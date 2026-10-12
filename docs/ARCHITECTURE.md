@@ -50,19 +50,21 @@ sidecara — w szczegolnosci sidecar DMR CZ pisze
 (`_cz_download_sheet`), bo tor CZ omija `DownloadManager` (ADR-023).
 Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
-(poza nim: kopia sidecara celu w sciezce standardowej,
-`download/links.py::write_link_sidecar`, i dopisanie
-`extra.parent_requests` w `DownloadManager`). Zapis
+(poza nim: kopia sidecara wersji w sciezce standardowej,
+`download/links.py::write_link_sidecar`, i lista lotow zadania
+`update_sidecar_extra` w sidecarze dowiazania). Zapis
 jest domyslnie best-effort: kazdy blad (IO, brakujacy klucz deskryptora,
 wyjatek w budowie metadanych) konczy sie `logger.warning` i zwrotem `None`,
 nigdy przerwaniem pobrania — dane sa wazniejsze niz metadane. Poza bledem
 zapisu jedyny cichy przypadek braku sidecara przy sukcesie to provider bez
 `descriptor_key` (`descriptor_key` nie bedacy `str`): `emit_sidecar` wraca
-wtedy `None` bez ostrzezenia. Z `required=True` (tylko sidecar pliku
-kampanii) oba przypadki koncza sie `DownloadError`. Pominiety juz pobrany plik zachowuje
-dotychczasowy sidecar (wyjatek ADR-030: sidecar pliku w `kampanie/` jest obowiazkowy, sekcja 3.2); arkusz z sidecarem ponownie wykorzystany
-w zadaniu obszarowym dopisuje `extra.parent_requests` bez zmiany
-oryginalnego `parent_request`.
+wtedy `None` bez ostrzezenia. Wyjatek: sidecar WERSJI w magazynie
+wersjonowanym (ADR-036, sekcja 3.3) jest obowiazkowy i pisany wylacznie
+(`exclusive=True`: tmp + `fsync` + `os.link`); bez deskryptora powstaje
+sidecar okrojony (`request`, `extra`, `sha256`, `size_bytes`,
+`downloaded_at`), a kazdy inny blad to `DownloadError` i brak wersji.
+Sidecar wersji nigdy sie nie zmienia (`extra.parent_requests` usuniete
+w 0.8.0; `parent_request` opisuje zadanie, ktore utworzylo wersje).
 
 **Polityka transformacji (ADR-024).** Transformacje, ktore przesuwaja TRESC
 rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza przez
@@ -298,7 +300,7 @@ kartograf/
 │   │                    # verify_file_format, verify_record_url/verify_sheet_extent (B4),
 │   │                    # verify_record_vertical_crs (uklad wysokosci rekordu)
 │   ├── countries.py     # Podzial obszaru na kraje: countries_for_bbox, split_bbox_by_country
-│   ├── links.py         # Dowiazanie sciezki standardowej (hardlink -> kopia, bez symlinkow, nigdy wstecz)
+│   ├── links.py         # Dowiazanie sciezki standardowej do wersji (wylacznie hardlink, nigdy wstecz)
 │   ├── cutout.py        # Wycinek PL WCS (ADR-035): prepare_pl_cutout,
 │   │                    # run_pl_wcs_cutout, download_pl_cutout, maska, sidecar
 │   ├── cz_cutout.py     # Wycinek CZ jako API: download_cz_cutout/run_cz_cutout, all_nodata,
@@ -306,10 +308,14 @@ kartograf/
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
-│   │                    # kampanie (all_campaigns=, min_year=, max_year=), SheetFetch/last_sheet
+│   │                    # kampanie (all_campaigns=, min_year=, max_year=), tryby update
+│   │                    # (None/upgrade/force), SheetFetch/last_sheet, inspect_sheets,
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
-│   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
-│                        # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
+│   ├── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026), versions/;
+│   │                    # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
+│   ├── updates.py       # Plan aktualizacji kartograf-plan/1 (ADR-036): check_updates, upgrade
+│   └── versions.py      # Magazyn wersjonowany (ADR-036): zapis wylaczny, etykiety,
+│                        # lista wersji, sprzatanie .incoming/
 ├── landcover/manager.py # LandCoverManager — dispatch do providerow pokrycia terenu;
 │                        # download_all_counties (BDOT10k z kazdego powiatu obszaru)
 ├── hydrology/hsg.py     # HSGCalculator — klasyfikacja USDA -> HSG (ADR-025)
@@ -401,8 +407,8 @@ i `hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
 | `license` | `{id, attribution, url}` z deskryptora |
 | `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar) / `parent_requests` (kolejne zadania); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign` oraz pola rocznikow/lotow opisane nizej; SM5 `mapname`/`cz_share`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
-| `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) przez ponowny odczyt GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Sidecar sciezki standardowej kampanii (kopia sidecara celu) niesie skrot celu — tresc dowiazania jest ta sama |
+| `extra` | `parent_request` (obszar; zadanie, ktore utworzylo plik — `parent_requests` usuniete w 0.8.0); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign`, `version` (`label`, `label_source`; ADR-036), `coverage` (lot niepelny, przy zapisie wersji) oraz pola rocznikow/lotow opisane nizej; SM5 `mapname`/`cz_share`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
+| `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) z GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Wersja w magazynie (ADR-036) podaje skrot z jedynego odczytu przy zapisie (`build_metadata(digest=)`, D20) — to tozsamosc wersji (`_<sha8>` w nazwie katalogu). Sidecar sciezki standardowej (kopia sidecara wersji) niesie skrot wersji |
 | `schema` | stale `kartograf-meta/1` |
 
 Nazwy kluczy sa angielskie (ADR-031, od 0.7.0); wyjatkiem jest `teryt` —
@@ -473,33 +479,36 @@ danymi); `extra.all_nodata` i `PlCutoutResult.all_nodata` sa prawdziwe, gdy
 caly wynik jest nodata. `extra.parent_request` powstaje tylko po przekazaniu
 `parent_request=` (w CLI: oryginalne zadanie, sekcja 3.4).
 
-**Kampanie (ADR-030).** Sidecar pliku w `kampanie/` jest OBOWIAZKOWY:
-`emit_sidecar(..., required=True)` zapisuje go atomowo, a porazka zapisu
-rzuca `DownloadError` (manager usuwa plik danych, kampania jest porazka,
-dowiazanie nie jest przestawiane). Pozostale sidecary (arkusz toru plain,
-wycinek, LAZ, CZ, landcover, HSG) zostaja best-effort. Sidecar sciezki standardowej
-(dowiazania) to ZWYKLY plik — kopia sidecara celu z dopisanym `extra.link`
-i `extra.link_target` (zapis `tmp` + `os.replace`, nigdy "przez" symlink
-sidecara pozostawiony przez uzytkownika; best-effort). To JEDYNE zrodlo celu
-dowiazania (hardlink nie niesie wskazania): brak sidecara standardowego =
-sciezka nieznana.
+**Magazyn wersjonowany (ADR-036).** Sidecar WERSJI (`versions/.../<etykieta>_<sha8>/<plik>.meta.json`)
+jest OBOWIAZKOWY i niezmienny: `emit_sidecar(..., exclusive=True)` pisze
+go raz (tmp + `fsync` + `os.link`, nigdy nie nadpisuje); porazka zapisu
+rzuca `DownloadError` (zapis usuwa utworzony plik danych, wersji nie ma).
+Pozostale sidecary (wycinek, LAZ, CZ, landcover, HSG) zostaja best-effort.
+Sidecar sciezki standardowej (dowiazania) to ZWYKLY plik — kopia sidecara
+wersji z dopisanym `extra.link` (`hardlink`) i `extra.link_target`
+(zapis `tmp` + `os.replace`, nigdy "przez" symlink sidecara pozostawiony
+przez uzytkownika; best-effort). To JEDYNE zrodlo celu dowiazania
+(hardlink nie niesie wskazania): brak sidecara standardowego albo
+`extra.link = "copy"` z 0.7.x = sciezka nieznana.
 
-**Przedzial lat (ADR-032).** Przy zadaniu z granica roku sidecar kazdej
-kampanii NMT/NMPT/orto i jego kopia w sciezce standardowej zawieraja
-`extra.available_years` (posortowane wszystkie lata arkusza z pelnego
-skorowidza); bez granic brak pola. `extra.coverage` (0..1, cztery miejsca
-po przecinku) w sidecarze kampanii jest tylko po pomiarze waznych pikseli:
-ASC bez `NODATA_value` (domyslnie -9999), orto wg nodata/alfa (bez
-obu brak pomiaru). Pomiar nastepuje przy przedziale i `all`, > 1 locie,
-gdy najnowszy lot nie ma `full_sheet=true`. Sidecar standardowy dostaje
-`extra.flights` z lotami wybranego przedzialu (malejaco wg ADR-028;
-`id`, `date`, `full_sheet`, `coverage` tylko po pomiarze), a przy starszym
-locie o WIEKSZYM pokryciu `extra.better_coverage` = jego `id` i CLI `Info:`
-na stderr (takze z `-q`). Pole `better_coverage` jest usuwane, gdy ponowny
-pomiar nie wykaze lepszego lotu; brak pola nie oznacza pustej listy lotow.
-Pokrycie NIE przestawia dowiazania (najpierw najnowszy lot wg ADR-028,
-zasada "nigdy wstecz"). Sidecar LAZ niesie dodatkowo `extra.acquisition_date`
-(`akt_data`) i `extra.full_sheet` (`czy_ark_wypelniony`), gdy znane.
+**Przedzial lat i pokrycie (ADR-032, ADR-036 D13).** Przy zadaniu z granica
+roku sidecar kazdej wersji NMT/NMPT/orto i jego kopia w sciezce
+standardowej zawieraja `extra.available_years` (posortowane wszystkie lata
+arkusza z pelnego skorowidza); bez granic brak pola. `extra.coverage` (0..1,
+cztery miejsca po przecinku) ma sidecar wersji KAZDEGO lotu bez
+`full_sheet=true` — liczone z tego samego odczytu co sha256 przy zapisie
+(ASC bez `NODATA_value` = -9999, orto wg nodata/alfa; blad pomiaru = brak
+pola + ostrzezenie), nigdy dopisywane pozniej. Przy przedziale i `all`
+z > 1 lotem, gdy najnowszy lot nie ma `full_sheet=true`, sidecar
+standardowy dostaje `extra.flights` (malejaco wg ADR-028; `id`, `date`,
+`full_sheet`, `coverage` z sidecarow wersji), a przy starszym locie
+o WIEKSZYM pokryciu `extra.better_coverage` = jego `id` (lot zadeklarowany
+jako pelny liczy sie jako pokryty w pelni) i CLI `Info:` na stderr (takze
+z `-q`). Pole `better_coverage` jest usuwane, gdy ponowne zadanie nie
+wykaze lepszego lotu. Pokrycie NIE przestawia dowiazania (najpierw
+najnowszy lot wg ADR-028, zasada "nigdy wstecz"). Sidecar LAZ niesie
+dodatkowo `extra.acquisition_date` (`akt_data`) i `extra.full_sheet`
+(`czy_ark_wypelniony`), gdy znane.
 
 ### 3.3 Kanoniczny uklad `data/`
 
@@ -508,7 +517,8 @@ data/
 ├── nmt/
 │   ├── pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # DOWIAZANIE (regula 6)
 │   ├── pl_1992_1m_evrf2007/full_sheet/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # DOWIAZANIE do najnowszego pelnego lotu (regula 7)
-│   ├── pl_1992_1m_evrf2007/kampanie/2022-05-10_83233/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   # prawdziwy plik
+│   ├── pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e/N-34-130-D-d-2-4.asc   # wersja (prawdziwy plik)
+│   ├── pl_1992_1m_evrf2007/versions/.incoming/<host>_<pid>_<token>/   # zapis w toku (sprzatany po 24 h)
 │   ├── pl_1992_1m_kron86/...
 │   ├── pl_1992_5m_evrf2007/...              # 5m tylko EVRF2007 (regula istniejaca)
 │   ├── pl_1992_1m_evrf2007/bbox/<coords>_<YYYYMMDD>.tif # wycinek PL WCS (4.3)
@@ -556,30 +566,33 @@ data/
    `FileStorage(variant=...)`; bez niego skip zwracal po cichu plik RGB na
    zadanie CIR.
 
-6. **Kampanie (ADR-030, errata 1-5).** Prawdziwe pliki NMT/NMPT/orto PL
-   leza WYLACZNIE w `<segment>/kampanie/<data>_<id>/<hierarchia godla>/
-   <godlo>.<ext>` (+ `.meta.json`), takze dla `newest`; sciezka standardowa
-   `<segment>/<hierarchia>/<godlo>.<ext>` jest dowiazaniem do najnowszej
-   LOKALNEJ kampanii (takze niepelnej). `<data>` = `aktualnosc` rekordu
-   (RRRR-MM-DD), `<id>` = pierwszy segment liczbowy nazwy pliku w URL
-   (`83233_1744736_<godlo>.asc` -> `83233`), inaczej `u` + 8 znakow hex
-   `sha1(URL)`. Segment ADR-026 bez zmian (takze `orto/pl_1992_cir`).
-   Metoda dowiazania (errata 4): 1) hardlink, 2) kopia + `Warning:`
-   (`extra.link` = `hardlink`/`copy`); symlinkow nie tworzymy (nieczytelne
-   dla klientow Windows przez SMB, limit dlugosci celu na udziale); kampania
-   lezy zawsze w tym samym segmencie co sciezka standardowa (ten sam system
-   plikow). Podmiana atomowa (plik tymczasowy + `os.replace`; istniejacy
-   symlink sprzed errata 4 = sciezka nieznana, zastepowany); dowiazanie
-   nigdy nie cofa sie na kampanie starsza od biezacego celu (klucz celu
-   z jego sidecara, a gdy nieczytelny — z nazwy katalogu). Kontrola
-   istnienia: cel z `extra.link_target` sidecara standardowego (`samefile`
-   dla hardlinku, rozmiar + mtime dla kopii); usuniety katalog kampanii =
-   brak pliku. `FileStorage.get_campaign_path` buduje sciezke kampanii,
-   `list_files()` domyslnie pomija `kampanie/` (`campaigns=True` = tylko
-   `kampanie/`). W 0.7.0 nic nie skanuje `kampanie/` w poszukiwaniu
-   lokalnych kampanii: cel dowiazania zna tylko sidecar standardowy, a
-   kampanie do pobrania wyznacza skorowidz. CZ, LAZ, BDOT10k i land cover
-   nie uzywaja `kampanie/`.
+6. **Wersje (ADR-036; dawniej `kampanie/`, ADR-030).** Prawdziwe pliki
+   NMT/NMPT/orto PL leza WYLACZNIE w `<segment>/versions/<hierarchia
+   godla>/<etykieta>_<sha8>/<godlo>.<ext>` (+ `.meta.json` wersji);
+   sciezka standardowa `<segment>/<hierarchia>/<godlo>.<ext>` jest
+   hardlinkiem do najnowszej LOKALNEJ wersji zadania. Etykieta kampanii =
+   `<data>_<id>`: `<data>` = `aktualnosc` rekordu (RRRR-MM-DD), `<id>` =
+   pierwszy segment liczbowy nazwy pliku w URL (`83233_1744736_<godlo>.asc`
+   -> `83233`), inaczej `u` + 8 znakow hex `sha1(URL)`; providery bez
+   kampanii: data pobrania UTC. `<sha8>` = poczatek sha256 tresci.
+   Zapis (`download/versions.py::commit_version`): katalog roboczy
+   `versions/.incoming/<host>_<pid>_<token>/` w tym samym systemie
+   plikow, `fsync`, wylaczny `os.link` (nigdy nie nadpisuje; istniejacy
+   plik o innym sha256 = `DownloadError`), sidecar wersji pisany wylacznie;
+   ta sama tresc = `unchanged`, ta sama tresc z nowa etykieta kampanii =
+   `relabeled` (nowy katalog z hardlinkiem). Wersja bez sidecara jest
+   niewazna (naprawia ja nastepny zapis tej samej tresci po sprawdzeniu
+   sha256); pozostalosci starsze niz 24 h sa usuwane. Dowiazanie: wylacznie
+   hardlink (brak obslugi = `DownloadError`, nigdy kopia ani symlink),
+   podmiana atomowa (plik tymczasowy + `os.replace`), nigdy wstecz (klucz
+   ADR-028 z sidecara wersji). Kontrola: cel z `extra.link_target` +
+   `os.path.samefile` — na udziale SMB wymaga stabilnych i-wezlow
+   (`serverino`), inaczej dowiazanie jest odtwarzane przy kazdym
+   uruchomieniu. `FileStorage.get_versions_root(sheet)`/`get_versions_base`,
+   `list_files()` pomija `versions/`, `full_sheet/` i `kampanie/`
+   (`versions=True` = tylko pliki wersji). Katalog `kampanie/` z 0.7.x
+   nie jest czytany (`has_legacy_campaigns()` -> `Info:` w CLI). CZ, LAZ,
+   BDOT10k i land cover nie uzywaja jeszcze `versions/` (plany 2/3, 3/3).
    Kopiowanie `data/`: `rsync -aH`/`cp -a` (bez zachowania hardlinkow
    powstaje duplikat).
 
@@ -588,12 +601,12 @@ data/
    (+ `.meta.json`) wskazuje najnowszy LOKALNY lot zadania oznaczony
    w skorowidzu jako pelny (`full_sheet is True`; NIE i brak flagi = nie
    pelny). Ta sama mechanika co regula 6 (`download/links.py::ensure_link`:
-   hardlink -> kopia, nigdy wstecz wsrod lotow pelnych, sidecar z
+   wylacznie hardlink, nigdy wstecz wsrod lotow pelnych, sidecar z
    `extra.link_target`); gdy najnowszy lot jest pelny, oba dowiazania to
    ten sam plik. Brak pelnego lotu = brak pliku w `full_sheet/`
    (istniejace dowiazanie zostaje). `FileStorage.get_full_sheet_path`
    buduje sciezke, `list_files()` pomija `full_sheet/` (tak jak
-   `kampanie/`), `delete(sheet)` usuwa oba dowiazania z sidecarami.
+   `versions/`), `delete(sheet)` usuwa oba dowiazania z sidecarami.
    Kolizja z hierarchia niemozliwa: pierwszy czlon hierarchii to arkusz
    1:1M albo strefa (`N-34`, `7`). LAZ, CZ, wycinki i land cover nie maja
    `full_sheet/`.
@@ -645,9 +658,9 @@ czeskim (EPSG:5514/3045) w ukladzie PLIKU (od 2026-09-28), dla pozostalych
 w EPSG:2180; jawne `--country cz` zapisuje obwiednie w ukladzie zadania CZ
 (EPSG:5514 albo `--target-crs`). Klucz buduje CLI (`_build_parent_request`);
 API biblioteki zapisuje go tylko po przekazaniu `parent_request=`.
-Arkusz juz pobrany z sidecarem zachowuje oryginalny `parent_request`,
-a nowe zadania trafiaja do deduplikowanej listy `extra.parent_requests`
-(bez tworzenia sidecara dla starego pliku bez niego). To jest klucz grupowania:
+Wersja z sidecarem zachowuje `parent_request` zadania, ktore ja
+UTWORZYLO; kolejne zadania nie zmieniaja sidecara wersji (ADR-036; lista
+`extra.parent_requests` usunieta w 0.8.0). To jest klucz grupowania:
 po nim konsument (Hydrograf, przyszly `find_downloaded`) sklada w calosc
 pliki jednego zadania, takze te lezace po obu stronach granicy, ktore
 Kartograf swiadomie zostawia rozdzielone (sekcja 1). Slownik jest wspoldzielony
@@ -658,14 +671,14 @@ utworzeniu.
 
 ## 4. Przeplywy per produkt
 
-**Migracja 0.7.0-dev -> 0.7.0 (ADR-030, BREAKING):**
+**Migracja 0.7.x -> 0.8.0 (ADR-036, BREAKING):**
 
 | Stan | Zachowanie |
 |---|---|
-| zwykly plik NMT/NMPT/orto w sciezce standardowej (stary uklad bez `kampanie/`) | traktowany jako nieznany (brak migracji); przy pierwszym `newest` kampania jest pobierana do `kampanie/`, a zwykly plik (z sidecarem) ZASTEPOWANY dowiazaniem |
-| dowiazanie (hardlink/kopia) w sciezce standardowej | cel = najnowsza lokalna kampania (z `extra.link_target`); kolejne `newest`/`all` przestawiaja je tylko na kampanie o kluczu `(aktualnosc, dt_pzgik, url)` scisle wiekszym niz klucz biezacego celu (ten sam cel albo klucz rowny/wiekszy = bez zmian; klucz z sidecara celu, a gdy nieczytelny z nazwy katalogu `<data>_<id>`) |
-| dowiazanie, ktorego `extra.link_target` nie istnieje (katalog kampanii usuniety) albo bez sidecara standardowego | brak pliku — pobranie od nowa |
-| symlink w sciezce standardowej (dane sprzed errata 4) | nieznany — `newest` zastepuje go hardlinkiem (bez kodu zgodnosci) |
+| `<segment>/kampanie/` z 0.7.x | nie jest czytany ani migrowany; CLI wypisuje raz `Info:`, potrzebne kampanie sa pobierane ponownie do `versions/` |
+| dowiazanie albo zwykly plik w sciezce standardowej | sidecar bez `extra.link = "hardlink"` z celem w `versions/` = sciezka nieznana; po pobraniu wersji ZASTEPOWANA hardlinkiem |
+| dowiazanie do wersji | kolejne zadania przestawiaja je tylko na wersje o kluczu `(aktualnosc, dt_pzgik, url)` wiekszym niz klucz biezacego celu; rowny klucz (nowa tresc tej samej kampanii) tylko, gdy wersja powstala w tym wywolaniu |
+| dowiazanie, ktorego `extra.link_target` nie istnieje (katalog wersji usuniety) | brak pliku — pobranie od nowa |
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
@@ -727,8 +740,8 @@ usuwa nieczytelny plik z `-wal`/`-shm`.
 `DownloadManager` pisze sidecar po kazdym udanym arkuszu; arkusz ASC GUGiK
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
-po jego wygasnieciu zapytanie do skorowidza) i pobiera tylko brakujace
-kampanie — kampania juz lokalna jest pomijana (`SheetFetch.skipped`). `--target-crs` w trybie godlowym jest
+po jego wygasnieciu zapytanie do skorowidza) i stosuje tryb `update`
+(ponizej, "Tryby i plan aktualizacji"). `--target-crs` w trybie godlowym jest
 **odrzucane** (kod 1) — godlo PL dostarcza arkusz natywny 1:1.
 
 **Niepelna najnowsza kampania (E13).** Rekord z `full_sheet: false`
@@ -784,27 +797,34 @@ lata z pelnej listy. Arkusz bez danych GUGiK = `NoCoverageError` i
 pominiecie R5, a z danymi tylko poza przedzialem = `YearRangeError`
 (lista lat do 20 arkuszy, podpowiedz tylko gdy jedna jednostronna
 granica obejmuje wszystkie konflikty), zero pobran dla CALEGO zadania.
-Awaria skorowidza w fazie sprawdzania tez przerywa zadanie przed
-pobraniem. Potem manager wykorzystuje JUZ sprawdzone rekordy,
-zapisuje kazdy wybrany lot w `kampanie/`, aktualizuje dowiazanie raz
-na arkusz (najnowszy lot wg ADR-028, nigdy wstecz), sidecary i pomiar
-opisany w 3.2. `DownloadResult.better_coverage` wskazuje arkusze z
+Awaria skorowidza w fazie sprawdzania przerywa zadanie przed pobraniem,
+chyba ze w trybie domyslnym (D14) KAZDY arkusz zadania ma lokalna wersje
+z rocznikiem w zakresie (`extra.campaign.date[:4]`) — wtedy arkusze
+z bledem skorowidza dostaja te wersje z ostrzezeniem (`unverified`).
+Potem manager wykorzystuje JUZ sprawdzone rekordy, zapisuje kazdy wybrany
+i brakujacy lot jako wersje w `versions/`, aktualizuje dowiazanie raz
+na arkusz (najnowszy lot wg ADR-028, nigdy wstecz), sidecary i pokrycie
+opisane w 3.2. `DownloadResult.better_coverage` wskazuje arkusze z
 lotem o lepszym pokryciu (tylko `all`); `link_outside_range` i
 `full_link_outside_range` (takze `SheetFetch`) — arkusze, ktorych
 dowiazanie standardowe albo `full_sheet/` zostalo przy locie spoza
 zadania (nigdy wstecz), CLI drukuje wtedy jeden `Info:` z linia
 `<godlo>: sciezka standardowa|full_sheet/ -> dowiazanie <data>_<id>`.
-Dalsze szczegoly: manager pobiera kazda
-brakujaca kampanie (`GugikProvider.download_record`; plik w `kampanie/`,
-`record_source` -> `extra.source`), po zebraniu kampanii przestawia
-dowiazanie RAZ na arkusz (deduplikacja godel; nigdy wstecz) i zwraca
-`SheetFetch(sheet, path, skipped, downloaded, reused, link, unverified)` w
-`DownloadManager.last_sheet`. `DownloadResult` (`last_result` listy
-i hierarchii) niesie `succeeded`, `failed`, `skipped`, `no_coverage`
-(podzbior `failed`: brak danych u zrodla), `no_coverage_hints` (godlo ->
-`NoCoverageError.hints`, tylko arkusze z podpowiedzia), `campaign_files`,
-`reused_campaign_files` (kampanie juz lokalne per arkusz), `copied`
-(arkusze, ktorych sciezka standardowa jest KOPIA) i `unverified` (ponizej).
+Dalsze szczegoly: jedna regula `DownloadManager._select` (wspolna dla
+pobierania i `inspect_sheets`) decyduje per rekord "lokalna wersja albo
+pobranie"; pobranie (`GugikProvider.download_record` do katalogu
+roboczego, `record_source` -> `extra.source`) konczy `commit_version`
+(ADR-036); po zebraniu kampanii manager przestawia dowiazanie RAZ na
+arkusz (deduplikacja godel; nigdy wstecz) i zwraca `SheetFetch(sheet,
+path, skipped, downloaded, reused, status, version, unverified, newer,
+files)` w `DownloadManager.last_sheet` (`status`: `new`/`relabeled`/
+`unchanged`/`local`, najsilniejszy z plikow; `files`: katalog wersji
+i status per plik). `DownloadResult` (`last_result` listy i hierarchii)
+niesie `succeeded`, `failed`, `skipped`, `no_coverage` (podzbior `failed`:
+brak danych u zrodla), `no_coverage_hints` (godlo -> `NoCoverageError.hints`),
+`campaign_files`, `reused_campaign_files` (wersje juz lokalne per arkusz),
+listy `new`/`relabeled`/`unchanged`/`local`, `newer` (godlo -> nowsza
+kampania nie pobrana), `files` i `unverified` (ponizej).
 Pelna lista pol: docstringi `SheetFetch`/`DownloadResult` w
 `download/manager.py`. `download_sheet` pojedynczego arkusza ustawia
 `last_result` jako wynik jednoelementowy (jak lista). Pochodzenie arkusza
@@ -812,8 +832,8 @@ przy kampaniach: `provider.source_info()` wypelnia przeplyw jednego rekordu
 (`download`, `get_download_url`, `resolve_campaigns` w trybie `newest`), a przy
 `all` zostaje `None` — zrodlem pochodzenia jest wtedy sidecar
 (`extra.source`, `extra.campaign`); sidecar sciezki standardowej opisuje
-kampanie, na ktora wskazuje dowiazanie, a ta moze byc starsza niz najnowszy
-rekord, gdy jego pobranie sie nie powiodlo (A12). Przed siecia
+wersje, na ktora wskazuje dowiazanie, a ta moze byc starsza niz najnowszy
+rekord (D5 albo nieudane pobranie, A12). Przed siecia
 `verify_record_url` (B4): nazwa pliku w URL rekordu musi konczyc sie godlem
 arkusza (`<id>_<numer>_<godlo>.<ext>`, porownanie w postaci kanonicznej);
 URL bez godla albo z innym godlem = `DownloadError` kampanii bez pobierania.
@@ -828,48 +848,75 @@ przesuniety o pol piksela) musi co najmniej w 50 % powierzchni
 `x < 1e6` = EPSG:2180 (takze arkusz PL-2000 opublikowany przez GUGiK w
 EPSG:2180, E17), inaczej natywna strefa PL-2000 godla. Arkusz czesciowy
 (`full_sheet=False`) lezy w ramie i przechodzi, arkusz sasiedni albo z
-innego miejsca nie; naglowek nieczytelny albo niepelny = blad. Te same dwie
-kontrole pliku przechodzi plik kampanii bez sidecara (R22) przed
-odtworzeniem sidecara. Nieznany format albo niezgodna tresc =
-`DownloadError` kampanii z nazwa formatu, zasieg spoza ramy =
-`DownloadError` z zasiegiem pliku i rama godla; plik usuniety. Blad pobrania
+innego miejsca nie; naglowek nieczytelny albo niepelny = blad. Nieznany
+format albo niezgodna tresc = `DownloadError` kampanii z nazwa formatu,
+zasieg spoza ramy = `DownloadError` z zasiegiem pliku i rama godla;
+wersja nie powstaje. Blad pobrania
 podaje nazwe pliku z URL (`84183_1852496_N-34-139-C-a-3-1.asc (OpenData):
 HTTP 404`), co w `all` rozroznia kampanie. Porazki: kampania (w tym
 niepoprawna `aktualnosc` rekordu w `all`, brak sidecara, porazka
-weryfikacji) = porazka tej kampanii — pozostale sa pobierane, dowiazanie
-idzie na najnowsza poprawna, ale arkusz konczy sie porazka (kod 1);
-porazka samego dowiazania (nawet kopii) = porazka arkusza (lista idzie
-dalej takze przy `--workers 1`, pobrane kampanie zostaja). Wyscig bez
-blokad: rownolegle wywolania na tej samej sciezce (procesy lub watki
-biblioteki) moga chwilowo zostawic dowiazanie na starszej kampanii;
-kolejne `newest`/`all` je naprawia, pliki w `kampanie/` sa nietkniete.
-Przy metodzie `copy` CLI drukuje `Warning: hardlink niedostepny na tym
-systemie plikow — sciezka standardowa jest KOPIA najnowszej kampanii dla N
-arkuszy (<godla do 10>) (extra.link=copy)`; podsumowanie `all` albo
-`--full-sheet` (bez `-q`): `Downloaded <n> campaign files for <m> sheets
-to <dir> (<k> already existed)`. Pojedyncze godlo drukuje `Skipped <godlo> - already exists at
-<sciezka>` (zamiast `Downloaded to`) tylko, gdy `manager.last_sheet.skipped`.
+weryfikacji, kolizja sha256) = porazka tej kampanii — pozostale sa pobierane,
+dowiazanie idzie na najnowsza poprawna, ale arkusz konczy sie porazka (kod 1);
+porazka samego dowiazania (takze brak hardlinkow) = porazka arkusza (lista
+idzie dalej takze przy `--workers 1`, zapisane wersje zostaja). Wyscig bez
+blokad: rownolegle zapisy tej samej tresci koncza w jednej wersji
+(wylaczny `os.link`), a rownolegle przestawienia dowiazania moga chwilowo
+zostawic je na starszej wersji; kolejne wywolanie je naprawia.
 
-Awaria skorowidza przy `newest` (I-1, errata 5 ADR-030; tylko arkusze): gdy `resolve_campaigns` konczy sie
+**Tryby i plan aktualizacji (ADR-036, D5, D14).** `update` w
+`download_sheet`/`download_hierarchy`/`download_sheets` (CLI: brak flagi,
+`--upgrade`, `--force`; wzajemnie wykluczajace sie z `--check-updates`):
+domyslnie lokalna wersja z etykieta rekordu jest uzywana bez pobrania,
+brakujace wersje (`all`, `--full-sheet`, brak lokalnej) sa pobierane,
+a gdy najnowszy lot nie jest lokalny, ale jest inna lokalna wersja
+z zakresu (najpierw cel dowiazania), zostaje ona i `SheetFetch.newer`
+/ `DownloadResult.newer` (CLI: dopisek `; dostepna nowsza <etykieta>
+(--upgrade)` i `Info:`). `upgrade` pobiera ten lot; `force` pobiera
+wszystkie wybrane loty ponownie i odswieza `MetadataCache` (ta sama tresc
+= `unchanged`, inna = nowa wersja tej samej etykiety), weryfikacja
+rekordu dziala we wszystkich trybach; `update="check"` to `ValidationError`
+(sprawdzenie robi `check_updates`). Providery bez kampanii: bez `force`
+najnowsza lokalna wersja (brak taniego sygnalu). `check_updates(manager,
+sheets)` (CLI `--check-updates [--plan PLIK]`) niczego nie pobiera
+i zwraca `UpdatePlan` (`kartograf-plan/1`: `store`, `checked_at`,
+`kartograf_version`, pozycje z segmentem, hierarchia, nazwa, wersja
+lokalna i sygnalem rekordu; statusy `current`/`newer`/`missing`/
+`unverifiable`/`check_failed`). `upgrade(manager, plan)` (CLI `--upgrade
+--plan PLIK`) odrzuca inny magazyn i nieznany schemat przed siecia,
+czyta sygnal ponownie i pobiera wylacznie pozycje `newer`/`missing`
+z niezmienionym sygnalem (`DownloadManager.download_records`); zmieniony
+sygnal = pozycja `stale` (blad, bez pobrania). Plan 1/3 obejmuje arkusze
+PL; `--check-updates`/`--upgrade` z LAZ, CZ, `--target-crs` albo
+`--country` innym niz `pl` dla obszaru = `Error:` (kod 1) przed siecia.
+CLI drukuje jedna linie na plik: `<godlo>: nowa wersja <etykieta>_<sha8>`,
+`nowa etykieta <etykieta> (ta sama tresc)`, `bez zmian <etykieta>`,
+`lokalna wersja <etykieta>`, a po liscie (bez `-q`) `Nowe: N, nowa
+etykieta: N, bez zmian: N, lokalne: N, bledy: N (<dir>)`; raport
+`--check-updates` to jedna linia na pozycje (`aktualne`, `nowsza: ...`,
+`do pobrania`, `nie udalo sie sprawdzic: ...`), kod 1 przy pozycji
+niesprawdzonej. Katalog `kampanie/` z 0.7.x: jednorazowe `Info:`.
+
+Awaria skorowidza bez granicy roku (I-1, errata 5 ADR-030; ADR-036: kazda
+strategia, tylko tryb domyslny): gdy `resolve_campaigns` konczy sie
 bledem TRANSPORTU (`DownloadError` z `status_code` 429/5xx albo bez kodu,
 ale z przyczyna `requests.RequestException` — siec/timeout; NIE
 `NoCoverageError`, inne 4xx ani raport OGC/zly szablon), a sciezka
-standardowa wskazuje istniejaca lokalna kampanie (`linked_campaign`)
-i `skip_existing`, manager NIE zglasza porazki: `logger.warning` i
-`SheetFetch(skipped=True, reused=(<kampania>,), unverified=<tresc bledu>)`,
-dowiazanie bez zmian. Lista/hierarchia: arkusz w `skipped`, a
-`DownloadResult.unverified` (godlo -> tresc bledu). CLI: `Warning: <godlo>:
-skorowidz GUGiK niedostepny — uzyto lokalnej kampanii bez sprawdzenia
-nowszej (<blad>)` (pojedyncze godlo) albo `Warning: skorowidz GUGiK
-niedostepny — dla N arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej
-(<godla do 10>) (<pierwszy blad>)` (lista), stderr takze z `-q`, kod bez
-zmian. `all`, jakakolwiek granica roku, `--force` i brak lokalnej
-kampanii (takze dowiazanie z usunieta kampania docelowa) — blad jak dotad.
+standardowa wskazuje istniejaca lokalna wersje (`linked_version`),
+manager NIE zglasza porazki: `logger.warning` i
+`SheetFetch(skipped=True, reused=(<wersja>,), status="local",
+unverified=<tresc bledu>)`, dowiazanie bez zmian. Lista/hierarchia: arkusz
+w `skipped`, a `DownloadResult.unverified` (godlo -> tresc bledu). CLI:
+`Warning: <godlo>: skorowidz GUGiK niedostepny — uzyto lokalnej wersji bez
+sprawdzenia nowszej (<blad>)` (pojedyncze godlo) albo `Warning: skorowidz
+GUGiK niedostepny — dla N arkuszy uzyto lokalnych wersji bez sprawdzenia
+nowszej (<godla do 10>) (<pierwszy blad>)` (lista), stderr takze z `-q`, kod
+bez zmian. `upgrade`, `force` i brak lokalnej wersji (takze dowiazanie
+z usunieta wersja docelowa) — blad. Z granica roku: D14 (wyzej).
 Biblioteka bez `MetadataCache` pyta
 skorowidz przy KAZDYM `download_sheet` (takze arkusza juz pobranego);
 przekazanie cache providerowi ogranicza to do raz na 7 dni.
 
-Wynik: `data/nmt/pl_1992_1m_evrf2007/kampanie/<data>_<id>/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`
+Wynik: `data/nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/<data>_<id>_<sha8>/N-34-130-D-d-2-4.asc`
 (+ `.meta.json`) i dowiazanie `data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`;
 dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla orto
 `data/orto/pl_1992/...`.
@@ -891,9 +938,8 @@ kazdym takim rozstrzygnieciu; SHP i jednowarstwowy GPKG nie daja
 komunikatu.
 
 Sidecar pobranego arkusza dostaje `extra.parent_request` i `extra.source`
-(URL, warstwa, data, rozdzielczosc). Przy ponownym wykorzystaniu arkusza
-sidecar zachowuje oryginalne zadanie, a nowy wpis trafia do
-`extra.parent_requests`. Tryb listy (takze hierarchia godla) probuje
+(URL, warstwa, data, rozdzielczosc). Ponowne wykorzystanie wersji nie
+zmienia jej sidecara (ADR-036). Tryb listy (takze hierarchia godla) probuje
 WSZYSTKIE arkusze niezaleznie od `--workers` (ADR-027 errata 3, R5-lista).
 `NoCoverageError` dopisuje brakujace godlo i `Warning:`, status postepu
 `no_coverage` (`∅`, `DownloadProgress.status`), bez wetowania pobranych
@@ -954,7 +1000,7 @@ ponawiania. Raporty XML sa odrzucane przez `reject_error_document("WCS")`.
 Orto pozostaje na wlasnej sciezce `download_bbox`.
 
 Wynik: **wiele plikow** — lista arkuszy w segmencie jak w 4.1 (dowiazania do
-`kampanie/`; przy `all` dodatkowo kazda kampania). To jest
+wersji w `versions/`; przy `all` dodatkowo kazda kampania). To jest
 asymetria wzgledem CZ, gdzie bbox daje jeden wycinek.
 
 ### 4.3 Bbox / geometria PL z `--target-crs` (ADR-035)

@@ -335,17 +335,21 @@ from kartograf import (
   każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się
   przy migracji na dwa segmenty; wyjątek: kafle LAZ — układ z `uklad_xy`
   kafla (`LazTile.system`), dopiero w drugiej kolejności z formatu godła
-- Kampanie GUGiK (ADR-030): prawdziwe pliki NMT/NMPT/orto PL w
-  `<segment>/kampanie/<data>_<id>/...`, ścieżka standardowa = dowiązanie do
-  najnowszej lokalnej kampanii (hardlink → kopia, bez symlinków — errata 4); brak migracji
+- Magazyn wersjonowany (ADR-036, od 0.8.0; plan 1/3: arkusze PL
+  NMT/NMPT/orto): prawdziwe pliki w
+  `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/...`, niezmienne
+  (sidecar wersji pisany raz, zapis wylaczny), sciezka standardowa =
+  hardlink do najnowszej lokalnej wersji (bez kopii i symlinkow; system
+  plikow z hardlinkami wymagany); `kampanie/` z 0.7.x bez migracji;
+  tryby `--check-updates`/`--upgrade`/`--force`, plan `kartograf-plan/1`
 - Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>` do
   najnowszego lokalnego lotu pełnego (ADR-033); `list_files()` je pomija,
   `delete()` usuwa oba dowiązania
 - `landcover/` bez zmian (własny katalog `--output`, wymagany od 0.8.0)
 - Każde udane pobranie (CLI, DownloadManager, LandCoverManager,
   download_pl_cutout, download_laz_area) i wynik HSG ma sidecar
-  `<plik>.meta.json` (schemat `kartograf-meta/1`, best-effort); sidecar pliku
-  kampanii jest obowiązkowy (porażka zapisu = porażka kampanii)
+  `<plik>.meta.json` (schemat `kartograf-meta/1`, best-effort); sidecar
+  wersji jest obowiązkowy (porażka zapisu = brak wersji)
 
 ### 2.12 Kampanie GUGiK (ADR-030) - IN SCOPE
 
@@ -730,8 +734,9 @@ pyshp >= 2.3.0         # Shapefile reading
 - Wycinek NMT/NMPT PL 1 m (--target-crs / download_pl_cutout): jeden GeoTIFF
   z WCS GUGiK na siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; poza
   ladem PL (maska PRG) nodata -9999
-- Kampanie GUGiK: --all-campaigns, --year/--min-year/--max-year; pliki
-  w kampanie/, ścieżka standardowa jako dowiązanie twarde (albo kopia) do najnowszej
+- Kampanie GUGiK: --all-campaigns, --year/--min-year/--max-year; wersje
+  w versions/, ścieżka standardowa jako dowiązanie twarde do najnowszej;
+  --check-updates/--upgrade/--force i plan aktualizacji (ADR-036)
 - LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area
 - Integracja z Hydrograf/Hydrolog działa
 ```
