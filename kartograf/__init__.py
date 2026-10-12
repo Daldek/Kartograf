@@ -49,10 +49,12 @@ Example usage::
 """
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.geometry import find_sheets_for_geometry
+from kartograf.core.bbox import transform_bbox
+from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.download.area import parent_request_for
 from kartograf.download.campaigns import CampaignRef
 from kartograf.download.countries import (
     CountryPart,
@@ -73,6 +75,13 @@ from kartograf.download.cz_sheets import (
     CzSheetResult,
     check_cz_sheet,
     download_cz_sheet,
+)
+from kartograf.download.data import (
+    DataReport,
+    UnitFailure,
+    UnitFile,
+    check_data,
+    download_data,
 )
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.laz import (
@@ -136,6 +145,15 @@ __all__ = [
     "find_sheets_for_bbox",
     "find_sheets_2000_for_bbox",
     "find_sheets_for_geometry",
+    "get_overall_bbox",
+    "transform_bbox",
+    "parent_request_for",
+    # Download (command level: `kartograf download`, spec 4.1)
+    "download_data",
+    "check_data",
+    "DataReport",
+    "UnitFile",
+    "UnitFailure",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",

@@ -84,6 +84,22 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zrobic (Hydrograf `core/cn_calculator.py`, `scripts/bootstrap.py`):
   `calculate_hsg_by_bbox(bbox, depth=..., stat="mean")` ->
   `calculate_hsg(bbox=bbox, depth=...)`; analogicznie arkusz i `check_hsg`.
+- `kartograf download` = `download_data(...)` / `check_data(...)` (nowe,
+  `kartograf.download.data`): cala logika komendy (godlo i kraj,
+  `country="auto"` z zawezeniem do PL i czesciowym sukcesem, walidacja
+  kazdego kraju przed pobraniem, rozwiniecie obszaru PL na arkusze,
+  `parent_request`) jest w bibliotece; wynik `DataReport(files, failed,
+  stale, superseded, notices, ok)`, CLI tylko tlumaczy flagi i wypisuje
+  raport. Bledy wejscia to `ValidationError` z tekstem jak w CLI.
+  Komunikaty o danych (`Info:`/`Warning:`) powstaja w bibliotece jako
+  `Notice` (m.in. przyciecie `auto`, brak pokrycia, dowiazania spoza
+  zakresu); stopnie w komunikatach przyciecia jako `st.N`/`st.E` (ASCII).
+  W podsumowaniu `bledy:` liczy nieudane czesci zadania (arkusze bez danych
+  GUGiK to `Warning:`, nie blad). Dodane do API: `download_data`,
+  `check_data`, `DataReport`, `UnitFile`, `UnitFailure`, `get_overall_bbox`,
+  `transform_bbox`, `parent_request_for`. Co zrobic: skrypty wolajace CLI
+  przez `subprocess` moga przejsc na `download_data` z tymi samymi
+  wartosciami (`resolution={"pl": "1m", "cz": "2m"}` zamiast `pl=1m,cz=2m`).
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

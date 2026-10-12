@@ -599,8 +599,8 @@ class TestCoverageHints:
         _hint_record("M-34-63-A-c-2-1", "1992"),
     )
     _EXPECTED = {
-        "Dostepny potomek 6.129.30.13.4 — uzyj --scale 1:1000",
-        "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) — uzyj "
+        "Dostepny potomek 6.129.30.13.4 - uzyj --scale 1:1000",
+        "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) - uzyj "
         "tego godla lub --system 1992",
     }
 

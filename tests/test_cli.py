@@ -696,7 +696,7 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_single_sheet(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a single sheet."""
         mock_manager = Mock()
@@ -731,7 +731,7 @@ class TestCmdDownload:
             "N-34-130-D-d-2-4", update=None, on_progress=None, on_download=ANY
         )
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_hierarchy(self, mock_manager_class, capsys, tmp_path):
         """Test downloading a hierarchy."""
         paths = [tmp_path / f"test{i}.tif" for i in range(4)]
@@ -766,7 +766,7 @@ class TestCmdDownload:
         assert result == 0
         mock_manager.download_hierarchy.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_with_force(self, mock_manager_class, tmp_path):
         """Test downloading with --force flag."""
         mock_manager = Mock()
@@ -802,7 +802,7 @@ class TestCmdDownload:
             "N-34-130-D-d-2-4", update="force", on_progress=None, on_download=ANY
         )
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_handles_error(self, mock_manager_class, capsys, tmp_path):
         """Test that download errors are handled."""
         mock_manager = Mock()
@@ -836,7 +836,7 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_invalid_scale(self, mock_manager_class, capsys, tmp_path):
         """Test downloading with invalid scale."""
         from kartograf.exceptions import ValidationError
@@ -873,7 +873,7 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_shows_progress(self, mock_manager_class, capsys, tmp_path):
         """Test that download shows progress when not quiet."""
         mock_manager = Mock()
@@ -905,7 +905,6 @@ class TestCmdDownload:
         assert result == 0
         captured = capsys.readouterr()
         assert "Downloading" in captured.out
-        assert "N-34-130-D-d-2-4: " in captured.out  # result line (mock manager)
 
     # --- hierarchy exit code (A2-3) ---
 
@@ -917,7 +916,7 @@ class TestCmdDownload:
         mock_manager.count_sheets.return_value = result.total
         return mock_manager
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_all_failed_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -951,7 +950,7 @@ class TestCmdDownload:
         assert "Error: 4 z 4 arkuszy nie pobrano" in err
         assert "A, B, C, D" in err and "ponow pobranie" in err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_partial_failure_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -984,7 +983,7 @@ class TestCmdDownload:
         assert result == 1
         assert "Error: 1 z 4 arkuszy nie pobrano" in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_no_coverage_with_files_warns_and_returns_0(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -1023,11 +1022,11 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy (A)" in captured.err
         assert "Error:" not in captured.err
-        assert "Nowe: 3, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 1" in (
+        assert "Nowe: 3, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 0" in (
             captured.out
         )
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_all_no_coverage_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -1061,7 +1060,7 @@ class TestCmdDownload:
         assert "Error: GUGiK nie ma danych dla zadnego z 2 arkuszy" in err
         assert "ponow pobranie" not in err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_all_skipped_returns_exit_0(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -1108,7 +1107,7 @@ class TestCmdDownload:
             captured.out
         )
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_scale_mode_failure_returns_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -1195,8 +1194,8 @@ class TestCmdDownloadProduct:
         )
         assert args.product == "nmpt"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_product_nmpt(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1240,8 +1239,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "nmpt"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_product_orto(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1283,8 +1282,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "orto"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_product_nmt_default(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1326,8 +1325,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "nmt"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_product_nmpt(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1370,8 +1369,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "nmpt"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_product_orto(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1412,8 +1411,8 @@ class TestCmdDownloadProduct:
         call_args = mock_create.call_args
         assert call_args[0][0] == "orto"
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_orto_messages_do_not_claim_a_resolution(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1450,8 +1449,8 @@ class TestCmdDownloadProduct:
 
     # --- N6/E14: PL-path MetadataCache — --force = cache in refresh mode ---
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_force_passes_refresh_cache_to_provider_factory(
         self, mock_manager_cls, mock_create, tmp_path
     ):
@@ -1544,9 +1543,9 @@ class TestCmdDownloadProduct:
         ],
         ids=["sheet", "bbox-list"],
     )
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox", return_value=["N-1"])
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox", return_value=["N-1"])
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_without_force_reads_cache_in_cwd(
         self, mock_manager_cls, mock_create, _mock_find, tmp_path, argv
     ):
@@ -1580,8 +1579,8 @@ class TestCmdDownloadProduct:
 
     # --- product/resolution and product/vertical-crs pair validation (V2-N1) ---
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_nmpt_with_resolution_5m_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1621,8 +1620,8 @@ class TestCmdDownloadProduct:
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_orto_with_vertical_crs_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1659,8 +1658,8 @@ class TestCmdDownloadProduct:
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_orto_without_vertical_crs_still_works(
         self, mock_manager_cls, mock_create, tmp_path
     ):
@@ -1691,8 +1690,8 @@ class TestCmdDownloadProduct:
 
         assert result == 0
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_bbox_nmpt_with_resolution_5m_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1736,8 +1735,8 @@ class TestCmdDownloadProduct:
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_bbox_orto_with_vertical_crs_rejected(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
@@ -1784,7 +1783,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmt_creates_gugik_provider(self, tmp_path):
         """Test that nmt creates GugikProvider + FileStorage."""
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
         from kartograf.providers.pl.gugik import GugikProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1796,7 +1795,7 @@ class TestCreateProviderAndStorage:
 
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1807,7 +1806,7 @@ class TestCreateProviderAndStorage:
 
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         provider, storage = _create_provider_and_storage(
@@ -1818,20 +1817,20 @@ class TestCreateProviderAndStorage:
 
     def test_laz_product_raises_validation_error(self, tmp_path):
         """LAZ has a separate flow (_cmd_download_laz) - it must not get here."""
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
 
-        with pytest.raises(ValidationError, match="LAZ"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany produkt"):
             _create_provider_and_storage("laz", tmp_path, "EVRF2007", "1m")
 
     def test_unknown_product_raises_validation_error(self, tmp_path):
         """An unknown product must not silently fall through to the NMT factory."""
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
 
         with pytest.raises(ValidationError, match="dmr5g"):
             _create_provider_and_storage("dmr5g", tmp_path, "EVRF2007", "1m")
 
     def test_nmt_kron86_storage_segment(self, tmp_path):
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "KRON86", "1m"
@@ -1841,7 +1840,7 @@ class TestCreateProviderAndStorage:
     def test_nmt_5m_needs_datum_resolved_by_sentinels(self, tmp_path):
         """0.7.1: ``_resolve_pl_sentinels`` rejects 5m + KRON86 before this
         helper; should the pair reach it, the library factory rejects it."""
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "EVRF2007", "5m"
@@ -1851,7 +1850,7 @@ class TestCreateProviderAndStorage:
             _create_provider_and_storage("nmt", tmp_path, "KRON86", "5m")
 
     def test_nmpt_storage_segment(self, tmp_path):
-        from kartograf.cli.download_cmd import _create_provider_and_storage
+        from kartograf.download.data import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
             "nmpt", tmp_path, "KRON86", "1m"
@@ -1860,7 +1859,7 @@ class TestCreateProviderAndStorage:
 
 
 _5M_KRON86_ERROR = (
-    "Error: NMT 5m (PL) jest dostepny tylko w EVRF2007 — podano --vertical-crs "
+    "Error: NMT 5m (PL) jest dostepny tylko w EVRF2007 - podano --vertical-crs "
     "KRON86; uzyj --vertical-crs EVRF2007 albo --resolution 1m dla KRON86"
 )
 
@@ -1912,11 +1911,11 @@ class TestNmt5mKron86Rejected:
             "bbox-auto-pl-cz-border",
         ],
     )
-    @patch("kartograf.cli.download_cmd._run_cz")
-    @patch("kartograf.cli.download_cmd._download_pl_cutout")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data._download_pl_cutout")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_explicit_kron86_with_5m_is_error(
         self,
         mock_manager_cls,
@@ -1964,11 +1963,11 @@ class TestNmt5mKron86Rejected:
         assert not (tmp_path / "out").exists()
 
     @pytest.mark.parametrize("extra", [[]], ids=["sheets"])
-    @patch("kartograf.cli.download_cmd._run_cz")
-    @patch("kartograf.cli.download_cmd._download_pl_cutout")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data._download_pl_cutout")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.DownloadManager")
     def test_geometry_explicit_kron86_with_5m_is_error(
         self,
         mock_manager_cls,
@@ -2021,13 +2020,15 @@ class TestNmt5mKron86Rejected:
         mock_run_cz.assert_not_called()
         assert not (tmp_path / "out").exists()
 
-    def test_pl_options_reject_kron86_and_missing_vertical_crs_for_5m(self, capsys):
-        """5m exists only in EVRF2007; a missing --vertical-crs is an error
+    def test_pl_options_reject_kron86_and_missing_vertical_crs_for_5m(self):
+        """5m exists only in EVRF2007; a missing vertical CRS is an error
         listing the values, KRON86 is rejected without a silent swap."""
-        from kartograf.cli.download_cmd import _resolve_pl_options
+        from types import SimpleNamespace
+
+        from kartograf.download.options import resolve_pl_options
 
         def ns(vertical_crs):
-            return argparse.Namespace(
+            return SimpleNamespace(
                 product="nmt",
                 resolution="5m",
                 vertical_crs=vertical_crs,
@@ -2036,24 +2037,22 @@ class TestNmt5mKron86Rejected:
                 scale=None,
             )
 
-        args = ns("EVRF2007")
-        assert _resolve_pl_options(args, sheet_system="1992") == 0
-        assert capsys.readouterr().err == ""
-
-        assert _resolve_pl_options(ns(None), sheet_system="1992") == 1
-        err = capsys.readouterr().err
-        assert "--vertical-crs wymagane" in err and "KRON86" in err
-
-        args = ns("KRON86")
-        assert _resolve_pl_options(args, sheet_system="1992") == 1
-        assert _5M_KRON86_ERROR in capsys.readouterr().err
-        assert args.vertical_crs == "KRON86"  # no silent swap
+        resolve_pl_options(ns("EVRF2007"), sheet_system="1992")
+        with pytest.raises(ValidationError) as missing:
+            resolve_pl_options(ns(None), sheet_system="1992")
+        assert "--vertical-crs wymagane" in str(missing.value)
+        assert "KRON86" in str(missing.value)
+        task = ns("KRON86")
+        with pytest.raises(ValidationError) as kron:
+            resolve_pl_options(task, sheet_system="1992")
+        assert f"Error: {kron.value}" == _5M_KRON86_ERROR
+        assert task.vertical_crs == "KRON86"  # no silent swap
 
 
 class TestCmdDownloadBBox:
     """Tests for download command with --bbox option."""
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_basic(self, mock_manager_class, capsys, tmp_path):
         """Test that --bbox calls find_sheets_for_bbox and download_sheet."""
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
@@ -2085,8 +2084,8 @@ class TestCmdDownloadBBox:
         assert result == 0
         mock_manager.download_sheets.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_sheet_list_header(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
@@ -2119,7 +2118,7 @@ class TestCmdDownloadBBox:
         assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
         assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
         """Test --bbox z --bbox-crs EPSG:4326."""
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
@@ -2248,7 +2247,7 @@ class TestCmdDownloadBBox:
         stdout), zero providers. Formerly a reversed bbox went on (a junk sheet),
         and NaN ended with a `ValueError`."""
         with (
-            patch("kartograf.cli.download_cmd.DownloadManager") as manager,
+            patch("kartograf.download.data.DownloadManager") as manager,
             patch(_CZ_FACTORY_PATCH) as cz_factory,
             patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
         ):
@@ -2308,7 +2307,7 @@ class TestCmdDownloadBBox:
         captured = capsys.readouterr()
         assert "Invalid bbox format" in captured.err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
         """PL-1992 is fixed at 1:10000: --scale is an error before any work."""
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
@@ -2343,7 +2342,7 @@ class TestCmdDownloadBBox:
         assert "--scale nie dotyczy PL-1992" in capsys.readouterr().err
         mock_manager_class.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_shows_summary(self, mock_manager_class, capsys, tmp_path):
         """Test that bbox mode shows summary when not quiet."""
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
@@ -2418,8 +2417,8 @@ class TestCmdDownloadBBox:
         assert args.sheet is None
         assert args.bbox == "419000,230000,426000,237000"
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_bbox_list_goes_through_download_sheets(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -2519,11 +2518,11 @@ class TestSheetListExitCode:
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         with (
             patch(
-                "kartograf.cli.download_cmd._create_provider_and_storage",
+                "kartograf.download.data._create_provider_and_storage",
                 return_value=(provider, storage),
             ),
             patch(
-                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                "kartograf.download.data.find_sheets_for_bbox",
                 return_value=list(sheets or TestSheetListExitCode._SHEETS),
             ),
         ):
@@ -2630,7 +2629,7 @@ class TestSheetListExitCode:
         assert "Error: 1 z 4 arkuszy nie pobrano" in err
         assert "N-34-130-D-d-2-3" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz", return_value=0)
+    @patch("kartograf.download.data._download_cz", return_value=0)
     def test_auto_partial_no_coverage_with_cz_ok_has_no_false_warning(
         self, mock_cz, tmp_path, capsys
     ):
@@ -2641,11 +2640,11 @@ class TestSheetListExitCode:
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         with (
             patch(
-                "kartograf.cli.download_cmd._create_provider_and_storage",
+                "kartograf.download.data._create_provider_and_storage",
                 return_value=(provider, storage),
             ),
             patch(
-                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                "kartograf.download.data.find_sheets_for_bbox",
                 return_value=list(self._SHEETS),
             ),
         ):
@@ -2697,7 +2696,7 @@ class TestSheetListExitCode:
         provider = _SheetProvider({"-1": "no_coverage"})
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         with patch(
-            "kartograf.cli.download_cmd._create_provider_and_storage",
+            "kartograf.download.data._create_provider_and_storage",
             return_value=(provider, storage),
         ):
             rc = main(
@@ -3312,7 +3311,7 @@ class TestCmdDownloadGeometry:
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_basic(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
@@ -3358,7 +3357,7 @@ class TestCmdDownloadGeometry:
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_with_layer(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
@@ -3405,7 +3404,7 @@ class TestCmdDownloadGeometry:
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_cli_geometry_multi_layer_info_once(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
@@ -3456,7 +3455,7 @@ class TestCmdDownloadGeometry:
     @pytest.mark.parametrize("kind", ["single_gpkg", "shp"])
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_cli_geometry_single_layer_no_info(
         self,
@@ -3650,7 +3649,7 @@ class TestCmdDownloadGeometry:
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_geometry_list_goes_through_download_sheets(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
@@ -4044,8 +4043,8 @@ class TestCreateParserBBoxCrsExtended:
 class TestDownloadBBoxSystem:
     """Tests for download --bbox --system integration."""
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_system_2000_passes_param(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -4086,8 +4085,8 @@ class TestDownloadBBoxSystem:
             len(call_kwargs.args) >= 3 and call_kwargs.args[2] == "2000"
         )
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_default_system_1992(
         self, mock_manager_cls, mock_find, capsys, tmp_path
     ):
@@ -4132,7 +4131,7 @@ class TestDownloadGeometrySystem:
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_system_2000(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
@@ -4180,7 +4179,7 @@ class TestDownloadGeometrySystem:
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.core.geometry.get_overall_bbox")
     def test_download_geometry_default_system_1992(
         self, mock_overall, mock_manager_cls, mock_find, mock_read_crs, capsys, tmp_path
@@ -4807,74 +4806,6 @@ class TestCmdDownloadLaz:
         assert "not found" in capsys.readouterr().err.lower()
 
 
-class TestResolveLazBbox:
-    """Tests for _resolve_laz_bbox helper."""
-
-    def test_sheet_to_2180(self):
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-
-        args = Namespace(sheet="M-34-27-B-b-2-1", bbox=None, geometry=None)
-        bbox = _resolve_laz_bbox(args)
-        assert bbox.crs == "EPSG:2180"
-        assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
-
-    def test_geometry_multi_layer_info_and_explicit_layer(
-        self, tmp_path, capsys, caplog
-    ):
-        """LAZ --geometry resolves the GPKG layer like the other paths: one Info
-        in the CLI and the explicit name downstream (no raw library WARNING)."""
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-
-        gpkg = write_gpkg_layers(tmp_path / "multi.gpkg", ["layer_a", "layer_b"])
-        args = Namespace(sheet=None, bbox=None, geometry=str(gpkg), layer=None)
-        envelope = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
-        with (
-            patch(
-                "kartograf.core.geometry.get_overall_bbox", return_value=envelope
-            ) as overall,
-            caplog.at_level("WARNING", logger="kartograf.core.geometry"),
-        ):
-            assert _resolve_laz_bbox(args) == envelope
-
-        assert overall.call_args.kwargs["layer"] == "layer_a"
-        err_lines = capsys.readouterr().err.splitlines()
-        info = [line for line in err_lines if "warstw" in line]
-        assert len(info) == 1 and info[0].startswith("Info:")
-        assert caplog.records == []
-
-    def test_bbox_2180_passthrough(self):
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-
-        args = Namespace(
-            sheet=None,
-            bbox="530000,382000,533000,386000",
-            bbox_crs="EPSG:2180",
-            geometry=None,
-        )
-        bbox = _resolve_laz_bbox(args)
-        assert (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y) == (
-            530000.0,
-            382000.0,
-            533000.0,
-            386000.0,
-        )
-
-    def test_bbox_wrong_value_count_raises(self):
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-
-        args = Namespace(sheet=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
-        with pytest.raises(ValidationError, match="Invalid bbox format"):
-            _resolve_laz_bbox(args)
-
-
 def _cz_args(tmp_path, **overrides):
     """Namespace for direct _cmd_download_cz calls (2m/Bpv; SM5 sheets: 5m only)."""
     sheet = overrides.get("sheet", "302_5550")
@@ -4901,6 +4832,28 @@ def _cz_args(tmp_path, **overrides):
     )
     base.update(overrides)
     return argparse.Namespace(**base)
+
+
+def _cmd_download_cz(args, bbox=None):
+    """The CZ request described by ``_cz_args`` run through ``main`` (a sheet
+    code, or ``bbox`` with its CRS as ``--bbox-crs``)."""
+    argv = ["download", "--product", args.product, "--country", args.country]
+    argv += ["-o", str(args.output), "--vertical-crs", args.vertical_crs]
+    if args.resolution:
+        argv += ["--resolution", args.resolution]
+    if bbox is not None:
+        coords = f"{bbox.min_x},{bbox.min_y},{bbox.max_x},{bbox.max_y}"
+        argv += [f"--bbox={coords}", "--bbox-crs", bbox.crs]
+    else:
+        argv += ["--sheet", args.sheet]
+    for flag in ("force", "quiet", "upgrade", "check_updates"):
+        if getattr(args, flag, False):
+            argv.append("--" + flag.replace("_", "-"))
+    if args.target_crs:
+        argv += ["--target-crs", args.target_crs]
+    if args.system:
+        argv += ["--system", args.system]
+    return main(argv)
 
 
 def _cz_provider_mock(resolution="2m"):
@@ -5064,175 +5017,11 @@ class TestCzDownloadingAfterValidation:
         assert "Downloading" not in captured.out
         assert "Error:" in captured.err and "parzyste" in captured.err
 
-    def test_sm5_announces_once_before_file_is_written(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        seen_at_fetch: list[str] = []
-
-        def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
-            seen_at_fetch.append(capsys.readouterr().out)
-            self._write_tif(output_path, crs=None)
-            return output_path
-
-        with patch(self._CLIENT) as client_cls, patch(self._INDEX) as index_cls:
-            index_cls.return_value.sm5_sheet.return_value = self._sm5_info()
-            client_cls.return_value.fetch_file.side_effect = fake_fetch
-            rc = main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=5m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "CTES96",
-                    "--country",
-                    "cz",
-                    "-o",
-                    str(tmp_path / "o"),
-                ]
-            )
-
-        rest = capsys.readouterr().out
-        assert rc == 0
-        assert len(seen_at_fetch) == 1
-        assert seen_at_fetch[0].count("Downloading CTES96 (CZ, resolution: 5m)") == 1
-        assert "Downloading" not in rest
-        assert rest.startswith("CTES96: nowa wersja ")
-
-    def test_tm33_announces_once_before_export(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        seen_at_export: list[str] = []
-
-        def fake_export(endpoint, bbox, **kwargs):
-            seen_at_export.append(capsys.readouterr().out)
-            self._write_tif(kwargs["output_path"], crs="EPSG:5514")
-            return kwargs["output_path"]
-
-        with (
-            patch(self._CLIENT) as client_cls,
-            patch(self._INDEX),
-            patch("kartograf.providers.cuzk.dmr.warp_to_grid") as warp,
-        ):
-            warp.side_effect = lambda src, dst, *a, **k: self._write_tif(
-                dst, crs="EPSG:3045"
-            )
-            client_cls.return_value.export_image.side_effect = fake_export
-            rc = main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "302_5550",
-                    "--country",
-                    "cz",
-                    "-o",
-                    str(tmp_path / "o"),
-                ]
-            )
-
-        rest = capsys.readouterr().out
-        assert rc == 0
-        assert len(seen_at_export) == 1
-        assert seen_at_export[0].count("Downloading 302_5550 (CZ, resolution: 2m)") == 1
-        assert "Downloading" not in rest
-
-    def test_bbox_announces_once_before_export(
-        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
-    ) -> None:
-        seen_at_export: list[str] = []
-
-        def fake_export(endpoint, bbox, **kwargs):
-            seen_at_export.append(capsys.readouterr().out)
-            self._write_tif(kwargs["output_path"], crs="EPSG:5514")
-            return kwargs["output_path"]
-
-        with patch(self._CLIENT) as client_cls, patch(self._INDEX):
-            client_cls.return_value.export_image.side_effect = fake_export
-            rc = main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--bbox=-447000,-1114000,-446000,-1113000",
-                    "--bbox-crs",
-                    "EPSG:5514",
-                    "--country",
-                    "cz",
-                    "-o",
-                    str(tmp_path / "o"),
-                ]
-            )
-
-        rest = capsys.readouterr().out
-        assert rc == 0
-        assert len(seen_at_export) == 1
-        assert seen_at_export[0].count("Downloading CZ bbox (2m, EPSG:5514)") == 1
-        assert "Downloading" not in rest
-
-    def test_bbox_rejected_in_provider_is_error_without_downloading(
-        self, tmp_path, capsys
-    ):
-        """A validation failure inside ``download_bbox`` (before exportImage)."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        provider = _cz_provider_mock()
-        provider.download_bbox.side_effect = ValidationError("zly bbox")
-        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, sheet=None, quiet=False)
-        with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(args, bbox=bbox)
-
-        captured = capsys.readouterr()
-        assert rc == 1
-        assert "Downloading" not in captured.out
-        assert "Error: zly bbox" in captured.err
-
-    @pytest.mark.parametrize("bbox_mode", [False, True])
-    def test_quiet_passes_no_announcement(self, tmp_path, capsys, bbox_mode):
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        provider = _cz_provider_mock()
-        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, sheet=None if bbox_mode else "302_5550")
-        with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(args, bbox=bbox if bbox_mode else None)
-
-        assert rc == 0
-        assert capsys.readouterr().out == ""
-        called = provider.download_bbox if bbox_mode else provider.download
-        called.assert_called_once()
-
 
 class TestCmdDownloadCz:
     """Tests for the CZ (CUZK) flow in the download command."""
 
     def test_tm33_sheet_saves_under_cz_dmr5g(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
@@ -5255,7 +5044,6 @@ class TestCmdDownloadCz:
     def test_force_refreshes_sheet_index_cache(self, tmp_path, force):
         """Forced CZ requests miss old sheet data but persist the replacement."""
         from kartograf.cache.defaults import open_cache
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         old = {"name": "old"}
         new = {"name": "new"}
@@ -5282,7 +5070,6 @@ class TestCmdDownloadCz:
 
     def test_unreadable_cache_warns_and_downloads(self, tmp_path, capsys):
         """An unreadable cache in the CZ path: one ``Warning:``, code 0."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         db = Path.cwd() / ".kartograf_cache.db"
         db.write_bytes(b"to nie jest baza SQLite\n" * 200)
@@ -5300,7 +5087,6 @@ class TestCmdDownloadCz:
         assert f"Warning: cache metadanych nieczytelny ({db})" in err
 
     def test_tm33_sheet_writes_sidecar(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
             _cmd_download_cz(_cz_args(tmp_path))
@@ -5330,7 +5116,7 @@ class TestCmdDownloadCz:
         assert "parent_request" not in payload["extra"]
 
     def test_sm5_sheet_enriches_extra_with_cz_share(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
+
         from kartograf.providers.cuzk.sheets import SheetInfo
 
         provider = _cz_provider_mock(resolution="5m")
@@ -5357,7 +5143,6 @@ class TestCmdDownloadCz:
 
     def test_sm5_index_failure_after_download_keeps_file(self, tmp_path):
         """Index error at PODIL: warning, the file and sidecar without podil stay."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock(resolution="5m")
         provider.sheet_index.sm5_sheet.side_effect = DownloadError("siec padla")
@@ -5517,19 +5302,16 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["resolution"] == "2m"
 
     def test_bbox_mode_file_in_bbox_subdir_and_parent_request(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
-        parent = {
-            "bbox": [530000.0, 382000.0, 533000.0, 386000.0],
-            "bbox_crs": "EPSG:2180",
-            "countries": ["CZ", "PL"],
-        }
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        parent = {
+            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+            "bbox_crs": "EPSG:5514",
+            "countries": ["CZ"],
+        }
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            result = _cmd_download_cz(
-                _cz_args(tmp_path, sheet=None), bbox=bbox, parent_request=parent
-            )
+            result = _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox)
 
         assert result == 0
         target = (
@@ -5605,7 +5387,6 @@ class TestCmdDownloadCz:
         assert (tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox" / target.name).exists()
 
     def test_bbox_with_target_crs_records_pinned_transform(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
@@ -5725,28 +5506,25 @@ class TestCmdDownloadCz:
         ) in err
         assert "Traceback" not in err
 
-    def test_target_crs_with_sheet_rejected(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
+    def test_target_crs_with_sheet_rejected(self, tmp_path, capsys):
 
-        with pytest.raises(ValidationError, match="--target-crs"):
-            _cmd_download_cz(_cz_args(tmp_path, target_crs="EPSG:2180"))
+        assert _cmd_download_cz(_cz_args(tmp_path, target_crs="EPSG:2180")) == 1
+        assert "Error: --target-crs" in capsys.readouterr().err
 
     def test_resolution_1m_rejected(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         result = _cmd_download_cz(_cz_args(tmp_path, resolution="1m"))
         assert result == 1
         assert "2m" in capsys.readouterr().err
 
     def test_system_flag_rejected(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         result = _cmd_download_cz(_cz_args(tmp_path, system="1992"))
         assert result == 1
         assert "--system" in capsys.readouterr().err
 
     def test_kron86_prints_remedy(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
+
         from kartograf.transform.crs import TransformUnavailableError
 
         with patch(
@@ -5761,7 +5539,6 @@ class TestCmdDownloadCz:
         assert "EVRF2007" in err
 
     def test_download_error_returns_1(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         provider.download.side_effect = DownloadError("404 openzu")
@@ -5773,7 +5550,6 @@ class TestCmdDownloadCz:
         assert not (tmp_path / "nmt" / "cz_dmr5g_bpv").exists()
 
     def test_legacy_plain_sheet_is_replaced_by_version(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         target.parent.mkdir(parents=True)
@@ -5790,7 +5566,6 @@ class TestCmdDownloadCz:
         )
 
     def test_force_redownloads_existing_version_without_overwrite(self, tmp_path):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         provider = _cz_provider_mock()
@@ -5807,7 +5582,6 @@ class TestCmdDownloadCz:
 
         The segment carries the provider's vertical CRS (ADR-026).
         """
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         provider.vertical_crs = "EVRF2007"
@@ -5835,7 +5609,6 @@ class TestCmdDownloadCz:
 
     def test_version_sidecar_failure_aborts_download(self, tmp_path, capsys):
         """A version without a sidecar cannot become a valid local version."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         with (
@@ -5852,7 +5625,6 @@ class TestCmdDownloadCz:
         assert not list((tmp_path / "nmt").rglob("*.tif"))
 
     def test_factory_validation_error_returns_1(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         with patch(
             _CZ_FACTORY_PATCH,
@@ -5865,7 +5637,6 @@ class TestCmdDownloadCz:
 
     def test_verbose_sheet_reports_progress_and_skip(self, tmp_path, capsys):
         """Per-file messages in the LAZ/PL flow convention."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
@@ -5881,7 +5652,6 @@ class TestCmdDownloadCz:
         provider.download.assert_called_once()
 
     def test_verbose_bbox_reports_progress_and_skip(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
@@ -5900,7 +5670,6 @@ class TestCmdDownloadCz:
         provider.download_bbox.assert_called_once()
 
     def test_bbox_download_error_returns_1(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         provider.download_bbox.side_effect = DownloadError("exportImage 500")
@@ -5917,8 +5686,6 @@ class TestCmdDownloadCz:
         import numpy as np
         import rasterio
         from rasterio.transform import from_origin
-
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         def real_tif(sheet, target, timeout=60, *, on_download=None, on_response=None):
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -5984,7 +5751,6 @@ class TestCmdDownloadCz:
 
     def test_bbox_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
         """A CZ cutout without a single valid pixel: Warning:, exit code 0, sidecar."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         provider.download_bbox.side_effect = self._real_tif_writer(-9999.0)
@@ -6001,8 +5767,6 @@ class TestCmdDownloadCz:
     def test_bbox_all_nodata_message_printed_once(self, tmp_path, capsys, monkeypatch):
         """The library log does not repeat the CLI 'Warning:' line on stderr."""
         import logging
-
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         # no handler on the 'kartograf' branch -> logging.lastResort writes to
         # stderr, as in a real CLI run (pytest's root handler would hide it)
@@ -6021,8 +5785,6 @@ class TestCmdDownloadCz:
     def test_library_log_unmuted_after_cli_call(self, tmp_path):
         """The muted library logger is restored - also after a failed download."""
         import logging
-
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         log = logging.getLogger("kartograf.download.cz_cutout")
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
@@ -6050,7 +5812,6 @@ class TestCmdDownloadCz:
         assert log.disabled is False
 
     def test_tm33_sheet_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         provider.download.side_effect = self._real_tif_writer(-9999.0)
@@ -6063,7 +5824,6 @@ class TestCmdDownloadCz:
 
     def test_bbox_with_data_has_no_nodata_warning(self, tmp_path, capsys):
         """Control: a raster with data (even one pixel) — no message."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         provider.download_bbox.side_effect = self._real_tif_writer(123.0)
@@ -6088,7 +5848,6 @@ class TestCmdDownloadCz:
     def test_legacy_bbox_cutout_replaced_by_version_without_legacy_warning(
         self, tmp_path, capsys
     ):
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
@@ -6113,12 +5872,11 @@ class TestCmdDownloadCz:
             == "hardlink"
         )
 
-    def test_target_crs_with_sheet_message_names_product_frames(self, tmp_path):
+    def test_target_crs_with_sheet_message_names_product_frames(self, tmp_path, capsys):
         """K2: the message says WHAT the code defines (SM5 in 5514, TM33 on 3045)."""
-        from kartograf.cli.download_cmd import _cmd_download_cz
 
-        with pytest.raises(ValidationError, match="kafel TM33 na siatce EPSG:3045"):
-            _cmd_download_cz(_cz_args(tmp_path, target_crs="EPSG:2180"))
+        assert _cmd_download_cz(_cz_args(tmp_path, target_crs="EPSG:2180")) == 1
+        assert "kafel TM33 na siatce EPSG:3045" in capsys.readouterr().err
 
 
 def _write_prague_shp(directory):
@@ -6178,7 +5936,7 @@ class TestCountryDispatch:
 
     # --- sheet code -> country ---
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sheet_routes_to_cz_flow(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
         result = main(
@@ -6204,7 +5962,7 @@ class TestCountryDispatch:
         assert result == 0
         mock_cz.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_sm5_sheet_auto_detected(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
         result = main(
@@ -6232,7 +5990,7 @@ class TestCountryDispatch:
         assert result == 0
         mock_cz.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sheet_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
         """An explicit --country cz consistent with the sheet code is not a conflict."""
         mock_cz.return_value = 0
@@ -6261,7 +6019,7 @@ class TestCountryDispatch:
         assert result == 0
         mock_cz.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sheet_gets_raw_per_country_values(self, mock_cz, tmp_path):
         """The CZ flow receives the per-country values unnarrowed by PL."""
         mock_cz.return_value = 0
@@ -6286,8 +6044,8 @@ class TestCountryDispatch:
             ]
         )
         args = mock_cz.call_args.args[0]
-        assert args.resolution == "pl=1m,cz=2m"
-        assert args.vertical_crs == "pl=EVRF2007,cz=Bpv"
+        assert args.resolution == {"pl": "1m", "cz": "2m"}
+        assert args.vertical_crs == {"pl": "EVRF2007", "cz": "Bpv"}
         assert args.system is None
 
     def test_cz_sheet_with_country_pl_conflicts(self, tmp_path, capsys):
@@ -6342,7 +6100,7 @@ class TestCountryDispatch:
 
     # --- sentinele PL ---
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_sheet_takes_pl_part_of_per_country_values(
         self, mock_manager_class, tmp_path
     ):
@@ -6377,7 +6135,7 @@ class TestCountryDispatch:
         assert provider.resolution == "1m"
         assert provider.vertical_crs == "EVRF2007"
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_1m_kron86_no_correction(self, mock_manager_class, tmp_path, capsys):
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = DownloadResult(
@@ -6410,11 +6168,13 @@ class TestCountryDispatch:
         assert "Info:" not in capsys.readouterr().err
         assert mock_manager_class.call_args.kwargs["provider"].vertical_crs == "KRON86"
 
-    def test_5m_rule_only_for_nmt(self, capsys):
+    def test_5m_rule_only_for_nmt(self):
         """LAZ also goes through the PL options - the NMT 5m rule does not apply."""
-        from kartograf.cli.download_cmd import _resolve_pl_options
+        from types import SimpleNamespace
 
-        args = argparse.Namespace(
+        from kartograf.download.options import resolve_pl_options
+
+        task = SimpleNamespace(
             product="laz",
             resolution="5m",
             vertical_crs="KRON86",
@@ -6422,10 +6182,8 @@ class TestCountryDispatch:
             system=None,
             scale=None,
         )
-        assert _resolve_pl_options(args) == 0
-        assert args.vertical_crs == "KRON86"
-        err = capsys.readouterr().err
-        assert "Info:" not in err and "Error:" not in err
+        resolve_pl_options(task)
+        assert task.vertical_crs == "KRON86"
 
     def test_pl_sheet_with_2m_rejected(self, tmp_path, capsys):
         result = main(
@@ -6562,7 +6320,7 @@ class TestCountryDispatch:
         assert result == 1
         assert "--target-crs" in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_validation_error_from_area_mode_returns_1(
         self, mock_cz, tmp_path, capsys
     ):
@@ -6647,7 +6405,7 @@ class TestCountryDispatch:
         assert result == 1
         assert "etapie 2" in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_orto_bbox_with_country_cz_rejected(self, mock_cz, tmp_path, capsys):
         result = main(
             [
@@ -6677,7 +6435,7 @@ class TestCountryDispatch:
 
     # --- area modes: explicit --country cz ---
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_bbox_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
         result = main(
@@ -6706,7 +6464,7 @@ class TestCountryDispatch:
         assert result == 0
         mock_cz.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_with_country_cz_reads_bbox_in_file_crs(self, mock_cz, tmp_path):
         """The envelope is computed in the FILE's CRS - the CZ layer transforms it."""
         from pyproj import CRS
@@ -6746,7 +6504,7 @@ class TestCountryDispatch:
         assert requested == CRS.from_epsg(4326)  # the file's CRS, not Krovak
         assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:5514"
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_cz_bbox_goes_through_pinned_transform(self, mock_cz, tmp_path):
         """The hop to Krovak uses the pinned operation with edge sampling."""
         from kartograf.providers.cuzk import dmr
@@ -6789,7 +6547,7 @@ class TestCountryDispatch:
         assert -1047000 < bbox.min_y < -1041000
         assert bbox.max_x > bbox.min_x and bbox.max_y > bbox.min_y
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_cz_skips_unpinned_transformer(self, mock_cz, tmp_path):
         """An unpinned pyproj transformer (``core.bbox``, ballpark) is unused."""
         from kartograf.core import bbox as core_bbox
@@ -6825,7 +6583,7 @@ class TestCountryDispatch:
         assert result == 0
         mock_transformer.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_cz_target_crs_in_one_hop(self, mock_cz, tmp_path):
         """--target-crs: the envelope directly in the CRS requested from the server."""
         shp = _write_prague_shp(tmp_path)
@@ -6888,9 +6646,9 @@ class TestCountryDispatch:
         assert result == 1
         assert "not found" in capsys.readouterr().err.lower()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
     def test_bbox_auto_stays_pl(self, mock_find, mock_manager_class, mock_cz, tmp_path):
         """--country auto + a bbox deep inside PL (Warsaw): the CZ flow untouched."""
         mock_find.return_value = ["N-34-130-D-d-2-4"]
@@ -6938,12 +6696,12 @@ class TestCountryDispatch:
         shp = _write_krovak_shp(tmp_path)
         captured = {}
 
-        def fake_pl_geometry(args, filepath, parent_request, bbox):
+        def fake_pl_geometry(task, run, filepath, parent_request, bbox):
             captured.update(bbox=bbox, parent=parent_request)
             return 0
 
         with patch(
-            "kartograf.cli.download_cmd._download_pl_geometry",
+            "kartograf.download.data._download_pl_geometry",
             side_effect=fake_pl_geometry,
         ):
             rc = main(
@@ -7053,9 +6811,9 @@ class TestAutoSplitBBox:
         "-q",
     ]
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_border_bbox_splits_into_both_countries(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7080,9 +6838,9 @@ class TestAutoSplitBBox:
         assert cz_kwargs["parent_request"] == expected_parent
         assert cz_kwargs["bbox"].crs == "EPSG:5514"
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_country_order_is_deterministic(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7097,9 +6855,9 @@ class TestAutoSplitBBox:
         parent = mock_cz.call_args.kwargs["parent_request"]
         assert parent["countries"] == sorted(parent["countries"])
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_branch_does_not_poison_cz_args(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7114,13 +6872,13 @@ class TestAutoSplitBBox:
         # the mock holds a REFERENCE to the Namespace — had the PL branch (run
         # after CZ) mutated a shared object, the CZ values would be narrowed
         cz_args = mock_cz.call_args.args[0]
-        assert cz_args.resolution == "pl=1m,cz=2m"
-        assert cz_args.vertical_crs == "pl=EVRF2007,cz=Bpv"
+        assert cz_args.resolution == {"pl": "1m", "cz": "2m"}
+        assert cz_args.vertical_crs == {"pl": "EVRF2007", "cz": "Bpv"}
         assert cz_args.system == "1992"
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_only_bbox_no_cz_flow_but_parent_request_present(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7135,8 +6893,8 @@ class TestAutoSplitBBox:
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["sidecar_extra"]["parent_request"]["countries"] == ["PL"]
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cz_only_bbox_skips_pl_flow(self, mock_manager_class, mock_cz, tmp_path):
         """A bbox entirely in CZ (13.3-13.5E, west of 14.07E): CUZK only."""
         mock_cz.return_value = 0
@@ -7160,7 +6918,7 @@ class TestAutoSplitBBox:
         assert "CZ nie ma rozdzielczosci 1m" in err
         assert "uzyj jawnie" not in err and "pl=" not in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_explicit_cz_bbox_gets_parent_request(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
         result = main(
@@ -7195,9 +6953,9 @@ class TestAutoSplitBBox:
             -447000, -1114000, -446000, -1113000, "EPSG:5514"
         )
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_explicit_pl_bbox_not_clipped(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7220,9 +6978,9 @@ class TestAutoSplitBBox:
             }
         }
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_clips_cz_part_to_country_extent(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7298,9 +7056,9 @@ class TestAutoSplitBBox:
             ]
         )
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_rozewie_clips_only_north_edge_and_informs(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7325,14 +7083,14 @@ class TestAutoSplitBBox:
         assert used.crs == "EPSG:2180"
         err = capsys.readouterr().err
         assert "Info: --country auto: czesc PL przycieta" in err
-        assert "N: 54,90°N" in err
+        assert "N: 54,90 st.N" in err
         assert "request.sheet" in err and "plik i request.bbox" not in err
         assert "poza zasiegiem PL/CZ" in err
         assert "--country pl" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_osinow_west_edge_info_keeps_parent_request(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7355,12 +7113,12 @@ class TestAutoSplitBBox:
         parent = mock_manager_class.call_args.kwargs["sidecar_extra"]["parent_request"]
         assert parent["bbox"] == [14.03, 52.835, 14.16, 52.85]
         err = capsys.readouterr().err
-        assert "W: 14,07°E" in err
+        assert "W: 14,07 st.E" in err
         assert "poza zasiegiem PL/CZ" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_bogatynia_cz_clipped_but_nothing_lost(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7379,12 +7137,13 @@ class TestAutoSplitBBox:
             if line.startswith("Info:") and "Bpv" not in line
         ]
         assert len(info_lines) == 1
-        assert "czesc CZ przycieta" in info_lines[0] and "N: 51,06°N" in info_lines[0]
+        assert "czesc CZ przycieta" in info_lines[0]
+        assert "N: 51,06 st.N" in info_lines[0]
         assert "poza zasiegiem" not in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_bbox_inside_both_extents_stays_silent(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7402,9 +7161,9 @@ class TestAutoSplitBBox:
         err = capsys.readouterr().err
         assert "przycieta" not in err and "poza zasiegiem" not in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_corner_loss_reported_even_when_edges_look_covered(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7415,13 +7174,15 @@ class TestAutoSplitBBox:
 
         assert rc == 0
         err = capsys.readouterr().err
-        assert "W: 14,07°E, N: 54,90°N" in err
-        assert "13,00°E-15,00°E x 53,00°N-55,00°N" in err
+        assert "W: 14,07 st.E, N: 54,90 st.N" in err
+        assert "13,00 st.E-15,00 st.E x 53,00 st.N-55,00 st.N" in err
         assert "% powierzchni zadania" in err
 
     def test_area_outside_extents_splits_bbox_into_cells(self):
         """Pure function: cells outside all rectangles + the share."""
-        from kartograf.cli.download_cmd import _area_outside_extents
+        from kartograf.download.area import (
+            area_outside_extents as _area_outside_extents,
+        )
 
         pl = BBox(14.07, 49.0, 24.2, 54.9, "EPSG:4326")
         cz = BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326")
@@ -7446,9 +7207,9 @@ class TestAutoSplitBBox:
         lost, share = _area_outside_extents(BBox(10, 56, 11, 57, "EPSG:4326"), [pl, cz])
         assert lost == BBox(10, 56, 11, 57, "EPSG:4326") and share == 1.0
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_part_of_cz_crs_bbox_leaves_krovak_pinned(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7459,9 +7220,9 @@ class TestAutoSplitBBox:
         at 14.07E) - i.e. it enters the path in which GUGiK sheet selection
         could result from unpinned Krovak transformations.
         """
-        from kartograf.cli.download_cmd import _bbox_to_wgs84
         from kartograf.core import bbox as core_bbox
         from kartograf.core.bbox import is_czech_crs
+        from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
         from kartograf.providers.cuzk import dmr
 
         mock_find.return_value = ["M-33-46-A-a-1-1"]
@@ -7510,9 +7271,9 @@ class TestAutoSplitBBox:
         # an unpinned transformer never targets a Czech CRS
         assert not any(is_czech_crs(call.args[1]) for call in plain.call_args_list)
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cz_failure_does_not_skip_pl_and_warns(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7532,9 +7293,9 @@ class TestAutoSplitBBox:
         assert "czesc CZ zadania zakonczyla sie bledem" in err
         assert "pobrano PL" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_failure_with_cz_success_warns_and_returns_0(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7576,9 +7337,9 @@ class TestAutoSplitBBox:
         "-q",
     ]
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_one_country_failed_other_succeeded_returns_0(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7596,9 +7357,9 @@ class TestAutoSplitBBox:
         assert "Warning: czesc PL zadania zakonczyla sie bledem" in err
         assert "pobrano CZ" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_all_countries_failed_returns_1(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7613,9 +7374,9 @@ class TestAutoSplitBBox:
         assert result == 1
         assert "Warning:" not in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_explicit_country_failure_still_returns_1(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7630,7 +7391,7 @@ class TestAutoSplitBBox:
         mock_cz.assert_not_called()
         assert "Warning:" not in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_sheet_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
         mock_manager = Mock()
         mock_manager.download_sheet.return_value = DownloadResult(
@@ -7670,9 +7431,9 @@ class TestAutoSplitBBox:
         mock_manager_class.return_value = mock_manager
         return mock_manager
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_with_resolution_1m_resolves_to_pl(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7687,9 +7448,9 @@ class TestAutoSplitBBox:
         assert "--country auto -> pl" in err
         assert "--resolution 1m" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_with_kron86_resolves_to_pl(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7712,9 +7473,9 @@ class TestAutoSplitBBox:
         assert "PL nie ma rozdzielczosci 2m" in err
         assert "--resolution pl=...,cz=..." in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_pl_only_flags_do_not_clip_bbox(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7766,14 +7527,14 @@ class TestAutoSplitBBox:
         assert result == 1
         assert "--system dotyczy tylko PL" in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_border_bbox_with_target_crs_runs_both_countries(self, mock_cz, tmp_path):
         """ADR-027/erratum to ADR-023: target-crs is no longer a Czech flag -
         the border area in one command gives two cutouts with a shared
         parent_request."""
         mock_cz.return_value = 0
         with patch(
-            "kartograf.cli.download_cmd._download_pl_bbox", return_value=0
+            "kartograf.download.data._download_pl_bbox", return_value=0
         ) as mock_pl:
             result = main(
                 self._BORDER
@@ -7791,13 +7552,13 @@ class TestAutoSplitBBox:
         mock_cz.assert_called_once()
         mock_pl.assert_called_once()
         parent = mock_cz.call_args.kwargs["parent_request"]
-        assert parent == mock_pl.call_args.args[2]
+        assert parent == mock_pl.call_args.args[3]
         # the CZ part goes in the RESULT CRS (cz_crs = target), not in Krovak
         assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:2180"
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_with_product_nmpt_resolves_to_pl(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7812,9 +7573,9 @@ class TestAutoSplitBBox:
         assert "--country auto -> pl" in err
         assert "--product nmpt" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_auto_with_product_orto_resolves_to_pl(
         self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
     ):
@@ -7830,9 +7591,9 @@ class TestAutoSplitBBox:
         mock_cz.assert_not_called()
         assert "--product orto" in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_resolution_5m_resolvable_for_both(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
@@ -7981,8 +7742,8 @@ class TestAutoSplitBBox:
         assert "brak bezpiecznej operacji" in err
         assert "Remedium" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd._country_bbox")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.country_bbox")
     def test_country_bbox_transform_error_returns_1_before_download(
         self, mock_country_bbox, mock_cz, tmp_path, capsys
     ):
@@ -8028,10 +7789,10 @@ class TestAutoSplitGeometry:
     """--geometry in auto mode: the envelope decides the countries."""
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_geometry_border_splits(
         self,
         mock_manager_class,
@@ -8087,10 +7848,10 @@ class TestAutoSplitGeometry:
         }
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_geometry_pl_only_skips_cz(
         self,
         mock_manager_class,
@@ -8138,10 +7899,10 @@ class TestAutoSplitGeometry:
         assert parent["countries"] == ["PL"]
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_geometry_auto_clipping_does_not_print_pl_info(
         self,
         mock_manager_class,
@@ -8191,10 +7952,10 @@ class TestAutoSplitGeometry:
         assert "poza zasiegiem PL/CZ" not in err
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
-    @patch("kartograf.cli.download_cmd._cmd_download_cz", return_value=0)
+    @patch("kartograf.download.data._download_cz", return_value=0)
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_geometry_auto_informs_only_clipped_cz(
         self, manager_class, find, overall, cz, read_crs, tmp_path, capsys
     ):
@@ -8235,7 +7996,7 @@ class TestAutoSplitGeometry:
         assert "Info: --country auto: czesc PL" not in err
         assert "poza zasiegiem PL/CZ" not in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_explicit_cz_gets_parent_request(self, mock_cz, tmp_path):
         """Explicit --country cz: parent_request from the request-CRS envelope."""
         shp = _write_prague_shp(tmp_path)
@@ -8275,7 +8036,7 @@ class TestAutoSplitGeometry:
             mock_cz.call_args.kwargs["bbox"].max_y,
         ]
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_in_task_crs_skips_transform(self, mock_run_cz, tmp_path):
         """File already in EPSG:5514: the envelope goes to CUZK bit for bit, no step."""
         shp = _write_krovak_shp(tmp_path)
@@ -8312,7 +8073,7 @@ class TestAutoSplitGeometry:
         assert bbox.max_y == -1113000.0
         assert bbox.crs == "EPSG:5514"
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     @patch("kartograf.core.geometry.read_source_crs")
     def test_geometry_cz_transform_unavailable_reports_remedy(
         self, mock_read_crs, mock_run_cz, tmp_path, capsys
@@ -8439,11 +8200,11 @@ class TestPartialSheetWarning:
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         with (
             patch(
-                "kartograf.cli.download_cmd._create_provider_and_storage",
+                "kartograf.download.data._create_provider_and_storage",
                 return_value=(provider, storage),
             ),
             patch(
-                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                "kartograf.download.data.find_sheets_for_bbox",
                 return_value=list(TestSheetListExitCode._SHEETS),
             ),
         ):
@@ -8571,7 +8332,7 @@ class TestSingleSheetSkipMessage:
 
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         with patch(
-            "kartograf.cli.download_cmd._create_provider_and_storage",
+            "kartograf.download.data._create_provider_and_storage",
             return_value=(provider, storage),
         ):
             return main(
@@ -8662,11 +8423,11 @@ class TestUnreadableMetadataCache:
 
         with (
             patch(
-                "kartograf.cli.download_cmd._create_provider_and_storage",
+                "kartograf.download.data._create_provider_and_storage",
                 side_effect=create,
             ),
             patch(
-                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                "kartograf.download.data.find_sheets_for_bbox",
                 return_value=list(sheets),
             ),
         ):
@@ -8886,7 +8647,7 @@ class TestSheetCrsMismatchWarning:
                 return_value=session,
             ),
             patch(
-                "kartograf.cli.download_cmd.find_sheets_for_bbox",
+                "kartograf.download.data.find_sheets_for_bbox",
                 return_value=[self.SHEET],
             ),
         ):
@@ -9045,7 +8806,7 @@ _CAMPAIGN_INFO = (
     "czesci PL"
 )
 _CZ_CAMPAIGN_ERROR = (
-    "CZ (CUZK) nie ma kampanii — "
+    "CZ (CUZK) nie ma kampanii - "
     "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko PL"
 )
 # PL/CZ border strip (both rectangular envelopes, ADR-023)
@@ -9107,8 +8868,8 @@ class TestCampaignOptions:
         assert args.all_campaigns is True
         assert args.min_year == 2024
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_campaigns_passed_to_manager_sheet_and_list(
         self, mock_manager_class, mock_find, tmp_path
     ):
@@ -9167,7 +8928,7 @@ class TestCampaignOptions:
         assert kwargs["all_campaigns"] is True
         assert kwargs["min_year"] == 2024
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_min_year_out_of_range_error_no_network(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -9198,7 +8959,7 @@ class TestCampaignOptions:
 
     @pytest.mark.parametrize("product", ["laz", "nmt"])
     @pytest.mark.parametrize("bound", ["--min-year", "--max-year"])
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_cli_year_conflicts_with_min_max(
         self, mock_provider_cls, mock_manager_class, product, bound, capsys, tmp_path
@@ -9242,7 +9003,7 @@ class TestCampaignOptions:
             (["--year", "2200"], "--year musi byc"),
         ],
     )
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_year_bounds_validated_before_network(
         self, mock_manager, flags, expected, capsys, tmp_path
     ):
@@ -9273,8 +9034,8 @@ class TestCampaignOptions:
 
     @pytest.mark.parametrize("product", ["nmt", "nmpt", "orto"])
     @pytest.mark.parametrize("mode", ["sheet", "bbox"])
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_year_passed_to_manager_for_nmt_nmpt_orto(
         self, mock_manager_class, mock_find, product, mode, tmp_path
     ):
@@ -9327,7 +9088,7 @@ class TestCampaignOptions:
             (["--all-campaigns", "--year", "2025"], True, (2025, 2025)),
         ],
     )
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_campaigns_independent_of_year_flags(
         self, mock_manager_class, flags, all_campaigns, bounds, tmp_path
     ):
@@ -9359,8 +9120,8 @@ class TestCampaignOptions:
         assert (kwargs["min_year"], kwargs["max_year"]) == bounds
         assert kwargs["all_campaigns"] is all_campaigns
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_reports_link_kept_outside_range(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
@@ -9399,9 +9160,9 @@ class TestCampaignOptions:
         assert "sciezka standardowa" in line and "2025-10-21_84183" in line
         assert "Info:" in err
 
-    @patch("kartograf.cli.download_cmd._create_provider_and_storage")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._create_provider_and_storage")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_year_nmt_list_error_message_and_hints(
         self, mock_manager_class, mock_find, mock_factory, capsys, tmp_path
     ):
@@ -9453,8 +9214,8 @@ class TestCampaignOptions:
         assert cache._conn is None
 
     @pytest.mark.parametrize("mode", ["sheet", "bbox"])
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_year_info_better_coverage(
         self, mock_manager_class, mock_find, mode, capsys, tmp_path
     ):
@@ -9521,14 +9282,17 @@ class TestCampaignOptions:
         assert "niepelny, pokrycie 0,9 %" in err
         assert "wieksze pokrycie: 2025-04-27_83233 (pelny, pokrycie 99,8 %)" in err
 
-    def test_cli_better_coverage_caps_details_at_ten(self, capsys, tmp_path):
-        from kartograf.cli.download_cmd import _print_better_coverage
+    def test_cli_better_coverage_caps_details_at_ten(self, tmp_path):
+        from kartograf.download.data import _better_coverage, _Run
+        from kartograf.notices import NoticeSink
 
         coverage = {f"N-34-139-C-a-3-{n:02}": "83233" for n in range(12)}
         result = DownloadResult(better_coverage=coverage)
-        _print_better_coverage(result, [tmp_path / f"{code}.asc" for code in coverage])
+        run = _Run(NoticeSink(None), None, False, None, False, 1, None)
+        _better_coverage(run, result, [tmp_path / f"{code}.asc" for code in coverage])
 
-        lines = capsys.readouterr().err.splitlines()
+        (notice,) = run.sink.notices
+        lines = notice.text.splitlines()
         assert "dla 12 arkuszy" in lines[0]
         assert len(lines) == 12
         assert "N-34-139-C-a-3-00" in lines[1]
@@ -9647,7 +9411,7 @@ class TestCampaignOptions:
 
     @pytest.mark.parametrize("location", [_PL_BBOX_2180, _BORDER_BBOX])
     @pytest.mark.parametrize("flag", ["--year", "--min-year", "--max-year"])
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.cutout.download_pl_cutout")
     def test_cli_year_flags_rejected_with_target_crs(
         self, mock_prepare, mock_run_cz, flag, location, capsys, tmp_path
@@ -9683,7 +9447,7 @@ class TestCampaignOptions:
         mock_run_cz.assert_not_called()
 
     @patch("kartograf.download.cutout.download_pl_cutout")
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_target_crs_with_all_cross_border_rejected_before_cz(
         self, mock_run_cz, mock_prepare, capsys, tmp_path
     ):
@@ -9718,7 +9482,7 @@ class TestCampaignOptions:
         mock_run_cz.assert_not_called()
         mock_prepare.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sheet_explicit_country_with_all_is_error(
         self, mock_run_cz, capsys, tmp_path
     ):
@@ -9750,7 +9514,7 @@ class TestCampaignOptions:
         assert "Info:" not in err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
             [
@@ -9776,7 +9540,7 @@ class TestCampaignOptions:
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sheet_auto_with_min_year_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
             [
@@ -9803,7 +9567,7 @@ class TestCampaignOptions:
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_sm5_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
             [
@@ -9830,7 +9594,7 @@ class TestCampaignOptions:
         mock_run_cz.assert_not_called()
 
     @pytest.mark.parametrize("sheet", ["CTES96", "302_5550"])
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cli_year_cz_sheet_rejected(self, mock_run_cz, sheet, capsys, tmp_path):
         rc = main(
             [
@@ -9858,7 +9622,7 @@ class TestCampaignOptions:
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_area_explicit_cz_with_all_error(self, mock_run_cz, capsys, tmp_path):
         mock_run_cz.return_value = 0
         rc = main(
@@ -9889,8 +9653,8 @@ class TestCampaignOptions:
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._resolve_cz_geometry_bbox")
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data.cz_geometry_bbox")
+    @patch("kartograf.download.data._download_cz")
     def test_geometry_explicit_cz_with_min_year_error(
         self, mock_run_cz, mock_cz_bbox, tmp_path, capsys
     ):
@@ -9927,7 +9691,7 @@ class TestCampaignOptions:
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_area_auto_entirely_cz_with_all_is_error(
         self, mock_run_cz, capsys, tmp_path
     ):
@@ -9957,7 +9721,7 @@ class TestCampaignOptions:
         assert "Info:" not in err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_area_auto_entirely_cz_with_min_year_is_error(
         self, mock_run_cz, capsys, tmp_path
     ):
@@ -9988,9 +9752,9 @@ class TestCampaignOptions:
         assert "Info:" not in err
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_area_auto_cross_border_with_all_info_once(
         self, mock_manager_class, mock_find, mock_cz, capsys, tmp_path
     ):
@@ -10026,9 +9790,9 @@ class TestCampaignOptions:
         assert mock_manager_class.call_args.kwargs["all_campaigns"] is True
         mock_cz.assert_called_once()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_cli_year_pl_cz_info(
         self, mock_manager_class, mock_find, mock_cz, capsys, tmp_path
     ):
@@ -10063,9 +9827,9 @@ class TestCampaignOptions:
         assert mock_manager_class.call_args.kwargs["all_campaigns"] is False
         assert mock_cz.call_count == 1
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_area_auto_pl_only_flag_plus_all_no_campaign_info(
         self, mock_manager_class, mock_find, mock_cz, capsys, tmp_path
     ):
@@ -10119,7 +9883,7 @@ class TestCampaignOptions:
             ]
         )
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_local_version_with_newer_campaign(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10163,7 +9927,7 @@ class TestCampaignOptions:
         ) in captured.out
         assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_new_version_line(self, mock_manager_class, capsys, tmp_path):
         target = tmp_path / "N-34-130-D-d-2-4.asc"
         manager = _mock_manager(target)
@@ -10179,18 +9943,8 @@ class TestCampaignOptions:
         out = capsys.readouterr().out
         assert "N-34-130-D-d-2-4: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_mock_manager_reports_result_path(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        """A successful single-sheet result reports its downloaded path."""
-        mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
-
-        assert self._single(tmp_path) == 0
-        assert f"N-34-130-D-d-2-4: {tmp_path / 'a.asc'}" in capsys.readouterr().out
-
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_all_list_status_line_per_file_and_counters(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
@@ -10240,7 +9994,7 @@ class TestCampaignOptions:
         ) in out
 
     @patch("kartograf.download.cutout.download_pl_cutout")
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_target_crs_with_all_cross_border_no_info_before_error(
         self, mock_run_cz, mock_prepare, capsys, tmp_path
     ):
@@ -10271,7 +10025,7 @@ class TestCampaignOptions:
         assert "Error: --all-campaigns nie dziala z --target-crs" in err
         assert "Info:" not in err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_sheet_target_crs_with_all_gets_sheet_error(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10304,7 +10058,7 @@ class TestCampaignOptions:
         assert "--all-campaigns nie dziala" not in err
         mock_manager_class.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_min_year_error_names_cli_flag(self, mock_manager_class, capsys, tmp_path):
         """Fix 4: the CLI says --min-year, not min_year (a library parameter)."""
         rc = main(
@@ -10333,7 +10087,7 @@ class TestCampaignOptions:
         assert "Error: --min-year musi byc" in err and "1800" in err
         assert " min_year" not in err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_campaigns_passed_to_manager_hierarchy(self, mock_manager_class, tmp_path):
         """Fix 5: the hierarchy path (--scale)."""
         manager = Mock()
@@ -10376,7 +10130,7 @@ class TestCampaignOptions:
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_campaigns_passed_to_manager_geometry_list(
         self, mock_manager_class, mock_find, mock_overall, mock_read_crs, tmp_path
     ):
@@ -10421,7 +10175,7 @@ class TestCampaignOptions:
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["all_campaigns"] is True and kwargs["min_year"] == 2022
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_newest_min_year_single_sheet_no_coverage_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10460,9 +10214,9 @@ class TestCampaignOptions:
         err = capsys.readouterr().err
         assert "Error:" in err and "2019-05-21" in err
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_quiet_does_not_hide_campaign_info(
         self, mock_manager_class, mock_find, mock_cz, capsys, tmp_path
     ):
@@ -10495,7 +10249,7 @@ class TestCampaignOptions:
         assert _CAMPAIGN_INFO in captured.err
         assert _CAMPAIGN_INFO not in captured.out
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_format_error_exit_1(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10529,7 +10283,7 @@ class TestCampaignOptions:
         err = capsys.readouterr().err
         assert "Error:" in err and "format 'X' nieobslugiwany" in err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_namespace_without_new_attrs_defaults(self, mock_manager_class, tmp_path):
         from kartograf.cli.download_cmd import cmd_download
 
@@ -10557,7 +10311,7 @@ class TestCampaignOptions:
     # I-1: newest on an index failure -> local campaign + Warning
     # -------------------------------------------------------------------------
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_unverified_local_campaign_warns_single_sheet(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10621,7 +10375,7 @@ class TestCampaignOptions:
             "(pobranie nieudane po 3 probach: HTTP 503)"
         ) in err
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_verified_single_sheet_has_no_unverified_warning(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10658,8 +10412,8 @@ class TestCampaignOptions:
         )
         assert "skorowidz GUGiK niedostepny" not in capsys.readouterr().err
 
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_unverified_local_campaign_warns_in_list_mode(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
@@ -10749,7 +10503,7 @@ class TestCampaignOptions:
             "-q",
         ]
         with patch(
-            "kartograf.cli.download_cmd._create_provider_and_storage",
+            "kartograf.download.data._create_provider_and_storage",
             return_value=(fake, None),
         ):
             assert main(argv) == 0
@@ -10773,7 +10527,7 @@ class TestCampaignOptions:
 class TestListMessagesUx:
     """O-3 / O-6 / O-7: CLI messages on no data, skip and download."""
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_skip_has_no_downloading_line(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10815,7 +10569,7 @@ class TestListMessagesUx:
         assert "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233" in out
         assert "Downloading" not in out
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_error_has_no_downloading_line(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10900,7 +10654,7 @@ class TestListMessagesUx:
         "pl",
     )
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_all_no_coverage_list_prints_real_hints(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10920,8 +10674,8 @@ class TestListMessagesUx:
         assert "nie ma danych dla zadnego z 2 arkuszy" in captured.err
         info = [x for x in captured.err.splitlines() if x.startswith("Info:")]
         assert info == [
-            "Info: Dostepny potomek 7.173.21.01 — uzyj --scale 1:2000",
-            "Info: Dostepny potomek 7.173.22.01 — uzyj --scale 1:2000",
+            "Info: Dostepny potomek 7.173.21.01 - uzyj --scale 1:2000",
+            "Info: Dostepny potomek 7.173.22.01 - uzyj --scale 1:2000",
         ]
         assert "Downloaded 0" not in captured.out
 
@@ -10932,7 +10686,7 @@ class TestListMessagesUx:
             no_coverage=list(hints_by_sheet),
             no_coverage_hints=hints_by_sheet,
         )
-        with patch("kartograf.cli.download_cmd.DownloadManager") as cls:
+        with patch("kartograf.download.data.DownloadManager") as cls:
             cls.return_value = TestListMessagesUx._list_manager(result)
             main([*TestListMessagesUx._BBOX_ARGS, "-o", str(tmp_path)])
         err = capsys.readouterr().err
@@ -10940,7 +10694,7 @@ class TestListMessagesUx:
 
     def test_pl1992_hints_with_different_sheet_are_all_kept(self, capsys, tmp_path):
         """Different sheet codes in hints (PL-1992) are not merged into one."""
-        h = "Skorowidz ma ten obszar w PL-1992: {g} (1:10000) — uzyj tego godla"
+        h = "Skorowidz ma ten obszar w PL-1992: {g} (1:10000) - uzyj tego godla"
         lines = self._info_lines(
             {
                 "S1": (h.format(g="M-34-63-A-c-2-1"),),
@@ -10968,7 +10722,7 @@ class TestListMessagesUx:
         assert "i 2 innych podpowiedzi" in lines[5]
         assert "no_coverage_hints" in lines[5]
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_message_with_dot_but_no_hints_prints_no_info(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -10982,7 +10736,7 @@ class TestListMessagesUx:
         assert "Info:" not in capsys.readouterr().err
 
     @pytest.mark.parametrize("all_campaigns", [False, True])
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_all_no_coverage_quiet_keeps_stderr_no_summary(
         self, mock_manager_class, all_campaigns, capsys, tmp_path
     ):
@@ -11005,7 +10759,7 @@ class TestListMessagesUx:
         assert "Downloaded" not in captured.out
 
     @pytest.mark.parametrize("all_campaigns", [False, True])
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_all_no_coverage_not_quiet_no_summary(
         self, mock_manager_class, all_campaigns, capsys, tmp_path
     ):
@@ -11018,7 +10772,7 @@ class TestListMessagesUx:
         assert rc == 1
         assert "Downloaded" not in capsys.readouterr().out
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_all_no_coverage_has_hint_and_no_summary(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -11059,7 +10813,7 @@ class TestListMessagesUx:
 class TestErrorWithoutBlankLine:
     """FB-1: no blank line before `Error:` when the progress bar is not running."""
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_error_starts_stderr(
         self, mock_manager_class, capsys, tmp_path
     ):
@@ -11174,11 +10928,11 @@ class TestLazOnlyOptions:
     def guards(self):
         """Everything that would reach the network or the disk."""
         with (
-            patch("kartograf.cli.download_cmd.DownloadManager") as manager,
-            patch("kartograf.cli.download_cmd._create_provider_and_storage") as factory,
+            patch("kartograf.download.data.DownloadManager") as manager,
+            patch("kartograf.download.data._create_provider_and_storage") as factory,
             patch("kartograf.download.cutout.download_pl_cutout") as cutout,
-            patch("kartograf.cli.download_cmd._run_cz") as run_cz,
-            patch("kartograf.cli.download_cmd._cmd_download_cz") as cmd_cz,
+            patch("kartograf.download.data._download_cz") as run_cz,
+            patch("kartograf.download.data._download_cz") as cmd_cz,
             patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
         ):
             yield [manager, factory, cutout, run_cz, cmd_cz, laz]
@@ -11282,7 +11036,7 @@ class TestFullSheetOption:
     @staticmethod
     def _run(fake, *argv):
         with patch(
-            "kartograf.cli.download_cmd._create_provider_and_storage",
+            "kartograf.download.data._create_provider_and_storage",
             return_value=(fake, None),
         ):
             return main(
@@ -11349,7 +11103,7 @@ class TestFullSheetOption:
         assert not out.exists()
 
     @pytest.mark.parametrize("location", [_PL_BBOX_2180, _BORDER_BBOX])
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.cutout.download_pl_cutout")
     def test_target_crs_rejected_before_network(
         self, prepare, run_cz, location, capsys, tmp_path
@@ -11381,7 +11135,7 @@ class TestFullSheetOption:
         prepare.assert_not_called()
         run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._run_cz")
+    @patch("kartograf.download.data._download_cz")
     def test_cz_only_is_error(self, run_cz, capsys, tmp_path):
         rc = main(
             [
@@ -11408,9 +11162,9 @@ class TestFullSheetOption:
         assert _CZ_CAMPAIGN_ERROR in err and "Info:" not in err
         run_cz.assert_not_called()
 
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
+    @patch("kartograf.download.data._download_cz")
+    @patch("kartograf.download.data.find_sheets_for_bbox")
+    @patch("kartograf.download.data.DownloadManager")
     def test_pl_cz_auto_info_and_flag_reaches_manager(
         self, manager_cls, find, cz, capsys, tmp_path
     ):

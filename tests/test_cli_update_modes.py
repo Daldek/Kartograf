@@ -18,7 +18,7 @@ G = "N-34-139-C-a-3-1"
 
 def _run(fake, out, *argv):
     with patch(
-        "kartograf.cli.download_cmd._create_provider_and_storage",
+        "kartograf.download.data._create_provider_and_storage",
         return_value=(fake, None),
     ):
         return main(

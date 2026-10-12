@@ -811,7 +811,7 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
     for record in records:
         if parser.system == "2000" and record.sheet.startswith(parser.sheet + "."):
             scale = SheetParser(record.sheet).scale
-            hints.add(f"Dostepny potomek {record.sheet} — uzyj --scale {scale}")
+            hints.add(f"Dostepny potomek {record.sheet} - uzyj --scale {scale}")
         elif record.system is not None and record.system != parser.system:
             scale = SheetParser(record.sheet).scale
             # PL-1992 sheets come only at 1:10000 (no --scale); PL-2000 needs it
@@ -820,7 +820,7 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
                 flags += f" --scale {scale}"
             hints.add(
                 f"Skorowidz ma ten obszar w PL-{record.system}: "
-                f"{record.sheet} ({scale}) — uzyj tego godla lub {flags}"
+                f"{record.sheet} ({scale}) - uzyj tego godla lub {flags}"
             )
     return hints
 

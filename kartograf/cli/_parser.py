@@ -14,6 +14,15 @@ from kartograf._version import build_version
 from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.cutout import SUPPORTED_TARGET_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
+from kartograf.download.options import (
+    COUNTRY_CHOICES,
+    PRODUCT_CHOICES,
+    RESOLUTION_PL,
+    SCALE_2000_CHOICES,
+    SYSTEM_CHOICES,
+    VERTICAL_CRS_CZ,
+    VERTICAL_CRS_PL,
+)
 from kartograf.exceptions import ValidationError
 
 
@@ -64,34 +73,8 @@ _LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
 )
 
-# Admissible values of the download data choices (0.8.0: no defaults). One
-# wording for --help and for the `Error:` of a missing value.
-PRODUCT_CHOICES = (
-    "nmt (Numeryczny Model Terenu; PL i CZ), nmpt (Numeryczny Model Pokrycia "
-    "Terenu; PL, tylko 1m), orto (ortofotomapa RGB; PL), laz (chmura punktow "
-    "LIDAR; PL)"
-)
-COUNTRY_CHOICES = (
-    "pl (GUGiK), cz (CUZK), auto (kraje wg prostokatnych obwiedni PL i CZ; "
-    "obszar w obu krajach daje osobne pliki per kraj)"
-)
-RESOLUTION_PL = "1m (NMT 1 m), 5m (NMT 5 m, tylko --vertical-crs EVRF2007)"
-VERTICAL_CRS_PL = (
-    "EVRF2007 (PL-EVRF2007-NH, uklad obowiazujacy), KRON86 (PL-KRON86-NH, "
-    "uklad historyczny; nie dla NMT 5m)"
-)
-VERTICAL_CRS_CZ = (
-    "Bpv (natywny uklad CUZK), EVRF2007 (transformacja z Bpv, "
-    "ok. +0,11..+0,15 m, rosnaco S->N)"
-)
-SYSTEM_CHOICES = (
-    "1992 (godla PL-1992, arkusze 1:10000), 2000 (godla PL-2000, strefy "
-    "EPSG:2176-2179; wymaga --scale)"
-)
-SCALE_2000_CHOICES = (
-    "1:5000, 1:2000, 1:1000, 1:500 (GUGiK publikuje arkusze PL-2000 najczesciej "
-    "w 1:2000, takze w 1:1000 i 1:5000)"
-)
+# Admissible values of the download data choices (0.8.0: no defaults): one
+# wording for --help and for the library ``ValidationError`` of a missing value.
 
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:
