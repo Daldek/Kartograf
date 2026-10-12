@@ -121,9 +121,13 @@
 >    `docs/research/2026-10-12-test-0.8.0/raport.md`).
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
 > NIEWYPCHNIETE na `origin`; `feat/versioned-store` po rebase na `develop`
-> (2026-10-12) i z planem 1/3 — rozjechana z `origin` (wymaga
-> `push --force-with-lease`). Push tylko za zgoda uzytkownika (2026-10-12:
-> "nic teraz").
+> (2026-10-12), z planem 1/3 i poprawka `1c84b3e` — rozjechana z `origin`
+> (wymaga `push --force-with-lease`). Push tylko za zgoda uzytkownika
+> (2026-10-12: "nic teraz").
+> **PROGRESS tylko na `develop`:** galaz nie zmienia `docs/PROGRESS.md`
+> (ma wersje z `3f150ce`), wiec rebase/merge bierze dziennik z `develop`
+> bez konfliktu — sesje dopisuj tu. CHANGELOG [0.8.0] dla magazynu i
+> ADR-036 sa TYLKO na galezi (`git show feat/versioned-store:docs/CHANGELOG.md`).
 > **v0.8.0-dev:** cykl OTWARTY (`chore(release): poczatek cyklu 0.8.0`).
 > Zrobione: usuniecie przestarzalego toru arkuszowego wycinkow PL i
 > `GridMismatchError` (ADR-035 errata 2); angielskie identyfikatory API/CLI
@@ -179,11 +183,19 @@
   `--all-campaigns --min-year 2019` (4 wersje, `full_sheet/`, pokrycie
   tylko lotu niepelnego, `better_coverage`), tryb listy `--bbox --country
   pl` (`aktualne` / `do pobrania`, potem `Nowe: 1, ... lokalne: 1`).
-  Znalezisko: udzial bez `serverino` (punkt 2 bloku START).
+  Znalezisko: udzial bez `serverino` (punkt 2 bloku START) — naprawione
+  `1c84b3e` (`links._same_content_hardlink`, 3 testy w
+  `tests/test_links.py`, ADR-036/USAGE/ARCHITECTURE zaktualizowane).
 - Test na zywo zmian 0.8.0 na migawce `develop` `3f150ce`: 0 FAIL
   (raport `docs/research/2026-10-12-test-0.8.0/raport.md`; dane
   `<katalog-danych>/kartograf/e2e/2026-10-12-test-0.8.0/`). Subagent do
   tego testu nie wystartowal (limit modelu) — test wykonany recznie.
+  Obserwacje bez poprawek: cache SQLite na udziale SMB przy rownoleglych
+  procesach daje `database is locked` (praca bez cache, zgodnie z
+  projektem); jedna wartosc `--resolution 1m` pod `--country auto` na
+  pograniczu zaweza zadanie do PL (`Info: --country auto -> pl`, ADR-023
+  pkt 5, zgodne z USAGE); dane GUGiK: NMPT N-34-139-C-a-3-1 tylko 0,5 m,
+  `6.179.12` bez arkuszy 1:5000 (podpowiedz PL-1992).
 
 ### Sesja 2026-10-12 — zmiany lamiace 0.8.0 (sheet, --all-campaigns, bez wartosci domyslnych)
 
