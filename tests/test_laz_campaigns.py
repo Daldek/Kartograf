@@ -13,7 +13,12 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.laz import download_laz_area, write_laz_sidecar
+from kartograf.download.laz import (
+    download_laz_area,
+    laz_version_ref,
+    write_laz_sidecar,
+)
+from kartograf.download.versions import read_content
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik_laz import GugikLazProvider
 
@@ -166,6 +171,9 @@ def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
         .tiles
     )
     target = tmp_path / "a.laz"
+    target.write_bytes(b"LASF")
+    digest = read_content(target, ext=".laz", coverage=False)
+    version = laz_version_ref(tile)
     write_laz_sidecar(
         _Provider(),
         tile,
@@ -174,6 +182,8 @@ def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
         all_campaigns=True,
         min_year=2022,
         max_year=2023,
+        digest=digest,
+        version=version,
     )
     meta = _meta(target)
     assert meta["request"]["campaigns"] == "all"
@@ -184,11 +194,24 @@ def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
     assert meta["extra"]["full_sheet"] is True
 
     exact = tmp_path / "b.laz"
-    write_laz_sidecar(_Provider(), tile, exact, bbox, min_year=2023, max_year=2023)
+    exact.write_bytes(b"LASF")
+    write_laz_sidecar(
+        _Provider(),
+        tile,
+        exact,
+        bbox,
+        min_year=2023,
+        max_year=2023,
+        digest=digest,
+        version=version,
+    )
     assert _meta(exact)["request"]["year"] == 2023
 
     plain = tmp_path / "c.laz"
-    write_laz_sidecar(_Provider(), tile, plain, bbox, year=2023)
+    plain.write_bytes(b"LASF")
+    write_laz_sidecar(
+        _Provider(), tile, plain, bbox, year=2023, digest=digest, version=version
+    )
     request = _meta(plain)["request"]
     assert request["year"] == 2023
     assert "campaigns" not in request
@@ -217,8 +240,8 @@ def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
         (2022, "PL-2000:S7"),
         (2023, "PL-1992"),
     }
-    for path in result.downloaded:
-        request = _meta(path)["request"]
+    for file in result.files:
+        request = _meta(file.version_path)["request"]
         assert request["campaigns"] == "all"
         assert request["min_year"] == 2022
         assert request["max_year"] == 2023

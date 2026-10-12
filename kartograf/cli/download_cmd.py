@@ -2342,16 +2342,17 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         min_year=min_year,
         max_year=max_year,
         max_workers=workers,
-        force=args.force,
+        update="force" if args.force else None,
         on_progress=_progress,
         parent_request=_laz_parent_request(args, bbox),
     )
 
     if not quiet:
         print()
+        downloaded = sum(file.status != "local" for file in result.files)
+        local = len(result.files) - downloaded
         print(
-            f"Downloaded {len(result.downloaded)} tiles "
-            f"({len(result.skipped)} skipped) to {output_dir / 'laz'}"
+            f"Downloaded {downloaded} tiles ({local} skipped) to {output_dir / 'laz'}"
         )
     if result.failed:
         # Code 1 => `Error:` (convention: `Warning:` only with code 0) and the FULL
