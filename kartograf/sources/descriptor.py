@@ -23,6 +23,7 @@ class TransportKind(StrEnum):
     WFS = "wfs"  # PL LAZ
     DIRECT_FILES = "direct_files"  # PL BDOT10k, CZ openzu (DMR 4G)
     CLMS_API = "clms_api"  # CORINE
+    WMS = "wms"  # CORINE preview (EEA/DLR styled PNG, not data)
     ARCGIS_IMAGE = "arcgis_image"  # stage 1 (CZ exportImage)
     ARCGIS_QUERY = "arcgis_query"  # stage 3 (ZABAGED), SK
     OGC_API_FEATURES = "ogc_api_features"  # DE basemap.de
@@ -85,8 +86,9 @@ class SourceDescriptor:
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
     tile_scheme: TileScheme | None
-    # Segment template {system}/{vcrs} (ADR-026); None for LandCoverManager sources
-    storage_subdir: str | None
+    # Segment template {system}/{vcrs} (ADR-026); land cover: a prefix completed
+    # by content tokens (landcover.store.landcover_segment, spec 3.4)
+    storage_subdir: str
     default_extension: str
     license: LicenseInfo
     resolution: str | None = None
@@ -108,8 +110,6 @@ class SourceDescriptor:
         this check it produced a silent, dangling storage segment (e.g.
         `nmt/pl_1992_1m_`, review max 2026-08-30, finding 7).
         """
-        if self.storage_subdir is None:
-            raise ValueError(f"Zrodlo '{self.key}' nie ma storage_subdir")
         for name, value in (("system", system), ("vcrs", vertical_crs)):
             if value is not None and not value.strip():
                 raise ValidationError(

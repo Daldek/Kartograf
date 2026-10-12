@@ -139,10 +139,7 @@ class FileStorage:
     @staticmethod
     def _descriptor_template(key: str) -> str:
         """Segment template of a registered source."""
-        template = get_source(key).storage_subdir
-        if template is None:
-            raise ValueError(f"Source '{key}' has no storage_subdir")
-        return template
+        return get_source(key).storage_subdir
 
     @property
     def output_dir(self) -> Path:

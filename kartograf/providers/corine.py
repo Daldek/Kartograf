@@ -41,13 +41,15 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
+from kartograf.sources.edition import Edition, edition_label
 from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
     download_to,
+    get_with_retry,
     reject_error_document,
 )
 
@@ -203,20 +205,21 @@ class CorineProvider(LandCoverProvider):
     # =========================================================================
     CLMS_API_BASE = "https://land.copernicus.eu/api"
 
-    # Dataset UIDs for CORINE Land Cover (from CLMS API)
+    # Dataset UIDs and RASTER download ids of the CLMS catalogue (checked
+    # 2026-10-12, docs/research/2026-10-12-plan3-spec-check/raport.md)
     CLMS_DATASET_UIDS = {
         2018: "0407d497d3c44bcd93ce8fd5bf78596a",
-        2012: "f0a04d46-7506-4d13-8a5e-0c7f22506a8c",
-        2006: "e6f25e4e-d847-4c31-95f2-15bf11c93f66",
-        2000: "a3f977ae-e863-4b0e-85e7-0accb8a44359",
+        2012: "a5ee71470be04d66bcff498f94ceb5dc",
+        2006: "d443c86fec2f49e08ff12c7decdbf2af",
+        2000: "6704f90ca82e4f228a46111519f8978e",
     }
 
     # Download information IDs for raster data
     CLMS_RASTER_DOWNLOAD_IDS = {
         2018: "7bcdf9d1-6ba0-4d4e-afa8-01451c7316cb",
-        2012: "b0a2b7bb-a1f8-4d99-b987-83ae7f687cf5",
-        2006: "a99e5c2f-6c52-4d22-b8b4-6e0c38282ec1",
-        2000: "c8f3c1d2-2e7a-4b5c-8e0d-1a2b3c4d5e6f",
+        2012: "b1027c88-6256-435b-98a3-62f019cbb381",
+        2006: "4841f8cb-6e7c-4227-bb35-cd787609c546",
+        2000: "19d7fbd8-53ee-4d09-89b6-fe5231247763",
     }
 
     # =========================================================================
@@ -310,6 +313,56 @@ class CorineProvider(LandCoverProvider):
         """Return source URL."""
         return "https://land.copernicus.eu/en/products/corine-land-cover"
 
+    def uses_clms(self, year: int) -> bool:
+        """True when ``year`` is downloaded as CLMS data (else a WMS preview)."""
+        return year in self.CLMS_YEARS and self.has_clms_token
+
+    def edition(self, year: int, timeout: int = DEFAULT_TIMEOUT) -> Edition:
+        """CORINE edition of ``year`` from the public CLMS catalogue (D29).
+
+        ``GET {CLMS_API_BASE}/@search?UID=<uid>&fullobjects=1`` without a
+        token; the single dataset record's
+        ``characteristics_release_major_version`` (e.g. ``V2020_20u1``) is
+        the version label.
+
+        Raises
+        ------
+        ValidationError
+            ``year`` has no CLMS dataset (preview-only years).
+        DownloadError
+            HTTP failure, not exactly one record or no release field.
+        """
+        uid = self.CLMS_DATASET_UIDS.get(year)
+        if uid is None:
+            raise ValidationError(
+                f"CORINE {year}: brak zbioru CLMS (lata: {sorted(self.CLMS_YEARS)})"
+            )
+        url = f"{self.CLMS_API_BASE}/@search?UID={uid}&fullobjects=1"
+        what = f"CORINE {year} katalog CLMS"
+        response = get_with_retry(
+            self._sessions.get(),
+            url,
+            timeout=timeout,
+            retries=self.MAX_RETRIES,
+            description=what,
+            headers={"Accept": "application/json"},
+        )
+        try:
+            items = response.json().get("items")
+        except (ValueError, AttributeError) as e:
+            raise DownloadError(f"{what}: odpowiedz nie jest JSON: {e}") from e
+        if not isinstance(items, list) or len(items) != 1:
+            count = len(items) if isinstance(items, list) else None
+            raise DownloadError(
+                f"{what}: oczekiwano 1 rekordu zbioru {uid}, jest {count}"
+            )
+        raw = items[0].get("characteristics_release_major_version")
+        if not isinstance(raw, str) or not raw:
+            raise DownloadError(
+                f"{what}: rekord bez characteristics_release_major_version"
+            )
+        return Edition(id=edition_label(raw, what=what), url=url, dataset_uid=uid)
+
     # =========================================================================
     # Download by bbox
     # =========================================================================
@@ -371,7 +424,7 @@ class CorineProvider(LandCoverProvider):
         output_path = Path(output_path)
 
         # Use CLMS API if token available and year is supported
-        if self.has_clms_token and year in self.CLMS_YEARS:
+        if self.uses_clms(year):
             return self._download_via_clms(bbox, output_path, year, timeout)
 
         # Fallback to WMS (styled preview)
