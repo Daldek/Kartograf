@@ -1,8 +1,10 @@
 # Spec: Magazyn wersjonowany (podprojekt 1 roadmapy v1.0.0)
 
 **Data:** 2026-10-08; rewizja 2026-10-11 (po 0.7.1 i 0.7.2 oraz review
-zapisu i skladowania, decyzje D13-D24)
-**Status:** ZAAKCEPTOWANY przez uzytkownika 2026-10-11 (rewizja D13-D24)
+zapisu i skladowania, decyzje D13-D24); rewizja 2026-10-12 (weryfikacja
+przed planem 2/3, decyzje D26-D28; D25 odrzucone)
+**Status:** ZAAKCEPTOWANY przez uzytkownika 2026-10-11 (rewizja D13-D24);
+D26-D28 decyzje uzytkownika 2026-10-12
 **Galaz:** `feat/versioned-store` (z `develop`; rebase na 0.7.2 2026-10-11)
 **Wersja docelowa:** 0.8.0 (zmiany lamiace ukladu `data/`, `--force`,
 sidecara, nazw wycinkow `bbox/` i CLI land cover)
@@ -42,7 +44,7 @@ Poza zakresem (podprojekt 2): manifest projektu, `prune` (usuwanie wersji),
 weryfikacja integralnosci lokalnych plikow (`verify`), indeks "ktore
 projekty uzywaja pliku".
 
-## 2. Decyzje (rozmowy 2026-10-08 i 2026-10-11)
+## 2. Decyzje (rozmowy 2026-10-08, 2026-10-11 i 2026-10-12)
 
 | # | Decyzja | Odrzucone |
 |---|---|---|
@@ -70,6 +72,9 @@ projekty uzywaja pliku".
 | D22 | Hardlinki wymagane: brak hardlinku = `DownloadError` pliku, bez kopii (I4; zmienia ADR-030 errata 4) | kopia + `Warning:` (2-3x miejsca, pelna kopia przy kazdym przestawieniu dowiazania) |
 | D23 | Ta sama tresc pod nowym sygnalem (nowy rekord skorowidza, nowy `ETag`, nowa edycja): nowy katalog wersji `<nowa_etykieta>_<sha8>` z hardlinkiem do tych samych danych i wlasnym sidecarem; status `relabeled` (review 2026-10-11, I1) | `unchanged` bez sladu nowego sygnalu (petla "dostepna nowsza" -> `--upgrade` -> bez zmian); jeden katalog na tresc z etykieta poza niezmiennym sidecarem |
 | D24 | Stary zwykly plik 0.7.x w sciezce, ktora w 0.8.0 staje sie dowiazaniem (LAZ `laz/pl_<uklad>_<vcrs>/...`, CZ godlo i `bbox/` w `nmt/cz_*`), jest NADPISYWANY przy pierwszym dowiazaniu, bez kopii i bez komunikatu; tylko wpis BREAKING w CHANGELOG (review 2026-10-11, D5; uzytkownik: brak innych uzytkownikow 0.7.x) | odlozenie jako `<nazwa>.pre-0.8`; przyjecie starego pliku jako wersji (migracja, wbrew D10) |
+| D26 | LAZ wersjonowany per plik: nazwa kafla niesie id rekordu (`<zgloszenie>_<rekord>_<godlo>.laz`), wiec nowszy nalot to INNE pliki, nie nowa wersja tego samego. Selekcja kafli zawsze wg ADR-029/ADR-030 (najnowsza w zakresie lat); kafel z lokalna wersja nie jest pobierany ponownie (domyslnie i `--upgrade`), nowy kafel z nowszego nalotu pobiera sie takze domyslnie — wyjatek od D5 dla LAZ. WFS niedostepny = blad zadania jak dzis (bez lokalnej mapy pokrycia obszaru) (2026-10-12) | pokrycie obszaru najpierw z lokalnych kafli + `Info:` o nowszym nalocie (nowa sciezka selekcji) |
+| D27 | `DownloadManager.download_bbox` USUNIETE (BREAKING): plik o nazwie wywolujacego w korzeniu `--output`, zawsze nadpisywany, dubluje `download_pl_cutout(target_crs="EPSG:2180")` bez maski PRG; Hydrograf go nie wola. NMT/NMPT bbox -> `download_pl_cutout` (wersjonowany, D15); orto i surowy WCS -> `provider.download_bbox(bbox, path)` poza magazynem, bez wersji i sidecara (2026-10-12) | wymagana `path` poza magazynem z odmowa nadpisania (dwa API do zblizonego wyniku); osobny segment `bbox_raw/` (trzecia regula sciezek) |
+| D28 | `Content-Length` z `HEAD` NIE jest sygnalem uzupelniajacym zrodel `index`; cicha poprawke u zrodla wykrywa tylko `--force` (ograniczenie 4.1) (2026-10-12) | `HEAD` na plik w `--check-updates`/`--upgrade` (1 zapytanie na plik) |
 
 ## 3. Model wersji i uklad na dysku
 
@@ -237,7 +242,10 @@ istniejacego wyniku; reguly sekcji 4.
 
 ### 4.1 Sygnal swiezosci
 
-Deskryptor zrodla (`sources/`) deklaruje `update_signal`:
+Kanal dostepu deskryptora (`AccessChannel` w `sources/`) deklaruje
+`update_signal` — per kanal, bo jeden deskryptor moze miec kanaly o roznych
+sygnalach (np. `cz.cuzk.dmr4g`: pliki SM5 z `openzu` i `exportImage`;
+`pl.gugik.nmt_1m`: arkusze ze skorowidza i WCS) (rewizja 2026-10-12):
 
 | Wartosc | Znaczenie | Przyklad |
 |---|---|---|
@@ -255,16 +263,15 @@ pobraniu. Sprawdzanie swiezosci (domyslne `Info:`, `--check-updates`,
 
 | Sygnal | Strona lokalna (sidecar wersji) | Strona zrodla |
 |---|---|---|
-| `index` | `extra.campaign` / `extra.source` (data aktualnosci, id kampanii z URL, numer zgloszenia); LAZ: `extra.year` i URL kafla | najnowszy rekord skorowidza w zakresie strategii kampanii |
+| `index` | `extra.campaign` / `extra.source` (data aktualnosci, id kampanii z URL, numer zgloszenia); LAZ: URL kafla w sidecarze wersji (D26: plik = rekord) | najnowszy rekord skorowidza w zakresie strategii kampanii; LAZ: selekcja kafli WFS (ADR-029/030) |
 | `metadata` | etykieta edycji (`extra.version.label`) | data/rok/edycja z metadanych uslugi |
 | `http` | `extra.http` (`etag`, `last_modified`, `content_length`) | naglowki odpowiedzi na `HEAD` |
 | `none` | — | brak; wynik "nie da sie sprawdzic bez pobrania" |
 
 Ograniczenie: zmiana tresci pliku przy niezmienionym sygnale (cicha poprawka
 u zrodla pod tym samym rekordem i URL) jest niewykrywalna bez pobrania;
-wykrywa ja `--force` (inne sha256 = nowa wersja). Zrodlo moze miec sygnal
-uzupelniajacy (np. `index` + `Content-Length` z `HEAD`): rozny rozmiar =
-na pewno inna tresc, ten sam rozmiar niczego nie dowodzi.
+wykrywa ja `--force` (inne sha256 = nowa wersja). `Content-Length` z `HEAD`
+nie jest sygnalem uzupelniajacym (D28).
 
 ### 4.2 Tryby
 
@@ -386,7 +393,7 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 | `sources/` (deskryptory) | pole `update_signal` |
 | `sources/sidecar.py` | `extra.version`; `build_metadata(digest=)` (sha256 i rozmiar z zapisu, bez drugiego odczytu, D20); `fsync` tmp sidecara (D21); usuniecie `parent_requests` |
 | `download/storage.py` | `get_version_path` zamiast `get_campaign_path`; `list_files` pomija `versions/` i `full_sheet/` |
-| `download/manager.py` | `update=` zamiast `skip_existing`; usuniety `_note_reuse`; kampanie przez `versions.py`; faza zakresu lat (ADR-032) z regula D14; pomiar pokrycia przy zapisie wersji (D13); `full_sheet` jako pozycje "brak lokalnej wersji" |
+| `download/manager.py` | `update=` zamiast `skip_existing`; usuniety `_note_reuse`; kampanie przez `versions.py`; faza zakresu lat (ADR-032) z regula D14; pomiar pokrycia przy zapisie wersji (D13); `full_sheet` jako pozycje "brak lokalnej wersji"; usuniete `download_bbox` (D27) |
 | `download/cutout.py` (tor WCS), `download/cz_cutout.py`, `download/laz.py` | zapis wersji; wycinki bez daty w nazwie (D15) |
 | `landcover/manager.py`, `hydrology/hsg.py` | `storage_for_provider`, segmenty, wersje, tryby `update`; `source_files[]` w `calculate_hsg_by_bbox` |
 | `cli/*` | flagi z 4.2/4.4, linie statusu, liczniki, kody wyjscia, `Info:` o `kampanie/` |
@@ -467,8 +474,8 @@ surowe odpowiedzi jako fixtury:
   podaje sum kontrolnych (brak naglowka `Digest`, pliki `<plik>.md5`/
   `.sha256`/`.sha1` = 404, rekord skorowidza bez pola sumy), NIE podaje
   `ETag` ani `Last-Modified`, katalogi kampanii bez listingu (404); jest
-  tylko `Content-Length`. Do rozstrzygniecia w planie: czy `Content-Length`
-  z `HEAD` jako sygnal uzupelniajacy (koszt: jedno zapytanie na plik).
+  tylko `Content-Length`. `Content-Length` nie jest sygnalem uzupelniajacym
+  (D28).
 - Pozostale hosty (paczki BDOT10k, LAZ, ISRIC, CUZK): te same pytania —
   sumy kontrolne, `ETag`/`Last-Modified`, `Content-Length`.
 - WCS GUGiK (wycinki `bbox/`, ADR-035): naglowki odpowiedzi
@@ -488,8 +495,9 @@ taniego sygnalu dostaje `none`.
   errata 4: kopia zamiast hardlinku — D22),
   ADR-033 (F-U5: "`kampanie/` zostaje"), ADR-035 (W-U3/W-U8: nazwa z data,
   pobieranie przy kazdym uruchomieniu), ADR-032 (pkt 2: awaria skorowidza
-  przy zakresie — D14; pkt 4: pomiar pokrycia — D13) i ADR-026 (land cover
-  poza ukladem); errata/odsylacze w indeksie.
+  przy zakresie — D14; pkt 4: pomiar pokrycia — D13), ADR-026 (land cover
+  poza ukladem) i ADR-004 (`DownloadManager.download_bbox` usuniete — D27);
+  ADR-036 zapisuje wyjatek LAZ od D5 (D26); errata/odsylacze w indeksie.
 - `ARCHITECTURE` 3.2, 3.3, 4.1-4.8; `SCOPE` 2.11, 2.12 (sumy kontrolne
   w sidecarze sa od 0.7.1); `PRD` 3.12; `USAGE` (wymaganie systemu plikow
   z hardlinkami, kopiowanie magazynu `rsync -aH`, zalecana kompresja
@@ -499,4 +507,5 @@ taniego sygnalu dostaje `none`.
   `parent_requests`, sciezki land cover/HSG, wycinki `bbox/` bez daty
   w nazwie i bez pobierania przy kazdym uruchomieniu, koniec kopii zamiast
   hardlinku, stare pliki LAZ i CZ nadpisywane przy pierwszym pobraniu —
-  D24; Przejscie z 0.7.x: ponowne pobranie danych).
+  D24; usuniete `DownloadManager.download_bbox` — D27; Przejscie z 0.7.x:
+  ponowne pobranie danych).
