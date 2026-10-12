@@ -431,9 +431,10 @@ class TestDescriptorProviderConsistency:
         ):
             for ch in get_source(key).channels:
                 assert ch.horizontal_crs == "EPSG:2180", key
-        # CORINE: EPSG:3035 applies to the CLMS GeoTIFF channel (the WMS PNG fallback
-        # has a different CRS and is corrected in LandCoverManager._write_sidecar)
+        # CORINE: EPSG:3035 is the CLMS GeoTIFF channel; the WMS preview channel
+        # is EPSG:3857 (1990 DLR: EPSG:4326, set by LandCoverManager per file)
         assert get_source("eu.clms.corine").channels[0].horizontal_crs == "EPSG:3035"
+        assert get_source("eu.clms.corine").channels[1].horizontal_crs == "EPSG:3857"
         assert (
             get_source("global.isric.soilgrids").channels[0].horizontal_crs
             == "EPSG:4326"

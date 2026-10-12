@@ -223,8 +223,9 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             print(f"  Geometry: {filepath.name}")
         elif args.teryt:
             print(f"  TERYT: {args.teryt}")
-            path = manager.download(teryt=args.teryt, **kwargs)
-            print(f"Downloaded to: {path}")
+            result = manager.download(teryt=args.teryt, **kwargs)
+            assert result.file is not None  # no plan: always a file
+            print(f"Downloaded to: {result.file.path}")
             return 0
         elif bbox:
             print(
@@ -234,21 +235,25 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             print(f"  Godło: {args.sheet}")
 
         if is_bdot:
-            # Every powiat of the area, one package each (A2); the first
-            # failure stops the loop with Error: (files already written stay).
+            # Every powiat of the area, one package each (A2); a failed
+            # powiat is reported and the others still run (exit code 1).
             if bbox is not None:
-                paths = manager.download_all_counties(bbox=bbox, **kwargs)
+                area = manager.download_all_counties(bbox=bbox, **kwargs)
             else:
-                paths = manager.download_all_counties(sheet=args.sheet, **kwargs)
-            for path in paths:
-                print(f"Downloaded to: {path}")
-            return 0
+                area = manager.download_all_counties(sheet=args.sheet, **kwargs)
+            for item in area.files:
+                assert item.file is not None
+                print(f"Downloaded to: {item.file.path}")
+            for failure in area.failed:
+                print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+            return 1 if area.failed else 0
 
         if bbox is not None:
-            path = manager.download(bbox=bbox, **kwargs)
+            result = manager.download(bbox=bbox, **kwargs)
         else:
-            path = manager.download(sheet=args.sheet, **kwargs)
-        print(f"Downloaded to: {path}")
+            result = manager.download(sheet=args.sheet, **kwargs)
+        assert result.file is not None
+        print(f"Downloaded to: {result.file.path}")
         return 0
 
     except NotImplementedError as e:
