@@ -2008,9 +2008,9 @@ def _download_pl_cutout(
     (``TransformError``/``ValidationError``) and EVERY download or build
     error (PRG, WCS) end with code 1 and a message, not a traceback: an
     exception leaking out of the country loop of ``_dispatch_area`` would break
-    the partial success contract (ADR-023 points 4-5). Every run downloads
-    (``--force``, ``--workers`` and ``--scale`` have no effect). A cutout
-    entirely outside PL land = ``Warning:``, code 0.
+    the partial success contract (ADR-023 points 4-5). ``--force`` fetches a
+    new version; by default a local version is reused. ``--workers`` and
+    ``--scale`` have no effect. An all-nodata cutout = ``Warning:``, code 0.
     """
     from kartograf.download.cutout import prepare_pl_cutout, run_pl_wcs_cutout
     from kartograf.transform.crs import TransformError
@@ -2046,7 +2046,10 @@ def _download_pl_cutout(
         )
     try:
         result = run_pl_wcs_cutout(
-            cutout, provider=provider, parent_request=parent_request
+            cutout,
+            provider=provider,
+            update="force" if args.force else None,
+            parent_request=parent_request,
         )
     except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
         print(f"Error: {e}", file=sys.stderr)
@@ -2058,7 +2061,8 @@ def _download_pl_cutout(
             file=sys.stderr,
         )
     if not args.quiet:
-        print(f"Downloaded to {result.path}")
+        assert result.file is not None
+        print(f"Downloaded to {result.file.path}")
     return 0
 
 

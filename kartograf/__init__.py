@@ -59,6 +59,7 @@ from kartograf.download.countries import (
 from kartograf.download.cutout import (
     PlCutout,
     PlCutoutResult,
+    check_pl_cutout,
     download_pl_cutout,
     prepare_pl_cutout,
     run_pl_wcs_cutout,
@@ -150,6 +151,7 @@ __all__ = [
     # Download (PL cutout: WCS ADR-035)
     "PlCutout",
     "PlCutoutResult",
+    "check_pl_cutout",
     "download_pl_cutout",
     "prepare_pl_cutout",
     "run_pl_wcs_cutout",
