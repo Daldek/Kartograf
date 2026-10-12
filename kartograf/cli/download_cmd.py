@@ -2132,8 +2132,9 @@ def _download_pl_sheet_list(
 
 def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
     """
-    Resolve a sheet code / --bbox / --geometry input to an EPSG:2180 BBox for LAZ.
+    Resolve a sheet code / --bbox / --geometry input to the LAZ request area.
 
+    ``--bbox`` stays in its CRS (the library converts it to EPSG:2180).
     Returns None (after printing an error) if a geometry file is missing or its
     layer is invalid. Raises ParseError / ValidationError on invalid input.
     """
@@ -2147,18 +2148,7 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
         )
 
     if args.bbox is not None:
-        bbox = parse_bbox_arg(args.bbox, args.bbox_crs)
-        from kartograf.core.bbox import is_czech_crs, transform_bbox
-
-        if is_czech_crs(bbox.crs):
-            # A Czech CRS (Krovak/UTM33N) is left ONLY via the pinned
-            # operation (like _country_bbox) - an unpinned pyproj transformer
-            # (ballpark, unknown accuracy) would risk a wrong selection of LAZ
-            # tiles on the border strip.
-            from kartograf.providers.cuzk.dmr import bbox_to_crs
-
-            return bbox_to_crs(bbox, "EPSG:2180")
-        return transform_bbox(bbox, "EPSG:2180")
+        return parse_bbox_arg(args.bbox, args.bbox_crs)
 
     # sheet code mode - SheetParser validates and transforms to EPSG:2180
     return SheetParser(args.sheet).get_bbox(crs="EPSG:2180")
@@ -2174,33 +2164,7 @@ def _laz_parent_request(args: argparse.Namespace, bbox: BBox) -> dict | None:
     """
     if args.sheet is not None:
         return None
-    if args.bbox is not None:
-        parts = [float(x.strip()) for x in args.bbox.split(",")]
-        bbox = BBox(parts[0], parts[1], parts[2], parts[3], args.bbox_crs)
     return _build_parent_request(bbox, ("PL",))
-
-
-def _laz_tile_label(tile) -> str:
-    return f"{tile.sheet} ({tile.year}, {tile.crs})"
-
-
-def _print_laz_superseded(superseded) -> None:
-    """``Info:`` about tiles skipped during selection (stderr, also with ``-q``)."""
-    if not superseded:
-        return
-    print(
-        f"Info: pominieto {len(superseded)} kafli LAZ — obszar pokrywaja "
-        "nowsze kafle (domyslnie najnowszy rocznik per obszar; inny "
-        "rocznik: --year/--min-year/--max-year)",
-        file=sys.stderr,
-    )
-    for entry in superseded:
-        if entry.covered_by:
-            covering = ", ".join(_laz_tile_label(t) for t in entry.covered_by)
-            reason = f"pokryty przez {covering}"
-        else:
-            reason = "rama kafla nie przecina obszaru (tylko obwiednia WFS)"
-        print(f"  {_laz_tile_label(entry.tile)}: {reason}", file=sys.stderr)
 
 
 def _cmd_download_laz(args: argparse.Namespace) -> int:
@@ -2208,14 +2172,16 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     Handle the download command for the LAZ product (area-based via WFS).
 
     Accepts the same inputs as the other products — a sheet code (down to 1:10000),
-    --bbox/--bbox-crs, or --geometry/--layer — resolves them to an EPSG:2180
-    bbox and hands the work to the library (``kartograf.download.laz``):
-    ``GugikLazProvider.select_tiles`` (newest tile per area) and
-    ``run_laz_download`` (parallel download, sidecars, failures). This
-    function only prints and maps the result to an exit code.
+    --bbox/--bbox-crs, or --geometry/--layer — and hands the work to the library
+    (``download_laz_area`` / ``check_laz_area``: selection of the newest tile
+    per area, parallel download, sidecars, failures). This function only
+    prints and maps the result to an exit code.
     """
-    from kartograf.download.laz import NO_TILES_MESSAGE, run_laz_download
-    from kartograf.providers.pl.gugik_laz import GugikLazProvider
+    from kartograf.download.laz import (
+        area_to_2180,
+        check_laz_area,
+        download_laz_area,
+    )
 
     # a CZ sheet code + laz is dropped already at dispatch; what remains here is an
     # explicit --country cz in area mode (LAZ skips cmd_download's bbox/geometry
@@ -2241,7 +2207,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if (
         args.country == "auto"
         and args.sheet is None
-        and "CZ" in _countries_for_bbox(bbox)
+        and "CZ" in _countries_for_bbox(area_to_2180(bbox))
     ):
         print(
             "Error: --product laz jest dostepny tylko dla PL, a obszar "
@@ -2251,67 +2217,52 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         return 1
 
     vertical_crs = args.vertical_crs
-    min_density = getattr(args, "min_density", None)
     workers = getattr(args, "workers", 4) or 1
     output_dir = Path(args.output)
     quiet = args.quiet
-
-    provider = GugikLazProvider(vertical_crs=vertical_crs)
+    selection = {
+        "output_dir": output_dir,
+        "vertical_crs": vertical_crs,
+        "min_density": getattr(args, "min_density", None),
+        "all_campaigns": all_campaigns,
+        "min_year": min_year,
+        "max_year": max_year,
+        "on_notice": _print_notice,
+    }
 
     if not quiet:
         print(f"Querying GUGiK WFS for LAZ tiles ({vertical_crs})...")
+    if getattr(args, "check_updates", False):
+        try:
+            plan = check_laz_area(bbox, **selection)
+        except (ValidationError, DownloadError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        return _report_plan(args, plan)
+
+    def _progress(done: int, count: int) -> None:
+        if quiet:
+            return
+        if done == 0:
+            print(f"Found {count} LAZ tiles. Downloading with {workers} worker(s)...")
+            print()
+            return
+        print(f"\r  {done}/{count} tiles", end="", flush=True)
+
+    update = _update_mode(args)
     try:
-        selection = provider.select_tiles(
+        result = download_laz_area(
             bbox,
-            min_density=min_density,
-            all_campaigns=all_campaigns,
-            min_year=min_year,
-            max_year=max_year,
+            workers=workers,
+            update=update,
+            plan=_plan_context(args).loaded,
+            on_progress=_progress,
+            parent_request=_laz_parent_request(args, bbox),
+            **selection,
         )
     except (ValidationError, DownloadError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-
-    _print_laz_superseded(selection.superseded)
-    if not selection.tiles:
-        # N7: discovery passed (all vintages answered), so an empty
-        # list means extent/filters, not a WFS failure
-        print(f"Error: {NO_TILES_MESSAGE}", file=sys.stderr)
-        return 1
-
-    if getattr(args, "check_updates", False):
-        from kartograf.download.laz import check_laz_updates
-
-        return _report_plan(
-            args,
-            check_laz_updates(selection, provider=provider, output_dir=output_dir),
-        )
-
-    total = len(selection.tiles)
-    if not quiet:
-        print(f"Found {total} LAZ tiles. Downloading with {workers} worker(s)...")
-        print()
-
-    def _progress(done: int, count: int) -> None:
-        if not quiet:
-            print(f"\r  {done}/{count} tiles", end="", flush=True)
-
-    update = _update_mode(args)
-    result = run_laz_download(
-        selection,
-        provider=provider,
-        bbox=bbox,
-        output_dir=output_dir,
-        min_density=min_density,
-        all_campaigns=all_campaigns,
-        min_year=min_year,
-        max_year=max_year,
-        max_workers=workers,
-        update=update,
-        plan=_plan_context(args).loaded,
-        on_progress=_progress,
-        parent_request=_laz_parent_request(args, bbox),
-    )
 
     if not quiet:
         print()
@@ -2329,8 +2280,8 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         # list of failed tiles to retry - model `_finish_pl_sheets` (N6).
         names = ", ".join(f.tile.sheet for f in result.failed)
         print(
-            f"Error: {len(result.failed)} z {total} kafli LAZ nie pobrano "
-            f"(blad pobrania): {names} — ponow pobranie",
+            f"Error: {len(result.failed)} z {len(result.tiles)} kafli LAZ nie "
+            f"pobrano (blad pobrania): {names} — ponow pobranie",
             file=sys.stderr,
         )
         for failure in result.failed:

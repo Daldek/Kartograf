@@ -5,10 +5,12 @@ Pattern: ``download/cutout.py`` — the CLI (``kartograf download --product
 laz``) is a thin layer over this module: it prints messages and translates
 the result into an exit code. There is no ``print`` or argparse here.
 
-Flow: bbox EPSG:2180 -> ``GugikLazProvider.select_tiles`` (WFS, tile
-selection from the newest vintage without duplicating the area) ->
-``run_laz_download`` (parallel downloads into ``versions/``, mandatory
-version sidecars and standard hardlinks; tile failures collected).
+Flow: bbox in any supported CRS -> EPSG:2180 (Czech CRSs only via the pinned
+operation) -> ``GugikLazProvider.select_tiles`` (WFS, tile selection from the
+newest vintage without duplicating the area) -> ``_run_laz_download``
+(parallel downloads into ``versions/``, mandatory version sidecars and
+standard hardlinks; tile failures collected). Public pair (Z2):
+``download_laz_area`` / ``check_laz_area`` with the same selection arguments.
 
 Example::
 
@@ -17,7 +19,7 @@ Example::
     result = download_laz_area(
         BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
         output_dir="./data", vertical_crs="EVRF2007",
-        max_workers=4,
+        workers=4,
     )
     for skipped in result.superseded:
         print(skipped.tile.sheet, "covered by", skipped.covered_by)
@@ -25,11 +27,14 @@ Example::
         ...  # retry: locally versioned tiles are reused by default
 """
 
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from kartograf.cache.defaults import open_cache
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.fetch import (
     FileSlot,
@@ -50,6 +55,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.notices import LAZ_SUPERSEDED, Notice, NoticeSink
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
     GugikLazProvider,
@@ -58,7 +64,8 @@ from kartograf.providers.pl.gugik_laz import (
     SupersededLazTile,
 )
 
-# (processed tiles, tiles selected for execution) — called in the caller's thread
+# (processed tiles, tiles selected for execution) — called in the caller's
+# thread; ``(0, total)`` comes once before the first tile download.
 LazProgressCallback = Callable[[int, int], None]
 
 NO_TILES_MESSAGE = (
@@ -81,6 +88,7 @@ class LazDownloadResult:
 
     With ``plan=`` the files include only executed plan positions; tiles
     removed from the plan or whose index signal changed are not downloaded.
+    ``notices`` holds the superseded-tiles message (Z3).
     """
 
     tiles: tuple[LazTile, ...]
@@ -88,6 +96,7 @@ class LazDownloadResult:
     failed: tuple[LazTileFailure, ...] = ()
     superseded: tuple[SupersededLazTile, ...] = ()
     stale: tuple[PlanItem, ...] = ()
+    notices: tuple[Notice, ...] = ()
 
     @property
     def ok(self) -> bool:
@@ -185,7 +194,7 @@ def write_laz_sidecar(
     )
 
 
-def check_laz_updates(
+def _check_selection(
     selection: LazTileSelection,
     *,
     provider,
@@ -211,7 +220,7 @@ def check_laz_updates(
     return new_plan(store_id(output_dir), items)
 
 
-def run_laz_download(
+def _run_laz_download(
     selection: LazTileSelection,
     *,
     provider,
@@ -222,7 +231,7 @@ def run_laz_download(
     all_campaigns: bool = False,
     min_year: int | None = None,
     max_year: int | None = None,
-    max_workers: int = 1,
+    workers: int = 1,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     on_progress: LazProgressCallback | None = None,
@@ -233,9 +242,8 @@ def run_laz_download(
     Each tile uses its own horizontal system's segment. The default and
     ``"upgrade"`` reuse existing versions (D26); ``"force"`` downloads
     bytes again without overwriting a version. With ``"upgrade"`` and a
-    plan, only still-missing positions from that plan execute. ``"check"``
-    is available through :func:`check_laz_updates`, not this function.
-    Sidecars retain the requested bbox, year, density and parent request.
+    plan, only still-missing positions from that plan execute. Sidecars
+    retain the requested bbox, year, density and parent request.
     """
     validate_update(update)
     if plan is not None:
@@ -246,7 +254,7 @@ def run_laz_download(
     tiles = selection.tiles
     stale: tuple[PlanItem, ...] = ()
     if update == "upgrade" and plan is not None:
-        fresh = check_laz_updates(
+        fresh = _check_selection(
             selection, provider=provider, output_dir=output_dir
         ).items
         todo, excluded = select_planned(plan, list(fresh), "laz_tile")
@@ -307,8 +315,10 @@ def run_laz_download(
         if on_progress is not None:
             on_progress(len(outcomes), total)
 
-    if max_workers > 1 and total > 1:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+    if on_progress is not None:
+        on_progress(0, total)
+    if workers > 1 and total > 1:
+        with ThreadPoolExecutor(max_workers=workers) as executor:
             futures = [executor.submit(fetch, tile) for tile in tiles]
             for future in as_completed(futures):
                 record(future.result())
@@ -335,20 +345,155 @@ def run_laz_download(
     )
 
 
+def area_to_2180(bbox: BBox) -> BBox:
+    """LAZ area in EPSG:2180: Czech CRSs only via the pinned operation.
+
+    A Czech CRS (Krovak/UTM33N) is left ONLY via the pinned operation (like
+    the country split) - an unpinned pyproj transformer (ballpark, unknown
+    accuracy) would risk a wrong selection of LAZ tiles on the border strip.
+    Other CRSs use the densified-edge envelope (``transform_bbox``).
+    """
+    from kartograf.core.bbox import is_czech_crs, transform_bbox
+
+    if is_czech_crs(bbox.crs):
+        from kartograf.providers.cuzk.dmr import bbox_to_crs
+
+        return bbox_to_crs(bbox, "EPSG:2180")
+    return transform_bbox(bbox, "EPSG:2180")
+
+
+@contextmanager
+def _selected(
+    bbox: BBox,
+    *,
+    vertical_crs: str,
+    year: int | None,
+    min_density: int | None,
+    all_campaigns: bool,
+    min_year: int | None,
+    max_year: int | None,
+    provider: GugikLazProvider | None,
+    tolerance_m: float,
+    cache: MetadataCache | bool,
+    force: bool,
+    sink: NoticeSink,
+) -> Iterator[tuple[GugikLazProvider, LazTileSelection, BBox]]:
+    """Provider, WFS tile selection and EPSG:2180 area of one LAZ request.
+
+    The ``LAZ_SUPERSEDED`` notice is emitted right after the selection; an
+    empty selection raises ``NoCoverageError`` after that notice.
+    """
+    area = area_to_2180(bbox)
+    with open_cache(cache, force=force, on_notice=sink.add) as metadata:
+        if provider is None:
+            # looked up on the module: callers patch the class at its source
+            from kartograf.providers.pl import gugik_laz
+
+            provider = gugik_laz.GugikLazProvider(
+                vertical_crs=vertical_crs, cache=metadata
+            )
+        elif vertical_crs != provider.vertical_crs:
+            raise ValidationError(
+                f"vertical_crs={vertical_crs} niezgodny z providerem "
+                f"({provider.vertical_crs})"
+            )
+        selection = provider.select_tiles(
+            area,
+            year=year,
+            min_density=min_density,
+            tolerance_m=tolerance_m,
+            all_campaigns=all_campaigns,
+            min_year=min_year,
+            max_year=max_year,
+        )
+        _emit_superseded(sink, selection.superseded)
+        if not selection.tiles:
+            raise NoCoverageError(NO_TILES_MESSAGE)
+        yield provider, selection, area
+
+
+def _tile_label(tile: LazTile) -> str:
+    return f"{tile.sheet} ({tile.year}, {tile.crs})"
+
+
+def _emit_superseded(
+    sink: NoticeSink, superseded: tuple[SupersededLazTile, ...]
+) -> None:
+    """``LAZ_SUPERSEDED``: tiles skipped during selection, one line per tile."""
+    if not superseded:
+        return
+    lines = [
+        f"pominieto {len(superseded)} kafli LAZ - obszar pokrywaja nowsze kafle "
+        "(domyslnie najnowszy rocznik per obszar; inny rocznik: "
+        "--year/--min-year/--max-year)"
+    ]
+    for entry in superseded:
+        if entry.covered_by:
+            covering = ", ".join(_tile_label(t) for t in entry.covered_by)
+            reason = f"pokryty przez {covering}"
+        else:
+            reason = "rama kafla nie przecina obszaru (tylko obwiednia WFS)"
+        lines.append(f"  {_tile_label(entry.tile)}: {reason}")
+    sink.emit("info", LAZ_SUPERSEDED, "\n".join(lines))
+
+
+def check_laz_area(
+    bbox: BBox,
+    *,
+    output_dir: str | Path,
+    vertical_crs: str,
+    year: int | None = None,
+    min_year: int | None = None,
+    max_year: int | None = None,
+    all_campaigns: bool = False,
+    min_density: int | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+    provider: GugikLazProvider | None = None,
+    tolerance_m: float = COVERAGE_TOLERANCE_M,
+) -> UpdatePlan:
+    """Update plan of ``download_laz_area`` with the same arguments, no download.
+
+    The tile selection queries the WFS (as the download does); no LAZ bytes
+    are transferred. Raises the same errors as the download's selection.
+    """
+    sink = NoticeSink(on_notice)
+    with _selected(
+        bbox,
+        vertical_crs=vertical_crs,
+        year=year,
+        min_density=min_density,
+        all_campaigns=all_campaigns,
+        min_year=min_year,
+        max_year=max_year,
+        provider=provider,
+        tolerance_m=tolerance_m,
+        cache=cache,
+        force=False,
+        sink=sink,
+    ) as (selected_provider, selection, _area):
+        return _check_selection(
+            selection, provider=selected_provider, output_dir=output_dir
+        )
+
+
 def download_laz_area(
     bbox: BBox,
     *,
     output_dir: str | Path,
     vertical_crs: str,
     year: int | None = None,
-    min_density: int | None = None,
-    all_campaigns: bool = False,
     min_year: int | None = None,
     max_year: int | None = None,
-    max_workers: int = 1,
+    all_campaigns: bool = False,
+    min_density: int | None = None,
     update: UpdateMode | None = None,
-    on_progress: LazProgressCallback | None = None,
+    plan: UpdatePlan | None = None,
+    workers: int = 1,
     parent_request: dict | None = None,
+    cache: MetadataCache | bool = True,
+    on_progress: LazProgressCallback | None = None,
+    on_notice: Callable[[Notice], None] | None = None,
     provider: GugikLazProvider | None = None,
     tolerance_m: float = COVERAGE_TOLERANCE_M,
 ) -> LazDownloadResult:
@@ -358,8 +503,9 @@ def download_laz_area(
     Parameters
     ----------
     bbox : BBox
-        Area in EPSG:2180 (e.g. ``SheetParser.get_bbox(crs="EPSG:2180")``
-        or ``get_overall_bbox(path, target_crs="EPSG:2180")``).
+        Area in any supported CRS; converted to EPSG:2180 (Czech CRSs via
+        the pinned operation), e.g. a geometry envelope from
+        ``get_overall_bbox(path, target_crs="EPSG:2180")``.
     output_dir : str or Path
         Explicit base directory for LAZ tiles and their sidecars.
     vertical_crs : str
@@ -378,10 +524,19 @@ def download_laz_area(
         ``YearRangeError`` before any download. Exclusive with ``year``.
     update : None or "upgrade" or "force", optional
         Reuse a local version by default; ``"force"`` downloads again.
-        Use :func:`check_laz_updates` for a download-free update plan.
+    plan : UpdatePlan, optional
+        From :func:`check_laz_area`; with ``update="upgrade"`` only its
+        still-missing positions execute, changed ones land in ``stale``.
+    workers : int
+        Parallel tile downloads (1 = sequential).
     parent_request : dict, optional
-        Sidecar ``extra.parent_request`` (ADR-023 (f).1) — the CLI passes it
-        in ``--bbox``/``--geometry`` mode.
+        Sidecar ``extra.parent_request`` (ADR-023 (f).1).
+    cache : MetadataCache or bool
+        ``True`` = default metadata cache in the current directory, a
+        ``MetadataCache`` = that cache, ``False`` = none.
+    on_progress, on_notice
+        Progress ``(done, total)`` (``(0, total)`` before the first tile) and
+        data notices (``LAZ_SUPERSEDED`` right after the selection).
     provider : GugikLazProvider, optional
         Custom provider (session); by default a new one for ``vertical_crs``.
     tolerance_m : float
@@ -396,8 +551,10 @@ def download_laz_area(
     Raises
     ------
     ValidationError
-        ``bbox`` not in EPSG:2180, unknown/mismatched ``vertical_crs`` or invalid
-        year bounds / ``update`` mode.
+        Unknown/mismatched ``vertical_crs`` or invalid year bounds /
+        ``update`` mode.
+    TransformError
+        No safe pinned operation from a Czech CRS of ``bbox``.
     DownloadError
         WFS discovery failure or no matching year in the service.
     YearRangeError
@@ -406,36 +563,35 @@ def download_laz_area(
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
     validate_update(update)
-    if provider is None:
-        provider = GugikLazProvider(vertical_crs=vertical_crs)
-    elif vertical_crs != provider.vertical_crs:
-        raise ValidationError(
-            f"vertical_crs={vertical_crs} niezgodny z providerem "
-            f"({provider.vertical_crs})"
-        )
-    selection = provider.select_tiles(
+    sink = NoticeSink(on_notice)
+    with _selected(
         bbox,
+        vertical_crs=vertical_crs,
         year=year,
         min_density=min_density,
-        tolerance_m=tolerance_m,
         all_campaigns=all_campaigns,
         min_year=min_year,
         max_year=max_year,
-    )
-    if not selection.tiles:
-        raise NoCoverageError(NO_TILES_MESSAGE)
-    return run_laz_download(
-        selection,
         provider=provider,
-        bbox=bbox,
-        output_dir=output_dir,
-        year=year,
-        min_density=min_density,
-        all_campaigns=all_campaigns,
-        min_year=min_year,
-        max_year=max_year,
-        max_workers=max_workers,
-        update=update,
-        on_progress=on_progress,
-        parent_request=parent_request,
-    )
+        tolerance_m=tolerance_m,
+        cache=cache,
+        force=update == "force",
+        sink=sink,
+    ) as (selected_provider, selection, area):
+        result = _run_laz_download(
+            selection,
+            provider=selected_provider,
+            bbox=area,
+            output_dir=output_dir,
+            year=year,
+            min_density=min_density,
+            all_campaigns=all_campaigns,
+            min_year=min_year,
+            max_year=max_year,
+            workers=workers,
+            update=update,
+            plan=plan,
+            on_progress=on_progress,
+            parent_request=parent_request,
+        )
+    return replace(result, notices=sink.notices)
