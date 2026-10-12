@@ -61,21 +61,21 @@ kartograf download --sheet 6.179.12.20
 kartograf download --sheet 7.171.21 --scale 1:2000
 kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 
-# Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
-# arkusza (all)
-kartograf download --sheet N-34-130-D-d-2-4 --campaigns all
+# Kampanie GUGiK (sekcja 4): domyślnie najnowsza; `--all-campaigns`
+# pobiera wszystkie kampanie arkusza
+kartograf download --sheet N-34-130-D-d-2-4 --all-campaigns
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet   # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
-kartograf download --sheet N-34-130-D-d-2-4 --product laz --campaigns all
-kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --all-campaigns
+kartograf download --bbox 530000,382000,533000,386000 --product laz --all-campaigns
 
 # Wybór roku danych (NMT, NMPT, orto, LAZ; sekcja 4.1)
 kartograf download --sheet N-34-130-D-d-2-4 --year 2025          # najnowszy lot z 2025
-kartograf download --sheet N-34-130-D-d-2-4 --year 2025 --campaigns all  # wszystkie loty z 2025
+kartograf download --sheet N-34-130-D-d-2-4 --year 2025 --all-campaigns  # wszystkie loty z 2025
 kartograf download --sheet N-34-130-D-d-2-4 --product orto --year 2024
 kartograf download --bbox 530000,382000,533000,386000 --max-year 2022
 kartograf download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024
 kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024      # najnowsza, nie starsza niż 2024
-kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022
 ```
 
 Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
@@ -169,7 +169,7 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
   `Info:` podaje liczbę żądań przy więcej niż jednym kawałku
   lub wyniku >= 1 GiB.
 - Wycinki 5 m, wybór roku (`--year`, `--min-year`, `--max-year`),
-  `--campaigns all` i `--full-sheet` z `--target-crs` są
+  `--all-campaigns` i `--full-sheet` z `--target-crs` są
   odrzucane (`Error:`). Podobnie `--target-crs` dla orto/LAZ;
   arkusze 5 m pobieraj bez `--target-crs`. Szczegóły:
   [ADR-035](DECISIONS.md), ARCHITECTURE 4.3.
@@ -505,8 +505,8 @@ Wycinki PL WCS nie są pomijane — każdy przebieg pobiera na nowo.
 ## 4. Kampanie GUGiK
 
 GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
-`--campaigns newest` (domyślnie, także z flagami roku) pobiera
-najnowszą; `--campaigns all` — każdą. Wybór roku (`--year`, `--min-year`,
+Domyślnie (również z flagami roku) pobiera najnowszą kampanię;
+`--all-campaigns` — każdą. Wybór roku (`--year`, `--min-year`,
 `--max-year`) opisuje sekcja 4.1. Kampanie i rok dotyczą tylko PL — dla CZ
 opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
 czeskie) albo `Info:` (obszar PL+CZ pod `auto`, CZ w bieżącej wersji).
@@ -522,7 +522,7 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   429/5xx), a arkusz ma już lokalną kampanię, `newest` jej używa i drukuje
   `Warning: <godło>: skorowidz GUGiK niedostepny — uzyto lokalnej kampanii
   bez sprawdzenia nowszej (...)` (kod bez zmian, także z `-q`). Bez lokalnej
-  kampanii, z `--force`, `--campaigns all` albo dowolną flagą roku taki błąd
+  kampanii, z `--force`, `--all-campaigns` albo dowolną flagą roku taki błąd
   nadal kończy pobranie porażką (errata 5 ADR-030; z flagą roku całe
   zadanie, sekcja 4.1). Biblioteka:
   `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
@@ -546,8 +546,8 @@ cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
   kampanie są pobierane). Rekord bez tego pola jest przyjmowany.
 - **Wycinek `--target-crs`** pochodzi z WCS GUGiK z kompozycją lotów
   serwera (nie z kampanii arkuszy, sekcja 1.3) i nie przyjmuje
-  `--campaigns all`, flag roku ani `--full-sheet`.
-- **LAZ:** `--campaigns all` pobiera wszystkie kafle, których rama przecina
+  `--all-campaigns`, flag roku ani `--full-sheet`.
+- **LAZ:** `--all-campaigns` pobiera wszystkie kafle, których rama przecina
   obszar (bez deduplikacji ADR-029). LAZ nie używa dowiązań.
   `--min-density` jest tylko dla LAZ (z innymi produktami: `Error:`,
   sekcja 1.1).
@@ -564,12 +564,12 @@ orto) albo `akt_rok` kafla LAZ — nie data przyjęcia do PZGiK. Granice są
 domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 ([ADR-032](DECISIONS.md)).
 
-- **Flagi roku wyznaczają tylko dopuszczalne lata, `--campaigns` — liczbę
-  lotów na arkusz.** Domyślnie (`newest`, nie trzeba podawać) pobierany jest
-  jeden, najnowszy lot z zakresu; `--campaigns all` pobiera wszystkie loty
+- **Flagi roku wyznaczają tylko dopuszczalne lata, `--all-campaigns` — liczbę
+  lotów na arkusz.** Domyślnie pobierany jest
+  jeden, najnowszy lot z zakresu; `--all-campaigns` pobiera wszystkie loty
   z zakresu do `kampanie/`. Ta sama reguła dla każdej flagi roku i każdego
   produktu. Przykład (arkusz z lotami 2019, 2023, 2025-04, 2025-10):
-  `--year 2025` = lot 2025-10; `--year 2025 --campaigns all` = oba loty
+  `--year 2025` = lot 2025-10; `--year 2025 --all-campaigns` = oba loty
   2025; `--max-year 2024` = lot 2023; `--min-year 2024` = lot 2025-10.
 - **Ścieżka standardowa** wskazuje najnowszy lokalny lot i nigdy nie cofa się
   na starszy. Gdy wcześniej pobrano nowszy lot, a teraz zakres go wyklucza
@@ -591,7 +591,7 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
   Arkusz bez żadnych danych (morze, obszar za granicą) jest pomijany
   z `Warning:` jak dotąd. Awaria skorowidza przy sprawdzaniu przerywa całe
   zadanie (`Error: nie udalo sie sprawdzic roku danych ...`) — ponów pobranie.
-- **Kilka lotów w przedziale (`--campaigns all`):** gdy najnowszy lot nie
+- **Kilka lotów w przedziale (`--all-campaigns`):** gdy najnowszy lot nie
   jest pełnym arkuszem, Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
   pikseli, `extra.coverage`); jeśli starszy lot ma większe pokrycie, drukuje
   `Info:` (stderr, także z `-q`) i zapisuje `extra.flights`
@@ -633,11 +633,11 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024   # pe�
 
 - **Bez flagi** `full_sheet/` powstaje tylko z lotów, które zadanie i tak
   ma lokalnie: domyślnie, gdy najnowszy lot jest pełny (oba dowiązania to
-  ten sam plik, bez dodatkowego miejsca), a z `--campaigns all` — najnowszy
+  ten sam plik, bez dodatkowego miejsca), a z `--all-campaigns` — najnowszy
   pełny spośród pobranych lotów. Pierwsze uruchomienie po aktualizacji tworzy
   `full_sheet/` także dla danych już pobranych.
 - **`--full-sheet`** pobiera najwyżej jeden dodatkowy lot na arkusz i tylko
-  wtedy, gdy najnowszy lot z zakresu lat nie jest pełny; z `--campaigns all`
+  wtedy, gdy najnowszy lot z zakresu lat nie jest pełny; z `--all-campaigns`
   nic nie dodaje. Sidecar takiej kampanii ma `request.full_sheet: true`.
 - **Brak pełnego lotu:** w `full_sheet/` nie ma pliku. `Warning:` o niepełnej
   najnowszej kampanii dzieli arkusze na: `pelny lot w <segment>/full_sheet/`,

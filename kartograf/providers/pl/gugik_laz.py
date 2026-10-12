@@ -353,8 +353,8 @@ def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSele
     """
     All LAZ tiles whose extent intersects ``area`` (no deduplication).
 
-    Strategy ``campaigns="all"`` (ADR-030): no skipping of a tile covered by
-    a newer one (unlike :func:`select_newest_cover`). The tile extent is its
+    With ``all_campaigns=True`` (ADR-030), tiles covered by newer ones are
+    not skipped (unlike :func:`select_newest_cover`). The tile extent is its
     ``footprint`` (envelope without it); a tile whose polygon has no positive
     shared area with the area (only the WFS envelope intersected it) goes to
     ``superseded`` with an empty ``covered_by`` (reason ``"outside"``).
@@ -667,7 +667,7 @@ class GugikLazProvider(BaseProvider):
         timeout: int = WFS_TIMEOUT,
         tolerance_m: float = COVERAGE_TOLERANCE_M,
         *,
-        campaigns: str = "newest",
+        all_campaigns: bool = False,
         min_year: int | None = None,
         max_year: int | None = None,
     ) -> LazTileSelection:
@@ -697,10 +697,11 @@ class GugikLazProvider(BaseProvider):
         tolerance_m : float, optional
             Edge tolerance of the coverage rule (default
             ``COVERAGE_TOLERANCE_M`` = 1 m; ``0`` = exact).
-        campaigns : {"newest", "all"}
-            ``"newest"`` (default) — the rule above (ADR-029); ``"all"`` —
-            every tile intersecting ``bbox`` (:func:`select_all_intersecting`),
-            no coverage-based skipping (ADR-030).
+        all_campaigns : bool, optional
+            False (default) selects the newest flights within year bounds
+            under the ADR-029 coverage rule; True selects every tile in bounds
+            intersecting ``bbox`` (:func:`select_all_intersecting`), without
+            coverage-based deduplication (ADR-030).
         min_year, max_year : int, optional
             Closed acquisition-year bounds; exclusive with ``year``.
 
@@ -715,8 +716,8 @@ class GugikLazProvider(BaseProvider):
         ValueError
             If ``bbox`` is not in EPSG:2180.
         ValidationError
-            Unknown ``campaigns``, invalid year bounds or ``year`` together
-            with ``min_year``/``max_year``.
+            Invalid year bounds or ``year`` together with
+            ``min_year``/``max_year``.
         DownloadError
             WFS discovery failure or a range without a year in the service.
         YearRangeError
@@ -725,7 +726,7 @@ class GugikLazProvider(BaseProvider):
         # Local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import (
             in_year_range,
-            validate_campaign_args,
+            validate_year_bounds,
             year_range_error,
             year_range_label,
         )
@@ -733,7 +734,7 @@ class GugikLazProvider(BaseProvider):
         if year is not None and (min_year is not None or max_year is not None):
             raise ValidationError("year wyklucza sie z min_year/max_year")
         lo, hi = (year, year) if year is not None else (min_year, max_year)
-        validate_campaign_args(campaigns, lo, hi)
+        validate_year_bounds(lo, hi)
         if bbox.crs != "EPSG:2180":
             raise ValueError(
                 f"bbox must be in EPSG:2180, got {bbox.crs}. "
@@ -782,7 +783,7 @@ class GugikLazProvider(BaseProvider):
         )
         selection = (
             select_all_intersecting(candidates, bbox)
-            if campaigns == "all"
+            if all_campaigns
             else select_newest_cover(candidates, bbox, tolerance_m)
         )
         if has_range:

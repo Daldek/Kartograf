@@ -53,7 +53,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
 | [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
 | [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow |
-| [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 i ADR-030 |
+| [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 i ADR-030 |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0 |
@@ -2059,7 +2059,7 @@ nie sa API publicznym i zostaja.
 ## ADR-032: Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie
 
 **Data:** 2026-10-10 (decyzje uzytkownika 2026-10-09 i 2026-10-10)
-**Status:** Przyjeta — uzupelniona przez ADR-033 (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 (LAZ) i ADR-030 (kampanie PL)
+**Status:** Przyjeta — uzupelniona przez ADR-033 (`--full-sheet` z pkt 4; errata 1); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 (LAZ) i ADR-030 (kampanie PL)
 
 **Kontekst:** `--year` dzialal tylko dla LAZ, a `--min-year` w liscie
 arkuszy pozwalal pominac arkusz, ktory mial wylacznie starsze dane.
@@ -2172,6 +2172,17 @@ najnowszy lot, a najnowszy pelny lot dostaje drugie dowiazanie
 — tylko gdy najnowszy w przedziale nie jest pelny; z `all` jest bez
 skutku. Przedzial lat filtruje takze lot pelny. `--min-coverage N`
 pozostaje poza zakresem.
+
+**Errata 2 (2026-10-12, 0.8.0):** CLI `--campaigns {newest,all}`
+zastapiono przelacznikiem bez wartosci `--all-campaigns`, a parametr
+biblioteki `campaigns="newest"|"all"` — `all_campaigns: bool = False`
+(m.in. `DownloadManager` i pobieranie LAZ). Bez przelacznika / przy
+`all_campaigns=False` pobierany jest najnowszy lot; z przelacznikiem /
+przy `all_campaigns=True` wszystkie loty w dozwolonym przedziale.
+Model A z pkt 3 pozostaje bez zmian: flagi roku filtruja dopuszczalne
+lata, przelacznik okresla liczbe lotow. Pole sidecara
+`request.campaigns` pozostaje tekstowa strategia `"newest"` lub `"all"`
+(schemat `kartograf-meta/1` bez zmiany).
 
 ---
 

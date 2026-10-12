@@ -271,31 +271,30 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="YYYY",
         help="Tylko ten rok danych (PL: rok pozyskania aktualnosc NMT/NMPT/orto, "
         "akt_rok LAZ); skrot --min-year YYYY --max-year YYYY; najnowszy lot "
-        "z tego roku (wszystkie: --campaigns all); brak roku na ktoryms "
+        "z tego roku (wszystkie: --all-campaigns); brak roku na ktoryms "
         "arkuszu/kaflu = blad przed pobraniem; nie dziala z --target-crs",
     )
     download_parser.add_argument(
-        "--campaigns",
-        choices=["newest", "all"],
-        default=None,
-        help="Ile lotow na arkusz (tylko PL): newest = najnowszy lot w zakresie "
-        "lat (domyslne, nie trzeba podawac), all = wszystkie loty z zakresu do "
-        "<segment>/kampanie/; flagi roku wyznaczaja tylko dopuszczalne lata; "
-        "LAZ: all = bez deduplikacji pokrycia",
+        "--all-campaigns",
+        action="store_true",
+        help="Tylko PL: bez flagi najnowszy lot na arkusz w zakresie lat "
+        "(jeden lot); z flaga wszystkie loty z zakresu lat do "
+        "<segment>/kampanie/; flagi roku ograniczaja tylko dopuszczalne lata; "
+        "LAZ: bez deduplikacji pokrycia; nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--min-year",
         type=int,
         metavar="YYYY",
         help="Tylko PL: dolna granica roku danych (wlacznie); najnowszy lot "
-        "z lat >= YYYY (wszystkie: --campaigns all); nie dziala z --target-crs",
+        "z lat >= YYYY (wszystkie: --all-campaigns); nie dziala z --target-crs",
     )
     download_parser.add_argument(
         "--max-year",
         type=int,
         metavar="YYYY",
         help="Tylko PL: gorna granica roku danych (wlacznie); najnowszy lot "
-        "z lat <= YYYY (wszystkie: --campaigns all); sciezka standardowa nigdy "
+        "z lat <= YYYY (wszystkie: --all-campaigns); sciezka standardowa nigdy "
         "nie cofa sie na starszy lot; nie dziala z --target-crs",
     )
     download_parser.add_argument(

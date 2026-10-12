@@ -68,6 +68,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wczesniej zostaja pod stara nazwa (land cover nie pomija istniejacych
   plikow, kolejne pobranie zapisze plik pod nowa nazwa).
 
+- CLI i biblioteka: `--campaigns {newest,all}` oraz parametr
+  `campaigns="newest"|"all"` zastapiono przelacznikiem `--all-campaigns`
+  i parametrem `all_campaigns: bool = False` (arkusze PL i LAZ).
+  Domyslnie pobierany jest najnowszy lot; przelacznik wybiera wszystkie
+  loty w zakresie lat. Model A i tekstowe wartosci `request.campaigns`
+  w sidecarze (`"newest"`/`"all"`) pozostaja bez zmian; parametr
+  `FileStorage.list_files(campaigns: bool)` rowniez zostaje.
+  Co zrobic: `--campaigns all` zamien na `--all-campaigns`,
+  `--campaigns newest` usun; `campaigns="all"` zamien na
+  `all_campaigns=True`, a `campaigns="newest"` usun lub zamien na
+  `all_campaigns=False`; wlasciwosc `DownloadManager.campaigns` ->
+  `DownloadManager.all_campaigns` (bool).
+
 ## [0.7.2] - 2026-10-11
 
 ### Dodane

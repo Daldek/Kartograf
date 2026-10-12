@@ -24,7 +24,7 @@ from kartograf.download.campaigns import (
     in_year_range,
     measure_coverage,
     record_year,
-    validate_campaign_args,
+    validate_year_bounds,
     verify_file_format,
     verify_record_url,
     verify_record_vertical_crs,
@@ -352,30 +352,29 @@ def test_invalid_aktualnosc_is_download_error(bad):
 
 
 @pytest.mark.parametrize(
-    "campaigns,min_year,max_year",
+    "min_year,max_year",
     [
-        ("mosaic", None, None),
-        ("newest", 1899, None),
-        ("all", 2101, None),
-        ("all", True, None),
-        ("all", "2024", None),
-        ("all", None, 1899),
-        ("all", None, 2101),
-        ("all", None, True),
-        ("all", 2025, 2023),
+        (1899, None),
+        (2101, None),
+        (True, None),
+        ("2024", None),
+        (None, 1899),
+        (None, 2101),
+        (None, True),
+        (2025, 2023),
     ],
 )
-def test_validate_campaign_args_rejects(campaigns, min_year, max_year):
+def test_validate_year_bounds_rejects_invalid_ranges(min_year, max_year):
     with pytest.raises(ValidationError):
-        validate_campaign_args(campaigns, min_year, max_year)
+        validate_year_bounds(min_year, max_year)
 
 
 @pytest.mark.parametrize(
-    "campaigns,min_year,max_year",
-    [(None, None, None), ("all", 2023, 2024), ("newest", 2024, None)],
+    "min_year,max_year",
+    [(None, None), (2023, 2024), (2024, None)],
 )
-def test_validate_campaign_args_accepts(campaigns, min_year, max_year):
-    validate_campaign_args(campaigns, min_year, max_year)
+def test_validate_year_bounds_accepts_valid_ranges(min_year, max_year):
+    validate_year_bounds(min_year, max_year)
 
 
 def test_in_year_range_boundaries():

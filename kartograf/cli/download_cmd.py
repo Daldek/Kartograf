@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
-from kartograf.download.campaigns import validate_campaign_args
+from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.countries import EDGES as _EDGES
 from kartograf.download.countries import CountryPart
 from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
@@ -261,10 +261,10 @@ def _reject_non_nmt_for_cz(product: str) -> bool:
 
 def _campaign_opts(
     args: argparse.Namespace,
-) -> tuple[str | None, int | None, int | None]:
-    """Campaign strategy and year bounds; absent attributes support handmade tests."""
+) -> tuple[bool, int | None, int | None]:
+    """All-flights choice and year bounds; absent attributes support handmade tests."""
     return (
-        getattr(args, "campaigns", None),
+        getattr(args, "all_campaigns", False),
         getattr(args, "min_year", None),
         getattr(args, "max_year", None),
     )
@@ -303,9 +303,9 @@ def _reject_campaign_opts_without_pl(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> bool:
     """Reject PL-only campaign/year choices in CZ; describe mixed tasks once."""
-    campaigns, min_year, max_year = _campaign_opts(args)
+    all_campaigns, min_year, max_year = _campaign_opts(args)
     if (
-        campaigns != "all"
+        not all_campaigns
         and min_year is None
         and max_year is None
         and getattr(args, "year", None) is None
@@ -315,14 +315,14 @@ def _reject_campaign_opts_without_pl(
     if "PL" not in countries:
         print(
             "Error: CZ (CUZK) nie ma kampanii — "
-            "--campaigns all/--min-year/--max-year/--year/--full-sheet dotycza "
+            "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
             "tylko PL",
             file=sys.stderr,
         )
         return True
     if "CZ" in countries:
         print(
-            "Info: --campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
+            "Info: --all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
             "tylko czesci PL (CZ: biezaca wersja danych CUZK)",
             file=sys.stderr,
         )
@@ -334,7 +334,7 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
     flight composition, the download date in the name."""
     if getattr(args, "target_crs", None) is None:
         return False
-    campaigns, min_year, max_year = _campaign_opts(args)
+    all_campaigns, min_year, max_year = _campaign_opts(args)
     flag = next(
         (
             name
@@ -355,9 +355,9 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
             file=sys.stderr,
         )
         return True
-    if campaigns == "all":
+    if all_campaigns:
         print(
-            "Error: --campaigns all nie dziala z --target-crs — wycinek z WCS "
+            "Error: --all-campaigns nie dziala z --target-crs — wycinek z WCS "
             "GUGiK ma jedna kompozycje lotow serwera; wszystkie kampanie: "
             "pobierz arkusze bez --target-crs",
             file=sys.stderr,
@@ -727,7 +727,7 @@ def _pl_only_flags(args: argparse.Namespace) -> list[str]:
       at most in the other direction (today: a validation error);
     * ``--target-crs`` since ADR-027 works on both sides of the border (PL: a merged
       cutout), so it does not decide the country in either direction;
-    * ``--campaigns all``/``--min-year`` (ADR-030) neither: a PL+CZ area
+    * ``--all-campaigns``/``--min-year`` (ADR-030) neither: a PL+CZ area
       downloads CZ in its current version (``_reject_campaign_opts_without_pl``).
     """
     flags: list[str] = []
@@ -978,7 +978,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     # registry ---
     from kartograf.core.parser_registry import detect_system
 
-    campaigns, min_year, max_year = _campaign_opts(args)
+    all_campaigns, min_year, max_year = _campaign_opts(args)
     year = getattr(args, "year", None)
     if year is not None and (min_year is not None or max_year is not None):
         print(
@@ -990,7 +990,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     if year is not None:
         min_year = max_year = year
     try:
-        validate_campaign_args(campaigns, min_year, max_year)
+        validate_year_bounds(min_year, max_year)
     except ValidationError as e:
         message = (
             str(e)
@@ -999,10 +999,8 @@ def cmd_download(args: argparse.Namespace) -> int:
         )
         print(f"Error: {message}", file=sys.stderr)
         return 1
-    # Year bounds only restrict the admissible years; --campaigns sets how many
-    # flights (model A, ADR-032 point 3): the same rule for every product.
-    campaigns = campaigns or "newest"
-    args.campaigns = campaigns
+    # Year bounds only restrict admissible years; --all-campaigns selects every
+    # flight (model A, ADR-032 point 3): the same rule for every product.
     args.min_year, args.max_year = min_year, max_year
     full_sheet = bool(getattr(args, "full_sheet", False))
 
@@ -1091,7 +1089,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                 vertical_crs=vertical_crs,
                 resolution=resolution,
                 max_workers=workers,
-                campaigns=campaigns,
+                all_campaigns=all_campaigns,
                 min_year=min_year,
                 max_year=max_year,
                 full_sheet=full_sheet,
@@ -1151,7 +1149,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                     if sheet is not None and sheet.link_outside_range is not None:
                         where = (sheet.downloaded or sheet.reused)[0]
                     if not args.quiet:
-                        if campaigns == "all" and sheet is not None:
+                        if all_campaigns and sheet is not None:
                             # M-1: like the list - campaign files, not a sheet
                             _print_campaign_summary(
                                 len(sheet.downloaded), 1, output_dir, len(sheet.reused)
@@ -1183,7 +1181,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                         [result],
                         facts,
                         full_sheet=full_sheet,
-                        campaigns=campaigns,
+                        all_campaigns=all_campaigns,
                         ranged=min_year is not None or max_year is not None,
                     )
                     _print_better_coverage(facts, [result])
@@ -1209,7 +1207,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         paths,
         output_dir=output_dir,
         quiet=args.quiet,
-        campaigns=campaigns,
+        all_campaigns=all_campaigns,
         full_sheet=full_sheet,
         ranged=min_year is not None or max_year is not None,
     )
@@ -1291,7 +1289,7 @@ def _print_coverage_hints(result: DownloadResult) -> None:
 def _print_campaign_summary(
     downloaded: int, sheets: int, output_dir: Path, existed: int
 ) -> None:
-    """Summary of ``--campaigns all`` (sheet list and a single sheet code)."""
+    """Summary of ``--all-campaigns`` (sheet list and a single sheet code)."""
     print(
         f"Downloaded {downloaded} campaign files for "
         f"{sheets} sheets to {output_dir} ({existed} already existed)"
@@ -1316,7 +1314,7 @@ def _finish_pl_sheets(
     *,
     output_dir: Path,
     quiet: bool,
-    campaigns: str = "newest",
+    all_campaigns: bool = False,
     full_sheet: bool = False,
     ranged: bool = False,
 ) -> int:
@@ -1342,7 +1340,7 @@ def _finish_pl_sheets(
     ``extra.source.full_sheet: false``) -> ``Warning:`` (E13, ADR-033: which of
     them have a ``full_sheet/`` link), code unchanged.
     Standard path as a campaign COPY (``result.copied``) ->
-    ``Warning:``, code unchanged. ``campaigns="all"`` or ``full_sheet``: the
+    ``Warning:``, code unchanged. ``all_campaigns=True`` or ``full_sheet``: the
     summary counts campaign files (``result.campaign_files``), not sheets.
     ``newest`` sheets
     from a local campaign on an index failure
@@ -1351,7 +1349,7 @@ def _finish_pl_sheets(
     ``Warning:``/``Error:`` go to stderr, so ``-q`` does NOT suppress them.
     """
     _warn_sheet_sidecars(
-        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+        paths, result, full_sheet=full_sheet, all_campaigns=all_campaigns, ranged=ranged
     )
     _print_better_coverage(result, paths)
     _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
@@ -1364,7 +1362,7 @@ def _finish_pl_sheets(
         print()
     if not quiet and paths:
         # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
-        if campaigns == "all" or full_sheet:
+        if all_campaigns or full_sheet:
             # `campaign_files` = downloaded + local; local ones separately
             # (`reused_campaign_files`, a per-sheet subset)
             files = result.campaign_files
@@ -1623,12 +1621,17 @@ def _warn_crs_mismatch_sheets(paths) -> None:
 
 
 def _warn_sheet_sidecars(
-    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
+    paths,
+    result: DownloadResult,
+    *,
+    full_sheet: bool,
+    all_campaigns: bool,
+    ranged: bool,
 ) -> None:
     """CLI warnings from the result sheets' sidecars: incomplete sheet (E13)
     and file CRS different from the sheet code's (E17)."""
     _warn_partial_sheets(
-        paths, result, full_sheet=full_sheet, campaigns=campaigns, ranged=ranged
+        paths, result, full_sheet=full_sheet, all_campaigns=all_campaigns, ranged=ranged
     )
     _warn_crs_mismatch_sheets(paths)
 
@@ -1638,7 +1641,12 @@ def _sheets_text(sheets: list[str]) -> str:
 
 
 def _warn_partial_sheets(
-    paths, result: DownloadResult, *, full_sheet: bool, campaigns: str, ranged: bool
+    paths,
+    result: DownloadResult,
+    *,
+    full_sheet: bool,
+    all_campaigns: bool,
+    ranged: bool,
 ) -> None:
     """E13: ``Warning:`` about sheets from an incomplete newest GUGiK campaign.
 
@@ -1647,7 +1655,7 @@ def _warn_partial_sheets(
     result files, so it also works for sheets skipped as existing. One
     ``Warning:`` splits the sheets (ADR-033): with a ``full_sheet/`` link
     (``result.full_links``), without a full flight in the index
-    (``result.without_full``; with ``campaigns="all"`` every flight of the
+    (``result.without_full``; with ``all_campaigns=True`` every flight of the
     range is local, so no link means none; ``ranged`` limits that claim to
     the year bounds), and the rest — not downloaded, with the
     ``--full-sheet`` hint unless the flag was given.
@@ -1657,7 +1665,7 @@ def _warn_partial_sheets(
         return
     linked = [g for g in partial if g in result.full_links]
     rest = [g for g in partial if g not in result.full_links]
-    absent = [g for g in rest if g in result.without_full or campaigns == "all"]
+    absent = [g for g in rest if g in result.without_full or all_campaigns]
     missing = [g for g in rest if g not in absent]
     groups = []
     if linked:
@@ -1833,8 +1841,7 @@ def _download_pl_sheet_list(
     product = getattr(args, "product", "nmt")
     workers = getattr(args, "workers", 4)
     skip_existing = not args.force
-    campaigns, min_year, max_year = _campaign_opts(args)
-    campaigns = campaigns or "newest"
+    all_campaigns, min_year, max_year = _campaign_opts(args)
     full_sheet = bool(getattr(args, "full_sheet", False))
 
     if not args.quiet:
@@ -1861,7 +1868,7 @@ def _download_pl_sheet_list(
                 resolution=resolution,
                 max_workers=workers,
                 sidecar_extra={"parent_request": parent_request},
-                campaigns=campaigns,
+                all_campaigns=all_campaigns,
                 min_year=min_year,
                 max_year=max_year,
                 full_sheet=full_sheet,
@@ -1881,7 +1888,7 @@ def _download_pl_sheet_list(
         all_paths,
         output_dir=output_dir,
         quiet=args.quiet,
-        campaigns=campaigns,
+        all_campaigns=all_campaigns,
         full_sheet=full_sheet,
         ranged=min_year is not None or max_year is not None,
     )
@@ -1980,8 +1987,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if getattr(args, "country", "auto") == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
-    campaigns, min_year, max_year = _campaign_opts(args)
-    campaigns = campaigns or "newest"
+    all_campaigns, min_year, max_year = _campaign_opts(args)
     if _resolve_pl_sentinels(args):
         return 1
 
@@ -2022,7 +2028,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         selection = provider.select_tiles(
             bbox,
             min_density=min_density,
-            campaigns=campaigns,
+            all_campaigns=all_campaigns,
             min_year=min_year,
             max_year=max_year,
         )
@@ -2052,7 +2058,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
         bbox=bbox,
         output_dir=output_dir,
         min_density=min_density,
-        campaigns=campaigns,
+        all_campaigns=all_campaigns,
         min_year=min_year,
         max_year=max_year,
         max_workers=workers,

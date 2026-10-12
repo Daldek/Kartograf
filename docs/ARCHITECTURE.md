@@ -306,7 +306,7 @@ kartograf/
 │   ├── laz.py           # Kafle LAZ jako API (ADR-029): download_laz_area/run_laz_download —
 │   │                    # pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — koordynacja arkuszy (ThreadPoolExecutor), sidecary;
-│   │                    # kampanie (campaigns=, min_year=, max_year=), SheetFetch/last_sheet
+│   │                    # kampanie (all_campaigns=, min_year=, max_year=), SheetFetch/last_sheet
 │   │                    # download_sheets/expand_sheets (lista godel, porazki w last_result)
 │   └── storage.py       # FileStorage — segmenty z szablonow rejestru (ADR-026);
 │                        # prune_empty_dirs — sprzatanie pustych bbox/ po porazce
@@ -755,7 +755,7 @@ bez kandydata dowiazanie pelne zostaje nietkniete. Porazka tego
 dowiazania = porazka arkusza (`dowiazanie <sciezka>: <blad>`), `--force`
 je odswieza, I-1 go nie dotyka. `DownloadManager(full_sheet=True)` (CLI
 `--full-sheet`): przy `newest`, gdy wybrany rekord nie jest pelny, manager
-wola dodatkowo `resolve_campaigns(campaigns="all", min_year, max_year)`
+wola dodatkowo `resolve_campaigns(all_campaigns=True, min_year=..., max_year=...)`
 i bierze pierwszy rekord pelny (lista od najnowszego, `campaigns_cache`)
 jako jeszcze jedna kampanie arkusza — najwyzej jeden dodatkowy lot;
 brak = `SheetFetch.no_full_flight` / `DownloadResult.without_full`.
@@ -770,9 +770,9 @@ dowiazanie pelne spoza zadania: `full_link_outside_range` i wspolny
 `--year Y` (skrot `--min-year Y --max-year Y`), `--min-year L` i
 `--max-year U` (granice wlacznie, 1900..2100); rok to `aktualnoscRok`,
 inaczej `aktualnosc[:4]`, NIE `dt_pzgik`. Flagi roku sa tylko filtrem
-dopuszczalnych lat; `--campaigns` decyduje o liczbie lotow (model A,
-ADR-032 pkt 3): `newest` (domyslnie, dozwolone z kazda granica) = jeden
-najnowszy lot z przedzialu, `all` = wszystkie loty z przedzialu, takze
+dopuszczalnych lat; `--all-campaigns` decyduje o liczbie lotow (model A,
+ADR-032 pkt 3): bez przelacznika (domyslnie, dozwolone z kazda granica) = jeden
+najnowszy lot z przedzialu, z przelacznikiem = wszystkie loty z przedzialu, takze
 kilka w roku. Ta sama regula dla LAZ.
 Zadanie z jakakolwiek granica najpierw sprawdza WSZYSTKIE arkusze
 w `DownloadManager.check_year_range`: jedna pelna lista kampanii z kazdej
@@ -907,7 +907,7 @@ inna awaria pobrania, CLI konczy kodem 1 i wypisuje pelna liste porazek.
 Pojedynczy arkusz bez danych to kod 1; pod `--country auto` kod zalezy
 jeszcze od sukcesu drugiego kraju (sekcja 4.6).
 
-Opcje kampanii i roku (`--campaigns`, `--year`, `--min-year`, `--max-year`,
+Opcje kampanii i roku (`--all-campaigns`, `--year`, `--min-year`, `--max-year`,
 sekcja 4.1) dzialaja tu per arkusz; podsumowanie `all` liczy pliki kampanii,
 nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 (`Warning:` R5); arkusz z danymi tylko poza przedzialem to
@@ -1016,7 +1016,7 @@ o srodku na pelnym metrze), nie srednia 2 x 2. Gdy loty sa te same
 i siatki sa zgodne, zmierzone WCS i arkusz sa bit w bit zgodne
 (`docs/research/2026-10-10-wcs-limits/raport.md` pkt 4, 8 oraz
 `docs/research/2026-10-11-wcs-cutouts/raport.md` pkt 2-4).
-`--year`, `--min-year`, `--max-year`, `--campaigns all` i
+`--year`, `--min-year`, `--max-year`, `--all-campaigns` i
 `--full-sheet` z `--target-crs` pozostaja `Error:` przed siecia;
 serwer nie udostepnia wyboru lotu.
 
@@ -1139,11 +1139,11 @@ pojawic sie takze wtedy, gdy czesc CZ okaze sie calkowicie nodata.
 Opcje kampanii i flagi roku (ADR-030/032; erraty Q9, N-3) dotycza
 tylko PL; `_reject_campaign_opts_without_pl(args, countries)` obsluguje
 wszystkie wejscia: zadanie bez PL (godlo CZ pod `cz`/`auto`, jawne
-`--country cz`, obszar w calosci CZ pod `auto`) z `all` lub dowolna
+`--country cz`, obszar w calosci CZ pod `auto`) z `--all-campaigns` lub dowolna
 flaga roku = `Error: CZ (CUZK) nie ma kampanii —
---campaigns all/--min-year/--max-year/--year dotycza tylko PL`,
+--all-campaigns/--min-year/--max-year/--year dotycza tylko PL`,
 kod 1 bez sieci. Dla obszaru PL+CZ pod `auto` wypisuje raz
-`Info: --campaigns/--min-year/--max-year/--year dotycza tylko czesci PL
+`Info: --all-campaigns/--min-year/--max-year/--year dotycza tylko czesci PL
 (CZ: biezaca wersja danych CUZK)`; czesc CZ jest pobierana.
 Flagi roku nie naleza do `_pl_only_flags` i nie zwezaja `auto` do PL.
 
@@ -1241,9 +1241,9 @@ jeden `FileStorage` wystarcza na cale zadanie. W trybie obszarowym
 `--country auto` obszar siegajacy CZ konczy sie bledem z podpowiedzia
 `--country pl` (LAZ dla CZ to etap 2).
 
-**Kampanie LAZ (ADR-030/032).** `--campaigns newest` (domyslnie,
-rowniez z gorna granica) = zachlanny wybor ADR-029 w przedziale.
-`--campaigns all` = wszystkie kafle z rama przecinajaca obszar
+**Kampanie LAZ (ADR-030/032).** Domyslnie
+(rowniez z gorna granica) zachlanny wybor ADR-029 w przedziale.
+`--all-campaigns` = wszystkie kafle z rama przecinajaca obszar
 (`select_all_intersecting`), bez deduplikacji pokryciowej; kafel
 przeciety tylko obwiednia WFS trafia do `superseded` z powodem
 "outside". `--year Y` = przedzial `[Y, Y]`, `--min-year`/`--max-year`

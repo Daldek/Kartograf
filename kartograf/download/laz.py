@@ -90,7 +90,7 @@ def write_laz_sidecar(
     *,
     year: int | None = None,
     min_density: int | None = None,
-    campaigns: str = "newest",
+    all_campaigns: bool = False,
     min_year: int | None = None,
     max_year: int | None = None,
     parent_request: dict | None = None,
@@ -98,6 +98,9 @@ def write_laz_sidecar(
     """Best-effort LAZ tile sidecar via ``emit_sidecar`` (error = warning in log).
 
     ``request`` describes the bbox and requested year/density bounds (E16).
+    ``all_campaigns=False`` selects the newest flight within year bounds;
+    True selects every flight within them without coverage deduplication and
+    records ``"all"`` in the sidecar's ``request.campaigns`` field.
     ``extra.nominal_density`` is the NOMINAL value from GUGiK WFS
     (``char_przestrz``); actual density is often several times higher.
     ``extra.acquisition_date`` and ``extra.full_sheet`` come from WFS when
@@ -114,8 +117,8 @@ def write_laz_sidecar(
         request["year"] = year if year is not None else min_year
     if min_density is not None:
         request["min_density"] = min_density
-    if campaigns == "all":
-        request["campaigns"] = campaigns
+    if all_campaigns:
+        request["campaigns"] = "all"
     if min_year is not None:
         request["min_year"] = min_year
     if max_year is not None:
@@ -154,7 +157,7 @@ def run_laz_download(
     output_dir: str | Path = "./data",
     year: int | None = None,
     min_density: int | None = None,
-    campaigns: str = "newest",
+    all_campaigns: bool = False,
     min_year: int | None = None,
     max_year: int | None = None,
     max_workers: int = 1,
@@ -174,8 +177,10 @@ def run_laz_download(
     and successful tiles stay on disk. Other exceptions (e.g. a write
     ``OSError``) abort the call.
 
-    ``bbox``, ``year``, ``min_density``, ``campaigns``, ``min_year``,
-    ``max_year`` and ``parent_request`` describe the request in the sidecars.
+    ``bbox``, ``year``, ``min_density``, ``min_year``, ``max_year`` and
+    ``parent_request`` describe the request in sidecars. ``all_campaigns=False``
+    selects the newest flight within year bounds; True selects every flight
+    within them without coverage deduplication; the sidecar records this choice.
     """
     storage = FileStorage(output_dir, product="laz", vertical_crs=provider.vertical_crs)
     tiles = selection.tiles
@@ -196,7 +201,7 @@ def run_laz_download(
             bbox,
             year=year,
             min_density=min_density,
-            campaigns=campaigns,
+            all_campaigns=all_campaigns,
             min_year=min_year,
             max_year=max_year,
             parent_request=parent_request,
@@ -245,7 +250,7 @@ def download_laz_area(
     vertical_crs: str | None = None,
     year: int | None = None,
     min_density: int | None = None,
-    campaigns: str = "newest",
+    all_campaigns: bool = False,
     min_year: int | None = None,
     max_year: int | None = None,
     max_workers: int = 1,
@@ -271,9 +276,10 @@ def download_laz_area(
     year, min_density
         Acquisition year / nominal-density filters. With ``year``, reference
         coverage must be available within that year before downloading.
-    campaigns : {"newest", "all"}
-        ``"newest"`` — ADR-029 selection; ``"all"`` — every tile
-        intersecting the area, without deduplication (ADR-030).
+    all_campaigns : bool, optional
+        False (default) selects the newest flight within year bounds using
+        ADR-029 coverage selection; True selects every flight within bounds
+        without coverage deduplication (ADR-030).
     min_year, max_year : int, optional
         Closed acquisition-year bounds; an uncovered reference tile raises
         ``YearRangeError`` before any download. Exclusive with ``year``.
@@ -296,7 +302,7 @@ def download_laz_area(
     ValueError
         ``bbox`` not in EPSG:2180, or an unknown / mismatched ``vertical_crs``.
     ValidationError
-        Unknown ``campaigns``/year bounds or ``year`` with a bound.
+        Invalid year bounds or ``year`` with a bound.
     DownloadError
         WFS discovery failure or no matching year in the service.
     YearRangeError
@@ -316,7 +322,7 @@ def download_laz_area(
         year=year,
         min_density=min_density,
         tolerance_m=tolerance_m,
-        campaigns=campaigns,
+        all_campaigns=all_campaigns,
         min_year=min_year,
         max_year=max_year,
     )
@@ -329,7 +335,7 @@ def download_laz_area(
         output_dir=output_dir,
         year=year,
         min_density=min_density,
-        campaigns=campaigns,
+        all_campaigns=all_campaigns,
         min_year=min_year,
         max_year=max_year,
         max_workers=max_workers,

@@ -7111,12 +7111,12 @@ class TestSheetCrsMismatchWarning:
 # --- Campaign and year selection in the CLI -------------------------------
 
 _CAMPAIGN_INFO = (
-    "Info: --campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko "
+    "Info: --all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko "
     "czesci PL"
 )
 _CZ_CAMPAIGN_ERROR = (
     "CZ (CUZK) nie ma kampanii — "
-    "--campaigns all/--min-year/--max-year/--year/--full-sheet dotycza tylko PL"
+    "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko PL"
 )
 # PL/CZ border strip (both rectangular envelopes, ADR-023)
 _BORDER_BBOX = ["--bbox", "18.4,49.55,18.8,49.75", "--bbox-crs", "EPSG:4326"]
@@ -7131,7 +7131,7 @@ class TestCampaignOptions:
     def test_parser_max_year_and_year_for_nmt(self):
         parser = create_parser()
         args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4"])
-        assert args.campaigns is None
+        assert args.all_campaigns is False
         assert args.min_year is None
         assert args.max_year is None
         assert args.year is None
@@ -7145,28 +7145,23 @@ class TestCampaignOptions:
                 "2024",
                 "--max-year",
                 "2025",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
             ]
         )
-        assert (args.year, args.max_year, args.campaigns) == (2024, 2025, "all")
+        assert (args.year, args.max_year, args.all_campaigns) == (2024, 2025, True)
 
         args = parser.parse_args(
             [
                 "download",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "--min-year",
                 "2024",
             ]
         )
-        assert args.campaigns == "all"
+        assert args.all_campaigns is True
         assert args.min_year == 2024
-
-        with pytest.raises(SystemExit):
-            parser.parse_args(["download", "--sheet", "X", "--campaigns", "coverage"])
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7174,11 +7169,11 @@ class TestCampaignOptions:
         self, mock_manager_class, mock_find, tmp_path
     ):
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
-        opts = ["--campaigns", "all", "--min-year", "2024", "-o", str(tmp_path), "-q"]
+        opts = ["--all-campaigns", "--min-year", "2024", "-o", str(tmp_path), "-q"]
 
         assert main(["download", "--sheet", "N-34-130-D-d-2-4", *opts]) == 0
         kwargs = mock_manager_class.call_args.kwargs
-        assert kwargs["campaigns"] == "all"
+        assert kwargs["all_campaigns"] is True
         assert kwargs["min_year"] == 2024
 
         mock_manager_class.reset_mock()
@@ -7186,7 +7181,7 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "a.asc")
         assert main(["download", *_PL_BBOX_2180, *opts]) == 0
         kwargs = mock_manager_class.call_args.kwargs
-        assert kwargs["campaigns"] == "all"
+        assert kwargs["all_campaigns"] is True
         assert kwargs["min_year"] == 2024
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7284,28 +7279,26 @@ class TestCampaignOptions:
         )
         assert rc == 0
         kwargs = mock_manager_class.call_args.kwargs
-        assert (kwargs["min_year"], kwargs["max_year"], kwargs["campaigns"]) == (
+        assert (kwargs["min_year"], kwargs["max_year"], kwargs["all_campaigns"]) == (
             2025,
             2025,
-            "newest",
+            False,
         )
 
     @pytest.mark.parametrize(
-        ("flags", "strategy", "bounds"),
+        ("flags", "all_campaigns", "bounds"),
         [
-            (["--min-year", "2024"], "newest", (2024, None)),
-            (["--min-year", "2024", "--campaigns", "newest"], "newest", (2024, None)),
-            (["--max-year", "2024"], "newest", (None, 2024)),
-            (["--campaigns", "newest", "--year", "2025"], "newest", (2025, 2025)),
-            (["--campaigns", "all", "--max-year", "2024"], "all", (None, 2024)),
-            (["--campaigns", "all", "--year", "2025"], "all", (2025, 2025)),
+            (["--min-year", "2024"], False, (2024, None)),
+            (["--max-year", "2024"], False, (None, 2024)),
+            (["--all-campaigns", "--max-year", "2024"], True, (None, 2024)),
+            (["--all-campaigns", "--year", "2025"], True, (2025, 2025)),
         ],
     )
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_cli_campaigns_independent_of_year_flags(
-        self, mock_manager_class, flags, strategy, bounds, tmp_path
+        self, mock_manager_class, flags, all_campaigns, bounds, tmp_path
     ):
-        """Model A: year flags set the bounds, ``--campaigns`` the flight count."""
+        """Year flags set the bounds; the switch controls flight count."""
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         rc = main(
             [
@@ -7321,7 +7314,7 @@ class TestCampaignOptions:
         assert rc == 0
         kwargs = mock_manager_class.call_args.kwargs
         assert (kwargs["min_year"], kwargs["max_year"]) == bounds
-        assert kwargs["campaigns"] == strategy
+        assert kwargs["all_campaigns"] is all_campaigns
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -7495,8 +7488,7 @@ class TestCampaignOptions:
                 "N-34-130-D-d-2-4",
                 "--product",
                 "laz",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "--min-year",
                 "2020",
                 "-o",
@@ -7506,9 +7498,9 @@ class TestCampaignOptions:
         )
         assert rc == 0
         kwargs = instance.select_tiles.call_args.kwargs
-        assert kwargs["campaigns"] == "all" and kwargs["min_year"] == 2020
+        assert kwargs["all_campaigns"] is True and kwargs["min_year"] == 2020
         kwargs = mock_run.call_args.kwargs
-        assert kwargs["campaigns"] == "all" and kwargs["min_year"] == 2020
+        assert kwargs["all_campaigns"] is True and kwargs["min_year"] == 2020
 
     @patch("kartograf.download.cutout.prepare_pl_cutout")
     def test_target_crs_with_campaigns_all_rejected_before_network(
@@ -7520,15 +7512,14 @@ class TestCampaignOptions:
                 *_PL_BBOX_2180,
                 "--target-crs",
                 "EPSG:2180",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
         )
         assert rc == 1
         err = capsys.readouterr().err
-        assert "Error: --campaigns all nie dziala z --target-crs" in err
+        assert "Error: --all-campaigns nie dziala z --target-crs" in err
         # no promise of a campaign-composing tool in a given release (ADR-030
         # errata 6): the message ends with the reason
         assert "0.7.1" not in err
@@ -7575,15 +7566,14 @@ class TestCampaignOptions:
                 *_BORDER_BBOX,
                 "--target-crs",
                 "EPSG:2180",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
         )
         assert rc == 1
         assert (
-            "Error: --campaigns all nie dziala z --target-crs"
+            "Error: --all-campaigns nie dziala z --target-crs"
             in capsys.readouterr().err
         )
         mock_run_cz.assert_not_called()
@@ -7600,8 +7590,7 @@ class TestCampaignOptions:
                 "302_5550",
                 "--country",
                 "cz",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
@@ -7619,8 +7608,7 @@ class TestCampaignOptions:
                 "download",
                 "--sheet",
                 "302_5550",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
@@ -7649,7 +7637,7 @@ class TestCampaignOptions:
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_cz_sm5_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
-            ["download", "--sheet", "CTES96", "--campaigns", "all", "-o", str(tmp_path)]
+            ["download", "--sheet", "CTES96", "--all-campaigns", "-o", str(tmp_path)]
         )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
@@ -7674,8 +7662,7 @@ class TestCampaignOptions:
                 *_BORDER_BBOX,
                 "--country",
                 "cz",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
@@ -7717,9 +7704,7 @@ class TestCampaignOptions:
         self, mock_run_cz, capsys, tmp_path
     ):
         mock_run_cz.return_value = 0
-        rc = main(
-            ["download", *_CZ_ONLY_BBOX, "--campaigns", "all", "-o", str(tmp_path)]
-        )
+        rc = main(["download", *_CZ_ONLY_BBOX, "--all-campaigns", "-o", str(tmp_path)])
         assert rc == 1
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err
@@ -7751,14 +7736,14 @@ class TestCampaignOptions:
         mock_cz.return_value = 0
 
         rc = main(
-            ["download", *_BORDER_BBOX, "--campaigns", "all", "-o", str(tmp_path), "-q"]
+            ["download", *_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"]
         )
 
         assert rc == 0
         err = capsys.readouterr().err
         assert err.count(_CAMPAIGN_INFO) == 1
         assert "--country auto -> pl" not in err
-        assert mock_manager_class.call_args.kwargs["campaigns"] == "all"
+        assert mock_manager_class.call_args.kwargs["all_campaigns"] is True
         mock_cz.assert_called_once()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
@@ -7777,7 +7762,7 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert err.count(_CAMPAIGN_INFO) == 1
-        assert mock_manager_class.call_args.kwargs["campaigns"] == "newest"
+        assert mock_manager_class.call_args.kwargs["all_campaigns"] is False
         assert mock_cz.call_count == 1
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
@@ -7795,8 +7780,7 @@ class TestCampaignOptions:
                 *_BORDER_BBOX,
                 "--product",
                 "orto",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -7926,9 +7910,7 @@ class TestCampaignOptions:
         }
         mock_manager_class.return_value = manager
 
-        rc = main(
-            ["download", *_PL_BBOX_2180, "--campaigns", "all", "-o", str(tmp_path)]
-        )
+        rc = main(["download", *_PL_BBOX_2180, "--all-campaigns", "-o", str(tmp_path)])
 
         assert rc == 0
         out = capsys.readouterr().out
@@ -7955,9 +7937,7 @@ class TestCampaignOptions:
         manager.last_result.reused_campaign_files = {g: f[1:] for g, f in files.items()}
         mock_manager_class.return_value = manager
 
-        rc = main(
-            ["download", *_PL_BBOX_2180, "--campaigns", "all", "-o", str(tmp_path)]
-        )
+        rc = main(["download", *_PL_BBOX_2180, "--all-campaigns", "-o", str(tmp_path)])
 
         assert rc == 0
         assert (
@@ -7977,15 +7957,14 @@ class TestCampaignOptions:
                 *_BORDER_BBOX,
                 "--target-crs",
                 "EPSG:2180",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
         )
         assert rc == 1
         err = capsys.readouterr().err
-        assert "Error: --campaigns all nie dziala z --target-crs" in err
+        assert "Error: --all-campaigns nie dziala z --target-crs" in err
         assert "Info:" not in err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -8000,8 +7979,7 @@ class TestCampaignOptions:
                 "N-34-130-D-d-2-4",
                 "--target-crs",
                 "EPSG:2180",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
@@ -8009,7 +7987,7 @@ class TestCampaignOptions:
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error: --target-crs dziala tylko z --bbox/--geometry" in err
-        assert "--campaigns all nie dziala" not in err
+        assert "--all-campaigns nie dziala" not in err
         mock_manager_class.assert_not_called()
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -8047,8 +8025,7 @@ class TestCampaignOptions:
                 "N-34-130-D",
                 "--scale",
                 "1:10000",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "--min-year",
                 "2021",
                 "-o",
@@ -8059,7 +8036,7 @@ class TestCampaignOptions:
         assert rc == 0
         manager.download_hierarchy.assert_called_once()
         kwargs = mock_manager_class.call_args.kwargs
-        assert kwargs["campaigns"] == "all" and kwargs["min_year"] == 2021
+        assert kwargs["all_campaigns"] is True and kwargs["min_year"] == 2021
 
     @patch("kartograf.core.geometry.read_source_crs", return_value=CRS.from_epsg(2180))
     @patch("kartograf.core.geometry.get_overall_bbox")
@@ -8084,8 +8061,7 @@ class TestCampaignOptions:
                 str(geometry_file),
                 "--country",
                 "pl",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "--min-year",
                 "2022",
                 "-o",
@@ -8096,7 +8072,7 @@ class TestCampaignOptions:
         assert rc == 0
         mock_find.assert_called_once()
         kwargs = mock_manager_class.call_args.kwargs
-        assert kwargs["campaigns"] == "all" and kwargs["min_year"] == 2022
+        assert kwargs["all_campaigns"] is True and kwargs["min_year"] == 2022
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_newest_min_year_single_sheet_no_coverage_exit_1(
@@ -8137,9 +8113,7 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
         mock_cz.return_value = 0
 
-        main(
-            ["download", *_BORDER_BBOX, "--campaigns", "all", "-o", str(tmp_path), "-q"]
-        )
+        main(["download", *_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"])
 
         captured = capsys.readouterr()
         assert _CAMPAIGN_INFO in captured.err
@@ -8180,7 +8154,7 @@ class TestCampaignOptions:
         )
         assert cmd_download(args) == 0
         kwargs = mock_manager_class.call_args.kwargs
-        assert kwargs["campaigns"] == "newest"
+        assert kwargs["all_campaigns"] is False
         assert kwargs["min_year"] is None
 
     # -------------------------------------------------------------------------
@@ -8285,7 +8259,7 @@ class TestCampaignOptions:
             assert "Error:" in capsys.readouterr().err
 
     # -------------------------------------------------------------------------
-    # M-1: single sheet code with --campaigns all — summary line as for a list
+    # M-1: single sheet code with --all-campaigns — summary line as for a list
     # -------------------------------------------------------------------------
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -8311,8 +8285,7 @@ class TestCampaignOptions:
                 "download",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
@@ -8349,8 +8322,7 @@ class TestCampaignOptions:
                 "download",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "--campaigns",
-                "all",
+                "--all-campaigns",
                 "-o",
                 str(tmp_path),
             ]
@@ -8527,10 +8499,10 @@ class TestListMessagesUx:
         assert rc == 1
         assert "Info:" not in capsys.readouterr().err
 
-    @pytest.mark.parametrize("campaigns", ["newest", "all"])
+    @pytest.mark.parametrize("all_campaigns", [False, True])
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_all_no_coverage_quiet_keeps_stderr_no_summary(
-        self, mock_manager_class, campaigns, capsys, tmp_path
+        self, mock_manager_class, all_campaigns, capsys, tmp_path
     ):
         """O-7 on both paths and with -q: Error/Info on stderr, no summary."""
         err = self._real_error("7.173.21")
@@ -8541,9 +8513,8 @@ class TestListMessagesUx:
         )
         mock_manager_class.return_value = self._list_manager(result)
 
-        rc = main(
-            [*self._BBOX_ARGS, "--campaigns", campaigns, "-q", "-o", str(tmp_path)]
-        )
+        flags = ["--all-campaigns"] if all_campaigns else []
+        rc = main([*self._BBOX_ARGS, *flags, "-q", "-o", str(tmp_path)])
 
         assert rc == 1
         captured = capsys.readouterr()
@@ -8551,15 +8522,16 @@ class TestListMessagesUx:
         assert "Info: Dostepny potomek 7.173.21.01" in captured.err
         assert "Downloaded" not in captured.out
 
-    @pytest.mark.parametrize("campaigns", ["newest", "all"])
+    @pytest.mark.parametrize("all_campaigns", [False, True])
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_all_no_coverage_not_quiet_no_summary(
-        self, mock_manager_class, campaigns, capsys, tmp_path
+        self, mock_manager_class, all_campaigns, capsys, tmp_path
     ):
         result = DownloadResult(failed=["A"], no_coverage=["A"])
         mock_manager_class.return_value = self._list_manager(result)
 
-        rc = main([*self._BBOX_ARGS, "--campaigns", campaigns, "-o", str(tmp_path)])
+        flags = ["--all-campaigns"] if all_campaigns else []
+        rc = main([*self._BBOX_ARGS, *flags, "-o", str(tmp_path)])
 
         assert rc == 1
         assert "Downloaded" not in capsys.readouterr().out
@@ -8706,7 +8678,7 @@ class TestLazOnlyOptions:
         [
             (["--year", "2022"], (2022, 2022)),
             (["--max-year", "2022"], (None, 2022)),
-            (["--year", "2022", "--campaigns", "newest"], (2022, 2022)),
+            (["--year", "2022", "--all-campaigns"], (2022, 2022)),
         ],
     )
     @patch("kartograf.download.laz.run_laz_download")
@@ -8741,7 +8713,7 @@ class TestLazOnlyOptions:
         ):
             assert kwargs["min_year"] == bounds[0]
             assert kwargs["max_year"] == bounds[1]
-            assert kwargs["campaigns"] == "newest"
+            assert kwargs["all_campaigns"] is ("--all-campaigns" in flags)
             assert kwargs.get("year") is None
             assert kwargs["min_density"] == 12
 
@@ -8899,15 +8871,13 @@ class TestFullSheetOption:
         fake = c14_fake()
         out = str(tmp_path / "out")
         assert (
-            self._run(fake, "--sheet", self.G, "--campaigns", "all", "-o", out, "-q")
-            == 0
+            self._run(fake, "--sheet", self.G, "--all-campaigns", "-o", out, "-q") == 0
         )
         capsys.readouterr()
         argv = [
             "--sheet",
             self.G,
-            "--campaigns",
-            "all",
+            "--all-campaigns",
             "--max-year",
             "2024",
             "-o",
@@ -8921,7 +8891,7 @@ class TestFullSheetOption:
         assert self.G in line and "2025-04-27_83233" in line
 
     def test_hierarchy_warning_splits_linked_and_absent_sheets(self, capsys, tmp_path):
-        """``--campaigns all`` over a hierarchy: one Warning, two groups."""
+        """``--all-campaigns`` over a hierarchy: one Warning, two groups."""
         import dataclasses
 
         from tests.test_manager_campaigns import FakeCampaignProvider, c14_records
@@ -8937,7 +8907,7 @@ class TestFullSheetOption:
                 )
         fake = FakeCampaignProvider({"all": records})
         out = str(tmp_path / "out")
-        argv = ["--sheet", "N-34-139-C-a-3", "--campaigns", "all", "-o", out, "-q"]
+        argv = ["--sheet", "N-34-139-C-a-3", "--all-campaigns", "-o", out, "-q"]
         assert self._run(fake, *argv) == 0
         line = self._partial_warning(capsys.readouterr().err)
         linked, absent = line.split("pelny lot w <segment>/full_sheet/: ")[1].split(
