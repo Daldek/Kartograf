@@ -47,7 +47,7 @@ class FileStorage:
 
     Examples
     --------
-    >>> storage = FileStorage("./data", resolution="1m")
+    >>> storage = FileStorage("./data", resolution="1m", vertical_crs="EVRF2007")
     >>> path = storage.get_path("N-34-130-D-d-2-4", ".asc")
     >>> print(path)
     data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc
@@ -62,11 +62,12 @@ class FileStorage:
 
     def __init__(
         self,
-        output_dir: str | Path = "./data",
-        resolution: str = "1m",
+        output_dir: str | Path,
+        *,
+        resolution: str | None,
+        vertical_crs: str | None,
         product: str | None = None,
         subdir: str | None = None,
-        vertical_crs: str | None = "EVRF2007",
         variant: str | None = None,
     ):
         """
@@ -77,31 +78,27 @@ class FileStorage:
         output_dir : str or Path
             Base directory for storing downloaded files.
             Will be created if it doesn't exist.
-        resolution : str, optional
-            Resolution picking the NMT segment template: "1m" or "5m"
-            (default: "1m"). Files land in
-            `output_dir/nmt/pl_<system>_<resolution>_<vcrs>/...`.
-            Ignored when product is set.
-        product : str, optional
-            Product name picking the segment template (e.g. "nmpt", "orto",
-            "laz"). When set, the product template replaces the resolution one
-            (`output_dir/nmpt/pl_<system>_1m_<vcrs>/...`).
-        subdir : str, optional
-            Explicit segment template driven by the source descriptor
-            (e.g. "nmt/cz_dmr5g_{vcrs}"). Takes precedence over product
-            and resolution.
-        vertical_crs : str, optional
-            Vertical CRS filling the ``{vcrs}`` placeholder of the segment
-            template (lowercased; default "EVRF2007"). ``None`` leaves the
-            placeholder unresolved — path methods then raise
-            ``ValidationError`` for templates that require it.
-        variant : str, optional
-            Product variant appended to the END of the segment as
-            ``_<variant>`` (E12: orto CIR -> ``orto/pl_<system>_cir``). Only
-            orto uses it today; its template has no ``{vcrs}``, so the ADR-026
-            order ``<kraj>_<system>[_<wariant>][_<vcrs>]`` holds. ``None``
-            (default) = no suffix — the default variant (RGB) keeps its
-            pre-E12 path. Take it from ``provider.storage_variant``.
+        resolution : str or None
+            "1m" for high-resolution NMT/NMPT or "5m" for NMT 5m.
+            Set None only if the selected product/descriptor segment has no
+            resolution dimension (e.g. orthophotos or LAZ). Without a product
+            or descriptor, a resolution is required to choose the NMT segment.
+        vertical_crs : str or None
+            "EVRF2007" (modern PL heights), "KRON86" (legacy PL heights) or
+            "Bpv" (native CZ heights). Set None only when the selected
+            product/descriptor segment has no vertical dimension (orthophoto).
+            A segment needing ``{vcrs}`` rejects None on path resolution.
+        product : str or None, optional
+            "nmpt" (surface model, 1m), "orto" (orthophoto) or "laz"
+            (point cloud); None (default) selects NMT from ``resolution``.
+        subdir : str or None, optional
+            Explicit descriptor segment template, e.g. "nmt/cz_dmr5g_{vcrs}";
+            None (default) selects by product or resolution.
+        variant : str or None, optional
+            Product variant appended as ``_<variant>``. "cir" and "bw"
+            distinguish orthophoto from its RGB segment; None (default)
+            leaves the segment unsuffixed. Take it from
+            ``provider.storage_variant``.
         """
         if variant is not None and not re.fullmatch(r"[a-z0-9]+", variant):
             raise ValidationError(
@@ -110,9 +107,9 @@ class FileStorage:
             )
         self._variant = variant
         self._subdir_override = subdir
-        if product:
-            self._product: str | None = product
-            self._resolution = ""
+        if product is not None or subdir is not None:
+            self._product = product
+            self._resolution = resolution or ""
         else:
             if resolution not in self.SUPPORTED_RESOLUTIONS:
                 raise ValueError(
@@ -210,7 +207,7 @@ class FileStorage:
             subdir = subdir.replace("{system}", system)
         return self._ensure_resolved(subdir)
 
-    def get_path(self, sheet: str, ext: str = ".asc") -> Path:
+    def get_path(self, sheet: str, ext: str) -> Path:
         """
         Generate file path for given sheet code and extension.
 
@@ -224,8 +221,9 @@ class FileStorage:
         ----------
         sheet : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
-        ext : str, optional
-            File extension including dot (default: ".asc")
+        ext : str
+            Explicit file extension including dot: ".asc" for NMT/NMPT
+            sheets or ".tif" for orthophotos.
 
         Returns
         -------
@@ -234,7 +232,7 @@ class FileStorage:
 
         Examples
         --------
-        >>> storage = FileStorage("./data", resolution="1m")
+        >>> storage = FileStorage("./data", resolution="1m", vertical_crs="EVRF2007")
         >>> storage.get_path("N-34-130-D-d-2-4", ".asc")
         PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
         """
@@ -252,21 +250,21 @@ class FileStorage:
             dir_path = dir_path / part
         return dir_path / f"{normalized}{ext}"
 
-    def get_campaign_path(
-        self, sheet: str, campaign: CampaignRef, ext: str = ".asc"
-    ) -> Path:
-        """
-        Path of a campaign file (ADR-030):
-        ``<output>/<segment>/kampanie/<date>_<id>/<hierarchy>/<sheet><ext>``.
+    def get_campaign_path(self, sheet: str, campaign: CampaignRef, ext: str) -> Path:
+        """Path of a campaign file under ``kampanie/<date>_<id>``.
+
+        ``ext`` is the explicit file extension including dot: ".asc" for
+        NMT/NMPT or ".tif" for orthophotos.
         """
         normalized = SheetParser(sheet).sheet
         return self._sheet_path(normalized, ext, CAMPAIGNS_DIR, campaign.dirname)
 
-    def get_full_sheet_path(self, sheet: str, ext: str = ".asc") -> Path:
+    def get_full_sheet_path(self, sheet: str, ext: str) -> Path:
         """
         Path of the second link to the newest declared-full flight (ADR-033):
         ``<output>/<segment>/full_sheet/<hierarchy>/<sheet><ext>`` — the same
         hierarchy as :meth:`get_path`.
+        ``ext`` is the explicit file extension including dot (".asc" or ".tif").
         """
         normalized = SheetParser(sheet).sheet
         return self._sheet_path(normalized, ext, FULL_SHEET_DIR)
@@ -309,7 +307,9 @@ class FileStorage:
 
         Examples
         --------
-        >>> storage = FileStorage("./data", product="laz")
+        >>> storage = FileStorage(
+        ...     "./data", resolution=None, vertical_crs="EVRF2007", product="laz"
+        ... )
         >>> storage.get_raw_path("N-33-131-B-a-1-1-4", "81121_x.laz")
         PosixPath('data/laz/pl_1992_evrf2007/N-33/131/B/a/1/1/4/81121_x.laz')
 
@@ -349,7 +349,7 @@ class FileStorage:
         """
         return parser_registry.path_parts(sheet)
 
-    def ensure_directory(self, sheet: str) -> Path:
+    def ensure_directory(self, sheet: str, ext: str) -> Path:
         """
         Ensure directory exists for given sheet code.
 
@@ -357,17 +357,19 @@ class FileStorage:
         ----------
         sheet : str
             Map sheet identifier
+        ext : str
+            Explicit file extension including dot (".asc" or ".tif").
 
         Returns
         -------
         Path
             Path to the directory (created if needed)
         """
-        path = self.get_path(sheet)
+        path = self.get_path(sheet, ext)
         path.parent.mkdir(parents=True, exist_ok=True)
         return path.parent
 
-    def exists(self, sheet: str, ext: str = ".asc") -> bool:
+    def exists(self, sheet: str, ext: str) -> bool:
         """
         Check if file for given sheet code exists.
 
@@ -375,8 +377,8 @@ class FileStorage:
         ----------
         sheet : str
             Map sheet identifier
-        ext : str, optional
-            File extension including dot (default: ".asc")
+        ext : str
+            Explicit file extension including dot (".asc" or ".tif").
 
         Returns
         -------
@@ -389,7 +391,7 @@ class FileStorage:
         self,
         sheet: str,
         content: bytes | BinaryIO,
-        ext: str = ".asc",
+        ext: str,
     ) -> Path:
         """
         Write content to file atomically.
@@ -407,8 +409,8 @@ class FileStorage:
             Map sheet identifier
         content : bytes or BinaryIO
             Content to write (bytes or file-like object)
-        ext : str, optional
-            File extension including dot (default: ".asc")
+        ext : str
+            Explicit file extension including dot (".asc" or ".tif").
 
         Returns
         -------
@@ -417,7 +419,7 @@ class FileStorage:
 
         Examples
         --------
-        >>> storage = FileStorage("./data")
+        >>> storage = FileStorage("./data", resolution="1m", vertical_crs="EVRF2007")
         >>> path = storage.write_atomic("N-34-130-D", b"data", ".asc")
         """
         target_path = self.get_path(sheet, ext)
@@ -448,7 +450,7 @@ class FileStorage:
                 temp_path.unlink()
             raise
 
-    def delete(self, sheet: str, ext: str = ".asc") -> bool:
+    def delete(self, sheet: str, ext: str) -> bool:
         """
         Delete the links of a sheet: the standard path and ``full_sheet/``.
 
@@ -459,8 +461,8 @@ class FileStorage:
         ----------
         sheet : str
             Map sheet identifier
-        ext : str, optional
-            File extension including dot (default: ".asc")
+        ext : str
+            Explicit file extension including dot (".asc" or ".tif").
 
         Returns
         -------
@@ -478,9 +480,7 @@ class FileStorage:
                 deleted = True
         return deleted
 
-    def list_files(
-        self, pattern: str = "**/*.asc", *, campaigns: bool = False
-    ) -> list[Path]:
+    def list_files(self, pattern: str, *, campaigns: bool = False) -> list[Path]:
         """
         List all files matching pattern in storage directory.
 
@@ -490,8 +490,9 @@ class FileStorage:
 
         Parameters
         ----------
-        pattern : str, optional
-            Glob pattern for matching files (default: "**/*.asc")
+        pattern : str
+            Explicit glob pattern, e.g. "**/*.asc" for NMT/NMPT sheets or
+            "**/*.tif" for orthophotos.
         campaigns : bool, optional
             False (default): standard paths — without ``kampanie/`` and
             ``full_sheet/``. True: only files in ``kampanie/`` (ADR-030).
@@ -520,7 +521,7 @@ class FileStorage:
                     files.append(p)
         return files
 
-    def get_size(self, sheet: str, ext: str = ".asc") -> int | None:
+    def get_size(self, sheet: str, ext: str) -> int | None:
         """
         Get file size for given sheet code.
 
@@ -580,25 +581,24 @@ def prune_empty_dirs(start: Path, stop: Path) -> None:
 
 def storage_for_provider(
     output_dir: str | Path,
-    provider=None,
+    provider,
     *,
-    resolution: str = "1m",
-    vertical_crs: str | None = "EVRF2007",
+    resolution: str | None,
+    vertical_crs: str | None,
 ) -> FileStorage:
     """
     ``FileStorage`` of the segment where the provider's files land — the
     single place it is built (D18: CLI, ``DownloadManager``, PL cutout, CZ
     flow).
 
-    The segment comes from the provider's source descriptor
-    (``resolve_subdir(vertical_crs=...)``, ``{system}`` resolved per sheet),
-    and without ``descriptor_key`` from ``resolution`` (PL NMT template).
-    Vertical CRS: the provider's ACTUAL vertical CRS when it knows it
-    (``str``), otherwise ``vertical_crs`` — the segment carries the fact,
-    not the caller's wish. The provider variant (``storage_variant``, orto
-    CIR/B-W) goes at the end of the segment (E12). ``isinstance(str)``, not
-    ``is not None``: for ``Mock(spec=Provider)`` class attributes yield a
-    ``Mock``.
+    The provider's source descriptor determines the segment, or
+    ``resolution`` picks the PL NMT template when there is no descriptor.
+    ``resolution`` is "1m" or "5m" for raster NMT, or None only where the
+    segment has no resolution dimension (e.g. LAZ/orthophoto).
+    ``vertical_crs`` is "EVRF2007", "KRON86", "Bpv", or None only where the
+    segment has no vertical dimension (orthophoto). The provider's actual
+    height system wins over an injected value. The optional variant
+    (``storage_variant``: ortho CIR/B-W) is appended to the segment.
     """
     provider_vertical_crs = getattr(provider, "vertical_crs", None)
     if isinstance(provider_vertical_crs, str):

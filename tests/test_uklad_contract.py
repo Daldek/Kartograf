@@ -54,7 +54,9 @@ def _laz_tile(value: str) -> LazTile | None:
       <gugik:uklad_xy>{value}</gugik:uklad_xy>
       <gugik:url_do_pobrania>https://x/81121_1_6.162.34.02.3.laz</gugik:url_do_pobrania>
     </gugik:SkorowidzDanychPomiarowychLIDAR2024>"""
-    return GugikLazProvider()._feature_to_tile(ET.fromstring(xml))
+    return GugikLazProvider(vertical_crs="EVRF2007")._feature_to_tile(
+        ET.fromstring(xml)
+    )
 
 
 def _hand_tile(value: str | None) -> LazTile:

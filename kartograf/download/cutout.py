@@ -20,7 +20,7 @@ Example::
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
         "EPSG:5514",
-        output_dir="./data",
+        output_dir="./data", vertical_crs="EVRF2007", product="nmt",
     )
     print(result.path)
 """
@@ -42,8 +42,8 @@ logger = logging.getLogger(__name__)
 
 # nodata of GUGiK WCS elevation
 PL_NODATA = -9999.0
-# result grid pixel per NMT PL resolution
-PIXEL_SIZES = {"1m": 1.0, "5m": 5.0}
+# PL WCS cutouts have exactly one admissible resolution: 1 m.
+PIXEL_SIZE = 1.0
 # target CRS with a pinned EPSG:2180 -> target operation (KNOWN_PATHS, ADR-027)
 SUPPORTED_TARGET_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
 # CONTENT reprojection operation policy (CONTENT_POLICY) and source envelope
@@ -61,23 +61,29 @@ LAND_MASK_LAYERS = (
 
 @dataclass(frozen=True)
 class PlCutout:
-    """Prepared (fail-fast, no network) NMT/NMPT PL cutout."""
+    """A prepared NMT/NMPT PL WCS cutout, always on the 1m grid.
+
+    ``target_crs`` is EPSG:2180 (native PL), EPSG:5514 or EPSG:3045
+    (reprojected). ``vertical_crs`` is EVRF2007 (current heights) or KRON86
+    (legacy heights). ``output_dir`` is the explicit output base directory;
+    ``product`` is "nmt" (terrain heights) or "nmpt" (surface heights).
+    Remaining fields contain the prepared extent, transform and result path.
+    """
 
     target_crs: str
-    resolution: str
-    vertical_crs: str  # ACTUAL vertical CRS (after the 5m rule => EVRF2007)
+    vertical_crs: str
     output_dir: Path
-    bbox_2180: BBox  # exact request in EPSG:2180
-    bbox_source_2180: BBox  # request + warp margin: WCS area
-    bbox_target: BBox  # result grid (target CRS)
-    pinned: PinnedTransform | None  # None for EPSG:2180 (crop only)
-    target_path: Path  # without the download date (WCS adds it, run_pl_wcs_cutout)
-    product: str = "nmt"  # "nmt" or "nmpt"
+    bbox_2180: BBox
+    bbox_source_2180: BBox
+    bbox_target: BBox
+    pinned: PinnedTransform | None
+    target_path: Path
+    product: str
 
     @property
     def pixel_size(self) -> float:
         """Result grid pixel size (m)."""
-        return PIXEL_SIZES[self.resolution]
+        return PIXEL_SIZE
 
     @property
     def grid_shape(self) -> tuple[int, int]:
@@ -134,23 +140,22 @@ def prepare_pl_cutout(
     bbox: BBox,
     target_crs: str,
     *,
-    output_dir: str | Path = "./data",
-    resolution: str = "1m",
-    vertical_crs: str = "EVRF2007",
-    product: str = "nmt",
+    output_dir: str | Path,
+    vertical_crs: str,
+    product: str,
 ) -> PlCutout:
-    """Fail-fast cutout preparation: operation, bboxes and result path.
+    """Prepare a PL WCS cutout without network access.
 
-    Zero network. ``TransformError`` when the EPSG:2180 -> ``target_crs``
-    pair has no pinned operation (ADR-024/027); ``ValidationError`` on bad
-    parameters. ``vertical_crs`` is the ACTUAL vertical CRS: with 5m only
-    EVRF2007 (``require_nmt_vertical_crs``; 5m with KRON86 =
-    ``ValidationError``). ``product``: ``"nmt"`` or ``"nmpt"`` (1m only; NMPT
-    cutouts exist only on the WCS path, ``run_pl_wcs_cutout``).
+    ``bbox`` is the requested extent in a supported CRS. ``target_crs`` is
+    "EPSG:2180" (native), "EPSG:5514" or "EPSG:3045" (pinned reprojection).
+    ``output_dir`` selects the result directory. ``vertical_crs`` is
+    "EVRF2007" (current heights) or "KRON86" (legacy heights).
+    ``product`` is "nmt" (terrain model) or "nmpt" (surface model);
+    both are available only at 1m for WCS cutouts.
 
-    The cutout is always a GeoTIFF (``.tif``) — the descriptor's
-    ``default_extension`` (``.asc``) concerns sheets, not the cutout.
-    ``target_path`` has no date; the WCS path adds the download date.
+    Raises ``ValidationError`` for invalid choices and ``TransformError``
+    when no safe pinned reprojection is available. The GeoTIFF
+    ``target_path`` is undated; the download adds the download date.
     """
     if product not in CUTOUT_PRODUCTS:
         raise ValidationError(
@@ -161,17 +166,10 @@ def prepare_pl_cutout(
             f"Nieobslugiwany uklad docelowy wycinka PL: {target_crs} "
             f"(dostepne: {', '.join(SUPPORTED_TARGET_CRS)})"
         )
-    if resolution not in PIXEL_SIZES:
-        raise ValidationError(f"Rozdzielczosc NMT PL: 1m albo 5m (podano {resolution})")
-    if product == "nmpt" and resolution != "1m":
-        raise ValidationError(f"NMPT PL jest tylko 1m (podano {resolution})")
     if vertical_crs not in _VERTICAL_CRS:
         raise ValidationError(
             f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
         )
-    from kartograf.providers.pl import require_nmt_vertical_crs
-
-    require_nmt_vertical_crs(resolution, vertical_crs)
 
     from kartograf.providers.cuzk.dmr import bbox_to_crs
     from kartograf.sources.registry import get_source
@@ -199,7 +197,7 @@ def prepare_pl_cutout(
         # Without `pinned` — the pinned operation is DIRECTIONAL (2180 -> target),
         # CZ does the same.
         back = bbox_to_crs(bbox_target, "EPSG:2180")
-        margin = WARP_MARGIN_PX * PIXEL_SIZES[resolution]
+        margin = WARP_MARGIN_PX * PIXEL_SIZE
         bbox_source_2180 = BBox(
             back.min_x - margin,
             back.min_y - margin,
@@ -208,14 +206,10 @@ def prepare_pl_cutout(
             "EPSG:2180",
         )
 
-    if product == "nmpt":
-        key = "pl.gugik.nmpt"
-    else:
-        key = "pl.gugik.nmt_5m" if resolution == "5m" else "pl.gugik.nmt_1m"
+    key = "pl.gugik.nmpt" if product == "nmpt" else "pl.gugik.nmt_1m"
     subdir = get_source(key).resolve_subdir(system="1992", vertical_crs=vertical_crs)
     return PlCutout(
         target_crs=target_crs,
-        resolution=resolution,
         vertical_crs=vertical_crs,
         output_dir=Path(output_dir),
         bbox_2180=bbox_2180,
@@ -228,10 +222,8 @@ def prepare_pl_cutout(
 
 
 def _cutout_descriptor_key(cutout: PlCutout) -> str:
-    """Source descriptor of the cutout's product and resolution."""
-    if cutout.product == "nmpt":
-        return "pl.gugik.nmpt"
-    return "pl.gugik.nmt_5m" if cutout.resolution == "5m" else "pl.gugik.nmt_1m"
+    """Source descriptor for the cutout's explicit product (always 1m)."""
+    return "pl.gugik.nmpt" if cutout.product == "nmpt" else "pl.gugik.nmt_1m"
 
 
 def _require_matching_provider(cutout: PlCutout, provider) -> None:
@@ -242,7 +234,7 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
     """
     checks = (
         ("vertical_crs", cutout.vertical_crs),
-        ("resolution", cutout.resolution),
+        ("resolution", "1m"),
         ("descriptor_key", _cutout_descriptor_key(cutout)),
     )
     for attr, expected in checks:
@@ -253,13 +245,6 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
                 f"wycinka {expected} — przygotuj wycinek (prepare_pl_cutout) "
                 "z produktem, pionem i rozdzielczoscia providera"
             )
-
-
-def _wcs_1m_only(resolution: str) -> ValidationError:
-    return ValidationError(
-        f"Wycinek PL z WCS GUGiK jest tylko 1m (podano {resolution}); "
-        "NMT 5 m pobieraj jako arkusze bez --target-crs"
-    )
 
 
 def dated_cutout_path(cutout: PlCutout, day: date) -> Path:
@@ -380,20 +365,17 @@ def run_pl_wcs_cutout(
     ``bbox/`` tree. The content is the server's flight composition, not the
     newest flight per ADR-028 (individual sheet downloads).
 
-    ``provider`` (default: NMT or NMPT provider of the cutout's vertical CRS)
-    must match the cutout's product, vertical CRS and resolution.
+    ``provider`` (default: provider for the cutout's product and vertical
+    CRS) must match the product, vertical CRS and fixed 1m resolution.
 
     Raises
     ------
     ValidationError
-        ``cutout.resolution`` other than ``"1m"``, provider mismatch or
-        too little disk space — before any network.
+        Provider mismatch or too little disk space, before any network.
     DownloadError
         PRG or WCS failure (after retries), or a WCS response whose ASC size or
         corner differs from the request; no result is written.
     """
-    if cutout.resolution != "1m":
-        raise _wcs_1m_only(cutout.resolution)
     if provider is not None:
         _require_matching_provider(cutout, provider)
     else:
@@ -468,11 +450,10 @@ def download_pl_cutout(
     bbox: BBox,
     target_crs: str,
     *,
-    output_dir: str | Path = "./data",
-    resolution: str = "1m",
-    vertical_crs: str = "EVRF2007",
+    output_dir: str | Path,
+    vertical_crs: str,
+    product: str,
     parent_request: dict | None = None,
-    product: str = "nmt",
 ) -> PlCutoutResult:
     """One NMT/NMPT PL GeoTIFF in ``target_crs`` for a bbox, from GUGiK WCS.
 
@@ -483,6 +464,10 @@ def download_pl_cutout(
     request, pass its envelope as ``bbox`` (e.g. via
     ``get_overall_bbox(path, target_crs="EPSG:2180")``).
 
+    ``output_dir`` selects the base directory; ``vertical_crs`` is
+    "EVRF2007" (current heights) or "KRON86" (legacy heights), and
+    ``product`` is "nmt" (terrain) or "nmpt" (surface). The only WCS cutout
+    resolution is 1m. ``parent_request=None`` adds no parent sidecar entry.
     Own provider/session: ``run_pl_wcs_cutout(provider=...)``.
 
     Returns
@@ -494,7 +479,7 @@ def download_pl_cutout(
     Raises
     ------
     ValidationError
-        Bad parameters (also ``resolution="5m"``), too little disk space.
+        Bad product, CRS or vertical CRS, or too little disk space.
     TransformError
         No safe pinned EPSG:2180 -> ``target_crs`` operation (before any
         network).
@@ -503,15 +488,10 @@ def download_pl_cutout(
 
     ``parent_request`` goes to the cutout sidecar only when it was given.
     """
-    if resolution != "1m":
-        if resolution not in PIXEL_SIZES:
-            raise ValidationError(f"Rozdzielczosc NMT PL: 1m (podano {resolution})")
-        raise _wcs_1m_only(resolution)
     cutout = prepare_pl_cutout(
         bbox,
         target_crs,
         output_dir=output_dir,
-        resolution=resolution,
         vertical_crs=vertical_crs,
         product=product,
     )

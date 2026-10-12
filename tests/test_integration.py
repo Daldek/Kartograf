@@ -30,13 +30,6 @@ class TestPublicAPIImports:
         parser = SheetParser("N-34-130-D")
         assert parser.sheet == "N-34-130-D"
 
-    def test_import_download_manager(self):
-        """Test DownloadManager import from main module."""
-        from kartograf import DownloadManager
-
-        manager = DownloadManager()
-        assert manager is not None
-
     def test_import_exceptions(self):
         """Test exceptions import from main module."""
         from kartograf import ParseError
@@ -62,10 +55,10 @@ class TestParserStorageIntegration:
     def test_parse_and_store(self, test_data_dir):
         """Test parsing sheet and storing file."""
         parser = SheetParser("N-34-130-D-d-2-4")
-        storage = FileStorage(test_data_dir)
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
 
         # Verify path generation matches parser components
-        path = storage.get_path(parser.sheet)
+        path = storage.get_path(parser.sheet, ".asc")
 
         assert "N-34" in str(path)
         assert "130" in str(path)
@@ -76,17 +69,17 @@ class TestParserStorageIntegration:
 
     def test_hierarchy_storage_structure(self, test_data_dir, mock_tif_data):
         """Test that hierarchy sheets are stored in correct structure."""
-        storage = FileStorage(test_data_dir)
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
         parser = SheetParser("N-34-130-D-d-2")
 
         # Get all children and store them
         children = parser.get_children()
         for child in children:
-            storage.write_atomic(child.sheet, mock_tif_data)
+            storage.write_atomic(child.sheet, mock_tif_data, ".asc")
 
         # Verify all files exist
         for child in children:
-            assert storage.exists(child.sheet)
+            assert storage.exists(child.sheet, ".asc")
 
         # Verify common parent directory (includes resolution subfolder)
         common_parent = (
@@ -103,11 +96,11 @@ class TestParserStorageIntegration:
 
     def test_all_scales_storage(self, test_data_dir, sample_sheets, mock_tif_data):
         """Test storage for all scale levels."""
-        storage = FileStorage(test_data_dir)
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
 
         for scale, sheet in sample_sheets.items():
-            storage.write_atomic(sheet, mock_tif_data)
-            assert storage.exists(sheet), f"Failed for {scale}: {sheet}"
+            storage.write_atomic(sheet, mock_tif_data, ".asc")
+            assert storage.exists(sheet, ".asc"), f"Failed for {scale}: {sheet}"
 
 
 class TestDownloadManagerIntegration:
@@ -115,7 +108,10 @@ class TestDownloadManagerIntegration:
 
     def test_manager_uses_provider_and_storage(self, test_data_dir):
         """Test that manager correctly coordinates provider and storage."""
-        manager = DownloadManager(output_dir=test_data_dir)
+        manager = DownloadManager(
+            output_dir=test_data_dir,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # Verify components are properly initialized
         assert isinstance(manager.provider, GugikProvider)
@@ -124,7 +120,7 @@ class TestDownloadManagerIntegration:
 
     def test_manager_skip_existing(self, test_data_dir, mock_tif_data):
         """Test that manager skips existing files."""
-        storage = FileStorage(test_data_dir)
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
 
         # Create existing ASC file
         existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
@@ -133,6 +129,8 @@ class TestDownloadManagerIntegration:
 
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
+        mock_provider.resolution = "1m"
+        mock_provider.vertical_crs = "EVRF2007"
         manager = DownloadManager(
             output_dir=test_data_dir,
             provider=mock_provider,
@@ -146,7 +144,10 @@ class TestDownloadManagerIntegration:
 
     def test_manager_hierarchy_counting(self, test_data_dir):
         """Test hierarchy sheet counting."""
-        manager = DownloadManager(output_dir=test_data_dir)
+        manager = DownloadManager(
+            output_dir=test_data_dir,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
 
         # 1:100k → 1:10k = 4 × 4 × 4 = 64 sheets
         count = manager.count_sheets("N-34-130-D", "1:10000")
@@ -158,7 +159,7 @@ class TestDownloadManagerIntegration:
 
     def test_manager_missing_sheets(self, test_data_dir, mock_tif_data):
         """Test missing sheets detection."""
-        storage = FileStorage(test_data_dir)
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
 
         # Pre-create 2 of 4 sheets (as ASC files)
         for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
@@ -166,7 +167,10 @@ class TestDownloadManagerIntegration:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(mock_tif_data)
 
-        manager = DownloadManager(output_dir=test_data_dir)
+        manager = DownloadManager(
+            output_dir=test_data_dir,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
         missing = manager.get_missing_sheets("N-34-130-D-d-2", "1:10000")
 
         assert len(missing) == 2
@@ -223,7 +227,7 @@ class TestProgressCallback:
         self, test_data_dir, mock_tif_data
     ):
         """Test that progress callback receives correct status updates."""
-        storage = FileStorage(test_data_dir)
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
 
         # Pre-create one ASC file to trigger skip
         existing_path = storage.get_path("N-34-130-D-d-2-1", ".asc")
@@ -232,6 +236,8 @@ class TestProgressCallback:
 
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
+        mock_provider.resolution = "1m"
+        mock_provider.vertical_crs = "EVRF2007"
 
         def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -316,8 +322,8 @@ class TestEdgeCases:
 
     def test_empty_storage_lists_no_files(self, test_data_dir):
         """Test that empty storage returns no files."""
-        storage = FileStorage(test_data_dir)
-        files = storage.list_files()
+        storage = FileStorage(test_data_dir, resolution="1m", vertical_crs="EVRF2007")
+        files = storage.list_files("**/*.asc")
 
         assert files == []
 

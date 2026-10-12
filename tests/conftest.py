@@ -272,6 +272,21 @@ def recorded_response(path: Path, body: bytes | None = None):
     return response
 
 
+# Required data choices of the GUGiK providers (0.8.0: no defaults) for tests
+# parametrized over provider classes.
+_PROVIDER_CHOICES = {
+    "GugikProvider": {"vertical_crs": "EVRF2007", "resolution": "1m"},
+    "GugikNmptProvider": {"vertical_crs": "EVRF2007"},
+    "GugikOrtoProvider": {"color": "RGB"},
+    "GugikLazProvider": {"vertical_crs": "EVRF2007"},
+}
+
+
+def make_provider(cls, **kwargs):
+    """Instantiate ``cls`` with its required data choices (EVRF2007, 1m, RGB)."""
+    return cls(**{**_PROVIDER_CHOICES.get(cls.__name__, {}), **kwargs})
+
+
 def multipart_asc_body(values, xll: float, yll: float, cellsize: float = 1.0) -> bytes:
     """A GUGiK-shaped ``multipart/related; boundary=wcs`` body with one ASC grid.
 

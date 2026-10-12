@@ -604,9 +604,10 @@ def get_overall_bbox(
 
 def find_sheets_for_geometry(
     filepath: Path,
-    target_scale: str = "1:10000",
+    target_scale: str,
     layer: str | None = None,
-    system: str = "1992",
+    *,
+    system: str,
 ) -> list[str]:
     """
     Find map sheets intersecting features in a geometry file.
@@ -620,13 +621,15 @@ def find_sheets_for_geometry(
     filepath : Path
         Path to SHP or GPKG file
     target_scale : str
-        Target scale (default: "1:10000")
+        PL-1992: 1:1000000, 1:500000, 1:200000, 1:100000,
+        1:50000, 1:25000 or 1:10000 (GUGiK publishes 1:10000).
+        PL-2000: 1:10000, 1:5000, 1:2000, 1:1000 or 1:500.
     layer : str or None
         Layer name for GPKG (None = first layer; with several layers a
         logger WARNING names the choice)
     system : str
-        Coordinate system: "1992" (PL-1992) or "2000" (PL-2000).
-        Default: "1992" - full backward compatibility.
+        "1992" for the PL-1992 sheet grid, or "2000" for the PL-2000
+        grid (whose finer scales differ).
 
     Returns
     -------

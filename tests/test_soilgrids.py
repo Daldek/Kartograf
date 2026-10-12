@@ -92,7 +92,9 @@ class TestSoilGridsValidation:
         provider = SoilGridsProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
         with pytest.raises(ValueError, match="EPSG:2180"):
-            provider.download_by_bbox(bbox, Path("/tmp/test.tif"))
+            provider.download_by_bbox(
+                bbox, Path("/tmp/test.tif"), property="soc", depth="0-5cm", stat="mean"
+            )
 
     def test_download_by_bbox_invalid_property(self):
         """Test download with invalid property."""
@@ -100,7 +102,11 @@ class TestSoilGridsValidation:
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         with pytest.raises(ValueError, match="Invalid property"):
             provider.download_by_bbox(
-                bbox, Path("/tmp/test.tif"), property="invalid_property"
+                bbox,
+                Path("/tmp/test.tif"),
+                property="invalid_property",
+                depth="0-5cm",
+                stat="mean",
             )
 
     def test_download_by_bbox_invalid_depth(self):
@@ -109,7 +115,11 @@ class TestSoilGridsValidation:
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         with pytest.raises(ValueError, match="Invalid depth"):
             provider.download_by_bbox(
-                bbox, Path("/tmp/test.tif"), depth="invalid_depth"
+                bbox,
+                Path("/tmp/test.tif"),
+                property="soc",
+                depth="invalid_depth",
+                stat="mean",
             )
 
     def test_download_by_bbox_invalid_stat(self):
@@ -117,7 +127,13 @@ class TestSoilGridsValidation:
         provider = SoilGridsProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         with pytest.raises(ValueError, match="Invalid stat"):
-            provider.download_by_bbox(bbox, Path("/tmp/test.tif"), stat="invalid_stat")
+            provider.download_by_bbox(
+                bbox,
+                Path("/tmp/test.tif"),
+                property="soc",
+                depth="0-5cm",
+                stat="invalid_stat",
+            )
 
 
 class TestSoilGridsWCSUrl:
@@ -181,7 +197,9 @@ class TestSoilGridsCRSTransform:
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
         provider = SoilGridsProvider()
         with patch.object(provider, "_download_via_wcs") as wcs:
-            provider.download_by_bbox(bbox, tmp_path / "x.tif")
+            provider.download_by_bbox(
+                bbox, tmp_path / "x.tif", property="soc", depth="0-5cm", stat="mean"
+            )
         min_lon, min_lat, max_lon, max_lat = wcs.call_args.kwargs["bbox_wgs84"]
 
         transformer = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
@@ -304,7 +322,7 @@ class TestSoilGridsManager:
         """Test manager with soilgrids provider."""
         from kartograf.landcover.manager import LandCoverManager
 
-        manager = LandCoverManager(provider="soilgrids")
+        manager = LandCoverManager(output_dir="data", provider="soilgrids")
         assert manager.provider_name == "SoilGrids"
 
     def test_manager_available_providers(self):

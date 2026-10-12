@@ -382,7 +382,10 @@ class TestPl2000SheetPublishedIn2180:
             ),
             caplog.at_level(logging.WARNING, logger="kartograf.sources.sidecar"),
         ):
-            manager = DownloadManager(output_dir=tmp_path, provider=GugikProvider())
+            manager = DownloadManager(
+                output_dir=tmp_path,
+                provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+            )
             path = manager.download_sheet(self.SHEET)
 
         assert path.relative_to(tmp_path).parts[:2] == ("nmt", "pl_2000_1m_evrf2007")

@@ -644,7 +644,7 @@ def _determine_zones_for_bbox(bbox_wgs84: BBox) -> list[int]:
 
 def find_sheets_2000_for_bbox(
     bbox: BBox,
-    target_scale: str = "1:10000",
+    target_scale: str,
     zone: int | None = None,
 ) -> list[str]:
     """
@@ -656,8 +656,8 @@ def find_sheets_2000_for_bbox(
         Bounding box in any supported CRS
         (EPSG:2176-2179, EPSG:2180, EPSG:4326)
     target_scale : str
-        Target scale (default: "1:10000").
-        Supported: 1:10000, 1:5000, 1:2000, 1:1000, 1:500
+        "1:10000" selects coarse PL-2000 sheets; "1:5000",
+        "1:2000", "1:1000" or "1:500" selects successively finer sheets.
     zone : int | None
         If given, restricts the search to this zone (5-8).
         If None, the zone is detected automatically from the bbox.

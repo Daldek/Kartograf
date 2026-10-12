@@ -29,15 +29,12 @@ class GugikNmptProvider(GugikProvider):
     Inherits all download logic from GugikProvider, overriding only
     the endpoints, layer names, and coverage IDs for NMPT.
 
-    Supports two vertical coordinate systems:
-    - EVRF2007 (default) - European Vertical Reference Frame 2007
-    - KRON86 - legacy Kronsztadt 86
-
-    Only 1m resolution is available for NMPT.
+    Supports EVRF2007 (current European heights) and KRON86 (legacy
+    Kronsztadt 86). NMPT has only a 1m resolution; there is no 5m variant.
 
     Examples
     --------
-    >>> provider = GugikNmptProvider()
+    >>> provider = GugikNmptProvider(vertical_crs="EVRF2007")
     >>> provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
     >>>
     >>> from kartograf import BBox
@@ -113,7 +110,7 @@ class GugikNmptProvider(GugikProvider):
         """Return provider name."""
         return "GUGiK NMPT"
 
-    def __init__(self, session=None, vertical_crs="EVRF2007", cache=None):
+    def __init__(self, session=None, *, vertical_crs: str, cache=None):
         """
         Initialize GUGiK NMPT provider.
 
@@ -121,8 +118,9 @@ class GugikNmptProvider(GugikProvider):
         ----------
         session : requests.Session, optional
             HTTP session to use for requests.
-        vertical_crs : str, optional
-            Vertical CRS: "KRON86" or "EVRF2007" (default: "EVRF2007").
+        vertical_crs : str
+            "EVRF2007" (current European heights) or "KRON86" (legacy
+            Kronsztadt 86); NMPT exists only at 1m in either system.
         cache : MetadataCache, optional
             Metadata cache instance for caching WMS lookup results.
             If None, no caching is performed (default behavior).

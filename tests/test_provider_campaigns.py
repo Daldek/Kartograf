@@ -111,14 +111,16 @@ def ids(records) -> list[str]:
 
 
 def test_newest_is_adr028_record_c14():
-    p = GugikProvider(session=c14_session(G))
+    p = GugikProvider(session=c14_session(G), vertical_crs="EVRF2007", resolution="1m")
     [r] = p.resolve_campaigns(G)
     assert file_id(r.url) == "84183_1852496"
 
 
 def test_newest_min_year_2026_c14_is_year_range_error():
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=c14_session(G)).resolve_campaigns(G, min_year=2026)
+        GugikProvider(
+            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, min_year=2026)
     assert exc.value.sheets == {G: (2019, 2023, 2025)}
     assert "--min-year 2025" in exc.value.hints[0]
 
@@ -127,7 +129,9 @@ def test_newest_min_year_does_not_skip_layers():
     sheet = "M-34-66-B-a-2-1"
     s = nmt_session(sheet, "nmt1_evr")
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=s).resolve_campaigns(sheet, min_year=2024)
+        GugikProvider(
+            session=s, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(sheet, min_year=2024)
     assert sheet in exc.value.sheets
     assert all(year < 2024 for year in exc.value.sheets[sheet])
     assert queried_layers(s) == [
@@ -148,7 +152,9 @@ def test_provider_does_not_log_campaign_count_at_info(caplog):
     import logging
 
     with caplog.at_level(logging.INFO):
-        GugikProvider(session=c14_session(G)).resolve_campaigns(G, all_campaigns=True)
+        GugikProvider(
+            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, all_campaigns=True)
     assert not [
         r
         for r in caplog.records
@@ -158,7 +164,9 @@ def test_provider_does_not_log_campaign_count_at_info(caplog):
 
 def test_all_lists_every_matching_campaign_from_all_layers():
     s = c14_session(G)
-    recs = GugikProvider(session=s).resolve_campaigns(G, all_campaigns=True)
+    recs = GugikProvider(
+        session=s, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
     assert ids(recs) == ["84183", "83233", "78047", "73021"]
     assert queried_layers(s) == [
         "SkorowidzeNMT2026",
@@ -177,15 +185,17 @@ def test_all_lists_every_matching_campaign_from_all_layers():
 )
 def test_resolve_campaigns_year_2025_c14_returns_both_flights(suffix, expected):
     sheet = f"N-34-139-C-a-3-{suffix}"
-    records = GugikProvider(session=c14_session(sheet)).resolve_campaigns(
-        sheet, all_campaigns=True, min_year=2025, max_year=2025
-    )
+    records = GugikProvider(
+        session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(sheet, all_campaigns=True, min_year=2025, max_year=2025)
     assert ids(records) == expected
 
 
 def test_resolve_campaigns_bounds_filter_years_campaigns_sets_count():
     """Model A: bounds restrict years; ``newest`` (default) = newest within them."""
-    provider = GugikProvider(session=c14_session(G))
+    provider = GugikProvider(
+        session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+    )
     assert ids(provider.resolve_campaigns(G, min_year=2025, max_year=2025)) == ["84183"]
     assert ids(provider.resolve_campaigns(G, max_year=2024)) == ["78047"]
     assert ids(provider.resolve_campaigns(G, all_campaigns=True, max_year=2024)) == [
@@ -198,7 +208,9 @@ def test_resolve_campaigns_bounds_filter_years_campaigns_sets_count():
 def test_newest_with_min_year_matches_newest_without_range():
     for suffix in range(1, 5):
         sheet = f"N-34-139-C-a-3-{suffix}"
-        provider = GugikProvider(session=c14_session(sheet))
+        provider = GugikProvider(
+            session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
+        )
         assert (
             provider.resolve_campaigns(sheet, min_year=2019)[0].url
             == provider.resolve_campaigns(sheet)[0].url
@@ -207,9 +219,9 @@ def test_newest_with_min_year_matches_newest_without_range():
 
 def test_resolve_campaigns_year_2024_c14_conflict_lists_years():
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=c14_session(G)).resolve_campaigns(
-            G, min_year=2024, max_year=2024
-        )
+        GugikProvider(
+            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, min_year=2024, max_year=2024)
     assert exc.value.sheets == {G: (2019, 2023, 2025)}
 
 
@@ -219,9 +231,9 @@ def test_resolve_campaigns_year_2024_c14_conflict_lists_years():
 )
 def test_resolve_campaigns_max_year_2022_c14(suffix, expected):
     sheet = f"N-34-139-C-a-3-{suffix}"
-    records = GugikProvider(session=c14_session(sheet)).resolve_campaigns(
-        sheet, max_year=2022
-    )
+    records = GugikProvider(
+        session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(sheet, max_year=2022)
     assert ids(records) == expected
 
 
@@ -230,7 +242,9 @@ def test_resolve_campaigns_range_queries_all_layers_no_partial_scan(tmp_path):
     key = ("nmt", "1m", "EVRF2007", sheet)
     cache = MetadataCache(tmp_path / "c.db")
     session = c14_session(sheet)
-    provider = GugikProvider(session=session, cache=cache)
+    provider = GugikProvider(
+        session=session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    )
     assert ids(provider.resolve_campaigns(sheet, min_year=2026)) == ["83998"]
     expected_layers = [
         "SkorowidzeNMT2026",
@@ -244,9 +258,9 @@ def test_resolve_campaigns_range_queries_all_layers_no_partial_scan(tmp_path):
     cache.set_campaigns(*key, {"sources": payload["sources"], "scanned_from": 2024})
     requery = c14_session(sheet)
     assert ids(
-        GugikProvider(session=requery, cache=cache).resolve_campaigns(
-            sheet, min_year=2026
-        )
+        GugikProvider(
+            session=requery, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(sheet, min_year=2026)
     ) == ["83998"]
     assert queried_layers(requery) == expected_layers
     assert "scanned_from" not in cache.get_campaigns(*key)
@@ -254,7 +268,9 @@ def test_resolve_campaigns_range_queries_all_layers_no_partial_scan(tmp_path):
 
 def test_available_years_c14():
     sheet = "N-34-139-C-a-3-2"
-    provider = GugikProvider(session=c14_session(sheet))
+    provider = GugikProvider(
+        session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
+    )
     assert provider.available_years(sheet) == (2019, 2022, 2023, 2024, 2025, 2026)
 
 
@@ -275,7 +291,7 @@ def test_orto_year_2025_two_rgb_flights_same_pixel_newest_first():
     """T14 for orto: two 0.25 m RGB flights in 2025, newest (NIE) first."""
     sheet = "N-33-130-D-d-1-4"
     recs = GugikOrtoProvider(
-        session=orto_session(sheet, base=REAL_10_10)
+        session=orto_session(sheet, base=REAL_10_10), color="RGB"
     ).resolve_campaigns(sheet, all_campaigns=True, min_year=2025, max_year=2025)
     assert [
         (file_id(r.url), r.aktualnosc, r.resolution_m, r.full_sheet) for r in recs
@@ -286,35 +302,35 @@ def test_orto_year_2025_two_rgb_flights_same_pixel_newest_first():
 
 
 def test_all_min_year_2023_queries_2023iStarsze_and_filters_by_aktualnosc(tmp_path):
-    recs = GugikProvider(session=c14_session(G)).resolve_campaigns(
-        G, all_campaigns=True, min_year=2023
-    )
+    recs = GugikProvider(
+        session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True, min_year=2023)
     assert [r.aktualnosc[:4] for r in recs] == ["2025", "2025", "2023"]
     # The cut-off from the acquisition-date year, not dt_pzgik: 84183 (2025-10-21,
     # dt_pzgik 2026-07-10) does not pass min_year=2026 -> 0 campaigns, not 1.
     cache = MetadataCache(tmp_path / "c.db")
-    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
-        G, all_campaigns=True
-    )
+    GugikProvider(
+        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
     s2 = Mock(spec=requests.Session)
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=s2, cache=cache).resolve_campaigns(
-            G, all_campaigns=True, min_year=2026
-        )
+        GugikProvider(
+            session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, all_campaigns=True, min_year=2026)
     assert exc.value.sheets == {G: (2019, 2023, 2025)}
     assert s2.get.call_count == 0
 
 
 def test_all_min_year_empty_lists_available_years(tmp_path):
     cache = MetadataCache(tmp_path / "c.db")
-    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
-        G, all_campaigns=True
-    )
+    GugikProvider(
+        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
     s2 = Mock(spec=requests.Session)
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=s2, cache=cache).resolve_campaigns(
-            G, all_campaigns=True, min_year=2026
-        )
+        GugikProvider(
+            session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, all_campaigns=True, min_year=2026)
     assert exc.value.sheets == {G: (2019, 2023, 2025)}
     assert "od roku 2026" in str(exc.value)
     assert s2.get.call_count == 0
@@ -323,20 +339,24 @@ def test_all_min_year_empty_lists_available_years(tmp_path):
 def test_all_no_records_is_no_coverage_with_provider_hints():
     sheet = "N-33-77-A-d-2-2"
     with pytest.raises(NoCoverageError) as newest:
-        GugikProvider(session=routed_session(lambda layer: None)).resolve_campaigns(
-            sheet
-        )
+        GugikProvider(
+            session=routed_session(lambda layer: None),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        ).resolve_campaigns(sheet)
     with pytest.raises(NoCoverageError) as every:
-        GugikProvider(session=routed_session(lambda layer: None)).resolve_campaigns(
-            sheet, all_campaigns=True
-        )
+        GugikProvider(
+            session=routed_session(lambda layer: None),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        ).resolve_campaigns(sheet, all_campaigns=True)
     assert str(every.value) == str(newest.value)
     assert "Brak danych NMT 1m" in str(every.value)
 
 
 def test_orto_all_min_year_always_queries_starsze():
     s = orto_session("M-34-90-C-b-4-4")
-    recs = GugikOrtoProvider(session=s).resolve_campaigns(
+    recs = GugikOrtoProvider(session=s, color="RGB").resolve_campaigns(
         "M-34-90-C-b-4-4", all_campaigns=True, min_year=2024
     )
     assert "SkorowidzeOrtofotomapyStarsze" in queried_layers(s)
@@ -345,9 +365,9 @@ def test_orto_all_min_year_always_queries_starsze():
 
 def test_all_lists_real_xyz_campaign_72675():
     s = nmt_session("N-33-69-A-d-3-2", "nmt1_evr")
-    recs = GugikProvider(session=s).resolve_campaigns(
-        "N-33-69-A-d-3-2", all_campaigns=True
-    )
+    recs = GugikProvider(
+        session=s, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns("N-33-69-A-d-3-2", all_campaigns=True)
     assert ids(recs) == ["81025", "81616", "75506", "74160", "72675"]
     assert recs[-1].url.endswith(".xyz")
     assert recs[-1].file_format == "ARC/INFO ASCII GRID"
@@ -360,13 +380,13 @@ def test_all_lists_real_xyz_campaign_72675():
 
 def test_all_cache_hit_no_network(tmp_path):
     cache = MetadataCache(tmp_path / "c.db")
-    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
-        G, all_campaigns=True
-    )
+    GugikProvider(
+        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
     s2 = Mock(spec=requests.Session)
-    recs = GugikProvider(session=s2, cache=cache).resolve_campaigns(
-        G, all_campaigns=True
-    )
+    recs = GugikProvider(
+        session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
     assert s2.get.call_count == 0 and len(recs) == 4
 
 
@@ -374,12 +394,15 @@ def test_all_from_cache_keeps_format(tmp_path):
     sheet = "N-33-69-A-d-3-2"
     cache = MetadataCache(tmp_path / "c.db")
     GugikProvider(
-        session=nmt_session(sheet, "nmt1_evr"), cache=cache
+        session=nmt_session(sheet, "nmt1_evr"),
+        cache=cache,
+        vertical_crs="EVRF2007",
+        resolution="1m",
     ).resolve_campaigns(sheet, all_campaigns=True)
     s2 = Mock(spec=requests.Session)
-    recs = GugikProvider(session=s2, cache=cache).resolve_campaigns(
-        sheet, all_campaigns=True
-    )
+    recs = GugikProvider(
+        session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(sheet, all_campaigns=True)
     assert s2.get.call_count == 0
     assert ids(recs)[-1] == "72675"
     assert recs[-1].file_format == "ARC/INFO ASCII GRID"
@@ -403,9 +426,9 @@ def test_all_failed_layer_is_download_error_and_not_cached(tmp_path):
     session.get = Mock(side_effect=get)
     cache = MetadataCache(tmp_path / "c.db")
     with patch("time.sleep"), pytest.raises(DownloadError) as exc:
-        GugikProvider(session=session, cache=cache).resolve_campaigns(
-            G, all_campaigns=True
-        )
+        GugikProvider(
+            session=session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, all_campaigns=True)
     assert not isinstance(exc.value, NoCoverageError)
     assert cache.get_campaigns("nmt", "1m", "EVRF2007", G) is None
 
@@ -416,7 +439,7 @@ def test_all_failed_layer_is_download_error_and_not_cached(tmp_path):
 
 
 def test_record_source_carries_endpoint_and_orto_color():
-    p = GugikOrtoProvider(session=orto_session("M-34-90-C-b-4-4"))
+    p = GugikOrtoProvider(session=orto_session("M-34-90-C-b-4-4"), color="RGB")
     [r] = p.resolve_campaigns("M-34-90-C-b-4-4")
     src = p.record_source(r)
     assert src["index_url"] == GugikOrtoProvider.WMS_INDEX_ENDPOINT
@@ -425,7 +448,7 @@ def test_record_source_carries_endpoint_and_orto_color():
 
 def test_download_record_fetches_record_url(tmp_path):
     s = c14_session(G)
-    p = GugikProvider(session=s)
+    p = GugikProvider(session=s, vertical_crs="EVRF2007", resolution="1m")
     record = p.resolve_campaigns(G, all_campaigns=True)[1]
     out = p.download_record(record, tmp_path / "x" / "a.asc")
     assert out == tmp_path / "x" / "a.asc"
@@ -436,7 +459,9 @@ def test_download_record_fetches_record_url(tmp_path):
 
 def test_download_unchanged_api_downloads_newest(tmp_path):
     s = c14_session(G)
-    out = GugikProvider(session=s).download(G, tmp_path / "sheet.asc")
+    out = GugikProvider(session=s, vertical_crs="EVRF2007", resolution="1m").download(
+        G, tmp_path / "sheet.asc"
+    )
     assert out.read_bytes() == b"DATA"
     assert file_id(s.get.call_args.args[0]) == "84183_1852496"
 
@@ -446,9 +471,9 @@ def test_nmpt_inherits_campaigns(tmp_path):
     s = nmt_session(sheet, "nmpt_evr")
     cache = MetadataCache(tmp_path / "c.db")
     with pytest.raises(NoCoverageError) as exc:
-        GugikNmptProvider(session=s, cache=cache).resolve_campaigns(
-            sheet, all_campaigns=True
-        )
+        GugikNmptProvider(
+            session=s, cache=cache, vertical_crs="EVRF2007"
+        ).resolve_campaigns(sheet, all_campaigns=True)
     assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
     assert s.get.call_count > 0
     # NMPT asks NMPT indexes only (its own and, for the variant hint, the
@@ -490,12 +515,14 @@ def _c14_copy(tmp_path: Path, blank_ids: set[str]) -> Mock:
 
 def test_all_record_without_year_is_dropped_by_min_year(tmp_path):
     s = _c14_copy(tmp_path, {"84183"})
-    recs = GugikProvider(session=s).resolve_campaigns(
-        G, all_campaigns=True, min_year=2024
-    )
+    recs = GugikProvider(
+        session=s, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True, min_year=2024)
     assert ids(recs) == ["83233"]
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=s).resolve_campaigns(G, all_campaigns=True, min_year=2026)
+        GugikProvider(
+            session=s, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, all_campaigns=True, min_year=2026)
     assert exc.value.sheets == {G: (2019, 2023, 2025)}
 
 
@@ -503,13 +530,17 @@ def test_records_without_any_year_are_no_coverage_not_conflict(tmp_path):
     """Spec 4.2 BRAK: no year to compare with = no data, as in the manager."""
     s = _c14_copy(tmp_path, {"84183", "83233", "78047", "73021"})
     with pytest.raises(NoCoverageError, match=f"Brak kampanii {G}"):
-        GugikProvider(session=s).resolve_campaigns(G, min_year=2024, max_year=2024)
+        GugikProvider(
+            session=s, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, min_year=2024, max_year=2024)
 
 
 def test_newest_record_without_year_fails_min_year(tmp_path):
     s = _c14_copy(tmp_path, {"84183", "83233"})
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=s).resolve_campaigns(G, min_year=2024)
+        GugikProvider(
+            session=s, vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(G, min_year=2024)
     assert exc.value.sheets == {G: (2019, 2023)}
 
 
@@ -538,12 +569,16 @@ def test_pre_adr031_record_cache_entry_is_a_miss_and_is_overwritten(tmp_path):
     """Old ``record_cache`` payload: no KeyError, sheet resolved again, entry
     rewritten with English keys (``source_info`` never sees Polish keys)."""
     cache = MetadataCache(tmp_path / "c.db")
-    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(G)
+    GugikProvider(
+        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G)
     fresh = cache.get_record("nmt", "1m", "EVRF2007", G)["source"]
     cache.set_record("nmt", "1m", "EVRF2007", G, {"source": _pre_adr031(fresh)})
 
     session = c14_session(G)
-    provider = GugikProvider(session=session, cache=cache)
+    provider = GugikProvider(
+        session=session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    )
     (record,) = provider.resolve_campaigns(G)
 
     assert queried_layers(session)  # cache miss -> index queried again
@@ -554,9 +589,9 @@ def test_pre_adr031_record_cache_entry_is_a_miss_and_is_overwritten(tmp_path):
 
 def test_pre_adr031_campaigns_cache_entry_is_a_miss_and_is_overwritten(tmp_path):
     cache = MetadataCache(tmp_path / "c.db")
-    GugikProvider(session=c14_session(G), cache=cache).resolve_campaigns(
-        G, all_campaigns=True
-    )
+    GugikProvider(
+        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
     fresh = cache.get_campaigns("nmt", "1m", "EVRF2007", G)["sources"]
     cache.set_campaigns(
         "nmt",
@@ -567,9 +602,9 @@ def test_pre_adr031_campaigns_cache_entry_is_a_miss_and_is_overwritten(tmp_path)
     )
 
     session = c14_session(G)
-    recs = GugikProvider(session=session, cache=cache).resolve_campaigns(
-        G, all_campaigns=True
-    )
+    recs = GugikProvider(
+        session=session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
+    ).resolve_campaigns(G, all_campaigns=True)
 
     assert queried_layers(session)
     assert ids(recs) == ["84183", "83233", "78047", "73021"]

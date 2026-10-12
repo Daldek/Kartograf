@@ -66,7 +66,7 @@ class TestParallelDownloadHierarchy:
     @pytest.fixture
     def mock_provider(self):
         """Fixture with a mock provider that simulates downloads."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):
@@ -140,7 +140,7 @@ class TestParallelDownloadHierarchy:
 
     def test_parallel_download_handles_failures(self, tmp_path):
         """Test parallel download handles individual failures gracefully."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         call_count = {"n": 0}
@@ -183,7 +183,7 @@ class TestParallelDownloadHierarchy:
         )
 
         # Pre-create some files
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
             path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
@@ -225,12 +225,20 @@ class TestParallelDownloadHierarchy:
         # Each sheet gets at least one progress call (completed or skipped)
         assert len(progress_calls) >= 4
 
-    def test_max_workers_init_minimum_1(self):
+    def test_max_workers_init_minimum_1(self, tmp_path):
         """Test that max_workers is clamped to minimum 1."""
-        manager = DownloadManager(max_workers=0)
+        manager = DownloadManager(
+            tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+            max_workers=0,
+        )
         assert manager._max_workers == 1
 
-        manager = DownloadManager(max_workers=-5)
+        manager = DownloadManager(
+            tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+            max_workers=-5,
+        )
         assert manager._max_workers == 1
 
 
@@ -240,7 +248,7 @@ class TestDownloadHierarchyLastResult:
     @pytest.fixture
     def flaky_provider(self):
         """Provider: a sheet code ending in '-1' fails, the rest download correctly."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):
@@ -297,7 +305,7 @@ class TestDownloadHierarchyLastResult:
         reports ``downloading`` before the download)."""
         from kartograf.exceptions import NoCoverageError
 
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):
@@ -344,7 +352,7 @@ class TestDownloadHierarchyLastResult:
 
     def test_last_result_counts_unexpected_error_as_failed(self, tmp_path):
         """A non-DownloadError exception in parallel mode lands in failed."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):
@@ -436,7 +444,7 @@ class TestProviderThreadSafety:
 
     def test_concurrent_downloads_no_corruption(self, tmp_path):
         """Test that 16 concurrent downloads don't corrupt files."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         results_lock = threading.Lock()
@@ -471,7 +479,7 @@ class TestProviderThreadSafety:
 
     def test_write_atomic_thread_safe_temp_names(self, tmp_path):
         """Test that write_atomic uses unique temp filenames per thread."""
-        storage = FileStorage(tmp_path)
+        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         results = []
         errors = []
 
@@ -504,7 +512,7 @@ class TestProviderThreadSafety:
 
     def test_concurrent_provider_sessions_independent(self):
         """Without an injected session the provider keeps one session per thread."""
-        provider = GugikProvider()
+        provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
         # No caller session: SessionPerThread creates a session per thread,
         # so the thread pool does not share a single requests.Session.
@@ -685,6 +693,16 @@ class TestCLIWorkersFlag:
             main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "N-34-130-D-d-2-4",
                     "--workers",
@@ -706,13 +724,20 @@ class TestDownloadManagerRepr:
 
     def test_repr_includes_max_workers(self, tmp_path):
         """Test that repr includes max_workers."""
-        manager = DownloadManager(output_dir=tmp_path, max_workers=4)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+            max_workers=4,
+        )
         repr_str = repr(manager)
         assert "max_workers=4" in repr_str
 
     def test_repr_default_max_workers(self, tmp_path):
         """Test that repr shows max_workers=1 by default."""
-        manager = DownloadManager(output_dir=tmp_path)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
+        )
         repr_str = repr(manager)
         assert "max_workers=1" in repr_str
 
@@ -727,7 +752,7 @@ class TestParallelDownloadRaceConditions:
     @pytest.fixture
     def mock_provider(self):
         """Fixture with a thread-safe mock provider."""
-        provider = Mock(spec=GugikProvider)
+        provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
         def mock_download(sheet, path, timeout=30):

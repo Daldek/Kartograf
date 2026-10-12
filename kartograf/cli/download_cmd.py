@@ -11,7 +11,17 @@ from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from kartograf.cli._parser import parse_bbox_arg
+from kartograf.cli._parser import (
+    COUNTRY_CHOICES,
+    PRODUCT_CHOICES,
+    RESOLUTION_CZ,
+    RESOLUTION_PL,
+    SCALE_2000_CHOICES,
+    SYSTEM_CHOICES,
+    VERTICAL_CRS_CZ,
+    VERTICAL_CRS_PL,
+    parse_bbox_arg,
+)
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.countries import EDGES as _EDGES
@@ -38,6 +48,10 @@ from kartograf.sources.registry import horizontal_crs_for_sheet
 
 if TYPE_CHECKING:
     from kartograf.cache import MetadataCache
+
+
+# PL-2000 sheet scales GUGiK can publish below the 1:10000 frame.
+_SCALES_2000 = ("1:5000", "1:2000", "1:1000", "1:500")
 
 
 class _ProgressPrinter:
@@ -128,7 +142,8 @@ def _create_provider_and_storage(
     elif product == "orto":
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
-        provider = GugikOrtoProvider(cache=cache)
+        # the CLI offers the RGB composition only (`--product orto`)
+        provider = GugikOrtoProvider(cache=cache, color="RGB")
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
@@ -168,8 +183,11 @@ def _warn_cache_disabled(message: str) -> None:
 def _cli_metadata_cache(force: bool) -> "MetadataCache":
     """``MetadataCache`` in the cwd for the CLI (``--force`` = refresh mode)."""
     from kartograf.cache import MetadataCache
+    from kartograf.cli.cache_cmd import cli_cache_path
 
-    return MetadataCache(refresh=force, on_disabled=_warn_cache_disabled)
+    return MetadataCache(
+        cli_cache_path(), refresh=force, on_disabled=_warn_cache_disabled
+    )
 
 
 def _announce_geometry_layer(args: argparse.Namespace) -> bool:
@@ -270,9 +288,207 @@ def _campaign_opts(
     )
 
 
+_COUNTRY_KEYS = ("pl", "cz")
+
+
+def _check_country_value_syntax(raw: str | None, flag: str) -> str | None:
+    """Error text for a malformed per-country form of ``flag``, else ``None``.
+
+    A value is either one plain value for every country of the task
+    (``5m``) or comma-separated ``country=value`` pairs (``pl=1m,cz=2m``;
+    keys ``pl``/``cz``, case-insensitive, each at most once).
+    """
+    if raw is None or "=" not in raw:
+        return None
+    seen: set[str] = set()
+    for item in raw.split(","):
+        key, sep, value = item.partition("=")
+        key = key.strip().lower()
+        if not sep or key not in _COUNTRY_KEYS or not value.strip() or key in seen:
+            return (
+                f"{flag}: nieprawidlowa wartosc {raw!r} — podaj jedna wartosc dla "
+                f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
+                f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=..."
+            )
+        seen.add(key)
+    return None
+
+
+def _country_value(raw: str | None, code: str) -> str | None:
+    """Value of a plain or per-country option for country ``code`` (PL/CZ).
+
+    A plain value applies to every country; the per-country form gives
+    ``None`` for a country it does not name. Syntax is checked earlier
+    (``_check_country_value_syntax``).
+    """
+    if raw is None or "=" not in raw:
+        return raw
+    for item in raw.split(","):
+        key, _, value = item.partition("=")
+        if key.strip().lower() == code.lower():
+            return value.strip()
+    return None
+
+
+def _per_country_hint(raw: str | None, flag: str, countries: tuple[str, ...]) -> str:
+    """Suffix suggesting the per-country form for a task spanning PL and CZ."""
+    if len(countries) < 2:
+        return ""
+    return f" (zadanie PL+CZ: wartosci per kraj, np. {flag} pl=...,cz=...)"
+
+
+def _pl_option_error(
+    args: argparse.Namespace,
+    *,
+    sheet_system: str | None = None,
+    sheet_scale: str | None = None,
+    countries: tuple[str, ...] = ("PL",),
+) -> str | None:
+    """Error text (without ``Error:``) for the PL data choices of the task.
+
+    ``sheet_system``/``sheet_scale`` describe a ``--sheet`` task (system and
+    scale of the code); ``None`` = area task (``--bbox``/``--geometry``).
+    Checked before any network access; values come from the PL part of a
+    plain or per-country ``--resolution``/``--vertical-crs``.
+    """
+    product = args.product
+    resolution = _country_value(args.resolution, "PL")
+    vertical_crs = _country_value(args.vertical_crs, "PL")
+    target_crs = getattr(args, "target_crs", None)
+    res_hint = _per_country_hint(args.resolution, "--resolution", countries)
+    vcrs_hint = _per_country_hint(args.vertical_crs, "--vertical-crs", countries)
+
+    if target_crs is not None and product in ("orto", "laz"):
+        return (
+            "--target-crs dla PL dziala tylko z --product nmt albo nmpt "
+            "(wycinek wysokosci z WCS GUGiK; orto i laz — pobierz bez "
+            "--target-crs)"
+        )
+    if product == "nmt":
+        if target_crs is not None:
+            if resolution not in (None, "1m"):
+                return (
+                    "wycinki --target-crs sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
+                    "pomin --target-crs; wycinek: --resolution 1m albo pomin "
+                    "--resolution"
+                )
+        elif resolution is None:
+            return f"--resolution wymagane dla NMT PL: {RESOLUTION_PL}{res_hint}"
+        elif resolution not in ("1m", "5m"):
+            return (
+                f"PL nie ma rozdzielczosci {resolution} — dostepne: "
+                f"{RESOLUTION_PL}{res_hint}"
+            )
+    elif product == "nmpt" and resolution not in (None, "1m"):
+        return (
+            f"--product nmpt jest dostepny tylko w rozdzielczosci 1m (podano "
+            f"{resolution}); pomin --resolution albo podaj 1m"
+        )
+
+    if product == "orto":
+        if vertical_crs is not None:
+            return (
+                "--vertical-crs nie dotyczy --product orto "
+                "(ortofotomapa nie ma ukladu pionowego)"
+            )
+    elif vertical_crs is None:
+        return (
+            f"--vertical-crs wymagane dla --product {product} (PL): "
+            f"{VERTICAL_CRS_PL}{vcrs_hint}"
+        )
+    elif vertical_crs not in ("KRON86", "EVRF2007"):
+        return (
+            f"{vertical_crs} nie jest ukladem wysokosci PL — dostepne: "
+            f"{VERTICAL_CRS_PL}{vcrs_hint}"
+        )
+    elif product == "nmt":
+        # 0.7.1: the library rule (`require_nmt_vertical_crs`) - 5m exists only
+        # in EVRF2007; the message names CLI flags, not keyword arguments.
+        try:
+            require_nmt_vertical_crs(resolution or "1m", vertical_crs)
+        except ValidationError:
+            return (
+                f"NMT {resolution} (PL) jest dostepny tylko w EVRF2007 — podano "
+                f"--vertical-crs {vertical_crs}; uzyj --vertical-crs EVRF2007 "
+                f"albo --resolution 1m dla {vertical_crs}"
+            )
+
+    if product == "laz":
+        return None  # LAZ: per-tile system from WFS, no sheet scale
+    system = getattr(args, "system", None)
+    scale = getattr(args, "scale", None)
+    if target_crs is not None:
+        if system not in (None, "1992"):
+            return (
+                "--target-crs nie dziala z --system 2000 — bbox wielostrefowy "
+                "dalby arkusze w roznych CRS (2176-2179); wycinek: --system 1992 "
+                "albo pomin --system"
+            )
+        return None
+    if sheet_system is None:
+        if system is None:
+            return f"--system wymagane dla --bbox/--geometry w PL: {SYSTEM_CHOICES}"
+        effective = system
+    else:
+        effective = sheet_system
+    if effective == "1992":
+        if scale is not None:
+            return (
+                "--scale nie dotyczy PL-1992: GUGiK publikuje arkusze PL-1992 "
+                "tylko w 1:10000 (godlo 7-czlonowe), a grubsze godlo rozwija sie "
+                "do 1:10000 samo — pomin --scale"
+            )
+        return None
+    if scale is None and (sheet_system is None or sheet_scale == "1:10000"):
+        return f"--scale wymagane dla arkuszy PL-2000: {SCALE_2000_CHOICES}"
+    if scale is not None and scale not in _SCALES_2000:
+        return f"Nieznana skala PL-2000 {scale} — dostepne: {SCALE_2000_CHOICES}"
+    return None
+
+
+def _cz_option_error(
+    args: argparse.Namespace,
+    *,
+    is_sm5: bool = False,
+    countries: tuple[str, ...] = ("CZ",),
+) -> str | None:
+    """Error text (without ``Error:``) for the CZ data choices of the task.
+
+    ``is_sm5``: a ``--sheet`` SM5 code (a ready DMR 4G file: only 5m).
+    """
+    resolution = _country_value(args.resolution, "CZ")
+    vertical_crs = _country_value(args.vertical_crs, "CZ")
+    res_hint = _per_country_hint(args.resolution, "--resolution", countries)
+    vcrs_hint = _per_country_hint(args.vertical_crs, "--vertical-crs", countries)
+    if is_sm5:
+        if resolution not in (None, "5m"):
+            return (
+                f"Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) — pomin "
+                f"--resolution albo podaj 5m; dla {resolution} uzyj godla TM33 "
+                f"albo --bbox [arkusz: {args.sheet}]"
+            )
+    elif resolution is None:
+        return f"--resolution wymagane dla NMT CZ: {RESOLUTION_CZ}{res_hint}"
+    elif resolution not in ("2m", "5m"):
+        return (
+            f"CZ nie ma rozdzielczosci {resolution} — dostepne: "
+            f"{RESOLUTION_CZ}{res_hint}"
+        )
+    if vertical_crs is None:
+        return f"--vertical-crs wymagane dla NMT CZ: {VERTICAL_CRS_CZ}{vcrs_hint}"
+    if vertical_crs not in ("Bpv", "EVRF2007"):
+        return (
+            f"{vertical_crs} nie jest dostepny dla CZ — dostepne: "
+            f"{VERTICAL_CRS_CZ}{vcrs_hint}"
+        )
+    if "PL" not in countries and getattr(args, "system", None) is not None:
+        return "--system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+    return None
+
+
 def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
     """Reject ``--min-density`` on non-LAZ products before any network request."""
-    product = getattr(args, "product", "nmt")
+    product = args.product
     if product == "laz":
         return False
     if getattr(args, "min_density", None) is not None:
@@ -287,9 +503,7 @@ def _reject_laz_only_opts(args: argparse.Namespace) -> bool:
 
 def _reject_full_sheet_for_laz(args: argparse.Namespace) -> bool:
     """Reject ``--full-sheet`` for LAZ before any network request (ADR-033)."""
-    if getattr(args, "product", "nmt") != "laz" or not getattr(
-        args, "full_sheet", False
-    ):
+    if args.product != "laz" or not getattr(args, "full_sheet", False):
         return False
     print(
         "Error: --full-sheet dziala tylko z NMT/NMPT/orto (podano laz) — LAZ "
@@ -373,101 +587,53 @@ def _reject_campaign_opts_with_target_crs(args: argparse.Namespace) -> bool:
     return False
 
 
-def _resolve_pl_sentinels(args: argparse.Namespace) -> int:
+def _resolve_pl_options(
+    args: argparse.Namespace,
+    *,
+    sheet_system: str | None = None,
+    sheet_scale: str | None = None,
+) -> int:
     """
-    Resolve None sentinels to Polish defaults; PL validation.
+    Validate the PL data choices and narrow ``args`` to the PL values.
 
     Called ONLY on the PL branch, after the country is resolved - it mutates
-    ``args``, so arguments heading to CZ must keep the value ``None``
-    (``_cmd_download_cz`` distinguishes "not given" from a Polish value).
-
-    Covers validation of the product/resolution and product/vertical_crs pairs
-    (symmetric to the hard rejections of the CZ branch) and of the ``--target-crs``
-    exclusions (product orto/laz, ``--resolution 5m``, ``--system 2000`` -
-    ADR-027/035)
-    - checked BEFORE defaults are substituted, so that "not given" does not
-    pose as a user choice. NMT 5m with KRON86 is rejected after the
-    defaults (0.7.1, ``require_nmt_vertical_crs``): only an explicit
-    ``--vertical-crs KRON86`` can produce the pair.
+    ``args`` (``--resolution``/``--vertical-crs`` become the plain PL values),
+    so arguments heading to CZ must be a separate copy (``_dispatch_area``).
+    Nothing is defaulted: a missing choice is an ``Error:`` listing the
+    admissible values (``_pl_option_error``). Only single-valued choices are
+    filled in: NMPT and the ``--target-crs`` cutout are 1m only, the cutout
+    is PL-1992 only, a ``--sheet`` task takes its system from the code.
 
     Returns
     -------
     int
         0 = OK, 1 = error (message already printed to stderr)
     """
-    product = getattr(args, "product", "nmt")
-    if product == "nmpt" and getattr(args, "resolution", None) == "5m":
-        print(
-            "Error: --product nmpt jest dostepny tylko w rozdzielczosci 1m (podano 5m)",
-            file=sys.stderr,
-        )
+    error = _pl_option_error(args, sheet_system=sheet_system, sheet_scale=sheet_scale)
+    if error is not None:
+        print(f"Error: {error}", file=sys.stderr)
         return 1
-    if product == "orto" and getattr(args, "vertical_crs", None) is not None:
-        print(
-            "Error: --vertical-crs nie dotyczy --product orto "
-            "(ortofotomapa nie ma ukladu pionowego)",
-            file=sys.stderr,
-        )
-        return 1
-
+    product = args.product
     target_crs = getattr(args, "target_crs", None)
-    if target_crs is not None and product in ("orto", "laz"):
-        print(
-            "Error: --target-crs dla PL dziala tylko z --product nmt albo nmpt "
-            "(wycinek wysokosci z WCS GUGiK; orto i laz — pobierz bez "
-            "--target-crs)",
-            file=sys.stderr,
-        )
-        return 1
-    if target_crs is not None and getattr(args, "resolution", None) == "5m":
-        print(
-            "Error: wycinki --target-crs sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
-            "pomin --target-crs; wycinek: --resolution 1m",
-            file=sys.stderr,
-        )
-        return 1
-    if target_crs is not None and getattr(args, "system", None) == "2000":
-        print(
-            "Error: --target-crs nie dziala z --system 2000 — bbox "
-            "wielostrefowy dalby arkusze w roznych CRS (2176-2179), "
-            "mozaika miedzystrefowa to etap 2; uzyj domyslnego --system 1992",
-            file=sys.stderr,
-        )
-        return 1
-
-    args.resolution = getattr(args, "resolution", None) or "1m"
-    args.vertical_crs = getattr(args, "vertical_crs", None) or "EVRF2007"
-    args.system = getattr(args, "system", None) or "1992"
-
-    if args.resolution == "2m":
-        print(
-            "Error: PL nie ma rozdzielczosci 2m — dostepne: 1m, 5m (2m to DMR 5G w CZ)",
-            file=sys.stderr,
-        )
-        return 1
-    if args.vertical_crs == "Bpv":
-        print(
-            "Error: Bpv to uklad czeski — dla PL dostepne: KRON86, EVRF2007",
-            file=sys.stderr,
-        )
-        return 1
-    if product == "nmt":
-        # 0.7.1: the library rule (`require_nmt_vertical_crs`) - 5m exists only
-        # in EVRF2007, so an explicit --vertical-crs KRON86 is an error (no
-        # swap); the default (None -> EVRF2007 above) never trips it. The
-        # message names CLI flags instead of the library's keyword arguments.
-        try:
-            require_nmt_vertical_crs(args.resolution, args.vertical_crs)
-        except ValidationError:
-            print(
-                f"Error: NMT {args.resolution} (PL) jest dostepny tylko w "
-                f"EVRF2007 — podano --vertical-crs {args.vertical_crs}; uzyj "
-                "--vertical-crs EVRF2007 (albo pomin --vertical-crs) albo "
-                f"--resolution 1m dla {args.vertical_crs}",
-                file=sys.stderr,
-            )
-            return 1
+    resolution = _country_value(args.resolution, "PL")
+    if resolution is None and (product == "nmpt" or target_crs is not None):
+        resolution = "1m"
+    args.resolution = resolution
+    args.vertical_crs = _country_value(args.vertical_crs, "PL")
+    if sheet_system is not None:
+        args.system = sheet_system
+    elif target_crs is not None:
+        args.system = "1992"
     return 0
+
+
+def _pl_target_scale(args: argparse.Namespace) -> str:
+    """Sheet scale of a PL area task: PL-1992 fixed 1:10000, PL-2000 ``--scale``.
+
+    GUGiK publishes PL-1992 sheets only at 1:10000 (7-part code); PL-2000
+    sheets in several modules, so the (validated, required) ``--scale``.
+    """
+    return args.scale if args.system == "2000" else "1:10000"
 
 
 def _run_cz(
@@ -658,56 +824,33 @@ def _validate_cross_country(
     args: argparse.Namespace, countries: tuple[str, ...]
 ) -> int:
     """
-    Options must be resolvable for EVERY intersected country (0=OK, 1=error).
+    Options must be valid for EVERY country of the task (0=OK, 1=error).
 
     Validation happens BEFORE any download - otherwise part of one country would be
     downloaded and the other branch would reject the task only afterwards (partial
-    execution). Instead of silently skipping a country, the CLI suggests an explicit
-    ``--country`` - but only when the area actually intersects more than one country
-    (with one country the choice is already resolved).
+    execution). Each country is checked with its own value of a plain or
+    per-country ``--resolution``/``--vertical-crs`` (``pl=..,cz=..``); a task
+    spanning PL and CZ gets the per-country form in the hint.
 
     ORDER: under ``--country auto`` some options are already resolved
     earlier (``_pl_only_flags`` in ``_dispatch_area``, ADR-023 point 5), so
-    ``countries`` is then single-element and these checks see only
-    truly ambiguous tasks (e.g. ``--resolution 2m``, which has no
-    PL counterpart) or an explicit ``--country``, which the CLI does not
-    override.
-
-    ``--target-crs`` is NOT validated here: since ADR-027 it works on both sides of the
-    border (PL: a merged cutout), so a cross-border task with this flag is
-    legal. PL exclusions (product != nmt, ``--system 2000``) are checked by
-    ``_resolve_pl_sentinels``, already on the Polish branch.
+    ``countries`` may be single-element by now.
     """
-    product = getattr(args, "product", "nmt")
-    resolution = getattr(args, "resolution", None)
-    vertical_crs = getattr(args, "vertical_crs", None)
-    checks: list[tuple[bool, str]] = [
-        (
-            "CZ" in countries and product != "nmt",
-            f"--product {product} jest dostepny tylko dla PL",
-        ),
-        (
-            "CZ" in countries and resolution == "1m",
-            "--resolution 1m nie istnieje dla CZ (dostepne 2m/5m)",
-        ),
-        (
-            "PL" in countries and resolution == "2m",
-            "--resolution 2m nie istnieje dla PL (dostepne 1m/5m)",
-        ),
-        (
-            "CZ" in countries and vertical_crs == "KRON86",
-            "KRON86 nie jest osiagalny dla CZ (siatki GUGiK niepubliczne)",
-        ),
-        ("PL" in countries and vertical_crs == "Bpv", "Bpv to uklad czeski"),
-        (
-            "CZ" in countries and getattr(args, "system", None) is not None,
-            "--system dotyczy tylko PL",
-        ),
-    ]
+    product = args.product
     hint = f"; {_CROSS_COUNTRY_HINT}" if len(countries) > 1 else ""
-    for failed, message in checks:
-        if failed:
-            print(f"Error: {message}{hint}", file=sys.stderr)
+    if "CZ" in countries and product != "nmt":
+        print(
+            f"Error: --product {product} jest dostepny tylko dla PL{hint}",
+            file=sys.stderr,
+        )
+        return 1
+    for code in countries:
+        if code == "PL":
+            error = _pl_option_error(args, countries=countries)
+        else:
+            error = _cz_option_error(args, countries=countries)
+        if error is not None:
+            print(f"Error: {error}", file=sys.stderr)
             return 1
     return 0
 
@@ -725,20 +868,20 @@ def _pl_only_flags(args: argparse.Namespace) -> list[str]:
     * ``--resolution 5m`` exists on both sides of the border (PL 5m, DMR 4G);
     * ``--resolution 2m`` and ``--vertical-crs Bpv`` are Czech, so they decide
       at most in the other direction (today: a validation error);
+    * a per-country value (``pl=..,cz=..``) names both countries on purpose;
+    * ``--system`` is required for every PL area task, so it carries no intent;
     * ``--target-crs`` since ADR-027 works on both sides of the border (PL: a merged
       cutout), so it does not decide the country in either direction;
     * ``--all-campaigns``/``--min-year`` (ADR-030) neither: a PL+CZ area
       downloads CZ in its current version (``_reject_campaign_opts_without_pl``).
     """
     flags: list[str] = []
-    product = getattr(args, "product", "nmt")
+    product = args.product
     if product in ("nmpt", "orto"):
         flags.append(f"--product {product}")
-    if getattr(args, "system", None) is not None:
-        flags.append("--system")
-    if getattr(args, "vertical_crs", None) == "KRON86":
+    if args.vertical_crs == "KRON86":
         flags.append("--vertical-crs KRON86")
-    if getattr(args, "resolution", None) == "1m":
+    if args.resolution == "1m":
         flags.append("--resolution 1m")
     return flags
 
@@ -754,14 +897,13 @@ def _dispatch_area(
     not from the envelope), and the bbox serves to recognize countries and
     ``parent_request``.
 
-    ``Info:``/``Warning:`` messages about country resolution, the mixed default
-    vertical CRSs of a PL+CZ task (PL EVRF2007, CZ Bpv) and partial success go
-    to stderr, so ``-q`` (suppressing stdout) does NOT hide them - just like
-    ``Error:`` messages.
+    ``Info:``/``Warning:`` messages about country resolution and partial
+    success go to stderr, so ``-q`` (suppressing stdout) does NOT hide them -
+    just like ``Error:`` messages.
     """
     from kartograf.transform.crs import TransformError
 
-    country_flag = getattr(args, "country", "auto")
+    country_flag = args.country
     auto = country_flag == "auto"
     countries = _countries_for_bbox(bbox) if auto else (country_flag.upper(),)
     if not countries:
@@ -787,7 +929,7 @@ def _dispatch_area(
             )
             auto = False
             countries = ("PL",)
-    product = getattr(args, "product", "nmt")
+    product = args.product
     # an entirely Czech area: the stage 2 message is more apt than the
     # "choose a country" hint - the country is already resolved
     if countries == ("CZ",) and _reject_non_nmt_for_cz(product):
@@ -828,31 +970,21 @@ def _dispatch_area(
             pl_geometry_sheets=pl_geometry_sheets,
             pl_sheet_list=filepath is None and not getattr(args, "target_crs", None),
         )
-        # Each country keeps its own default vertical CRS (PL EVRF2007, CZ Bpv,
-        # ~0.11-0.15 m apart); say so before the work. The country envelopes are
-        # rectangles (ADR-023 point 4), so this names the CRS of the parts the task
-        # runs, not whether both hold data (spec silent-defaults 2.3).
-        if {"PL", "CZ"} <= parts.keys() and getattr(args, "vertical_crs", None) is None:
-            print(
-                "Info: --country auto bez --vertical-crs: czesc PL w EVRF2007, "
-                "czesc CZ w Bpv (rozne uklady wysokosci, roznica ok. "
-                "0,11-0,15 m); jeden uklad dla obu: --vertical-crs EVRF2007",
-                file=sys.stderr,
-            )
 
     results: list[tuple[str, int]] = []
     for code in countries:
         part = parts[code].bbox
+        # A COPY of args per country: each branch narrows --resolution and
+        # --vertical-crs to its own country's value (per-country form).
+        country_args = argparse.Namespace(**vars(args))
         if code == "CZ":
-            rc = _run_cz(args, bbox=part, parent_request=parent_request)
+            rc = _run_cz(country_args, bbox=part, parent_request=parent_request)
+        elif filepath is not None:
+            rc = _download_pl_geometry(
+                country_args, filepath, parent_request, bbox=part
+            )
         else:
-            # COPY of args: _resolve_pl_sentinels mutates the Namespace (None->"1m"),
-            # which would poison the CZ branch; the copy removes the order dependence
-            pl_args = argparse.Namespace(**vars(args))
-            if filepath is not None:
-                rc = _download_pl_geometry(pl_args, filepath, parent_request, bbox=part)
-            else:
-                rc = _download_pl_bbox(pl_args, part, parent_request)
+            rc = _download_pl_bbox(country_args, part, parent_request)
         results.append((code, rc))
 
     exit_codes = [rc for _, rc in results]
@@ -974,6 +1106,33 @@ def cmd_download(args: argparse.Namespace) -> int:
         )
         return 1
 
+    # 0.8.0: no data-affecting defaults - every choice is explicit (checked
+    # before any network access; values listed in the message)
+    if args.product is None:
+        print(f"Error: --product wymagane: {PRODUCT_CHOICES}", file=sys.stderr)
+        return 1
+    if args.output is None:
+        print(
+            "Error: --output wymagane: katalog wyniku (pliki trafiaja do "
+            "<DIR>/<produkt>/<segment>/...)",
+            file=sys.stderr,
+        )
+        return 1
+    if not has_sheet and args.country is None:
+        print(
+            f"Error: --country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}",
+            file=sys.stderr,
+        )
+        return 1
+    for raw, flag in (
+        (args.resolution, "--resolution"),
+        (args.vertical_crs, "--vertical-crs"),
+    ):
+        syntax_error = _check_country_value_syntax(raw, flag)
+        if syntax_error is not None:
+            print(f"Error: {syntax_error}", file=sys.stderr)
+            return 1
+
     # --- Per-country dispatch: the sheet code decides the country via the system
     # registry ---
     from kartograf.core.parser_registry import detect_system
@@ -1009,15 +1168,18 @@ def cmd_download(args: argparse.Namespace) -> int:
     if _reject_laz_only_opts(args) or _reject_full_sheet_for_laz(args):
         return 1
 
-    country_flag = getattr(args, "country", "auto")
-    product = getattr(args, "product", "nmt")
+    country_flag = args.country
+    product = args.product
 
     if has_sheet:
         # the registry ends with the pl1992 fallback (always matches, never None)
         system = detect_system(args.sheet)
         system_id = system.id
         system_country = system.country
-        if country_flag != "auto" and country_flag.upper() != system_country:
+        if (
+            country_flag not in (None, "auto")
+            and country_flag.upper() != system_country
+        ):
             print(
                 f"Error: Godlo '{args.sheet}' nalezy do systemu {system_id} "
                 f"(kraj {system_country}), a podano --country {country_flag}",
@@ -1031,7 +1193,14 @@ def cmd_download(args: argparse.Namespace) -> int:
             if _reject_campaign_opts_without_pl(args, ("CZ",)):
                 return 1
             return _run_cz(args)
-        if _resolve_pl_sentinels(args):
+        try:
+            parsed = SheetParser(args.sheet)
+        except (ParseError, ValidationError) as e:
+            print(f"Error: {e}", file=sys.stderr)
+            return 1
+        if _resolve_pl_options(
+            args, sheet_system=parsed.system, sheet_scale=parsed.scale
+        ):
             return 1
         if getattr(args, "target_crs", None) is not None:
             print(
@@ -1055,21 +1224,11 @@ def cmd_download(args: argparse.Namespace) -> int:
     if has_bbox:
         return _cmd_download_bbox(args)
 
-    # --- Sheet code mode (existing logic) ---
-    try:
-        # Validate sheet code first
-        SheetParser(args.sheet)
-    except (ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    # Create download manager with vertical CRS, resolution, and product
+    # --- Sheet code mode (validated and resolved above) ---
     output_dir = Path(args.output)
-    # the PL sentinels are already resolved (`_resolve_pl_sentinels`), and argparse
-    # always creates both attributes - we read them directly
+    # the PL options are already resolved (`_resolve_pl_options`)
     vertical_crs = args.vertical_crs
     resolution = args.resolution
-    product = getattr(args, "product", "nmt")
     label = _product_label(product, resolution)
 
     workers = getattr(args, "workers", 4)
@@ -1084,10 +1243,6 @@ def cmd_download(args: argparse.Namespace) -> int:
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # the vertical CRS is already validated: 5m + KRON86 is
-                # rejected in _resolve_pl_sentinels (0.7.1)
-                vertical_crs=vertical_crs,
-                resolution=resolution,
                 max_workers=workers,
                 all_campaigns=all_campaigns,
                 min_year=min_year,
@@ -1721,7 +1876,7 @@ def _download_pl_cutout(
     """Polish --target-crs cutout from GUGiK WCS (ADR-035): a CLI overlay on
     ``download/cutout.py``.
 
-    Called after ``_resolve_pl_sentinels`` (nmt/nmpt, 1m only). ``bbox`` is
+    Called after ``_resolve_pl_options`` (nmt/nmpt, 1m only). ``bbox`` is
     the request or the ``--geometry`` envelope. Preparation errors
     (``TransformError``/``ValidationError``) and EVERY download or build
     error (PRG, WCS) end with code 1 and a message, not a traceback: an
@@ -1733,7 +1888,7 @@ def _download_pl_cutout(
     from kartograf.download.cutout import prepare_pl_cutout, run_pl_wcs_cutout
     from kartograf.transform.crs import TransformError
 
-    product = getattr(args, "product", "nmt")
+    product = args.product
     output_dir = Path(args.output)
     try:
         # fail-fast: the pinned operation is built BEFORE any network access
@@ -1741,7 +1896,6 @@ def _download_pl_cutout(
             bbox,
             args.target_crs,
             output_dir=output_dir,
-            resolution=args.resolution,
             vertical_crs=args.vertical_crs,
             product=product,
         )
@@ -1798,12 +1952,12 @@ def _download_pl_bbox(
     ``download/cutout.py``): one cutout from GUGiK WCS instead of a sheet list.
     Without it - a sheet list with R5 tolerance (``_finish_pl_sheets``, D2).
     """
-    if _resolve_pl_sentinels(args):
+    if _resolve_pl_options(args):
         return 1
     if args.target_crs is not None:
         return _download_pl_cutout(args, bbox, parent_request)
 
-    target_scale = args.scale or "1:10000"
+    target_scale = _pl_target_scale(args)
 
     # Find sheets covering the bbox (no network, no cache)
     try:
@@ -1831,14 +1985,13 @@ def _download_pl_sheet_list(
 ) -> int:
     """PL sheet list mode (bbox/geometry without ``--target-crs``): manager + finish.
 
-    The PL sentinels are already resolved (``_resolve_pl_sentinels``), and argparse
-    always creates both attributes - we read them directly. ``MetadataCache`` lives
-    only for the duration of the task (N6).
+    The PL options are already resolved (``_resolve_pl_options``).
+    ``MetadataCache`` lives only for the duration of the task (N6).
     """
     output_dir = Path(args.output)
     vertical_crs = args.vertical_crs
     resolution = args.resolution
-    product = getattr(args, "product", "nmt")
+    product = args.product
     workers = getattr(args, "workers", 4)
     skip_existing = not args.force
     all_campaigns, min_year, max_year = _campaign_opts(args)
@@ -1862,10 +2015,6 @@ def _download_pl_sheet_list(
                 output_dir=output_dir,
                 provider=provider,
                 storage=storage,
-                # the vertical CRS is already validated: 5m + KRON86 is
-                # rejected in _resolve_pl_sentinels (0.7.1)
-                vertical_crs=vertical_crs,
-                resolution=resolution,
                 max_workers=workers,
                 sidecar_extra={"parent_request": parent_request},
                 all_campaigns=all_campaigns,
@@ -1984,11 +2133,11 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     # a CZ sheet code + laz is dropped already at dispatch; what remains here is an
     # explicit --country cz in area mode (LAZ skips cmd_download's bbox/geometry
     # branches)
-    if getattr(args, "country", "auto") == "cz":
+    if args.country == "cz":
         print(_CZ_ONLY_NMT_MSG.format(product="laz"), file=sys.stderr)
         return 1
     all_campaigns, min_year, max_year = _campaign_opts(args)
-    if _resolve_pl_sentinels(args):
+    if _resolve_pl_options(args):
         return 1
 
     try:
@@ -2003,7 +2152,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     # would be downloaded silently and only partially (spec 5.7: no silent skipping
     # of a country). A PL sheet code unambiguously points to the country - no guard.
     if (
-        getattr(args, "country", "auto") == "auto"
+        args.country == "auto"
         and args.sheet is None
         and "CZ" in _countries_for_bbox(bbox)
     ):
@@ -2121,7 +2270,12 @@ def _cz_download_sheet(args, provider, *, quiet: bool, skip_existing: bool) -> i
     sheet = args.sheet
     system = detect_system(sheet)
     descriptor = get_source(provider.descriptor_key)
-    storage = storage_for_provider(args.output, provider)
+    storage = storage_for_provider(
+        args.output,
+        provider,
+        resolution=provider.resolution,
+        vertical_crs=provider.vertical_crs,
+    )
     target = storage.get_raw_path(sheet, f"{sheet}{descriptor.default_extension}")
 
     if skip_existing and target.exists():
@@ -2289,33 +2443,20 @@ def _cmd_download_cz(
     has_sheet = bbox is None
     # An SM5 sheet is a ready-made DMR 4G file that exists only at 5 m, so the
     # sheet itself determines the resolution; TM33 tiles and bbox cutouts are
-    # cut from the service, where 2 m (default) and 5 m are a real choice.
+    # cut from the service, where 2 m and 5 m are a real (required) choice.
     is_sm5 = has_sheet and detect_system(args.sheet).id == "cz_sm5"
-    resolution = args.resolution or ("5m" if is_sm5 else "2m")
-    vertical_crs = args.vertical_crs or "Bpv"
-
-    if resolution == "1m":
-        print(
-            "Error: CZ nie ma rozdzielczosci 1m — dostepne: 2m (DMR 5G), 5m (DMR 4G)",
-            file=sys.stderr,
-        )
+    # an `auto` area task was validated for all its countries in
+    # `_dispatch_area` (there --system may belong to the PL part)
+    countries = ("CZ",) if has_sheet or args.country == "cz" else ("CZ", "PL")
+    error = _cz_option_error(args, is_sm5=is_sm5, countries=countries)
+    if error is not None:
+        # rejected before the provider (no network) and before "Downloading"
+        print(f"Error: {error}", file=sys.stderr)
         return 1
-    if is_sm5 and resolution != "5m":
-        # contradictory request: rejected before the provider (no network)
-        # and before the "Downloading" announcement
-        print(
-            f"Error: Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) — pomin "
-            f"--resolution albo podaj 5m; dla {resolution} uzyj godla TM33 "
-            f"albo --bbox [arkusz: {args.sheet}]",
-            file=sys.stderr,
-        )
-        return 1
-    if getattr(args, "system", None) is not None:
-        print(
-            "Error: --system dotyczy tylko PL (godla CZ wykrywane wzorcem)",
-            file=sys.stderr,
-        )
-        return 1
+    resolution = _country_value(args.resolution, "CZ") or "5m"  # only SM5 omits it
+    vertical_crs = _country_value(args.vertical_crs, "CZ")
+    assert vertical_crs is not None  # required: checked by _cz_option_error
+    args.resolution, args.vertical_crs = resolution, vertical_crs
     if has_sheet and args.target_crs is not None:
         # the provider ignores target_crs in sheet code mode - silence would be a lie
         raise ValidationError(
@@ -2382,9 +2523,8 @@ def _cmd_download_geometry(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    country_flag = getattr(args, "country", "auto")
-    if country_flag == "cz":
-        if _reject_non_nmt_for_cz(getattr(args, "product", "nmt")):
+    if args.country == "cz":
+        if _reject_non_nmt_for_cz(args.product):
             return 1
         # this branch bypasses `_dispatch_area` - the campaign guard here too
         if _reject_campaign_opts_without_pl(args, ("CZ",)):
@@ -2432,12 +2572,12 @@ def _download_pl_geometry(
     """
     from kartograf.core.geometry import find_sheets_for_geometry
 
-    if _resolve_pl_sentinels(args):
+    if _resolve_pl_options(args):
         return 1
     if args.target_crs is not None:
         return _download_pl_cutout(args, bbox, parent_request)
 
-    target_scale = args.scale or "1:10000"
+    target_scale = _pl_target_scale(args)
     layer = getattr(args, "layer", None)
 
     try:

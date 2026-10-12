@@ -7,6 +7,7 @@ verifying correct parsing and output formatting.
 
 import argparse
 import json
+import re
 import threading
 from pathlib import Path
 from unittest.mock import ANY, Mock, patch
@@ -522,22 +523,17 @@ class TestCreateParserDownload:
         args = parser.parse_args(["download", "--sheet", "N-34-130-D", "-q"])
         assert args.quiet is True
 
-    def test_download_default_values(self):
-        """Test default values for download options."""
+    def test_download_switch_defaults(self):
+        """Switches stay off unless given (the only download defaults left)."""
         parser = create_parser()
         args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
-        assert args.output == "./data"
         assert args.force is False
         assert args.quiet is False
-        assert args.scale is None
+        assert args.all_campaigns is False
 
 
 class TestCreateParserCountry:
     """Tests for --country/--target-crs and per-country sentinels on download."""
-
-    def test_country_default_auto(self):
-        args = create_parser().parse_args(["download", "--sheet", "X"])
-        assert args.country == "auto"
 
     def test_country_choices(self):
         for value in ("pl", "cz", "auto"):
@@ -646,7 +642,24 @@ class TestCmdDownload:
 
     def test_download_invalid_sheet(self, capsys):
         """Test downloading with invalid sheet."""
-        result = main(["download", "--sheet", "INVALID", "-q"])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "INVALID",
+                "-q",
+            ]
+        )
 
         assert result == 1
         captured = capsys.readouterr()
@@ -661,7 +674,24 @@ class TestCmdDownload:
         mock_manager_class.return_value = mock_manager
 
         result = main(
-            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -682,10 +712,20 @@ class TestCmdDownload:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
-                "N-34-130-D-d-2",
+                "7.171.21",
                 "--scale",
-                "1:10000",
+                "1:2000",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -706,6 +746,16 @@ class TestCmdDownload:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "-o",
@@ -729,7 +779,26 @@ class TestCmdDownload:
         )
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "--sheet", "N-34-130-D", "-o", str(tmp_path), "-q"])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
 
         assert result == 1
         captured = capsys.readouterr()
@@ -748,6 +817,16 @@ class TestCmdDownload:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D",
                 "--scale",
@@ -772,7 +851,25 @@ class TestCmdDownload:
         )
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert result == 0
         captured = capsys.readouterr()
@@ -799,7 +896,25 @@ class TestCmdDownload:
             DownloadResult(succeeded=[], failed=["A", "B", "C", "D"], skipped=[])
         )
 
-        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert result == 1
         err = capsys.readouterr().err
@@ -816,7 +931,25 @@ class TestCmdDownload:
             DownloadResult(succeeded=paths, failed=["A"], skipped=[])
         )
 
-        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert result == 1
         assert "Error: 1 z 4 arkuszy nie pobrano" in capsys.readouterr().err
@@ -831,7 +964,25 @@ class TestCmdDownload:
             DownloadResult(succeeded=paths, failed=["A"], no_coverage=["A"])
         )
 
-        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert result == 0
         captured = capsys.readouterr()
@@ -848,7 +999,25 @@ class TestCmdDownload:
             DownloadResult(failed=["A", "B"], no_coverage=["A", "B"])
         )
 
-        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert result == 1
         err = capsys.readouterr().err
@@ -866,7 +1035,25 @@ class TestCmdDownload:
         mock_manager.download_sheet.return_value = [tmp_path / "x.asc"] * 4
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert result == 0
         captured = capsys.readouterr()
@@ -890,10 +1077,20 @@ class TestCmdDownload:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
-                "N-34-130-D-d-2",
+                "7.171.21",
                 "--scale",
-                "1:10000",
+                "1:2000",
                 "-o",
                 str(tmp_path),
             ]
@@ -909,7 +1106,22 @@ class TestDownloadCLIIntegration:
     def test_download_help(self, capsys):
         """Test download --help."""
         with pytest.raises(SystemExit) as exc_info:
-            main(["download", "--help"])
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--help",
+                ]
+            )
 
         assert exc_info.value.code == 0
         captured = capsys.readouterr()
@@ -937,12 +1149,6 @@ class TestCmdDownloadProduct:
         )
         assert args.product == "nmpt"
 
-    def test_download_product_default_nmt(self):
-        """Test that --product defaults to nmt."""
-        parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
-        assert args.product == "nmt"
-
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_product_nmpt(
@@ -962,6 +1168,16 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -996,6 +1212,14 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -1028,7 +1252,24 @@ class TestCmdDownloadProduct:
         mock_manager_cls.return_value = mock_manager
 
         result = main(
-            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -1053,6 +1294,18 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "--product",
@@ -1085,6 +1338,16 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "--product",
@@ -1114,6 +1377,14 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -1144,6 +1415,16 @@ class TestCmdDownloadProduct:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--force",
@@ -1162,8 +1443,40 @@ class TestCmdDownloadProduct:
     @pytest.mark.parametrize(
         "argv",
         [
-            ["download", "--sheet", "N-34-130-D-d-2-4"],
-            ["download", "--bbox", "630000,480000,637000,487000", "--country", "pl"],
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+            ],
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--system",
+                "1992",
+                "--bbox",
+                "630000,480000,637000,487000",
+                "--country",
+                "pl",
+            ],
         ],
         ids=["sheet", "bbox-list"],
     )
@@ -1202,6 +1515,16 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -1233,6 +1556,14 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -1263,6 +1594,14 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -1287,6 +1626,18 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "530000,382000,533000,386000",
                 "--country",
@@ -1320,6 +1671,16 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
                 "--bbox",
                 "530000,382000,533000,386000",
                 "--country",
@@ -1423,8 +1784,7 @@ class TestCreateProviderAndStorage:
 
 _5M_KRON86_ERROR = (
     "Error: NMT 5m (PL) jest dostepny tylko w EVRF2007 — podano --vertical-crs "
-    "KRON86; uzyj --vertical-crs EVRF2007 (albo pomin --vertical-crs) albo "
-    "--resolution 1m dla KRON86"
+    "KRON86; uzyj --vertical-crs EVRF2007 albo --resolution 1m dla KRON86"
 )
 
 
@@ -1494,6 +1854,16 @@ class TestNmt5mKron86Rejected:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *task,
                 "--resolution",
                 "5m",
@@ -1538,6 +1908,18 @@ class TestNmt5mKron86Rejected:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp),
                 *extra,
@@ -1562,40 +1944,10 @@ class TestNmt5mKron86Rejected:
         mock_run_cz.assert_not_called()
         assert not (tmp_path / "out").exists()
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_sheet_5m_without_vertical_crs_uses_evrf2007(
-        self, mock_manager_cls, capsys, tmp_path
-    ):
-        mock_manager = Mock()
-        mock_manager.last_result = None
-        mock_manager.download_sheet.return_value = tmp_path / "out" / "a.asc"
-        mock_manager_cls.return_value = mock_manager
-
-        result = main(
-            [
-                "download",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--resolution",
-                "5m",
-                "-o",
-                str(tmp_path / "out"),
-                "-q",
-            ]
-        )
-
-        assert result == 0
-        err = capsys.readouterr().err
-        assert "Error:" not in err and "Info:" not in err
-        kwargs = mock_manager_cls.call_args.kwargs
-        assert kwargs["vertical_crs"] == "EVRF2007"
-        assert kwargs["resolution"] == "5m"
-        assert kwargs["provider"].vertical_crs == "EVRF2007"
-
-    def test_sentinels_reject_only_explicit_kron86(self, capsys):
-        """The rule sits in ``_resolve_pl_sentinels``: the default (None ->
-        EVRF2007) and an explicit EVRF2007 pass, an explicit KRON86 fails."""
-        from kartograf.cli.download_cmd import _resolve_pl_sentinels
+    def test_pl_options_reject_kron86_and_missing_vertical_crs_for_5m(self, capsys):
+        """5m exists only in EVRF2007; a missing --vertical-crs is an error
+        listing the values, KRON86 is rejected without a silent swap."""
+        from kartograf.cli.download_cmd import _resolve_pl_options
 
         def ns(vertical_crs):
             return argparse.Namespace(
@@ -1604,16 +1956,19 @@ class TestNmt5mKron86Rejected:
                 vertical_crs=vertical_crs,
                 target_crs=None,
                 system=None,
+                scale=None,
             )
 
-        for given in (None, "EVRF2007"):
-            args = ns(given)
-            assert _resolve_pl_sentinels(args) == 0
-            assert args.vertical_crs == "EVRF2007"
+        args = ns("EVRF2007")
+        assert _resolve_pl_options(args, sheet_system="1992") == 0
         assert capsys.readouterr().err == ""
 
+        assert _resolve_pl_options(ns(None), sheet_system="1992") == 1
+        err = capsys.readouterr().err
+        assert "--vertical-crs wymagane" in err and "KRON86" in err
+
         args = ns("KRON86")
-        assert _resolve_pl_sentinels(args) == 1
+        assert _resolve_pl_options(args, sheet_system="1992") == 1
         assert _5M_KRON86_ERROR in capsys.readouterr().err
         assert args.vertical_crs == "KRON86"  # no silent swap
 
@@ -1630,6 +1985,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "-o",
@@ -1650,7 +2017,25 @@ class TestCmdDownloadBBox:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "t.asc")
         mock_find.return_value = [f"N-{i}" for i in range(1, 13)]
         result = main(
-            ["download", "--bbox", "630000,480000,637000,487000", "-o", str(tmp_path)]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--bbox",
+                "630000,480000,637000,487000",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 0
         out = capsys.readouterr().out
@@ -1666,6 +2051,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "19.93,50.05,19.95,50.07",
                 "--bbox-crs",
@@ -1684,6 +2081,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--bbox",
@@ -1698,7 +2107,22 @@ class TestCmdDownloadBBox:
 
     def test_download_no_input_error(self, capsys):
         """Test no sheet code and no --bbox → exit 1."""
-        result = main(["download", "-q"])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "-q",
+            ]
+        )
 
         assert result == 1
         captured = capsys.readouterr()
@@ -1709,6 +2133,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "not,a,valid,bbox",
                 "-q",
@@ -1740,7 +2176,24 @@ class TestCmdDownloadBBox:
             patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
         ):
             result = main(
-                ["download", f"--bbox={bbox}", "-o", str(tmp_path), "-q", *extra]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    f"--bbox={bbox}",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                    *extra,
+                ]
             )
         assert result == 1
         captured = capsys.readouterr()
@@ -1756,6 +2209,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "419000,230000,426000",
                 "-q",
@@ -1768,13 +2233,25 @@ class TestCmdDownloadBBox:
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
-        """Test --bbox z --scale 1:100000."""
+        """PL-1992 is fixed at 1:10000: --scale is an error before any work."""
         mock_manager = _sheet_list_manager(tmp_path / "test.asc")
         mock_manager_class.return_value = mock_manager
 
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "--scale",
@@ -1785,9 +2262,9 @@ class TestCmdDownloadBBox:
             ]
         )
 
-        assert result == 0
-        # A smaller scale = fewer sheets
-        mock_manager.download_sheets.assert_called_once()
+        assert result == 1
+        assert "--scale nie dotyczy PL-1992" in capsys.readouterr().err
+        mock_manager_class.assert_not_called()
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_download_bbox_shows_summary(self, mock_manager_class, capsys, tmp_path):
@@ -1798,6 +2275,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "19.93,50.05,19.95,50.07",
                 "--bbox-crs",
@@ -1867,6 +2356,18 @@ class TestCmdDownloadBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "--country",
@@ -1952,6 +2453,18 @@ class TestSheetListExitCode:
             rc = main(
                 [
                     "download",
+                    "--system",
+                    "1992",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox",
                     "630000,480000,637000,487000",
                     "-o",
@@ -2026,8 +2539,6 @@ class TestSheetListExitCode:
         rc, provider, files = self._run_bbox(
             tmp_path,
             {"-2-3": "fail"},
-            "--scale",
-            "1:25000",
             sheets=["N-34-130-D-d-2"],
         )
 
@@ -2060,6 +2571,18 @@ class TestSheetListExitCode:
             rc = main(
                 [
                     "download",
+                    "--system",
+                    "1992",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox",
                     "18.4,49.55,18.8,49.75",
                     "--bbox-crs",
@@ -2096,7 +2619,27 @@ class TestSheetListExitCode:
             "kartograf.cli.download_cmd._create_provider_and_storage",
             return_value=(provider, storage),
         ):
-            rc = main(["download", "--geometry", str(shp_file), "-o", str(tmp_path)])
+            rc = main(
+                [
+                    "download",
+                    "--system",
+                    "1992",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--geometry",
+                    str(shp_file),
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
 
         assert rc == 0
         assert len(provider.calls) == 4
@@ -2136,7 +2679,18 @@ class TestCmdLandcoverDownload:
         mock_mgr.download.return_value = tmp_path / "out.gpkg"
         mock_mgr_cls.return_value = mock_mgr
 
-        result = main(["landcover", "download", "--teryt", "1465", "-o", str(tmp_path)])
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "--teryt",
+                "1465",
+                "-o",
+                str(tmp_path),
+            ]
+        )
         assert result == 0
         mock_mgr.download.assert_called_once()
         call_kwargs = mock_mgr.download.call_args
@@ -2152,6 +2706,12 @@ class TestCmdLandcoverDownload:
                 "soilgrids",
                 "--teryt",
                 "1465",
+                "--property",
+                "soc",
+                "--depth",
+                "0-5cm",
+                "--stat",
+                "mean",
                 "-o",
                 str(tmp_path),
             ]
@@ -2169,7 +2729,16 @@ class TestCmdLandcoverDownload:
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
-            ["landcover", "download", "--sheet", "N-34-130-D", "-o", str(tmp_path)]
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "--sheet",
+                "N-34-130-D",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 0
         mock_mgr.download_all_counties.assert_called_once()
@@ -2190,6 +2759,8 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
+                "--source",
+                "bdot10k",
                 "--bbox",
                 "450000,550000,460000,560000",
                 "-o",
@@ -2219,6 +2790,8 @@ class TestCmdLandcoverDownload:
                 "corine",
                 "--sheet",
                 "N-34-130-D",
+                "--year",
+                "2018",
                 "-o",
                 str(tmp_path),
             ]
@@ -2237,7 +2810,18 @@ class TestCmdLandcoverDownload:
         mock_mgr.download.side_effect = DownloadError("Network error")
         mock_mgr_cls.return_value = mock_mgr
 
-        result = main(["landcover", "download", "--teryt", "1465", "-o", str(tmp_path)])
+        result = main(
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "--teryt",
+                "1465",
+                "-o",
+                str(tmp_path),
+            ]
+        )
         assert result == 1
         captured = capsys.readouterr()
         assert "Error" in captured.err
@@ -2245,12 +2829,92 @@ class TestCmdLandcoverDownload:
     def test_landcover_download_multiple_selection(self, capsys):
         """Multiple selection methods -> exit 1."""
         result = main(
-            ["landcover", "download", "--teryt", "1465", "--sheet", "N-34-130-D"]
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "-o",
+                "unused",
+                "--teryt",
+                "1465",
+                "--sheet",
+                "N-34-130-D",
+            ]
         )
         assert result == 1
         captured = capsys.readouterr()
         err = captured.err
         assert "only one of" in err.lower() or "Provide only one" in err
+
+    @pytest.mark.parametrize(
+        ("flags", "missing", "choices"),
+        [
+            (["-o", "out"], "--source", "bdot10k"),
+            (["--source", "bdot10k"], "--output", "katalog"),
+            (["--source", "corine", "-o", "out"], "--year", "1990"),
+            (
+                [
+                    "--source",
+                    "soilgrids",
+                    "-o",
+                    "out",
+                    "--depth",
+                    "0-5cm",
+                    "--stat",
+                    "mean",
+                ],
+                "--property",
+                "bdod",
+            ),
+            (
+                [
+                    "--source",
+                    "soilgrids",
+                    "-o",
+                    "out",
+                    "--property",
+                    "soc",
+                    "--stat",
+                    "mean",
+                ],
+                "--depth",
+                "100-200cm",
+            ),
+            (
+                [
+                    "--source",
+                    "soilgrids",
+                    "-o",
+                    "out",
+                    "--property",
+                    "soc",
+                    "--depth",
+                    "0-5cm",
+                ],
+                "--stat",
+                "uncertainty",
+            ),
+        ],
+    )
+    def test_missing_data_choice_fails_before_download(
+        self, flags, missing, choices, capsys
+    ):
+        """Each missing source-specific choice is explained before accessing data."""
+        with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
+            rc = main(["landcover", "download", "--sheet", "N-34-130-D", *flags])
+        assert rc == 1
+        manager.assert_not_called()
+        err = capsys.readouterr().err
+        assert err.startswith("Error: ")
+        assert missing in err and choices in err
+
+    def test_list_layers_without_source_fails_with_choices(self, capsys):
+        rc = main(["landcover", "list-layers"])
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error: --source")
+        assert all(source in err for source in ("bdot10k", "corine", "soilgrids"))
 
     def test_landcover_list_layers_soilgrids(self, capsys):
         """list-layers --source soilgrids shows soil properties."""
@@ -2316,6 +2980,8 @@ class TestCmdSoilgrids:
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
+                "--depth",
+                "0-5cm",
                 "-o",
                 str(tmp_path),
             ]
@@ -2368,6 +3034,8 @@ class TestCmdSoilgrids:
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
+                "--depth",
+                "0-5cm",
                 "-o",
                 str(tmp_path),
                 "--stats",
@@ -2392,6 +3060,8 @@ class TestCmdSoilgrids:
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
+                "--depth",
+                "0-5cm",
                 "-o",
                 str(tmp_path),
             ]
@@ -2407,7 +3077,18 @@ class TestCmdSoilgrids:
         mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
         out = tmp_path / "out"
 
-        result = main(["soilgrids", "hsg", "--sheet", "M-33-036-A", "-o", str(out)])
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--sheet",
+                "M-33-036-A",
+                "-o",
+                str(out),
+                "--depth",
+                "0-5cm",
+            ]
+        )
 
         assert result == 0
         kwargs = mock_calc.calculate_hsg_by_sheet.call_args.kwargs
@@ -2419,7 +3100,18 @@ class TestCmdSoilgrids:
         """A7: an out-of-range sheet -> Error on stderr, code 1, no calculation."""
         out = tmp_path / "out"
 
-        result = main(["soilgrids", "hsg", "--sheet", "N-34-999-D", "-o", str(out)])
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--sheet",
+                "N-34-999-D",
+                "-o",
+                str(out),
+                "--depth",
+                "0-5cm",
+            ]
+        )
 
         assert result == 1
         mock_calc_cls.return_value.calculate_hsg_by_sheet.assert_not_called()
@@ -2433,7 +3125,17 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_rejects_bad_bbox(self, bbox, capsys, tmp_path):
         """K7a: bad --bbox -> Error on stderr, code 1, the calculator never starts."""
         with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
-            result = main(["soilgrids", "hsg", f"--bbox={bbox}", "-o", str(tmp_path)])
+            result = main(
+                [
+                    "soilgrids",
+                    "hsg",
+                    f"--bbox={bbox}",
+                    "-o",
+                    str(tmp_path),
+                    "--depth",
+                    "0-5cm",
+                ]
+            )
         assert result == 1
         calc_cls.return_value.calculate_hsg_by_bbox.assert_not_called()
         captured = capsys.readouterr()
@@ -2441,9 +3143,23 @@ class TestCmdSoilgrids:
         assert "ValueError" not in captured.err
         assert "Expected" not in captured.out
 
+    @pytest.mark.parametrize(
+        ("flags", "missing"),
+        [
+            (["--depth", "0-5cm"], "--output"),
+            (["--output", "out"], "--depth"),
+        ],
+    )
+    def test_hsg_missing_choice_fails_before_calculation(self, flags, missing, capsys):
+        with patch("kartograf.hydrology.HSGCalculator") as calculator:
+            rc = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", *flags])
+        assert rc == 1
+        calculator.assert_not_called()
+        assert f"Error: {missing}" in capsys.readouterr().err
+
     def test_soilgrids_hsg_no_selection(self, capsys):
         """soilgrids hsg without --sheet or --bbox -> exit 1."""
-        result = main(["soilgrids", "hsg"])
+        result = main(["soilgrids", "hsg", "--output", "unused", "--depth", "0-5cm"])
         assert result == 1
         captured = capsys.readouterr()
         assert "Must provide one of" in captured.err
@@ -2461,6 +3177,8 @@ class TestCmdSoilgrids:
                 "hsg",
                 "--bbox",
                 "450000,550000,460000,560000",
+                "--depth",
+                "0-5cm",
                 "-o",
                 str(tmp_path),
             ]
@@ -2505,7 +3223,7 @@ class TestSoilgridsHsgOutputName:
 
 def test_landcover_download_no_selection(capsys):
     """No selection method -> exit 1."""
-    result = main(["landcover", "download"])
+    result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
     assert result == 1
     captured = capsys.readouterr()
     assert "Must provide one of" in captured.err
@@ -2539,7 +3257,26 @@ class TestCmdDownloadGeometry:
         mock_manager_cls.return_value = mock_manager
 
         result = main(
-            ["download", "--geometry", str(shp_file), "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--geometry",
+                str(shp_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -2566,6 +3303,18 @@ class TestCmdDownloadGeometry:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(gpkg_file),
                 "--layer",
@@ -2598,7 +3347,26 @@ class TestCmdDownloadGeometry:
         mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
 
         result = main(
-            ["download", "--geometry", str(gpkg_file), "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--geometry",
+                str(gpkg_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -2638,7 +3406,30 @@ class TestCmdDownloadGeometry:
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager_cls.return_value = _sheet_list_manager(tmp_path / "test.asc")
 
-        assert main(["download", "--geometry", str(path), "-o", str(tmp_path)]) == 0
+        assert (
+            main(
+                [
+                    "download",
+                    "--system",
+                    "1992",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--geometry",
+                    str(path),
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+            == 0
+        )
         assert "warstw" not in capsys.readouterr().err
 
     def test_cli_geometry_unknown_layer_error(self, capsys, tmp_path):
@@ -2646,6 +3437,18 @@ class TestCmdDownloadGeometry:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(gpkg_file),
                 "--layer",
@@ -2666,6 +3469,18 @@ class TestCmdDownloadGeometry:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--geometry",
@@ -2686,6 +3501,18 @@ class TestCmdDownloadGeometry:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp_file),
                 "--bbox",
@@ -2703,6 +3530,18 @@ class TestCmdDownloadGeometry:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(tmp_path / "nonexistent.shp"),
                 "-q",
@@ -2715,7 +3554,22 @@ class TestCmdDownloadGeometry:
 
     def test_download_no_input_error_updated(self, capsys):
         """No input at all shows updated error message."""
-        result = main(["download", "-q"])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "-q",
+            ]
+        )
 
         assert result == 1
         captured = capsys.readouterr()
@@ -2744,6 +3598,18 @@ class TestCmdDownloadGeometry:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp_file),
                 "--country",
@@ -2787,6 +3653,8 @@ class TestCmdLandcoverDownloadGeometry:
             [
                 "landcover",
                 "download",
+                "--source",
+                "bdot10k",
                 "--geometry",
                 str(shp_file),
                 "-o",
@@ -2815,7 +3683,16 @@ class TestCmdLandcoverDownloadGeometry:
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
-            ["landcover", "download", "--geometry", str(gpkg), "-o", str(tmp_path)]
+            [
+                "landcover",
+                "download",
+                "--source",
+                "bdot10k",
+                "--geometry",
+                str(gpkg),
+                "-o",
+                str(tmp_path),
+            ]
         )
 
         assert result == 0
@@ -2834,10 +3711,14 @@ class TestCmdLandcoverDownloadGeometry:
             [
                 "landcover",
                 "download",
+                "--source",
+                "bdot10k",
                 "--geometry",
                 str(shp_file),
                 "--teryt",
                 "1465",
+                "-o",
+                str(tmp_path / "out"),
             ]
         )
 
@@ -2852,8 +3733,12 @@ class TestCmdLandcoverDownloadGeometry:
             [
                 "landcover",
                 "download",
+                "--source",
+                "bdot10k",
                 "--geometry",
                 str(tmp_path / "nonexistent.shp"),
+                "-o",
+                str(tmp_path / "out"),
             ]
         )
 
@@ -2886,6 +3771,8 @@ class TestCmdSoilgridsHsgGeometry:
             [
                 "soilgrids",
                 "hsg",
+                "--depth",
+                "0-5cm",
                 "--geometry",
                 str(shp_file),
                 "-o",
@@ -2909,7 +3796,16 @@ class TestCmdSoilgridsHsgGeometry:
         mock_calc_cls.return_value = mock_calc
 
         result = main(
-            ["soilgrids", "hsg", "--geometry", str(gpkg), "-o", str(tmp_path)]
+            [
+                "soilgrids",
+                "hsg",
+                "--geometry",
+                str(gpkg),
+                "--depth",
+                "0-5cm",
+                "-o",
+                str(tmp_path),
+            ]
         )
 
         assert result == 0
@@ -2928,10 +3824,14 @@ class TestCmdSoilgridsHsgGeometry:
             [
                 "soilgrids",
                 "hsg",
+                "--depth",
+                "0-5cm",
                 "--geometry",
                 str(shp_file),
                 "--sheet",
                 "N-34-130-D",
+                "-o",
+                str(tmp_path / "out"),
             ]
         )
 
@@ -3149,10 +4049,22 @@ class TestDownloadBBoxSystem:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "--system",
                 "2000",
+                "--scale",
+                "1:2000",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -3179,6 +4091,18 @@ class TestDownloadBBoxSystem:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "-o",
@@ -3219,10 +4143,22 @@ class TestDownloadGeometrySystem:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp_file),
                 "--system",
                 "2000",
+                "--scale",
+                "1:2000",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -3255,6 +4191,18 @@ class TestDownloadGeometrySystem:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp_file),
                 "-o",
@@ -3342,6 +4290,16 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
@@ -3371,6 +4329,18 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "530000,382000,533000,386000",
                 "--product",
@@ -3418,6 +4388,16 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
@@ -3447,6 +4427,16 @@ class TestCmdDownloadLaz:
         main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
@@ -3490,6 +4480,16 @@ class TestCmdDownloadLaz:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "M-34-27-B-b-2-1",
                     "--product",
@@ -3520,6 +4520,16 @@ class TestCmdDownloadLaz:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "M-34-27-B-b-2-1",
                     "--product",
@@ -3561,6 +4571,16 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
@@ -3585,7 +4605,9 @@ class TestCmdDownloadLaz:
         # segment. Equality with ``FileStorage(...).get_raw_path(...)`` alone is not
         # enough: if the same (potentially mutated) function computed both sides, the
         # assertion would stay green even with broken production code.
-        expected_storage = FileStorage(tmp_path, product="laz", vertical_crs="EVRF2007")
+        expected_storage = FileStorage(
+            tmp_path, product="laz", resolution=None, vertical_crs="EVRF2007"
+        )
         assert target == expected_storage.get_raw_path(
             tile.sheet, tile.filename, system=tile.system
         )
@@ -3629,6 +4651,16 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
@@ -3675,6 +4707,16 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
@@ -3694,6 +4736,16 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "NOT-A-GODLO!!",
                 "--product",
@@ -3709,6 +4761,18 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(tmp_path / "missing.shp"),
                 "--product",
@@ -3859,7 +4923,9 @@ class TestResolveLazBbox:
 
 
 def _cz_args(tmp_path, **overrides):
-    """Namespace for direct _cmd_download_cz calls."""
+    """Namespace for direct _cmd_download_cz calls (2m/Bpv; SM5 sheets: 5m only)."""
+    sheet = overrides.get("sheet", "302_5550")
+    sm5 = sheet is not None and re.fullmatch(r"\s*[A-Z]{4}\d{2}\s*", sheet)
     base = dict(
         sheet="302_5550",
         bbox=None,
@@ -3870,8 +4936,8 @@ def _cz_args(tmp_path, **overrides):
         output=str(tmp_path),
         force=False,
         quiet=True,
-        vertical_crs=None,
-        resolution=None,
+        vertical_crs="Bpv",
+        resolution=None if sm5 else "2m",
         product="nmt",
         system=None,
         country="cz",
@@ -3971,7 +5037,25 @@ class TestCzDownloadingAfterValidation:
                 "Arkusz SM5 'ABCD12' nie istnieje w indeksie KladyMapovychListu"
             )
             rc = main(
-                ["download", "--sheet", "ABCD12", "--country", "cz", "-o", str(out)]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=5m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "ABCD12",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(out),
+                ]
             )
             client_cls.return_value.fetch_file.assert_not_called()
 
@@ -3987,6 +5071,16 @@ class TestCzDownloadingAfterValidation:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "301_5550",
                     "--country",
@@ -4018,6 +5112,16 @@ class TestCzDownloadingAfterValidation:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=5m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "CTES96",
                     "--country",
@@ -4056,6 +5160,16 @@ class TestCzDownloadingAfterValidation:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "302_5550",
                     "--country",
@@ -4086,6 +5200,16 @@ class TestCzDownloadingAfterValidation:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox=-447000,-1114000,-446000,-1113000",
                     "--bbox-crs",
                     "EPSG:5514",
@@ -4286,6 +5410,16 @@ class TestCmdDownloadCz:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=5m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "CTES96",
                     "--country",
@@ -4312,6 +5446,16 @@ class TestCmdDownloadCz:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=5m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "CTES96",
                     "--resolution",
@@ -4333,7 +5477,24 @@ class TestCmdDownloadCz:
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             rc = main(
-                ["download", "--sheet", "302_5550", "-o", str(tmp_path / "out"), "-q"]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "302_5550",
+                    "-o",
+                    str(tmp_path / "out"),
+                    "-q",
+                ]
             )
 
         assert rc == 0
@@ -4346,6 +5507,16 @@ class TestCmdDownloadCz:
             rc = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox=-447000,-1114000,-446000,-1113000",
                     "--bbox-crs",
                     "EPSG:5514",
@@ -4406,6 +5577,16 @@ class TestCmdDownloadCz:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox",
                     "472887.5,208337.5,473808.0,209409.8",
                     "--country",
@@ -4477,6 +5658,16 @@ class TestCmdDownloadCz:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "302_5550",
                     "--country",
@@ -4507,6 +5698,16 @@ class TestCmdDownloadCz:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox=-447000,-1114000,-446000,-1113000",
                     "--bbox-crs",
                     "EPSG:5514",
@@ -4655,7 +5856,7 @@ class TestCmdDownloadCz:
             _CZ_FACTORY_PATCH,
             side_effect=ValidationError("Nieobslugiwany uklad pionowy dla CZ"),
         ):
-            result = _cmd_download_cz(_cz_args(tmp_path, vertical_crs="KRON86"))
+            result = _cmd_download_cz(_cz_args(tmp_path))
 
         assert result == 1
         assert "Error: Nieobslugiwany uklad pionowy" in capsys.readouterr().err
@@ -5001,7 +6202,26 @@ class TestCountryDispatch:
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_cz_sheet_routes_to_cz_flow(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
-        result = main(["download", "--sheet", "302_5550", "-o", str(tmp_path), "-q"])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "302_5550",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
         assert result == 0
         mock_cz.assert_called_once()
 
@@ -5011,6 +6231,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "CTES96",
                 "--resolution",
@@ -5030,6 +6260,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
                 "--country",
@@ -5043,18 +6283,55 @@ class TestCountryDispatch:
         mock_cz.assert_called_once()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    def test_cz_sheet_keeps_sentinels_unresolved(self, mock_cz, tmp_path):
-        """PL sentinels must not touch the arguments going to CZ."""
+    def test_cz_sheet_gets_raw_per_country_values(self, mock_cz, tmp_path):
+        """The CZ flow receives the per-country values unnarrowed by PL."""
         mock_cz.return_value = 0
-        main(["download", "--sheet", "302_5550", "-o", str(tmp_path), "-q"])
+        main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "302_5550",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
         args = mock_cz.call_args.args[0]
-        assert args.resolution is None
-        assert args.vertical_crs is None
+        assert args.resolution == "pl=1m,cz=2m"
+        assert args.vertical_crs == "pl=EVRF2007,cz=Bpv"
         assert args.system is None
 
     def test_cz_sheet_with_country_pl_conflicts(self, tmp_path, capsys):
         result = main(
-            ["download", "--sheet", "CTES96", "--country", "pl", "-o", str(tmp_path)]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "CTES96",
+                "--country",
+                "pl",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 1
         assert "cz_sm5" in capsys.readouterr().err
@@ -5063,6 +6340,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--country",
@@ -5077,21 +6364,38 @@ class TestCountryDispatch:
     # --- sentinele PL ---
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_sheet_sentinels_resolved_to_defaults(
+    def test_pl_sheet_takes_pl_part_of_per_country_values(
         self, mock_manager_class, tmp_path
     ):
-        """Observable PL behaviour unchanged: None -> 1m/EVRF2007."""
+        """pl=1m,cz=2m / pl=EVRF2007,cz=Bpv -> the PL provider gets 1m/EVRF2007."""
         mock_manager = Mock()
         mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
         result = main(
-            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert result == 0
-        kwargs = mock_manager_class.call_args.kwargs
-        assert kwargs["resolution"] == "1m"
-        assert kwargs["vertical_crs"] == "EVRF2007"
+        provider = mock_manager_class.call_args.kwargs["provider"]
+        assert provider.resolution == "1m"
+        assert provider.vertical_crs == "EVRF2007"
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_pl_1m_kron86_no_correction(self, mock_manager_class, tmp_path, capsys):
@@ -5102,6 +6406,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--vertical-crs",
@@ -5113,11 +6427,11 @@ class TestCountryDispatch:
         )
         assert result == 0
         assert "Info:" not in capsys.readouterr().err
-        assert mock_manager_class.call_args.kwargs["vertical_crs"] == "KRON86"
+        assert mock_manager_class.call_args.kwargs["provider"].vertical_crs == "KRON86"
 
     def test_5m_rule_only_for_nmt(self, capsys):
-        """LAZ also goes through the PL sentinels - the NMT rule does not apply."""
-        from kartograf.cli.download_cmd import _resolve_pl_sentinels
+        """LAZ also goes through the PL options - the NMT 5m rule does not apply."""
+        from kartograf.cli.download_cmd import _resolve_pl_options
 
         args = argparse.Namespace(
             product="laz",
@@ -5125,8 +6439,9 @@ class TestCountryDispatch:
             vertical_crs="KRON86",
             target_crs=None,
             system=None,
+            scale=None,
         )
-        assert _resolve_pl_sentinels(args) == 0
+        assert _resolve_pl_options(args) == 0
         assert args.vertical_crs == "KRON86"
         err = capsys.readouterr().err
         assert "Info:" not in err and "Error:" not in err
@@ -5135,6 +6450,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--resolution",
@@ -5150,6 +6475,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--vertical-crs",
@@ -5165,6 +6500,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--target-crs",
@@ -5183,7 +6528,26 @@ class TestCountryDispatch:
 
     def test_cz_sheet_parse_error_returns_1_without_traceback(self, tmp_path, capsys):
         """TM33 pattern with odd km: a CLI error (ParseError), not a traceback."""
-        result = main(["download", "--sheet", "301_5551", "-o", str(tmp_path), "-q"])
+        result = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "301_5551",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
         assert result == 1
         err = capsys.readouterr().err
         assert "Error:" in err
@@ -5196,6 +6560,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
                 "--target-crs",
@@ -5215,6 +6589,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox=-447000,-1114000,-446000,-1113000",
                 "--bbox-crs",
                 "EPSG:5514",
@@ -5231,7 +6615,25 @@ class TestCountryDispatch:
 
     def test_laz_with_country_cz_rejected(self, tmp_path, capsys):
         result = main(
-            ["download", "--sheet", "302_5550", "--product", "laz", "-o", str(tmp_path)]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "302_5550",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 1
         assert "etapie 2" in capsys.readouterr().err
@@ -5240,6 +6642,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox=-447000,-1114000,-446000,-1113000",
                 "--bbox-crs",
                 "EPSG:5514",
@@ -5259,6 +6671,14 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
                 "--bbox=-447000,-1114000,-446000,-1113000",
                 "--bbox-crs",
                 "EPSG:5514",
@@ -5282,6 +6702,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox=-447000,-1114000,-446000,-1113000",
                 "--bbox-crs",
                 "EPSG:5514",
@@ -5310,6 +6740,16 @@ class TestCountryDispatch:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(shp),
                     "--country",
@@ -5338,6 +6778,16 @@ class TestCountryDispatch:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(shp),
                     "--country",
@@ -5371,6 +6821,16 @@ class TestCountryDispatch:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(shp),
                     "--country",
@@ -5393,6 +6853,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp),
                 "--country",
@@ -5415,6 +6885,16 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(tmp_path / "missing.shp"),
                 "--country",
@@ -5439,6 +6919,18 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "630000,480000,637000,487000",
                 "-o",
@@ -5476,6 +6968,18 @@ class TestCountryDispatch:
             rc = main(
                 [
                     "download",
+                    "--system",
+                    "1992",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(shp),
                     "--country",
@@ -5509,6 +7013,18 @@ class TestAutoSplitBBox:
     # contain this rectangle: CZ up to 18.86E/51.06N, PL from 14.07E/49.0N)
     _BORDER = [
         "download",
+        "--system",
+        "1992",
+        "--product",
+        "nmt",
+        "-o",
+        "./data",
+        "--country",
+        "auto",
+        "--resolution",
+        "pl=1m,cz=2m",
+        "--vertical-crs",
+        "pl=EVRF2007,cz=Bpv",
         "--bbox",
         "18.4,49.55,18.8,49.75",
         "--bbox-crs",
@@ -5518,6 +7034,18 @@ class TestAutoSplitBBox:
     # 21.0-21.2E / 52.0-52.2N — Warsaw, east of the CZ envelope (18.86E)
     _PL_ONLY = [
         "download",
+        "--system",
+        "1992",
+        "--product",
+        "nmt",
+        "-o",
+        "./data",
+        "--country",
+        "auto",
+        "--resolution",
+        "pl=1m,cz=2m",
+        "--vertical-crs",
+        "pl=EVRF2007,cz=Bpv",
         "--bbox",
         "21.0,52.0,21.2,52.2",
         "--bbox-crs",
@@ -5527,6 +7055,16 @@ class TestAutoSplitBBox:
     # 13.3-13.5E / 49.7-49.8N — Plzen, west of the PL envelope (14.07E)
     _CZ_ONLY = [
         "download",
+        "--product",
+        "nmt",
+        "-o",
+        "./data",
+        "--country",
+        "auto",
+        "--resolution",
+        "pl=1m,cz=2m",
+        "--vertical-crs",
+        "pl=EVRF2007,cz=Bpv",
         "--bbox",
         "13.3,49.7,13.5,49.8",
         "--bbox-crs",
@@ -5561,89 +7099,6 @@ class TestAutoSplitBBox:
         assert cz_kwargs["parent_request"] == expected_parent
         assert cz_kwargs["bbox"].crs == "EPSG:5514"
 
-    @staticmethod
-    def _mixed_info(err: str) -> list[str]:
-        return [line for line in err.splitlines() if "Bpv" in line]
-
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_auto_mixed_vertical_crs_info(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        """PL+CZ without --vertical-crs: one Info naming both default CRSs and
-        the remedy; both countries still run."""
-        mock_find.return_value = ["M-34-86-D-d-4-3"]
-        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
-        mock_cz.return_value = 0
-
-        assert main(self._BORDER + ["-o", str(tmp_path)]) == 0
-
-        info = self._mixed_info(capsys.readouterr().err)
-        assert len(info) == 1
-        assert info[0].startswith("Info:")
-        assert "EVRF2007" in info[0] and "--vertical-crs" in info[0]
-        mock_cz.assert_called_once()
-        mock_manager_class.assert_called_once()
-
-    @pytest.mark.parametrize(
-        "extra",
-        [
-            ["--vertical-crs", "EVRF2007"],
-            ["--country", "pl"],
-            ["--vertical-crs", "KRON86"],
-        ],
-    )
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_no_mixed_vertical_crs_info(
-        self, mock_manager_class, mock_find, mock_cz, extra, tmp_path, capsys
-    ):
-        """Explicit EVRF2007 (one CRS for both), explicit country and KRON86
-        (resolves the country to PL) give no such Info."""
-        mock_find.return_value = ["M-34-86-D-d-4-3"]
-        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
-        mock_cz.return_value = 0
-
-        main(self._BORDER + extra + ["-o", str(tmp_path)])
-
-        assert self._mixed_info(capsys.readouterr().err) == []
-
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_only_area_no_mixed_vertical_crs_info(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        mock_find.return_value = ["N-34-139-A-c-1-1"]
-        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
-
-        main(self._PL_ONLY + ["-o", str(tmp_path)])
-
-        assert self._mixed_info(capsys.readouterr().err) == []
-        mock_cz.assert_not_called()
-
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.core.geometry.find_sheets_for_geometry")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_auto_geometry_cross_border_mixed_info(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        shp = tmp_path / "area.shp"
-        shp.touch()
-        mock_find.return_value = ["M-34-86-D-d-4-3"]
-        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
-        mock_cz.return_value = 0
-        border = BBox(18.4, 49.55, 18.8, 49.75, "EPSG:4326")
-
-        with patch(
-            "kartograf.cli.download_cmd._geometry_envelope", return_value=border
-        ):
-            main(["download", "--geometry", str(shp), "-q", "-o", str(tmp_path)])
-
-        assert len(self._mixed_info(capsys.readouterr().err)) == 1
-
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -5667,7 +7122,7 @@ class TestAutoSplitBBox:
     def test_pl_branch_does_not_poison_cz_args(
         self, mock_manager_class, mock_find, mock_cz, tmp_path
     ):
-        """The PL branch works on a COPY of args — the CZ sentinels stay None."""
+        """Each country works on its own COPY of args: the CZ flow gets raw values."""
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
@@ -5676,11 +7131,11 @@ class TestAutoSplitBBox:
         main(self._BORDER + ["-o", str(tmp_path)])
 
         # the mock holds a REFERENCE to the Namespace — had the PL branch (run
-        # after CZ) mutated the same object, the sentinels would be resolved
+        # after CZ) mutated a shared object, the CZ values would be narrowed
         cz_args = mock_cz.call_args.args[0]
-        assert cz_args.resolution is None
-        assert cz_args.vertical_crs is None
-        assert cz_args.system is None
+        assert cz_args.resolution == "pl=1m,cz=2m"
+        assert cz_args.vertical_crs == "pl=EVRF2007,cz=Bpv"
+        assert cz_args.system == "1992"
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -5721,8 +7176,8 @@ class TestAutoSplitBBox:
         result = main(self._CZ_ONLY + ["--resolution", "1m", "-o", str(tmp_path)])
         assert result == 1
         err = capsys.readouterr().err
-        assert "nie istnieje dla CZ" in err
-        assert "uzyj jawnie" not in err
+        assert "CZ nie ma rozdzielczosci 1m" in err
+        assert "uzyj jawnie" not in err and "pl=" not in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     def test_explicit_cz_bbox_gets_parent_request(self, mock_cz, tmp_path):
@@ -5730,6 +7185,16 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox=-447000,-1114000,-446000,-1113000",
                 "--bbox-crs",
                 "EPSG:5514",
@@ -5791,6 +7256,18 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "18.4,49.55,19.5,49.75",
                 "--bbox-crs",
@@ -5816,7 +7293,28 @@ class TestAutoSplitBBox:
         mock_find.return_value = ["M-34-86-D-d-4-3"]
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
         return main(
-            ["download", "--bbox", bbox, "--bbox-crs", crs, "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--bbox",
+                bbox,
+                "--bbox-crs",
+                crs,
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
@@ -5999,9 +7497,21 @@ class TestAutoSplitBBox:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--bbox=-788231,-1052442,-741087,-1013379",
                     "--bbox-crs",
                     "EPSG:5514",
+                    "--system",
+                    "1992",
                     "-o",
                     str(tmp_path),
                     "-q",
@@ -6066,10 +7576,22 @@ class TestAutoSplitBBox:
     # rectangle (from 14.07E): auto also queries GUGiK, which has no data there
     _PRAGUE = [
         "download",
+        "--product",
+        "nmt",
+        "-o",
+        "./data",
+        "--country",
+        "auto",
+        "--resolution",
+        "pl=1m,cz=2m",
+        "--vertical-crs",
+        "pl=EVRF2007,cz=Bpv",
         "--bbox",
         "14.40,50.05,14.45,50.10",
         "--bbox-crs",
         "EPSG:4326",
+        "--system",
+        "1992",
         "-q",
     ]
 
@@ -6134,7 +7656,24 @@ class TestAutoSplitBBox:
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
         result = main(
-            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert result == 0
         kwargs = mock_manager_class.call_args.kwargs
@@ -6184,28 +7723,12 @@ class TestAutoSplitBBox:
         assert "KRON86" in err
 
     def test_border_bbox_with_2m_unresolvable_for_pl(self, tmp_path, capsys):
+        """A plain value inadmissible for one country: the per-country hint."""
         result = main(self._BORDER + ["--resolution", "2m", "-o", str(tmp_path)])
         assert result == 1
-        assert "--country" in capsys.readouterr().err
-
-    @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_auto_with_system_2000_resolves_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        """--system does not apply to CZ: auto = pl, and the sidecar carries PL only."""
-        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "6.179.12.20")
-
-        result = main(self._BORDER + ["--system", "2000", "-o", str(tmp_path)])
-
-        assert result == 0
-        mock_cz.assert_not_called()
-        parent = mock_manager_class.call_args.kwargs["sidecar_extra"]["parent_request"]
-        assert parent["countries"] == ["PL"]
         err = capsys.readouterr().err
-        assert "--country auto -> pl" in err
-        assert "--system" in err
+        assert "PL nie ma rozdzielczosci 2m" in err
+        assert "--resolution pl=...,cz=..." in err
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -6224,12 +7747,24 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "13.5,50.0,14.5,50.4",
                 "--bbox-crs",
                 "EPSG:4326",
                 "--system",
-                "2000",
+                "1992",
+                "--resolution",
+                "1m",
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -6304,7 +7839,10 @@ class TestAutoSplitBBox:
         """Orthophoto for CZ is stage 2: auto resolves the country to PL."""
         self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
 
-        result = main(self._BORDER + ["--product", "orto", "-o", str(tmp_path)])
+        argv = self._BORDER + ["--product", "orto", "-o", str(tmp_path)]
+        at = argv.index("--vertical-crs")  # orthophoto has no vertical CRS
+        del argv[at : at + 2]
+        result = main(argv)
 
         assert result == 0
         mock_cz.assert_not_called()
@@ -6329,6 +7867,18 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "2.0,40.0,2.5,40.5",
                 "--bbox-crs",
@@ -6348,6 +7898,18 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "18.4,49.55,18.8,49.75",
                 "--bbox-crs",
@@ -6376,6 +7938,16 @@ class TestAutoSplitBBox:
             result = main(
                 [
                     "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--sheet",
                     "M-34-86-D-d-4-3",
                     "--product",
@@ -6403,6 +7975,16 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "419000,230000,426000,237000",
                 "--country",
@@ -6431,6 +8013,18 @@ class TestAutoSplitBBox:
         result = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "18.60,49.752,18.65,49.768",
                 "--bbox-crs",
@@ -6478,7 +8072,26 @@ class TestAutoSplitGeometry:
         mock_cz.return_value = 0
 
         result = main(
-            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--geometry",
+                str(geometry_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -6515,7 +8128,26 @@ class TestAutoSplitGeometry:
         mock_manager_class.return_value = mock_manager
 
         result = main(
-            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--geometry",
+                str(geometry_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -6548,7 +8180,26 @@ class TestAutoSplitGeometry:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
 
         result = main(
-            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--geometry",
+                str(geometry_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -6575,6 +8226,18 @@ class TestAutoSplitGeometry:
             main(
                 [
                     "download",
+                    "--system",
+                    "1992",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
                     "--geometry",
                     str(geometry_file),
                     "-o",
@@ -6599,6 +8262,16 @@ class TestAutoSplitGeometry:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp),
                 "--country",
@@ -6629,6 +8302,16 @@ class TestAutoSplitGeometry:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp),
                 "--country",
@@ -6664,6 +8347,16 @@ class TestAutoSplitGeometry:
         result = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(shp),
                 "--country",
@@ -6688,7 +8381,26 @@ class TestAutoSplitGeometry:
         mock_overall.return_value = BBox(2.0, 40.0, 2.5, 40.5, "EPSG:4326")
 
         result = main(
-            ["download", "--geometry", str(geometry_file), "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--geometry",
+                str(geometry_file),
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert result == 1
@@ -6756,7 +8468,25 @@ class TestPartialSheetWarning:
             return main([*argv, "-o", str(tmp_path)])
 
     def test_single_sheet_partial_sheet_warns(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ("-1",), ["download", "--sheet", "N-34-130-D-d-2-1"])
+        rc = self._run(
+            tmp_path,
+            ("-1",),
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-1",
+            ],
+        )
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -6766,7 +8496,25 @@ class TestPartialSheetWarning:
         assert meta["extra"]["source"]["full_sheet"] is False
 
     def test_single_sheet_full_sheet_is_silent(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ("-9",), ["download", "--sheet", "N-34-130-D-d-2-1"])
+        rc = self._run(
+            tmp_path,
+            ("-9",),
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-1",
+            ],
+        )
 
         assert rc == 0
         assert "niepelna" not in capsys.readouterr().err
@@ -6775,7 +8523,23 @@ class TestPartialSheetWarning:
         rc = self._run(
             tmp_path,
             ("-2", "-4"),
-            ["download", "--bbox", "630000,480000,637000,487000"],
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--system",
+                "1992",
+                "--bbox",
+                "630000,480000,637000,487000",
+            ],
         )
 
         assert rc == 0
@@ -6787,7 +8551,25 @@ class TestPartialSheetWarning:
         assert "N-34-130-D-d-2-1" not in warning
 
     def test_hierarchy_partial_sheet_warns(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ("-3",), ["download", "--sheet", "N-34-130-D-d-2"])
+        rc = self._run(
+            tmp_path,
+            ("-3",),
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+            ],
+        )
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -6807,7 +8589,24 @@ class TestSingleSheetSkipMessage:
             return_value=(provider, storage),
         ):
             return main(
-                ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), *extra]
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "-o",
+                    str(tmp_path),
+                    *extra,
+                ]
             )
 
     def test_second_run_reports_skip(self, tmp_path, capsys):
@@ -6899,7 +8698,23 @@ class TestUnreadableMetadataCache:
         self, tmp_path, capsys, workers, quiet
     ):
         db = self._broken_cache()
-        argv = ["download", "--bbox", "630000,480000,637000,487000"]
+        argv = [
+            "download",
+            "--system",
+            "1992",
+            "--product",
+            "nmt",
+            "-o",
+            "./data",
+            "--country",
+            "auto",
+            "--resolution",
+            "pl=1m,cz=2m",
+            "--vertical-crs",
+            "pl=EVRF2007,cz=Bpv",
+            "--bbox",
+            "630000,480000,637000,487000",
+        ]
         argv += ["--country", "pl", "--workers", workers]
         if quiet:
             argv.append("-q")
@@ -6924,7 +8739,22 @@ class TestUnreadableMetadataCache:
         self._broken_cache()
 
         rc, providers, files = self._run(
-            tmp_path, ["download", "--sheet", "N-34-130-D-d-2-4"]
+            tmp_path,
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+            ],
         )
 
         assert rc == 0
@@ -6939,7 +8769,22 @@ class TestUnreadableMetadataCache:
     def test_warning_once_per_command_not_per_process(self, tmp_path, capsys):
         """Every command reports the broken cache again (dedup reset)."""
         self._broken_cache()
-        argv = ["download", "--sheet", "N-34-130-D-d-2-4", "--force"]
+        argv = [
+            "download",
+            "--product",
+            "nmt",
+            "-o",
+            "./data",
+            "--country",
+            "auto",
+            "--resolution",
+            "pl=1m,cz=2m",
+            "--vertical-crs",
+            "pl=EVRF2007,cz=Bpv",
+            "--sheet",
+            "N-34-130-D-d-2-4",
+            "--force",
+        ]
 
         self._run(tmp_path, argv)
         self._run(tmp_path, argv)
@@ -6967,7 +8812,15 @@ class TestLazSidecarRequestFilters:
             "kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=instance
         ):
             rc = main(
-                ["download", "--sheet", "M-34-27-B-b-2-1", "--product", "laz"]
+                [
+                    "download",
+                    "--sheet",
+                    "M-34-27-B-b-2-1",
+                    "--product",
+                    "laz",
+                    "--vertical-crs",
+                    "EVRF2007",
+                ]
                 + list(extra)
                 + ["-o", str(tmp_path), "-q"]
             )
@@ -7058,17 +8911,74 @@ class TestSheetCrsMismatchWarning:
         ]
 
     def test_single_sheet_warns_with_prefix(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ["download", "--sheet", self.SHEET])
+        rc = self._run(
+            tmp_path,
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                self.SHEET,
+            ],
+        )
 
         assert rc == 0
         (warning,) = self._warnings(capsys.readouterr().err)
         assert self.SHEET in warning and "EPSG:2178" in warning
 
     def test_skip_repeats_warning(self, tmp_path, capsys):
-        assert self._run(tmp_path, ["download", "--sheet", self.SHEET]) == 0
+        assert (
+            self._run(
+                tmp_path,
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    self.SHEET,
+                ],
+            )
+            == 0
+        )
         capsys.readouterr()
 
-        assert self._run(tmp_path, ["download", "--sheet", self.SHEET]) == 0
+        assert (
+            self._run(
+                tmp_path,
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    self.SHEET,
+                ],
+            )
+            == 0
+        )
 
         (warning,) = self._warnings(capsys.readouterr().err)
         assert self.SHEET in warning
@@ -7078,12 +8988,24 @@ class TestSheetCrsMismatchWarning:
             tmp_path,
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "7564000,5530000,7566000,5532000",
                 "--bbox-crs",
                 "EPSG:2178",
                 "--system",
                 "2000",
+                "--scale",
+                "1:2000",
                 "--country",
                 "pl",
             ],
@@ -7102,7 +9024,25 @@ class TestSheetCrsMismatchWarning:
         )
         assert head.count(b"7424800.5") == 1 and head.count(b"5546000.5") == 1
 
-        rc = self._run(tmp_path, ["download", "--sheet", self.SHEET], raw=head)
+        rc = self._run(
+            tmp_path,
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                self.SHEET,
+            ],
+            raw=head,
+        )
 
         assert rc == 0
         assert "innym ukladzie" not in capsys.readouterr().err
@@ -7119,10 +9059,24 @@ _CZ_CAMPAIGN_ERROR = (
     "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza tylko PL"
 )
 # PL/CZ border strip (both rectangular envelopes, ADR-023)
-_BORDER_BBOX = ["--bbox", "18.4,49.55,18.8,49.75", "--bbox-crs", "EPSG:4326"]
+_BORDER_BBOX = [
+    "--bbox",
+    "18.4,49.55,18.8,49.75",
+    "--bbox-crs",
+    "EPSG:4326",
+    "--system",
+    "1992",
+]
 # Ceske Budejovice: _countries_for_bbox == ("CZ",)
 _CZ_ONLY_BBOX = ["--bbox", "14.45,48.95,14.50,49.00", "--bbox-crs", "EPSG:4326"]
-_PL_BBOX_2180 = ["--bbox", "530000,382000,533000,386000", "--country", "pl"]
+_PL_BBOX_2180 = [
+    "--bbox",
+    "530000,382000,533000,386000",
+    "--country",
+    "pl",
+    "--system",
+    "1992",
+]
 
 
 class TestCampaignOptions:
@@ -7171,7 +9125,27 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         opts = ["--all-campaigns", "--min-year", "2024", "-o", str(tmp_path), "-q"]
 
-        assert main(["download", "--sheet", "N-34-130-D-d-2-4", *opts]) == 0
+        assert (
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    *opts,
+                ]
+            )
+            == 0
+        )
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["all_campaigns"] is True
         assert kwargs["min_year"] == 2024
@@ -7179,7 +9153,26 @@ class TestCampaignOptions:
         mock_manager_class.reset_mock()
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "a.asc")
-        assert main(["download", *_PL_BBOX_2180, *opts]) == 0
+        assert (
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    *_PL_BBOX_2180,
+                    *opts,
+                ]
+            )
+            == 0
+        )
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["all_campaigns"] is True
         assert kwargs["min_year"] == 2024
@@ -7191,6 +9184,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--min-year",
@@ -7213,6 +9216,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -7244,7 +9257,24 @@ class TestCampaignOptions:
         self, mock_manager, flags, expected, capsys, tmp_path
     ):
         rc = main(
-            ["download", "--sheet", "N-34-130-D-d-2-4", *flags, "-o", str(tmp_path)]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                *flags,
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -7267,6 +9297,19 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                *(
+                    []
+                    if product == "orto"
+                    else ["--vertical-crs", "pl=EVRF2007,cz=Bpv"]
+                ),
                 *location,
                 "--product",
                 product,
@@ -7303,6 +9346,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 *flags,
@@ -7332,6 +9385,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *_PL_BBOX_2180,
                 "--max-year",
                 "2022",
@@ -7367,7 +9430,25 @@ class TestCampaignOptions:
             total=4,
         )
         rc = main(
-            ["download", *_PL_BBOX_2180, "--year", "2024", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_PL_BBOX_2180,
+                "--year",
+                "2024",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert rc == 1
         lines = capsys.readouterr().err.splitlines()
@@ -7424,7 +9505,27 @@ class TestCampaignOptions:
             location = _PL_BBOX_2180
         mock_manager_class.return_value = manager
 
-        rc = main(["download", *location, "--year", "2025", "-o", str(tmp_path), "-q"])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *location,
+                "--year",
+                "2025",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
         assert rc == 0
         err = capsys.readouterr().err
         assert "Info: dla 1 arkuszy starszy lot z przedzialu" in err
@@ -7461,6 +9562,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -7484,6 +9595,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -7509,6 +9630,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *_PL_BBOX_2180,
                 "--target-crs",
                 "EPSG:2180",
@@ -7536,6 +9667,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *location,
                 "--target-crs",
                 "EPSG:2180",
@@ -7563,6 +9704,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *_BORDER_BBOX,
                 "--target-crs",
                 "EPSG:2180",
@@ -7586,6 +9737,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
                 "--country",
@@ -7606,6 +9767,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
                 "--all-campaigns",
@@ -7622,6 +9793,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "302_5550",
                 "--min-year",
@@ -7637,7 +9818,24 @@ class TestCampaignOptions:
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_cz_sm5_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
-            ["download", "--sheet", "CTES96", "--all-campaigns", "-o", str(tmp_path)]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=5m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "CTES96",
+                "--all-campaigns",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
@@ -7647,7 +9845,26 @@ class TestCampaignOptions:
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_cli_year_cz_sheet_rejected(self, mock_run_cz, sheet, capsys, tmp_path):
         rc = main(
-            ["download", "--sheet", sheet, "--year", "2023", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                sheet,
+                "--year",
+                "2023",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
@@ -7659,7 +9876,20 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
-                *_BORDER_BBOX,
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--bbox",
+                "18.4,49.55,18.8,49.75",
+                "--bbox-crs",
+                "EPSG:4326",
                 "--country",
                 "cz",
                 "--all-campaigns",
@@ -7685,6 +9915,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(gpkg),
                 "--country",
@@ -7704,7 +9944,25 @@ class TestCampaignOptions:
         self, mock_run_cz, capsys, tmp_path
     ):
         mock_run_cz.return_value = 0
-        rc = main(["download", *_CZ_ONLY_BBOX, "--all-campaigns", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_CZ_ONLY_BBOX,
+                "--all-campaigns",
+                "-o",
+                str(tmp_path),
+            ]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err
@@ -7717,7 +9975,24 @@ class TestCampaignOptions:
     ):
         mock_run_cz.return_value = 0
         rc = main(
-            ["download", *_CZ_ONLY_BBOX, "--min-year", "2020", "-o", str(tmp_path)]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_CZ_ONLY_BBOX,
+                "--min-year",
+                "2020",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -7736,7 +10011,24 @@ class TestCampaignOptions:
         mock_cz.return_value = 0
 
         rc = main(
-            ["download", *_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_BORDER_BBOX,
+                "--all-campaigns",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert rc == 0
@@ -7757,7 +10049,25 @@ class TestCampaignOptions:
         mock_cz.return_value = 0
 
         rc = main(
-            ["download", *_BORDER_BBOX, "--year", "2023", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_BORDER_BBOX,
+                "--year",
+                "2023",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert rc == 0
         err = capsys.readouterr().err
@@ -7777,6 +10087,14 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
                 *_BORDER_BBOX,
                 "--product",
                 "orto",
@@ -7805,7 +10123,26 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         assert (
-            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+            == 0
         )
         out = capsys.readouterr().out
         assert f"Skipped N-34-130-D-d-2-4 - already exists at {path}" in out
@@ -7819,7 +10156,26 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
 
         assert (
-            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+            == 0
         )
         out = capsys.readouterr().out
         assert "Downloaded to" in out
@@ -7845,7 +10201,26 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         assert (
-            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "-o",
+                    str(tmp_path),
+                ]
+            )
+            == 0
         )
         out = capsys.readouterr().out
         assert f"Downloaded to {target}" in out
@@ -7861,7 +10236,25 @@ class TestCampaignOptions:
         manager.last_result.copied = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
         mock_manager_class.return_value = manager
 
-        rc = main(["download", *_PL_BBOX_2180, "-o", str(tmp_path), "-q"])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_PL_BBOX_2180,
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -7885,7 +10278,26 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         assert (
-            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
             == 0
         )
         assert "(extra.link=copy)" in capsys.readouterr().err
@@ -7910,7 +10322,25 @@ class TestCampaignOptions:
         }
         mock_manager_class.return_value = manager
 
-        rc = main(["download", *_PL_BBOX_2180, "--all-campaigns", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_PL_BBOX_2180,
+                "--all-campaigns",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert rc == 0
         out = capsys.readouterr().out
@@ -7937,7 +10367,25 @@ class TestCampaignOptions:
         manager.last_result.reused_campaign_files = {g: f[1:] for g, f in files.items()}
         mock_manager_class.return_value = manager
 
-        rc = main(["download", *_PL_BBOX_2180, "--all-campaigns", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_PL_BBOX_2180,
+                "--all-campaigns",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert rc == 0
         assert (
@@ -7954,6 +10402,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *_BORDER_BBOX,
                 "--target-crs",
                 "EPSG:2180",
@@ -7975,6 +10433,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--target-crs",
@@ -7996,6 +10464,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--min-year",
@@ -8021,10 +10499,20 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
-                "N-34-130-D",
+                "7.171.21",
                 "--scale",
-                "1:10000",
+                "1:2000",
                 "--all-campaigns",
                 "--min-year",
                 "2021",
@@ -8057,6 +10545,18 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--system",
+                "1992",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--geometry",
                 str(geometry_file),
                 "--country",
@@ -8091,6 +10591,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--min-year",
@@ -8113,7 +10623,26 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
         mock_cz.return_value = 0
 
-        main(["download", *_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"])
+        main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_BORDER_BBOX,
+                "--all-campaigns",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
 
         captured = capsys.readouterr()
         assert _CAMPAIGN_INFO in captured.err
@@ -8130,7 +10659,25 @@ class TestCampaignOptions:
         )
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+            ]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error:" in err and "format 'X' nieobslugiwany" in err
@@ -8147,8 +10694,10 @@ class TestCampaignOptions:
             force=False,
             quiet=True,
             scale=None,
-            vertical_crs=None,
-            resolution=None,
+            vertical_crs="EVRF2007",
+            resolution="1m",
+            product="nmt",
+            country=None,
             target_crs=None,
             system=None,
         )
@@ -8180,7 +10729,24 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         rc = main(
-            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert rc == 0
@@ -8203,7 +10769,26 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         assert (
-            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+            main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    "--sheet",
+                    "N-34-130-D-d-2-4",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
+            )
             == 0
         )
         assert "skorowidz GUGiK niedostepny" not in capsys.readouterr().err
@@ -8222,7 +10807,25 @@ class TestCampaignOptions:
         manager.last_result.unverified = {g: "HTTP 503" for g in sheets}
         mock_manager_class.return_value = manager
 
-        rc = main(["download", *_PL_BBOX_2180, "-o", str(tmp_path), "-q"])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_PL_BBOX_2180,
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -8240,7 +10843,24 @@ class TestCampaignOptions:
         fake = FakeCampaignProvider(C14)
         sheet = "N-34-139-C-a-3-1"
         out = tmp_path / "out"
-        argv = ["download", "--sheet", sheet, "-o", str(out), "-q"]
+        argv = [
+            "download",
+            "--product",
+            "nmt",
+            "-o",
+            "./data",
+            "--country",
+            "auto",
+            "--resolution",
+            "pl=1m,cz=2m",
+            "--vertical-crs",
+            "pl=EVRF2007,cz=Bpv",
+            "--sheet",
+            sheet,
+            "-o",
+            str(out),
+            "-q",
+        ]
         with patch(
             "kartograf.cli.download_cmd._create_provider_and_storage",
             return_value=(fake, None),
@@ -8283,6 +10903,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--all-campaigns",
@@ -8320,6 +10950,16 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--all-campaigns",
@@ -8351,7 +10991,25 @@ class TestListMessagesUx:
         manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert rc == 0
         out = capsys.readouterr().out
@@ -8367,7 +11025,25 @@ class TestListMessagesUx:
         manager.download_sheet.side_effect = DownloadError("brak")
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert rc == 1
         captured = capsys.readouterr()
@@ -8410,10 +11086,18 @@ class TestListMessagesUx:
 
     _BBOX_ARGS = (
         "download",
+        "--product",
+        "nmt",
+        "--resolution",
+        "1m",
+        "--vertical-crs",
+        "EVRF2007",
         "--bbox",
         "419000,230000,426000,237000",
         "--system",
         "2000",
+        "--scale",
+        "1:5000",
         "--country",
         "pl",
     )
@@ -8548,7 +11232,25 @@ class TestListMessagesUx:
             )
         )
 
-        rc = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert rc == 1
         captured = capsys.readouterr()
@@ -8567,7 +11269,25 @@ class TestErrorWithoutBlankLine:
         manager.download_sheet.side_effect = DownloadError("brak kampanii od 2024")
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "--sheet", "7.125.11.19", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "7.125.11.19",
+                "-o",
+                str(tmp_path),
+            ]
+        )
 
         assert rc == 1
         err = capsys.readouterr().err
@@ -8588,14 +11308,23 @@ class TestErrorWithoutBlankLine:
 class TestSoilgridsHsgNoEarlyMkdir:
     """soilgrids hsg does not leave an empty output directory after an error."""
 
-    def test_missing_geometry_leaves_no_default_dir(
-        self, capsys, tmp_path, monkeypatch
-    ):
+    def test_missing_geometry_leaves_no_output_dir(self, capsys, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
-        result = main(["soilgrids", "hsg", "--geometry", "nieistniejacy.shp"])
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--geometry",
+                "nieistniejacy.shp",
+                "--depth",
+                "0-5cm",
+                "-o",
+                str(tmp_path / "out"),
+            ]
+        )
         assert result == 1
         assert "Error:" in capsys.readouterr().err
-        assert not (tmp_path / "data").exists()
+        assert not (tmp_path / "out").exists()
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_calculation_error_leaves_no_dir(
@@ -8606,7 +11335,18 @@ class TestSoilgridsHsgNoEarlyMkdir:
             "siec"
         )
         out = tmp_path / "out" / "hsg"
-        result = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", "-o", str(out)])
+        result = main(
+            [
+                "soilgrids",
+                "hsg",
+                "--sheet",
+                "N-34-130-D",
+                "-o",
+                str(out),
+                "--depth",
+                "0-5cm",
+            ]
+        )
         assert result == 1
         assert not (tmp_path / "out").exists()
 
@@ -8656,6 +11396,16 @@ class TestLazOnlyOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *_LAZ_ONLY_PATHS[path],
                 "--product",
                 product,
@@ -8694,6 +11444,16 @@ class TestLazOnlyOptions:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -8729,7 +11489,22 @@ class TestFullSheetOption:
             "kartograf.cli.download_cmd._create_provider_and_storage",
             return_value=(fake, None),
         ):
-            return main(["download", *argv])
+            return main(
+                [
+                    "download",
+                    "--product",
+                    "nmt",
+                    "-o",
+                    "./data",
+                    "--country",
+                    "auto",
+                    "--resolution",
+                    "pl=1m,cz=2m",
+                    "--vertical-crs",
+                    "pl=EVRF2007,cz=Bpv",
+                    *argv,
+                ]
+            )
 
     @staticmethod
     def _partial_warning(err: str) -> str:
@@ -8751,6 +11526,16 @@ class TestFullSheetOption:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 self.G,
                 "--product",
@@ -8776,6 +11561,16 @@ class TestFullSheetOption:
         rc = main(
             [
                 "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
                 *location,
                 "--target-crs",
                 "EPSG:2180",
@@ -8793,7 +11588,24 @@ class TestFullSheetOption:
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_cz_only_is_error(self, run_cz, capsys, tmp_path):
         rc = main(
-            ["download", "--sheet", "302_5550", "--full-sheet", "-o", str(tmp_path)]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "302_5550",
+                "--full-sheet",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -8810,7 +11622,24 @@ class TestFullSheetOption:
         manager_cls.return_value = _sheet_list_manager(tmp_path / "x.asc")
         cz.return_value = 0
         rc = main(
-            ["download", *_BORDER_BBOX, "--full-sheet", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--product",
+                "nmt",
+                "-o",
+                "./data",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                *_BORDER_BBOX,
+                "--full-sheet",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert rc == 0
         assert capsys.readouterr().err.count(_CAMPAIGN_INFO) == 1

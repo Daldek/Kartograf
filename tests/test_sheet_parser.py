@@ -1051,7 +1051,7 @@ class TestFindSheetsForBBox:
             "EPSG:4326",
         )
 
-        result = find_sheets_for_bbox(inner_bbox, "1:10000")
+        result = find_sheets_for_bbox(inner_bbox, "1:10000", system="1992")
         assert result == [sheet]
 
     def test_100k_contains_64_sheets(self):
@@ -1070,7 +1070,7 @@ class TestFindSheetsForBBox:
             "EPSG:4326",
         )
 
-        result = find_sheets_for_bbox(inner_bbox, "1:10000")
+        result = find_sheets_for_bbox(inner_bbox, "1:10000", system="1992")
         assert len(result) == 64
         # All should start with N-34-130-D
         assert all(g.startswith("N-34-130-D") for g in result)
@@ -1092,14 +1092,14 @@ class TestFindSheetsForBBox:
             "EPSG:2180",
         )
 
-        result = find_sheets_for_bbox(inner_bbox, "1:10000")
+        result = find_sheets_for_bbox(inner_bbox, "1:10000", system="1992")
         assert sheet in result
 
     def test_bbox_epsg4326(self):
         """Test of a bbox in EPSG:4326 → correct result."""
         # A small bbox in the centre of Krakow (should hit M-34)
         bbox = BBox(19.93, 50.05, 19.95, 50.07, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:10000")
+        result = find_sheets_for_bbox(bbox, "1:10000", system="1992")
         assert len(result) >= 1
         # Should be in the M-34 area
         assert all(g.startswith("M-34") for g in result)
@@ -1109,7 +1109,7 @@ class TestFindSheetsForBBox:
         # A bbox spanning the boundary of belts N and M (52°N)
         # N: 52-56°N, M: 48-52°N
         bbox = BBox(20.0, 51.99, 20.1, 52.01, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:1000000")
+        result = find_sheets_for_bbox(bbox, "1:1000000", system="1992")
         sheets = sorted(result)
         # Should contain both belts: M (48-52) and N (52-56)
         pasy = {g.split("-")[0] for g in sheets}
@@ -1119,7 +1119,7 @@ class TestFindSheetsForBBox:
     def test_target_scale_1m(self):
         """Test of target 1:1M → returns 1:1M sheet codes."""
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:1000000")
+        result = find_sheets_for_bbox(bbox, "1:1000000", system="1992")
         assert len(result) >= 1
         # Check the format - a 1:1M sheet code is X-YY
         for sheet in result:
@@ -1129,7 +1129,7 @@ class TestFindSheetsForBBox:
     def test_target_scale_200k(self):
         """Test of target 1:200k → sheet codes of the N-34-XXX format."""
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:200000")
+        result = find_sheets_for_bbox(bbox, "1:200000", system="1992")
         assert len(result) >= 1
         for sheet in result:
             parser = SheetParser(sheet)
@@ -1139,25 +1139,25 @@ class TestFindSheetsForBBox:
         """Test of a wrong target scale → ValidationError."""
         bbox = BBox(20.0, 52.0, 20.5, 52.5, "EPSG:4326")
         with pytest.raises(ValidationError, match="Nieprawidłowa skala"):
-            find_sheets_for_bbox(bbox, "1:5000")
+            find_sheets_for_bbox(bbox, "1:5000", system="1992")
 
     def test_invalid_crs(self):
         """Test of an unsupported CRS → ValidationError."""
         bbox = BBox(0, 0, 1, 1, "EPSG:3857")
         with pytest.raises(ValidationError, match="Nieobsługiwany CRS"):
-            find_sheets_for_bbox(bbox, "1:10000")
+            find_sheets_for_bbox(bbox, "1:10000", system="1992")
 
     def test_sorted_output(self):
         """Test that the result is sorted."""
         # A bbox covering several sheets
         bbox = BBox(20.0, 52.5, 20.3, 52.7, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:10000")
+        result = find_sheets_for_bbox(bbox, "1:10000", system="1992")
         assert result == sorted(result)
 
     def test_target_scale_500k(self):
         """Test target 1:500k."""
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:500000")
+        result = find_sheets_for_bbox(bbox, "1:500000", system="1992")
         assert len(result) >= 1
         for sheet in result:
             parser = SheetParser(sheet)
@@ -1166,7 +1166,7 @@ class TestFindSheetsForBBox:
     def test_bbox_equal_to_sheet_returns_only_its_children(self):
         """A bbox equal to a 1:100k sheet → only its 4 sheets of 1:50k (A1-7)."""
         bbox = SheetParser("N-34-130-D").get_bbox(crs="EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:50000")
+        result = find_sheets_for_bbox(bbox, "1:50000", system="1992")
         assert result == [
             "N-34-130-D-a",
             "N-34-130-D-b",
@@ -1178,18 +1178,18 @@ class TestFindSheetsForBBox:
         """A bbox equal to a 1:10k sheet → exactly that one sheet (A1-7)."""
         sheet = "N-34-130-D-d-2-4"
         bbox = SheetParser(sheet).get_bbox(crs="EPSG:4326")
-        assert find_sheets_for_bbox(bbox, "1:10000") == [sheet]
+        assert find_sheets_for_bbox(bbox, "1:10000", system="1992") == [sheet]
 
     def test_bbox_equal_to_100k_sheet_on_1m_grid_returns_four(self):
         """A bbox of a sheet touching the edge of 1:1M → 4 descendant sheets."""
         bbox = SheetParser("N-34-1").get_bbox(crs="EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:100000")
+        result = find_sheets_for_bbox(bbox, "1:100000", system="1992")
         assert result == ["N-34-1-A", "N-34-1-B", "N-34-1-C", "N-34-1-D"]
 
     def test_point_bbox_on_grid_line_returns_single_sheet(self):
         """A degenerate bbox at a grid line intersection → exactly 1 sheet."""
         bbox = BBox(21.0, 52.0, 21.0, 52.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox)
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="1992")
         assert len(result) == 1
         sheet_bbox = SheetParser(result[0]).get_bbox(crs="EPSG:4326")
         # The sheet NE of the grid line intersection
@@ -1209,11 +1209,17 @@ class TestFindSheetsForBBox:
             "EPSG:4326",
         )
         # Overlap on each side of the line <= _EDGE_TOL → without normalisation: []
-        assert find_sheets_for_bbox(bbox) == ["N-34-139-C-c-3-3"]
+        assert find_sheets_for_bbox(bbox, target_scale="1:10000", system="1992") == [
+            "N-34-139-C-c-3-3"
+        ]
 
     def test_point_bbox_inside_sheet_returns_single_sheet(self):
         """A degenerate bbox inside a sheet → exactly 1 sheet."""
-        result = find_sheets_for_bbox(BBox(21.1, 52.1, 21.1, 52.1, "EPSG:4326"))
+        result = find_sheets_for_bbox(
+            BBox(21.1, 52.1, 21.1, 52.1, "EPSG:4326"),
+            target_scale="1:10000",
+            system="1992",
+        )
         assert len(result) == 1
 
     def test_find_sheets_for_bbox_rejects_unknown_system(self):
@@ -1248,7 +1254,7 @@ class TestFindSheetsForBBox:
                 bbox.max_y - shrink,
                 "EPSG:4326",
             )
-            result = find_sheets_for_bbox(inner_bbox, scale)
+            result = find_sheets_for_bbox(inner_bbox, scale, system="1992")
             assert sheet in result, f"Expected {sheet} in result for scale {scale}"
 
     def test_top_edge_across_central_meridian_keeps_sheets(self):
@@ -1279,7 +1285,7 @@ class TestFindSheetsForBBox:
             )
             assert inside.any(), sheet
 
-        assert expected <= set(find_sheets_for_bbox(bbox, "1:10000"))
+        assert expected <= set(find_sheets_for_bbox(bbox, "1:10000", system="1992"))
 
 
 # =============================================================================
@@ -1391,7 +1397,7 @@ class TestFindSheetsForBBoxSystem:
     def test_default_system_1992(self):
         """Default system='1992' returns PL-1992 sheets (dash-separated)."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
-        result = find_sheets_for_bbox(bbox, target_scale="1:10000")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="1992")
         assert all("-" in g for g in result)
 
     def test_system_2000(self):
@@ -1404,7 +1410,7 @@ class TestFindSheetsForBBoxSystem:
     def test_backward_compatible(self):
         """Calling without system param gives same result as system='1992'."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
-        result_default = find_sheets_for_bbox(bbox, "1:10000")
+        result_default = find_sheets_for_bbox(bbox, "1:10000", system="1992")
         result_explicit = find_sheets_for_bbox(bbox, "1:10000", system="1992")
         assert result_default == result_explicit
 
@@ -1466,17 +1472,30 @@ class TestSheetParserBBoxViaCoreBBox:
     def test_find_sheets_rejects_inverted_bbox(self):
         """Formerly BBox(10,10,5,5) gave the junk sheet ['L-33-1-D-c-4-3']."""
         with pytest.raises(ValidationError, match="odwrocony"):
-            find_sheets_for_bbox(BBox(10, 10, 5, 5, "EPSG:2180"))
+            find_sheets_for_bbox(
+                BBox(10, 10, 5, 5, "EPSG:2180"), target_scale="1:10000", system="1992"
+            )
 
     @pytest.mark.parametrize("system", ["1992", "2000"])
     def test_find_sheets_rejects_nan_bbox(self, system):
         with pytest.raises(ValidationError, match="skonczone"):
             find_sheets_for_bbox(
-                BBox(float("nan"), 1, 2, 3, "EPSG:2180"), system=system
+                BBox(float("nan"), 1, 2, 3, "EPSG:2180"),
+                system=system,
+                target_scale="1:10000",
             )
 
     def test_find_sheets_point_bbox_still_allowed(self):
-        assert len(find_sheets_for_bbox(BBox(19.5, 50.5, 19.5, 50.5, "EPSG:4326"))) == 1
+        assert (
+            len(
+                find_sheets_for_bbox(
+                    BBox(19.5, 50.5, 19.5, 50.5, "EPSG:4326"),
+                    target_scale="1:10000",
+                    system="1992",
+                )
+            )
+            == 1
+        )
 
 
 class TestNomenclatureRange:
@@ -1541,7 +1560,7 @@ class TestFindSheetsOutsideRange:
         from kartograf.core.bbox import BBox
 
         sheets = find_sheets_for_bbox(
-            BBox(11.9, 50.4, 12.2, 50.6, "EPSG:4326"), "1:100000"
+            BBox(11.9, 50.4, 12.2, 50.6, "EPSG:4326"), "1:100000", system="1992"
         )
         assert sheets
         assert all(s.startswith("M-33-") for s in sheets)
@@ -1551,7 +1570,7 @@ class TestFindSheetsOutsideRange:
         from kartograf.core.bbox import BBox
 
         sheets = find_sheets_for_bbox(
-            BBox(15.0, 47.9, 15.2, 48.1, "EPSG:4326"), "1:100000"
+            BBox(15.0, 47.9, 15.2, 48.1, "EPSG:4326"), "1:100000", system="1992"
         )
         assert sheets
         assert all(s.startswith("M-33-") for s in sheets)
@@ -1560,4 +1579,4 @@ class TestFindSheetsOutsideRange:
         from kartograf.core.bbox import BBox
 
         bbox = BBox(5.0, 45.0, 5.5, 45.5, "EPSG:4326")
-        assert find_sheets_for_bbox(bbox, "1:100000") == []
+        assert find_sheets_for_bbox(bbox, "1:100000", system="1992") == []
