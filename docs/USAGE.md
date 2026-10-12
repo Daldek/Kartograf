@@ -268,6 +268,13 @@ kartograf landcover download --source soilgrids --bbox 626000,480000,628000,4820
 # dla tego samego obszaru to osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
 
+# Tylko wybrane warstwy BDOT10k (GPKG) + oryginalny ZIP, bbox w WGS84,
+# 4 powiaty równolegle, bez linii statusu (Info:/Warning:/Error: zostają)
+kartograf landcover download --source bdot10k --bbox 16.70,50.45,16.80,50.55 \
+    --bbox-crs EPSG:4326 --layers SWRS,PTWP --keep-raw --workers 4 -q -o ./data
+#   -> landcover/pl_bdot10k_gpkg_ptwp-swrs/teryt/<T>.gpkg
+#      i landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip
+
 # Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
 kartograf soilgrids hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
 #   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
@@ -288,7 +295,7 @@ kartograf cache path
 BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`, `--geometry`). BDOT10k
 z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
 z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
-w `TERYT entries`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
+w `Wpisy TERYT`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
 się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
 credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
@@ -377,6 +384,43 @@ z podpowiedzianą skalą.
 
 ## 2. Biblioteka Python
 
+Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
+(nazwy parametrów = nazwy flag w `snake_case`) i tym samym wynikiem
+(ADR-037): `kartograf download` = `download_data`/`check_data`,
+`landcover download` = `LandCoverManager.download`/`.check`,
+`soilgrids hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`. Błąd wejścia
+to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
+(CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
+`on_notice`.
+
+```python
+from kartograf import BBox, check_data, download_data
+
+# = kartograf download --product nmt --bbox 18.60,49.73,18.66,49.76
+#   --bbox-crs EPSG:4326 --country auto --resolution pl=1m,cz=2m
+#   --vertical-crs pl=EVRF2007,cz=Bpv --target-crs EPSG:3045 -o ./data
+selection = dict(
+    product="nmt",
+    output_dir="./data",
+    bbox=BBox(18.60, 49.73, 18.66, 49.76, "EPSG:4326"),
+    country="auto",
+    resolution={"pl": "1m", "cz": "2m"},     # jedna wartość: resolution="1m"
+    vertical_crs={"pl": "EVRF2007", "cz": "Bpv"},
+    target_crs="EPSG:3045",
+)
+report = download_data(**selection, on_notice=lambda n: print(n.level, n.text))
+for item in report.files:                    # UnitFile(unit, country, file)
+    print(item.country, item.unit, item.file.path, item.file.status)
+for failure in report.failed:                # UnitFailure(unit, country, error, kind)
+    print(failure.country, failure.error)
+print(report.ok)  # kod wyjścia CLI: True = 0 (także częściowy sukces auto)
+
+plan = check_data(**selection)               # = --check-updates, bez pobierania
+report = download_data(**selection, update="upgrade", plan=plan)  # = --upgrade --plan
+```
+
+Niższy poziom (tory) — te same pliki i sidecary co `download_data`:
+
 ```python
 from pathlib import Path
 from kartograf import SheetParser, DownloadManager, BBox, GugikProvider
@@ -394,7 +438,7 @@ manager = DownloadManager("./data", provider)
 result = manager.download_sheet("N-34-130-D-d-2-4")
 path = result.files["N-34-130-D-d-2-4"][0].version_path
 # NMT 5 m tylko w EVRF2007: GugikProvider(resolution="5m", vertical_crs="KRON86")
-# -> ValueError (create_nmt_provider: ValidationError)
+# -> ValidationError
 
 # Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF):
 # provider.download_bbox(bbox, path) — jednopasmowy float32 GeoTIFF na
@@ -499,10 +543,17 @@ sm5 = download_cz_sheet(
 )
 ```
 
-**Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
-skorowidz GUGiK przy KAŻDYM `download_sheet`, także dla arkusza już
-pobranego. Przekaż cache providerowi, a zapytania o arkusz ograniczą się do
-raz na TTL cache (7 dni):
+**Cache metadanych w bibliotece.** Funkcje poziomu komendy i torów
+(`download_data`, `check_data`, `download_pl_cutout`, `download_cz_*`,
+`download_laz_area`, `LandCoverManager`, `HSGCalculator`) przyjmują
+`cache: MetadataCache | bool = True`: domyślnie ten sam plik co CLI
+(`<cwd>/.kartograf_cache.db`, TTL 7 dni), `False` = bez cache, własny
+`MetadataCache` = ten. `update="force"` pomija odczyty z cache w tym
+wywołaniu (jak `--force`). Katalog tylko do odczytu: cache wyłączony
+z `Notice` `cache_disabled`, pobieranie idzie dalej. Provider tworzony
+ręcznie (niżej) bez `MetadataCache` pyta skorowidz GUGiK przy KAŻDYM
+`download_sheet`; przekaż mu cache, a zapytania o arkusz ograniczą się do
+raz na TTL:
 
 ```python
 from kartograf import DownloadManager, MetadataCache

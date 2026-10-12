@@ -52,12 +52,13 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
 | [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7) i [ADR-036](#adr-036-magazyn-wersjonowany) (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
-| [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow |
+| [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (jezyk tekstow dla uzytkownika, Z5); czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow |
 | [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (pkt 2: D14, pkt 4: D13; errata 3); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia ADR-029 i ADR-030 |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta — czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (F-U5: `kampanie/`; errata 1); uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, realizacja w planie 2/3) |
-| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta; czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5) i [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8, plan 2/3); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG, D29-D33) |
+| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5) i [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8, plan 2/3); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG, D29-D33) |
+| [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta; uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 
 ---
 
@@ -2005,7 +2006,7 @@ tresc = `unchanged`, inna = nowa wersja). Regula wyboru rekordu i klucz
 ## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
 
 **Data:** 2026-10-08 (decyzja uzytkownika)
-**Status:** Przyjeta; czesciowo zastepuje ADR-028 (nazwy kluczy `extra.source`) i ADR-030 (nazwy kluczy `extra.campaign`); uzupelnia ADR-022 (konwencja nazw kluczy sidecara `kartograf-meta/1`); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow (pkt 2-3 nieaktualne)
+**Status:** Przyjeta — uzupelniona przez ADR-037 (jezyk tekstow dla uzytkownika, Z5); czesciowo zastepuje ADR-028 (nazwy kluczy `extra.source`) i ADR-030 (nazwy kluczy `extra.campaign`); uzupelnia ADR-022 (konwencja nazw kluczy sidecara `kartograf-meta/1`); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow (pkt 2-3 nieaktualne)
 
 **Kontekst:** Sidecar `<plik>.meta.json` (`kartograf-meta/1`, ADR-022) jest
 kontraktem dla konsumentow (Hydrograf), a jego klucze powstawaly
@@ -2494,7 +2495,7 @@ pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane (D10).
 ## ADR-036: Magazyn wersjonowany
 
 **Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizje 2026-10-12, D26-D28 i D29-D33)
-**Status:** Przyjeta; czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
+**Status:** Przyjeta — uzupelniona przez ADR-037 (arkusz CZ w publicznym API; errata 1); czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
 
 **Kontekst:** Do 0.7.x magazyn mogl po cichu nadpisac dane: `--force`
 nadpisywal plik kampanii, `newest` automatycznie przestawial sciezke na
@@ -2611,6 +2612,90 @@ Decyzje rewizji 2026-10-12 (plan 3/3, weryfikacja
   sprawdzone na zywo (2026-10-12). HSG o tej samej tresci z innych wejsc
   zostaje wersja z pierwszymi wejsciami w `source_files` (wersje sa
   niezmienne), wiec takie wejscia licza HSG przy kazdym uruchomieniu.
+
+**Errata 1 (2026-10-12, ADR-037, decyzja 9 planu 2/3):** arkusz CZ
+(TM33/SM5) ma publiczne API: `download_cz_sheet`/`check_cz_sheet`
+(`kartograf/download/cz_sheets.py`, wynik `CzSheetResult`, eksport
+w `kartograf/__init__.py`); wczesniejsze "bez publicznego API arkusza CZ"
+nie obowiazuje. Tory sa wywolywane przez `download_data`/`check_data`
+(spojnosc CLI i API, ADR-037).
+
+---
+
+## ADR-037: Spojnosc CLI i API
+
+**Data:** 2026-10-12 (spec `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md`, plan `docs/superpowers/plans/2026-10-12-cli-api-consistency.md`)
+**Status:** Przyjeta; uzupelnia ADR-036 (arkusz CZ w publicznym API; errata 1 ADR-036) i ADR-031 (jezyk tekstow dla uzytkownika)
+
+**Kontekst:** Audyt 2026-10-12 pokazal, ze to samo zadanie z CLI
+i z biblioteki dawalo rozne wyniki: logika danych tylko w CLI (`--country
+auto`, walidacja `--system`/`--scale`, `parent_request`, `--geometry`
+i `--bbox-crs` poza arkuszami PL, arkusz CZ, BDOT10k z wielu powiatow),
+cztery ksztalty wyniku i planu, inny cache metadanych (CLI w cwd,
+biblioteka bez), `ValueError` obok `ValidationError` i mieszany jezyk
+komunikatow. Hydrograf korzysta z biblioteki, wiec wynik nie mogl zalezec
+od sposobu uruchomienia.
+
+**Opcje:**
+- A) Biblioteka jako jedyne miejsce decyzji o danych; CLI tylko tlumaczy
+  flagi i wypisuje wynik; testy zgodnosci CLI = API.
+- B) Zostawic logike w CLI i dopisac jej odpowiedniki w bibliotece (dwa
+  zrodla prawdy, rozjazd wraca przy kazdej zmianie).
+- C) Biblioteka wola CLI (`main([...])`) - wynik tylko jako tekst.
+
+**Decyzja:** A. Zasady (spec 3):
+- Z1. CLI tylko tlumaczy: w `kartograf/cli/` nie wolno walidowac wartosci
+  danych, wybierac krajow, arkuszy, skali, kampanii ani powiatow, budowac
+  `parent_request` ani czytac sidecarow w celu decyzji. Wolno parsowac
+  tekst flag, czytac/zapisywac plik planu, formatowac wynik, wyliczac kod
+  wyjscia z pol wyniku i rysowac postep (`tests/test_cli_translation.py`
+  `test_cli_imports_no_data_logic`).
+- Z2. Para `download`/`check`: kazda publiczna funkcja pobierajaca ma
+  blizniaka `check_*` z tymi samymi argumentami (bez `update`, `plan`,
+  `workers`, `on_progress`); kazda pobierajaca przyjmuje `update=`
+  i `plan=`.
+- Z3. Komunikaty o danych powstaja w bibliotece jako
+  `Notice(level, code, text)` w polu `notices` wyniku i przez
+  `on_notice`; CLI wypisuje `Info:`/`Warning:` na stderr (takze z `-q`).
+- Z4. Bledne wejscie = `ValidationError` (`ParseError` dla godel),
+  zrodlo = `DownloadError`, cache = `CacheError`; bledy programu zostaja
+  wbudowane; `ValidationError` nie dziedziczy z `ValueError`.
+- Z5. Pomoc, komunikaty CLI i teksty wyjatkow `KartografError` po polsku,
+  wylacznie ASCII; `metavar` po polsku (`GODLO`, `KATALOG`, `PLIK`,
+  `ROK`, `NAZWA`, `KOD`, `SKALA`).
+- Z6. Wspolny cache metadanych: `cache: MetadataCache | bool = True`
+  (`True` = `<cwd>/.kartograf_cache.db`, `False` = bez); `update="force"`
+  bez odczytow z cache w tym wywolaniu.
+- Z7. Testy zgodnosci (`tests/test_parity.py`,
+  `tests/test_parity_landcover.py`): ten sam magazyn bajtowo (pliki,
+  sidecary, wersje), statusy, plan, `notices`, typ i tekst bledu, przy
+  zamrozonym zegarze (`kartograf/_clock.py`).
+
+Decyzje S1-S6 (spec 7): S1 `download_data`/`check_data` (nazwa `download`
+koliduje z podpakietem); S2 kroki wewnetrzne (`prepare_pl_cutout`,
+`run_*`, `check_laz_updates`, `check_updates`, `upgrade`) poza API;
+S3 `LandCoverManager.download` zawsze `LandCoverAreaResult`
+(`download_all_counties`/`download_by_*`/`download_batch` usuniete);
+S4 HSG `calculate_hsg`/`check_hsg` z `sheet`/`bbox`/`geometry`, bez
+`stat`; S5 `cache: MetadataCache | bool`; S6 teksty wyjatkow po polsku
+ASCII (trafiaja do CLI 1:1).
+
+**Konsekwencje:** Wersja 0.8.0 lamie API (CHANGELOG [0.8.0] "Co
+zrobic"): `DownloadResult` z wartosci zwracanej zamiast `last_result`,
+`check_sheets`/`download_sheets(plan=)`, `workers`, nowe sygnatury
+`check_*`, `LandCoverAreaResult`, HSG bez `stat`, teksty komunikatow.
+Nowa komenda biblioteki `kartograf.download.data`: `download_data`/
+`check_data` -> `DataReport(files, failed, stale, superseded, notices,
+ok)`; `ok` jest regula kodu wyjscia CLI (czesciowy sukces `auto` = `ok`
+z `Notice`). Nowe flagi R7: `landcover download --layers --keep-raw
+--bbox-crs --workers --quiet`, `soilgrids hsg --bbox-crs --quiet`.
+Testy zgodnosci wykryly i usunely dwie rozbieznosci: bbox w sidecarze
+z liczb calkowitych (biblioteka) vs zmiennoprzecinkowych (CLI) - teraz
+zawsze `float` (`core.bbox.bbox_coords`); kolejnosc wyniku arkuszy
+rownoleglych zalezna od watkow - teraz kolejnosc zlecenia. Ryzyko Z6:
+proces biblioteki z cwd tylko do odczytu dostaje cache wylaczony
+z `Notice`. Zmiana CLI bez odpowiednika w bibliotece jest bledem (test
+importow CLI i testy zgodnosci).
 
 ---
 

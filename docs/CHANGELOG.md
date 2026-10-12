@@ -18,10 +18,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `upgrade(manager, plan)` -> `manager.download_sheets(sheets, update="upgrade",
   plan=plan)`. Usunieto `last_result`, `last_sheet`, `UpgradeReport` oraz
   eksport `SheetFetch`; `max_workers=` menedzera -> `workers=`, dodano
-  `year=` i `on_notice=`. Co zrobic (takze w Hydrografie): korzystaj z
-  wartosci zwroconej, aktualizuj wywolania metod i odczyty plikow z
-  `result.files`, a komunikaty wypisuj z `on_notice` bez ponownego
-  przetwarzania `result.notices`.
+  `year=` i `on_notice=`. Co zrobic (takze w Hydrografie,
+  `scripts/download_dem.py`): korzystaj z wartosci zwroconej, aktualizuj
+  wywolania metod i odczyty plikow z `result.files`, a komunikaty wypisuj
+  z `on_notice` bez ponownego przetwarzania `result.notices`.
+- Cache metadanych (Z6, ADR-037): funkcje publiczne (`download_data`,
+  `check_data`, tory `download_*`/`check_*`, `LandCoverManager`,
+  `HSGCalculator`) przyjmuja `cache: MetadataCache | bool = True` -
+  domyslnie ten sam plik co CLI (`<cwd>/.kartograf_cache.db`), dotad
+  biblioteka pracowala bez cache. `update="force"` pomija odczyty z cache
+  (jak `--force`). Co zrobic: proces w katalogu bez prawa zapisu albo
+  testy bez stanu - `cache=False`; wlasny plik - `cache=MetadataCache(...)`.
 - Wycinek PL: `download_pl_cutout(bbox, *, target_crs, ...)` i
   `check_pl_cutout(bbox, *, target_crs, ...)` przyjmuja te same argumenty
   wyboru (`target_crs` tylko jako nazwany), `download_pl_cutout` dostaje
@@ -401,6 +408,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Biblioteka (ADR-037): `download_data`/`check_data` = komenda
+  `kartograf download` (wynik `DataReport`, `UnitFile`, `UnitFailure`),
+  `download_cz_sheet`/`check_cz_sheet`, `check_laz_area`,
+  `get_overall_bbox`, `transform_bbox`, `parent_request_for` w API;
+  testy zgodnosci CLI = API (`tests/test_parity.py`,
+  `tests/test_parity_landcover.py`). CLI: flagi `landcover download
+  --layers --keep-raw --bbox-crs --workers --quiet` i `soilgrids hsg
+  --bbox-crs --quiet` (szczegoly w BREAKING wyzej).
 - Biblioteka: `Notice(level, code, text)` w publicznym API oraz
   `kartograf.notices.NoticeSink` (zbieranie komunikatow i przekazanie do
   callbacku); tekst komunikatow ograniczony do ASCII, kody sa stale.
