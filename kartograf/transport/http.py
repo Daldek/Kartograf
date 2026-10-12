@@ -152,13 +152,16 @@ def get_with_retry(
     retries: int = MAX_RETRIES,
     description: str = "",
     params: dict[str, str] | None = None,
+    headers: dict[str, str] | None = None,
 ) -> requests.Response:
     """Fetch an HTTP response; every failed attempt keeps the same URL.
 
-    ``params`` (optional) go to ``session.get`` unchanged - every
-    attempt sends the same set of query parameters.
+    ``params`` and ``headers`` (optional) go to ``session.get`` unchanged -
+    every attempt sends the same query parameters and headers.
     """
-    extra = {"params": params} if params is not None else {}
+    extra: dict = {"params": params} if params is not None else {}
+    if headers is not None:
+        extra["headers"] = headers
     context = description or url
     last_error: requests.RequestException | None = None
     for attempt in range(retries):

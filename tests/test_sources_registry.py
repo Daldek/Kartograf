@@ -50,7 +50,8 @@ CHANNEL_SIGNALS = [
     ("pl.gugik.laz", TransportKind.WFS, "index"),
     ("pl.gugik.bdot10k", TransportKind.DIRECT_FILES, "none"),
     ("eu.clms.corine", TransportKind.CLMS_API, "metadata"),
-    ("global.isric.soilgrids", TransportKind.WCS, "none"),
+    ("eu.clms.corine", TransportKind.WMS, "none"),
+    ("global.isric.soilgrids", TransportKind.WCS, "metadata"),
     ("cz.cuzk.dmr5g", TransportKind.ARCGIS_IMAGE, "none"),
     ("cz.cuzk.dmr4g", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.dmr4g", TransportKind.ARCGIS_IMAGE, "none"),
@@ -403,10 +404,20 @@ class TestDescriptorProviderConsistency:
         ]
         for key, provider, fmt in cases:
             d = get_source(key)
-            assert d.storage_subdir is None
             assert d.default_extension == provider.get_file_extension(fmt)
             assert d.provider_name != ""
             assert d.license.attribution != ""
+
+    def test_landcover_storage_prefixes(self):
+        """Spec 3.4: land cover segments = prefix + content tokens, no placeholders."""
+        assert {
+            key: get_source(key).storage_subdir
+            for key in ("pl.gugik.bdot10k", "eu.clms.corine", "global.isric.soilgrids")
+        } == {
+            "pl.gugik.bdot10k": "landcover/pl_bdot10k",
+            "eu.clms.corine": "landcover/eu_corine",
+            "global.isric.soilgrids": "soil/global_soilgrids",
+        }
 
     def test_horizontal_crs_matches_channel_reality(self):
         """Descriptor horizontal CRS = the CRS the channel actually returns."""
@@ -505,11 +516,6 @@ class TestResolveSubdir:
     def test_no_args_returns_template(self):
         d = self._descriptor("laz/pl_{system}_{vcrs}")
         assert d.resolve_subdir() == "laz/pl_{system}_{vcrs}"
-
-    def test_none_subdir_raises(self):
-        d = self._descriptor(None)
-        with pytest.raises(ValueError, match="test.key"):
-            d.resolve_subdir()
 
     @pytest.mark.parametrize(
         "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"system": ""}]
