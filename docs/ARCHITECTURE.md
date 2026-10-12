@@ -392,7 +392,7 @@ Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
 pliki: dane i `<plik>.meta.json` (zapis best-effort, wyjatki — sekcja 1).
 Od 0.7.1 takze `download_cz_cutout`/`run_cz_cutout` (wycinek CZ)
 i `hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
-(np. `CuzkDmrProvider.download`); sidecar godla CZ pisze CLI.
+(np. `CuzkDmrProvider.download`); sidecar godla CZ pisze `download/cz_sheets.py`.
 
 | Pole | Znaczenie |
 |---|---|
@@ -405,9 +405,9 @@ i `hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ z tagu GeoTIFF (`download/cz_cutout.py::read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
 | `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla kampanii PL `campaigns` (rozwiazane `newest`/`all`, zawsze), `min_year`/`max_year` (gdy podane) i `year` (gdy granice rowne); LAZ: `year`/`min_year`/`max_year`/`min_density` gdy podane, `campaigns` tylko dla `all`; land cover: parametry tresci z domyslnymi wartosciami — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8). `request` opisuje pierwotne POBRANIE pliku, nie ostatnie wykorzystanie; `extra.parent_request(s)` nie niesie flag roku (3.4) |
 | `license` | `{id, attribution, url}` z deskryptora |
-| `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, sekundy) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
+| `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, od 0.8.0 z mikrosekundami — porzadek dwoch pobran w jednej sekundzie) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
-| `extra` | `parent_request` (obszar; zadanie, ktore utworzylo plik — `parent_requests` usuniete w 0.8.0); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign`, `version` (`label`, `label_source`; ADR-036), `coverage` (lot niepelny, przy zapisie wersji) oraz pola rocznikow/lotow opisane nizej; SM5 `mapname`/`cz_share`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
+| `extra` | `parent_request` (obszar; zadanie, ktore utworzylo plik — `parent_requests` usuniete w 0.8.0); LAZ `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign`, `version` (`label`, `label_source`; ADR-036), `coverage` (lot niepelny, przy zapisie wersji) oraz pola rocznikow/lotow opisane nizej; LAZ, arkusze i wycinki CZ, wycinek PL: `version` (ADR-036, plan 2/3); SM5 `mapname`/`cz_share`, `http` (`etag`, `last_modified`, `content_length` odpowiedzi `openzu`; sygnal swiezosci) i `all_nodata`; wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
 | `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) z GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Wersja w magazynie (ADR-036) podaje skrot z jedynego odczytu przy zapisie (`build_metadata(digest=)`, D20) — to tozsamosc wersji (`_<sha8>` w nazwie katalogu). Sidecar sciezki standardowej (kopia sidecara wersji) niesie skrot wersji |
 | `schema` | stale `kartograf-meta/1` |
 
@@ -521,18 +521,20 @@ data/
 │   ├── pl_1992_1m_evrf2007/versions/.incoming/<host>_<pid>_<token>/   # zapis w toku (sprzatany po 24 h)
 │   ├── pl_1992_1m_kron86/...
 │   ├── pl_1992_5m_evrf2007/...              # 5m tylko EVRF2007 (regula istniejaca)
-│   ├── pl_1992_1m_evrf2007/bbox/<coords>_<YYYYMMDD>.tif # wycinek PL WCS (4.3)
+│   ├── pl_1992_1m_evrf2007/bbox/<coords>.tif         # DOWIAZANIE: wycinek PL WCS (4.3)
+│   ├── pl_1992_1m_evrf2007/versions/bbox/2026-10-12_<sha8>/<coords>.tif   # wersja wycinka
 │   ├── pl_2000_1m_evrf2007/6/179/12/20/6.179.12.20.asc
-│   ├── cz_dmr5g_bpv/302/5550/302_5550.tif
-│   ├── cz_dmr5g_bpv/bbox/<coords>.tif       # wycinki bbox CZ
+│   ├── cz_dmr5g_bpv/302/5550/302_5550.tif   # DOWIAZANIE (wersja w versions/302/5550/)
+│   ├── cz_dmr5g_bpv/bbox/<coords>.tif       # DOWIAZANIE: wycinki bbox CZ (wersje w versions/bbox/)
 │   ├── cz_dmr5g_evrf2007/...
-│   └── cz_dmr4g_bpv/CTES/96/CTES96.tif
+│   └── cz_dmr4g_bpv/CTES/96/CTES96.tif      # DOWIAZANIE; sidecar wersji z extra.http (ETag)
 ├── nmpt/
 │   ├── pl_1992_1m_evrf2007/...              # (+ _kron86, + pl_2000_...)
-│   └── pl_1992_1m_evrf2007/bbox/<coords>_<YYYYMMDD>.tif # wycinek NMPT WCS
+│   └── pl_1992_1m_evrf2007/bbox/<coords>.tif # DOWIAZANIE: wycinek NMPT WCS
 ├── orto/pl_1992/...                         # bez ukladu pionowego
 ├── orto/pl_1992_cir/...                     # wariant CIR (B/W: pl_<uklad>_bw), E12
-├── laz/pl_2000_evrf2007/...                 # poziomy per kafel (uklad_xy), pionowy z flagi
+├── laz/pl_2000_evrf2007/<hier>/<plik>.laz   # DOWIAZANIE; uklad poziomy per kafel (uklad_xy), pionowy z flagi
+├── laz/pl_2000_evrf2007/versions/<hier>/<data>_<zgloszenie>_<sha8>/<plik>.laz   # wersja (D26)
 └── landcover/...                            # wlasny katalog (--output wymagane)
 ```
 
@@ -545,8 +547,9 @@ data/
 2. Hierarchia wewnatrz segmentu jest bez zmian — `parser_registry.path_parts`:
    PL-1992 `N-34-130-D-d-2-4` -> `N-34/130/D/d/2/4`, PL-2000 `6.179.12.20` ->
    `6/179/12/20`, TM33 `302_5550` -> `302/5550`, SM5 `CTES96` -> `CTES/96`.
-3. Podkatalog `bbox/` wewnatrz segmentu trzyma wycinki: PL WCS z
-   `--target-crs` to `<coords>_<YYYYMMDD>.tif`, CZ to `<coords>.tif`.
+3. Podkatalog `bbox/` wewnatrz segmentu trzyma dowiazania wycinkow PL WCS
+   (`--target-crs`) i CZ: `<coords>.tif` bez daty (D15); wersje w
+   `<segment>/versions/bbox/<RRRR-MM-DD>_<sha8>/<coords>.tif`.
    Wspolrzedne sa w ukladzie WYNIKU (po `--target-crs`), formatowane
    `%.10g` i sklejane `_`. Nazwa niesie ZADANIE, nie dokladny zasieg
    rastra: wycinek PL w EPSG:2180 siega do < 1 px dalej po wyrownaniu
@@ -592,8 +595,14 @@ data/
    (`links._same_content_hardlink`). `FileStorage.get_versions_root(sheet)`/`get_versions_base`,
    `list_files()` pomija `versions/`, `full_sheet/` i `kampanie/`
    (`versions=True` = tylko pliki wersji). Katalog `kampanie/` z 0.7.x
-   nie jest czytany (`has_legacy_campaigns()` -> `Info:` w CLI). CZ, LAZ,
-   BDOT10k i land cover nie uzywaja jeszcze `versions/` (plany 2/3, 3/3).
+   nie jest czytany (`has_legacy_campaigns()` -> `Info:` w CLI). Od planu
+   2/3 te sama mechanika maja kafle LAZ (etykieta `<akt_data>_<zgloszenie>`,
+   D26; `FileStorage.get_raw_versions_root/base(sheet, system=)`), arkusze
+   CZ (etykieta = data pobrania UTC) i wycinki `bbox/` (hierarchia `bbox`,
+   `storage.bbox_slot`); wspolna polityka plikow bez kampanii:
+   `download/fetch.py::fetch_version`. Stary zwykly plik 0.7.x w sciezce
+   standardowej (sidecar bez `extra.link`) jest zastepowany dowiazaniem
+   (D24). BDOT10k i land cover nie uzywaja jeszcze `versions/` (plan 3/3).
    Kopiowanie `data/`: `rsync -aH`/`cp -a` (bez zachowania hardlinkow
    powstaje duplikat).
 
@@ -886,16 +895,47 @@ lokalna i sygnalem rekordu; statusy `current`/`newer`/`missing`/
 --plan PLIK`) odrzuca inny magazyn i nieznany schemat przed siecia,
 czyta sygnal ponownie i pobiera wylacznie pozycje `newer`/`missing`
 z niezmienionym sygnalem (`DownloadManager.download_records`); zmieniony
-sygnal = pozycja `stale` (blad, bez pobrania). Plan 1/3 obejmuje arkusze
-PL; `--check-updates`/`--upgrade` z LAZ, CZ, `--target-crs` albo
-`--country` innym niz `pl` dla obszaru = `Error:` (kod 1) przed siecia.
+sygnal = pozycja `stale` (blad, bez pobrania). Typy planu leza w
+`download/plan.py` (`PlanItem.track` = `pl_sheet`/`laz_tile`/`cz_sheet`/
+`pl_cutout`/`cz_cutout`, `unit` = jednostka zadania; `UpdatePlan.merge`,
+`select_planned`, `new_plan`); `updates.upgrade` wykonuje tylko
+`pl_sheet`, pozostale tory dostaja `plan=` w swoich `run_*`.
+
+**Tory bez kampanii (plan 2/3).** LAZ (`download/laz.py`), arkusze CZ
+(`download/cz_sheets.py`), wycinki CZ (`download/cz_cutout.py`) i PL
+(`download/cutout.py`) oraz tor bez kampanii `DownloadManager` korzystaja
+z jednej polityki `download/fetch.py`: `fetch_version(slot, update,
+signal=, fetch=, version=, write_sidecar=, probe=)` — lokalna wersja albo
+pobranie do `.incoming/`, `commit_version(signal=)`, hardlink — oraz
+`inspect_version` (pozycja planu bez pobierania; `check_laz_updates`,
+`check_cz_sheet`, `check_cz_cutout`, `check_pl_cutout`). Sygnal wg
+kanalu (`AccessChannel.update_signal`, `channel_signal`): LAZ `index`
+(kafel z lokalna wersja = `local`, nowszy nalot to nowe pliki, D26),
+SM5 `http` (`probe` = `CuzkDmrProvider.sm5_signal`, `HEAD` pliku
+`openzu`; rowne `ETag` = lokalna, rozne = `newer` domyslnie, pobranie
+przy `upgrade`; nieudane `HEAD` = `unverified="check_failed: ..."`
+domyslnie, blad przy `upgrade`), TM33 i wycinki `none` (lokalna,
+`unverified="none"`). Wynik: `VersionedFile(path, status, label, sha256,
+version_path, newer, unverified)`; `LazDownloadResult.files`,
+`CzSheetResult`/`CzCutoutResult`/`PlCutoutResult.file` (`None` tylko
+z `plan=`, gdy plan nie wykonuje pliku i nie ma wersji lokalnej) i
+`stale`. Pola wyniku lokalnej wersji (`all_nodata`, `masked_pixels`,
+`zero_pixels`) pochodza z sidecara wersji, bez odczytu rastra.
+
 CLI drukuje jedna linie na plik: `<godlo>: nowa wersja <etykieta>_<sha8>`,
 `nowa etykieta <etykieta> (ta sama tresc)`, `bez zmian <etykieta>`,
 `lokalna wersja <etykieta>`, a po liscie (bez `-q`) `Nowe: N, nowa
-etykieta: N, bez zmian: N, lokalne: N, bledy: N (<dir>)`; raport
-`--check-updates` to jedna linia na pozycje (`aktualne`, `nowsza: ...`,
-`do pobrania`, `nie udalo sie sprawdzic: ...`), kod 1 przy pozycji
-niesprawdzonej. Katalog `kampanie/` z 0.7.x: jednorazowe `Info:`.
+etykieta: N, bez zmian: N, lokalne: N, bledy: N (<dir>)` (arkusze PL
+i kafle LAZ; jednostka LAZ = nazwa pliku, wycinka = sciezka pod
+`--output`). Plik bez taniego sygnalu: domyslnie dopisek `(bez
+sprawdzania; --check-updates)`, przy `--upgrade` `Info:` o `--force`;
+nieudane sprawdzenie sygnalu: `Warning:`. Raport `--check-updates` to
+jedna linia na pozycje (`aktualne`, `nowsza: ...`, `do pobrania`, `nie da
+sie sprawdzic bez pobrania`, `nie udalo sie sprawdzic: ...`), kod 1 przy
+pozycji niesprawdzonej; z `--plan` CLI zapisuje JEDEN plan wszystkich
+torow zadania (`--country auto`: PL i CZ, `UpdatePlan.merge`), a
+`--upgrade --plan` czyta go raz przed praca. Katalog `kampanie/` z 0.7.x:
+jednorazowe `Info:`.
 
 Awaria skorowidza bez granicy roku (I-1, errata 5 ADR-030; ADR-036: kazda
 strategia, tylko tryb domyslny): gdy `resolve_campaigns` konczy sie
@@ -961,12 +1001,14 @@ nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 `YearRangeError` i przerwanie CALEJ listy przed pobraniem, rowniez przy
 samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
 
-**WCS (`download_bbox`) w bibliotece: NMT/NMPT 1 m i orto.**
+**WCS (`provider.download_bbox`) w bibliotece: NMT/NMPT 1 m i orto.**
 CLI PL uzywa WCS tylko z `--target-crs` (sekcja 4.3); bez tej flagi
-pobiera arkusze OpenData. `DownloadManager.download_bbox` /
-`GugikProvider.download_bbox` dla NMT 1 m i
+pobiera arkusze OpenData. `GugikProvider.download_bbox` dla NMT 1 m i
 `GugikNmptProvider.download_bbox` dla NMPT daja jednopasmowy GeoTIFF
-float32 z wysokosciami na siatce 1 m EPSG:2180 (bez nodata i maski PRG).
+float32 z wysokosciami na siatce 1 m EPSG:2180 (bez nodata, maski PRG,
+sidecara i wersji — plik poza magazynem). `DownloadManager.download_bbox`
+usuniete w 0.8.0 (D27, errata 2 ADR-003): wycinek w magazynie to
+`download_pl_cutout`.
 Dla NMT 5 m WCS nie istnieje. NMT KRON86: endpoint
 `DigitalTerrainModelFormatTIFF`, coverage `DTM_PL-KRON86-NH_TIFF`,
 `image/tiff` float32; NMT EVRF2007: `DigitalTerrainModel`,
@@ -1046,15 +1088,22 @@ i rozdzielczosci.
    i `Warning:` (kod 0).
 4. Wynik jest w `nmt/pl_1992_1m_<vcrs>/bbox/` lub
    `nmpt/pl_1992_1m_<vcrs>/bbox/` jako
-   `<coords>_<YYYYMMDD>.tif` (+ `.meta.json`), gdzie `<coords>`
-   opisuja bbox zadania W UKLADZIE WYNIKU, nie wyrownany raster.
-   Kazde uruchomienie pobiera od nowa, `--force`, `--workers` i
-   `--scale` nie zmieniaja toru WCS. Tego samego dnia podmiana
-   jest atomowa dopiero po sukcesie: awaria pozostawia poprzedni
-   plik i sidecar, bez pustego drzewa `bbox/`. Sidecar z
+   dowiazanie `<coords>.tif` (bez daty, D15) do wersji
+   `versions/bbox/<RRRR-MM-DD>_<sha8>/<coords>.tif` (+ `.meta.json`
+   wersji), gdzie `<coords>` opisuja bbox zadania W UKLADZIE WYNIKU,
+   nie wyrownany raster. Kroki 2-3 (maska PRG, WCS, warp) dzialaja
+   w prywatnym `versions/.incoming/`, a wynik zapisuje
+   `fetch_version` (sygnal `none`): domyslnie i przy `upgrade` lokalna
+   wersja bez zapytan PRG i WCS (pola wyniku z sidecara wersji, kontrola
+   miejsca tylko przy pobieraniu), `force` pobiera ponownie (ta sama
+   tresc = `unchanged`; wycinki sa bajtowo powtarzalne, inwentaryzacja
+   2026-10-12). `--workers` i `--scale` nie zmieniaja toru WCS. Awaria
+   pozostawia poprzednia wersje i dowiazanie, bez pustego drzewa.
+   Pliki `<coords>_<YYYYMMDD>.tif` z 0.7.x nie sa rozpoznawane. Sidecar z
    `capability="bbox_raster"`, `extra.source` WCS i `extra.mask`
    PRG opisano w sekcji 3.2. CLI wypisuje `Info:` z liczba zapytan
-   WCS dla > 1 kawalka lub wyniku >= 1 GiB.
+   WCS dla > 1 kawalka lub wyniku >= 1 GiB (gdy wycinek bedzie
+   pobierany).
 
 WCS oddaje kompozycje serwera (najnowszy lot obszaru bez doklejania
 starszych), **nie** najnowsza kampanie dokladnie 1 m wybrana dla arkusza
@@ -1114,27 +1163,33 @@ Wycinek w calosci nodata daje `Warning:` i kod 0, nie pozorna cisze.
 
 Od 0.7.1 tor bbox CZ jest w bibliotece (`download/cz_cutout.py`, A6
 Hydrografa): `run_cz_cutout(provider, bbox, output_dir=, image_crs=,
-force=, parent_request=, on_download=)` robi normalizacje bboxa, sciezke,
-pobranie, kontrole nodata i sidecar; CLI (`_cz_download_bbox`) tylko
+update=, plan=, parent_request=, on_download=)` robi normalizacje bboxa,
+slot wersji (`bbox_slot`), pobranie (`fetch_version`, sygnal `none`),
+kontrole nodata i sidecar wersji; CLI (`_cz_download_bbox`) tylko
 drukuje komunikaty. `image_crs` (uklad wyniku, `None` = natywny EPSG:5514)
 podaje wywolujacy jawnie — CLI z `--target-crs` — a nie odczyt atrybutow
 providera. `download_cz_cutout(bbox, output_dir=, target_crs=,
-vertical_crs=, resolution=)` buduje providera (`create_dmr_provider`)
+vertical_crs=, resolution=, update=)` buduje providera (`create_dmr_provider`)
 i wola `run_cz_cutout`. Siatka wyniku startuje od zadanego bboxa
 przeliczonego do ukladu wyniku, dokladnie jak w CLI przed 0.7.1;
 wyrownania do siatki PL nie ma (osobny spec razem z R6). Wynik
-`CzCutoutResult(path, skipped, all_nodata)`: rastr bez ani jednego
+`CzCutoutResult(file, all_nodata, stale)`: rastr bez ani jednego
 waznego piksela powstaje, ma `all_nodata=True`, `extra.all_nodata: true`
 w sidecarze (przy danych `false` — klucz jest zawsze) i `logger.warning`;
 CLI wycisza na czas wywolania ten logger (`_library_log_muted`), bo drukuje
 wlasna linie `Warning:`. Kontrola jest best-effort: nieczytelny plik daje
 `all_nodata=False` (log debug), nigdy przerwania po udanym pobraniu.
-Pominiety istniejacy plik (`force=False`) zwraca `skipped=True`
-z flaga `all_nodata` odczytana z pliku; sidecar zostaje bez zmian.
-Nieudane pobranie usuwa pusty katalog `<segment>/bbox/` i przekazuje
-wyjatek dalej.
+Lokalna wersja (tryb domyslny i `upgrade`) zwraca `file.status ==
+"local"` z flaga `all_nodata` z sidecara wersji, bez sieci; `force`
+pobiera ponownie (ta sama tresc = `unchanged`). Nieudane pobranie nie
+zostawia wersji ani pustego drzewa i przekazuje wyjatek dalej.
 
-Wynik: `data/nmt/cz_dmr5g_<vcrs>/bbox/<coords>.tif` (+ `.meta.json`).
+Wynik: dowiazanie `data/nmt/cz_dmr5g_<vcrs>/bbox/<coords>.tif` do wersji
+w `versions/bbox/<RRRR-MM-DD>_<sha8>/`. Arkusze CZ (TM33, SM5) maja
+od 0.8.0 odpowiednik w bibliotece `download/cz_sheets.py` (`run_cz_sheet`,
+`check_cz_sheet`; bez eksportu w `__all__`): ta sama tresc sidecara co
+wczesniej w CLI (`mapname`, `cz_share`, `capability`, `horizontal_crs`),
+SM5 z sygnalem `http` (`extra.http`), TM33 `none`.
 
 ### 4.6 Dyspozycja per kraj (`--country auto`)
 

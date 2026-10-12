@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.19
-**Data:** 2026-10-11
+**Wersja:** 3.20
+**Data:** 2026-10-12
 **Status:** Wydanie v0.7.2 (2026-10-11)
 
 ---
@@ -52,9 +52,10 @@ Kartograf automatyzuje ten proces oferując:
 - Reverse lookup: geometry file → godła (find_sheets_for_geometry)
 - Selekcja obszaru: godło, bbox, plik geometrii (SHP/GPKG)
 - Pobieranie przez godło → ASC (OpenData)
-- Biblioteczne `download_bbox`: NMT 1 m KRON86 (TIFF float32),
-  EVRF2007 i NMPT (ASC multipart -> jednopasmowy GeoTIFF float32
-  z wysokosciami), bbox wyrownany do siatki 1 m EPSG:2180.
+- `provider.download_bbox` (poza magazynem wersji): NMT 1 m KRON86
+  (TIFF float32), EVRF2007 i NMPT (ASC multipart -> jednopasmowy GeoTIFF
+  float32 z wysokosciami), bbox wyrownany do siatki 1 m EPSG:2180;
+  `DownloadManager.download_bbox` usuniete w 0.8.0 (D27).
   CLI `--bbox` bez `--target-crs`: arkusze OpenData.
 - Wycinek bbox z WCS GUGiK: `--target-crs {EPSG:2180,EPSG:5514,
   EPSG:3045}` w trybie `--bbox`/`--geometry` dla NMT **i NMPT** 1 m
@@ -64,8 +65,9 @@ Kartograf automatyzuje ten proces oferując:
   arkuszy 1 m (`k + 0,5`), lokalna przypieta reprojekcja.
   WCS pokazuje kompozycje lotow serwera, niekoniecznie najnowszy
   arkusz dokladnie 1 m wg ADR-028; dla lotow 0,5 m wynik 1 m
-  jest decymacja. Kazde uruchomienie pobiera ponownie; data
-  w nazwie `<coords>_<YYYYMMDD>.tif`, udana podmiana atomowa.
+  jest decymacja. Od 0.8.0 `bbox/<coords>.tif` bez daty jest
+  dowiazaniem do wersji; domyslnie lokalna wersja bez zapytan PRG/WCS,
+  `--force` pobiera ponownie (ta sama tresc = bez zmian).
   Brak wyboru kampanii/roku, 5 m z `--target-crs` = `Error:`;
   5 m pozostaje dostepne jako arkusze bez tej flagi.
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
@@ -137,7 +139,7 @@ patrz sekcja 3.2, znane ograniczenie.
 # Funkcjonalności:
 - Digital Surface Model (DSM) — teren + obiekty (drzewa, budynki)
 - Pobieranie przez godło → ASC (OpenData)
-- Pobieranie przez bbox z biblioteki (`download_bbox`) -> GeoTIFF
+- Pobieranie przez bbox z biblioteki (`provider.download_bbox`) -> GeoTIFF
   float32 z wysokosciami WCS (ASC multipart);
   CLI `--bbox` bez `--target-crs` pobiera arkusze OpenData,
   z `--target-crs` wycinek WCS z maska ladu
@@ -155,7 +157,7 @@ patrz sekcja 3.2, znane ograniczenie.
 # Funkcjonalności:
 - Zdjęcia lotnicze Standard Resolution (25cm)
 - Pobieranie przez godło → TIF (OpenData)
-- Pobieranie przez bbox → GeoTIFF (WCS) — z biblioteki (`download_bbox`);
+- Pobieranie przez bbox → GeoTIFF (WCS) — z biblioteki (`provider.download_bbox`, poza magazynem);
   CLI `--bbox` pobiera arkusze OpenData
 - Brak vertical CRS (2D RGB); najnowszy zgodny rekord wariantu `color`
   (`RGB`/`CIR`/`B/W`, wymagany w API; CLI pobiera RGB) z
@@ -180,9 +182,12 @@ patrz sekcja 3.2, znane ograniczenie.
 - Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year/--min-year/--max-year
   (przedział lat, ADR-032), --vertical-crs, --min-density, --all-campaigns (sekcja 2.12)
 - Dwa układy wysokościowe (wybór wymagany od 0.8.0): EVRF2007 (2018+), KRON86 (legacy, 2010-2019)
-- Pobieranie równoległe (--workers), pomijanie istniejących plików
+- Pobieranie równoległe (--workers); kafle jako wersje w magazynie
+  (ADR-036 D26): kafel z lokalną wersją nie jest pobierany ponownie,
+  nowszy nalot (inne pliki) pobiera się domyślnie; --check-updates,
+  --upgrade, --force, --plan
 - Biblioteka: download_laz_area (wybór + pobranie + sidecary, wynik
-  LazDownloadResult: downloaded/skipped/failed/superseded) albo
+  LazDownloadResult: files/failed/superseded/stale; check_laz_updates) albo
   GugikLazProvider.select_tiles + run_laz_download
 - Porażka choć jednego kafla = Error: z pełną listą, kod 1 (pobrane zostają)
 
@@ -328,20 +333,24 @@ from kartograf import (
 - `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...` (ADR-026);
   kanoniczna tabela segmentów i migracja 0.6.x→0.7.0:
   `docs/ARCHITECTURE.md` sekcja 3
-- Wycinki CZ w `<segment>/bbox/<coords>.tif`; wycinki PL NMT/NMPT
-  1 m w `<segment>/bbox/<coords>_<YYYYMMDD>.tif` tylko z
-  `--target-crs` (bez tej flagi PL zapisuje arkusze w hierarchii godel)
+- Wycinki CZ i wycinki PL NMT/NMPT 1 m (tylko z `--target-crs`; bez
+  tej flagi PL zapisuje arkusze w hierarchii godel) w
+  `<segment>/bbox/<coords>.tif` — dowiazanie do wersji w
+  `<segment>/versions/bbox/` (D15)
 - `<układ>` w segmencie (`pl_1992` vs `pl_2000`) rozstrzyga format godła
   każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się
   przy migracji na dwa segmenty; wyjątek: kafle LAZ — układ z `uklad_xy`
   kafla (`LazTile.system`), dopiero w drugiej kolejności z formatu godła
-- Magazyn wersjonowany (ADR-036, od 0.8.0; plan 1/3: arkusze PL
-  NMT/NMPT/orto): prawdziwe pliki w
+- Magazyn wersjonowany (ADR-036, od 0.8.0; arkusze PL NMT/NMPT/orto,
+  kafle LAZ, arkusze i wycinki CZ, wycinki PL; land cover i HSG w planie
+  3/3): prawdziwe pliki w
   `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/...`, niezmienne
   (sidecar wersji pisany raz, zapis wylaczny), sciezka standardowa =
   hardlink do najnowszej lokalnej wersji (bez kopii i symlinkow; system
   plikow z hardlinkami wymagany); `kampanie/` z 0.7.x bez migracji;
   tryby `--check-updates`/`--upgrade`/`--force`, plan `kartograf-plan/1`
+  dla kazdego toru `download` (sygnal swiezosci per kanal: skorowidz,
+  rekord WFS, `ETag` SM5, brak dla WCS/`exportImage`)
 - Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>` do
   najnowszego lokalnego lotu pełnego (ADR-033); `list_files()` je pomija,
   `delete()` usuwa oba dowiązania
@@ -465,7 +474,7 @@ from kartograf import (
   między plikami, przez ThreadPoolExecutor/--workers; domyślnie 4 workery
   w CLI, 1 w bibliotece — DownloadManager(max_workers=1))
 - NMT 5m (PL) wymaga EVRF2007
-- WCS (`download_bbox`) NMT i NMPT daje wysokosci 1 m float32
+- WCS (`provider.download_bbox`) NMT i NMPT daje wysokosci 1 m float32
   w obu ukladach wysokosciowych; NMT 5 m tylko z OpenData
 - Wycinki PL WCS `--target-crs` tylko 1 m, bez wyboru kampanii/roku;
   serwer decyduje o locie, ktory moze roznic sie od lotu arkusza
@@ -499,11 +508,12 @@ from kartograf import (
   -9999; wysokosc 0,0 na ladzie zostaje. Caly wycinek nodata =
   Warning: i kod 0. WCS wybiera lot na serwerze, inny niz
   najnowszy arkusz dokladnie 1 m wg ADR-028 (sekcja 2.1)
-- Wycinek WCS pobiera za kazdym razem; ta sama data i bbox oznacza
-  atomowe zastapienie dopiero po sukcesie. Stary plik i sidecar
-  pozostaja przy awarii; `--force`, `--workers`, `--scale` bez wplywu.
+- Wycinek WCS (od 0.8.0): domyslnie lokalna wersja bez zapytan PRG
+  i WCS (brak taniego sygnalu swiezosci), `--force` pobiera ponownie;
+  nowa wersja powstaje obok starej, poprzednia wersja i dowiazanie
+  zostaja przy awarii; `--workers`, `--scale` bez wplywu.
   `Info:` podaje liczbe zadan WCS dla wielu kawalkow lub wyniku
-  >= 1 GiB, bez twardego limitu rozmiaru
+  >= 1 GiB (gdy wycinek jest pobierany), bez twardego limitu rozmiaru
 - Lista arkuszy PL (--bbox/--geometry bez --target-crs oraz hierarchia
   godła) próbuje wszystkie arkusze niezależnie od --workers. R5:
   NoCoverageError -> pominięcie, Warning: i status no_coverage;
@@ -602,7 +612,7 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 
 | # | Podprojekt | Zakres | Zależy od |
 |---|------------|--------|-----------|
-| 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`) | — |
+| 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`); stan 2026-10-12: plany 1/3 (arkusze PL) i 2/3 (LAZ, CZ, wycinki) wykonane na gałęzi `feat/versioned-store`, plan 3/3 (land cover, HSG) do napisania | — |
 | 2 | Manifest projektu | plik manifestu w katalogu projektu; CLI: pobranie do projektu, weryfikacja (sumy kontrolne), wykrywanie nowszych danych u źródła | 1 |
 | 3 | Katalog GUGiK i gotowe dane | strumień kolejnych produktów (inwentaryzacja usług w specu podprojektu, m.in. PRG, PRNG, EGiB w zakresie publicznym, BDOO, modele 3D, zdjęcia lotnicze, obrazy intensywności, archiwalny BDOT10k); każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących | 1 |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
@@ -782,6 +792,7 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-10 | 3.17 | Wybór roku danych (ADR-032): --year/--min-year/--max-year dla NMT/NMPT/orto/LAZ w 2.12, CZ i wycinki bez roku; model A (rok = filtr lat, --campaigns = liczba lotów) |
 | 2026-10-10 | 3.18 | Drugie dowiązanie `full_sheet/` i `--full-sheet` (ADR-033) w 2.11 i 2.12 |
 | 2026-10-11 | 3.19 | Wydanie v0.7.2: wycinki NMT/NMPT PL z WCS GUGiK z maską lądu PRG (ADR-035), kawałki zapytań obszarowych na siatce źródła (ADR-034), status |
+| 2026-10-12 | 3.20 | Magazyn wersjonowany plan 2/3 (ADR-036): LAZ, CZ i wycinki `bbox/` bez daty w wersjach, tryby update dla każdego toru, `DownloadManager.download_bbox` usunięte |
 
 ---
 

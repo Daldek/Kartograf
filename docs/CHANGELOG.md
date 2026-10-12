@@ -22,7 +22,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `geometry`, `layer`, `scale`, `max_workers`, `force`, `on_progress`,
   `cache`. Co zrobic: przekaz obwiednie geometrii jako `bbox`; wybor
   arkuszy, kampanii i 5 m realizuj przez pobieranie arkuszy bez
-  `--target-crs`. Wycinek WCS pobiera dane przy kazdym wywolaniu.
+  `--target-crs`.
 - `mosaic_and_crop` nie przyjmuje juz `snap_to_source_grid` ani
   `assign_crs`; `dtype=` i owijanie zrodel w VRT pozostaja. Co zrobic:
   sprawdz siatke przez `check_source_grid`, a w razie potrzeby
@@ -176,14 +176,69 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     strategii (dotad tylko `newest`); z granica roku gdy KAZDY arkusz ma
     lokalna wersje z zakresu — lokalne wersje z ostrzezeniem (dotad zawsze
     blad zadania). Tylko tryb domyslny.
+- Magazyn wersjonowany dla LAZ, arkuszy i wycinkow CZ oraz wycinkow PL
+  z WCS (ADR-036, plan 2/3):
+  - LAZ: kafel = wersja w `laz/<segment>/versions/<hierarchia>/<data>_<zgloszenie>_<sha8>/<plik>.laz`,
+    sciezka standardowa = hardlink, sidecar wersji obowiazkowy. Kafel
+    z lokalna wersja nie jest pobierany ponownie; nowszy nalot (inne
+    pliki) pobiera sie domyslnie (D26). `run_laz_download`/
+    `download_laz_area(force=)` -> `update=None|"upgrade"|"force"`,
+    `LazDownloadResult.downloaded`/`.skipped` -> `.files`
+    (`VersionedFile`, status `new`/`unchanged`/`relabeled`/`local`) i
+    `.stale`. Co zrobic: `force=True` zamien na `update="force"`, liczniki
+    licz z `result.files` po `status`.
+  - Arkusze CZ (TM33, SM5) i wycinek CZ: wersje w `<segment>/versions/`,
+    `bbox/<wsp>.tif` i sciezka arkusza to hardlinki. SM5 zapisuje
+    `ETag`/`Last-Modified` w `extra.http` i domyslnie robi jedno `HEAD`
+    na plik z lokalna wersja (nowsza tresc tylko zglaszana, `--upgrade`
+    pobiera). `run_cz_cutout`/`download_cz_cutout(force=)` -> `update=`,
+    `CzCutoutResult.path`/`.skipped` -> `.file` (`VersionedFile`) i
+    `.stale`. Co zrobic: `force=True` -> `update="force"`, sciezke czytaj
+    z `result.file.path`, pominiecie z `result.file.status == "local"`.
+  - Wycinek PL z WCS: `bbox/<wsp>.tif` bez daty w nazwie jest dowiazaniem
+    do wersji w `versions/bbox/<RRRR-MM-DD>_<sha8>/`; domyslnie i przy
+    `--upgrade` lokalna wersja bez zapytan PRG i WCS (dotad kazde
+    wywolanie pobieralo), `--force` pobiera ponownie (ta sama tresc =
+    bez zmian). Pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane.
+    `PlCutoutResult.path`/`.skipped` -> `.file` i `.stale`;
+    `run_pl_wcs_cutout(today=)` -> `now=` (+ `update=`, `plan=`),
+    `download_pl_cutout(..., update=)`; `dated_cutout_path` usuniete. Co
+    zrobic: sciezke czytaj z `result.file.path`; ponowne pobranie tylko
+    przez `update="force"`/`--force`; stare pliki z data usun recznie.
+  - Stary zwykly plik 0.7.x w sciezce LAZ/CZ/wycinka jest zastepowany
+    dowiazaniem do nowej wersji przy pierwszym pobraniu (D24). Co zrobic:
+    nic (kopie poza magazynem nie sa ruszane).
+  - `run_cz_cutout`, `run_cz_sheet`, `run_pl_wcs_cutout`: pole `file` jest
+    `None` tylko z `plan=`, gdy plan nie wykonuje tego pliku i nie ma
+    wersji lokalnej.
+  - `PlanItem.sheet` -> `PlanItem.unit`, nowe pole `track` (`pl_sheet`,
+    `laz_tile`, `cz_sheet`, `pl_cutout`, `cz_cutout`); `PlanItem`/
+    `UpdatePlan` w `kartograf.download.plan` (eksport z `kartograf` bez
+    zmian), `UpdateMode` w `kartograf.download.fetch`. Schemat planu
+    zostaje `kartograf-plan/1`. Co zrobic: `item.sheet` -> `item.unit`;
+    importy z `kartograf.download.updates`/`manager` przestaw na
+    `kartograf`.
+  - `DownloadManager.download_bbox` usuniete (D27, errata 2 ADR-003). Co
+    zrobic: wycinek NMT/NMPT w magazynie — `download_pl_cutout(bbox,
+    "EPSG:2180", ...)`; surowy WCS (np. ortofotomapa) poza magazynem —
+    `provider.download_bbox(bbox, path)`.
+  - CLI LAZ, CZ i wycinki: zamiast `Downloaded to ...`/`Skipped ...`
+    jedna linia statusu na plik (`<arkusz|sciezka wycinka|plik LAZ>:
+    nowa wersja ...` / `lokalna wersja ...`), dla LAZ podsumowanie
+    licznikow; plik bez taniego sygnalu (TM33, wycinki) dostaje
+    `(bez sprawdzania; --check-updates)`. Co zrobic: skrypty parsujace
+    wyjscie przestaw na nowe linie.
+  - Sidecar: `downloaded_at` z mikrosekundami (porzadek dwoch pobran
+    w tej samej sekundzie). Co zrobic: parsery ISO 8601 bez zmian.
 
 ### Dodane
 
 - CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
   plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
-  nowszej kampanii; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
-  od planu). W tej wersji dla arkuszy PL (`--sheet`, `--bbox`/`--geometry`
-  z `--country pl` bez `--target-crs`).
+  nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
+  od planu) — dla kazdego toru: arkusze PL, kafle LAZ, arkusze CZ (SM5:
+  `ETag`), wycinki CZ i PL (bez taniego sygnalu: "nie da sie sprawdzic bez
+  pobrania"); przy `--country auto` jeden plan PL i CZ.
 - Biblioteka: `check_updates`, `upgrade`, `UpdatePlan`, `PlanItem`,
   `UpgradeReport`, `UpdateMode`, `VersionRef` (w `__all__`);
   `DownloadManager.inspect_sheets`, `download_records`; `SheetFetch.status`,
@@ -192,6 +247,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `get_versions_base`, `has_legacy_campaigns`; sidecar `extra.version`
   (`label`, `label_source`); status `relabeled` (ta sama tresc pod nowym
   rekordem kampanii).
+- Biblioteka (plan 2/3): `check_laz_updates`, `check_cz_cutout`,
+  `check_pl_cutout` (w `__all__`), `kartograf.download.cz_sheets`
+  (`run_cz_sheet`, `check_cz_sheet`, `CzSheetResult` — bez eksportu w
+  `__all__`), `VersionedFile` (w `__all__`), `fetch_version`/`inspect_version`
+  (`kartograf.download.fetch`), `UpdatePlan.merge`/`items_for`,
+  `select_planned`, `new_plan`; `AccessChannel.update_signal` i
+  `channel_signal`; transport `response_signal`, `head_signal`,
+  `download_to(on_response=)`; `CuzkDmrProvider.sm5_signal`,
+  `download(..., on_response=)`; sidecar `extra.http` (SM5).
 
 ## [0.7.2] - 2026-10-11
 
