@@ -238,6 +238,29 @@ class CampaignRef:
             file_format=raw.get("format"),
         )
 
+    @classmethod
+    def from_sidecar(cls, meta: dict) -> "CampaignRef | None":
+        """Rebuild from a version sidecar (``extra.campaign`` +
+        ``extra.source.url``); ``None`` when it describes no campaign."""
+        extra = meta.get("extra")
+        campaign = extra.get("campaign") if isinstance(extra, dict) else None
+        source = extra.get("source") if isinstance(extra, dict) else None
+        if not isinstance(campaign, dict) or not isinstance(source, dict):
+            return None
+        date, url = campaign.get("date"), source.get("url")
+        if not isinstance(date, str) or not _DATE.fullmatch(date) or not url:
+            return None
+        return cls(
+            id=str(campaign.get("id") or campaign_id_from_url(str(url))),
+            date=date,
+            dt_pzgik=campaign.get("pzgik_date"),
+            url=str(url),
+            survey_work_id=campaign.get("survey_work_id"),
+            source=campaign.get("source"),
+            full_sheet=campaign.get("full_sheet"),
+            file_format=None,
+        )
+
     @property
     def dirname(self) -> str:
         return f"{self.date}_{self.id}"

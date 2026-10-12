@@ -36,6 +36,7 @@ from kartograf.download.manager import (
     DownloadProgress,
     DownloadResult,
     SheetFetch,
+    UpdateMode,
 )
 from kartograf.exceptions import (
     DownloadError,
@@ -1253,7 +1254,7 @@ def cmd_download(args: argparse.Namespace) -> int:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
-        skip_existing = not args.force
+        update = _update_mode(args)
 
         try:
             if args.scale:
@@ -1269,7 +1270,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                 paths = manager.download_hierarchy(
                     args.sheet,
                     args.scale,
-                    skip_existing=skip_existing,
+                    update=update,
                     on_progress=on_progress,
                 )
             else:
@@ -1285,7 +1286,7 @@ def cmd_download(args: argparse.Namespace) -> int:
 
                 result = manager.download_sheet(
                     args.sheet,
-                    skip_existing=skip_existing,
+                    update=update,
                     on_progress=on_progress,
                     on_download=announce,
                 )
@@ -1374,10 +1375,15 @@ def _last_result(manager: DownloadManager) -> DownloadResult:
     return result
 
 
+def _update_mode(args: argparse.Namespace) -> UpdateMode | None:
+    """``update`` of the PL sheet download: ``--force`` -> ``"force"``."""
+    return "force" if args.force else None
+
+
 def _download_sheet_list(
     manager: DownloadManager,
     sheet_list: list[str],
-    skip_existing: bool,
+    update: UpdateMode | None,
     on_progress,
 ) -> tuple[list[Path], DownloadResult]:
     """
@@ -1396,9 +1402,7 @@ def _download_sheet_list(
         Files available after the task (downloaded + skipped as existing)
         and a per-sheet summary (``manager.last_result``).
     """
-    paths = manager.download_sheets(
-        sheet_list, skip_existing=skip_existing, on_progress=on_progress
-    )
+    paths = manager.download_sheets(sheet_list, update=update, on_progress=on_progress)
     return list(paths), _last_result(manager)
 
 
@@ -1978,7 +1982,7 @@ def _download_pl_sheet_list(
     resolution = args.resolution
     product = args.product
     workers = getattr(args, "workers", 4)
-    skip_existing = not args.force
+    update = _update_mode(args)
     all_campaigns, min_year, max_year = _campaign_opts(args)
     full_sheet = bool(getattr(args, "full_sheet", False))
 
@@ -2008,7 +2012,7 @@ def _download_pl_sheet_list(
                 full_sheet=full_sheet,
             )
             all_paths, result = _download_sheet_list(
-                manager, sheet_list, skip_existing, on_progress
+                manager, sheet_list, update, on_progress
             )
         except DownloadError as e:
             print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
