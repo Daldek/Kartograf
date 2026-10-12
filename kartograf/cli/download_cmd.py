@@ -39,9 +39,8 @@ from kartograf.download.manager import (
     SheetFetch,
     UpdateMode,
 )
+from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.updates import (
-    PlanItem,
-    UpdatePlan,
     check_updates,
     upgrade,
 )
@@ -1445,7 +1444,7 @@ def _plan_line(item: PlanItem) -> str:
         label = item.local_label or item.available_label
         if label:
             text += f" ({label})"
-    return f"{item.sheet}: {text}"
+    return f"{item.unit}: {text}"
 
 
 def _run_plan_modes(
@@ -1479,7 +1478,7 @@ def _run_plan_modes(
                 print(line)
     for item in report.stale:
         print(
-            f"Error: {item.sheet}: zrodlo zmienilo sie od planu "
+            f"Error: {item.unit}: zrodlo zmienilo sie od planu "
             f"({item.available_label}) — sprawdz ponownie (--check-updates)",
             file=sys.stderr,
         )

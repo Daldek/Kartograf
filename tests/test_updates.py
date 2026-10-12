@@ -6,12 +6,8 @@ import json
 import pytest
 
 from kartograf.download.manager import DownloadManager
-from kartograf.download.updates import (
-    PLAN_SCHEMA,
-    UpdatePlan,
-    check_updates,
-    upgrade,
-)
+from kartograf.download.plan import PLAN_SCHEMA, UpdatePlan
+from kartograf.download.updates import check_updates, upgrade
 from kartograf.exceptions import ValidationError
 from tests.test_manager_campaigns import (
     C14,
@@ -35,6 +31,7 @@ def test_check_updates_downloads_nothing_and_reports_missing(tmp_path):
     assert fake.downloads == []
     (item,) = plan.items
     assert item.status == "missing" and item.available_label == "2025-10-21_84183"
+    assert item.track == "pl_sheet" and item.unit == G
     assert item.segment == "nmt/pl_1992_1m_evrf2007"
     assert item.hierarchy == "N-34/139/C/a/3/1" and item.name == f"{G}.asc"
     assert item.available_signal == {
@@ -116,7 +113,7 @@ def test_upgrade_stale_item_fails_others_run(tmp_path):
         "all": fake.records["all"],
     }
     report = upgrade(m, plan)
-    assert [i.sheet for i in report.stale] == [G]
+    assert [i.unit for i in report.stale] == [G]
     assert [f.sheet for f in report.done] == [G2]
     assert all(G2 in url for url in fake.downloads)
 
