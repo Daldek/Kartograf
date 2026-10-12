@@ -125,7 +125,7 @@ class TestFileStorageGetPath:
         assert path_asc.suffix == ".asc"
         assert path_xyz.suffix == ".xyz"
 
-    def test_get_path_normalizes_godlo(self):
+    def test_get_path_normalizes_sheet(self):
         """Test sheet code normalisation in the path."""
         storage = FileStorage("./data")
 
@@ -568,7 +568,7 @@ class TestFileStoragePL2000:
 class TestFileStorageGetRawPath:
     """Tests for get_raw_path (opaque identifiers, e.g. LAZ tile sheet codes)."""
 
-    def test_raw_path_pl1992_fine_godlo(self, tmp_path):
+    def test_raw_path_pl1992_fine_sheet(self, tmp_path):
         """Fine PL-1992 sheet code (finer than 1:10000) is split without parsing."""
         storage = FileStorage(tmp_path, product="laz")
         path = storage.get_raw_path(
@@ -580,7 +580,7 @@ class TestFileStorageGetRawPath:
         assert parts[-8:-1] == ["N-33", "131", "B", "a", "1", "1", "4"]
         assert path.name == "81121_1573132_N-33-131-B-a-1-1-4.laz"
 
-    def test_raw_path_pl2000_godlo(self, tmp_path):
+    def test_raw_path_pl2000_sheet(self, tmp_path):
         """PL-2000 dotted sheet code is split on dots."""
         storage = FileStorage(tmp_path, product="laz")
         path = storage.get_raw_path("6.162.34.02.3", "x_6.162.34.02.3.laz")
@@ -719,20 +719,20 @@ class TestFileStorageSegments:
         assert tuple(p1992.parts[-10:-8]) == ("laz", "pl_1992_evrf2007")
         assert tuple(p2000.parts[-8:-6]) == ("laz", "pl_2000_evrf2007")
 
-    def test_laz_uklad_from_tile_overrides_identifier(self, tmp_path):
+    def test_laz_system_from_tile_overrides_identifier(self, tmp_path):
         """Finding 8: a PL-2000:S6 tile with a hyphenated code lands in pl_2000.
 
         Also through the library API (previously the library gave pl_1992 and
         the CLI pl_2000).
         """
         storage = FileStorage(tmp_path, product="laz")
-        path = storage.get_raw_path("N-33-131-B-a-1-1-4", "a.laz", uklad="2000")
+        path = storage.get_raw_path("N-33-131-B-a-1-1-4", "a.laz", system="2000")
         assert tuple(path.parts[-10:-8]) == ("laz", "pl_2000_evrf2007")
 
-    def test_laz_unknown_uklad_rejected(self, tmp_path):
+    def test_laz_unknown_system_rejected(self, tmp_path):
         with pytest.raises(ValidationError):
             FileStorage(tmp_path, product="laz").get_raw_path(
-                "N-33-131-B-a-1-1-4", "a.laz", uklad="1965"
+                "N-33-131-B-a-1-1-4", "a.laz", system="1965"
             )
 
     def test_unresolved_vcrs_raises(self, tmp_path):
@@ -764,7 +764,7 @@ class TestFileStorageSegments:
             tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
         )
 
-    def test_list_files_spans_both_uklady(self, tmp_path):
+    def test_list_files_spans_both_systems(self, tmp_path):
         storage = FileStorage(tmp_path, resolution="1m")
         storage.write_atomic("N-34-130-D-d-2-4", b"x", ".asc")
         storage.write_atomic("6.179.12.20", b"y", ".asc")
@@ -779,7 +779,7 @@ class TestFileStorageSegments:
         assert not path.exists() and not sidecar.exists()
 
     @pytest.mark.parametrize(
-        ("kwargs", "key", "godlo", "expected"),
+        ("kwargs", "key", "sheet", "expected"),
         [
             (
                 {"resolution": "1m"},
@@ -796,7 +796,7 @@ class TestFileStorageSegments:
         ],
     )
     def test_segment_templates_come_from_registry(
-        self, tmp_path, monkeypatch, kwargs, key, godlo, expected
+        self, tmp_path, monkeypatch, kwargs, key, sheet, expected
     ):
         """Finding 11: one source of truth - the template comes from the descriptor.
 
@@ -812,12 +812,12 @@ class TestFileStorageSegments:
             d = real_get_source(k)
             if k == key:
                 return replace(
-                    d, storage_subdir=expected.split("/")[0] + "/test_{uklad}_{vcrs}"
+                    d, storage_subdir=expected.split("/")[0] + "/test_{system}_{vcrs}"
                 )
             return d
 
         monkeypatch.setattr(storage_mod, "get_source", fake_get_source)
-        path = FileStorage(tmp_path, **kwargs).get_path(godlo, ".asc")
+        path = FileStorage(tmp_path, **kwargs).get_path(sheet, ".asc")
         assert expected in path.as_posix()
 
 
@@ -937,7 +937,7 @@ def _rec(
 ):
     return SimpleNamespace(
         url=url,
-        godlo="N-34-139-C-a-3-1",
+        sheet="N-34-139-C-a-3-1",
         aktualnosc="2025-04-27",
         dt_pzgik="2025-11-17",
         full_sheet=True,
@@ -1053,7 +1053,7 @@ class TestCampaignPaths:
         assert st.delete(g, ".asc") is False
 
 
-def test_leading_zero_godlo_same_path_and_sidecar(tmp_path):
+def test_leading_zero_sheet_same_path_and_sidecar(tmp_path):
     """A7: '036' and '36' -> one path, one canonical code everywhere."""
     import json
     from unittest.mock import Mock
@@ -1070,7 +1070,7 @@ def test_leading_zero_godlo_same_path_and_sidecar(tmp_path):
     provider.descriptor_key = "pl.gugik.nmt_1m"
     provider.default_extension = ".asc"
 
-    def fake_download(godlo, target):
+    def fake_download(sheet, target):
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("ncols 1\nnrows 1\nxllcorner 0\nyllcorner 0\ncellsize 1\n0\n")
         return target

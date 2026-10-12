@@ -28,7 +28,7 @@ class TestPublicAPIImports:
         from kartograf import SheetParser
 
         parser = SheetParser("N-34-130-D")
-        assert parser.godlo == "N-34-130-D"
+        assert parser.sheet == "N-34-130-D"
 
     def test_import_download_manager(self):
         """Test DownloadManager import from main module."""
@@ -60,12 +60,12 @@ class TestParserStorageIntegration:
     """Test integration between SheetParser and FileStorage."""
 
     def test_parse_and_store(self, test_data_dir):
-        """Test parsing godlo and storing file."""
+        """Test parsing sheet and storing file."""
         parser = SheetParser("N-34-130-D-d-2-4")
         storage = FileStorage(test_data_dir)
 
         # Verify path generation matches parser components
-        path = storage.get_path(parser.godlo)
+        path = storage.get_path(parser.sheet)
 
         assert "N-34" in str(path)
         assert "130" in str(path)
@@ -82,11 +82,11 @@ class TestParserStorageIntegration:
         # Get all children and store them
         children = parser.get_children()
         for child in children:
-            storage.write_atomic(child.godlo, mock_tif_data)
+            storage.write_atomic(child.sheet, mock_tif_data)
 
         # Verify all files exist
         for child in children:
-            assert storage.exists(child.godlo)
+            assert storage.exists(child.sheet)
 
         # Verify common parent directory (includes resolution subfolder)
         common_parent = (
@@ -101,13 +101,13 @@ class TestParserStorageIntegration:
         )
         assert common_parent.exists()
 
-    def test_all_scales_storage(self, test_data_dir, sample_godlos, mock_tif_data):
+    def test_all_scales_storage(self, test_data_dir, sample_sheets, mock_tif_data):
         """Test storage for all scale levels."""
         storage = FileStorage(test_data_dir)
 
-        for scale, godlo in sample_godlos.items():
-            storage.write_atomic(godlo, mock_tif_data)
-            assert storage.exists(godlo), f"Failed for {scale}: {godlo}"
+        for scale, sheet in sample_sheets.items():
+            storage.write_atomic(sheet, mock_tif_data)
+            assert storage.exists(sheet), f"Failed for {scale}: {sheet}"
 
 
 class TestDownloadManagerIntegration:
@@ -161,8 +161,8 @@ class TestDownloadManagerIntegration:
         storage = FileStorage(test_data_dir)
 
         # Pre-create 2 of 4 sheets (as ASC files)
-        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
-            path = storage.get_path(godlo, ".asc")
+        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
+            path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(mock_tif_data)
 
@@ -177,9 +177,9 @@ class TestDownloadManagerIntegration:
 class TestHierarchyWorkflow:
     """Test complete hierarchy workflows."""
 
-    def test_full_hierarchy_traversal(self, sample_godlos):
+    def test_full_hierarchy_traversal(self, sample_sheets):
         """Test traversing hierarchy from 1:10k to 1:1M."""
-        parser = SheetParser(sample_godlos["1:10000"])
+        parser = SheetParser(sample_sheets["1:10000"])
         hierarchy = parser.get_hierarchy_up()
 
         # Should have 7 levels (from 1:10k to 1:1M, skipping 1:500k which is implicit)
@@ -203,17 +203,17 @@ class TestHierarchyWorkflow:
         for desc in descendants:
             assert desc.scale == "1:10000"
 
-    def test_parent_child_roundtrip(self, sample_godlos):
+    def test_parent_child_roundtrip(self, sample_sheets):
         """Test parent-child relationships are consistent."""
         for scale in ["1:500000", "1:200000", "1:100000", "1:50000", "1:25000"]:
-            godlo = sample_godlos[scale]
-            parser = SheetParser(godlo)
+            sheet = sample_sheets[scale]
+            parser = SheetParser(sheet)
 
             children = parser.get_children()
             for child in children:
                 parent = child.get_parent()
                 assert parent is not None
-                assert parent.godlo == parser.godlo
+                assert parent.sheet == parser.sheet
 
 
 class TestProgressCallback:
@@ -233,7 +233,7 @@ class TestProgressCallback:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(mock_tif_data)
             return path
@@ -247,7 +247,7 @@ class TestProgressCallback:
         def on_progress(p: DownloadProgress):
             progress_calls.append(
                 {
-                    "godlo": p.godlo,
+                    "godlo": p.sheet,
                     "status": p.status,
                     "current": p.current,
                     "total": p.total,
@@ -271,8 +271,8 @@ class TestProgressCallback:
 class TestErrorHandling:
     """Test error handling across components."""
 
-    def test_invalid_godlo_raises_parse_error(self):
-        """Test that invalid godlo raises ParseError."""
+    def test_invalid_sheet_raises_parse_error(self):
+        """Test that invalid sheet raises ParseError."""
         with pytest.raises(ParseError):
             SheetParser("INVALID-FORMAT")
 
@@ -325,19 +325,19 @@ class TestEdgeCases:
         """Test progress percentage edge cases."""
         # Zero total
         progress = DownloadProgress(
-            current=0, total=0, godlo="N-34", status="completed"
+            current=0, total=0, sheet="N-34", status="completed"
         )
         assert progress.progress_percent == 100.0
 
         # Partial progress
         progress = DownloadProgress(
-            current=1, total=4, godlo="N-34", status="downloading"
+            current=1, total=4, sheet="N-34", status="downloading"
         )
         assert progress.progress_percent == 25.0
 
         # Complete
         progress = DownloadProgress(
-            current=4, total=4, godlo="N-34", status="completed"
+            current=4, total=4, sheet="N-34", status="completed"
         )
         assert progress.progress_percent == 100.0
 

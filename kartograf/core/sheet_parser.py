@@ -2,7 +2,7 @@
 Parser of topographic map sheet codes for the 1992 and 2000 systems.
 
 This module provides the SheetParser class for parsing Polish topographic
-map sheet codes (godlo) and extracting information about scale,
+map sheet codes and extracting information about scale,
 coordinate system, and sheet components.
 """
 
@@ -14,18 +14,18 @@ from kartograf.core.bbox import BBox, transform_bbox, validate_bbox
 from kartograf.exceptions import ParseError, ValidationError
 
 
-def _is_pl2000_format(godlo: str) -> bool:
-    """Check if godlo uses PL-2000 dot-separated numeric format (via registry)."""
-    return parser_registry.detect_system(godlo).id == "pl2000"
+def _is_pl2000_format(sheet: str) -> bool:
+    """Check if sheet uses PL-2000 dot-separated numeric format (via registry)."""
+    return parser_registry.detect_system(sheet).id == "pl2000"
 
 
 _PL2000_ZONES = ("5", "6", "7", "8")
 
 
-def _zone_number_error(godlo: str) -> ParseError:
+def _zone_number_error(sheet: str) -> ParseError:
     """Build the error for a bare PL-2000 zone number used as a sheet code."""
     return ParseError(
-        f"Nieprawidłowe godło: '{godlo}'. "
+        f"Nieprawidłowe godło: '{sheet}'. "
         f"To numer strefy PL-2000, a nie godło arkusza. "
         f"Najgrubsze godło PL-2000 ma format strefa.pas.slup "
         f"(1:10000), np. 6.179.12."
@@ -40,18 +40,18 @@ class SheetParser:
 
     Attributes
     ----------
-    godlo : str
+    sheet : str
         Normalized sheet code (e.g. "N-34-130-D-d-2-4")
     scale : str
         Map scale (e.g. "1:10000")
-    uklad : str
+    system : str
         Coordinate system ("1992" or "2000")
     components : Dict[str, str]
         Sheet code components (pas, slup, and optional subdivisions)
 
     Examples
     --------
-    >>> parser = SheetParser("N-34-130-D-d-2-4", uklad="1992")
+    >>> parser = SheetParser("N-34-130-D-d-2-4", system="1992")
     >>> parser.scale
     '1:10000'
     >>> parser.components
@@ -61,7 +61,7 @@ class SheetParser:
     Notes
     -----
     Scale labels in Kartograf are one level finer than GUGiK nomenclature: a
-    7-part godlo (e.g. N-34-130-D-d-2-4) is labelled '1:10000' here, while
+    7-part sheet (e.g. N-34-130-D-d-2-4) is labelled '1:10000' here, while
     GUGiK calls the same sheet the 1:5000 archiving module; the 1-144 grid is
     labelled '1:200000' but has the dimensions of the official 1:100000 sheet
     (20' x 30'). Labels are kept for backward compatibility of the public API
@@ -104,22 +104,22 @@ class SheetParser:
     ]
 
     # Allowed coordinate systems
-    VALID_UKLADY = ("1992", "2000")
+    VALID_SYSTEMS = ("1992", "2000")
 
     # PL-1992 nomenclature range (A7): the 1:1M sheets covering Poland
     VALID_BANDS = ("M", "N")
     VALID_COLUMNS = range(33, 36)
     VALID_SHEET_NUMBERS = range(1, 145)
 
-    def __init__(self, godlo: str, uklad: str | None = None):
+    def __init__(self, sheet: str, system: str | None = None):
         """
         Initialize the parser for the given sheet code.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet code (e.g. "N-34-130-D-d-2-4")
-        uklad : str, optional
+        system : str, optional
             Coordinate system ("1992" or "2000").
             If None, it defaults to "1992".
 
@@ -132,14 +132,14 @@ class SheetParser:
 
         Examples
         --------
-        >>> parser = SheetParser("N-34-130-D", uklad="1992")
+        >>> parser = SheetParser("N-34-130-D", system="1992")
         >>> parser.scale
         '1:100000'
         """
-        if not isinstance(godlo, str):
-            raise ParseError(f"Godło musi być stringiem, otrzymano: {type(godlo)}")
+        if not isinstance(sheet, str):
+            raise ParseError(f"Godło musi być stringiem, otrzymano: {type(sheet)}")
 
-        cleaned = godlo.strip()
+        cleaned = sheet.strip()
         if not cleaned:
             raise ParseError("Godło nie może być puste")
 
@@ -147,31 +147,31 @@ class SheetParser:
         if _is_pl2000_format(cleaned):
             from kartograf.core.parser_2000 import Parser2000
 
-            if uklad is not None and uklad != "2000":
+            if system is not None and system != "2000":
                 raise ValidationError(
-                    f"Godło '{cleaned}' ma format PL-2000, ale podano uklad='{uklad}'"
+                    f"Godło '{cleaned}' ma format PL-2000, ale podano system='{system}'"
                 )
             self._pl2000: Parser2000 | None = Parser2000(cleaned)
-            self._original_godlo = cleaned
-            self._godlo = self._pl2000.godlo
-            self._uklad = "2000"
+            self._original_sheet = cleaned
+            self._sheet = self._pl2000.sheet
+            self._system = "2000"
             self._scale = self._pl2000.scale
             self._components = self._pl2000.components
         else:
             if cleaned in _PL2000_ZONES:
                 raise _zone_number_error(cleaned)
-            if uklad is not None and uklad == "2000":
+            if system is not None and system == "2000":
                 raise ValidationError(
-                    f"Godło '{cleaned}' ma format PL-1992, ale podano uklad='2000'"
+                    f"Godło '{cleaned}' ma format PL-1992, ale podano system='2000'"
                 )
             self._pl2000 = None
-            self._original_godlo = cleaned
+            self._original_sheet = cleaned
 
             # Normalize the sheet code (lowercase letters for 50k sheets and smaller)
-            self._godlo = self._normalize_godlo(self._original_godlo)
+            self._sheet = self._normalize_sheet(self._original_sheet)
 
             # Validate and set the coordinate system
-            self._uklad = self._validate_uklad(uklad)
+            self._system = self._validate_system(system)
 
             # Determine the scale and validate the format
             self._scale = self._determine_scale()
@@ -182,7 +182,7 @@ class SheetParser:
             # Reject codes outside the nomenclature range (A7)
             self._validate_range()
 
-    def _normalize_godlo(self, godlo: str) -> str:
+    def _normalize_sheet(self, sheet: str) -> str:
         """
         Normalize the sheet code to the standard format.
 
@@ -191,7 +191,7 @@ class SheetParser:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Original sheet code
 
         Returns
@@ -199,9 +199,9 @@ class SheetParser:
         str
             Normalized sheet code
         """
-        parts = godlo.split("-")
+        parts = sheet.split("-")
         if len(parts) < 2:
-            return godlo  # Return unchanged, validation will report the error
+            return sheet  # Return unchanged, validation will report the error
 
         normalized = []
 
@@ -225,13 +225,13 @@ class SheetParser:
 
         return "-".join(normalized)
 
-    def _validate_uklad(self, uklad: str | None) -> str:
+    def _validate_system(self, system: str | None) -> str:
         """
         Validate the coordinate system.
 
         Parameters
         ----------
-        uklad : str or None
+        system : str or None
             System to validate, or None for the default
 
         Returns
@@ -244,16 +244,16 @@ class SheetParser:
         ValidationError
             If the coordinate system is invalid
         """
-        if uklad is None:
+        if system is None:
             return "1992"  # Default system
 
-        if uklad not in self.VALID_UKLADY:
+        if system not in self.VALID_SYSTEMS:
             raise ValidationError(
-                f"Nieprawidłowy układ: '{uklad}'. "
-                f"Dozwolone wartości: {', '.join(self.VALID_UKLADY)}"
+                f"Nieprawidłowy układ: '{system}'. "
+                f"Dozwolone wartości: {', '.join(self.VALID_SYSTEMS)}"
             )
 
-        return uklad
+        return system
 
     def _determine_scale(self) -> str:
         """
@@ -270,14 +270,14 @@ class SheetParser:
             If the sheet code matches no pattern
         """
         for scale, pattern in self.PATTERNS.items():
-            if re.match(pattern, self._godlo):
+            if re.match(pattern, self._sheet):
                 return scale
 
-        if self._original_godlo in _PL2000_ZONES:
-            raise _zone_number_error(self._original_godlo)
+        if self._original_sheet in _PL2000_ZONES:
+            raise _zone_number_error(self._original_sheet)
 
         raise ParseError(
-            f"Nieprawidłowe godło: '{self._original_godlo}'. "
+            f"Nieprawidłowe godło: '{self._original_sheet}'. "
             f"Oczekiwano godła PL-1992 (np. N-34-130-D-d-2-4) "
             f"albo PL-2000 (np. 6.179.12)."
         )
@@ -292,10 +292,10 @@ class SheetParser:
             Dictionary of sheet code components
         """
         pattern = self.PATTERNS[self._scale]
-        match = re.match(pattern, self._godlo)
+        match = re.match(pattern, self._sheet)
 
         if not match:
-            raise ParseError(f"Błąd parsowania godła: {self._godlo}")
+            raise ParseError(f"Błąd parsowania godła: {self._sheet}")
 
         groups = match.groups()
         components = {}
@@ -326,14 +326,14 @@ class SheetParser:
             problems.append(f"arkusz {sheet} (dozwolone: 1-144)")
         if problems:
             raise ParseError(
-                f"Nieprawidlowe godlo: '{self._original_godlo}' — poza zakresem "
+                f"Nieprawidlowe godlo: '{self._original_sheet}' — poza zakresem "
                 f"nomenklatury PL-1992: {', '.join(problems)}"
             )
 
     @property
-    def godlo(self) -> str:
+    def sheet(self) -> str:
         """Return the normalized sheet code."""
-        return self._godlo
+        return self._sheet
 
     @property
     def scale(self) -> str:
@@ -341,9 +341,9 @@ class SheetParser:
         return self._scale
 
     @property
-    def uklad(self) -> str:
+    def system(self) -> str:
         """Return the coordinate system."""
-        return self._uklad
+        return self._system
 
     @property
     def components(self) -> dict[str, str]:
@@ -353,23 +353,23 @@ class SheetParser:
     def __repr__(self) -> str:
         """Return a debugging representation of the object."""
         return (
-            f"SheetParser(godlo='{self._godlo}', "
-            f"scale='{self._scale}', uklad='{self._uklad}')"
+            f"SheetParser(sheet='{self._sheet}', "
+            f"scale='{self._scale}', system='{self._system}')"
         )
 
     def __str__(self) -> str:
         """Return a readable representation of the sheet."""
-        return f"{self._godlo} (skala {self._scale}, układ {self._uklad})"
+        return f"{self._sheet} (skala {self._scale}, układ {self._system})"
 
     def __eq__(self, other: object) -> bool:
         """Compare two parsers by sheet code and coordinate system."""
         if not isinstance(other, SheetParser):
             return NotImplemented
-        return self._godlo == other._godlo and self._uklad == other._uklad
+        return self._sheet == other._sheet and self._system == other._system
 
     def __hash__(self) -> int:
         """Return the object hash."""
-        return hash((self._godlo, self._uklad))
+        return hash((self._sheet, self._system))
 
     # =========================================================================
     # Hierarchy methods
@@ -398,14 +398,14 @@ class SheetParser:
         --------
         >>> parser = SheetParser("N-34-130-D-d-2-4")
         >>> parent = parser.get_parent()
-        >>> parent.godlo
+        >>> parent.sheet
         'N-34-130-D-d-2'
         >>> parent.scale
         '1:25000'
         """
         if self._pl2000 is not None:
             p = self._pl2000.get_parent()
-            return SheetParser(p.godlo) if p is not None else None
+            return SheetParser(p.sheet) if p is not None else None
 
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
@@ -417,12 +417,12 @@ class SheetParser:
             return self._get_parent_from_200k()
 
         # For the remaining scales: drop the last component
-        parts = self._godlo.split("-")
+        parts = self._sheet.split("-")
         if len(parts) <= 2:
             return None
 
-        parent_godlo = "-".join(parts[:-1])
-        return SheetParser(parent_godlo, self._uklad)
+        parent_sheet = "-".join(parts[:-1])
+        return SheetParser(parent_sheet, self._system)
 
     def _get_parent_from_200k(self) -> "SheetParser":
         """
@@ -448,10 +448,10 @@ class SheetParser:
         row, col = divmod(arkusz_num - 1, 12)
         section_letter = "ABCD"[(row >= 6) * 2 + (col >= 6)]
 
-        parent_godlo = (
+        parent_sheet = (
             f"{self._components['pas']}-{self._components['slup']}-{section_letter}"
         )
-        return SheetParser(parent_godlo, self._uklad)
+        return SheetParser(parent_sheet, self._system)
 
     def get_children(self) -> "list[SheetParser]":
         """
@@ -469,11 +469,11 @@ class SheetParser:
         >>> children = parser.get_children()
         >>> len(children)
         4
-        >>> children[0].godlo
+        >>> children[0].sheet
         'N-34-130-D-d-2-1'
         """
         if self._pl2000 is not None:
-            return [SheetParser(c.godlo) for c in self._pl2000.get_children()]
+            return [SheetParser(c.sheet) for c in self._pl2000.get_children()]
 
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
@@ -490,8 +490,8 @@ class SheetParser:
         children = []
 
         for suffix in suffixes:
-            child_godlo = f"{self._godlo}-{suffix}"
-            children.append(SheetParser(child_godlo, self._uklad))
+            child_sheet = f"{self._sheet}-{suffix}"
+            children.append(SheetParser(child_sheet, self._system))
 
         return children
 
@@ -525,8 +525,8 @@ class SheetParser:
         for row in range(row_start, row_start + 6):
             for col in range(col_start, col_start + 6):
                 num = row * 12 + col + 1
-                child_godlo = f"{pas}-{slup}-{num}"
-                children.append(SheetParser(child_godlo, self._uklad))
+                child_sheet = f"{pas}-{slup}-{num}"
+                children.append(SheetParser(child_sheet, self._system))
 
         return children
 
@@ -551,7 +551,7 @@ class SheetParser:
         """
         if self._pl2000 is not None:
             h = self._pl2000.get_hierarchy_up()
-            return [SheetParser(x.godlo) for x in h]
+            return [SheetParser(x.sheet) for x in h]
 
         hierarchy = [self]
         current = self
@@ -597,7 +597,7 @@ class SheetParser:
         """
         if self._pl2000 is not None:
             desc = self._pl2000.get_all_descendants(target_scale)
-            return [SheetParser(d.godlo) for d in desc]
+            return [SheetParser(d.sheet) for d in desc]
 
         if target_scale not in self.SCALE_HIERARCHY:
             raise ValidationError(
@@ -1032,14 +1032,14 @@ def find_sheets_for_bbox(
     # --- Step 2: Find the 1:500k sheets ---
     if target_idx == 1:  # 1:500000
         result = []
-        for godlo_1m in sheets_1m:
-            result.extend(_find_children_intersecting(godlo_1m, wgs_bbox))
+        for sheet_1m in sheets_1m:
+            result.extend(_find_children_intersecting(sheet_1m, wgs_bbox))
         return sorted(result)
 
     # --- Step 3: Find the 1:200k sheets (optimized) ---
     sheets_200k = []
-    for godlo_1m in sheets_1m:
-        sheets_200k.extend(_find_200k_sheets(godlo_1m, wgs_bbox))
+    for sheet_1m in sheets_1m:
+        sheets_200k.extend(_find_200k_sheets(sheet_1m, wgs_bbox))
 
     if target_idx == 2:  # 1:200000
         return sorted(sheets_200k)
@@ -1050,8 +1050,8 @@ def find_sheets_for_bbox(
 
     while current_scale_idx < target_idx:
         next_sheets = []
-        for godlo in current_sheets:
-            next_sheets.extend(_find_children_intersecting(godlo, wgs_bbox))
+        for sheet in current_sheets:
+            next_sheets.extend(_find_children_intersecting(sheet, wgs_bbox))
         current_sheets = next_sheets
         current_scale_idx += 1
 
@@ -1101,7 +1101,7 @@ def _find_1m_sheets(wgs_bbox: BBox) -> list[str]:
     return result
 
 
-def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
+def _find_200k_sheets(sheet_1m: str, wgs_bbox: BBox) -> list[str]:
     """
     Find the 1:200k sheets within a 1:1M sheet that intersect the bbox.
 
@@ -1109,7 +1109,7 @@ def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
 
     Parameters
     ----------
-    godlo_1m : str
+    sheet_1m : str
         Sheet code of the 1:1M sheet (e.g. "N-34")
     wgs_bbox : BBox
         Bbox in EPSG:4326
@@ -1119,7 +1119,7 @@ def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
     list[str]
         List of 1:200k sheet codes
     """
-    parser_1m = SheetParser(godlo_1m)
+    parser_1m = SheetParser(sheet_1m)
     bbox_1m = parser_1m.get_bbox(crs="EPSG:4326")
 
     north_1m = bbox_1m.max_y
@@ -1144,30 +1144,30 @@ def _find_200k_sheets(godlo_1m: str, wgs_bbox: BBox) -> list[str]:
     min_col = max(0, min(11, min_col))
     max_col = max(0, min(11, max_col))
 
-    pas = godlo_1m.split("-")[0]
-    slup = godlo_1m.split("-")[1]
+    pas = sheet_1m.split("-")[0]
+    slup = sheet_1m.split("-")[1]
 
     result = []
     for row in range(min_row, max_row + 1):
         for col in range(min_col, max_col + 1):
             arkusz_num = row * 12 + col + 1
-            godlo = f"{pas}-{slup}-{arkusz_num}"
+            sheet = f"{pas}-{slup}-{arkusz_num}"
             # Verify the intersection (in case of edge cases)
-            sp = SheetParser(godlo)
+            sp = SheetParser(sheet)
             sb = sp.get_bbox(crs="EPSG:4326")
             if _bboxes_intersect(wgs_bbox, sb):
-                result.append(godlo)
+                result.append(sheet)
 
     return result
 
 
-def _find_children_intersecting(godlo: str, wgs_bbox: BBox) -> list[str]:
+def _find_children_intersecting(sheet: str, wgs_bbox: BBox) -> list[str]:
     """
     Find the children of a sheet that intersect the bbox.
 
     Parameters
     ----------
-    godlo : str
+    sheet : str
         Sheet code of the parent sheet
     wgs_bbox : BBox
         Bbox in EPSG:4326
@@ -1177,13 +1177,13 @@ def _find_children_intersecting(godlo: str, wgs_bbox: BBox) -> list[str]:
     list[str]
         List of sheet codes of children intersecting the bbox
     """
-    parser = SheetParser(godlo)
+    parser = SheetParser(sheet)
     children = parser.get_children()
 
     result = []
     for child in children:
         child_bbox = child.get_bbox(crs="EPSG:4326")
         if _bboxes_intersect(wgs_bbox, child_bbox):
-            result.append(child.godlo)
+            result.append(child.sheet)
 
     return result

@@ -120,12 +120,13 @@ def create_parser() -> argparse.ArgumentParser:
     parse_parser = subparsers.add_parser(
         "parse",
         help="Parse and display information about a map sheet",
-        description="Parse a map sheet identifier (godlo) and display its properties",
+        description="Parse a map sheet code and display its properties",
     )
     parse_parser.add_argument(
-        "godlo",
+        "sheet",
+        metavar="SHEET",
         type=str.strip,
-        help="Map sheet identifier (e.g., N-34-130-D, N-34-130-D-d-2-4)",
+        help="Map sheet code (e.g., N-34-130-D, N-34-130-D-d-2-4)",
     )
     parse_parser.add_argument(
         "--hierarchy",
@@ -159,13 +160,14 @@ def create_parser() -> argparse.ArgumentParser:
         ),
     )
     download_parser.add_argument(
-        "godlo",
-        nargs="?",
+        "--sheet",
+        metavar="SHEET",
         default=None,
         # argparse does not strip whitespace; a sheet code with padding would reach
         # the system registry and the file name (parser review 2026-10-07, K5)
         type=str.strip,
-        help="Map sheet identifier (e.g., N-34-130-D-d-2-4)",
+        help="Map sheet code: PL-1992 (e.g. N-34-130-D-d-2-4), PL-2000 "
+        "(e.g. 6.129.30.25.3), CZ SM5 (e.g. CTES96) or CZ TM33 (e.g. 302_5550)",
     )
     download_parser.add_argument(
         "--bbox",
@@ -193,7 +195,7 @@ def create_parser() -> argparse.ArgumentParser:
         choices=["pl", "cz", "auto"],
         default="auto",
         help="Kraj zrodla danych: pl (GUGiK), cz (CUZK) lub auto — wykrywany "
-        "z godla/bboxa; bbox przecinajacy oba kraje pobiera osobne pliki "
+        "z arkusza/bboxa; bbox przecinajacy oba kraje pobiera osobne pliki "
         "per kraj (default: auto)",
     )
     download_parser.add_argument(
@@ -214,8 +216,8 @@ def create_parser() -> argparse.ArgumentParser:
     download_parser.add_argument(
         "--scale",
         metavar="SCALE",
-        help="Skala docelowa arkuszy PL (domyslnie 1:10000): godlo grubsze "
-        "rozwijane do potomkow w tej skali, --bbox/--geometry dzielone na "
+        help="Skala docelowa arkuszy PL (domyslnie 1:10000): arkusz grubszy "
+        "rozwijany do potomkow w tej skali, --bbox/--geometry dzielone na "
         "arkusze tej skali. Zbedna dla PL-1992; dla PL-2000 zwykle 1:2000 "
         "(skala, w ktorej GUGiK publikuje arkusze; podaje ja podpowiedz "
         "przy braku pokrycia). Szczegoly: docs/USAGE.md 1.6",
@@ -252,7 +254,7 @@ def create_parser() -> argparse.ArgumentParser:
         "-r",
         choices=["1m", "5m", "2m"],
         default=None,
-        help="Rozdzielczosc siatki: PL 1m/5m (default 1m); CZ: godlo SM5 "
+        help="Rozdzielczosc siatki: PL 1m/5m (default 1m); CZ: arkusz SM5 "
         "tylko 5m (wynika z arkusza), kafel TM33 i --bbox/--geometry 2m "
         "(default) lub 5m",
     )
@@ -372,9 +374,9 @@ def create_parser() -> argparse.ArgumentParser:
         help="Bounding box: min_x,min_y,max_x,max_y in EPSG:2180",
     )
     lc_download.add_argument(
-        "--godlo",
-        metavar="GODLO",
-        help="Map sheet identifier (e.g., N-34-130-D)",
+        "--sheet",
+        metavar="SHEET",
+        help="Map sheet code (e.g., N-34-130-D)",
     )
     lc_download.add_argument(
         "--year",
@@ -467,9 +469,9 @@ def create_parser() -> argparse.ArgumentParser:
         ),
     )
     sg_hsg.add_argument(
-        "--godlo",
-        metavar="GODLO",
-        help="Map sheet identifier (e.g., N-34-130-D)",
+        "--sheet",
+        metavar="SHEET",
+        help="Map sheet code (e.g., N-34-130-D)",
     )
     sg_hsg.add_argument(
         "--bbox",

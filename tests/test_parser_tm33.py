@@ -13,31 +13,31 @@ from kartograf.exceptions import ParseError, ValidationError
 
 
 class TestParserTM33Parsing:
-    def test_valid_godlo(self):
+    def test_valid_sheet(self):
         p = ParserTM33("302_5550")
-        assert p.godlo == "302_5550"
-        assert p.uklad == "cz_tm33"
+        assert p.sheet == "302_5550"
+        assert p.system == "cz_tm33"
 
     def test_whitespace_stripped(self):
-        assert ParserTM33("  302_5550 ").godlo == "302_5550"
+        assert ParserTM33("  302_5550 ").sheet == "302_5550"
 
     def test_non_string_raises_parse_error(self):
         with pytest.raises(ParseError, match="stringiem"):
             ParserTM33(123)
 
     @pytest.mark.parametrize(
-        "godlo",
+        "sheet",
         ["302-5550", "3025550", "30_5550", "302_555", "302_55501", "abc_5550", ""],
     )
-    def test_invalid_format_raises(self, godlo):
+    def test_invalid_format_raises(self, sheet):
         with pytest.raises(ParseError):
-            ParserTM33(godlo)
+            ParserTM33(sheet)
 
-    @pytest.mark.parametrize("godlo", ["303_5550", "302_5551", "301_5549"])
-    def test_odd_kilometers_raise(self, godlo):
+    @pytest.mark.parametrize("sheet", ["303_5550", "302_5551", "301_5549"])
+    def test_odd_kilometers_raise(self, sheet):
         """Tiles every 2 km - odd kilometres are not an SW corner."""
         with pytest.raises(ParseError, match="parzyste"):
-            ParserTM33(godlo)
+            ParserTM33(sheet)
 
 
 class TestParserTM33BBox:

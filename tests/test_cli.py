@@ -76,7 +76,7 @@ def _mock_manager(path):
 def _starting_download(path):
     """A fake ``download_sheet`` that calls ``on_download`` before downloading."""
 
-    def fake(godlo, skip_existing=True, on_progress=None, on_download=None):
+    def fake(sheet, skip_existing=True, on_progress=None, on_download=None):
         if on_download is not None:
             on_download()
         return path
@@ -105,7 +105,7 @@ class TestCreateParser:
         parser = create_parser()
         args = parser.parse_args(["parse", "N-34-130-D"])
         assert args.command == "parse"
-        assert args.godlo == "N-34-130-D"
+        assert args.sheet == "N-34-130-D"
 
     def test_parse_hierarchy_flag(self):
         """Test --hierarchy flag."""
@@ -164,21 +164,23 @@ class TestParseBboxArg:
         assert "Expected: min_x,min_y,max_x,max_y" in msg
 
 
-class TestCreateParserGodloStrip:
-    """K5: argparse does not strip whitespace - the sheet code (godlo) is stripped
+class TestCreateParserSheetStrip:
+    """K5: argparse does not strip whitespace - the sheet code is stripped
     on input, before the system registry decides the country and before the
     file name is built."""
 
     @pytest.mark.parametrize("raw", [" 302_5550", "302_5550 ", "\t302_5550\n"])
-    def test_download_godlo_stripped(self, raw):
-        assert create_parser().parse_args(["download", raw]).godlo == "302_5550"
+    def test_download_sheet_stripped(self, raw):
+        assert (
+            create_parser().parse_args(["download", "--sheet", raw]).sheet == "302_5550"
+        )
 
-    def test_parse_godlo_stripped(self):
-        assert create_parser().parse_args(["parse", " N-34 "]).godlo == "N-34"
+    def test_parse_sheet_stripped(self):
+        assert create_parser().parse_args(["parse", " N-34 "]).sheet == "N-34"
 
-    def test_download_without_godlo_still_none(self):
+    def test_download_without_sheet_still_none(self):
         args = create_parser().parse_args(["download", "--bbox", "1,2,3,4"])
-        assert args.godlo is None
+        assert args.sheet is None
 
 
 class TestFormatSheetInfo:
@@ -294,8 +296,8 @@ class TestFormatDescendants:
 class TestCmdParse:
     """Tests for cmd_parse command."""
 
-    def test_parse_valid_godlo(self, capsys):
-        """Test parsing valid godlo."""
+    def test_parse_valid_sheet(self, capsys):
+        """Test parsing valid sheet."""
         result = main(["parse", "N-34-130-D"])
 
         assert result == 0
@@ -303,8 +305,8 @@ class TestCmdParse:
         assert "N-34-130-D" in captured.out
         assert "1:100000" in captured.out
 
-    def test_parse_invalid_godlo(self, capsys):
-        """Test parsing invalid godlo."""
+    def test_parse_invalid_sheet(self, capsys):
+        """Test parsing invalid sheet."""
         result = main(["parse", "INVALID"])
 
         assert result == 1
@@ -475,11 +477,11 @@ class TestCLIIntegration:
             ("N-34-130-D-d-2-4", "1:10000"),
         ]
 
-        for godlo, expected_scale in test_cases:
-            result = main(["parse", godlo])
-            assert result == 0, f"Failed for {godlo}"
+        for sheet, expected_scale in test_cases:
+            result = main(["parse", sheet])
+            assert result == 0, f"Failed for {sheet}"
             captured = capsys.readouterr()
-            assert expected_scale in captured.out, f"Scale not found for {godlo}"
+            assert expected_scale in captured.out, f"Scale not found for {sheet}"
 
 
 class TestCreateParserDownload:
@@ -488,38 +490,42 @@ class TestCreateParserDownload:
     def test_has_download_subcommand(self):
         """Test that download subcommand exists."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
         assert args.command == "download"
-        assert args.godlo == "N-34-130-D"
+        assert args.sheet == "N-34-130-D"
 
     def test_download_scale_option(self):
         """Test --scale option."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D", "--scale", "1:10000"])
+        args = parser.parse_args(
+            ["download", "--sheet", "N-34-130-D", "--scale", "1:10000"]
+        )
         assert args.scale == "1:10000"
 
     def test_download_output_option(self):
         """Test --output option."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D", "-o", "/custom/path"])
+        args = parser.parse_args(
+            ["download", "--sheet", "N-34-130-D", "-o", "/custom/path"]
+        )
         assert args.output == "/custom/path"
 
     def test_download_force_flag(self):
         """Test --force flag."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D", "--force"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D", "--force"])
         assert args.force is True
 
     def test_download_quiet_flag(self):
         """Test --quiet flag."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D", "-q"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D", "-q"])
         assert args.quiet is True
 
     def test_download_default_values(self):
         """Test default values for download options."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
         assert args.output == "./data"
         assert args.force is False
         assert args.quiet is False
@@ -530,37 +536,43 @@ class TestCreateParserCountry:
     """Tests for --country/--target-crs and per-country sentinels on download."""
 
     def test_country_default_auto(self):
-        args = create_parser().parse_args(["download", "X"])
+        args = create_parser().parse_args(["download", "--sheet", "X"])
         assert args.country == "auto"
 
     def test_country_choices(self):
         for value in ("pl", "cz", "auto"):
-            args = create_parser().parse_args(["download", "X", "--country", value])
+            args = create_parser().parse_args(
+                ["download", "--sheet", "X", "--country", value]
+            )
             assert args.country == value
 
     def test_country_invalid_rejected(self):
         with pytest.raises(SystemExit):
-            create_parser().parse_args(["download", "X", "--country", "de"])
+            create_parser().parse_args(["download", "--sheet", "X", "--country", "de"])
 
     def test_target_crs_default_none_and_choices(self):
-        args = create_parser().parse_args(["download", "X"])
+        args = create_parser().parse_args(["download", "--sheet", "X"])
         assert args.target_crs is None
         for value in ("EPSG:2180", "EPSG:5514", "EPSG:3045"):
-            args = create_parser().parse_args(["download", "X", "--target-crs", value])
+            args = create_parser().parse_args(
+                ["download", "--sheet", "X", "--target-crs", value]
+            )
             assert args.target_crs == value
         with pytest.raises(SystemExit):
-            create_parser().parse_args(["download", "X", "--target-crs", "EPSG:4326"])
+            create_parser().parse_args(
+                ["download", "--sheet", "X", "--target-crs", "EPSG:4326"]
+            )
 
     def test_sentinel_defaults(self):
         """--resolution/--vertical-crs/--system default to None (per country)."""
-        args = create_parser().parse_args(["download", "X"])
+        args = create_parser().parse_args(["download", "--sheet", "X"])
         assert args.resolution is None
         assert args.vertical_crs is None
         assert args.system is None
 
     def test_new_choices_accepted(self):
         args = create_parser().parse_args(
-            ["download", "X", "--resolution", "2m", "--vertical-crs", "Bpv"]
+            ["download", "--sheet", "X", "--resolution", "2m", "--vertical-crs", "Bpv"]
         )
         assert args.resolution == "2m"
         assert args.vertical_crs == "Bpv"
@@ -590,7 +602,7 @@ class TestProgressCallback:
         """Test callback for downloading status."""
         callback = create_progress_callback(quiet=False)
         progress = DownloadProgress(
-            current=1, total=4, godlo="N-34-130-D", status="downloading"
+            current=1, total=4, sheet="N-34-130-D", status="downloading"
         )
         callback(progress)
         captured = capsys.readouterr()
@@ -601,7 +613,7 @@ class TestProgressCallback:
         """Test callback for completed status."""
         callback = create_progress_callback(quiet=False)
         progress = DownloadProgress(
-            current=4, total=4, godlo="N-34-130-D", status="completed"
+            current=4, total=4, sheet="N-34-130-D", status="completed"
         )
         callback(progress)
         captured = capsys.readouterr()
@@ -612,7 +624,7 @@ class TestProgressCallback:
         """Test callback for skipped status."""
         callback = create_progress_callback(quiet=False)
         progress = DownloadProgress(
-            current=2, total=4, godlo="N-34-130-D", status="skipped"
+            current=2, total=4, sheet="N-34-130-D", status="skipped"
         )
         callback(progress)
         captured = capsys.readouterr()
@@ -622,7 +634,7 @@ class TestProgressCallback:
         """Test callback for failed status."""
         callback = create_progress_callback(quiet=False)
         progress = DownloadProgress(
-            current=3, total=4, godlo="N-34-130-D", status="failed"
+            current=3, total=4, sheet="N-34-130-D", status="failed"
         )
         callback(progress)
         captured = capsys.readouterr()
@@ -632,9 +644,9 @@ class TestProgressCallback:
 class TestCmdDownload:
     """Tests for cmd_download command."""
 
-    def test_download_invalid_godlo(self, capsys):
-        """Test downloading with invalid godlo."""
-        result = main(["download", "INVALID", "-q"])
+    def test_download_invalid_sheet(self, capsys):
+        """Test downloading with invalid sheet."""
+        result = main(["download", "--sheet", "INVALID", "-q"])
 
         assert result == 1
         captured = capsys.readouterr()
@@ -648,7 +660,9 @@ class TestCmdDownload:
         mock_manager.download_sheet.return_value = tmp_path / "test.tif"
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        result = main(
+            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+        )
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
@@ -668,6 +682,7 @@ class TestCmdDownload:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2",
                 "--scale",
                 "1:10000",
@@ -689,7 +704,15 @@ class TestCmdDownload:
         mock_manager_class.return_value = mock_manager
 
         result = main(
-            ["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "--force", "-q"]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+                "--force",
+                "-q",
+            ]
         )
 
         assert result == 0
@@ -702,11 +725,11 @@ class TestCmdDownload:
         """Test that download errors are handled."""
         mock_manager = Mock()
         mock_manager.download_sheet.side_effect = DownloadError(
-            "Network error", godlo="N-34-130-D"
+            "Network error", sheet="N-34-130-D"
         )
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "N-34-130-D", "-o", str(tmp_path), "-q"])
+        result = main(["download", "--sheet", "N-34-130-D", "-o", str(tmp_path), "-q"])
 
         assert result == 1
         captured = capsys.readouterr()
@@ -725,6 +748,7 @@ class TestCmdDownload:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D",
                 "--scale",
                 "1:invalid",
@@ -748,7 +772,7 @@ class TestCmdDownload:
         )
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        result = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -775,7 +799,7 @@ class TestCmdDownload:
             DownloadResult(succeeded=[], failed=["A", "B", "C", "D"], skipped=[])
         )
 
-        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
         assert result == 1
         err = capsys.readouterr().err
@@ -792,7 +816,7 @@ class TestCmdDownload:
             DownloadResult(succeeded=paths, failed=["A"], skipped=[])
         )
 
-        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
         assert result == 1
         assert "Error: 1 z 4 arkuszy nie pobrano" in capsys.readouterr().err
@@ -807,7 +831,7 @@ class TestCmdDownload:
             DownloadResult(succeeded=paths, failed=["A"], no_coverage=["A"])
         )
 
-        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -824,7 +848,7 @@ class TestCmdDownload:
             DownloadResult(failed=["A", "B"], no_coverage=["A", "B"])
         )
 
-        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
         assert result == 1
         err = capsys.readouterr().err
@@ -842,7 +866,7 @@ class TestCmdDownload:
         mock_manager.download_sheet.return_value = [tmp_path / "x.asc"] * 4
         mock_manager_class.return_value = mock_manager
 
-        result = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        result = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -864,7 +888,15 @@ class TestCmdDownload:
         mock_manager_class.return_value = mock_manager
 
         result = main(
-            ["download", "N-34-130-D-d-2", "--scale", "1:10000", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2",
+                "--scale",
+                "1:10000",
+                "-o",
+                str(tmp_path),
+            ]
         )
 
         assert result == 1
@@ -900,13 +932,15 @@ class TestCmdDownloadProduct:
     def test_download_parser_has_product_option(self):
         """Test that download parser has --product option."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D", "--product", "nmpt"])
+        args = parser.parse_args(
+            ["download", "--sheet", "N-34-130-D", "--product", "nmpt"]
+        )
         assert args.product == "nmpt"
 
     def test_download_product_default_nmt(self):
         """Test that --product defaults to nmt."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
         assert args.product == "nmt"
 
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
@@ -928,6 +962,7 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "nmpt",
@@ -961,6 +996,7 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "orto",
@@ -991,7 +1027,9 @@ class TestCmdDownloadProduct:
         mock_manager.download_sheet.return_value = tmp_path / "test.asc"
         mock_manager_cls.return_value = mock_manager
 
-        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        result = main(
+            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+        )
 
         assert result == 0
         mock_create.assert_called_once()
@@ -1074,7 +1112,15 @@ class TestCmdDownloadProduct:
         mock_manager_cls.return_value = manager
 
         result = main(
-            ["download", "N-34-130-D-d-2-4", "--product", "orto", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--product",
+                "orto",
+                "-o",
+                str(tmp_path),
+            ]
         )
 
         assert result == 0
@@ -1096,7 +1142,15 @@ class TestCmdDownloadProduct:
         mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
 
         rc = main(
-            ["download", "N-34-130-D-d-2-4", "--force", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--force",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
 
         assert rc == 0
@@ -1108,10 +1162,10 @@ class TestCmdDownloadProduct:
     @pytest.mark.parametrize(
         "argv",
         [
-            ["download", "N-34-130-D-d-2-4"],
+            ["download", "--sheet", "N-34-130-D-d-2-4"],
             ["download", "--bbox", "630000,480000,637000,487000", "--country", "pl"],
         ],
-        ids=["godlo", "bbox-list"],
+        ids=["sheet", "bbox-list"],
     )
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox", return_value=["N-1"])
     @patch("kartograf.cli.download_cmd._create_provider_and_storage")
@@ -1148,6 +1202,7 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "nmpt",
@@ -1178,6 +1233,7 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "orto",
@@ -1207,6 +1263,7 @@ class TestCmdDownloadProduct:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "orto",
@@ -1297,7 +1354,7 @@ class TestCreateProviderAndStorage:
         )
         assert isinstance(provider, GugikProvider)
         assert storage._resolution == "1m"
-        assert storage._subdir == "nmt/pl_{uklad}_1m_evrf2007"
+        assert storage._subdir == "nmt/pl_{system}_1m_evrf2007"
 
     def test_nmpt_creates_nmpt_provider(self, tmp_path):
         """Test that nmpt creates GugikNmptProvider."""
@@ -1308,7 +1365,7 @@ class TestCreateProviderAndStorage:
             "nmpt", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikNmptProvider)
-        assert storage._subdir == "nmpt/pl_{uklad}_1m_evrf2007"
+        assert storage._subdir == "nmpt/pl_{system}_1m_evrf2007"
 
     def test_orto_creates_orto_provider(self, tmp_path):
         """Test that orto creates GugikOrtoProvider."""
@@ -1319,7 +1376,7 @@ class TestCreateProviderAndStorage:
             "orto", tmp_path, "EVRF2007", "1m"
         )
         assert isinstance(provider, GugikOrtoProvider)
-        assert storage._subdir == "orto/pl_{uklad}"
+        assert storage._subdir == "orto/pl_{system}"
 
     def test_laz_product_raises_validation_error(self, tmp_path):
         """LAZ has a separate flow (_cmd_download_laz) - it must not get here."""
@@ -1341,7 +1398,7 @@ class TestCreateProviderAndStorage:
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "KRON86", "1m"
         )
-        assert storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+        assert storage._subdir == "nmt/pl_{system}_1m_kron86"
 
     def test_nmt_5m_needs_datum_resolved_by_sentinels(self, tmp_path):
         """0.7.1: ``_resolve_pl_sentinels`` rejects 5m + KRON86 before this
@@ -1351,7 +1408,7 @@ class TestCreateProviderAndStorage:
         provider, storage = _create_provider_and_storage(
             "nmt", tmp_path, "EVRF2007", "5m"
         )
-        assert storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+        assert storage._subdir == "nmt/pl_{system}_5m_evrf2007"
         with pytest.raises(ValidationError, match="tylko w EVRF2007"):
             _create_provider_and_storage("nmt", tmp_path, "KRON86", "5m")
 
@@ -1361,7 +1418,7 @@ class TestCreateProviderAndStorage:
         provider, storage = _create_provider_and_storage(
             "nmpt", tmp_path, "KRON86", "1m"
         )
-        assert storage._subdir == "nmpt/pl_{uklad}_1m_kron86"
+        assert storage._subdir == "nmpt/pl_{system}_1m_kron86"
 
 
 _5M_KRON86_ERROR = (
@@ -1403,16 +1460,16 @@ class TestNmt5mKron86Rejected:
     @pytest.mark.parametrize(
         "task",
         [
-            ["N-34-130-D-d-2-4"],
-            ["N-34-130-D"],
+            ["--sheet", "N-34-130-D-d-2-4"],
+            ["--sheet", "N-34-130-D"],
             ["--bbox", "630000,480000,637000,487000", "--country", "pl"],
             ["--bbox", "630000,480000,637000,487000"],
             # PL+CZ border area: under auto KRON86 decides PL, CZ never runs
             ["--bbox", "18.5,49.7,18.9,49.95", "--bbox-crs", "EPSG:4326"],
         ],
         ids=[
-            "godlo",
-            "godlo-hierarchy",
+            "sheet",
+            "sheet-hierarchy",
             "bbox-pl",
             "bbox-auto",
             "bbox-auto-pl-cz-border",
@@ -1506,7 +1563,7 @@ class TestNmt5mKron86Rejected:
         assert not (tmp_path / "out").exists()
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_godlo_5m_without_vertical_crs_uses_evrf2007(
+    def test_sheet_5m_without_vertical_crs_uses_evrf2007(
         self, mock_manager_cls, capsys, tmp_path
     ):
         mock_manager = Mock()
@@ -1517,6 +1574,7 @@ class TestNmt5mKron86Rejected:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--resolution",
                 "5m",
@@ -1621,11 +1679,12 @@ class TestCmdDownloadBBox:
         assert result == 0
         mock_manager.download_sheets.assert_called_once()
 
-    def test_download_bbox_and_godlo_error(self, capsys):
-        """Test oba godlo i --bbox → exit 1."""
+    def test_download_bbox_and_sheet_error(self, capsys):
+        """Test oba sheet i --bbox → exit 1."""
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--bbox",
                 "419000,230000,426000,237000",
@@ -1780,8 +1839,8 @@ class TestCmdDownloadBBox:
         )
         assert args.bbox_crs == "EPSG:2180"
 
-    def test_download_parser_godlo_optional(self):
-        """Test that godlo is now optional."""
+    def test_download_parser_sheet_optional(self):
+        """Test that sheet is now optional."""
         parser = create_parser()
         args = parser.parse_args(
             [
@@ -1790,7 +1849,7 @@ class TestCmdDownloadBBox:
                 "419000,230000,426000,237000",
             ]
         )
-        assert args.godlo is None
+        assert args.sheet is None
         assert args.bbox == "419000,230000,426000,237000"
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -1846,19 +1905,19 @@ class _SheetProvider:
         self.calls: list[str] = []
         self._lock = threading.Lock()
 
-    def download(self, godlo, path, timeout=30):
+    def download(self, sheet, path, timeout=30):
         from kartograf.exceptions import NoCoverageError
 
         with self._lock:
-            self.calls.append(godlo)
+            self.calls.append(sheet)
         outcome = next(
-            (v for suffix, v in self.outcomes.items() if godlo.endswith(suffix)),
+            (v for suffix, v in self.outcomes.items() if sheet.endswith(suffix)),
             "ok",
         )
         if outcome == "no_coverage":
-            raise NoCoverageError(f"No NMT 1m data available for {godlo}", godlo=godlo)
+            raise NoCoverageError(f"No NMT 1m data available for {sheet}", sheet=sheet)
         if outcome == "fail":
-            raise DownloadError(f"timeout {godlo}", godlo=godlo)
+            raise DownloadError(f"timeout {sheet}", sheet=sheet)
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_bytes(b"data")
         return path
@@ -1872,10 +1931,10 @@ class TestSheetListExitCode:
     CLI loop.
     """
 
-    _GODLA = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
+    _SHEETS = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
 
     @staticmethod
-    def _run_bbox(tmp_path, outcomes, *extra, godla=None):
+    def _run_bbox(tmp_path, outcomes, *extra, sheets=None):
         from kartograf.download.storage import FileStorage
 
         provider = _SheetProvider(outcomes)
@@ -1887,7 +1946,7 @@ class TestSheetListExitCode:
             ),
             patch(
                 "kartograf.cli.download_cmd.find_sheets_for_bbox",
-                return_value=list(godla or TestSheetListExitCode._GODLA),
+                return_value=list(sheets or TestSheetListExitCode._SHEETS),
             ),
         ):
             rc = main(
@@ -1917,7 +1976,7 @@ class TestSheetListExitCode:
         )
 
         assert rc == 1
-        assert sorted(provider.calls) == self._GODLA
+        assert sorted(provider.calls) == self._SHEETS
         assert files == ["N-34-130-D-d-2-2.asc", "N-34-130-D-d-2-4.asc"]
         err = capsys.readouterr().err
         error_line = next(line for line in err.splitlines() if "Error:" in line)
@@ -1962,18 +2021,18 @@ class TestSheetListExitCode:
         assert captured.out == ""
         assert "Warning:" in captured.err and "Error:" in captured.err
 
-    def test_coarse_godlo_expands_in_manager(self, tmp_path, capsys):
+    def test_coarse_sheet_expands_in_manager(self, tmp_path, capsys):
         """The manager expands a coarser code; a leaf failure is in the summary."""
         rc, provider, files = self._run_bbox(
             tmp_path,
             {"-2-3": "fail"},
             "--scale",
             "1:25000",
-            godla=["N-34-130-D-d-2"],
+            sheets=["N-34-130-D-d-2"],
         )
 
         assert rc == 1
-        assert sorted(provider.calls) == self._GODLA
+        assert sorted(provider.calls) == self._SHEETS
         assert len(files) == 3
         err = capsys.readouterr().err
         assert "Error: 1 z 4 arkuszy nie pobrano" in err
@@ -1995,7 +2054,7 @@ class TestSheetListExitCode:
             ),
             patch(
                 "kartograf.cli.download_cmd.find_sheets_for_bbox",
-                return_value=list(self._GODLA),
+                return_value=list(self._SHEETS),
             ),
         ):
             rc = main(
@@ -2030,7 +2089,7 @@ class TestSheetListExitCode:
         mock_overall.return_value = BBox(
             630000.0, 480000.0, 640000.0, 490000.0, "EPSG:2180"
         )  # Warsaw - deep inside PL, auto-split will not touch CZ
-        mock_find.return_value = list(self._GODLA)
+        mock_find.return_value = list(self._SHEETS)
         provider = _SheetProvider({"-1": "no_coverage"})
         storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         with patch(
@@ -2053,10 +2112,10 @@ class TestProgressNoCoverage:
         on_progress = create_progress_callback(quiet=False)
         on_progress(
             DownloadProgress(
-                current=1, total=2, godlo="N-1", status="no_coverage", message="sea"
+                current=1, total=2, sheet="N-1", status="no_coverage", message="sea"
             )
         )
-        on_progress(DownloadProgress(current=2, total=2, godlo="N-2", status="failed"))
+        on_progress(DownloadProgress(current=2, total=2, sheet="N-2", status="failed"))
         out = capsys.readouterr().out
         assert "∅ N-1" in out and "✗ N-2" in out
 
@@ -2102,20 +2161,20 @@ class TestCmdLandcoverDownload:
         assert "Error: SoilGrids does not support TERYT" in captured.err
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_by_godlo(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --godlo (BDOT10k) downloads every powiat of the sheet."""
+    def test_landcover_download_by_sheet(self, mock_mgr_cls, capsys, tmp_path):
+        """landcover download --sheet (BDOT10k) downloads every powiat of the sheet."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
         mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
-            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+            ["landcover", "download", "--sheet", "N-34-130-D", "-o", str(tmp_path)]
         )
         assert result == 0
         mock_mgr.download_all_counties.assert_called_once()
         call_kwargs = mock_mgr.download_all_counties.call_args
-        assert call_kwargs.kwargs.get("godlo") == "N-34-130-D"
+        assert call_kwargs.kwargs.get("sheet") == "N-34-130-D"
         mock_mgr.download.assert_not_called()
         assert "Downloaded to" in capsys.readouterr().out
 
@@ -2158,7 +2217,7 @@ class TestCmdLandcoverDownload:
                 "download",
                 "--source",
                 "corine",
-                "--godlo",
+                "--sheet",
                 "N-34-130-D",
                 "-o",
                 str(tmp_path),
@@ -2186,7 +2245,7 @@ class TestCmdLandcoverDownload:
     def test_landcover_download_multiple_selection(self, capsys):
         """Multiple selection methods -> exit 1."""
         result = main(
-            ["landcover", "download", "--teryt", "1465", "--godlo", "N-34-130-D"]
+            ["landcover", "download", "--teryt", "1465", "--sheet", "N-34-130-D"]
         )
         assert result == 1
         captured = capsys.readouterr()
@@ -2246,16 +2305,16 @@ class TestCmdSoilgrids:
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
-        """soilgrids hsg --godlo -> success output."""
+        """soilgrids hsg --sheet -> success output."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
         mock_calc_cls.return_value = mock_calc
 
         result = main(
             [
                 "soilgrids",
                 "hsg",
-                "--godlo",
+                "--sheet",
                 "N-34-130-D",
                 "-o",
                 str(tmp_path),
@@ -2264,13 +2323,13 @@ class TestCmdSoilgrids:
         assert result == 0
         captured = capsys.readouterr()
         assert "HSG raster saved to" in captured.out
-        mock_calc.calculate_hsg_by_godlo.assert_called_once()
+        mock_calc.calculate_hsg_by_sheet.assert_called_once()
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --stats prints statistics."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
         mock_calc.get_hsg_statistics.return_value = {
             "A": {
                 "count": 100,
@@ -2307,7 +2366,7 @@ class TestCmdSoilgrids:
             [
                 "soilgrids",
                 "hsg",
-                "--godlo",
+                "--sheet",
                 "N-34-130-D",
                 "-o",
                 str(tmp_path),
@@ -2324,14 +2383,14 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg raises DownloadError -> exit 1."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_godlo.side_effect = DownloadError("Network error")
+        mock_calc.calculate_hsg_by_sheet.side_effect = DownloadError("Network error")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
             [
                 "soilgrids",
                 "hsg",
-                "--godlo",
+                "--sheet",
                 "N-34-130-D",
                 "-o",
                 str(tmp_path),
@@ -2342,28 +2401,28 @@ class TestCmdSoilgrids:
         assert "Error" in captured.err
 
     @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_godlo_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
-        """A7: default HSG file name and the calculator use the canonical godlo."""
+    def test_soilgrids_hsg_sheet_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
+        """A7: default HSG file name and the calculator use the canonical sheet."""
         mock_calc = mock_calc_cls.return_value
-        mock_calc.calculate_hsg_by_godlo.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
         out = tmp_path / "out"
 
-        result = main(["soilgrids", "hsg", "--godlo", "M-33-036-A", "-o", str(out)])
+        result = main(["soilgrids", "hsg", "--sheet", "M-33-036-A", "-o", str(out)])
 
         assert result == 0
-        kwargs = mock_calc.calculate_hsg_by_godlo.call_args.kwargs
-        assert kwargs["godlo"] == "M-33-36-A"
+        kwargs = mock_calc.calculate_hsg_by_sheet.call_args.kwargs
+        assert kwargs["sheet"] == "M-33-36-A"
         assert kwargs["output_path"] == out / "hsg_M-33-36-A_0-5cm.tif"
 
     @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_out_of_range_godlo(self, mock_calc_cls, capsys, tmp_path):
-        """A7: an out-of-range godlo -> Error on stderr, code 1, no calculation."""
+    def test_soilgrids_hsg_out_of_range_sheet(self, mock_calc_cls, capsys, tmp_path):
+        """A7: an out-of-range sheet -> Error on stderr, code 1, no calculation."""
         out = tmp_path / "out"
 
-        result = main(["soilgrids", "hsg", "--godlo", "N-34-999-D", "-o", str(out)])
+        result = main(["soilgrids", "hsg", "--sheet", "N-34-999-D", "-o", str(out)])
 
         assert result == 1
-        mock_calc_cls.return_value.calculate_hsg_by_godlo.assert_not_called()
+        mock_calc_cls.return_value.calculate_hsg_by_sheet.assert_not_called()
         captured = capsys.readouterr()
         assert "Error: " in captured.err
         assert "poza zakresem" in captured.err
@@ -2383,7 +2442,7 @@ class TestCmdSoilgrids:
         assert "Expected" not in captured.out
 
     def test_soilgrids_hsg_no_selection(self, capsys):
-        """soilgrids hsg without --godlo or --bbox -> exit 1."""
+        """soilgrids hsg without --sheet or --bbox -> exit 1."""
         result = main(["soilgrids", "hsg"])
         assert result == 1
         captured = capsys.readouterr()
@@ -2421,16 +2480,16 @@ class TestSoilgridsHsgOutputName:
             assert main(["soilgrids", "hsg", *args, "-o", str(tmp_path)]) == 0
             return getattr(calc, method).call_args.kwargs["output_path"]
 
-    def test_godlo_name_has_depth(self, tmp_path):
+    def test_sheet_name_has_depth(self, tmp_path):
         a = self._run(
-            ["--godlo", "N-34-130-D", "--depth", "0-5cm"],
+            ["--sheet", "N-34-130-D", "--depth", "0-5cm"],
             tmp_path,
-            "calculate_hsg_by_godlo",
+            "calculate_hsg_by_sheet",
         )
         b = self._run(
-            ["--godlo", "N-34-130-D", "--depth", "5-15cm"],
+            ["--sheet", "N-34-130-D", "--depth", "5-15cm"],
             tmp_path,
-            "calculate_hsg_by_godlo",
+            "calculate_hsg_by_sheet",
         )
         assert a.name == "hsg_N-34-130-D_0-5cm.tif"
         assert b.name == "hsg_N-34-130-D_5-15cm.tif"
@@ -2599,14 +2658,15 @@ class TestCmdDownloadGeometry:
         err = capsys.readouterr().err
         assert err.startswith("Error:") and "layer_a, layer_b" in err
 
-    def test_download_geometry_and_godlo_error(self, capsys, tmp_path):
-        """--geometry + godlo -> mutual exclusivity error."""
+    def test_download_geometry_and_sheet_error(self, capsys, tmp_path):
+        """--geometry + sheet -> mutual exclusivity error."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--geometry",
                 str(shp_file),
@@ -2859,8 +2919,8 @@ class TestCmdSoilgridsHsgGeometry:
         assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
         assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
 
-    def test_soilgrids_hsg_geometry_and_godlo_error(self, capsys, tmp_path):
-        """--geometry + --godlo -> mutual exclusivity error."""
+    def test_soilgrids_hsg_geometry_and_sheet_error(self, capsys, tmp_path):
+        """--geometry + --sheet -> mutual exclusivity error."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
@@ -2870,7 +2930,7 @@ class TestCmdSoilgridsHsgGeometry:
                 "hsg",
                 "--geometry",
                 str(shp_file),
-                "--godlo",
+                "--sheet",
                 "N-34-130-D",
             ]
         )
@@ -2887,10 +2947,10 @@ class TestCmdSoilgridsHsgGeometry:
 
 
 class TestFormatSheetInfoPL2000:
-    """Tests for format_sheet_info() with PL-2000 godla."""
+    """Tests for format_sheet_info() with PL-2000 sheets."""
 
     def test_format_pl2000_sheet_basic(self):
-        """PL-2000 godlo shows correct layout and components."""
+        """PL-2000 sheet shows correct layout and components."""
         parser = SheetParser("6.179.12")
         output = format_sheet_info(parser)
 
@@ -2933,7 +2993,7 @@ class TestFormatSheetInfoPL2000:
         assert "Natywny CRS: EPSG:2179" in output
 
     def test_format_pl1992_no_strefa(self):
-        """PL-1992 godlo should NOT show Strefa or Natywny CRS."""
+        """PL-1992 sheet should NOT show Strefa or Natywny CRS."""
         parser = SheetParser("N-34-130-D")
         output = format_sheet_info(parser)
 
@@ -2942,9 +3002,9 @@ class TestFormatSheetInfoPL2000:
 
 
 class TestParsePL2000Command:
-    """Tests for 'kartograf parse' with PL-2000 godla."""
+    """Tests for 'kartograf parse' with PL-2000 sheets."""
 
-    def test_parse_pl2000_godlo(self, capsys):
+    def test_parse_pl2000_sheet(self, capsys):
         """kartograf parse 6.179.12 should work."""
         result = main(["parse", "6.179.12"])
 
@@ -2973,7 +3033,7 @@ class TestParsePL2000Command:
         assert "Strefa: 6" in captured.out
 
     def test_parse_pl2000_invalid(self, capsys):
-        """Invalid PL-2000 godlo returns error."""
+        """Invalid PL-2000 sheet returns error."""
         result = main(["parse", "9.179.12"])
 
         assert result == 1
@@ -3223,7 +3283,7 @@ class TestCmdDownloadLaz:
 
         return [
             LazTile(
-                godlo="N-33-131-B-a-1-1-4",
+                sheet="N-33-131-B-a-1-1-4",
                 url="https://opendata.geoportal.gov.pl/x/81121_1_N-33-131-B-a-1-1-4.laz",
                 year=2024,
                 density=25,
@@ -3234,7 +3294,7 @@ class TestCmdDownloadLaz:
                 max_y=383000,
             ),
             LazTile(
-                godlo="N-33-131-B-a-1-2-3",
+                sheet="N-33-131-B-a-1-2-3",
                 url="https://opendata.geoportal.gov.pl/x/81279_2_N-33-131-B-a-1-2-3.laz",
                 year=2024,
                 density=25,
@@ -3251,6 +3311,7 @@ class TestCmdDownloadLaz:
         args = parser.parse_args(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3267,10 +3328,10 @@ class TestCmdDownloadLaz:
     def test_laz_invalid_product_choice_rejected(self):
         parser = create_parser()
         with pytest.raises(SystemExit):
-            parser.parse_args(["download", "X", "--product", "nope"])
+            parser.parse_args(["download", "--sheet", "X", "--product", "nope"])
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
-    def test_laz_godlo_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
+    def test_laz_sheet_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
         """sheet code → discover tiles → download each via provider.download."""
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
@@ -3281,6 +3342,7 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3335,12 +3397,12 @@ class TestCmdDownloadLaz:
         from kartograf.exceptions import DownloadError
 
         base = self._fake_tiles()[0]
-        godla = [f"N-33-131-B-a-1-1-{i}" for i in range(1, 9)]
+        sheets = [f"N-33-131-B-a-1-1-{i}" for i in range(1, 9)]
         tiles = [
-            replace(base, godlo=g, url=f"https://opendata.geoportal.gov.pl/x/{g}.laz")
-            for g in godla
+            replace(base, sheet=g, url=f"https://opendata.geoportal.gov.pl/x/{g}.laz")
+            for g in sheets
         ]
-        good = godla[0]
+        good = sheets[0]
 
         def _download(url, target, **_kwargs):
             if good in url:
@@ -3356,6 +3418,7 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3370,7 +3433,7 @@ class TestCmdDownloadLaz:
         assert "Warning:" not in err
         assert "Error: 7 z 8 kafli LAZ nie pobrano" in err
         for tile in tiles[1:]:
-            assert tile.godlo in err
+            assert tile.sheet in err
         assert f"{good}:" not in err
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
@@ -3384,6 +3447,7 @@ class TestCmdDownloadLaz:
         main(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3426,6 +3490,7 @@ class TestCmdDownloadLaz:
             result = main(
                 [
                     "download",
+                    "--sheet",
                     "M-34-27-B-b-2-1",
                     "--product",
                     "laz",
@@ -3455,6 +3520,7 @@ class TestCmdDownloadLaz:
             result = main(
                 [
                     "download",
+                    "--sheet",
                     "M-34-27-B-b-2-1",
                     "--product",
                     "laz",
@@ -3495,6 +3561,7 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3520,13 +3587,13 @@ class TestCmdDownloadLaz:
         # assertion would stay green even with broken production code.
         expected_storage = FileStorage(tmp_path, product="laz", vertical_crs="EVRF2007")
         assert target == expected_storage.get_raw_path(
-            tile.godlo, tile.filename, uklad=tile.uklad
+            tile.sheet, tile.filename, system=tile.system
         )
         assert target.parts[-10:-8] == ("laz", "pl_2000_evrf2007")
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["dataset"] == "pl.gugik.laz"
         assert payload["vertical_crs"] == "EPSG:9651"
-        assert payload["extra"]["tile_sheet"] == tile.godlo
+        assert payload["extra"]["tile_sheet"] == tile.sheet
         assert payload["extra"]["year"] == tile.year
         assert payload["request"]["bbox_crs"] == "EPSG:2180"
 
@@ -3562,6 +3629,7 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3607,6 +3675,7 @@ class TestCmdDownloadLaz:
         result = main(
             [
                 "download",
+                "--sheet",
                 "M-34-27-B-b-2-1",
                 "--product",
                 "laz",
@@ -3621,9 +3690,18 @@ class TestCmdDownloadLaz:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["horizontal_crs"] == "EPSG:2178"
 
-    def test_laz_invalid_godlo_errors(self, capsys, tmp_path):
+    def test_laz_invalid_sheet_errors(self, capsys, tmp_path):
         result = main(
-            ["download", "NOT-A-GODLO!!", "--product", "laz", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--sheet",
+                "NOT-A-GODLO!!",
+                "--product",
+                "laz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert result == 1
 
@@ -3647,12 +3725,12 @@ class TestCmdDownloadLaz:
 class TestResolveLazBbox:
     """Tests for _resolve_laz_bbox helper."""
 
-    def test_godlo_to_2180(self):
+    def test_sheet_to_2180(self):
         from argparse import Namespace
 
         from kartograf.cli.download_cmd import _resolve_laz_bbox
 
-        args = Namespace(godlo="M-34-27-B-b-2-1", bbox=None, geometry=None)
+        args = Namespace(sheet="M-34-27-B-b-2-1", bbox=None, geometry=None)
         bbox = _resolve_laz_bbox(args)
         assert bbox.crs == "EPSG:2180"
         assert bbox.min_x < bbox.max_x and bbox.min_y < bbox.max_y
@@ -3667,7 +3745,7 @@ class TestResolveLazBbox:
         from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         gpkg = write_gpkg_layers(tmp_path / "multi.gpkg", ["layer_a", "layer_b"])
-        args = Namespace(godlo=None, bbox=None, geometry=str(gpkg), layer=None)
+        args = Namespace(sheet=None, bbox=None, geometry=str(gpkg), layer=None)
         envelope = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         with (
             patch(
@@ -3691,7 +3769,7 @@ class TestResolveLazBbox:
         from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(
-            godlo=None, bbox="18,50,20,50.2", bbox_crs="EPSG:4326", geometry=None
+            sheet=None, bbox="18,50,20,50.2", bbox_crs="EPSG:4326", geometry=None
         )
         bbox = _resolve_laz_bbox(args)
         assert bbox.crs == "EPSG:2180"
@@ -3703,7 +3781,7 @@ class TestResolveLazBbox:
         from kartograf.cli.download_cmd import _resolve_laz_bbox
 
         args = Namespace(
-            godlo=None,
+            sheet=None,
             bbox="530000,382000,533000,386000",
             bbox_crs="EPSG:2180",
             geometry=None,
@@ -3721,7 +3799,7 @@ class TestResolveLazBbox:
 
         from kartograf.cli.download_cmd import _resolve_laz_bbox
 
-        args = Namespace(godlo=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
+        args = Namespace(sheet=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
         with pytest.raises(ValidationError, match="Invalid bbox format"):
             _resolve_laz_bbox(args)
 
@@ -3736,7 +3814,7 @@ class TestResolveLazBbox:
         from kartograf.providers.cuzk import dmr
 
         args = Namespace(
-            godlo=None,
+            sheet=None,
             bbox="-788231,-1052442,-741087,-1013379",
             bbox_crs="EPSG:5514",
             geometry=None,
@@ -3762,7 +3840,7 @@ class TestResolveLazBbox:
         from kartograf.providers.cuzk import dmr
 
         args = Namespace(
-            godlo=None,
+            sheet=None,
             bbox="450000,5540000,455000,5545000",
             bbox_crs="EPSG:3045",
             geometry=None,
@@ -3783,7 +3861,7 @@ class TestResolveLazBbox:
 def _cz_args(tmp_path, **overrides):
     """Namespace for direct _cmd_download_cz calls."""
     base = dict(
-        godlo="302_5550",
+        sheet="302_5550",
         bbox=None,
         bbox_crs="EPSG:2180",
         geometry=None,
@@ -3825,7 +3903,7 @@ def _cz_provider_mock(resolution="2m"):
 
     provider.horizontal_transform.side_effect = fake_horizontal
 
-    def fake_download(godlo, target, timeout=60, *, on_download=None):
+    def fake_download(sheet, target, timeout=60, *, on_download=None):
         # provider contract: announce after validation, before the transfer
         if on_download is not None:
             on_download()
@@ -3858,7 +3936,7 @@ class TestCzDownloadingAfterValidation:
         from kartograf.providers.cuzk.sheets import SheetInfo
 
         return SheetInfo(
-            godlo="CTES96",
+            sheet="CTES96",
             name=None,
             bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
             podil=None,
@@ -3892,7 +3970,9 @@ class TestCzDownloadingAfterValidation:
             index_cls.return_value.sm5_sheet.side_effect = ValidationError(
                 "Arkusz SM5 'ABCD12' nie istnieje w indeksie KladyMapovychListu"
             )
-            rc = main(["download", "ABCD12", "--country", "cz", "-o", str(out)])
+            rc = main(
+                ["download", "--sheet", "ABCD12", "--country", "cz", "-o", str(out)]
+            )
             client_cls.return_value.fetch_file.assert_not_called()
 
         captured = capsys.readouterr()
@@ -3905,7 +3985,15 @@ class TestCzDownloadingAfterValidation:
         """Odd kilometres match the TM33 pattern but fail ``ParserTM33``."""
         with patch(self._CLIENT) as client_cls, patch(self._INDEX):
             rc = main(
-                ["download", "301_5550", "--country", "cz", "-o", str(tmp_path / "o")]
+                [
+                    "download",
+                    "--sheet",
+                    "301_5550",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path / "o"),
+                ]
             )
             client_cls.return_value.export_image.assert_not_called()
 
@@ -3928,7 +4016,15 @@ class TestCzDownloadingAfterValidation:
             index_cls.return_value.sm5_sheet.return_value = self._sm5_info()
             client_cls.return_value.fetch_file.side_effect = fake_fetch
             rc = main(
-                ["download", "CTES96", "--country", "cz", "-o", str(tmp_path / "o")]
+                [
+                    "download",
+                    "--sheet",
+                    "CTES96",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path / "o"),
+                ]
             )
 
         rest = capsys.readouterr().out
@@ -3958,7 +4054,15 @@ class TestCzDownloadingAfterValidation:
             )
             client_cls.return_value.export_image.side_effect = fake_export
             rc = main(
-                ["download", "302_5550", "--country", "cz", "-o", str(tmp_path / "o")]
+                [
+                    "download",
+                    "--sheet",
+                    "302_5550",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path / "o"),
+                ]
             )
 
         rest = capsys.readouterr().out
@@ -4007,7 +4111,7 @@ class TestCzDownloadingAfterValidation:
         provider = _cz_provider_mock()
         provider.download_bbox.side_effect = ValidationError("zly bbox")
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, godlo=None, quiet=False)
+        args = _cz_args(tmp_path, sheet=None, quiet=False)
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             rc = _cmd_download_cz(args, bbox=bbox)
 
@@ -4022,7 +4126,7 @@ class TestCzDownloadingAfterValidation:
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, godlo=None if bbox_mode else "302_5550")
+        args = _cz_args(tmp_path, sheet=None if bbox_mode else "302_5550")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             rc = _cmd_download_cz(args, bbox=bbox if bbox_mode else None)
 
@@ -4035,7 +4139,7 @@ class TestCzDownloadingAfterValidation:
 class TestCmdDownloadCz:
     """Tests for the CZ (CUZK) flow in the download command."""
 
-    def test_tm33_godlo_saves_under_cz_dmr5g(self, tmp_path):
+    def test_tm33_sheet_saves_under_cz_dmr5g(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -4086,7 +4190,7 @@ class TestCmdDownloadCz:
         assert "Error:" not in err
         assert f"Warning: cache metadanych nieczytelny ({db})" in err
 
-    def test_tm33_godlo_writes_sidecar(self, tmp_path):
+    def test_tm33_sheet_writes_sidecar(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
@@ -4116,13 +4220,13 @@ class TestCmdDownloadCz:
         # sheet code mode without the field
         assert "parent_request" not in payload["extra"]
 
-    def test_sm5_godlo_enriches_extra_with_cz_share(self, tmp_path):
+    def test_sm5_sheet_enriches_extra_with_cz_share(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
         from kartograf.providers.cuzk.sheets import SheetInfo
 
         provider = _cz_provider_mock(resolution="5m")
         provider.sheet_index.sm5_sheet.return_value = SheetInfo(
-            godlo="CTES96",
+            sheet="CTES96",
             name="Český Těšín 9-6",
             bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
             podil=0.99,
@@ -4130,7 +4234,7 @@ class TestCmdDownloadCz:
         )
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(
-                _cz_args(tmp_path, godlo="CTES96", resolution="5m")
+                _cz_args(tmp_path, sheet="CTES96", resolution="5m")
             )
 
         assert result == 0
@@ -4150,7 +4254,7 @@ class TestCmdDownloadCz:
         provider.sheet_index.sm5_sheet.side_effect = DownloadError("siec padla")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(
-                _cz_args(tmp_path, godlo="CTES96", resolution="5m")
+                _cz_args(tmp_path, sheet="CTES96", resolution="5m")
             )
 
         assert result == 0
@@ -4162,7 +4266,7 @@ class TestCmdDownloadCz:
         assert "cz_share" not in payload["extra"]
 
     @pytest.mark.parametrize("country", ["auto", "cz"])
-    def test_sm5_godlo_without_resolution_defaults_to_5m(
+    def test_sm5_sheet_without_resolution_defaults_to_5m(
         self, tmp_path, capsys, country
     ):
         """An SM5 sheet exists only at 5 m (DMR 4G): without ``--resolution``
@@ -4172,7 +4276,7 @@ class TestCmdDownloadCz:
 
         provider = _cz_provider_mock(resolution="5m")
         provider.sheet_index.sm5_sheet.return_value = SheetInfo(
-            godlo="CTES96",
+            sheet="CTES96",
             name=None,
             bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
             podil=None,
@@ -4182,6 +4286,7 @@ class TestCmdDownloadCz:
             rc = main(
                 [
                     "download",
+                    "--sheet",
                     "CTES96",
                     "--country",
                     country,
@@ -4197,7 +4302,7 @@ class TestCmdDownloadCz:
         assert "Downloading CTES96 (CZ, resolution: 5m)..." in captured.out
         assert captured.err == ""
 
-    def test_sm5_godlo_with_explicit_2m_is_error_without_network(
+    def test_sm5_sheet_with_explicit_2m_is_error_without_network(
         self, tmp_path, capsys
     ):
         """An explicit ``--resolution 2m`` with an SM5 sheet code is a contradictory
@@ -4207,6 +4312,7 @@ class TestCmdDownloadCz:
             rc = main(
                 [
                     "download",
+                    "--sheet",
                     "CTES96",
                     "--resolution",
                     "2m",
@@ -4222,11 +4328,13 @@ class TestCmdDownloadCz:
         assert "Error: Arkusze SM5" in captured.err
         assert "5m" in captured.err
 
-    def test_tm33_godlo_without_resolution_stays_2m(self, tmp_path):
+    def test_tm33_sheet_without_resolution_stays_2m(self, tmp_path):
         """TM33 tile cut from the service: 2 m by default, as before."""
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
-            rc = main(["download", "302_5550", "-o", str(tmp_path / "out"), "-q"])
+            rc = main(
+                ["download", "--sheet", "302_5550", "-o", str(tmp_path / "out"), "-q"]
+            )
 
         assert rc == 0
         assert factory.call_args.kwargs["resolution"] == "2m"
@@ -4264,7 +4372,7 @@ class TestCmdDownloadCz:
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(
-                _cz_args(tmp_path, godlo=None), bbox=bbox, parent_request=parent
+                _cz_args(tmp_path, sheet=None), bbox=bbox, parent_request=parent
             )
 
         assert result == 0
@@ -4327,7 +4435,7 @@ class TestCmdDownloadCz:
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             result = _cmd_download_cz(
-                _cz_args(tmp_path, godlo=None, target_crs="EPSG:3045"), bbox=bbox
+                _cz_args(tmp_path, sheet=None, target_crs="EPSG:3045"), bbox=bbox
             )
 
         assert result == 0
@@ -4342,7 +4450,7 @@ class TestCmdDownloadCz:
             "horizontal": "pinned: S-JTSK to ETRS89 (1) -> EPSG:3045 (1.0 m)"
         }
 
-    def test_godlo_without_safe_horizontal_operation_exits_cleanly(
+    def test_sheet_without_safe_horizontal_operation_exits_cleanly(
         self, tmp_path, capsys
     ):
         """The TM33 sheet code path builds the horizontal operation only at download
@@ -4350,7 +4458,7 @@ class TestCmdDownloadCz:
         it) - a missing safe operation must give a message with a remedy and exit
         code 1, NOT a traceback.
 
-        The safeguard lies in `_run_cz`, not in `_cz_download_godlo`, so it is
+        The safeguard lies in `_run_cz`, not in `_cz_download_sheet`, so it is
         easy to overlook in a refactor - hence this test on the full CLI flow
         (`main`), not on the helper function alone.
         """
@@ -4367,7 +4475,15 @@ class TestCmdDownloadCz:
             "kartograf.providers.cuzk.dmr.build_pinned_transform", side_effect=_boom
         ):
             result = main(
-                ["download", "302_5550", "--country", "cz", "-o", str(tmp_path)]
+                [
+                    "download",
+                    "--sheet",
+                    "302_5550",
+                    "--country",
+                    "cz",
+                    "-o",
+                    str(tmp_path),
+                ]
             )
 
         assert result == 1
@@ -4411,7 +4527,7 @@ class TestCmdDownloadCz:
         ) in err
         assert "Traceback" not in err
 
-    def test_target_crs_with_godlo_rejected(self, tmp_path):
+    def test_target_crs_with_sheet_rejected(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         with pytest.raises(ValidationError, match="--target-crs"):
@@ -4544,7 +4660,7 @@ class TestCmdDownloadCz:
         assert result == 1
         assert "Error: Nieobslugiwany uklad pionowy" in capsys.readouterr().err
 
-    def test_verbose_godlo_reports_progress_and_skip(self, tmp_path, capsys):
+    def test_verbose_sheet_reports_progress_and_skip(self, tmp_path, capsys):
         """Per-file messages in the LAZ/PL flow convention."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
@@ -4565,7 +4681,7 @@ class TestCmdDownloadCz:
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, godlo=None, quiet=False)
+        args = _cz_args(tmp_path, sheet=None, quiet=False)
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             assert _cmd_download_cz(args, bbox=bbox) == 0
             first = capsys.readouterr().out
@@ -4584,7 +4700,7 @@ class TestCmdDownloadCz:
         provider.download_bbox.side_effect = DownloadError("exportImage 500")
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            result = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+            result = _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox)
 
         assert result == 1
         assert "exportImage 500" in capsys.readouterr().err
@@ -4598,7 +4714,7 @@ class TestCmdDownloadCz:
 
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        def real_tif(godlo, target, timeout=60, *, on_download=None):
+        def real_tif(sheet, target, timeout=60, *, on_download=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             with rasterio.open(
                 target,
@@ -4668,7 +4784,7 @@ class TestCmdDownloadCz:
         provider.download_bbox.side_effect = self._real_tif_writer(-9999.0)
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+            rc = _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox)
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -4689,7 +4805,7 @@ class TestCmdDownloadCz:
         provider.download_bbox.side_effect = self._real_tif_writer(-9999.0)
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+            rc = _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox)
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -4708,13 +4824,13 @@ class TestCmdDownloadCz:
         ok = _cz_provider_mock()
         ok.download_bbox.side_effect = self._real_tif_writer(-9999.0)
         with patch(_CZ_FACTORY_PATCH, return_value=ok):
-            assert _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox) == 0
+            assert _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox) == 0
         assert log.disabled is False
 
         failing = _cz_provider_mock()
         failing.download_bbox.side_effect = DownloadError("boom")
         with patch(_CZ_FACTORY_PATCH, return_value=failing):
-            rc = _cmd_download_cz(_cz_args(tmp_path / "b", godlo=None), bbox=bbox)
+            rc = _cmd_download_cz(_cz_args(tmp_path / "b", sheet=None), bbox=bbox)
         assert rc == 1
         assert log.disabled is False
 
@@ -4724,10 +4840,10 @@ class TestCmdDownloadCz:
             patch(_CZ_FACTORY_PATCH, return_value=crashing),
             pytest.raises(KeyboardInterrupt),
         ):
-            _cmd_download_cz(_cz_args(tmp_path / "c", godlo=None), bbox=bbox)
+            _cmd_download_cz(_cz_args(tmp_path / "c", sheet=None), bbox=bbox)
         assert log.disabled is False
 
-    def test_tm33_godlo_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
+    def test_tm33_sheet_all_nodata_warns_but_returns_0(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -4747,7 +4863,7 @@ class TestCmdDownloadCz:
         provider.download_bbox.side_effect = self._real_tif_writer(123.0)
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(_cz_args(tmp_path, godlo=None), bbox=bbox)
+            rc = _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox)
 
         assert rc == 0
         assert "Warning:" not in capsys.readouterr().err
@@ -4794,7 +4910,7 @@ class TestCmdDownloadCz:
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, godlo=None, target_crs="EPSG:2180")
+        args = _cz_args(tmp_path, sheet=None, target_crs="EPSG:2180")
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             assert _cmd_download_cz(args, bbox=bbox) == 0
         target = next((tmp_path / "nmt").rglob("*.tif"))
@@ -4817,7 +4933,7 @@ class TestCmdDownloadCz:
             assert _cmd_download_cz(_cz_args(tmp_path)) == 0
         assert capsys.readouterr().err == ""
 
-    def test_target_crs_with_godlo_message_names_product_frames(self, tmp_path):
+    def test_target_crs_with_sheet_message_names_product_frames(self, tmp_path):
         """K2: the message says WHAT the code defines (SM5 in 5514, TM33 on 3045)."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
@@ -4883,49 +4999,77 @@ class TestCountryDispatch:
     # --- sheet code -> country ---
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    def test_cz_godlo_routes_to_cz_flow(self, mock_cz, tmp_path):
+    def test_cz_sheet_routes_to_cz_flow(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
-        result = main(["download", "302_5550", "-o", str(tmp_path), "-q"])
+        result = main(["download", "--sheet", "302_5550", "-o", str(tmp_path), "-q"])
         assert result == 0
         mock_cz.assert_called_once()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    def test_sm5_godlo_auto_detected(self, mock_cz, tmp_path):
+    def test_sm5_sheet_auto_detected(self, mock_cz, tmp_path):
         mock_cz.return_value = 0
         result = main(
-            ["download", "CTES96", "--resolution", "5m", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--sheet",
+                "CTES96",
+                "--resolution",
+                "5m",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert result == 0
         mock_cz.assert_called_once()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    def test_cz_godlo_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
+    def test_cz_sheet_with_country_cz_routes_to_cz_flow(self, mock_cz, tmp_path):
         """An explicit --country cz consistent with the sheet code is not a conflict."""
         mock_cz.return_value = 0
         result = main(
-            ["download", "302_5550", "--country", "cz", "-o", str(tmp_path), "-q"]
+            [
+                "download",
+                "--sheet",
+                "302_5550",
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
         )
         assert result == 0
         mock_cz.assert_called_once()
 
     @patch("kartograf.cli.download_cmd._cmd_download_cz")
-    def test_cz_godlo_keeps_sentinels_unresolved(self, mock_cz, tmp_path):
+    def test_cz_sheet_keeps_sentinels_unresolved(self, mock_cz, tmp_path):
         """PL sentinels must not touch the arguments going to CZ."""
         mock_cz.return_value = 0
-        main(["download", "302_5550", "-o", str(tmp_path), "-q"])
+        main(["download", "--sheet", "302_5550", "-o", str(tmp_path), "-q"])
         args = mock_cz.call_args.args[0]
         assert args.resolution is None
         assert args.vertical_crs is None
         assert args.system is None
 
-    def test_cz_godlo_with_country_pl_conflicts(self, tmp_path, capsys):
-        result = main(["download", "CTES96", "--country", "pl", "-o", str(tmp_path)])
+    def test_cz_sheet_with_country_pl_conflicts(self, tmp_path, capsys):
+        result = main(
+            ["download", "--sheet", "CTES96", "--country", "pl", "-o", str(tmp_path)]
+        )
         assert result == 1
         assert "cz_sm5" in capsys.readouterr().err
 
-    def test_pl_godlo_with_country_cz_conflicts(self, tmp_path, capsys):
+    def test_pl_sheet_with_country_cz_conflicts(self, tmp_path, capsys):
         result = main(
-            ["download", "N-34-130-D-d-2-4", "--country", "cz", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--country",
+                "cz",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 1
         assert "pl" in capsys.readouterr().err.lower()
@@ -4933,7 +5077,7 @@ class TestCountryDispatch:
     # --- sentinele PL ---
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_godlo_sentinels_resolved_to_defaults(
+    def test_pl_sheet_sentinels_resolved_to_defaults(
         self, mock_manager_class, tmp_path
     ):
         """Observable PL behaviour unchanged: None -> 1m/EVRF2007."""
@@ -4941,7 +5085,9 @@ class TestCountryDispatch:
         mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
-        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        result = main(
+            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+        )
         assert result == 0
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["resolution"] == "1m"
@@ -4956,6 +5102,7 @@ class TestCountryDispatch:
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--vertical-crs",
                 "KRON86",
@@ -4984,17 +5131,26 @@ class TestCountryDispatch:
         err = capsys.readouterr().err
         assert "Info:" not in err and "Error:" not in err
 
-    def test_pl_godlo_with_2m_rejected(self, tmp_path, capsys):
+    def test_pl_sheet_with_2m_rejected(self, tmp_path, capsys):
         result = main(
-            ["download", "N-34-130-D-d-2-4", "--resolution", "2m", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--resolution",
+                "2m",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 1
         assert "2m" in capsys.readouterr().err
 
-    def test_pl_godlo_with_bpv_rejected(self, tmp_path, capsys):
+    def test_pl_sheet_with_bpv_rejected(self, tmp_path, capsys):
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--vertical-crs",
                 "Bpv",
@@ -5005,10 +5161,11 @@ class TestCountryDispatch:
         assert result == 1
         assert "Bpv" in capsys.readouterr().err
 
-    def test_pl_godlo_with_target_crs_rejected(self, tmp_path, capsys):
+    def test_pl_sheet_with_target_crs_rejected(self, tmp_path, capsys):
         result = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--target-crs",
                 "EPSG:2180",
@@ -5024,20 +5181,28 @@ class TestCountryDispatch:
 
     # --- ValidationError from the CZ flow does not escape as a traceback ---
 
-    def test_cz_godlo_parse_error_returns_1_without_traceback(self, tmp_path, capsys):
+    def test_cz_sheet_parse_error_returns_1_without_traceback(self, tmp_path, capsys):
         """TM33 pattern with odd km: a CLI error (ParseError), not a traceback."""
-        result = main(["download", "301_5551", "-o", str(tmp_path), "-q"])
+        result = main(["download", "--sheet", "301_5551", "-o", str(tmp_path), "-q"])
         assert result == 1
         err = capsys.readouterr().err
         assert "Error:" in err
         assert "301_5551" in err
 
-    def test_cz_godlo_with_target_crs_returns_1_without_traceback(
+    def test_cz_sheet_with_target_crs_returns_1_without_traceback(
         self, tmp_path, capsys
     ):
         """R9: --target-crs + CZ sheet code = a CLI error (main catches nothing)."""
         result = main(
-            ["download", "302_5550", "--target-crs", "EPSG:3045", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "302_5550",
+                "--target-crs",
+                "EPSG:3045",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert result == 1
         assert "--target-crs" in capsys.readouterr().err
@@ -5065,7 +5230,9 @@ class TestCountryDispatch:
     # --- products other than nmt for CZ ---
 
     def test_laz_with_country_cz_rejected(self, tmp_path, capsys):
-        result = main(["download", "302_5550", "--product", "laz", "-o", str(tmp_path)])
+        result = main(
+            ["download", "--sheet", "302_5550", "--product", "laz", "-o", str(tmp_path)]
+        )
         assert result == 1
         assert "etapie 2" in capsys.readouterr().err
 
@@ -5961,21 +6128,23 @@ class TestAutoSplitBBox:
         assert "Warning:" not in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_godlo_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
+    def test_sheet_mode_has_no_parent_request(self, mock_manager_class, tmp_path):
         mock_manager = Mock()
         mock_manager.last_result = None
         mock_manager.download_sheet.return_value = tmp_path / "x.asc"
         mock_manager_class.return_value = mock_manager
-        result = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        result = main(
+            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+        )
         assert result == 0
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs.get("sidecar_extra") is None
 
     # --- N6-2: PL-only flags resolve `auto` instead of failing the task ---
 
-    def _pl_mocks(self, mock_manager_class, mock_find, tmp_path, godlo):
+    def _pl_mocks(self, mock_manager_class, mock_find, tmp_path, sheet):
         """PL branch: one sheet, the manager returns a ready file."""
-        mock_find.return_value = [godlo]
+        mock_find.return_value = [sheet]
         mock_manager = _sheet_list_manager(tmp_path / "x.asc")
         mock_manager_class.return_value = mock_manager
         return mock_manager
@@ -6193,7 +6362,7 @@ class TestAutoSplitBBox:
         assert result == 1
         assert "--country pl" in capsys.readouterr().err
 
-    def test_laz_godlo_untouched_by_guard(self, tmp_path, capsys):
+    def test_laz_sheet_untouched_by_guard(self, tmp_path, capsys):
         """The LAZ sheet code mode does not go through the cross-border guard.
 
         Sheet code M-34-86-D-d-4-3 lies at the CZ border (inside the CZ envelope),
@@ -6205,7 +6374,15 @@ class TestAutoSplitBBox:
         with patch.object(gugik_laz, "GugikLazProvider") as provider_cls:
             provider_cls.return_value.select_tiles.return_value = _selection([])
             result = main(
-                ["download", "M-34-86-D-d-4-3", "--product", "laz", "-o", str(tmp_path)]
+                [
+                    "download",
+                    "--sheet",
+                    "M-34-86-D-d-4-3",
+                    "--product",
+                    "laz",
+                    "-o",
+                    str(tmp_path),
+                ]
             )
 
         assert result == 1
@@ -6544,12 +6721,12 @@ class _PartialSheetProvider(_SheetProvider):
         super().__init__({})
         self.partial = partial
 
-    def source_info(self, godlo):
+    def source_info(self, sheet):
         return {
-            "url": f"https://opendata.geoportal.gov.pl/NMT/1/1_{godlo}.asc",
+            "url": f"https://opendata.geoportal.gov.pl/NMT/1/1_{sheet}.asc",
             "layer": "SkorowidzeNMT2025",
             "acquisition_date": "2025-10-21",
-            "full_sheet": not godlo.endswith(self.partial),
+            "full_sheet": not sheet.endswith(self.partial),
         }
 
 
@@ -6573,13 +6750,13 @@ class TestPartialSheetWarning:
             ),
             patch(
                 "kartograf.cli.download_cmd.find_sheets_for_bbox",
-                return_value=list(TestSheetListExitCode._GODLA),
+                return_value=list(TestSheetListExitCode._SHEETS),
             ),
         ):
             return main([*argv, "-o", str(tmp_path)])
 
-    def test_single_godlo_partial_sheet_warns(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ("-1",), ["download", "N-34-130-D-d-2-1"])
+    def test_single_sheet_partial_sheet_warns(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-1",), ["download", "--sheet", "N-34-130-D-d-2-1"])
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -6588,8 +6765,8 @@ class TestPartialSheetWarning:
         meta = json.loads(sidecar.read_text("utf-8"))
         assert meta["extra"]["source"]["full_sheet"] is False
 
-    def test_single_godlo_full_sheet_is_silent(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ("-9",), ["download", "N-34-130-D-d-2-1"])
+    def test_single_sheet_full_sheet_is_silent(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ("-9",), ["download", "--sheet", "N-34-130-D-d-2-1"])
 
         assert rc == 0
         assert "niepelna" not in capsys.readouterr().err
@@ -6610,14 +6787,14 @@ class TestPartialSheetWarning:
         assert "N-34-130-D-d-2-1" not in warning
 
     def test_hierarchy_partial_sheet_warns(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ("-3",), ["download", "N-34-130-D-d-2"])
+        rc = self._run(tmp_path, ("-3",), ["download", "--sheet", "N-34-130-D-d-2"])
 
         assert rc == 0
         err = capsys.readouterr().err
         assert "niepelna" in err and "N-34-130-D-d-2-3" in err
 
 
-class TestSingleGodloSkipMessage:
+class TestSingleSheetSkipMessage:
     """E15 (E2E-B C17): skipping one sheet code says skip, not ``Downloaded to``."""
 
     @staticmethod
@@ -6629,7 +6806,9 @@ class TestSingleGodloSkipMessage:
             "kartograf.cli.download_cmd._create_provider_and_storage",
             return_value=(provider, storage),
         ):
-            return main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), *extra])
+            return main(
+                ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), *extra]
+            )
 
     def test_second_run_reports_skip(self, tmp_path, capsys):
         provider = _SheetProvider({})
@@ -6662,10 +6841,10 @@ class _CachingSheetProvider(_SheetProvider):
         super().__init__({})
         self.cache = cache
 
-    def download(self, godlo, path, timeout=30):
-        if self.cache.get_record("nmt", "1m", "EVRF2007", godlo) is None:
-            self.cache.set_record("nmt", "1m", "EVRF2007", godlo, {"godlo": godlo})
-        return super().download(godlo, path, timeout)
+    def download(self, sheet, path, timeout=30):
+        if self.cache.get_record("nmt", "1m", "EVRF2007", sheet) is None:
+            self.cache.set_record("nmt", "1m", "EVRF2007", sheet, {"godlo": sheet})
+        return super().download(sheet, path, timeout)
 
 
 class TestUnreadableMetadataCache:
@@ -6676,7 +6855,7 @@ class TestUnreadableMetadataCache:
     ``Error: DatabaseError`` from the ``main`` barrier.
     """
 
-    _GODLA = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
+    _SHEETS = [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
 
     @staticmethod
     def _broken_cache() -> Path:
@@ -6685,7 +6864,7 @@ class TestUnreadableMetadataCache:
         return db
 
     @staticmethod
-    def _run(tmp_path, argv, godla=()):
+    def _run(tmp_path, argv, sheets=()):
         from kartograf.download.storage import FileStorage
 
         out = tmp_path / "out"
@@ -6703,7 +6882,7 @@ class TestUnreadableMetadataCache:
             ),
             patch(
                 "kartograf.cli.download_cmd.find_sheets_for_bbox",
-                return_value=list(godla),
+                return_value=list(sheets),
             ),
         ):
             rc = main([*argv, "-o", str(out)])
@@ -6725,11 +6904,11 @@ class TestUnreadableMetadataCache:
         if quiet:
             argv.append("-q")
 
-        rc, providers, files = self._run(tmp_path, argv, godla=self._GODLA)
+        rc, providers, files = self._run(tmp_path, argv, sheets=self._SHEETS)
 
         assert rc == 0
-        assert files == [f"{g}.asc" for g in self._GODLA]
-        assert sorted(providers[0].calls) == self._GODLA
+        assert files == [f"{g}.asc" for g in self._SHEETS]
+        assert sorted(providers[0].calls) == self._SHEETS
         err = capsys.readouterr().err
         assert "Error:" not in err
         assert "file is not a database" in err
@@ -6741,10 +6920,12 @@ class TestUnreadableMetadataCache:
         ]
         assert db.read_bytes().startswith(b"to nie jest baza")  # untouched
 
-    def test_single_godlo_downloads_with_warning(self, tmp_path, capsys):
+    def test_single_sheet_downloads_with_warning(self, tmp_path, capsys):
         self._broken_cache()
 
-        rc, providers, files = self._run(tmp_path, ["download", "N-34-130-D-d-2-4"])
+        rc, providers, files = self._run(
+            tmp_path, ["download", "--sheet", "N-34-130-D-d-2-4"]
+        )
 
         assert rc == 0
         assert files == ["N-34-130-D-d-2-4.asc"]
@@ -6758,7 +6939,7 @@ class TestUnreadableMetadataCache:
     def test_warning_once_per_command_not_per_process(self, tmp_path, capsys):
         """Every command reports the broken cache again (dedup reset)."""
         self._broken_cache()
-        argv = ["download", "N-34-130-D-d-2-4", "--force"]
+        argv = ["download", "--sheet", "N-34-130-D-d-2-4", "--force"]
 
         self._run(tmp_path, argv)
         self._run(tmp_path, argv)
@@ -6786,7 +6967,7 @@ class TestLazSidecarRequestFilters:
             "kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=instance
         ):
             rc = main(
-                ["download", "M-34-27-B-b-2-1", "--product", "laz"]
+                ["download", "--sheet", "M-34-27-B-b-2-1", "--product", "laz"]
                 + list(extra)
                 + ["-o", str(tmp_path), "-q"]
             )
@@ -6816,7 +6997,7 @@ class TestSheetCrsMismatchWarning:
     ``77912_1384976_7.125.11.19.asc`` (record ``PL-2000:S7``).
     """
 
-    GODLO = "7.125.11.19"
+    SHEET = "7.125.11.19"
     URL = (
         "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/77912/"
         "77912_1384976_7.125.11.19.asc"
@@ -6836,8 +7017,8 @@ class TestSheetCrsMismatchWarning:
         body = render_gfi_body(
             [
                 gfi_record(
-                    self.GODLO,
-                    uklad="PL-2000:S7",
+                    self.SHEET,
+                    system="PL-2000:S7",
                     aktualnosc="2023-03-17",
                     url=self.URL,
                 )
@@ -6863,7 +7044,7 @@ class TestSheetCrsMismatchWarning:
             ),
             patch(
                 "kartograf.cli.download_cmd.find_sheets_for_bbox",
-                return_value=[self.GODLO],
+                return_value=[self.SHEET],
             ),
         ):
             return main([*argv, "-o", str(tmp_path / "out"), "-q"])
@@ -6876,21 +7057,21 @@ class TestSheetCrsMismatchWarning:
             if line.startswith("Warning:") and "EPSG:2180" in line
         ]
 
-    def test_single_godlo_warns_with_prefix(self, tmp_path, capsys):
-        rc = self._run(tmp_path, ["download", self.GODLO])
+    def test_single_sheet_warns_with_prefix(self, tmp_path, capsys):
+        rc = self._run(tmp_path, ["download", "--sheet", self.SHEET])
 
         assert rc == 0
         (warning,) = self._warnings(capsys.readouterr().err)
-        assert self.GODLO in warning and "EPSG:2178" in warning
+        assert self.SHEET in warning and "EPSG:2178" in warning
 
     def test_skip_repeats_warning(self, tmp_path, capsys):
-        assert self._run(tmp_path, ["download", self.GODLO]) == 0
+        assert self._run(tmp_path, ["download", "--sheet", self.SHEET]) == 0
         capsys.readouterr()
 
-        assert self._run(tmp_path, ["download", self.GODLO]) == 0
+        assert self._run(tmp_path, ["download", "--sheet", self.SHEET]) == 0
 
         (warning,) = self._warnings(capsys.readouterr().err)
-        assert self.GODLO in warning
+        assert self.SHEET in warning
 
     def test_sheet_list_warns(self, tmp_path, capsys):
         rc = self._run(
@@ -6910,7 +7091,7 @@ class TestSheetCrsMismatchWarning:
 
         assert rc == 0
         (warning,) = self._warnings(capsys.readouterr().err)
-        assert self.GODLO in warning and "EPSG:2178" in warning
+        assert self.SHEET in warning and "EPSG:2178" in warning
 
     def test_file_in_zone_crs_is_silent(self, tmp_path, capsys):
         # header moved into the real EPSG:2178 frame of 7.125.11.19
@@ -6921,7 +7102,7 @@ class TestSheetCrsMismatchWarning:
         )
         assert head.count(b"7424800.5") == 1 and head.count(b"5546000.5") == 1
 
-        rc = self._run(tmp_path, ["download", self.GODLO], raw=head)
+        rc = self._run(tmp_path, ["download", "--sheet", self.SHEET], raw=head)
 
         assert rc == 0
         assert "innym ukladzie" not in capsys.readouterr().err
@@ -6949,7 +7130,7 @@ class TestCampaignOptions:
 
     def test_parser_max_year_and_year_for_nmt(self):
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D-d-2-4"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4"])
         assert args.campaigns is None
         assert args.min_year is None
         assert args.max_year is None
@@ -6958,6 +7139,7 @@ class TestCampaignOptions:
         args = parser.parse_args(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--year",
                 "2024",
@@ -6970,23 +7152,31 @@ class TestCampaignOptions:
         assert (args.year, args.max_year, args.campaigns) == (2024, 2025, "all")
 
         args = parser.parse_args(
-            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "--min-year", "2024"]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--campaigns",
+                "all",
+                "--min-year",
+                "2024",
+            ]
         )
         assert args.campaigns == "all"
         assert args.min_year == 2024
 
         with pytest.raises(SystemExit):
-            parser.parse_args(["download", "X", "--campaigns", "coverage"])
+            parser.parse_args(["download", "--sheet", "X", "--campaigns", "coverage"])
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_campaigns_passed_to_manager_godlo_and_list(
+    def test_campaigns_passed_to_manager_sheet_and_list(
         self, mock_manager_class, mock_find, tmp_path
     ):
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         opts = ["--campaigns", "all", "--min-year", "2024", "-o", str(tmp_path), "-q"]
 
-        assert main(["download", "N-34-130-D-d-2-4", *opts]) == 0
+        assert main(["download", "--sheet", "N-34-130-D-d-2-4", *opts]) == 0
         kwargs = mock_manager_class.call_args.kwargs
         assert kwargs["campaigns"] == "all"
         assert kwargs["min_year"] == 2024
@@ -7004,7 +7194,15 @@ class TestCampaignOptions:
         self, mock_manager_class, capsys, tmp_path
     ):
         rc = main(
-            ["download", "N-34-130-D-d-2-4", "--min-year", "1800", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--min-year",
+                "1800",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         assert "Error:" in capsys.readouterr().err
@@ -7020,6 +7218,7 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 product,
@@ -7049,14 +7248,16 @@ class TestCampaignOptions:
     def test_cli_year_bounds_validated_before_network(
         self, mock_manager, flags, expected, capsys, tmp_path
     ):
-        rc = main(["download", "N-34-130-D-d-2-4", *flags, "-o", str(tmp_path)])
+        rc = main(
+            ["download", "--sheet", "N-34-130-D-d-2-4", *flags, "-o", str(tmp_path)]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         assert expected in err and ("2200" in err or "2023" in err)
         mock_manager.assert_not_called()
 
     @pytest.mark.parametrize("product", ["nmt", "nmpt", "orto"])
-    @pytest.mark.parametrize("mode", ["godlo", "bbox"])
+    @pytest.mark.parametrize("mode", ["sheet", "bbox"])
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_cli_year_passed_to_manager_for_nmt_nmpt_orto(
@@ -7065,9 +7266,9 @@ class TestCampaignOptions:
         path = tmp_path / "N-34-130-D-d-2-4.asc"
         mock_find.return_value = ["N-34-130-D-d-2-4"]
         mock_manager_class.return_value = (
-            _mock_manager(path) if mode == "godlo" else _sheet_list_manager(path)
+            _mock_manager(path) if mode == "sheet" else _sheet_list_manager(path)
         )
-        location = ["N-34-130-D-d-2-4"] if mode == "godlo" else _PL_BBOX_2180
+        location = ["--sheet", "N-34-130-D-d-2-4"] if mode == "sheet" else _PL_BBOX_2180
         rc = main(
             [
                 "download",
@@ -7106,7 +7307,17 @@ class TestCampaignOptions:
     ):
         """Model A: year flags set the bounds, ``--campaigns`` the flight count."""
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
-        rc = main(["download", "N-34-130-D-d-2-4", *flags, "-o", str(tmp_path), "-q"])
+        rc = main(
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                *flags,
+                "-o",
+                str(tmp_path),
+                "-q",
+            ]
+        )
         assert rc == 0
         kwargs = mock_manager_class.call_args.kwargs
         assert (kwargs["min_year"], kwargs["max_year"]) == bounds
@@ -7118,11 +7329,11 @@ class TestCampaignOptions:
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
         """U15: `Info:` names the sheet and the campaign the link still uses."""
-        godlo = "N-34-130-D-d-2-4"
-        mock_find.return_value = [godlo]
-        manager = _sheet_list_manager(tmp_path / f"{godlo}.asc")
+        sheet = "N-34-130-D-d-2-4"
+        mock_find.return_value = [sheet]
+        manager = _sheet_list_manager(tmp_path / f"{sheet}.asc")
         manager.last_result.link_outside_range = {
-            godlo: tmp_path / "kampanie" / "2025-10-21_84183" / f"{godlo}.asc"
+            sheet: tmp_path / "kampanie" / "2025-10-21_84183" / f"{sheet}.asc"
         }
         mock_manager_class.return_value = manager
         rc = main(
@@ -7138,7 +7349,7 @@ class TestCampaignOptions:
         )
         assert rc == 0
         err = capsys.readouterr().err
-        (line,) = [ln for ln in err.splitlines() if ln.startswith(f"  {godlo}:")]
+        (line,) = [ln for ln in err.splitlines() if ln.startswith(f"  {sheet}:")]
         assert "sciezka standardowa" in line and "2025-10-21_84183" in line
         assert "Info:" in err
 
@@ -7177,7 +7388,7 @@ class TestCampaignOptions:
         assert isinstance(cache, MetadataCache)
         assert cache._conn is None
 
-    @pytest.mark.parametrize("mode", ["godlo", "bbox"])
+    @pytest.mark.parametrize("mode", ["sheet", "bbox"])
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_cli_year_info_better_coverage(
@@ -7185,8 +7396,8 @@ class TestCampaignOptions:
     ):
         from kartograf.download.manager import SheetFetch
 
-        godlo = "N-34-139-C-a-3-1"
-        path = tmp_path / f"{godlo}.asc"
+        sheet = "N-34-139-C-a-3-1"
+        path = tmp_path / f"{sheet}.asc"
         sidecar = {
             "extra": {
                 "campaign": {"id": "84183"},
@@ -7206,17 +7417,17 @@ class TestCampaignOptions:
                 ],
             },
         }
-        (tmp_path / f"{godlo}.asc.meta.json").write_text(json.dumps(sidecar))
-        mock_find.return_value = [godlo]
-        if mode == "godlo":
+        (tmp_path / f"{sheet}.asc.meta.json").write_text(json.dumps(sidecar))
+        mock_find.return_value = [sheet]
+        if mode == "sheet":
             manager = _mock_manager(path)
             manager.last_sheet = SheetFetch(
-                godlo, path, skipped=False, better_coverage="83233"
+                sheet, path, skipped=False, better_coverage="83233"
             )
-            location = [godlo]
+            location = ["--sheet", sheet]
         else:
             manager = _sheet_list_manager(path)
-            manager.last_result.better_coverage = {godlo: "83233"}
+            manager.last_result.better_coverage = {sheet: "83233"}
             location = _PL_BBOX_2180
         mock_manager_class.return_value = manager
 
@@ -7224,7 +7435,7 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert "Info: dla 1 arkuszy starszy lot z przedzialu" in err
-        assert f"{godlo}: dowiazanie 2025-10-21_84183" in err
+        assert f"{sheet}: dowiazanie 2025-10-21_84183" in err
         assert "niepelny, pokrycie 0,9 %" in err
         assert "wieksze pokrycie: 2025-04-27_83233 (pelny, pokrycie 99,8 %)" in err
 
@@ -7257,6 +7468,7 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "laz",
@@ -7279,6 +7491,7 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "laz",
@@ -7377,12 +7590,13 @@ class TestCampaignOptions:
         mock_prepare.assert_not_called()
 
     @patch("kartograf.cli.download_cmd._run_cz")
-    def test_cz_godlo_explicit_country_with_all_is_error(
+    def test_cz_sheet_explicit_country_with_all_is_error(
         self, mock_run_cz, capsys, tmp_path
     ):
         rc = main(
             [
                 "download",
+                "--sheet",
                 "302_5550",
                 "--country",
                 "cz",
@@ -7399,30 +7613,54 @@ class TestCampaignOptions:
         mock_run_cz.assert_not_called()
 
     @patch("kartograf.cli.download_cmd._run_cz")
-    def test_cz_godlo_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
-        rc = main(["download", "302_5550", "--campaigns", "all", "-o", str(tmp_path)])
+    def test_cz_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
+        rc = main(
+            [
+                "download",
+                "--sheet",
+                "302_5550",
+                "--campaigns",
+                "all",
+                "-o",
+                str(tmp_path),
+            ]
+        )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
     @patch("kartograf.cli.download_cmd._run_cz")
-    def test_cz_godlo_auto_with_min_year_is_error(self, mock_run_cz, capsys, tmp_path):
-        rc = main(["download", "302_5550", "--min-year", "2020", "-o", str(tmp_path)])
+    def test_cz_sheet_auto_with_min_year_is_error(self, mock_run_cz, capsys, tmp_path):
+        rc = main(
+            [
+                "download",
+                "--sheet",
+                "302_5550",
+                "--min-year",
+                "2020",
+                "-o",
+                str(tmp_path),
+            ]
+        )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
     @patch("kartograf.cli.download_cmd._run_cz")
-    def test_cz_sm5_godlo_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
-        rc = main(["download", "CTES96", "--campaigns", "all", "-o", str(tmp_path)])
+    def test_cz_sm5_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
+        rc = main(
+            ["download", "--sheet", "CTES96", "--campaigns", "all", "-o", str(tmp_path)]
+        )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
-    @pytest.mark.parametrize("godlo", ["CTES96", "302_5550"])
+    @pytest.mark.parametrize("sheet", ["CTES96", "302_5550"])
     @patch("kartograf.cli.download_cmd._run_cz")
-    def test_cli_year_cz_godlo_rejected(self, mock_run_cz, godlo, capsys, tmp_path):
-        rc = main(["download", godlo, "--year", "2023", "-o", str(tmp_path), "-q"])
+    def test_cli_year_cz_sheet_rejected(self, mock_run_cz, sheet, capsys, tmp_path):
+        rc = main(
+            ["download", "--sheet", sheet, "--year", "2023", "-o", str(tmp_path), "-q"]
+        )
         assert rc == 1
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
@@ -7582,7 +7820,9 @@ class TestCampaignOptions:
         manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
         mock_manager_class.return_value = manager
 
-        assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+        assert (
+            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+        )
         out = capsys.readouterr().out
         assert f"Skipped N-34-130-D-d-2-4 - already exists at {path}" in out
         assert "Downloaded to" not in out
@@ -7594,7 +7834,9 @@ class TestCampaignOptions:
         """I-1: a Mock() fake has ``last_sheet.skipped`` = Mock (truthy)."""
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
 
-        assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+        assert (
+            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+        )
         out = capsys.readouterr().out
         assert "Downloaded to" in out
         assert "Skipped" not in out
@@ -7618,7 +7860,9 @@ class TestCampaignOptions:
         )
         mock_manager_class.return_value = manager
 
-        assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+        assert (
+            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]) == 0
+        )
         out = capsys.readouterr().out
         assert f"Downloaded to {target}" in out
         assert "Skipped" not in out
@@ -7656,7 +7900,10 @@ class TestCampaignOptions:
         )
         mock_manager_class.return_value = manager
 
-        assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]) == 0
+        assert (
+            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+            == 0
+        )
         assert "(extra.link=copy)" in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -7697,12 +7944,12 @@ class TestCampaignOptions:
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
         """Fix 1: 10 sheets x (1 new + 3 local) -> 10 downloaded, 30 local."""
-        godla = [f"N-34-130-D-d-2-{i}" for i in range(10)]
-        mock_find.return_value = godla
-        paths = [tmp_path / f"{g}.asc" for g in godla]
+        sheets = [f"N-34-130-D-d-2-{i}" for i in range(10)]
+        mock_find.return_value = sheets
+        paths = [tmp_path / f"{g}.asc" for g in sheets]
         manager = _sheet_list_manager(*paths)
         files = {
-            g: tuple(tmp_path / f"k{k}" / f"{g}.asc" for k in range(4)) for g in godla
+            g: tuple(tmp_path / f"k{k}" / f"{g}.asc" for k in range(4)) for g in sheets
         }
         manager.last_result.campaign_files = files
         manager.last_result.reused_campaign_files = {g: f[1:] for g, f in files.items()}
@@ -7742,13 +7989,14 @@ class TestCampaignOptions:
         assert "Info:" not in err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_pl_godlo_target_crs_with_all_gets_godlo_error(
+    def test_pl_sheet_target_crs_with_all_gets_sheet_error(
         self, mock_manager_class, capsys, tmp_path
     ):
         """Fix 3: the more general sheet code guard (--target-crs with a code) wins."""
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--target-crs",
                 "EPSG:2180",
@@ -7768,7 +8016,15 @@ class TestCampaignOptions:
     def test_min_year_error_names_cli_flag(self, mock_manager_class, capsys, tmp_path):
         """Fix 4: the CLI says --min-year, not min_year (a library parameter)."""
         rc = main(
-            ["download", "N-34-130-D-d-2-4", "--min-year", "1800", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--min-year",
+                "1800",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -7787,6 +8043,7 @@ class TestCampaignOptions:
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D",
                 "--scale",
                 "1:10000",
@@ -7851,12 +8108,20 @@ class TestCampaignOptions:
         manager.download_sheet.side_effect = NoCoverageError(
             "N-34-130-D-d-2-4: najnowsza kampania 2019-05-21 starsza niz "
             "--min-year 2024",
-            godlo="N-34-130-D-d-2-4",
+            sheet="N-34-130-D-d-2-4",
         )
         mock_manager_class.return_value = manager
 
         rc = main(
-            ["download", "N-34-130-D-d-2-4", "--min-year", "2024", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--min-year",
+                "2024",
+                "-o",
+                str(tmp_path),
+            ]
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -7891,7 +8156,7 @@ class TestCampaignOptions:
         )
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        rc = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
         assert rc == 1
         err = capsys.readouterr().err
         assert "Error:" in err and "format 'X' nieobslugiwany" in err
@@ -7902,7 +8167,7 @@ class TestCampaignOptions:
 
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         args = argparse.Namespace(
-            godlo="N-34-130-D-d-2-4",
+            sheet="N-34-130-D-d-2-4",
             bbox=None,
             output=str(tmp_path),
             force=False,
@@ -7940,7 +8205,9 @@ class TestCampaignOptions:
         )
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+        rc = main(
+            ["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]
+        )
 
         assert rc == 0
         err = capsys.readouterr().err
@@ -7961,7 +8228,10 @@ class TestCampaignOptions:
         manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
         mock_manager_class.return_value = manager
 
-        assert main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"]) == 0
+        assert (
+            main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), "-q"])
+            == 0
+        )
         assert "skorowidz GUGiK niedostepny" not in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
@@ -7969,13 +8239,13 @@ class TestCampaignOptions:
     def test_unverified_local_campaign_warns_in_list_mode(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
-        godla = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
-        mock_find.return_value = godla
+        sheets = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
+        mock_find.return_value = sheets
         manager = _sheet_list_manager(
-            tmp_path / "a.asc", tmp_path / "b.asc", skipped=godla
+            tmp_path / "a.asc", tmp_path / "b.asc", skipped=sheets
         )
         manager.last_result.succeeded = []
-        manager.last_result.unverified = {g: "HTTP 503" for g in godla}
+        manager.last_result.unverified = {g: "HTTP 503" for g in sheets}
         mock_manager_class.return_value = manager
 
         rc = main(["download", *_PL_BBOX_2180, "-o", str(tmp_path), "-q"])
@@ -7994,9 +8264,9 @@ class TestCampaignOptions:
         from tests.test_manager_campaigns import C14, FakeCampaignProvider
 
         fake = FakeCampaignProvider(C14)
-        godlo = "N-34-139-C-a-3-1"
+        sheet = "N-34-139-C-a-3-1"
         out = tmp_path / "out"
-        argv = ["download", godlo, "-o", str(out), "-q"]
+        argv = ["download", "--sheet", sheet, "-o", str(out), "-q"]
         with patch(
             "kartograf.cli.download_cmd._create_provider_and_storage",
             return_value=(fake, None),
@@ -8008,7 +8278,7 @@ class TestCampaignOptions:
             capsys.readouterr()
             assert main(argv) == 0
             err = capsys.readouterr().err
-            assert f"Warning: {godlo}: skorowidz GUGiK niedostepny" in err
+            assert f"Warning: {sheet}: skorowidz GUGiK niedostepny" in err
 
             fake.resolve_error = DownloadError("raport wyjatku OGC")
             assert main(argv) == 1
@@ -8037,7 +8307,15 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         rc = main(
-            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--campaigns",
+                "all",
+                "-o",
+                str(tmp_path),
+            ]
         )
 
         assert rc == 0
@@ -8067,7 +8345,15 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
 
         rc = main(
-            ["download", "N-34-130-D-d-2-4", "--campaigns", "all", "-o", str(tmp_path)]
+            [
+                "download",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "--campaigns",
+                "all",
+                "-o",
+                str(tmp_path),
+            ]
         )
 
         assert rc == 0
@@ -8093,7 +8379,7 @@ class TestListMessagesUx:
         manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        rc = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
 
         assert rc == 0
         out = capsys.readouterr().out
@@ -8109,7 +8395,7 @@ class TestListMessagesUx:
         manager.download_sheet.side_effect = DownloadError("brak")
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
+        rc = main(["download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)])
 
         assert rc == 1
         captured = capsys.readouterr()
@@ -8125,7 +8411,7 @@ class TestListMessagesUx:
         return manager
 
     @staticmethod
-    def _real_error(godlo):
+    def _real_error(sheet):
         """A real index ``no_coverage_error`` (PL-2000 descendant)."""
         from kartograf.providers.pl.skorowidz import (
             SkorowidzRecord,
@@ -8133,21 +8419,21 @@ class TestListMessagesUx:
             no_coverage_error,
         )
 
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         child = SkorowidzRecord(
             url="https://example.invalid/x.asc",
-            godlo=f"{godlo}.01",
+            sheet=f"{sheet}.01",
             aktualnosc="2024-01-01",
             dt_pzgik=None,
             layer="L",
-            uklad="2000",
+            system="2000",
             zone=7,
             resolution_m=1.0,
             full_sheet=True,
             raw={},
         )
         return no_coverage_error(
-            parser, f"Brak NMT dla {godlo}", coverage_hints(parser, [child])
+            parser, f"Brak NMT dla {sheet}", coverage_hints(parser, [child])
         )
 
     _BBOX_ARGS = (
@@ -8186,11 +8472,11 @@ class TestListMessagesUx:
         assert "Downloaded 0" not in captured.out
 
     @staticmethod
-    def _info_lines(hints_by_godlo, capsys, tmp_path):
+    def _info_lines(hints_by_sheet, capsys, tmp_path):
         result = DownloadResult(
-            failed=list(hints_by_godlo),
-            no_coverage=list(hints_by_godlo),
-            no_coverage_hints=hints_by_godlo,
+            failed=list(hints_by_sheet),
+            no_coverage=list(hints_by_sheet),
+            no_coverage_hints=hints_by_sheet,
         )
         with patch("kartograf.cli.download_cmd.DownloadManager") as cls:
             cls.return_value = TestListMessagesUx._list_manager(result)
@@ -8198,7 +8484,7 @@ class TestListMessagesUx:
         err = capsys.readouterr().err
         return [x for x in err.splitlines() if x.startswith("Info:")]
 
-    def test_pl1992_hints_with_different_godlo_are_all_kept(self, capsys, tmp_path):
+    def test_pl1992_hints_with_different_sheet_are_all_kept(self, capsys, tmp_path):
         """Different sheet codes in hints (PL-1992) are not merged into one."""
         h = "Skorowidz ma ten obszar w PL-1992: {g} (1:10000) — uzyj tego godla"
         lines = self._info_lines(
@@ -8290,7 +8576,7 @@ class TestListMessagesUx:
             )
         )
 
-        rc = main(["download", "N-34-130-D-d-2", "-o", str(tmp_path)])
+        rc = main(["download", "--sheet", "N-34-130-D-d-2", "-o", str(tmp_path)])
 
         assert rc == 1
         captured = capsys.readouterr()
@@ -8309,7 +8595,7 @@ class TestErrorWithoutBlankLine:
         manager.download_sheet.side_effect = DownloadError("brak kampanii od 2024")
         mock_manager_class.return_value = manager
 
-        rc = main(["download", "7.125.11.19", "-o", str(tmp_path)])
+        rc = main(["download", "--sheet", "7.125.11.19", "-o", str(tmp_path)])
 
         assert rc == 1
         err = capsys.readouterr().err
@@ -8344,11 +8630,11 @@ class TestSoilgridsHsgNoEarlyMkdir:
         self, mock_calc_cls, capsys, tmp_path, monkeypatch
     ):
         monkeypatch.chdir(tmp_path)
-        mock_calc_cls.return_value.calculate_hsg_by_godlo.side_effect = DownloadError(
+        mock_calc_cls.return_value.calculate_hsg_by_sheet.side_effect = DownloadError(
             "siec"
         )
         out = tmp_path / "out" / "hsg"
-        result = main(["soilgrids", "hsg", "--godlo", "N-34-130-D", "-o", str(out)])
+        result = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", "-o", str(out)])
         assert result == 1
         assert not (tmp_path / "out").exists()
 
@@ -8359,15 +8645,15 @@ _LAZ_ONLY_DENSITY_ERROR = (
 )
 # Every download path rejects point density for non-LAZ products.
 _LAZ_ONLY_PATHS = {
-    "godlo": ["N-34-130-D-d-2-4"],
-    "hierarchy": ["N-34-130-D"],
-    "hierarchy_scale": ["N-34-130-D-d-2-4", "--scale", "1:10000"],
+    "sheet": ["--sheet", "N-34-130-D-d-2-4"],
+    "hierarchy": ["--sheet", "N-34-130-D"],
+    "hierarchy_scale": ["--sheet", "N-34-130-D-d-2-4", "--scale", "1:10000"],
     "list_bbox": _PL_BBOX_2180,
     "geometry": ["--geometry", "area.gpkg"],
     "cutout": [*_PL_BBOX_2180, "--target-crs", "EPSG:2180"],
     "auto_border": _BORDER_BBOX,
     "auto_cz_bbox": _CZ_ONLY_BBOX,
-    "cz_godlo": ["302_5550"],
+    "cz_sheet": ["--sheet", "302_5550"],
     "cz_forced": [*_CZ_ONLY_BBOX, "--country", "cz"],
 }
 _LAZ_ONLY_PRODUCTS = ["nmt", "nmpt", "orto"]
@@ -8436,6 +8722,7 @@ class TestLazOnlyOptions:
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
                 "laz",
@@ -8479,8 +8766,10 @@ class TestFullSheetOption:
         return line
 
     def test_parser_flag_default_off(self):
-        assert create_parser().parse_args(["download", "X"]).full_sheet is False
-        args = create_parser().parse_args(["download", "X", "--full-sheet"])
+        assert (
+            create_parser().parse_args(["download", "--sheet", "X"]).full_sheet is False
+        )
+        args = create_parser().parse_args(["download", "--sheet", "X", "--full-sheet"])
         assert args.full_sheet is True
 
     @patch("kartograf.download.laz.run_laz_download")
@@ -8488,7 +8777,16 @@ class TestFullSheetOption:
     def test_laz_rejected_before_network(self, provider_cls, run, capsys, tmp_path):
         out = tmp_path / "out"
         rc = main(
-            ["download", self.G, "--product", "laz", "--full-sheet", "-o", str(out)]
+            [
+                "download",
+                "--sheet",
+                self.G,
+                "--product",
+                "laz",
+                "--full-sheet",
+                "-o",
+                str(out),
+            ]
         )
         assert rc == 1
         err = capsys.readouterr().err
@@ -8522,7 +8820,9 @@ class TestFullSheetOption:
 
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_cz_only_is_error(self, run_cz, capsys, tmp_path):
-        rc = main(["download", "302_5550", "--full-sheet", "-o", str(tmp_path)])
+        rc = main(
+            ["download", "--sheet", "302_5550", "--full-sheet", "-o", str(tmp_path)]
+        )
         assert rc == 1
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err and "Info:" not in err
@@ -8552,7 +8852,7 @@ class TestFullSheetOption:
 
         fake = c14_fake()
         out = str(tmp_path / "out")
-        assert self._run(fake, self.G, "--full-sheet", "-o", out) == 0
+        assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert fake.downloads == [REC["84183"].url, REC["83233"].url]
         assert "Downloaded 2 campaign files for 1 sheets" in captured.out
@@ -8560,7 +8860,7 @@ class TestFullSheetOption:
         assert self.G in first and "full_sheet/" in first
         assert "uzyj --full-sheet" not in first
 
-        assert self._run(fake, self.G, "--full-sheet", "-o", out) == 0
+        assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert len(fake.downloads) == 2
         assert f"Skipped {self.G}" in captured.out
@@ -8571,7 +8871,9 @@ class TestFullSheetOption:
         from tests.test_manager_campaigns import c14_fake
 
         fake = c14_fake()
-        assert self._run(fake, self.G, "-o", str(tmp_path / "out"), "-q") == 0
+        assert (
+            self._run(fake, "--sheet", self.G, "-o", str(tmp_path / "out"), "-q") == 0
+        )
         line = self._partial_warning(capsys.readouterr().err)
         assert self.G in line and "--full-sheet" in line
         assert len(fake.downloads) == 1
@@ -8585,7 +8887,7 @@ class TestFullSheetOption:
         records = [dataclasses.replace(r, full_sheet=False) for r in C14_ALL]
         fake = FakeCampaignProvider({"newest": records[:1], "all": records})
         out = str(tmp_path / "out")
-        assert self._run(fake, self.G, "--full-sheet", "-o", out, "-q") == 0
+        assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out, "-q") == 0
         line = self._partial_warning(capsys.readouterr().err)
         assert "brak pelnego lotu w skorowidzu" in line and self.G in line
         assert "uzyj --full-sheet" not in line
@@ -8596,9 +8898,22 @@ class TestFullSheetOption:
 
         fake = c14_fake()
         out = str(tmp_path / "out")
-        assert self._run(fake, self.G, "--campaigns", "all", "-o", out, "-q") == 0
+        assert (
+            self._run(fake, "--sheet", self.G, "--campaigns", "all", "-o", out, "-q")
+            == 0
+        )
         capsys.readouterr()
-        argv = [self.G, "--campaigns", "all", "--max-year", "2024", "-o", out, "-q"]
+        argv = [
+            "--sheet",
+            self.G,
+            "--campaigns",
+            "all",
+            "--max-year",
+            "2024",
+            "-o",
+            out,
+            "-q",
+        ]
         assert self._run(fake, *argv) == 0
         err = capsys.readouterr().err
         assert "Info:" in err
@@ -8614,15 +8929,15 @@ class TestFullSheetOption:
         g3 = "N-34-139-C-a-3-3"
         records = []
         for i in range(1, 5):
-            godlo = f"N-34-139-C-a-3-{i}"
-            for r in c14_records(godlo):
-                no_full = godlo == g3
+            sheet = f"N-34-139-C-a-3-{i}"
+            for r in c14_records(sheet):
+                no_full = sheet == g3
                 records.append(
                     dataclasses.replace(r, full_sheet=False) if no_full else r
                 )
         fake = FakeCampaignProvider({"all": records})
         out = str(tmp_path / "out")
-        argv = ["N-34-139-C-a-3", "--campaigns", "all", "-o", out, "-q"]
+        argv = ["--sheet", "N-34-139-C-a-3", "--campaigns", "all", "-o", out, "-q"]
         assert self._run(fake, *argv) == 0
         line = self._partial_warning(capsys.readouterr().err)
         linked, absent = line.split("pelny lot w <segment>/full_sheet/: ")[1].split(
@@ -8642,7 +8957,16 @@ class TestFullSheetOption:
         ]
         fake = FakeCampaignProvider({"newest": records[:1], "all": records})
         out = str(tmp_path / "out")
-        argv = [self.G, "--full-sheet", "--max-year", "2024", "-o", out, "-q"]
+        argv = [
+            "--sheet",
+            self.G,
+            "--full-sheet",
+            "--max-year",
+            "2024",
+            "-o",
+            out,
+            "-q",
+        ]
         assert self._run(fake, *argv) == 0
         line = self._partial_warning(capsys.readouterr().err)
         assert (

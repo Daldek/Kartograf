@@ -2,7 +2,7 @@
 Unit tests for the download manager module.
 
 This module contains tests for the DownloadManager class with the new architecture:
-- download_sheet(godlo) -> ASC
+- download_sheet -> ASC
 - download_bbox(bbox) -> GeoTIFF
 """
 
@@ -26,21 +26,21 @@ class TestDownloadProgress:
         progress = DownloadProgress(
             current=5,
             total=10,
-            godlo="N-34-130-D",
+            sheet="N-34-130-D",
             status="downloading",
             message="In progress",
         )
 
         assert progress.current == 5
         assert progress.total == 10
-        assert progress.godlo == "N-34-130-D"
+        assert progress.sheet == "N-34-130-D"
         assert progress.status == "downloading"
         assert progress.message == "In progress"
 
     def test_progress_percent(self):
         """Test of the progress percentage computation."""
         progress = DownloadProgress(
-            current=5, total=10, godlo="N-34-130-D", status="downloading"
+            current=5, total=10, sheet="N-34-130-D", status="downloading"
         )
 
         assert progress.progress_percent == 50.0
@@ -48,7 +48,7 @@ class TestDownloadProgress:
     def test_progress_percent_zero_total(self):
         """Test of the progress percentage when total=0."""
         progress = DownloadProgress(
-            current=0, total=0, godlo="N-34-130-D", status="completed"
+            current=0, total=0, sheet="N-34-130-D", status="completed"
         )
 
         assert progress.progress_percent == 100.0
@@ -56,7 +56,7 @@ class TestDownloadProgress:
     def test_progress_default_message(self):
         """Test of the default message."""
         progress = DownloadProgress(
-            current=1, total=1, godlo="N-34-130-D", status="completed"
+            current=1, total=1, sheet="N-34-130-D", status="completed"
         )
 
         assert progress.message == ""
@@ -132,7 +132,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikNmptProvider())
 
-        assert manager._storage._subdir == "nmpt/pl_{uklad}_1m_evrf2007"
+        assert manager._storage._subdir == "nmpt/pl_{system}_1m_evrf2007"
 
     def test_nmt_and_nmpt_managers_do_not_collide(self, tmp_path):
         """NMT and NMPT paths for the same sheet code must not be identical."""
@@ -150,7 +150,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
         manager = DownloadManager(output_dir=tmp_path, provider=GugikOrtoProvider())
 
-        assert manager._storage._subdir == "orto/pl_{uklad}"
+        assert manager._storage._subdir == "orto/pl_{system}"
 
     def test_manager_without_descriptor_key_falls_back_to_resolution(self, tmp_path):
         """A provider without descriptor_key -> subdirectory per resolution."""
@@ -162,7 +162,7 @@ class TestDownloadManagerStorageFromDescriptor:
             output_dir=tmp_path, provider=provider, resolution="5m"
         )
 
-        assert manager._storage._subdir == "nmt/pl_{uklad}_5m_evrf2007"
+        assert manager._storage._subdir == "nmt/pl_{system}_5m_evrf2007"
 
     def test_manager_with_mock_spec_provider_falls_back_to_resolution(self, tmp_path):
         """Mock(spec=GugikProvider).descriptor_key is a Mock - treated as missing."""
@@ -171,7 +171,7 @@ class TestDownloadManagerStorageFromDescriptor:
 
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
 
-        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_evrf2007"
+        assert manager._storage._subdir == "nmt/pl_{system}_1m_evrf2007"
 
     def test_explicit_storage_wins_over_descriptor(self, tmp_path):
         """An explicit storage= takes precedence over the provider descriptor."""
@@ -192,7 +192,7 @@ class TestDownloadManagerStorageFromDescriptor:
         manager = DownloadManager(
             output_dir=tmp_path, provider=provider, vertical_crs="KRON86"
         )
-        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+        assert manager._storage._subdir == "nmt/pl_{system}_1m_kron86"
 
     def test_manager_without_descriptor_key_keeps_kron86_in_segment(self, tmp_path):
         """Twin of the test above: without a descriptor FileStorage fills {vcrs}.
@@ -209,7 +209,7 @@ class TestDownloadManagerStorageFromDescriptor:
             output_dir=tmp_path, provider=provider, vertical_crs="KRON86"
         )
 
-        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+        assert manager._storage._subdir == "nmt/pl_{system}_1m_kron86"
 
     def test_default_storage_follows_provider_vertical_crs(self, tmp_path):
         """The segment takes the vertical CRS from the PROVIDER, not from the manager
@@ -223,7 +223,7 @@ class TestDownloadManagerStorageFromDescriptor:
             output_dir=tmp_path, provider=GugikProvider(vertical_crs="KRON86")
         )
 
-        assert manager._storage._subdir == "nmt/pl_{uklad}_1m_kron86"
+        assert manager._storage._subdir == "nmt/pl_{system}_1m_kron86"
         assert manager.vertical_crs == "KRON86"
 
     def test_default_storage_5m_kron86_rejected(self, tmp_path):
@@ -262,7 +262,7 @@ class TestDownloadManagerDownloadSheet:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -370,9 +370,9 @@ class TestLastResultSingleSheet:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def fake_download(godlo, path, timeout=30):
+        def fake_download(sheet, path, timeout=30):
             if fail:
-                raise DownloadError("boom", godlo=godlo)
+                raise DownloadError("boom", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -423,7 +423,7 @@ class TestDownloadManagerDownloadHierarchy:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
             return path
@@ -463,8 +463,8 @@ class TestDownloadManagerDownloadHierarchy:
 
         # Pre-create some ASC files
         storage = FileStorage(tmp_path)
-        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
-            path = storage.get_path(godlo, ".asc")
+        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
+            path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"existing")
 
@@ -492,10 +492,10 @@ class TestDownloadManagerDownloadHierarchy:
         # First two succeed, third fails, fourth succeeds
         call_count = [0]
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             call_count[0] += 1
             if call_count[0] == 3:
-                raise DownloadError("Network error", godlo=godlo)
+                raise DownloadError("Network error", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
             return path
@@ -540,15 +540,15 @@ class TestDownloadResultNoCoverage:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def download(godlo, path, timeout=30):
-            if godlo.endswith("-1"):
+        def download(sheet, path, timeout=30):
+            if sheet.endswith("-1"):
                 raise NoCoverageError(
-                    f"No NMT 1m data available for {godlo}",
-                    godlo=godlo,
+                    f"No NMT 1m data available for {sheet}",
+                    sheet=sheet,
                     hints=("uzyj --scale 1:2000",),
                 )
-            if godlo.endswith("-2"):
-                raise DownloadError(f"timeout {godlo}", godlo=godlo)
+            if sheet.endswith("-2"):
+                raise DownloadError(f"timeout {sheet}", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
             return path
@@ -590,7 +590,7 @@ class TestDownloadResultNoCoverage:
         manager.download_sheets(
             ["N-34-130-D-d-2"],
             max_workers=workers,
-            on_progress=lambda p: statuses.__setitem__(p.godlo, p.status),
+            on_progress=lambda p: statuses.__setitem__(p.sheet, p.status),
         )
         result = manager.last_result
         assert result is not None
@@ -610,10 +610,10 @@ class TestDownloadManagerDownloadSheets:
         provider.calls = []
         provider.fail = set()
 
-        def download(godlo, path, timeout=30):
-            provider.calls.append(godlo)
-            if godlo in provider.fail:
-                raise DownloadError(f"blad {godlo}", godlo=godlo)
+        def download(sheet, path, timeout=30):
+            provider.calls.append(sheet)
+            if sheet in provider.fail:
+                raise DownloadError(f"blad {sheet}", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
             return path
@@ -664,7 +664,7 @@ class TestDownloadManagerDownloadSheets:
         assert provider.calls == ["N-34-130-D-d-2-2"]
         assert manager.last_result.skipped == ["N-34-130-D-d-2-1"]
 
-    def test_invalid_godlo_raises_before_any_download(self, tmp_path, provider):
+    def test_invalid_sheet_raises_before_any_download(self, tmp_path, provider):
         from kartograf.exceptions import ParseError
 
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
@@ -745,8 +745,8 @@ class TestDownloadManagerGetMissingSheets:
 
         # Pre-create some ASC files
         storage = FileStorage(tmp_path)
-        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
-            path = storage.get_path(godlo, ".asc")
+        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3"]:
+            path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
 
@@ -765,8 +765,8 @@ class TestDownloadManagerGetMissingSheets:
         # Pre-create all ASC files
         storage = FileStorage(tmp_path)
         for i in range(1, 5):
-            godlo = f"N-34-130-D-d-2-{i}"
-            path = storage.get_path(godlo, ".asc")
+            sheet = f"N-34-130-D-d-2-{i}"
+            path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
 
@@ -891,7 +891,7 @@ class TestDownloadManagerPL2000:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -914,7 +914,7 @@ class TestDownloadManagerPL2000:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -939,7 +939,7 @@ class TestDownloadManagerPL2000:
         mock_provider = Mock()
         mock_provider.default_extension = ".asc"
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -1029,7 +1029,7 @@ class TestSidecarWritten:
         provider.descriptor_key = "pl.gugik.nmt_1m"
         provider.vertical_crs = "EVRF2007"
 
-        def fake_download(godlo, target, timeout=30):
+        def fake_download(sheet, target, timeout=30):
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(
                 "ncols 2\nnrows 2\nxllcorner 0\nyllcorner 0\n"
@@ -1077,18 +1077,18 @@ class TestSidecarWritten:
         provider = self._mock_provider()
         written = self._mock_provider().download.side_effect
 
-        def download_elsewhere(godlo, target, timeout=30):
-            return written(godlo, target.with_name(f"{target.stem}_v2.asc"))
+        def download_elsewhere(sheet, target, timeout=30):
+            return written(sheet, target.with_name(f"{target.stem}_v2.asc"))
 
         provider.download.side_effect = download_elsewhere
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        godlo = "N-34-130-D-d-2-4"
+        sheet = "N-34-130-D-d-2-4"
         if mode == "sheet":
-            path = manager.download_sheet(godlo)
+            path = manager.download_sheet(sheet)
         else:
             workers = 1 if mode == "list_seq" else 3
-            (path,) = manager.download_sheets([godlo], max_workers=workers)
-        assert path.name == f"{godlo}_v2.asc"
+            (path,) = manager.download_sheets([sheet], max_workers=workers)
+        assert path.name == f"{sheet}_v2.asc"
         assert (path.parent / f"{path.name}.meta.json").exists()
 
     def test_skip_existing_writes_no_sidecar(self, tmp_path):
@@ -1161,8 +1161,8 @@ class TestSidecarWritten:
             "resolution_m": 1.0,
         }
         provider = self._mock_provider()
-        provider.source_info = lambda godlo: (
-            source if godlo == "N-34-130-D-d-2-4" else None
+        provider.source_info = lambda sheet: (
+            source if sheet == "N-34-130-D-d-2-4" else None
         )
         manager = DownloadManager(
             output_dir=tmp_path,
@@ -1190,7 +1190,7 @@ class TestSidecarWritten:
         )
         assert "source" not in payload["extra"]
 
-        provider.source_info = lambda godlo: None
+        provider.source_info = lambda sheet: None
         result.unlink()
         result = manager.download_sheet("N-34-130-D-d-2-4")
         payload = json.loads(

@@ -207,7 +207,7 @@ class CuzkDmrProvider(BaseProvider):
 
     def download(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = _DEFAULT_TIMEOUT,
         *,
@@ -231,19 +231,19 @@ class CuzkDmrProvider(BaseProvider):
         output_path = Path(output_path)
         # like the system registry: whitespace is not part of the sheet code
         # (openzu URL, SM5 index and ParserTM33 get the same stripped code)
-        godlo = godlo.strip()
-        system = detect_system(godlo)
+        sheet = sheet.strip()
+        system = detect_system(sheet)
         if system.country != "CZ":
             raise ValidationError(
-                f"Godlo '{godlo}' nie nalezy do zadnego systemu CZ "
+                f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ "
                 f"(TM33: 302_5550, SM5: CTES96)"
             )
         if system.id == "cz_sm5":
-            self._download_sm5(godlo, output_path, timeout, on_download)
+            self._download_sm5(sheet, output_path, timeout, on_download)
         else:  # cz_tm33
             # Parsing through ParserTM33 (full validation: even kilometres),
             # not through the system registry regex alone.
-            bbox = ParserTM33(godlo).get_bbox()
+            bbox = ParserTM33(sheet).get_bbox()
             self._export_raster(bbox, output_path, timeout, on_download)
         if self.vertical_transform is not None:
             self._apply_vertical_shift(output_path)
@@ -364,7 +364,7 @@ class CuzkDmrProvider(BaseProvider):
 
     def _download_sm5(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int,
         on_download: Callable[[], None] | None = None,
@@ -374,7 +374,7 @@ class CuzkDmrProvider(BaseProvider):
             raise ValidationError(
                 f"Arkusze SM5 sa dostepne tylko dla --resolution 5m "
                 f"(DMR 4G); dla 2m uzyj godla TM33 albo --bbox "
-                f"[godlo: {godlo}]"
+                f"[godlo: {sheet}]"
             )
         if self._files_endpoint is None:
             raise ValidationError(
@@ -382,8 +382,8 @@ class CuzkDmrProvider(BaseProvider):
                 f"{TransportKind.DIRECT_FILES.name} z endpointem — "
                 f"pobieranie arkuszy SM5 niemozliwe"
             )
-        self._sheet_index.sm5_sheet(godlo)  # validation before download
-        url = self._files_endpoint.format(sheet=godlo)
+        self._sheet_index.sm5_sheet(sheet)  # validation before download
+        url = self._files_endpoint.format(sheet=sheet)
         if on_download is not None:
             on_download()
         try:
@@ -576,7 +576,7 @@ def _assign_crs(path: Path, crs: str) -> None:
     because a corrupt TIFF from a correctly extracted ZIP can make rasterio
     raise an unmapped exception (e.g. TypeError) instead of
     (DownloadError, ValidationError) — without catching it such an exception
-    would escape `_cz_download_godlo`/`_run_cz` as a traceback. On error both
+    would escape `_cz_download_sheet`/`_run_cz` as a traceback. On error both
     the target file and the accompanying .tfw are removed, so that
     `skip_existing` on the next run does not make the corruption permanent.
     """

@@ -41,40 +41,40 @@ kartograf parse N-34-130-D --hierarchy
 
 # NMT: pojedynczy arkusz albo hierarchia, opcjonalnie 5m; godło PL-1992 grubsze
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
-kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D --resolution 5m --workers 8 --output ./data
+kartograf download --sheet N-34-130-D-d-2-4
+kartograf download --sheet N-34-130-D --resolution 5m --workers 8 --output ./data
 # NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z jawnym --vertical-crs KRON86
 # kończy się Error: (kod 1, przed siecią; od 0.7.1, wcześniej zamiana z Info:) —
 # pomiń --vertical-crs (domyślny EVRF2007) albo użyj --resolution 1m dla KRON86
 
 # Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
-kartograf download N-34-130-D-d-2-4 --product nmpt
-kartograf download N-34-130-D-d-2-4 --product orto
-kartograf download N-34-130-D-d-2-4 --product laz
-kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
+kartograf download --sheet N-34-130-D-d-2-4 --product nmpt
+kartograf download --sheet N-34-130-D-d-2-4 --product orto
+kartograf download --sheet N-34-130-D-d-2-4 --product laz
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
 
 # PL-2000: godło albo bbox w CRS strefy; godło grubsze i bbox wymagają --scale
 # zgodnej z arkuszami GUGiK (sekcja 1.6)
 kartograf parse 6.179.12.20
-kartograf download 6.179.12.20
-kartograf download 7.171.21 --scale 1:2000
+kartograf download --sheet 6.179.12.20
+kartograf download --sheet 7.171.21 --scale 1:2000
 kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza (newest); wszystkie kampanie
 # arkusza (all)
-kartograf download N-34-130-D-d-2-4 --campaigns all
-kartograf download N-34-139-C-a-3-1 --full-sheet   # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
-kartograf download N-34-130-D-d-2-4 --product laz --campaigns all
+kartograf download --sheet N-34-130-D-d-2-4 --campaigns all
+kartograf download --sheet N-34-139-C-a-3-1 --full-sheet   # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --campaigns all
 kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
 
 # Wybór roku danych (NMT, NMPT, orto, LAZ; sekcja 4.1)
-kartograf download N-34-130-D-d-2-4 --year 2025          # najnowszy lot z 2025
-kartograf download N-34-130-D-d-2-4 --year 2025 --campaigns all  # wszystkie loty z 2025
-kartograf download N-34-130-D-d-2-4 --product orto --year 2024
+kartograf download --sheet N-34-130-D-d-2-4 --year 2025          # najnowszy lot z 2025
+kartograf download --sheet N-34-130-D-d-2-4 --year 2025 --campaigns all  # wszystkie loty z 2025
+kartograf download --sheet N-34-130-D-d-2-4 --product orto --year 2024
 kartograf download --bbox 530000,382000,533000,386000 --max-year 2022
 kartograf download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024
-kartograf download N-34-130-D-d-2-4 --min-year 2024      # najnowsza, nie starsza niż 2024
+kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024      # najnowsza, nie starsza niż 2024
 kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
 ```
 
@@ -178,9 +178,9 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
 
 ```bash
 # DMR 5G (2 m), godło TM33 (ten kafel leży w większości w Niemczech — głównie nodata)
-kartograf download 302_5550 --country cz
-kartograf download CTES96                                      # DMR 4G (5 m), godło SM5, kraj z godła
-kartograf download 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007 (EPSG:5621)
+kartograf download --sheet 302_5550 --country cz
+kartograf download --sheet CTES96                                      # DMR 4G (5 m), godło SM5, kraj z godła
+kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007   # Bpv -> EVRF2007 (EPSG:5621)
 # reprojekcja CZ (tylko --bbox/--geometry, nie godło), lokalnie przypiętą operacją
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
 # pogranicze pod auto: osobne pliki PL i CZ, wspólny extra.parent_request;
@@ -225,17 +225,17 @@ kartograf landcover download --source bdot10k --bbox 340000,290000,350000,300000
 #   -> Downloaded to: dane/bdot10k_teryt_0208.gpkg
 #   -> Downloaded to: dane/bdot10k_teryt_0224.gpkg
 #   (nazwa zawsze teryt_<TERYT> — pakiet to cały powiat; obszar żądania
-#    w sidecarze extra.parent_request; to samo dla --godlo i --geometry)
-kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
-#   -> corine_2018_godlo_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
-kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
-#   -> soilgrids_clay_15-30cm_mean_godlo_N-34-130-D.tif
+#    w sidecarze extra.parent_request; to samo dla --sheet i --geometry)
+kartograf landcover download --source corine --year 2018 --sheet N-34-130-D
+#   -> corine_2018_sheet_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm
+#   -> soilgrids_clay_15-30cm_mean_sheet_N-34-130-D.tif
 # Nazwa niesie każdy parametr treści (także domyślny), więc --property sand
 # dla tego samego obszaru daje osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
 
 # Hydrologic Soil Groups dla metody SCS-CN
-kartograf soilgrids hsg --godlo N-34-130-D --stats
+kartograf soilgrids hsg --sheet N-34-130-D --stats
 
 # Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
@@ -245,8 +245,8 @@ kartograf cache clear
 kartograf cache path
 ```
 
-`--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--godlo`, `--bbox`,
-`--geometry`). BDOT10k z `--bbox`/`--godlo`/`--geometry` pobiera wszystkie
+`--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`,
+`--geometry`). BDOT10k z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie
 powiaty obszaru (lista z WFS PRG, odpowiedzi w cache metadanych — `cache
 stats` liczy je w `TERYT entries`); obszar bez powiatu (morze) to `Error:`.
 CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
@@ -292,7 +292,7 @@ i 1:5000; arkusza PL-2000 1:10000 nie było w nich wcale. Dlatego dla godła 1:1
 z `--system 2000` podaj skalę arkuszy z danymi, zwykle `--scale 1:2000`:
 
 ```bash
-kartograf download 7.171.21 --scale 1:2000
+kartograf download --sheet 7.171.21 --scale 1:2000
 kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000
 ```
 
@@ -361,7 +361,7 @@ path = kron.download_bbox(area, "my_area.tif")
 from kartograf import LandCoverManager
 lc = LandCoverManager()
 lc.download(teryt="1465")                   # BDOT10k (powiat)
-# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo godlo=),
+# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo sheet=),
 # tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...];
 # keep_raw=True zostawia obok oryginalny ZIP GUGiK (bdot10k_teryt_<T>_GPKG.zip,
 # pełny pakiet niezależnie od layers=, z własnym sidecarem; tylko GPKG)
@@ -373,12 +373,12 @@ paths = lc.download_all_counties(
 # lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
 # kodów (kilka powiatów) / NoCoverageError (żaden)
 lc.set_provider("corine")
-lc.download(godlo="N-34-130-D", year=2018)  # CORINE
+lc.download(sheet="N-34-130-D", year=2018)  # CORINE
 
 # Hydrologic Soil Groups
 from kartograf import HSGCalculator
 calc = HSGCalculator()
-calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
+calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"))
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
 
 # HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
@@ -625,10 +625,10 @@ data/nmt/pl_1992_1m_evrf2007/full_sheet/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc  #
 
 ```bash
 # arkusz z niepełnym najnowszym lotem: pobiera najnowszy i najnowszy pełny
-kartograf download N-34-139-C-a-3-1 --full-sheet
+kartograf download --sheet N-34-139-C-a-3-1 --full-sheet
 #   -> Downloaded 2 campaign files for 1 sheets to ./data (0 already existed)
-kartograf download M-34-90-C-b-4-4 --product orto --full-sheet
-kartograf download N-34-139-C-a-3-1 --full-sheet --max-year 2024   # pełny z zakresu lat
+kartograf download --sheet M-34-90-C-b-4-4 --product orto --full-sheet
+kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024   # pełny z zakresu lat
 ```
 
 - **Bez flagi** `full_sheet/` powstaje tylko z lotów, które zadanie i tak

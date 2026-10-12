@@ -62,7 +62,7 @@ class LandCoverManager:
 
     Coordinates downloads from multiple land cover providers,
     handles file storage, and provides a unified interface
-    for downloading by TERYT, bbox, or sheet code (godlo).
+    for downloading by TERYT, bbox, or sheet code.
 
     Parameters
     ----------
@@ -84,7 +84,7 @@ class LandCoverManager:
     >>> manager.download(teryt="1465")
     >>>
     >>> # Download by sheet code (BDOT10k: the sheet must lie in one powiat)
-    >>> manager.download(godlo="N-34-130-D")
+    >>> manager.download(sheet="N-34-130-D")
     >>>
     >>> # BDOT10k of every powiat of an area, selected layers only
     >>> from kartograf import BBox
@@ -93,7 +93,7 @@ class LandCoverManager:
     >>>
     >>> # Download CORINE data
     >>> manager.set_provider("corine")
-    >>> manager.download(godlo="N-34-130-D", year=2018)
+    >>> manager.download(sheet="N-34-130-D", year=2018)
     >>>
     >>> # Download by bbox
     >>> manager.download(bbox=bbox)
@@ -191,14 +191,14 @@ class LandCoverManager:
         self,
         teryt: str | None = None,
         bbox: BBox | None = None,
-        godlo: str | None = None,
+        sheet: str | None = None,
         output_path: Path | None = None,
         **kwargs,
     ) -> Path:
         """
         Download land cover data.
 
-        Exactly one of teryt, bbox, or godlo must be provided.
+        Exactly one of teryt, bbox, or sheet must be provided.
 
         Parameters
         ----------
@@ -206,7 +206,7 @@ class LandCoverManager:
             TERYT code (4-digit for powiat)
         bbox : BBox, optional
             Bounding box (EPSG:2180; BDOT10k accepts any supported CRS)
-        godlo : str, optional
+        sheet : str, optional
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path, optional
             Custom output path. If not provided, auto-generated.
@@ -227,22 +227,22 @@ class LandCoverManager:
             `download_all_counties`)
         """
         # Validate exactly one selection method
-        methods = [teryt, bbox, godlo]
+        methods = [teryt, bbox, sheet]
         provided = [m for m in methods if m is not None]
 
         if len(provided) == 0:
-            raise ValueError("Must provide one of: teryt, bbox, or godlo")
+            raise ValueError("Must provide one of: teryt, bbox, or sheet")
         if len(provided) > 1:
-            raise ValueError("Provide only one of: teryt, bbox, or godlo")
+            raise ValueError("Provide only one of: teryt, bbox, or sheet")
 
         if teryt is not None:
             return self.download_by_teryt(teryt, output_path, **kwargs)
         if bbox is not None:
             return self.download_by_bbox(bbox, output_path, **kwargs)
-        if godlo is not None:
-            return self.download_by_godlo(godlo, output_path, **kwargs)
-        # Unreachable after the validation above; keeps godlo narrowed to str.
-        raise ValueError("Must provide one of: teryt, bbox, or godlo")
+        if sheet is not None:
+            return self.download_by_sheet(sheet, output_path, **kwargs)
+        # Unreachable after the validation above; keeps sheet narrowed to str.
+        raise ValueError("Must provide one of: teryt, bbox, or sheet")
 
     def download_by_teryt(
         self,
@@ -329,9 +329,9 @@ class LandCoverManager:
         self._write_sidecar(path, request, kwargs)
         return path
 
-    def download_by_godlo(
+    def download_by_sheet(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path | None = None,
         **kwargs,
     ) -> Path:
@@ -340,12 +340,12 @@ class LandCoverManager:
 
         BDOT10k without ``output_path``: as in `download_by_bbox` - the ONE
         powiat intersecting the sheet frame, file ``..._teryt_<T>``, sidecar
-        ``extra.parent_request = {"sheet": godlo, "countries": ["PL"]}``;
-        with ``output_path``: that path and ``request = {"sheet": godlo}``.
+        ``extra.parent_request = {"sheet": sheet, "countries": ["PL"]}``;
+        with ``output_path``: that path and ``request = {"sheet": sheet}``.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path, optional
             Custom output path. Default path follows the same naming as
@@ -359,29 +359,29 @@ class LandCoverManager:
             Path to downloaded file
         """
         # One canonical sheet code in the name and the sidecar (A7)
-        godlo = SheetParser(godlo).godlo
+        sheet = SheetParser(sheet).sheet
         if isinstance(self._provider, Bdot10kProvider):
-            parent, area = self._bdot_area(None, godlo)
+            parent, area = self._bdot_area(None, sheet)
             teryt = self._provider._single_teryt(
                 area, f"BDOT10k {parent['sheet']}", self._prg_timeout(kwargs)
             )
             if output_path is None:
                 return self._download_county(teryt, kwargs, parent)
             return self._download_county(
-                teryt, kwargs, None, output_path, {"sheet": godlo}
+                teryt, kwargs, None, output_path, {"sheet": sheet}
             )
         if output_path is None:
-            output_path = self._generate_output_path(None, None, godlo, kwargs)
-        path = self._provider.download_by_godlo(godlo, output_path, **kwargs)
-        self._write_sidecar(path, {"sheet": godlo}, kwargs)
+            output_path = self._generate_output_path(None, None, sheet, kwargs)
+        path = self._provider.download_by_sheet(sheet, output_path, **kwargs)
+        self._write_sidecar(path, {"sheet": sheet}, kwargs)
         return path
 
     def download_all_counties(
-        self, *, bbox: BBox | None = None, godlo: str | None = None, **kwargs
+        self, *, bbox: BBox | None = None, sheet: str | None = None, **kwargs
     ) -> list[Path]:
         """BDOT10k packages of EVERY powiat intersecting the area, one file each.
 
-        Exactly one of ``bbox``/``godlo``. Files ``bdot10k[_<layers>]_teryt_<T>``
+        Exactly one of ``bbox``/``sheet``. Files ``bdot10k[_<layers>]_teryt_<T>``
         in TERYT order; each sidecar has ``request.teryt`` and
         ``extra.parent_request`` (the area). Provider options (``format``,
         ``layers``, ``timeout``, ``keep_raw``) as in ``download_by_teryt``.
@@ -389,7 +389,7 @@ class LandCoverManager:
         Raises
         ------
         ValidationError
-            Not a BDOT10k provider, or not exactly one of bbox/godlo.
+            Not a BDOT10k provider, or not exactly one of bbox/sheet.
         NoCoverageError
             The area intersects no powiat.
         DownloadError
@@ -397,9 +397,9 @@ class LandCoverManager:
         """
         if not isinstance(self._provider, Bdot10kProvider):
             raise ValidationError("download_all_counties dziala tylko dla BDOT10k")
-        if (bbox is None) == (godlo is None):
-            raise ValidationError("Podaj dokladnie jedno z: bbox, godlo")
-        parent, area = self._bdot_area(bbox, godlo)
+        if (bbox is None) == (sheet is None):
+            raise ValidationError("Podaj dokladnie jedno z: bbox, sheet")
+        parent, area = self._bdot_area(bbox, sheet)
         teryts = self._provider.teryts_for_area(area, timeout=self._prg_timeout(kwargs))
         if not teryts:
             raise NoCoverageError("BDOT10k: obszar nie przecina zadnego powiatu (PRG)")
@@ -411,11 +411,11 @@ class LandCoverManager:
         return kwargs.get("timeout", 30)
 
     @staticmethod
-    def _bdot_area(bbox: BBox | None, godlo: str | None) -> tuple[dict, BBox]:
+    def _bdot_area(bbox: BBox | None, sheet: str | None) -> tuple[dict, BBox]:
         """``extra.parent_request`` and the PRG query area of a BDOT10k selection."""
-        if godlo is not None:
-            parser = SheetParser(godlo)
-            parent: dict = {"sheet": parser.godlo, "countries": ["PL"]}
+        if sheet is not None:
+            parser = SheetParser(sheet)
+            parent: dict = {"sheet": parser.sheet, "countries": ["PL"]}
             return parent, parser.get_bbox(crs="EPSG:2180")
         assert bbox is not None
         parent = {
@@ -435,10 +435,10 @@ class LandCoverManager:
     ) -> Path:
         """One powiat package with its sidecars (A2, A4); ``parent`` = the area.
 
-        The single BDOT10k download path of the manager (TERYT, bbox, godlo,
+        The single BDOT10k download path of the manager (TERYT, bbox, sheet,
         all counties); default target = the standard ``..._teryt_<T>`` path
         and default sidecar ``request`` = ``{"teryt": teryt}`` (an explicit
-        ``output_path`` from bbox/godlo keeps that selection as ``request``).
+        ``output_path`` from bbox/sheet keeps that selection as ``request``).
         """
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)
@@ -498,7 +498,7 @@ class LandCoverManager:
         """
         Download land cover data for multiple items in parallel.
 
-        Each item dict should contain exactly one of: teryt, bbox, godlo.
+        Each item dict should contain exactly one of: teryt, bbox, sheet.
 
         Parameters
         ----------
@@ -506,7 +506,7 @@ class LandCoverManager:
             List of download items, each with one of:
             - {"teryt": "1465"}
             - {"bbox": BBox(...)}
-            - {"godlo": "N-34-130-D"}
+            - {"sheet": "N-34-130-D"}
         max_workers : int, optional
             Maximum number of parallel download threads (default: 4).
             When <= 1, downloads sequentially.
@@ -525,7 +525,7 @@ class LandCoverManager:
         >>> items = [
         ...     {"teryt": "1465"},
         ...     {"teryt": "1261"},
-        ...     {"godlo": "N-34-130-D"},
+        ...     {"sheet": "N-34-130-D"},
         ... ]
         >>> paths = manager.download_batch(items, max_workers=2)
         """
@@ -605,21 +605,21 @@ class LandCoverManager:
         self,
         teryt: str | None,
         bbox: BBox | None,
-        godlo: str | None,
+        sheet: str | None,
         kwargs: dict | None = None,
     ) -> Path:
         """Generate the output path from the selection method and the options.
 
         Pattern: ``<source>[_<param>...]_<mode>_<id>.<ext>``, e.g.
         ``soilgrids_clay_0-5cm_mean_bbox_<coords>.tif``,
-        ``corine_2018_godlo_N-34-130-D.tif``, ``bdot10k_teryt_1465.gpkg``,
+        ``corine_2018_sheet_N-34-130-D.tif``, ``bdot10k_teryt_1465.gpkg``,
         ``bdot10k_PTWP-SWRS_teryt_1465.gpkg`` (layer filter: codes joined
         with ``-``). Every option that changes the content of the result
         (`_content_params`) is part of the name, so different options never
         share a file and the same options always give the same path. The
         BDOT10k ``format`` is carried by the extension (the provider saves
         SHP as ``.zip``), CORINE without CLMS credentials saves ``.png``.
-        BDOT10k by bbox/godlo goes through `_download_county`, so its name
+        BDOT10k by bbox/sheet goes through `_download_county`, so its name
         is always ``teryt_<T>``.
         """
         prefix = self._source_prefix()
@@ -638,7 +638,7 @@ class LandCoverManager:
                 f"_{bbox.max_x:.0f}_{bbox.max_y:.0f}"
             )
         else:
-            selection = f"godlo_{godlo}"
+            selection = f"sheet_{sheet}"
 
         suffix = ".tif" if isinstance(self._provider, _RASTER_PROVIDERS) else ".gpkg"
         filename = "_".join([prefix, *tokens, selection]) + suffix

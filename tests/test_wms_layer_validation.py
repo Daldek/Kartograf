@@ -135,8 +135,8 @@ WMS_XML_NMT_AND_NMPT = """\
 # ---------------------------------------------------------------------------
 
 ENDPOINT = "https://example.com/wms"
-NMT_1M_EVRF2007 = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
-GODLO = "N-34-130-D-d-2-4"
+NMT_1M_EVRF2007 = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
+SHEET = "N-34-130-D-d-2-4"
 
 
 def _make_mock_response(text: str) -> Mock:
@@ -347,7 +347,7 @@ class TestLayers:
             ),
             pytest.raises(DownloadError, match="GetCapabilities down"),
         ):
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         session.get.assert_not_called()
 
@@ -357,7 +357,7 @@ class TestLayers:
         provider = GugikProvider(session=session)
 
         with pytest.raises(NoCoverageError, match="Brak danych NMT 1m"):
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         # own index only; the variant check (P10) asks the other indexes
         urls = [
@@ -439,9 +439,9 @@ class TestCapabilitiesTimeout:
         provider = self._provider(product, session)
 
         with pytest.raises(NoCoverageError):
-            provider.download(GODLO, tmp_path / "x")
+            provider.download(SHEET, tmp_path / "x")
 
-        own = provider._skorowidz_query(SheetParser(GODLO)).endpoint
+        own = provider._skorowidz_query(SheetParser(SHEET)).endpoint
         timeouts = [
             call.kwargs.get("timeout")
             for call in session.get.call_args_list
@@ -458,7 +458,7 @@ class TestCapabilitiesTimeout:
         )
 
         with pytest.raises(NoCoverageError):
-            GugikProvider(session=session).download(GODLO, tmp_path / "x", timeout=45)
+            GugikProvider(session=session).download(SHEET, tmp_path / "x", timeout=45)
 
         caps_call = next(
             c for c in session.get.call_args_list if "GetCapabilities" in c.args[0]

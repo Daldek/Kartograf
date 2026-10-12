@@ -77,7 +77,7 @@ class TestSm5Sheet:
         index = SheetIndex(session=session)
         info = index.sm5_sheet("CTES96")
         assert isinstance(info, SheetInfo)
-        assert info.godlo == "CTES96"
+        assert info.sheet == "CTES96"
         assert info.name  # MAPNAME present
         assert info.podil is not None and 0.0 < info.podil <= 1.0
         assert info.in_cz is None
@@ -119,7 +119,7 @@ class TestSm5Sheet:
         """Consistent with the system registry (detect_system strip()) — K5."""
         session = _session_returning(_fixture("klady_sm5_where_ctes96.json"))
         info = SheetIndex(session=session).sm5_sheet(" CTES96 ")
-        assert info.godlo == "CTES96"
+        assert info.sheet == "CTES96"
         assert session.get.call_args.kwargs["params"]["where"] == "MAPNOM='CTES96'"
 
     def test_whitespace_mapnom_uses_stripped_cache_key(self, tmp_path):
@@ -167,7 +167,7 @@ class TestSm5Sheet:
         SheetIndex(session=session1, cache=cache).sm5_sheet("CTES96")
         session2 = Mock()
         info = SheetIndex(session=session2, cache=cache).sm5_sheet("CTES96")
-        assert info.godlo == "CTES96"
+        assert info.sheet == "CTES96"
         session2.get.assert_not_called()
         cache.close()
 
@@ -179,8 +179,8 @@ class TestSm5Sheet:
         info = SheetIndex(session=session, cache=cache).sm5_sheet("CTES96")
 
         cache.get_sheet.assert_called_once_with("cz_sm5", "CTES96")
-        system, godlo, payload = cache.set_sheet.call_args.args
-        assert (system, godlo) == ("cz_sm5", "CTES96")
+        system, sheet, payload = cache.set_sheet.call_args.args
+        assert (system, sheet) == ("cz_sm5", "CTES96")
         # the payload must go through JSON (that is how MetadataCache stores it)
         decoded = json.loads(json.dumps(payload, ensure_ascii=False))
 
@@ -225,7 +225,7 @@ class TestBboxQueries:
         assert len(fixture["features"]) == 13
         session = _session_returning(fixture)
         infos = SheetIndex(session=session).sm5_sheets_for_bbox(BBOX_SM5)
-        assert [i.godlo for i in infos] == [
+        assert [i.sheet for i in infos] == [
             "CTES80",
             "CTES90",
             "CTES91",
@@ -242,7 +242,7 @@ class TestBboxQueries:
         session = _session_returning(fixture)
         index = SheetIndex(session=session)
         infos = index.tm33_tiles_for_bbox(BBOX_TM33_OVERSEL)
-        assert [i.godlo for i in infos] == ["744_5534"]
+        assert [i.sheet for i in infos] == ["744_5534"]
         first = infos[0]
         assert first.in_cz in (True, False)
         assert first.podil is None
@@ -273,7 +273,7 @@ class TestBboxQueries:
         )
         session = _session_returning(payload)
         infos = SheetIndex(session=session).sm5_sheets_for_bbox(BBOX_SM5)
-        assert [i.godlo for i in infos] == ["AAAA02", "AAAA04"]
+        assert [i.sheet for i in infos] == ["AAAA02", "AAAA04"]
 
     def test_multi_ring_geometry_uses_envelope_of_all_rings(self):
         """Multipart/holed polygon: envelope of all rings."""

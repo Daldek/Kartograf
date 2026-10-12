@@ -1,7 +1,7 @@
 """
 ParserTM33 - computable grid of 2x2 km ETRS89/TM33N (EPSG:3045) tiles for CZ.
 
-The sheet code (godlo) `{E_km}_{N_km}` is the SW corner of the tile (e.g.
+The sheet code `{E_km}_{N_km}` is the SW corner of the tile (e.g.
 "302_5550" => E 302000..304000, N 5550000..5552000; verified against georss
 in the 2026-08-10 research). Pure maths, zero IO - modelled on Parser2000.
 """
@@ -19,26 +19,26 @@ TILE_SIZE_M = 2000
 class ParserTM33:
     """Parser of TM33 grid sheet codes (SW corner, 2 km step)."""
 
-    uklad = "cz_tm33"
+    system = "cz_tm33"
 
-    def __init__(self, godlo: str):
-        if not isinstance(godlo, str):
+    def __init__(self, sheet: str):
+        if not isinstance(sheet, str):
             raise ParseError(
-                f"Godlo TM33 musi byc stringiem, otrzymano: {type(godlo).__name__}"
+                f"Godlo TM33 musi byc stringiem, otrzymano: {type(sheet).__name__}"
             )
-        godlo = godlo.strip()
-        match = CZ_TM33_PATTERN.match(godlo)
+        sheet = sheet.strip()
+        match = CZ_TM33_PATTERN.match(sheet)
         if not match:
             raise ParseError(
-                f"Niepoprawne godlo TM33: '{godlo}' (oczekiwano EEE_NNNN, np. 302_5550)"
+                f"Niepoprawne godlo TM33: '{sheet}' (oczekiwano EEE_NNNN, np. 302_5550)"
             )
         e_km, n_km = int(match.group(1)), int(match.group(2))
         if e_km % 2 or n_km % 2:
             raise ParseError(
-                f"Niepoprawne godlo TM33: '{godlo}' "
+                f"Niepoprawne godlo TM33: '{sheet}' "
                 f"(kafle co 2 km — kilometry musza byc parzyste)"
             )
-        self.godlo = godlo
+        self.sheet = sheet
         self._west = e_km * 1000
         self._south = n_km * 1000
 
@@ -60,7 +60,7 @@ class ParserTM33:
         return f"{e_km:03d}_{n_km:04d}"
 
     def __repr__(self) -> str:
-        return f"ParserTM33('{self.godlo}')"
+        return f"ParserTM33('{self.sheet}')"
 
 
 def find_tiles_tm33_for_bbox(bbox: BBox) -> list[str]:

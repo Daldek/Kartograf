@@ -3,8 +3,8 @@ Linking a path to the newest local campaign (ADR-030 d, ADR-033).
 
 The real NMT/NMPT/orto files live in ``<segment>/kampanie/<date>_<id>/...``.
 Two link paths point into them: the standard path
-``<segment>/<hierarchy>/<godlo>.<ext>`` (newest LOCAL campaign) and the
-second link ``<segment>/full_sheet/<hierarchy>/<godlo>.<ext>`` (newest LOCAL
+``<segment>/<hierarchy>/<sheet>.<ext>`` (newest LOCAL campaign) and the
+second link ``<segment>/full_sheet/<hierarchy>/<sheet>.<ext>`` (newest LOCAL
 campaign declared full in the index). The mechanics below do not depend on
 which link path is used. Method (errata 4 ADR-030): 1) hardlink, 2) copy
 (``logger.warning``); we do not create symlinks (unreadable for Windows
@@ -315,7 +315,7 @@ def ensure_link(
     and the swap are not one atomic operation). Files in ``kampanie/``
     remain untouched, and the next ``newest``/``all`` call repairs the link
     itself. ``DownloadManager`` does not call this function in parallel for
-    one sheet (a link once per sheet, godlo deduplication in
+    one sheet (a link once per sheet, sheet deduplication in
     ``expand_sheets``).
     """
     cur = linked_campaign(link)

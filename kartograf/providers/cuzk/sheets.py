@@ -62,7 +62,7 @@ _OVERLAP_TOLERANCE_M = 0.01
 class SheetInfo:
     """One sheet/tile from the KladyMapovychListu index."""
 
-    godlo: str  # MAPNOM ("CTES96" / "744_5534")
+    sheet: str  # MAPNOM ("CTES96" / "744_5534")
     name: str | None  # MAPNAME ("Český Těšín 9-6"); None for TM33
     bbox: BBox  # EPSG:5514 (layer 24) / EPSG:3045 (layer 26)
     podil: float | None  # share of the sheet in CZ territory; None for TM33
@@ -162,12 +162,12 @@ def _intersecting(bbox: BBox, infos: list[SheetInfo]) -> list[SheetInfo]:
     """Drop the service's over-selection; result sorted by sheet code (determinism)."""
     kept = [i for i in infos if _overlaps_interior(i.bbox, bbox)]
     if len(kept) != len(infos):
-        dropped = sorted({i.godlo for i in infos} - {i.godlo for i in kept})
+        dropped = sorted({i.sheet for i in infos} - {i.sheet for i in kept})
         logger.debug(
             f"KladyMapovychListu: odrzucono {len(infos) - len(kept)} "
             f"nieprzecinajacych arkuszy: {', '.join(dropped)}"
         )
-    return sorted(kept, key=lambda i: i.godlo)
+    return sorted(kept, key=lambda i: i.sheet)
 
 
 def _rings_envelope(feature: dict, crs: str) -> BBox:
@@ -205,7 +205,7 @@ def _sm5_info(feature: dict) -> SheetInfo:
     attrs = feature.get("attributes") or {}
     podil = attrs.get("PODIL")
     return SheetInfo(
-        godlo=_mapnom(feature),
+        sheet=_mapnom(feature),
         name=attrs.get("MAPNAME"),
         bbox=_rings_envelope(feature, SM5_CRS),
         podil=float(podil) if podil is not None else None,
@@ -216,7 +216,7 @@ def _sm5_info(feature: dict) -> SheetInfo:
 def _tm33_info(feature: dict) -> SheetInfo:
     attrs = feature.get("attributes") or {}
     return SheetInfo(
-        godlo=_mapnom(feature),
+        sheet=_mapnom(feature),
         name=None,
         bbox=_rings_envelope(feature, TM33_CRS),
         podil=None,
@@ -235,7 +235,7 @@ def _parse_in_cz(value: Any) -> bool | None:
 
 def _payload_from_info(info: SheetInfo) -> dict:
     return {
-        "godlo": info.godlo,
+        "godlo": info.sheet,
         "name": info.name,
         "bbox": [info.bbox.min_x, info.bbox.min_y, info.bbox.max_x, info.bbox.max_y],
         "bbox_crs": info.bbox.crs,
@@ -249,7 +249,7 @@ def _info_from_payload(payload: dict) -> SheetInfo | None:
     try:
         min_x, min_y, max_x, max_y = payload["bbox"]
         return SheetInfo(
-            godlo=payload["godlo"],
+            sheet=payload["godlo"],
             name=payload.get("name"),
             bbox=BBox(min_x, min_y, max_x, max_y, payload["bbox_crs"]),
             podil=payload.get("podil"),

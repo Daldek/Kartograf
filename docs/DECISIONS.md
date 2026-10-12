@@ -52,7 +52,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
 | [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
-| [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara) |
+| [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta; czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow |
 | [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); uzupelnia ADR-029 i ADR-030 |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta; uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
@@ -1955,7 +1955,7 @@ all` (j) konczy sie od 0.7.1 na powodzie, bez odeslania do narzedzia.
 ## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
 
 **Data:** 2026-10-08 (decyzja uzytkownika)
-**Status:** Przyjeta; czesciowo zastepuje ADR-028 (nazwy kluczy `extra.source`) i ADR-030 (nazwy kluczy `extra.campaign`); uzupelnia ADR-022 (konwencja nazw kluczy sidecara `kartograf-meta/1`)
+**Status:** Przyjeta; czesciowo zastepuje ADR-028 (nazwy kluczy `extra.source`) i ADR-030 (nazwy kluczy `extra.campaign`); uzupelnia ADR-022 (konwencja nazw kluczy sidecara `kartograf-meta/1`); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow (pkt 2-3 nieaktualne)
 
 **Kontekst:** Sidecar `<plik>.meta.json` (`kartograf-meta/1`, ADR-022) jest
 kontraktem dla konsumentow (Hydrograf), a jego klucze powstawaly
@@ -2033,6 +2033,26 @@ decyzja dotyczy wylacznie identyfikatorow. STANDARDS 9.4 odsyla tutaj.
   Nazwy pol surowych odpowiedzi zewnetrznych (rekord GUGiK
   `aktualnoscRok`, `PODIL` CUZK) nie sa identyfikatorami Kartografa
   i sie nie zmieniaja.
+
+**Errata 1 (2026-10-12, 0.8.0, decyzja uzytkownika):** pkt 2-3 decyzji
+(aliasy w kolejnych 0.x, usuniecie w v1.0.0) nie obowiazuja. API i CLI
+przechodza na angielskie identyfikatory w 0.8.0 jednym ruchem, bez aliasow
+i bez ostrzezen o wycofaniu (0.8.0 i tak lamie CLI magazynem
+wersjonowanym). Zakres: `godlo` -> `sheet` (`godla` -> `sheets`) we
+wszystkich parametrach, atrybutach i nazwach metod (`download_by_sheet`,
+`calculate_hsg_by_sheet`, `validate_sheet`, `horizontal_crs_for_sheet`);
+`uklad` -> `system` (`SheetParser.system`, `LazTile.system`,
+`FileStorage.get_raw_path(system=)`, szablon segmentu `{system}`),
+`VALID_UKLADY` -> `VALID_SYSTEMS`; `CampaignRef.zgloszenie` ->
+`survey_work_id` (jak klucz sidecara); `WMS_SKOROWIDZE_ENDPOINT(S)` ->
+`WMS_INDEX_ENDPOINT(S)`. CLI: `--godlo` -> `--sheet` (`landcover
+download`, `soilgrids hsg`), argument pozycyjny `download` -> `--sheet`,
+`parse` zostaje pozycyjny (`SHEET`). Domyslna nazwa pliku land cover:
+`..._godlo_<arkusz>` -> `..._sheet_<arkusz>`. Bez zmian: `dt_pzgik` (nazwa
+pola GUGiK), komunikaty po polsku, nazwy pol surowych odpowiedzi
+(`godlo`, `uklad_xy`, `ukladWspolrzednych*`), kolumny wewnetrznego cache
+SQLite. Moduly wewnetrzne o polskich nazwach (`providers/pl/skorowidz.py`)
+nie sa API publicznym i zostaja.
 
 ---
 

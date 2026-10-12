@@ -39,7 +39,7 @@ class BaseProvider(DataSourceProvider):
     the required abstract methods.
 
     Providers support two download modes:
-    - By sheet code (godlo): returns data in provider's native format
+    - By sheet code: returns data in provider's native format
     - By bbox (bounding box): returns data in specified format (optional)
 
     Attributes
@@ -60,7 +60,7 @@ class BaseProvider(DataSourceProvider):
     ...     def base_url(self) -> str:
     ...         return "https://example.com/api"
     ...
-    ...     def download(self, godlo: str, output_path: Path) -> Path:
+    ...     def download(self, sheet: str, output_path: Path) -> Path:
     ...         # Implementation
     ...         pass
     """
@@ -82,7 +82,7 @@ class BaseProvider(DataSourceProvider):
         """
         return None
 
-    def source_info(self, godlo: str) -> dict | None:
+    def source_info(self, sheet: str) -> dict | None:
         """Origin of the downloaded sheet, if the provider exposes it.
 
         Filled by the single-record flow (e.g. ``download`` of one record). In
@@ -97,16 +97,16 @@ class BaseProvider(DataSourceProvider):
     @abstractmethod
     def download(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = 30,
     ) -> Path:
         """
-        Download data for given map sheet (godlo).
+        Download data for given map sheet.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         output_path : Path
             Path where the file should be saved
@@ -199,19 +199,19 @@ class BaseProvider(DataSourceProvider):
             raise ValueError(f"Unknown format: {format}")
         return extensions[format]
 
-    def validate_godlo(self, godlo: str) -> bool:
+    def validate_sheet(self, sheet: str) -> bool:
         """
-        Validate that godlo is in correct format for this provider.
+        Validate that sheet is in correct format for this provider.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier to validate
 
         Returns
         -------
         bool
-            True if godlo is valid, False otherwise
+            True if sheet is valid, False otherwise
         """
         return True
 
@@ -232,7 +232,7 @@ class LandCoverProvider(DataSourceProvider):
     the required abstract methods. Providers support three download modes:
     - By TERYT code (administrative unit)
     - By bbox (bounding box)
-    - By godlo (map sheet ID)
+    - By sheet (map sheet ID)
     Attributes
     ----------
     name : str
@@ -325,21 +325,21 @@ class LandCoverProvider(DataSourceProvider):
             teryt, output_path, timeout=timeout, **kwargs
         )
 
-    def download_by_godlo(
+    def download_by_sheet(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = 60,
         **kwargs,
     ) -> Path:
         """
-        Download land cover data for a map sheet (godlo).
+        Download land cover data for a map sheet.
 
-        Converts godlo to bbox and calls download_by_bbox.
+        Converts sheet to bbox and calls download_by_bbox.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path
             Path where the file should be saved
@@ -356,13 +356,13 @@ class LandCoverProvider(DataSourceProvider):
         Raises
         ------
         ParseError
-            If godlo format is invalid
+            If sheet format is invalid
         DownloadError
             If the download fails
         """
         from kartograf.core.sheet_parser import SheetParser
 
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         bbox = parser.get_bbox(crs="EPSG:2180")
         return self.download_by_bbox(bbox, output_path, timeout, **kwargs)
 

@@ -32,7 +32,7 @@ EMPTY = (
 ).read_text(encoding="utf-8")
 
 G = "N-34-139-C-a-3-1"
-NMPT_EVRF2007 = GugikNmptProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+NMPT_EVRF2007 = GugikNmptProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
 
 
 def _response(body: str) -> Mock:
@@ -64,25 +64,25 @@ def routed_session(path_for_layer) -> Mock:
     return session
 
 
-def nmt_session(godlo: str, prefix: str) -> Mock:
+def nmt_session(sheet: str, prefix: str) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "nmt" / godlo / f"{prefix}__{layer}.body"
+        path = REAL / "nmt" / sheet / f"{prefix}__{layer}.body"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
 
 
-def orto_session(godlo: str, base: Path = REAL) -> Mock:
+def orto_session(sheet: str, base: Path = REAL) -> Mock:
     def path_for_layer(layer):
-        path = base / "orto" / f"{godlo}_{layer}.html"
+        path = base / "orto" / f"{sheet}_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
 
 
-def c14_session(godlo: str) -> Mock:
+def c14_session(sheet: str) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "nmt" / "c14" / f"{godlo}_EVRF2007_{layer}.html"
+        path = REAL / "nmt" / "c14" / f"{sheet}_EVRF2007_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
@@ -124,12 +124,12 @@ def test_newest_min_year_2026_c14_is_year_range_error():
 
 
 def test_newest_min_year_does_not_skip_layers():
-    godlo = "M-34-66-B-a-2-1"
-    s = nmt_session(godlo, "nmt1_evr")
+    sheet = "M-34-66-B-a-2-1"
+    s = nmt_session(sheet, "nmt1_evr")
     with pytest.raises(YearRangeError) as exc:
-        GugikProvider(session=s).resolve_campaigns(godlo, min_year=2024)
-    assert godlo in exc.value.sheets
-    assert all(year < 2024 for year in exc.value.sheets[godlo])
+        GugikProvider(session=s).resolve_campaigns(sheet, min_year=2024)
+    assert sheet in exc.value.sheets
+    assert all(year < 2024 for year in exc.value.sheets[sheet])
     assert queried_layers(s) == [
         "SkorowidzeNMT2026",
         "SkorowidzeNMT2025",
@@ -176,9 +176,9 @@ def test_all_lists_every_matching_campaign_from_all_layers():
     ],
 )
 def test_resolve_campaigns_year_2025_c14_returns_both_flights(suffix, expected):
-    godlo = f"N-34-139-C-a-3-{suffix}"
-    records = GugikProvider(session=c14_session(godlo)).resolve_campaigns(
-        godlo, campaigns="all", min_year=2025, max_year=2025
+    sheet = f"N-34-139-C-a-3-{suffix}"
+    records = GugikProvider(session=c14_session(sheet)).resolve_campaigns(
+        sheet, campaigns="all", min_year=2025, max_year=2025
     )
     assert ids(records) == expected
 
@@ -200,11 +200,11 @@ def test_resolve_campaigns_bounds_filter_years_campaigns_sets_count():
 
 def test_newest_with_min_year_matches_newest_without_range():
     for suffix in range(1, 5):
-        godlo = f"N-34-139-C-a-3-{suffix}"
-        provider = GugikProvider(session=c14_session(godlo))
+        sheet = f"N-34-139-C-a-3-{suffix}"
+        provider = GugikProvider(session=c14_session(sheet))
         assert (
-            provider.resolve_campaigns(godlo, min_year=2019)[0].url
-            == provider.resolve_campaigns(godlo)[0].url
+            provider.resolve_campaigns(sheet, min_year=2019)[0].url
+            == provider.resolve_campaigns(sheet)[0].url
         )
 
 
@@ -221,20 +221,20 @@ def test_resolve_campaigns_year_2024_c14_conflict_lists_years():
     [(1, ["73021"]), (2, ["75162"])],
 )
 def test_resolve_campaigns_max_year_2022_c14(suffix, expected):
-    godlo = f"N-34-139-C-a-3-{suffix}"
-    records = GugikProvider(session=c14_session(godlo)).resolve_campaigns(
-        godlo, max_year=2022
+    sheet = f"N-34-139-C-a-3-{suffix}"
+    records = GugikProvider(session=c14_session(sheet)).resolve_campaigns(
+        sheet, max_year=2022
     )
     assert ids(records) == expected
 
 
 def test_resolve_campaigns_range_queries_all_layers_no_partial_scan(tmp_path):
-    godlo = "N-34-139-C-a-3-2"
-    key = ("nmt", "1m", "EVRF2007", godlo)
+    sheet = "N-34-139-C-a-3-2"
+    key = ("nmt", "1m", "EVRF2007", sheet)
     cache = MetadataCache(tmp_path / "c.db")
-    session = c14_session(godlo)
+    session = c14_session(sheet)
     provider = GugikProvider(session=session, cache=cache)
-    assert ids(provider.resolve_campaigns(godlo, min_year=2026)) == ["83998"]
+    assert ids(provider.resolve_campaigns(sheet, min_year=2026)) == ["83998"]
     expected_layers = [
         "SkorowidzeNMT2026",
         "SkorowidzeNMT2025",
@@ -245,10 +245,10 @@ def test_resolve_campaigns_range_queries_all_layers_no_partial_scan(tmp_path):
     payload = cache.get_campaigns(*key)
     assert "scanned_from" not in payload
     cache.set_campaigns(*key, {"sources": payload["sources"], "scanned_from": 2024})
-    requery = c14_session(godlo)
+    requery = c14_session(sheet)
     assert ids(
         GugikProvider(session=requery, cache=cache).resolve_campaigns(
-            godlo, min_year=2026
+            sheet, min_year=2026
         )
     ) == ["83998"]
     assert queried_layers(requery) == expected_layers
@@ -256,30 +256,30 @@ def test_resolve_campaigns_range_queries_all_layers_no_partial_scan(tmp_path):
 
 
 def test_available_years_c14():
-    godlo = "N-34-139-C-a-3-2"
-    provider = GugikProvider(session=c14_session(godlo))
-    assert provider.available_years(godlo) == (2019, 2022, 2023, 2024, 2025, 2026)
+    sheet = "N-34-139-C-a-3-2"
+    provider = GugikProvider(session=c14_session(sheet))
+    assert provider.available_years(sheet) == (2019, 2022, 2023, 2024, 2025, 2026)
 
 
 def test_orto_cir_year_2025_conflict_rgb_has_it():
-    godlo = "N-34-139-A-c-1-1"
-    session = orto_session(godlo)
+    sheet = "N-34-139-A-c-1-1"
+    session = orto_session(sheet)
     with pytest.raises(YearRangeError) as exc:
         GugikOrtoProvider(session=session, color="CIR").resolve_campaigns(
-            godlo, min_year=2025, max_year=2025
+            sheet, min_year=2025, max_year=2025
         )
-    assert exc.value.sheets == {godlo: (2011, 2014, 2017, 2022, 2024)}
+    assert exc.value.sheets == {sheet: (2011, 2014, 2017, 2022, 2024)}
     assert 2025 in GugikOrtoProvider(
-        session=orto_session(godlo), color="RGB"
-    ).available_years(godlo)
+        session=orto_session(sheet), color="RGB"
+    ).available_years(sheet)
 
 
 def test_orto_year_2025_two_rgb_flights_same_pixel_newest_first():
     """T14 for orto: two 0.25 m RGB flights in 2025, newest (NIE) first."""
-    godlo = "N-33-130-D-d-1-4"
+    sheet = "N-33-130-D-d-1-4"
     recs = GugikOrtoProvider(
-        session=orto_session(godlo, base=REAL_10_10)
-    ).resolve_campaigns(godlo, campaigns="all", min_year=2025, max_year=2025)
+        session=orto_session(sheet, base=REAL_10_10)
+    ).resolve_campaigns(sheet, campaigns="all", min_year=2025, max_year=2025)
     assert [
         (file_id(r.url), r.aktualnosc, r.resolution_m, r.full_sheet) for r in recs
     ] == [
@@ -324,14 +324,14 @@ def test_all_min_year_empty_lists_available_years(tmp_path):
 
 
 def test_all_no_records_is_no_coverage_with_provider_hints():
-    godlo = "N-33-77-A-d-2-2"
+    sheet = "N-33-77-A-d-2-2"
     with pytest.raises(NoCoverageError) as newest:
         GugikProvider(session=routed_session(lambda layer: None)).resolve_campaigns(
-            godlo
+            sheet
         )
     with pytest.raises(NoCoverageError) as every:
         GugikProvider(session=routed_session(lambda layer: None)).resolve_campaigns(
-            godlo, campaigns="all"
+            sheet, campaigns="all"
         )
     assert str(every.value) == str(newest.value)
     assert "Brak danych NMT 1m" in str(every.value)
@@ -372,14 +372,14 @@ def test_all_cache_hit_no_network(tmp_path):
 
 
 def test_all_from_cache_keeps_format(tmp_path):
-    godlo = "N-33-69-A-d-3-2"
+    sheet = "N-33-69-A-d-3-2"
     cache = MetadataCache(tmp_path / "c.db")
     GugikProvider(
-        session=nmt_session(godlo, "nmt1_evr"), cache=cache
-    ).resolve_campaigns(godlo, campaigns="all")
+        session=nmt_session(sheet, "nmt1_evr"), cache=cache
+    ).resolve_campaigns(sheet, campaigns="all")
     s2 = Mock(spec=requests.Session)
     recs = GugikProvider(session=s2, cache=cache).resolve_campaigns(
-        godlo, campaigns="all"
+        sheet, campaigns="all"
     )
     assert s2.get.call_count == 0
     assert ids(recs)[-1] == "72675"
@@ -420,7 +420,7 @@ def test_record_source_carries_endpoint_and_orto_color():
     p = GugikOrtoProvider(session=orto_session("M-34-90-C-b-4-4"))
     [r] = p.resolve_campaigns("M-34-90-C-b-4-4")
     src = p.record_source(r)
-    assert src["index_url"] == GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT
+    assert src["index_url"] == GugikOrtoProvider.WMS_INDEX_ENDPOINT
     assert src["color"] == "RGB"
 
 
@@ -443,20 +443,20 @@ def test_download_unchanged_api_downloads_newest(tmp_path):
 
 
 def test_nmpt_inherits_campaigns(tmp_path):
-    godlo = "N-33-77-A-d-2-2"
-    s = nmt_session(godlo, "nmpt_evr")
+    sheet = "N-33-77-A-d-2-2"
+    s = nmt_session(sheet, "nmpt_evr")
     cache = MetadataCache(tmp_path / "c.db")
     with pytest.raises(NoCoverageError) as exc:
         GugikNmptProvider(session=s, cache=cache).resolve_campaigns(
-            godlo, campaigns="all"
+            sheet, campaigns="all"
         )
     assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
     assert s.get.call_count > 0
     # NMPT asks NMPT indexes only (its own and, for the variant hint, the
     # other vertical CRS) - never NMT
     assert all("/NMPT/" in c.args[0] for c in s.get.call_args_list)
-    assert cache.get_campaigns("nmpt", "1m", "EVRF2007", godlo)["no_coverage"] is True
-    assert cache.get_campaigns("nmt", "1m", "EVRF2007", godlo) is None
+    assert cache.get_campaigns("nmpt", "1m", "EVRF2007", sheet)["no_coverage"] is True
+    assert cache.get_campaigns("nmt", "1m", "EVRF2007", sheet) is None
 
 
 def test_supports_campaigns_flag():

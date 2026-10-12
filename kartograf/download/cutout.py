@@ -212,7 +212,7 @@ def prepare_pl_cutout(
         key = "pl.gugik.nmpt"
     else:
         key = "pl.gugik.nmt_5m" if resolution == "5m" else "pl.gugik.nmt_1m"
-    subdir = get_source(key).resolve_subdir(uklad="1992", vertical_crs=vertical_crs)
+    subdir = get_source(key).resolve_subdir(system="1992", vertical_crs=vertical_crs)
     return PlCutout(
         target_crs=target_crs,
         resolution=resolution,

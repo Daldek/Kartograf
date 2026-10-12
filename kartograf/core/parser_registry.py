@@ -35,16 +35,16 @@ class SheetSystem:
     path_parts: Callable[[str], list[str]]  # path parts for FileStorage
 
 
-def _pl2000_path_parts(godlo: str) -> list[str]:
+def _pl2000_path_parts(sheet: str) -> list[str]:
     # PL-2000: split on dots, use all parts as directory hierarchy
-    return godlo.split(".")
+    return sheet.split(".")
 
 
-def _pl1992_path_parts(godlo: str) -> list[str]:
+def _pl1992_path_parts(sheet: str) -> list[str]:
     # PL-1992: split on dashes, first two parts form the base (e.g. N-34).
     # Identifiers without a dash (e.g. opaque non-PL raw identifiers routed
     # through the fallback system) are used as a single directory part.
-    parts = godlo.split("-")
+    parts = sheet.split("-")
     if len(parts) < 2:
         return parts
     dir_parts = [f"{parts[0]}-{parts[1]}"]
@@ -57,31 +57,31 @@ SYSTEMS: tuple[SheetSystem, ...] = (
     SheetSystem(
         id="pl2000",
         country="PL",
-        detect=lambda godlo: bool(_PL2000_PATTERN.match(godlo)),
+        detect=lambda sheet: bool(_PL2000_PATTERN.match(sheet)),
         path_parts=_pl2000_path_parts,
     ),
     SheetSystem(
         id="cz_tm33",
         country="CZ",
-        detect=lambda godlo: bool(CZ_TM33_PATTERN.match(godlo)),
-        path_parts=lambda godlo: godlo.split("_"),
+        detect=lambda sheet: bool(CZ_TM33_PATTERN.match(sheet)),
+        path_parts=lambda sheet: sheet.split("_"),
     ),
     SheetSystem(
         id="cz_sm5",
         country="CZ",
-        detect=lambda godlo: bool(CZ_SM5_PATTERN.match(godlo)),
-        path_parts=lambda godlo: [godlo[:4], godlo[4:]],
+        detect=lambda sheet: bool(CZ_SM5_PATTERN.match(sheet)),
+        path_parts=lambda sheet: [sheet[:4], sheet[4:]],
     ),
     SheetSystem(
         id="pl1992",
         country="PL",
-        detect=lambda godlo: True,  # fallback - always last
+        detect=lambda sheet: True,  # fallback - always last
         path_parts=_pl1992_path_parts,
     ),
 )
 
 
-def detect_system(godlo: str) -> SheetSystem:
+def detect_system(sheet: str) -> SheetSystem:
     """
     First system (in ``SYSTEMS`` order) whose ``detect`` matches.
 
@@ -89,11 +89,11 @@ def detect_system(godlo: str) -> SheetSystem:
     ``pl1992`` is the fallback for any identifier (including an invalid one -
     validation is done by the system's parser).
     """
-    cleaned = godlo.strip()
+    cleaned = sheet.strip()
     return next(s for s in SYSTEMS if s.detect(cleaned))
 
 
-def path_parts(godlo: str) -> list[str]:
+def path_parts(sheet: str) -> list[str]:
     """Directory path parts for a sheet code (whitespace stripped), by system."""
-    cleaned = godlo.strip()
+    cleaned = sheet.strip()
     return detect_system(cleaned).path_parts(cleaned)

@@ -21,52 +21,52 @@ from kartograf.exceptions import ParseError, ValidationError
 class TestSheetParserBasic:
     """Tests of the basic SheetParser functionality."""
 
-    def test_parse_valid_godlo_1m(self):
+    def test_parse_valid_sheet_1m(self):
         """Test of parsing a 1:1000000 sheet code."""
-        parser = SheetParser("N-34", uklad="1992")
+        parser = SheetParser("N-34", system="1992")
 
-        assert parser.godlo == "N-34"
+        assert parser.sheet == "N-34"
         assert parser.scale == "1:1000000"
-        assert parser.uklad == "1992"
+        assert parser.system == "1992"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
 
-    def test_parse_valid_godlo_500k(self):
+    def test_parse_valid_sheet_500k(self):
         """Test of parsing a 1:500000 sheet code."""
-        parser = SheetParser("N-34-A", uklad="1992")
+        parser = SheetParser("N-34-A", system="1992")
 
-        assert parser.godlo == "N-34-A"
+        assert parser.sheet == "N-34-A"
         assert parser.scale == "1:500000"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
         assert parser.components["arkusz_200k"] == "A"
 
-    def test_parse_valid_godlo_200k(self):
+    def test_parse_valid_sheet_200k(self):
         """Test of parsing a 1:200000 sheet code."""
-        parser = SheetParser("N-34-130", uklad="1992")
+        parser = SheetParser("N-34-130", system="1992")
 
-        assert parser.godlo == "N-34-130"
+        assert parser.sheet == "N-34-130"
         assert parser.scale == "1:200000"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
         assert parser.components["arkusz_200k"] == "130"
 
-    def test_parse_valid_godlo_100k(self):
+    def test_parse_valid_sheet_100k(self):
         """Test of parsing a 1:100000 sheet code."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
 
-        assert parser.godlo == "N-34-130-D"
+        assert parser.sheet == "N-34-130-D"
         assert parser.scale == "1:100000"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
         assert parser.components["arkusz_200k"] == "130"
         assert parser.components["arkusz_100k"] == "D"
 
-    def test_parse_valid_godlo_50k(self):
+    def test_parse_valid_sheet_50k(self):
         """Test of parsing a 1:50000 sheet code."""
-        parser = SheetParser("N-34-130-D-d", uklad="1992")
+        parser = SheetParser("N-34-130-D-d", system="1992")
 
-        assert parser.godlo == "N-34-130-D-d"
+        assert parser.sheet == "N-34-130-D-d"
         assert parser.scale == "1:50000"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
@@ -74,11 +74,11 @@ class TestSheetParserBasic:
         assert parser.components["arkusz_100k"] == "D"
         assert parser.components["arkusz_50k"] == "d"
 
-    def test_parse_valid_godlo_25k(self):
+    def test_parse_valid_sheet_25k(self):
         """Test of parsing a 1:25000 sheet code."""
-        parser = SheetParser("N-34-130-D-d-2", uklad="1992")
+        parser = SheetParser("N-34-130-D-d-2", system="1992")
 
-        assert parser.godlo == "N-34-130-D-d-2"
+        assert parser.sheet == "N-34-130-D-d-2"
         assert parser.scale == "1:25000"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
@@ -87,13 +87,13 @@ class TestSheetParserBasic:
         assert parser.components["arkusz_50k"] == "d"
         assert parser.components["arkusz_25k"] == "2"
 
-    def test_parse_valid_godlo_10k(self):
+    def test_parse_valid_sheet_10k(self):
         """Test of parsing a 1:10000 sheet code."""
-        parser = SheetParser("N-34-130-D-d-2-4", uklad="1992")
+        parser = SheetParser("N-34-130-D-d-2-4", system="1992")
 
-        assert parser.godlo == "N-34-130-D-d-2-4"
+        assert parser.sheet == "N-34-130-D-d-2-4"
         assert parser.scale == "1:10000"
-        assert parser.uklad == "1992"
+        assert parser.system == "1992"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
         assert parser.components["arkusz_200k"] == "130"
@@ -108,72 +108,72 @@ class TestSheetParserNormalization:
 
     def test_normalize_lowercase_pas(self):
         """Test of normalising a lowercase belt letter to uppercase."""
-        parser = SheetParser("n-34-130-D", uklad="1992")
-        assert parser.godlo == "N-34-130-D"
+        parser = SheetParser("n-34-130-D", system="1992")
+        assert parser.sheet == "N-34-130-D"
 
     def test_normalize_lowercase_100k(self):
         """Test of normalising a lowercase 100k sheet letter to uppercase."""
-        parser = SheetParser("N-34-130-d", uklad="1992")
-        assert parser.godlo == "N-34-130-D"
+        parser = SheetParser("N-34-130-d", system="1992")
+        assert parser.sheet == "N-34-130-D"
 
     def test_normalize_uppercase_50k_to_lowercase(self):
         """Test of normalising an uppercase 50k sheet letter to lowercase."""
-        parser = SheetParser("N-34-130-D-D", uklad="1992")
-        assert parser.godlo == "N-34-130-D-d"
+        parser = SheetParser("N-34-130-D-D", system="1992")
+        assert parser.sheet == "N-34-130-D-d"
 
     def test_normalize_mixed_case(self):
         """Test of normalising mixed letter case."""
-        parser = SheetParser("n-34-130-d-D-2-4", uklad="1992")
-        assert parser.godlo == "N-34-130-D-d-2-4"
+        parser = SheetParser("n-34-130-d-D-2-4", system="1992")
+        assert parser.sheet == "N-34-130-D-d-2-4"
 
     def test_strip_whitespace(self):
         """Test of whitespace removal."""
-        parser = SheetParser("  N-34-130-D  ", uklad="1992")
-        assert parser.godlo == "N-34-130-D"
+        parser = SheetParser("  N-34-130-D  ", system="1992")
+        assert parser.sheet == "N-34-130-D"
 
 
 class TestSheetParserUklad:
     """Tests of coordinate system validation."""
 
-    def test_uklad_1992(self):
+    def test_system_1992(self):
         """Test of the 1992 system."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
-        assert parser.uklad == "1992"
+        parser = SheetParser("N-34-130-D", system="1992")
+        assert parser.system == "1992"
 
-    def test_uklad_2000(self):
+    def test_system_2000(self):
         """Test of the 2000 system with a PL-2000 sheet code."""
-        parser = SheetParser("6.179.12", uklad="2000")
-        assert parser.uklad == "2000"
+        parser = SheetParser("6.179.12", system="2000")
+        assert parser.system == "2000"
 
-    def test_auto_detect_uklad(self):
+    def test_auto_detect_system(self):
         """Test of automatic system detection (default 1992)."""
         parser = SheetParser("N-34-130-D")
-        assert parser.uklad == "1992"
+        assert parser.system == "1992"
 
-    def test_invalid_uklad(self):
+    def test_invalid_system(self):
         """Test of validation of an invalid system."""
         with pytest.raises(ValidationError, match="Nieprawidłowy układ"):
-            SheetParser("N-34-130-D", uklad="1965")
+            SheetParser("N-34-130-D", system="1965")
 
-    def test_invalid_uklad_wrong_type(self):
+    def test_invalid_system_wrong_type(self):
         """Test of validation of a system of the wrong type."""
         with pytest.raises(ValidationError, match="Nieprawidłowy układ"):
-            SheetParser("N-34-130-D", uklad="PUWG")
+            SheetParser("N-34-130-D", system="PUWG")
 
 
 class TestSheetParserValidation:
     """Tests of sheet code validation."""
 
-    def test_invalid_godlo_format(self):
+    def test_invalid_sheet_format(self):
         """Test of validation of an invalid sheet code format."""
         with pytest.raises(ParseError, match="Nieprawidłowe godło"):
             SheetParser("INVALID-GODLO")
 
-    @pytest.mark.parametrize("godlo", ["M-３３-８-A", "N-34-１３０-D", "6.１４５.２０"])
-    def test_non_ascii_digits_rejected(self, godlo):
+    @pytest.mark.parametrize("sheet", ["M-３３-８-A", "N-34-１３０-D", "6.１４５.２０"])
+    def test_non_ascii_digits_rejected(self, sheet):
         """P5: \\d and isdecimal() let full-width digits into the sheet code."""
         with pytest.raises(ParseError):
-            SheetParser(godlo)
+            SheetParser(sheet)
 
     @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
     def test_bare_pl2000_zone_number_message(self, zone):
@@ -193,12 +193,12 @@ class TestSheetParserValidation:
         assert "N-34-130-D-d-2-4" in msg
         assert "6.179.12" in msg
 
-    @pytest.mark.parametrize("uklad", ["2000", "1992"])
+    @pytest.mark.parametrize("system", ["2000", "1992"])
     @pytest.mark.parametrize("zone", ["5", "6", "7", "8", " 6 "])
-    def test_bare_zone_number_with_explicit_uklad(self, zone, uklad):
+    def test_bare_zone_number_with_explicit_system(self, zone, system):
         """A zone number with an explicit system gives the same zone message."""
         with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
-            SheetParser(zone, uklad=uklad)
+            SheetParser(zone, system=system)
         msg = str(exc.value)
         assert "6.179.12" in msg
         assert "format PL-1992" not in msg
@@ -209,17 +209,17 @@ class TestSheetParserValidation:
             SheetParser("6.179")
         assert "numer strefy" not in str(exc.value)
 
-    def test_empty_godlo(self):
+    def test_empty_sheet(self):
         """Test of an empty sheet code."""
         with pytest.raises(ParseError, match="nie może być puste"):
             SheetParser("")
 
-    def test_whitespace_only_godlo(self):
+    def test_whitespace_only_sheet(self):
         """Test of a sheet code containing only whitespace."""
         with pytest.raises(ParseError, match="nie może być puste"):
             SheetParser("   ")
 
-    def test_invalid_godlo_type(self):
+    def test_invalid_sheet_type(self):
         """Test of an invalid sheet code type."""
         with pytest.raises(ParseError, match="musi być stringiem"):
             SheetParser(12345)  # type: ignore
@@ -256,26 +256,26 @@ class TestSheetParserEdgeCases:
     def test_single_digit_slup_out_of_range(self):
         """A7: a one-digit column is outside the PL-1992 range (33-35)."""
         with pytest.raises(ParseError, match="slup 1 "):
-            SheetParser("M-1", uklad="1992")
+            SheetParser("M-1", system="1992")
 
     def test_double_digit_slup_out_of_range(self):
         """A7: column 99 is outside the PL-1992 range (33-35)."""
         with pytest.raises(ParseError, match="slup 99 "):
-            SheetParser("M-99", uklad="1992")
+            SheetParser("M-99", system="1992")
 
     def test_three_digit_arkusz_200k(self):
         """Test of a three-digit 200k sheet number."""
-        parser = SheetParser("N-34-130", uklad="1992")
+        parser = SheetParser("N-34-130", system="1992")
         assert parser.components["arkusz_200k"] == "130"
 
     def test_single_digit_arkusz_200k(self):
         """Test of a single-digit 200k sheet number."""
-        parser = SheetParser("N-34-1", uklad="1992")
+        parser = SheetParser("N-34-1", system="1992")
         assert parser.components["arkusz_200k"] == "1"
 
     def test_all_a_subdivisions(self):
         """Test of a sheet with all divisions 'A/a/1'."""
-        parser = SheetParser("N-34-130-A-a-1-1", uklad="1992")
+        parser = SheetParser("N-34-130-A-a-1-1", system="1992")
         assert parser.components["arkusz_100k"] == "A"
         assert parser.components["arkusz_50k"] == "a"
         assert parser.components["arkusz_25k"] == "1"
@@ -283,7 +283,7 @@ class TestSheetParserEdgeCases:
 
     def test_all_d_subdivisions(self):
         """Test of a sheet with all divisions 'D/d/4'."""
-        parser = SheetParser("N-34-130-D-d-4-4", uklad="1992")
+        parser = SheetParser("N-34-130-D-d-4-4", system="1992")
         assert parser.components["arkusz_100k"] == "D"
         assert parser.components["arkusz_50k"] == "d"
         assert parser.components["arkusz_25k"] == "4"
@@ -295,7 +295,7 @@ class TestSheetParserStringRepresentations:
 
     def test_repr(self):
         """Test __repr__."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
         repr_str = repr(parser)
 
         assert "SheetParser" in repr_str
@@ -305,7 +305,7 @@ class TestSheetParserStringRepresentations:
 
     def test_str(self):
         """Test __str__."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
         str_repr = str(parser)
 
         assert "N-34-130-D" in str_repr
@@ -318,36 +318,36 @@ class TestSheetParserEquality:
 
     def test_equal_parsers(self):
         """Test of equality of identical parsers."""
-        parser1 = SheetParser("N-34-130-D", uklad="1992")
-        parser2 = SheetParser("N-34-130-D", uklad="1992")
+        parser1 = SheetParser("N-34-130-D", system="1992")
+        parser2 = SheetParser("N-34-130-D", system="1992")
 
         assert parser1 == parser2
 
-    def test_different_godlo(self):
+    def test_different_sheet(self):
         """Test of inequality for different sheet codes."""
-        parser1 = SheetParser("N-34-130-D", uklad="1992")
-        parser2 = SheetParser("N-34-130-C", uklad="1992")
+        parser1 = SheetParser("N-34-130-D", system="1992")
+        parser2 = SheetParser("N-34-130-C", system="1992")
 
         assert parser1 != parser2
 
-    def test_different_uklad(self):
+    def test_different_system(self):
         """Test of inequality for different systems - PL-1992 vs PL-2000."""
-        parser1 = SheetParser("N-34-130-D", uklad="1992")
-        parser2 = SheetParser("6.179.12", uklad="2000")
+        parser1 = SheetParser("N-34-130-D", system="1992")
+        parser2 = SheetParser("6.179.12", system="2000")
 
         assert parser1 != parser2
 
     def test_hash_equal_parsers(self):
         """Test of the hash for equal parsers."""
-        parser1 = SheetParser("N-34-130-D", uklad="1992")
-        parser2 = SheetParser("N-34-130-D", uklad="1992")
+        parser1 = SheetParser("N-34-130-D", system="1992")
+        parser2 = SheetParser("N-34-130-D", system="1992")
 
         assert hash(parser1) == hash(parser2)
 
     def test_hash_different_parsers(self):
         """Test of the hash for different parsers."""
-        parser1 = SheetParser("N-34-130-D", uklad="1992")
-        parser2 = SheetParser("N-34-130-C", uklad="1992")
+        parser1 = SheetParser("N-34-130-D", system="1992")
+        parser2 = SheetParser("N-34-130-C", system="1992")
 
         # The hash may differ (it need not, but usually does)
         # We only test that the hash works
@@ -356,7 +356,7 @@ class TestSheetParserEquality:
 
     def test_not_equal_to_other_types(self):
         """Test of inequality with other types."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
 
         assert parser != "N-34-130-D"
         assert parser != 123
@@ -368,7 +368,7 @@ class TestSheetParserComponentsImmutability:
 
     def test_components_returns_copy(self):
         """Test that components returns a copy of the dictionary."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
         components1 = parser.components
         components2 = parser.components
 
@@ -415,9 +415,9 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-130-D-d-2"
+        assert parent.sheet == "N-34-130-D-d-2"
         assert parent.scale == "1:25000"
-        assert parent.uklad == "1992"
+        assert parent.system == "1992"
 
     def test_get_parent_from_25k(self):
         """Test of get_parent() for the 1:25000 scale."""
@@ -425,7 +425,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-130-D-d"
+        assert parent.sheet == "N-34-130-D-d"
         assert parent.scale == "1:50000"
 
     def test_get_parent_from_50k(self):
@@ -434,7 +434,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-130-D"
+        assert parent.sheet == "N-34-130-D"
         assert parent.scale == "1:100000"
 
     def test_get_parent_from_100k(self):
@@ -443,7 +443,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-130"
+        assert parent.sheet == "N-34-130"
         assert parent.scale == "1:200000"
 
     def test_get_parent_from_200k_section_a(self):
@@ -452,7 +452,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-A"
+        assert parent.sheet == "N-34-A"
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_b(self):
@@ -461,7 +461,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-B"
+        assert parent.sheet == "N-34-B"
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_c(self):
@@ -470,7 +470,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-C"
+        assert parent.sheet == "N-34-C"
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_200k_section_d(self):
@@ -479,7 +479,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34-D"
+        assert parent.sheet == "N-34-D"
         assert parent.scale == "1:500000"
 
     def test_get_parent_from_500k(self):
@@ -488,7 +488,7 @@ class TestSheetParserGetParent:
         parent = parser.get_parent()
 
         assert parent is not None
-        assert parent.godlo == "N-34"
+        assert parent.sheet == "N-34"
         assert parent.scale == "1:1000000"
 
     def test_get_parent_from_1m_returns_none(self):
@@ -498,12 +498,12 @@ class TestSheetParserGetParent:
 
         assert parent is None
 
-    def test_get_parent_preserves_uklad(self):
+    def test_get_parent_preserves_system(self):
         """Test that get_parent() preserves the system."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
         parent = parser.get_parent()
 
-        assert parent.uklad == "1992"
+        assert parent.system == "1992"
 
     @pytest.mark.parametrize("nr", range(1, 145))
     def test_parent_bbox_contains_child_bbox_for_all_200k_numbers(self, nr):
@@ -525,10 +525,10 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 4
-        assert children[0].godlo == "N-34-A"
-        assert children[1].godlo == "N-34-B"
-        assert children[2].godlo == "N-34-C"
-        assert children[3].godlo == "N-34-D"
+        assert children[0].sheet == "N-34-A"
+        assert children[1].sheet == "N-34-B"
+        assert children[2].sheet == "N-34-C"
+        assert children[3].sheet == "N-34-D"
         assert all(c.scale == "1:500000" for c in children)
 
     def test_get_children_from_500k_section_a(self):
@@ -537,8 +537,8 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 36
-        assert children[0].godlo == "N-34-1"
-        assert children[35].godlo == "N-34-66"
+        assert children[0].sheet == "N-34-1"
+        assert children[35].sheet == "N-34-66"
         assert all(c.scale == "1:200000" for c in children)
 
     def test_get_children_from_500k_section_d(self):
@@ -547,8 +547,8 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 36
-        assert children[0].godlo == "N-34-79"
-        assert children[35].godlo == "N-34-144"
+        assert children[0].sheet == "N-34-79"
+        assert children[35].sheet == "N-34-144"
         assert all(c.scale == "1:200000" for c in children)
 
     def test_get_children_from_200k(self):
@@ -557,10 +557,10 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 4
-        assert children[0].godlo == "N-34-130-A"
-        assert children[1].godlo == "N-34-130-B"
-        assert children[2].godlo == "N-34-130-C"
-        assert children[3].godlo == "N-34-130-D"
+        assert children[0].sheet == "N-34-130-A"
+        assert children[1].sheet == "N-34-130-B"
+        assert children[2].sheet == "N-34-130-C"
+        assert children[3].sheet == "N-34-130-D"
         assert all(c.scale == "1:100000" for c in children)
 
     def test_get_children_from_100k(self):
@@ -569,10 +569,10 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 4
-        assert children[0].godlo == "N-34-130-D-a"
-        assert children[1].godlo == "N-34-130-D-b"
-        assert children[2].godlo == "N-34-130-D-c"
-        assert children[3].godlo == "N-34-130-D-d"
+        assert children[0].sheet == "N-34-130-D-a"
+        assert children[1].sheet == "N-34-130-D-b"
+        assert children[2].sheet == "N-34-130-D-c"
+        assert children[3].sheet == "N-34-130-D-d"
         assert all(c.scale == "1:50000" for c in children)
 
     def test_get_children_from_50k(self):
@@ -581,10 +581,10 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 4
-        assert children[0].godlo == "N-34-130-D-d-1"
-        assert children[1].godlo == "N-34-130-D-d-2"
-        assert children[2].godlo == "N-34-130-D-d-3"
-        assert children[3].godlo == "N-34-130-D-d-4"
+        assert children[0].sheet == "N-34-130-D-d-1"
+        assert children[1].sheet == "N-34-130-D-d-2"
+        assert children[2].sheet == "N-34-130-D-d-3"
+        assert children[3].sheet == "N-34-130-D-d-4"
         assert all(c.scale == "1:25000" for c in children)
 
     def test_get_children_from_25k(self):
@@ -593,10 +593,10 @@ class TestSheetParserGetChildren:
         children = parser.get_children()
 
         assert len(children) == 4
-        assert children[0].godlo == "N-34-130-D-d-2-1"
-        assert children[1].godlo == "N-34-130-D-d-2-2"
-        assert children[2].godlo == "N-34-130-D-d-2-3"
-        assert children[3].godlo == "N-34-130-D-d-2-4"
+        assert children[0].sheet == "N-34-130-D-d-2-1"
+        assert children[1].sheet == "N-34-130-D-d-2-2"
+        assert children[2].sheet == "N-34-130-D-d-2-3"
+        assert children[3].sheet == "N-34-130-D-d-2-4"
         assert all(c.scale == "1:10000" for c in children)
 
     def test_get_children_from_10k_returns_empty(self):
@@ -614,19 +614,19 @@ class TestSheetParserGetChildren:
         pb = parent.get_bbox("EPSG:4326")
         children = parent.get_children()
         assert len(children) == 36
-        assert len({c.godlo for c in children}) == 36
+        assert len({c.sheet for c in children}) == 36
         for c in children:
             cb = c.get_bbox("EPSG:4326")
             assert pb.min_x <= cb.min_x and cb.max_x <= pb.max_x
             assert pb.min_y <= cb.min_y and cb.max_y <= pb.max_y
-            assert c.get_parent().godlo == parent.godlo
+            assert c.get_parent().sheet == parent.sheet
 
-    def test_get_children_preserves_uklad(self):
+    def test_get_children_preserves_system(self):
         """Test that get_children() preserves the system."""
-        parser = SheetParser("N-34-130-D", uklad="1992")
+        parser = SheetParser("N-34-130-D", system="1992")
         children = parser.get_children()
 
-        assert all(c.uklad == "1992" for c in children)
+        assert all(c.system == "1992" for c in children)
 
 
 class TestSheetParserGetHierarchyUp:
@@ -672,14 +672,14 @@ class TestSheetParserGetHierarchyUp:
 
         assert len(hierarchy) == 1
         assert hierarchy[0].scale == "1:1000000"
-        assert hierarchy[0].godlo == "N-34"
+        assert hierarchy[0].sheet == "N-34"
 
-    def test_hierarchy_up_godlo_values(self):
+    def test_hierarchy_up_sheet_values(self):
         """Test of correct sheet code values in the hierarchy."""
         parser = SheetParser("N-34-130-D-d-2-4")
         hierarchy = parser.get_hierarchy_up()
 
-        expected_godla = [
+        expected_sheets = [
             "N-34-130-D-d-2-4",
             "N-34-130-D-d-2",
             "N-34-130-D-d",
@@ -689,7 +689,7 @@ class TestSheetParserGetHierarchyUp:
             "N-34",
         ]
 
-        assert [p.godlo for p in hierarchy] == expected_godla
+        assert [p.sheet for p in hierarchy] == expected_sheets
 
 
 class TestSheetParserGetAllDescendants:
@@ -720,8 +720,8 @@ class TestSheetParserGetAllDescendants:
 
         assert len(descendants) == 4
         assert all(d.scale == "1:10000" for d in descendants)
-        assert descendants[0].godlo == "N-34-130-D-d-2-1"
-        assert descendants[3].godlo == "N-34-130-D-d-2-4"
+        assert descendants[0].sheet == "N-34-130-D-d-2-1"
+        assert descendants[3].sheet == "N-34-130-D-d-2-4"
 
     def test_descendants_from_500k_to_200k(self):
         """Test of get_all_descendants() from 1:500000 to 1:200000 (36 sheets)."""
@@ -757,12 +757,12 @@ class TestSheetParserGetAllDescendants:
         with pytest.raises(ValueError, match="musi być większa"):
             parser.get_all_descendants("1:200000")
 
-    def test_descendants_preserves_uklad(self):
+    def test_descendants_preserves_system(self):
         """Test that get_all_descendants() preserves the system."""
-        parser = SheetParser("N-34-130-D-d", uklad="1992")
+        parser = SheetParser("N-34-130-D-d", system="1992")
         descendants = parser.get_all_descendants("1:10000")
 
-        assert all(d.uklad == "1992" for d in descendants)
+        assert all(d.system == "1992" for d in descendants)
 
 
 class TestSheetParserHierarchyRoundTrip:
@@ -797,7 +797,7 @@ class TestSheetParserHierarchyRoundTrip:
         parser_1m = hierarchy[-1]
 
         assert parser_1m.scale == "1:1000000"
-        assert parser_1m.godlo == "N-34"
+        assert parser_1m.sheet == "N-34"
 
         # Find the way back to the original sheet
         descendants = parser_1m.get_all_descendants("1:10000")
@@ -1037,8 +1037,8 @@ class TestFindSheetsForBBox:
 
     def test_single_sheet_exact_match(self):
         """bbox = get_bbox() of a single 1:10k → returns exactly that sheet code."""
-        godlo = "N-34-130-D-d-2-4"
-        parser = SheetParser(godlo)
+        sheet = "N-34-130-D-d-2-4"
+        parser = SheetParser(sheet)
         bbox = parser.get_bbox(crs="EPSG:4326")
 
         # Slightly shrink the bbox so that it fits inside the sheet
@@ -1052,12 +1052,12 @@ class TestFindSheetsForBBox:
         )
 
         result = find_sheets_for_bbox(inner_bbox, "1:10000")
-        assert result == [godlo]
+        assert result == [sheet]
 
     def test_100k_contains_64_sheets(self):
         """Test of bbox = get_bbox() of a single 1:100k → 64 sheets of 1:10k."""
-        godlo_100k = "N-34-130-D"
-        parser = SheetParser(godlo_100k)
+        sheet_100k = "N-34-130-D"
+        parser = SheetParser(sheet_100k)
         bbox = parser.get_bbox(crs="EPSG:4326")
 
         # Shrink slightly so as not to catch neighbours
@@ -1078,8 +1078,8 @@ class TestFindSheetsForBBox:
     def test_bbox_epsg2180(self):
         """Test of a bbox in EPSG:2180 → correct conversion and result."""
         # Use the bbox of a single 1:10k sheet in EPSG:2180
-        godlo = "N-34-130-D-d-2-4"
-        parser = SheetParser(godlo)
+        sheet = "N-34-130-D-d-2-4"
+        parser = SheetParser(sheet)
         bbox_2180 = parser.get_bbox(crs="EPSG:2180")
 
         # Shrink slightly
@@ -1093,7 +1093,7 @@ class TestFindSheetsForBBox:
         )
 
         result = find_sheets_for_bbox(inner_bbox, "1:10000")
-        assert godlo in result
+        assert sheet in result
 
     def test_bbox_epsg4326(self):
         """Test of a bbox in EPSG:4326 → correct result."""
@@ -1110,9 +1110,9 @@ class TestFindSheetsForBBox:
         # N: 52-56°N, M: 48-52°N
         bbox = BBox(20.0, 51.99, 20.1, 52.01, "EPSG:4326")
         result = find_sheets_for_bbox(bbox, "1:1000000")
-        godla = sorted(result)
+        sheets = sorted(result)
         # Should contain both belts: M (48-52) and N (52-56)
-        pasy = {g.split("-")[0] for g in godla}
+        pasy = {g.split("-")[0] for g in sheets}
         assert "M" in pasy
         assert "N" in pasy
 
@@ -1122,8 +1122,8 @@ class TestFindSheetsForBBox:
         result = find_sheets_for_bbox(bbox, "1:1000000")
         assert len(result) >= 1
         # Check the format - a 1:1M sheet code is X-YY
-        for godlo in result:
-            parser = SheetParser(godlo)
+        for sheet in result:
+            parser = SheetParser(sheet)
             assert parser.scale == "1:1000000"
 
     def test_target_scale_200k(self):
@@ -1131,8 +1131,8 @@ class TestFindSheetsForBBox:
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
         result = find_sheets_for_bbox(bbox, "1:200000")
         assert len(result) >= 1
-        for godlo in result:
-            parser = SheetParser(godlo)
+        for sheet in result:
+            parser = SheetParser(sheet)
             assert parser.scale == "1:200000"
 
     def test_invalid_scale(self):
@@ -1159,8 +1159,8 @@ class TestFindSheetsForBBox:
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
         result = find_sheets_for_bbox(bbox, "1:500000")
         assert len(result) >= 1
-        for godlo in result:
-            parser = SheetParser(godlo)
+        for sheet in result:
+            parser = SheetParser(sheet)
             assert parser.scale == "1:500000"
 
     def test_bbox_equal_to_sheet_returns_only_its_children(self):
@@ -1176,9 +1176,9 @@ class TestFindSheetsForBBox:
 
     def test_bbox_equal_to_10k_sheet_returns_itself(self):
         """A bbox equal to a 1:10k sheet → exactly that one sheet (A1-7)."""
-        godlo = "N-34-130-D-d-2-4"
-        bbox = SheetParser(godlo).get_bbox(crs="EPSG:4326")
-        assert find_sheets_for_bbox(bbox, "1:10000") == [godlo]
+        sheet = "N-34-130-D-d-2-4"
+        bbox = SheetParser(sheet).get_bbox(crs="EPSG:4326")
+        assert find_sheets_for_bbox(bbox, "1:10000") == [sheet]
 
     def test_bbox_equal_to_100k_sheet_on_1m_grid_returns_four(self):
         """A bbox of a sheet touching the edge of 1:1M → 4 descendant sheets."""
@@ -1236,8 +1236,8 @@ class TestFindSheetsForBBox:
             ("N-34-130-D-d-2-4", "1:10000"),
         ]
 
-        for godlo, scale in test_cases:
-            parser = SheetParser(godlo)
+        for sheet, scale in test_cases:
+            parser = SheetParser(sheet)
             bbox = parser.get_bbox(crs="EPSG:4326")
             # Shrink the bbox so that it fits inside
             shrink = 0.00001
@@ -1249,7 +1249,7 @@ class TestFindSheetsForBBox:
                 "EPSG:4326",
             )
             result = find_sheets_for_bbox(inner_bbox, scale)
-            assert godlo in result, f"Expected {godlo} in result for scale {scale}"
+            assert sheet in result, f"Expected {sheet} in result for scale {scale}"
 
     def test_top_edge_across_central_meridian_keeps_sheets(self):
         """Fact 8 of the 2026-09-28 plan: in PUWG 1992 the greatest width of the upper
@@ -1272,12 +1272,12 @@ class TestFindSheetsForBBox:
         to_wgs = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
         xs = np.linspace(bbox.min_x + 1, bbox.max_x - 1, 4001)
         lon, lat = to_wgs.transform(xs, np.full_like(xs, bbox.max_y - 0.01))
-        for godlo in expected:
-            s = SheetParser(godlo).get_bbox("EPSG:4326")
+        for sheet in expected:
+            s = SheetParser(sheet).get_bbox("EPSG:4326")
             inside = (
                 (lon > s.min_x) & (lon < s.max_x) & (lat > s.min_y) & (lat < s.max_y)
             )
-            assert inside.any(), godlo
+            assert inside.any(), sheet
 
         assert expected <= set(find_sheets_for_bbox(bbox, "1:10000"))
 
@@ -1292,26 +1292,26 @@ class TestSheetParserAutoDetection:
 
     def test_pl1992_detected(self):
         p = SheetParser("N-34-130-D")
-        assert p.uklad == "1992"
+        assert p.system == "1992"
 
     def test_pl2000_detected(self):
         p = SheetParser("6.179.12")
-        assert p.uklad == "2000"
+        assert p.system == "2000"
         assert p.scale == "1:10000"
 
     def test_pl2000_2k(self):
         p = SheetParser("6.179.12.20")
-        assert p.uklad == "2000"
+        assert p.system == "2000"
         assert p.scale == "1:2000"
 
     def test_pl2000_5k(self):
         p = SheetParser("6.179.12.3")
-        assert p.uklad == "2000"
+        assert p.system == "2000"
         assert p.scale == "1:5000"
 
     def test_pl2000_500(self):
         p = SheetParser("6.179.12.01.1.1")
-        assert p.uklad == "2000"
+        assert p.system == "2000"
         assert p.scale == "1:500"
 
     def test_pl2000_bbox(self):
@@ -1323,7 +1323,7 @@ class TestSheetParserAutoDetection:
         p = SheetParser("6.179.12.01")
         parent = p.get_parent()
         assert parent is not None
-        assert parent.godlo == "6.179.12"
+        assert parent.sheet == "6.179.12"
         assert isinstance(parent, SheetParser)
 
     def test_pl2000_children(self):
@@ -1344,17 +1344,17 @@ class TestSheetParserAutoDetection:
         assert len(desc) == 25
         assert all(isinstance(d, SheetParser) for d in desc)
 
-    def test_explicit_uklad_2000_match(self):
-        p = SheetParser("6.179.12", uklad="2000")
-        assert p.uklad == "2000"
+    def test_explicit_system_2000_match(self):
+        p = SheetParser("6.179.12", system="2000")
+        assert p.system == "2000"
 
-    def test_explicit_uklad_1992_conflict(self):
+    def test_explicit_system_1992_conflict(self):
         with pytest.raises(ValidationError):
-            SheetParser("6.179.12", uklad="1992")
+            SheetParser("6.179.12", system="1992")
 
-    def test_explicit_uklad_2000_conflict_with_1992_format(self):
+    def test_explicit_system_2000_conflict_with_1992_format(self):
         with pytest.raises(ValidationError):
-            SheetParser("N-34-130-D", uklad="2000")
+            SheetParser("N-34-130-D", system="2000")
 
     def test_pl2000_components(self):
         p = SheetParser("6.179.12")
@@ -1379,7 +1379,7 @@ class TestSheetParserAutoDetection:
     def test_pl1992_backward_compat(self):
         """Existing PL-1992 usage unchanged."""
         p = SheetParser("N-34-130-D-d-2-4")
-        assert p.uklad == "1992"
+        assert p.system == "1992"
         assert p.scale == "1:10000"
         bbox = p.get_bbox()
         assert bbox.crs == "EPSG:2180"
@@ -1389,13 +1389,13 @@ class TestFindSheetsForBBoxSystem:
     """find_sheets_for_bbox with system parameter."""
 
     def test_default_system_1992(self):
-        """Default system='1992' returns PL-1992 godla (dash-separated)."""
+        """Default system='1992' returns PL-1992 sheets (dash-separated)."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
         result = find_sheets_for_bbox(bbox, target_scale="1:10000")
         assert all("-" in g for g in result)
 
     def test_system_2000(self):
-        """system='2000' returns PL-2000 godla (dot-separated)."""
+        """system='2000' returns PL-2000 sheets (dot-separated)."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
         result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="2000")
         assert all("." in g for g in result)
@@ -1419,7 +1419,7 @@ class TestSheetParserBBoxViaCoreBBox:
     """K2 (parser assessment): get_bbox and selection via core.bbox.transform_bbox."""
 
     @pytest.mark.parametrize(
-        ("godlo", "expected"),
+        ("sheet", "expected"),
         [
             (
                 "N-34-130-D-d-2-4",
@@ -1441,9 +1441,9 @@ class TestSheetParserBBoxViaCoreBBox:
             ),
         ],
     )
-    def test_10k_sheet_bbox_2180_unchanged(self, godlo, expected):
+    def test_10k_sheet_bbox_2180_unchanged(self, sheet, expected):
         """1:10000 and finer sheets: 4 corners == dense envelope."""
-        bbox = SheetParser(godlo).get_bbox("EPSG:2180")
+        bbox = SheetParser(sheet).get_bbox("EPSG:2180")
         for got, exp in zip(bbox[:4], expected, strict=True):
             assert got == pytest.approx(exp, abs=1e-6)
 
@@ -1483,7 +1483,7 @@ class TestNomenclatureRange:
     """A7: codes outside the PL-1992 nomenclature fail before any network call."""
 
     @pytest.mark.parametrize(
-        "godlo",
+        "sheet",
         [
             "X-99-1-D-d-3",  # band and column out of range (bbox was inf)
             "Z-99-144-D-d-4-4",
@@ -1494,9 +1494,9 @@ class TestNomenclatureRange:
             "N-36",  # 1:1M sheet outside Poland
         ],
     )
-    def test_out_of_range_raises_parse_error(self, godlo):
+    def test_out_of_range_raises_parse_error(self, sheet):
         with pytest.raises(ParseError, match="poza zakresem"):
-            SheetParser(godlo)
+            SheetParser(sheet)
 
     def test_parse_error_is_validation_error(self):
         from kartograf.exceptions import ValidationError
@@ -1505,11 +1505,11 @@ class TestNomenclatureRange:
             SheetParser("N-34-999-D")
 
     @pytest.mark.parametrize(
-        "godlo",
+        "sheet",
         ["M-33", "N-35", "M-33-1-A", "N-34-144-D-d-4-4", "M-34-B"],
     )
-    def test_edges_of_range_accepted(self, godlo):
-        assert SheetParser(godlo).godlo == godlo
+    def test_edges_of_range_accepted(self, sheet):
+        assert SheetParser(sheet).sheet == sheet
 
 
 class TestCanonicalNumbers:
@@ -1525,13 +1525,13 @@ class TestCanonicalNumbers:
         ],
     )
     def test_leading_zeros_stripped(self, given, canonical):
-        assert SheetParser(given).godlo == canonical
+        assert SheetParser(given).sheet == canonical
 
     def test_zero_padded_and_plain_are_equal(self):
         assert SheetParser("M-33-036-A") == SheetParser("M-33-36-A")
 
     def test_pl2000_unchanged(self):
-        assert SheetParser("7.124.07.24").godlo == "7.124.07.24"
+        assert SheetParser("7.124.07.24").sheet == "7.124.07.24"
 
 
 class TestFindSheetsOutsideRange:

@@ -2,7 +2,7 @@
 Parser of topographic map sheet codes for the PL-2000 system.
 
 This module provides the Parser2000 class for parsing Polish topographic
-map sheet codes (godla) in PL-2000 coordinate system.
+map sheet codes in PL-2000 coordinate system.
 PL-2000 uses dot-separated numeric format: zone.row.column[.subdivisions]
 (e.g., 6.179.12, 6.179.12.20).
 """
@@ -58,11 +58,11 @@ class Parser2000:
 
     Attributes
     ----------
-    godlo : str
+    sheet : str
         Normalized sheet code (e.g. "6.179.12")
     scale : str
         Map scale (e.g. "1:10000")
-    uklad : str
+    system : str
         Coordinate system (always "2000")
     components : dict[str, str]
         Sheet code components (strefa, pas, slup, and optionally
@@ -109,13 +109,13 @@ class Parser2000:
         4: (1, 1),  # SE
     }
 
-    def __init__(self, godlo: str):
+    def __init__(self, sheet: str):
         """
         Initialize the parser for the given PL-2000 sheet code.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet code (e.g. "6.179.12", "6.179.12.15")
 
         Raises
@@ -125,21 +125,21 @@ class Parser2000:
         ValidationError
             If ark_2k is outside the range 01-25.
         """
-        if not isinstance(godlo, str):
-            raise ParseError(f"Godlo musi byc stringiem, otrzymano: {type(godlo)}")
+        if not isinstance(sheet, str):
+            raise ParseError(f"Godlo musi byc stringiem, otrzymano: {type(sheet)}")
 
-        godlo = godlo.strip()
-        if not godlo:
+        sheet = sheet.strip()
+        if not sheet:
             raise ParseError("Godlo nie moze byc puste")
 
         # Reject the PL-1992 format (dashes)
-        if "-" in godlo:
+        if "-" in sheet:
             raise ParseError(
-                f"Nieprawidlowe godlo PL-2000: '{godlo}'. "
+                f"Nieprawidlowe godlo PL-2000: '{sheet}'. "
                 f"Format PL-1992 (z myslnikami) nie jest obslugiwany przez Parser2000."
             )
 
-        self._godlo = godlo
+        self._sheet = sheet
         self._scale = self._determine_scale()
         self._components = self._parse_components()
         self._validate_components()
@@ -159,11 +159,11 @@ class Parser2000:
             If the sheet code matches no pattern
         """
         for scale, pattern in self.PATTERNS_2000.items():
-            if re.match(pattern, self._godlo):
+            if re.match(pattern, self._sheet):
                 return scale
 
         raise ParseError(
-            f"Nieprawidlowe godlo PL-2000: '{self._godlo}'. "
+            f"Nieprawidlowe godlo PL-2000: '{self._sheet}'. "
             f"Godlo musi byc w formacie: strefa.pas.slup[.subdivisions]"
         )
 
@@ -177,10 +177,10 @@ class Parser2000:
             Dictionary of sheet code components
         """
         pattern = self.PATTERNS_2000[self._scale]
-        match = re.match(pattern, self._godlo)
+        match = re.match(pattern, self._sheet)
 
         if not match:
-            raise ParseError(f"Blad parsowania godla: {self._godlo}")
+            raise ParseError(f"Blad parsowania godla: {self._sheet}")
 
         names = self._COMPONENT_NAMES[self._scale]
         return dict(zip(names, match.groups(), strict=True))
@@ -208,9 +208,9 @@ class Parser2000:
     # =========================================================================
 
     @property
-    def godlo(self) -> str:
+    def sheet(self) -> str:
         """Return the sheet code."""
-        return self._godlo
+        return self._sheet
 
     @property
     def scale(self) -> str:
@@ -218,7 +218,7 @@ class Parser2000:
         return self._scale
 
     @property
-    def uklad(self) -> str:
+    def system(self) -> str:
         """Return the coordinate system (always '2000')."""
         return "2000"
 
@@ -245,19 +245,21 @@ class Parser2000:
         """Compare two parsers by sheet code."""
         if not isinstance(other, Parser2000):
             return NotImplemented
-        return self._godlo == other._godlo
+        return self._sheet == other._sheet
 
     def __hash__(self) -> int:
         """Return the object hash."""
-        return hash(self._godlo)
+        return hash(self._sheet)
 
     def __repr__(self) -> str:
         """Return a debugging representation of the object."""
-        return f"Parser2000(godlo='{self._godlo}', scale='{self._scale}', uklad='2000')"
+        return (
+            f"Parser2000(sheet='{self._sheet}', scale='{self._scale}', system='2000')"
+        )
 
     def __str__(self) -> str:
         """Return a readable representation of the sheet."""
-        return f"{self._godlo} (skala {self._scale}, uklad 2000)"
+        return f"{self._sheet} (skala {self._scale}, uklad 2000)"
 
     # =========================================================================
     # BBox
@@ -417,7 +419,7 @@ class Parser2000:
 
         Examples
         --------
-        >>> Parser2000("6.179.12.15.2").get_parent().godlo
+        >>> Parser2000("6.179.12.15.2").get_parent().sheet
         '6.179.12.15'
         """
         if self._scale == "1:10000":
@@ -427,8 +429,8 @@ class Parser2000:
         # 1:2000 -> 1:10000 (drop ark_2k - the last segment)
         # 1:1000 -> 1:2000 (drop ark_1k - the last segment)
         # 1:500  -> 1:1000 (drop ark_500 - the last segment)
-        parent_godlo = self._godlo.rsplit(".", 1)[0]
-        return Parser2000(parent_godlo)
+        parent_sheet = self._sheet.rsplit(".", 1)[0]
+        return Parser2000(parent_sheet)
 
     def get_children(self, scale: str | None = None) -> list["Parser2000"]:
         """
@@ -448,7 +450,7 @@ class Parser2000:
 
         Examples
         --------
-        >>> [c.godlo for c in Parser2000("6.179.12").get_children(scale="1:5000")]
+        >>> [c.sheet for c in Parser2000("6.179.12").get_children(scale="1:5000")]
         ['6.179.12.1', '6.179.12.2', '6.179.12.3', '6.179.12.4']
         """
         if self._scale == "1:10000":
@@ -456,19 +458,19 @@ class Parser2000:
                 scale = "1:2000"
             if scale == "1:5000":
                 # 2x2: quadrants 1-4
-                return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
+                return [Parser2000(f"{self._sheet}.{q}") for q in range(1, 5)]
             if scale == "1:2000":
                 # 5x5: sheets 01-25
-                return [Parser2000(f"{self._godlo}.{i:02d}") for i in range(1, 26)]
+                return [Parser2000(f"{self._sheet}.{i:02d}") for i in range(1, 26)]
             return []
 
         if self._scale == "1:2000":
             # 2x2: quadrants 1-4
-            return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
+            return [Parser2000(f"{self._sheet}.{q}") for q in range(1, 5)]
 
         if self._scale == "1:1000":
             # 2x2: quadrants 1-4
-            return [Parser2000(f"{self._godlo}.{q}") for q in range(1, 5)]
+            return [Parser2000(f"{self._sheet}.{q}") for q in range(1, 5)]
 
         # 1:5000 and 1:500 are leaves - no children
         return []
@@ -533,18 +535,18 @@ class Parser2000:
         children = self.get_children()
         if not children:
             raise ValidationError(
-                f"Arkusz {self._godlo} ({self._scale}) nie ma potomkow "
+                f"Arkusz {self._sheet} ({self._scale}) nie ma potomkow "
                 f"w skali {target_scale}."
             )
 
         if children[0].scale == target_scale:
-            return sorted(children, key=lambda p: p.godlo)
+            return sorted(children, key=lambda p: p.sheet)
 
         # Recursion
         result = []
         for child in children:
             result.extend(child.get_all_descendants(target_scale))
-        return sorted(result, key=lambda p: p.godlo)
+        return sorted(result, key=lambda p: p.sheet)
 
     def get_hierarchy_up(self) -> list["Parser2000"]:
         """
@@ -698,7 +700,7 @@ def find_sheets_2000_for_bbox(
         return []
 
     # Step 3: For each zone find the 1:10k sheets
-    all_godla: set[str] = set()
+    all_sheets: set[str] = set()
 
     for z in zones:
         zone_crs = ZONE_EPSG[z]
@@ -729,11 +731,11 @@ def find_sheets_2000_for_bbox(
         # Step 4: Check the intersection for every candidate
         for row in range(min_row, max_row + 1):
             for col in range(min_col, max_col + 1):
-                godlo_10k = f"{z}.{row}.{col}"
+                sheet_10k = f"{z}.{row}.{col}"
 
                 # Try to create a Parser2000 - skip if the sheet code is invalid
                 try:
-                    p = Parser2000(godlo_10k)
+                    p = Parser2000(sheet_10k)
                 except (ParseError, ValidationError):
                     continue
 
@@ -741,12 +743,12 @@ def find_sheets_2000_for_bbox(
 
                 if _bboxes_intersect_2000(zone_bbox, sheet_bbox):
                     if target_scale == "1:10000":
-                        all_godla.add(godlo_10k)
+                        all_sheets.add(sheet_10k)
                     else:
                         # Drill down to target_scale
-                        _drill_down(p, zone_bbox, target_scale, all_godla)
+                        _drill_down(p, zone_bbox, target_scale, all_sheets)
 
-    return sorted(all_godla)
+    return sorted(all_sheets)
 
 
 def _drill_down(
@@ -782,6 +784,6 @@ def _drill_down(
             continue
 
         if child.scale == target_scale:
-            result.add(child.godlo)
+            result.add(child.sheet)
         else:
             _drill_down(child, zone_bbox, target_scale, result)
