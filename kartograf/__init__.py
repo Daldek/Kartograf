@@ -70,7 +70,7 @@ from kartograf.download.cz_cutout import (
     download_cz_cutout,
     run_cz_cutout,
 )
-from kartograf.download.fetch import UpdateMode
+from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.laz import (
     LazDownloadResult,
     LazTileFailure,
@@ -143,6 +143,7 @@ __all__ = [
     "FileStorage",
     # Download (versioned store, update plan)
     "UpdateMode",
+    "VersionedFile",
     "VersionRef",
     "PlanItem",
     "UpdatePlan",
