@@ -29,7 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032 + errata 2, ADR-033) | ✅ Gotowy | `--all-campaigns` (od 0.8.0-dev; wczesniej `--campaigns {newest,all}`), `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 usuniety na `develop` (0.8.0-dev, ADR-035 errata 2) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane na `feat/versioned-store` (3/3: 2026-10-12, E2E na zywo PASS), merge do `develop` czeka na zgode uzytkownika |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane i scalone do `develop` (merge `423a664`, 2026-10-12, lokalnie; E2E na zywo PASS) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -104,17 +104,18 @@
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
 > **START NASTEPNEJ SESJI (stan 2026-10-12, koniec szostej sesji):**
-> 1. **Plan 3/3 magazynu wersjonowanego WDROZONY** na galezi
->    `feat/versioned-store` (`b2a650c`..`a4ffa02`, Task 1-11; E2E na zywo
->    calosci PASS: `docs/research/2026-10-12-store-e2e/raport.md`).
->    Nastepny krok: **Task 12 planu 3/3** — `git rebase develop`, pelna
->    brama, merge `--no-ff` do `develop` i push `develop` / galezi
->    (`--force-with-lease` albo usuniecie) — WYLACZNIE za zgoda
->    uzytkownika. `CLMS_CREDENTIALS` odlozone (decyzja uzytkownika
->    2026-10-12) — pobranie CLMS zostaje niesprawdzone na zywo (backlog,
->    razem z CLMS 1990 jako dane).
+> 1. **Magazyn wersjonowany (plany 1/3-3/3) SCALONY do `develop`
+>    lokalnie** (merge `--no-ff` `423a664` po rebase na `develop`, brama
+>    zielona; plan 3/3: `d2e936c`..`3f313a2`, E2E na zywo calosci PASS:
+>    `docs/research/2026-10-12-store-e2e/raport.md`). Nastepny krok:
+>    push `develop` i decyzja o galezi `feat/versioned-store` na `origin`
+>    (`push --force-with-lease` albo usuniecie) — WYLACZNIE za zgoda
+>    uzytkownika (2026-10-12: "Rebase + merge lokalnie", bez push).
+>    `CLMS_CREDENTIALS` odlozone (decyzja uzytkownika 2026-10-12) —
+>    pobranie CLMS zostaje niesprawdzone na zywo (backlog, razem z CLMS
+>    1990 jako dane).
 > 2. Udzial SMB bez `serverino` (`samefile` falszywe dla hardlinkow):
->    ROZWIAZANE na galezi (`1c84b3e`, decyzja uzytkownika 2026-10-12) —
+>    ROZWIAZANE (`1c84b3e`, decyzja uzytkownika 2026-10-12) —
 >    `linked_version` potwierdza dowiazanie trescia (oba pliki > 1 link,
 >    ten sam rozmiar, sha256 = sidecar wersji). Na zywo: rerun bez
 >    przepisania sidecara dowiazania, `full_sheet/` rozpoznany.
@@ -123,14 +124,10 @@
 > 4. Test na zywo zmian lamiacych 0.8.0 na `develop` ZROBIONY (0 FAIL,
 >    `docs/research/2026-10-12-test-0.8.0/raport.md`).
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
-> NIEWYPCHNIETE na `origin`; `feat/versioned-store` po rebase na `develop`
-> (2026-10-12), z planem 1/3, poprawka `1c84b3e`, planem 2/3 `ce6a45b` i jego wdrozeniem (`369e7cf`), specem D29-D33 (`9a8f392`), planem 3/3 (`20ba175`) i jego wdrozeniem (`a4ffa02`) — rozjechana z `origin`
-> (wymaga `push --force-with-lease`). Push tylko za zgoda uzytkownika
-> (2026-10-12: "nic teraz").
-> **PROGRESS tylko na `develop`:** galaz nie zmienia `docs/PROGRESS.md`
-> (ma wersje z `3f150ce`), wiec rebase/merge bierze dziennik z `develop`
-> bez konfliktu — sesje dopisuj tu. CHANGELOG [0.8.0] dla magazynu i
-> ADR-036 sa TYLKO na galezi (`git show feat/versioned-store:docs/CHANGELOG.md`).
+> NIEWYPCHNIETE na `origin` (w tym merge magazynu `423a664`);
+> `feat/versioned-store` lokalnie = stan scalony (po rebase), na `origin`
+> stara wersja (rozjechana; push tylko za zgoda uzytkownika).
+> CHANGELOG [0.8.0] dla magazynu i ADR-036 sa na `develop`.
 > **v0.8.0-dev:** cykl OTWARTY (`chore(release): poczatek cyklu 0.8.0`).
 > Zrobione: usuniecie przestarzalego toru arkuszowego wycinkow PL i
 > `GridMismatchError` (ADR-035 errata 2); angielskie identyfikatory API/CLI
@@ -165,7 +162,9 @@
 
 ### Sesja 2026-10-12 (szosta) — wdrozenie planu 3/3 magazynu wersjonowanego
 
-- Galaz `feat/versioned-store`, commity `b2a650c`..`a4ffa02` (bez push):
+- Galaz `feat/versioned-store`, commity `d2e936c`..`3f313a2` (po rebase;
+  przed rebase `b2a650c`..`a4ffa02`), scalona do `develop` lokalnie
+  (`423a664`, decyzja uzytkownika: rebase + merge bez push):
   Task 1 wydania (`sources/edition.py`, `SoilGridsProvider.edition`,
   `CorineProvider.edition`/`uses_clms`, UID-y CLMS z katalogu, kanal WMS
   podgladu CORINE, `storage_subdir` zawsze `str`), Task 2 (`fetch.py`:
