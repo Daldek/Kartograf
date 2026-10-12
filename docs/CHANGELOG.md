@@ -9,6 +9,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- `DownloadManager.download_sheet`, `download_hierarchy` i
+  `download_sheets` zwracaja teraz `DownloadResult` zamiast sciezki lub listy
+  sciezek. `result.files[godlo]` zawiera `VersionedFile` (m.in. `path`,
+  `version_path`, `label`, `status`), a `result.stale` i `result.notices`
+  przekazuja nieaktualne pozycje planu i komunikaty o danych.
+  `check_updates(manager, sheets)` -> `manager.check_sheets(sheets)`;
+  `upgrade(manager, plan)` -> `manager.download_sheets(sheets, update="upgrade",
+  plan=plan)`. Usunieto `last_result`, `last_sheet`, `UpgradeReport` oraz
+  eksport `SheetFetch`; `max_workers=` menedzera -> `workers=`, dodano
+  `year=` i `on_notice=`. Co zrobic (takze w Hydrografie): korzystaj z
+  wartosci zwroconej, aktualizuj wywolania metod i odczyty plikow z
+  `result.files`, a komunikaty wypisuj z `on_notice` bez ponownego
+  przetwarzania `result.notices`.
+
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa
   `KartografError`), a nie `ValueError`; CLI nie przechwytuje juz
@@ -48,7 +62,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Biblioteka: polskie identyfikatory publicznego API zastapione
   angielskimi, bez aliasow (ADR-031 errata 1). `godlo` -> `sheet`,
   `godla` -> `sheets` we wszystkich parametrach i atrybutach (m.in.
-  `SheetParser.sheet`, `SheetFetch.sheet`, `DownloadProgress.sheet`,
+  `SheetParser.sheet`, `DownloadProgress.sheet`,
   `LazTile.sheet`, `DownloadError.sheet`/`NoCoverageError.sheet`,
   `DownloadManager.download_sheet(sheet)`, `check_year_range(sheets)`,
   `MetadataCache.get_record(..., sheet)`, `LandCoverManager.download(sheet=)`,

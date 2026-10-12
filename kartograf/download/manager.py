@@ -4,16 +4,15 @@ Download manager for coordinating NMT data downloads.
 This module provides the DownloadManager class for downloading
 single sheets and entire hierarchies of map sheets.
 
-Supports parallel downloads via ThreadPoolExecutor when max_workers > 1.
+Supports parallel downloads via ThreadPoolExecutor when workers > 1.
 """
 
 import concurrent.futures
 import logging
 import os
 import shutil
-import threading
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal, Protocol, cast
 
@@ -35,10 +34,20 @@ from kartograf.download.campaigns import (
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
+    VersionedFile,
     fetch_version,
     validate_update,
 )
 from kartograf.download.links import ensure_link, linked_version, update_sidecar_extra
+from kartograf.download.plan import (
+    TODO_STATUSES,
+    PlanItem,
+    UpdatePlan,
+    new_plan,
+    require_store,
+    select_planned,
+    store_id,
+)
 from kartograf.download.storage import FileStorage, storage_for_provider
 from kartograf.download.versions import (
     ContentDigest,
@@ -54,6 +63,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.notices import NEWER_AVAILABLE, UNVERIFIED_LOCAL, Notice, NoticeSink
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
 
@@ -121,7 +131,7 @@ class DownloadResult:
         selected by this run, downloaded and already local (for successful
         sheets). Flow without campaigns: empty.
     new, relabeled, unchanged, local : list[str]
-        Successful sheets by ``SheetFetch.status``: a new version, the same
+        Successful sheets by strongest file status: a new version, the same
         content under a new campaign label (D23), downloaded content equal
         to an existing version, or only local versions used (no download).
     reused_campaign_files : dict[str, tuple[Path, ...]]
@@ -131,9 +141,8 @@ class DownloadResult:
         Subset of the ``no_coverage`` keys: sheet -> ``NoCoverageError.hints``
         (e.g. ``use --scale 1:2000``); only sheets with a hint.
     unverified : dict[str, str]
-        Subset of ``skipped``: sheet -> GUGiK index (skorowidz) transport
-        error with which ``newest`` used a local campaign without checking
-        for a newer one (``SheetFetch.unverified``). Otherwise empty.
+        Subset of ``skipped``: sheet -> GUGiK index transport error with
+        which a local campaign was used without checking for a newer one.
     better_coverage : dict[str, str]
         With a ranged ``all`` request, sheets whose older flight measured
         higher pixel coverage than the standard link: sheet -> flight ID.
@@ -152,14 +161,12 @@ class DownloadResult:
     newer : dict[str, str]
         Default mode: sheet -> label of a newer campaign available in the
         index that was NOT downloaded (``update="upgrade"`` fetches it, D5).
-    files : dict[str, tuple[tuple[str, str], ...]]
-        Successful sheets: ``SheetFetch.files`` (version directory, status).
-
-    Notes
-    -----
-    Populated by `download_hierarchy`, `download_sheets` and `download_sheet`
-    (a one-element result for a single sheet) and exposed as
-    `DownloadManager.last_result`.
+    files : dict[str, tuple[VersionedFile, ...]]
+        Successful sheets: one versioned file per selected campaign.
+    stale : tuple[PlanItem, ...]
+        Planned files whose source signal changed since the plan was created.
+    notices : tuple[Notice, ...]
+        Data messages emitted during this call, also forwarded to ``on_notice``.
     """
 
     succeeded: list[Path] = field(default_factory=list)
@@ -180,7 +187,10 @@ class DownloadResult:
     full_link_outside_range: dict[str, Path] = field(default_factory=dict)
     without_full: list[str] = field(default_factory=list)
     newer: dict[str, str] = field(default_factory=dict)
-    files: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
+    files: dict[str, tuple[VersionedFile, ...]] = field(default_factory=dict)
+    stale: tuple[PlanItem, ...] = ()
+    notices: tuple[Notice, ...] = ()
+    errors: dict[str, str] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -223,7 +233,7 @@ class YearRangeCheck:
 
 @dataclass(frozen=True)
 class SheetFetch:
-    """Result of downloading one sheet (``DownloadManager.last_sheet``).
+    """Internal result of downloading one sheet.
 
     Attributes
     ----------
@@ -268,9 +278,8 @@ class SheetFetch:
     newer : str or None
         Default mode, newest flight: label of a newer campaign in the index
         kept out of the store (the local version stays, D5).
-    files : tuple[tuple[str, str], ...]
-        One entry per file of this call: version directory ``<label>_<sha8>``
-        and its status (``new``/``relabeled``/``unchanged``/``local``).
+    files : tuple[VersionedFile, ...]
+        One result per selected file, with its path, status, label and hash.
     """
 
     sheet: str
@@ -287,7 +296,7 @@ class SheetFetch:
     full_link_outside_range: Path | None = None
     no_full_flight: bool = False
     newer: str | None = None
-    files: tuple[tuple[str, str], ...] = ()
+    files: tuple[VersionedFile, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -417,42 +426,13 @@ class DownloadManager:
     and vertical CRS (EVRF2007 or KRON86 for PL). NMT 5m exists only in
     EVRF2007; bbox WCS is available only for 1m.
 
-    Attributes
-    ----------
-    last_result : DownloadResult or None
-        Per-sheet outcome of the most recent download. Reset to None at the
-        start of each `download_sheet` / `download_hierarchy` /
-        `download_sheets` call and set when the call completes - also for a
-        single sheet downloaded directly via `download_sheet` (a one-element
-        `DownloadResult`); a call that raises leaves it None.
-    last_sheet : SheetFetch or None
-        Result of a single sheet downloaded directly by `download_sheet`
-        (1:10000 or PL-2000). Reset (None) at the start of every
-        `download_sheet` / `download_hierarchy` / `download_sheets` (an
-        exception does not leave a stale result); None after expansion to a
-        hierarchy and after a sheet list.
-
     Examples
     --------
     >>> from kartograf.providers.pl import create_nmt_provider
     >>> manager = DownloadManager("./data", create_nmt_provider("EVRF2007", "1m"))
-    >>>
-    >>> # Download single sheet (ASC)
-    >>> manager.download_sheet("N-34-130-D-d-2-4")
-    PosixPath('data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc')
-    >>>
-    >>> # Download hierarchy (ASC)
-    >>> manager.download_hierarchy("N-34-130-D", "1:10000")
-    >>>
-    >>> # A bbox cutout lives in the versioned store too: download_pl_cutout()
-    >>>
-    >>> # Download in legacy KRON86 vertical CRS
-    >>> manager = DownloadManager("./data", create_nmt_provider("KRON86", "1m"))
-    >>> manager.download_sheet("N-34-130-D-d-2-4")
-    >>>
-    >>> # Download 5m resolution (only EVRF2007)
-    >>> manager = DownloadManager("./data", create_nmt_provider("EVRF2007", "5m"))
-    >>> manager.download_sheet("N-34-130-D-d-2-4")
+    >>> result = manager.download_sheet("N-34-130-D-d-2-4")
+    >>> result.files["N-34-130-D-d-2-4"][0].status
+    'new'
     """
 
     def __init__(
@@ -461,12 +441,14 @@ class DownloadManager:
         provider: BaseProvider,
         *,
         storage: FileStorage | None = None,
-        max_workers: int = 1,
+        workers: int = 1,
         sidecar_extra: dict | None = None,
+        year: int | None = None,
         all_campaigns: bool = False,
         min_year: int | None = None,
         max_year: int | None = None,
         full_sheet: bool = False,
+        on_notice: Callable[[Notice], None] | None = None,
     ):
         """
         Initialize download manager.
@@ -483,9 +465,8 @@ class DownloadManager:
         storage : FileStorage, optional
             Explicit storage manager (default: storage from the provider's
             descriptor, resolution, vertical CRS and optional variant).
-        max_workers : int, optional
+        workers : int, optional
             Maximum number of parallel download threads (default: 1).
-            When 1, downloads are sequential (backward compatible).
             When > 1, uses ThreadPoolExecutor for parallel downloads.
         sidecar_extra : dict, optional
             Extra fields merged into the `extra` of every sidecar (stage 1:
@@ -495,6 +476,8 @@ class DownloadManager:
             bounds; True selects every flight within them. Year bounds only
             restrict admissible years. Only PL GUGiK supports campaigns;
             LAZ with True does not deduplicate coverage.
+        year : int, optional
+            One acquisition year (equivalent to equal ``min_year``/``max_year``).
         min_year, max_year : int, optional
             Inclusive bounds on the campaign acquisition year.
         full_sheet : bool, optional
@@ -510,6 +493,13 @@ class DownloadManager:
             a year bound, ``all_campaigns=True`` or ``full_sheet=True``;
             incompatible resolution/CRS.
         """
+        if year is not None:
+            if min_year is not None or max_year is not None:
+                raise ValidationError(
+                    "--year wyklucza sie z --min-year/--max-year "
+                    "(--year Y to skrot --min-year Y --max-year Y)"
+                )
+            min_year = max_year = year
         validate_year_bounds(min_year, max_year)
         self._provider = provider
         # Do not infer a different dataset when the provider has no resolution
@@ -531,8 +521,9 @@ class DownloadManager:
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._default_ext = self._provider.default_extension
-        self._max_workers = max(1, max_workers)
+        self._workers = max(1, workers)
         self._sidecar_extra = sidecar_extra
+        self._on_notice = on_notice
         # `is True`, not truthiness: Mock/Mock(spec=...) yields a Mock -> plain flow.
         self._campaign_aware = (
             getattr(self._provider, "supports_campaigns", False) is True
@@ -549,8 +540,6 @@ class DownloadManager:
         self._max_year = max_year
         self._full_sheet = full_sheet
         self._has_range = min_year is not None or max_year is not None
-        self.last_result: DownloadResult | None = None
-        self.last_sheet: SheetFetch | None = None
 
     @property
     def vertical_crs(self) -> str | None:
@@ -606,7 +595,7 @@ class DownloadManager:
         without year bounds, so callers can inspect ``available`` even when
         ``selected`` is empty. This public phase performs no file downloads;
         callers must abort if ``failed`` or ``conflicts`` is nonempty.
-        ``workers`` overrides the manager's ``max_workers`` for the queries.
+        ``workers`` overrides the manager's default worker count for the queries.
         """
         if not self._campaign_aware or not self._has_range:
             raise ValidationError(
@@ -640,7 +629,7 @@ class DownloadManager:
                 selected = selected[:1]
             return sheet, selected, years, None
 
-        pool = self._max_workers if workers is None else workers
+        pool = self._workers if workers is None else workers
         if len(sheets) > 1 and pool > 1:
             with concurrent.futures.ThreadPoolExecutor(max_workers=pool) as executor:
                 rows = list(executor.map(classify, sheets))
@@ -749,7 +738,16 @@ class DownloadManager:
             status="local",
             version=version.label,
             unverified=str(error),
-            files=((version.path.parent.name, "local"),),
+            files=(
+                VersionedFile(
+                    std,
+                    "local",
+                    version.label,
+                    version.sha256,
+                    version.path,
+                    unverified=f"check_failed: {error}",
+                ),
+            ),
             full_link=full if linked_version(full) is not None else None,
         )
 
@@ -760,73 +758,30 @@ class DownloadManager:
     def download_sheet(
         self,
         sheet: str,
+        *,
         update: UpdateMode | None = None,
+        plan: UpdatePlan | None = None,
         on_progress: ProgressCallback | None = None,
         on_download: Callable[[], None] | None = None,
-    ) -> Path | list[Path]:
+    ) -> DownloadResult:
+        """Download one PL sheet (expand coarser PL-1992 codes).
+
+        A direct leaf failure raises ``DownloadError``. A hierarchy collects
+        per-sheet failures in the result. With ``plan``, only matching positions
+        are executed and changed source signals are reported in ``stale``.
+        ``on_download`` runs before the first actual leaf download.
         """
-        Download a map sheet as ASC.
-
-        For sheets at scale 1:10000, downloads a single file.
-        For coarser scales (e.g. 1:25000, 1:50000), automatically expands
-        to all descendant 1:10000 sheets via download_hierarchy().
-
-        Parameters
-        ----------
-        sheet : str
-            Map sheet identifier (e.g., "N-34-130-D-d-2-4")
-        update : {None, "upgrade", "force"}, optional
-            None (default): local versions are used, missing ones are
-            downloaded, a newer campaign of the newest flight is only reported
-            (``SheetFetch.newer``). "upgrade": the newest flight is
-            downloaded when it is not local. "force": every selected campaign
-            is downloaded again (same content = ``unchanged``). "check" is
-            ``check_updates`` (``ValidationError`` here). Spec 4.2.
-        on_progress : callable, optional
-            Callback function for progress updates (used when expanding hierarchy).
-        on_download : callable, optional
-            Called once, right before the first file download of a single
-            sheet (not on skip or on a record resolution error).
-
-        Returns
-        -------
-        Path or list[Path]
-            Path to the downloaded ASC file (for 1:10000),
-            or list of paths (for coarser scales expanded to 1:10000)
-
-        Raises
-        ------
-        DownloadError
-            If download fails, including a year-range index check before downloading.
-        YearRangeError
-            If data exists only outside the year range, before downloading.
-        ParseError
-            If sheet is invalid
-        ValidationError
-            ``update`` outside None/"upgrade"/"force".
-
-        Notes
-        -----
-        `self.last_result` is reset to None at the start of the call and set
-        when the call completes - also for a single sheet downloaded here
-        directly (a one-element `DownloadResult`); a call that raises leaves
-        it None, so the previous run's result never leaks.
-        `self.last_sheet` is reset the same way and set (``SheetFetch``) only
-        for a single sheet downloaded directly.
-        """
-        # The previous run's result must not leak into this call.
-        # The reset is idempotent — expansion to a hierarchy resets it again.
-        self.last_result = None
-        self.last_sheet = None
         validate_update(update)
-
+        if plan is not None and update != "upgrade":
+            raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         parser = SheetParser(sheet)
-
-        # PL-2000 sheet codes are always downloaded directly (individual files on GUGiK)
-        # PL-1992 coarser than 1:10000 must be expanded to 1:10000 descendants
         if parser.system != "2000" and parser.scale != "1:10000":
             return self.download_hierarchy(
-                sheet, "1:10000", update=update, on_progress=on_progress
+                sheet, "1:10000", update=update, plan=plan, on_progress=on_progress
+            )
+        if plan is not None:
+            return self.download_sheets(
+                [parser.sheet], update=update, plan=plan, on_progress=on_progress
             )
 
         check = (
@@ -846,95 +801,34 @@ class DownloadManager:
                 records=check.selected[parser.sheet] if check is not None else None,
                 available=check.available[parser.sheet] if check is not None else None,
             )
-        self.last_sheet = fetch
-        # A9: one sheet is a one-element result too - same reading as a list
         result = DownloadResult()
         self._record(
-            result, [], fetch.sheet, fetch, "skipped" if fetch.skipped else "completed"
+            result, parser.sheet, fetch, "skipped" if fetch.skipped else "completed"
         )
-        self.last_result = result
-        return fetch.path
+        return self._finish_result(result, single=True)
 
     def download_hierarchy(
         self,
         sheet: str,
         target_scale: str,
+        *,
         update: UpdateMode | None = None,
+        plan: UpdatePlan | None = None,
         on_progress: ProgressCallback | None = None,
-        max_workers: int | None = None,
-    ) -> list[Path]:
-        """
-        Download all descendant sheets to target scale as ASC.
-
-        Parameters
-        ----------
-        sheet : str
-            Starting map sheet identifier (e.g., "N-34-130-D")
-        target_scale : str
-            Target scale to download (e.g., "1:10000")
-        update : {None, "upgrade", "force"}, optional
-            Download mode, as in :meth:`download_sheet`.
-        on_progress : callable, optional
-            Callback function for progress updates.
-        max_workers : int, optional
-            Maximum parallel download threads. If None, uses instance default.
-            When <= 1, downloads sequentially (backward compatible).
-
-        Returns
-        -------
-        list[Path]
-            List of paths to downloaded ASC files
-
-        Raises
-        ------
-        ValidationError
-            If target_scale is invalid
-        ParseError
-            If sheet is invalid
-        DownloadError, YearRangeError
-            With year bounds, an index check failure or a conflicting sheet
-            aborts the whole task before any download.
-
-        Notes
-        -----
-        Per-sheet `DownloadError` failures (incl. `NoCoverageError`) do not
-        raise; they are collected in `self.last_result.failed` (see
-        `DownloadResult`). Any other exception from a sheet (e.g. `OSError`
-        while writing it) propagates and stops the download when running
-        sequentially (`max_workers <= 1`); with parallel workers it is
-        collected in `failed` like a download error. The returned list
-        contains downloaded AND skipped (pre-existing) files.
-        `self.last_result` is reset to None at the start of the call and set
-        when the download completes (`download_sheets` works the same way),
-        so a call that raises never leaves the previous run's result behind.
-
-        Examples
-        --------
-        >>> manager = DownloadManager()
-        >>> paths = manager.download_hierarchy("N-34-130-D-d", "1:10000")
-        >>> len(paths)  # 4 * 4 = 16 sheets
-        16
-        """
-        # The previous run's result must not leak into this call —
-        # clear it before anything can raise (ParseError/ValidationError).
-        self.last_result = None
-        self.last_sheet = None
+    ) -> DownloadResult:
+        """Download every descendant to ``target_scale``; collect leaf failures."""
         validate_update(update)
-
-        # Parse starting sheet and get all descendants
-        parser = SheetParser(sheet)
-        descendants = parser.get_all_descendants(target_scale)
-
-        total = len(descendants)
-        workers = max_workers if max_workers is not None else self._max_workers
-
+        descendants = SheetParser(sheet).get_all_descendants(target_scale)
+        sheets = [descendant.sheet for descendant in descendants]
         logger.info(
-            f"Starting hierarchy download: {sheet} → {target_scale} "
-            f"({total} sheets, workers={workers})"
+            "Starting hierarchy download: %s -> %s (%d sheets, workers=%d)",
+            sheet,
+            target_scale,
+            len(sheets),
+            self._workers,
         )
-
-        return self._download_many(
-            [d.sheet for d in descendants], update, on_progress, workers
+        return self.download_sheets(
+            sheets, update=update, plan=plan, on_progress=on_progress
         )
 
     @staticmethod
@@ -969,44 +863,30 @@ class DownloadManager:
     def download_sheets(
         self,
         sheets: list[str],
+        *,
         update: UpdateMode | None = None,
+        plan: UpdatePlan | None = None,
         on_progress: ProgressCallback | None = None,
-        max_workers: int | None = None,
-    ) -> list[Path]:
+    ) -> DownloadResult:
+        """Download normalized leaf sheets; with ``plan`` execute only planned files.
+
+        Individual download errors are collected; a year-range preflight
+        error aborts the whole unplanned request before the first download.
         """
-        Download a list of sheets (see :meth:`expand_sheets`), ``update`` as
-        in :meth:`download_sheet`.
-
-        Unlike calling :meth:`download_sheet` in a loop, per-sheet download
-        failures (``DownloadError``) do not raise: they are collected in
-        ``self.last_result`` exactly like in :meth:`download_hierarchy`
-        (``failed``; ``no_coverage`` for sheets the source has no data for;
-        other exceptions as described in its Notes). With year bounds, index
-        check failures and year conflicts raise before the first download.
-
-        Returns
-        -------
-        list[Path]
-            Downloaded AND skipped (pre-existing) files
-
-        Raises
-        ------
-        ParseError
-            If any sheet is invalid — raised before any download starts
-        DownloadError, YearRangeError
-            With year bounds, an index check failure or a conflicting sheet
-            aborts the whole list before any download.
-        """
-        self.last_result = None
-        self.last_sheet = None
         validate_update(update)
-        leaves = [SheetParser(g) for g in self.expand_sheets(sheets)]
-        total = len(leaves)
-        workers = max_workers if max_workers is not None else self._max_workers
-        logger.info(f"Starting sheet list download: {total} sheets, workers={workers}")
-        return self._download_many(
-            [leaf.sheet for leaf in leaves], update, on_progress, workers
+        if plan is not None and update != "upgrade":
+            raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+        if plan is not None:
+            require_store(plan, store_id(self._storage.output_dir))
+        leaves = self.expand_sheets(sheets)
+        if plan is not None:
+            return self._download_planned(leaves, plan, on_progress)
+        logger.info(
+            "Starting sheet list download: %d sheets, workers=%d",
+            len(leaves),
+            self._workers,
         )
+        return self._download_many(leaves, update, on_progress, self._workers)
 
     def inspect_sheets(self, sheets: list[str]) -> list[SheetInspection]:
         """Freshness of the leaf sheets WITHOUT downloading (spec 4.1, 4.4).
@@ -1061,35 +941,108 @@ class DownloadManager:
                 record_errors=tuple(errors),
             )
 
-        if len(leaves) > 1 and self._max_workers > 1:
-            with concurrent.futures.ThreadPoolExecutor(self._max_workers) as executor:
+        if len(leaves) > 1 and self._workers > 1:
+            with concurrent.futures.ThreadPoolExecutor(self._workers) as executor:
                 return list(executor.map(inspect, leaves))
         return [inspect(sheet) for sheet in leaves]
 
-    def download_records(
-        self,
-        sheet: str,
-        records: tuple[SkorowidzRecord, ...],
-        available: tuple[int, ...] | None = None,
-    ) -> SheetFetch:
-        """Fetch exactly these records of a sheet in the ``upgrade`` mode.
+    def check_sheets(self, sheets: list[str]) -> UpdatePlan:
+        """Return the PL-sheet update plan without downloading any files."""
+        from kartograf.download.updates import _items
 
-        For ``upgrade(plan)`` (spec 4.4): only the plan's positions are
-        downloaded; records already local stay local. Sets ``last_sheet``
-        and a one-element ``last_result`` like :meth:`download_sheet`.
-        """
-        self.last_result = None
-        self.last_sheet = None
-        fetch = self._fetch_campaigns(
-            sheet, "upgrade", records=records, available=available, exact=True
-        )
-        self.last_sheet = fetch
+        items = [
+            item
+            for inspection in self.inspect_sheets(sheets)
+            for item in _items(self, inspection)
+        ]
+        return new_plan(self._storage.output_dir, items)
+
+    def _download_planned(
+        self,
+        leaves: list[str],
+        plan: UpdatePlan,
+        on_progress: ProgressCallback | None,
+    ) -> DownloadResult:
+        """Recheck and execute exactly the selected positions of this request."""
+        from kartograf.download.updates import _items
+
+        requested = set(leaves)
+        planned = [
+            item
+            for item in plan.items_for("pl_sheet")
+            if item.status in TODO_STATUSES and item.unit in requested
+        ]
         result = DownloadResult()
-        self._record(
-            result, [], fetch.sheet, fetch, "skipped" if fetch.skipped else "completed"
-        )
-        self.last_result = result
-        return fetch
+        if not planned:
+            return result
+        sheets = list(dict.fromkeys(item.unit for item in planned))
+        checked: set[str] = set()
+        fresh: list[PlanItem] = []
+        picks: dict[tuple[str, str, str], _Pick] = {}
+        available: dict[str, tuple[int, ...] | None] = {}
+        for inspection in self.inspect_sheets(sheets):
+            sheet = inspection.sheet
+            if inspection.error is not None:
+                result.failed.append(sheet)
+                result.errors[sheet] = str(inspection.error)
+                self._emit(
+                    on_progress,
+                    result.total,
+                    len(sheets),
+                    sheet,
+                    "failed",
+                    str(inspection.error),
+                )
+                continue
+            if not inspection.picks:
+                # Sources without a comparable signal have only one file.
+                current = _items(self, inspection)
+                scope = replace(
+                    plan, items=tuple(i for i in planned if i.unit == sheet)
+                )
+                todo, stale = select_planned(scope, current, "pl_sheet")
+                result.stale += tuple(stale)
+                if todo:
+                    _, fetch, status, message, hints = self._download_single_sheet_task(
+                        sheet, "upgrade"
+                    )
+                    self._record(result, sheet, fetch, status, hints, message)
+                    self._emit(
+                        on_progress, result.total, len(sheets), sheet, status, message
+                    )
+                continue
+            checked.add(sheet)
+            fresh.extend(_items(self, inspection))
+            available[sheet] = inspection.available
+            for pick in inspection.picks:
+                picks[(sheet, pick.name, pick.ref.dirname)] = pick
+        scope = replace(plan, items=tuple(i for i in planned if i.unit in checked))
+        todo, stale = select_planned(scope, fresh, "pl_sheet")
+        result.stale += tuple(stale)
+        records: dict[str, list[SkorowidzRecord]] = {}
+        for item in todo:
+            pick = picks[(item.unit, item.name, item.available_label or "")]
+            records.setdefault(item.unit, []).append(pick.record)
+        for sheet, chosen in records.items():
+            try:
+                fetch = self._fetch_campaigns(
+                    sheet,
+                    "upgrade",
+                    records=tuple(chosen),
+                    available=available[sheet],
+                    exact=True,
+                )
+            except DownloadError as error:
+                result.failed.append(sheet)
+                result.errors[sheet] = str(error)
+                self._emit(
+                    on_progress, result.total, len(sheets), sheet, "failed", str(error)
+                )
+                continue
+            status = "skipped" if fetch.skipped else "completed"
+            self._record(result, sheet, fetch, status)
+            self._emit(on_progress, result.total, len(sheets), sheet, status)
+        return self._finish_result(result)
 
     def _fetch_sheet(
         self,
@@ -1166,7 +1119,7 @@ class DownloadManager:
             # "reused" is only for derived files (HSG), never a sheet
             status=cast(SheetStatus, result.status),
             version=result.label,
-            files=((result.version_path.parent.name, result.status),),
+            files=(result,),
         )
 
     @staticmethod
@@ -1272,7 +1225,7 @@ class DownloadManager:
         not local: another local version in range (the standard link target
         first) is kept and ``newer`` says whether the record is newer than
         it. Anything else is downloaded. Used by downloads and by
-        ``inspect_sheets`` (``check_updates``), so both read one rule.
+        ``inspect_sheets`` (used by ``check_sheets``), so both read one rule.
         """
         std = self._storage.get_path(sheet, self._default_ext)
         root = self._storage.get_versions_root(sheet)
@@ -1402,7 +1355,7 @@ class DownloadManager:
                     if fetch is not None:
                         return fetch
                 raise
-        elif exact:  # download_records: exactly the plan's records
+        elif exact:  # Execute exactly the records selected by the plan.
             chosen, no_full_flight = list(records), False
         else:
             chosen, no_full_flight = self._resolve_chosen(sheet, records)
@@ -1419,14 +1372,23 @@ class DownloadManager:
         commits: list[VersionCommit] = []
         started = False
         newer: str | None = None
-        files: list[tuple[str, str]] = []
+        files: list[VersionedFile] = []
         for pick in picks:
             if pick.local is not None and pick.local_ref is not None:
                 logger.info(f"{sheet} {pick.local.label}: lokalna wersja")
                 if pick.newer:
                     newer = pick.ref.dirname
                 reused.append(pick.local.path)
-                files.append((pick.local.path.parent.name, "local"))
+                files.append(
+                    VersionedFile(
+                        std,
+                        "local",
+                        pick.local.label,
+                        pick.local.sha256,
+                        pick.local.path,
+                        newer=pick.ref.dirname if pick.newer else None,
+                    )
+                )
                 local.append((pick.local_ref, pick.local.path))
                 continue
             if on_download is not None and not started:
@@ -1441,7 +1403,15 @@ class DownloadManager:
                 errors.append((pick.ref.dirname, e))
                 continue
             commits.append(commit)
-            files.append((commit.path.parent.name, commit.status))
+            files.append(
+                VersionedFile(
+                    std,
+                    commit.status,
+                    commit.label,
+                    commit.sha256,
+                    commit.path,
+                )
+            )
             downloaded.append(commit.path)
             local.append((pick.ref, commit.path))
         refreshed = {c.path for c in commits if c.status != "unchanged"}
@@ -1592,6 +1562,9 @@ class DownloadManager:
             f"{sheet}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
             f"wersji {target} bez sprawdzenia nowszej"
         )
+        version = read_version(target.parent, target.name)
+        if version is None:
+            return None
         full = self._storage.get_full_sheet_path(sheet, self._default_ext)
         return SheetFetch(
             sheet,
@@ -1599,9 +1572,18 @@ class DownloadManager:
             skipped=True,
             reused=(target,),
             status="local",
-            version=_label_of(target),
+            version=version.label,
             unverified=str(error),
-            files=((target.parent.name, "local"),),
+            files=(
+                VersionedFile(
+                    std,
+                    "local",
+                    version.label,
+                    version.sha256,
+                    target,
+                    unverified=f"check_failed: {error}",
+                ),
+            ),
             full_link=full if linked_version(full) is not None else None,
         )
 
@@ -1652,19 +1634,18 @@ class DownloadManager:
     @staticmethod
     def _record(
         result: DownloadResult,
-        paths: list[Path],
         sheet: str,
         fetch: SheetFetch | None,
         status: str,
         hints: tuple[str, ...] = (),
+        message: str = "",
     ) -> None:
-        """Record one sheet result into ``DownloadResult`` and the path list."""
+        """Accumulate the outcome of a leaf in one returned result."""
         if status in ("completed", "skipped") and fetch is not None:
             if status == "skipped":
                 result.skipped.append(sheet)
             else:
                 result.succeeded.append(fetch.path)
-            paths.append(fetch.path)
             if fetch.downloaded or fetch.reused:
                 result.campaign_files[sheet] = fetch.downloaded + fetch.reused
                 result.reused_campaign_files[sheet] = fetch.reused
@@ -1686,12 +1667,50 @@ class DownloadManager:
             if fetch.files:
                 result.files[sheet] = fetch.files
         elif status in ("failed", "no_coverage"):
-            # R5: no data at the source — a list failure, but recognizable
             result.failed.append(sheet)
+            result.errors[sheet] = message
             if status == "no_coverage":
                 result.no_coverage.append(sheet)
                 if hints:
                     result.no_coverage_hints[sheet] = hints
+
+    def _finish_result(
+        self, result: DownloadResult, *, single: bool = False
+    ) -> DownloadResult:
+        """Emit data notices once and return them together with the outcomes."""
+        sink = NoticeSink(self._on_notice)
+        if result.unverified:
+            sheets = list(result.unverified)
+            if single:
+                sheet = sheets[0]
+                text = (
+                    f"{sheet}: skorowidz GUGiK niedostepny - uzyto lokalnej "
+                    "wersji bez sprawdzenia nowszej "
+                    f"({result.unverified[sheet]})"
+                )
+            else:
+                shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
+                text = (
+                    f"skorowidz GUGiK niedostepny - dla {len(sheets)} arkuszy "
+                    "uzyto lokalnych wersji bez sprawdzenia nowszej "
+                    f"({shown}) ({result.unverified[sheets[0]]})"
+                )
+            sink.emit(
+                "warning",
+                UNVERIFIED_LOCAL,
+                text.encode("ascii", "backslashreplace").decode("ascii"),
+            )
+        if result.newer:
+            sheets = list(result.newer)
+            shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
+            sink.emit(
+                "info",
+                NEWER_AVAILABLE,
+                f"dostepna nowsza kampania dla {len(sheets)} arkuszy ({shown}) - "
+                "uzyto lokalnych wersji; pobierz: --upgrade",
+            )
+        result.notices = sink.notices
+        return result
 
     @staticmethod
     def _emit(
@@ -1720,7 +1739,7 @@ class DownloadManager:
         update: UpdateMode | None,
         on_progress: ProgressCallback | None,
         workers: int,
-    ) -> list[Path]:
+    ) -> DownloadResult:
         """Download a list of sheets (``workers <= 1`` sequential, otherwise a pool).
 
         Both modes call ``_download_single_sheet_task`` and report via
@@ -1731,7 +1750,6 @@ class DownloadManager:
         check = (
             self._checked_range(sheets, workers, update) if self._has_range else None
         )
-        downloaded_paths: list[Path] = []
         result = DownloadResult()
         total = len(sheets)
 
@@ -1744,10 +1762,9 @@ class DownloadManager:
                 _, fetch, status, message, hints = self._download_single_sheet_task(
                     sheet, update, on_download=started, check=check
                 )
-                self._record(result, downloaded_paths, sheet, fetch, status, hints)
+                self._record(result, sheet, fetch, status, hints, message)
                 self._emit(on_progress, i, total, sheet, status, message)
         else:
-            lock = threading.Lock()
             counter = 0
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
                 future_to_sheet = {
@@ -1766,20 +1783,15 @@ class DownloadManager:
                     except Exception as e:
                         logger.error(f"Unexpected error downloading {sheet}: {e}")
                         fetch, status, message, hints = None, "failed", str(e), ()
-                    with lock:
-                        counter += 1
-                        current = counter
-                        self._record(
-                            result, downloaded_paths, sheet, fetch, status, hints
-                        )
-                    self._emit(on_progress, current, total, sheet, status, message)
+                    counter += 1
+                    self._record(result, sheet, fetch, status, hints, message)
+                    self._emit(on_progress, counter, total, sheet, status, message)
 
-        self.last_result = result
         logger.info(
             f"Hierarchy download complete: {len(result.succeeded)} downloaded, "
             f"{len(result.skipped)} skipped, {len(result.failed)} failed (of {total})"
         )
-        return downloaded_paths
+        return self._finish_result(result)
 
     # =========================================================================
     # Utility methods
@@ -1936,5 +1948,5 @@ class DownloadManager:
             f"DownloadManager(provider={self._provider.name}, "
             f"output_dir='{self._storage.output_dir}', "
             f"resolution='{self._resolution}', "
-            f"max_workers={self._max_workers})"
+            f"workers={self._workers})"
         )

@@ -391,7 +391,8 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 # Pobieranie przez godło -> ASC (OpenData); hierarchia: download_hierarchy()
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 manager = DownloadManager("./data", provider)
-path = manager.download_sheet("N-34-130-D-d-2-4")
+result = manager.download_sheet("N-34-130-D-d-2-4")
+path = result.files["N-34-130-D-d-2-4"][0].version_path
 # NMT 5 m tylko w EVRF2007: GugikProvider(resolution="5m", vertical_crs="KRON86")
 # -> ValueError (create_nmt_provider: ValidationError)
 
@@ -512,30 +513,22 @@ w SCOPE 2.10 i PRD 5.
 
 ## 3. Wynik pobrania
 
-**Wartość zwracana.** `DownloadManager.download_sheet()` zwraca `Path` dla
-arkusza 1:10000 i dla godła PL-2000 (pobierane bezpośrednio), a
-`list[Path]` dla godła PL-1992 grubszego niż 1:10000 — takie godło jest
-rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
-`list[Path]`). Kod wołający musi obsłużyć oba warianty.
-`download_sheets(godla)` pobiera listę godeł (grubsze PL-1992 rozwijane do
-1:10000 — `expand_sheets()`) i nie przerywa się na porażce arkusza.
+**Wartosc zwracana.** `download_sheet`, `download_hierarchy` i
+`download_sheets` zwracaja `DownloadResult`. Godlo PL-1992 grubsze niz
+1:10000 rozwija sie na arkusze 1:10000 (`expand_sheets`); porazki
+pojedynczych arkuszy listy i hierarchii nie przerywaja pozostalych.
+`result.files[godlo]` zawiera krotke `VersionedFile`: `path` to sciezka
+standardowa, `version_path` to plik wersji, `label` i `status` opisuja
+wybrana wersje.
 
-**Podsumowania** (pola: dataclassy w kodzie, opis — ARCHITECTURE 4.1–4.3):
+**Podsumowanie:** `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze,
+dla ktorych GUGiK nie ma danych; podzbior `failed`), `campaign_files`,
+`reused_campaign_files`, statusy `new`/`relabeled`/`unchanged`/`local`,
+`newer`, `unverified` i `no_coverage_hints`. `stale` zawiera nieaktualne
+pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
+`on_notice`. Pozostaja pola `better_coverage`, `link_outside_range`,
+`full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1 i 4.2).
 
-- `DownloadManager.last_result` (`DownloadResult`) po liście/hierarchii
-  (także po pojedynczym arkuszu — wynik jednoelementowy):
-  `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze, dla których
-  GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
-  w `failed`), pliki kampanii, `unverified`, statusy wersji `new`/
-  `relabeled`/`unchanged`/`local`, `newer` i `files` (sekcja 4).
-- `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
-  `path`, `skipped`, `downloaded`, `reused`, `status`, `version`, `newer`,
-  `files`, `unverified`, `better_coverage`, `link_outside_range`, `full_link`,
-  `full_link_outside_range` (sekcje 4.1–4.3).
-- `DownloadResult` ma też `no_coverage_hints` (godło -> podpowiedzi przy
-  braku pokrycia, sekcja 1.6), `better_coverage`, `link_outside_range`,
-  `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1
-  i 4.2).
 - `PlCutoutResult` (wycinek WCS): `file` (`VersionedFile`),
   `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
@@ -592,16 +585,15 @@ dowiązaniem twardym do najnowszej lokalnej wersji
 samej treści to „bez zmian”, inna treść to nowa wersja obok starej.
 Szczegóły trybów: sekcja 4.3.
 
-- **Skorowidz niedostępny:** gdy skorowidz GUGiK nie odpowiada (sieć, HTTP
-  429/5xx), a arkusz ma już lokalną wersję, tryb domyślny jej używa (każda
-  strategia) i drukuje `Warning: <godło>: skorowidz GUGiK niedostepny —
-  uzyto lokalnej wersji bez sprawdzenia nowszej (...)` (kod bez zmian,
-  także z `-q`). Z flagą roku: gdy KAŻDY arkusz zadania ma lokalną wersję
-  z zakresu lat — lokalne wersje z ostrzeżeniem, inaczej całe zadanie kończy
-  się błędem bez pobrań. Bez lokalnej wersji, z `--upgrade` albo `--force`
-  błąd kończy pobranie porażką. Biblioteka:
-  `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
-  (treść błędu transportu).
+- **Skorowidz niedostepny:** gdy skorowidz GUGiK nie odpowiada (siec, HTTP
+  429/5xx), a arkusz ma juz lokalna wersje, tryb domyslny jej uzywa (kazda
+  strategia) i drukuje ostrzezenie o lokalnej wersji bez sprawdzenia nowszej
+  (kod bez zmian, takze z `-q`). Z flaga roku: gdy KAZDY arkusz zadania
+  ma lokalna wersje z zakresu lat — lokalne wersje z ostrzezeniem,
+  inaczej cale zadanie konczy sie bledem bez pobran. Bez lokalnej wersji,
+  z `--upgrade` albo `--force` blad konczy pobranie porazka. Biblioteka:
+  `DownloadResult.unverified` (tresc bledu transportu) i `notices` z kodem
+  `UNVERIFIED_LOCAL`.
 - **Wymagane hardlinki:** ścieżka standardowa to dowiązanie twarde do pliku
   wersji (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
@@ -794,14 +786,19 @@ podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
 Biblioteka:
 
 ```python
-from kartograf import DownloadManager, GugikProvider, UpdatePlan, check_updates, upgrade
+from kartograf import DownloadManager, GugikProvider, UpdatePlan
 
-manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
-manager.download_sheet("N-34-139-C-a-3-1")                     # domyślnie
-manager.download_sheet("N-34-139-C-a-3-1", update="upgrade")   # albo "force"
-plan = check_updates(manager, ["N-34-139-C-a-3-1"])            # nic nie pobiera
-report = upgrade(manager, UpdatePlan.from_json(plan.to_json()))
-print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-10-21_84183
+godlo = "N-34-139-C-a-3-1"
+manager = DownloadManager(
+    "./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+)
+result = manager.download_sheet(godlo)
+print(result.files[godlo][0].status, result.files[godlo][0].label)
+plan = manager.check_sheets([godlo])  # niczego nie pobiera
+report = manager.download_sheets(
+    [godlo], update="upgrade", plan=UpdatePlan.from_json(plan.to_json())
+)
+print(report.stale, report.files.get(godlo, ()))
 # LAZ / CZ / wycinki: run_laz_download(..., update=, plan=), check_laz_updates,
 # run_cz_cutout(..., update=, plan=), check_cz_cutout, run_pl_wcs_cutout(...,
 # update=, plan=), check_pl_cutout; land cover: LandCoverManager.download(...,

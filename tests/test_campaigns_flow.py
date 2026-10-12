@@ -130,9 +130,10 @@ def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
             session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
         ),
     )
-    path = m.download_sheet(G)
-
+    result = m.download_sheet(G)
+    (path,) = result.succeeded
     assert path == std_path(tmp_path, G)
+    assert result.files[G][0].version_path.exists()
     [campaign_file] = m.storage.list_files("**/*.asc", versions=True)
     assert not path.is_symlink() and os.path.samefile(path, campaign_file)
     meta = json.loads(sidecar(path).read_text(encoding="utf-8"))
@@ -144,11 +145,10 @@ def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
 
 
 def test_exports():
-    from kartograf import CampaignRef, SheetFetch
+    from kartograf import CampaignRef
     from kartograf.download.campaigns import CampaignRef as Original
-    from kartograf.download.manager import SheetFetch as OriginalFetch
 
-    assert CampaignRef is Original and SheetFetch is OriginalFetch
+    assert CampaignRef is Original
 
 
 def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
@@ -191,7 +191,7 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
             session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
         ),
     )
-    std = m.download_sheet(G)
+    std = m.download_sheet(G).succeeded[0]
     before = str(linked_version(std))
     assert "2025-10-21_84183" in before
 
@@ -204,9 +204,10 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
         ),
     )
     with patch("kartograf.transport.http.time.sleep"):
-        path = m2.download_sheet(G)
+        result = m2.download_sheet(G)
 
-    assert offline.get.called  # no record cache: a query on every call
-    assert path == std and str(linked_version(std)) == before
-    assert m2.last_sheet.skipped is True
-    assert "GUGiK lezy" in m2.last_sheet.unverified
+    assert offline.get.called
+    assert result.succeeded == [] and str(linked_version(std)) == before
+    assert result.skipped == [G]
+    assert result.files[G][0].path == std
+    assert "GUGiK lezy" in result.files[G][0].unverified
