@@ -179,6 +179,12 @@ def _select_channel_by_capability(
     )
 
 
+def _now_iso() -> str:
+    """``downloaded_at``: UTC with microseconds — orders two versions of
+    one file downloaded within the same second (``version_key``)."""
+    return datetime.now(UTC).isoformat(timespec="microseconds")
+
+
 def build_metadata(
     descriptor: SourceDescriptor,
     *,
@@ -247,7 +253,7 @@ def build_metadata(
         extra=extra or {},
         sha256=sha256,
         size_bytes=size_bytes,
-        downloaded_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        downloaded_at=_now_iso(),
         kartograf_version=build_version(),
     )
 
@@ -380,7 +386,7 @@ def emit_sidecar(
                 "extra": {**(extra or {}), **({"version": version} if version else {})},
                 "sha256": sha256,
                 "size_bytes": size_bytes,
-                "downloaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "downloaded_at": _now_iso(),
                 "kartograf_version": build_version(),
             }
             return write_sidecar(data_path, bare, exclusive=True)
