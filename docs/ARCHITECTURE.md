@@ -586,9 +586,10 @@ data/
    hardlink (brak obslugi = `DownloadError`, nigdy kopia ani symlink),
    podmiana atomowa (plik tymczasowy + `os.replace`), nigdy wstecz (klucz
    ADR-028 z sidecara wersji). Kontrola: cel z `extra.link_target` +
-   `os.path.samefile` — na udziale SMB wymaga stabilnych i-wezlow
-   (`serverino`), inaczej dowiazanie jest odtwarzane przy kazdym
-   uruchomieniu. `FileStorage.get_versions_root(sheet)`/`get_versions_base`,
+   `os.path.samefile`; gdy system plikow nie ma stabilnych i-wezlow (SMB bez
+   `serverino`), potwierdzenie trescia: oba pliki maja > 1 link, ten sam
+   rozmiar i sha256 dowiazania = sha256 sidecara wersji
+   (`links._same_content_hardlink`). `FileStorage.get_versions_root(sheet)`/`get_versions_base`,
    `list_files()` pomija `versions/`, `full_sheet/` i `kampanie/`
    (`versions=True` = tylko pliki wersji). Katalog `kampanie/` z 0.7.x
    nie jest czytany (`has_legacy_campaigns()` -> `Info:` w CLI). CZ, LAZ,

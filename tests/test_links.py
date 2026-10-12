@@ -243,3 +243,38 @@ def test_aux_xml_removed_on_relink(tmp_path):
     assert aux.exists()
     assert ensure_link(link, b, k_b).changed is True
     assert not aux.exists()
+
+
+def _no_inode_identity(monkeypatch):
+    """SMB without ``serverino``: ``samefile`` is false even for a hardlink."""
+    monkeypatch.setattr(os.path, "samefile", lambda a, b: False)
+
+
+def test_hardlink_confirmed_by_sha256_without_inode_identity(tmp_path, monkeypatch):
+    a, k_a = _a(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, a, k_a)
+    _no_inode_identity(monkeypatch)
+    assert _same(linked_version(link), a)
+    assert ensure_link(link, a, k_a).changed is False  # no relink each run
+
+
+def test_edited_link_rejected_without_inode_identity(tmp_path, monkeypatch):
+    a, k_a = _a(tmp_path, body="AAAA")
+    link = _link(tmp_path)
+    ensure_link(link, a, k_a)
+    link.write_text("BBBB")  # same size, edited in place (both names)
+    _no_inode_identity(monkeypatch)
+    assert linked_version(link) is None
+
+
+def test_single_link_copy_rejected_without_inode_identity(tmp_path, monkeypatch):
+    """A regular file with the version content but nlink 1 is not a hardlink."""
+    a, k_a = _a(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, a, k_a)
+    other = link.parent / "other.asc"
+    other.write_text("A")
+    os.replace(other, link)
+    _no_inode_identity(monkeypatch)
+    assert linked_version(link) is None

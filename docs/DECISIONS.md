@@ -2520,11 +2520,11 @@ bez `--target-crs`): `versions.py`, `updates.py`, `--check-updates`,
 `--upgrade`, `--plan`, statusy wersji w CLI. `kampanie/` z 0.7.x nie
 jest migrowany (ponowne pobranie, `Info:`). Plan 2/3: LAZ, CZ, wycinki
 `bbox/` (D15), sygnaly `http`; plan 3/3: land cover i HSG w ukladzie
-`data/`. Magazyn wymaga systemu plikow z hardlinkami; na udziale SMB
-identycznosc pliku (`samefile`) wymaga stabilnych numerow i-wezlow
-(montowanie z `serverino`) — bez nich dowiazanie jest przy kazdym
-uruchomieniu odtwarzane, a awaria skorowidza nie znajduje lokalnej
-wersji przez dowiazanie. Kopia magazynu: `rsync -aH`.
+`data/`. Magazyn wymaga systemu plikow z hardlinkami; gdy system plikow
+nie podaje stabilnych numerow i-wezlow (SMB bez `serverino`, `samefile`
+falszywe dla hardlinku), dowiazanie potwierdza tresc: obie sciezki maja
+wiecej niz 1 link, ten sam rozmiar, a sha256 dowiazania = sha256 z sidecara wersji
+(pelny odczyt pliku tylko na takich udzialach). Kopia magazynu: `rsync -aH`.
 
 ---
 

@@ -557,9 +557,9 @@ Szczegóły trybów: sekcja 4.3.
 - **Wymagane hardlinki:** ścieżka standardowa to dowiązanie twarde do pliku
   wersji (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
-  sshfs/FUSE) kończy pobranie arkusza błędem. Udział SMB montowany bez
-  `serverino` (niestabilne numery i-węzłów) działa, ale dowiązanie jest
-  odtwarzane przy każdym uruchomieniu.
+  sshfs/FUSE) kończy pobranie arkusza błędem. Na udziale SMB montowanym
+  bez `serverino` (niestabilne numery i-węzłów) dowiązanie jest
+  potwierdzane sumą SHA-256 (jeden odczyt pliku przy każdym uruchomieniu).
 - **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` — bez zachowania
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
