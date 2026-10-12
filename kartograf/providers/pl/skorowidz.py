@@ -401,9 +401,9 @@ class SourceInfoMixin:
         """Origin of the sheet's index record (URL, layer, acquisition date).
 
         Filled by the single-record flow (``_resolve_record``: ``download``,
-        ``get_download_url`` and ``resolve_campaigns(campaigns="newest")``).
-        With ``campaigns="all"`` (``DownloadManager(campaigns="all")``) it is
-        None: there is no single record. In the campaign flow the origin of a
+        ``get_download_url`` and ``resolve_campaigns(all_campaigns=False)``).
+        With ``all_campaigns=True`` (``DownloadManager(all_campaigns=True)``)
+        it is None: there is no single record. In the campaign flow the origin of a
         sheet is its sidecar (``extra.source``, ``extra.campaign``) - the
         standard path sidecar describes the campaign the link actually points
         to, which can be older than the newest record when its download
@@ -617,33 +617,34 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         self,
         sheet: str,
         *,
-        campaigns: str = "newest",
+        all_campaigns: bool = False,
         min_year: int | None = None,
         max_year: int | None = None,
         timeout: int | None = None,
     ) -> list[SkorowidzRecord]:
         """Campaigns of a sheet in a closed year range (newest first).
 
-        ``campaigns`` sets how many flights: ``newest`` = the newest one within
-        the bounds, ``all`` = every one. Without bounds, ``newest`` retains the
-        single-record cache. With a bound, the full campaign list supplies both
-        selected records and all available years on a range conflict.
+        ``all_campaigns=False`` selects the newest flight within year bounds;
+        True selects every flight within bounds. Without bounds, False retains
+        the single-record cache. With a bound, the full campaign list supplies
+        both selected records and all available years on a range conflict.
+        LAZ with True does not deduplicate coverage.
         """
         # local import: the kartograf.download package imports manager -> providers.pl
         from kartograf.download.campaigns import (
             in_year_range,
             record_year,
-            validate_campaign_args,
+            validate_year_bounds,
             year_range_error,
         )
 
-        validate_campaign_args(campaigns, min_year, max_year)
+        validate_year_bounds(min_year, max_year)
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
         parser = SheetParser(sheet)
         sheet = parser.sheet
         query = self._skorowidz_query(parser)
-        if min_year is None and max_year is None and campaigns == "newest":
+        if min_year is None and max_year is None and not all_campaigns:
             return [self._resolve_record(parser, timeout, query)]
         found = self._resolve_all(parser, timeout, query)
         if min_year is None and max_year is None:
@@ -667,7 +668,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 if not years:
                     raise NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
                 raise year_range_error({sheet: years}, min_year, max_year, total=1)
-        if campaigns == "newest":
+        if not all_campaigns:
             return [kept[0]]
         # the manager logs the campaign count at INFO (`_fetch_campaigns`, M-7)
         logger.debug("%s: %s kampanii", sheet, len(kept))

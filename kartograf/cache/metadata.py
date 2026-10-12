@@ -408,7 +408,7 @@ class MetadataCache:
         logger.debug(f"Cached record for {sheet} ({product})")
 
     # =========================================================================
-    # Campaigns cache (--campaigns all, ADR-030 h)
+    # Campaigns cache (--all-campaigns, ADR-030 h)
     # =========================================================================
 
     def get_campaigns(

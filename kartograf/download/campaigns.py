@@ -28,7 +28,6 @@ logger = logging.getLogger(__name__)
 CAMPAIGNS_DIR = "kampanie"
 # Second link to the newest local flight declared full in the index (ADR-033).
 FULL_SHEET_DIR = "full_sheet"
-CAMPAIGN_STRATEGIES = ("newest", "all")
 
 # record `format` field -> canonical extension (errata 2 N-2)
 FILE_FORMATS: Mapping[str, str] = {"ARC/INFO ASCII GRID": ".asc"}
@@ -75,15 +74,8 @@ def campaign_id_from_url(url: str) -> str:
     return "u" + hashlib.sha1(url.encode("utf-8")).hexdigest()[:8]
 
 
-def validate_campaign_args(
-    campaigns: str | None, min_year: int | None, max_year: int | None
-) -> None:
-    """Validate a strategy (including the unresolved sentinel) and year bounds."""
-    if campaigns is not None and campaigns not in CAMPAIGN_STRATEGIES:
-        raise ValidationError(
-            f"Nieznana strategia kampanii {campaigns!r} "
-            f"(dozwolone: {', '.join(CAMPAIGN_STRATEGIES)})"
-        )
+def validate_year_bounds(min_year: int | None, max_year: int | None) -> None:
+    """Validate inclusive acquisition-year bounds."""
     for name, year in (("min_year", min_year), ("max_year", max_year)):
         if year is not None and (
             not isinstance(year, int)
