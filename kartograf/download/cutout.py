@@ -6,8 +6,8 @@ WCS path (CLI ``--target-crs`` and ``download_pl_cutout``, ADR-035):
 WCS on the 1 m sheet grid (chunks, ADR-034), the PL land mask from PRG (nodata
 -9999 outside ``A00 - W02 - W03``), then for EPSG:2180 the file as is, for
 another CRS a local warp with a FORCED pinned operation (ADR-024/027). The
-result is ONE GeoTIFF ``<output_dir>/<segment>/bbox/<coords>_<YYYYMMDD>.tif``
-+ sidecar; every run downloads (the server composition may change).
+standard path ``<output_dir>/<segment>/bbox/<coords>.tif`` links to a version
+in ``<segment>/versions/bbox/``. A local version needs no PRG or WCS request.
 
 The CLI (``kartograf download --bbox/--geometry --target-crs``) is a thin
 layer over this module: it prints messages and translates exceptions into
@@ -22,20 +22,40 @@ Example::
         "EPSG:5514",
         output_dir="./data", vertical_crs="EVRF2007", product="nmt",
     )
-    print(result.path)
+    print(result.file.path)
 """
 
 import logging
 import os
 import shutil
-import threading
 from dataclasses import dataclass, replace
-from datetime import date
+from datetime import UTC, datetime
 from pathlib import Path
 
+from kartograf._version import build_version
 from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
-from kartograf.download.storage import bbox_cutout_path, prune_empty_dirs
-from kartograf.exceptions import ValidationError
+from kartograf.download.fetch import (
+    FileSlot,
+    UpdateMode,
+    VersionedFile,
+    fetch_version,
+    inspect_version,
+    link_version,
+    local_version,
+    validate_update,
+)
+from kartograf.download.plan import (
+    PlanItem,
+    UpdatePlan,
+    require_store,
+    select_planned,
+    store_id,
+)
+from kartograf.download.storage import bbox_cutout_path, bbox_slot
+from kartograf.download.versions import ContentDigest, VersionRef, read_version
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.sources.descriptor import TransportKind
+from kartograf.sources.registry import channel_signal
 from kartograf.transform.crs import CONTENT_POLICY, WARP_MARGIN_PX, PinnedTransform
 
 logger = logging.getLogger(__name__)
@@ -103,17 +123,17 @@ class PlCutout:
 
 @dataclass(frozen=True)
 class PlCutoutResult:
-    """Result of ``run_pl_wcs_cutout`` / ``download_pl_cutout``.
+    """Versioned cutout file and its PRG mask counts.
 
-    ``path`` carries the download date, ``skipped`` is always ``False``,
-    and ``masked_pixels``/``zero_pixels`` describe the land mask.
+    ``file`` is ``None`` only when a plan skips this cutout and nothing is
+    available locally. Otherwise the file points to the standard bbox link.
     """
 
-    path: Path
-    skipped: bool = False
+    file: VersionedFile | None
     all_nodata: bool = False
     masked_pixels: int = 0
     zero_pixels: int = 0
+    stale: tuple[PlanItem, ...] = ()
 
 
 def bbox_to_2180(bbox: BBox) -> BBox:
@@ -155,7 +175,7 @@ def prepare_pl_cutout(
 
     Raises ``ValidationError`` for invalid choices and ``TransformError``
     when no safe pinned reprojection is available. The GeoTIFF
-    ``target_path`` is undated; the download adds the download date.
+    ``target_path`` is the undated standard link to the versioned result.
     """
     if product not in CUTOUT_PRODUCTS:
         raise ValidationError(
@@ -247,12 +267,6 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
             )
 
 
-def dated_cutout_path(cutout: PlCutout, day: date) -> Path:
-    """WCS cutout path: ``<coords>_<YYYYMMDD>.tif`` next to ``cutout.target_path``."""
-    path = cutout.target_path
-    return path.with_name(f"{path.stem}_{day:%Y%m%d}{path.suffix}")
-
-
 def _wcs_cutout_provider(cutout: PlCutout):
     """Default provider of the cutout's product and vertical CRS (1 m)."""
     if cutout.product == "nmpt":
@@ -264,10 +278,10 @@ def _wcs_cutout_provider(cutout: PlCutout):
     return create_nmt_provider(vertical_crs=cutout.vertical_crs, resolution="1m")
 
 
-def _check_wcs_disk_space(cutout: PlCutout, path: Path) -> None:
-    """``ValidationError`` when the disk SURELY runs out (result + 2180 work file)."""
+def _check_wcs_disk_space(cutout: PlCutout, staged: Path) -> None:
+    """``ValidationError`` if work directory lacks result + source space."""
     need = 2 * cutout.estimated_bytes
-    probe = path.parent
+    probe = staged.parent
     while not probe.exists():
         probe = probe.parent
     free = shutil.disk_usage(probe).free
@@ -285,19 +299,21 @@ def write_pl_wcs_cutout_sidecar(
     path: Path,
     provider,
     *,
+    version: VersionRef,
+    digest: ContentDigest,
+    http: dict | None,
     parent_request: dict | None = None,
     masked_pixels: int = 0,
     zero_pixels: int = 0,
     all_nodata: bool = False,
 ) -> None:
-    """Best-effort sidecar of a WCS cutout (an error does not abort the download).
+    """Write the mandatory, exclusive sidecar of a WCS cutout version.
 
-    ``capability="bbox_raster"`` of the cutout's descriptor. ``extra.source``
-    names the WCS request (``service``, ``endpoint``, ``coverage``, ``format``)
-    and ``composition: "server"`` — the flight shown by the server, not chosen
-    by Kartograf (no campaign or year, ADR-035). ``extra.mask`` describes the
-    PRG land mask and ``masked_pixels``; ``extra.zero_pixels`` (> 0 only) counts
-    0.0 pixels kept on land; ``extra.all_nodata`` when no pixel is valid.
+    ``extra.source`` names the WCS request and its server flight composition.
+    ``extra.mask`` describes the PRG mask and ``masked_pixels``;
+    ``extra.zero_pixels`` counts 0.0 pixels kept on land (when positive);
+    ``extra.all_nodata`` is set when no pixel is valid. The version, digest
+    and HTTP signal are stored by the same sidecar contract as other tracks.
     """
     from kartograf.providers.pl.wcs import HEIGHT_AAIGRID
     from kartograf.sources.sidecar import emit_sidecar
@@ -324,6 +340,8 @@ def write_pl_wcs_cutout_sidecar(
         extra["zero_pixels"] = zero_pixels
     if all_nodata:
         extra["all_nodata"] = True
+    if http is not None:
+        extra["http"] = http
     b = cutout.bbox_target
     emit_sidecar(
         _cutout_descriptor_key(cutout),
@@ -338,6 +356,55 @@ def write_pl_wcs_cutout_sidecar(
         capability="bbox_raster",
         nodata=PL_NODATA,
         extra=extra,
+        digest=(digest.sha256, digest.size_bytes),
+        version=version.to_extra(),
+        exclusive=True,
+    )
+
+
+def _pl_cutout_slot(cutout: PlCutout) -> FileSlot:
+    """Version slot for the undated bbox link of this prepared cutout."""
+    from kartograf.sources.registry import get_source
+
+    subdir = get_source(_cutout_descriptor_key(cutout)).resolve_subdir(
+        system="1992", vertical_crs=cutout.vertical_crs
+    )
+    return bbox_slot(cutout.output_dir, subdir, cutout.bbox_target, ".tif")
+
+
+def check_pl_cutout(cutout: PlCutout) -> UpdatePlan:
+    """Check a PL WCS cutout without fetching PRG or WCS data (signal ``none``)."""
+    slot = _pl_cutout_slot(cutout)
+    item = inspect_version(
+        slot,
+        track="pl_cutout",
+        unit=slot.std.stem,
+        signal=channel_signal(_cutout_descriptor_key(cutout), TransportKind.WCS),
+    )
+    return UpdatePlan(
+        store=store_id(cutout.output_dir),
+        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        kartograf_version=build_version(),
+        items=(item,),
+    )
+
+
+def _cutout_result(
+    file: VersionedFile | None, *, stale: tuple[PlanItem, ...] = ()
+) -> PlCutoutResult:
+    """Read mask counts from the immutable version sidecar, never from the raster."""
+    if file is None:
+        return PlCutoutResult(None, stale=stale)
+    version = read_version(file.version_path.parent, file.version_path.name)
+    if version is None:
+        raise DownloadError(f"{file.version_path}: wersja bez czytelnego sidecara")
+    extra = version.meta.get("extra") or {}
+    return PlCutoutResult(
+        file=file,
+        all_nodata=bool(extra.get("all_nodata", False)),
+        masked_pixels=int((extra.get("mask") or {}).get("masked_pixels", 0)),
+        zero_pixels=int(extra.get("zero_pixels", 0)),
+        stale=stale,
     )
 
 
@@ -345,105 +412,127 @@ def run_pl_wcs_cutout(
     cutout: PlCutout,
     *,
     provider=None,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
     parent_request: dict | None = None,
-    today: date | None = None,
+    now: datetime | None = None,
 ) -> PlCutoutResult:
-    """Download the cutout from GUGiK WCS, mask it to PL land, write the sidecar.
+    """Use the local cutout or download a new immutable GUGiK WCS version.
 
-    Steps (ADR-035): the PL land mask for ``bbox_source_2180`` from PRG
-    (``fetch_land_mask``; a failure = ``DownloadError`` before any WCS
-    request), one GetCoverage area on the 1 m sheet grid
-    (``bbox_source_2180`` aligned OUTWARD, chunks per ``plan_wcs_chunks``),
-    pixels outside ``A00 - W02 - W03`` -> -9999 (0.0 on land stays data), then
-    EPSG:2180: that file is the result; another CRS: ``warp_to_grid`` with the
-    pinned operation onto ``bbox_target``.
+    On a download (ADR-035), check disk space, get the PRG land mask before
+    WCS, request the source on its 1 m sheet grid, mask pixels outside
+    ``A00 - W02 - W03`` to -9999 (on-land zeroes stay data), then move the
+    result or warp it with the pinned operation onto ``bbox_target``. All
+    work happens inside the private ``versions/.incoming/`` directory.
+    ``now`` supplies the UTC ``downloaded`` version label.
 
-    The result is ``<coords>_<YYYYMMDD>.tif`` (``today``, default: local
-    date). Every run downloads; on the same day the new file replaces the
-    previous one atomically only after a successful build — a failed run
-    leaves the previous file and its sidecar untouched and no empty
-    ``bbox/`` tree. The content is the server's flight composition, not the
-    newest flight per ADR-028 (individual sheet downloads).
-
-    ``provider`` (default: provider for the cutout's product and vertical
-    CRS) must match the product, vertical CRS and fixed 1m resolution.
-
-    Raises
-    ------
-    ValidationError
-        Provider mismatch or too little disk space, before any network.
-    DownloadError
-        PRG or WCS failure (after retries), or a WCS response whose ASC size or
-        corner differs from the request; no result is written.
+    A local version has no PRG/WCS request and its mask counts come from its
+    immutable sidecar. A plan executes only matching missing positions; stale
+    or removed positions are skipped. Without a local version, a skipped
+    position has ``file=None``.
     """
+    validate_update(update)
     if provider is not None:
         _require_matching_provider(cutout, provider)
-    else:
-        provider = _wcs_cutout_provider(cutout)
-    path = dated_cutout_path(cutout, today or date.today())
-    _check_wcs_disk_space(cutout, path)
+    slot = _pl_cutout_slot(cutout)
+    signal = channel_signal(_cutout_descriptor_key(cutout), TransportKind.WCS)
+    stale: tuple[PlanItem, ...] = ()
+    if plan is not None:
+        require_store(plan, store_id(cutout.output_dir))
+        current = inspect_version(
+            slot, track="pl_cutout", unit=slot.std.stem, signal=signal
+        )
+        todo, excluded = select_planned(plan, [current], "pl_cutout")
+        stale = tuple(excluded)
+        if not todo:
+            local = local_version(slot)
+            if local is None:
+                return _cutout_result(None, stale=stale)
+            link_version(slot.std, local, refresh=False)
+            return _cutout_result(
+                VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+                stale=stale,
+            )
 
     from kartograf.providers.pl.prg import fetch_land_mask
     from kartograf.transport.chunks import align_bbox
     from kartograf.transport.mosaic import has_valid_pixels
 
-    timeout = provider.DEFAULT_TIMEOUT
-    b = cutout.bbox_source_2180
-    # before WCS: a PRG failure must not waste a long download. The mask covers
-    # the raster actually written (aligned OUTWARD to the sheet grid): a W02/W03
-    # polygon touching only an edge pixel centre must be returned by the BBOX.
-    grid = provider.WCS_GRID
-    mask_area = align_bbox(b, grid.step, grid)[0] if grid is not None else b
-    mask = fetch_land_mask(mask_area, timeout=timeout)
-    description = (
-        f"wycinek {cutout.product.upper()} {cutout.vertical_crs} "
-        f"({b.min_x:.0f},{b.min_y:.0f})-({b.max_x:.0f},{b.max_y:.0f})"
-    )
-    work = path.with_name(f"{path.name}.{os.getpid()}_{threading.get_ident()}.wcs.tif")
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        provider._download_wcs(b, work, "GTiff", timeout, description)
-        masked, zeros = mask.apply(work, PL_NODATA)
-        if cutout.pinned is None:
-            os.replace(work, path)
-        else:
-            from kartograf.transform.raster import warp_to_grid
+    selected_provider = provider
+    masked_pixels = zero_pixels = 0
+    all_nodata = False
 
-            warp_to_grid(
-                work,
-                path,
-                cutout.bbox_target,
-                cutout.pixel_size,
-                cutout.pinned,
-                src_crs="EPSG:2180",
-                nodata=PL_NODATA,
-            )
-    except BaseException:
-        work.unlink(missing_ok=True)
-        # a failed run leaves no empty <segment>/bbox/ tree (a directory with a
-        # previous result is not empty — it stays)
-        prune_empty_dirs(path.parent, cutout.output_dir)
-        raise
-    work.unlink(missing_ok=True)
-
-    all_nodata = not has_valid_pixels(path, PL_NODATA)
-    if all_nodata:
-        logger.warning(
-            "Cutout %s is entirely nodata: the area lies outside PL land (PRG mask)",
-            path,
+    def fetch(staged: Path) -> None:
+        nonlocal selected_provider, masked_pixels, zero_pixels, all_nodata
+        _check_wcs_disk_space(cutout, staged)
+        if selected_provider is None:
+            selected_provider = _wcs_cutout_provider(cutout)
+        timeout = selected_provider.DEFAULT_TIMEOUT
+        b = cutout.bbox_source_2180
+        # PRG covers the source aligned OUTWARD to the sheet grid, including
+        # any edge pixel centre. A PRG failure must precede all WCS requests.
+        grid = selected_provider.WCS_GRID
+        mask_area = align_bbox(b, grid.step, grid)[0] if grid is not None else b
+        mask = fetch_land_mask(mask_area, timeout=timeout)
+        description = (
+            f"wycinek {cutout.product.upper()} {cutout.vertical_crs} "
+            f"({b.min_x:.0f},{b.min_y:.0f})-({b.max_x:.0f},{b.max_y:.0f})"
         )
-    write_pl_wcs_cutout_sidecar(
-        cutout,
-        path,
-        provider,
-        parent_request=parent_request,
-        masked_pixels=masked,
-        zero_pixels=zeros,
-        all_nodata=all_nodata,
+        work = staged.parent / f"{staged.stem}.wcs.tif"
+        try:
+            selected_provider._download_wcs(b, work, "GTiff", timeout, description)
+            masked_pixels, zero_pixels = mask.apply(work, PL_NODATA)
+            if cutout.pinned is None:
+                os.replace(work, staged)
+            else:
+                from kartograf.transform.raster import warp_to_grid
+
+                warp_to_grid(
+                    work,
+                    staged,
+                    cutout.bbox_target,
+                    cutout.pixel_size,
+                    cutout.pinned,
+                    src_crs="EPSG:2180",
+                    nodata=PL_NODATA,
+                )
+        finally:
+            work.unlink(missing_ok=True)
+
+        all_nodata = not has_valid_pixels(staged, PL_NODATA)
+        if all_nodata:
+            logger.warning(
+                "Wycinek %s jest w calosci nodata: obszar poza ladem PL (maska PRG)",
+                slot.std,
+            )
+        return None
+
+    def write_sidecar(
+        path: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+    ) -> None:
+        assert selected_provider is not None
+        write_pl_wcs_cutout_sidecar(
+            cutout,
+            path,
+            selected_provider,
+            version=version,
+            digest=digest,
+            http=http,
+            parent_request=parent_request,
+            masked_pixels=masked_pixels,
+            zero_pixels=zero_pixels,
+            all_nodata=all_nodata,
+        )
+
+    file = fetch_version(
+        slot,
+        update,
+        signal=signal,
+        fetch=fetch,
+        version=VersionRef.downloaded(now),
+        write_sidecar=write_sidecar,
     )
-    return PlCutoutResult(
-        path=path, all_nodata=all_nodata, masked_pixels=masked, zero_pixels=zeros
-    )
+    return _cutout_result(file, stale=stale)
 
 
 def download_pl_cutout(
@@ -453,15 +542,18 @@ def download_pl_cutout(
     output_dir: str | Path,
     vertical_crs: str,
     product: str,
+    update: UpdateMode | None = None,
     parent_request: dict | None = None,
 ) -> PlCutoutResult:
-    """One NMT/NMPT PL GeoTIFF in ``target_crs`` for a bbox, from GUGiK WCS.
+    """One versioned NMT/NMPT PL GeoTIFF in ``target_crs`` from GUGiK WCS.
 
-    ``prepare_pl_cutout(product=)`` -> ``run_pl_wcs_cutout`` (ADR-035): 1 m on
-    the sheet grid, the server's flight composition (not the newest flight per
-    ADR-028), nodata -9999 outside PL land (PRG mask; 0.0 on land stays data),
-    the download date in the file name, every call downloads. For a geometry
-    request, pass its envelope as ``bbox`` (e.g. via
+    ``prepare_pl_cutout(product=)`` -> ``run_pl_wcs_cutout`` (ADR-035): the
+    source on the 1 m sheet grid, the server's flight composition (not the
+    newest flight per ADR-028), nodata -9999 outside PL land (PRG mask;
+    0.0 on land stays data). The undated standard bbox path links to an
+    immutable version. Default and ``update="upgrade"`` use a local version
+    without PRG or WCS requests; ``update="force"`` downloads again.
+    For a geometry request pass its envelope as ``bbox`` (e.g. via
     ``get_overall_bbox(path, target_crs="EPSG:2180")``).
 
     ``output_dir`` selects the base directory; ``vertical_crs`` is
@@ -473,20 +565,20 @@ def download_pl_cutout(
     Returns
     -------
     PlCutoutResult
-        ``path`` — the dated result file; ``masked_pixels``/``zero_pixels`` —
-        land mask counts; ``all_nodata`` — the area is outside PL land.
+        ``file`` — standard link and version status; ``masked_pixels`` and
+        ``zero_pixels`` — land mask counts; ``all_nodata`` — outside PL land.
 
     Raises
     ------
     ValidationError
-        Bad product, CRS or vertical CRS, or too little disk space.
+        Bad product, CRS or vertical CRS, or too little disk space on download.
     TransformError
         No safe pinned EPSG:2180 -> ``target_crs`` operation (before any
         network).
     DownloadError
-        PRG or WCS failure; the cutout is not created.
+        PRG or WCS failure; no new version is committed.
 
-    ``parent_request`` goes to the cutout sidecar only when it was given.
+    ``parent_request`` goes to the cutout version sidecar only when given.
     """
     cutout = prepare_pl_cutout(
         bbox,
@@ -495,4 +587,4 @@ def download_pl_cutout(
         vertical_crs=vertical_crs,
         product=product,
     )
-    return run_pl_wcs_cutout(cutout, parent_request=parent_request)
+    return run_pl_wcs_cutout(cutout, update=update, parent_request=parent_request)
