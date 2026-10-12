@@ -26,10 +26,10 @@
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
-| Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032, ADR-033) | ✅ Gotowy | `--campaigns {newest,all}`, `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
+| Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032 + errata 2, ADR-033) | ✅ Gotowy | `--all-campaigns` (od 0.8.0-dev; wczesniej `--campaigns {newest,all}`), `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 usuniety na `develop` (0.8.0-dev, ADR-035 errata 2) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): spec zaakceptowany, plan 1/3 gotowy, implementacja po zmianach lamiacych 0.8.0 (sesja 2026-10-11/12) |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): spec zaakceptowany, plan 1/3 gotowy; zmiany lamiace 0.8.0 wdrozone na `develop` 2026-10-12 — nastepnie rebase `feat/versioned-store` i plan 1/3 |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -103,32 +103,32 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec sesji):** NIC nie jest
-> w trakcie implementacji; nastepna sesja od razu WDRAZA w kolejnosci
-> zatwierdzonej przez uzytkownika 2026-10-12:
-> 1. Zmiany lamiace 0.8.0 na `develop` (kazda na krotkiej galezi
->    z `develop`, wg backlogu "Do 0.8.0" nizej): `godlo` -> `sheet`
->    w CLI i API (bez aliasow), `--campaigns` -> przelacznik
->    `--all-campaigns`, "Bez wartosci domyslnych wplywajacych na dane"
->    (pelna lista parametrow i wymagania opisow w docstringach i `--help`
->    w tej pozycji; obejmuje tez osobna pozycje `--product` wymagane).
->    Kolejnosc miedzy nimi do ustalenia na starcie (rekomendacja: najpierw
->    `godlo` -> `sheet`, bo zmienia najwiecej sygnatur).
-> 2. `git rebase develop` galezi `feat/versioned-store` (+ push
->    `--force-with-lease`; galaz zawiera tylko dokumenty specu i planu).
-> 3. Plan 1/3 magazynu wersjonowanego od Task 1
->    (`docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`;
->    po zmianach z pkt 1 nazwy w planie dostosowac do nowych — `sheet`,
->    wymagane `output_dir`/`vertical_crs` itd.; sekcja "Pytania do
->    uzytkownika" planu jest rozstrzygnieta: najpierw zmiany lamiace).
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec sesji):** zmiany
+> lamiace 0.8.0 (pkt 1 kolejnosci z 2026-10-12) sa WDROZONE i scalone do
+> `develop` (sesja 2026-10-12 nizej). Nastepna sesja kontynuuje:
+> 1. `git rebase develop` galezi `feat/versioned-store` (+ push
+>    `--force-with-lease` za zgoda uzytkownika; galaz zawiera tylko
+>    dokumenty specu i planu).
+> 2. Plan 1/3 magazynu wersjonowanego od Task 1
+>    (`docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`):
+>    nazwy w planie dostosowac do 0.8.0 — `sheet`/`system` zamiast
+>    `godlo`/`uklad`, `all_campaigns: bool`, `DownloadManager(output_dir,
+>    provider)` bez `vertical_crs`/`resolution`, wymagane `FileStorage(...,
+>    resolution=, vertical_crs=)`, `ext`, `MetadataCache(db_path)`, CLI
+>    `--sheet`/`--product`/`--output`/`--vertical-crs`/`--resolution`
+>    (pelna lista: `docs/CHANGELOG.md` [0.8.0]).
+> 3. Hydrograf i Hydrolog musza dostosowac wywolania (CHANGELOG [0.8.0],
+>    "Co zrobic") — sprawdzic przed wydaniem 0.8.0.
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
 > NIEWYPCHNIETE na `origin` (cykl 0.8.0, usuniecie toru arkuszowego,
-> dokumenty) — push tylko za zgoda uzytkownika. `feat/versioned-store`
-> jest na `origin`.
+> zmiany lamiace 2026-10-12, dokumenty) — push tylko za zgoda
+> uzytkownika. `feat/versioned-store` jest na `origin`.
 > **v0.8.0-dev:** cykl OTWARTY (`chore(release): poczatek cyklu 0.8.0`).
 > Zrobione: usuniecie przestarzalego toru arkuszowego wycinkow PL i
-> `GridMismatchError` (merge `refactor/remove-sheet-cutout`, ADR-035
-> errata 2, CHANGELOG [0.8.0] BREAKING).
+> `GridMismatchError` (ADR-035 errata 2); angielskie identyfikatory API/CLI
+> (ADR-031 errata 1); `--all-campaigns` (ADR-032 errata 2); bez wartosci
+> domyslnych wplywajacych na dane (ADR-004 errata 1, ADR-023 errata 2) —
+> CHANGELOG [0.8.0] BREAKING.
 > **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11, decyzje D1-D24
 > (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`; ADR
 > magazynu = ADR-036, powstaje w Task 8 planu 1/3). Samoopisowe nazwy
@@ -153,6 +153,41 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 — zmiany lamiace 0.8.0 (sheet, --all-campaigns, bez wartosci domyslnych)
+
+- Trzy galezie z `develop`, kazda scalona `--no-ff` po zielonej bramie:
+  `refactor/sheet-naming` (`ecf3a22`), `refactor/all-campaigns`
+  (`e79cc59`), `refactor/no-data-defaults` (`94aaf6f`); merge `0baec53`.
+- Identyfikatory (ADR-031 errata 1, decyzja uzytkownika: wszystkie polskie
+  nazwy API): `godlo`/`godla` -> `sheet`/`sheets`, `uklad` -> `system`,
+  `VALID_UKLADY` -> `VALID_SYSTEMS`, `CampaignRef.zgloszenie` ->
+  `survey_work_id`, `WMS_SKOROWIDZE_*` -> `WMS_INDEX_*`; CLI `--sheet`
+  (download: zamiast argumentu pozycyjnego), `parse SHEET`; nazwa pliku
+  land cover `..._sheet_<arkusz>`. Kolumny SQLite cache i pola surowych
+  odpowiedzi GUGiK bez zmian.
+- `--all-campaigns` / `all_campaigns: bool` (ADR-032 errata 2); sidecar
+  `request.campaigns` nadal `"newest"`/`"all"`.
+- Bez wartosci domyslnych wplywajacych na dane (DEVELOPMENT_STANDARDS
+  11.2, ADR-004 errata 1, ADR-023 errata 2): decyzje uzytkownika
+  2026-10-12 — zadanie PL+CZ podaje wartosci per kraj
+  (`--resolution pl=1m,cz=2m`, `--vertical-crs pl=EVRF2007,cz=Bpv`),
+  `--country` wymagane tylko z `--bbox`/`--geometry`, `--scale`: PL-1992
+  stale 1:10000 (flaga = `Error:`), PL-2000 wymagane. `DownloadManager`
+  bez `vertical_crs`/`resolution` (decyduje provider), `MetadataCache(db_path)`
+  (CLI: `.kartograf_cache.db` w cwd, `cli/cache_cmd.py::cli_cache_path`).
+  Podpowiedz braku pokrycia PL-1992 nie podaje `--scale`.
+- Brama na `develop` po merge: pytest offline 3135 passed / 16 deselected,
+  `ruff check .` i `ruff format --check .` czyste, `mypy kartograf/ tests/`
+  bez bledow. Smoke offline: komunikaty `Error:` brakujacych wartosci
+  (`--product`, `--output`, `--resolution`, `--vertical-crs`, `--country`,
+  `--scale` PL-1992/PL-2000, skladnia `pl=..`), `--help`, walidacja PL+CZ
+  per kraj; wywolania z przykladow biblioteki w USAGE (konstruktory bez
+  sieci). Testow na zywo nie bylo (brak katalogu danych w tej sesji) —
+  przed wydaniem 0.8.0 przebieg na zywo CLI i biblioteki.
+- Dokumentacja: README, USAGE (1.1-1.6, 2), ARCHITECTURE, PRD, SCOPE,
+  DEVELOPMENT_STANDARDS (9.4, 11.2, 6.4), DECISIONS (ADR-004/023/031/032),
+  CHANGELOG [0.8.0] (cztery wpisy BREAKING z "Co zrobic").
 
 ### Sesja 2026-10-11/12 — v0.8.0: magazyn wersjonowany (spec, plan), usuniecie toru arkuszowego
 
@@ -1957,21 +1992,21 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
 `feat/versioned-store`), wiec pozostale zaplanowane zmiany lamiace CLI
 wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
 
-- [ ] **`--product` wymagane w `kartograf download`:** dzis domyslnie `nmt`
+- [x] **`--product` wymagane w `kartograf download`:** ZROBIONE 2026-10-12 (w ramach pozycji "Bez wartosci domyslnych").
   (`cli/_parser.py`, `default="nmt"`), niezgodnie z pozostalymi produktami;
   brak flagi = blad argparse z lista produktow.
-- [ ] **Godlo po angielsku w CLI (ADR-031):** `--godlo` -> `--sheet`
+- [x] **Godlo po angielsku w CLI (ADR-031):** ZROBIONE 2026-10-12. `--godlo` -> `--sheet`
   (`landcover download`, `soilgrids hsg`); w `download` argument pozycyjny
   `godlo` -> `--sheet` (spojnie z `--bbox`/`--geometry`/`--teryt`); `parse`
   zachowuje argument pozycyjny (nazwa w pomocy: `SHEET`). Bez aliasow
   (BREAKING w CHANGELOG) — errata ADR-031: dla CLI bez okresu przejsciowego.
-- [ ] **Godlo po angielsku w API biblioteki (ADR-031):** parametry, atrybuty
+- [x] **Godlo po angielsku w API biblioteki (ADR-031):** ZROBIONE 2026-10-12 (z `uklad`, `zgloszenie`, `WMS_SKOROWIDZE_*`). parametry, atrybuty
   i nazwy w publicznym API (`kartograf/__init__.py` `__all__`) `godlo` ->
   `sheet`, bez aliasow (BREAKING; Hydrograf i Hydrolog dostosuja importy).
   Errata ADR-031: zamiast okresu aliasow zmiana w 0.8.0. Przy okazji
   inwentaryzacja pozostalych polskich identyfikatorow publicznego API —
   decyzja uzytkownika, czy tez wchodza do 0.8.0.
-- [ ] **`--campaigns {newest,all}` -> przelacznik bez wartosci** (decyzja
+- [x] **`--campaigns {newest,all}` -> przelacznik bez wartosci** ZROBIONE 2026-10-12 (`--all-campaigns`; decyzja
   uzytkownika 2026-10-10, spec wyboru roku U16): w modelu A `newest` jest
   zawsze domyslne, wiec jawne `--campaigns newest` niczego nie zmienia;
   zastapic przelacznikiem (np. `--all-campaigns`), bez aliasu (BREAKING
@@ -1988,7 +2023,7 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   Zmigrowac wywolania API przed usunieciem (BREAKING w CHANGELOG).
   Wykonac PRZED planem 1/3 magazynu wersjonowanego (D16 specu, decyzja
   uzytkownika 2026-10-11).
-- [ ] **Bez wartosci domyslnych wplywajacych na dane (CLI i API; rozszerza
+- [x] **Bez wartosci domyslnych wplywajacych na dane** — ZROBIONE 2026-10-12 (CLI i API; rozszerza
   Hydrograf A8; decyzje uzytkownika 2026-10-12)** — BREAKING, kazda pozycja
   z "Co zrobic" w CHANGELOG; wywolania Hydrografa do dostosowania.
   Regula: wymagane jest wszystko, co wybiera produkt, wariant, edycje,
