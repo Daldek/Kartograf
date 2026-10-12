@@ -18,19 +18,21 @@ Reference:
 import logging
 import tempfile
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
+from kartograf.notices import Notice, NoticeSink
+
 if TYPE_CHECKING:
+    from kartograf.cache.metadata import MetadataCache
     from kartograf.core.bbox import BBox
     from kartograf.download.fetch import FileSlot, UpdateMode, VersionedFile
     from kartograf.download.plan import ItemStatus, PlanItem, Track, UpdatePlan
     from kartograf.download.versions import LocalVersion
     from kartograf.landcover.manager import LandCoverManager, LandCoverResult
-
 logger = logging.getLogger(__name__)
 
 
@@ -371,6 +373,10 @@ def _write_hsg_geotiff(output_path: Path, hsg: np.ndarray, profile: dict) -> Non
 _INPUTS = ("clay", "sand", "silt")
 _HSG_CLASSES = "1=A, 2=B, 3=C, 4=D"
 _HSG_TRACK: "Track" = "hsg"
+# HSG always classifies the mean texture estimate (R3): the store segments
+# ``soil/global_soilgrids_<prop>_<depth>_mean`` and
+# ``hsg/global_soilgrids_<depth>_mean`` and the sidecar ``stat`` stay as before.
+_HSG_STAT = "mean"
 
 
 @dataclass(frozen=True)
@@ -381,23 +387,30 @@ class HsgResult:
     computed, ``reused`` when a version of the same input set exists,
     ``local`` for a position left out of a plan; ``None`` only then, without
     a local version). ``inputs``: clay, sand, silt in the store. ``stale``:
-    planned positions whose source changed since the plan.
+    planned positions whose source changed since the plan. ``notices``: data
+    messages (e.g. the geometry layer choice). ``ok``: no stale position.
     """
 
     unit: str
     file: "VersionedFile | None"
     inputs: "tuple[LandCoverResult, ...]"
     stale: "tuple[PlanItem, ...]" = ()
+    notices: "tuple[Notice, ...]" = ()
+
+    @property
+    def ok(self) -> bool:
+        """True when no planned position went stale."""
+        return not self.stale
 
 
 class HSGCalculator:
     """
     Hydrologic Soil Groups from SoilGrids clay/sand/silt in the version store.
 
-    The inputs are SoilGrids versions of ``output_dir``
-    (``soil/global_soilgrids_{clay,sand,silt}_<depth>_<stat>/``, labelled by
+    The inputs are SoilGrids ``mean`` versions of ``output_dir``
+    (``soil/global_soilgrids_{clay,sand,silt}_<depth>_mean/``, labelled by
     the SoilGrids edition, D33); the HSG raster is a version of
-    ``hsg/global_soilgrids_<depth>_<stat>/`` with the same selection
+    ``hsg/global_soilgrids_<depth>_mean/`` with the same selection
     hierarchy (``bbox/<coords>`` or the sheet hierarchy). A version whose
     ``extra.source_files`` has the same three input sha256 is used again
     (``reused``, nothing computed). Rasters outside the store:
@@ -407,7 +420,7 @@ class HSGCalculator:
     --------
     >>> from kartograf.hydrology import HSGCalculator
     >>> calc = HSGCalculator("./data")
-    >>> result = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+    >>> result = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
     >>> result.file.path, result.file.status  # hsg/.../N-34-130-D.tif, "new"
     >>> calc.get_hsg_statistics(result.file.path)
     """
@@ -416,7 +429,12 @@ class HSGCalculator:
     # Data is stored as g/kg, divide by 10 for percentage
     CONVERSION_FACTOR = 10.0
 
-    def __init__(self, output_dir: str | Path, provider=None):
+    def __init__(
+        self,
+        output_dir: str | Path,
+        provider=None,
+        cache: "MetadataCache | bool" = True,
+    ):
         """
         Initialize HSG calculator.
 
@@ -425,10 +443,15 @@ class HSGCalculator:
         output_dir : str or Path
             Store root (``--output``); created only when a file is written.
         provider : SoilGridsProvider, optional
-            Provider to use for downloading. Creates new one if not provided.
+            Provider of the inputs (keeps its own cache). Default: a
+            SoilGrids provider using ``cache``.
+        cache : MetadataCache or bool
+            ``True`` = default metadata cache in the current directory, a
+            ``MetadataCache`` = that cache, ``False`` = none (default provider).
         """
         self._output_dir = Path(output_dir)
         self._provider = provider
+        self._cache = cache
 
     @property
     def provider(self):
@@ -439,57 +462,46 @@ class HSGCalculator:
             self._provider = SoilGridsProvider()
         return self._provider
 
-    def calculate_hsg_by_sheet(
+    def calculate_hsg(
         self,
-        sheet: str,
         *,
+        sheet: str | None = None,
+        bbox: "BBox | None" = None,
+        geometry: str | Path | None = None,
+        layer: str | None = None,
         depth: str,
-        stat: str,
         update: "UpdateMode | None" = None,
         plan: "UpdatePlan | None" = None,
         timeout: int = 120,
-    ) -> HsgResult:
-        """HSG of a map sheet (canonical sheet code, sheet hierarchy); see
-        `calculate_hsg_by_bbox`."""
-        from kartograf.core.sheet_parser import SheetParser
-
-        return self._calculate(
-            {"sheet": SheetParser(sheet).sheet}, depth, stat, update, plan, timeout
-        )
-
-    def calculate_hsg_by_bbox(
-        self,
-        bbox: "BBox",
-        *,
-        depth: str,
-        stat: str,
-        update: "UpdateMode | None" = None,
-        plan: "UpdatePlan | None" = None,
-        timeout: int = 120,
+        on_notice: "Callable[[Notice], None] | None" = None,
     ) -> HsgResult:
         """
-        HSG of a bounding box (EPSG:2180, ``bbox/<coords>``).
+        HSG of one selection: exactly one of ``sheet``, ``bbox``, ``geometry``.
 
         Parameters
         ----------
-        bbox : BBox
-            Bounding box in EPSG:2180
+        sheet : str, optional
+            Map sheet (canonical code, sheet hierarchy).
+        bbox : BBox, optional
+            Area in any supported CRS (``bbox/<coords>`` of its EPSG:2180
+            envelope; Czech CRSs via the pinned operation).
+        geometry : str or Path, optional
+            SHP/GPKG file; its EPSG:2180 envelope is the area (``layer`` of a
+            GPKG; default first layer with a ``GEOMETRY_LAYER_DEFAULT`` notice).
         depth : str
             Soil interval below surface: 0-5cm, 5-15cm, 15-30cm,
-            30-60cm, 60-100cm, or 100-200cm.
-        stat : str
-            SoilGrids statistic: mean (average), Q0.05 (5th percentile),
-            Q0.5 (median), Q0.95 (95th percentile), or uncertainty
-            (prediction uncertainty).
+            30-60cm, 60-100cm, or 100-200cm. The statistic is always ``mean``.
         update : None, "upgrade" or "force", optional
             Mode of the INPUTS (spec 4.2): ``None`` uses local versions,
             ``"upgrade"`` downloads a newer SoilGrids edition, ``"force"``
             downloads again. HSG is computed only for a new input set.
         plan : UpdatePlan, optional
-            With ``update="upgrade"``: execute only the planned positions
-            (`check_hsg_by_bbox`).
+            From ``check_hsg``; with ``update="upgrade"`` only the planned
+            positions execute.
         timeout : int, optional
             Request timeout in seconds (default: 120)
+        on_notice : callable, optional
+            Receives each data notice when emitted.
 
         Returns
         -------
@@ -500,26 +512,63 @@ class HSGCalculator:
         DownloadError
             An input failed (no HSG is written) or a store failure.
         ValidationError
-            Bad mode, plan of another store or a bbox outside EPSG:2180.
+            Not exactly one selection, bad mode or a plan of another store.
         """
-        return self._calculate(_bbox_request(bbox), depth, stat, update, plan, timeout)
+        sink = NoticeSink(on_notice)
+        selection = self._selection(sheet, bbox, geometry, layer, sink)
+        result = self._calculate(
+            selection, depth, _HSG_STAT, update, plan, timeout, sink
+        )
+        return replace(result, notices=sink.notices)
 
-    def check_hsg_by_bbox(self, bbox: "BBox", *, depth: str, stat: str) -> "UpdatePlan":
-        """Plan WITHOUT downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
-        return self._check(_bbox_request(bbox), depth, stat)
+    def check_hsg(
+        self,
+        *,
+        sheet: str | None = None,
+        bbox: "BBox | None" = None,
+        geometry: str | Path | None = None,
+        layer: str | None = None,
+        depth: str,
+        on_notice: "Callable[[Notice], None] | None" = None,
+    ) -> "UpdatePlan":
+        """Plan of ``calculate_hsg`` with the same selection, WITHOUT
+        downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
+        sink = NoticeSink(on_notice)
+        selection = self._selection(sheet, bbox, geometry, layer, sink)
+        return self._check(selection, depth, _HSG_STAT, sink)
 
-    def check_hsg_by_sheet(self, sheet: str, *, depth: str, stat: str) -> "UpdatePlan":
-        """Plan of `calculate_hsg_by_sheet` WITHOUT downloading or computing."""
+    @staticmethod
+    def _selection(
+        sheet: str | None,
+        bbox: "BBox | None",
+        geometry: str | Path | None,
+        layer: str | None,
+        sink: "NoticeSink",
+    ) -> dict:
+        """HSG selection: the canonical sheet or an EPSG:2180 bbox."""
         from kartograf.core.sheet_parser import SheetParser
+        from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
+        from kartograf.exceptions import ValidationError
 
-        return self._check({"sheet": SheetParser(sheet).sheet}, depth, stat)
+        if sum(v is not None for v in (sheet, bbox, geometry)) != 1:
+            raise ValidationError(
+                "Podaj dokladnie jeden wybor: sheet, bbox albo geometry"
+            )
+        if sheet is not None:
+            return {"sheet": SheetParser(sheet).sheet}
+        if geometry is not None:
+            return _bbox_request(geometry_envelope_2180(geometry, layer, sink))
+        assert bbox is not None
+        return _bbox_request(bbox_to_2180(bbox))
 
     # -------------------------------------------------------------------------
 
     def _manager(self) -> "LandCoverManager":
         from kartograf.landcover.manager import LandCoverManager
 
-        return LandCoverManager(self._output_dir, self.provider)
+        if self._provider is None:  # by name: the manager attaches the cache
+            return LandCoverManager(self._output_dir, "soilgrids", cache=self._cache)
+        return LandCoverManager(self._output_dir, self._provider)
 
     def _slot(self, selection: dict, depth: str, stat: str) -> "FileSlot":
         from kartograf.landcover.store import hsg_segment, selection_slot
@@ -532,22 +581,26 @@ class HSGCalculator:
             sheet=selection.get("sheet"),
         )
 
-    def _check(self, selection: dict, depth: str, stat: str) -> "UpdatePlan":
+    def _check(
+        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
+    ) -> "UpdatePlan":
         from kartograf.download.plan import new_plan
 
-        inputs = self._input_items(selection, depth, stat)
+        inputs = self._input_items(selection, depth, stat, sink)
         return new_plan(
             self._output_dir, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
         )
 
-    def _input_items(self, selection: dict, depth: str, stat: str) -> list:
+    def _input_items(
+        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
+    ) -> list:
         manager = self._manager()
         where = _where(selection)
         return [
             item
             for prop in _INPUTS
             for item in manager.check(
-                **where, property=prop, depth=depth, stat=stat
+                **where, property=prop, depth=depth, stat=stat, on_notice=sink.add
             ).items
         ]
 
@@ -599,6 +652,7 @@ class HSGCalculator:
         update: "UpdateMode | None",
         plan: "UpdatePlan | None",
         timeout: int,
+        sink: "NoticeSink",
     ) -> HsgResult:
         from kartograf.download.fetch import validate_update
         from kartograf.download.plan import require_store, select_planned, store_id
@@ -618,7 +672,7 @@ class HSGCalculator:
             require_store(plan, store_id(self._output_dir))
             # The HSG position is checked BEFORE the inputs change.
             fresh = self._hsg_item(
-                selection, depth, stat, self._input_items(selection, depth, stat)
+                selection, depth, stat, self._input_items(selection, depth, stat, sink)
             )
             todo, skipped = select_planned(plan, [fresh], _HSG_TRACK)
             planned_hsg, stale = bool(todo), list(skipped)
@@ -636,6 +690,7 @@ class HSGCalculator:
                 depth=depth,
                 stat=stat,
                 timeout=timeout,
+                on_notice=sink.add,
             )
             for prop in _INPUTS
         ]
@@ -813,7 +868,7 @@ def hsg_from_rasters(
 
     Each input is reprojected with a pinned operation (``CONTENT_POLICY``,
     bilinear) onto the grid anchored at ``bbox`` (converted to ``crs``) with
-    ``pixel_m`` pixels, then classified like ``calculate_hsg_by_bbox``:
+    ``pixel_m`` pixels, then classified like ``calculate_hsg``:
     input nodata from its tag only (no tag = no nodata value), cells outside
     an input and all-zero triplets are gaps (0). No configuration defaults.
 
@@ -842,7 +897,7 @@ def hsg_from_rasters(
         for name, src_path in layers.items():
             with rasterio.open(src_path) as src:
                 src_crs = src.crs.to_string()
-                nodatas[name] = src.nodata  # tag only, like calculate_hsg_by_bbox
+                nodatas[name] = src.nodata  # tag only, like calculate_hsg
             pinned = build_pinned_transform(src_crs, crs, CONTENT_POLICY)
             warped = Path(tmp) / f"{name}.tif"
             # Untagged input: NaN as the warp fill - cells outside the input
