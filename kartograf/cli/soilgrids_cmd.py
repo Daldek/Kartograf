@@ -40,9 +40,9 @@ def cmd_soilgrids(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     if args.soilgrids_command is None:
-        print("Usage: kartograf soilgrids <command>")
-        print("Commands: hsg")
-        print("Run 'kartograf soilgrids <command> --help' for details")
+        print("Uzycie: kartograf soilgrids <komenda>")
+        print("Komendy: hsg")
+        print("Szczegoly: kartograf soilgrids <komenda> --help")
         return 0
 
     if args.soilgrids_command == "hsg":
@@ -68,8 +68,8 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     missing = []
     if args.output is None:
         missing.append(
-            "--output wymagane: katalog magazynu (wejscia w <DIR>/soil/..., "
-            "HSG w <DIR>/hsg/...)"
+            "--output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
+            "HSG w <KATALOG>/hsg/...)"
         )
     if args.depth is None:
         missing.append(
@@ -102,17 +102,17 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     calc = HSGCalculator(Path(args.output))
 
     if not args.quiet:
-        print("Calculating Hydrologic Soil Groups (HSG)...")
+        print("Obliczanie grup hydrologicznych gleb (HSG)...")
         if args.sheet:
             print(f"  Godlo: {args.sheet}")
         if geometry is not None:
-            print(f"  Geometry: {geometry.name}")
+            print(f"  Geometria: {geometry.name}")
         if bbox:
             print(
                 f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
                 f" {bbox.crs}"
             )
-        print(f"  Depth: {args.depth}")
+        print(f"  Glebokosc: {args.depth}")
         print()
 
     try:
@@ -158,17 +158,17 @@ def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) 
 
     if args.stats and result.file is not None:
         print()
-        print("HSG Statistics:")
+        print("Statystyki HSG:")
         stats = calc.get_hsg_statistics(result.file.path)
         for group, data in stats.items():
             pct = data["percent"]
             area = data["area_ha"]
-            print(f"  Group {group}: {pct:.1f}% ({area:.2f} ha)")
+            print(f"  Grupa {group}: {pct:.1f}% ({area:.2f} ha)")
             print(f"           {data['description']}")
 
     if not args.quiet:
         print()
-        print("Legend: 1=A (high infiltration), 2=B (moderate),")
-        print("        3=C (slow), 4=D (very slow)")
-        print("Use with SCS-CN method: HSG + Land Use -> Curve Number")
+        print("Legenda: 1=A (duza infiltracja), 2=B (umiarkowana),")
+        print("         3=C (mala), 4=D (bardzo mala)")
+        print("Metoda SCS-CN: HSG + uzytkowanie terenu -> Curve Number")
     return rc

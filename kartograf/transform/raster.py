@@ -113,7 +113,7 @@ def _vrt_over(path: Path, *, crs_wkt: str, dtype: str) -> Iterator[str]:
     with rasterio.open(path) as src:
         if src.count != 1:
             raise ValidationError(
-                f"warp_to_grid: zrodlo {path.name} ma {src.count} pasm — "
+                f"warp_to_grid: zrodlo {path.name} ma {src.count} pasm - "
                 "reprojekcja obsluguje tylko rastry jednopasmowe"
             )
         meta = {"transform": src.transform, "width": src.width, "height": src.height}

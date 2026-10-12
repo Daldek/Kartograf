@@ -580,6 +580,16 @@ Regula obowiazujaca (decyzja wlasciciela projektu, 2026-10-08):
   — po angielsku; klucze sidecara od 0.7.0, polskie nazwy publicznego API
   i CLI (`godlo`, `uklad`, ...) zastapione angielskimi w 0.8.0 bez aliasow
   (ADR-031 i jego errata w `docs/DECISIONS.md`)
+- **Teksty dla uzytkownika** (Z5, ADR-037): pomoc CLI (`help`,
+  `description`, `metavar`), komunikaty CLI (`Error:`/`Warning:`/`Info:`,
+  linie statusu, pasek postepu), teksty `Notice` i wyjatkow `KartografError`
+  (`ValidationError`, `DownloadError`, ...) - po polsku, wylacznie ASCII
+  (bez polskich znakow, `—` -> `-`, `°` -> ` st.`, ikony postepu ASCII).
+  Prefiksy `Error:`/`Warning:`/`Info:` i wbudowane teksty `argparse`
+  (`usage:`, `options:`) zostaja. Wyjatki bledow programisty (`TypeError`,
+  `ValueError`, `RuntimeError`, `NotImplementedError`) i logi `logging`
+  moga byc po angielsku. Pilnuja `tests/test_cli_language.py` i ASCII
+  w `Notice`.
 
 Stan zastany: czesc kodu sprzed tej decyzji ma docstringi i komentarze po
 polsku bez polskich znakow (m.in. `download/cutout.py`, `transport/mosaic.py`,

@@ -682,7 +682,7 @@ class DownloadManager:
             raise DownloadError(
                 f"nie udalo sie sprawdzic roku danych dla {len(check.failed)} z "
                 f"{len(sheets)} arkuszy (blad skorowidza, nie brak danych): "
-                f"{names} — ponow pobranie"
+                f"{names} - ponow pobranie"
             )
         if check.conflicts:
             raise year_range_error(
@@ -726,7 +726,7 @@ class DownloadManager:
         std = self._storage.get_path(sheet, self._default_ext)
         self._link(std, version.path, version_key(version), refresh=False)
         logger.warning(
-            f"{sheet}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
+            f"{sheet}: skorowidz GUGiK niedostepny ({error}) - uzyto lokalnej "
             f"wersji {version.label} z zakresu lat bez sprawdzenia nowszej"
         )
         full = self._storage.get_full_sheet_path(sheet, self._default_ext)
@@ -1559,7 +1559,7 @@ class DownloadManager:
         except (OSError, DownloadError):
             return None
         logger.warning(
-            f"{sheet}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
+            f"{sheet}: skorowidz GUGiK niedostepny ({error}) - uzyto lokalnej "
             f"wersji {target} bez sprawdzenia nowszej"
         )
         version = read_version(target.parent, target.name)

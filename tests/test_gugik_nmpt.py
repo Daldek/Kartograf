@@ -56,7 +56,7 @@ class TestGugikNmptProviderInit:
 
     def test_invalid_vertical_crs(self):
         """Test that an invalid vertical CRS raises ValidationError."""
-        with pytest.raises(ValidationError, match="Unsupported vertical CRS"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany uklad wysokosci"):
             GugikNmptProvider(vertical_crs="INVALID")
 
 

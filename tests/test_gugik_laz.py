@@ -183,7 +183,7 @@ def _provider_with_getfeature(text):
 class TestInitAndProperties:
     def test_defaults(self):
         p = GugikLazProvider(vertical_crs="EVRF2007")
-        assert p.name == "GUGiK LAZ (chmura punktów)"
+        assert p.name == "GUGiK LAZ (chmura punktow)"
         assert p.base_url == "https://mapy.geoportal.gov.pl"
         assert p.default_extension == ".laz"
         assert p.vertical_crs == "EVRF2007"
@@ -193,7 +193,7 @@ class TestInitAndProperties:
         assert p.vertical_crs == "KRON86"
 
     def test_invalid_vertical_crs(self):
-        with pytest.raises(ValidationError, match="Unsupported vertical_crs"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany uklad wysokosci"):
             GugikLazProvider(vertical_crs="NONSENSE")
 
     def test_endpoints_present(self):

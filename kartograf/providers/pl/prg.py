@@ -287,7 +287,7 @@ def _check_complete(root: ET.Element, found: int) -> None:
     if cut or root.get("next"):
         raise DownloadError(
             f"PRG WFS: niepelna lista powiatow ({returned} z "
-            f"{matched or 'nieznanej liczby'}) — zmniejsz obszar"
+            f"{matched or 'nieznanej liczby'}) - zmniejsz obszar"
         )
 
 

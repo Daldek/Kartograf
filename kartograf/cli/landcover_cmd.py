@@ -38,9 +38,9 @@ def cmd_landcover(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     if args.landcover_command is None:
-        print("Usage: kartograf landcover <command>")
-        print("Commands: download, list-sources, list-layers")
-        print("Run 'kartograf landcover <command> --help' for details")
+        print("Uzycie: kartograf landcover <komenda>")
+        print("Komendy: download, list-sources, list-layers")
+        print("Szczegoly: kartograf landcover <komenda> --help")
         return 0
 
     if args.landcover_command == "list-sources":
@@ -57,24 +57,26 @@ def cmd_landcover(args: argparse.Namespace) -> int:
 
 def cmd_landcover_list_sources(args: argparse.Namespace) -> int:
     """List available land cover data sources."""
-    print("Available land cover data sources:")
+    print("Dostepne zrodla pokrycia terenu i gleb:")
     print()
     print("  bdot10k   - BDOT10k (GUGiK)")
-    print("              Polish topographic database, land cover and hydrography")
-    print("              layers (PT*, SW*)")
-    print("              High resolution (1:10000), vector data")
-    print("              Formats: GPKG, SHP")
+    print("              Baza danych obiektow topograficznych: warstwy pokrycia")
+    print("              terenu i sieci wodnej (PT*, SW*)")
+    print("              Dane wektorowe, szczegolowosc 1:10000")
+    print("              Formaty: GPKG, SHP")
     print()
-    print("  corine    - CORINE Land Cover (Copernicus/GIOŚ)")
-    print("              European land cover classification (44 classes)")
-    print("              Resolution: 100m, raster data")
-    print("              Years: 1990, 2000, 2006, 2012, 2018")
+    print("  corine    - CORINE Land Cover (Copernicus/GIOS)")
+    print("              Europejska klasyfikacja pokrycia terenu (44 klasy)")
+    print("              Rozdzielczosc: 100 m, dane rastrowe")
+    print("              Lata: 1990, 2000, 2006, 2012, 2018")
     print()
     print("  soilgrids - ISRIC SoilGrids")
-    print("              Global soil property predictions")
-    print("              Resolution: 250m, raster data (GeoTIFF)")
-    print("              Properties: clay, sand, silt, soc, phh2o, nitrogen, etc.")
-    print("              Depths: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm")
+    print("              Globalne predykcje wlasciwosci gleb")
+    print("              Rozdzielczosc: 250 m, dane rastrowe (GeoTIFF)")
+    print("              Wlasciwosci: clay, sand, silt, soc, phh2o, nitrogen i inne")
+    print(
+        "              Glebokosci: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm"
+    )
     print()
     return 0
 
@@ -93,7 +95,7 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     provider: Any = LandCoverManager(".", args.source, cache=False).provider
     bdot = corine = soilgrids = provider
     provider_name = provider.name
-    print(f"Available layers for {provider_name}:")
+    print(f"Warstwy zrodla {provider_name}:")
     print()
 
     if args.source == "bdot10k":
@@ -101,27 +103,27 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
             desc = bdot.get_layer_description(layer)
             print(f"    {layer}  - {desc}")
     elif args.source == "corine":
-        print("  CORINE provides unified land cover classification.")
-        print("  Available years:")
+        print("  CORINE: jedna klasyfikacja pokrycia terenu.")
+        print("  Dostepne lata:")
         for year in corine.get_available_years():
             print(f"    {year}")
         print()
-        print("  Use --year option to select reference year.")
+        print("  Rok referencyjny: --year.")
     elif args.source == "soilgrids":
-        print("  Available soil properties:")
+        print("  Wlasciwosci gleb:")
         for prop in soilgrids.get_available_properties():
             desc = soilgrids.get_property_description(prop)
             print(f"    {prop:10} - {desc}")
         print()
-        print("  Available depths:")
+        print("  Glebokosci:")
         for depth in soilgrids.get_available_depths():
             print(f"    {depth}")
         print()
-        print("  Available statistics:")
+        print("  Statystyki:")
         for stat in soilgrids.get_available_stats():
             print(f"    {stat}")
         print()
-        print("  Use --property, --depth, --stat options to configure download.")
+        print("  Wybor pobrania: --property, --depth, --stat.")
 
     return 0
 
@@ -136,8 +138,8 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         )
     if args.output is None:
         missing.append(
-            "--output wymagane: katalog magazynu (pliki w <DIR>/landcover/... "
-            "i <DIR>/soil/...)"
+            "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/... "
+            "i <KATALOG>/soil/...)"
         )
     if args.source == "corine" and args.year is None:
         missing.append(

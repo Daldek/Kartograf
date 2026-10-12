@@ -175,10 +175,10 @@ class TestParseBboxArg:
     @pytest.mark.parametrize(
         ("text", "reason"),
         [
-            ("1,2,3", "expected 4 comma-separated values, got 3"),
-            ("1,2,3,4,", "expected 4 comma-separated values, got 5"),
-            ("1;2;3;4", "got 1"),
-            ("a,2,3,4", "'a' is not a number"),
+            ("1,2,3", "oczekiwano 4 wartosci rozdzielonych przecinkami, podano 3"),
+            ("1,2,3,4,", "oczekiwano 4 wartosci rozdzielonych przecinkami, podano 5"),
+            ("1;2;3;4", "podano 1"),
+            ("a,2,3,4", "'a' nie jest liczba"),
             ("10,10,5,5", "min > max"),
             ("1,10,5,5", "min > max"),
             ("nan,1,2,3", "skonczone"),
@@ -191,9 +191,9 @@ class TestParseBboxArg:
         with pytest.raises(ValidationError) as exc:
             parse_bbox_arg(text, "EPSG:2180")
         msg = str(exc.value)
-        assert msg.startswith("Invalid bbox format: ")
+        assert msg.startswith("Nieprawidlowy bbox: ")
         assert reason in msg
-        assert "Expected: min_x,min_y,max_x,max_y" in msg
+        assert "Oczekiwano: min_x,min_y,max_x,max_y" in msg
 
 
 class TestCreateParserSheetStrip:
@@ -226,7 +226,7 @@ class TestFormatSheetInfo:
         assert "N-34" in output
         assert "1:1000000" in output
         assert "1992" in output
-        assert "Components:" in output
+        assert "Czlony:" in output
 
     def test_format_10k_sheet(self):
         """Test formatting 1:10000 sheet."""
@@ -257,7 +257,7 @@ class TestFormatHierarchy:
         parser = SheetParser("N-34-130-D-d-2-4")
         output = format_hierarchy(parser)
 
-        assert "Hierarchy" in output
+        assert "Hierarchia" in output
         assert "N-34-130-D-d-2-4" in output
         assert "N-34-130-D-d-2" in output
         assert "N-34-130-D-d" in output
@@ -281,26 +281,26 @@ class TestFormatChildren:
         parser = SheetParser("N-34-130-D")
         output = format_children(parser)
 
-        assert "Children" in output
-        assert "4 sheets" in output
+        assert "Arkusze potomne" in output
+        assert "(4)" in output
         assert "N-34-130-D-a" in output
         assert "N-34-130-D-b" in output
         assert "N-34-130-D-c" in output
         assert "N-34-130-D-d" in output
 
     def test_format_children_10k_no_children(self):
-        """Test formatting children of 1:10000 (no children)."""
+        """Test formatting children of 1:10000 (nie ma arkuszy potomnych)."""
         parser = SheetParser("N-34-130-D-d-2-4")
         output = format_children(parser)
 
-        assert "no children" in output
+        assert "nie ma arkuszy potomnych" in output
 
     def test_format_children_500k(self):
-        """Test formatting children of 1:500000 (36 sheets)."""
+        """Test formatting children of 1:500000 ((36))."""
         parser = SheetParser("N-34-A")
         output = format_children(parser)
 
-        assert "36 sheets" in output
+        assert "(36)" in output
 
 
 class TestFormatDescendants:
@@ -311,8 +311,8 @@ class TestFormatDescendants:
         parser = SheetParser("N-34-130-D-d-2")
         output = format_descendants(parser, "1:10000")
 
-        assert "Descendants" in output
-        assert "4 sheets" in output
+        assert "Arkusze potomne" in output
+        assert "(4)" in output
         assert "N-34-130-D-d-2-1" in output
         assert "N-34-130-D-d-2-4" in output
 
@@ -321,7 +321,7 @@ class TestFormatDescendants:
         parser = SheetParser("N-34-130-D")
         output = format_descendants(parser, "1:10000")
 
-        assert "64 sheets" in output
+        assert "(64)" in output
         assert "..." in output
 
 
@@ -351,7 +351,7 @@ class TestCmdParse:
 
         assert result == 0
         captured = capsys.readouterr()
-        assert "Hierarchy" in captured.out
+        assert "Hierarchia" in captured.out
         assert "N-34" in captured.out
 
     def test_parse_with_children(self, capsys):
@@ -360,7 +360,7 @@ class TestCmdParse:
 
         assert result == 0
         captured = capsys.readouterr()
-        assert "Children" in captured.out
+        assert "Arkusze potomne" in captured.out
         assert "N-34-130-D-a" in captured.out
 
     def test_parse_with_descendants(self, capsys):
@@ -369,8 +369,8 @@ class TestCmdParse:
 
         assert result == 0
         captured = capsys.readouterr()
-        assert "Descendants" in captured.out
-        assert "4 sheets" in captured.out
+        assert "Arkusze potomne" in captured.out
+        assert "(4)" in captured.out
 
     def test_parse_with_invalid_descendants_scale(self, capsys):
         """Test parsing with invalid descendants scale."""
@@ -493,9 +493,9 @@ class TestCLIIntegration:
         # Should show basic info
         assert "1:10000" in captured.out
         # Should show hierarchy
-        assert "Hierarchy" in captured.out
+        assert "Hierarchia" in captured.out
         # Should show no children message
-        assert "no children" in captured.out
+        assert "nie ma arkuszy potomnych" in captured.out
 
     def test_all_scales(self, capsys):
         """Test parsing all scale levels."""
@@ -645,7 +645,7 @@ class TestProgressCallback:
         callback(progress)
         captured = capsys.readouterr()
         assert "N-34-130-D" in captured.out
-        assert "✓" in captured.out
+        assert "4/4 + N-34-130-D" in captured.out
 
     def test_callback_handles_skipped_status(self, capsys):
         """Test callback for skipped status."""
@@ -655,7 +655,7 @@ class TestProgressCallback:
         )
         callback(progress)
         captured = capsys.readouterr()
-        assert "○" in captured.out
+        assert "2/4 o N-34-130-D" in captured.out
 
     def test_callback_handles_failed_status(self, capsys):
         """Test callback for failed status."""
@@ -665,7 +665,7 @@ class TestProgressCallback:
         )
         callback(progress)
         captured = capsys.readouterr()
-        assert "✗" in captured.out
+        assert "3/4 x N-34-130-D" in captured.out
 
 
 class TestCmdDownload:
@@ -904,7 +904,7 @@ class TestCmdDownload:
 
         assert result == 0
         captured = capsys.readouterr()
-        assert "Downloading" in captured.out
+        assert "Pobieranie" in captured.out
 
     # --- hierarchy exit code (A2-3) ---
 
@@ -1444,7 +1444,7 @@ class TestCmdDownloadProduct:
 
         assert result == 0
         out = capsys.readouterr().out
-        assert "Downloading N-34-130-D-d-2-4 (product: orto)" in out
+        assert "Pobieranie N-34-130-D-d-2-4 (product: orto)" in out
         assert "resolution" not in out
 
     # --- N6/E14: PL-path MetadataCache — --force = cache in refresh mode ---
@@ -2115,8 +2115,10 @@ class TestCmdDownloadBBox:
         )
         assert result == 0
         out = capsys.readouterr().out
-        assert "Found 12 sheets at 1:10000 for bbox (resolution: 1m)\n" in out
-        assert "  Sheets: N-1, N-2, N-3, ..., N-11, N-12\n" in out
+        assert (
+            "Znaleziono arkuszy w skali 1:10000: 12 dla bbox (resolution: 1m)\n" in out
+        )
+        assert "  Arkusze: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
     @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_epsg4326(self, mock_manager_class, capsys, tmp_path):
@@ -2179,7 +2181,7 @@ class TestCmdDownloadBBox:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Specify only one of" in captured.err
+        assert "Podaj dokladnie jeden wybor obszaru" in captured.err
 
     def test_download_no_input_error(self, capsys):
         """Test no sheet code and no --bbox → exit 1."""
@@ -2202,7 +2204,7 @@ class TestCmdDownloadBBox:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Must specify" in captured.err
+        assert "Podaj wybor obszaru" in captured.err
 
     def test_download_bbox_invalid_format(self, capsys):
         """Test of a bad bbox format → exit 1."""
@@ -2229,7 +2231,7 @@ class TestCmdDownloadBBox:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Invalid bbox format" in captured.err
+        assert "Nieprawidlowy bbox" in captured.err
 
     @pytest.mark.parametrize(
         "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
@@ -2273,9 +2275,9 @@ class TestCmdDownloadBBox:
             )
         assert result == 1
         captured = capsys.readouterr()
-        assert "Error: Invalid bbox format" in captured.err
+        assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
-        assert "Expected" not in captured.out
+        assert "Oczekiwano" not in captured.out
         manager.assert_not_called()
         cz_factory.assert_not_called()
         laz.assert_not_called()
@@ -2305,7 +2307,7 @@ class TestCmdDownloadBBox:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Invalid bbox format" in captured.err
+        assert "Nieprawidlowy bbox" in captured.err
 
     @patch("kartograf.download.data.DownloadManager")
     def test_download_bbox_with_scale(self, mock_manager_class, capsys, tmp_path):
@@ -2374,8 +2376,8 @@ class TestCmdDownloadBBox:
 
         assert result == 0
         captured = capsys.readouterr()
-        assert "Found" in captured.out
-        assert "sheets" in captured.out
+        assert "Znaleziono" in captured.out
+        assert "Arkusze:" in captured.out
 
     def test_download_parser_has_bbox_options(self):
         """Test that download parser has --bbox and --bbox-crs options."""
@@ -2740,7 +2742,7 @@ class TestProgressNoCoverage:
         )
         on_progress(DownloadProgress(current=2, total=2, sheet="N-2", status="failed"))
         out = capsys.readouterr().out
-        assert "∅ N-1" in out and "✗ N-2" in out
+        assert "1/2 0 N-1" in out and "2/2 x N-2" in out
 
 
 # ===========================================================================
@@ -3149,8 +3151,8 @@ class TestCmdSoilgrids:
         )
         assert result == 0
         captured = capsys.readouterr()
-        assert "HSG Statistics" in captured.out
-        assert "Group A" in captured.out
+        assert "Statystyki HSG" in captured.out
+        assert "Grupa A" in captured.out
         assert "50.0%" in captured.out
 
     @patch("kartograf.hydrology.HSGCalculator")
@@ -3245,9 +3247,9 @@ class TestCmdSoilgrids:
         assert result == 1
         calc_cls.return_value.calculate_hsg.assert_not_called()
         captured = capsys.readouterr()
-        assert "Error: Invalid bbox format" in captured.err
+        assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
-        assert "Expected" not in captured.out
+        assert "Oczekiwano" not in captured.out
 
     @pytest.mark.parametrize(
         ("flags", "missing"),
@@ -3563,7 +3565,7 @@ class TestCmdDownloadGeometry:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Specify only one of" in captured.err
+        assert "Podaj dokladnie jeden wybor obszaru" in captured.err
 
     def test_download_geometry_and_bbox_error(self, capsys, tmp_path):
         """--geometry + --bbox -> mutual exclusivity error."""
@@ -3595,7 +3597,7 @@ class TestCmdDownloadGeometry:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "Specify only one of" in captured.err
+        assert "Podaj dokladnie jeden wybor obszaru" in captured.err
 
     def test_download_geometry_file_not_found(self, capsys, tmp_path):
         """--geometry with nonexistent file -> error."""
@@ -3622,7 +3624,7 @@ class TestCmdDownloadGeometry:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "File not found" in captured.err
+        assert "Brak pliku" in captured.err
 
     def test_download_no_input_error_updated(self, capsys):
         """No input at all shows updated error message."""
@@ -3783,7 +3785,7 @@ class TestCmdLandcoverDownloadGeometry:
 
         assert result == 1
         captured = capsys.readouterr()
-        assert "File not found" in captured.err
+        assert "Brak pliku" in captured.err
 
 
 # ===========================================================================
@@ -3864,7 +3866,7 @@ class TestFormatSheetInfoPL2000:
         assert "6.179.12" in output
         assert "1:10000" in output
         assert "2000" in output
-        assert "Components:" in output
+        assert "Czlony:" in output
         assert "strefa: 6" in output
         assert "pas: 179" in output
         assert "slup: 12" in output
@@ -4515,7 +4517,7 @@ class TestCmdDownloadLaz:
             )
         assert result == 1
         err = capsys.readouterr().err
-        assert "No LAZ tiles" in err
+        assert "Brak kafli LAZ" in err
         # N7: discovery is all-or-nothing, so an empty list = extent/filters
         assert "--year" in err and "wszystkie roczniki WFS odpowiedzialy" in err
         assert get.call_count == 3  # Capabilities and both available years completed.
@@ -4559,7 +4561,7 @@ class TestCmdDownloadLaz:
         err = capsys.readouterr().err
         assert "Error: WFS" in err
         assert "connection reset by peer" in err
-        assert "No LAZ tiles" not in err
+        assert "Brak kafli LAZ" not in err
         assert get.call_count == 3
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
@@ -4803,7 +4805,7 @@ class TestCmdDownloadLaz:
             ]
         )
         assert result == 1
-        assert "not found" in capsys.readouterr().err.lower()
+        assert "brak pliku" in capsys.readouterr().err.lower()
 
 
 def _cz_args(tmp_path, **overrides):
@@ -4982,7 +4984,7 @@ class TestCzDownloadingAfterValidation:
 
         captured = capsys.readouterr()
         assert rc == 1
-        assert "Downloading" not in captured.out
+        assert "Pobieranie" not in captured.out
         assert "Error: Arkusz SM5 'ABCD12' nie istnieje" in captured.err
         assert not list(out.rglob("*.tif"))
 
@@ -5014,7 +5016,7 @@ class TestCzDownloadingAfterValidation:
 
         captured = capsys.readouterr()
         assert rc == 1
-        assert "Downloading" not in captured.out
+        assert "Pobieranie" not in captured.out
         assert "Error:" in captured.err and "parzyste" in captured.err
 
 
@@ -5203,7 +5205,7 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["resolution"] == "5m"
         provider.download.assert_called_once()
         captured = capsys.readouterr()
-        assert "Downloading CTES96 (CZ, resolution: 5m)..." in captured.out
+        assert "Pobieranie CTES96 (CZ, resolution: 5m)..." in captured.out
         assert captured.err == ""
 
     def test_sm5_sheet_with_explicit_2m_is_error_without_network(
@@ -5238,7 +5240,7 @@ class TestCmdDownloadCz:
         assert rc == 1
         factory.assert_not_called()
         captured = capsys.readouterr()
-        assert "Downloading" not in captured.out
+        assert "Pobieranie" not in captured.out
         assert "Error: Arkusze SM5" in captured.err
         assert "5m" in captured.err
 
@@ -5645,7 +5647,7 @@ class TestCmdDownloadCz:
             assert _cmd_download_cz(_cz_args(tmp_path, quiet=False)) == 0
             second = capsys.readouterr().out
 
-        assert "Downloading 302_5550 (CZ, resolution: 2m)" in first
+        assert "Pobieranie 302_5550 (CZ, resolution: 2m)" in first
         assert "302_5550: nowa wersja " in first
         assert "302_5550: lokalna wersja " in second
         assert "(bez sprawdzania; --check-updates)" in second  # TM33: signal none
@@ -5662,7 +5664,7 @@ class TestCmdDownloadCz:
             assert _cmd_download_cz(args, bbox=bbox) == 0
             second = capsys.readouterr().out
 
-        assert "Downloading CZ bbox (2m, EPSG:5514)" in first
+        assert "Pobieranie CZ bbox (2m, EPSG:5514)" in first
         unit = "nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif"
         assert f"{unit}: nowa wersja " in first
         assert f"{unit}: lokalna wersja " in second
@@ -6644,7 +6646,7 @@ class TestCountryDispatch:
             ]
         )
         assert result == 1
-        assert "not found" in capsys.readouterr().err.lower()
+        assert "brak pliku" in capsys.readouterr().err.lower()
 
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data.DownloadManager")
@@ -7703,7 +7705,7 @@ class TestAutoSplitBBox:
         assert result == 1
         err = capsys.readouterr().err
         assert "--country pl" not in err
-        assert "No LAZ tiles" in err
+        assert "Brak kafli LAZ" in err
 
     @patch("kartograf.providers.cuzk.dmr.bbox_to_crs")
     def test_cz_bbox_transform_error_returns_1_with_remedy(
@@ -10531,7 +10533,7 @@ class TestListMessagesUx:
     def test_single_sheet_skip_has_no_downloading_line(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """O-3: a local version is not preceded by 'Downloading ...'."""
+        """O-3: a local version is not preceded by 'Pobieranie ...'."""
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)  # the mock does not call on_download (skip)
         manager.download_sheet.return_value = DownloadResult(
@@ -10567,13 +10569,13 @@ class TestListMessagesUx:
         assert rc == 0
         out = capsys.readouterr().out
         assert "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233" in out
-        assert "Downloading" not in out
+        assert "Pobieranie" not in out
 
     @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_error_has_no_downloading_line(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """O-3: Error (no record) is not preceded by 'Downloading ...'."""
+        """O-3: Error (no record) is not preceded by 'Pobieranie ...'."""
         manager = _mock_manager(tmp_path / "a.asc")
         manager.download_sheet.side_effect = DownloadError("brak")
         mock_manager_class.return_value = manager
@@ -10601,7 +10603,7 @@ class TestListMessagesUx:
         assert rc == 1
         captured = capsys.readouterr()
         assert "Error: brak" in captured.err
-        assert "Downloading" not in captured.out
+        assert "Pobieranie" not in captured.out
 
     @staticmethod
     def _list_manager(result):

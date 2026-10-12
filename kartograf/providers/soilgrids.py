@@ -61,12 +61,12 @@ _EDITION_RE = re.compile(r"^SoilGrids250m (\S+) - ")
 
 # Soil property descriptions
 PROPERTY_DESCRIPTIONS = {
-    "bdod": "Bulk density (kg/dm³)",
+    "bdod": "Bulk density (kg/dm3)",
     "cec": "Cation exchange capacity (cmol/kg)",
     "cfvo": "Coarse fragments (%)",
     "clay": "Clay content (%)",
     "nitrogen": "Total nitrogen (g/kg)",
-    "ocd": "Organic carbon density (kg/m³)",
+    "ocd": "Organic carbon density (kg/m3)",
     "ocs": "Organic carbon stock (t/ha)",
     "phh2o": "pH in H2O",
     "sand": "Sand content (%)",
@@ -189,7 +189,8 @@ class SoilGridsProvider(LandCoverProvider):
         """
         if property not in self.PROPERTIES:
             raise ValidationError(
-                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
+                f"Nieprawidlowa wlasciwosc: {property}. "
+                f"Dostepne: {', '.join(self.PROPERTIES)}"
             )
         url = self.capabilities_url(property)
         response = get_with_retry(
@@ -272,26 +273,27 @@ class SoilGridsProvider(LandCoverProvider):
         # Validate CRS
         if bbox.crs != "EPSG:2180":
             raise ValidationError(
-                f"BBox must be in EPSG:2180, got {bbox.crs}. "
-                f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
+                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
+                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
             )
 
         # Validate property
         if property not in self.PROPERTIES:
             raise ValidationError(
-                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
+                f"Nieprawidlowa wlasciwosc: {property}. "
+                f"Dostepne: {', '.join(self.PROPERTIES)}"
             )
 
         # Validate depth
         if depth not in self.DEPTHS:
             raise ValidationError(
-                f"Invalid depth: {depth}. Available: {', '.join(self.DEPTHS)}"
+                f"Nieprawidlowa glebokosc: {depth}. Dostepne: {', '.join(self.DEPTHS)}"
             )
 
         # Validate stat
         if stat not in self.STATS:
             raise ValidationError(
-                f"Invalid stat: {stat}. Available: {', '.join(self.STATS)}"
+                f"Nieprawidlowa statystyka: {stat}. Dostepne: {', '.join(self.STATS)}"
             )
 
         output_path = Path(output_path)

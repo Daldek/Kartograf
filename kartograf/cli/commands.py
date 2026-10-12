@@ -71,7 +71,7 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         return cmd_cache(parsed_args)
 
     # Unknown command (shouldn't happen with argparse)
-    print(f"Unknown command: {parsed_args.command}", file=sys.stderr)
+    print(f"Error: nieznana komenda: {parsed_args.command}", file=sys.stderr)
     return 1
 
 

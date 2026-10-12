@@ -152,12 +152,12 @@ class TestSheetParserUklad:
 
     def test_invalid_system(self):
         """Test of validation of an invalid system."""
-        with pytest.raises(ValidationError, match="Nieprawidłowy układ"):
+        with pytest.raises(ValidationError, match="Nieprawidlowy uklad"):
             SheetParser("N-34-130-D", system="1965")
 
     def test_invalid_system_wrong_type(self):
         """Test of validation of a system of the wrong type."""
-        with pytest.raises(ValidationError, match="Nieprawidłowy układ"):
+        with pytest.raises(ValidationError, match="Nieprawidlowy uklad"):
             SheetParser("N-34-130-D", system="PUWG")
 
 
@@ -166,7 +166,7 @@ class TestSheetParserValidation:
 
     def test_invalid_sheet_format(self):
         """Test of validation of an invalid sheet code format."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło"):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
             SheetParser("INVALID-GODLO")
 
     @pytest.mark.parametrize("sheet", ["M-３３-８-A", "N-34-１３０-D", "6.１４５.２０"])
@@ -186,7 +186,7 @@ class TestSheetParserValidation:
     @pytest.mark.parametrize("junk", ["XYZ", "9", "0"])
     def test_generic_error_shows_both_formats(self, junk):
         """The general error lists both formats with examples."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło") as exc:
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo") as exc:
             SheetParser(junk)
         msg = str(exc.value)
         assert "numer strefy" not in msg
@@ -211,42 +211,42 @@ class TestSheetParserValidation:
 
     def test_empty_sheet(self):
         """Test of an empty sheet code."""
-        with pytest.raises(ParseError, match="nie może być puste"):
+        with pytest.raises(ParseError, match="nie moze byc puste"):
             SheetParser("")
 
     def test_whitespace_only_sheet(self):
         """Test of a sheet code containing only whitespace."""
-        with pytest.raises(ParseError, match="nie może być puste"):
+        with pytest.raises(ParseError, match="nie moze byc puste"):
             SheetParser("   ")
 
     def test_invalid_sheet_type(self):
         """Test of an invalid sheet code type."""
-        with pytest.raises(ParseError, match="musi być stringiem"):
+        with pytest.raises(ParseError, match="musi byc stringiem"):
             SheetParser(12345)  # type: ignore
 
     def test_invalid_pas_letter(self):
         """Test of an invalid belt letter."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło"):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
             SheetParser("1-34")
 
     def test_invalid_100k_subdivision(self):
         """Test of an invalid 100k division (E is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło"):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
             SheetParser("N-34-130-E")
 
     def test_invalid_50k_subdivision(self):
         """Test of an invalid 50k division (e is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło"):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
             SheetParser("N-34-130-D-e")
 
     def test_invalid_25k_subdivision(self):
         """Test of an invalid 25k division (5 is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło"):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
             SheetParser("N-34-130-D-d-5")
 
     def test_invalid_10k_subdivision(self):
         """Test of an invalid 10k division (0 is not allowed)."""
-        with pytest.raises(ParseError, match="Nieprawidłowe godło"):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
             SheetParser("N-34-130-D-d-2-0")
 
 
@@ -744,17 +744,17 @@ class TestSheetParserGetAllDescendants:
         """Test of get_all_descendants() with an invalid target scale."""
         parser = SheetParser("N-34-130-D")
 
-        with pytest.raises(ValidationError, match="Nieprawidłowa skala"):
+        with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
             parser.get_all_descendants("1:5000")
 
     def test_descendants_target_scale_not_smaller(self):
         """Test of get_all_descendants() when the target scale is >= the current one."""
         parser = SheetParser("N-34-130-D")  # 1:100000
 
-        with pytest.raises(ValidationError, match="musi być większa"):
+        with pytest.raises(ValidationError, match="musi byc wieksza"):
             parser.get_all_descendants("1:100000")
 
-        with pytest.raises(ValidationError, match="musi być większa"):
+        with pytest.raises(ValidationError, match="musi byc wieksza"):
             parser.get_all_descendants("1:200000")
 
     def test_descendants_preserves_system(self):
@@ -922,7 +922,7 @@ class TestSheetParserGetBBox:
         """Test of the error for an unsupported CRS."""
         parser = SheetParser("N-34")
 
-        with pytest.raises(ValidationError, match="Nieobsługiwany układ"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany uklad"):
             parser.get_bbox(crs="EPSG:3857")
 
     def test_bbox_default_crs_is_2180(self):
@@ -1138,13 +1138,13 @@ class TestFindSheetsForBBox:
     def test_invalid_scale(self):
         """Test of a wrong target scale → ValidationError."""
         bbox = BBox(20.0, 52.0, 20.5, 52.5, "EPSG:4326")
-        with pytest.raises(ValidationError, match="Nieprawidłowa skala"):
+        with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
             find_sheets_for_bbox(bbox, "1:5000", system="1992")
 
     def test_invalid_crs(self):
         """Test of an unsupported CRS → ValidationError."""
         bbox = BBox(0, 0, 1, 1, "EPSG:3857")
-        with pytest.raises(ValidationError, match="Nieobsługiwany CRS"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany CRS"):
             find_sheets_for_bbox(bbox, "1:10000", system="1992")
 
     def test_sorted_output(self):

@@ -237,15 +237,17 @@ def validate_request(task: SimpleNamespace) -> None:
     """
     provided = sum(v is not None for v in (task.sheet, task.bbox, task.geometry))
     if provided > 1:
-        raise ValidationError("Specify only one of: --sheet, --bbox, or --geometry")
+        raise ValidationError(
+            "Podaj dokladnie jeden wybor obszaru: --sheet, --bbox albo --geometry"
+        )
     if provided == 0:
-        raise ValidationError("Must specify one of: --sheet, --bbox, or --geometry")
+        raise ValidationError("Podaj wybor obszaru: --sheet, --bbox albo --geometry")
     if task.product is None:
         raise ValidationError(f"--product wymagane: {PRODUCT_CHOICES}")
     if task.output_dir is None:
         raise ValidationError(
             "--output wymagane: katalog wyniku (pliki trafiaja do "
-            "<DIR>/<produkt>/<segment>/...)"
+            "<KATALOG>/<produkt>/<segment>/...)"
         )
     if task.sheet is None and task.country is None:
         raise ValidationError(

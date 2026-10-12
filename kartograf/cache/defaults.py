@@ -36,7 +36,7 @@ def open_cache(
 
     def on_disabled(message: str) -> None:
         if on_notice is not None:
-            text = message.replace(" — ", " - ")
+            text = message.replace(" - ", " - ")
             if not text.isascii():
                 text = text.encode("ascii", "backslashreplace").decode("ascii")
             on_notice(Notice("warning", CACHE_DISABLED, text))

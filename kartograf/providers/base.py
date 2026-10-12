@@ -197,7 +197,7 @@ class BaseProvider(DataSourceProvider):
             "ASC": ".asc",
         }
         if format not in extensions:
-            raise ValidationError(f"Unknown format: {format}")
+            raise ValidationError(f"Nieznany format: {format}")
         return extensions[format]
 
     def validate_sheet(self, sheet: str) -> bool:
@@ -410,7 +410,7 @@ class LandCoverProvider(DataSourceProvider):
             "GTiff": ".tif",
         }
         if format not in extensions:
-            raise ValidationError(f"Unknown format: {format}")
+            raise ValidationError(f"Nieznany format: {format}")
         return extensions[format]
 
     def validate_admin_unit(self, code: str) -> bool:

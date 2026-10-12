@@ -144,7 +144,7 @@ class TestGugikProviderBasic:
         """Test of the extension for an invalid format."""
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
-        with pytest.raises(ValidationError, match="Unknown format"):
+        with pytest.raises(ValidationError, match="Nieznany format"):
             provider.get_file_extension("InvalidFormat")
 
 
@@ -164,12 +164,14 @@ class TestGugikProviderResolution:
 
     def test_resolution_5m_requires_evrf2007(self):
         """Test that the 5m resolution requires EVRF2007."""
-        with pytest.raises(ValidationError, match="5m is only available for EVRF2007"):
+        with pytest.raises(
+            ValidationError, match="5m jest dostepna tylko dla EVRF2007"
+        ):
             GugikProvider(resolution="5m", vertical_crs="KRON86")
 
     def test_resolution_invalid(self):
         """Test of an invalid resolution."""
-        with pytest.raises(ValidationError, match="Unsupported resolution"):
+        with pytest.raises(ValidationError, match="Nieobslugiwana rozdzielczosc"):
             GugikProvider(resolution="2m", vertical_crs="EVRF2007")
 
     def test_supported_resolutions(self):
@@ -217,7 +219,7 @@ class TestGugikProviderResolution:
             min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         )
 
-        with pytest.raises(ValidationError, match="not available for 5m"):
+        with pytest.raises(ValidationError, match="nie jest dostepne dla"):
             provider.download_bbox(bbox, output_path)
 
 
@@ -416,7 +418,7 @@ class TestGugikProviderDownloadBbox:
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         output_path = tmp_path / "test.xyz"
 
-        with pytest.raises(ValidationError, match="Unsupported WCS format"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany format WCS"):
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
     def test_download_bbox_wrong_crs(self, tmp_path):

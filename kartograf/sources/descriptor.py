@@ -114,7 +114,7 @@ class SourceDescriptor:
             if value is not None and not value.strip():
                 raise ValidationError(
                     f"Pusty wymiar segmentu storage '{name}' (zrodlo '{self.key}') "
-                    "— podaj wartosc albo None"
+                    "- podaj wartosc albo None"
                 )
         subdir = self.storage_subdir
         if system is not None:
