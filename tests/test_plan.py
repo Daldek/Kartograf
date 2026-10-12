@@ -38,6 +38,7 @@ def _plan(*items: PlanItem, store="/magazyn") -> UpdatePlan:
 
 
 def test_plan_round_trip_all_tracks():
+    assert {"landcover", "hsg"} <= set(TRACKS)
     plan = _plan(*(_item(track=t, name=f"{t}.tif") for t in TRACKS))
     assert UpdatePlan.from_json(plan.to_json()) == plan
     assert [i["track"] for i in json.loads(plan.to_json())["items"]] == list(TRACKS)

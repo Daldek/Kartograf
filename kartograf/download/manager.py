@@ -1163,7 +1163,8 @@ class DownloadManager:
             sheet,
             std,
             skipped=result.status == "local",
-            status=result.status,
+            # "reused" is only for derived files (HSG), never a sheet
+            status=cast(SheetStatus, result.status),
             version=result.label,
             files=((result.version_path.parent.name, result.status),),
         )
