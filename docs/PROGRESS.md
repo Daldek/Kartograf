@@ -103,33 +103,28 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec sesji):** zmiany
-> lamiace 0.8.0 (pkt 1 kolejnosci z 2026-10-12) sa WDROZONE i scalone do
-> `develop` (sesja 2026-10-12 nizej). Nastepna sesja kontynuuje:
-> 1. `git rebase develop` galezi `feat/versioned-store` (+ push
->    `--force-with-lease` za zgoda uzytkownika; galaz zawiera tylko
->    dokumenty specu i planu).
-> 2. Plan 1/3 magazynu wersjonowanego od Task 1
->    (`docs/superpowers/plans/2026-10-08-versioned-store-1-core-pl-sheets.md`):
->    nazwy w planie dostosowac do 0.8.0 — `sheet`/`system` zamiast
->    `godlo`/`uklad`, `all_campaigns: bool`, `DownloadManager(output_dir,
->    provider)` bez `vertical_crs`/`resolution`, wymagane `FileStorage(...,
->    resolution=, vertical_crs=)`, `ext`, `MetadataCache(db_path)`, CLI
->    `--sheet`/`--product`/`--output`/`--vertical-crs`/`--resolution`
->    (pelna lista: `docs/CHANGELOG.md` [0.8.0]).
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec drugiej sesji):**
+> 1. **Plan 1/3 magazynu wersjonowanego ZROBIONY** na galezi
+>    `feat/versioned-store` (Task 1-9, ADR-036, CHANGELOG [0.8.0] na
+>    galezi; sesja "plan 1/3" nizej). Galaz trafia do `develop` dopiero po
+>    planie 3/3. Nastepny krok: napisac plan 2/3 (inwentaryzacja sygnalow
+>    spec 8, LAZ, CZ, wycinki `bbox/` D15, `download_bbox`, `extra.http`)
+>    na podstawie specu i stanu galezi.
+> 2. Otwarte z weryfikacji na zywo planu 1/3 (do decyzji uzytkownika):
+>    udzial SMB bez `serverino` — `os.path.samefile` falszywe dla
+>    hardlinkow, wiec `linked_version` nie rozpoznaje dowiazania (odtwarzane
+>    przy kazdym uruchomieniu; mylacy `Warning:` "pelny lot nie pobrany",
+>    I-1 bez lokalnej wersji). Udokumentowane w ADR-036/USAGE 4; mozliwa
+>    poprawka (np. porownanie sha256 sidecara z trescia) — nie podjeta.
 > 3. Hydrograf i Hydrolog musza dostosowac wywolania (CHANGELOG [0.8.0],
 >    "Co zrobic") — sprawdzic przed wydaniem 0.8.0.
-> 4. Test na zywo zmian lamiacych 0.8.0 (CLI i biblioteka: `--sheet`,
->    `--all-campaigns`, wartosci per kraj na pograniczu, PL-2000 `--scale`,
->    land cover/HSG) — przed wydaniem 0.8.0; katalog danych wskazuje
->    uzytkownik.
-> Uwaga: plik planu 1/3 istnieje TYLKO na galezi `feat/versioned-store`
-> (na `develop` go nie ma) — czytaj go po rebase albo przez
-> `git show feat/versioned-store:<sciezka>`.
+> 4. Test na zywo zmian lamiacych 0.8.0 na `develop` ZROBIONY (0 FAIL,
+>    `docs/research/2026-10-12-test-0.8.0/raport.md`).
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
-> NIEWYPCHNIETE na `origin` (cykl 0.8.0, usuniecie toru arkuszowego,
-> zmiany lamiace 2026-10-12, dokumenty) — push tylko za zgoda
-> uzytkownika. `feat/versioned-store` jest na `origin`.
+> NIEWYPCHNIETE na `origin`; `feat/versioned-store` po rebase na `develop`
+> (2026-10-12) i z planem 1/3 — rozjechana z `origin` (wymaga
+> `push --force-with-lease`). Push tylko za zgoda uzytkownika (2026-10-12:
+> "nic teraz").
 > **v0.8.0-dev:** cykl OTWARTY (`chore(release): poczatek cyklu 0.8.0`).
 > Zrobione: usuniecie przestarzalego toru arkuszowego wycinkow PL i
 > `GridMismatchError` (ADR-035 errata 2); angielskie identyfikatory API/CLI
@@ -137,8 +132,8 @@
 > domyslnych wplywajacych na dane (ADR-004 errata 1, ADR-023 errata 2) —
 > CHANGELOG [0.8.0] BREAKING.
 > **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11, decyzje D1-D24
-> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`; ADR
-> magazynu = ADR-036, powstaje w Task 8 planu 1/3). Samoopisowe nazwy
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, plan 1/3
+> i ADR-036 na galezi `feat/versioned-store`). Samoopisowe nazwy
 > plikow (proponowane D25) ODRZUCONE 2026-10-12 — parametry niesie
 > sciezka. Poprawki czytelnosci ukladu na pozniej: backlog "Do v1.0.0".
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
@@ -160,6 +155,36 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 (druga) — rebase, plan 1/3 magazynu wersjonowanego, test na zywo 0.8.0
+
+- `feat/versioned-store` przestawiona na `develop` (`git rebase`, bez
+  konfliktow); push wstrzymany decyzja uzytkownika.
+- Plan 1/3 dostosowany do 0.8.0 (`sheet`, `all_campaigns`, wymagane
+  argumenty, odwolania plik:linia; zatwierdzone przez uzytkownika, z
+  `FileStorage.list_files(versions=)` zamiast `campaigns=`), potem
+  zrealizowany na galezi (commity `52c2b94`..`d3b1314`):
+  `download/versions.py` (zapis wylaczny, `relabeled`, sprzatanie),
+  sidecar wersji z `digest`/`extra.version`/`fsync` i publikacja wylaczna
+  (decyzja implementacyjna 9 planu), jeden licznik pokrycia ASC
+  (`AscCoverage`, decyzja 10), dowiazania tylko hardlink, manager na
+  wersjach, tryby `update` (D5, D14, I-1 dla kazdej strategii),
+  `download/updates.py` (`kartograf-plan/1`), CLI `--check-updates`/
+  `--upgrade`/`--plan` i linie statusu, ADR-036 + erraty ADR-026/030/032/
+  033/035 (CRLF zachowane), ARCHITECTURE/USAGE/SCOPE/PRD/CHANGELOG.
+  Brama na galezi: pytest offline zielony, ruff i mypy czyste.
+- Weryfikacja na zywo planu 1/3 (N-34-139-C-a-3-1, udzial SMB): nowa
+  wersja z hardlinkiem (nlink 2), rerun `lokalna wersja` z niezmienionym
+  sidecarem wersji, `--check-updates --plan` (`aktualne`, `store` =
+  katalog), `--upgrade` (lokalna), `--force` (`bez zmian`),
+  `--all-campaigns --min-year 2019` (4 wersje, `full_sheet/`, pokrycie
+  tylko lotu niepelnego, `better_coverage`), tryb listy `--bbox --country
+  pl` (`aktualne` / `do pobrania`, potem `Nowe: 1, ... lokalne: 1`).
+  Znalezisko: udzial bez `serverino` (punkt 2 bloku START).
+- Test na zywo zmian 0.8.0 na migawce `develop` `3f150ce`: 0 FAIL
+  (raport `docs/research/2026-10-12-test-0.8.0/raport.md`; dane
+  `<katalog-danych>/kartograf/e2e/2026-10-12-test-0.8.0/`). Subagent do
+  tego testu nie wystartowal (limit modelu) — test wykonany recznie.
 
 ### Sesja 2026-10-12 — zmiany lamiace 0.8.0 (sheet, --all-campaigns, bez wartosci domyslnych)
 
