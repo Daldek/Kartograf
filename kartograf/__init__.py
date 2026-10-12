@@ -70,7 +70,11 @@ from kartograf.download.cz_cutout import (
     CzCutoutResult,
     check_cz_cutout,
     download_cz_cutout,
-    run_cz_cutout,
+)
+from kartograf.download.cz_sheets import (
+    CzSheetResult,
+    check_cz_sheet,
+    download_cz_sheet,
 )
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.laz import (
@@ -158,7 +162,10 @@ __all__ = [
     "CzCutoutResult",
     "check_cz_cutout",
     "download_cz_cutout",
-    "run_cz_cutout",
+    # Download (CZ sheet: SM5 sheet / TM33 tile, R4)
+    "CzSheetResult",
+    "check_cz_sheet",
+    "download_cz_sheet",
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",

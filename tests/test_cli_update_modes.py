@@ -2,12 +2,13 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from kartograf.cli.commands import main
 from kartograf.download.cutout import PlCutoutResult
+from kartograf.download.cz_sheets import CzSheetResult
 from tests.test_cli import _CZ_FACTORY_PATCH, _cz_provider_mock
 from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
@@ -309,11 +310,11 @@ def test_laz_summary_counters(tmp_path, capsys):
     [((), None), (("--upgrade",), "upgrade"), (("--force",), "force")],
 )
 def test_cz_sheet_cli_uses_library(tmp_path, flag, update):
-    with (
-        patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()),
-        patch("kartograf.download.cz_sheets.run_cz_sheet") as run,
-    ):
-        run.return_value = Mock(file=None, all_nodata=False, stale=())
+    with patch(
+        "kartograf.download.cz_sheets.download_cz_sheet",
+        return_value=CzSheetResult(None, False),
+    ) as run:
         assert _download(tmp_path, "--sheet", "302_5550", *CZ_2M, *flag) == 0
-    assert run.call_args.args[1] == "302_5550"
+    assert run.call_args.args[0] == "302_5550"
     assert run.call_args.kwargs["update"] == update
+    assert run.call_args.kwargs["resolution"] == "2m"

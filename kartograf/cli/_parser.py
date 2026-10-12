@@ -13,6 +13,7 @@ from typing import Any, NoReturn
 from kartograf._version import build_version
 from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.cutout import SUPPORTED_TARGET_CRS
+from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.exceptions import ValidationError
 
 
@@ -75,7 +76,6 @@ COUNTRY_CHOICES = (
     "obszar w obu krajach daje osobne pliki per kraj)"
 )
 RESOLUTION_PL = "1m (NMT 1 m), 5m (NMT 5 m, tylko --vertical-crs EVRF2007)"
-RESOLUTION_CZ = "2m (DMR 5G), 5m (DMR 4G)"
 VERTICAL_CRS_PL = (
     "EVRF2007 (PL-EVRF2007-NH, uklad obowiazujacy), KRON86 (PL-KRON86-NH, "
     "uklad historyczny; nie dla NMT 5m)"

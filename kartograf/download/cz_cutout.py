@@ -3,13 +3,17 @@
 The result grid starts at the bbox normalized to the requested image CRS.
 The standard ``bbox/<coords>.tif`` path is a hardlink to an immutable
 version; local versions restore ``all_nodata`` from their sidecar.
+Public pair (Z2): ``download_cz_cutout`` / ``check_cz_cutout`` with the same
+selection arguments; data messages are ``Notice``s in the result.
 """
 
 import logging
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
+from kartograf.cache.defaults import open_cache
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
 from kartograf.download.fetch import (
     FileSlot,
@@ -32,6 +36,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import ValidationError
+from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.providers.cuzk.client import wkid
 from kartograf.providers.cuzk.dmr import CUZK_NODATA, NATIVE_CRS
 from kartograf.sources.registry import get_source
@@ -41,11 +46,28 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class CzCutoutResult:
-    """Result of a CZ cutout; ``file=None`` only when a plan excludes a missing file."""
+    """Result of a CZ cutout; ``file=None`` only when a plan excludes a missing file.
+
+    ``notices`` holds the all-nodata message of a freshly downloaded file.
+    """
 
     file: VersionedFile | None
     all_nodata: bool = False
     stale: tuple[PlanItem, ...] = ()
+    notices: tuple[Notice, ...] = ()
+
+
+def emit_cz_all_nodata(
+    sink: NoticeSink, file: VersionedFile | None, all_nodata: bool
+) -> None:
+    """``ALL_NODATA`` for a downloaded (not reused local) CZ raster without data."""
+    if all_nodata and file is not None and file.status != "local":
+        sink.emit(
+            "warning",
+            ALL_NODATA,
+            f"{file.path} jest w calosci nodata - obszar poza pokryciem DMR CUZK "
+            "(poza granica CZ?)",
+        )
 
 
 def read_tif_nodata(path: Path) -> float | None:
@@ -152,14 +174,14 @@ def _result(
     return CzCutoutResult(file, all_nodata=extra.get("all_nodata") is True, stale=stale)
 
 
-def check_cz_cutout(
+def _check_cutout(
     provider,
     bbox: BBox,
     *,
     output_dir: str | Path,
     image_crs: str | None,
 ) -> UpdatePlan:
-    """Check a CZ bbox version without raster access or network requests."""
+    """Plan of a CZ bbox version without raster access or network requests."""
     _, _, slot = _cutout_slot(provider, bbox, output_dir, image_crs)
     item = inspect_version(
         slot,
@@ -170,7 +192,7 @@ def check_cz_cutout(
     return new_plan(store_id(output_dir), (item,))
 
 
-def run_cz_cutout(
+def _run_cz_cutout(
     provider,
     bbox: BBox,
     *,
@@ -220,11 +242,6 @@ def run_cz_cutout(
     ) -> None:
         nodata = read_tif_nodata(data)
         empty = _all_nodata(data, nodata)
-        if empty:
-            logger.warning(
-                f"Wycinek CZ {slot.std} jest w calosci nodata - obszar poza pokryciem "
-                "DMR CUZK (poza granica CZ?)"
-            )
         extra: dict = {"all_nodata": empty}
         if parent_request:
             extra["parent_request"] = parent_request
@@ -255,6 +272,58 @@ def run_cz_cutout(
     return _result(file, stale)
 
 
+def _image_crs(target_crs: str) -> str | None:
+    """``None`` for the native EPSG:5514 result, else the requested result CRS."""
+    return None if wkid(target_crs) == wkid(NATIVE_CRS) else target_crs
+
+
+def _cz_provider(
+    *,
+    target_crs: str,
+    vertical_crs: str,
+    resolution: str,
+    cache: MetadataCache | None,
+):
+    """CZ DMR provider of a cutout (``TransformError`` before any network)."""
+    from kartograf.providers.cuzk import create_dmr_provider
+
+    return create_dmr_provider(
+        resolution=resolution,
+        cache=cache,
+        target_crs=_image_crs(target_crs),
+        vertical_crs=vertical_crs,
+    )
+
+
+def check_cz_cutout(
+    bbox: BBox,
+    *,
+    output_dir: str | Path,
+    target_crs: str,
+    vertical_crs: str,
+    resolution: str,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_cz_cutout`` with the same arguments, no download.
+
+    The cutout channel has no remote version signal: the plan reads only the
+    local store (no network, no metadata cache). ``cache`` and ``on_notice``
+    are accepted for symmetry with the download. Invalid choices raise the
+    same ``ValidationError``/``TransformError`` as the download.
+    """
+    del cache, on_notice  # same signature as the download (Z2); unused here
+    provider = _cz_provider(
+        target_crs=target_crs,
+        vertical_crs=vertical_crs,
+        resolution=resolution,
+        cache=None,
+    )
+    return _check_cutout(
+        provider, bbox, output_dir=output_dir, image_crs=_image_crs(target_crs)
+    )
+
+
 def download_cz_cutout(
     bbox: BBox,
     *,
@@ -263,38 +332,50 @@ def download_cz_cutout(
     vertical_crs: str,
     resolution: str,
     update: UpdateMode | None = None,
-    cache=None,
+    plan: UpdatePlan | None = None,
     parent_request: dict | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+    on_download: Callable[[], None] | None = None,
 ) -> CzCutoutResult:
     """CZ DMR cutout in ``target_crs`` (e.g. EPSG:2180 + EVRF2007, A6).
 
     No configuration defaults (A8): output directory, CRSs and resolution
     (``"2m"`` DMR 5G / ``"5m"`` DMR 4G) are explicit. The grid starts at
-    ``bbox`` converted to ``target_crs``.
+    ``bbox`` converted to ``target_crs``. ``plan`` (from ``check_cz_cutout``
+    with ``update="upgrade"``) downloads only its missing position; a changed
+    position lands in ``stale``. ``cache``: ``True`` = default metadata cache
+    in the current directory, a ``MetadataCache`` = that cache, ``False`` =
+    none. ``on_notice`` receives each data notice when emitted;
+    ``on_download`` is called right before the first service request.
 
     Raises
     ------
     ValidationError
-        Bad resolution, CRS or vertical CRS.
+        Bad resolution, CRS, vertical CRS or plan/update combination.
     TransformError
         No safe pinned operation to ``target_crs``.
     DownloadError
         CUZK service failure.
     """
-    from kartograf.providers.cuzk import create_dmr_provider
-
-    image_crs = None if wkid(target_crs) == wkid(NATIVE_CRS) else target_crs
-    provider = create_dmr_provider(
-        resolution=resolution,
-        cache=cache,
-        target_crs=image_crs,
-        vertical_crs=vertical_crs,
-    )
-    return run_cz_cutout(
-        provider,
-        bbox,
-        output_dir=output_dir,
-        image_crs=image_crs,
-        update=update,
-        parent_request=parent_request,
-    )
+    validate_update(update)
+    sink = NoticeSink(on_notice)
+    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+        provider = _cz_provider(
+            target_crs=target_crs,
+            vertical_crs=vertical_crs,
+            resolution=resolution,
+            cache=metadata,
+        )
+        result = _run_cz_cutout(
+            provider,
+            bbox,
+            output_dir=output_dir,
+            image_crs=_image_crs(target_crs),
+            update=update,
+            plan=plan,
+            parent_request=parent_request,
+            on_download=on_download,
+        )
+    emit_cz_all_nodata(sink, result.file, result.all_nodata)
+    return replace(result, notices=sink.notices)
