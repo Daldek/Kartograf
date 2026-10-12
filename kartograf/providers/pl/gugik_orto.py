@@ -22,7 +22,7 @@ from pathlib import Path
 import requests
 
 from kartograf.core.sheet_parser import BBox, SheetParser
-from kartograf.exceptions import NoCoverageError
+from kartograf.exceptions import NoCoverageError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import (
     SkorowidzLayersMixin,
@@ -261,17 +261,17 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         ------
         DownloadError
             If the download fails
-        ValueError
+        ValidationError
             If format is not supported or bbox CRS is not EPSG:2180
         """
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
+            raise ValidationError(
                 f"BBox must be in EPSG:2180, got {bbox.crs}. "
                 f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
             )
 
         if format not in self.WCS_FORMATS:
-            raise ValueError(
+            raise ValidationError(
                 f"Unsupported WCS format: '{format}'. "
                 f"Supported formats: {list(self.WCS_FORMATS.keys())}"
             )

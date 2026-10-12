@@ -583,7 +583,7 @@ class SheetParser:
         ------
         ValidationError
             If target_scale is not a valid scale
-        ValueError
+        ValidationError
             If target_scale is smaller than or equal to the current scale
 
         Examples
@@ -609,7 +609,7 @@ class SheetParser:
         target_idx = self.SCALE_HIERARCHY.index(target_scale)
 
         if target_idx <= current_idx:
-            raise ValueError(
+            raise ValidationError(
                 f"Skala docelowa {target_scale} musi być większa "
                 f"(bardziej szczegółowa) niż bieżąca {self._scale}"
             )

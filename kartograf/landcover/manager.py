@@ -262,12 +262,12 @@ class LandCoverManager:
 
         Raises
         ------
-        ValueError
+        ValidationError
             If provider name is unknown
         """
         name_lower = name.lower()
         if name_lower not in PROVIDERS:
-            raise ValueError(
+            raise ValidationError(
                 f"Unknown provider: {name}. "
                 f"Available providers: {list(PROVIDERS.keys())}"
             )
@@ -357,14 +357,12 @@ class LandCoverManager:
 
         Raises
         ------
-        ValueError
-            None or several selections, invalid source options.
+        ValidationError
+            None or several selections, invalid source options; BDOT10k: the
+            area intersects several powiats (see `download_all_counties`);
+            a plan of another store or without ``update="upgrade"``.
         TypeError
             An option the provider does not accept (e.g. ``output_path``).
-        ValidationError
-            BDOT10k: the area intersects several powiats (see
-            `download_all_counties`); a plan of another store or without
-            ``update="upgrade"``.
         DownloadError
             Download, edition or store failure.
         """
@@ -611,9 +609,9 @@ class LandCoverManager:
     def _require_one(teryt, bbox, sheet) -> None:
         provided = [m for m in (teryt, bbox, sheet) if m is not None]
         if not provided:
-            raise ValueError("Must provide one of: teryt, bbox, or sheet")
+            raise ValidationError("Must provide one of: teryt, bbox, or sheet")
         if len(provided) > 1:
-            raise ValueError("Provide only one of: teryt, bbox, or sheet")
+            raise ValidationError("Provide only one of: teryt, bbox, or sheet")
 
     def _kind(self) -> type:
         for cls in _OPTIONS:
@@ -626,7 +624,7 @@ class LandCoverManager:
         )
 
     def _check_options(self, kwargs: dict) -> None:
-        """Reject unknown options (TypeError) and invalid values (ValueError)."""
+        """Reject unknown options (TypeError) and invalid values (ValidationError)."""
         kind = self._kind()
         unknown = sorted(set(kwargs) - _OPTIONS[kind])
         if unknown:
@@ -646,20 +644,20 @@ class LandCoverManager:
                 ("stat", provider.STATS),
             ):
                 if kwargs[name] not in allowed:
-                    raise ValueError(
+                    raise ValidationError(
                         f"Invalid {name}: {kwargs[name]}. "
                         f"Available: {', '.join(allowed)}"
                     )
         elif isinstance(provider, CorineProvider):
             if kwargs["year"] not in provider.AVAILABLE_YEARS:
-                raise ValueError(
+                raise ValidationError(
                     f"Invalid year: {kwargs['year']}. "
                     f"Available years: {provider.AVAILABLE_YEARS}"
                 )
         else:
             fmt = kwargs.get("format", "GPKG")
             if fmt not in ("GPKG", "SHP"):
-                raise ValueError(f"Unsupported format: {fmt}. Use 'GPKG' or 'SHP'")
+                raise ValidationError(f"Unsupported format: {fmt}. Use 'GPKG' or 'SHP'")
             if kwargs.get("layers") is not None:
                 normalize_layers(kwargs["layers"])
                 if fmt != "GPKG":

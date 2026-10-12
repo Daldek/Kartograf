@@ -18,7 +18,7 @@ import rasterio
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.pl.gugik import GugikProvider
 from tests.conftest import (
     _STUB_LAYERS,
@@ -144,7 +144,7 @@ class TestGugikProviderBasic:
         """Test of the extension for an invalid format."""
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 
-        with pytest.raises(ValueError, match="Unknown format"):
+        with pytest.raises(ValidationError, match="Unknown format"):
             provider.get_file_extension("InvalidFormat")
 
 
@@ -164,12 +164,12 @@ class TestGugikProviderResolution:
 
     def test_resolution_5m_requires_evrf2007(self):
         """Test that the 5m resolution requires EVRF2007."""
-        with pytest.raises(ValueError, match="5m is only available for EVRF2007"):
+        with pytest.raises(ValidationError, match="5m is only available for EVRF2007"):
             GugikProvider(resolution="5m", vertical_crs="KRON86")
 
     def test_resolution_invalid(self):
         """Test of an invalid resolution."""
-        with pytest.raises(ValueError, match="Unsupported resolution"):
+        with pytest.raises(ValidationError, match="Unsupported resolution"):
             GugikProvider(resolution="2m", vertical_crs="EVRF2007")
 
     def test_supported_resolutions(self):
@@ -217,7 +217,7 @@ class TestGugikProviderResolution:
             min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
         )
 
-        with pytest.raises(ValueError, match="not available for 5m"):
+        with pytest.raises(ValidationError, match="not available for 5m"):
             provider.download_bbox(bbox, output_path)
 
 
@@ -416,7 +416,7 @@ class TestGugikProviderDownloadBbox:
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
         output_path = tmp_path / "test.xyz"
 
-        with pytest.raises(ValueError, match="Unsupported WCS format"):
+        with pytest.raises(ValidationError, match="Unsupported WCS format"):
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
     def test_download_bbox_wrong_crs(self, tmp_path):
@@ -428,7 +428,7 @@ class TestGugikProviderDownloadBbox:
             min_x=18.0, min_y=52.0, max_x=19.0, max_y=53.0, crs="EPSG:4326"
         )
 
-        with pytest.raises(ValueError, match="EPSG:2180"):
+        with pytest.raises(ValidationError, match="EPSG:2180"):
             provider.download_bbox(wrong_crs_bbox, output_path)
 
     def test_odd_size_requested_even_and_cropped(self, tmp_path, sample_bbox):

@@ -751,10 +751,10 @@ class TestSheetParserGetAllDescendants:
         """Test of get_all_descendants() when the target scale is >= the current one."""
         parser = SheetParser("N-34-130-D")  # 1:100000
 
-        with pytest.raises(ValueError, match="musi być większa"):
+        with pytest.raises(ValidationError, match="musi być większa"):
             parser.get_all_descendants("1:100000")
 
-        with pytest.raises(ValueError, match="musi być większa"):
+        with pytest.raises(ValidationError, match="musi być większa"):
             parser.get_all_descendants("1:200000")
 
     def test_descendants_preserves_system(self):

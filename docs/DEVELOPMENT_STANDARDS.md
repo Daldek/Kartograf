@@ -715,17 +715,31 @@ listy klas. Zasady:
   sekcja 6.2) — komunikat ma byc zrozumialy dla uzytkownika.
 - Zawsze zachowuj lancuch wyjatkow: `raise ... from err` (sekcja 11.3).
 
+**Z4 (0.8.0) - rodzaj bledu jest czescia kontraktu API:** nieprawidlowe
+wartosci argumentow wywolania to `ValidationError` (godlo: `ParseError`),
+problem z odpowiedzia lub pobraniem ze zrodla to `DownloadError`
+(`NoCoverageError`, `YearRangeError`), a awaria cache to `CacheError`.
+Naruszenie wewnetrznego niezmiennika (blad programu) zachowuje wbudowany
+wyjatek, np. `ValueError`/`RuntimeError`; nieznany argument daje `TypeError`.
+`ValidationError` NIE dziedziczy z `ValueError`: wewnetrzne
+`except ValueError` przy dekodowaniu danych nie moga ukrywac bledow wejscia.
+
+
 ### 11.2 Walidacja na wejsciu
 
 ```python
 def download_sheet(sheet: str) -> Path:
     """Download NMT sheet."""
     if not sheet or not sheet.strip():
-        raise ValidationError("Sheet code cannot be empty")
+        raise ValidationError("Godlo arkusza nie moze byc puste")
 
     parser = SheetParser(sheet)  # raises ParseError if invalid
     ...
 ```
+
+Walidacja wartosci na granicy CLI i biblioteki musi uzywac Z4 z 11.1:
+nie obejmuj `except ValueError` bledow wejscia. Nieznana nazwa parametru
+lub brak wymaganego argumentu funkcji pozostaje pythonowym `TypeError`.
 
 **Bez wartosci domyslnych wplywajacych na dane (od 0.8.0).** Parametr API
 i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,

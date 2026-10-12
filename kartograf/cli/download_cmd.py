@@ -1051,7 +1051,7 @@ def _resolve_cz_geometry_bbox(args: argparse.Namespace) -> BBox | None:
             # the file is already in the task CRS - only a label, zero transformation
             return BBox(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, image_sr)
         return bbox_to_crs(bbox, image_sr)
-    except (ValidationError, ValueError, TransformError) as e:
+    except (ValidationError, TransformError) as e:
         _print_transform_error(e)
         return None
 
@@ -2408,7 +2408,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
             min_year=min_year,
             max_year=max_year,
         )
-    except (ValueError, ValidationError, DownloadError) as e:
+    except (ValidationError, DownloadError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 

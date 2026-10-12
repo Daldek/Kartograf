@@ -582,7 +582,7 @@ class TestDownloadLazArea:
         session.get.assert_not_called()
 
     def test_vertical_crs_mismatch_with_provider_is_rejected(self, tmp_path):
-        with pytest.raises(ValueError, match="KRON86"):
+        with pytest.raises(ValidationError, match="KRON86"):
             download_laz_area(
                 W2_AREA,
                 output_dir=tmp_path,

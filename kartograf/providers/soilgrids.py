@@ -39,7 +39,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.sources.edition import Edition, edition_label
 from kartograf.transform.bbox import envelope_from_2180
@@ -188,7 +188,7 @@ class SoilGridsProvider(LandCoverProvider):
             HTTP failure, unreadable XML or a title without an edition.
         """
         if property not in self.PROPERTIES:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
             )
         url = self.capabilities_url(property)
@@ -264,33 +264,33 @@ class SoilGridsProvider(LandCoverProvider):
 
         Raises
         ------
-        ValueError
+        ValidationError
             If bbox CRS is not EPSG:2180 or parameters are invalid
         DownloadError
             If the download fails
         """
         # Validate CRS
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
+            raise ValidationError(
                 f"BBox must be in EPSG:2180, got {bbox.crs}. "
                 f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
             )
 
         # Validate property
         if property not in self.PROPERTIES:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
             )
 
         # Validate depth
         if depth not in self.DEPTHS:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid depth: {depth}. Available: {', '.join(self.DEPTHS)}"
             )
 
         # Validate stat
         if stat not in self.STATS:
-            raise ValueError(
+            raise ValidationError(
                 f"Invalid stat: {stat}. Available: {', '.join(self.STATS)}"
             )
 

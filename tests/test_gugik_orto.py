@@ -22,7 +22,7 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, NoCoverageError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from tests.conftest import render_gfi_body
 
@@ -697,7 +697,7 @@ class TestGugikOrtoProviderDownloadBbox:
             min_x=18.0, min_y=52.0, max_x=19.0, max_y=53.0, crs="EPSG:4326"
         )
 
-        with pytest.raises(ValueError, match="EPSG:2180"):
+        with pytest.raises(ValidationError, match="EPSG:2180"):
             provider.download_bbox(wrong_crs_bbox, output_path)
 
     def test_download_bbox_invalid_format(self, tmp_path, sample_bbox):
@@ -705,7 +705,7 @@ class TestGugikOrtoProviderDownloadBbox:
         provider = GugikOrtoProvider(color="RGB")
         output_path = tmp_path / "area.xyz"
 
-        with pytest.raises(ValueError, match="Unsupported WCS format"):
+        with pytest.raises(ValidationError, match="Unsupported WCS format"):
             provider.download_bbox(sample_bbox, output_path, format="InvalidFormat")
 
 

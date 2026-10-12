@@ -245,12 +245,6 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    except ValueError as e:
-        # Providers (SoilGrids/CORINE/BDOT10k) validate --property/--depth/
-        # --stat/--year/--format via ValueError - that is a user error, not
-        # a program failure (no KARTOGRAF_DEBUG hint; review N8).
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
     finally:
         # close() purges expired entries (as the PL/CZ download paths do)
         if cache is not None:
