@@ -9,6 +9,7 @@ in the sidecar (``build_metadata(capability=)``) and are not enforced in manager
 
 from dataclasses import dataclass
 from enum import StrEnum
+from typing import Literal
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ValidationError
@@ -25,6 +26,12 @@ class TransportKind(StrEnum):
     ARCGIS_IMAGE = "arcgis_image"  # stage 1 (CZ exportImage)
     ARCGIS_QUERY = "arcgis_query"  # stage 3 (ZABAGED), SK
     OGC_API_FEATURES = "ogc_api_features"  # DE basemap.de
+
+
+# Cheap freshness signal of a channel (versioned store spec 4.1, 8): the
+# sheet index record (``index``), source metadata (``metadata``), HTTP
+# ``ETag``/``Last-Modified`` of the file (``http``) or none (``none``).
+SignalKind = Literal["index", "metadata", "http", "none"]
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,9 @@ class AccessChannel:
     endpoint: str = ""
     # Channel URL for descriptor-driven engines (stage 1: CuzkClient).
     # PL entries: "" - the provider constants remain the source of truth (stage 0).
+    update_signal: SignalKind = "none"
+    # Freshness signal of THIS channel (one dataset may have several, e.g.
+    # CZ DMR 4G: SM5 files with ETag, exportImage without a content signal).
 
 
 @dataclass(frozen=True)

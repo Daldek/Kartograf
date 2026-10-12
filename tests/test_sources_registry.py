@@ -5,6 +5,7 @@ import dataclasses
 import pytest
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
     CountryProfile,
@@ -15,6 +16,7 @@ from kartograf.sources.descriptor import (
 )
 from kartograf.sources.registry import (
     all_countries,
+    channel_signal,
     get_country,
     get_source,
     horizontal_crs_for_sheet,
@@ -36,6 +38,43 @@ EXPECTED_KEYS = {
     "cz.cuzk.dmr5g",
     "cz.cuzk.dmr4g",
 }
+
+# Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md).
+CHANNEL_SIGNALS = [
+    ("pl.gugik.nmt_1m", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.nmt_1m", TransportKind.WCS, "none"),
+    ("pl.gugik.nmt_5m", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.nmpt", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.nmpt", TransportKind.WCS, "none"),
+    ("pl.gugik.orto", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.laz", TransportKind.WFS, "index"),
+    ("pl.gugik.bdot10k", TransportKind.DIRECT_FILES, "none"),
+    ("eu.clms.corine", TransportKind.CLMS_API, "metadata"),
+    ("global.isric.soilgrids", TransportKind.WCS, "none"),
+    ("cz.cuzk.dmr5g", TransportKind.ARCGIS_IMAGE, "none"),
+    ("cz.cuzk.dmr4g", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.dmr4g", TransportKind.ARCGIS_IMAGE, "none"),
+]
+
+
+@pytest.mark.parametrize(("key", "transport", "signal"), CHANNEL_SIGNALS)
+def test_channel_signals_match_inventory(key, transport, signal):
+    assert channel_signal(key, transport) == signal
+
+
+def test_every_channel_has_an_inventoried_signal():
+    inventoried = {(key, transport) for key, transport, _ in CHANNEL_SIGNALS}
+    channels = {(d.key, c.transport) for d in sources_for() for c in d.channels}
+    assert channels == inventoried
+
+
+@pytest.mark.parametrize(
+    ("key", "transport"),
+    [("xx.none.zadne", TransportKind.WCS), ("pl.gugik.nmt_5m", TransportKind.WCS)],
+)
+def test_unknown_channel_signal_is_error(key, transport):
+    with pytest.raises(ValidationError):
+        channel_signal(key, transport)
 
 
 class TestDescriptorDataclasses:
