@@ -8,10 +8,8 @@ version; local versions restore ``all_nodata`` from their sidecar.
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
 from pathlib import Path
 
-from kartograf._version import build_version
 from kartograf.core.bbox import BBox
 from kartograf.download.fetch import (
     FileSlot,
@@ -26,6 +24,7 @@ from kartograf.download.fetch import (
 from kartograf.download.plan import (
     PlanItem,
     UpdatePlan,
+    new_plan,
     require_store,
     select_planned,
     store_id,
@@ -168,12 +167,7 @@ def check_cz_cutout(
         unit=slot.std.stem,
         signal="none",
     )
-    return UpdatePlan(
-        store=store_id(output_dir),
-        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        kartograf_version=build_version(),
-        items=(item,),
-    )
+    return new_plan(store_id(output_dir), (item,))
 
 
 def run_cz_cutout(

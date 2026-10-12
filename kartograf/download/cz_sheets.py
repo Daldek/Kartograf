@@ -3,12 +3,10 @@
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass, replace
-from datetime import UTC, datetime
 from pathlib import Path
 
 import requests
 
-from kartograf._version import build_version
 from kartograf.core.parser_registry import detect_system
 from kartograf.download.cz_cutout import _all_nodata, read_tif_nodata
 from kartograf.download.fetch import (
@@ -25,6 +23,7 @@ from kartograf.download.plan import (
     TODO_STATUSES,
     PlanItem,
     UpdatePlan,
+    new_plan,
     require_store,
     select_planned,
     store_id,
@@ -90,12 +89,7 @@ def check_cz_sheet(provider, sheet: str, *, output_dir: str | Path) -> UpdatePla
         signal=_signal(provider, sm5),
         probe=(lambda: provider.sm5_signal(sheet)) if sm5 else None,
     )
-    return UpdatePlan(
-        store=store_id(output_dir),
-        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
-        kartograf_version=build_version(),
-        items=(item,),
-    )
+    return new_plan(store_id(output_dir), (item,))
 
 
 def _local_result(slot: FileSlot, stale: tuple[PlanItem, ...]) -> CzSheetResult:

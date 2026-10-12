@@ -5196,7 +5196,7 @@ class TestCzDownloadingAfterValidation:
         assert len(seen_at_fetch) == 1
         assert seen_at_fetch[0].count("Downloading CTES96 (CZ, resolution: 5m)") == 1
         assert "Downloading" not in rest
-        assert "Downloaded to " in rest
+        assert rest.startswith("CTES96: nowa wersja ")
 
     def test_tm33_announces_once_before_export(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -5955,8 +5955,9 @@ class TestCmdDownloadCz:
             second = capsys.readouterr().out
 
         assert "Downloading 302_5550 (CZ, resolution: 2m)" in first
-        assert "Downloaded to " in first
-        assert "Skipped 302_5550 - already exists at " in second
+        assert "302_5550: nowa wersja " in first
+        assert "302_5550: lokalna wersja " in second
+        assert "(bez sprawdzania; --check-updates)" in second  # TM33: signal none
         provider.download.assert_called_once()
 
     def test_verbose_bbox_reports_progress_and_skip(self, tmp_path, capsys):
@@ -5972,8 +5973,10 @@ class TestCmdDownloadCz:
             second = capsys.readouterr().out
 
         assert "Downloading CZ bbox (2m, EPSG:5514)" in first
-        assert "Downloaded to " in first
-        assert "Skipped - already exists at " in second
+        unit = "nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif"
+        assert f"{unit}: nowa wersja " in first
+        assert f"{unit}: lokalna wersja " in second
+        assert "(bez sprawdzania; --check-updates)" in second
         provider.download_bbox.assert_called_once()
 
     def test_bbox_download_error_returns_1(self, tmp_path, capsys):
@@ -9656,7 +9659,7 @@ class TestCampaignOptions:
         instance = Mock()
         instance.select_tiles.return_value = Mock(tiles=[Mock()], superseded=[])
         mock_provider_cls.return_value = instance
-        mock_run.return_value = Mock(downloaded=[], skipped=[], failed=[])
+        mock_run.return_value = Mock(files=[], failed=[], stale=())
 
         rc = main(
             [
@@ -11260,7 +11263,7 @@ class TestLazOnlyOptions:
         instance = Mock()
         instance.select_tiles.return_value = Mock(tiles=[Mock()], superseded=[])
         mock_provider_cls.return_value = instance
-        mock_run.return_value = Mock(downloaded=[], skipped=[], failed=[])
+        mock_run.return_value = Mock(files=[], failed=[], stale=())
 
         rc = main(
             [
