@@ -14,17 +14,16 @@ from kartograf.providers.soilgrids import SoilGridsProvider
 
 
 @pytest.mark.parametrize(
-    "case", ["laz_crs", "vertical_crs", "soil_property", "bdot_format", "corine_year"]
+    "case",
+    ["laz_vertical_crs", "vertical_crs", "soil_property", "bdot_format", "corine_year"],
 )
 def test_input_errors_are_kartograf_errors(case: str, tmp_path: Path) -> None:
     bbox_pl = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 
     def invalid() -> object:
-        if case == "laz_crs":
+        if case == "laz_vertical_crs":
             return download_laz_area(
-                BBox(14, 52, 15, 53, "EPSG:4326"),
-                output_dir=tmp_path,
-                vertical_crs="EVRF2007",
+                bbox_pl, output_dir=tmp_path, vertical_crs="bad", cache=False
             )
         if case == "vertical_crs":
             return GugikProvider(resolution="1m", vertical_crs="bad")

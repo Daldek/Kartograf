@@ -545,7 +545,7 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
   (arkusz CZ, `download_cz_sheet`): `file`, `all_nodata`, `stale`, `notices`.
 - `LazDownloadResult` (`download_laz_area`): `files` (`VersionedFile` na
   kafel), `failed`, `superseded` (kafle pominięte jako pokryte przez
-  nowsze), `stale`.
+  nowsze), `stale`, `notices`.
 - `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
   (`new`/`unchanged`/`relabeled`/`local`), `label`, `sha256`,
   `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
@@ -737,7 +737,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 - **Nie działa:** z `--product laz` i `--target-crs` (`Error:` przed siecią);
   dla CZ jak inne opcje kampanii.
 - **Biblioteka:** `DownloadManager(full_sheet=True)`;
-  `SheetFetch.full_link`, `DownloadResult.full_links` (godło -> ścieżka
+  `DownloadResult.full_links` (godło -> ścieżka
   `full_sheet/`), `DownloadResult.without_full`,
   `DownloadResult.full_link_outside_range`.
 
@@ -809,7 +809,7 @@ report = manager.download_sheets(
     [godlo], update="upgrade", plan=UpdatePlan.from_json(plan.to_json())
 )
 print(report.stale, report.files.get(godlo, ()))
-# LAZ: run_laz_download(..., update=, plan=), check_laz_updates;
+# LAZ: download_laz_area(..., update=, plan=) + check_laz_area (te same argumenty);
 # wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
 # download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
 # check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,

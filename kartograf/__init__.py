@@ -80,9 +80,8 @@ from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.laz import (
     LazDownloadResult,
     LazTileFailure,
-    check_laz_updates,
+    check_laz_area,
     download_laz_area,
-    run_laz_download,
 )
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.plan import PlanItem, UpdatePlan
@@ -169,9 +168,8 @@ __all__ = [
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
-    "check_laz_updates",
+    "check_laz_area",
     "download_laz_area",
-    "run_laz_download",
     # Land Cover
     "LandCoverManager",
     "LandCoverResult",

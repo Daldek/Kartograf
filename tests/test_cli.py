@@ -27,6 +27,7 @@ from kartograf.cli.commands import (
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.fetch import VersionedFile
+from kartograf.download.laz import LazDownloadResult
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import Notice
@@ -4919,20 +4920,6 @@ class TestResolveLazBbox:
         assert len(info) == 1 and info[0].startswith("Info:")
         assert caplog.records == []
 
-    def test_bbox_wgs84_across_19e_keeps_southern_band(self):
-        """K6: an envelope from densified edges - four corners lost
-        ~479 m in the S for a bbox through 19E (LAZ tile selection too narrow)."""
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-
-        args = Namespace(
-            sheet=None, bbox="18,50,20,50.2", bbox_crs="EPSG:4326", geometry=None
-        )
-        bbox = _resolve_laz_bbox(args)
-        assert bbox.crs == "EPSG:2180"
-        assert bbox.min_y == pytest.approx(236968.4486, abs=0.01)
-
     def test_bbox_2180_passthrough(self):
         from argparse import Namespace
 
@@ -4960,60 +4947,6 @@ class TestResolveLazBbox:
         args = Namespace(sheet=None, bbox="1,2,3", bbox_crs="EPSG:2180", geometry=None)
         with pytest.raises(ValidationError, match="Invalid bbox format"):
             _resolve_laz_bbox(args)
-
-    def test_bbox_from_krovak_uses_pinned_transform(self):
-        """--bbox-crs EPSG:5514 (F2): the step to 2180 must go through the pinned
-        operation (bbox_to_crs), NOT an unpinned pyproj transformer - otherwise
-        LAZ tile selection on the border strip could result from a ballpark."""
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-        from kartograf.core import bbox as core_bbox
-        from kartograf.providers.cuzk import dmr
-
-        args = Namespace(
-            sheet=None,
-            bbox="-788231,-1052442,-741087,-1013379",
-            bbox_crs="EPSG:5514",
-            geometry=None,
-        )
-        with (
-            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(
-                core_bbox, "_transformer", wraps=core_bbox._transformer
-            ) as plain,
-        ):
-            bbox = _resolve_laz_bbox(args)
-
-        assert bbox.crs == "EPSG:2180"
-        assert pinned.called
-        plain.assert_not_called()
-
-    def test_bbox_from_utm33n_uses_pinned_transform(self):
-        """As above, but for the second Czech CRS (EPSG:3045)."""
-        from argparse import Namespace
-
-        from kartograf.cli.download_cmd import _resolve_laz_bbox
-        from kartograf.core import bbox as core_bbox
-        from kartograf.providers.cuzk import dmr
-
-        args = Namespace(
-            sheet=None,
-            bbox="450000,5540000,455000,5545000",
-            bbox_crs="EPSG:3045",
-            geometry=None,
-        )
-        with (
-            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
-            patch.object(
-                core_bbox, "_transformer", wraps=core_bbox._transformer
-            ) as plain,
-        ):
-            bbox = _resolve_laz_bbox(args)
-
-        assert bbox.crs == "EPSG:2180"
-        assert pinned.called
-        plain.assert_not_called()
 
 
 def _cz_args(tmp_path, **overrides):
@@ -9713,13 +9646,13 @@ class TestCampaignOptions:
         assert rc == 1
         assert "inny rocznik: --year/--min-year/--max-year" in capsys.readouterr().err
 
-    @patch("kartograf.download.laz.run_laz_download")
+    @patch("kartograf.download.laz._run_laz_download")
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_campaign_opts_forwarded(self, mock_provider_cls, mock_run, tmp_path):
         instance = Mock()
         instance.select_tiles.return_value = Mock(tiles=[Mock()], superseded=[])
         mock_provider_cls.return_value = instance
-        mock_run.return_value = Mock(files=[], failed=[], stale=())
+        mock_run.return_value = LazDownloadResult(tiles=())
 
         rc = main(
             [
@@ -11370,7 +11303,7 @@ class TestLazOnlyOptions:
             (["--year", "2022", "--all-campaigns"], (2022, 2022)),
         ],
     )
-    @patch("kartograf.download.laz.run_laz_download")
+    @patch("kartograf.download.laz._run_laz_download")
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_cli_laz_year_mapped_to_range(
         self, mock_provider_cls, mock_run, flags, bounds, tmp_path
@@ -11378,7 +11311,7 @@ class TestLazOnlyOptions:
         instance = Mock()
         instance.select_tiles.return_value = Mock(tiles=[Mock()], superseded=[])
         mock_provider_cls.return_value = instance
-        mock_run.return_value = Mock(files=[], failed=[], stale=())
+        mock_run.return_value = LazDownloadResult(tiles=())
 
         rc = main(
             [
@@ -11458,7 +11391,7 @@ class TestFullSheetOption:
         args = create_parser().parse_args(["download", "--sheet", "X", "--full-sheet"])
         assert args.full_sheet is True
 
-    @patch("kartograf.download.laz.run_laz_download")
+    @patch("kartograf.download.laz._run_laz_download")
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_rejected_before_network(self, provider_cls, run, capsys, tmp_path):
         out = tmp_path / "out"

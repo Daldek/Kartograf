@@ -46,6 +46,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `download_cz_cutout(bbox, ...)`; `check_cz_cutout(provider, bbox,
   output_dir=, image_crs=)` -> `check_cz_cutout(bbox, output_dir=,
   target_crs=, vertical_crs=, resolution=)`.
+- LAZ: `download_laz_area` przyjmuje `bbox` w dowolnym obslugiwanym CRS
+  (uklady CZ tylko przez przypieta operacje), `plan=`, `cache=True`,
+  `on_notice=` (`laz_superseded` zamiast wypisywania przez CLI) i
+  `workers=` zamiast `max_workers=`; nowy blizniak `check_laz_area` z tymi
+  samymi argumentami. `on_progress` dostaje `(0, total)` przed pierwszym
+  kaflem. `run_laz_download` i `check_laz_updates` poza API. Co zrobic:
+  `max_workers=` -> `workers=`; `check_laz_updates(selection, ...)` ->
+  `check_laz_area(bbox, output_dir=..., vertical_crs=..., ...)`; plan
+  wykonuj przez `download_laz_area(..., update="upgrade", plan=plan)`.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa
