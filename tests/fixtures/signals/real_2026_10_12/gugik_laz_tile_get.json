@@ -1,0 +1,11 @@
+{
+  "url": "https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/83230/83230_1743180_N-34-139-A-c-1-1-1-1.laz",
+  "method": "GET",
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "136606526",
+    "Cache-Control": "must-revalidate"
+  },
+  "recorded": "2026-10-12"
+}

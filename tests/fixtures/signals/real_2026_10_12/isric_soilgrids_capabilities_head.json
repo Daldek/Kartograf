@@ -1,0 +1,11 @@
+{
+  "url": "https://maps.isric.org/mapserv?map=/map/clay.map&SERVICE=WCS&VERSION=2.0.1&REQUEST=GetCapabilities",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Content-Type": "text/html",
+    "Content-Length": "181",
+    "Cache-Control": "max-age=0, must-revalidate, no-cache, no-store"
+  },
+  "recorded": "2026-10-12"
+}

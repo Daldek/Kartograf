@@ -7,8 +7,8 @@ the result into an exit code. There is no ``print`` or argparse here.
 
 Flow: bbox EPSG:2180 -> ``GugikLazProvider.select_tiles`` (WFS, tile
 selection from the newest vintage without duplicating the area) ->
-``run_laz_download`` (thread pool, ``<file>.laz.meta.json`` sidecar per
-tile, tile failures collected, not raised).
+``run_laz_download`` (parallel downloads into ``versions/``, mandatory
+version sidecars and standard hardlinks; tile failures collected).
 
 Example::
 
@@ -22,7 +22,7 @@ Example::
     for skipped in result.superseded:
         print(skipped.tile.sheet, "covered by", skipped.covered_by)
     if result.failed:
-        ...  # retry: tiles already downloaded are skipped (force=False)
+        ...  # retry: locally versioned tiles are reused by default
 """
 
 from collections.abc import Callable
@@ -31,7 +31,24 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.download.fetch import (
+    FileSlot,
+    UpdateMode,
+    VersionedFile,
+    fetch_version,
+    inspect_version,
+    validate_update,
+)
+from kartograf.download.plan import (
+    PlanItem,
+    UpdatePlan,
+    new_plan,
+    require_store,
+    select_planned,
+    store_id,
+)
 from kartograf.download.storage import FileStorage
+from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
@@ -41,7 +58,7 @@ from kartograf.providers.pl.gugik_laz import (
     SupersededLazTile,
 )
 
-# (downloaded or skipped tiles, tile count) — called in the caller's thread
+# (processed tiles, tiles selected for execution) — called in the caller's thread
 LazProgressCallback = Callable[[int, int], None]
 
 NO_TILES_MESSAGE = (
@@ -60,26 +77,40 @@ class LazTileFailure:
 
 @dataclass(frozen=True)
 class LazDownloadResult:
-    """
-    Result of ``run_laz_download`` / ``download_laz_area``.
+    """Selected tiles, versioned files, failures, superseded tiles and stale plan items.
 
-    ``tiles`` — tiles selected for download (by sheet); each ends up in
-    exactly one of the lists ``downloaded`` (downloaded now), ``skipped``
-    (file already existed, ``force=False``) or ``failed``. ``superseded`` —
-    tiles dropped during selection (covered by newer tiles or outside the
-    area).
+    With ``plan=`` the files include only executed plan positions; tiles
+    removed from the plan or whose index signal changed are not downloaded.
     """
 
     tiles: tuple[LazTile, ...]
-    downloaded: tuple[Path, ...] = ()
-    skipped: tuple[Path, ...] = ()
+    files: tuple[VersionedFile, ...] = ()
     failed: tuple[LazTileFailure, ...] = ()
     superseded: tuple[SupersededLazTile, ...] = ()
+    stale: tuple[PlanItem, ...] = ()
 
     @property
     def ok(self) -> bool:
         """True when no tile failed."""
         return not self.failed
+
+
+def laz_version_ref(tile: LazTile) -> VersionRef:
+    """Campaign label of one WFS tile: acquisition date (or year) and request id."""
+    label = f"{tile.date or tile.year}_{tile.filename.split('_', 1)[0]}"
+    return VersionRef(label, "campaign")
+
+
+def laz_slot(storage: FileStorage, tile: LazTile) -> FileSlot:
+    """Standard path and version hierarchy in the tile's own horizontal system."""
+    system = tile.system
+    return FileSlot(
+        output_dir=storage.output_dir,
+        std=storage.get_raw_path(tile.sheet, tile.filename, system=system),
+        versions_base=storage.get_raw_versions_base(tile.sheet, system=system),
+        versions_root=storage.get_raw_versions_root(tile.sheet, system=system),
+        ext=".laz",
+    )
 
 
 def write_laz_sidecar(
@@ -94,8 +125,10 @@ def write_laz_sidecar(
     min_year: int | None = None,
     max_year: int | None = None,
     parent_request: dict | None = None,
+    digest: ContentDigest,
+    version: VersionRef,
 ) -> None:
-    """Best-effort LAZ tile sidecar via ``emit_sidecar`` (error = warning in log).
+    """Write the mandatory LAZ version sidecar exclusively via ``emit_sidecar``.
 
     ``request`` describes the bbox and requested year/density bounds (E16).
     ``all_campaigns=False`` selects the newest flight within year bounds;
@@ -146,7 +179,36 @@ def write_laz_sidecar(
         # the WFS channel declares only the default — unknown CRS = channel
         horizontal_crs=horizontal_crs_for_system(tile.crs),
         extra=extra,
+        digest=(digest.sha256, digest.size_bytes),
+        version=version.to_extra(),
+        exclusive=True,
     )
+
+
+def check_laz_updates(
+    selection: LazTileSelection,
+    *,
+    provider,
+    output_dir: str | Path,
+) -> UpdatePlan:
+    """Inspect selected WFS tiles without downloading any LAZ bytes."""
+    storage = FileStorage(
+        output_dir, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
+    )
+    items = tuple(
+        inspect_version(
+            laz_slot(storage, tile),
+            track="laz_tile",
+            unit=tile.sheet,
+            signal="index",
+            available=(
+                laz_version_ref(tile).label,
+                {"url": tile.url, "year": tile.year, "date": tile.date},
+            ),
+        )
+        for tile in selection.tiles
+    )
+    return new_plan(store_id(output_dir), items)
 
 
 def run_laz_download(
@@ -161,59 +223,86 @@ def run_laz_download(
     min_year: int | None = None,
     max_year: int | None = None,
     max_workers: int = 1,
-    force: bool = False,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
     on_progress: LazProgressCallback | None = None,
     parent_request: dict | None = None,
 ) -> LazDownloadResult:
-    """
-    Download the selected LAZ tiles (in parallel) and write sidecars.
+    """Version selected LAZ tiles, collecting per-tile download failures.
 
-    ``output_dir`` is the required base path. A tile goes to
-    ``FileStorage(output_dir, product="laz", resolution=None,
-    vertical_crs=provider.vertical_crs)``; the ``{system}`` segment follows
-    each tile's ``LazTile.system``. An existing file is skipped unless
-    ``force=True`` (default False). A tile ``DownloadError`` is collected
-    in ``failed``; other exceptions abort the call.
-
-    ``bbox``, optional ``year`` (None: no single-year filter),
-    ``min_density`` (None: no density filter), ``min_year``/``max_year``
-    (None: no year bounds) and ``parent_request`` (None: no parent entry)
-    describe the request in sidecars. ``all_campaigns=False`` selects
-    the newest flight in the year bounds; True selects all flights without
-    coverage deduplication. ``max_workers=1`` runs sequentially, and
-    ``on_progress=None`` emits no callbacks.
+    Each tile uses its own horizontal system's segment. The default and
+    ``"upgrade"`` reuse existing versions (D26); ``"force"`` downloads
+    bytes again without overwriting a version. With ``"upgrade"`` and a
+    plan, only still-missing positions from that plan execute. ``"check"``
+    is available through :func:`check_laz_updates`, not this function.
+    Sidecars retain the requested bbox, year, density and parent request.
     """
+    validate_update(update)
+    if plan is not None:
+        require_store(plan, store_id(output_dir))
     storage = FileStorage(
         output_dir, resolution=None, vertical_crs=provider.vertical_crs, product="laz"
     )
     tiles = selection.tiles
+    stale: tuple[PlanItem, ...] = ()
+    if update == "upgrade" and plan is not None:
+        fresh = check_laz_updates(
+            selection, provider=provider, output_dir=output_dir
+        ).items
+        todo, excluded = select_planned(plan, list(fresh), "laz_tile")
+        keys = {(item.segment, item.hierarchy, item.name) for item in todo}
+        tiles = tuple(
+            tile
+            for tile in tiles
+            if (
+                (slot := laz_slot(storage, tile)).segment,
+                slot.hierarchy,
+                slot.name,
+            )
+            in keys
+        )
+        stale = tuple(excluded)
     total = len(tiles)
 
-    def fetch(tile: LazTile) -> tuple[str, LazTile, Path | None, DownloadError | None]:
-        target = storage.get_raw_path(tile.sheet, tile.filename, system=tile.system)
-        if not force and target.exists():
-            return "skip", tile, target, None
+    def fetch(
+        tile: LazTile,
+    ) -> tuple[LazTile, VersionedFile | None, DownloadError | None]:
+        slot = laz_slot(storage, tile)
+
+        def download(staged: Path) -> None:
+            provider.download(tile.url, staged)
+
         try:
-            provider.download(tile.url, target)
-        except DownloadError as e:
-            return "fail", tile, None, e
-        write_laz_sidecar(
-            provider,
-            tile,
-            target,
-            bbox,
-            year=year,
-            min_density=min_density,
-            all_campaigns=all_campaigns,
-            min_year=min_year,
-            max_year=max_year,
-            parent_request=parent_request,
-        )
-        return "ok", tile, target, None
+            file = fetch_version(
+                slot,
+                update,
+                signal="index",
+                fetch=download,
+                version=laz_version_ref(tile),
+                write_sidecar=lambda data, ref, digest, _http: write_laz_sidecar(
+                    provider,
+                    tile,
+                    data,
+                    bbox,
+                    year=year,
+                    min_density=min_density,
+                    all_campaigns=all_campaigns,
+                    min_year=min_year,
+                    max_year=max_year,
+                    parent_request=parent_request,
+                    digest=digest,
+                    version=ref,
+                ),
+            )
+        except DownloadError as error:
+            return tile, None, error
+        return tile, file, None
 
-    outcomes: list[tuple[str, LazTile, Path | None, DownloadError | None]] = []
+    outcomes: list[tuple[LazTile, VersionedFile | None, DownloadError | None]] = []
 
-    def record(outcome) -> None:
+    def record(
+        outcome: tuple[LazTile, VersionedFile | None, DownloadError | None],
+    ) -> None:
         outcomes.append(outcome)
         if on_progress is not None:
             on_progress(len(outcomes), total)
@@ -228,21 +317,21 @@ def run_laz_download(
             record(fetch(tile))
 
     order = {id(tile): i for i, tile in enumerate(tiles)}
-    outcomes.sort(key=lambda o: order[id(o[1])])
+    outcomes.sort(key=lambda outcome: order[id(outcome[0])])
     failed = sorted(
         (
-            LazTileFailure(tile=t, error=e)
-            for s, t, _, e in outcomes
-            if s == "fail" and e
+            LazTileFailure(tile=tile, error=error)
+            for tile, _, error in outcomes
+            if error is not None
         ),
-        key=lambda f: (f.tile.sheet, f.tile.url),
+        key=lambda failure: (failure.tile.sheet, failure.tile.url),
     )
     return LazDownloadResult(
-        tiles=tiles,
-        downloaded=tuple(p for s, _, p, _ in outcomes if s == "ok" and p is not None),
-        skipped=tuple(p for s, _, p, _ in outcomes if s == "skip" and p is not None),
+        tiles=selection.tiles,
+        files=tuple(file for _, file, _ in outcomes if file is not None),
         failed=tuple(failed),
         superseded=selection.superseded,
+        stale=stale,
     )
 
 
@@ -257,7 +346,7 @@ def download_laz_area(
     min_year: int | None = None,
     max_year: int | None = None,
     max_workers: int = 1,
-    force: bool = False,
+    update: UpdateMode | None = None,
     on_progress: LazProgressCallback | None = None,
     parent_request: dict | None = None,
     provider: GugikLazProvider | None = None,
@@ -287,6 +376,9 @@ def download_laz_area(
     min_year, max_year : int, optional
         Closed acquisition-year bounds; an uncovered reference tile raises
         ``YearRangeError`` before any download. Exclusive with ``year``.
+    update : None or "upgrade" or "force", optional
+        Reuse a local version by default; ``"force"`` downloads again.
+        Use :func:`check_laz_updates` for a download-free update plan.
     parent_request : dict, optional
         Sidecar ``extra.parent_request`` (ADR-023 (f).1) — the CLI passes it
         in ``--bbox``/``--geometry`` mode.
@@ -306,7 +398,7 @@ def download_laz_area(
     ValueError
         ``bbox`` not in EPSG:2180, or an unknown / mismatched ``vertical_crs``.
     ValidationError
-        Invalid year bounds or ``year`` with a bound.
+        Invalid year bounds, ``year`` with a bound, or invalid update mode.
     DownloadError
         WFS discovery failure or no matching year in the service.
     YearRangeError
@@ -314,6 +406,7 @@ def download_laz_area(
     NoCoverageError
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
+    validate_update(update)
     if provider is None:
         provider = GugikLazProvider(vertical_crs=vertical_crs)
     elif vertical_crs != provider.vertical_crs:
@@ -343,7 +436,7 @@ def download_laz_area(
         min_year=min_year,
         max_year=max_year,
         max_workers=max_workers,
-        force=force,
+        update=update,
         on_progress=on_progress,
         parent_request=parent_request,
     )

@@ -158,7 +158,7 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
 ```
 
 - PL: WCS GUGiK daje wysokości NMT/NMPT 1 m w jednym GeoTIFF
-  `<segment>/bbox/<współrzędne>_<YYYYMMDD>.tif`. Przed zapytaniem
+  `<segment>/bbox/<współrzędne>.tif`. Przed zapytaniem
   WCS pobierana jest maska lądu PRG (`A00 - W02 - W03`): morze
   i obszar poza Polską to nodata `-9999`, **0,0 na lądzie zostaje
   danymi**. Wynik w całości nodata daje `Warning:` i kod 0. Na
@@ -173,12 +173,17 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
   starszymi); wycinek może pokazywać inny lot niż pobrane
   arkusze dokładnie 1 m. Nad lotem 0,5 m wynik 1 m to
   decymacja, nie uśrednienie.
-- Każde uruchomienie pobiera ponownie (bez pomijania istniejącego
-  pliku); tego samego dnia udany wynik atomowo zastępuje
-  poprzedni, nieudany pozostawia plik i sidecar. `--force`,
-  `--workers` i `--scale` nie zmieniają wycinka WCS.
-  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku
-  lub wyniku >= 1 GiB.
+- Wynik to dowiązanie `<segment>/bbox/<współrzędne>.tif` (bez daty) do
+  wersji w `<segment>/versions/bbox/<RRRR-MM-DD>_<sha8>/`. Domyślnie
+  i z `--upgrade` istniejąca wersja jest używana bez zapytań PRG i WCS
+  (linia `... lokalna wersja ... (bez sprawdzania; --check-updates)`);
+  `--force` pobiera ponownie — ta sama treść to „bez zmian” (wycinki są
+  bajtowo powtarzalne, pomiar 2026-10-12), inna to nowa wersja obok
+  starej. Nieudane pobranie nie rusza poprzedniej wersji ani dowiązania.
+  Pliki `<współrzędne>_<RRRRMMDD>.tif` z 0.7.x nie są rozpoznawane (usuń
+  je ręcznie). `--workers` i `--scale` nie zmieniają wycinka WCS.
+  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku lub wyniku
+  >= 1 GiB (tylko gdy wycinek będzie pobierany).
 - Wycinki 5 m, wybór roku (`--year`, `--min-year`, `--max-year`),
   `--all-campaigns` i `--full-sheet` z `--target-crs` są
   odrzucane (`Error:`). Podobnie `--target-crs` dla orto/LAZ;
@@ -229,28 +234,45 @@ w Polsce (część CZ bywa wtedy w całości nodata).
   żaden kraj nie dał wyniku albo `--country` było jawne.
 - Natywnie S-JTSK/Bpv (EPSG:5514); `KRON86` dla CZ jest nieosiągalny.
   Szczegóły: SCOPE 2.2 i 3.2, ARCHITECTURE 4.4–4.6.
+- Magazyn wersji (0.8.0): arkusz CZ i wycinek CZ leżą jako wersje
+  w `<segment>/versions/`, ścieżka arkusza i `bbox/<współrzędne>.tif` to
+  hardlinki. Arkusz SM5 ma tani sygnał (`ETag`/`Last-Modified` pliku
+  `openzu`, zapisany w `extra.http` sidecara wersji): domyślnie jedno
+  `HEAD` na plik z lokalną wersją — nowsza treść daje dopisek `; dostępna
+  nowsza ... (--upgrade)`, a `--upgrade` ją pobiera; nieudane `HEAD` to
+  `Warning:` i lokalna wersja (z `--upgrade` — błąd). Kafel TM33 i wycinek
+  CZ (`exportImage`) nie mają taniego sygnału: lokalna wersja bez
+  sieci, ponowne pobranie tylko `--force`.
 
 ### 1.5 Pokrycie terenu, gleby, HSG, cache
 
 ```bash
-kartograf landcover download --source bdot10k --teryt 1465 -o ./data/landcover
-kartograf landcover download --source bdot10k --teryt 1465 --format SHP -o ./data/landcover # archiwum .zip
+kartograf landcover download --source bdot10k --teryt 1465 -o ./data
+#   landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: nowa wersja 2026-10-12_f3550257
+kartograf landcover download --source bdot10k --teryt 1465 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp/teryt/1465.zip: nowa wersja ...  (archiwum .zip)
 # Obszar z dwóch powiatów (TERYT z WFS PRG): pakiet KAŻDEGO powiatu, osobny plik
-kartograf landcover download --source bdot10k --bbox 340000,290000,350000,300000 -o ./dane
-#   -> Downloaded to: dane/bdot10k_teryt_0208.gpkg
-#   -> Downloaded to: dane/bdot10k_teryt_0224.gpkg
-#   (nazwa zawsze teryt_<TERYT> — pakiet to cały powiat; obszar żądania
+kartograf landcover download --source bdot10k --bbox 626000,480000,628000,482000 -o ./data
+#   landcover/pl_bdot10k_gpkg/teryt/1421.gpkg: nowa wersja 2026-10-12_38da4056
+#   landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja 2026-10-12 (bez sprawdzania; --check-updates)
+#   Nowe: 1, nowa etykieta: 0, bez zmian: 0, lokalne: 1, bledy: 0 (./data)
+#   (ścieżka zawsze teryt/<TERYT> — pakiet to cały powiat; obszar żądania
 #    w sidecarze extra.parent_request; to samo dla --sheet i --geometry)
-kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data/landcover
-#   -> corine_2018_sheet_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
-kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm -o ./data/landcover --stat mean
-#   -> soilgrids_clay_15-30cm_mean_sheet_N-34-130-D.tif
-# Nazwa niesie każdy parametr treści (także domyślny), więc --property sand
-# dla tego samego obszaru daje osobny plik; parametry są też w sidecarze
+kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data
+#   z CLMS_CREDENTIALS: landcover/eu_corine_2018/N-34/130/D/N-34-130-D.tif: nowa wersja V2020_20u1_<sha8>
+#   bez: Info: CORINE 2018: podglad WMS ...
+#        landcover/eu_corine_2018_preview/N-34/130/D/N-34-130-D.png: nowa wersja 2026-10-12_<sha8>
+kartograf landcover download --source soilgrids --bbox 626000,480000,628000,482000 --property clay --depth 0-5cm --stat mean -o ./data
+#   soil/global_soilgrids_clay_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_717f0989
+# Segment niesie każdy parametr treści (lowercase), więc --property sand
+# dla tego samego obszaru to osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
 
-# Hydrologic Soil Groups dla metody SCS-CN
-kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data/hsg --depth 0-5cm
+# Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
+kartograf soilgrids hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
+#   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
+#   hsg/global_soilgrids_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_470ef3d9
+# Ponownie (także z --force, gdy treść wejść się nie zmieniła): ... uzyta ponownie 2.0
 
 # Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
@@ -260,12 +282,17 @@ kartograf cache clear
 kartograf cache path
 ```
 
-`--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`,
-`--geometry`). BDOT10k z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie
-powiaty obszaru (lista z WFS PRG, odpowiedzi w cache metadanych — `cache
-stats` liczy je w `TERYT entries`); obszar bez powiatu (morze) to `Error:`.
-CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
-Warstwy BDOT10k, parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
+`--output` to katalog magazynu (wersje w `versions/`, ścieżka standardowa
+= hardlink; ARCHITECTURE 3.3 reguła 8); `soilgrids hsg -o plik.tif` to
+`Error:` (plik poza magazynem: `hsg_from_rasters`). `--teryt` dotyczy tylko
+BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`, `--geometry`). BDOT10k
+z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
+z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
+w `TERYT entries`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
+się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
+`--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
+credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
+parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
 
 ### 1.6 Kiedy `--scale` jest wymagane
 
@@ -368,36 +395,44 @@ path = manager.download_sheet("N-34-130-D-d-2-4")
 # NMT 5 m tylko w EVRF2007: GugikProvider(resolution="5m", vertical_crs="KRON86")
 # -> ValueError (create_nmt_provider: ValidationError)
 
-# Biblioteczne download_bbox: NMT KRON86 (TIFF) i EVRF2007
-# (ASC multipart), a także NMPT (ASC multipart) — jednopasmowy
-# float32 GeoTIFF wysokości na siatce 1 m EPSG:2180, bez maski PRG
-kron = DownloadManager("./data", GugikProvider(vertical_crs="KRON86", resolution="1m"))
+# Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF):
+# provider.download_bbox(bbox, path) — jednopasmowy float32 GeoTIFF na
+# siatce 1 m EPSG:2180, bez maski PRG i bez wersji. Wycinek NMT/NMPT
+# w magazynie wersji: download_pl_cutout (niżej).
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
-path = kron.download_bbox(area, "my_area.tif")
+kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
+path = kron.download_bbox(area, Path("my_area.tif"))
 
-# Land Cover: BDOT10k / CORINE / SoilGrids (provider wymagany)
+# Land Cover: BDOT10k / CORINE / SoilGrids do magazynu (output_dir = --output)
 from kartograf import LandCoverManager
-lc = LandCoverManager("./data/landcover", "bdot10k")
-lc.download(teryt="1465")                   # BDOT10k (powiat)
+lc = LandCoverManager("./data", "bdot10k")
+result = lc.download(teryt="1465")         # BDOT10k (powiat)
+print(result.file.path, result.file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
 # BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo sheet=),
-# tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...];
-# keep_raw=True zostawia obok oryginalny ZIP GUGiK (bdot10k_teryt_<T>_GPKG.zip,
-# pełny pakiet niezależnie od layers=, z własnym sidecarem; tylko GPKG)
-paths = lc.download_all_counties(
+# tylko wybrane warstwy -> landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
+# keep_raw=True: oryginalny ZIP GUGiK jako osobna wersja
+# (landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip, pełny pakiet; tylko GPKG)
+area = lc.download_all_counties(
     bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
     layers=["SWRS", "SWKN", "SWRM", "PTWP"],
     keep_raw=True,
 )
+paths = [r.file.path for r in area.files]  # area.failed: powiaty z błędem
 # lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
 # kodów (kilka powiatów) / NoCoverageError (żaden)
 lc.set_provider("corine")
-lc.download(sheet="N-34-130-D", year=2018)  # CORINE
+lc.download(sheet="N-34-130-D", year=2018)  # CORINE (CLMS albo podgląd _preview)
+lc.set_provider("soilgrids")
+plan = lc.check(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean")
+lc.download(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean",
+            update="upgrade", plan=plan)    # tylko pozycje planu
 
-# Hydrologic Soil Groups
+# Hydrologic Soil Groups (wejścia = wersje SoilGrids w tym samym magazynie)
 from kartograf import HSGCalculator
-calc = HSGCalculator()
-calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"), depth="0-5cm", stat="mean")
-stats = calc.get_hsg_statistics(Path("./hsg.tif"))
+calc = HSGCalculator("./data")
+hsg = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+print(hsg.file.status, hsg.file.label)      # new 2.0 (ponownie: reused 2.0)
+stats = calc.get_hsg_statistics(hsg.file.path)
 
 # HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
 from kartograf import BBox, hsg_from_rasters
@@ -414,7 +449,8 @@ bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 result = download_pl_cutout(
     bbox, "EPSG:5514", output_dir="./data", vertical_crs="EVRF2007", product="nmpt",
 )
-print(result.path, result.masked_pixels, result.zero_pixels, result.all_nodata)
+print(result.file.path, result.file.status, result.masked_pixels, result.all_nodata)
+# domyślnie istniejąca wersja bez zapytań PRG/WCS; update="force" pobiera ponownie
 # osobne kroki przy własnym providerze; maska PRG pobierana przed WCS
 cutout = prepare_pl_cutout(
     bbox, "EPSG:2180", output_dir="./data", vertical_crs="EVRF2007", product="nmt"
@@ -434,12 +470,17 @@ cz = download_cz_cutout(
     vertical_crs="EVRF2007",
     resolution="2m",          # "2m" DMR 5G / "5m" DMR 4G
 )
-print(cz.path)                # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
+print(cz.file.path)           # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
 # all_nodata=True: część CZ bez ani jednego ważnego piksela (prostokąt
 # obwiedni CZ sięga w głąb Polski) — plik powstaje, flaga też w sidecarze
 print(cz.all_nodata)
 # Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
 # Własny provider: run_cz_cutout(provider, bbox, output_dir=, image_crs=).
+
+# Sprawdzenie bez pobierania (plan kartograf-plan/1) dla każdego toru:
+from kartograf import check_cz_cutout, check_laz_updates, check_pl_cutout
+plan = check_pl_cutout(cutout)          # status "unverifiable"/"missing"
+print([(i.track, i.unit, i.status) for i in plan.items])
 ```
 
 **Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
@@ -458,7 +499,7 @@ manager = DownloadManager(
     ),  # albo GugikProvider(..., cache=...)
 )
 # Land cover: cache dla providera tworzonego po nazwie (BDOT10k: odpowiedzi PRG)
-lc = LandCoverManager("./data/landcover", "bdot10k", cache=MetadataCache(".kartograf_cache.db"))
+lc = LandCoverManager("./data", "bdot10k", cache=MetadataCache(".kartograf_cache.db"))
 ```
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`,
@@ -485,21 +526,29 @@ rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
   (także po pojedynczym arkuszu — wynik jednoelementowy):
   `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze, dla których
   GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
-  w `failed`), pliki kampanii i `unverified` (sekcja 4).
+  w `failed`), pliki kampanii, `unverified`, statusy wersji `new`/
+  `relabeled`/`unchanged`/`local`, `newer` i `files` (sekcja 4).
 - `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
-  `path`, `skipped`, `downloaded`, `reused`, `link`, `unverified`,
-  `better_coverage`, `link_outside_range`, `full_link`,
-  `full_link_outside_range` (sekcje 4.1 i 4.2).
+  `path`, `skipped`, `downloaded`, `reused`, `status`, `version`, `newer`,
+  `files`, `unverified`, `better_coverage`, `link_outside_range`, `full_link`,
+  `full_link_outside_range` (sekcje 4.1–4.3).
 - `DownloadResult` ma też `no_coverage_hints` (godło -> podpowiedzi przy
   braku pokrycia, sekcja 1.6), `better_coverage`, `link_outside_range`,
   `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1
   i 4.2).
-- `PlCutoutResult` (wycinek WCS): `path`, `masked_pixels`,
-  `zero_pixels`, `all_nodata`; `skipped` zawsze `False`.
+- `PlCutoutResult` (wycinek WCS): `file` (`VersionedFile`),
+  `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
-  `path`, `skipped`, `all_nodata`.
-- `LazDownloadResult` (`download_laz_area`): `downloaded`, `skipped`,
-  `failed`, `superseded` (kafle pominięte jako pokryte przez nowsze).
+  `file`, `all_nodata`, `stale`.
+- `LazDownloadResult` (`download_laz_area`): `files` (`VersionedFile` na
+  kafel), `failed`, `superseded` (kafle pominięte jako pokryte przez
+  nowsze), `stale`.
+- `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
+  (`new`/`unchanged`/`relabeled`/`local`), `label`, `sha256`,
+  `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
+  `unverified` (`"none"` — brak taniego sygnału, `"check_failed: ..."`).
+  `file` wyników jednoplikowych jest `None` tylko z `plan=`, gdy plan nie
+  wykonuje tego pliku i nie ma wersji lokalnej.
 
 **Sidecar.** Każde udane pobranie przez CLI albo warstwę zarządzającą
 biblioteki (niżej) zapisuje dwa pliki: dane (`.asc`, `.tif`,
@@ -509,7 +558,7 @@ pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 łączący pliki jednego zadania. Pełna tabela pól: ARCHITECTURE 3.2,
 `parent_request`: ARCHITECTURE 3.4. Sidecary pisze warstwa zarządzająca
 (`DownloadManager`, `LandCoverManager`, wycinki PL i CZ oraz kafle LAZ
-w bibliotece; dla godła CZ — CLI), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
+i arkusze CZ w bibliotece), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
 Bezpośrednie wywołanie providera (np. `CuzkDmrProvider` z biblioteki) zapisuje
 sam plik danych, bez sidecara.
 
@@ -533,34 +582,42 @@ Domyślnie (również z flagami roku) pobiera najnowszą kampanię;
 opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
 czeskie) albo `Info:` (obszar PL+CZ pod `auto`, CZ w bieżącej wersji).
 
-Prawdziwe pliki NMT/NMPT/orto leżą w
-`data/<produkt>/<segment>/kampanie/<data>_<id>/<hierarchia godła>/<godło>.<ext>`
-(`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK),
-a ścieżka standardowa `data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>`
-jest dowiązaniem do najnowszej lokalnej kampanii. `newest` po wygaśnięciu
-cache (7 dni) sprawdza w skorowidzu, czy pojawiła się nowsza kampania.
+Prawdziwe pliki NMT/NMPT/orto leżą jako **wersje** w
+`data/<produkt>/<segment>/versions/<hierarchia godła>/<data>_<id>_<sha8>/<godło>.<ext>`
+(`<data>` = data pozyskania, `<id>` = numer kampanii z nazwy pliku GUGiK,
+`<sha8>` = początek sumy SHA-256 treści), a ścieżka standardowa
+`data/<produkt>/<segment>/<hierarchia godła>/<godło>.<ext>` jest
+dowiązaniem twardym do najnowszej lokalnej wersji
+([ADR-036](DECISIONS.md)). Wersji nic nie nadpisuje: ponowne pobranie tej
+samej treści to „bez zmian”, inna treść to nowa wersja obok starej.
+Szczegóły trybów: sekcja 4.3.
 
 - **Skorowidz niedostępny:** gdy skorowidz GUGiK nie odpowiada (sieć, HTTP
-  429/5xx), a arkusz ma już lokalną kampanię, `newest` jej używa i drukuje
-  `Warning: <godło>: skorowidz GUGiK niedostepny — uzyto lokalnej kampanii
-  bez sprawdzenia nowszej (...)` (kod bez zmian, także z `-q`). Bez lokalnej
-  kampanii, z `--force`, `--all-campaigns` albo dowolną flagą roku taki błąd
-  nadal kończy pobranie porażką (errata 5 ADR-030; z flagą roku całe
-  zadanie, sekcja 4.1). Biblioteka:
+  429/5xx), a arkusz ma już lokalną wersję, tryb domyślny jej używa (każda
+  strategia) i drukuje `Warning: <godło>: skorowidz GUGiK niedostepny —
+  uzyto lokalnej wersji bez sprawdzenia nowszej (...)` (kod bez zmian,
+  także z `-q`). Z flagą roku: gdy KAŻDY arkusz zadania ma lokalną wersję
+  z zakresu lat — lokalne wersje z ostrzeżeniem, inaczej całe zadanie kończy
+  się błędem bez pobrań. Bez lokalnej wersji, z `--upgrade` albo `--force`
+  błąd kończy pobranie porażką. Biblioteka:
   `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
   (treść błędu transportu).
-- **Dowiązanie = hardlink:** ścieżka standardowa to dowiązanie twarde do
-  pliku kampanii (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf
-  nie tworzy symlinków. Gdy system plików nie obsługuje hardlinków
-  (exFAT/FAT, sshfs/FUSE), powstaje kopia z `Warning:` (`extra.link: copy`
-  w sidecarze).
+- **Wymagane hardlinki:** ścieżka standardowa to dowiązanie twarde do pliku
+  wersji (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
+  tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
+  sshfs/FUSE) kończy pobranie arkusza błędem. Na udziale SMB montowanym
+  bez `serverino` (niestabilne numery i-węzłów) dowiązanie jest
+  potwierdzane sumą SHA-256 (jeden odczyt pliku przy każdym uruchomieniu).
 - **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` — bez zachowania
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
+  Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
+  zbiorach warto włączyć kompresję systemu plików.
 - **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
   udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
-- **Migracja:** brak; zwykły plik NMT/NMPT/orto w starej ścieżce
-  standardowej jest traktowany jak nieznany — pierwsze uruchomienie pobiera
-  go ponownie do `kampanie/` i zastępuje dowiązaniem.
+- **Migracja z 0.7.x:** brak; katalog `kampanie/` nie jest czytany (CLI
+  raz drukuje `Info: katalog kampanie/ z wersji 0.7.x nie jest uzywany ...`),
+  a potrzebne kampanie są pobierane ponownie do `versions/`; zwykły plik albo
+  kopia w ścieżce standardowej jest zastępowana dowiązaniem.
 - **Układ wysokości rekordu:** rekord skorowidza NMT/NMPT musi deklarować
   zadany układ (`ukladWspolrzednychPionowych`: `PL-KRON86-NH` dla KRON86,
   `PL-EVRF2007-NH` dla EVRF2007); inna wartość kończy kampanię błędem przed
@@ -589,13 +646,13 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 - **Flagi roku wyznaczają tylko dopuszczalne lata, `--all-campaigns` — liczbę
   lotów na arkusz.** Domyślnie pobierany jest
   jeden, najnowszy lot z zakresu; `--all-campaigns` pobiera wszystkie loty
-  z zakresu do `kampanie/`. Ta sama reguła dla każdej flagi roku i każdego
+  z zakresu do `versions/`. Ta sama reguła dla każdej flagi roku i każdego
   produktu. Przykład (arkusz z lotami 2019, 2023, 2025-04, 2025-10):
   `--year 2025` = lot 2025-10; `--year 2025 --all-campaigns` = oba loty
   2025; `--max-year 2024` = lot 2023; `--min-year 2024` = lot 2025-10.
 - **Ścieżka standardowa** wskazuje najnowszy lokalny lot i nigdy nie cofa się
   na starszy. Gdy wcześniej pobrano nowszy lot, a teraz zakres go wyklucza
-  (np. `--max-year 2022`), wybrany lot trafia do `kampanie/`, dowiązanie
+  (np. `--max-year 2022`), wybrany lot trafia do `versions/`, dowiązanie
   zostaje przy nowszym, a CLI podaje `Info: N dowiazan wskazuje lokalny lot
   spoza tego zadania ...` z linią `<godło>: sciezka standardowa -> dowiazanie
   <data>_<id>` (to samo dla `full_sheet/`, sekcja 4.2).
@@ -613,12 +670,13 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
   Arkusz bez żadnych danych (morze, obszar za granicą) jest pomijany
   z `Warning:` jak dotąd. Awaria skorowidza przy sprawdzaniu przerywa całe
   zadanie (`Error: nie udalo sie sprawdzic roku danych ...`) — ponów pobranie.
-- **Kilka lotów w przedziale (`--all-campaigns`):** gdy najnowszy lot nie
-  jest pełnym arkuszem, Kartograf mierzy po pobraniu pokrycie każdego lotu (udział ważnych
-  pikseli, `extra.coverage`); jeśli starszy lot ma większe pokrycie, drukuje
+- **Kilka lotów w przedziale (`--all-campaigns`):** każdy lot niepełny ma
+  w sidecarze wersji pokrycie zmierzone przy zapisie (udział ważnych pikseli,
+  `extra.coverage`); gdy najnowszy lot jest niepełny, a starszy ma większe
+  pokrycie (lot pełny liczy się jako pokryty w całości), Kartograf drukuje
   `Info:` (stderr, także z `-q`) i zapisuje `extra.flights`
   i `extra.better_coverage` w sidecarze ścieżki standardowej. Dowiązanie
-  nadal wskazuje najnowszy lot; starszy leży w `kampanie/`.
+  nadal wskazuje najnowszy lot; starszy leży w `versions/`.
 - **Sidecar:** `request.min_year`/`max_year` (gdy podane), `request.year`
   (gdy równe), `request.campaigns` (strategia faktycznie użyta),
   `extra.available_years` (wszystkie lata arkusza w skorowidzu).
@@ -648,7 +706,7 @@ data/nmt/pl_1992_1m_evrf2007/full_sheet/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc  #
 ```bash
 # arkusz z niepełnym najnowszym lotem: pobiera najnowszy i najnowszy pełny
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-#   -> Downloaded 2 campaign files for 1 sheets to ./data (0 already existed)
+#   -> N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_<sha8> (i druga: najnowszy pełny lot)
 kartograf download --sheet M-34-90-C-b-4-4 --product orto --full-sheet -o ./data
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pełny z zakresu lat
 ```
@@ -672,7 +730,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
   dowiązanie zostaje przy pełnym locie spoza zakresu, CLI podaje `Info:`
   z linią `<godło>: full_sheet/ -> dowiazanie <data>_<id>`.
 - **`list_files()` / `delete()`:** `FileStorage.list_files()` pomija
-  `full_sheet/`, `delete(godło)` usuwa oba dowiązania (pliki w `kampanie/`
+  `full_sheet/` i `versions/`, `delete(godło)` usuwa oba dowiązania (wersje
   zostają).
 - **Nie działa:** z `--product laz` i `--target-crs` (`Error:` przed siecią);
   dla CZ jak inne opcje kampanii.
@@ -681,6 +739,76 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
   `full_sheet/`), `DownloadResult.without_full`,
   `DownloadResult.full_link_outside_range`.
 
+
+### 4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)
+
+Dotyczy każdego toru `kartograf download`: arkuszy PL NMT/NMPT/orto,
+kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
+`--target-crs`, a także `landcover download` i `soilgrids hsg`. Flagi
+wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
+skorowidz); pozostałe tory różnią się sygnałem:
+
+| Tor | Sygnał świeżości | Uwagi |
+|---|---|---|
+| arkusze PL | skorowidz GUGiK (`index`) | tabela niżej |
+| kafle LAZ | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
+| arkusze SM5 (CZ) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
+| kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
+| SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
+| BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
+| HSG (`soilgrids hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
+
+Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
+z pozycjami PL i CZ (pole `track`), a `--upgrade --plan PLIK` wykonuje
+pozycje każdego toru.
+
+| Sytuacja | domyślnie | `--check-updates` | `--upgrade` | `--force` |
+|---|---|---|---|---|
+| lokalna wersja aktualna | lokalna wersja | `aktualne` | lokalna wersja | pobiera ponownie |
+| w skorowidzu nowsza kampania | lokalna wersja + `Info:` | `nowsza: <etykieta>` | pobiera nowszą | pobiera |
+| brak lokalnej wersji | pobiera | `do pobrania` | pobiera | pobiera |
+
+`--check-updates` niczego nie pobiera; z `--plan PLIK` zapisuje plan JSON
+(`kartograf-plan/1`), który `--upgrade --plan PLIK` wykonuje później —
+pozycja, której źródło zmieniło się od planu, kończy się `Error:` bez
+pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
+ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
+`bez zmian`, inna = nowa wersja.
+
+```bash
+kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+#   N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_4de1eac7
+kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --check-updates --plan plan.json
+#   N-34-139-C-a-3-1: aktualne (2025-10-21_84183)
+kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --upgrade --plan plan.json
+```
+
+Wynik: jedna linia na plik — `nowa wersja <etykieta>_<sha8>`, `nowa
+etykieta <etykieta> (ta sama tresc)` (GUGiK opublikował tę samą treść pod
+nowym rekordem), `bez zmian <etykieta>`, `lokalna wersja <etykieta>`
+(z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)`), po liście
+podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
+(także dla kafli LAZ). Arkusz CZ i wycinek dają jedną linię statusu
+(jednostka: godło albo ścieżka wycinka pod `--output`).
+
+Biblioteka:
+
+```python
+from kartograf import DownloadManager, GugikProvider, UpdatePlan, check_updates, upgrade
+
+manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
+manager.download_sheet("N-34-139-C-a-3-1")                     # domyślnie
+manager.download_sheet("N-34-139-C-a-3-1", update="upgrade")   # albo "force"
+plan = check_updates(manager, ["N-34-139-C-a-3-1"])            # nic nie pobiera
+report = upgrade(manager, UpdatePlan.from_json(plan.to_json()))
+print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-10-21_84183
+# LAZ / CZ / wycinki: run_laz_download(..., update=, plan=), check_laz_updates,
+# run_cz_cutout(..., update=, plan=), check_cz_cutout, run_pl_wcs_cutout(...,
+# update=, plan=), check_pl_cutout; land cover: LandCoverManager.download(...,
+# update=, plan=), check, check_all_counties; HSG: calculate_hsg_by_*(...,
+# update=, plan=), check_hsg_by_*; pozycje planu: item.track, item.unit
+```
+
 ---
 
 ## 5. Gleby i HSG
@@ -688,10 +816,13 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 - SoilGrids (ISRIC): 11 parametrów, 6 głębokości, 5 statystyk,
   rozdzielczość 250 m — tabela parametrów i jednostek: PRD 3.7;
   `kartograf landcover list-layers --source soilgrids`.
-- HSG (`kartograf soilgrids hsg`, `HSGCalculator`) pobiera `clay`/`sand`/
-  `silt` z SoilGrids, klasyfikuje teksturę wg trójkąta USDA (12 klas)
-  i mapuje ją na grupy A–D; wynik to GeoTIFF 1–4 (0 = nodata) z sidecarem
-  (PRD 3.8).
+- HSG (`kartograf soilgrids hsg`, `HSGCalculator(output_dir)`) bierze
+  `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
+  (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)
+  i mapuje ją na grupy A–D; wynik to wersja GeoTIFF 1–4 (0 = nodata)
+  w `hsg/global_soilgrids_<głębokość>_<stat>/` z sidecarem
+  (`extra.source_files`: ścieżki wersji i sha256 wejść; PRD 3.8). Te same
+  wejścia = wersja użyta ponownie, bez liczenia.
 - `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
   robi to samo z gotowych rastrow (g/kg) na siatce o zadanym ukladzie
   i pikselu, bez wartosci domyslnych. Nodata wejscia tylko z jego tagu,
@@ -758,6 +889,13 @@ proxy).
 
 - Kartograf nie scala rastrów PL i CZ w jedną powierzchnię przygraniczną
   (R6); wyniki są osobne, powiązane przez `extra.parent_request`.
+- Land cover i HSG (od 0.8.0): poprawkę danych w obrębie tego samego
+  wydania SoilGrids/CORINE (bez zmiany etykiety wydania) wykrywa tylko
+  `--force`; BDOT10k i podgląd CORINE nie mają taniego sygnału świeżości.
+  Pobranie CORINE z CLMS (z `CLMS_CREDENTIALS`) nie było sprawdzone na
+  żywo w 0.8.0 (odczyt wydania z katalogu CLMS — tak). Pliki land cover
+  i HSG z 0.7.x (`bdot10k_teryt_*.gpkg`, `soilgrids_*.tif`,
+  `hsg_*.tif`) nie są rozpoznawane — pobierz ponownie do magazynu.
 - Gdy skorowidz dla godła PL-2000 1:10000 udostępnia tylko arkusze potomne,
   pobranie zwraca `NoCoverageError` z podpowiedzią `--scale 1:2000`; nie
   pobiera arkusza PL-1992 jako zamiennika.
@@ -766,12 +904,14 @@ proxy).
   w Czechach (sekcja 1.2).
 - NMT 5 m nie obsługuje `--target-crs`: pobieraj arkusze
   bez tej flagi.
-- WCS `download_bbox` NMT KRON86 (TIFF) oraz NMT EVRF2007
-  i NMPT (ASC multipart) daje wysokości float32 w rozdzielczości
-  1 m. Samo `download_bbox` nie stosuje maski lądu PRG ani
-  nodata; maskę dostaje wycinek `--target-crs` /
+- `provider.download_bbox` (WCS: NMT KRON86 TIFF, NMT EVRF2007
+  i NMPT ASC multipart) daje wysokości float32 w rozdzielczości
+  1 m poza magazynem wersji, bez maski lądu PRG i bez sidecara;
+  maskę i wersję dostaje wycinek `--target-crs` /
   `download_pl_cutout`. Kompozycja serwera może różnić się
   od wyboru kampanii arkusza.
+- Wycinki (PL, CZ) i kafle TM33 nie mają taniego sygnału świeżości:
+  zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (...)` i pracuje bez cache.

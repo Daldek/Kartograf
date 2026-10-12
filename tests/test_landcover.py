@@ -7,6 +7,7 @@ and LandCoverManager classes.
 
 import hashlib
 import json
+import os
 import shutil
 import sqlite3
 import zipfile
@@ -161,7 +162,7 @@ class TestBdot10kPrgTimeout:
         manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
         with (
             patch(self.DISCOVER, return_value=["0208"]) as discover,
-            patch.object(manager, "_download_county", return_value=tmp_path / "x"),
+            patch.object(manager, "_run"),
         ):
             manager.download_by_bbox(self.BBOX, timeout=7)
             assert discover.call_args.kwargs["timeout"] == 7
@@ -535,14 +536,16 @@ class TestBdot10kShpFormat:
             )
         assert rc == 0
         assert session.get.call_args[0][0].endswith("/SHP/14/1465_SHP.zip")
-        expected = tmp_path / "bdot10k_teryt_1465.zip"
+        expected = tmp_path / "landcover/pl_bdot10k_shp/teryt/1465.zip"
         assert expected.read_bytes().startswith(b"PK")
-        assert (tmp_path / "bdot10k_teryt_1465.zip.meta.json").exists()
-        assert sorted(p.name for p in tmp_path.iterdir()) == [
-            "bdot10k_teryt_1465.zip",
-            "bdot10k_teryt_1465.zip.meta.json",
+        (version,) = (tmp_path / "landcover/pl_bdot10k_shp/versions/teryt").iterdir()
+        assert sorted(p.name for p in version.iterdir()) == [
+            "1465.zip",
+            "1465.zip.meta.json",
         ]
-        assert f"Downloaded to: {expected}" in capsys.readouterr().out
+        assert os.path.samefile(expected, version / "1465.zip")
+        out = capsys.readouterr().out
+        assert "landcover/pl_bdot10k_shp/teryt/1465.zip: nowa wersja " in out
 
     def test_provider_returns_zip_path_for_shp(self, tmp_path):
         provider = Bdot10kProvider(session=self._session())
@@ -1165,207 +1168,6 @@ class TestCorineProviderDownload:
 
 
 # ===========================================================================
-# New tests for LandCoverManager
-# ===========================================================================
-
-
-class TestLandCoverManagerDownload:
-    """Test LandCoverManager download methods with mocks."""
-
-    def test_download_by_teryt(self, tmp_path):
-        """download_by_teryt delegates to provider."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.download_by_teryt.return_value = tmp_path / "out.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        result = manager.download_by_teryt("1465", output_path=tmp_path / "out.gpkg")
-
-        assert result == tmp_path / "out.gpkg"
-        mock_provider.download_by_teryt.assert_called_once()
-
-    def test_download_by_teryt_auto_path(self, tmp_path):
-        """download_by_teryt generates path when not provided."""
-        mock_provider = Mock()
-        mock_provider.name = "TestProv"
-        mock_provider.download_by_teryt.return_value = tmp_path / "auto.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download_by_teryt("1465")
-
-        # Check auto-generated path contains provider name and TERYT
-        call_args = mock_provider.download_by_teryt.call_args
-        auto_path = call_args[0][1]
-        assert "testprov" in str(auto_path).lower()
-        assert "1465" in str(auto_path)
-
-    def test_download_by_bbox(self, tmp_path):
-        """download_by_bbox delegates to provider."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.download_by_bbox.return_value = tmp_path / "out.gpkg"
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        result = manager.download_by_bbox(bbox, output_path=tmp_path / "out.gpkg")
-
-        assert result == tmp_path / "out.gpkg"
-        mock_provider.download_by_bbox.assert_called_once()
-
-    def test_download_by_bbox_auto_path(self, tmp_path):
-        """download_by_bbox generates path with bbox coordinates."""
-        mock_provider = Mock()
-        mock_provider.name = "Test"
-        mock_provider.download_by_bbox.return_value = tmp_path / "auto.gpkg"
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download_by_bbox(bbox)
-
-        call_args = mock_provider.download_by_bbox.call_args
-        auto_path = call_args[0][1]
-        assert "bbox" in str(auto_path)
-
-    def test_download_by_sheet(self, tmp_path):
-        """download_by_sheet delegates to provider."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.download_by_sheet.return_value = tmp_path / "out.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        result = manager.download_by_sheet(
-            "N-34-130-D", output_path=tmp_path / "out.gpkg"
-        )
-
-        assert result == tmp_path / "out.gpkg"
-        mock_provider.download_by_sheet.assert_called_once()
-
-    def test_download_by_sheet_auto_path(self, tmp_path):
-        """download_by_sheet generates path with sheet."""
-        mock_provider = Mock()
-        mock_provider.name = "Test"
-        mock_provider.download_by_sheet.return_value = tmp_path / "auto.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download_by_sheet("N-34-130-D")
-
-        call_args = mock_provider.download_by_sheet.call_args
-        auto_path = call_args[0][1]
-        assert "N-34-130-D" in str(auto_path)
-
-    def test_download_dispatches_teryt(self, tmp_path):
-        """download(teryt=...) dispatches to download_by_teryt."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.download_by_teryt.return_value = tmp_path / "out.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download(teryt="1465")
-
-        mock_provider.download_by_teryt.assert_called_once()
-
-    def test_download_dispatches_sheet(self, tmp_path):
-        """download(sheet=...) dispatches to download_by_sheet."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.download_by_sheet.return_value = tmp_path / "out.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download(sheet="N-34-130-D")
-
-        mock_provider.download_by_sheet.assert_called_once()
-
-    def test_download_dispatches_bbox(self, tmp_path):
-        """download(bbox=...) dispatches to download_by_bbox."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.download_by_bbox.return_value = tmp_path / "out.gpkg"
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download(bbox=bbox)
-
-        mock_provider.download_by_bbox.assert_called_once()
-
-    def test_get_available_layers(self, tmp_path):
-        """get_available_layers delegates to provider."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.get_available_layers.return_value = ["layer1", "layer2"]
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        layers = manager.get_available_layers()
-
-        assert layers == ["layer1", "layer2"]
-
-    def test_get_supported_formats(self, tmp_path):
-        """get_supported_formats delegates to provider."""
-        mock_provider = Mock()
-        mock_provider.name = "MockProvider"
-        mock_provider.get_supported_formats.return_value = ["GPKG"]
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        formats = manager.get_supported_formats()
-
-        assert formats == ["GPKG"]
-
-    @pytest.mark.parametrize(
-        "call_kwargs,method_name",
-        [
-            ({"sheet": "N-34-130-D"}, "sheet"),
-            ({"teryt": "1465"}, "teryt"),
-            (
-                {"bbox": BBox(500000, 300000, 510000, 310000, "EPSG:2180")},
-                "bbox",
-            ),
-        ],
-    )
-    def test_download_and_download_by_x_generate_same_path(
-        self, tmp_path, call_kwargs, method_name
-    ):
-        """download() and download_by_* must generate identical paths without spaces."""
-        mock_provider = Mock()
-        mock_provider.name = "CORINE Land Cover"
-        provider_method = getattr(mock_provider, f"download_by_{method_name}")
-        provider_method.return_value = tmp_path / "out.gpkg"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-
-        with patch.object(manager, "_write_sidecar"):
-            manager.download(**call_kwargs)
-        path_via_download = provider_method.call_args[0][1]
-
-        provider_method.reset_mock()
-        manager_method = getattr(manager, f"download_by_{method_name}")
-        manager_method(**call_kwargs)
-        path_via_download_by = provider_method.call_args[0][1]
-
-        assert path_via_download == path_via_download_by
-        assert " " not in str(path_via_download)
-        assert " " not in str(path_via_download_by)
-
-    def test_generate_output_path(self, tmp_path):
-        """_generate_output_path creates correct paths."""
-        mock_provider = Mock()
-        mock_provider.name = "Test Provider"
-
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-
-        # By TERYT
-        path = manager._generate_output_path("1465", None, None)
-        assert "teryt_1465" in str(path)
-
-        # By bbox
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        path = manager._generate_output_path(None, bbox, None)
-        assert "bbox" in str(path)
-
-        # By sheet
-        path = manager._generate_output_path(None, None, "N-34-130-D")
-        assert "sheet_N-34-130-D" in str(path)
-
-
-# ===========================================================================
 # Tests for rtree spatial index preservation during GPKG merge
 # ===========================================================================
 
@@ -1629,92 +1431,6 @@ class TestAdminUnitAliases:
         assert DataSourceProvider.descriptor_key is None
 
 
-class TestSidecarLandCover:
-    """A .meta.json sidecar after a land cover download (spec stage 0)."""
-
-    def test_download_by_teryt_writes_sidecar(self, tmp_path):
-        mock_provider = Mock()
-        mock_provider.name = "BDOT10k"
-        mock_provider.descriptor_key = "pl.gugik.bdot10k"
-        out = tmp_path / "out.gpkg"
-
-        def fake(teryt, output_path, **kwargs):
-            out.write_bytes(b"GPKG")
-            return out
-
-        mock_provider.download_by_teryt.side_effect = fake
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        result = manager.download_by_teryt("1465", output_path=out)
-        sidecar = result.parent / f"{result.name}.meta.json"
-        assert sidecar.exists()
-        import json
-
-        payload = json.loads(sidecar.read_text(encoding="utf-8"))
-        assert payload["dataset"] == "pl.gugik.bdot10k"
-        assert payload["request"] == {"teryt": "1465"}
-        assert payload["vertical_crs"] is None
-
-    def test_sidecar_failure_does_not_break_download(self, tmp_path, caplog):
-        """D7: a sidecar build error = warning, the data file stays."""
-        import logging
-
-        mock_provider = Mock()
-        mock_provider.name = "BDOT10k"
-        mock_provider.descriptor_key = "pl.gugik.bdot10k"
-        out = tmp_path / "out.gpkg"
-
-        def fake(teryt, output_path, **kwargs):
-            out.write_bytes(b"GPKG")
-            return out
-
-        mock_provider.download_by_teryt.side_effect = fake
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        with (
-            patch(
-                "kartograf.sources.sidecar.build_metadata",
-                side_effect=RuntimeError("zepsuty deskryptor"),
-            ),
-            caplog.at_level(logging.WARNING),
-        ):
-            result = manager.download_by_teryt("1465", output_path=out)
-        assert result.exists()
-        assert not (result.parent / f"{result.name}.meta.json").exists()
-        assert "zepsuty deskryptor" in caplog.text
-
-    @staticmethod
-    def _corine_png_sidecar(tmp_path, **kwargs):
-        """Download CORINE by bbox with the PNG fallback; return the sidecar payload."""
-        import json
-
-        mock_provider = Mock()
-        mock_provider.name = "CORINE"
-        mock_provider.descriptor_key = "eu.clms.corine"
-        out = tmp_path / "clc.png"
-
-        def fake(bbox, output_path, **_kwargs):
-            out.write_bytes(b"\x89PNG")
-            return out
-
-        mock_provider.download_by_bbox.side_effect = fake
-        manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        result = manager.download_by_bbox(bbox, output_path=out, **kwargs)
-        sidecar = result.parent / f"{result.name}.meta.json"
-        assert sidecar.exists()
-        return json.loads(sidecar.read_text(encoding="utf-8"))
-
-    def test_corine_png_fallback_uses_web_mercator(self, tmp_path):
-        payload = self._corine_png_sidecar(tmp_path)
-        assert payload["horizontal_crs"] == "EPSG:3857"
-        assert payload["extra"]["fallback"] == "wms_png"
-        assert payload["extra"]["note"] == "podglad WMS, nie dane"
-
-    def test_corine_png_fallback_1990_uses_wgs84(self, tmp_path):
-        payload = self._corine_png_sidecar(tmp_path, year=1990)
-        assert payload["horizontal_crs"] == "EPSG:4326"
-        assert payload["extra"]["fallback"] == "wms_png"
-
-
 class TestBdot10kDefaultTimeout:
     """N11: ``Bdot10kProvider.DEFAULT_TIMEOUT`` is the source of the default
     download timeout in all modes (SCOPE 3.2: 120 s), not a dead constant
@@ -1875,18 +1591,6 @@ class TestLandCoverNoSideEffectsOnInit:
         monkeypatch.chdir(cwd)
         return cwd
 
-    @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
-    def test_init_with_output_dir_creates_nothing(self, empty_cwd, source):
-        out = empty_cwd / "a" / "b"
-        manager = LandCoverManager(output_dir=out, provider=source)
-        # Generating the path (without writing) must not create it either.
-        options = {
-            "corine": {"year": 2018},
-            "soilgrids": {"property": "soc", "depth": "0-5cm", "stat": "mean"},
-        }.get(source, {})
-        manager._generate_output_path("1465", None, None, options)
-        assert _tree(empty_cwd) == []
-
     @pytest.mark.parametrize(
         "argv",
         [
@@ -1903,7 +1607,7 @@ class TestLandCoverNoSideEffectsOnInit:
         assert _tree(empty_cwd) == []
 
     def test_bdot10k_download_creates_output_dir_and_file(self, empty_cwd):
-        out_dir = empty_cwd / "data" / "landcover"
+        out_dir = empty_cwd / "data"
         provider = Bdot10kProvider()
         session = Mock()
         session.get.return_value = _stream_response(b"PK zip", "application/zip")
@@ -1911,43 +1615,11 @@ class TestLandCoverNoSideEffectsOnInit:
         manager = LandCoverManager(output_dir=out_dir, provider=provider)
         assert not out_dir.exists()
 
-        path = manager.download(teryt="1465", format="SHP")
+        file = manager.download(teryt="1465", format="SHP").file
 
-        assert path == out_dir / "bdot10k_teryt_1465.zip"
-        assert path.read_bytes() == b"PK zip"
-        assert (out_dir / "bdot10k_teryt_1465.zip.meta.json").exists()
-
-    def test_corine_wms_download_creates_output_dir_and_file(self, empty_cwd):
-        out_dir = empty_cwd / "out" / "corine"
-        provider = CorineProvider(use_proxy=False)
-        session = Mock()
-        session.get.return_value = _stream_response(b"\x89PNG", "image/png")
-        provider._sessions.injected = session
-        manager = LandCoverManager(output_dir=out_dir, provider=provider)
-        bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
-
-        path = manager.download(bbox=bbox, year=2018)
-
-        assert path.parent == out_dir
-        assert path.read_bytes() == b"\x89PNG"
-        assert (out_dir / f"{path.name}.meta.json").exists()
-
-    def test_soilgrids_download_creates_output_dir_and_file(self, empty_cwd):
-        from kartograf.providers.soilgrids import SoilGridsProvider
-
-        out_dir = empty_cwd / "out" / "soil"
-        provider = SoilGridsProvider()
-        session = Mock()
-        session.get.return_value = _stream_response(b"II*\x00", "image/tiff")
-        provider._sessions.injected = session
-        manager = LandCoverManager(output_dir=out_dir, provider=provider)
-        bbox = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
-
-        path = manager.download(bbox=bbox, property="soc", depth="0-5cm", stat="mean")
-
-        assert path.parent == out_dir
-        assert path.read_bytes() == b"II*\x00"
-        assert (out_dir / f"{path.name}.meta.json").exists()
+        assert file.path == out_dir / "landcover/pl_bdot10k_shp/teryt/1465.zip"
+        assert file.path.read_bytes() == b"PK zip"
+        assert Path(f"{file.version_path}.meta.json").exists()
 
     @pytest.mark.parametrize("source", ["bdot10k", "corine", "soilgrids"])
     def test_failed_download_leaves_no_output_dir(self, empty_cwd, source):
@@ -1977,7 +1649,8 @@ class TestLandCoverNoSideEffectsOnInit:
                     **options,
                 )
 
-        assert _tree(empty_cwd) == []
+        # the store root may stay (staging lives below it), never a file
+        assert _tree(empty_cwd) in ([], ["out"])
 
 
 def _bdot_zip(tmp_path, tables):
@@ -2135,7 +1808,7 @@ class TestBdot10kSidecarSource:
 
     def test_keep_raw_write_error_keeps_previous_result(self, tmp_path, monkeypatch):
         """P1: a re-download whose raw ZIP write fails leaves the previous
-        GPKG and its sidecar untouched and consistent."""
+        versions and links untouched and no staging behind."""
         out = tmp_path / "out"
         manager = LandCoverManager(output_dir=out, provider="bdot10k")
         z1, z2 = tmp_path / "z1", tmp_path / "z2"
@@ -2143,9 +1816,10 @@ class TestBdot10kSidecarSource:
         z2.mkdir()
         first = _bdot_zip(z1, ["OT_PTWP_A"])
         manager.provider._sessions = SessionPerThread(self._session(first, {}))
-        gpkg = manager.download(teryt="0262", keep_raw=True)
+        result = manager.download(teryt="0262", keep_raw=True)
+        gpkg = result.file.path
         before = gpkg.read_bytes()
-        sidecar = json.loads((gpkg.parent / f"{gpkg.name}.meta.json").read_text())
+        sidecar = json.loads(Path(f"{result.file.version_path}.meta.json").read_text())
 
         second = _bdot_zip(z2, ["OT_PTWP_A", "OT_SWRS_L"])
         manager.provider._sessions = SessionPerThread(self._session(second, {}))
@@ -2155,10 +1829,11 @@ class TestBdot10kSidecarSource:
 
         monkeypatch.setattr(Path, "write_bytes", disk_full)
         with pytest.raises(DownloadError, match="No space left"):
-            manager.download(teryt="0262", keep_raw=True)
+            manager.download(teryt="0262", keep_raw=True, update="force")
         assert gpkg.read_bytes() == before
         assert hashlib.sha256(before).hexdigest() == sidecar["sha256"]
-        assert [p.name for p in out.iterdir() if ".tmp" in p.name] == []
+        assert [p for p in out.rglob("*") if ".incoming" in p.parts[-2:]] == []
+        assert not any(".tmp" in p.name for p in out.rglob("*"))
 
     def test_failed_raw_zip_write_releases_buffer_view(self, tmp_path, monkeypatch):
         """P9g: the ``getbuffer`` view is released even when the write fails
@@ -2240,212 +1915,8 @@ class TestBdot10kSidecarSource:
         assert "Cannot allocate memory" in err
         assert "OSError" not in err
 
-    def test_manager_sidecar_has_source_and_http(self, tmp_path):
-        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
-        manager.provider._sessions = SessionPerThread(
-            self._session(body, {"Content-Length": str(len(body))})
-        )
-        path = manager.download(teryt="0262", keep_raw=True)
-        meta = json.loads(path.with_name(path.name + ".meta.json").read_text())
-        assert meta["extra"]["source"] == {
-            "url": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/GPKG/02/0262_GPKG.zip",
-            "teryt": "0262",
-            "format": "GPKG",
-            "raw_file": "bdot10k_teryt_0262_GPKG.zip",
-        }
-        assert meta["extra"]["http"]["content_length"] == len(body)
-        assert len(meta["sha256"]) == 64
-        assert "keep_raw" not in meta["request"]
-        raw = tmp_path / "out" / "bdot10k_teryt_0262_GPKG.zip"
-        raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
-        assert raw_meta["size_bytes"] == len(body)
-        assert "raw_file" not in raw_meta["extra"]["source"]
 
-    def test_manager_without_keep_raw_has_no_raw_file(self, tmp_path):
-        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
-        manager.provider._sessions = SessionPerThread(self._session(body, {}))
-        path = manager.download(teryt="0262")
-        meta = json.loads(path.with_name(path.name + ".meta.json").read_text())
-        assert "raw_file" not in meta["extra"]["source"]
-        assert meta["extra"]["http"] == {
-            "etag": None,
-            "last_modified": None,
-            "content_length": None,
-        }
-        assert sorted(p.name for p in (tmp_path / "out").iterdir()) == [
-            "bdot10k_teryt_0262.gpkg",
-            "bdot10k_teryt_0262.gpkg.meta.json",
-        ]
-
-    def test_all_counties_keep_raw_reaches_provider(self, tmp_path):
-        """keep_raw passes the manager's option filter (``_BDOT_OPTIONS``) and
-        the source joins ``extra.parent_request``."""
-        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
-        manager.provider._sessions = SessionPerThread(self._session(body, {}))
-        with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
-            paths = manager.download_all_counties(
-                sheet="M-33-48-A", keep_raw=True, layers=["PTWP"]
-            )
-        assert [p.name for p in paths] == ["bdot10k_PTWP_teryt_0262.gpkg"]
-        raw = tmp_path / "out" / "bdot10k_teryt_0262_GPKG.zip"
-        assert raw.read_bytes() == body
-        meta = json.loads(paths[0].with_name(paths[0].name + ".meta.json").read_text())
-        assert meta["extra"]["parent_request"] == {
-            "sheet": "M-33-48-A",
-            "countries": ["PL"],
-        }
-        assert meta["extra"]["source"]["raw_file"] == raw.name
-        raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
-        assert raw_meta["extra"]["parent_request"] == meta["extra"]["parent_request"]
-
-    def test_layer_filters_share_one_unfiltered_raw_zip(self, tmp_path):
-        """A2: the raw ZIP is the full package - one standard name without a
-        layers token and a sidecar ``request`` without ``layers``, whatever the
-        filter of the GPKG."""
-        body = _bdot_zip(tmp_path, ["OT_PTWP_A", "OT_SWRS_L"])
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
-        manager.provider._sessions = SessionPerThread(self._session(body, {}))
-        with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
-            for layers in (["PTWP"], ["SWRS"]):
-                manager.download_all_counties(
-                    sheet="M-33-48-A", keep_raw=True, layers=layers
-                )
-        out = tmp_path / "out"
-        assert sorted(p.name for p in out.glob("*.zip")) == [
-            "bdot10k_teryt_0262_GPKG.zip"
-        ]
-        raw = out / "bdot10k_teryt_0262_GPKG.zip"
-        assert raw.read_bytes() == body
-        raw_meta = json.loads(raw.with_name(raw.name + ".meta.json").read_text())
-        assert raw_meta["request"] == {"teryt": "0262", "format": "GPKG"}
-        for layer in ("PTWP", "SWRS"):
-            gpkg = out / f"bdot10k_{layer}_teryt_0262.gpkg"
-            meta = json.loads(gpkg.with_name(gpkg.name + ".meta.json").read_text())
-            assert meta["request"]["layers"] == [layer]
-            assert meta["extra"]["source"]["raw_file"] == raw.name
-
-    def test_bbox_explicit_output_path_keeps_request_and_source(self, tmp_path):
-        """An explicit ``output_path`` (bbox) also gets the source and the raw
-        ZIP sidecar; ``request`` stays the bbox."""
-        body = _bdot_zip(tmp_path, ["OT_PTWP_A"])
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
-        manager.provider._sessions = SessionPerThread(self._session(body, {}))
-        bbox = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
-        out = tmp_path / "own" / "area.gpkg"
-        with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
-            path = manager.download_by_bbox(bbox, output_path=out, keep_raw=True)
-        assert path == out
-        meta = json.loads(out.with_name(out.name + ".meta.json").read_text())
-        assert meta["request"]["bbox"] == [340000, 290000, 350000, 300000]
-        assert "teryt" not in meta["request"]
-        assert meta["extra"]["source"]["teryt"] == "0262"
-        assert meta["extra"]["source"]["raw_file"] == "area_GPKG.zip"
-        assert (tmp_path / "own" / "area_GPKG.zip.meta.json").exists()
-
-
-class TestBdot10kManyCounties:
-    BBOX = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
-
-    def _manager(self, tmp_path, teryts):
-        manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
-        provider = manager.provider
-        patcher = patch.object(provider, "teryts_for_area", return_value=teryts)
-        patcher.start()
-
-        def fake_package(code, output_path, **kw):
-            output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_bytes(b"gpkg " + code.encode())
-            return Bdot10kPackage(
-                path=output_path,
-                teryt=code,
-                url=f"https://x/{code}_GPKG.zip",
-                format="GPKG",
-            )
-
-        patch.object(provider, "download_package", side_effect=fake_package).start()
-        return manager
-
-    def teardown_method(self):
-        patch.stopall()
-
-    def test_all_counties_one_file_each(self, tmp_path):
-        manager = self._manager(tmp_path, ["0208", "0224"])
-        paths = manager.download_all_counties(bbox=self.BBOX)
-        assert [p.name for p in paths] == [
-            "bdot10k_teryt_0208.gpkg",
-            "bdot10k_teryt_0224.gpkg",
-        ]
-        meta = json.loads(
-            (paths[1].with_name(paths[1].name + ".meta.json")).read_text()
-        )
-        assert meta["request"]["teryt"] == "0224"
-        assert meta["extra"]["parent_request"]["bbox"] == [
-            340000,
-            290000,
-            350000,
-            300000,
-        ]
-        assert meta["extra"]["parent_request"]["countries"] == ["PL"]
-
-    def test_all_counties_by_sheet(self, tmp_path):
-        manager = self._manager(tmp_path, ["0208"])
-        paths = manager.download_all_counties(sheet="M-33-48-A")
-        meta = json.loads(
-            (paths[0].with_name(paths[0].name + ".meta.json")).read_text()
-        )
-        assert meta["extra"]["parent_request"] == {
-            "sheet": "M-33-48-A",
-            "countries": ["PL"],
-        }
-
-    def test_layers_in_name_and_request(self, tmp_path):
-        manager = self._manager(tmp_path, ["0208"])
-        paths = manager.download_all_counties(bbox=self.BBOX, layers=["SWRS", "PTWP"])
-        assert paths[0].name == "bdot10k_PTWP-SWRS_teryt_0208.gpkg"
-
-    def test_single_county_bbox_uses_teryt_name(self, tmp_path):
-        manager = self._manager(tmp_path, ["0208"])
-        path = manager.download(bbox=self.BBOX)
-        assert path.name == "bdot10k_teryt_0208.gpkg"
-        meta = json.loads((path.with_name(path.name + ".meta.json")).read_text())
-        assert meta["request"]["teryt"] == "0208"
-        assert meta["extra"]["parent_request"]["bbox_crs"] == "EPSG:2180"
-
-    def test_single_county_sheet_has_parent_request(self, tmp_path):
-        manager = self._manager(tmp_path, ["0208"])
-        path = manager.download(sheet="M-33-048-A")
-        meta = json.loads((path.with_name(path.name + ".meta.json")).read_text())
-        assert meta["extra"]["parent_request"] == {
-            "sheet": "M-33-48-A",
-            "countries": ["PL"],
-        }
-
-    def test_many_counties_old_method_raises(self, tmp_path):
-        manager = self._manager(tmp_path, ["0208", "0224"])
-        with pytest.raises(ValidationError, match="0208, 0224.*download_all_counties"):
-            manager.download(bbox=self.BBOX)
-
-    def test_no_county_raises_no_coverage(self, tmp_path):
-        from kartograf.exceptions import NoCoverageError
-
-        manager = self._manager(tmp_path, [])
-        with pytest.raises(NoCoverageError):
-            manager.download_all_counties(bbox=self.BBOX)
-
-    def test_non_bdot_provider_rejected(self, tmp_path):
-        manager = LandCoverManager(output_dir=tmp_path, provider="corine")
-        with pytest.raises(ValidationError, match="BDOT10k"):
-            manager.download_all_counties(bbox=self.BBOX)
-
-    def test_bbox_in_4326_accepted(self, tmp_path):
-        """D7: no EPSG:2180 requirement - the PRG query converts the area."""
-        manager = self._manager(tmp_path, ["0208"])
-        path = manager.download(bbox=BBox(16.70, 50.45, 16.80, 50.55, "EPSG:4326"))
-        assert path.name == "bdot10k_teryt_0208.gpkg"
-
+class TestLandCoverManagerCache:
     def test_soilgrids_gets_manager_cache(self, tmp_path):
         """A13: the cache reaches SoilGrids (CORINE has none)."""
         from kartograf.cache.metadata import MetadataCache
@@ -2496,8 +1967,8 @@ class TestLandCoverCliManyCounties:
             )
         assert rc == 0
         out = capsys.readouterr().out
-        assert f"Downloaded to: {tmp_path / 'out' / 'bdot10k_teryt_0208.gpkg'}" in out
-        assert f"Downloaded to: {tmp_path / 'out' / 'bdot10k_teryt_0224.gpkg'}" in out
+        assert "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: nowa wersja " in out
+        assert "landcover/pl_bdot10k_gpkg/teryt/0224.gpkg: nowa wersja " in out
 
     def test_cli_passes_metadata_cache(self, tmp_path, monkeypatch, capsys):
         from kartograf.cli.commands import main

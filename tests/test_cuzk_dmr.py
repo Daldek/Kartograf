@@ -203,7 +203,7 @@ class TestDownloadDispatch:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
             client = client_cls.return_value
 
-            def fake_fetch(url, output_path, *, unzip_single=None):
+            def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
                 # DMR4G-TIFF: crs=None (georeferencing only in .tfw)
                 _write_tif(Path(output_path), crs=None)
                 return Path(output_path)
@@ -221,6 +221,56 @@ class TestDownloadDispatch:
         with rasterio.open(target) as src:
             assert src.crs is not None and src.crs.to_epsg() == 5514
 
+    def test_sm5_response_callback_observes_zip_headers(self, tmp_path):
+        received = []
+        with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
+            index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
+
+            def fake_fetch(url, output_path, *, unzip_single, on_response):
+                _write_tif(Path(output_path), crs=None)
+                on_response(MagicMock(headers={"ETag": '"d19f2c604d89dc1:0"'}))
+                return Path(output_path)
+
+            client_cls.return_value.fetch_file.side_effect = fake_fetch
+            provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
+            provider.download(
+                "CTES96", tmp_path / "CTES96.tif", on_response=received.append
+            )
+
+        assert len(received) == 1
+        assert received[0].headers["ETag"] == '"d19f2c604d89dc1:0"'
+
+    def test_tm33_never_calls_response_callback(self, tmp_path):
+        received = []
+        with patch.object(CuzkDmrProvider, "_export_raster") as export:
+            provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+            provider.download(
+                "302_5550", tmp_path / "302_5550.tif", on_response=received.append
+            )
+        export.assert_called_once()
+        assert received == []
+
+    def test_sm5_signal_heads_openzu_url_with_timeout(self):
+        session = MagicMock()
+        session.head.return_value.headers = {
+            "ETag": '"d19f2c604d89dc1:0"',
+            "Last-Modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+            "Content-Length": "752795",
+        }
+        provider = CuzkDmrProvider(resolution="5m", session=session, vertical_crs="Bpv")
+        signal = provider.sm5_signal(" CTES96 ", timeout=12)
+        assert signal == {
+            "etag": '"d19f2c604d89dc1:0"',
+            "last_modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+            "content_length": 752795,
+        }
+        session.head.assert_called_once_with(
+            "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/CTES96.zip",
+            timeout=12,
+            allow_redirects=True,
+        )
+        session.get.assert_not_called()
+
     @pytest.mark.parametrize("sheet", [" CTES96", "CTES96 ", "\tCTES96\n"])
     def test_sm5_sheet_with_whitespace_builds_clean_url(self, tmp_path, sheet):
         """A library call with whitespace (the CLI already trims the sheet code):
@@ -231,7 +281,7 @@ class TestDownloadDispatch:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
             client = client_cls.return_value
 
-            def fake_fetch(url, output_path, *, unzip_single=None):
+            def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
                 _write_tif(Path(output_path), crs=None)
                 return Path(output_path)
 
@@ -258,7 +308,7 @@ class TestDownloadDispatch:
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
 
-            def fake_fetch(url, output_path, *, unzip_single=None):
+            def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
                 _write_dmr4g_pair(Path(output_path))
                 return Path(output_path)
 
@@ -284,7 +334,7 @@ class TestDownloadDispatch:
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
 
-            def fake_fetch(url, output_path, *, unzip_single=None):
+            def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
                 output_path = Path(output_path)
                 output_path.write_bytes(b"not a real tiff at all")
                 output_path.with_suffix(".tfw").write_text(
@@ -884,7 +934,7 @@ class TestOnDownloadCallback:
                 events.append("index")
                 return _ctes96_info()
 
-            def fake_fetch(url, output_path, *, unzip_single=None):
+            def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
                 events.append("fetch")
                 _write_tif(Path(output_path), crs=None)
                 return Path(output_path)

@@ -46,12 +46,33 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
-from kartograf.transport.http import MAX_RETRIES, SessionPerThread, download_to
+from kartograf.transport.http import (
+    MAX_RETRIES,
+    SessionPerThread,
+    download_to,
+    response_signal,
+)
 
 logger = logging.getLogger(__name__)
 
 # Layer code = the 4 letters after OT_ in GUGiK table names (e.g. PTWP in OT_PTWP_A)
 _LAYER_CODE = re.compile(r"[A-Z]{4}")
+
+
+def normalize_layers(layers: Sequence[str]) -> list[str]:
+    """Sorted unique BDOT10k layer codes; ``ValidationError`` for a bad code.
+
+    A code is 4 upper-case letters (``PTWP``, ``SWRS``); an empty selection
+    is an error too.
+    """
+    wanted = sorted(set(layers))
+    bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
+    if bad or not wanted:
+        raise ValidationError(
+            f"Nieprawidlowe kody warstw BDOT10k: {bad or '[]'} "
+            "(4 wielkie litery, np. PTWP, SWRS)"
+        )
+    return wanted
 
 
 @dataclass(frozen=True)
@@ -231,13 +252,7 @@ class Bdot10kProvider(LandCoverProvider):
             raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
         wanted = None
         if layers is not None:
-            wanted = sorted(set(layers))
-            bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
-            if bad or not wanted:
-                raise ValidationError(
-                    f"Nieprawidlowe kody warstw BDOT10k: {bad or '[]'} "
-                    "(4 wielkie litery, np. PTWP, SWRS)"
-                )
+            wanted = normalize_layers(layers)
             if format != "GPKG":
                 raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
         if keep_raw and format != "GPKG":
@@ -256,18 +271,8 @@ class Bdot10kProvider(LandCoverProvider):
         headers: dict = {}
 
         def capture(response: requests.Response) -> None:
-            def text(name: str) -> str | None:
-                # str only: anything else (e.g. a test double) is "absent"
-                value = response.headers.get(name)
-                return value if isinstance(value, str) else None
-
-            length = text("Content-Length")
             headers.clear()
-            headers.update(
-                etag=text("ETag"),
-                last_modified=text("Last-Modified"),
-                content_length=int(length) if length and length.isdigit() else None,
-            )
+            headers.update(response_signal(response))
 
         if keep_raw and raw_path is None:
             raw_path = output_path.with_name(f"{output_path.stem}_GPKG.zip")
@@ -284,7 +289,7 @@ class Bdot10kProvider(LandCoverProvider):
             timeout=timeout,
             retries=self.MAX_RETRIES,
             description=f"BDOT10k TERYT {code}",
-            validate=capture,
+            on_response=capture,
             save=save if format == "GPKG" else None,
         )
         return Bdot10kPackage(

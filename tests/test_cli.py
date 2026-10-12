@@ -62,8 +62,22 @@ def _sheet_list_manager(*paths, failed=(), no_coverage=(), skipped=()):
         failed=[*failed, *no_coverage],
         skipped=list(skipped),
         no_coverage=list(no_coverage),
+        files={
+            Path(p).stem: (
+                (
+                    "2025-01-01_1_0a1b2c3d",
+                    "local" if Path(p).stem in skipped else "new",
+                ),
+            )
+            for p in paths
+        },
     )
     return manager
+
+
+def _files(sheets, status="new"):
+    """``DownloadResult.files`` of a fake: one version file per sheet."""
+    return {sheet: (("2025-01-01_1_0a1b2c3d", status),) for sheet in sheets}
 
 
 def _mock_manager(path):
@@ -77,7 +91,7 @@ def _mock_manager(path):
 def _starting_download(path):
     """A fake ``download_sheet`` that calls ``on_download`` before downloading."""
 
-    def fake(sheet, skip_existing=True, on_progress=None, on_download=None):
+    def fake(sheet, update=None, on_progress=None, on_download=None):
         if on_download is not None:
             on_download()
         return path
@@ -696,7 +710,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=True, on_progress=None, on_download=ANY
+            "N-34-130-D-d-2-4", update=None, on_progress=None, on_download=ANY
         )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -767,7 +781,7 @@ class TestCmdDownload:
 
         assert result == 0
         mock_manager.download_sheet.assert_called_once_with(
-            "N-34-130-D-d-2-4", skip_existing=False, on_progress=None, on_download=ANY
+            "N-34-130-D-d-2-4", update="force", on_progress=None, on_download=ANY
         )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -874,7 +888,7 @@ class TestCmdDownload:
         assert result == 0
         captured = capsys.readouterr()
         assert "Downloading" in captured.out
-        assert "Downloaded to" in captured.out
+        assert "N-34-130-D-d-2-4: " in captured.out  # result line (mock manager)
 
     # --- hierarchy exit code (A2-3) ---
 
@@ -961,7 +975,12 @@ class TestCmdDownload:
         """D10: sea sheets under a 1:50000 code = Warning + exit code 0 (as --bbox)."""
         paths = [tmp_path / f"test{i}.asc" for i in range(3)]
         mock_manager_class.return_value = self._hierarchy_manager(
-            DownloadResult(succeeded=paths, failed=["A"], no_coverage=["A"])
+            DownloadResult(
+                succeeded=paths,
+                failed=["A"],
+                no_coverage=["A"],
+                files=_files(["B", "C", "D"]),
+            )
         )
 
         result = main(
@@ -988,7 +1007,9 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy (A)" in captured.err
         assert "Error:" not in captured.err
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 1" in (
+            captured.out
+        )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_hierarchy_all_no_coverage_returns_exit_1(
@@ -1030,7 +1051,12 @@ class TestCmdDownload:
     ):
         """Only skips (the files already exist) is still a success."""
         mock_manager = self._hierarchy_manager(
-            DownloadResult(succeeded=[], failed=[], skipped=["A", "B", "C", "D"])
+            DownloadResult(
+                succeeded=[],
+                failed=[],
+                skipped=["A", "B", "C", "D"],
+                files=_files(["A", "B", "C", "D"], "local"),
+            )
         )
         mock_manager.download_sheet.return_value = [tmp_path / "x.asc"] * 4
         mock_manager_class.return_value = mock_manager
@@ -1058,8 +1084,10 @@ class TestCmdDownload:
         assert result == 0
         captured = capsys.readouterr()
         assert captured.err == ""
-        assert "Downloaded 0 files" in captured.out
-        assert "4 already existed" in captured.out
+        assert "A: lokalna wersja 2025-01-01_1" in captured.out
+        assert "Nowe: 0, nowa etykieta: 0, bez zmian: 0, lokalne: 4, bledy: 0" in (
+            captured.out
+        )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_hierarchy_scale_mode_failure_returns_exit_1(
@@ -2381,12 +2409,12 @@ class TestCmdDownloadBBox:
 
         assert result == 0
         mock_manager.download_sheets.assert_called_once_with(
-            ["A", "B"], skip_existing=True, on_progress=ANY
+            ["A", "B"], update=None, on_progress=ANY
         )
         # --workers reaches the manager, not the CLI loop
         assert mock_manager_cls.call_args.kwargs["max_workers"] == 1
         captured = capsys.readouterr()
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
 
 class _SheetProvider:
@@ -2472,7 +2500,11 @@ class TestSheetListExitCode:
                     *extra,
                 ]
             )
-        files = sorted(p.name for p in tmp_path.rglob("*.asc"))
+        files = sorted(
+            p.name
+            for p in tmp_path.rglob("*.asc")
+            if "versions" not in p.relative_to(tmp_path).parts
+        )
         return rc, provider, files
 
     @pytest.mark.parametrize("workers", ["1", "2"])
@@ -2510,7 +2542,7 @@ class TestSheetListExitCode:
         assert "Error:" not in captured.err
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy" in captured.err
         assert "(N-34-130-D-d-2-1)" in captured.err
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
     def test_all_no_coverage_returns_1(self, tmp_path, capsys):
         """Zero files and all without data = exit code 1 (nothing to download)."""
@@ -2645,7 +2677,7 @@ class TestSheetListExitCode:
         assert len(provider.calls) == 4
         captured = capsys.readouterr()
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy" in captured.err
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
 
 class TestProgressNoCoverage:
@@ -2668,6 +2700,22 @@ class TestProgressNoCoverage:
 # ===========================================================================
 
 
+def _lc_result(path: Path):
+    """A land cover result for a mocked ``LandCoverManager``."""
+    from kartograf.download.fetch import VersionedFile
+    from kartograf.landcover.manager import LandCoverResult
+
+    return LandCoverResult(
+        "u", VersionedFile(path, "new", "2026-10-12", "0" * 64, path)
+    )
+
+
+def _lc_area(path: Path):
+    from kartograf.landcover.manager import LandCoverAreaResult
+
+    return LandCoverAreaResult((_lc_result(path),))
+
+
 class TestCmdLandcoverDownload:
     """Tests for landcover download CLI."""
 
@@ -2676,7 +2724,8 @@ class TestCmdLandcoverDownload:
         """landcover download --teryt calls manager.download with teryt."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.return_value = tmp_path / "out.gpkg"
+        mock_mgr.output_dir = tmp_path
+        mock_mgr.download.return_value = _lc_result(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2725,7 +2774,8 @@ class TestCmdLandcoverDownload:
         """landcover download --sheet (BDOT10k) downloads every powiat of the sheet."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.output_dir = tmp_path
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2745,14 +2795,15 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("sheet") == "N-34-130-D"
         mock_mgr.download.assert_not_called()
-        assert "Downloaded to" in capsys.readouterr().out
+        assert "out.gpkg: nowa wersja " in capsys.readouterr().out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
         """landcover download --bbox (BDOT10k) downloads every powiat of the bbox."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.output_dir = tmp_path
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2772,14 +2823,15 @@ class TestCmdLandcoverDownload:
         assert mock_mgr.download_all_counties.call_args.kwargs.get("bbox") is not None
         mock_mgr.download.assert_not_called()
         captured = capsys.readouterr()
-        assert "Downloaded to" in captured.out
+        assert "out.gpkg: nowa wersja " in captured.out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_source_corine(self, mock_mgr_cls, capsys, tmp_path):
         """--source corine creates manager with corine provider."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "CORINE Land Cover"
-        mock_mgr.download.return_value = tmp_path / "out.png"
+        mock_mgr.output_dir = tmp_path
+        mock_mgr.download.return_value = _lc_result(tmp_path / "out.png")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2957,6 +3009,14 @@ class TestCmdLandcoverDownload:
 # ===========================================================================
 
 
+def _hsg_result(path: Path):
+    """An HSG result for a mocked ``HSGCalculator``."""
+    from kartograf.download.fetch import VersionedFile
+    from kartograf.hydrology.hsg import HsgResult
+
+    return HsgResult("u", VersionedFile(path, "new", "2.0", "0" * 64, path), ())
+
+
 class TestCmdSoilgrids:
     """Tests for soilgrids CLI commands."""
 
@@ -2971,7 +3031,9 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --sheet -> success output."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
+            tmp_path / "hsg.tif"
+        )
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -2988,14 +3050,16 @@ class TestCmdSoilgrids:
         )
         assert result == 0
         captured = capsys.readouterr()
-        assert "HSG raster saved to" in captured.out
+        assert "hsg.tif: nowa wersja" in captured.out
         mock_calc.calculate_hsg_by_sheet.assert_called_once()
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --stats prints statistics."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
+            tmp_path / "hsg.tif"
+        )
         mock_calc.get_hsg_statistics.return_value = {
             "A": {
                 "count": 100,
@@ -3074,7 +3138,9 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_sheet_leading_zeros_canonical(self, mock_calc_cls, tmp_path):
         """A7: default HSG file name and the calculator use the canonical sheet."""
         mock_calc = mock_calc_cls.return_value
-        mock_calc.calculate_hsg_by_sheet.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_sheet.return_value = _hsg_result(
+            tmp_path / "hsg.tif"
+        )
         out = tmp_path / "out"
 
         result = main(
@@ -3091,9 +3157,8 @@ class TestCmdSoilgrids:
         )
 
         assert result == 0
-        kwargs = mock_calc.calculate_hsg_by_sheet.call_args.kwargs
-        assert kwargs["sheet"] == "M-33-36-A"
-        assert kwargs["output_path"] == out / "hsg_M-33-36-A_0-5cm.tif"
+        assert mock_calc_cls.call_args.args[0] == out
+        assert mock_calc.calculate_hsg_by_sheet.call_args.args[0] == "M-33-36-A"
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_out_of_range_sheet(self, mock_calc_cls, capsys, tmp_path):
@@ -3168,7 +3233,7 @@ class TestCmdSoilgrids:
     def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
         """soilgrids hsg --bbox -> calculate_hsg_by_bbox called."""
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3185,40 +3250,6 @@ class TestCmdSoilgrids:
         )
         assert result == 0
         mock_calc.calculate_hsg_by_bbox.assert_called_once()
-
-
-class TestSoilgridsHsgOutputName:
-    """Default HSG file names carry the depth, so depths do not overwrite."""
-
-    @staticmethod
-    def _run(args, tmp_path, method):
-        with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
-            calc = calc_cls.return_value
-            getattr(calc, method).return_value = tmp_path / "x.tif"
-            assert main(["soilgrids", "hsg", *args, "-o", str(tmp_path)]) == 0
-            return getattr(calc, method).call_args.kwargs["output_path"]
-
-    def test_sheet_name_has_depth(self, tmp_path):
-        a = self._run(
-            ["--sheet", "N-34-130-D", "--depth", "0-5cm"],
-            tmp_path,
-            "calculate_hsg_by_sheet",
-        )
-        b = self._run(
-            ["--sheet", "N-34-130-D", "--depth", "5-15cm"],
-            tmp_path,
-            "calculate_hsg_by_sheet",
-        )
-        assert a.name == "hsg_N-34-130-D_0-5cm.tif"
-        assert b.name == "hsg_N-34-130-D_5-15cm.tif"
-
-    def test_bbox_name_has_depth(self, tmp_path):
-        path = self._run(
-            ["--bbox", "450000,550000,460000,560000", "-d", "15-30cm"],
-            tmp_path,
-            "calculate_hsg_by_bbox",
-        )
-        assert path.name == "hsg_bbox_15-30cm.tif"
 
 
 def test_landcover_download_no_selection(capsys):
@@ -3625,7 +3656,7 @@ class TestCmdDownloadGeometry:
         mock_manager.download_sheets.assert_called_once()
         assert mock_manager.download_sheets.call_args.args[0] == ["A", "B"]
         captured = capsys.readouterr()
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
 
 # ===========================================================================
@@ -3646,7 +3677,8 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.output_dir = tmp_path
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -3668,7 +3700,7 @@ class TestCmdLandcoverDownloadGeometry:
         call_kwargs = mock_mgr.download_all_counties.call_args
         assert call_kwargs.kwargs.get("bbox") is not None
         mock_mgr.download.assert_not_called()
-        assert "Downloaded to" in capsys.readouterr().out
+        assert "out.gpkg: nowa wersja " in capsys.readouterr().out
 
     @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
@@ -3679,7 +3711,8 @@ class TestCmdLandcoverDownloadGeometry:
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download_all_counties.return_value = [tmp_path / "out.gpkg"]
+        mock_mgr.output_dir = tmp_path
+        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -3764,7 +3797,7 @@ class TestCmdSoilgridsHsgGeometry:
 
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -3792,7 +3825,7 @@ class TestCmdSoilgridsHsgGeometry:
         gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
         mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_calc = Mock()
-        mock_calc.calculate_hsg_by_bbox.return_value = tmp_path / "hsg.tif"
+        mock_calc.calculate_hsg_by_bbox.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
@@ -4223,6 +4256,13 @@ def _selection(tiles, superseded=()):
     return LazTileSelection(tiles=tuple(tiles), superseded=tuple(superseded))
 
 
+def _write_laz_tile(_url, target, **_kwargs):
+    """Stub tile bytes at the staged location consumed by the version store."""
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_bytes(b"LASF")
+    return target
+
+
 class TestCmdDownloadLaz:
     """Tests for the LAZ product flow in the download command."""
 
@@ -4284,7 +4324,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.return_value = tmp_path / "x.laz"
+        instance.download.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4323,7 +4363,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.return_value = tmp_path / "x.laz"
+        instance.download.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4376,7 +4416,7 @@ class TestCmdDownloadLaz:
 
         def _download(url, target, **_kwargs):
             if good in url:
-                return target
+                return _write_laz_tile(url, target)
             raise DownloadError(f"HTTP 503 dla {url}")
 
         instance = Mock()
@@ -4421,7 +4461,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.return_value = tmp_path / "x.laz"
+        instance.download.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         main(
@@ -4592,7 +4632,9 @@ class TestCmdDownloadLaz:
         )
 
         assert result == 0
-        sidecars = list(tmp_path.rglob("*.meta.json"))
+        sidecars = [
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        ]
         assert len(sidecars) == 1
         sidecar = sidecars[0]
         assert sidecar.name == f"{tile.filename}.meta.json"
@@ -4674,7 +4716,9 @@ class TestCmdDownloadLaz:
         )
 
         assert result == 0
-        sidecars = list(tmp_path.rglob("*.meta.json"))
+        sidecars = [
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        ]
         assert len(sidecars) == 1
         sidecar = sidecars[0]
         assert "pl_2000_kron86" in str(sidecar.parent)
@@ -4728,7 +4772,9 @@ class TestCmdDownloadLaz:
         )
 
         assert result == 0
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        )
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
         assert payload["horizontal_crs"] == "EPSG:2178"
 
@@ -4957,6 +5003,11 @@ def _cz_provider_mock(resolution="2m"):
     provider.resolution = resolution
     provider.vertical_crs = "Bpv"
     provider.vertical_transform = None
+    provider.sm5_signal.return_value = {
+        "etag": '"d19f2c604d89dc1:0"',
+        "last_modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+        "content_length": 752795,
+    }
 
     def fake_horizontal(target_crs):
         """CuzkDmrProvider.horizontal_transform contract: None for native."""
@@ -4969,10 +5020,20 @@ def _cz_provider_mock(resolution="2m"):
 
     provider.horizontal_transform.side_effect = fake_horizontal
 
-    def fake_download(sheet, target, timeout=60, *, on_download=None):
+    def fake_download(sheet, target, timeout=60, *, on_download=None, on_response=None):
         # provider contract: announce after validation, before the transfer
         if on_download is not None:
             on_download()
+        if on_response is not None:
+            on_response(
+                Mock(
+                    headers={
+                        "ETag": '"d19f2c604d89dc1:0"',
+                        "Last-Modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+                        "Content-Length": "752795",
+                    }
+                )
+            )
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"II*\x00dane")
         return target
@@ -5101,7 +5162,7 @@ class TestCzDownloadingAfterValidation:
     ) -> None:
         seen_at_fetch: list[str] = []
 
-        def fake_fetch(url, output_path, *, unzip_single=None):
+        def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
             seen_at_fetch.append(capsys.readouterr().out)
             self._write_tif(output_path, crs=None)
             return output_path
@@ -5136,7 +5197,7 @@ class TestCzDownloadingAfterValidation:
         assert len(seen_at_fetch) == 1
         assert seen_at_fetch[0].count("Downloading CTES96 (CZ, resolution: 5m)") == 1
         assert "Downloading" not in rest
-        assert "Downloaded to " in rest
+        assert rest.startswith("CTES96: nowa wersja ")
 
     def test_tm33_announces_once_before_export(
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
@@ -5273,9 +5334,14 @@ class TestCmdDownloadCz:
         assert result == 0
         assert factory.call_args.kwargs["resolution"] == "2m"
         assert factory.call_args.kwargs["vertical_crs"] == "Bpv"
-        target = provider.download.call_args.args[1]
-        assert target == (
-            tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
+        staged = provider.download.call_args.args[1]
+        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
+        assert staged.name == target.name
+        assert ".incoming" in staged.parts
+        assert target.read_bytes() == b"II*\x00dane"
+        assert (
+            json.loads(Path(f"{target}.meta.json").read_text())["extra"]["link"]
+            == "hardlink"
         )
 
     @pytest.mark.parametrize("force", [False, True])
@@ -5554,7 +5620,13 @@ class TestCmdDownloadCz:
             / "bbox"
             / "-447000_-1114000_-446000_-1113000.tif"
         )
-        assert provider.download_bbox.call_args.args[1] == target
+        staged = provider.download_bbox.call_args.args[1]
+        assert staged.name == target.name
+        assert staged.parent.parent.name == ".incoming"
+        assert staged.parent.parent.parent == (
+            tmp_path / "nmt" / "cz_dmr5g_bpv" / "versions"
+        )
+        assert target.exists()
         payload = json.loads(
             (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -5601,13 +5673,17 @@ class TestCmdDownloadCz:
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:5514"
         assert -450000 < sent_bbox.min_x < -440000  # Krovak: negative values
-        assert target.parent == tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox"
+        assert target.parent.parent.name == ".incoming"
+        assert target.parent.parent.parent == (
+            tmp_path / "nmt" / "cz_dmr5g_bpv" / "versions"
+        )
         assert target.name == (
             f"{format(sent_bbox.min_x, '.10g')}"
             f"_{format(sent_bbox.min_y, '.10g')}"
             f"_{format(sent_bbox.max_x, '.10g')}"
             f"_{format(sent_bbox.max_y, '.10g')}.tif"
         )
+        assert (tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox" / target.name).exists()
 
     def test_bbox_with_target_crs_records_pinned_transform(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -5623,8 +5699,10 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["target_crs"] == "EPSG:3045"
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:3045"
+        assert target.parent.parent.name == ".incoming"
+        link = tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox" / target.name
         payload = json.loads(
-            (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
+            (link.parent / f"{link.name}.meta.json").read_text(encoding="utf-8")
         )
         assert payload["horizontal_crs"] == "EPSG:3045"
         assert payload["transform"] == {
@@ -5775,7 +5853,7 @@ class TestCmdDownloadCz:
         assert "404 openzu" in capsys.readouterr().err
         assert not (tmp_path / "nmt" / "cz_dmr5g_bpv").exists()
 
-    def test_skip_existing(self, tmp_path):
+    def test_legacy_plain_sheet_is_replaced_by_version(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
@@ -5785,19 +5863,25 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(_cz_args(tmp_path))
         assert result == 0
-        provider.download.assert_not_called()
+        provider.download.assert_called_once()
+        assert target.read_bytes() == b"II*\x00dane"
+        assert (
+            json.loads(Path(f"{target}.meta.json").read_text())["extra"]["link"]
+            == "hardlink"
+        )
 
-    def test_force_overwrites_existing(self, tmp_path):
+    def test_force_redownloads_existing_version_without_overwrite(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        target.parent.mkdir(parents=True)
-        target.write_bytes(b"stare")
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            result = _cmd_download_cz(_cz_args(tmp_path, force=True))
-        assert result == 0
-        provider.download.assert_called_once()
+            assert _cmd_download_cz(_cz_args(tmp_path)) == 0
+            before = next((tmp_path / "nmt").rglob("versions/**/*.tif"))
+            assert _cmd_download_cz(_cz_args(tmp_path, force=True)) == 0
+        assert provider.download.call_count == 2
+        assert target.read_bytes() == b"II*\x00dane"
+        assert list((tmp_path / "nmt").rglob("versions/**/*.tif")) == [before]
 
     def test_evrf2007_transform_lands_in_sidecar(self, tmp_path):
         """Bpv->EVRF2007 vertical transformation recorded in the sidecar.
@@ -5830,8 +5914,8 @@ class TestCmdDownloadCz:
             "pinned: Baltic 1957 height to EVRF2007 height (1) (0.1 m)"
         )
 
-    def test_sidecar_failure_does_not_fail_download(self, tmp_path, caplog):
-        """A sidecar write error = warning, not a download failure."""
+    def test_version_sidecar_failure_aborts_download(self, tmp_path, capsys):
+        """A version without a sidecar cannot become a valid local version."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -5844,10 +5928,9 @@ class TestCmdDownloadCz:
         ):
             result = _cmd_download_cz(_cz_args(tmp_path))
 
-        assert result == 0
-        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        assert target.exists()
-        assert not (target.parent / "302_5550.tif.meta.json").exists()
+        assert result == 1
+        assert "deskryptor padl" in capsys.readouterr().err
+        assert not list((tmp_path / "nmt").rglob("*.tif"))
 
     def test_factory_validation_error_returns_1(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -5873,8 +5956,9 @@ class TestCmdDownloadCz:
             second = capsys.readouterr().out
 
         assert "Downloading 302_5550 (CZ, resolution: 2m)" in first
-        assert "Downloaded to " in first
-        assert "Skipped 302_5550 - already exists at " in second
+        assert "302_5550: nowa wersja " in first
+        assert "302_5550: lokalna wersja " in second
+        assert "(bez sprawdzania; --check-updates)" in second  # TM33: signal none
         provider.download.assert_called_once()
 
     def test_verbose_bbox_reports_progress_and_skip(self, tmp_path, capsys):
@@ -5890,8 +5974,10 @@ class TestCmdDownloadCz:
             second = capsys.readouterr().out
 
         assert "Downloading CZ bbox (2m, EPSG:5514)" in first
-        assert "Downloaded to " in first
-        assert "Skipped - already exists at " in second
+        unit = "nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif"
+        assert f"{unit}: nowa wersja " in first
+        assert f"{unit}: lokalna wersja " in second
+        assert "(bez sprawdzania; --check-updates)" in second
         provider.download_bbox.assert_called_once()
 
     def test_bbox_download_error_returns_1(self, tmp_path, capsys):
@@ -5915,7 +6001,7 @@ class TestCmdDownloadCz:
 
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        def real_tif(sheet, target, timeout=60, *, on_download=None):
+        def real_tif(sheet, target, timeout=60, *, on_download=None, on_response=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             with rasterio.open(
                 target,
@@ -6080,59 +6166,33 @@ class TestCmdDownloadCz:
             json.dumps({"transform": transform}), encoding="utf-8"
         )
 
-    @pytest.mark.parametrize(
-        ("horizontal", "expect_info"),
-        [
-            ("S-JTSK to ETRS89 (3) + UTM zone 33N (0.5 m)", True),
-            ("S-JTSK to ETRS89 (1) + UTM zone 33N (1 m)", False),
-            (None, False),
-        ],
-    )
-    def test_skipped_tm33_tile_reports_legacy_krovak_sidecar(
-        self, tmp_path, capsys, horizontal, expect_info
+    def test_legacy_bbox_cutout_replaced_by_version_without_legacy_warning(
+        self, tmp_path, capsys
     ):
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        self._existing_with_sidecar(target, horizontal)
-        provider = _cz_provider_mock()
-        with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(_cz_args(tmp_path))
-
-        assert rc == 0
-        provider.download.assert_not_called()
-        err = capsys.readouterr().err
-        assert ("sprzed naprawy operacji S-JTSK" in err) is expect_info
-        if expect_info:
-            assert str(target) in err and "--force" in err
-
-    def test_skipped_bbox_cutout_reports_legacy_krovak_sidecar(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, sheet=None, target_crs="EPSG:2180")
-        with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            assert _cmd_download_cz(args, bbox=bbox) == 0
-        target = next((tmp_path / "nmt").rglob("*.tif"))
+        target = (
+            tmp_path
+            / "nmt"
+            / "cz_dmr5g_bpv"
+            / "bbox"
+            / "-447000_-1114000_-446000_-1113000.tif"
+        )
         self._existing_with_sidecar(target, "S-JTSK to ETRS89 (3) -> EPSG:2180")
-        capsys.readouterr()
-
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            assert _cmd_download_cz(args, bbox=bbox) == 0
+            assert _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox) == 0
 
         provider.download_bbox.assert_called_once()
-        assert "sprzed naprawy operacji S-JTSK" in capsys.readouterr().err
-
-    def test_skipped_file_without_sidecar_is_silent(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        target.parent.mkdir(parents=True)
-        target.write_bytes(b"stare")
-        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
-            assert _cmd_download_cz(_cz_args(tmp_path)) == 0
-        assert capsys.readouterr().err == ""
+        assert target.read_bytes() != b"stare"
+        assert "sprzed naprawy operacji S-JTSK" not in capsys.readouterr().err
+        assert (
+            json.loads(target.with_name(target.name + ".meta.json").read_text())[
+                "extra"
+            ]["link"]
+            == "hardlink"
+        )
 
     def test_target_crs_with_sheet_message_names_product_frames(self, tmp_path):
         """K2: the message says WHAT the code defines (SM5 in 5514, TM33 on 3045)."""
@@ -8491,7 +8551,11 @@ class TestPartialSheetWarning:
         assert rc == 0
         err = capsys.readouterr().err
         assert "Warning:" in err and "niepelna" in err and "N-34-130-D-d-2-1" in err
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p
+            for p in tmp_path.rglob("*.meta.json")
+            if "versions" not in p.relative_to(tmp_path).parts
+        )
         meta = json.loads(sidecar.read_text("utf-8"))
         assert meta["extra"]["source"]["full_sheet"] is False
 
@@ -8577,7 +8641,7 @@ class TestPartialSheetWarning:
 
 
 class TestSingleSheetSkipMessage:
-    """E15 (E2E-B C17): skipping one sheet code says skip, not ``Downloaded to``."""
+    """E15 + spec 4.5: one sheet code reports the version status per file."""
 
     @staticmethod
     def _run(tmp_path, provider, *extra):
@@ -8609,27 +8673,27 @@ class TestSingleSheetSkipMessage:
                 ]
             )
 
-    def test_second_run_reports_skip(self, tmp_path, capsys):
+    def test_second_run_reports_local_version(self, tmp_path, capsys):
         provider = _SheetProvider({})
         assert self._run(tmp_path, provider) == 0
         first = capsys.readouterr().out
-        assert "Downloaded to" in first
+        assert "N-34-130-D-d-2-4: nowa wersja " in first
 
         assert self._run(tmp_path, provider) == 0
 
         out = capsys.readouterr().out
         assert provider.calls == ["N-34-130-D-d-2-4"]  # the second run without network
-        assert "Downloaded to" not in out
-        assert "Skipped N-34-130-D-d-2-4 - already exists at" in out
+        assert "nowa wersja" not in out
+        assert "N-34-130-D-d-2-4: lokalna wersja " in out
 
-    def test_force_reports_download(self, tmp_path, capsys):
+    def test_force_reports_unchanged_content(self, tmp_path, capsys):
         provider = _SheetProvider({})
         self._run(tmp_path, provider)
         capsys.readouterr()
 
         assert self._run(tmp_path, provider, "--force") == 0
 
-        assert "Downloaded to" in capsys.readouterr().out
+        assert "N-34-130-D-d-2-4: bez zmian " in capsys.readouterr().out
         assert len(provider.calls) == 2
 
 
@@ -8685,7 +8749,11 @@ class TestUnreadableMetadataCache:
             ),
         ):
             rc = main([*argv, "-o", str(out)])
-        files = sorted(p.name for p in out.rglob("*.asc"))
+        files = sorted(
+            p.name
+            for p in out.rglob("*.asc")
+            if "versions" not in p.relative_to(out).parts
+        )
         return rc, providers, files
 
     @staticmethod
@@ -8761,7 +8829,7 @@ class TestUnreadableMetadataCache:
         assert files == ["N-34-130-D-d-2-4.asc"]
         assert providers[0].calls == ["N-34-130-D-d-2-4"]
         captured = capsys.readouterr()
-        assert "Downloaded to" in captured.out
+        assert "N-34-130-D-d-2-4: nowa wersja " in captured.out
         assert "Error:" not in captured.err
         assert len(self._cache_warnings(captured.err)) == 1
         assert captured.err.startswith("Warning: cache metadanych nieczytelny (")
@@ -8824,7 +8892,9 @@ class TestLazSidecarRequestFilters:
                 + list(extra)
                 + ["-o", str(tmp_path), "-q"]
             )
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p for p in tmp_path.rglob("*.meta.json") if "versions" not in p.parts
+        )
         return rc, json.loads(sidecar.read_text(encoding="utf-8"))["request"]
 
     def test_filters_recorded(self, tmp_path):
@@ -9379,7 +9449,7 @@ class TestCampaignOptions:
         mock_find.return_value = [sheet]
         manager = _sheet_list_manager(tmp_path / f"{sheet}.asc")
         manager.last_result.link_outside_range = {
-            sheet: tmp_path / "kampanie" / "2025-10-21_84183" / f"{sheet}.asc"
+            sheet: tmp_path / "versions" / "2025-10-21_84183_3fa91c2e" / f"{sheet}.asc"
         }
         mock_manager_class.return_value = manager
         rc = main(
@@ -9590,7 +9660,7 @@ class TestCampaignOptions:
         instance = Mock()
         instance.select_tiles.return_value = Mock(tiles=[Mock()], superseded=[])
         mock_provider_cls.return_value = instance
-        mock_run.return_value = Mock(downloaded=[], skipped=[], failed=[])
+        mock_run.return_value = Mock(files=[], failed=[], stale=())
 
         rc = main(
             [
@@ -10111,214 +10181,99 @@ class TestCampaignOptions:
         assert _CAMPAIGN_INFO not in err
         mock_cz.assert_not_called()
 
+    @staticmethod
+    def _single(tmp_path):
+        return main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_skip_message_from_last_sheet(
+    def test_single_sheet_local_version_with_newer_campaign(
         self, mock_manager_class, capsys, tmp_path
     ):
         from kartograf.download.manager import SheetFetch
 
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            status="local",
+            newer="2025-10-21_84183",
+            files=(("2025-04-27_83233_0a1b2c3d", "local"),),
+        )
         mock_manager_class.return_value = manager
 
+        assert self._single(tmp_path) == 0
+        captured = capsys.readouterr()
         assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            == 0
-        )
-        out = capsys.readouterr().out
-        assert f"Skipped N-34-130-D-d-2-4 - already exists at {path}" in out
-        assert "Downloaded to" not in out
+            "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233; dostepna nowsza "
+            "2025-10-21_84183 (--upgrade)"
+        ) in captured.out
+        assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_mock_manager_reports_downloaded(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        """I-1: a Mock() fake has ``last_sheet.skipped`` = Mock (truthy)."""
-        mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
-
-        assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            == 0
-        )
-        out = capsys.readouterr().out
-        assert "Downloaded to" in out
-        assert "Skipped" not in out
-
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_existing_link_but_new_campaign_reports_downloaded(
-        self, mock_manager_class, capsys, tmp_path
-    ):
+    def test_single_sheet_new_version_line(self, mock_manager_class, capsys, tmp_path):
         from kartograf.download.manager import SheetFetch
 
         target = tmp_path / "N-34-130-D-d-2-4.asc"
-        target.write_bytes(b"old link target")
         manager = _mock_manager(target)
-        manager.storage.get_path.return_value = target
         manager.last_sheet = SheetFetch(
             "N-34-130-D-d-2-4",
             target,
             skipped=False,
-            downloaded=(tmp_path / "kampanie" / "new.asc",),
-            link="hardlink",
+            status="new",
+            files=(("2025-10-21_84183_0a1b2c3d", "new"),),
         )
         mock_manager_class.return_value = manager
 
-        assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            == 0
-        )
+        assert self._single(tmp_path) == 0
         out = capsys.readouterr().out
-        assert f"Downloaded to {target}" in out
-        assert "Skipped" not in out
-
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_copy_fallback_warning_in_list_mode(
-        self, mock_manager_class, mock_find, capsys, tmp_path
-    ):
-        mock_find.return_value = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
-        manager = _sheet_list_manager(tmp_path / "a.asc", tmp_path / "b.asc")
-        manager.last_result.copied = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                *_PL_BBOX_2180,
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert (
-            "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
-            "standardowa jest KOPIA najnowszej kampanii dla 2 arkuszy "
-            "(N-34-130-D-d-2-4, N-34-130-D-d-2-3) (extra.link=copy)"
-        ) in err
+        assert "N-34-130-D-d-2-4: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_copy_fallback_warning_single_sheet(
+    def test_single_sheet_mock_manager_reports_result_path(
         self, mock_manager_class, capsys, tmp_path
     ):
-        from kartograf.download.manager import SheetFetch
+        """I-1: a Mock() fake has no ``SheetFetch``: the result path only."""
+        mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
 
-        path = tmp_path / "a.asc"
-        manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4", path, skipped=False, link="copy"
-        )
-        mock_manager_class.return_value = manager
-
-        assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                    "-q",
-                ]
-            )
-            == 0
-        )
-        assert "(extra.link=copy)" in capsys.readouterr().err
+        assert self._single(tmp_path) == 0
+        assert f"N-34-130-D-d-2-4: {tmp_path / 'a.asc'}" in capsys.readouterr().out
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_summary_counts_campaign_files(
+    def test_all_list_status_line_per_file_and_counters(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
         mock_find.return_value = ["A", "B", "C"]
         a, b, c = (tmp_path / f"{n}.asc" for n in "abc")
-        manager = _sheet_list_manager(a, b, c, skipped=["C"])
-        manager.last_result.succeeded = [a, b]
-        manager.last_result.campaign_files = {
-            "A": (tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            "B": (tmp_path / "k1" / "b.asc",),
-            "C": (tmp_path / "k1" / "c.asc", tmp_path / "k2" / "c.asc"),
-        }
-        # a skipped sheet = all its campaigns already local (like the manager)
-        manager.last_result.reused_campaign_files = {
-            "C": manager.last_result.campaign_files["C"]
+        manager = _sheet_list_manager(a, b, c)
+        manager.last_result.files = {
+            "A": (
+                ("2025-10-21_84183_0a1b2c3d", "new"),
+                ("2023-09-05_78047_1a1b2c3d", "local"),
+            ),
+            "B": (("2025-10-21_84190_2a1b2c3d", "relabeled"),),
+            "C": (
+                ("2025-10-21_84191_3a1b2c3d", "unchanged"),
+                ("2019-04-18_73021_4a1b2c3d", "local"),
+            ),
         }
         mock_manager_class.return_value = manager
 
@@ -10327,8 +10282,6 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
-                "./data",
                 "--country",
                 "auto",
                 "--resolution",
@@ -10344,54 +10297,14 @@ class TestCampaignOptions:
 
         assert rc == 0
         out = capsys.readouterr().out
+        assert "A: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
+        assert "A: lokalna wersja 2023-09-05_78047" in out
+        assert "B: nowa etykieta 2025-10-21_84190 (ta sama tresc)" in out
+        assert "C: bez zmian 2025-10-21_84191" in out
         assert (
-            f"Downloaded 3 campaign files for 3 sheets to {tmp_path} "
-            "(2 already existed)"
+            "Nowe: 1, nowa etykieta: 1, bez zmian: 1, lokalne: 2, bledy: 0 "
+            f"({tmp_path})"
         ) in out
-        assert "Downloaded 2 files" not in out
-
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_summary_partially_new_sheets(
-        self, mock_manager_class, mock_find, capsys, tmp_path
-    ):
-        """Fix 1: 10 sheets x (1 new + 3 local) -> 10 downloaded, 30 local."""
-        sheets = [f"N-34-130-D-d-2-{i}" for i in range(10)]
-        mock_find.return_value = sheets
-        paths = [tmp_path / f"{g}.asc" for g in sheets]
-        manager = _sheet_list_manager(*paths)
-        files = {
-            g: tuple(tmp_path / f"k{k}" / f"{g}.asc" for k in range(4)) for g in sheets
-        }
-        manager.last_result.campaign_files = files
-        manager.last_result.reused_campaign_files = {g: f[1:] for g, f in files.items()}
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                *_PL_BBOX_2180,
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert rc == 0
-        assert (
-            f"Downloaded 10 campaign files for 10 sheets to {tmp_path} "
-            "(30 already existed)"
-        ) in capsys.readouterr().out
 
     @patch("kartograf.download.cutout.prepare_pl_cutout")
     @patch("kartograf.cli.download_cmd._run_cz")
@@ -10722,8 +10635,8 @@ class TestCampaignOptions:
             "N-34-130-D-d-2-4",
             path,
             skipped=True,
-            reused=(tmp_path / "kampanie" / "a.asc",),
-            link="hardlink",
+            reused=(tmp_path / "versions" / "a.asc",),
+            status="local",
             unverified="pobranie nieudane po 3 probach: HTTP 503",
         )
         mock_manager_class.return_value = manager
@@ -10753,7 +10666,7 @@ class TestCampaignOptions:
         err = capsys.readouterr().err
         assert (
             "Warning: N-34-130-D-d-2-4: skorowidz GUGiK niedostepny — uzyto "
-            "lokalnej kampanii bez sprawdzenia nowszej "
+            "lokalnej wersji bez sprawdzenia nowszej "
             "(pobranie nieudane po 3 probach: HTTP 503)"
         ) in err
 
@@ -10830,8 +10743,8 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert (
-            "Warning: skorowidz GUGiK niedostepny — dla 2 arkuszy uzyto lokalnej "
-            "kampanii bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
+            "Warning: skorowidz GUGiK niedostepny — dla 2 arkuszy uzyto lokalnych "
+            "wersji bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
             "(HTTP 503)"
         ) in err
 
@@ -10882,99 +10795,6 @@ class TestCampaignOptions:
     # M-1: single sheet code with --all-campaigns — summary line as for a list
     # -------------------------------------------------------------------------
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_single_sheet_summary_counts_campaign_files(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        from kartograf.download.manager import SheetFetch
-
-        path = tmp_path / "a.asc"
-        manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=False,
-            downloaded=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            reused=(tmp_path / "k3" / "a.asc",),
-            link="hardlink",
-        )
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert rc == 0
-        out = capsys.readouterr().out
-        assert (
-            f"Downloaded 2 campaign files for 1 sheets to {tmp_path} "
-            "(1 already existed)"
-        ) in out
-        assert "Downloaded to" not in out
-        assert "Skipped" not in out
-
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_single_sheet_all_local_summary(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        from kartograf.download.manager import SheetFetch
-
-        path = tmp_path / "a.asc"
-        manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=True,
-            reused=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            link="hardlink",
-        )
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert rc == 0
-        out = capsys.readouterr().out
-        assert (
-            f"Downloaded 0 campaign files for 1 sheets to {tmp_path} "
-            "(2 already existed)"
-        ) in out
-
 
 class TestListMessagesUx:
     """O-3 / O-6 / O-7: CLI messages on no data, skip and download."""
@@ -10983,12 +10803,17 @@ class TestListMessagesUx:
     def test_single_sheet_skip_has_no_downloading_line(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """O-3: Skipped is not preceded by 'Downloading ...'."""
+        """O-3: a local version is not preceded by 'Downloading ...'."""
         from kartograf.download.manager import SheetFetch
 
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)  # the mock does not call on_download (skip)
-        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            files=(("2025-04-27_83233_0a1b2c3d", "local"),),
+        )
         mock_manager_class.return_value = manager
 
         rc = main(
@@ -11013,7 +10838,7 @@ class TestListMessagesUx:
 
         assert rc == 0
         out = capsys.readouterr().out
-        assert "Skipped" in out
+        assert "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233" in out
         assert "Downloading" not in out
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -11439,7 +11264,7 @@ class TestLazOnlyOptions:
         instance = Mock()
         instance.select_tiles.return_value = Mock(tiles=[Mock()], superseded=[])
         mock_provider_cls.return_value = instance
-        mock_run.return_value = Mock(downloaded=[], skipped=[], failed=[])
+        mock_run.return_value = Mock(files=[], failed=[], stale=())
 
         rc = main(
             [
@@ -11656,7 +11481,7 @@ class TestFullSheetOption:
         assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert fake.downloads == [REC["84183"].url, REC["83233"].url]
-        assert "Downloaded 2 campaign files for 1 sheets" in captured.out
+        assert captured.out.count(f"{self.G}: nowa wersja ") == 2
         first = self._partial_warning(captured.err)
         assert self.G in first and "full_sheet/" in first
         assert "uzyj --full-sheet" not in first
@@ -11664,7 +11489,7 @@ class TestFullSheetOption:
         assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert len(fake.downloads) == 2
-        assert f"Skipped {self.G}" in captured.out
+        assert captured.out.count(f"{self.G}: lokalna wersja ") == 2
         assert self._partial_warning(captured.err) == first
 
     def test_without_flag_hints_full_sheet(self, capsys, tmp_path):

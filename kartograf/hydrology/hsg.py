@@ -18,6 +18,7 @@ Reference:
 import logging
 import tempfile
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -25,6 +26,10 @@ import numpy as np
 
 if TYPE_CHECKING:
     from kartograf.core.bbox import BBox
+    from kartograf.download.fetch import FileSlot, UpdateMode, VersionedFile
+    from kartograf.download.plan import ItemStatus, PlanItem, Track, UpdatePlan
+    from kartograf.download.versions import LocalVersion
+    from kartograf.landcover.manager import LandCoverManager, LandCoverResult
 
 logger = logging.getLogger(__name__)
 
@@ -363,35 +368,66 @@ def _write_hsg_geotiff(output_path: Path, hsg: np.ndarray, profile: dict) -> Non
         )
 
 
+_INPUTS = ("clay", "sand", "silt")
+_HSG_CLASSES = "1=A, 2=B, 3=C, 4=D"
+_HSG_TRACK: "Track" = "hsg"
+
+
+@dataclass(frozen=True)
+class HsgResult:
+    """HSG of one selection (``unit``: bbox coordinates or the sheet).
+
+    ``file``: the HSG version (``new``/``unchanged``/``relabeled`` when
+    computed, ``reused`` when a version of the same input set exists,
+    ``local`` for a position left out of a plan; ``None`` only then, without
+    a local version). ``inputs``: clay, sand, silt in the store. ``stale``:
+    planned positions whose source changed since the plan.
+    """
+
+    unit: str
+    file: "VersionedFile | None"
+    inputs: "tuple[LandCoverResult, ...]"
+    stale: "tuple[PlanItem, ...]" = ()
+
+
 class HSGCalculator:
     """
-    Calculator for Hydrologic Soil Groups from SoilGrids data.
+    Hydrologic Soil Groups from SoilGrids clay/sand/silt in the version store.
 
-    This class downloads clay, sand, and silt data from SoilGrids,
-    classifies the soil texture, and produces HSG rasters.
+    The inputs are SoilGrids versions of ``output_dir``
+    (``soil/global_soilgrids_{clay,sand,silt}_<depth>_<stat>/``, labelled by
+    the SoilGrids edition, D33); the HSG raster is a version of
+    ``hsg/global_soilgrids_<depth>_<stat>/`` with the same selection
+    hierarchy (``bbox/<coords>`` or the sheet hierarchy). A version whose
+    ``extra.source_files`` has the same three input sha256 is used again
+    (``reused``, nothing computed). Rasters outside the store:
+    ``hsg_from_rasters``.
 
     Examples
     --------
     >>> from kartograf.hydrology import HSGCalculator
-    >>> calc = HSGCalculator()
-    >>> calc.calculate_hsg_by_sheet(
-    ...     "N-34-130-D", Path("./hsg.tif"), depth="0-5cm", stat="mean"
-    ... )
+    >>> calc = HSGCalculator("./data")
+    >>> result = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+    >>> result.file.path, result.file.status  # hsg/.../N-34-130-D.tif, "new"
+    >>> calc.get_hsg_statistics(result.file.path)
     """
 
     # SoilGrids conversion factors
     # Data is stored as g/kg, divide by 10 for percentage
     CONVERSION_FACTOR = 10.0
 
-    def __init__(self, provider=None):
+    def __init__(self, output_dir: str | Path, provider=None):
         """
         Initialize HSG calculator.
 
         Parameters
         ----------
+        output_dir : str or Path
+            Store root (``--output``); created only when a file is written.
         provider : SoilGridsProvider, optional
             Provider to use for downloading. Creates new one if not provided.
         """
+        self._output_dir = Path(output_dir)
         self._provider = provider
 
     @property
@@ -406,75 +442,38 @@ class HSGCalculator:
     def calculate_hsg_by_sheet(
         self,
         sheet: str,
-        output_path: Path,
         *,
         depth: str,
         stat: str,
-        keep_intermediate: bool = False,
+        update: "UpdateMode | None" = None,
+        plan: "UpdatePlan | None" = None,
         timeout: int = 120,
-    ) -> Path:
-        """
-        Calculate HSG raster for a map sheet (sheet code).
-
-        Parameters
-        ----------
-        sheet : str
-            Map sheet identifier (e.g., "N-34-130-D")
-        output_path : Path
-            Path for output HSG GeoTIFF
-        depth : str
-            Soil interval below surface: 0-5cm, 5-15cm, 15-30cm,
-            30-60cm, 60-100cm, or 100-200cm.
-        stat : str
-            SoilGrids statistic: mean (average), Q0.05 (5th percentile),
-            Q0.5 (median), Q0.95 (95th percentile), or uncertainty
-            (prediction uncertainty).
-        keep_intermediate : bool, optional
-            Keep intermediate clay/sand/silt files (default: False)
-        timeout : int, optional
-            Download timeout in seconds (default: 120)
-
-        Returns
-        -------
-        Path
-            Path to the output HSG GeoTIFF
-        """
+    ) -> HsgResult:
+        """HSG of a map sheet (canonical sheet code, sheet hierarchy); see
+        `calculate_hsg_by_bbox`."""
         from kartograf.core.sheet_parser import SheetParser
 
-        parser = SheetParser(sheet)
-        bbox = parser.get_bbox(crs="EPSG:2180")
-
-        return self.calculate_hsg_by_bbox(
-            bbox=bbox,
-            output_path=output_path,
-            depth=depth,
-            stat=stat,
-            keep_intermediate=keep_intermediate,
-            timeout=timeout,
-            # Canonical sheet code in the sidecar, as for NMT and land cover (A7)
-            sheet=parser.sheet,
+        return self._calculate(
+            {"sheet": SheetParser(sheet).sheet}, depth, stat, update, plan, timeout
         )
 
     def calculate_hsg_by_bbox(
         self,
-        bbox,
-        output_path: Path,
+        bbox: "BBox",
         *,
         depth: str,
         stat: str,
-        keep_intermediate: bool = False,
+        update: "UpdateMode | None" = None,
+        plan: "UpdatePlan | None" = None,
         timeout: int = 120,
-        sheet: str | None = None,
-    ) -> Path:
+    ) -> HsgResult:
         """
-        Calculate HSG raster for a bounding box.
+        HSG of a bounding box (EPSG:2180, ``bbox/<coords>``).
 
         Parameters
         ----------
         bbox : BBox
             Bounding box in EPSG:2180
-        output_path : Path
-            Path for output HSG GeoTIFF
         depth : str
             Soil interval below surface: 0-5cm, 5-15cm, 15-30cm,
             30-60cm, 60-100cm, or 100-200cm.
@@ -482,136 +481,260 @@ class HSGCalculator:
             SoilGrids statistic: mean (average), Q0.05 (5th percentile),
             Q0.5 (median), Q0.95 (95th percentile), or uncertainty
             (prediction uncertainty).
-        keep_intermediate : bool, optional
-            Keep intermediate clay/sand/silt files (default: False)
+        update : None, "upgrade" or "force", optional
+            Mode of the INPUTS (spec 4.2): ``None`` uses local versions,
+            ``"upgrade"`` downloads a newer SoilGrids edition, ``"force"``
+            downloads again. HSG is computed only for a new input set.
+        plan : UpdatePlan, optional
+            With ``update="upgrade"``: execute only the planned positions
+            (`check_hsg_by_bbox`).
         timeout : int, optional
-            Download timeout in seconds (default: 120)
-        sheet : str, optional
-            Sheet code the bbox was derived from; recorded in the sidecar as
-            ``request.sheet`` (set by :meth:`calculate_hsg_by_sheet`)
+            Request timeout in seconds (default: 120)
 
         Returns
         -------
-        Path
-            Path to the output HSG GeoTIFF
+        HsgResult
+
+        Raises
+        ------
+        DownloadError
+            An input failed (no HSG is written) or a store failure.
+        ValidationError
+            Bad mode, plan of another store or a bbox outside EPSG:2180.
         """
-        import rasterio
+        return self._calculate(_bbox_request(bbox), depth, stat, update, plan, timeout)
 
-        output_path = Path(output_path)
+    def check_hsg_by_bbox(self, bbox: "BBox", *, depth: str, stat: str) -> "UpdatePlan":
+        """Plan WITHOUT downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
+        return self._check(_bbox_request(bbox), depth, stat)
 
-        # Use temporary directory for intermediate files
-        with tempfile.TemporaryDirectory() as tmp:
-            tmpdir = Path(tmp)
+    def check_hsg_by_sheet(self, sheet: str, *, depth: str, stat: str) -> "UpdatePlan":
+        """Plan of `calculate_hsg_by_sheet` WITHOUT downloading or computing."""
+        from kartograf.core.sheet_parser import SheetParser
 
-            # Download clay, sand, silt
-            logger.info("Downloading soil texture data from SoilGrids...")
+        return self._check({"sheet": SheetParser(sheet).sheet}, depth, stat)
 
-            clay_path = tmpdir / "clay.tif"
-            sand_path = tmpdir / "sand.tif"
-            silt_path = tmpdir / "silt.tif"
+    # -------------------------------------------------------------------------
 
-            logger.info("  Downloading clay content...")
-            self.provider.download_by_bbox(
-                bbox,
-                clay_path,
-                timeout=timeout,
-                property="clay",
-                depth=depth,
-                stat=stat,
-            )
+    def _manager(self) -> "LandCoverManager":
+        from kartograf.landcover.manager import LandCoverManager
 
-            logger.info("  Downloading sand content...")
-            self.provider.download_by_bbox(
-                bbox,
-                sand_path,
-                timeout=timeout,
-                property="sand",
-                depth=depth,
-                stat=stat,
-            )
+        return LandCoverManager(self._output_dir, self.provider)
 
-            logger.info("  Downloading silt content...")
-            self.provider.download_by_bbox(
-                bbox,
-                silt_path,
-                timeout=timeout,
-                property="silt",
-                depth=depth,
-                stat=stat,
-            )
+    def _slot(self, selection: dict, depth: str, stat: str) -> "FileSlot":
+        from kartograf.landcover.store import hsg_segment, selection_slot
 
-            # Read rasters
-            logger.info("Processing texture data...")
+        return selection_slot(
+            self._output_dir,
+            hsg_segment(depth, stat),
+            ".tif",
+            bbox=selection.get("bbox_obj"),
+            sheet=selection.get("sheet"),
+        )
 
-            with rasterio.open(clay_path) as clay_src:
-                clay = clay_src.read(1).astype(np.float32)
-                clay_nd = clay_src.nodata
-                profile = clay_src.profile.copy()
+    def _check(self, selection: dict, depth: str, stat: str) -> "UpdatePlan":
+        from kartograf.download.plan import new_plan
 
-            with rasterio.open(sand_path) as sand_src:
-                sand = sand_src.read(1).astype(np.float32)
-                sand_nd = sand_src.nodata
+        inputs = self._input_items(selection, depth, stat)
+        return new_plan(
+            self._output_dir, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
+        )
 
-            with rasterio.open(silt_path) as silt_src:
-                silt = silt_src.read(1).astype(np.float32)
-                silt_nd = silt_src.nodata
+    def _input_items(self, selection: dict, depth: str, stat: str) -> list:
+        manager = self._manager()
+        where = _where(selection)
+        return [
+            item
+            for prop in _INPUTS
+            for item in manager.check(
+                **where, property=prop, depth=depth, stat=stat
+            ).items
+        ]
 
-            logger.info("Classifying HSG...")
-            hsg = _classify_hsg(clay, sand, silt, (clay_nd, sand_nd, silt_nd))
+    def _hsg_item(self, selection: dict, depth: str, stat: str, inputs: list):
+        """Plan position of the HSG: ``current`` when a version of the current
+        local inputs exists and every input is current; ``check_failed`` when an
+        input could not be checked; otherwise ``missing`` (to compute)."""
+        from kartograf.download.fetch import local_version
+        from kartograf.download.plan import PlanItem
+        from kartograf.landcover.store import selection_unit
 
-            logger.info(f"Writing HSG raster to {output_path}...")
-            hsg_crs = profile.get("crs")
-            _write_hsg_geotiff(output_path, hsg, profile)
+        slot = self._slot(selection, depth, stat)
+        labels = [i.available_label for i in inputs]
+        label = "+".join(sorted(set(labels))) if all(labels) else None
+        failed = [i for i in inputs if i.status == "check_failed"]
+        shas = tuple(i.local_sha256 for i in inputs)
+        reusable = (
+            _matching_version(slot, shas) if all(shas) else None  # type: ignore[arg-type]
+        )
+        local = local_version(slot)
+        status: ItemStatus
+        if failed:
+            status = "check_failed"
+        elif reusable is not None and all(i.status == "current" for i in inputs):
+            status = "current"
+        else:
+            status = "missing"
+        return PlanItem(
+            track=_HSG_TRACK,
+            segment=slot.segment,
+            hierarchy=slot.hierarchy,
+            name=slot.name,
+            unit=selection_unit(
+                bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
+            ),
+            local_label=local.label if local is not None else None,
+            local_sha256=local.sha256 if local is not None else None,
+            available_label=label,
+            available_signal=None,
+            status=status,
+            error=failed[0].error if failed else None,
+        )
 
-            # Copy intermediate files if requested
-            if keep_intermediate:
-                import shutil
-
-                out_dir = output_path.parent
-                shutil.copy(clay_path, out_dir / "clay.tif")
-                shutil.copy(sand_path, out_dir / "sand.tif")
-                shutil.copy(silt_path, out_dir / "silt.tif")
-                logger.info(f"Intermediate files saved to {out_dir}")
-
-        self._write_sidecar(output_path, bbox, depth, stat, hsg_crs, sheet)
-
-        logger.info(f"HSG calculation complete: {output_path}")
-        return output_path
-
-    @staticmethod
-    def _write_sidecar(
-        output_path: Path,
-        bbox,
+    def _calculate(
+        self,
+        selection: dict,
         depth: str,
         stat: str,
-        crs,
-        sheet: str | None = None,
-    ) -> None:
-        """Best-effort sidecar of the result (computed from SoilGrids layers)."""
+        update: "UpdateMode | None",
+        plan: "UpdatePlan | None",
+        timeout: int,
+    ) -> HsgResult:
+        from kartograf.download.fetch import validate_update
+        from kartograf.download.plan import require_store, select_planned, store_id
+        from kartograf.exceptions import ValidationError
+        from kartograf.landcover.store import selection_unit
+
+        validate_update(update)
+        slot = self._slot(selection, depth, stat)
+        unit = selection_unit(
+            bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
+        )
+        planned_hsg = True
+        stale: list = []
+        if plan is not None:
+            if update != "upgrade":
+                raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+            require_store(plan, store_id(self._output_dir))
+            # The HSG position is checked BEFORE the inputs change.
+            fresh = self._hsg_item(
+                selection, depth, stat, self._input_items(selection, depth, stat)
+            )
+            todo, skipped = select_planned(plan, [fresh], _HSG_TRACK)
+            planned_hsg, stale = bool(todo), list(skipped)
+
+        manager = self._manager()
+        where = _where(selection)
+        inputs = tuple(
+            manager.download(
+                **where,
+                update=update,
+                plan=_input_plan(plan, prop, depth, stat),
+                property=prop,
+                depth=depth,
+                stat=stat,
+                timeout=timeout,
+            )
+            for prop in _INPUTS
+        )
+        for result in inputs:
+            stale.extend(result.stale)
+        files = [r.file for r in inputs]
+        if not planned_hsg or any(f is None for f in files):
+            return HsgResult(unit, _local_only(slot), inputs, tuple(stale))
+        hsg = self._reuse_or_compute(
+            slot, selection, depth, stat, [f for f in files if f is not None]
+        )
+        return HsgResult(unit, hsg, inputs, tuple(stale))
+
+    def _reuse_or_compute(
+        self,
+        slot: "FileSlot",
+        selection: dict,
+        depth: str,
+        stat: str,
+        files: "list[VersionedFile]",
+    ) -> "VersionedFile":
+        """The HSG version of these inputs: reused, or computed and stored."""
+        import rasterio
+
+        from kartograf.download.fetch import (
+            VersionedFile,
+            discard_staging,
+            link_version,
+            new_staging,
+            store_file,
+        )
+        from kartograf.download.versions import VersionRef
         from kartograf.sources.sidecar import emit_sidecar
 
-        request: dict = {
-            "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-            "bbox_crs": getattr(bbox, "crs", None),
-        }
-        if sheet is not None:
-            # The user asked for a sheet code; the bbox is derived from it.
-            request["sheet"] = sheet
+        shas = tuple(f.sha256 for f in files)
+        match = _matching_version(slot, shas)
+        if match is not None:
+            link_version(slot.std, match, refresh=True)
+            logger.info(f"HSG {slot.std}: wersja {match.label} uzyta ponownie")
+            return VersionedFile(
+                slot.std, "reused", match.label, match.sha256, match.path
+            )
 
-        emit_sidecar(
-            "global.isric.soilgrids",
-            output_path,
-            request=request,
-            horizontal_crs=str(crs) if crs else None,
-            capability="bbox_raster",
-            nodata=0,
-            extra={
-                "derived": "hsg",
-                "source_layers": ["clay", "sand", "silt"],
-                "depth": depth,
-                "stat": stat,
-                "classes": "1=A, 2=B, 3=C, 4=D",
-            },
+        label = "+".join(sorted({f.label for f in files}))
+        staged = new_staging(slot)
+        try:
+            arrays, nodatas = [], []
+            for f in files:
+                with rasterio.open(f.version_path) as src:
+                    arrays.append(src.read(1).astype(np.float32))
+                    nodatas.append(src.nodata)
+                    if len(arrays) == 1:  # grid of clay = grid of the result
+                        profile = src.profile.copy()
+            logger.info("Classifying HSG...")
+            hsg = _classify_hsg(
+                arrays[0], arrays[1], arrays[2], (nodatas[0], nodatas[1], nodatas[2])
+            )
+            _write_hsg_geotiff(staged, hsg, profile)
+        except BaseException:
+            discard_staging(staged, slot)
+            raise
+        crs = profile.get("crs")
+        request = {k: v for k, v in selection.items() if k != "bbox_obj"}
+        extra = {
+            "derived": "hsg",
+            "depth": depth,
+            "stat": stat,
+            "classes": _HSG_CLASSES,
+            "source_layers": list(_INPUTS),
+            "source_files": [
+                {
+                    "name": name,
+                    "file": f.version_path.relative_to(self._output_dir).as_posix(),
+                    "sha256": f.sha256,
+                    "label": f.label,
+                }
+                for name, f in zip(_INPUTS, files, strict=True)
+            ],
+        }
+
+        def write(data: Path, ref, dg, _http) -> None:
+            emit_sidecar(
+                "global.isric.soilgrids",
+                data,
+                request=request,
+                horizontal_crs=str(crs) if crs else None,
+                capability="bbox_raster",
+                nodata=0,
+                extra=extra,
+                exclusive=True,
+                digest=(dg.sha256, dg.size_bytes),
+                version=ref.to_extra(),
+            )
+
+        return store_file(
+            slot,
+            staged,
+            version=VersionRef(label, "edition"),
+            write_sidecar=write,
+            http=None,
+            signal="metadata",
         )
 
     def get_hsg_statistics(self, hsg_path: Path) -> dict:
@@ -768,3 +891,59 @@ def _write_rasters_sidecar(
             "classes": "1=A, 2=B, 3=C, 4=D",
         },
     )
+
+
+def _bbox_request(bbox: "BBox") -> dict:
+    """HSG selection of a bbox: sidecar ``request`` + the ``BBox`` itself."""
+    return {
+        "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+        "bbox_crs": bbox.crs,
+        "bbox_obj": bbox,
+    }
+
+
+def _input_plan(
+    plan: "UpdatePlan | None", prop: str, depth: str, stat: str
+) -> "UpdatePlan | None":
+    """The plan positions of one input (its segment): the other inputs are
+    separate requests of the manager, not files that left the selection."""
+    if plan is None:
+        return None
+    from dataclasses import replace
+
+    from kartograf.landcover.store import landcover_segment
+
+    segment = landcover_segment("global.isric.soilgrids", (prop, depth, stat))
+    return replace(plan, items=tuple(i for i in plan.items if i.segment == segment))
+
+
+def _where(selection: dict) -> dict:
+    """``LandCoverManager`` selection keyword of an HSG selection."""
+    if "sheet" in selection:
+        return {"sheet": selection["sheet"]}
+    return {"bbox": selection["bbox_obj"]}
+
+
+def _matching_version(slot: "FileSlot", shas: tuple[str, ...]) -> "LocalVersion | None":
+    """The newest HSG version computed from inputs with exactly these sha256."""
+    from kartograf.download.versions import list_versions, newest_version
+
+    def inputs_of(version) -> tuple[str, ...]:
+        extra = version.meta.get("extra") or {}
+        files = extra.get("source_files") or []
+        return tuple(str(f.get("sha256")) for f in files if isinstance(f, dict))
+
+    return newest_version(
+        v for v in list_versions(slot.versions_root, slot.name) if inputs_of(v) == shas
+    )
+
+
+def _local_only(slot: "FileSlot") -> "VersionedFile | None":
+    """A position left out of the plan: its local version, nothing computed."""
+    from kartograf.download.fetch import VersionedFile, link_version, local_version
+
+    local = local_version(slot)
+    if local is None:
+        return None
+    link_version(slot.std, local, refresh=False)
+    return VersionedFile(slot.std, "local", local.label, local.sha256, local.path)

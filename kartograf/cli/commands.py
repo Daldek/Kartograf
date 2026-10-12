@@ -51,6 +51,13 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     if parsed_args.command == "parse":
         return cmd_parse(parsed_args)
 
+    # --plan needs a mode in every store command (download, landcover
+    # download, soilgrids hsg)
+    if getattr(parsed_args, "plan", None) is not None and not (
+        parsed_args.check_updates or parsed_args.upgrade
+    ):
+        parser.error("--plan wymaga --check-updates albo --upgrade")
+
     if parsed_args.command == "download":
         return cmd_download(parsed_args)
 

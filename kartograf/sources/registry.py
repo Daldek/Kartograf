@@ -11,10 +11,12 @@ import re
 
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
     CountryProfile,
     LicenseInfo,
+    SignalKind,
     SourceDescriptor,
     TileScheme,
     TransportKind,
@@ -83,12 +85,14 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WMS_SHEET_INDEX,
+                    update_signal="index",
                     horizontal_crs=PL_1992_CRS,  # PL-2000: zone from sheet code (N8)
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"sheet_files"}),
                 ),
                 AccessChannel(
                     transport=TransportKind.WCS,
+                    update_signal="none",
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"bbox_raster"}),
@@ -113,6 +117,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WMS_SHEET_INDEX,
+                    update_signal="index",
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=("EPSG:9651",),
                     capabilities=frozenset({"sheet_files"}),
@@ -134,12 +139,14 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WMS_SHEET_INDEX,
+                    update_signal="index",
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"sheet_files"}),
                 ),
                 AccessChannel(
                     transport=TransportKind.WCS,
+                    update_signal="none",
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"bbox_raster"}),
@@ -164,6 +171,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WMS_SHEET_INDEX,
+                    update_signal="index",
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"sheet_files"}),
                 ),
@@ -182,6 +190,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WFS,
+                    update_signal="index",
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"area_files"}),
@@ -202,12 +211,13 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"admin_unit_files"}),
                 ),
             ),
             tile_scheme=None,
-            storage_subdir=None,
+            storage_subdir="landcover/pl_bdot10k",
             default_extension=".gpkg",
             license=_GUGIK_LICENSE,
         ),
@@ -220,13 +230,24 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.CLMS_API,
+                    update_signal="metadata",
                     horizontal_crs="EPSG:3035",
                     capabilities=frozenset({"bbox_raster"}),
-                    notes="bez credentials CLMS fallback: podglad PNG z WMS",
+                    notes="wymaga credentials CLMS (CLMS_CREDENTIALS)",
+                ),
+                AccessChannel(
+                    transport=TransportKind.WMS,
+                    update_signal="none",
+                    horizontal_crs="EPSG:3857",
+                    capabilities=frozenset({"bbox_raster"}),
+                    notes=(
+                        "bez credentials CLMS: stylizowany PNG z WMS EEA - podglad, "
+                        "nie dane; 1990: WMS DLR w EPSG:4326"
+                    ),
                 ),
             ),
             tile_scheme=None,
-            storage_subdir=None,
+            storage_subdir="landcover/eu_corine",
             default_extension=".tif",
             license=_CLMS_LICENSE,
             auth="clms_oauth",
@@ -240,13 +261,14 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.WCS,
+                    update_signal="metadata",
                     horizontal_crs="EPSG:4326",
                     capabilities=frozenset({"bbox_raster"}),
                     notes="tylko WGS84 bbox; transformacja z EPSG:2180 automatyczna",
                 ),
             ),
             tile_scheme=None,
-            storage_subdir=None,
+            storage_subdir="soil/global_soilgrids",
             default_extension=".tif",
             license=_SOILGRIDS_LICENSE,
         ),
@@ -259,6 +281,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.ARCGIS_IMAGE,
+                    update_signal="none",
                     horizontal_crs="EPSG:5514",
                     vertical_crs_options=("EPSG:8357",),
                     server_reprojection=False,
@@ -294,6 +317,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             channels=(
                 AccessChannel(
                     transport=TransportKind.DIRECT_FILES,
+                    update_signal="http",
                     horizontal_crs="EPSG:5514",
                     vertical_crs_options=("EPSG:8357",),
                     capabilities=frozenset({"sheet_files"}),
@@ -304,6 +328,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 ),
                 AccessChannel(
                     transport=TransportKind.ARCGIS_IMAGE,
+                    update_signal="none",
                     horizontal_crs="EPSG:5514",
                     vertical_crs_options=("EPSG:8357",),
                     server_reprojection=False,
@@ -359,6 +384,26 @@ def get_source(key: str) -> SourceDescriptor:
         raise KeyError(
             f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}"
         ) from None
+
+
+def channel_signal(key: str, transport: TransportKind) -> SignalKind:
+    """Freshness signal of the ``transport`` channel of source ``key``.
+
+    Raises
+    ------
+    ValidationError
+        Unknown source or a source without such a channel.
+    """
+    source = _SOURCES.get(key)
+    if source is None:
+        raise ValidationError(f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}")
+    for channel in source.channels:
+        if channel.transport == transport:
+            return channel.update_signal
+    raise ValidationError(
+        f"Zrodlo '{key}' nie ma kanalu {transport.value!r} "
+        f"(kanaly: {[c.transport.value for c in source.channels]})"
+    )
 
 
 def sources_for(

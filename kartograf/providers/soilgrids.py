@@ -31,22 +31,32 @@ Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
 """
 
 import logging
+import re
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from urllib.parse import urlencode
 
 import requests
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.exceptions import DownloadError
 from kartograf.providers.base import LandCoverProvider
+from kartograf.sources.edition import Edition, edition_label
 from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
     download_to,
+    get_with_retry,
     reject_error_document,
 )
 
 logger = logging.getLogger(__name__)
+
+_OWS = "{http://www.opengis.net/ows/2.0}"
+_OWS_TITLE = f"{_OWS}ServiceIdentification/{_OWS}Title"
+# "SoilGrids250m 2.0 - Clay content" -> "2.0" (D29)
+_EDITION_RE = re.compile(r"^SoilGrids250m (\S+) - ")
 
 
 # Soil property descriptions
@@ -155,6 +165,55 @@ class SoilGridsProvider(LandCoverProvider):
     def base_url(self) -> str:
         """Return source URL."""
         return "https://soilgrids.org"
+
+    # =========================================================================
+    # Edition (versioned store signal ``metadata``, D29)
+    # =========================================================================
+
+    def capabilities_url(self, property: str) -> str:
+        """WCS 2.0.1 GetCapabilities URL of the property map."""
+        params = {"SERVICE": "WCS", "VERSION": "2.0.1", "REQUEST": "GetCapabilities"}
+        return f"{self.WCS_BASE}?map=/map/{property}.map&{urlencode(params)}"
+
+    def edition(self, property: str, timeout: int = DEFAULT_TIMEOUT) -> Edition:
+        """SoilGrids edition announced by the property map's GetCapabilities.
+
+        The first ``ows:Title`` of ``ServiceIdentification`` has the form
+        ``SoilGrids250m <edition> - <property name>``; the edition is the
+        version label of every file of this property.
+
+        Raises
+        ------
+        DownloadError
+            HTTP failure, unreadable XML or a title without an edition.
+        """
+        if property not in self.PROPERTIES:
+            raise ValueError(
+                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
+            )
+        url = self.capabilities_url(property)
+        response = get_with_retry(
+            self._sessions.get(),
+            url,
+            timeout=timeout,
+            retries=self.MAX_RETRIES,
+            description=f"SoilGrids GetCapabilities {property}",
+        )
+        try:
+            root = ET.fromstring(response.content)
+        except ET.ParseError as e:
+            raise DownloadError(
+                f"SoilGrids GetCapabilities {property}: XML: {e}"
+            ) from e
+        title = (root.findtext(_OWS_TITLE) or "").strip()
+        match = _EDITION_RE.match(title)
+        if match is None:
+            raise DownloadError(
+                f"SoilGrids GetCapabilities {property}: brak wydania w tytule "
+                f"{title!r} (oczekiwano 'SoilGrids250m <wydanie> - ...')"
+            )
+        label = edition_label(match.group(1), what="SoilGrids")
+        return Edition(id=label, url=url, title=title)
 
     # =========================================================================
     # Download by bbox → WCS

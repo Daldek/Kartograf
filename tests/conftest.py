@@ -310,6 +310,119 @@ def multipart_asc_body(values, xll: float, yll: float, cellsize: float = 1.0) ->
     )
 
 
+SIGNAL_FIXTURES = Path(__file__).parent / "fixtures" / "signals" / "real_2026_10_12"
+
+
+def tiny_geotiff(nodata: float | None, value: int) -> bytes:
+    """A 2x2 Int16 GeoTIFF (EPSG:4326) with the given nodata and fill value."""
+    import numpy as np
+    from rasterio.io import MemoryFile
+    from rasterio.transform import from_origin
+
+    with MemoryFile() as mem:
+        with mem.open(
+            driver="GTiff",
+            width=2,
+            height=2,
+            count=1,
+            dtype="int16",
+            crs="EPSG:4326",
+            transform=from_origin(19.0, 50.0, 0.01, 0.01),
+            nodata=nodata,
+        ) as ds:
+            ds.write(np.full((1, 2, 2), value, dtype="int16"))
+        return bytes(mem.read())
+
+
+def _body_response(body: bytes, content_type: str, status: int = 200):
+    from unittest.mock import Mock
+
+    import requests
+
+    response = Mock()
+    response.status_code = status
+    response.headers = {"Content-Type": content_type}
+    response.content = body
+    response.iter_content = lambda chunk_size=1: iter([body])
+    if status >= 400:
+        error = requests.HTTPError(f"{status} Error", response=response)
+        response.raise_for_status.side_effect = error
+    return response
+
+
+class FakeSoilGrids:
+    """``requests.Session`` stand-in for SoilGrids: GetCapabilities + GetCoverage.
+
+    ``edition``: the edition announced by GetCapabilities (recorded 2.0
+    response with the title rewritten), or an HTTP status (int) for a failed
+    request. ``values``: pixel value per property of the served GeoTIFF.
+    Counts ``capabilities`` and ``coverages`` requests.
+    """
+
+    CAPABILITIES = (
+        SIGNAL_FIXTURES / "isric_soilgrids_capabilities_get.xml"
+    ).read_bytes()
+
+    def __init__(self, edition: str | int = "2.0", values: dict | None = None):
+        self.edition = edition
+        self.values = dict(values or {})
+        self.capabilities = 0
+        self.coverages = 0
+
+    def get(self, url, **kwargs):
+        import re
+
+        prop = re.search(r"map=/map/(\w+)\.map", url).group(1)  # type: ignore[union-attr]
+        if "GetCapabilities" in url:
+            self.capabilities += 1
+            if isinstance(self.edition, int):
+                return _body_response(b"", "text/html", self.edition)
+            body = self.CAPABILITIES.replace(
+                b"SoilGrids250m 2.0 - ", f"SoilGrids250m {self.edition} - ".encode()
+            )
+            return _body_response(body, "text/xml")
+        self.coverages += 1
+        return _body_response(
+            tiny_geotiff(-32768, self.values.get(prop, 1)), "image/tiff"
+        )
+
+
+class FakeCorine:
+    """``requests.Session`` stand-in for CORINE: CLMS catalogue + WMS preview.
+
+    ``edition``: ``characteristics_release_major_version`` of the catalogue
+    record (recorded 2018 answer), or an HTTP status (int). Counts
+    ``catalogue`` and ``previews`` requests.
+    """
+
+    CATALOGUE = json.loads(
+        (SIGNAL_FIXTURES / "clms_corine_2018_search.json").read_text()
+    )
+
+    def __init__(
+        self, edition: str | int = "V2020_20u1", preview: bytes = b"\x89PNG x"
+    ):
+        self.edition = edition
+        self.preview = preview
+        self.catalogue = 0
+        self.previews = 0
+
+    def get(self, url, **kwargs):
+        if "@search" in url:
+            self.catalogue += 1
+            if isinstance(self.edition, int):
+                return _body_response(b"", "text/html", self.edition)
+            record = {
+                **self.CATALOGUE["items"][0],
+                "characteristics_release_major_version": self.edition,
+            }
+            response = _body_response(b"", "application/json")
+            response.json.return_value = {"items": [record], "items_total": 1}
+            return response
+        self.previews += 1
+        return _body_response(self.preview, "image/png")
+
+
 @pytest.fixture
 def sample_sheets() -> dict:
     """

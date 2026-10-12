@@ -10,12 +10,14 @@ from kartograf.hydrology.hsg import (
     HSG_DESCRIPTIONS,
     TEXTURE_CLASSES,
     HSGCalculator,
+    HsgResult,
     classify_usda_texture,
     texture_to_hsg,
 )
 
 __all__ = [
     "HSGCalculator",
+    "HsgResult",
     "classify_usda_texture",
     "texture_to_hsg",
     "HSG_DESCRIPTIONS",
