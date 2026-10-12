@@ -54,8 +54,8 @@ kartograf download --geometry zlewnia.gpkg --layer catchments --product nmt --co
 kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 
 # Pokrycie terenu i grupy hydrologiczne gleb
-kartograf landcover download --source bdot10k --teryt 1465 -o ./data/landcover
-kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data/hsg --depth 0-5cm
+kartograf landcover download --source bdot10k --teryt 1465 -o ./data
+kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
 ```
 
 Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór

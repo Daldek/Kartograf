@@ -61,13 +61,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`GugikProvider`, `GugikNmptProvider`, `GugikOrtoProvider`). Co zrobic:
   zamien nazwy w wywolaniach i odczytach atrybutow (Hydrograf, Hydrolog).
   Klucze sidecara i wartosci (godla) bez zmian.
-- Land cover: domyslna nazwa pliku dla zadania przez arkusz ma czlon
-  `sheet_` zamiast `godlo_` (np. `corine_2018_sheet_N-34-130-D.tif`,
-  `soilgrids_clay_15-30cm_mean_sheet_N-34-130-D.tif`). Co zrobic: skrypty
-  szukajace plikow po nazwie dostosuj do nowego czlonu; pliki pobrane
-  wczesniej zostaja pod stara nazwa (land cover nie pomija istniejacych
-  plikow, kolejne pobranie zapisze plik pod nowa nazwa).
-
 - CLI i biblioteka: `--campaigns {newest,all}` oraz parametr
   `campaigns="newest"|"all"` zastapiono przelacznikiem `--all-campaigns`
   i parametrem `all_campaigns: bool = False` (arkusze PL i LAZ).
@@ -230,6 +223,54 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     wyjscie przestaw na nowe linie.
   - Sidecar: `downloaded_at` z mikrosekundami (porzadek dwoch pobran
     w tej samej sekundzie). Co zrobic: parsery ISO 8601 bez zmian.
+- Magazyn wersjonowany dla land cover i HSG (ADR-036 D29-D33, plan 3/3):
+  - Uklad: pliki `bdot10k_..._teryt_<T>.gpkg`, `corine_<rok>_sheet_<godlo>.png`,
+    `soilgrids_<wl>_<gl>_<stat>_bbox_<wsp>.tif`, `hsg_<godlo>_<gl>.tif`
+    -> segmenty spec 3.4 z wersjami: `landcover/pl_bdot10k_gpkg[_<warstwy>]/teryt/<T>.gpkg`
+    (`keep_raw`: `landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip`, SHP:
+    `landcover/pl_bdot10k_shp/teryt/<T>.zip`), `landcover/eu_corine_<rok>/...tif`
+    (CLMS), `landcover/eu_corine_<rok>_preview/...png` (podglad WMS bez
+    credentials), `soil/global_soilgrids_<wl>_<gl>_<stat>/...tif`,
+    `hsg/global_soilgrids_<gl>_<stat>/...tif`; pod segmentem `teryt/<T>`,
+    `bbox/<wsp>` (EPSG:2180, jak wycinki) albo hierarchia godla. Brak
+    migracji. Co zrobic: pobierz ponownie do katalogu magazynu (`--output`)
+    i czytaj sciezke z linii statusu / `result.file.path`; stare pliki
+    usun recznie.
+  - `LandCoverManager` i `HSGCalculator` pisza wylacznie do magazynu:
+    `output_path` usuniety (`TypeError`), wynik `LandCoverResult` /
+    `LandCoverAreaResult` / `HsgResult` zamiast `Path`, `HSGCalculator(output_dir,
+    provider=None)` (katalog wymagany), `keep_intermediate` usuniety (wejscia
+    clay/sand/silt to wersje SoilGrids w magazynie). Co zrobic (Hydrograf:
+    `backend/scripts/download_landcover.py`, `backend/core/cn_calculator.py`,
+    `backend/scripts/bootstrap.py`): `LandCoverManager(<korzen magazynu>,
+    ...).download_by_*(...)` bez `output_path` i `path = result.file.path`;
+    `HSGCalculator(<korzen>).calculate_hsg_by_bbox(bbox, depth=..., stat=...)`
+    i `result.file.path`. Plik w wybranym miejscu poza magazynem:
+    `provider.download_by_*(..., output_path)` albo `hsg_from_rasters`.
+  - Land cover nie pobiera juz ponownie istniejacego pliku: domyslnie
+    lokalna wersja (SoilGrids/CORINE CLMS: jedno zapytanie o wydanie,
+    nowsze wydanie tylko zglaszane; BDOT10k i podglad CORINE bez taniego
+    sygnalu: `(bez sprawdzania; --check-updates)`). Wersje SoilGrids
+    i CORINE CLMS maja etykiete wydania zrodla (`2.0`, `V2020_20u1`), bez
+    wydania nie powstaja (blad). Co zrobic: ponowne pobranie — `--force` /
+    `update="force"`, nowsze wydanie — `--upgrade` / `update="upgrade"`.
+  - `download_all_counties` nie przerywa na pierwszym bledzie powiatu:
+    zwraca `LandCoverAreaResult(files, failed, stale)`; CLI wypisuje
+    `Error: <TERYT>: ...` dla kazdego bledu i konczy kodem 1. Co zrobic:
+    sprawdzaj `result.failed` zamiast lapac wyjatek.
+  - `extra.source.raw_file` (BDOT10k `keep_raw`) zastapione
+    `extra.source_files` (`name`, `file` = sciezka wersji ZIP wzgledem
+    `--output`, `sha256`). Sidecar HSG: `extra.source_files` z `file`,
+    `sha256`, `label` wejsc; `request` = wybor (bez `bbox` przy arkuszu).
+  - CLI `landcover download` i `soilgrids hsg`: zamiast `Downloaded to:` /
+    `HSG raster saved to:` linia statusu na plik (sciezka wzgledem
+    `--output`); `soilgrids hsg --output` tylko katalog magazynu (`.tif` =
+    `Error:`), `--keep-intermediate` usuniete. Co zrobic: skrypty parsujace
+    wyjscie przestaw na linie statusu.
+  - `SourceDescriptor.storage_subdir` jest zawsze `str` (land cover:
+    prefiks segmentu); `CorineProvider.CLMS_DATASET_UIDS`/
+    `CLMS_RASTER_DOWNLOAD_IDS` 2012/2006/2000 zmienione na identyfikatory
+    z katalogu CLMS.
 
 ### Dodane
 
@@ -239,6 +280,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   od planu) — dla kazdego toru: arkusze PL, kafle LAZ, arkusze CZ (SM5:
   `ETag`), wycinki CZ i PL (bez taniego sygnalu: "nie da sie sprawdzic bez
   pobrania"); przy `--country auto` jeden plan PL i CZ.
+- CLI `landcover download` i `soilgrids hsg`: `--check-updates`,
+  `--upgrade`, `--force`, `--plan PLIK` (tory planu `landcover` i `hsg`);
+  status `uzyta ponownie` (HSG z tych samych wejsc, bez liczenia).
 - Biblioteka: `check_updates`, `upgrade`, `UpdatePlan`, `PlanItem`,
   `UpgradeReport`, `UpdateMode`, `VersionRef` (w `__all__`);
   `DownloadManager.inspect_sheets`, `download_records`; `SheetFetch.status`,
@@ -256,6 +300,27 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `channel_signal`; transport `response_signal`, `head_signal`,
   `download_to(on_response=)`; `CuzkDmrProvider.sm5_signal`,
   `download(..., on_response=)`; sidecar `extra.http` (SM5).
+- Biblioteka (plan 3/3): `LandCoverResult`, `LandCoverAreaResult`,
+  `LandCoverFailure`, `HsgResult`, `Edition` (w `__all__`);
+  `LandCoverManager(..., update=, plan=)`, `check`, `check_all_counties`;
+  `HSGCalculator.check_hsg_by_bbox`/`check_hsg_by_sheet`;
+  `SoilGridsProvider.edition`/`capabilities_url`,
+  `CorineProvider.edition`/`uses_clms`; `kartograf.landcover.store`
+  (`landcover_segment`, `hsg_segment`, `selection_slot`, `selection_unit`);
+  `kartograf.download.fetch.use_local`/`store_file`, status `reused`;
+  `fetch_version(edition=)`/`inspect_version(edition=)` (sygnal `metadata`);
+  `get_with_retry(headers=)`; `TransportKind.WMS` (kanal podgladu CORINE);
+  sidecar `extra.edition`.
+
+### Naprawione
+
+- CORINE CLMS 2012/2006/2000: UID-y zbiorow i `@id` rastra nie istnialy
+  w katalogu CLMS (`items_total: 0`); poprawione wg katalogu
+  (`docs/research/2026-10-12-plan3-spec-check/raport.md`). Pobranie CLMS
+  z credentials niesprawdzone na zywo.
+- `soilgrids hsg --bbox ... -o <katalog>` pisal `hsg_bbox_<glebokosc>.tif`
+  bez wspolrzednych — dwa obszary nadpisywaly jeden plik. Teraz
+  `hsg/global_soilgrids_<gl>_<stat>/bbox/<wsp>.tif`.
 
 ## [0.7.2] - 2026-10-11
 

@@ -47,7 +47,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0); errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0) |
 | [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
-| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i [ADR-036](#adr-036-magazyn-wersjonowany) (`<segment>/versions/`; errata 3); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
+| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i [ADR-036](#adr-036-magazyn-wersjonowany) (`<segment>/versions/`, land cover i HSG w ukladzie; errata 3); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
 | [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`all`/`--min-year`; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial LAZ; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile) |
@@ -57,7 +57,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta — czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (F-U5: `kampanie/`; errata 1); uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, realizacja w planie 2/3) |
-| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta; czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5) i [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8, plan 2/3); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover w planie 3/3) |
+| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta; czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5) i [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8, plan 2/3); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG, D29-D33) |
 
 ---
 
@@ -1270,7 +1270,12 @@ kampanii (ADR-030 (c), (d), errata 4). Segmenty z tej decyzji bez zmian.
 jako wersje w `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/`;
 sciezka standardowa i `full_sheet/` to wylacznie dowiazania twarde do
 wersji (bez kopii). Katalog `kampanie/` z 0.7.x nie jest uzywany. Land
-cover i HSG w ukladzie `data/` — realizacja w planie 3/3 magazynu.
+cover i HSG leza w ukladzie `data/` (plan 3/3, ADR-036 D29-D33): segmenty
+`landcover/pl_bdot10k_*`, `landcover/eu_corine_<rok>[_preview]`,
+`soil/global_soilgrids_<wlasciwosc>_<glebokosc>_<stat>`,
+`hsg/global_soilgrids_<glebokosc>_<stat>` (prefiksy w `storage_subdir`
+deskryptorow, tokeny tresci lowercase), pod nimi `teryt/<T>`,
+`bbox/<wsp>` albo hierarchia godla.
 
 ---
 
@@ -2488,8 +2493,8 @@ pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane (D10).
 
 ## ADR-036: Magazyn wersjonowany
 
-**Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizja 2026-10-12, D26-D28)
-**Status:** Przyjeta; czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover w planie 3/3)
+**Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizje 2026-10-12, D26-D28 i D29-D33)
+**Status:** Przyjeta; czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
 
 **Kontekst:** Do 0.7.x magazyn mogl po cichu nadpisac dane: `--force`
 nadpisywal plik kampanii, `newest` automatycznie przestawial sciezke na
@@ -2532,7 +2537,8 @@ i wycinki PL z WCS w `bbox/<wsp>.tif` bez daty (D15); wspolna polityka
 plikow bez kampanii `download/fetch.py`, plan z torem pozycji
 (`download/plan.py`, `PlanItem.track`/`unit`), `--check-updates`/
 `--upgrade`/`--plan` dla kazdego toru (przy `--country auto` jeden plan
-PL i CZ). Plan 3/3: land cover i HSG w ukladzie `data/`. Magazyn wymaga systemu plikow z hardlinkami; gdy system plikow
+PL i CZ). Plan 3/3 (2026-10-12): land cover (BDOT10k, CORINE, SoilGrids)
+i HSG w ukladzie `data/` (D29-D33 nizej). Magazyn wymaga systemu plikow z hardlinkami; gdy system plikow
 nie podaje stabilnych numerow i-wezlow (SMB bez `serverino`, `samefile`
 falszywe dla hardlinku), dowiazanie potwierdza tresc: obie sciezki maja
 wiecej niz 1 link, ten sam rozmiar, a sha256 dowiazania = sha256 z sidecara wersji
@@ -2555,12 +2561,56 @@ Decyzje rewizji 2026-10-12 (plan 2/3):
 | WCS GUGiK (wycinki PL) | `none` | data pobrania |
 | SM5 CUZK (`openzu`) | `http` (`ETag`, `Last-Modified` w `extra.http`) | data pobrania |
 | `exportImage` CUZK (TM33, wycinki CZ) | `none` (`ETag` zalezny od zapytania) | data pobrania |
+| BDOT10k (paczka powiatu) | `none` | data pobrania |
+| SoilGrids (WCS) | `metadata` (wydanie z GetCapabilities, D29) | wydanie, np. `2.0` |
+| CORINE CLMS | `metadata` (`characteristics_release_major_version` z katalogu CLMS, D29) | wydanie, np. `V2020_20u1` |
+| CORINE podglad WMS (EEA/DLR) | `none` (D31) | data pobrania |
+| HSG (pochodna) | zestaw sha256 wejsc (D33) | wydanie wejsc |
 
   Ta sama tresc pod nowym `ETag` = `relabeled`, pod tym samym albo bez
   sygnalu = `unchanged` (D23 dla `http`). Bez taniego sygnalu: domyslnie
   i przy `--upgrade` lokalna wersja (niesprawdzona, `--force` pobiera).
   Wszystkie mierzone obiekty byly bajtowo powtarzalne, wiec `--force` przy
   niezmienionym zrodle daje "bez zmian".
+
+Decyzje rewizji 2026-10-12 (plan 3/3, weryfikacja
+`docs/research/2026-10-12-plan3-spec-check/raport.md`):
+- D29: sygnal `metadata` SoilGrids i CORINE = wydanie zrodla: tytul
+  GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - Clay content` ->
+  `2.0`) i `characteristics_release_major_version` publicznego katalogu
+  CLMS (bez credentials). Wydanie jest etykieta wersji (`label_source =
+  "edition"`), opis w `extra.edition`. UID-y CLMS 2012/2006/2000 poprawione
+  wg katalogu.
+- D30: zadna wersja SoilGrids/CORINE nie powstaje bez wydania: wydanie
+  niedostepne bez lokalnej wersji = blad pliku; z lokalna wersja domyslnie
+  `Warning:` (lokalna niesprawdzona), `--upgrade`/`--force` = blad.
+  Porownanie: etykieta lokalnej wersji z wydaniem zrodla (inne wydanie =
+  domyslnie informacja, `--upgrade` pobiera); wersja z inna etykieta
+  (nie z wydania) jest nieporownywalna. Naglowki HTTP kanalu bez sygnalu
+  (`none`) nie rozrozniaja wersji (ta sama tresc innego dnia = `unchanged`).
+- D31: podglad CORINE z WMS (bez `CLMS_CREDENTIALS`, takze 1990) to osobny
+  produkt w segmencie `eu_corine_<rok>_preview` (kanal WMS, `none`,
+  etykieta daty) — nigdy wersja pliku danych CLMS.
+- D32: `LandCoverManager` i `HSGCalculator` pisza wylacznie do magazynu
+  (`output_dir` = korzen `--output`, bez `output_path`); wynik
+  `LandCoverResult`/`LandCoverAreaResult`/`HsgResult` z `VersionedFile`.
+  Plik poza magazynem: `provider.download_by_*` i `hsg_from_rasters`.
+- D33: HSG liczony z wersji wejsc clay/sand/silt (tabela 4.2, bez katalogu
+  tymczasowego i bez `keep_intermediate`); etykieta = wydanie wejsc
+  (rozne: posortowane, laczone `+`), `extra.source_files[]` z `sha256`
+  i sciezka wersji wejscia; wersja o tym samym zestawie sha256 wejsc jest
+  uzywana ponownie (`reused`, bez liczenia), `--force` dotyczy wejsc.
+- Segmenty (spec 3.4, lowercase): `landcover/pl_bdot10k_gpkg[_<warstwy>]`,
+  `landcover/pl_bdot10k_gpkg_zip` (`keep_raw`), `landcover/pl_bdot10k_shp`,
+  `landcover/eu_corine_<rok>[_preview]`,
+  `soil/global_soilgrids_<wlasciwosc>_<glebokosc>_<stat>`,
+  `hsg/global_soilgrids_<glebokosc>_<stat>`; pod segmentem `teryt/<T>`,
+  `bbox/<wsp>` albo hierarchia godla. Tory planu `landcover` i `hsg`.
+- Ograniczenia: poprawka danych w obrebie tego samego wydania (bez zmiany
+  etykiety) wykrywa tylko `--force`; pobranie CLMS z credentials nie bylo
+  sprawdzone na zywo (2026-10-12). HSG o tej samej tresci z innych wejsc
+  zostaje wersja z pierwszymi wejsciami w `source_files` (wersje sa
+  niezmienne), wiec takie wejscia licza HSG przy kazdym uruchomieniu.
 
 ---
 
