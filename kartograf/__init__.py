@@ -112,6 +112,7 @@ from kartograf.landcover.manager import (
     LandCoverManager,
     LandCoverResult,
 )
+from kartograf.notices import Notice
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
@@ -136,6 +137,8 @@ __version__ = "0.8.0-dev"
 __all__ = [
     # Cache
     "MetadataCache",
+    # Notices
+    "Notice",
     # Core
     "SheetParser",
     "Parser2000",

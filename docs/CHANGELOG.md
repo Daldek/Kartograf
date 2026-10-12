@@ -280,6 +280,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Biblioteka: `Notice(level, code, text)` w publicznym API oraz
+  `kartograf.notices.NoticeSink` (zbieranie komunikatow i przekazanie do
+  callbacku); tekst komunikatow ograniczony do ASCII, kody sa stale.
 - CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
   plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
   nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
