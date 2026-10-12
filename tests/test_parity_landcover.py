@@ -19,7 +19,7 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 from tests.conftest import FakeCorine, FakeSoilGrids, tiny_geotiff, write_gpkg_layers
-from tests.parity import assert_same_store, run_both
+from tests.parity import assert_notices_printed, assert_same_store, run_both
 from tests.test_hsg import RasterSoilGrids
 from tests.test_landcover_output_params import FakePackages
 
@@ -31,15 +31,10 @@ CLAY_ARGS = ["--property", "clay", "--depth", "0-5cm", "--stat", "mean"]
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 
-def _notice_lines(notices: tuple[Notice, ...]) -> list[str]:
-    return [f"{'Info' if n.level == 'info' else 'Warning'}: {n.text}" for n in notices]
-
-
 def _same(run, notices: tuple[Notice, ...], ok: bool) -> None:
     assert_same_store(run.cli_store, run.api_store)
     assert run.cli_code == (0 if ok else 1)
-    lines = _notice_lines(notices)
-    assert [line for line in lines if line in run.cli_stderr] == lines
+    assert_notices_printed(run.cli_stderr, notices)
 
 
 def _providers(**by_name):

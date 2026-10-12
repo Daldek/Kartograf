@@ -65,6 +65,24 @@ def run_both(
     )
 
 
+def assert_notices_printed(stderr: str, notices) -> None:
+    """Every data notice is on CLI stderr as whole line(s), in report order.
+
+    The sheet list header (``SHEET_LIST``) goes to stdout and is not checked.
+    """
+    from kartograf.notices import SHEET_LIST
+
+    position = 0
+    text = f"\n{stderr}"
+    for notice in notices:
+        if notice.code == SHEET_LIST:
+            continue
+        prefix = "Info" if notice.level == "info" else "Warning"
+        found = text.find(f"\n{prefix}: {notice.text}\n", position)
+        assert found >= 0, f"Not on stderr (whole line, in order): {notice.text!r}"
+        position = found + 1
+
+
 def assert_same_store(a: Path, b: Path) -> None:
     """Assert identical relative tree paths and file bytes, including sidecars."""
     a_entries = {p.relative_to(a): p for p in a.rglob("*")}
