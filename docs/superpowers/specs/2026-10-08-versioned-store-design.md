@@ -2,9 +2,13 @@
 
 **Data:** 2026-10-08; rewizja 2026-10-11 (po 0.7.1 i 0.7.2 oraz review
 zapisu i skladowania, decyzje D13-D24); rewizja 2026-10-12 (weryfikacja
-przed planem 2/3, decyzje D26-D28; D25 odrzucone)
+przed planem 2/3, decyzje D26-D28; D25 odrzucone); rewizja 2026-10-12
+(weryfikacja przed planem 3/3, decyzje D29-D33,
+`docs/research/2026-10-12-plan3-spec-check/raport.md`)
 **Status:** ZAAKCEPTOWANY przez uzytkownika 2026-10-11 (rewizja D13-D24);
-D26-D28 decyzje uzytkownika 2026-10-12
+D26-D28 decyzje uzytkownika 2026-10-12; D29-D33 z weryfikacji przed planem
+3/3 (2026-10-12; sygnaly SoilGrids i CORINE uzytkownik powierzyl
+wykonawcy z wymogiem porownywalnosci wersji)
 **Galaz:** `feat/versioned-store` (z `develop`; rebase na 0.7.2 2026-10-11)
 **Wersja docelowa:** 0.8.0 (zmiany lamiace ukladu `data/`, `--force`,
 sidecara, nazw wycinkow `bbox/` i CLI land cover)
@@ -75,6 +79,11 @@ projekty uzywaja pliku".
 | D26 | LAZ wersjonowany per plik: nazwa kafla niesie id rekordu (`<zgloszenie>_<rekord>_<godlo>.laz`), wiec nowszy nalot to INNE pliki, nie nowa wersja tego samego. Selekcja kafli zawsze wg ADR-029/ADR-030 (najnowsza w zakresie lat); kafel z lokalna wersja nie jest pobierany ponownie (domyslnie i `--upgrade`), nowy kafel z nowszego nalotu pobiera sie takze domyslnie — wyjatek od D5 dla LAZ. WFS niedostepny = blad zadania jak dzis (bez lokalnej mapy pokrycia obszaru) (2026-10-12) | pokrycie obszaru najpierw z lokalnych kafli + `Info:` o nowszym nalocie (nowa sciezka selekcji) |
 | D27 | `DownloadManager.download_bbox` USUNIETE (BREAKING): plik o nazwie wywolujacego w korzeniu `--output`, zawsze nadpisywany, dubluje `download_pl_cutout(target_crs="EPSG:2180")` bez maski PRG; Hydrograf go nie wola. NMT/NMPT bbox -> `download_pl_cutout` (wersjonowany, D15); orto i surowy WCS -> `provider.download_bbox(bbox, path)` poza magazynem, bez wersji i sidecara (2026-10-12) | wymagana `path` poza magazynem z odmowa nadpisania (dwa API do zblizonego wyniku); osobny segment `bbox_raw/` (trzecia regula sciezek) |
 | D28 | `Content-Length` z `HEAD` NIE jest sygnalem uzupelniajacym zrodel `index`; cicha poprawke u zrodla wykrywa tylko `--force` (ograniczenie 4.1) (2026-10-12) | `HEAD` na plik w `--check-updates`/`--upgrade` (1 zapytanie na plik) |
+| D29 | Sygnal `metadata` = identyfikator WYDANIA zbioru, etykieta `edition` = ten identyfikator: SoilGrids — wydanie z tytulu GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`); CORINE (CLMS) — `characteristics_release_major_version` rekordu zbioru rocznika w publicznym katalogu CLMS (`V2020_20u1`), rocznik w segmencie. Poprawka w obrebie wydania wykrywa tylko `--force` (ograniczenie 4.1) (2026-10-12) | SoilGrids `none` + `downloaded` (wersje bez nazwy wydania, nieporownywalne miedzy projektami); `ETag` VRT z `files.isric.org` (inny kanal niz WCS); rocznik CORINE jako sygnal (parametr zadania — zawsze "aktualne") |
+| D30 | Zrodlo `metadata` nie tworzy wersji bez wydania: wydanie niedostepne = blad pliku (takze brak lokalnej wersji w trybie domyslnym); lokalna wersja istnieje — tabela 4.2 wiersz "sygnal niedostepny". Porownanie: `extra.version.label` lokalnej wersji z wydaniem zrodla (2026-10-12) | etykieta `downloaded` awaryjnie (wersje jednego pliku z roznymi rodzajami etykiet, nieporownywalne) |
+| D31 | Podglad CORINE z WMS (bez `CLMS_CREDENTIALS`, takze 1990) to osobny produkt: segment `eu_corine_<rok>_preview`, kanal WMS z sygnalem `none`, etykieta `downloaded`; nigdy wersja pliku danych CLMS (2026-10-12) | podglad jako wersja pliku danych (inna tresc pod ta sama nazwa); usuniecie podgladu (zmiana zakresu) |
+| D32 | `LandCoverManager` i `HSGCalculator` zapisuja wylacznie do magazynu (`output_dir` = korzen jak `--output`; BREAKING: bez `output_path`). Plik poza magazynem, bez wersji: `provider.download_by_*(..., output_path)` i `hsg_from_rasters` (jak D27) (2026-10-12) | `output_path` z wersjami poza magazynem (trzecia regula sciezek); `output_path` jako kopia (podwojne miejsce) |
+| D33 | HSG: wejscia clay/sand/silt to wersje SoilGrids w magazynie (tabela 4.2), bez katalogu tymczasowego i bez `keep_intermediate` (BREAKING); etykieta wersji HSG = wydanie wejsc (rozne wydania: posortowane, laczone `+`), `label_source = "edition"`; `extra.source_files[]` z `sha256` i sciezka wejscia wzgledem `--output` (2026-10-12) | etykieta `downloaded` (data obliczenia nie mowi, z jakich danych); kopie wejsc obok wyniku |
 
 ## 3. Model wersji i uklad na dysku
 
@@ -93,9 +102,11 @@ projekty uzywaja pliku".
   sha256 w sidecarze.
 - **Etykieta** (tylko dla czlowieka; w kolejnosci):
   1. kampania ze skorowidza: `<aktualnosc RRRR-MM-DD>_<id>` jak dzis w ADR-030;
-  2. edycja zrodla: CORINE `<rok>`, rok aktualizacji CUZK, wersja SoilGrids
-     (dokladna postac per zrodlo — inwentaryzacja, sekcja 8);
+  2. wydanie zrodla (D29): CORINE (CLMS) `V2020_20u1`, SoilGrids `2.0`,
+     HSG — wydanie wejsc (D33); CUZK nie ma wydania (sekcja 8);
   3. data pobrania `RRRR-MM-DD` (UTC).
+  Etykieta z wydania zrodla musi pasowac do `[A-Za-z0-9._+-]+` (nazwa
+  katalogu); inna wartosc = wydanie niedostepne (D30), bez zamiany znakow.
   Rodzaj etykiety zapisuje `extra.version.label_source`
   (`campaign`/`edition`/`downloaded`).
 
@@ -202,8 +213,8 @@ Sidecar wersji jest pisany raz i nigdy nie zmieniany.
 | `extra.source` / `extra.campaign` | bez zmian (kampanie PL; `extra.campaign.full_sheet` wyznacza cel `full_sheet/`) |
 | `extra.coverage` | w sidecarze wersji liczone przy zapisie (D13), nigdy dopisywane; `extra.flights`, `extra.better_coverage` tylko w sidecarze dowiazania |
 | `request.*`, `extra.available_years` (ADR-032 pkt 7) | bez zmian; `request` opisuje pobranie, ktore UTWORZYLO wersje (ponowne pobranie tej samej tresci go nie zmienia) |
-| etykieta zrodla dla BDOT10k, SoilGrids, CZ | NOWE pola wg inwentaryzacji (sekcja 8); dzis brak |
-| `extra.source_files[]` (HSG) | istnieje w `hsg_from_rasters` (`name`, `file`, `sha256`); NOWE w `calculate_hsg_by_bbox` |
+| `extra.edition` | NOWE dla zrodel `metadata` (D29): `{id, title?, url}` — `id` = etykieta wydania, `title` = surowy tytul (SoilGrids), `url` = zapytanie metadanych; CORINE dodatkowo `dataset_uid`. BDOT10k i CZ bez wydania (sekcja 8) |
+| `extra.source_files[]` (HSG, GPKG z `keep_raw`) | istnieje w `hsg_from_rasters` (`name`, `file`, `sha256`); NOWE w `HSGCalculator` (D33: `file` = sciezka wersji wejscia wzgledem `--output`, dodatkowo `label`) i w GPKG BDOT10k z `keep_raw` (ZIP paczki) |
 | inne pochodne z lokalnych plikow | lista wejsc z `sha256` w postaci `extra.source_files[]` |
 | `extra.parent_requests` | USUNIETE (BREAKING); `extra.parent_request` zostaje |
 
@@ -212,28 +223,42 @@ Schemat pozostaje `kartograf-meta/1`: stare sidecary czytane jak dzis
 
 ### 3.4 Land cover i HSG w ukladzie `data/`
 
-`LandCoverManager` i `HSGCalculator` przechodza na `storage_for_provider`
-i segmenty ADR-026. Segmenty niosa parametry tresci, ktore dzis sa w nazwie
-pliku (od 0.7.1 `bdot10k_teryt_<TERYT>.gpkg`, z filtrem warstw
-`bdot10k_PTWP-SWRS_teryt_<TERYT>.gpkg`), np. (dokladne nazwy w planie
-implementacji, zgodnie z regulami segmentow ADR-026):
+`LandCoverManager` i `HSGCalculator` przechodza na segmenty ADR-026 i pisza
+tylko do magazynu (D32). Segment niesie parametry tresci, ktore dzis sa w
+nazwie pliku (od 0.7.1 `bdot10k_teryt_<TERYT>.gpkg`, z filtrem warstw
+`bdot10k_PTWP-SWRS_teryt_<TERYT>.gpkg`); wartosci lowercase (ADR-026
+regula 1):
 
 ```
-landcover/pl_bdot10k_gpkg/teryt/1206.gpkg
-landcover/pl_bdot10k_gpkg_PTWP-SWRS/teryt/1206.gpkg
-landcover/pl_bdot10k_raw_zip/teryt/1206.zip     (keep_raw)
-landcover/eu_corine_2018/...
-soil/global_soilgrids_clay_0-5cm_mean/...
-hsg/...
+landcover/pl_bdot10k_gpkg/teryt/<TERYT>.gpkg
+landcover/pl_bdot10k_gpkg_<warstwy>/teryt/<TERYT>.gpkg        (np. _ptwp-swrs: kody posortowane, "-")
+landcover/pl_bdot10k_gpkg_zip/teryt/<TERYT>.zip                (keep_raw: oryginalny ZIP paczki GPKG)
+landcover/pl_bdot10k_shp/teryt/<TERYT>.zip                     (paczka SHP)
+landcover/eu_corine_<rok>/<hierarchia>/<id>.tif                (CLMS)
+landcover/eu_corine_<rok>_preview/<hierarchia>/<id>.png        (podglad WMS, D31)
+soil/global_soilgrids_<wlasciwosc>_<glebokosc>_<stat>/<hierarchia>/<id>.tif   (np. clay_0-5cm_q0.05)
+hsg/global_soilgrids_<glebokosc>_<stat>/<hierarchia>/<id>.tif
 ```
 
-Filtr warstw BDOT10k zmienia tresc, wiec jest parametrem segmentu, nie
-wersja. Oryginalny ZIP (`keep_raw=True`) jest osobnym plikiem z wlasnymi
-wersjami i sidecarem (jak w 0.7.1); sidecar GPKG ma wtedy
-`extra.source_files[]` z sha256 ZIP-a. Zapisy ZIP i GPKG nie sa atomowe
+`<hierarchia>/<id>`: `teryt/<TERYT>` (BDOT10k — takze przy wyborze bboxem,
+arkuszem i geometria, jak dzis), `bbox/<wsp>` (`bbox_cutout_path`:
+wspolrzedne EPSG:2180 `format(v, ".10g")`, jak wycinki), arkusz — hierarchia
+godla jak NMT (`parser_registry.path_parts`, nazwa = kanoniczne godlo).
+Geometria = bbox jej obwiedni (jak dzis). Rocznik CORINE, wlasciwosc,
+glebokosc i statystyka SoilGrids, format i filtr warstw BDOT10k zmieniaja
+tresc, wiec sa segmentem, nie wersja. Sygnaly i etykiety: sekcja 8.
+
+Oryginalny ZIP (`keep_raw=True`) jest osobnym plikiem z wlasnymi wersjami
+i sidecarem (jak w 0.7.1); sidecar wersji GPKG ma wtedy
+`extra.source_files[]` z sha256 ZIP-a. Oba pliki powstaja z jednego
+pobrania paczki; paczka jest pobierana, gdy ktorykolwiek zadany plik nie ma
+lokalnej wersji (albo wg trybu, 4.2). Zapisy ZIP i GPKG nie sa atomowe
 wzgledem siebie (awaria miedzy nimi = ZIP bez GPKG; naprawia nastepne
-uruchomienie). `hsg_from_rasters` pisze pod
-sciezke podana przez wywolujacego — poza magazynem, bez wersji.
+uruchomienie).
+
+Poza magazynem, bez wersji (D32): `provider.download_by_*(..., output_path)`
+(BDOT10k `download_package`, CORINE, SoilGrids) i `hsg_from_rasters` —
+pisza pod sciezke podana przez wywolujacego.
 
 Zmiana zachowania (BREAKING): ponowne uruchomienie NIE pobiera ponownie
 istniejacego wyniku; reguly sekcji 4.
@@ -264,7 +289,7 @@ pobraniu. Sprawdzanie swiezosci (domyslne `Info:`, `--check-updates`,
 | Sygnal | Strona lokalna (sidecar wersji) | Strona zrodla |
 |---|---|---|
 | `index` | `extra.campaign` / `extra.source` (data aktualnosci, id kampanii z URL, numer zgloszenia); LAZ: URL kafla w sidecarze wersji (D26: plik = rekord) | najnowszy rekord skorowidza w zakresie strategii kampanii; LAZ: selekcja kafli WFS (ADR-029/030) |
-| `metadata` | etykieta edycji (`extra.version.label`) | data/rok/edycja z metadanych uslugi |
+| `metadata` | etykieta wydania (`extra.version.label`, `label_source = "edition"`) | wydanie z metadanych uslugi (D29): SoilGrids — tytul GetCapabilities mapy wlasciwosci; CORINE — `characteristics_release_major_version` z katalogu CLMS |
 | `http` | `extra.http` (`etag`, `last_modified`, `content_length`) | naglowki odpowiedzi na `HEAD` |
 | `none` | — | brak; wynik "nie da sie sprawdzic bez pobrania" |
 
@@ -272,6 +297,13 @@ Ograniczenie: zmiana tresci pliku przy niezmienionym sygnale (cicha poprawka
 u zrodla pod tym samym rekordem i URL) jest niewykrywalna bez pobrania;
 wykrywa ja `--force` (inne sha256 = nowa wersja). `Content-Length` z `HEAD`
 nie jest sygnalem uzupelniajacym (D28).
+
+`metadata` (D29, D30): rowne wydanie = "aktualne" / lokalna wersja; inne =
+"nowsza: <wydanie>" (domyslnie lokalna + `Info:`, `--upgrade` pobiera);
+metadane niedostepne albo bez rozpoznawalnego wydania = wiersz "sygnal
+niedostepny" tabeli 4.2, a bez lokalnej wersji blad pliku (zadnej wersji
+bez wydania). Jedno zapytanie metadanych na wydanie w zadaniu (SoilGrids:
+na wlasciwosc, CORINE: na rocznik), bez cache SQLite.
 
 ### 4.2 Tryby
 
@@ -320,9 +352,18 @@ najnowsza; `--check-updates` raportuje "do pobrania".
 ### 4.3 Produkty pochodne
 
 Produkty pochodne = wyniki liczone z LOKALNYCH plikow (dzis HSG z warstw
-SoilGrids). Najpierw wersje wejsc wg tabeli 4.2. Istniejaca wersja
-pochodnej o tym samym zestawie sha256 wejsc i tych samych parametrach jest
-uzywana ponownie (`reused`); w przeciwnym razie powstaje nowa wersja.
+SoilGrids). Najpierw wersje wejsc wg tabeli 4.2 (D33: wejscia HSG to pliki
+`soil/global_soilgrids_{clay,sand,silt}_<glebokosc>_<stat>/` tej samej
+hierarchii). Istniejaca wersja pochodnej o tym samym zestawie sha256 wejsc
+i tych samych parametrach (glebokosc, statystyka, obszar = sciezka) jest
+uzywana ponownie (`reused`, bez liczenia); w przeciwnym razie wynik jest
+liczony do `.incoming/` i zapisywany jak kazda wersja (3.1: ta sama tresc =
+`unchanged`). Wejscia ani wynik nie sa usuwane.
+
+Tryby dla pochodnej dotycza wejsc: `--force` pobiera wejscia ponownie (wynik
+liczony tylko, gdy zestaw sha256 sie zmienil); `--check-updates` raportuje
+wejscia oraz pochodna (`missing` — brak wersji dla biezacych lokalnych
+wejsc, `current` — jest; pochodna nigdy `newer`).
 
 Wycinki PL z WCS (ADR-035) i wycinki CZ nie sa pochodnymi: ich zrodlem jest
 usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
@@ -353,6 +394,8 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 - `SheetFetch`/`DownloadResult`, wyniki land cover, LAZ, wycinka i HSG
   dostaja informacje o wersji: etykieta, `sha256`, status
   (`new`/`unchanged`/`relabeled`/`reused`/`local`), sciezka wersji.
+  `LandCoverManager.download*` i `HSGCalculator.calculate_*` zwracaja wynik
+  z wersja zamiast `Path` (BREAKING, D32).
 - CLI: jedna linia statusu na plik, np.
   `N-34-130-D-d-2-4: nowa wersja 2025-06-02_91234_3fa91c2e`,
   `1206: lokalna wersja 2026-10-08_ab12cd34 (bez sprawdzania; --check-updates)`;
@@ -397,7 +440,9 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 | `download/storage.py` | `get_version_path` zamiast `get_campaign_path`; `list_files` pomija `versions/` i `full_sheet/` |
 | `download/manager.py` | `update=` zamiast `skip_existing`; usuniety `_note_reuse`; kampanie przez `versions.py`; faza zakresu lat (ADR-032) z regula D14; pomiar pokrycia przy zapisie wersji (D13); `full_sheet` jako pozycje "brak lokalnej wersji"; usuniete `download_bbox` (D27) |
 | `download/cutout.py` (tor WCS), `download/cz_cutout.py`, `download/laz.py` | zapis wersji; wycinki bez daty w nazwie (D15) |
-| `landcover/manager.py`, `hydrology/hsg.py` | `storage_for_provider`, segmenty, wersje, tryby `update`; `source_files[]` w `calculate_hsg_by_bbox` |
+| `landcover/manager.py`, `hydrology/hsg.py` | segmenty 3.4, wersje, tryby `update`, wynik z wersja zamiast `Path`, bez `output_path`/`keep_intermediate` (D32, D33); `source_files[]` w HSG |
+| `providers/corine.py`, `providers/soilgrids.py` | odczyt wydania (D29); CORINE: UID-y zbiorow i `@id` RASTER z katalogu CLMS (2012/2006/2000 w kodzie nie istnieja, raport 2026-10-12) |
+| `download/fetch.py` | porownanie `metadata` (D30) w `fetch_version`/`inspect_version`; status `reused` dla pochodnych |
 | `cli/*` | flagi z 4.2/4.4, linie statusu, liczniki, kody wyjscia, `Info:` o `kampanie/` |
 | `cache/metadata.py` | bez zmian strukturalnych (`campaigns_cache` zostaje) |
 | `kartograf/__init__.py` | eksporty `UpdatePlan`, `check_updates`, `upgrade`, `VersionRef` (nazwy angielskie) |
@@ -438,8 +483,11 @@ Offline (`-m "not live"`), fixtury z surowych odpowiedzi:
   zly schemat/magazyn;
 - sidecar: nowe pola, brak `parent_requests`, niezmiennosc sidecara wersji
   po ponownym uzyciu;
-- land cover i HSG: nowe sciezki, domyslne uzycie lokalnej wersji, filtr
-  warstw BDOT10k w segmencie, `keep_raw` jako osobny plik;
+- land cover i HSG: nowe sciezki (segmenty 3.4, lowercase), domyslne
+  uzycie lokalnej wersji, filtr warstw BDOT10k w segmencie, `keep_raw`
+  jako osobny plik, podglad CORINE w osobnym segmencie (D31);
+- `metadata`: rowne / inne wydanie, metadane niedostepne z lokalna wersja
+  i bez niej (D30), ta sama tresc pod nowym wydaniem = `relabeled`;
 - wycinki `bbox/`: nazwa bez daty, domyslnie lokalna wersja, `--force`
   z ta sama trescia = "bez zmian";
 - HSG: ponowne uzycie wg sha wejsc; nowa wersja po zmianie jednej warstwy;
@@ -501,9 +549,10 @@ taniego sygnalu dostaje `none`.
 | `pl.gugik.laz` — pliki | `index` (rekord WFS; `HEAD` tylko `Content-Length`) | `campaign` (D26) | tak (surowy kafel) |
 | `cz.cuzk.dmr4g` — pliki SM5 (`openzu`) | `http` (`ETag`, `Last-Modified`) | `downloaded` | tak |
 | `cz.cuzk.dmr4g`/`dmr5g` — `exportImage` (TM33, wycinki) | `none` | `downloaded` | tak |
-| `pl.gugik.bdot10k` | `none` (tylko `Content-Length`) | `downloaded` | tak (GPKG skladany lokalnie) |
-| `global.isric.soilgrids` | do decyzji w planie 3/3: `metadata` tylko na poziomie wydania (tytul GetCapabilities `SoilGrids250m 2.0`) albo `none` | `edition` `SoilGrids250m 2.0` albo `downloaded` | tak |
-| `eu.clms.corine` | `metadata` (`year`) — niesprawdzone (brak `CLMS_CREDENTIALS`) | `edition` `<rok>` | nie sprawdzono |
+| `pl.gugik.bdot10k` | `none` (tylko `Content-Length`; `schemat2021` w URL to schemat, nie wydanie) | `downloaded` | tak (GPKG skladany lokalnie) |
+| `global.isric.soilgrids` — WCS | `metadata` (D29: tytul GetCapabilities mapy wlasciwosci, `SoilGrids250m 2.0 - Clay content`) | `edition` `2.0` | tak |
+| `eu.clms.corine` — CLMS API | `metadata` (D29: `characteristics_release_major_version` z `land.copernicus.eu/api/@search?UID=<uid>`, publiczne, sprawdzone 2026-10-12: `V2020_20u1` dla 1990-2018) | `edition` `V2020_20u1` | nie sprawdzono (pobranie wymaga `CLMS_CREDENTIALS`, odlozone) |
+| `eu.clms.corine` — WMS EEA/DLR (podglad) | `none` (D31) | `downloaded` | nie sprawdzono |
 
 Ustalenia poza oczekiwaniami: `exportImage` CUZK zwraca `ETag`, ale zalezny
 od parametrow zadania (bbox, rozmiar, format), bez dowodu, ze sledzi edycje
@@ -511,6 +560,13 @@ rastra, a wycinek i kafel TM33 ponad budzet pikseli sa mozaika wielu zadan —
 zostaje `none`. Warstwa CUZK `Metadata` (`rok`) to rok aktualizacji
 obszaru, nie tozsamosc wersji pobieranego pliku — nie jest sygnalem ani
 etykieta. `ETag` dokumentu `ImageServer?f=json` dotyczy dokumentu JSON.
+
+Rozstrzygniecia przed planem 3/3 (D29-D31,
+`docs/research/2026-10-12-plan3-spec-check/raport.md`, fixtura
+`clms_corine_2018_search.json`): wydanie SoilGrids per wlasciwosc z
+GetCapabilities; wydanie CORINE z publicznego katalogu CLMS (bez
+credentials; `ETag` odpowiedzi opisuje strone katalogu, nie zbior); `ETag`
+VRT na `files.isric.org` nie jest sygnalem tresci WCS.
 
 ## 9. Dokumentacja
 
@@ -522,6 +578,9 @@ etykieta. `ETag` dokumentu `ImageServer?f=json` dotyczy dokumentu JSON.
   przy zakresie — D14; pkt 4: pomiar pokrycia — D13), ADR-026 (land cover
   poza ukladem) i ADR-004 (`DownloadManager.download_bbox` usuniete — D27);
   ADR-036 zapisuje wyjatek LAZ od D5 (D26); errata/odsylacze w indeksie.
+  ADR-036 zapisuje tez D29-D33 (wydania jako sygnal `metadata`, brak wersji
+  bez wydania, podglad CORINE jako osobny produkt, land cover i HSG tylko
+  w magazynie, HSG z wersji wejsc); ADR-026: realizacja land cover/HSG.
 - `ARCHITECTURE` 3.2, 3.3, 4.1-4.8; `SCOPE` 2.11, 2.12 (sumy kontrolne
   w sidecarze sa od 0.7.1); `PRD` 3.12; `USAGE` (wymaganie systemu plikow
   z hardlinkami, kopiowanie magazynu `rsync -aH`, zalecana kompresja
@@ -531,5 +590,7 @@ etykieta. `ETag` dokumentu `ImageServer?f=json` dotyczy dokumentu JSON.
   `parent_requests`, sciezki land cover/HSG, wycinki `bbox/` bez daty
   w nazwie i bez pobierania przy kazdym uruchomieniu, koniec kopii zamiast
   hardlinku, stare pliki LAZ i CZ nadpisywane przy pierwszym pobraniu —
-  D24; usuniete `DownloadManager.download_bbox` — D27; Przejscie z 0.7.x:
+  D24; usuniete `DownloadManager.download_bbox` — D27; `LandCoverManager`
+  i `HSGCalculator` bez `output_path`, wynik z wersja zamiast `Path`, bez
+  `keep_intermediate`/`--keep-intermediate` — D32, D33; Przejscie z 0.7.x:
   ponowne pobranie danych).
