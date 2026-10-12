@@ -495,9 +495,9 @@ class TestCLIWorkersFlag:
         """Test that --workers value is passed to DownloadManager."""
         with (
             patch(
-                "kartograf.cli.download_cmd._create_provider_and_storage"
+                "kartograf.download.data._create_provider_and_storage"
             ) as mock_create,
-            patch("kartograf.cli.download_cmd.DownloadManager") as mock_dm_class,
+            patch("kartograf.download.data.DownloadManager") as mock_dm_class,
         ):
             mock_provider = Mock()
             mock_provider.default_extension = ".asc"

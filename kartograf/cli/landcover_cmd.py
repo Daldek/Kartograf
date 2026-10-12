@@ -5,6 +5,7 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 from kartograf.cli._parser import parse_bbox_arg
 from kartograf.cli.download_cmd import (
@@ -88,21 +89,10 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         )
         return 1
 
-    if args.source == "bdot10k":
-        from kartograf.providers.pl.bdot10k import Bdot10kProvider
-
-        bdot = Bdot10kProvider()
-        provider_name = bdot.name
-    elif args.source == "corine":
-        from kartograf.providers.corine import CorineProvider
-
-        corine = CorineProvider()
-        provider_name = corine.name
-    else:
-        from kartograf.providers.soilgrids import SoilGridsProvider
-
-        soilgrids = SoilGridsProvider()
-        provider_name = soilgrids.name
+    # the catalogue of the source (no network, nothing written)
+    provider: Any = LandCoverManager(".", args.source, cache=False).provider
+    bdot = corine = soilgrids = provider
+    provider_name = provider.name
     print(f"Available layers for {provider_name}:")
     print()
 

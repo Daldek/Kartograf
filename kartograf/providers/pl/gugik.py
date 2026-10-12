@@ -323,7 +323,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             if record.resolution_m != wanted_resolution:
                 if record.sheet == parser.sheet and record.resolution_m is not None:
                     hints.add(
-                        f"GUGiK ma ten arkusz w {record.resolution_m:g} m — "
+                        f"GUGiK ma ten arkusz w {record.resolution_m:g} m - "
                         f"Kartograf pobiera dokladnie {wanted_resolution:g} m"
                     )
                 continue
@@ -403,7 +403,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                         flags.append(f"--vertical-crs {vertical_crs}")
                     hints.add(
                         f"Skorowidz GUGiK ma ten arkusz w "
-                        f"{self._CACHE_PRODUCT.upper()} {variant} — uzyj "
+                        f"{self._CACHE_PRODUCT.upper()} {variant} - uzyj "
                         + " ".join(flags)
                     )
         return hints
