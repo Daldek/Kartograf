@@ -66,6 +66,7 @@ from kartograf.download.cutout import (
 )
 from kartograf.download.cz_cutout import (
     CzCutoutResult,
+    check_cz_cutout,
     download_cz_cutout,
     run_cz_cutout,
 )
@@ -160,6 +161,7 @@ __all__ = [
     "countries_for_bbox",
     "split_bbox_by_country",
     "CzCutoutResult",
+    "check_cz_cutout",
     "download_cz_cutout",
     "run_cz_cutout",
     # Download (LAZ tiles, D17)

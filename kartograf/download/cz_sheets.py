@@ -1,0 +1,242 @@
+"""CUZK SM5 and TM33 sheet downloads on the versioned file store."""
+
+import logging
+from collections.abc import Callable
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from pathlib import Path
+
+import requests
+
+from kartograf._version import build_version
+from kartograf.core.parser_registry import detect_system
+from kartograf.download.cz_cutout import _all_nodata, read_tif_nodata
+from kartograf.download.fetch import (
+    FileSlot,
+    UpdateMode,
+    VersionedFile,
+    fetch_version,
+    inspect_version,
+    link_version,
+    local_version,
+    validate_update,
+)
+from kartograf.download.plan import (
+    TODO_STATUSES,
+    PlanItem,
+    UpdatePlan,
+    require_store,
+    select_planned,
+    store_id,
+)
+from kartograf.download.storage import storage_for_provider
+from kartograf.download.versions import ContentDigest, VersionRef, read_version
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.sources.descriptor import SignalKind, TransportKind
+from kartograf.sources.registry import channel_signal, get_source
+from kartograf.sources.sidecar import emit_sidecar
+from kartograf.transport.http import response_signal
+
+logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class CzSheetResult:
+    """One CZ sheet; ``file=None`` only when a plan skips a missing file."""
+
+    file: VersionedFile | None
+    all_nodata: bool
+    stale: tuple[PlanItem, ...] = ()
+
+
+def _sheet_slot(provider, sheet: str, output_dir: str | Path) -> tuple[FileSlot, bool]:
+    sheet = sheet.strip()
+    system = detect_system(sheet)
+    if system.country != "CZ":
+        raise ValidationError(f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ")
+    sm5 = system.id == "cz_sm5"
+    descriptor = get_source(provider.descriptor_key)
+    storage = storage_for_provider(
+        output_dir,
+        provider,
+        resolution=provider.resolution,
+        vertical_crs=provider.vertical_crs,
+    )
+    return (
+        FileSlot(
+            Path(output_dir),
+            storage.get_raw_path(sheet, f"{sheet}{descriptor.default_extension}"),
+            storage.get_raw_versions_base(sheet),
+            storage.get_raw_versions_root(sheet),
+            descriptor.default_extension,
+        ),
+        sm5,
+    )
+
+
+def _signal(provider, sm5: bool) -> SignalKind:
+    transport = TransportKind.DIRECT_FILES if sm5 else TransportKind.ARCGIS_IMAGE
+    return channel_signal(provider.descriptor_key, transport)
+
+
+def check_cz_sheet(provider, sheet: str, *, output_dir: str | Path) -> UpdatePlan:
+    """Inspect one CZ sheet without transferring raster bytes."""
+    sheet = sheet.strip()
+    slot, sm5 = _sheet_slot(provider, sheet, output_dir)
+    item = inspect_version(
+        slot,
+        track="cz_sheet",
+        unit=sheet,
+        signal=_signal(provider, sm5),
+        probe=(lambda: provider.sm5_signal(sheet)) if sm5 else None,
+    )
+    return UpdatePlan(
+        store=store_id(output_dir),
+        checked_at=datetime.now(UTC).isoformat(timespec="seconds"),
+        kartograf_version=build_version(),
+        items=(item,),
+    )
+
+
+def _local_result(slot: FileSlot, stale: tuple[PlanItem, ...]) -> CzSheetResult:
+    """Return a planned-but-unselected sheet without probing or reading raster data."""
+    local = local_version(slot)
+    if local is None:
+        return CzSheetResult(None, False, stale)
+    link_version(slot.std, local, refresh=False)
+    return CzSheetResult(
+        VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
+        local.meta.get("extra", {}).get("all_nodata", False) is True,
+        stale,
+    )
+
+
+def run_cz_sheet(
+    provider,
+    sheet: str,
+    *,
+    output_dir: str | Path,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    on_download: Callable[[], None] | None = None,
+) -> CzSheetResult:
+    """Download or use the local version of a TM33 tile or an SM5 sheet.
+
+    SM5 compares the openzu ZIP's HTTP signal with one HEAD request when a
+    local version exists; TM33 has no cheap freshness signal. With a plan,
+    only a matching ``missing``/``newer`` position may be downloaded; a
+    skipped position with no local version has ``file=None``.
+    """
+    validate_update(update)
+    if plan is not None and update != "upgrade":
+        raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+    sheet = sheet.strip()
+    slot, sm5 = _sheet_slot(provider, sheet, output_dir)
+    signal = _signal(provider, sm5)
+    probe = (lambda: provider.sm5_signal(sheet)) if sm5 else None
+    stale: tuple[PlanItem, ...] = ()
+    if plan is not None:
+        require_store(plan, store_id(output_dir))
+        scoped = replace(
+            plan,
+            items=tuple(
+                item for item in plan.items_for("cz_sheet") if item.unit == sheet
+            ),
+        )
+        if not any(item.status in TODO_STATUSES for item in scoped.items):
+            return _local_result(slot, ())
+        fresh = check_cz_sheet(provider, sheet, output_dir=output_dir).items
+        if fresh[0].status == "check_failed":
+            raise DownloadError(
+                f"Nie udalo sie sprawdzic arkusza CZ {sheet}: {fresh[0].error}"
+            )
+        todo, rejected = select_planned(scoped, list(fresh), "cz_sheet")
+        stale = tuple(rejected)
+        if not todo:
+            return _local_result(slot, stale)
+        # The plan was just checked: reuse that one HEAD result instead of
+        # issuing a second HEAD for the same signal before downloading.
+        if sm5:
+            available_signal = todo[0].available_signal
+
+            def planned_probe() -> dict:
+                return available_signal or {}
+
+            probe = planned_probe
+
+    received: dict | None = None
+    empty = False
+
+    def on_response(response: requests.Response) -> None:
+        nonlocal received
+        received = response_signal(response)
+
+    def fetch(staged: Path) -> dict | None:
+        provider.download(
+            sheet,
+            staged,
+            on_download=on_download,
+            on_response=on_response if sm5 else None,
+        )
+        return received if sm5 else None
+
+    def write_sidecar(
+        data: Path, version: VersionRef, digest: ContentDigest, http: dict | None
+    ) -> None:
+        nonlocal empty
+        nodata = read_tif_nodata(data)
+        empty = _all_nodata(data, nodata)
+        extra: dict = {"all_nodata": empty}
+        if http is not None:
+            extra["http"] = http
+        if sm5:
+            try:
+                info = provider.sheet_index.sm5_sheet(sheet)
+                if info.name is not None:
+                    extra["mapname"] = info.name
+                if info.podil is not None:
+                    extra["cz_share"] = info.podil
+            except Exception as e:  # noqa: BLE001 — data matters more than metadata
+                logger.warning(
+                    f"Sidecar {sheet} bez extra.cz_share (PODIL; blad indeksu): {e}"
+                )
+        horizontal_crs = "EPSG:5514" if sm5 else "EPSG:3045"
+        emit_sidecar(
+            provider.descriptor_key,
+            data,
+            request={"sheet": sheet},
+            vertical_crs=provider.vertical_crs,
+            horizontal_crs=horizontal_crs,
+            pinned_transforms={
+                "horizontal": provider.horizontal_transform(horizontal_crs),
+                "vertical": provider.vertical_transform,
+            },
+            capability="sheet_files" if sm5 else "bbox_raster",
+            nodata=nodata,
+            extra=extra,
+            digest=(digest.sha256, digest.size_bytes),
+            version=version.to_extra(),
+            exclusive=True,
+        )
+
+    file = fetch_version(
+        slot,
+        update,
+        signal=signal,
+        fetch=fetch,
+        version=VersionRef.downloaded(),
+        write_sidecar=write_sidecar,
+        probe=probe,
+    )
+    if file.status == "local":
+        stored = read_version(file.version_path.parent, file.version_path.name)
+        empty = (
+            stored is not None
+            and stored.meta.get("extra", {}).get("all_nodata", False) is True
+        )
+    elif empty:
+        logger.warning(
+            f"Arkusz CZ {file.path} jest w calosci nodata — obszar poza pokryciem "
+            "DMR CUZK (poza granica CZ?)"
+        )
+    return CzSheetResult(file, empty, stale)
