@@ -98,7 +98,7 @@ class Bdot10kProvider(LandCoverProvider):
 
     Every download is a pre-packaged powiat (county) package from OpenData:
     - By TERYT code: that powiat (``download_package``)
-    - By bbox or sheet code (godlo): the ONE powiat intersecting the area;
+    - By bbox or sheet code: the ONE powiat intersecting the area;
       several powiats = ``ValidationError`` (use
       ``LandCoverManager.download_all_counties`` or ``teryts_for_area``),
       none = ``NoCoverageError``. The area may be in any supported CRS.
@@ -117,8 +117,8 @@ class Bdot10kProvider(LandCoverProvider):
     ... )
     >>> provider.download_by_bbox(bbox, Path("./data/area.gpkg"))
     >>>
-    >>> # Download by sheet code (godlo)
-    >>> provider.download_by_godlo("N-34-130-D", Path("./data/sheet.gpkg"))
+    >>> # Download by sheet code
+    >>> provider.download_by_sheet("N-34-130-D", Path("./data/sheet.gpkg"))
     """
 
     # OpenData base URL for BDOT10k packages
@@ -371,16 +371,16 @@ class Bdot10kProvider(LandCoverProvider):
             )
         return teryts[0]
 
-    def download_by_godlo(
+    def download_by_sheet(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
         **kwargs,
     ) -> Path:
         """
-        Download BDOT10k data for a map sheet (godlo).
+        Download BDOT10k data for a map sheet.
 
         Finds the ONE powiat (county) intersecting the sheet frame (PRG WFS)
         and downloads the entire county package. A sheet spanning several
@@ -388,7 +388,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path
             Path where the file should be saved
@@ -415,9 +415,9 @@ class Bdot10kProvider(LandCoverProvider):
         """
         from kartograf.core.sheet_parser import SheetParser
 
-        bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
-        teryt = self._single_teryt(bbox, f"BDOT10k {godlo}", timeout)
-        logger.info(f"Godło {godlo} is in powiat {teryt}, downloading county package")
+        bbox = SheetParser(sheet).get_bbox(crs="EPSG:2180")
+        teryt = self._single_teryt(bbox, f"BDOT10k {sheet}", timeout)
+        logger.info(f"Godło {sheet} is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
         )

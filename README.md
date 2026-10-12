@@ -43,19 +43,19 @@ pip install -e .
 kartograf parse N-34-130-D-d-2-4
 
 # NMT dla arkusza, inne produkty GUGiK
-kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download --sheet N-34-130-D-d-2-4
+kartograf download --sheet N-34-130-D-d-2-4 --product orto
 
 # NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
 kartograf download --bbox 530000,382000,533000,386000 --country pl
 kartograf download --geometry zlewnia.gpkg --layer catchments
 
 # NMT Czech
-kartograf download 302_5550 --country cz
+kartograf download --sheet 302_5550 --country cz
 
 # Pokrycie terenu i grupy hydrologiczne gleb
 kartograf landcover download --source bdot10k --teryt 1465
-kartograf soilgrids hsg --godlo N-34-130-D --stats
+kartograf soilgrids hsg --sheet N-34-130-D --stats
 ```
 
 Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór

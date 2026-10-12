@@ -240,7 +240,7 @@ patrz sekcja 3.2, znane ograniczenie.
 - Automatyczne pobieranie clay/sand/silt z SoilGrids
 - Statystyki pokrycia dla każdej grupy
 - Format wyjściowy: GeoTIFF (wartości 1-4, 0 = nodata)
-- Selekcja: --godlo, --bbox, --geometry
+- Selekcja: --sheet, --bbox, --geometry
 - Sidecar wyniku <plik>.meta.json (extra.derived = "hsg", warstwy źródłowe,
   głębokość, statystyka, kody klas)
 
@@ -253,35 +253,35 @@ patrz sekcja 3.2, znane ograniczenie.
 # Komendy:
 kartograf parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
 kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
-kartograf download <godlo>                 # pobierz NMT
-kartograf download <godlo> --product nmpt  # pobierz NMPT
-kartograf download <godlo> --product orto  # pobierz ortofoto
-kartograf download <godlo> --product laz   # pobierz chmury punktów LAZ (wiele kafli)
+kartograf download --sheet <godlo>                 # pobierz NMT
+kartograf download --sheet <godlo> --product nmpt  # pobierz NMPT
+kartograf download --sheet <godlo> --product orto  # pobierz ortofoto
+kartograf download --sheet <godlo> --product laz   # pobierz chmury punktów LAZ (wiele kafli)
 kartograf download --bbox ... --product laz --year 2024 --min-density 12
 kartograf download --bbox min_x,min_y,max_x,max_y  # NMT dla bbox
 kartograf download --bbox ... --system 2000 --scale 1:2000  # NMT w ukladzie PL-2000 (arkusze 1:2000)
 kartograf download --bbox ... --product orto  # ortofoto dla bbox
 kartograf download --geometry area.shp         # NMT z pliku geometrii
 kartograf download --geometry area.gpkg --layer catchments
-kartograf download <godlo> --resolution 5m # NMT 5m
-kartograf download 302_5550 --country cz               # DMR 5G (CZ), godlo TM33
-kartograf download CTES96                               # DMR 4G (CZ, 5m), godlo SM5, kraj auto
+kartograf download --sheet <godlo> --resolution 5m # NMT 5m
+kartograf download --sheet 302_5550 --country cz               # DMR 5G (CZ), godlo TM33
+kartograf download --sheet CTES96                               # DMR 4G (CZ, 5m), godlo SM5, kraj auto
 kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox transgraniczny -> pliki per kraj
 kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
 kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
-kartograf download 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
-kartograf download <godlo> --campaigns all              # wszystkie kampanie GUGiK arkusza (ADR-030)
-kartograf download <godlo> --year 2025                  # najnowszy lot z roku (ADR-032)
-kartograf download <godlo> --year 2025 --campaigns all  # wszystkie loty z roku
-kartograf download <godlo> --min-year 2024              # najnowszy lot, nie starszy niż rok
+kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
+kartograf download --sheet <godlo> --campaigns all              # wszystkie kampanie GUGiK arkusza (ADR-030)
+kartograf download --sheet <godlo> --year 2025                  # najnowszy lot z roku (ADR-032)
+kartograf download --sheet <godlo> --year 2025 --campaigns all  # wszystkie loty z roku
+kartograf download --sheet <godlo> --min-year 2024              # najnowszy lot, nie starszy niż rok
 kartograf download --bbox ... --max-year 2022           # najnowszy lot do roku (dowiązanie nigdy wstecz)
 kartograf download --bbox ... --product laz --campaigns all   # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod>
-kartograf landcover download --source corine --godlo <godlo>
-kartograf landcover download --source soilgrids --property <param>  # --godlo/--bbox (bez --teryt)
+kartograf landcover download --source corine --sheet <arkusz>
+kartograf landcover download --source soilgrids --property <param>  # --sheet/--bbox (bez --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
-kartograf soilgrids hsg --godlo <godlo>    # oblicz HSG
+kartograf soilgrids hsg --sheet <arkusz>    # oblicz HSG
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
 # Pełna lista opcji: kartograf <komenda> --help
 ```
@@ -333,7 +333,7 @@ from kartograf import (
 - `<układ>` w segmencie (`pl_1992` vs `pl_2000`) rozstrzyga format godła
   każdego pliku z osobna — jeden stary katalog (np. `orto/`) rozchodzi się
   przy migracji na dwa segmenty; wyjątek: kafle LAZ — układ z `uklad_xy`
-  kafla (`LazTile.uklad`), dopiero w drugiej kolejności z formatu godła
+  kafla (`LazTile.system`), dopiero w drugiej kolejności z formatu godła
 - Kampanie GUGiK (ADR-030): prawdziwe pliki NMT/NMPT/orto PL w
   `<segment>/kampanie/<data>_<id>/...`, ścieżka standardowa = dowiązanie do
   najnowszej lokalnej kampanii (hardlink → kopia, bez symlinków — errata 4); brak migracji
@@ -447,7 +447,7 @@ from kartograf import (
   GugikOrtoProvider.DEFAULT_TIMEOUT, GugikLazProvider.DEFAULT_TIMEOUT (kafle)
   i .WFS_TIMEOUT (discovery), CorineProvider.DEFAULT_TIMEOUT,
   SoilGridsProvider.DEFAULT_TIMEOUT (bbox; godło: domyślne 60 s
-  z LandCoverProvider.download_by_godlo), Bdot10kProvider.DEFAULT_TIMEOUT
+  z LandCoverProvider.download_by_sheet), Bdot10kProvider.DEFAULT_TIMEOUT
   (zapytanie TERYT w PRG, teryts_for_area: 30 s), _DEFAULT_TIMEOUT
   w providers/cuzk/dmr.py, HSGCalculator: parametr timeout=120
   (grep -rn "_TIMEOUT =" kartograf/providers)
@@ -467,7 +467,7 @@ from kartograf import (
 - SoilGrids: tylko WGS84 bbox (transformacja automatyczna)
 - SoilGrids: brak selekcji po TERYT — `--teryt` dotyczy wyłącznie bdot10k,
   a `SoilGridsProvider.download_by_teryt` rzuca NotImplementedError (wcześniej
-  cicho zwracał kwadrat 60x60 km wokół środka województwa); użyj --bbox/--godlo
+  cicho zwracał kwadrat 60x60 km wokół środka województwa); użyj --bbox/--sheet
 - find_sheets_for_bbox/find_sheets_for_geometry: stykające się krawędzie NIE
   są przecięciem (wymagane dodatnie pole) — bbox równy arkuszowi w EPSG:4326
   zwraca tylko jego arkusze (w EPSG:2180 także fragmenty sąsiadów), a bbox
@@ -601,7 +601,7 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 | 3 | Katalog GUGiK i gotowe dane | strumień kolejnych produktów (inwentaryzacja usług w specu podprojektu, m.in. PRG, PRNG, EGiB w zakresie publicznym, BDOO, modele 3D, zdjęcia lotnicze, obrazy intensywności, archiwalny BDOT10k); każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących | 1 |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
 | 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |
-| — | ADR-031 (angielskie identyfikatory) | aliasy, potem usunięcie polskich nazw | równolegle, przed v1.0.0 |
+| — | ADR-031 (angielskie identyfikatory) | API i CLI po angielsku w 0.8.0 bez aliasów (errata 1) | zrobione (0.8.0) |
 | — | Publikacja nakładek | po przetestowaniu 4 i 5 lokalnie | 4, 5 |
 
 Podprojekt 3 to strumień, nie jeden blok: produkty dochodzą w kolejnych

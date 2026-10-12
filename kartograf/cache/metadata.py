@@ -327,7 +327,7 @@ class MetadataCache:
         product: str,
         resolution: str,
         vertical_crs: str,
-        godlo: str,
+        sheet: str,
     ) -> dict | None:
         """Return the index record or None (missing/expired/refresh mode), 7-day TTL."""
         if self._refresh:
@@ -351,7 +351,7 @@ class MetadataCache:
                 SELECT payload, cached_at FROM record_cache
                 WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                 """,
-                (godlo, resolution, vertical_crs, product),
+                (sheet, resolution, vertical_crs, product),
             )
             row = cursor.fetchone()
             if row is None:
@@ -359,7 +359,7 @@ class MetadataCache:
 
             payload, cached_at = row
             if time.time() - cached_at >= self._ttl_seconds:
-                logger.debug(f"Record cache expired for {godlo} ({product})")
+                logger.debug(f"Record cache expired for {sheet} ({product})")
                 # Opportunistically delete the expired entry (same critical
                 # section - threading.Lock is not reentrant).
                 conn.execute(
@@ -367,12 +367,12 @@ class MetadataCache:
                     DELETE FROM record_cache
                     WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                     """,
-                    (godlo, resolution, vertical_crs, product),
+                    (sheet, resolution, vertical_crs, product),
                 )
                 conn.commit()
                 return None
 
-            logger.debug(f"Record cache hit for {godlo} ({product})")
+            logger.debug(f"Record cache hit for {sheet} ({product})")
             return json.loads(payload)
         return None  # disabled by an SQLite error (_db_errors)
 
@@ -381,7 +381,7 @@ class MetadataCache:
         product: str,
         resolution: str,
         vertical_crs: str,
-        godlo: str,
+        sheet: str,
         payload: dict,
     ) -> None:
         """Store the chosen record or confirmed no coverage after successful queries."""
@@ -396,7 +396,7 @@ class MetadataCache:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    godlo,
+                    sheet,
                     resolution,
                     vertical_crs,
                     product,
@@ -405,7 +405,7 @@ class MetadataCache:
                 ),
             )
             conn.commit()
-        logger.debug(f"Cached record for {godlo} ({product})")
+        logger.debug(f"Cached record for {sheet} ({product})")
 
     # =========================================================================
     # Campaigns cache (--campaigns all, ADR-030 h)
@@ -416,7 +416,7 @@ class MetadataCache:
         product: str,
         resolution: str,
         vertical_crs: str,
-        godlo: str,
+        sheet: str,
     ) -> dict | None:
         """Return the sheet's campaigns or None (missing/expired/refresh mode), 7-day
         TTL.
@@ -435,25 +435,25 @@ class MetadataCache:
                 SELECT payload, cached_at FROM campaigns_cache
                 WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                 """,
-                (godlo, resolution, vertical_crs, product),
+                (sheet, resolution, vertical_crs, product),
             ).fetchone()
             if row is None:
                 return None
 
             payload, cached_at = row
             if time.time() - cached_at >= self._ttl_seconds:
-                logger.debug(f"Campaigns cache expired for {godlo} ({product})")
+                logger.debug(f"Campaigns cache expired for {sheet} ({product})")
                 conn.execute(
                     """
                     DELETE FROM campaigns_cache
                     WHERE godlo=? AND resolution=? AND vertical_crs=? AND product=?
                     """,
-                    (godlo, resolution, vertical_crs, product),
+                    (sheet, resolution, vertical_crs, product),
                 )
                 conn.commit()
                 return None
 
-            logger.debug(f"Campaigns cache hit for {godlo} ({product})")
+            logger.debug(f"Campaigns cache hit for {sheet} ({product})")
             return json.loads(payload)
         return None  # disabled by an SQLite error (_db_errors)
 
@@ -462,7 +462,7 @@ class MetadataCache:
         product: str,
         resolution: str,
         vertical_crs: str,
-        godlo: str,
+        sheet: str,
         payload: dict,
     ) -> None:
         """Store the sheet's campaigns (newest first) or a confirmed no coverage."""
@@ -477,7 +477,7 @@ class MetadataCache:
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    godlo,
+                    sheet,
                     resolution,
                     vertical_crs,
                     product,
@@ -486,7 +486,7 @@ class MetadataCache:
                 ),
             )
             conn.commit()
-        logger.debug(f"Cached campaigns for {godlo} ({product})")
+        logger.debug(f"Cached campaigns for {sheet} ({product})")
 
     # =========================================================================
     # TERYT cache (for Bdot10kProvider)
@@ -629,7 +629,7 @@ class MetadataCache:
     # Sheet cache (CZ sheet index: KladyMapovychListu)
     # =========================================================================
 
-    def get_sheet(self, system: str, godlo: str) -> dict | None:
+    def get_sheet(self, system: str, sheet: str) -> dict | None:
         """Return the decoded sheet payload or None (missing/expired).
 
         Lock guards the read too - see comment in get_record(). In
@@ -643,27 +643,27 @@ class MetadataCache:
                 return None
             cursor = conn.execute(
                 "SELECT payload, cached_at FROM sheet_cache WHERE system=? AND godlo=?",
-                (system, godlo),
+                (system, sheet),
             )
             row = cursor.fetchone()
             if row is None:
                 return None
             payload, cached_at = row
             if time.time() - cached_at >= SHEET_TTL_SECONDS:
-                logger.debug(f"Sheet cache expired for {system}/{godlo}")
+                logger.debug(f"Sheet cache expired for {system}/{sheet}")
                 # Same critical section - threading.Lock is not reentrant.
                 conn.execute(
                     "DELETE FROM sheet_cache WHERE system=? AND godlo=?",
-                    (system, godlo),
+                    (system, sheet),
                 )
                 conn.commit()
                 return None
-            logger.debug(f"Sheet cache hit for {system}/{godlo}")
+            logger.debug(f"Sheet cache hit for {system}/{sheet}")
             return json.loads(payload)
         return None  # disabled by an SQLite error (_db_errors)
 
-    def set_sheet(self, system: str, godlo: str, payload: dict) -> None:
-        """Store the sheet payload (JSON) under the key (system, godlo)."""
+    def set_sheet(self, system: str, sheet: str, payload: dict) -> None:
+        """Store the sheet payload (JSON) under the key (system, sheet)."""
         with self._write_lock, self._db_errors():
             conn = self._connection()
             if conn is None:
@@ -673,10 +673,10 @@ class MetadataCache:
                 INSERT OR REPLACE INTO sheet_cache
                 (system, godlo, payload, cached_at) VALUES (?, ?, ?, ?)
                 """,
-                (system, godlo, json.dumps(payload, ensure_ascii=False), time.time()),
+                (system, sheet, json.dumps(payload, ensure_ascii=False), time.time()),
             )
             conn.commit()
-        logger.debug(f"Cached sheet {system}/{godlo}")
+        logger.debug(f"Cached sheet {system}/{sheet}")
 
     # =========================================================================
     # Management methods

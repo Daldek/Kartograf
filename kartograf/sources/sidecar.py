@@ -23,7 +23,7 @@ from kartograf.exceptions import DownloadError
 from kartograf.sources.descriptor import AccessChannel, SourceDescriptor
 from kartograf.sources.registry import (
     PL_1992_CRS,
-    horizontal_crs_for_godlo,
+    horizontal_crs_for_sheet,
     resolve_vertical_crs,
 )
 
@@ -117,7 +117,7 @@ def _crs_from_pl_coordinate(x: float) -> str | None:
     return ZONE_EPSG.get(int(x // 1e6))
 
 
-def pl_sheet_horizontal_crs(data_path: Path | None, godlo: str) -> str:
+def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
     """ACTUAL CRS of a PL sheet file: zone from the sheet code, checked against
     coordinates.
 
@@ -126,7 +126,7 @@ def pl_sheet_horizontal_crs(data_path: Path | None, godlo: str) -> str:
     PL-1992 sheet substituted for a PL-2000 sheet code by a pre-0.7.0 cache - K4),
     the sidecar describes the FILE: the CRS from the file is returned, with a warning.
     """
-    expected = horizontal_crs_for_godlo(godlo)
+    expected = horizontal_crs_for_sheet(sheet)
     if data_path is None:
         return expected
     x = _file_min_x(Path(data_path))
@@ -134,7 +134,7 @@ def pl_sheet_horizontal_crs(data_path: Path | None, godlo: str) -> str:
     if actual is None or actual == expected:
         return expected
     logger.warning(
-        f"Sidecar {data_path}: godlo {godlo} wskazuje {expected}, ale wspolrzedne "
+        f"Sidecar {data_path}: godlo {sheet} wskazuje {expected}, ale wspolrzedne "
         f"pliku (x = {x:.0f}) sa w {actual} — zapisano uklad pliku"
     )
     return actual
@@ -157,13 +157,13 @@ def _default_horizontal_crs(
     data_path: Path | None,
 ) -> str:
     """Channel CRS; for a PL sheet by sheet code - the file's CRS (PL-2000 zone, N8)."""
-    godlo = request.get("sheet")
+    sheet = request.get("sheet")
     if (
         descriptor.country == "PL"
         and "sheet_files" in channel.capabilities
-        and isinstance(godlo, str)
+        and isinstance(sheet, str)
     ):
-        return pl_sheet_horizontal_crs(data_path, godlo)
+        return pl_sheet_horizontal_crs(data_path, sheet)
     return channel.horizontal_crs
 
 

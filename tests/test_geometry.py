@@ -988,9 +988,9 @@ class TestFindSheetsForGeometry:
         points = [(637000.0, 487000.0), (605000.0, 495000.0)]
         for x, y in points:
             containing = [
-                godlo
-                for godlo in result
-                if _bbox_contains(SheetParser(godlo).get_bbox("EPSG:2180"), x, y)
+                sheet
+                for sheet in result
+                if _bbox_contains(SheetParser(sheet).get_bbox("EPSG:2180"), x, y)
             ]
             assert len(containing) == 1, (
                 f"expected exactly one sheet in {result} for ({x}, {y}), "

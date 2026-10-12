@@ -69,7 +69,7 @@ class TestParallelDownloadHierarchy:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -146,12 +146,12 @@ class TestParallelDownloadHierarchy:
         call_count = {"n": 0}
         lock = threading.Lock()
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             with lock:
                 call_count["n"] += 1
                 count = call_count["n"]
             if count == 2:
-                raise DownloadError("Network error", godlo=godlo)
+                raise DownloadError("Network error", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"data")
             return path
@@ -184,8 +184,8 @@ class TestParallelDownloadHierarchy:
 
         # Pre-create some files
         storage = FileStorage(tmp_path)
-        for godlo in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
-            path = storage.get_path(godlo, ".asc")
+        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
+            path = storage.get_path(sheet, ".asc")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"existing")
 
@@ -243,9 +243,9 @@ class TestDownloadHierarchyLastResult:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
-            if godlo.endswith("-1"):
-                raise DownloadError("Network error", godlo=godlo)
+        def mock_download(sheet, path, timeout=30):
+            if sheet.endswith("-1"):
+                raise DownloadError("Network error", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -266,8 +266,8 @@ class TestDownloadHierarchyLastResult:
         """last_result separates downloaded, skipped and failed sheets."""
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
 
-        existing_godlo = "N-34-130-D-d-2-2"
-        existing_path = manager.storage.get_path(existing_godlo, ".asc")
+        existing_sheet = "N-34-130-D-d-2-2"
+        existing_path = manager.storage.get_path(existing_sheet, ".asc")
         existing_path.parent.mkdir(parents=True, exist_ok=True)
         existing_path.write_bytes(b"existing")
 
@@ -278,7 +278,7 @@ class TestDownloadHierarchyLastResult:
 
         assert manager.last_result is not None
         assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
-        assert set(manager.last_result.skipped) == {existing_godlo}
+        assert set(manager.last_result.skipped) == {existing_sheet}
         assert len(manager.last_result.succeeded) == 2
         assert manager.last_result.total == 4
 
@@ -300,11 +300,11 @@ class TestDownloadHierarchyLastResult:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
-            if godlo.endswith("-1"):
-                raise DownloadError("Network error", godlo=godlo)
-            if godlo.endswith("-3"):
-                raise NoCoverageError("morze", godlo=godlo)
+        def mock_download(sheet, path, timeout=30):
+            if sheet.endswith("-1"):
+                raise DownloadError("Network error", sheet=sheet)
+            if sheet.endswith("-3"):
+                raise NoCoverageError("morze", sheet=sheet)
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
             return path
@@ -324,7 +324,7 @@ class TestDownloadHierarchyLastResult:
         )
 
         final = {
-            e.godlo: (e.status, e.message) for e in events if e.status != "downloading"
+            e.sheet: (e.status, e.message) for e in events if e.status != "downloading"
         }
         assert final["N-34-130-D-d-2-1"][0] == "failed"
         assert "Network error" in final["N-34-130-D-d-2-1"][1]
@@ -338,7 +338,7 @@ class TestDownloadHierarchyLastResult:
             3,
             4,
         ]
-        downloading = [e.godlo for e in events if e.status == "downloading"]
+        downloading = [e.sheet for e in events if e.status == "downloading"]
         expected = ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3", "N-34-130-D-d-2-4"]
         assert downloading == (expected if workers == 1 else [])
 
@@ -347,8 +347,8 @@ class TestDownloadHierarchyLastResult:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
-            if godlo.endswith("-1"):
+        def mock_download(sheet, path, timeout=30):
+            if sheet.endswith("-1"):
                 raise RuntimeError("boom")
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(b"ASC data")
@@ -389,7 +389,7 @@ class TestDownloadHierarchyLastResult:
         manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
         assert manager.last_result is not None
 
-        def boom(godlo, path, timeout=30):
+        def boom(sheet, path, timeout=30):
             raise RuntimeError("boom")
 
         flaky_provider.download = boom
@@ -442,14 +442,14 @@ class TestProviderThreadSafety:
         results_lock = threading.Lock()
         thread_ids_seen = set()
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             # Record that multiple threads are used
             with results_lock:
                 thread_ids_seen.add(threading.current_thread().ident)
 
             path.parent.mkdir(parents=True, exist_ok=True)
-            # Write unique data per godlo to detect corruption
-            path.write_bytes(f"data-for-{godlo}".encode())
+            # Write unique data per sheet to detect corruption
+            path.write_bytes(f"data-for-{sheet}".encode())
             return path
 
         provider.download = mock_download
@@ -464,8 +464,8 @@ class TestProviderThreadSafety:
         # Verify each file has correct content
         for path in results:
             content = path.read_bytes().decode()
-            godlo = path.stem  # e.g. "N-34-130-D-d-1-1"
-            assert content == f"data-for-{godlo}", (
+            sheet = path.stem  # e.g. "N-34-130-D-d-1-1"
+            assert content == f"data-for-{sheet}", (
                 f"File corruption detected: {path} has content '{content}'"
             )
 
@@ -475,19 +475,19 @@ class TestProviderThreadSafety:
         results = []
         errors = []
 
-        def write_from_thread(godlo, data):
+        def write_from_thread(sheet, data):
             try:
-                path = storage.write_atomic(godlo, data.encode(), ".asc")
-                results.append((godlo, path))
+                path = storage.write_atomic(sheet, data.encode(), ".asc")
+                results.append((sheet, path))
             except Exception as e:
-                errors.append((godlo, e))
+                errors.append((sheet, e))
 
         threads = []
-        godlos = [f"N-34-130-D-d-{i}-{j}" for i in range(1, 5) for j in range(1, 5)]
+        sheets = [f"N-34-130-D-d-{i}-{j}" for i in range(1, 5) for j in range(1, 5)]
 
-        for godlo in godlos:
+        for sheet in sheets:
             t = threading.Thread(
-                target=write_from_thread, args=(godlo, f"data-{godlo}")
+                target=write_from_thread, args=(sheet, f"data-{sheet}")
             )
             threads.append(t)
             t.start()
@@ -499,8 +499,8 @@ class TestProviderThreadSafety:
         assert len(results) == 16
 
         # Verify content integrity
-        for godlo, path in results:
-            assert path.read_bytes() == f"data-{godlo}".encode()
+        for sheet, path in results:
+            assert path.read_bytes() == f"data-{sheet}".encode()
 
     def test_concurrent_provider_sessions_independent(self):
         """Without an injected session the provider keeps one session per thread."""
@@ -617,19 +617,19 @@ class TestLandCoverParallelDownload:
         mock_provider.name = "corine"
         mock_provider.get_available_layers.return_value = []
 
-        def mock_download_by_godlo(godlo, output_path, **kwargs):
+        def mock_download_by_sheet(sheet, output_path, **kwargs):
             output_path.parent.mkdir(parents=True, exist_ok=True)
             # Store kwargs in file to verify they were passed
             output_path.write_bytes(str(kwargs).encode())
             return output_path
 
-        mock_provider.download_by_godlo = mock_download_by_godlo
+        mock_provider.download_by_sheet = mock_download_by_sheet
 
         manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
 
         items = [
-            {"godlo": "N-34-130-D"},
-            {"godlo": "N-34-130-C"},
+            {"sheet": "N-34-130-D"},
+            {"sheet": "N-34-130-C"},
         ]
 
         results = manager.download_batch(items, max_workers=1, year=2018)
@@ -647,19 +647,21 @@ class TestCLIWorkersFlag:
     def test_download_parser_has_workers_flag(self):
         """Test that download parser accepts --workers."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D-d-2-4", "--workers", "8"])
+        args = parser.parse_args(
+            ["download", "--sheet", "N-34-130-D-d-2-4", "--workers", "8"]
+        )
         assert args.workers == 8
 
     def test_download_parser_workers_short_flag(self):
         """Test that download parser accepts -w shorthand."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D-d-2-4", "-w", "2"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4", "-w", "2"])
         assert args.workers == 2
 
     def test_download_parser_workers_default(self):
         """Test that --workers defaults to 4."""
         parser = create_parser()
-        args = parser.parse_args(["download", "N-34-130-D-d-2-4"])
+        args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4"])
         assert args.workers == 4
 
     def test_workers_passed_to_download_manager(self, tmp_path):
@@ -683,6 +685,7 @@ class TestCLIWorkersFlag:
             main(
                 [
                     "download",
+                    "--sheet",
                     "N-34-130-D-d-2-4",
                     "--workers",
                     "8",
@@ -727,9 +730,9 @@ class TestParallelDownloadRaceConditions:
         provider = Mock(spec=GugikProvider)
         type(provider).default_extension = PropertyMock(return_value=".asc")
 
-        def mock_download(godlo, path, timeout=30):
+        def mock_download(sheet, path, timeout=30):
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(f"data-{godlo}".encode())
+            path.write_bytes(f"data-{sheet}".encode())
             return path
 
         provider.download = mock_download
@@ -749,16 +752,16 @@ class TestParallelDownloadRaceConditions:
 
         assert len(results) == 4
         # Verify all files exist and have correct content
-        godlos_found = set()
+        sheets_found = set()
         for path in results:
             assert path.exists()
             content = path.read_bytes().decode()
-            godlo = path.stem
-            assert content == f"data-{godlo}"
-            godlos_found.add(godlo)
+            sheet = path.stem
+            assert content == f"data-{sheet}"
+            sheets_found.add(sheet)
 
-        # All 4 godlos should be unique
-        assert len(godlos_found) == 4
+        # All 4 sheets should be unique
+        assert len(sheets_found) == 4
 
     @pytest.mark.parametrize("run", range(3))
     def test_parallel_progress_counter_consistency(self, tmp_path, mock_provider, run):

@@ -35,19 +35,19 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 from tests.conftest import gfi_record, render_gfi_body
 
-GODLO = "N-34-130-D-d-2-4"
+SHEET = "N-34-130-D-d-2-4"
 
 # A `source` payload with the SkorowidzRecord.to_source keys (cache contract).
 SOURCE = {
     "url": (
-        f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{GODLO}.asc"
+        f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{SHEET}.asc"
     ),
     "index_url": (
         "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WMS/"
         "SkorowidzeUkladEVRF2007"
     ),
     "layer": "SkorowidzeNMT2024",
-    "sheet": GODLO,
+    "sheet": SHEET,
     "acquisition_date": "2024-09-03",
     "acquisition_year": "2024",
     "pzgik_date": "2024-09-03",
@@ -105,28 +105,28 @@ def short_ttl_cache(cache_path):
 
 
 class TestMetadataCacheRecord:
-    """The record_cache table: a JSON payload under (product, res, vcrs, godlo)."""
+    """The record_cache table: a JSON payload under (product, res, vcrs, sheet)."""
 
     def test_set_and_get_round_trip(self, cache):
         """A nested payload comes back 1:1 (JSON round-trip, also None/float)."""
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
 
     def test_no_coverage_payload_round_trip(self, cache):
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"no_coverage": True}
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True})
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) == {"no_coverage": True}
 
     def test_get_returns_none_when_missing(self, cache):
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) is None
 
     def test_ttl_expiry(self, short_ttl_cache):
         """An entry expires after ttl_seconds and is removed opportunistically."""
-        short_ttl_cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
-        assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", GODLO) is not None
+        short_ttl_cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", SHEET) is not None
 
         time.sleep(1.1)
 
-        assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert short_ttl_cache.get_record("nmt", "1m", "EVRF2007", SHEET) is None
         count = short_ttl_cache._conn.execute(
             "SELECT COUNT(*) FROM record_cache"
         ).fetchone()[0]
@@ -134,17 +134,17 @@ class TestMetadataCacheRecord:
 
     def test_overwrite_same_key(self, cache):
         """Same key: the new payload replaces the old (e.g. no_coverage -> source)."""
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True})
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
         assert cache.stats()["record_count"] == 1
 
     @pytest.mark.parametrize(
         "other_key",
         [
-            ("nmpt", "1m", "EVRF2007", GODLO),
-            ("nmt", "5m", "EVRF2007", GODLO),
-            ("nmt", "1m", "KRON86", GODLO),
+            ("nmpt", "1m", "EVRF2007", SHEET),
+            ("nmt", "5m", "EVRF2007", SHEET),
+            ("nmt", "1m", "KRON86", SHEET),
             ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-3"),
         ],
         ids=["product", "resolution", "vertical_crs", "godlo"],
@@ -152,10 +152,10 @@ class TestMetadataCacheRecord:
     def test_each_key_part_separates_entries(self, cache, other_key):
         """Each of the 4 key fields separates entries — no leaks between them."""
         other_payload = {"source": {**SOURCE, "url": "https://other/file.asc"}}
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
         assert cache.get_record(*other_key) is None
         cache.set_record(*other_key, other_payload)
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
         assert cache.get_record(*other_key) == other_payload
 
 
@@ -319,7 +319,7 @@ class TestMetadataCacheMigration:
         )
         conn.execute(
             "INSERT INTO url_cache VALUES (?, ?, ?, ?, ?, ?)",
-            (GODLO, "1m", "EVRF2007", "nmt", "https://old/file.asc", time.time()),
+            (SHEET, "1m", "EVRF2007", "nmt", "https://old/file.asc", time.time()),
         )
         conn.commit()
         conn.close()
@@ -327,7 +327,7 @@ class TestMetadataCacheMigration:
         c = MetadataCache(db_path=cache_path)
         try:
             # the existing file is opened (and migrated) by the first read
-            assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+            assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
             tables = {
                 row[0]
                 for row in c._conn.execute(
@@ -466,72 +466,72 @@ class TestGugikProviderCacheIntegration:
 
     def test_cache_hit_source_skips_network(self, cache):
         """A `source` hit = no network; URL and source_info from the payload."""
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(session=mock_session, cache=cache)
 
-        assert provider._get_opendata_url(GODLO) == SOURCE["url"]
+        assert provider._get_opendata_url(SHEET) == SOURCE["url"]
         mock_session.get.assert_not_called()
-        assert provider.source_info(GODLO) == SOURCE
+        assert provider.source_info(SHEET) == SOURCE
 
     def test_cache_hit_no_coverage_raises_without_network(self, cache):
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True})
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(session=mock_session, cache=cache)
 
-        with pytest.raises(NoCoverageError, match=GODLO):
-            provider._get_opendata_url(GODLO)
+        with pytest.raises(NoCoverageError, match=SHEET):
+            provider._get_opendata_url(SHEET)
         mock_session.get.assert_not_called()
 
     def test_cache_miss_queries_wms_and_stores_source(self, cache):
         """Miss: the first layer with a record ends the loop; cache gets `source`."""
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(GODLO)])
+            render_gfi_body([gfi_record(SHEET)])
         )
 
         provider = GugikProvider(session=mock_session, cache=cache)
-        result = provider._get_opendata_url(GODLO)
+        result = provider._get_opendata_url(SHEET)
 
-        expected_url = gfi_record(GODLO)["url"]
+        expected_url = gfi_record(SHEET)["url"]
         assert result == expected_url
         assert mock_session.get.call_count == 1
-        cached = cache.get_record("nmt", "1m", "EVRF2007", GODLO)
+        cached = cache.get_record("nmt", "1m", "EVRF2007", SHEET)
         assert cached["source"]["url"] == expected_url
         assert cached["source"]["layer"] == "SkorowidzeNMT2026"
-        assert provider.source_info(GODLO) == cached["source"]
+        assert provider.source_info(SHEET) == cached["source"]
 
     def test_no_coverage_hints_survive_cache(self, cache):
         """NoCoverageError hints: stored in the cache and restored from a hit."""
-        godlo = "N-33-90-C-c-2-4"
+        sheet = "N-33-90-C-c-2-4"
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(godlo, resolution="5.00 m")])
+            render_gfi_body([gfi_record(sheet, resolution="5.00 m")])
         )
         provider = GugikProvider(session=mock_session, cache=cache)
         with pytest.raises(NoCoverageError) as first:
-            provider._get_opendata_url(godlo)
+            provider._get_opendata_url(sheet)
         assert first.value.hints
-        assert cache.get_record("nmt", "1m", "EVRF2007", godlo)["hints"] == list(
+        assert cache.get_record("nmt", "1m", "EVRF2007", sheet)["hints"] == list(
             first.value.hints
         )
 
         offline = Mock(spec=requests.Session)
         with pytest.raises(NoCoverageError) as hit:
-            GugikProvider(session=offline, cache=cache)._get_opendata_url(godlo)
+            GugikProvider(session=offline, cache=cache)._get_opendata_url(sheet)
         offline.get.assert_not_called()
         assert hit.value.hints == first.value.hints
 
     def test_old_cache_entry_without_hints_gives_no_hints(self, cache):
         cache.set_record(
-            "nmt", "1m", "EVRF2007", GODLO, {"no_coverage": True, "message": "Brak. X"}
+            "nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True, "message": "Brak. X"}
         )
         with pytest.raises(NoCoverageError) as hit:
             GugikProvider(
                 session=Mock(spec=requests.Session), cache=cache
-            )._get_opendata_url(GODLO)
+            )._get_opendata_url(SHEET)
         assert hit.value.hints == ()
 
     def test_cache_miss_all_layers_empty_stores_no_coverage(self, cache):
@@ -540,15 +540,15 @@ class TestGugikProviderCacheIntegration:
         mock_session.get.return_value = _gfi_response(render_gfi_body([]))
 
         provider = GugikProvider(session=mock_session, cache=cache)
-        with pytest.raises(NoCoverageError, match=GODLO):
-            provider._get_opendata_url(GODLO)
+        with pytest.raises(NoCoverageError, match=SHEET):
+            provider._get_opendata_url(SHEET)
 
-        own = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
+        own = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
         own_calls = [
             c for c in mock_session.get.call_args_list if c.args[0].startswith(own)
         ]
         assert len(own_calls) == 4  # every layer of its own index
-        cached = cache.get_record("nmt", "1m", "EVRF2007", GODLO)
+        cached = cache.get_record("nmt", "1m", "EVRF2007", SHEET)
         assert cached is not None and cached["no_coverage"] is True
         assert "Brak danych" in cached["message"]
 
@@ -559,44 +559,44 @@ class TestGugikProviderCacheIntegration:
 
         provider = GugikProvider(session=mock_session, cache=cache)
         with patch("time.sleep") as sleep, pytest.raises(DownloadError) as excinfo:
-            provider._get_opendata_url(GODLO)
+            provider._get_opendata_url(SHEET)
 
         assert not isinstance(excinfo.value, NoCoverageError)
         assert "SkorowidzeNMT2026" in str(excinfo.value)
         assert mock_session.get.call_count == 3
         assert sleep.call_count == 2
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) is None
 
     def test_no_cache_backward_compat(self):
         """cache=None: the same resolution, without writing."""
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(GODLO)])
+            render_gfi_body([gfi_record(SHEET)])
         )
 
         provider = GugikProvider(session=mock_session)
-        assert provider._get_opendata_url(GODLO) == gfi_record(GODLO)["url"]
+        assert provider._get_opendata_url(SHEET) == gfi_record(SHEET)["url"]
 
     def test_5m_resolution_with_cache(self, cache):
         """5m key: a hit without network, a miss writes under ("nmt","5m",...)."""
         cache.set_record(
-            "nmt", "5m", "EVRF2007", GODLO, {"source": {**SOURCE, "resolution_m": 5.0}}
+            "nmt", "5m", "EVRF2007", SHEET, {"source": {**SOURCE, "resolution_m": 5.0}}
         )
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(session=mock_session, resolution="5m", cache=cache)
-        assert provider._get_opendata_url(GODLO) == SOURCE["url"]
+        assert provider._get_opendata_url(SHEET) == SOURCE["url"]
         mock_session.get.assert_not_called()
 
         cache.clear()
         url_5m = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/5m/x.asc"
         mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(GODLO, resolution="5.00 m", url=url_5m)])
+            render_gfi_body([gfi_record(SHEET, resolution="5.00 m", url=url_5m)])
         )
-        assert provider._get_opendata_url(GODLO) == url_5m
-        cached = cache.get_record("nmt", "5m", "EVRF2007", GODLO)
+        assert provider._get_opendata_url(SHEET) == url_5m
+        cached = cache.get_record("nmt", "5m", "EVRF2007", SHEET)
         assert cached["source"]["url"] == url_5m
         assert cached["source"]["resolution_m"] == 5.0
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) is None
 
 
 # =========================================================================
@@ -609,31 +609,31 @@ class TestGugikNmptProviderCacheIntegration:
 
     def test_cache_hit_source_skips_network(self, cache):
         nmpt_source = {**SOURCE, "url": "https://opendata.cached.com/nmpt.asc"}
-        cache.set_record("nmpt", "1m", "EVRF2007", GODLO, {"source": nmpt_source})
+        cache.set_record("nmpt", "1m", "EVRF2007", SHEET, {"source": nmpt_source})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikNmptProvider(session=mock_session, cache=cache)
 
-        assert provider._get_opendata_url(GODLO) == nmpt_source["url"]
+        assert provider._get_opendata_url(SHEET) == nmpt_source["url"]
         mock_session.get.assert_not_called()
 
     def test_nmt_entry_does_not_serve_nmpt(self, cache):
         """An "nmt" entry is no NMPT hit - the miss goes to the network as "nmpt"."""
-        cache.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
         nmpt_url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/1/x.asc"
         mock_session = Mock(spec=requests.Session)
         mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(GODLO, url=nmpt_url)])
+            render_gfi_body([gfi_record(SHEET, url=nmpt_url)])
         )
 
         provider = GugikNmptProvider(session=mock_session, cache=cache)
-        assert provider._get_opendata_url(GODLO) == nmpt_url
+        assert provider._get_opendata_url(SHEET) == nmpt_url
 
         assert mock_session.get.call_count == 1
-        cached = cache.get_record("nmpt", "1m", "EVRF2007", GODLO)
+        cached = cache.get_record("nmpt", "1m", "EVRF2007", SHEET)
         assert cached["source"]["url"] == nmpt_url
         assert cached["source"]["layer"] == "SkorowidzeNMPT2026"
-        assert cache.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
 
 
 # =========================================================================
@@ -1252,8 +1252,8 @@ class TestLazyOpen:
 
     def test_reads_on_missing_file_miss_without_creating(self, cache_path):
         c = MetadataCache(db_path=cache_path)
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
-        assert c.get_campaigns("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
+        assert c.get_campaigns("nmt", "1m", "EVRF2007", SHEET) is None
         assert c.get_teryt(1.0, 2.0) is None
         assert c.get_sheet("cz_sm5", "CTES96") is None
         assert not cache_path.exists()
@@ -1287,13 +1287,13 @@ class TestLazyOpen:
         ("setter", "getter", "expected"),
         [
             (
-                lambda c: c.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1}),
-                lambda c: c.get_record("nmt", "1m", "EVRF2007", GODLO),
+                lambda c: c.set_record("nmt", "1m", "EVRF2007", SHEET, {"a": 1}),
+                lambda c: c.get_record("nmt", "1m", "EVRF2007", SHEET),
                 {"a": 1},
             ),
             (
-                lambda c: c.set_campaigns("nmt", "1m", "EVRF2007", GODLO, {"b": 2}),
-                lambda c: c.get_campaigns("nmt", "1m", "EVRF2007", GODLO),
+                lambda c: c.set_campaigns("nmt", "1m", "EVRF2007", SHEET, {"b": 2}),
+                lambda c: c.get_campaigns("nmt", "1m", "EVRF2007", SHEET),
                 {"b": 2},
             ),
             (
@@ -1327,26 +1327,26 @@ class TestLazyOpen:
 
     def test_read_sees_file_created_later_by_other_instance(self, cache_path):
         reader = MetadataCache(db_path=cache_path)
-        assert reader.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert reader.get_record("nmt", "1m", "EVRF2007", SHEET) is None
         writer = MetadataCache(db_path=cache_path)
-        writer.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1})
+        writer.set_record("nmt", "1m", "EVRF2007", SHEET, {"a": 1})
         writer.close()
         try:
-            assert reader.get_record("nmt", "1m", "EVRF2007", GODLO) == {"a": 1}
+            assert reader.get_record("nmt", "1m", "EVRF2007", SHEET) == {"a": 1}
         finally:
             reader.close()
 
     def test_refresh_reads_miss_and_write_creates_file(self, cache_path):
         c = MetadataCache(db_path=cache_path, refresh=True)
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
         assert not cache_path.exists()
-        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1})
+        c.set_record("nmt", "1m", "EVRF2007", SHEET, {"a": 1})
         assert cache_path.exists()
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
         c.close()
         normal = MetadataCache(db_path=cache_path)
         try:
-            assert normal.get_record("nmt", "1m", "EVRF2007", GODLO) == {"a": 1}
+            assert normal.get_record("nmt", "1m", "EVRF2007", SHEET) == {"a": 1}
         finally:
             normal.close()
 
@@ -1389,10 +1389,10 @@ class TestLazyOpen:
 
     def test_close_twice_then_reuse_reopens(self, cache_path):
         c = MetadataCache(db_path=cache_path)
-        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"a": 1})
+        c.set_record("nmt", "1m", "EVRF2007", SHEET, {"a": 1})
         c.close()
         c.close()
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) == {"a": 1}
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) == {"a": 1}
         c.close()
 
     def test_del_without_connection_does_not_raise_or_create(self, cache_path):
@@ -1451,7 +1451,7 @@ def _truncated_db(path: Path) -> None:
 
 def _unreadable_db(path: Path) -> None:
     c = MetadataCache(db_path=path)
-    c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+    c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
     c.close()
     path.chmod(0)
 
@@ -1478,11 +1478,11 @@ def _cache_warnings(caplog) -> list[logging.LogRecord]:
 
 def _exercise_all(c: MetadataCache) -> None:
     """Every public operation of the cache - none may raise."""
-    assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
-    c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
-    assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
-    assert c.get_campaigns("nmt", "1m", "EVRF2007", GODLO) is None
-    c.set_campaigns("nmt", "1m", "EVRF2007", GODLO, {"campaigns": []})
+    assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
+    c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+    assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
+    assert c.get_campaigns("nmt", "1m", "EVRF2007", SHEET) is None
+    c.set_campaigns("nmt", "1m", "EVRF2007", SHEET, {"campaigns": []})
     assert c.get_teryt(1.0, 2.0) is None
     c.set_teryt(1.0, 2.0, "1465")
     assert c.get_sheet("cz_sm5", "CTES96") is None
@@ -1539,13 +1539,13 @@ class TestUnreadableDatabase:
     def test_first_read_error_disables_cache(self, cache_path, caplog):
         """A read that fails AFTER a successful open also disables the cache."""
         c = MetadataCache(db_path=cache_path)
-        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
         assert c._conn is not None
         c._conn.execute("DROP TABLE record_cache")
         caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
 
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
         # intact tables are off too: disabled for the rest of the instance
         c.set_teryt(1.0, 2.0, "1465")
         assert c.get_teryt(1.0, 2.0) is None
@@ -1574,8 +1574,8 @@ class TestUnreadableDatabase:
         caplog.set_level(logging.WARNING, logger="kartograf.cache.metadata")
         c = MetadataCache(db_path=cache_path)
 
-        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) is None
+        c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) is None
         c.close()
 
         warnings = _cache_warnings(caplog)
@@ -1596,9 +1596,9 @@ class TestUnreadableDatabase:
             try:
                 start.wait()
                 for j in range(20):
-                    godlo = f"G-{i}-{j}"
-                    assert c.get_record("nmt", "1m", "EVRF2007", godlo) is None
-                    c.set_record("nmt", "1m", "EVRF2007", godlo, {"i": i})
+                    sheet = f"G-{i}-{j}"
+                    assert c.get_record("nmt", "1m", "EVRF2007", sheet) is None
+                    c.set_record("nmt", "1m", "EVRF2007", sheet, {"i": i})
                     c.get_teryt(float(i), float(j))
             except BaseException as e:  # noqa: BLE001 - reported below
                 errors.append(e)
@@ -1639,8 +1639,8 @@ class TestCLICacheCommandsUnreadable:
         assert list(tmp_path.iterdir()) == []
         # the regular path works again: a fresh database is created
         c = MetadataCache(db_path=db)
-        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
-        assert c.get_record("nmt", "1m", "EVRF2007", GODLO) == {"source": SOURCE}
+        c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        assert c.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
         c.close()
 
     @_needs_non_root
@@ -1669,7 +1669,7 @@ class TestCLICacheCommandsUnreadable:
         monkeypatch.chdir(tmp_path)
         db = self._db(tmp_path)
         c = MetadataCache(db_path=db)
-        c.set_record("nmt", "1m", "EVRF2007", GODLO, {"source": SOURCE})
+        c.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
         c.close()
         monkeypatch.setattr(MetadataCache, "_create_tables", staticmethod(_locked))
 

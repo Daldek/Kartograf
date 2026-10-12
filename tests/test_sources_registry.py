@@ -17,8 +17,8 @@ from kartograf.sources.registry import (
     all_countries,
     get_country,
     get_source,
-    horizontal_crs_for_godlo,
-    horizontal_crs_for_uklad,
+    horizontal_crs_for_sheet,
+    horizontal_crs_for_system,
     resolve_vertical_crs,
     sources_for,
     vertical_crs_code,
@@ -73,7 +73,7 @@ class TestDescriptorDataclasses:
             provider_name="GUGiK",
             channels=(self._channel(),),
             tile_scheme=None,
-            storage_subdir="nmt/pl_{uklad}_1m_{vcrs}",
+            storage_subdir="nmt/pl_{system}_1m_{vcrs}",
             default_extension=".asc",
             license=LicenseInfo(id="PL-PGiK-40a", attribution="GUGiK"),
         )
@@ -148,26 +148,26 @@ class TestRegistry:
             == "EPSG:9651"
         )
 
-    def test_horizontal_crs_for_godlo(self):
-        """N8: strefa PL-2000 z godla; PL-1992 = EPSG:2180."""
-        assert horizontal_crs_for_godlo("5.176.14") == "EPSG:2176"
-        assert horizontal_crs_for_godlo("6.179.12.20") == "EPSG:2177"
-        assert horizontal_crs_for_godlo("7.124.07.24") == "EPSG:2178"
-        assert horizontal_crs_for_godlo("8.170.10") == "EPSG:2179"
-        assert horizontal_crs_for_godlo("N-34-130-D-d-2-4") == "EPSG:2180"
+    def test_horizontal_crs_for_sheet(self):
+        """N8: strefa PL-2000 z sheets; PL-1992 = EPSG:2180."""
+        assert horizontal_crs_for_sheet("5.176.14") == "EPSG:2176"
+        assert horizontal_crs_for_sheet("6.179.12.20") == "EPSG:2177"
+        assert horizontal_crs_for_sheet("7.124.07.24") == "EPSG:2178"
+        assert horizontal_crs_for_sheet("8.170.10") == "EPSG:2179"
+        assert horizontal_crs_for_sheet("N-34-130-D-d-2-4") == "EPSG:2180"
 
-    def test_horizontal_crs_for_uklad(self):
+    def test_horizontal_crs_for_system(self):
         """GUGiK CRS names (uklad_xy of a LAZ tile, index) -> EPSG code."""
-        assert horizontal_crs_for_uklad("PL-2000:S6") == "EPSG:2177"
-        assert horizontal_crs_for_uklad(" PL-2000:S8 ") == "EPSG:2179"
-        assert horizontal_crs_for_uklad("PL-1992") == "EPSG:2180"
-        assert horizontal_crs_for_uklad("PL-2000:S9") is None
-        assert horizontal_crs_for_uklad("") is None
-        assert horizontal_crs_for_uklad(None) is None
+        assert horizontal_crs_for_system("PL-2000:S6") == "EPSG:2177"
+        assert horizontal_crs_for_system(" PL-2000:S8 ") == "EPSG:2179"
+        assert horizontal_crs_for_system("PL-1992") == "EPSG:2180"
+        assert horizontal_crs_for_system("PL-2000:S9") is None
+        assert horizontal_crs_for_system("") is None
+        assert horizontal_crs_for_system(None) is None
 
     def test_nmt_1m_entry_values(self):
         d = get_source("pl.gugik.nmt_1m")
-        assert d.storage_subdir == "nmt/pl_{uklad}_1m_{vcrs}"
+        assert d.storage_subdir == "nmt/pl_{system}_1m_{vcrs}"
         assert d.default_extension == ".asc"
         assert d.resolution == "1m"
         transports = {ch.transport for ch in d.channels}
@@ -433,15 +433,15 @@ class TestResolveSubdir:
         )
 
     def test_full_fill(self):
-        d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
+        d = self._descriptor("nmt/pl_{system}_1m_{vcrs}")
         assert (
-            d.resolve_subdir(uklad="1992", vertical_crs="EVRF2007")
+            d.resolve_subdir(system="1992", vertical_crs="EVRF2007")
             == "nmt/pl_1992_1m_evrf2007"
         )
 
-    def test_partial_fill_leaves_uklad(self):
-        d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
-        assert d.resolve_subdir(vertical_crs="KRON86") == "nmt/pl_{uklad}_1m_kron86"
+    def test_partial_fill_leaves_system(self):
+        d = self._descriptor("nmt/pl_{system}_1m_{vcrs}")
+        assert d.resolve_subdir(vertical_crs="KRON86") == "nmt/pl_{system}_1m_kron86"
 
     def test_vcrs_lowercased(self):
         d = self._descriptor("nmt/cz_dmr5g_{vcrs}")
@@ -449,12 +449,14 @@ class TestResolveSubdir:
 
     def test_unknown_dimension_is_noop(self):
         """Ortho has no {vcrs} - passing vertical_crs breaks nothing."""
-        d = self._descriptor("orto/pl_{uklad}")
-        assert d.resolve_subdir(uklad="1992", vertical_crs="EVRF2007") == "orto/pl_1992"
+        d = self._descriptor("orto/pl_{system}")
+        assert (
+            d.resolve_subdir(system="1992", vertical_crs="EVRF2007") == "orto/pl_1992"
+        )
 
     def test_no_args_returns_template(self):
-        d = self._descriptor("laz/pl_{uklad}_{vcrs}")
-        assert d.resolve_subdir() == "laz/pl_{uklad}_{vcrs}"
+        d = self._descriptor("laz/pl_{system}_{vcrs}")
+        assert d.resolve_subdir() == "laz/pl_{system}_{vcrs}"
 
     def test_none_subdir_raises(self):
         d = self._descriptor(None)
@@ -462,14 +464,14 @@ class TestResolveSubdir:
             d.resolve_subdir()
 
     @pytest.mark.parametrize(
-        "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"uklad": ""}]
+        "kwargs", [{"vertical_crs": ""}, {"vertical_crs": "  "}, {"system": ""}]
     )
     def test_empty_dimension_raises(self, kwargs):
         """Finding 7: an empty string is a caller error, not a missing dimension - so
-        far it gave a silent segment `nmt/pl_{uklad}_1m_` (FileStorage closes the
+        far it gave a silent segment `nmt/pl_{system}_1m_` (FileStorage closes the
         same trap with a falsy check)."""
         from kartograf.exceptions import ValidationError
 
-        d = self._descriptor("nmt/pl_{uklad}_1m_{vcrs}")
+        d = self._descriptor("nmt/pl_{system}_1m_{vcrs}")
         with pytest.raises(ValidationError, match="Pusty wymiar"):
             d.resolve_subdir(**kwargs)

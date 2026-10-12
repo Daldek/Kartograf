@@ -60,7 +60,7 @@ class DownloadProgress:
         Number of sheets processed so far
     total : int
         Total number of sheets to process
-    godlo : str
+    sheet : str
         Current sheet being processed
     status : str
         Status of current operation ("downloading", "skipped", "completed",
@@ -74,7 +74,7 @@ class DownloadProgress:
 
     current: int
     total: int
-    godlo: str
+    sheet: str
     status: str
     message: str = ""
 
@@ -96,41 +96,41 @@ class DownloadResult:
     succeeded : list[Path]
         Paths to successfully downloaded files
     failed : list[str]
-        Godlo identifiers that failed to download
+        Sheet identifiers that failed to download
     skipped : list[str]
-        Godlo identifiers that were skipped (already existed)
+        Sheet identifiers that were skipped (already existed)
     no_coverage : list[str]
         Subset of ``failed``: sheets the source has no data for
         (``NoCoverageError``) — as opposed to a transport/service failure.
     campaign_files : dict[str, tuple[Path, ...]]
-        Campaign flow (ADR-030): godlo -> campaign files downloaded in this
+        Campaign flow (ADR-030): sheet -> campaign files downloaded in this
         run and already local (for successful sheets). Flow without
         campaigns: empty.
     copied : list[str]
-        Godla whose standard path is a COPY of the campaign file (hardlink
+        Sheets whose standard path is a COPY of the campaign file (hardlink
         unavailable, e.g. exFAT/FAT, sshfs/FUSE).
     reused_campaign_files : dict[str, tuple[Path, ...]]
-        Subset of ``campaign_files``: godlo -> campaign files already local
+        Subset of ``campaign_files``: sheet -> campaign files already local
         (not downloaded in this run). Flow without campaigns: empty.
     no_coverage_hints : dict[str, tuple[str, ...]]
-        Subset of the ``no_coverage`` keys: godlo -> ``NoCoverageError.hints``
+        Subset of the ``no_coverage`` keys: sheet -> ``NoCoverageError.hints``
         (e.g. ``use --scale 1:2000``); only sheets with a hint.
     unverified : dict[str, str]
-        Subset of ``skipped``: godlo -> GUGiK index (skorowidz) transport
+        Subset of ``skipped``: sheet -> GUGiK index (skorowidz) transport
         error with which ``newest`` used a local campaign without checking
         for a newer one (``SheetFetch.unverified``). Otherwise empty.
     better_coverage : dict[str, str]
         With a ranged ``all`` request, sheets whose older flight measured
-        higher pixel coverage than the standard link: godlo -> flight ID.
+        higher pixel coverage than the standard link: sheet -> flight ID.
     link_outside_range : dict[str, Path]
         With year bounds, sheets whose standard path still points to a newer
-        local flight outside this request: godlo -> that campaign file.
+        local flight outside this request: sheet -> that campaign file.
     full_links : dict[str, Path]
         Sheets with a ``full_sheet/`` link (ADR-033) after this request:
-        godlo -> that link path.
+        sheet -> that link path.
     full_link_outside_range : dict[str, Path]
         With year bounds, sheets whose ``full_sheet/`` link still points to a
-        full flight outside this request: godlo -> that campaign file.
+        full flight outside this request: sheet -> that campaign file.
     without_full : list[str]
         With ``full_sheet=True``: sheets whose newest flight is partial and
         whose index lists no full flight within the year bounds.
@@ -202,7 +202,7 @@ class SheetFetch:
 
     Attributes
     ----------
-    godlo : str
+    sheet : str
         The sheet.
     path : Path
         Standard path (campaign flow — a link) or the file (flow without
@@ -239,7 +239,7 @@ class SheetFetch:
         year bounds, while the newest one is partial.
     """
 
-    godlo: str
+    sheet: str
     path: Path
     skipped: bool
     downloaded: tuple[Path, ...] = ()
@@ -263,7 +263,7 @@ class CampaignProvider(Protocol):
 
     def resolve_campaigns(
         self,
-        godlo: str,
+        sheet: str,
         *,
         campaigns: str = "newest",
         min_year: int | None = None,
@@ -384,7 +384,7 @@ class DownloadManager:
         storage : FileStorage, optional
             Storage manager (default: FileStorage whose subdirectory comes
             from the provider's source descriptor
-            (`resolve_subdir(vertical_crs=...)`, `{uklad}` resolved per godlo),
+            (`resolve_subdir(vertical_crs=...)`, `{system}` resolved per sheet),
             falling back to `resolution` when the provider has no
             `descriptor_key`; the provider's `storage_variant`, e.g. orto CIR,
             is appended as `_<variant>`)
@@ -527,7 +527,7 @@ class DownloadManager:
         return cast(CampaignProvider, self._provider)
 
     def check_year_range(
-        self, godla: list[str], workers: int | None = None
+        self, sheets: list[str], workers: int | None = None
     ) -> YearRangeCheck:
         """Check every PL sheet against the year bounds before any download.
 
@@ -543,14 +543,14 @@ class DownloadManager:
             )
 
         def classify(
-            godlo: str,
+            sheet: str,
         ) -> tuple[str, tuple[SkorowidzRecord, ...], tuple[int, ...], Exception | None]:
             try:
                 records = self._campaign_provider.resolve_campaigns(
-                    godlo, campaigns="all"
+                    sheet, campaigns="all"
                 )
             except DownloadError as e:
-                return godlo, (), (), e
+                return sheet, (), (), e
             years = tuple(
                 sorted({y for r in records if (y := record_year(r)) is not None})
             )
@@ -567,49 +567,49 @@ class DownloadManager:
             )
             if self._campaigns == "newest":
                 selected = selected[:1]
-            return godlo, selected, years, None
+            return sheet, selected, years, None
 
         pool = self._max_workers if workers is None else workers
-        if len(godla) > 1 and pool > 1:
+        if len(sheets) > 1 and pool > 1:
             with concurrent.futures.ThreadPoolExecutor(max_workers=pool) as executor:
-                rows = list(executor.map(classify, godla))
+                rows = list(executor.map(classify, sheets))
         else:
-            rows = [classify(g) for g in godla]
+            rows = [classify(g) for g in sheets]
 
         selected: dict[str, tuple[SkorowidzRecord, ...]] = {}
         available: dict[str, tuple[int, ...]] = {}
         no_data: dict[str, NoCoverageError] = {}
         conflicts: dict[str, tuple[int, ...]] = {}
         failed: dict[str, DownloadError] = {}
-        for godlo, records, years, error in rows:
+        for sheet, records, years, error in rows:
             if isinstance(error, NoCoverageError):
-                no_data[godlo] = error
+                no_data[sheet] = error
             elif isinstance(error, DownloadError):
-                failed[godlo] = error
+                failed[sheet] = error
             elif not years:
-                no_data[godlo] = NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
+                no_data[sheet] = NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
             elif not records:
-                conflicts[godlo] = years
+                conflicts[sheet] = years
             else:
-                selected[godlo] = records
-                available[godlo] = years
+                selected[sheet] = records
+                available[sheet] = years
         return YearRangeCheck(selected, available, no_data, conflicts, failed)
 
     def _checked_range(
-        self, godla: list[str], workers: int | None = None
+        self, sheets: list[str], workers: int | None = None
     ) -> YearRangeCheck:
         """Abort the whole task on an index failure or a year conflict."""
-        check = self.check_year_range(godla, workers)
+        check = self.check_year_range(sheets, workers)
         if check.failed:
             names = ", ".join(check.failed)
             raise DownloadError(
                 f"nie udalo sie sprawdzic roku danych dla {len(check.failed)} z "
-                f"{len(godla)} arkuszy (blad skorowidza, nie brak danych): "
+                f"{len(sheets)} arkuszy (blad skorowidza, nie brak danych): "
                 f"{names} — ponow pobranie"
             )
         if check.conflicts:
             raise year_range_error(
-                check.conflicts, self._min_year, self._max_year, total=len(godla)
+                check.conflicts, self._min_year, self._max_year, total=len(sheets)
             )
         return check
 
@@ -619,7 +619,7 @@ class DownloadManager:
 
     def download_sheet(
         self,
-        godlo: str,
+        sheet: str,
         skip_existing: bool = True,
         on_progress: ProgressCallback | None = None,
         on_download: Callable[[], None] | None = None,
@@ -633,7 +633,7 @@ class DownloadManager:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         skip_existing : bool, optional
             Skip download if file exists (default: True)
@@ -656,7 +656,7 @@ class DownloadManager:
         YearRangeError
             If data exists only outside the year range, before downloading.
         ParseError
-            If godlo is invalid
+            If sheet is invalid
 
         Notes
         -----
@@ -672,37 +672,37 @@ class DownloadManager:
         self.last_result = None
         self.last_sheet = None
 
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
 
         # PL-2000 sheet codes are always downloaded directly (individual files on GUGiK)
         # PL-1992 coarser than 1:10000 must be expanded to 1:10000 descendants
-        if parser.uklad != "2000" and parser.scale != "1:10000":
+        if parser.system != "2000" and parser.scale != "1:10000":
             return self.download_hierarchy(
-                godlo, "1:10000", skip_existing=skip_existing, on_progress=on_progress
+                sheet, "1:10000", skip_existing=skip_existing, on_progress=on_progress
             )
 
-        check = self._checked_range([parser.godlo]) if self._has_range else None
-        if check is not None and parser.godlo in check.no_data:
-            raise check.no_data[parser.godlo]
+        check = self._checked_range([parser.sheet]) if self._has_range else None
+        if check is not None and parser.sheet in check.no_data:
+            raise check.no_data[parser.sheet]
         fetch = self._fetch_sheet(
-            parser.godlo,
+            parser.sheet,
             skip_existing,
             on_download,
-            records=check.selected[parser.godlo] if check is not None else None,
-            available=check.available[parser.godlo] if check is not None else None,
+            records=check.selected[parser.sheet] if check is not None else None,
+            available=check.available[parser.sheet] if check is not None else None,
         )
         self.last_sheet = fetch
         # A9: one sheet is a one-element result too - same reading as a list
         result = DownloadResult()
         self._record(
-            result, [], fetch.godlo, fetch, "skipped" if fetch.skipped else "completed"
+            result, [], fetch.sheet, fetch, "skipped" if fetch.skipped else "completed"
         )
         self.last_result = result
         return fetch.path
 
     def download_hierarchy(
         self,
-        godlo: str,
+        sheet: str,
         target_scale: str,
         skip_existing: bool = True,
         on_progress: ProgressCallback | None = None,
@@ -713,7 +713,7 @@ class DownloadManager:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Starting map sheet identifier (e.g., "N-34-130-D")
         target_scale : str
             Target scale to download (e.g., "1:10000")
@@ -735,7 +735,7 @@ class DownloadManager:
         ValidationError
             If target_scale is invalid
         ParseError
-            If godlo is invalid
+            If sheet is invalid
         DownloadError, YearRangeError
             With year bounds, an index check failure or a conflicting sheet
             aborts the whole task before any download.
@@ -766,44 +766,44 @@ class DownloadManager:
         self.last_sheet = None
 
         # Parse starting sheet and get all descendants
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         descendants = parser.get_all_descendants(target_scale)
 
         total = len(descendants)
         workers = max_workers if max_workers is not None else self._max_workers
 
         logger.info(
-            f"Starting hierarchy download: {godlo} → {target_scale} "
+            f"Starting hierarchy download: {sheet} → {target_scale} "
             f"({total} sheets, workers={workers})"
         )
 
         return self._download_many(
-            [d.godlo for d in descendants], skip_existing, on_progress, workers
+            [d.sheet for d in descendants], skip_existing, on_progress, workers
         )
 
     @staticmethod
-    def expand_sheets(godla: list[str]) -> list[str]:
+    def expand_sheets(sheets: list[str]) -> list[str]:
         """
-        Leaf sheets actually requested from the provider for a list of godla.
+        Leaf sheets actually requested from the provider for a list of sheets.
 
-        PL-1992 godla coarser than 1:10000 expand to their 1:10000
-        descendants (like :meth:`download_sheet`); 1:10000 and PL-2000 godla
+        PL-1992 sheets coarser than 1:10000 expand to their 1:10000
+        descendants (like :meth:`download_sheet`); 1:10000 and PL-2000 sheets
         stay as they are. Identifiers are normalized, duplicates dropped,
         first-seen order kept.
 
         Raises
         ------
         ParseError
-            If any godlo is invalid
+            If any sheet is invalid
         """
         leaves: list[str] = []
         seen: set[str] = set()
-        for godlo in godla:
-            parser = SheetParser(godlo)
-            if parser.uklad != "2000" and parser.scale != "1:10000":
-                expanded = [d.godlo for d in parser.get_all_descendants("1:10000")]
+        for sheet in sheets:
+            parser = SheetParser(sheet)
+            if parser.system != "2000" and parser.scale != "1:10000":
+                expanded = [d.sheet for d in parser.get_all_descendants("1:10000")]
             else:
-                expanded = [parser.godlo]
+                expanded = [parser.sheet]
             for leaf in expanded:
                 if leaf not in seen:
                     seen.add(leaf)
@@ -812,7 +812,7 @@ class DownloadManager:
 
     def download_sheets(
         self,
-        godla: list[str],
+        sheets: list[str],
         skip_existing: bool = True,
         on_progress: ProgressCallback | None = None,
         max_workers: int | None = None,
@@ -835,24 +835,24 @@ class DownloadManager:
         Raises
         ------
         ParseError
-            If any godlo is invalid — raised before any download starts
+            If any sheet is invalid — raised before any download starts
         DownloadError, YearRangeError
             With year bounds, an index check failure or a conflicting sheet
             aborts the whole list before any download.
         """
         self.last_result = None
         self.last_sheet = None
-        leaves = [SheetParser(g) for g in self.expand_sheets(godla)]
+        leaves = [SheetParser(g) for g in self.expand_sheets(sheets)]
         total = len(leaves)
         workers = max_workers if max_workers is not None else self._max_workers
         logger.info(f"Starting sheet list download: {total} sheets, workers={workers}")
         return self._download_many(
-            [leaf.godlo for leaf in leaves], skip_existing, on_progress, workers
+            [leaf.sheet for leaf in leaves], skip_existing, on_progress, workers
         )
 
     def _fetch_sheet(
         self,
-        godlo: str,
+        sheet: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
         records: tuple[SkorowidzRecord, ...] | None = None,
@@ -868,13 +868,13 @@ class DownloadManager:
         """
         if self._campaign_aware:
             return self._fetch_campaigns(
-                godlo, skip_existing, on_download, records=records, available=available
+                sheet, skip_existing, on_download, records=records, available=available
             )
-        return self._fetch_sheet_plain(godlo, skip_existing, on_download)
+        return self._fetch_sheet_plain(sheet, skip_existing, on_download)
 
     def _fetch_sheet_plain(
         self,
-        godlo: str,
+        sheet: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
     ) -> SheetFetch:
@@ -886,21 +886,21 @@ class DownloadManager:
         downloads the file and the manager writes a sidecar (best-effort).
         Provider exceptions propagate unchanged.
         """
-        target_path = self._storage.get_path(godlo, self._default_ext)
+        target_path = self._storage.get_path(sheet, self._default_ext)
         if skip_existing and target_path.exists():
-            logger.info(f"Skipping {godlo} - already exists at {target_path}")
+            logger.info(f"Skipping {sheet} - already exists at {target_path}")
             self._note_reuse(target_path)
-            return SheetFetch(godlo, target_path, skipped=True)
+            return SheetFetch(sheet, target_path, skipped=True)
         if on_download is not None:
             on_download()
-        logger.info(f"Downloading {godlo}...")
-        path = self._provider.download(godlo, target_path)
-        self._write_sidecar(path, {"sheet": godlo})
-        return SheetFetch(godlo, path, skipped=False)
+        logger.info(f"Downloading {sheet}...")
+        path = self._provider.download(sheet, target_path)
+        self._write_sidecar(path, {"sheet": sheet})
+        return SheetFetch(sheet, path, skipped=False)
 
     def _fetch_campaigns(
         self,
-        godlo: str,
+        sheet: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
         records: tuple[SkorowidzRecord, ...] | None = None,
@@ -938,7 +938,7 @@ class DownloadManager:
         measurement errors warn without failing the downloaded sheet.
 
         Concurrency: the link is set ONCE per sheet, after all its campaigns
-        are collected, and ``expand_sheets`` deduplicates godla — one sheet =
+        are collected, and ``expand_sheets`` deduplicates sheets — one sheet =
         one thread. Safety within a single manager call therefore follows
         from the structure, not from a lock (there are no locks); a race
         between processes is described by ``ensure_link``.
@@ -970,12 +970,12 @@ class DownloadManager:
             campaigns stay on disk, and the link points to the newest of
             them.
         """
-        std = self._storage.get_path(godlo, self._default_ext)
+        std = self._storage.get_path(sheet, self._default_ext)
         chosen: list[SkorowidzRecord] | tuple[SkorowidzRecord, ...]
         if records is None:
             try:
                 chosen = self._campaign_provider.resolve_campaigns(
-                    godlo, campaigns=self._campaigns, min_year=self._min_year
+                    sheet, campaigns=self._campaigns, min_year=self._min_year
                 )
             except DownloadError as e:
                 if (
@@ -984,7 +984,7 @@ class DownloadManager:
                     and skip_existing
                     and _is_transport_failure(e)
                 ):
-                    fetch = self._local_newest(godlo, std, e)
+                    fetch = self._local_newest(sheet, std, e)
                     if fetch is not None:
                         return fetch
                 raise
@@ -997,7 +997,7 @@ class DownloadManager:
             and chosen[0].full_sheet is not True
         ):
             pool = self._campaign_provider.resolve_campaigns(
-                godlo,
+                sheet,
                 campaigns="all",
                 min_year=self._min_year,
                 max_year=self._max_year,
@@ -1007,7 +1007,7 @@ class DownloadManager:
                 no_full_flight = True
             else:
                 chosen = [*chosen, extra_full]
-        logger.info("%s: %d kampanii (%s)", godlo, len(chosen), self._campaigns)
+        logger.info("%s: %d kampanii (%s)", sheet, len(chosen), self._campaigns)
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
@@ -1020,8 +1020,8 @@ class DownloadManager:
                 errors.append((record.url, e))
                 continue
             try:  # B4 + record datum - before the network
-                verify_record_url(record.url, godlo)
-                verify_record_vertical_crs(record, self._record_vertical_crs, godlo)
+                verify_record_url(record.url, sheet)
+                verify_record_vertical_crs(record, self._record_vertical_crs, sheet)
             except DownloadError as e:
                 errors.append((ref.dirname, e))
                 continue
@@ -1030,41 +1030,41 @@ class DownloadManager:
             except DownloadError as e:
                 errors.append((ref.dirname, e))
                 continue
-            path = self._storage.get_campaign_path(godlo, ref, ext)
+            path = self._storage.get_campaign_path(sheet, ref, ext)
             if skip_existing and path.exists():
                 if path.with_name(path.name + ".meta.json").exists():
                     self._note_reuse(path)
                 else:  # R22: process interrupted before the sidecar — recreate
                     try:  # content unverified (interrupted before verification)
                         verify_file_format(path, ext)
-                        verify_sheet_extent(path, godlo, ext)
+                        verify_sheet_extent(path, sheet, ext)
                     except DownloadError as e:
                         path.unlink(missing_ok=True)
                         errors.append((ref.dirname, e))
                         continue
                     try:
                         self._write_campaign_sidecar(
-                            path, godlo, record, ref, available=available
+                            path, sheet, record, ref, available=available
                         )
                     except DownloadError as e:
                         errors.append(
                             (ref.dirname, e)
                         )  # the file stays (from before the run)
                         continue
-                logger.info(f"Skipping {godlo} {ref.dirname} - already exists")
+                logger.info(f"Skipping {sheet} {ref.dirname} - already exists")
                 reused.append(path)
                 local.append((ref, path))
                 continue
             if on_download is not None and not started:
                 on_download()
                 started = True
-            logger.info(f"Downloading {godlo} {ref.dirname}...")
+            logger.info(f"Downloading {sheet} {ref.dirname}...")
             try:
                 self._campaign_provider.download_record(record, path)
                 verify_file_format(path, ext)
-                verify_sheet_extent(path, godlo, ext)
+                verify_sheet_extent(path, sheet, ext)
                 self._write_campaign_sidecar(
-                    path, godlo, record, ref, available=available
+                    path, sheet, record, ref, available=available
                 )
             except DownloadError as e:
                 path.unlink(missing_ok=True)
@@ -1089,7 +1089,7 @@ class DownloadManager:
                 if not outcome.changed:
                     self._note_link_reuse(std, outcome)
         # ADR-033: the second link, same mechanics, only declared-full flights.
-        full = self._storage.get_full_sheet_path(godlo, self._default_ext)
+        full = self._storage.get_full_sheet_path(sheet, self._default_ext)
         full_target: Path | None = None
         full_link_error: OSError | None = None
         candidates = [rp for rp in local if rp[0].full_sheet is True]
@@ -1119,7 +1119,7 @@ class DownloadManager:
                 problems.append(f"dowiazanie {std}: {link_error}")
             if full_link_error is not None:
                 problems.append(f"dowiazanie {full}: {full_link_error}")
-            raise DownloadError(f"{godlo}: " + "; ".join(problems), godlo=godlo)
+            raise DownloadError(f"{sheet}: " + "; ".join(problems), sheet=sheet)
         better_coverage = None
         if self._has_range and self._campaigns == "all" and linked_target is not None:
             better_coverage = self._add_range_flights(std, local, linked_target)
@@ -1141,7 +1141,7 @@ class DownloadManager:
         ):
             full_link_outside_range = full_target
         return SheetFetch(
-            godlo,
+            sheet,
             std,
             skipped=not downloaded,
             downloaded=tuple(downloaded),
@@ -1234,7 +1234,7 @@ class DownloadManager:
         self._note_reuse(link)
 
     def _local_newest(
-        self, godlo: str, std: Path, error: DownloadError
+        self, sheet: str, std: Path, error: DownloadError
     ) -> SheetFetch | None:
         """I-1: the local ``newest`` campaign when the GUGiK index is unavailable.
 
@@ -1252,14 +1252,14 @@ class DownloadManager:
         except OSError:
             return None
         logger.warning(
-            f"{godlo}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
+            f"{sheet}: skorowidz GUGiK niedostepny ({error}) — uzyto lokalnej "
             f"kampanii {outcome.target} bez sprawdzenia nowszej"
         )
         self._note_reuse(outcome.target)
         self._note_link_reuse(std, outcome)
-        full = self._storage.get_full_sheet_path(godlo, self._default_ext)
+        full = self._storage.get_full_sheet_path(sheet, self._default_ext)
         return SheetFetch(
-            godlo,
+            sheet,
             std,
             skipped=True,
             reused=(outcome.target,),
@@ -1270,7 +1270,7 @@ class DownloadManager:
 
     def _download_single_sheet_task(
         self,
-        godlo: str,
+        sheet: str,
         skip_existing: bool,
         on_download: Callable[[], None] | None = None,
         check: YearRangeCheck | None = None,
@@ -1286,34 +1286,34 @@ class DownloadManager:
         Returns
         -------
         tuple[str, SheetFetch | None, str, str, tuple[str, ...]]
-            (godlo, fetch_or_none, status, message, hints)
+            (sheet, fetch_or_none, status, message, hints)
             status is one of: "skipped", "completed", "failed", "no_coverage"
         """
         try:
-            if check is not None and godlo in check.no_data:
-                raise check.no_data[godlo]
+            if check is not None and sheet in check.no_data:
+                raise check.no_data[sheet]
             fetch = self._fetch_sheet(
-                godlo,
+                sheet,
                 skip_existing,
                 on_download,
-                records=check.selected[godlo] if check is not None else None,
-                available=check.available[godlo] if check is not None else None,
+                records=check.selected[sheet] if check is not None else None,
+                available=check.available[sheet] if check is not None else None,
             )
         except NoCoverageError as e:
-            logger.warning(f"No data for {godlo}: {e}")
-            return (godlo, None, "no_coverage", str(e), e.hints)
+            logger.warning(f"No data for {sheet}: {e}")
+            return (sheet, None, "no_coverage", str(e), e.hints)
         except DownloadError as e:
-            logger.error(f"Failed to download {godlo}: {e}")
-            return (godlo, None, "failed", str(e), ())
+            logger.error(f"Failed to download {sheet}: {e}")
+            return (sheet, None, "failed", str(e), ())
         if fetch.skipped:
-            return (godlo, fetch, "skipped", "Already exists", ())
-        return (godlo, fetch, "completed", "", ())
+            return (sheet, fetch, "skipped", "Already exists", ())
+        return (sheet, fetch, "completed", "", ())
 
     @staticmethod
     def _record(
         result: DownloadResult,
         paths: list[Path],
-        godlo: str,
+        sheet: str,
         fetch: SheetFetch | None,
         status: str,
         hints: tuple[str, ...] = (),
@@ -1321,41 +1321,41 @@ class DownloadManager:
         """Record one sheet result into ``DownloadResult`` and the path list."""
         if status in ("completed", "skipped") and fetch is not None:
             if status == "skipped":
-                result.skipped.append(godlo)
+                result.skipped.append(sheet)
             else:
                 result.succeeded.append(fetch.path)
             paths.append(fetch.path)
             if fetch.downloaded or fetch.reused:
-                result.campaign_files[godlo] = fetch.downloaded + fetch.reused
-                result.reused_campaign_files[godlo] = fetch.reused
+                result.campaign_files[sheet] = fetch.downloaded + fetch.reused
+                result.reused_campaign_files[sheet] = fetch.reused
             if fetch.link == "copy":
-                result.copied.append(godlo)
+                result.copied.append(sheet)
             if fetch.unverified is not None:
-                result.unverified[godlo] = fetch.unverified
+                result.unverified[sheet] = fetch.unverified
             if fetch.better_coverage is not None:
-                result.better_coverage[godlo] = fetch.better_coverage
+                result.better_coverage[sheet] = fetch.better_coverage
             if fetch.link_outside_range is not None:
-                result.link_outside_range[godlo] = fetch.link_outside_range
+                result.link_outside_range[sheet] = fetch.link_outside_range
             if fetch.full_link is not None:
-                result.full_links[godlo] = fetch.full_link
+                result.full_links[sheet] = fetch.full_link
             if fetch.full_link_outside_range is not None:
-                result.full_link_outside_range[godlo] = fetch.full_link_outside_range
+                result.full_link_outside_range[sheet] = fetch.full_link_outside_range
             if fetch.no_full_flight:
-                result.without_full.append(godlo)
+                result.without_full.append(sheet)
         elif status in ("failed", "no_coverage"):
             # R5: no data at the source — a list failure, but recognizable
-            result.failed.append(godlo)
+            result.failed.append(sheet)
             if status == "no_coverage":
-                result.no_coverage.append(godlo)
+                result.no_coverage.append(sheet)
                 if hints:
-                    result.no_coverage_hints[godlo] = hints
+                    result.no_coverage_hints[sheet] = hints
 
     @staticmethod
     def _emit(
         on_progress: ProgressCallback | None,
         current: int,
         total: int,
-        godlo: str,
+        sheet: str,
         status: str,
         message: str = "",
     ) -> None:
@@ -1365,7 +1365,7 @@ class DownloadManager:
                 DownloadProgress(
                     current=current,
                     total=total,
-                    godlo=godlo,
+                    sheet=sheet,
                     status=status,
                     message=message,
                 )
@@ -1373,7 +1373,7 @@ class DownloadManager:
 
     def _download_many(
         self,
-        godla: list[str],
+        sheets: list[str],
         skip_existing: bool,
         on_progress: ProgressCallback | None,
         workers: int,
@@ -1385,49 +1385,49 @@ class DownloadManager:
         before each download and lets exceptions other than ``DownloadError``
         through; parallel (completion order) counts them as ``"failed"``.
         """
-        check = self._checked_range(godla, workers) if self._has_range else None
+        check = self._checked_range(sheets, workers) if self._has_range else None
         downloaded_paths: list[Path] = []
         result = DownloadResult()
-        total = len(godla)
+        total = len(sheets)
 
         if workers <= 1:
-            for i, godlo in enumerate(godla, 1):
+            for i, sheet in enumerate(sheets, 1):
 
-                def started(i: int = i, godlo: str = godlo) -> None:
-                    self._emit(on_progress, i, total, godlo, "downloading")
+                def started(i: int = i, sheet: str = sheet) -> None:
+                    self._emit(on_progress, i, total, sheet, "downloading")
 
                 _, fetch, status, message, hints = self._download_single_sheet_task(
-                    godlo, skip_existing, on_download=started, check=check
+                    sheet, skip_existing, on_download=started, check=check
                 )
-                self._record(result, downloaded_paths, godlo, fetch, status, hints)
-                self._emit(on_progress, i, total, godlo, status, message)
+                self._record(result, downloaded_paths, sheet, fetch, status, hints)
+                self._emit(on_progress, i, total, sheet, status, message)
         else:
             lock = threading.Lock()
             counter = 0
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                future_to_godlo = {
+                future_to_sheet = {
                     executor.submit(
                         self._download_single_sheet_task,
-                        godlo,
+                        sheet,
                         skip_existing,
                         check=check,
-                    ): godlo
-                    for godlo in godla
+                    ): sheet
+                    for sheet in sheets
                 }
-                for future in concurrent.futures.as_completed(future_to_godlo):
-                    godlo = future_to_godlo[future]
+                for future in concurrent.futures.as_completed(future_to_sheet):
+                    sheet = future_to_sheet[future]
                     try:
-                        godlo, fetch, status, message, hints = future.result()
+                        sheet, fetch, status, message, hints = future.result()
                     except Exception as e:
-                        logger.error(f"Unexpected error downloading {godlo}: {e}")
+                        logger.error(f"Unexpected error downloading {sheet}: {e}")
                         fetch, status, message, hints = None, "failed", str(e), ()
                     with lock:
                         counter += 1
                         current = counter
                         self._record(
-                            result, downloaded_paths, godlo, fetch, status, hints
+                            result, downloaded_paths, sheet, fetch, status, hints
                         )
-                    self._emit(on_progress, current, total, godlo, status, message)
+                    self._emit(on_progress, current, total, sheet, status, message)
 
         self.last_result = result
         logger.info(
@@ -1508,7 +1508,7 @@ class DownloadManager:
 
     def get_missing_sheets(
         self,
-        godlo: str,
+        sheet: str,
         target_scale: str,
     ) -> list[str]:
         """
@@ -1516,7 +1516,7 @@ class DownloadManager:
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Starting map sheet identifier
         target_scale : str
             Target scale to check
@@ -1526,23 +1526,23 @@ class DownloadManager:
         list[str]
             List of sheet code identifiers for missing sheets
         """
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         descendants = parser.get_all_descendants(target_scale)
 
         missing = []
         for descendant in descendants:
-            if not self._storage.exists(descendant.godlo, self._default_ext):
-                missing.append(descendant.godlo)
+            if not self._storage.exists(descendant.sheet, self._default_ext):
+                missing.append(descendant.sheet)
 
         return missing
 
-    def count_sheets(self, godlo: str, target_scale: str) -> int:
+    def count_sheets(self, sheet: str, target_scale: str) -> int:
         """
         Count total number of sheets in hierarchy.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Starting map sheet identifier
         target_scale : str
             Target scale to count
@@ -1552,7 +1552,7 @@ class DownloadManager:
         int
             Number of sheets
         """
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         descendants = parser.get_all_descendants(target_scale)
         return len(descendants)
 
@@ -1568,7 +1568,7 @@ class DownloadManager:
         not abort the download).
 
         For a request with ``sheet`` it adds ``extra.source`` — the file origin
-        per ``provider.source_info(godlo)`` (GUGiK index record: URL, layer,
+        per ``provider.source_info`` (GUGiK index record: URL, layer,
         acquisition date; D5). Only a ``dict`` goes into the sidecar: a
         provider without origin returns ``None``, and ``Mock(spec=...)`` — a
         ``Mock``. ``extra_override`` (campaign sidecar) replaces
@@ -1582,10 +1582,10 @@ class DownloadManager:
         if extra_override is not None:
             extra.update(extra_override)
         else:
-            godlo = request.get("sheet")
+            sheet = request.get("sheet")
             source_info = getattr(self._provider, "source_info", None)
-            if godlo is not None and callable(source_info):
-                source = source_info(godlo)
+            if sheet is not None and callable(source_info):
+                source = source_info(sheet)
                 if isinstance(source, dict):
                     extra["source"] = source
         emit_sidecar(
@@ -1600,7 +1600,7 @@ class DownloadManager:
     def _write_campaign_sidecar(
         self,
         path: Path,
-        godlo: str,
+        sheet: str,
         record: SkorowidzRecord,
         ref: CampaignRef,
         *,
@@ -1614,7 +1614,7 @@ class DownloadManager:
         (R13), plus all available years for range-checked requests. Failure
         is a campaign ``DownloadError`` (the caller removes the data file).
         """
-        request: dict = {"sheet": godlo, "campaigns": self._campaigns}
+        request: dict = {"sheet": sheet, "campaigns": self._campaigns}
         if self._full_sheet:  # describes the request, not this flight
             request["full_sheet"] = True
         if self._min_year is not None:
@@ -1629,7 +1629,7 @@ class DownloadManager:
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara kampanii "
                 f"{ref.dirname}: {e}",
-                godlo=godlo,
+                sheet=sheet,
             ) from e
         extra: dict = {"source": source, "campaign": ref.to_extra()}
         if available is not None:

@@ -40,9 +40,9 @@ def _response(body: str) -> Mock:
     return response
 
 
-def asc_bytes(godlo: str, value: int) -> bytes:
+def asc_bytes(sheet: str, value: int) -> bytes:
     """Small 5x5 ASC with xllcorner/yllcorner from the sheet frame (EPSG:2180)."""
-    frame = SheetParser(godlo).get_bbox("EPSG:2180")
+    frame = SheetParser(sheet).get_bbox("EPSG:2180")
     rows = "\n".join(" ".join([str(value)] * 5) for _ in range(5))
     header = (
         f"ncols 5\nnrows 5\nxllcorner {frame.min_x}\nyllcorner {frame.min_y}\n"
@@ -62,8 +62,8 @@ def routed_session(path_for_layer, downloads=None) -> Mock:
                 content = downloads[url]
             else:
                 name = url.rsplit("/", 1)[-1]
-                godlo = re.sub(r"^\d+_\d+_", "", name).rsplit(".", 1)[0]
-                content = asc_bytes(godlo, int(name.split("_")[0]))
+                sheet = re.sub(r"^\d+_\d+_", "", name).rsplit(".", 1)[0]
+                content = asc_bytes(sheet, int(name.split("_")[0]))
             response = _response("")
             response.iter_content = Mock(return_value=[content])
             return response
@@ -75,25 +75,25 @@ def routed_session(path_for_layer, downloads=None) -> Mock:
     return session
 
 
-def c14_session(godlo: str) -> Mock:
+def c14_session(sheet: str) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "nmt" / "c14" / f"{godlo}_EVRF2007_{layer}.html"
+        path = REAL / "nmt" / "c14" / f"{sheet}_EVRF2007_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
 
 
-def nmt_session(godlo: str, prefix: str, downloads=None) -> Mock:
+def nmt_session(sheet: str, prefix: str, downloads=None) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "nmt" / godlo / f"{prefix}__{layer}.body"
+        path = REAL / "nmt" / sheet / f"{prefix}__{layer}.body"
         return path if path.exists() else None
 
     return routed_session(path_for_layer, downloads)
 
 
-def std_path(tmp_path: Path, godlo: str) -> Path:
-    parts = godlo.split("-")
-    return tmp_path / SEGMENT / "-".join(parts[:2]) / Path(*parts[2:]) / f"{godlo}.asc"
+def std_path(tmp_path: Path, sheet: str) -> Path:
+    parts = sheet.split("-")
+    return tmp_path / SEGMENT / "-".join(parts[:2]) / Path(*parts[2:]) / f"{sheet}.asc"
 
 
 def sidecar(path: Path) -> Path:

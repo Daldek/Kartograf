@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from kartograf.sources.descriptor import TransportKind
-from kartograf.sources.registry import get_source, horizontal_crs_for_uklad
+from kartograf.sources.registry import get_source, horizontal_crs_for_system
 from kartograf.sources.sidecar import (
     ResultMetadata,
     _select_channel_by_capability,
@@ -44,7 +44,7 @@ class TestPlSheetHorizontalCrs:
         assert meta.nodata == -9999.0
 
     @pytest.mark.parametrize(
-        ("godlo", "expected"),
+        ("sheet", "expected"),
         [
             ("5.176.14", "EPSG:2176"),
             ("7.124.07.24", "EPSG:2178"),
@@ -52,10 +52,10 @@ class TestPlSheetHorizontalCrs:
             ("N-34-130-D-d-2-4", "EPSG:2180"),
         ],
     )
-    def test_without_file_zone_comes_from_godlo(self, godlo, expected):
-        meta = build_metadata(get_source("pl.gugik.orto"), request={"sheet": godlo})
+    def test_without_file_zone_comes_from_sheet(self, sheet, expected):
+        meta = build_metadata(get_source("pl.gugik.orto"), request={"sheet": sheet})
         assert meta.horizontal_crs == expected
-        assert pl_sheet_horizontal_crs(None, godlo) == expected
+        assert pl_sheet_horizontal_crs(None, sheet) == expected
 
     def test_pl1992_sheet_with_pl1992_coordinates_stays_2180(self, tmp_path, caplog):
         asc = tmp_path / "M-34-76-A-a-2-4.asc"
@@ -80,7 +80,7 @@ class TestPlSheetHorizontalCrs:
         assert "EPSG:2178" in caplog.text
         assert "EPSG:2180" in caplog.text
 
-    def test_unreadable_file_falls_back_to_godlo(self, tmp_path):
+    def test_unreadable_file_falls_back_to_sheet(self, tmp_path):
         missing = tmp_path / "6.179.12.20.asc"
         assert pl_sheet_horizontal_crs(missing, "6.179.12.20") == "EPSG:2177"
 
@@ -114,7 +114,7 @@ class TestPlSheetHorizontalCrs:
             assert pl_sheet_horizontal_crs(tif, "M-34-76-A-a-1-1") == "EPSG:2178"
         assert "zapisano uklad pliku" in caplog.text
 
-    def test_explicit_horizontal_crs_overrides_channel_and_godlo(self, tmp_path):
+    def test_explicit_horizontal_crs_overrides_channel_and_sheet(self, tmp_path):
         asc = tmp_path / "6.179.12.20.asc"
         _asc(asc, 6_500_000.0)
         meta = build_metadata(
@@ -125,14 +125,14 @@ class TestPlSheetHorizontalCrs:
         )
         assert meta.horizontal_crs == "EPSG:5514"
 
-    def test_laz_tile_crs_from_uklad_xy(self):
+    def test_laz_tile_crs_from_system_xy(self):
         """LAZ tile: hyphenated sheet code, data in PL-2000:S6 - CRS from uklad_xy."""
         meta = build_metadata(
             get_source("pl.gugik.laz"),
             request={"bbox": [530500, 382500, 531000, 383000], "bbox_crs": "EPSG:2180"},
             vertical_crs="EVRF2007",
             extra={"tile_sheet": "N-33-131-B-a-1-1-4"},
-            horizontal_crs=horizontal_crs_for_uklad("PL-2000:S6"),
+            horizontal_crs=horizontal_crs_for_system("PL-2000:S6"),
         )
         assert meta.horizontal_crs == "EPSG:2177"
 
@@ -149,7 +149,7 @@ class TestPlSheetHorizontalCrs:
 
 
 class TestBuildMetadata:
-    def test_godlo_request_nmt(self, tmp_path):
+    def test_sheet_request_nmt(self, tmp_path):
         asc = tmp_path / "N-34-130-D-d-2-4.asc"
         asc.write_text(
             "ncols 10\nnrows 10\nxllcorner 0\nyllcorner 0\n"
@@ -272,7 +272,7 @@ class TestBuildMetadataCapabilityAndNodata:
             d, request={"sheet": "CTES96"}, capability="bbox_raster"
         )
         # both dmr4g channels have 5514; the transport tells them apart - we check
-        # that selection did not use the bbox heuristic (request godlo +
+        # that selection did not use the bbox heuristic (request sheet +
         # capability bbox)
         assert meta_bbox.horizontal_crs == "EPSG:5514"
 
@@ -327,11 +327,11 @@ class TestPl2000SheetPublishedIn2180:
     ``77912_1384976_7.125.11.19.asc`` (record ``PL-2000:S7``, 2023-03-17;
     ``xllcenter 567975.95``, ``cellsize 0.9993671653521061``). Expected:
     sidecar ``horizontal_crs`` = the FILE CRS (EPSG:2180),
-    ``extra.source.uklad`` = the record's declaration, a warning, the path
+    ``extra.source.system`` = the record's declaration, a warning, the path
     segment by sheet code (``pl_2000_...``, ADR-026).
     """
 
-    GODLO = "7.125.11.19"
+    SHEET = "7.125.11.19"
     URL = (
         "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/77912/"
         "77912_1384976_7.125.11.19.asc"
@@ -355,8 +355,8 @@ class TestPl2000SheetPublishedIn2180:
         body = render_gfi_body(
             [
                 gfi_record(
-                    self.GODLO,
-                    uklad="PL-2000:S7",
+                    self.SHEET,
+                    system="PL-2000:S7",
                     aktualnosc="2023-03-17",
                     url=self.URL,
                 )
@@ -383,7 +383,7 @@ class TestPl2000SheetPublishedIn2180:
             caplog.at_level(logging.WARNING, logger="kartograf.sources.sidecar"),
         ):
             manager = DownloadManager(output_dir=tmp_path, provider=GugikProvider())
-            path = manager.download_sheet(self.GODLO)
+            path = manager.download_sheet(self.SHEET)
 
         assert path.relative_to(tmp_path).parts[:2] == ("nmt", "pl_2000_1m_evrf2007")
         assert session.get.call_args_list[-1][0][0] == self.URL

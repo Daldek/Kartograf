@@ -11,7 +11,7 @@ Unlike NMT/NMPT, orthophotos:
 - Have no vertical CRS (2D RGB imagery)
 - Use a single WMS endpoint (no KRON86/EVRF2007 split)
 - Download as TIF (not ASC)
-- Come in colour variants (RGB, CIR, B/W) published under the same godlo;
+- Come in colour variants (RGB, CIR, B/W) published under the same sheet;
   the provider downloads exactly one variant (``color``, default RGB)
 """
 
@@ -45,7 +45,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     Provider for downloading Orthophotomap data from GUGiK.
 
     Supports two download modes:
-    - By sheet code (godlo): downloads from OpenData as TIF
+    - By sheet code: downloads from OpenData as TIF
     - By bbox (bounding box): downloads from WCS as GeoTIFF
 
     Examples
@@ -67,7 +67,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     DOWNLOAD_LABEL = "Ortofoto OpenData"
 
-    WMS_SKOROWIDZE_ENDPOINT = (
+    WMS_INDEX_ENDPOINT = (
         f"{BASE_URL}/wss/service/PZGIK/ORTO/WMS/SkorowidzeWgAktualnosci"
     )
 
@@ -152,16 +152,16 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
 
     def download(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
     ) -> Path:
         """
-        Download orthophoto for a map sheet (godlo) from OpenData.
+        Download orthophoto for a map sheet from OpenData.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D-d-2-4")
         output_path : Path
             Path where the TIF file should be saved
@@ -178,7 +178,7 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         NoCoverageError
             Subclass of ``DownloadError``: every index layer answered and
             none has this sheet in the requested colour variant and the
-            godlo's coordinate system (other variants are listed in the
+            sheet's coordinate system (other variants are listed in the
             message, never substituted).
         DownloadError
             If any index layer query fails after retries, its answer is
@@ -186,18 +186,18 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             campaign is never substituted after a failed query.
         """
         return self.download_record(
-            self._resolve_sheet(godlo, timeout), Path(output_path), timeout
+            self._resolve_sheet(sheet, timeout), Path(output_path), timeout
         )
 
-    def _get_opendata_url(self, godlo: str, timeout: int = DEFAULT_TIMEOUT) -> str:
+    def _get_opendata_url(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         """Return the URL of the newest index record in the requested colour."""
-        return self._resolve_sheet(godlo, timeout).url
+        return self._resolve_sheet(sheet, timeout).url
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
         """Cache key per colour variant; hard CRS + colour filter."""
         return SkorowidzQuery(
-            cache_key=(self._CACHE_PRODUCT, self._color, "none", parser.godlo),
-            endpoint=self.WMS_SKOROWIDZE_ENDPOINT,
+            cache_key=(self._CACHE_PRODUCT, self._color, "none", parser.sheet),
+            endpoint=self.WMS_INDEX_ENDPOINT,
             # Pixel size is not a filter: orto has no resolution flag.
             predicate=lambda record: record.raw.get("kolor") == self._color,
             source_extra={"color": self._color},
@@ -207,17 +207,17 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     def _no_coverage(
         self, parser: SheetParser, records: list[SkorowidzRecord]
     ) -> NoCoverageError:
-        zone = int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
+        zone = int(parser.sheet.split(".")[0]) if parser.system == "2000" else None
         variants = sorted(
             (record.aktualnosc, record.raw.get("kolor") or "?")
             for record in records
-            if record.godlo == parser.godlo
-            and record.uklad == parser.uklad
+            if record.sheet == parser.sheet
+            and record.system == parser.system
             and record.zone == zone
         )
         message = (
-            f"Brak ortofotomapy {self._color} dla {parser.godlo} "
-            f"(uklad PL-{parser.uklad})"
+            f"Brak ortofotomapy {self._color} dla {parser.sheet} "
+            f"(uklad PL-{parser.system})"
         )
         if variants:
             message += ". Dostepne warianty tego arkusza: " + ", ".join(

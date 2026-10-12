@@ -191,7 +191,7 @@ class CorineProvider(LandCoverProvider):
     --------
     >>> # Preview mode (WMS - styled images)
     >>> provider = CorineProvider()
-    >>> provider.download_by_godlo("N-34-130-D", Path("./preview.png"), year=2018)
+    >>> provider.download_by_sheet("N-34-130-D", Path("./preview.png"), year=2018)
     >>>
     >>> # Data mode (CLMS API - raw class codes)
     >>> provider = CorineProvider(clms_token="your-token-here")
@@ -701,20 +701,20 @@ class CorineProvider(LandCoverProvider):
             f"CLMS download timed out after {self.CLMS_MAX_WAIT} seconds"
         )
 
-    def download_by_godlo(
+    def download_by_sheet(
         self,
-        godlo: str,
+        sheet: str,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
         year: int = DEFAULT_YEAR,
         **kwargs,
     ) -> Path:
         """
-        Download CORINE Land Cover data for a map sheet (godlo).
+        Download CORINE Land Cover data for a map sheet.
 
         Parameters
         ----------
-        godlo : str
+        sheet : str
             Map sheet identifier (e.g., "N-34-130-D")
         output_path : Path
             Path where the file should be saved
@@ -732,7 +732,7 @@ class CorineProvider(LandCoverProvider):
         """
         from kartograf.core.sheet_parser import SheetParser
 
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         bbox = parser.get_bbox(crs="EPSG:2180")
 
         return self.download_by_bbox(
@@ -756,11 +756,11 @@ class CorineProvider(LandCoverProvider):
         Raises
         ------
         NotImplementedError
-            Always raised - use download_by_bbox or download_by_godlo instead
+            Always raised - use download_by_bbox or download_by_sheet instead
         """
         raise NotImplementedError(
             "CORINE Land Cover does not support TERYT downloads. "
-            "Use download_by_bbox() or download_by_godlo() instead."
+            "Use download_by_bbox() or download_by_sheet() instead."
         )
 
     def _construct_wms_url(

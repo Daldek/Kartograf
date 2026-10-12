@@ -68,27 +68,27 @@ def routed_session(path_for_layer) -> Mock:
     return session
 
 
-def nmt_session(godlo: str, prefix: str) -> Mock:
-    """Raw body: ``real_2026_10_06/nmt/<godlo>/<prefix>__<warstwa>.body``."""
+def nmt_session(sheet: str, prefix: str) -> Mock:
+    """Raw body: ``real_2026_10_06/nmt/<sheet>/<prefix>__<warstwa>.body``."""
 
     def path_for_layer(layer):
-        path = REAL / "nmt" / godlo / f"{prefix}__{layer}.body"
+        path = REAL / "nmt" / sheet / f"{prefix}__{layer}.body"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
 
 
-def orto_session(godlo: str) -> Mock:
+def orto_session(sheet: str) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "orto" / f"{godlo}_{layer}.html"
+        path = REAL / "orto" / f"{sheet}_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
 
 
-def c14_session(godlo: str) -> Mock:
+def c14_session(sheet: str) -> Mock:
     def path_for_layer(layer):
-        path = REAL / "nmt" / "c14" / f"{godlo}_EVRF2007_{layer}.html"
+        path = REAL / "nmt" / "c14" / f"{sheet}_EVRF2007_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
@@ -115,9 +115,9 @@ def file_id(url: str) -> str:
 class TestNmtRecordSelectionOnRealBodies:
     def test_c1b_several_campaigns_in_one_layer_newest_wins(self):
         """M-34-66-B-a-2-1: 2019-02-16, 2022-05-31, 2023-03-29 w 2023iStarsze."""
-        godlo = "M-34-66-B-a-2-1"
+        sheet = "M-34-66-B-a-2-1"
         records = layer_records(
-            REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
+            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
             "SkorowidzeNMT2023iStarsze",
         )
         assert sorted(r.aktualnosc for r in records) == [
@@ -125,25 +125,25 @@ class TestNmtRecordSelectionOnRealBodies:
             "2022-05-31",
             "2023-03-29",
         ]
-        session = nmt_session(godlo, "nmt1_evr")
+        session = nmt_session(sheet, "nmt1_evr")
         provider = GugikProvider(session=session)
-        url = provider._get_opendata_url(godlo)
+        url = provider._get_opendata_url(sheet)
         assert file_id(url) == "77381_1339240"
-        assert provider.source_info(godlo)["acquisition_date"] == "2023-03-29"
+        assert provider.source_info(sheet)["acquisition_date"] == "2023-03-29"
         # Layers 2026..2024 empty -> fall through to the aggregate one, no error
         assert queried_layers(session)[-1] == "SkorowidzeNMT2023iStarsze"
 
     def test_c3_layer_2025_only_half_metre_falls_through_to_1m_older_layer(self):
         """M-33-57-C-b-4-2: 2025 has ONLY 0.5 m, 1 m is in 2023iStarsze."""
-        godlo = "M-33-57-C-b-4-2"
+        sheet = "M-33-57-C-b-4-2"
         newer = layer_records(
-            REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2025.body",
+            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2025.body",
             "SkorowidzeNMT2025",
         )
         assert [r.resolution_m for r in newer] == [0.5]
-        session = nmt_session(godlo, "nmt1_evr")
+        session = nmt_session(sheet, "nmt1_evr")
         provider = GugikProvider(session=session)
-        record = provider._resolve_sheet(godlo)
+        record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "78954_1462161"
         assert record.resolution_m == 1.0
         assert record.aktualnosc == "2023-05-04"
@@ -156,14 +156,14 @@ class TestNmtRecordSelectionOnRealBodies:
 
     def test_c3_pooled_records_pick_resolution_by_request(self):
         """The same record pool: 0,5 m -> 2025 (84161), 1 m -> 2023 (78954)."""
-        godlo = "M-33-57-C-b-4-2"
+        sheet = "M-33-57-C-b-4-2"
         pool = []
         for layer in ("SkorowidzeNMT2025", "SkorowidzeNMT2023iStarsze"):
             pool += layer_records(
-                REAL / "nmt" / godlo / f"nmt1_evr__{layer}.body", layer
+                REAL / "nmt" / sheet / f"nmt1_evr__{layer}.body", layer
             )
-        half = select_sheet_record(pool, godlo=godlo, uklad="1992", resolution_m=0.5)
-        one = select_sheet_record(pool, godlo=godlo, uklad="1992", resolution_m=1.0)
+        half = select_sheet_record(pool, sheet=sheet, system="1992", resolution_m=0.5)
+        one = select_sheet_record(pool, sheet=sheet, system="1992", resolution_m=1.0)
         assert file_id(half.url) == "84161_1849941"
         assert file_id(one.url) == "78954_1462161"
 
@@ -172,80 +172,80 @@ class TestNmtRecordSelectionOnRealBodies:
         session = nmt_session("M-34-64-D-d-2-3", "nmt1_evr")
         record = GugikProvider(session=session)._resolve_sheet("7.125.11.19")
         assert file_id(record.url) == "77912_1384976"
-        assert (record.uklad, record.zone) == ("2000", 7)
+        assert (record.system, record.zone) == ("2000", 7)
         assert record.aktualnosc == "2023-03-17"
 
     def test_c6_pl1992_sheet_in_same_body_ignores_pl2000_records(self):
         """The same point, PL-1992 sheet code: the newest layer wins (2025, 83137)."""
-        godlo = "M-34-64-D-d-2-3"
-        record = GugikProvider(session=nmt_session(godlo, "nmt1_evr"))._resolve_sheet(
-            godlo
+        sheet = "M-34-64-D-d-2-3"
+        record = GugikProvider(session=nmt_session(sheet, "nmt1_evr"))._resolve_sheet(
+            sheet
         )
         assert file_id(record.url) == "83137_1729557"
-        assert record.uklad == "1992"
+        assert record.system == "1992"
 
     def test_campaign_date_beats_dt_pzgik(self):
         """N-33-69-A-d-3-2 (2024): 2024-09-23 (81025) before 2024-07-21 (81616),
         although the latter has a later ``dt_pzgik`` (2025-06-20)."""
-        godlo = "N-33-69-A-d-3-2"
+        sheet = "N-33-69-A-d-3-2"
         records = layer_records(
-            REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2024.body",
+            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2024.body",
             "SkorowidzeNMT2024",
         )
         by_id = {file_id(r.url): r for r in records}
         assert by_id["81616_1669599"].dt_pzgik > by_id["81025_1562196"].dt_pzgik
-        record = GugikProvider(session=nmt_session(godlo, "nmt1_evr"))._resolve_sheet(
-            godlo
+        record = GugikProvider(session=nmt_session(sheet, "nmt1_evr"))._resolve_sheet(
+            sheet
         )
         assert file_id(record.url) == "81025_1562196"
 
     def test_c9_xyz_record_is_parsed_but_never_decides(self):
         """A ``.xyz`` record (72675, 2019-04-29) is read (H1: no extension
         filter), but loses to newer ones."""
-        godlo = "N-33-69-A-d-3-2"
+        sheet = "N-33-69-A-d-3-2"
         records = layer_records(
-            REAL / "nmt" / godlo / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
+            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
             "SkorowidzeNMT2023iStarsze",
         )
         assert [r.url.rsplit(".", 1)[-1] for r in records].count("xyz") == 1
         assert len(records) == 3
-        chosen = select_sheet_record(records, godlo=godlo, uklad="1992")
+        chosen = select_sheet_record(records, sheet=sheet, system="1992")
         assert file_id(chosen.url) == "75506_1144309"
         assert chosen.url.endswith(".asc")
 
     def test_c9_uppercase_asc_record_is_available_but_loses_to_newer_layer(self):
         """5 m N-33-115-C-d-2-2: ``.ASC`` from 2022iStarsze is available alone,
         but across the whole index 2025-03-20 (``.asc``) wins."""
-        godlo = "N-33-115-C-d-2-2"
+        sheet = "N-33-115-C-d-2-2"
         old = layer_records(
-            REAL / "nmt" / godlo / "nmt5_evr__SkorowidzeNMT2022iStarsze.body",
+            REAL / "nmt" / sheet / "nmt5_evr__SkorowidzeNMT2022iStarsze.body",
             "SkorowidzeNMT2022iStarsze",
         )
         assert [r.url.rsplit(".", 1)[-1] for r in old] == ["ASC"]
-        alone = select_sheet_record(old, godlo=godlo, uklad="1992", resolution_m=5.0)
+        alone = select_sheet_record(old, sheet=sheet, system="1992", resolution_m=5.0)
         assert alone is not None and alone.url.endswith(".ASC")
 
         provider = GugikProvider(
-            session=nmt_session(godlo, "nmt5_evr"), resolution="5m"
+            session=nmt_session(sheet, "nmt5_evr"), resolution="5m"
         )
-        record = provider._resolve_sheet(godlo)
+        record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "83841_1816160"
         assert record.aktualnosc == "2025-03-20"
 
-    def test_c9a_lowercase_godlo_in_record_is_normalised(self):
-        """KRON86 N-33-59-C-a-1-3: record ``godlo:"N-33-59-c-a-1-3"`` (lower-case c)."""
-        godlo = "N-33-59-C-a-1-3"
-        body = (REAL / "nmt" / godlo / "nmt1_krn__SkorowidzeNMT2018.body").read_text(
+    def test_c9a_lowercase_sheet_in_record_is_normalised(self):
+        """KRON86 N-33-59-C-a-1-3: record ``sheet:"N-33-59-c-a-1-3"`` (lower-case c)."""
+        sheet = "N-33-59-C-a-1-3"
+        body = (REAL / "nmt" / sheet / "nmt1_krn__SkorowidzeNMT2018.body").read_text(
             encoding="utf-8"
         )
         assert 'godlo:"N-33-59-c-a-1-3"' in body  # raw body, unedited
         provider = GugikProvider(
-            session=nmt_session(godlo, "nmt1_krn"), vertical_crs="KRON86"
+            session=nmt_session(sheet, "nmt1_krn"), vertical_crs="KRON86"
         )
-        record = provider._resolve_sheet(godlo)
+        record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "67106_778610"
-        assert record.godlo == godlo
-        assert provider.source_info(godlo)["sheet"] == godlo
+        assert record.sheet == sheet
+        assert provider.source_info(sheet)["sheet"] == sheet
 
 
 # =============================================================================
@@ -255,27 +255,27 @@ class TestNmtRecordSelectionOnRealBodies:
 
 class TestNoCoverageHintsOnRealBodies:
     def test_c6f_pl2000_1_10000_hints_descendant_scale_and_pl1992_sheet(self):
-        godlo = "6.129.30"
-        provider = GugikProvider(session=nmt_session(godlo, "nmt1_evr"))
+        sheet = "6.129.30"
+        provider = GugikProvider(session=nmt_session(sheet, "nmt1_evr"))
         with pytest.raises(NoCoverageError) as exc:
-            provider._resolve_sheet(godlo)
+            provider._resolve_sheet(sheet)
         message = str(exc.value)
         assert "Dostepny potomek 6.129.30.13.4" in message
         assert "--scale 1:1000" in message
         assert "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1" in message
-        assert exc.value.godlo == godlo
+        assert exc.value.sheet == sheet
 
     def test_c6g_pl2000_kron86_hint_points_to_1_2000(self):
-        godlo = "5.167.25"
+        sheet = "5.167.25"
         provider = GugikProvider(
-            session=nmt_session(godlo, "nmt1_krn"), vertical_crs="KRON86"
+            session=nmt_session(sheet, "nmt1_krn"), vertical_crs="KRON86"
         )
         with pytest.raises(NoCoverageError, match="--scale 1:2000") as exc:
-            provider._resolve_sheet(godlo)
+            provider._resolve_sheet(sheet)
         assert "5.167.25.13" in str(exc.value)
         # KRON86 layers: all checked before no coverage was reported (the
         # variant check, P10, then asks the other indexes in one query each)
-        kron86 = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["KRON86"]
+        kron86 = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["KRON86"]
         calls = provider._sessions.injected.get.call_args_list
         assert [
             _layer_of(c.args[0]) for c in calls if c.args[0].startswith(kron86)
@@ -286,10 +286,10 @@ class TestNoCoverageHintsOnRealBodies:
         ]
 
     def test_c10g_nmpt_only_half_metre_names_the_resolution(self):
-        godlo = "N-33-77-A-d-2-2"
-        provider = GugikNmptProvider(session=nmt_session(godlo, "nmpt_evr"))
+        sheet = "N-33-77-A-d-2-2"
+        provider = GugikNmptProvider(session=nmt_session(sheet, "nmpt_evr"))
         with pytest.raises(NoCoverageError) as exc:
-            provider._resolve_sheet(godlo)
+            provider._resolve_sheet(sheet)
         assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
         assert "Kartograf pobiera dokladnie 1 m" in str(exc.value)
 
@@ -303,7 +303,7 @@ REAL_U1 = (
     / "N-34-130-D-d-1-1"
 )
 U1 = "N-34-130-D-d-1-1"
-NMT_ENDPOINTS = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS
+NMT_ENDPOINTS = GugikProvider.WMS_INDEX_ENDPOINTS
 
 
 def variant_session(fail_prefix: str | None = None, bodies=None) -> Mock:
@@ -421,10 +421,10 @@ class TestVariantHintOnRealBodies:
         assert exc2.value.hints == exc1.value.hints
 
     def test_nmpt_queries_only_nmpt_indexes(self):
-        godlo = "N-33-77-A-d-2-2"
-        session = nmt_session(godlo, "nmpt_evr")
+        sheet = "N-33-77-A-d-2-2"
+        session = nmt_session(sheet, "nmpt_evr")
         with pytest.raises(NoCoverageError):
-            GugikNmptProvider(session=session)._resolve_sheet(godlo)
+            GugikNmptProvider(session=session)._resolve_sheet(sheet)
         assert all("/NMPT/" in c.args[0] for c in session.get.call_args_list)
 
 
@@ -434,23 +434,23 @@ class TestVariantHintOnRealBodies:
 
 
 class TestOrtoRecordSelectionOnRealBodies:
-    GODLO = "N-34-139-A-c-1-1"
+    SHEET = "N-34-139-A-c-1-1"
 
     def test_c12_cir_comes_from_2024_when_newer_layer_has_only_rgb(self):
-        provider = GugikOrtoProvider(session=orto_session(self.GODLO), color="CIR")
-        record = provider._resolve_sheet(self.GODLO)
+        provider = GugikOrtoProvider(session=orto_session(self.SHEET), color="CIR")
+        record = provider._resolve_sheet(self.SHEET)
         assert file_id(record.url) == "81434_1416956"
         assert record.layer == "SkorowidzeOrtofotomapy2024"
         assert record.resolution_m == 0.25
-        assert provider.source_info(self.GODLO)["color"] == "CIR"
+        assert provider.source_info(self.SHEET)["color"] == "CIR"
 
     def test_c12_rgb_comes_from_2025_at_5_cm(self):
-        provider = GugikOrtoProvider(session=orto_session(self.GODLO))
-        record = provider._resolve_sheet(self.GODLO)
+        provider = GugikOrtoProvider(session=orto_session(self.SHEET))
+        record = provider._resolve_sheet(self.SHEET)
         assert file_id(record.url) == "83235_1485417"
         assert record.layer == "SkorowidzeOrtofotomapy2025"
         assert record.resolution_m == 0.05
-        assert provider.source_info(self.GODLO)["color"] == "RGB"
+        assert provider.source_info(self.SHEET)["color"] == "RGB"
 
     def test_c12_token_parent_request_never_takes_child_records(self):
         """M-34-90-C-b-4 (parent sheet) -> its own 0.75 m record from 1997,
@@ -461,12 +461,12 @@ class TestOrtoRecordSelectionOnRealBodies:
         )
         parent = select_sheet_record(
             records,
-            godlo="M-34-90-C-b-4",
-            uklad="1992",
+            sheet="M-34-90-C-b-4",
+            system="1992",
             predicate=lambda r: r.raw.get("kolor") == "RGB",
         )
         assert file_id(parent.url) == "77300_1184641"
-        assert parent.godlo == "M-34-90-C-b-4"
+        assert parent.sheet == "M-34-90-C-b-4"
 
     def test_c12_token_child_request_never_takes_parent_record(self):
         """From the records of the parent M-34-90-C-b-4 alone, the request
@@ -476,41 +476,41 @@ class TestOrtoRecordSelectionOnRealBodies:
             REAL / "orto" / "M-34-90-C-b-4-4_SkorowidzeOrtofotomapyStarsze.html",
             "SkorowidzeOrtofotomapyStarsze",
         )
-        parents = [r for r in records if r.godlo == "M-34-90-C-b-4"]
+        parents = [r for r in records if r.sheet == "M-34-90-C-b-4"]
         assert parents  # the parent is in the raw body
         assert (
-            select_sheet_record(parents, godlo="M-34-90-C-b-4-4", uklad="1992") is None
+            select_sheet_record(parents, sheet="M-34-90-C-b-4-4", system="1992") is None
         )
         # and the sheet's own real record beats the newest: 2022-06-26 RGB (76530)
         child = select_sheet_record(
             records,
-            godlo="M-34-90-C-b-4-4",
-            uklad="1992",
+            sheet="M-34-90-C-b-4-4",
+            system="1992",
             predicate=lambda r: r.raw.get("kolor") == "RGB",
         )
         assert file_id(child.url) == "76530_1090199"
-        assert child.godlo == "M-34-90-C-b-4-4"
+        assert child.sheet == "M-34-90-C-b-4-4"
 
     def test_c12_record_with_full_sheet_false_wins_adr_028(self):
         """M-34-90-C-b-4-4: 2026 (partial sheet) before the full 2024 - no
         preference for the ``calyArkuszWypelnionyTrescia`` flag."""
-        godlo = "M-34-90-C-b-4-4"
-        provider = GugikOrtoProvider(session=orto_session(godlo))
-        record = provider._resolve_sheet(godlo)
+        sheet = "M-34-90-C-b-4-4"
+        provider = GugikOrtoProvider(session=orto_session(sheet))
+        record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "84466_1602825"
         assert record.full_sheet is False
         assert record.layer == "SkorowidzeOrtofotomapy2026"
-        assert provider.source_info(godlo)["full_sheet"] is False
+        assert provider.source_info(sheet)["full_sheet"] is False
 
     def test_c12_pl2000_sheet_takes_own_record_not_descendants(self):
         """7.173.21.01: record 2021-04-28 (75063), descendants 7.173.21.01.x
         from 2022 are ignored (the sheet code is a whole token)."""
-        godlo = "7.173.21.01"
-        provider = GugikOrtoProvider(session=orto_session(godlo))
-        record = provider._resolve_sheet(godlo)
+        sheet = "7.173.21.01"
+        provider = GugikOrtoProvider(session=orto_session(sheet))
+        record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == "75063_1038529"
-        assert record.godlo == godlo
-        assert (record.uklad, record.zone) == ("2000", 7)
+        assert record.sheet == sheet
+        assert (record.system, record.zone) == ("2000", 7)
 
 
 # =============================================================================
@@ -520,7 +520,7 @@ class TestOrtoRecordSelectionOnRealBodies:
 
 class TestCutoutSheetsFromDifferentCampaigns:
     @pytest.mark.parametrize(
-        ("godlo", "expected_id", "layer", "full_sheet"),
+        ("sheet", "expected_id", "layer", "full_sheet"),
         [
             ("N-34-139-C-a-3-1", "84183_1852496", "SkorowidzeNMT2025", False),
             ("N-34-139-C-a-3-2", "83998_1841627", "SkorowidzeNMT2026", True),
@@ -529,22 +529,22 @@ class TestCutoutSheetsFromDifferentCampaigns:
         ],
     )
     def test_c14_each_sheet_gets_its_own_newest_campaign(
-        self, godlo, expected_id, layer, full_sheet
+        self, sheet, expected_id, layer, full_sheet
     ):
-        provider = GugikProvider(session=c14_session(godlo))
-        record = provider._resolve_sheet(godlo)
+        provider = GugikProvider(session=c14_session(sheet))
+        record = provider._resolve_sheet(sheet)
         assert file_id(record.url) == expected_id
         assert record.layer == layer
         assert record.full_sheet is full_sheet
-        source = provider.source_info(godlo)
+        source = provider.source_info(sheet)
         assert source["url"] == record.url
         assert source["full_sheet"] is full_sheet
 
     def test_c14_four_sheets_four_distinct_sources_two_prefixes(self):
         prefixes = set()
         urls = set()
-        for godlo in (f"N-34-139-C-a-3-{n}" for n in range(1, 5)):
-            record = GugikProvider(session=c14_session(godlo))._resolve_sheet(godlo)
+        for sheet in (f"N-34-139-C-a-3-{n}" for n in range(1, 5)):
+            record = GugikProvider(session=c14_session(sheet))._resolve_sheet(sheet)
             prefixes.add(file_id(record.url).split("_")[0])
             urls.add(record.url)
         assert prefixes == {"84183", "83998"}
@@ -607,21 +607,21 @@ class TestLazDiscoveryOnRealWfs:
         """
         selection = GugikLazProvider(session=laz_session()).select_tiles(W2_BBOX)
         tiles = selection.tiles
-        assert [(t.godlo, t.year, t.crs) for t in tiles] == [
+        assert [(t.sheet, t.year, t.crs) for t in tiles] == [
             ("N-34-139-A-c-1-1-3-4", 2025, "PL-1992"),
         ]
-        assert [t.uklad for t in tiles] == ["1992"]
+        assert [t.system for t in tiles] == ["1992"]
         assert [t.density for t in tiles] == [12]
         assert tiles[0].url.endswith("83230_1743191_N-34-139-A-c-1-1-3-4.laz")
         assert sorted(
-            (s.tile.godlo, s.tile.year, s.tile.crs) for s in selection.superseded
+            (s.tile.sheet, s.tile.year, s.tile.crs) for s in selection.superseded
         ) == [
             ("7.173.21.06.1", 2022, "PL-2000:S7"),
             ("7.173.21.06.2", 2022, "PL-2000:S7"),
             ("N-34-139-A-c-1-1-3-4", 2023, "PL-1992"),
         ]
         # the second horizontal CRS is still recognised (pl_2000 segment)
-        assert [s.tile.uklad for s in selection.superseded if s.tile.year == 2022] == [
+        assert [s.tile.system for s in selection.superseded if s.tile.year == 2022] == [
             "2000",
             "2000",
         ]
@@ -629,7 +629,7 @@ class TestLazDiscoveryOnRealWfs:
     def test_laz_year_2023_w2_covers_reference(self):
         session = laz_session()
         tiles = GugikLazProvider(session=session).discover_tiles(W2_BBOX, year=2023)
-        assert [(t.godlo, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2023)]
+        assert [(t.sheet, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2023)]
         assert file_id(tiles[0].url) == "78044_1403296"
         assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
 
@@ -637,7 +637,7 @@ class TestLazDiscoveryOnRealWfs:
         """P8: no single 2022 tile covers W2_BBOX, their union does - no conflict."""
         session = laz_session()
         selection = GugikLazProvider(session=session).select_tiles(W2_BBOX, year=2022)
-        assert [(t.godlo, t.year, t.crs) for t in selection.tiles] == [
+        assert [(t.sheet, t.year, t.crs) for t in selection.tiles] == [
             ("7.173.21.06.1", 2022, "PL-2000:S7"),
             ("7.173.21.06.2", 2022, "PL-2000:S7"),
         ]
@@ -679,7 +679,7 @@ class TestLazDiscoveryOnRealWfs:
         tiles = GugikLazProvider(session=laz_session()).discover_tiles(
             W2_BBOX, min_density=13
         )
-        assert [(t.godlo, t.crs) for t in tiles] == [
+        assert [(t.sheet, t.crs) for t in tiles] == [
             ("7.173.21.06.1", "PL-2000:S7"),
             ("7.173.21.06.2", "PL-2000:S7"),
         ]
@@ -688,7 +688,7 @@ class TestLazDiscoveryOnRealWfs:
         session = laz_session()
         provider = GugikLazProvider(session=session, vertical_crs="KRON86")
         tiles = provider.discover_tiles(W2_BBOX)
-        assert [(t.godlo, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2018)]
+        assert [(t.sheet, t.year) for t in tiles] == [("N-34-139-A-c-1-1-3-4", 2018)]
         assert file_id(tiles[0].url) == "70707_846000"
         # vintage 2012 was in the service and was queried
         assert "2012" in feature_years(session)
@@ -712,7 +712,7 @@ class TestLazDiscoveryOnRealWfs:
             WRO_BBOX, **bounds
         )
         assert [
-            (t.godlo, t.year, t.full_sheet, file_id(t.url)) for t in selection.tiles
+            (t.sheet, t.year, t.full_sheet, file_id(t.url)) for t in selection.tiles
         ] == [
             ("6.150.13.16.4", 2025, False, "84048_1847378"),
             ("6.150.13.16.4", 2025, False, "84169_1850670"),
@@ -772,7 +772,7 @@ class TestLazDiscoveryOnRealWfs:
         tiles = GugikLazProvider(session=laz_session("w3")).discover_tiles(
             W3_BBOX, min_year=2019, max_year=2023
         )
-        assert [(t.godlo, t.year) for t in tiles] == [
+        assert [(t.sheet, t.year) for t in tiles] == [
             ("N-34-138-B-c-4-4-4-4", 2023),
             ("N-34-138-D-a-2-2-2", 2019),
         ]
@@ -780,12 +780,12 @@ class TestLazDiscoveryOnRealWfs:
     def test_w3_older_tile_adding_uncovered_area_is_kept(self):
         """ADR-029: no newer tile covers the 2019 sheet, so 2019 stays beside 2025."""
         selection = GugikLazProvider(session=laz_session("w3")).select_tiles(W3_BBOX)
-        assert [(t.godlo, t.year) for t in selection.tiles] == [
+        assert [(t.sheet, t.year) for t in selection.tiles] == [
             ("N-34-138-B-c-4-4-4-4", 2025),
             ("N-34-138-D-a-2-2-2", 2019),
         ]
         assert [
-            (s.tile.godlo, s.tile.year, s.reason) for s in selection.superseded
+            (s.tile.sheet, s.tile.year, s.reason) for s in selection.superseded
         ] == [("N-34-138-B-c-4-4-4-4", 2023, "covered")]
 
 
@@ -796,18 +796,18 @@ class TestLazDiscoveryOnRealWfs:
 NMT_DIR = REAL / "nmt"
 
 
-def _c14_records(godlo):
+def _c14_records(sheet):
     return [
         r
-        for f in sorted((NMT_DIR / "c14").glob(f"{godlo}_EVRF2007_*.html"))
+        for f in sorted((NMT_DIR / "c14").glob(f"{sheet}_EVRF2007_*.html"))
         for r in layer_records(f, f.stem.split("_EVRF2007_")[1])
     ]
 
 
-def _orto_records(godlo):
+def _orto_records(sheet):
     return [
         r
-        for f in sorted((REAL / "orto").glob(f"{godlo}_*.html"))
+        for f in sorted((REAL / "orto").glob(f"{sheet}_*.html"))
         for r in layer_records(f, f.stem.split("_", 1)[1])
     ]
 
@@ -820,10 +820,10 @@ def _is_cir(record):
     return record.raw.get("kolor") == "CIR"
 
 
-def _sheet_args(godlo):
-    parser = SheetParser(godlo)
-    zone = int(godlo.split(".")[0]) if parser.uklad == "2000" else None
-    return {"godlo": godlo, "uklad": parser.uklad, "zone": zone}
+def _sheet_args(sheet):
+    parser = SheetParser(sheet)
+    zone = int(sheet.split(".")[0]) if parser.system == "2000" else None
+    return {"sheet": sheet, "system": parser.system, "zone": zone}
 
 
 def _real_cases() -> list[tuple]:
@@ -841,18 +841,18 @@ def _real_cases() -> list[tuple]:
                 continue
             res = 5.0 if prefix.startswith("nmt5_") else 1.0
             cases.append((folder.name, records, res, None))
-    for godlo in (
+    for sheet in (
         "N-34-139-C-a-3-1",
         "N-34-139-C-a-3-2",
         "N-34-139-C-a-3-3",
         "N-34-139-C-a-3-4",
     ):
-        cases.append((godlo, _c14_records(godlo), 1.0, None))
-    for godlo in sorted(
+        cases.append((sheet, _c14_records(sheet), 1.0, None))
+    for sheet in sorted(
         {f.name.rsplit("_Skorowidze", 1)[0] for f in (REAL / "orto").glob("*.html")}
     ):
         for pred in (_is_rgb, _is_cir):
-            cases.append((godlo, _orto_records(godlo), None, pred))
+            cases.append((sheet, _orto_records(sheet), None, pred))
     return cases
 
 
@@ -860,8 +860,8 @@ class TestCampaignListsOnRealBodies:
     def test_c14_all_campaigns_n34_139_c_a_3_1(self):
         recs = select_campaign_records(
             _c14_records("N-34-139-C-a-3-1"),
-            godlo="N-34-139-C-a-3-1",
-            uklad="1992",
+            sheet="N-34-139-C-a-3-1",
+            system="1992",
             resolution_m=1.0,
         )
         assert [file_id(r.url).split("_")[0] for r in recs] == [
@@ -874,16 +874,16 @@ class TestCampaignListsOnRealBodies:
     def test_select_sheet_record_equals_head_of_campaign_list_on_every_real_body(self):
         cases = _real_cases()
         assert len(cases) >= 15
-        for godlo, records, res, pred in cases:
-            args = {**_sheet_args(godlo), "resolution_m": res, "predicate": pred}
+        for sheet, records, res, pred in cases:
+            args = {**_sheet_args(sheet), "resolution_m": res, "predicate": pred}
             single = select_sheet_record(records, **args)
             listed = select_campaign_records(records, **args)
-            assert single == (listed or [None])[0], (godlo, pred)
+            assert single == (listed or [None])[0], (sheet, pred)
 
     def test_orto_all_rgb_m34_90_c_b_4_4_excludes_cir_and_parent_sheet(self):
-        godlo = "M-34-90-C-b-4-4"
+        sheet = "M-34-90-C-b-4-4"
         recs = select_campaign_records(
-            _orto_records(godlo), predicate=_is_rgb, **_sheet_args(godlo)
+            _orto_records(sheet), predicate=_is_rgb, **_sheet_args(sheet)
         )
         assert [file_id(r.url).split("_")[0] for r in recs] == [
             "84466",
@@ -896,13 +896,13 @@ class TestCampaignListsOnRealBodies:
         ]
 
     def test_duplicate_url_across_layers_listed_once(self):
-        godlo = "N-34-139-C-a-3-1"
-        body = next((NMT_DIR / "c14").glob(f"{godlo}_EVRF2007_*2025.html"))
+        sheet = "N-34-139-C-a-3-1"
+        body = next((NMT_DIR / "c14").glob(f"{sheet}_EVRF2007_*2025.html"))
         twice = layer_records(body, "SkorowidzeNMT2025") + layer_records(
             body, "SkorowidzeNMT2024"
         )
         recs = select_campaign_records(
-            twice, godlo=godlo, uklad="1992", resolution_m=1.0
+            twice, sheet=sheet, system="1992", resolution_m=1.0
         )
         assert len(recs) == len({r.url for r in recs}) > 0
 
@@ -946,26 +946,26 @@ class TestCampaignListsOnRealBodies:
 class TestDeclaredVerticalCrsOnRealBodies:
     """``GugikProvider.download`` (path without the manager) checks the record."""
 
-    GODLO = "N-33-59-C-a-1-3"  # raw KRON86 bodies: records PL-KRON86-NH
-    KRN_2018 = REAL / "nmt" / GODLO / "nmt1_krn__SkorowidzeNMT2018.body"
+    SHEET = "N-33-59-C-a-1-3"  # raw KRON86 bodies: records PL-KRON86-NH
+    KRN_2018 = REAL / "nmt" / SHEET / "nmt1_krn__SkorowidzeNMT2018.body"
 
     def test_kron86_record_from_evrf2007_index_is_not_downloaded(self, tmp_path):
         """E5: the EVRF2007 index answers with a KRON86 record -> DownloadError."""
         provider = GugikProvider(session=routed_session(lambda layer: self.KRN_2018))
         provider.download_record = Mock()
         with pytest.raises(DownloadError) as exc:
-            provider.download(self.GODLO, tmp_path / "a.asc")
+            provider.download(self.SHEET, tmp_path / "a.asc")
         message = str(exc.value)
         assert "deklaruje uklad wysokosci PL-KRON86-NH" in message
         assert "zadano EVRF2007" in message
-        assert self.GODLO in message
+        assert self.SHEET in message
         provider.download_record.assert_not_called()
 
     def test_kron86_record_from_kron86_index_is_downloaded(self, tmp_path):
         provider = GugikProvider(
-            session=nmt_session(self.GODLO, "nmt1_krn"), vertical_crs="KRON86"
+            session=nmt_session(self.SHEET, "nmt1_krn"), vertical_crs="KRON86"
         )
         provider.download_record = Mock(return_value=tmp_path / "a.asc")
-        provider.download(self.GODLO, tmp_path / "a.asc")
+        provider.download(self.SHEET, tmp_path / "a.asc")
         record = provider.download_record.call_args.args[0]
         assert record.raw["ukladWspolrzednychPionowych"] == "PL-KRON86-NH"

@@ -102,7 +102,7 @@ def _exporting(crs):
 
 def _ctes96_info():
     return SheetInfo(
-        godlo="CTES96",
+        sheet="CTES96",
         name="Český Těšín 9-6",
         bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
         podil=0.99,
@@ -159,7 +159,7 @@ class TestConstruction:
 
 
 class TestDownloadDispatch:
-    def test_tm33_godlo_requests_native_then_warps_to_3045(self, tmp_path):
+    def test_tm33_sheet_requests_native_then_warps_to_3045(self, tmp_path):
         """The TM33 tile is defined in 3045 but fetched in 5514: Kartograf does
         the reprojection, not the server (ADR-024)."""
         target = tmp_path / "302_5550.tif"
@@ -188,7 +188,7 @@ class TestDownloadDispatch:
             assert src.crs.to_epsg() == 3045
             assert src.bounds == (302000.0, 5550000.0, 304000.0, 5552000.0)
 
-    def test_sm5_godlo_validates_fetches_and_repairs_crs(self, tmp_path):
+    def test_sm5_sheet_validates_fetches_and_repairs_crs(self, tmp_path):
         target = tmp_path / "CTES96.tif"
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.return_value = _ctes96_info()
@@ -212,8 +212,8 @@ class TestDownloadDispatch:
         with rasterio.open(target) as src:
             assert src.crs is not None and src.crs.to_epsg() == 5514
 
-    @pytest.mark.parametrize("godlo", [" CTES96", "CTES96 ", "\tCTES96\n"])
-    def test_sm5_godlo_with_whitespace_builds_clean_url(self, tmp_path, godlo):
+    @pytest.mark.parametrize("sheet", [" CTES96", "CTES96 ", "\tCTES96\n"])
+    def test_sm5_sheet_with_whitespace_builds_clean_url(self, tmp_path, sheet):
         """A library call with whitespace (the CLI already trims the sheet code):
         the system registry recognises SM5 after strip(), so the openzu URL
         and the index validation must receive the trimmed sheet code."""
@@ -227,14 +227,14 @@ class TestDownloadDispatch:
                 return Path(output_path)
 
             client.fetch_file.side_effect = fake_fetch
-            CuzkDmrProvider(resolution="5m").download(godlo, target)
+            CuzkDmrProvider(resolution="5m").download(sheet, target)
 
         index_cls.return_value.sm5_sheet.assert_called_once_with("CTES96")
         assert client.fetch_file.call_args.args[0] == (
             "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/CTES96.zip"
         )
 
-    def test_tm33_godlo_with_whitespace_is_parsed(self, tmp_path):
+    def test_tm33_sheet_with_whitespace_is_parsed(self, tmp_path):
         """TM33 tile with whitespace: ParserTM33 gets the stripped sheet code."""
         with patch.object(CuzkDmrProvider, "_export_raster") as export:
             CuzkDmrProvider(resolution="2m").download(" 302_5550 ", tmp_path / "t.tif")
@@ -292,7 +292,7 @@ class TestDownloadDispatch:
         with pytest.raises(ValidationError, match="5m"):
             provider.download("CTES96", tmp_path / "CTES96.tif")
 
-    def test_non_cz_godlo_rejected(self, tmp_path):
+    def test_non_cz_sheet_rejected(self, tmp_path):
         provider = CuzkDmrProvider()
         with pytest.raises(ValidationError, match="CZ"):
             provider.download("N-34-130-D-d-2-4", tmp_path / "x.tif")
@@ -456,7 +456,7 @@ class TestHorizontalReprojection:
         assert all(wkid(image_sr) == "5514" for _, image_sr, _ in calls)
         assert all(wkid(sent.crs) == "5514" for sent, _, _ in calls)
 
-    def test_tm33_godlo_also_goes_native_then_local_warp(self, tmp_path: Path) -> None:
+    def test_tm33_sheet_also_goes_native_then_local_warp(self, tmp_path: Path) -> None:
         """The TM33 tile (3045) does not trust server reprojection either."""
         target = tmp_path / "302_5550.tif"
         calls: list = []
@@ -828,7 +828,7 @@ class TestOnDownloadCallback:
         events, announce = self._recorder()
         with patch(_CLIENT_PATCH) as client_cls, patch(_INDEX_PATCH) as index_cls:
 
-            def fake_index(godlo):
+            def fake_index(sheet):
                 events.append("index")
                 return _ctes96_info()
 
@@ -876,7 +876,7 @@ class TestOnDownloadCallback:
             )
         assert events == []
 
-    def test_non_cz_godlo_does_not_announce(self, tmp_path):
+    def test_non_cz_sheet_does_not_announce(self, tmp_path):
         events, announce = self._recorder()
         with pytest.raises(ValidationError, match="CZ"):
             CuzkDmrProvider().download(
@@ -940,7 +940,7 @@ class TestVerticalTransform:
     """The subject of the tests is `_apply_vertical_shift`, so the rasters go
     the NATIVE path (bbox in 5514) - without horizontal reprojection, which
     would resample the synthetic fixtures. The interplay of both
-    transformations is checked by `test_tm33_godlo_warps_then_shifts_vertically`."""
+    transformations is checked by `test_tm33_sheet_warps_then_shifts_vertically`."""
 
     def _pinned_fakes(self, real_horizontal=False):
         """side_effect for build_pinned_transform: SEPARATE fakes for the
@@ -996,7 +996,7 @@ class TestVerticalTransform:
         assert data[0, 0] == CUZK_NODATA  # nodata is NOT transformed
         assert vertical.transform.called
 
-    def test_tm33_godlo_warps_then_shifts_vertically(self, tmp_path):
+    def test_tm33_sheet_warps_then_shifts_vertically(self, tmp_path):
         """TM33 tile: the horizontal reprojection and the vertical shift compose
         (raster in 3045, values after the Bpv->EVRF2007 operation, nodata untouched)."""
         target = tmp_path / "302_5550.tif"

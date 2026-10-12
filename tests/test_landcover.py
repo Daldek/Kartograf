@@ -146,7 +146,7 @@ class TestBdot10kPrgTimeout:
     BBOX = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
     DISCOVER = "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox"
 
-    def test_provider_bbox_and_godlo(self, tmp_path):
+    def test_provider_bbox_and_sheet(self, tmp_path):
         provider = Bdot10kProvider()
         with (
             patch(self.DISCOVER, return_value=["0208"]) as discover,
@@ -154,7 +154,7 @@ class TestBdot10kPrgTimeout:
         ):
             provider.download_by_bbox(self.BBOX, tmp_path / "x.gpkg", timeout=7)
             assert discover.call_args.kwargs["timeout"] == 7
-            provider.download_by_godlo("N-34-130-D", tmp_path / "x.gpkg", timeout=9)
+            provider.download_by_sheet("N-34-130-D", tmp_path / "x.gpkg", timeout=9)
             assert discover.call_args.kwargs["timeout"] == 9
 
     def test_manager_passes_timeout_option(self, tmp_path):
@@ -165,7 +165,7 @@ class TestBdot10kPrgTimeout:
         ):
             manager.download_by_bbox(self.BBOX, timeout=7)
             assert discover.call_args.kwargs["timeout"] == 7
-            manager.download_by_godlo("N-34-130-D", timeout=8)
+            manager.download_by_sheet("N-34-130-D", timeout=8)
             assert discover.call_args.kwargs["timeout"] == 8
             manager.download_all_counties(bbox=self.BBOX, timeout=9)
             assert discover.call_args.kwargs["timeout"] == 9
@@ -324,7 +324,7 @@ class TestLandCoverManager:
         """Test download with multiple selection methods."""
         manager = LandCoverManager()
         with pytest.raises(ValueError):
-            manager.download(teryt="1465", godlo="N-34-130-D")
+            manager.download(teryt="1465", sheet="N-34-130-D")
 
     def test_repr(self):
         """Test string representation."""
@@ -440,7 +440,7 @@ class TestLandCoverInvalidOptions:
         from kartograf.cli.commands import main
 
         rc = main(
-            ["landcover", "download", "--godlo", "N-34-130-D", "-o", str(tmp_path)]
+            ["landcover", "download", "--sheet", "N-34-130-D", "-o", str(tmp_path)]
             + extra
         )
         err = capsys.readouterr().err
@@ -550,8 +550,8 @@ class TestBdot10kProviderDownload:
         )
 
     @patch("kartograf.core.sheet_parser.SheetParser")
-    def test_download_by_godlo_success(self, mock_parser_cls, tmp_path):
-        """download_by_godlo resolves the one TERYT of the sheet frame (PRG)."""
+    def test_download_by_sheet_success(self, mock_parser_cls, tmp_path):
+        """download_by_sheet resolves the one TERYT of the sheet frame (PRG)."""
         provider = Bdot10kProvider()
         output = tmp_path / "out.gpkg"
 
@@ -567,7 +567,7 @@ class TestBdot10kProviderDownload:
                 provider, "download_by_admin_unit", return_value=output
             ) as mock_dl,
         ):
-            result = provider.download_by_godlo("N-34-130-D", output)
+            result = provider.download_by_sheet("N-34-130-D", output)
 
         assert result == output
         mock_dl.assert_called_once()
@@ -963,8 +963,8 @@ class TestCorineProviderDownload:
         assert abs(aspect_px - aspect_bbox) < 0.02
 
     @patch("kartograf.core.sheet_parser.SheetParser")
-    def test_download_by_godlo_delegates_to_bbox(self, mock_parser_cls, tmp_path):
-        """download_by_godlo delegates to download_by_bbox."""
+    def test_download_by_sheet_delegates_to_bbox(self, mock_parser_cls, tmp_path):
+        """download_by_sheet delegates to download_by_bbox."""
         provider = CorineProvider(use_proxy=False)
         output = tmp_path / "test.png"
 
@@ -975,7 +975,7 @@ class TestCorineProviderDownload:
         mock_parser_cls.return_value = mock_parser
 
         with patch.object(provider, "download_by_bbox", return_value=output) as mock_dl:
-            result = provider.download_by_godlo("N-34-130-D", output, year=2018)
+            result = provider.download_by_sheet("N-34-130-D", output, year=2018)
 
         assert result == output
         mock_dl.assert_called_once()
@@ -1176,30 +1176,30 @@ class TestLandCoverManagerDownload:
         auto_path = call_args[0][1]
         assert "bbox" in str(auto_path)
 
-    def test_download_by_godlo(self, tmp_path):
-        """download_by_godlo delegates to provider."""
+    def test_download_by_sheet(self, tmp_path):
+        """download_by_sheet delegates to provider."""
         mock_provider = Mock()
         mock_provider.name = "MockProvider"
-        mock_provider.download_by_godlo.return_value = tmp_path / "out.gpkg"
+        mock_provider.download_by_sheet.return_value = tmp_path / "out.gpkg"
 
         manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        result = manager.download_by_godlo(
+        result = manager.download_by_sheet(
             "N-34-130-D", output_path=tmp_path / "out.gpkg"
         )
 
         assert result == tmp_path / "out.gpkg"
-        mock_provider.download_by_godlo.assert_called_once()
+        mock_provider.download_by_sheet.assert_called_once()
 
-    def test_download_by_godlo_auto_path(self, tmp_path):
-        """download_by_godlo generates path with godlo."""
+    def test_download_by_sheet_auto_path(self, tmp_path):
+        """download_by_sheet generates path with sheet."""
         mock_provider = Mock()
         mock_provider.name = "Test"
-        mock_provider.download_by_godlo.return_value = tmp_path / "auto.gpkg"
+        mock_provider.download_by_sheet.return_value = tmp_path / "auto.gpkg"
 
         manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download_by_godlo("N-34-130-D")
+        manager.download_by_sheet("N-34-130-D")
 
-        call_args = mock_provider.download_by_godlo.call_args
+        call_args = mock_provider.download_by_sheet.call_args
         auto_path = call_args[0][1]
         assert "N-34-130-D" in str(auto_path)
 
@@ -1214,16 +1214,16 @@ class TestLandCoverManagerDownload:
 
         mock_provider.download_by_teryt.assert_called_once()
 
-    def test_download_dispatches_godlo(self, tmp_path):
-        """download(godlo=...) dispatches to download_by_godlo."""
+    def test_download_dispatches_sheet(self, tmp_path):
+        """download(sheet=...) dispatches to download_by_sheet."""
         mock_provider = Mock()
         mock_provider.name = "MockProvider"
-        mock_provider.download_by_godlo.return_value = tmp_path / "out.gpkg"
+        mock_provider.download_by_sheet.return_value = tmp_path / "out.gpkg"
 
         manager = LandCoverManager(output_dir=tmp_path, provider=mock_provider)
-        manager.download(godlo="N-34-130-D")
+        manager.download(sheet="N-34-130-D")
 
-        mock_provider.download_by_godlo.assert_called_once()
+        mock_provider.download_by_sheet.assert_called_once()
 
     def test_download_dispatches_bbox(self, tmp_path):
         """download(bbox=...) dispatches to download_by_bbox."""
@@ -1262,7 +1262,7 @@ class TestLandCoverManagerDownload:
     @pytest.mark.parametrize(
         "call_kwargs,method_name",
         [
-            ({"godlo": "N-34-130-D"}, "godlo"),
+            ({"sheet": "N-34-130-D"}, "sheet"),
             ({"teryt": "1465"}, "teryt"),
             (
                 {"bbox": BBox(500000, 300000, 510000, 310000, "EPSG:2180")},
@@ -1310,9 +1310,9 @@ class TestLandCoverManagerDownload:
         path = manager._generate_output_path(None, bbox, None)
         assert "bbox" in str(path)
 
-        # By godlo
+        # By sheet
         path = manager._generate_output_path(None, None, "N-34-130-D")
-        assert "godlo_N-34-130-D" in str(path)
+        assert "sheet_N-34-130-D" in str(path)
 
 
 # ===========================================================================
@@ -1671,7 +1671,7 @@ class TestBdot10kDefaultTimeout:
     contradicting the signatures."""
 
     @pytest.mark.parametrize(
-        "method", ["download_by_admin_unit", "download_by_godlo", "download_by_bbox"]
+        "method", ["download_by_admin_unit", "download_by_sheet", "download_by_bbox"]
     )
     def test_download_default_timeout_is_class_constant(self, method):
         import inspect
@@ -2229,7 +2229,7 @@ class TestBdot10kSidecarSource:
         manager.provider._sessions = SessionPerThread(self._session(body, {}))
         with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
             paths = manager.download_all_counties(
-                godlo="M-33-48-A", keep_raw=True, layers=["PTWP"]
+                sheet="M-33-48-A", keep_raw=True, layers=["PTWP"]
             )
         assert [p.name for p in paths] == ["bdot10k_PTWP_teryt_0262.gpkg"]
         raw = tmp_path / "out" / "bdot10k_teryt_0262_GPKG.zip"
@@ -2253,7 +2253,7 @@ class TestBdot10kSidecarSource:
         with patch.object(manager.provider, "teryts_for_area", return_value=["0262"]):
             for layers in (["PTWP"], ["SWRS"]):
                 manager.download_all_counties(
-                    godlo="M-33-48-A", keep_raw=True, layers=layers
+                    sheet="M-33-48-A", keep_raw=True, layers=layers
                 )
         out = tmp_path / "out"
         assert sorted(p.name for p in out.glob("*.zip")) == [
@@ -2332,9 +2332,9 @@ class TestBdot10kManyCounties:
         ]
         assert meta["extra"]["parent_request"]["countries"] == ["PL"]
 
-    def test_all_counties_by_godlo(self, tmp_path):
+    def test_all_counties_by_sheet(self, tmp_path):
         manager = self._manager(tmp_path, ["0208"])
-        paths = manager.download_all_counties(godlo="M-33-48-A")
+        paths = manager.download_all_counties(sheet="M-33-48-A")
         meta = json.loads(
             (paths[0].with_name(paths[0].name + ".meta.json")).read_text()
         )
@@ -2356,9 +2356,9 @@ class TestBdot10kManyCounties:
         assert meta["request"]["teryt"] == "0208"
         assert meta["extra"]["parent_request"]["bbox_crs"] == "EPSG:2180"
 
-    def test_single_county_godlo_has_parent_request(self, tmp_path):
+    def test_single_county_sheet_has_parent_request(self, tmp_path):
         manager = self._manager(tmp_path, ["0208"])
-        path = manager.download(godlo="M-33-048-A")
+        path = manager.download(sheet="M-33-048-A")
         meta = json.loads((path.with_name(path.name + ".meta.json")).read_text())
         assert meta["extra"]["parent_request"] == {
             "sheet": "M-33-48-A",

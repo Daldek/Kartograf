@@ -32,6 +32,41 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zglaszal go tylko usuniety tor arkuszowy (EPSG:2180 z arkuszy o roznej
   fazie siatki). Co zrobic: usun obsluge tego wyjatku; faze siatki
   wlasnych zrodel sprawdza `check_source_grid(...).off_grid`.
+- CLI: godlo podaje sie flaga `--sheet` (ADR-031 errata 1, bez aliasow):
+  `kartograf download N-34-130-D-d-2-4` -> `kartograf download --sheet
+  N-34-130-D-d-2-4` (takze godla PL-2000 i CZ, np. `--sheet 302_5550`);
+  `landcover download --godlo` i `soilgrids hsg --godlo` -> `--sheet`.
+  `kartograf parse` przyjmuje godlo pozycyjnie jak dotad (w pomocy:
+  `SHEET`). Co zrobic: dopisz `--sheet` przed godlem w `download`, zamien
+  `--godlo` na `--sheet`.
+- Biblioteka: polskie identyfikatory publicznego API zastapione
+  angielskimi, bez aliasow (ADR-031 errata 1). `godlo` -> `sheet`,
+  `godla` -> `sheets` we wszystkich parametrach i atrybutach (m.in.
+  `SheetParser.sheet`, `SheetFetch.sheet`, `DownloadProgress.sheet`,
+  `LazTile.sheet`, `DownloadError.sheet`/`NoCoverageError.sheet`,
+  `DownloadManager.download_sheet(sheet)`, `check_year_range(sheets)`,
+  `MetadataCache.get_record(..., sheet)`, `LandCoverManager.download(sheet=)`,
+  `download_all_counties(sheet=)`); metody `download_by_godlo` ->
+  `download_by_sheet` (`LandCoverManager`, `LandCoverProvider`,
+  `Bdot10kProvider`, `CorineProvider`, `SoilGridsProvider`),
+  `HSGCalculator.calculate_hsg_by_godlo` -> `calculate_hsg_by_sheet`,
+  `BaseProvider.validate_godlo` -> `validate_sheet`,
+  `horizontal_crs_for_godlo` -> `horizontal_crs_for_sheet`. `uklad` ->
+  `system` (`SheetParser(sheet, system=)`, `.system`, `Parser2000.system`,
+  `ParserTM33.system`, `LazTile.system`, `FileStorage.get_raw_path(...,
+  system=)`, `SourceDescriptor.resolve_subdir(system=)`, szablon segmentu
+  `{system}` zamiast `{uklad}`), `SheetParser.VALID_UKLADY` ->
+  `VALID_SYSTEMS`, `CampaignRef.zgloszenie` -> `survey_work_id`,
+  `WMS_SKOROWIDZE_ENDPOINT(S)` -> `WMS_INDEX_ENDPOINT(S)`
+  (`GugikProvider`, `GugikNmptProvider`, `GugikOrtoProvider`). Co zrobic:
+  zamien nazwy w wywolaniach i odczytach atrybutow (Hydrograf, Hydrolog).
+  Klucze sidecara i wartosci (godla) bez zmian.
+- Land cover: domyslna nazwa pliku dla zadania przez arkusz ma czlon
+  `sheet_` zamiast `godlo_` (np. `corine_2018_sheet_N-34-130-D.tif`,
+  `soilgrids_clay_15-30cm_mean_sheet_N-34-130-D.tif`). Co zrobic: skrypty
+  szukajace plikow po nazwie dostosuj do nowego czlonu; pliki pobrane
+  wczesniej zostaja pod stara nazwa (land cover nie pomija istniejacych
+  plikow, kolejne pobranie zapisze plik pod nowa nazwa).
 
 ## [0.7.2] - 2026-10-11
 

@@ -56,40 +56,40 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
 
     # Check that exactly one selection method is provided
     has_geometry = getattr(args, "geometry", None) is not None
-    methods = [args.bbox, args.godlo]
+    methods = [args.bbox, args.sheet]
     provided = [m for m in methods if m is not None]
     if has_geometry:
         provided.append(args.geometry)
 
     if len(provided) == 0:
         print(
-            "Error: Must provide one of: --bbox, --godlo, or --geometry",
+            "Error: Must provide one of: --bbox, --sheet, or --geometry",
             file=sys.stderr,
         )
         return 1
 
     if len(provided) > 1:
         print(
-            "Error: Provide only one of: --bbox, --godlo, or --geometry",
+            "Error: Provide only one of: --bbox, --sheet, or --geometry",
             file=sys.stderr,
         )
         return 1
 
     # Canonical sheet code (A7): 'M-33-036-A' and 'M-33-36-A' give one file
-    godlo = None
-    if args.godlo:
+    sheet = None
+    if args.sheet:
         try:
-            godlo = SheetParser(args.godlo).godlo
+            sheet = SheetParser(args.sheet).sheet
         except (ParseError, ValidationError) as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
 
     # Determine output path
     output_path = Path(args.output)
-    if godlo:
+    if sheet:
         if output_path.suffix.lower() != ".tif":
             # Output is a directory; the directory itself is created on write
-            output_path = output_path / f"hsg_{godlo}_{args.depth}.tif"
+            output_path = output_path / f"hsg_{sheet}_{args.depth}.tif"
     elif (args.bbox or has_geometry) and output_path.suffix.lower() != ".tif":
         output_path = output_path / f"hsg_bbox_{args.depth}.tif"
 
@@ -114,8 +114,8 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     calc = HSGCalculator()
 
     print("Calculating Hydrologic Soil Groups (HSG)...")
-    if godlo:
-        print(f"  Godło: {godlo}")
+    if sheet:
+        print(f"  Godło: {sheet}")
     if has_geometry:
         print(f"  Geometry: {Path(args.geometry).name}")
     if bbox:
@@ -124,9 +124,9 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     print()
 
     try:
-        if godlo:
-            result_path = calc.calculate_hsg_by_godlo(
-                godlo=godlo,
+        if sheet:
+            result_path = calc.calculate_hsg_by_sheet(
+                sheet=sheet,
                 output_path=output_path,
                 depth=args.depth,
                 keep_intermediate=args.keep_intermediate,

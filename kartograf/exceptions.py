@@ -70,7 +70,7 @@ class DownloadError(KartografError):
 
     Attributes
     ----------
-    godlo : str, optional
+    sheet : str, optional
         The sheet code that was being downloaded when the error occurred.
     status_code : int, optional
         HTTP status code if applicable.
@@ -83,11 +83,11 @@ class DownloadError(KartografError):
     def __init__(
         self,
         message: str,
-        godlo: str | None = None,
+        sheet: str | None = None,
         status_code: int | None = None,
     ):
         super().__init__(message)
-        self.godlo = godlo
+        self.sheet = sheet
         self.status_code = status_code
 
 
@@ -110,11 +110,11 @@ class NoCoverageError(DownloadError):
     def __init__(
         self,
         message: str,
-        godlo: str | None = None,
+        sheet: str | None = None,
         status_code: int | None = None,
         hints: tuple[str, ...] = (),
     ):
-        super().__init__(message, godlo=godlo, status_code=status_code)
+        super().__init__(message, sheet=sheet, status_code=status_code)
         self.hints = tuple(hints)
 
 

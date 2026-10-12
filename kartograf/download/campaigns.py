@@ -63,7 +63,7 @@ _AAIGRID_HEADER_KEYS = frozenset(
 
 
 def campaign_id_from_url(url: str) -> str:
-    """'83233' from '.../83233_1744736_<godlo>.asc'.
+    """'83233' from '.../83233_1744736_<sheet>.asc'.
 
     Without a leading '<digits>_' in the file name: 'u' + 8 hex chars of
     sha1(url).
@@ -176,11 +176,11 @@ def year_range_error(
 
     ``subject`` and optional per-sheet ``labels`` let LAZ report reference
     tile vintages without duplicating the year-range formatting and hints;
-    years in ``partial_years[godlo]`` (LAZ: only partial sheets there) are
+    years in ``partial_years[sheet]`` (LAZ: only partial sheets there) are
     marked in the message.
     """
     sheets = {
-        godlo: tuple(sorted(set(years))) for godlo, years in sorted(conflicts.items())
+        sheet: tuple(sorted(set(years))) for sheet, years in sorted(conflicts.items())
     }
     hints = year_range_hints(sheets, min_year, max_year)
     lines = [
@@ -188,15 +188,15 @@ def year_range_error(
         f"dla {len(sheets)} z {total} {unit} — nic nie pobrano:"
     ]
 
-    def year_text(godlo: str, year: int) -> str:
-        if partial_years and year in partial_years.get(godlo, ()):
+    def year_text(sheet: str, year: int) -> str:
+        if partial_years and year in partial_years.get(sheet, ()):
             return f"{year} (tylko arkusze niepelne)"
         return str(year)
 
     lines.extend(
-        f"  {godlo}{' ' + labels[godlo] if labels and godlo in labels else ''}: "
-        f"dostepne roczniki {', '.join(year_text(godlo, y) for y in years)}"
-        for godlo, years in list(sheets.items())[:20]
+        f"  {sheet}{' ' + labels[sheet] if labels and sheet in labels else ''}: "
+        f"dostepne roczniki {', '.join(year_text(sheet, y) for y in years)}"
+        for sheet, years in list(sheets.items())[:20]
     )
     if len(sheets) > 20:
         lines.append(f"  ... i {len(sheets) - 20} innych")
@@ -217,14 +217,14 @@ class CampaignRef:
     date: str  # acquisition date, YYYY-MM-DD (validated)
     dt_pzgik: str | None
     url: str
-    zgloszenie: str | None  # numerZgloszeniaPracy
+    survey_work_id: str | None  # numerZgloszeniaPracy
     source: str | None  # zrDanych / zrodloDanych
     full_sheet: bool | None
     file_format: str | None  # record `format` field; None = no field (orto, old cache)
 
     @classmethod
     def from_record(cls, record) -> "CampaignRef":
-        """Build from an index record (duck typing: url, godlo, aktualnosc,
+        """Build from an index record (duck typing: url, sheet, aktualnosc,
         dt_pzgik, full_sheet, raw). An aktualnosc outside YYYY-MM-DD raises
         DownloadError — the server value ends up in a path."""
         date = record.aktualnosc
@@ -232,7 +232,7 @@ class CampaignRef:
             raise DownloadError(
                 f"Rekord skorowidza ma niepoprawna aktualnosc {date!r} "
                 f"(oczekiwano RRRR-MM-DD)",
-                godlo=getattr(record, "godlo", None),
+                sheet=getattr(record, "sheet", None),
             )
         raw = record.raw or {}
         return cls(
@@ -240,7 +240,7 @@ class CampaignRef:
             date=date,
             dt_pzgik=record.dt_pzgik,
             url=record.url,
-            zgloszenie=raw.get("numerZgloszeniaPracy"),
+            survey_work_id=raw.get("numerZgloszeniaPracy"),
             source=raw.get("zrDanych") or raw.get("zrodloDanych"),
             full_sheet=record.full_sheet,
             file_format=raw.get("format"),
@@ -264,7 +264,7 @@ class CampaignRef:
         return {
             "id": self.id,
             "date": self.date,
-            "survey_work_id": self.zgloszenie,
+            "survey_work_id": self.survey_work_id,
             "source": self.source,
             "full_sheet": self.full_sheet,
             "pzgik_date": self.dt_pzgik,
@@ -282,7 +282,7 @@ RECORD_VERTICAL_CRS: Mapping[str, str] = {
 }
 
 
-def verify_record_vertical_crs(record, vertical_crs: str | None, godlo: str) -> None:
+def verify_record_vertical_crs(record, vertical_crs: str | None, sheet: str) -> None:
     """The vertical datum declared by the record must be the requested one.
 
     The datum is chosen only by the endpoint (one WMS index per datum); the
@@ -306,16 +306,16 @@ def verify_record_vertical_crs(record, vertical_crs: str | None, godlo: str) -> 
         logger.debug(
             "%s: rekord skorowidza bez ukladWspolrzednychPionowych — uklad "
             "wysokosci niesprawdzony (%s)",
-            godlo,
+            sheet,
             record.url,
         )
         return
     if declared.upper() != expected:
         raise DownloadError(
-            f"{godlo}: rekord skorowidza deklaruje uklad wysokosci {declared}, "
+            f"{sheet}: rekord skorowidza deklaruje uklad wysokosci {declared}, "
             f"a zadano {vertical_crs} (oczekiwano {expected}) — plik nie "
             f"zostal pobrany: {record.url}",
-            godlo=godlo,
+            sheet=sheet,
         )
 
 
@@ -436,26 +436,26 @@ def measure_coverage(path: Path, ext: str) -> float | None:
     raise DownloadError(f"{path.name}: brak pomiaru pokrycia dla {ext!r}")
 
 
-def verify_record_url(url: str, godlo: str) -> None:
+def verify_record_url(url: str, sheet: str) -> None:
     """The record URL file name must end with the sheet code (B4).
 
-    GUGiK names files ``<id>_<number>_<godlo>.<ext>``; a URL without the
+    GUGiK names files ``<id>_<number>_<sheet>.<ext>``; a URL without the
     sheet code (or with another one) points to an unknown file. Both codes
-    are compared in canonical form (``SheetParser.godlo``).
+    are compared in canonical form (``SheetParser.sheet``).
     """
     stem = PurePosixPath(urlparse(url).path).stem
     token = stem.rsplit("_", 1)[-1]
     try:
-        named = SheetParser(token).godlo
+        named = SheetParser(token).sheet
     except ValidationError:
         named = None
-    if named != SheetParser(godlo).godlo:
+    if named != SheetParser(sheet).sheet:
         raise DownloadError(
-            f"URL rekordu skorowidza nie zawiera godla {godlo}: {url}", godlo=godlo
+            f"URL rekordu skorowidza nie zawiera godla {sheet}: {url}", sheet=sheet
         )
 
 
-def verify_sheet_extent(path: Path, godlo: str, ext: str) -> None:
+def verify_sheet_extent(path: Path, sheet: str, ext: str) -> None:
     """The ASC header extent must lie in the sheet frame (B4; '.asc' only).
 
     At least ``MIN_FRAME_OVERLAP`` of the file extent must lie inside the
@@ -477,10 +477,10 @@ def verify_sheet_extent(path: Path, godlo: str, ext: str) -> None:
     except KeyError as e:
         raise DownloadError(
             f"{path.name}: niepelny naglowek ASC (brak {e}) — nie mozna "
-            f"sprawdzic zasiegu arkusza {godlo}",
-            godlo=godlo,
+            f"sprawdzic zasiegu arkusza {sheet}",
+            sheet=sheet,
         ) from e
-    parser = SheetParser(godlo)
+    parser = SheetParser(sheet)
     frame = parser.get_bbox(crs="EPSG:2180") if x0 < 1e6 else parser.get_bbox()
     ix = max(0.0, min(x1, frame.max_x) - max(x0, frame.min_x))
     iy = max(0.0, min(y1, frame.max_y) - max(y0, frame.min_y))
@@ -488,7 +488,7 @@ def verify_sheet_extent(path: Path, godlo: str, ext: str) -> None:
     if area <= 0 or ix * iy < MIN_FRAME_OVERLAP * area:
         raise DownloadError(
             f"{path.name}: zasieg pliku ({x0:.0f}, {y0:.0f}, {x1:.0f}, {y1:.0f}) "
-            f"nie pokrywa sie z rama godla {godlo} ({frame.min_x:.0f}, "
+            f"nie pokrywa sie z rama godla {sheet} ({frame.min_x:.0f}, "
             f"{frame.min_y:.0f}, {frame.max_x:.0f}, {frame.max_y:.0f}, {frame.crs})",
-            godlo=godlo,
+            sheet=sheet,
         )

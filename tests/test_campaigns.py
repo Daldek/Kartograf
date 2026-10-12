@@ -54,16 +54,16 @@ C14 = Path(__file__).parent / "fixtures/gugik_skorowidz/real_2026_10_06/nmt/c14"
 
 
 def _c14_years(suffix: int) -> tuple[int, ...]:
-    godlo = f"N-34-139-C-a-3-{suffix}"
+    sheet = f"N-34-139-C-a-3-{suffix}"
     records = [
         record
-        for path in C14.glob(f"{godlo}_EVRF2007_*.html")
+        for path in C14.glob(f"{sheet}_EVRF2007_*.html")
         for record in parse_skorowidz_records(
             path.read_text(encoding="utf-8"), path.stem
         )
     ]
     matching = select_campaign_records(
-        records, godlo=godlo, uklad="1992", resolution_m=1.0
+        records, sheet=sheet, system="1992", resolution_m=1.0
     )
     return tuple(
         sorted(
@@ -75,7 +75,7 @@ def _c14_years(suffix: int) -> tuple[int, ...]:
 def _rec(url=URL, aktualnosc="2025-04-27", dt="2025-11-17", full=True, raw=None):
     return SimpleNamespace(
         url=url,
-        godlo="N-34-139-C-a-3-1",
+        sheet="N-34-139-C-a-3-1",
         aktualnosc=aktualnosc,
         dt_pzgik=dt,
         full_sheet=full,
@@ -504,10 +504,10 @@ GUGIK_ASC = Path(__file__).parent / "fixtures" / "gugik_asc"
 
 
 def _asc_for_frame(
-    path, godlo, *, shift_x=0.0, shift_y=0.0, shrink=1.0, center=False, cell=1.0
+    path, sheet, *, shift_x=0.0, shift_y=0.0, shrink=1.0, center=False, cell=1.0
 ):
-    """ASC whose extent is the godlo frame (optionally shifted/shrunk)."""
-    b = SheetParser(godlo).get_bbox()
+    """ASC whose extent is the sheet frame (optionally shifted/shrunk)."""
+    b = SheetParser(sheet).get_bbox()
     width = (b.max_x - b.min_x) * shrink
     height = (b.max_y - b.min_y) * shrink
     ncols, nrows = round(width / cell), round(height / cell)
@@ -522,7 +522,7 @@ def _asc_for_frame(
 
 
 class TestVerifyRecordUrl:
-    def test_url_with_godlo_passes(self):
+    def test_url_with_sheet_passes(self):
         verify_record_url(
             "https://x/NMT/1/73044_1234_N-34-130-D-d-2-4.asc", "N-34-130-D-d-2-4"
         )
@@ -530,11 +530,11 @@ class TestVerifyRecordUrl:
     def test_pl2000_url_passes(self):
         verify_record_url("https://x/64878_364829_7.124.07.24.tif", "7.124.07.24")
 
-    def test_url_without_godlo_raises(self):
+    def test_url_without_sheet_raises(self):
         with pytest.raises(DownloadError, match="nie zawiera godla"):
             verify_record_url("https://x/NMT/84183/84183_1_G.asc", "N-34-130-D-d-2-4")
 
-    def test_url_with_other_godlo_raises(self):
+    def test_url_with_other_sheet_raises(self):
         with pytest.raises(DownloadError, match="nie zawiera godla"):
             verify_record_url("https://x/1_2_N-34-130-D-d-2-3.asc", "N-34-130-D-d-2-4")
 
@@ -589,7 +589,7 @@ class TestVerifySheetExtent:
         head = GUGIK_ASC / "77912_1384976_7.125.11.19.head.asc"
         verify_sheet_extent(head, "7.125.11.19", ".asc")
 
-    def test_pl2000_godlo_with_2180_file_of_other_place_raises(self, tmp_path):
+    def test_pl2000_sheet_with_2180_file_of_other_place_raises(self, tmp_path):
         # EPSG:2180 header of N-34-130-D-d-2-4 - far from 7.124.07.24
         p = _asc_for_frame(tmp_path / "a.asc", self.G)
         with pytest.raises(DownloadError, match="zasieg"):
@@ -651,44 +651,44 @@ class TestVerifyRecordVerticalCrs:
 
     def test_every_real_record_passes_for_its_own_index(self):
         for record in KRON86_RECORDS:
-            verify_record_vertical_crs(record, "KRON86", record.godlo)
+            verify_record_vertical_crs(record, "KRON86", record.sheet)
         for record in EVRF2007_RECORDS:
-            verify_record_vertical_crs(record, "EVRF2007", record.godlo)
+            verify_record_vertical_crs(record, "EVRF2007", record.sheet)
 
     @pytest.mark.parametrize(
         ("records", "requested"),
         [(KRON86_RECORDS, "EVRF2007"), (EVRF2007_RECORDS, "KRON86")],
     )
-    def test_other_datum_raises_naming_godlo_and_both_datums(self, records, requested):
+    def test_other_datum_raises_naming_sheet_and_both_datums(self, records, requested):
         record = records[0]
         with pytest.raises(DownloadError) as exc:
-            verify_record_vertical_crs(record, requested, record.godlo)
+            verify_record_vertical_crs(record, requested, record.sheet)
         message = str(exc.value)
-        assert record.godlo in message
+        assert record.sheet in message
         assert f"deklaruje uklad wysokosci {record.raw[VFIELD]}" in message
         assert f"zadano {requested}" in message
         assert RECORD_VERTICAL_CRS[requested] in message
-        assert exc.value.godlo == record.godlo
+        assert exc.value.sheet == record.sheet
 
     @pytest.mark.parametrize("value", [None, "", "  "])
     def test_missing_or_empty_field_is_accepted_with_debug_log(self, value, caplog):
         record = _declaring(KRON86_RECORDS[0], value)
         with caplog.at_level(logging.DEBUG, logger="kartograf.download.campaigns"):
-            verify_record_vertical_crs(record, "EVRF2007", record.godlo)
+            verify_record_vertical_crs(record, "EVRF2007", record.sheet)
         assert "niesprawdzony" in caplog.text
 
     def test_case_and_whitespace_of_declared_value_are_tolerated(self):
         record = _declaring(EVRF2007_RECORDS[0], " pl-evrf2007-nh ")
-        verify_record_vertical_crs(record, "EVRF2007", record.godlo)
+        verify_record_vertical_crs(record, "EVRF2007", record.sheet)
 
     @pytest.mark.parametrize("requested", [None, "Bpv"])
     def test_request_without_known_datum_is_not_checked(self, requested):
         """Orto (no vertical datum) and datums outside the mapping."""
         record = KRON86_RECORDS[0]
-        verify_record_vertical_crs(record, requested, record.godlo)
+        verify_record_vertical_crs(record, requested, record.sheet)
 
     def test_record_restored_from_cache_keeps_the_check(self):
         """Cache round trip (A3 ``declared_vertical_crs`` -> raw field again)."""
         cached = SkorowidzRecord.from_source(KRON86_RECORDS[0].to_source("https://wms"))
         with pytest.raises(DownloadError, match="PL-KRON86-NH"):
-            verify_record_vertical_crs(cached, "EVRF2007", cached.godlo)
+            verify_record_vertical_crs(cached, "EVRF2007", cached.sheet)

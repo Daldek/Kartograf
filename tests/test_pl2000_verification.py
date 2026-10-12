@@ -70,11 +70,11 @@ class TestPL2000BBoxReferenceValues:
     """Verify the BBox against the reference formula for all zones."""
 
     @pytest.mark.parametrize(
-        "godlo, strefa, pas, slup",
+        "sheet, strefa, pas, slup",
         REFERENCE_10K_CASES,
         ids=[c[0] for c in REFERENCE_10K_CASES],
     )
-    def test_bbox_10k_matches_formula(self, godlo, strefa, pas, slup):
+    def test_bbox_10k_matches_formula(self, sheet, strefa, pas, slup):
         """Verify the 1:10k BBox against the reference formula."""
         expected_south = pas * 5000 + 4_920_000
         expected_north = expected_south + 5000
@@ -82,7 +82,7 @@ class TestPL2000BBoxReferenceValues:
         expected_east = expected_west + 8000
         expected_crs = ZONE_EPSG[strefa]
 
-        p = Parser2000(godlo)
+        p = Parser2000(sheet)
         bbox = p.get_bbox()
 
         assert bbox.min_y == pytest.approx(expected_south, abs=0.01)
@@ -104,15 +104,15 @@ class TestPL2000BBoxReferenceValues:
     )
     def test_sheet_dimensions_all_scales(self, scale, expected_height, expected_width):
         """Verify the sheet dimensions for every scale."""
-        # Use a known valid godlo for each scale
-        godla_per_scale = {
+        # Use a known valid sheet for each scale
+        sheets_per_scale = {
             "1:10000": "6.179.12",
             "1:5000": "6.179.12.1",
             "1:2000": "6.179.12.13",
             "1:1000": "6.179.12.13.1",
             "1:500": "6.179.12.13.1.1",
         }
-        p = Parser2000(godla_per_scale[scale])
+        p = Parser2000(sheets_per_scale[scale])
         bbox = p.get_bbox()
 
         height = bbox.max_y - bbox.min_y
@@ -128,14 +128,14 @@ class TestPL2000BBoxReferenceValues:
     )
     def test_dimensions_match_constant(self, scale, expected_height, expected_width):
         """Verify that SHEET_DIMENSIONS_2000 agrees with the computed dimensions."""
-        godla_per_scale = {
+        sheets_per_scale = {
             "1:10000": "7.160.15",
             "1:5000": "7.160.15.2",
             "1:2000": "7.160.15.10",
             "1:1000": "7.160.15.10.3",
             "1:500": "7.160.15.10.3.2",
         }
-        p = Parser2000(godla_per_scale[scale])
+        p = Parser2000(sheets_per_scale[scale])
         bbox = p.get_bbox()
 
         actual_height = bbox.max_y - bbox.min_y
@@ -337,7 +337,7 @@ class TestPL2000HierarchyConsistency:
                 if overlap_width > 0 and overlap_height > 0:
                     overlap_area = overlap_width * overlap_height
                     assert overlap_area == pytest.approx(0, abs=0.01), (
-                        f"Children {children[i].godlo} and {children[j].godlo} overlap"
+                        f"Children {children[i].sheet} and {children[j].sheet} overlap"
                     )
 
     def test_no_2k_children_overlap(self):
@@ -354,7 +354,7 @@ class TestPL2000HierarchyConsistency:
                 if overlap_width > 0 and overlap_height > 0:
                     overlap_area = overlap_width * overlap_height
                     assert overlap_area == pytest.approx(0, abs=0.01), (
-                        f"Children {children[i].godlo} and {children[j].godlo} overlap"
+                        f"Children {children[i].sheet} and {children[j].sheet} overlap"
                     )
 
     def test_no_1k_children_overlap(self):
@@ -371,7 +371,7 @@ class TestPL2000HierarchyConsistency:
                 if overlap_width > 0 and overlap_height > 0:
                     overlap_area = overlap_width * overlap_height
                     assert overlap_area == pytest.approx(0, abs=0.01), (
-                        f"Children {children[i].godlo} and {children[j].godlo} overlap"
+                        f"Children {children[i].sheet} and {children[j].sheet} overlap"
                     )
 
     def test_hierarchy_tiling_multiple_zones(self):
@@ -432,40 +432,40 @@ LIVE_TIMEOUT = 15
 LIVE_INDEX_ENDPOINTS = [
     pytest.param(
         GugikProvider(resolution="1m", vertical_crs="EVRF2007"),
-        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+        GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"],
         True,
         id="nmt-1m-evrf2007",
     ),
     pytest.param(
         GugikProvider(resolution="1m", vertical_crs="KRON86"),
-        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["KRON86"],
+        GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["KRON86"],
         False,
         id="nmt-1m-kron86",
     ),
     pytest.param(
         GugikProvider(resolution="5m"),
-        GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["5m"]["EVRF2007"],
+        GugikProvider.WMS_INDEX_ENDPOINTS["5m"]["EVRF2007"],
         True,
         id="nmt-5m-evrf2007",
     ),
     pytest.param(
         GugikNmptProvider(vertical_crs="EVRF2007"),
-        GugikNmptProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+        GugikNmptProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"],
         True,
         id="nmpt-1m-evrf2007",
     ),
     pytest.param(
         GugikOrtoProvider(),
-        GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT,
+        GugikOrtoProvider.WMS_INDEX_ENDPOINT,
         True,
         id="orto",
     ),
 ]
 
 
-def _center_query_bbox(godlo: str) -> tuple[float, float, str]:
+def _center_query_bbox(sheet: str) -> tuple[float, float, str]:
     """A mid-sheet point (EPSG:2180) and a GetFeatureInfo BBOX as in providers."""
-    bbox = SheetParser(godlo).get_bbox(crs="EPSG:2180")
+    bbox = SheetParser(sheet).get_bbox(crs="EPSG:2180")
     x = (bbox.min_x + bbox.max_x) / 2
     y = (bbox.min_y + bbox.max_y) / 2
     return x, y, f"{y - 10},{x - 10},{y + 10},{x + 10}"
@@ -513,7 +513,7 @@ class TestLiveGugikIndex:
         assert source["resolution_m"] == 5.0
         assert source["uklad"] == "PL-1992"
         assert source["layer"] in provider._layers(
-            GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["5m"]["EVRF2007"]
+            GugikProvider.WMS_INDEX_ENDPOINTS["5m"]["EVRF2007"]
         )
 
     def test_sea_sheet_is_no_coverage(self):
@@ -523,7 +523,7 @@ class TestLiveGugikIndex:
         with pytest.raises(NoCoverageError) as exc:
             provider._get_opendata_url("N-33-48-C-a-1-3", timeout=LIVE_TIMEOUT)
 
-        assert exc.value.godlo == "N-33-48-C-a-1-3"
+        assert exc.value.sheet == "N-33-48-C-a-1-3"
 
     def test_unknown_layer_is_service_exception_not_no_coverage(self):
         """Nonexistent layer: an OGC report = DownloadError, never no coverage."""
@@ -533,25 +533,25 @@ class TestLiveGugikIndex:
         with pytest.raises(DownloadError, match="OGC") as exc:
             query_skorowidz_layer(
                 provider._sessions.get(),
-                GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"],
+                GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"],
                 "SkorowidzeNMT1999NieIstnieje",
                 query_bbox=query_bbox,
-                godlo="N-33-48-C-a-3-4",
+                sheet="N-33-48-C-a-3-4",
                 timeout=LIVE_TIMEOUT,
             )
 
         assert not isinstance(exc.value, NoCoverageError)
 
     @pytest.mark.parametrize(
-        ("godlo", "zone"), LIVE_WMS_SHEETS, ids=[s[0] for s in LIVE_WMS_SHEETS]
+        ("sheet", "zone"), LIVE_WMS_SHEETS, ids=[s[0] for s in LIVE_WMS_SHEETS]
     )
-    def test_pl2000_center_query_returns_sheets_containing_the_point(self, godlo, zone):
+    def test_pl2000_center_query_returns_sheets_containing_the_point(self, sheet, zone):
         """PL-2000 geometry vs the GUGiK index: the sheet centre hits the 1 m NMT
         records, and the bbox of EVERY returned sheet code (PL-1992 or the proper
         PL-2000 zone) contains the query point."""
         provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
-        endpoint = GugikProvider.WMS_SKOROWIDZE_ENDPOINTS["1m"]["EVRF2007"]
-        x, y, query_bbox = _center_query_bbox(godlo)
+        endpoint = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
+        x, y, query_bbox = _center_query_bbox(sheet)
 
         records = []
         for layer in provider._layers(endpoint):
@@ -561,20 +561,20 @@ class TestLiveGugikIndex:
                     endpoint,
                     layer,
                     query_bbox=query_bbox,
-                    godlo=godlo,
+                    sheet=sheet,
                     timeout=LIVE_TIMEOUT,
                 )
             )
 
-        assert records, f"{godlo}: zaden rekord NMT 1 m w srodku arkusza"
+        assert records, f"{sheet}: zaden rekord NMT 1 m w srodku arkusza"
         for record in records:
-            sheet = SheetParser(record.godlo).get_bbox(crs="EPSG:2180")
-            assert sheet.min_x - 1 <= x <= sheet.max_x + 1, (godlo, record.godlo)
-            assert sheet.min_y - 1 <= y <= sheet.max_y + 1, (godlo, record.godlo)
-            assert record.uklad in {"1992", "2000"}, record
-            if record.uklad == "2000":
+            frame = SheetParser(record.sheet).get_bbox(crs="EPSG:2180")
+            assert frame.min_x - 1 <= x <= frame.max_x + 1, (sheet, record.sheet)
+            assert frame.min_y - 1 <= y <= frame.max_y + 1, (sheet, record.sheet)
+            assert record.system in {"1992", "2000"}, record
+            if record.system == "2000":
                 assert record.zone == zone, record
-                assert record.godlo.startswith(f"{zone}."), record
+                assert record.sheet.startswith(f"{zone}."), record
                 assert record.raw["ukladWspolrzednychPoziomych"] == (f"PL-2000:S{zone}")
 
 
@@ -593,8 +593,8 @@ class TestPL2000EdgeCases:
         sheets = find_sheets_2000_for_bbox(bbox)
 
         zones_found = set()
-        for godlo in sheets:
-            zone = int(godlo.split(".")[0])
+        for sheet in sheets:
+            zone = int(sheet.split(".")[0])
             zones_found.add(zone)
 
         assert 5 in zones_found, "Should find sheets in zone 5"
@@ -606,8 +606,8 @@ class TestPL2000EdgeCases:
         sheets = find_sheets_2000_for_bbox(bbox)
 
         zones_found = set()
-        for godlo in sheets:
-            zone = int(godlo.split(".")[0])
+        for sheet in sheets:
+            zone = int(sheet.split(".")[0])
             zones_found.add(zone)
 
         assert 6 in zones_found, "Should find sheets in zone 6"
@@ -619,23 +619,23 @@ class TestPL2000EdgeCases:
         sheets = find_sheets_2000_for_bbox(bbox)
 
         zones_found = set()
-        for godlo in sheets:
-            zone = int(godlo.split(".")[0])
+        for sheet in sheets:
+            zone = int(sheet.split(".")[0])
             zones_found.add(zone)
 
         assert 7 in zones_found, "Should find sheets in zone 7"
         assert 8 in zones_found, "Should find sheets in zone 8"
 
-    def test_round_trip_godlo_to_bbox_and_back(self):
+    def test_round_trip_sheet_to_bbox_and_back(self):
         """Round-trip: sheet code -> BBox -> find_sheets -> contains the original."""
-        test_godla = [
+        test_sheets = [
             "5.170.10",
             "6.179.12",
             "7.180.15",
             "8.175.8",
         ]
-        for godlo in test_godla:
-            p = Parser2000(godlo)
+        for sheet in test_sheets:
+            p = Parser2000(sheet)
             bbox = p.get_bbox()
 
             # Shrink bbox slightly inward to ensure we are inside the sheet
@@ -649,8 +649,8 @@ class TestPL2000EdgeCases:
             )
 
             sheets = find_sheets_2000_for_bbox(inner_bbox)
-            assert godlo in sheets, (
-                f"Round-trip failed: {godlo} not found in "
+            assert sheet in sheets, (
+                f"Round-trip failed: {sheet} not found in "
                 f"find_sheets_2000_for_bbox result {sheets}"
             )
 
@@ -718,8 +718,8 @@ class TestPL2000EdgeCases:
         sheets = find_sheets_2000_for_bbox(inner_bbox, target_scale="1:5000")
 
         # All sheets should be 1:5000 scale (4 segments dot-separated)
-        for godlo in sheets:
-            p_child = Parser2000(godlo)
+        for sheet in sheets:
+            p_child = Parser2000(sheet)
             assert p_child.scale == "1:5000"
 
         # Should find all 4 children of parent 6.179.12
@@ -744,8 +744,8 @@ class TestPL2000EdgeCases:
         sheets = find_sheets_2000_for_bbox(inner_bbox, target_scale="1:2000")
 
         # All sheets should be 1:2000 scale
-        for godlo in sheets:
-            p_child = Parser2000(godlo)
+        for sheet in sheets:
+            p_child = Parser2000(sheet)
             assert p_child.scale == "1:2000"
 
         # Should find all 25 children of parent 7.180.15
@@ -775,8 +775,8 @@ class TestPL2000EdgeCases:
     def test_round_trip_finer_scales(self):
         """Round-trip for finer scales: 1:5k and 1:2k."""
         # 1:5000 round-trip
-        godlo_5k = "6.179.12.3"
-        p5k = Parser2000(godlo_5k)
+        sheet_5k = "6.179.12.3"
+        p5k = Parser2000(sheet_5k)
         bbox_5k = p5k.get_bbox()
         epsilon = 1.0
         inner_5k = BBox(
@@ -787,11 +787,11 @@ class TestPL2000EdgeCases:
             crs=bbox_5k.crs,
         )
         sheets_5k = find_sheets_2000_for_bbox(inner_5k, target_scale="1:5000")
-        assert godlo_5k in sheets_5k
+        assert sheet_5k in sheets_5k
 
         # 1:2000 round-trip
-        godlo_2k = "7.180.15.13"
-        p2k = Parser2000(godlo_2k)
+        sheet_2k = "7.180.15.13"
+        p2k = Parser2000(sheet_2k)
         bbox_2k = p2k.get_bbox()
         inner_2k = BBox(
             min_x=bbox_2k.min_x + epsilon,
@@ -801,7 +801,7 @@ class TestPL2000EdgeCases:
             crs=bbox_2k.crs,
         )
         sheets_2k = find_sheets_2000_for_bbox(inner_2k, target_scale="1:2000")
-        assert godlo_2k in sheets_2k
+        assert sheet_2k in sheets_2k
 
     def test_bbox_in_epsg2180_finds_sheets(self):
         """A BBox in EPSG:2180 (PL-1992) is handled correctly."""

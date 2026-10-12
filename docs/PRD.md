@@ -152,15 +152,15 @@ path = manager_5m.download_sheet("N-34-130-D-d-2-4")
 ```bash
 kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
-kartograf download N-34-130-D-d-2-4
-kartograf download N-34-130-D              # godło grubsze -> arkusze 1:10000 (bez --scale)
-kartograf download 7.171.21 --scale 1:2000  # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
+kartograf download --sheet N-34-130-D-d-2-4
+kartograf download --sheet N-34-130-D              # godło grubsze -> arkusze 1:10000 (bez --scale)
+kartograf download --sheet 7.171.21 --scale 1:2000  # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
 kartograf download --bbox 771000,509000,772000,510000
 kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326
-kartograf download N-34-130-D --resolution 5m
-kartograf download N-34-130-D-d-2-4 --product nmpt
-kartograf download N-34-130-D-d-2-4 --product orto
-kartograf download N-34-130-D-d-2-4 --product laz
+kartograf download --sheet N-34-130-D --resolution 5m
+kartograf download --sheet N-34-130-D-d-2-4 --product nmpt
+kartograf download --sheet N-34-130-D-d-2-4 --product orto
+kartograf download --sheet N-34-130-D-d-2-4 --product laz
 kartograf download --bbox 771000,509000,772000,510000 --product orto
 kartograf download --geometry area.shp
 kartograf download --geometry area.gpkg --layer catchments
@@ -197,7 +197,7 @@ provider.download_bbox(bbox, Path("./area.tif"))
 
 #### CLI Commands
 ```bash
-kartograf download N-34-130-D-d-2-4 --product nmpt
+kartograf download --sheet N-34-130-D-d-2-4 --product nmpt
 kartograf download --bbox 771000,509000,772000,510000 --product nmpt
 ```
 
@@ -229,7 +229,7 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 
 #### CLI Commands
 ```bash
-kartograf download N-34-130-D-d-2-4 --product orto
+kartograf download --sheet N-34-130-D-d-2-4 --product orto
 kartograf download --bbox 771000,509000,772000,510000 --product orto
 ```
 
@@ -262,8 +262,8 @@ selection = provider.select_tiles(bbox, year=2024)  # LazTileSelection(tiles, su
 
 #### CLI Commands
 ```bash
-kartograf download N-34-130-D-d-2-4 --product laz
-kartograf download N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
+kartograf download --sheet N-34-130-D-d-2-4 --product laz
+kartograf download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
 kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
 kartograf download --geometry area.shp --product laz
@@ -313,7 +313,7 @@ lc.set_provider("bdot10k")
 lc.download(teryt="1465")
 
 # Pobieranie przez godło z jawną ścieżką pliku
-lc.download(godlo="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg"))
+lc.download(sheet="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg"))
 ```
 
 #### Warstwy (15 warstw — pobierany caly plik)
@@ -344,7 +344,7 @@ lc.download(godlo="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg
 #### CLI Commands
 ```bash
 kartograf landcover download --source bdot10k --teryt 1465
-kartograf landcover download --source bdot10k --godlo N-34-130-D
+kartograf landcover download --source bdot10k --sheet N-34-130-D
 kartograf landcover list-layers --source bdot10k
 ```
 
@@ -369,7 +369,7 @@ lc.set_provider("corine")
 
 # Pobieranie przez godło (rozszerzenie wymusza provider: .tif, .png dla WMS)
 lc.download(
-    godlo="N-34-130-D",
+    sheet="N-34-130-D",
     year=2018,
     output_path=Path("./data/corine_2018_N-34-130-D.tif"),
 )
@@ -399,7 +399,7 @@ ani tokenu. Bez credentials — podgląd PNG przez WMS (sidecar
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source corine --year 2018 --godlo N-34-130-D
+kartograf landcover download --source corine --year 2018 --sheet N-34-130-D
 kartograf landcover list-layers --source corine
 ```
 
@@ -425,7 +425,7 @@ lc.set_provider("soilgrids")
 # Pobieranie węgla organicznego (selekcja: godło albo bbox — TERYT
 # nie jest obsługiwany przez SoilGrids i kończy się NotImplementedError)
 lc.download(
-    godlo="N-34-130-D",
+    sheet="N-34-130-D",
     property="soc",
     depth="0-5cm",
     stat="mean",
@@ -434,7 +434,7 @@ lc.download(
 
 # Pobieranie zawartości gliny
 lc.download(
-    godlo="N-34-130-D",
+    sheet="N-34-130-D",
     property="clay",
     depth="15-30cm"
 )
@@ -463,8 +463,8 @@ mean, Q0.05, Q0.5, Q0.95, uncertainty
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source soilgrids --godlo N-34-130-D --property soc
-kartograf landcover download --source soilgrids --godlo N-34-130-D --property clay --depth 15-30cm
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property soc
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm
 kartograf landcover list-layers --source soilgrids
 ```
 
@@ -486,7 +486,7 @@ from pathlib import Path
 calc = HSGCalculator()
 
 # Oblicz HSG dla godła
-calc.calculate_hsg_by_godlo("N-34-130-D", Path("./hsg.tif"))
+calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"))
 
 # Statystyki HSG
 stats = calc.get_hsg_statistics(Path("./hsg.tif"))
@@ -515,10 +515,10 @@ Wynik dostaje sidecar `.meta.json` (`extra.derived = "hsg"`, warstwy
 
 #### CLI Commands
 ```bash
-kartograf soilgrids hsg --godlo N-34-130-D
-kartograf soilgrids hsg --godlo N-34-130-D --stats
-kartograf soilgrids hsg --godlo N-34-130-D --depth 15-30cm --output /tmp/hsg.tif
-kartograf soilgrids hsg --godlo N-34-130-D --keep-intermediate
+kartograf soilgrids hsg --sheet N-34-130-D
+kartograf soilgrids hsg --sheet N-34-130-D --stats
+kartograf soilgrids hsg --sheet N-34-130-D --depth 15-30cm --output /tmp/hsg.tif
+kartograf soilgrids hsg --sheet N-34-130-D --keep-intermediate
 kartograf soilgrids hsg --bbox 450000,550000,460000,560000
 kartograf soilgrids hsg --geometry area.gpkg --layer catchments
 ```
@@ -574,9 +574,9 @@ provider_evrf.download_bbox(bbox, Path("./area.tif"))      # wycinek exportImage
 
 #### CLI Commands
 ```bash
-kartograf download 302_5550 --country cz                       # DMR 5G (TM33), 2m, Bpv
-kartograf download CTES96                                      # DMR 4G (SM5, tylko 5m), kraj z godła
-kartograf download 302_5550 --country cz --vertical-crs EVRF2007
+kartograf download --sheet 302_5550 --country cz                       # DMR 5G (TM33), 2m, Bpv
+kartograf download --sheet CTES96                                      # DMR 4G (SM5, tylko 5m), kraj z godła
+kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007
 kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto
 kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180
 kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m
@@ -695,10 +695,10 @@ manager.last_result.without_full   # arkusze bez pełnego lotu w zakresie
 
 #### CLI Commands
 ```bash
-kartograf download N-34-130-D-d-2-4 --campaigns all
-kartograf download N-34-130-D-d-2-4 --min-year 2024
+kartograf download --sheet N-34-130-D-d-2-4 --campaigns all
+kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024
 kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
-kartograf download N-34-139-C-a-3-1 --full-sheet
+kartograf download --sheet N-34-139-C-a-3-1 --full-sheet
 ```
 
 ---
@@ -774,7 +774,7 @@ transform/ (przypięte transformacje CRS), cache/ (MetadataCache, SQLite).
 ┌─────────────────────────────────────────────────────────────┐
 │                    HSGCalculator                            │
 ├─────────────────────────────────────────────────────────────┤
-│  calculate_hsg_by_godlo()                                   │
+│  calculate_hsg_by_sheet()                                   │
 │  calculate_hsg_by_bbox()                                    │
 │  get_hsg_statistics()                                       │
 └──────────────────────────┬──────────────────────────────────┘
@@ -975,7 +975,8 @@ opisują wynik, nie rozwiązanie.
 - [ ] **GUI webowe:** lokalny manager danych — przeglądarka magazynu
       i manifestów projektów z informacją o nowszych danych; publikacja
       po przetestowaniu lokalnym.
-- [ ] **Wyłącznie angielskie identyfikatory** w API, CLI i sidecarze (ADR-031).
+- [x] **Wyłącznie angielskie identyfikatory** w API, CLI i sidecarze (ADR-031;
+      API/CLI w 0.8.0, errata 1).
 
 ### Później (poza v1.0.0)
 - [ ] PostGIS integration
