@@ -19,7 +19,7 @@ from typing import Literal, Protocol, cast
 
 import requests
 
-from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.campaigns import (
     CampaignRef,
     campaign_extension,
@@ -425,7 +425,6 @@ class DownloadManager:
         `download_sheets` call and set when the call completes - also for a
         single sheet downloaded directly via `download_sheet` (a one-element
         `DownloadResult`); a call that raises leaves it None.
-        `download_bbox` does not touch it.
     last_sheet : SheetFetch or None
         Result of a single sheet downloaded directly by `download_sheet`
         (1:10000 or PL-2000). Reset (None) at the start of every
@@ -445,12 +444,7 @@ class DownloadManager:
     >>> # Download hierarchy (ASC)
     >>> manager.download_hierarchy("N-34-130-D", "1:10000")
     >>>
-    >>> # Download by bounding box (GeoTIFF float32, WCS) - only 1m
-    >>> from kartograf import BBox
-    >>> bbox = BBox(
-    ...     min_x=450000, min_y=550000, max_x=451000, max_y=551000, crs="EPSG:2180"
-    ... )
-    >>> manager.download_bbox(bbox, "area.tif")
+    >>> # A bbox cutout lives in the versioned store too: download_pl_cutout()
     >>>
     >>> # Download in legacy KRON86 vertical CRS
     >>> manager = DownloadManager("./data", create_nmt_provider("KRON86", "1m"))
@@ -1785,74 +1779,6 @@ class DownloadManager:
             f"{len(result.skipped)} skipped, {len(result.failed)} failed (of {total})"
         )
         return downloaded_paths
-
-    # =========================================================================
-    # Download by bbox → GeoTIFF
-    # =========================================================================
-
-    def download_bbox(
-        self,
-        bbox: BBox,
-        filename: str,
-        format: str = "GTiff",
-    ) -> Path:
-        """
-        Download NMT data for a bounding box as GeoTIFF.
-
-        Use this method when you need data for an arbitrary area
-        (not aligned to standard map sheets).
-
-        Note: WCS download is only available for 1m resolution; for 5m use
-        download_sheet() with a sheet code instead. The result is float32
-        heights with no nodata on the 1 m sheet grid (see
-        ``GugikProvider.download_bbox``).
-
-        Parameters
-        ----------
-        bbox : BBox
-            Bounding box in EPSG:2180 coordinates
-        filename : str
-            Output filename (will be placed in output_dir)
-        format : str, optional
-            Output format: "GTiff", "PNG", or "JPEG" (default: "GTiff")
-
-        Returns
-        -------
-        Path
-            Path to the downloaded file
-
-        Raises
-        ------
-        DownloadError
-            If download fails
-        ValueError
-            If format is not supported, bbox CRS is wrong, or resolution is 5m
-        ValidationError
-            If the provider refuses the request before going out to the
-            network (a vertical CRS in ``WITHDRAWN_WCS_VERTICAL_CRS``; none today)
-
-        Examples
-        --------
-        >>> manager = DownloadManager(
-        ...     "./data", create_nmt_provider("EVRF2007", "1m")
-        ... )
-        >>> bbox = BBox(
-        ...     min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180"
-        ... )
-        >>> path = manager.download_bbox(bbox, "my_area.tif")
-        """
-        output_path = self._storage.output_dir / filename
-
-        logger.info(f"Downloading bbox to {output_path}...")
-        result = self._provider.download_bbox(bbox, output_path, format=format)
-        self._write_sidecar(
-            result,
-            {
-                "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
-                "bbox_crs": bbox.crs,
-            },
-        )
-        return result
 
     # =========================================================================
     # Utility methods
