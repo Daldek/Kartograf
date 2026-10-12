@@ -254,7 +254,7 @@ def build_metadata(
 
 def write_sidecar(
     data_path: Path,
-    meta: ResultMetadata,
+    meta: ResultMetadata | dict,
     *,
     atomic: bool = False,
     exclusive: bool = False,
@@ -273,10 +273,14 @@ def write_sidecar(
     ``exclusive=True`` (version sidecar, D18/D21): as ``atomic`` but published
     with ``os.link`` - never replaces an existing sidecar; ``FileExistsError``
     means another writer published it first.
+
+    ``meta`` may be a plain ``dict`` (bare version sidecar of a provider
+    without a descriptor, ``emit_sidecar``).
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
+    fields = meta if isinstance(meta, dict) else asdict(meta)
     if atomic or exclusive:
-        payload = json.dumps(asdict(meta), ensure_ascii=False, indent=2)
+        payload = json.dumps(fields, ensure_ascii=False, indent=2)
         tmp = sidecar_path.with_name(
             f"{sidecar_path.name}.{os.getpid()}_{threading.get_ident()}.tmp"
         )
@@ -293,7 +297,7 @@ def write_sidecar(
             tmp.unlink(missing_ok=True)
         return sidecar_path
     try:
-        payload = json.dumps(asdict(meta), ensure_ascii=False, indent=2)
+        payload = json.dumps(fields, ensure_ascii=False, indent=2)
         sidecar_path.write_text(payload + "\n", encoding="utf-8")
     except OSError as e:
         logger.warning(f"Nie udalo sie zapisac sidecara {sidecar_path}: {e}")
@@ -340,7 +344,10 @@ def emit_sidecar(
     ``exclusive=True`` (version sidecar, implies ``required``): published with
     ``os.link`` (``write_sidecar(exclusive=True)``); ``FileExistsError``
     PROPAGATES unchanged - another writer published the sidecar first.
-    ``digest``/``version`` as in ``build_metadata``.
+    ``digest``/``version`` as in ``build_metadata``. A version must always
+    have a sidecar, so without a descriptor a BARE one is written: only
+    ``request``, ``extra``, ``sha256``, ``size_bytes``, ``downloaded_at``
+    and ``kartograf_version`` (a stub or foreign provider; plan 1/3 decision 7).
 
     Returns
     -------
@@ -356,7 +363,7 @@ def emit_sidecar(
     """
     sidecar_path = data_path.parent / f"{data_path.name}.meta.json"
     required = required or exclusive
-    if not isinstance(descriptor_key, str):
+    if not isinstance(descriptor_key, str) and not exclusive:
         if required:
             raise DownloadError(
                 f"Nie udalo sie zapisac obowiazkowego sidecara {sidecar_path}: "
@@ -364,6 +371,19 @@ def emit_sidecar(
             )
         return None
     try:
+        if not isinstance(descriptor_key, str):
+            sha256, size_bytes = (
+                digest if digest is not None else file_digest(data_path)
+            )
+            bare = {
+                "request": request,
+                "extra": {**(extra or {}), **({"version": version} if version else {})},
+                "sha256": sha256,
+                "size_bytes": size_bytes,
+                "downloaded_at": datetime.now(UTC).isoformat(timespec="seconds"),
+                "kartograf_version": build_version(),
+            }
+            return write_sidecar(data_path, bare, exclusive=True)
         from kartograf.sources.registry import get_source
 
         transform = {

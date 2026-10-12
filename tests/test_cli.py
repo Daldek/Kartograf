@@ -2472,7 +2472,11 @@ class TestSheetListExitCode:
                     *extra,
                 ]
             )
-        files = sorted(p.name for p in tmp_path.rglob("*.asc"))
+        files = sorted(
+            p.name
+            for p in tmp_path.rglob("*.asc")
+            if "versions" not in p.relative_to(tmp_path).parts
+        )
         return rc, provider, files
 
     @pytest.mark.parametrize("workers", ["1", "2"])
@@ -8491,7 +8495,11 @@ class TestPartialSheetWarning:
         assert rc == 0
         err = capsys.readouterr().err
         assert "Warning:" in err and "niepelna" in err and "N-34-130-D-d-2-1" in err
-        (sidecar,) = tmp_path.rglob("*.meta.json")
+        (sidecar,) = (
+            p
+            for p in tmp_path.rglob("*.meta.json")
+            if "versions" not in p.relative_to(tmp_path).parts
+        )
         meta = json.loads(sidecar.read_text("utf-8"))
         assert meta["extra"]["source"]["full_sheet"] is False
 
@@ -8685,7 +8693,11 @@ class TestUnreadableMetadataCache:
             ),
         ):
             rc = main([*argv, "-o", str(out)])
-        files = sorted(p.name for p in out.rglob("*.asc"))
+        files = sorted(
+            p.name
+            for p in out.rglob("*.asc")
+            if "versions" not in p.relative_to(out).parts
+        )
         return rc, providers, files
 
     @staticmethod
@@ -9379,7 +9391,7 @@ class TestCampaignOptions:
         mock_find.return_value = [sheet]
         manager = _sheet_list_manager(tmp_path / f"{sheet}.asc")
         manager.last_result.link_outside_range = {
-            sheet: tmp_path / "kampanie" / "2025-10-21_84183" / f"{sheet}.asc"
+            sheet: tmp_path / "versions" / "2025-10-21_84183_3fa91c2e" / f"{sheet}.asc"
         }
         mock_manager_class.return_value = manager
         rc = main(
@@ -10195,8 +10207,8 @@ class TestCampaignOptions:
             "N-34-130-D-d-2-4",
             target,
             skipped=False,
-            downloaded=(tmp_path / "kampanie" / "new.asc",),
-            link="hardlink",
+            downloaded=(tmp_path / "versions" / "new.asc",),
+            status="new",
         )
         mock_manager_class.return_value = manager
 
@@ -10225,82 +10237,6 @@ class TestCampaignOptions:
         out = capsys.readouterr().out
         assert f"Downloaded to {target}" in out
         assert "Skipped" not in out
-
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_copy_fallback_warning_in_list_mode(
-        self, mock_manager_class, mock_find, capsys, tmp_path
-    ):
-        mock_find.return_value = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
-        manager = _sheet_list_manager(tmp_path / "a.asc", tmp_path / "b.asc")
-        manager.last_result.copied = ["N-34-130-D-d-2-4", "N-34-130-D-d-2-3"]
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                *_PL_BBOX_2180,
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert (
-            "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
-            "standardowa jest KOPIA najnowszej kampanii dla 2 arkuszy "
-            "(N-34-130-D-d-2-4, N-34-130-D-d-2-3) (extra.link=copy)"
-        ) in err
-
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_copy_fallback_warning_single_sheet(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        from kartograf.download.manager import SheetFetch
-
-        path = tmp_path / "a.asc"
-        manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4", path, skipped=False, link="copy"
-        )
-        mock_manager_class.return_value = manager
-
-        assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                    "-q",
-                ]
-            )
-            == 0
-        )
-        assert "(extra.link=copy)" in capsys.readouterr().err
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -10722,8 +10658,8 @@ class TestCampaignOptions:
             "N-34-130-D-d-2-4",
             path,
             skipped=True,
-            reused=(tmp_path / "kampanie" / "a.asc",),
-            link="hardlink",
+            reused=(tmp_path / "versions" / "a.asc",),
+            status="local",
             unverified="pobranie nieudane po 3 probach: HTTP 503",
         )
         mock_manager_class.return_value = manager
@@ -10896,7 +10832,7 @@ class TestCampaignOptions:
             skipped=False,
             downloaded=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
             reused=(tmp_path / "k3" / "a.asc",),
-            link="hardlink",
+            status="new",
         )
         mock_manager_class.return_value = manager
 
@@ -10943,7 +10879,7 @@ class TestCampaignOptions:
             path,
             skipped=True,
             reused=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            link="hardlink",
+            status="local",
         )
         mock_manager_class.return_value = manager
 

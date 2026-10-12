@@ -1321,8 +1321,6 @@ def cmd_download(args: argparse.Namespace) -> int:
                             )
                         else:
                             print(f"Downloaded to {where}")
-                    if sheet is not None and sheet.link == "copy":
-                        _warn_copied_links([args.sheet])
                     if sheet is not None and sheet.unverified is not None:
                         print(
                             f"Warning: {args.sheet}: skorowidz GUGiK niedostepny "
@@ -1404,17 +1402,6 @@ def _download_sheet_list(
     return list(paths), _last_result(manager)
 
 
-def _warn_copied_links(sheets: Sequence[str]) -> None:
-    """``Warning:`` about the standard path being a COPY of a campaign (ADR-030)."""
-    shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
-    print(
-        "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
-        f"standardowa jest KOPIA najnowszej kampanii dla {len(sheets)} arkuszy "
-        f"({shown}) (extra.link=copy)",
-        file=sys.stderr,
-    )
-
-
 MAX_HINT_LINES = 5
 
 
@@ -1494,8 +1481,7 @@ def _finish_pl_sheets(
     Sheets from an incomplete newest campaign (sidecar
     ``extra.source.full_sheet: false``) -> ``Warning:`` (E13, ADR-033: which of
     them have a ``full_sheet/`` link), code unchanged.
-    Standard path as a campaign COPY (``result.copied``) ->
-    ``Warning:``, code unchanged. ``all_campaigns=True`` or ``full_sheet``: the
+    ``all_campaigns=True`` or ``full_sheet``: the
     summary counts campaign files (``result.campaign_files``), not sheets.
     ``newest`` sheets
     from a local campaign on an index failure
@@ -1508,8 +1494,6 @@ def _finish_pl_sheets(
     )
     _print_better_coverage(result, paths)
     _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
-    if result.copied:
-        _warn_copied_links(result.copied)
     if result.unverified:
         _warn_unverified(result.unverified)
     if not quiet:
@@ -1666,11 +1650,12 @@ def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
 
 
 def _campaign_dirname(path: Path) -> str:
-    """``<date>_<id>`` of a ``kampanie/<date>_<id>/...`` path; else the file name."""
-    parts = Path(path).parts
-    if "kampanie" in parts and parts.index("kampanie") + 1 < len(parts):
-        return parts[parts.index("kampanie") + 1]
-    return Path(path).name
+    """``<date>_<id>`` label of a version file ``<label>_<sha8>/<file>``; else
+    the file name."""
+    path = Path(path)
+    if "versions" in path.parts and "_" in path.parent.name:
+        return path.parent.name.rsplit("_", 1)[0]
+    return path.name
 
 
 def _print_link_outside_range(

@@ -1006,85 +1006,57 @@ class TestStorageForProvider:
         assert self._segment(storage, tmp_path) == ("nmt", "pl_1992_1m_kron86")
 
 
-# --- ADR-030: campaign paths ---
-from types import SimpleNamespace  # noqa: E402
-
-from kartograf.download.campaigns import CampaignRef  # noqa: E402
+# --- spec 3: version store paths ---
+VERSION_DIR = "2025-04-27_83233_3fa91c2e"
 
 
-def _rec(
-    url="https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/83233_1744736_N-34-139-C-a-3-1.asc",
-):
-    return SimpleNamespace(
-        url=url,
-        sheet="N-34-139-C-a-3-1",
-        aktualnosc="2025-04-27",
-        dt_pzgik="2025-11-17",
-        full_sheet=True,
-        raw={"format": "ARC/INFO ASCII GRID"},
-    )
-
-
-REF = CampaignRef.from_record(_rec())
-
-
-class TestCampaignPaths:
-    def test_campaign_path_layout_adr030(self, tmp_path):
-        ref = CampaignRef.from_record(_rec())
-        path = FileStorage(
-            tmp_path, resolution="1m", vertical_crs="EVRF2007"
-        ).get_campaign_path("N-34-139-C-a-3-1", ref, ".asc")
-        assert path == (
-            tmp_path
-            / "nmt/pl_1992_1m_evrf2007/kampanie/2025-04-27_83233"
-            / "N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc"
+class TestVersionPaths:
+    def test_versions_root_mirrors_hierarchy(self, tmp_path):
+        st = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        g = "N-34-139-C-a-3-1"
+        assert st.get_versions_root(g) == (
+            tmp_path / "nmt/pl_1992_1m_evrf2007/versions/N-34/139/C/a/3/1"
+        )
+        assert st.get_versions_base(g) == tmp_path / "nmt/pl_1992_1m_evrf2007/versions"
+        assert st.get_versions_root("M-33-036-A-a-1-1") == st.get_versions_root(
+            "M-33-36-A-a-1-1"
         )
 
-    def test_campaign_path_keeps_orto_variant_segment(self, tmp_path):
-        st = FileStorage(
+    def test_versions_root_keeps_orto_variant_and_pl2000_segment(self, tmp_path):
+        orto = FileStorage(
             tmp_path,
             product="orto",
             variant="cir",
             resolution="1m",
             vertical_crs="EVRF2007",
         )
-        path = st.get_campaign_path("M-34-90-C-b-4-4", REF, ".tif")
-        assert "orto/pl_1992_cir/kampanie/" in path.as_posix()
-
-    def test_campaign_path_pl2000(self, tmp_path):
-        p = FileStorage(
-            tmp_path, resolution="1m", vertical_crs="EVRF2007"
-        ).get_campaign_path("6.129.30.13.4", REF, ".asc")
-        assert p.relative_to(tmp_path).parts[:3] == (
-            "nmt",
-            "pl_2000_1m_evrf2007",
-            "kampanie",
+        assert "orto/pl_1992_cir/versions/" in (
+            orto.get_versions_root("M-34-90-C-b-4-4").as_posix()
         )
+        nmt = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+        assert nmt.get_versions_root("6.129.30.13.4").relative_to(tmp_path).parts[
+            :3
+        ] == ("nmt", "pl_2000_1m_evrf2007", "versions")
 
-    def test_list_files_excludes_campaigns(self, tmp_path):
+    def test_list_files_standard_paths_or_versions_only(self, tmp_path):
         st = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        camp = st.get_campaign_path("N-34-139-C-a-3-1", REF, ".asc")
-        camp.parent.mkdir(parents=True)
-        camp.write_text("x")
-        std = st.get_path("N-34-139-C-a-3-1", ".asc")
-        std.parent.mkdir(parents=True)
-        os.link(camp, std)
+        g = "N-34-139-C-a-3-1"
+        version = st.get_versions_root(g) / VERSION_DIR / f"{g}.asc"
+        staged = st.get_versions_base(g) / ".incoming" / "h_1_ab" / f"{g}.asc"
+        legacy = st.get_versions_base(g).parent / "kampanie" / "x" / f"{g}.asc"
+        std = st.get_path(g, ".asc")
+        full = st.get_full_sheet_path(g, ".asc")
+        for p in (version, staged, legacy, std, full):
+            p.parent.mkdir(parents=True)
+            p.write_text("x")
         assert st.list_files("**/*.asc") == [std]
-        assert st.list_files("**/*.asc", campaigns=True) == [camp]
+        assert st.list_files("**/*.asc", versions=True) == [version]
 
-    def test_delete_hardlink_and_sidecar_keeps_campaign_file(self, tmp_path):
+    def test_has_legacy_campaigns(self, tmp_path):
         st = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        camp = st.get_campaign_path("N-34-139-C-a-3-1", REF, ".asc")
-        camp.parent.mkdir(parents=True)
-        camp.write_text("x")
-        link = st.get_path("N-34-139-C-a-3-1", ".asc")
-        link.parent.mkdir(parents=True)
-        os.link(camp, link)
-        sidecar = link.with_name(link.name + ".meta.json")
-        sidecar.write_text("{}")
-        assert st.delete("N-34-139-C-a-3-1", ".asc") is True
-        assert not link.exists() and not sidecar.exists()
-        assert camp.read_text() == "x" and camp.stat().st_nlink == 1
+        assert st.has_legacy_campaigns() is False
+        (tmp_path / "nmt/pl_2000_1m_evrf2007/kampanie").mkdir(parents=True)
+        assert st.has_legacy_campaigns() is True
 
     def test_full_sheet_path_mirrors_standard_hierarchy(self, tmp_path):
         st = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
@@ -1106,36 +1078,24 @@ class TestCampaignPaths:
             "full_sheet",
         )
 
-    def test_list_files_excludes_full_sheet_tree(self, tmp_path):
+    def test_delete_removes_standard_and_full_sheet_links_keeps_version(self, tmp_path):
         st = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
         g = "N-34-139-C-a-3-1"
-        camp = st.get_campaign_path(g, REF, ".asc")
-        std = st.get_path(g, ".asc")
-        full = st.get_full_sheet_path(g, ".asc")
-        for p in (camp, std, full):
-            p.parent.mkdir(parents=True)
-            p.write_text("x")
-        assert st.list_files("**/*.asc") == [std]
-        assert st.list_files("**/*.asc", campaigns=True) == [camp]
-
-    def test_delete_removes_standard_and_full_sheet_links(self, tmp_path):
-        st = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        g = "N-34-139-C-a-3-1"
-        camp = st.get_campaign_path(g, REF, ".asc")
-        camp.parent.mkdir(parents=True)
-        camp.write_text("x")
+        version = st.get_versions_root(g) / VERSION_DIR / f"{g}.asc"
+        version.parent.mkdir(parents=True)
+        version.write_text("x")
         links = [st.get_path(g, ".asc"), st.get_full_sheet_path(g, ".asc")]
         for link in links:
             link.parent.mkdir(parents=True)
-            os.link(camp, link)
+            os.link(version, link)
             link.with_name(link.name + ".meta.json").write_text("{}")
         assert st.delete(g, ".asc") is True
         for link in links:
             assert not link.exists()
             assert not link.with_name(link.name + ".meta.json").exists()
-        assert camp.read_text() == "x" and camp.stat().st_nlink == 1
+        assert version.read_text() == "x" and version.stat().st_nlink == 1
         # only the full_sheet/ link left: still a deletion
-        os.link(camp, links[1])
+        os.link(version, links[1])
         assert st.delete(g, ".asc") is True
         assert not links[1].exists()
         assert st.delete(g, ".asc") is False

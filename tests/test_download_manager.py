@@ -277,21 +277,19 @@ class TestDownloadManagerDownloadSheet:
         assert result.exists()
 
     def test_download_sheet_skip_existing(self, tmp_path, mock_provider):
-        """Test of skipping an existing file."""
+        """A local version is used without a download (skip_existing)."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
+        first = manager.download_sheet("N-34-130-D-d-2-4")
 
-        # Create existing ASC file
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        existing_path = storage.get_path("N-34-130-D-d-2-4", ".asc")
-        existing_path.parent.mkdir(parents=True, exist_ok=True)
-        existing_path.write_bytes(b"existing data")
+        def must_not_download(sheet, path, timeout=30):
+            raise AssertionError("download")
 
+        mock_provider.download = must_not_download
         result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=True)
 
-        # Should return existing path without downloading
-        assert isinstance(result, Path)
-        assert result.exists()
-        assert result.read_bytes() == b"existing data"
+        assert result == first
+        assert result.read_bytes() == b"ASC data"
+        assert manager.last_sheet.status == "local"
 
     def test_download_sheet_overwrite_existing(self, tmp_path, mock_provider):
         """Test of overwriting an existing file."""
@@ -407,7 +405,7 @@ class TestLastResultSingleSheet:
         result = manager.last_result
         assert result.succeeded == [path]
         assert result.skipped == [] and result.failed == []
-        assert result.campaign_files == {} and result.copied == []
+        assert result.campaign_files == {} and result.new == ["N-34-130-D-d-1-1"]
 
 
 class TestDownloadManagerDownloadHierarchy:
@@ -454,16 +452,9 @@ class TestDownloadManagerDownloadHierarchy:
         assert len(progress_calls) == 8  # 4 sheets × 2 calls each
 
     def test_download_hierarchy_skip_existing(self, tmp_path, mock_provider):
-        """Test of skipping existing files in the hierarchy."""
+        """Test of skipping sheets with a local version in the hierarchy."""
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
-
-        # Pre-create some ASC files
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        for sheet in ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]:
-            path = storage.get_path(sheet, ".asc")
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"existing")
-
+        manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
         progress_calls = []
 
         def on_progress(p):
@@ -652,15 +643,14 @@ class TestDownloadManagerDownloadSheets:
         assert manager.last_result.total == 4
 
     def test_skip_existing(self, tmp_path, provider):
-        existing = FileStorage(
-            tmp_path, resolution="1m", vertical_crs="EVRF2007"
-        ).get_path("N-34-130-D-d-2-1", ".asc")
-        existing.parent.mkdir(parents=True, exist_ok=True)
-        existing.write_bytes(b"old")
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager.download_sheets(["N-34-130-D-d-2-1"])
+        provider.calls.clear()
         manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
         assert provider.calls == ["N-34-130-D-d-2-2"]
         assert manager.last_result.skipped == ["N-34-130-D-d-2-1"]
+        assert manager.last_result.local == ["N-34-130-D-d-2-1"]
+        assert manager.last_result.new == ["N-34-130-D-d-2-2"]
 
     def test_invalid_sheet_raises_before_any_download(self, tmp_path, provider):
         from kartograf.exceptions import ParseError
@@ -1094,11 +1084,9 @@ class TestSidecarWritten:
         assert payload["size_bytes"] == len(data)
 
     @pytest.mark.parametrize("mode", ["sheet", "list_seq", "list_parallel"])
-    def test_every_mode_returns_provider_path(self, tmp_path, mode):
-        """D10: one "download sheet" content - the path and sidecar are the file the
-        provider RETURNED. Previously ``download_sheet`` returned (and described
-        with a sidecar) the manager's target path, while the list mode used the
-        provider result."""
+    def test_every_mode_returns_standard_link_to_provider_file(self, tmp_path, mode):
+        """D10 + spec 3: whatever path the provider RETURNS becomes the version;
+        every mode returns the standard path linked to it."""
         provider = self._mock_provider()
         written = self._mock_provider().download.side_effect
 
@@ -1113,36 +1101,52 @@ class TestSidecarWritten:
         else:
             workers = 1 if mode == "list_seq" else 3
             (path,) = manager.download_sheets([sheet], max_workers=workers)
-        assert path.name == f"{sheet}_v2.asc"
+        assert path == manager.storage.get_path(sheet, ".asc")
+        assert "1 2" in path.read_text()
         assert (path.parent / f"{path.name}.meta.json").exists()
 
-    def test_skip_existing_writes_no_sidecar(self, tmp_path):
-        provider = self._mock_provider()
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        result = manager.download_sheet("N-34-130-D-d-2-4")
-        sidecar = result.parent / f"{result.name}.meta.json"
-        sidecar.unlink()
-        manager.download_sheet("N-34-130-D-d-2-4")  # skip_existing=True
-        assert not sidecar.exists()
+    def test_rerun_never_rewrites_version_sidecar(self, tmp_path):
+        """D12: the version sidecar is written once."""
+        manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
+        sheet = "N-34-130-D-d-2-4"
+        manager.download_sheet(sheet)
+        (version,) = manager.storage.list_files("**/*.asc", versions=True)
+        sidecar = version.parent / f"{version.name}.meta.json"
+        before = sidecar.read_bytes()
+        manager.download_sheet(sheet)
+        manager.download_sheet(sheet, skip_existing=False)
+        assert sidecar.read_bytes() == before
 
-    def test_sidecar_failure_does_not_break_download(self, tmp_path):
+    def test_sidecar_failure_fails_sheet_without_version(self, tmp_path):
         from unittest.mock import patch
 
         manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
-        with patch(
-            "kartograf.sources.sidecar.write_sidecar",
-            side_effect=OSError("dysk pelny"),
+        with (
+            patch(
+                "kartograf.sources.sidecar.write_sidecar",
+                side_effect=OSError("dysk pelny"),
+            ),
+            pytest.raises(DownloadError, match="sidecara"),
         ):
-            result = manager.download_sheet("N-34-130-D-d-2-4")
-        assert result.exists()
+            manager.download_sheet("N-34-130-D-d-2-4")
+        assert manager.storage.list_files("**/*.asc") == []
+        assert manager.storage.list_files("**/*.asc", versions=True) == []
 
-    def test_mock_provider_without_key_is_skipped(self, tmp_path):
+    def test_provider_without_descriptor_gets_bare_version_sidecar(self, tmp_path):
+        import json
+
         provider = self._mock_provider()
-        del provider.descriptor_key  # Mock attribute, not str -> the guard skips
+        del provider.descriptor_key  # Mock attribute, not str
         provider.descriptor_key = object()
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         result = manager.download_sheet("N-34-130-D-d-2-4")
-        assert not (result.parent / f"{result.name}.meta.json").exists()
+        payload = json.loads(
+            (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
+        )
+        assert "dataset" not in payload
+        assert payload["request"] == {"sheet": "N-34-130-D-d-2-4"}
+        assert payload["extra"]["version"]["label_source"] == "downloaded"
+        assert len(payload["sha256"]) == 64
 
     def test_sidecar_extra_merged_into_extra(self, tmp_path):
         import json
@@ -1163,7 +1167,7 @@ class TestSidecarWritten:
         )
         assert payload["extra"]["parent_request"] == parent
 
-    def test_sidecar_extra_none_keeps_extra_empty(self, tmp_path):
+    def test_sidecar_extra_none_keeps_only_version_and_link(self, tmp_path):
         import json
 
         manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
@@ -1171,7 +1175,7 @@ class TestSidecarWritten:
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
-        assert payload["extra"] == {}
+        assert set(payload["extra"]) == {"version", "link", "link_target"}
 
     def test_sidecar_carries_provider_source(self, tmp_path):
         """D5: ``extra.source`` = sheet origin per ``provider.source_info``."""
@@ -1216,85 +1220,29 @@ class TestSidecarWritten:
         assert "source" not in payload["extra"]
 
         provider.source_info = lambda sheet: None
-        result.unlink()
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4", skip_existing=False)
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
-        assert payload["extra"] == {}
+        assert "source" not in payload["extra"]
 
 
-class TestReuseNotedInSidecar:
-    """N4: a SKIPPED sheet (already in cache) gets ``extra.parent_requests``."""
+def test_reuse_keeps_parent_request_of_the_creating_request(tmp_path):
+    """D12: ``extra.parent_requests`` is gone; a later request reusing the
+    version changes no sidecar."""
+    first = {"bbox": [1.0, 2.0, 3.0, 4.0], "bbox_crs": "EPSG:2180"}
+    second = {"bbox": [5.0, 6.0, 7.0, 8.0], "bbox_crs": "EPSG:2180"}
 
-    _FIRST = {
-        "bbox": [1.0, 2.0, 3.0, 4.0],
-        "bbox_crs": "EPSG:2180",
-        "countries": ["PL"],
-    }
-    _SECOND = {
-        "bbox": [5.0, 6.0, 7.0, 8.0],
-        "bbox_crs": "EPSG:2180",
-        "countries": ["PL"],
-    }
-
-    @staticmethod
-    def _manager(tmp_path, request):
+    def manager(request):
         return DownloadManager(
             output_dir=tmp_path,
             provider=TestSidecarWritten()._mock_provider(),
             sidecar_extra={"parent_request": request},
         )
 
-    @staticmethod
-    def _payload(path):
-        import json
-
-        return json.loads((path.parent / f"{path.name}.meta.json").read_text("utf-8"))
-
-    @pytest.mark.parametrize("workers", [1, 3])
-    def test_skipped_sheet_gets_reusing_request_appended(self, tmp_path, workers):
-        """The first request downloads (``parent_request``), later ones reuse
-        (``parent_requests``: a list, without duplicates, also without the
-        downloading request). ``downloaded_at`` and the rest of the sidecar
-        unchanged."""
-        first = self._manager(tmp_path, self._FIRST)
-        (path,) = first.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)
-        before = self._payload(path)
-
-        second = self._manager(tmp_path, self._SECOND)
-        second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)
-        second.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # duplicate
-        first.download_sheets(["N-34-130-D-d-2-4"], max_workers=workers)  # = parent
-
-        after = self._payload(path)
-        assert after["extra"]["parent_request"] == self._FIRST
-        assert after["extra"]["parent_requests"] == [self._SECOND]
-        assert after["downloaded_at"] == before["downloaded_at"]
-        assert {k: v for k, v in after.items() if k != "extra"} == {
-            k: v for k, v in before.items() if k != "extra"
-        }
-
-    def test_download_sheet_skip_path_also_notes_reuse(self, tmp_path):
-        first = self._manager(tmp_path, self._FIRST)
-        path = first.download_sheet("N-34-130-D-d-2-4")
-        self._manager(tmp_path, self._SECOND).download_sheet("N-34-130-D-d-2-4")
-        assert self._payload(path)["extra"]["parent_requests"] == [self._SECOND]
-
-    def test_no_sidecar_means_nothing_is_invented(self, tmp_path):
-        """Pre-0.7.0 cache (no sidecar): no sidecar is created."""
-        first = self._manager(tmp_path, self._FIRST)
-        path = first.download_sheet("N-34-130-D-d-2-4")
-        (path.parent / f"{path.name}.meta.json").unlink()
-
-        self._manager(tmp_path, self._SECOND).download_sheet("N-34-130-D-d-2-4")
-
-        assert not (path.parent / f"{path.name}.meta.json").exists()
-
-    def test_manager_without_parent_request_leaves_sidecar_untouched(self, tmp_path):
-        first = self._manager(tmp_path, self._FIRST)
-        path = first.download_sheet("N-34-130-D-d-2-4")
-        DownloadManager(
-            output_dir=tmp_path, provider=TestSidecarWritten()._mock_provider()
-        ).download_sheet("N-34-130-D-d-2-4")
-        assert "parent_requests" not in self._payload(path)["extra"]
+    path = manager(first).download_sheet("N-34-130-D-d-2-4")
+    sidecar = path.parent / f"{path.name}.meta.json"
+    before = sidecar.read_bytes()
+    manager(second).download_sheets(["N-34-130-D-d-2-4"], max_workers=3)
+    assert sidecar.read_bytes() == before
+    assert b"parent_requests" not in before

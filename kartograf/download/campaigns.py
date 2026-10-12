@@ -1,8 +1,8 @@
 """
 GUGiK campaign identity (ADR-030) — a PL-ONLY mechanism.
 
-A campaign is one GUGiK data delivery (an index (skorowidz) record). The
-campaign directory is ``<acquisition date>_<id>``, where ``id`` is the first
+A campaign is one GUGiK data delivery (an index (skorowidz) record). Its
+version label is ``<acquisition date>_<id>``, where ``id`` is the first
 numeric segment of the file name in the URL. File validation reads ASC
 headers or TIFF signatures; ``measure_coverage`` additionally streams ASC
 pixels or reads GeoTIFF mask windows from an already downloaded file.
@@ -26,7 +26,6 @@ from kartograf.sources.sidecar import read_asc_header
 
 logger = logging.getLogger(__name__)
 
-CAMPAIGNS_DIR = "kampanie"
 # Second link to the newest local flight declared full in the index (ADR-033).
 FULL_SHEET_DIR = "full_sheet"
 
