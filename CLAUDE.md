@@ -52,6 +52,7 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 | CZ (CUZK), `--country auto` | ARCHITECTURE 4.4-4.6 |
 | LAZ (ADR-029) | ARCHITECTURE 4.7 |
 | Land cover, BDOT10k, CORINE, SoilGrids, HSG | ARCHITECTURE 4.8 |
+| CLI = API: `download_data`/`check_data`, `Notice`, wspolny cache, testy zgodnosci (CLI tylko tlumaczy) | STANDARDS 7.3; ARCHITECTURE 4 (wstep); ADR-037 |
 | Nowe zrodlo albo kraj; nowy provider pokrycia terenu | ARCHITECTURE 5; STANDARDS 17 |
 | Przyklady CLI i biblioteki, wynik pobrania, kampanie, CLMS, znane problemy | `docs/USAGE.md` 1-7 |
 | Decyzje i ich erraty (indeks na poczatku pliku) | `docs/DECISIONS.md` |

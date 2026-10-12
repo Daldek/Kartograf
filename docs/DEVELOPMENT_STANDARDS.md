@@ -437,6 +437,36 @@ tam jego opis w tym samym commicie.
 Wszystkie narzedzia konfiguruj w jednym pliku `pyproject.toml`.
 Nie tworz osobnych plikow konfiguracyjnych (`setup.cfg`, `tox.ini`, `.flake8`, itp.).
 
+### 7.3 CLI tylko tlumaczy (ADR-037)
+
+To samo zadanie z CLI i z biblioteki daje ten sam magazyn (bajtowo), te
+same statusy, plan, komunikaty i bledy. Reguly:
+
+- **Z1:** komenda w `kartograf/cli/` zamienia flagi na argumenty jednej
+  funkcji biblioteki poziomu komendy (`download_data`/`check_data`,
+  `LandCoverManager.download`/`.check`, `HSGCalculator.calculate_hsg`/
+  `.check_hsg`) i wypisuje jej wynik. W CLI nie wolno walidowac wartosci
+  danych, wybierac krajow, arkuszy, skali, kampanii ani powiatow, budowac
+  `parent_request` ani czytac sidecarow w celu decyzji. Wolno: parsowac
+  tekst flag (`--bbox`, `pl=..,cz=..`, `--layers`), czytac i zapisywac
+  plik planu, formatowac wynik, wyliczac kod wyjscia z pol wyniku (`ok`),
+  rysowac postep z `on_progress`. CLI nie importuje providerow ani
+  doboru arkuszy (`tests/test_cli_translation.py`).
+- **Z2:** kazda publiczna funkcja pobierajaca ma `check_*` z tymi samymi
+  argumentami (bez `update`, `plan`, `workers`, `on_progress`); kazda
+  pobierajaca przyjmuje `update=` i `plan=`.
+- **Z3:** komunikaty o danych powstaja w bibliotece jako `Notice` (pole
+  `notices` wyniku i `on_notice`), z kodem z `kartograf/notices.py`; CLI
+  wypisuje `Info:`/`Warning:` na stderr. Biblioteka nie loguje dodatkowo
+  tego samego tekstu.
+- **Z6:** parametr `cache: MetadataCache | bool = True` (cache w cwd jak
+  w CLI); `update="force"` bez odczytow z cache.
+- **Z7:** nowa flaga albo nowy tor = scenariusz w `tests/test_parity.py`
+  (albo `tests/test_parity_landcover.py`) przez `kartograf.cli.main`
+  i przez API, z `frozen_clock`.
+
+Wyjatki: 11.1 (Z4); jezyk: 9.4 (Z5).
+
 ---
 
 ## 8. Python — type hints

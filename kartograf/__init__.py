@@ -2,6 +2,11 @@
 Kartograf - download spatial data: NMT/NMPT/orthophoto/LAZ from GUGiK (PL),
 DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
+Every CLI command has one library function with the same choices and the same
+result (ADR-037): ``kartograf download`` = ``download_data``/``check_data``,
+``landcover download`` = ``LandCoverManager.download``/``.check``,
+``soilgrids hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``.
+
 Example usage::
 
     from kartograf import (
@@ -9,6 +14,7 @@ Example usage::
         DownloadManager,
         GugikProvider,
         SheetParser,
+        download_data,
         download_laz_area,
         download_pl_cutout,
     )
@@ -16,6 +22,16 @@ Example usage::
     # Parse a map sheet identifier
     parser = SheetParser("N-34-130-D-d-2-4")
     print(f"Scale: {parser.scale}")
+
+    # The `kartograf download` command: files, failures, notices, ok
+    report = download_data(
+        product="nmt",
+        output_dir="./data",
+        sheet="N-34-130-D-d-2-4",
+        resolution="1m",
+        vertical_crs="EVRF2007",
+    )
+    print([item.file.path for item in report.files], report.ok)
 
     # Download NMT data (one sheet from GUGiK OpenData); every data choice
     # (product, resolution, vertical CRS, output) is explicit
