@@ -4,14 +4,14 @@
 
 **Data:** 2026-10-11 (przepisany od nowa; wersja z 2026-10-08 nieaktualna — historia w gicie)
 
-**Goal:** Wersje identyfikowane trescia w ukladzie `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/<nazwa>` z niezmiennym sidecarem, wylacznym zapisem (`os.link`), wymaganymi hardlinkami i trybami `update` (domyslny / `check` / `upgrade` / `force`) oraz planem aktualizacji `kartograf-plan/1` — dla arkuszy PL NMT/NMPT/orto pobieranych przez `DownloadManager`, w bibliotece i w CLI `kartograf download` (godlo, hierarchia, lista, `--bbox`/`--geometry` bez `--target-crs`).
+**Goal:** Wersje identyfikowane trescia w ukladzie `<segment>/versions/<hierarchia>/<etykieta>_<sha8>/<nazwa>` z niezmiennym sidecarem, wylacznym zapisem (`os.link`), wymaganymi hardlinkami i trybami `update` (domyslny / `check` / `upgrade` / `force`) oraz planem aktualizacji `kartograf-plan/1` — dla arkuszy PL NMT/NMPT/orto pobieranych przez `DownloadManager`, w bibliotece i w CLI `kartograf download` (`--sheet`, hierarchia, lista, `--bbox`/`--geometry` bez `--target-crs`).
 
 **Architecture:** Nowy modul `kartograf/download/versions.py` (tozsamosc, zapis, lista wersji, sprzatanie). `download/links.py` zostaje mechanizmem dowiazan (standardowe i `full_sheet/`), wylacznie hardlink, klucz wersji zamiast klucza kampanii. `DownloadManager` zastepuje `skip_existing` parametrem `update`; kampania GUGiK = wersja z etykieta `<aktualnosc>_<id>`. Nowy modul `kartograf/download/updates.py` (plan aktualizacji). CLI: `--check-updates` / `--upgrade` / `--force` (grupa wykluczajaca) i `--plan`.
 
 **Spec:** `docs/superpowers/specs/2026-10-08-versioned-store-design.md` — ZAAKCEPTOWANY 2026-10-11 (D1-D24). Numeracja decyzji (Dn) w tym planie odnosi sie do specu.
 
 **Poza planem 1/3 (osobne plany po wykonaniu tego):**
-- plan 2/3: inwentaryzacja sygnalow (spec sekcja 8) dla zrodel spoza arkuszy PL, LAZ, CZ (godlo i `bbox/`), wycinki PL z WCS `bbox/` (D15), nadpisanie starych plikow LAZ/CZ (D24), `DownloadManager.download_bbox`, `extra.http` i sygnal `http`;
+- plan 2/3: inwentaryzacja sygnalow (spec sekcja 8) dla zrodel spoza arkuszy PL, LAZ, CZ (`--sheet` i `bbox/`), wycinki PL z WCS `bbox/` (D15), nadpisanie starych plikow LAZ/CZ (D24), `DownloadManager.download_bbox`, `extra.http` i sygnal `http`;
 - plan 3/3: land cover (BDOT10k, CORINE, SoilGrids) i HSG w ukladzie `data/` (D11), `keep_raw`, pelna dokumentacja i E2E calosci.
 Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 
@@ -36,16 +36,16 @@ Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 
 1. **Sygnal przy D23 w planie 1/3 = etykieta.** Dla kampanii etykieta `<aktualnosc>_<id>` wynika z rekordu skorowidza, wiec "inny sygnal" = inna etykieta przy `label_source` `campaign`/`edition`. Etykieta `downloaded` nie jest sygnalem (zawsze `unchanged`). `extra.http` jako sygnal dochodzi w planie 2/3.
 2. **D20 (jeden odczyt):** ASC — sha256 i pokrycie liczone w jednym strumieniu (parser liczb w tym samym przebiegu po 1 MiB). GeoTIFF (orto) — sha256 w strumieniu, pokrycie przez `rasterio` zaraz potem (dane w cache stron systemu). `build_metadata(digest=)` nigdy nie czyta pliku drugi raz. Zapisane w docstringu `read_content`.
-3. **Granulacja pozycji:** `newest` — jedna pozycja na arkusz; `all` — jedna pozycja na (arkusz, kampania); `--full-sheet` — dodatkowa pozycja "najnowszy pelny lot w zakresie".
+3. **Granulacja pozycji:** bez `--all-campaigns` (`all_campaigns=False`) — jedna pozycja na arkusz; z `--all-campaigns` — jedna pozycja na (arkusz, kampania); `--full-sheet` — dodatkowa pozycja "najnowszy pelny lot w zakresie".
 4. **Tozsamosc magazynu w planie aktualizacji:** `str(Path(output_dir).resolve())`; porownanie dokladne.
 5. **Host w katalogu roboczym:** `socket.gethostname()` oczyszczony do `[A-Za-z0-9-]` (reszta -> `-`), token `secrets.token_hex(4)`.
 6. **Klucz "najnowszej wersji":** kampania — `(extra.campaign.date, extra.campaign.pzgik_date or "", extra.source.url)` (jak dzis `campaign_key_from_sidecar`); pozostale — `(data z etykiety albo "", downloaded_at, sha256)`. Wersja bez czytelnego sidecara nie jest wazna, wiec fallbacku z nazwy katalogu nie ma.
 7. **Tor bez kampanii (`_fetch_sheet_plain`)** dostaje wersje z etykieta `downloaded` (providery bez kampanii: atrapy testowe, obce providery).
 8. **Tymczasowe odrzucenie w CLI:** `--check-updates`/`--upgrade` dla torow z planow 2/3 i 3/3 (LAZ, CZ, `--target-crs`, `landcover`, `soilgrids`) konczy sie `Error:` (kod 1) przed siecia; `--force` dziala tam jak dzis. Galaz nie trafia do `develop` przed planem 3/3, ktory usuwa to odrzucenie.
 
-## Warunek wstepny (rozstrzygniety 2026-10-12)
+## Warunek wstepny (spelniony 2026-10-12)
 
-- **Kolejnosc:** pozostale zmiany lamiace 0.8.0 (`godlo` -> `sheet` w CLI i API, `--all-campaigns`, "Bez wartosci domyslnych wplywajacych na dane" z `--product` wymaganym — backlog "Do 0.8.0" w `docs/PROGRESS.md`) ida NAJPIERW na `develop` (decyzja uzytkownika 2026-10-12), potem `git rebase develop` tej galezi i dopiero Task 1. Przed Task 1 dostosuj nazwy i sygnatury w tym planie do stanu po tych zmianach (`sheet` zamiast `godlo`, wymagane `output_dir`/`vertical_crs`/`resolution`, brak `ext='.asc'` w `FileStorage`, przelacznik zamiast `campaigns=`) i zweryfikuj odwolania plik:linia.
+- **Kolejnosc:** zmiany lamiace 0.8.0 (`godlo` -> `sheet`, `--all-campaigns`, "Bez wartosci domyslnych wplywajacych na dane") sa na `develop` (merge `0baec53`); galaz po `git rebase develop` (2026-10-12). Nazwy i sygnatury w planie dostosowane do 0.8.0 (2026-10-12): `sheet`/`sheets` zamiast `godlo`/`godla`, `all_campaigns: bool` zamiast `campaigns=`, `DownloadManager(output_dir, provider, *, ...)` bez `vertical_crs`/`resolution`, `FileStorage(output_dir, *, resolution, vertical_crs, ...)` i wymagane `ext` w `get_path`/`get_full_sheet_path`/`exists`/`delete`, `list_files(pattern, ...)`, `MetadataCache(db_path)`, CLI `--sheet`/`--product`/`--output`/`--resolution`/`--vertical-crs`; odwolania plik:linia sprawdzone na `develop` `3f150ce`.
 
 ## Review Focus
 
@@ -75,14 +75,14 @@ Galaz `feat/versioned-store` trafia do `develop` dopiero po planie 3/3.
 | `kartograf/__init__.py` | eksporty `VersionRef`, `UpdatePlan`, `PlanItem`, `UpgradeReport`, `check_updates`, `upgrade` |
 | `docs/DECISIONS.md` (CRLF), `docs/CHANGELOG.md`, `docs/ARCHITECTURE.md`, `docs/USAGE.md`, `docs/SCOPE.md`, `docs/PROGRESS.md` | ADR-036, BREAKING, opis ukladu i trybow dla arkuszy PL |
 
-Fakty o obecnym kodzie (zweryfikowane 2026-10-11 na `feat/versioned-store` po rebase na `develop`):
-- `DownloadManager.download_sheet/download_hierarchy/download_sheets(..., skip_existing: bool = True, ...)` — `kartograf/download/manager.py:620-626`, `703-710`, `813-819`; wewnetrznie `_fetch_sheet` (853), `_fetch_sheet_plain` (875), `_fetch_campaigns` (901-1229), `_download_many` (1375), I-1 `_local_newest` (1236), pomiar pokrycia `_add_range_flights` (1175-1226, `update_sidecar_extra` w 1210 i 1225), `_write_sidecar` (1559), `_write_campaign_sidecar` (1600), `_note_reuse` (1644).
-- Plik kampanii: `FileStorage.get_campaign_path` (`kartograf/download/storage.py:255-263`), dowiazanie pelne `get_full_sheet_path` (265-272), `list_files` (470-498), `delete` (444-468).
-- `link_atomic` z kopia zapasowa — `kartograf/download/links.py:73-109`; `ensure_link(link, target, key, *, refresh)` — 294-331; `linked_campaign` 171-214; `campaign_key_from_sidecar` 112-141; `update_sidecar_extra` 252-283.
-- `build_metadata` liczy `file_digest` z gotowego pliku — `kartograf/sources/sidecar.py:214-217`; `write_sidecar(atomic=True)` bez `fsync` — 258-270; `emit_sidecar` 284-358.
-- `measure_coverage(path, ext)` — `kartograf/download/campaigns.py:367-435`; `CampaignRef.dirname/sort_key/to_extra` — 215-283.
-- CLI: `--force` `kartograf/cli/_parser.py:206-215`, `--campaigns` 179-190, `--full-sheet` 259-269; `skip_existing = not args.force` w `kartograf/cli/download_cmd.py:1103` i `1835` (arkusze PL), `2339` (CZ godlo, plan 2/3), `run_laz_download(force=args.force)` 2059 (plan 2/3); `_pl_metadata_cache` 219; podsumowania 1150-1170, 1296-1298, 1378-1379; kody wyjscia `_finish_pl_sheets` 1313-1408.
-- Testy: `tests/test_manager_campaigns.py` (helpery `FakeCampaignProvider` 107, `c14_fake` 701, `std_path` 176, `campaign_path` 181, `meta` 199, `deny_links` 219), `tests/test_links.py`, `tests/test_campaigns.py`, `tests/test_campaigns_flow.py`, `tests/test_storage.py`, `tests/test_sidecar*.py`, `tests/test_cli.py`.
+Fakty o obecnym kodzie (zweryfikowane 2026-10-12 na `feat/versioned-store` po rebase na `develop` `3f150ce`):
+- `DownloadManager.__init__(output_dir, provider, *, storage=None, max_workers=1, sidecar_extra=None, all_campaigns=False, min_year=None, max_year=None, full_sheet=False)` — `kartograf/download/manager.py:358-453`; `download_sheet(sheet, skip_existing: bool = True, ...)` 591-672, `download_hierarchy(sheet, target_scale, skip_existing=True, ...)` 674-753, `download_sheets(sheets, skip_existing=True, ...)` 784-822; wewnetrznie `_fetch_sheet` (824), `_fetch_sheet_plain` (846), `_fetch_campaigns` (872-1131), `_download_single_sheet_task` (1247), `_download_many` (1350), I-1 `_local_newest` (1212-1245), pomiar pokrycia `_add_range_flights` (1133-1202, `update_sidecar_extra` w 1186 i 1201), `_note_link_reuse` (1204-1210), `_write_sidecar` (1537), `_write_campaign_sidecar` (1578-1623), `_note_reuse` (1625-1667); faza `check_year_range` 500-589. `SheetFetch` 198-252 (`link` 246), `DownloadResult` 88-178 (`copied` 149).
+- Plik kampanii: `FileStorage.get_campaign_path(sheet, campaign, ext)` (`kartograf/download/storage.py:253-260`), dowiazanie pelne `get_full_sheet_path(sheet, ext)` (262-270), `delete(sheet, ext)` (453-481), `list_files(pattern, *, campaigns=False)` (483-522; `{system}` 506-507); import `CAMPAIGNS_DIR` 16.
+- `link_atomic` z kopia zapasowa — `kartograf/download/links.py:73-110`; lokalna stala `_CAMPAIGNS_DIR` 40; `campaign_key_from_sidecar` 112-142; `campaign_key_of` 144-169; `linked_campaign` 171-207; `update_sidecar_extra` 252-284; `ensure_link(link, target, key, *, refresh)` od 294.
+- `build_metadata` (182-243) liczy `file_digest` z gotowego pliku — `kartograf/sources/sidecar.py:216-217`; `write_sidecar(atomic=True)` bez `fsync` — 245-277 (`os.replace` 266); `emit_sidecar` od 284 (`get_source` importowany lokalnie w 333, nie na poziomie modulu).
+- `measure_coverage(path, ext)` — `kartograf/download/campaigns.py:359-430`; `CAMPAIGNS_DIR` 28; `CampaignRef` 206-263 (`dirname` 242, `sort_key` 250, `to_extra` 254 z kluczem `pzgik_date`). `SkorowidzRecord` (`kartograf/providers/pl/skorowidz.py:55`) ma nadal pole `aktualnosc` (surowe pola GUGiK bez zmian).
+- CLI: `--force` `kartograf/cli/_parser.py:265-275`, `--all-campaigns` 315-325, `--full-sheet` 338-348; `skip_existing = not args.force` w `kartograf/cli/download_cmd.py:1256` (`--sheet` PL w `cmd_download`) i `1996` (`_download_pl_sheet_list`), CZ `_cmd_download_cz` 2402 (`_cz_download_sheet` 2262, `_cz_download_bbox` 2343; plan 2/3), `_cmd_download_laz` 2119 z `force=args.force` 2214 (plan 2/3), wycinek `_download_pl_cutout` 1871; `_pl_metadata_cache(args)` 226 (otwiera `MetadataCache(cli_cache_path(), refresh=args.force)` przez `_cli_metadata_cache` 183); `Skipped` dla `--sheet` PL 1313, `_warn_copied_links` 1407 (wywolania 1324-1325 i 1511-1512), `_print_campaign_summary` 1444, `_finish_pl_sheets` 1466.
+- Testy: `tests/test_manager_campaigns.py` (helpery `FakeCampaignProvider` 107, `download_record` 161-174, `std_path` 176, `campaign_path` 181, `meta` 199, `deny_links` 219, `c14_fake` 705), `tests/test_links.py`, `tests/test_campaigns.py`, `tests/test_campaigns_flow.py`, `tests/test_storage.py`, `tests/test_sidecar*.py`, `tests/test_cli.py`.
 
 ---
 
@@ -346,7 +346,7 @@ Wymagania (kazde pokryte testem wyzej):
 ### Task 2: Sidecar wersji — `extra.version`, `digest=`, `fsync`
 
 **Files:**
-- Modify: `kartograf/sources/sidecar.py` (`build_metadata` 182-242, `write_sidecar` 245-276, `emit_sidecar` 284-358)
+- Modify: `kartograf/sources/sidecar.py` (`build_metadata` 182-243, `write_sidecar` 245-277, `emit_sidecar` od 284)
 - Test: `tests/test_sidecar.py`
 
 **Interfaces:**
@@ -357,12 +357,13 @@ Wymagania (kazde pokryte testem wyzej):
 ```python
 def test_build_metadata_with_digest_does_not_read_file(tmp_path, monkeypatch):
     from kartograf.sources import sidecar as s
+    from kartograf.sources.registry import get_source
 
     data = tmp_path / "N-34-139-C-a-3-1.asc"
     data.write_text("ncols 1\nnrows 1\nxllcorner 0\nyllcorner 0\ncellsize 1\n1\n")
     monkeypatch.setattr(s, "file_digest", lambda p: pytest.fail("second read"))
     meta = s.build_metadata(
-        s.get_source("pl.gugik.nmt_1m"),
+        get_source("pl.gugik.nmt_1m"),
         request={"sheet": "N-34-139-C-a-3-1"},
         data_path=data,
         digest=("ab" * 32, 7),
@@ -370,7 +371,6 @@ def test_build_metadata_with_digest_does_not_read_file(tmp_path, monkeypatch):
     )
     assert (meta.sha256, meta.size_bytes) == ("ab" * 32, 7)
     assert meta.extra["version"] == {"label": "2025-06-02_91234", "label_source": "campaign"}
-
 
 def test_atomic_sidecar_is_fsynced_before_replace(tmp_path, monkeypatch):
     from kartograf.sources import sidecar as s
@@ -388,10 +388,10 @@ def test_atomic_sidecar_is_fsynced_before_replace(tmp_path, monkeypatch):
     assert calls[:2] == ["fsync", "replace"]
 ```
 
-(`get_source` importowany w `sidecar.py` z `sources.registry`; jesli nie — uzyj tej samej sciezki importu, co istniejace testy `tests/test_sidecar.py`.)
+(`get_source` z `kartograf.sources.registry` — `sidecar.py` importuje go tylko lokalnie w `emit_sidecar`.)
 
 - [ ] **Step 2: FAIL** (`unexpected keyword argument 'digest'`)
-- [ ] **Step 3: Implementacja** — w `build_metadata` (214-217): `if digest is not None: sha256, size_bytes = digest` zamiast `file_digest`; `extra = {**(extra or {}), "version": dict(version)}` gdy `version`. W `write_sidecar(atomic=True)`: zapis przez `open(tmp, "w")` + `f.flush()` + `os.fsync(f.fileno())`, potem `os.replace`. `emit_sidecar` przekazuje `digest`/`version`. Docstring: "``digest`` — (sha256, size) computed by the store commit from the same read (D20); a version sidecar is written once (D12)."
+- [ ] **Step 3: Implementacja** — w `build_metadata` (216-217): `if digest is not None: sha256, size_bytes = digest` zamiast `file_digest`; `extra = {**(extra or {}), "version": dict(version)}` gdy `version`. W `write_sidecar(atomic=True)`: zapis przez `open(tmp, "w")` + `f.flush()` + `os.fsync(f.fileno())`, potem `os.replace`. `emit_sidecar` przekazuje `digest`/`version`. Docstring: "``digest`` — (sha256, size) computed by the store commit from the same read (D20); a version sidecar is written once (D12)."
 - [ ] **Step 4: PASS** — `tests/test_sidecar*.py`
 - [ ] **Step 5: Brama i commit** — `feat(sidecar): extra.version, digest z zapisu wersji i fsync`
 
@@ -400,7 +400,7 @@ def test_atomic_sidecar_is_fsynced_before_replace(tmp_path, monkeypatch):
 ### Task 3: Dowiazania tylko hardlink, klucz wersji, `FileStorage` na `versions/`
 
 **Files:**
-- Modify: `kartograf/download/links.py` (73-109, 112-214, 294-331), `kartograf/download/storage.py` (16, 255-263, 444-498), `kartograf/download/campaigns.py` (stala `CAMPAIGNS_DIR` 28)
+- Modify: `kartograf/download/links.py` (40, 73-110, 112-207, 294-), `kartograf/download/storage.py` (16, 253-260, 453-522), `kartograf/download/campaigns.py` (stala `CAMPAIGNS_DIR` 28)
 - Test: `tests/test_links.py`, `tests/test_storage.py`
 
 **Interfaces:**
@@ -409,8 +409,8 @@ def test_atomic_sidecar_is_fsynced_before_replace(tmp_path, monkeypatch):
   - `linked_version(link) -> Path | None` — cel tylko z `extra.link == "hardlink"` + `extra.link_target` + `os.path.samefile` (sidecar z `copy` = sciezka nieznana, odtworzona).
   - `version_key_of(path) -> tuple[str, str, str] | None` — z sidecara wersji (decyzja 6).
   - `ensure_link(link, target, key, *, refresh=False)` — logika bez zmian, `campaign_key_of` -> `version_key_of`.
-  - `FileStorage.get_versions_root(godlo) -> Path` = `<segment>/versions/<hierarchia>/`; `FileStorage.has_legacy_campaigns() -> bool` (czy w segmencie istnieje `kampanie/`); `list_files` pomija pierwszy czlon `versions` i `full_sheet`; `delete` usuwa oba dowiazania (wersje zostaja, D9); `get_campaign_path` usuniete.
-- Usun: galaz kopii w `link_atomic`, kontrole D-5 (rozmiar/mtime kopii) w `linked_campaign`, `campaign_key_of` z fallbackiem z nazwy katalogu `kampanie/`, `CAMPAIGNS_DIR`.
+  - `FileStorage.get_versions_root(sheet) -> Path` = `<segment>/versions/<hierarchia>/` (katalog, bez `ext`); `FileStorage.has_legacy_campaigns() -> bool` (czy w segmencie istnieje `kampanie/`); `list_files(pattern, *, versions=False)` — `versions=False` pomija pierwszy czlon `versions` i `full_sheet`, `versions=True` = tylko pliki danych w `versions/` (zastepuje `campaigns=`; BREAKING w Task 8); `delete(sheet, ext)` usuwa oba dowiazania (wersje zostaja, D9); `get_campaign_path` usuniete.
+- Usun: galaz kopii w `link_atomic`, kontrole D-5 (rozmiar/mtime kopii) w `linked_campaign`, `campaign_key_of` z fallbackiem z nazwy katalogu `kampanie/` (z `_CAMPAIGNS_DIR`/`_CAMPAIGN_DIR` w `links.py`), `CAMPAIGNS_DIR`.
 
 - [ ] **Step 1: Testy** — przepisz w `tests/test_links.py` testy kopii (`test_no_hardlink_falls_back_to_copy_with_warning`, `test_copy_detected_via_sidecar_on_next_run`, `test_refresh_recopies_when_target_redownloaded` i pochodne) na:
 
@@ -450,25 +450,26 @@ oraz w `tests/test_storage.py`:
 
 ```python
 def test_versions_root_mirrors_hierarchy(tmp_path):
-    s = FileStorage(tmp_path)
+    s = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
     root = s.get_versions_root("N-34-130-D-d-2-4")
     assert root == tmp_path / "nmt" / "pl_1992_1m_evrf2007" / "versions" / "N-34" / "130" / "D" / "d" / "2" / "4"
 
 
 def test_list_files_skips_versions_and_full_sheet(tmp_path):
-    s = FileStorage(tmp_path)
+    s = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
     g = "N-34-130-D-d-2-4"
-    standard = s.get_path(g)
-    full = s.get_full_sheet_path(g)
+    standard = s.get_path(g, ".asc")
+    full = s.get_full_sheet_path(g, ".asc")
     version = s.get_versions_root(g) / "2025-06-02_91234_3fa91c2e" / f"{g}.asc"
     for p in (standard, full, version):
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text("1")
-    assert s.list_files() == [standard]
+    assert s.list_files("**/*.asc") == [standard]
+    assert s.list_files("**/*.asc", versions=True) == [version]
 ```
 
 - [ ] **Step 2: FAIL**
-- [ ] **Step 3: Implementacja** wg Interfaces; `has_legacy_campaigns` sprawdza `(<output>/<segment>/kampanie).is_dir()` dla obu wartosci `{uklad}` jak `list_files` (storage.py:504-508).
+- [ ] **Step 3: Implementacja** wg Interfaces; `has_legacy_campaigns` sprawdza `(<output>/<segment>/kampanie).is_dir()` dla obu wartosci `{system}` jak `list_files` (storage.py:506-507).
 - [ ] **Step 4: Bez osobnego commitu** — Task 3 zmienia kontrakt, na ktorym stoi `DownloadManager`, wiec testy managera sa czerwone do konca Task 4; brama i commit sa wspolne z Task 4 (bez `xfail`). Tu tylko: `.venv/bin/python -m pytest tests/test_links.py tests/test_storage.py tests/test_campaigns.py -q` -> PASS.
 
 ---
@@ -476,30 +477,30 @@ def test_list_files_skips_versions_and_full_sheet(tmp_path):
 ### Task 4: `DownloadManager` — arkusze na wersjach (zapis, D13, D23, `full_sheet/`)
 
 **Files:**
-- Modify: `kartograf/download/manager.py` (`_fetch_campaigns` 901-1229, `_fetch_sheet_plain` 875-899, `_add_range_flights` 1175-1226, `_local_newest` 1236-1258, `_write_sidecar` 1559, `_write_campaign_sidecar` 1600-1642; usun `_note_reuse` 1644-1688 i `_note_link_reuse`)
+- Modify: `kartograf/download/manager.py` (`_fetch_campaigns` 872-1131, `_fetch_sheet_plain` 846-870, `_add_range_flights` 1133-1202, `_local_newest` 1212-1245, `_write_sidecar` 1537, `_write_campaign_sidecar` 1578-1623, `SheetFetch` 198-252, `DownloadResult` 88-178; usun `_note_reuse` 1625-1667 i `_note_link_reuse` 1204-1210)
 - Test: `tests/test_manager_campaigns.py`, `tests/test_campaigns_flow.py`
 
 **Interfaces:**
 - Consumes: Task 1-3.
 - Produces (tryb domyslny jak dzisiejsze `skip_existing=True`; tryby w Task 5):
-  - Pobranie kampanii: `staged = new_incoming_dir(root) / f"{godlo}{ext}"` -> `provider.download_record(record, staged)` -> `verify_file_format(staged, ext)` -> `verify_sheet_extent(staged, godlo, ext)` -> `digest = read_content(staged, ext=ext, coverage=ref.full_sheet is not True)` (D13) -> `commit_version(staged, root, name, VersionRef(ref.dirname, "campaign"), digest, writer)`; `writer` wola `_write_campaign_sidecar(..., digest=, version=, coverage=)` (`extra.coverage` gdy niepuste; blad pomiaru = brak pola + `logger.warning`, spec 6).
+  - Pobranie kampanii: `staged = new_incoming_dir(root) / f"{sheet}{ext}"` -> `provider.download_record(record, staged)` -> `verify_file_format(staged, ext)` -> `verify_sheet_extent(staged, sheet, ext)` -> `digest = read_content(staged, ext=ext, coverage=ref.full_sheet is not True)` (D13) -> `commit_version(staged, root, name, VersionRef(ref.dirname, "campaign"), digest, writer)`; `writer` wola `_write_campaign_sidecar(..., digest=, version=, coverage=)` (`extra.coverage` gdy niepuste; blad pomiaru = brak pola + `logger.warning`, spec 6).
   - Istniejaca lokalna wersja kampanii = wersja z etykieta `ref.dirname` w `list_versions` -> bez pobrania (`local`).
   - R22 znika: wersja bez sidecara jest niewazna; naprawia ja nastepny zapis tej samej tresci (D18).
   - Dowiazania: standardowe -> `newest_version` lokalnych wersji zadania (klucz decyzji 6); `full_sheet/` -> najnowsza wersja z `meta["extra"]["campaign"]["full_sheet"] is True`; `ensure_link(..., refresh=commit.status in ("new", "relabeled"))`.
   - `_add_range_flights`: pokrycie czytane z `extra.coverage` sidecarow wersji; `update_sidecar_extra` wolany wylacznie na sidecarze dowiazania (`flights`, `better_coverage`).
-  - `SheetFetch` dostaje `status: Literal["new", "unchanged", "relabeled", "local"]` i `version: str | None` (etykieta celu dowiazania); `DownloadResult` liczniki `new`, `relabeled`, `unchanged`, `local` (listy godel).
+  - `SheetFetch` dostaje `status: Literal["new", "unchanged", "relabeled", "local"]` i `version: str | None` (etykieta celu dowiazania); `DownloadResult` liczniki `new`, `relabeled`, `unchanged`, `local` (listy arkuszy, `list[str]`).
   - Usuniete: `extra.parent_requests` (`_note_reuse`), `DownloadResult.copied`, `SheetFetch.link` (`"copy"` nie istnieje — pole usuwane, nie stale `"hardlink"`).
 
-- [ ] **Step 1: Testy** — przepisz testy z `kampanie/` na `versions/` (helper `campaign_path` -> `version_path(tmp_path, record, godlo)` szukajacy `versions/<hier>/<dirname>_*/<godlo>.asc`); usun testy kopii, `_note_reuse` i R22; dodaj:
+- [ ] **Step 1: Testy** — przepisz testy z `kampanie/` na `versions/` (helper `campaign_path` -> `version_path(tmp_path, record, sheet)` szukajacy `versions/<hier>/<dirname>_*/<sheet>.asc`); usun testy kopii, `_note_reuse` i R22; dodaj:
 
 ```python
 def test_version_sidecar_bytes_never_change(tmp_path):
     fake = c14_fake(contents={REC["84183"].url: asc_pixels(G, (1, -9999, -9999, -9999)),
                               REC["83233"].url: asc_pixels(G, (1, 2, 3, 4))})
-    DownloadManager(tmp_path, provider=fake, campaigns="all", min_year=2025,
+    DownloadManager(tmp_path, provider=fake, all_campaigns=True, min_year=2025,
                     max_year=2025).download_sheets([G])
     sidecars = {p: p.read_bytes() for p in (tmp_path / SEGMENT / "versions").rglob("*.meta.json")}
-    for kwargs in ({}, {"campaigns": "all", "min_year": 2019}, {"full_sheet": True}):
+    for kwargs in ({}, {"all_campaigns": True, "min_year": 2019}, {"full_sheet": True}):
         DownloadManager(tmp_path, provider=fake, **kwargs).download_sheets([G])
     for p, body in sidecars.items():
         assert p.read_bytes() == body
@@ -546,7 +547,7 @@ def test_rerun_same_campaign_is_local_without_download(tmp_path):
     assert fake.downloads == [] and m.last_sheet.status == "local"
 ```
 
-Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.downloads: list[str]` (URL-e w `download_record`), `FakeCampaignProvider.body_for(record) -> bytes` (wyciagniete z obecnego `download_record` 161-174 — te same bajty, ktore trafiaja do pliku), `version_path(tmp_path, record, godlo=G) -> Path` (jedyny plik `versions/<hier>/<aktualnosc>_<id>_*/<godlo>.asc`; zastepuje `campaign_path` 181).
+Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.downloads: list[str]` (URL-e w `download_record`), `FakeCampaignProvider.body_for(record) -> bytes` (wyciagniete z obecnego `download_record` 161-174 — te same bajty, ktore trafiaja do pliku), `version_path(tmp_path, record, sheet=G) -> Path` (jedyny plik `versions/<hier>/<aktualnosc>_<id>_*/<sheet>.asc`; zastepuje `campaign_path` 181).
 
 - [ ] **Step 2: FAIL**
 - [ ] **Step 3: Implementacja** wg Interfaces. `_fetch_sheet_plain`: ten sam zapis przez `commit_version` z `VersionRef.downloaded()` i `coverage=False`, dowiazanie standardowe do najnowszej wersji.
@@ -558,14 +559,14 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
 ### Task 5: Tryby `update` (tabela 4.2), zakres lat (D14), I-1 dla wszystkich strategii
 
 **Files:**
-- Modify: `kartograf/download/manager.py` (sygnatury 620-626, 703-710, 813-819; `_fetch_sheet`, `_fetch_campaigns`, `_download_many` 1375, faza `check_year_range` 529-614)
+- Modify: `kartograf/download/manager.py` (sygnatury 591-597, 674-681, 784-790; `_fetch_sheet` 824, `_fetch_campaigns`, `_download_single_sheet_task` 1247, `_download_many` 1350, faza `check_year_range` 500-589)
 - Test: `tests/test_manager_update_modes.py` (NOWY), `tests/test_manager_campaigns.py`
 
 **Interfaces:**
 - Produces:
   - `UpdateMode = Literal["check", "upgrade", "force"]`; `download_sheet/download_hierarchy/download_sheets(..., update: UpdateMode | None = None, ...)` — `skip_existing` USUNIETE (BREAKING); `"check"` w tych metodach = `ValidationError` (sprawdzenie robi `check_updates`, Task 6).
   - `SheetFetch.newer: str | None` (etykieta dostepnej nowszej kampanii, tryb domyslny), `SheetFetch.unverified` (jak dzis, tekst bledu skorowidza).
-  - `DownloadManager.inspect_sheet(godlo) -> list[PlanItemDraft]` — wspolna logika porownania sygnalu dla Task 6 (bez pobierania).
+  - `DownloadManager.inspect_sheet(sheet) -> list[PlanItemDraft]` — wspolna logika porownania sygnalu dla Task 6 (bez pobierania).
 - Reguly (kazda komorka tabeli 4.2 = test):
 
 | Sytuacja | `None` | `upgrade` | `force` |
@@ -576,8 +577,8 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
 | skorowidz niedostepny (transport), bez zakresu lat | `local` + `unverified` (kazda strategia) | blad arkusza | blad arkusza |
 | skorowidz niedostepny, zakres lat | D14: kazdy arkusz zadania ma lokalna wersje z rocznikiem w zakresie -> `local` + `unverified`; inaczej `DownloadError` zadania przed pobraniem | blad zadania | blad zadania |
 
-  - `all`: brakujace lokalnie kampanie z zakresu sa pobierane w trybie domyslnym (decyzja 3); `--full-sheet`: brakujacy najnowszy pelny lot w zakresie = pobranie.
-  - `force` = `MetadataCache(refresh=True)` w CLI (Task 7) i pobranie wszystkich wybranych kampanii; weryfikacja rekordu (B4, pion) dziala we wszystkich trybach.
+  - `all_campaigns=True`: brakujace lokalnie kampanie z zakresu sa pobierane w trybie domyslnym (decyzja 3); `full_sheet=True`: brakujacy najnowszy pelny lot w zakresie = pobranie.
+  - `force` = `MetadataCache(db_path, refresh=True)` w CLI (Task 7, `_pl_metadata_cache(args)` przy `--force`) i pobranie wszystkich wybranych kampanii; weryfikacja rekordu (B4, pion) dziala we wszystkich trybach.
   - Rocznik lokalnej wersji: `extra.campaign.date[:4]` (zgodnie z ADR-032 pkt 1, `aktualnoscRok` jest w `extra.source`, gdy obecny).
 
 - [ ] **Step 1: Testy (`tests/test_manager_update_modes.py`)** — parametryzowane po komorkach tabeli, z `FakeCampaignProvider` i `_transport_error` z `tests/test_manager_campaigns.py`; co najmniej:
@@ -622,7 +623,7 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
   class UpgradeReport:
       done: tuple[SheetFetch, ...]; stale: tuple[PlanItem, ...]; failed: dict[str, str]
 
-  def check_updates(manager: DownloadManager, godla: list[str]) -> UpdatePlan
+  def check_updates(manager: DownloadManager, sheets: list[str]) -> UpdatePlan
   def upgrade(manager: DownloadManager, plan: UpdatePlan) -> UpgradeReport
   ```
 - Reguly (spec 4.4): `check_updates` niczego nie pobiera; `upgrade(plan)` — inny `store` albo nieznany schemat = `ValidationError` przed jakimkolwiek zapytaniem; przed kazda pozycja `newer`/`missing` ponowne odczytanie sygnalu, rozny od planu = pozycja w `stale`, bez pobrania; pozycje usuniete z pliku planu nie sa wykonywane; `current`/`unverifiable` pomijane.
@@ -638,21 +639,21 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
 ### Task 7: CLI `kartograf download` — flagi, statusy, plan, `Info:` o `kampanie/`
 
 **Files:**
-- Modify: `kartograf/cli/_parser.py` (`--force` 206-215 do grupy wykluczajacej z `--check-updates`, `--upgrade`; nowe `--plan PLIK`), `kartograf/cli/download_cmd.py` (1085-1192, 1296-1298, 1313-1408, 1835-1870, `_pl_metadata_cache` 219; odrzucenie torow 2/3 i 3/3: LAZ 2059, CZ 2219/2339, `--target-crs`, `landcover`, `soilgrids`)
+- Modify: `kartograf/cli/_parser.py` (`--force` 265-275 do grupy wykluczajacej z `--check-updates`, `--upgrade`; nowe `--plan PLIK`), `kartograf/cli/download_cmd.py` (`cmd_download` tor `--sheet` PL 1256-1330, `_print_campaign_summary` 1444, `_finish_pl_sheets` 1466, `_download_pl_sheet_list` 1978-2044, `_pl_metadata_cache` 226; odrzucenie torow 2/3 i 3/3: `_cmd_download_laz` 2119, `_cmd_download_cz` 2402, `--target-crs` `_download_pl_cutout` 1871, `landcover`, `soilgrids`)
 - Test: `tests/test_cli.py` (klasy z `--force`, kampaniami i `--full-sheet`), `tests/test_cli_update_modes.py` (NOWY)
 
 **Interfaces:**
-- Mapowanie: brak flag -> `update=None`; `--upgrade` -> `"upgrade"`; `--force` -> `"force"` (+ `_pl_metadata_cache(refresh=True)`); `--check-updates` -> `check_updates` i raport (bez pobierania), `--plan PLIK` zapisuje JSON; `--upgrade --plan PLIK` -> `upgrade(UpdatePlan.from_json(...))`; `--plan` bez `--check-updates`/`--upgrade` = `Error:` argparse.
-- Linie statusu (jedna na plik): `"<godlo>: nowa wersja <label>_<sha8>"`, `"<godlo>: nowa etykieta <label> (ta sama tresc)"`, `"<godlo>: bez zmian <label>"`, `"<godlo>: lokalna wersja <label>"` + przy `newer` dopisek `"; dostepna nowsza <label> (--upgrade)"`; podsumowanie `"Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N"`; kody wyjscia wg `_finish_pl_sheets` bez zmian; `--check-updates` z pozycja `check_failed` = kod czesciowego sukcesu.
+- Mapowanie: brak flag -> `update=None`; `--upgrade` -> `"upgrade"`; `--force` -> `"force"` (cache juz dzis: `_pl_metadata_cache(args)` otwiera `MetadataCache(cli_cache_path(), refresh=args.force)`); `--check-updates` -> `check_updates` i raport (bez pobierania), `--plan PLIK` zapisuje JSON; `--upgrade --plan PLIK` -> `upgrade(UpdatePlan.from_json(...))`; `--plan` bez `--check-updates`/`--upgrade` = `Error:` argparse.
+- Linie statusu (jedna na plik): `"<sheet>: nowa wersja <label>_<sha8>"`, `"<sheet>: nowa etykieta <label> (ta sama tresc)"`, `"<sheet>: bez zmian <label>"`, `"<sheet>: lokalna wersja <label>"` + przy `newer` dopisek `"; dostepna nowsza <label> (--upgrade)"`; podsumowanie `"Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N"`; kody wyjscia wg `_finish_pl_sheets` bez zmian; `--check-updates` z pozycja `check_failed` = kod czesciowego sukcesu.
 - Raport `--check-updates`: jedna linia na pozycje ze statusem (`aktualne`, `nowsza: <label>`, `do pobrania`, `nie da sie sprawdzic bez pobrania`, `nie udalo sie sprawdzic: <blad>`).
 - Jednorazowe `Info: katalog kampanie/ z wersji 0.7.x nie jest uzywany; dane zostana pobrane ponownie do versions/` gdy `storage.has_legacy_campaigns()`.
-- Usuniete z CLI: komunikat o kopii zamiast hardlinku (download_cmd.py:1358-1359), `Skipped ... already exists`.
+- Usuniete z CLI: `_warn_copied_links` (download_cmd.py:1407, wywolania 1324-1325 i 1511-1512), `Skipped ... already exists` toru `--sheet` PL (1313).
 
 - [ ] **Step 1: Testy** — `test_flags_mutually_exclusive` (kod 2 argparse), `test_plan_requires_check_or_upgrade`, `test_status_lines_and_counters`, `test_check_updates_prints_report_and_downloads_nothing`, `test_check_updates_writes_plan_file`, `test_upgrade_with_plan_executes_items`, `test_legacy_kampanie_info_once`, `test_check_updates_rejected_for_laz_cz_cutout_landcover` (kod 1, przed siecia); przepisz istniejace testy CLI z `Skipped`/`kampanie/`/kopii.
 - [ ] **Step 2: FAIL**
 - [ ] **Step 3: Implementacja**
 - [ ] **Step 4: PASS** — `tests/test_cli*.py`
-- [ ] **Step 5: Smoke CLI offline** — `.venv/bin/kartograf download --help` (grupa flag widoczna); `.venv/bin/kartograf download N-34-139-C-a-3-1 --check-updates --upgrade` -> kod 2.
+- [ ] **Step 5: Smoke CLI offline** — `.venv/bin/kartograf download --help` (grupa flag widoczna); `.venv/bin/kartograf download --sheet N-34-139-C-a-3-1 --check-updates --upgrade` -> kod 2.
 - [ ] **Step 6: Brama i commit** — `feat(cli)!: --check-updates, --upgrade, --plan i statusy wersji dla arkuszy PL`
 
 ---
@@ -664,7 +665,7 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
 
 - [ ] **Step 1: ADR-036 "Magazyn wersjonowany"** — Kontekst/Opcje/Decyzja = D1-D24 w skrocie z odsylaczem do specu; Konsekwencje: zakres planu 1/3 i plany 2/3, 3/3. Wiersz indeksu; erraty/statusy wg spec sekcja 9 (ADR-030 uklad `kampanie/`, automatyczne `newest`, errata 4 kopia; ADR-033 F-U5; ADR-032 pkt 2 i 4; ADR-035 W-U3/W-U8 — to ostatnie oznacz "realizacja w planie 2/3"; ADR-026 land cover — "realizacja w planie 3/3"). Sprawdz CRLF:
   `.venv/bin/python -c "b=open('docs/DECISIONS.md','rb').read().split(b'\n'); print([i for i,l in enumerate(b[:-1],1) if not l.endswith(b'\r')][:5])"` -> `[]`.
-- [ ] **Step 2: CHANGELOG `[0.8.0] - Unreleased` / `Zmiany lamiace (BREAKING)`** (styl wpisow 0.7.2, kazdy z "Co zrobic"): `kampanie/` -> `versions/<hierarchia>/<etykieta>_<sha8>/` (bez migracji, ponowne pobranie); domyslnie lokalna wersja zamiast automatycznego pobrania nowszej kampanii (`--upgrade`); nowe znaczenie `--force`; `skip_existing` -> `update=`; hardlinki wymagane (koniec kopii; FS bez hardlinkow = blad); `extra.parent_requests` usuniete; `SheetFetch.link`, `DownloadResult.copied` usuniete; pola `status`/`version`/`newer`. `Dodane`: `--check-updates`, `--upgrade`, `--plan`, `check_updates`, `upgrade`, `UpdatePlan`, `VersionRef`, `extra.version`, `relabeled`.
+- [ ] **Step 2: CHANGELOG `[0.8.0] - Unreleased` / `Zmiany lamiace (BREAKING)`** (styl wpisow 0.7.2, kazdy z "Co zrobic"): `kampanie/` -> `versions/<hierarchia>/<etykieta>_<sha8>/` (bez migracji, ponowne pobranie); domyslnie lokalna wersja zamiast automatycznego pobrania nowszej kampanii (`--upgrade`); nowe znaczenie `--force`; `skip_existing` -> `update=`; hardlinki wymagane (koniec kopii; FS bez hardlinkow = blad); `extra.parent_requests` usuniete; `SheetFetch.link`, `DownloadResult.copied` usuniete; `FileStorage.get_campaign_path` usuniete, `list_files(campaigns=)` -> `list_files(versions=)` (popraw zdanie "parametr `FileStorage.list_files(campaigns: bool)` rowniez zostaje" we wpisie `--all-campaigns`); pola `status`/`version`/`newer`. `Dodane`: `--check-updates`, `--upgrade`, `--plan`, `check_updates`, `upgrade`, `UpdatePlan`, `VersionRef`, `extra.version`, `relabeled`.
 - [ ] **Step 3: ARCHITECTURE/USAGE/SCOPE** — uklad `versions/` dla arkuszy PL, tryby, plan aktualizacji, wymaganie hardlinkow, `rsync -aH`, kompresja systemu plikow (spec 9); usun opisy `kampanie/`, kopii i `parent_requests` dla arkuszy PL.
 - [ ] **Step 4: PROGRESS** — sesja, stan planu 1/3, nastepny krok (plan 2/3).
 - [ ] **Step 5: Commit** — `docs: magazyn wersjonowany dla arkuszy PL (ADR-036, CHANGELOG, uklad versions/)`
@@ -675,11 +676,11 @@ Helpery do dopisania w `tests/test_manager_campaigns.py`: `FakeCampaignProvider.
 
 **Files:** brak zmian w repo (chyba ze test wykaze blad — wtedy osobny commit z testem odtwarzajacym).
 
-Katalog danych podaje uzytkownik (poza repo i `/tmp`); oznaczony nizej jako `$DATA`. CLI z korzenia repo.
+Katalog danych podaje uzytkownik (poza repo i `/tmp`); oznaczony nizej jako `$DATA`. CLI z korzenia repo. Wspolne flagi zadania: `NMT="--product nmt --resolution 1m --vertical-crs EVRF2007"` (0.8.0: bez wartosci domyslnych).
 
-- [ ] **Step 1:** `.venv/bin/kartograf download N-34-139-C-a-3-1 -o "$DATA"` -> kod 0, linia `nowa wersja`, w `$DATA/nmt/pl_1992_1m_evrf2007/versions/N-34/139/C/a/3/1/` jeden katalog `<aktualnosc>_<id>_<sha8>`; `stat -c %h` pliku = 2 (wersja + sciezka standardowa); sidecar wersji z `sha256`, `extra.version`, `extra.campaign`.
+- [ ] **Step 1:** `.venv/bin/kartograf download --sheet N-34-139-C-a-3-1 $NMT -o "$DATA"` -> kod 0, linia `nowa wersja`, w `$DATA/nmt/pl_1992_1m_evrf2007/versions/N-34/139/C/a/3/1/` jeden katalog `<aktualnosc>_<id>_<sha8>`; `stat -c %h` pliku = 2 (wersja + sciezka standardowa); sidecar wersji z `sha256`, `extra.version`, `extra.campaign`.
 - [ ] **Step 2:** ponowne uruchomienie -> `lokalna wersja`, zero pobran (log), bajty sidecara wersji bez zmian (`sha256sum`).
 - [ ] **Step 3:** `--check-updates --plan "$DATA/plan.json"` -> `aktualne`; plik planu z `schema: kartograf-plan/1` i `store` = `$DATA`.
 - [ ] **Step 4:** `--upgrade` -> `lokalna wersja`; `--force` -> `bez zmian` (ta sama tresc) albo `nowa wersja` przy zmianie u zrodla.
-- [ ] **Step 5:** `--campaigns all --min-year 2019` na arkuszu z kilkoma lotami (np. `N-34-139-C-a-3-1`) -> kilka katalogow wersji, `full_sheet/` gdy jest pelny lot, `extra.coverage` w sidecarach lotow niepelnych.
+- [ ] **Step 5:** `--all-campaigns --min-year 2019` na arkuszu z kilkoma lotami (np. `N-34-139-C-a-3-1`) -> kilka katalogow wersji, `full_sheet/` gdy jest pelny lot, `extra.coverage` w sidecarach lotow niepelnych.
 - [ ] **Step 6:** Przekaz uzytkownikowi komendy, kody wyjscia, listing `versions/`, liczby hardlinkow. Kazda niezgodnosc: test odtwarzajacy w `tests/` (failing), poprawka, osobny commit.
