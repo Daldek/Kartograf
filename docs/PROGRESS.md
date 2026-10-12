@@ -2148,6 +2148,17 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
     1 m, uklad pionowy CZ) i wartosc domyslna, jesli zostaje. Komunikat
     bledu przy braku wartosci podaje te sama liste. Sprawdzic tez
     istniejace opisy (np. `--vertical-crs` mowi dzis o "default").
+- [ ] **Spojnosc CLI, biblioteki i API (przed wydaniem 0.8.0; decyzja
+  uzytkownika 2026-10-12):** sprawdzic, czy CLI (`kartograf --help` kazdej
+  komendy), biblioteka (funkcje `run_*`/`download_*`/`check_*`, menedzery,
+  providery) i publiczne API (`kartograf/__init__.py` `__all__`) maja te
+  same mozliwosci, flagi/parametry i logike dzialania: kazda flaga CLI ma
+  odpowiednik w API i odwrotnie (np. tryby `update`, `--plan`, zakres lat,
+  `--full-sheet`, `--target-crs`, `--country auto`), te same wartosci
+  domyslne, walidacje i komunikaty bledow, te same statusy wyniku. Wynik:
+  tabela flaga/parametr -> CLI / biblioteka / `__all__` z lukami;
+  rozbieznosci naprawic albo zapisac jako decyzje (np. arkusz CZ bez
+  publicznego API — decyzja 9 planu 2/3 magazynu).
 
 #### Do v1.0.0 — roadmapa
 
