@@ -80,7 +80,7 @@ result = download_pl_cutout(
     vertical_crs="EVRF2007",
     product="nmt",
 )
-print(result.path)
+print(result.file.path)
 ```
 
 ## Gdzie trafiają dane
