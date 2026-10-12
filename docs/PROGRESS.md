@@ -1963,10 +1963,59 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
   Zmigrowac wywolania API przed usunieciem (BREAKING w CHANGELOG).
   Wykonac PRZED planem 1/3 magazynu wersjonowanego (D16 specu, decyzja
   uzytkownika 2026-10-11).
-- [ ] **Parametry wymagane w API (Hydrograf A8):** bez wartosci domyslnych
-  `output_dir="./data"`, `vertical_crs="EVRF2007"` (`DownloadManager`),
-  `MetadataCache` w biezacym katalogu, `depth="0-5cm"`/`stat="mean"`
-  (`calculate_hsg_by_bbox`) — BREAKING; w 0.7.x wartosci mozna podawac jawnie.
+- [ ] **Bez wartosci domyslnych wplywajacych na dane (CLI i API; rozszerza
+  Hydrograf A8; decyzje uzytkownika 2026-10-12)** — BREAKING, kazda pozycja
+  z "Co zrobic" w CHANGELOG; wywolania Hydrografa do dostosowania.
+  Regula: wymagane jest wszystko, co wybiera produkt, wariant, edycje,
+  uklad pionowy, rozdzielczosc, wybor arkuszy albo miejsce zapisu.
+  Zostaja: format danych (`format='GTiff'`, `format='GPKG'`, CLI
+  `landcover --format GPKG`), uklad poziomy PL `EPSG:2180` (`--bbox-crs`,
+  wynik bez `--target-crs`) i natywny `EPSG:5514` wyniku CZ bez
+  `--target-crs`, przelaczniki domyslnie wylaczone (`force`, `full_sheet`,
+  `keep_raw`, `keep_intermediate`, `refresh`, `strict`), `None` = "nie
+  podano" (`min_year`, `max_year`, `year` LAZ, `min_density`, `layer`,
+  `cache`, `session`, `on_progress`, `parent_request`), parametry z jedna
+  dopuszczalna wartoscia (rozdzielczosc NMPT i wycinkow WCS = 1 m,
+  rozdzielczosc CZ wynikajaca z godla SM5) oraz WYJATEK techniczny
+  (`timeout`, `max_workers`/`--workers`, `retries`, `ttl_seconds`,
+  `tolerance_m`, `use_proxy`). Do usuniecia (stan `develop` 2026-10-12):
+  - CLI: `download --product` (`nmt`), `--output` (`./data`),
+    `--resolution` (PL `1m`, CZ `2m`; `download_cmd.py:438`, `2288`),
+    `--vertical-crs` (PL `EVRF2007`, CZ `Bpv`; `download_cmd.py:439`,
+    `2289`), `--system` (`1992`; `download_cmd.py:440`), `--scale`
+    (`1:10000`; `download_cmd.py:1798`, `2434`), `--country` (`auto`);
+    `landcover download --source` (`bdot10k`), `--output`
+    (`./data/landcover`), `--year` (`2018`), `--property` (`soc`),
+    `--depth` (`0-5cm`), `--stat` (`mean`); `landcover list-layers
+    --source` (`bdot10k`); `soilgrids hsg --output` (`./data/hsg`),
+    `--depth` (`0-5cm`).
+  - API: `output_dir` w `DownloadManager`, `FileStorage`,
+    `prepare_pl_cutout`, `download_pl_cutout`, `download_laz_area`,
+    `run_laz_download`, `LandCoverManager`; `MetadataCache(db_path=None)`;
+    `provider=None` w `DownloadManager` i `LandCoverManager`;
+    `vertical_crs` w `DownloadManager`, `FileStorage`, `GugikProvider`,
+    `GugikNmptProvider`, `GugikLazProvider`, `CuzkDmrProvider`,
+    `create_dmr_provider`, `prepare_pl_cutout`, `download_pl_cutout`;
+    `resolution` w `DownloadManager`, `FileStorage`, `GugikProvider`,
+    `CuzkDmrProvider`, `create_dmr_provider` (gdzie jest wybor);
+    `product='nmt'` w `prepare_pl_cutout`/`download_pl_cutout`;
+    `GugikOrtoProvider(color='RGB')`; `CorineProvider.download_by_bbox/
+    godlo(year=2018)`; `SoilGridsProvider.download_by_bbox(property='soc',
+    depth='0-5cm', stat='mean')`; `HSGCalculator.calculate_hsg_by_bbox`
+    i `calculate_hsg_by_godlo` (`depth`, `stat`); `find_sheets_for_bbox`,
+    `find_sheets_for_geometry` (`target_scale='1:10000'`, `system='1992'`),
+    `find_sheets_2000_for_bbox` (`target_scale`); `FileStorage` metody
+    `ext='.asc'` (`get_path`, `exists`, `delete`, `get_full_sheet_path`,
+    `get_size`, `write_atomic`) i `list_files(pattern='**/*.asc')`;
+    `campaigns='newest'` w API znika z przelacznikiem `--all-campaigns`
+    (pozycja wyzej); `skip_existing` znika w planie 1/3 magazynu.
+  - Dokumentacja wyboru: kazdy parametr i flaga, ktore staja sie wymagane
+    (oraz te, ktore zostaja z domyslna), ma w docstringu i w `--help`
+    jasny, prosty i WYCZERPUJACY opis: wszystkie dopuszczalne wartosci,
+    co kazda oznacza, ograniczenia (np. NMT 5 m tylko EVRF2007, NMPT tylko
+    1 m, uklad pionowy CZ) i wartosc domyslna, jesli zostaje. Komunikat
+    bledu przy braku wartosci podaje te sama liste. Sprawdzic tez
+    istniejace opisy (np. `--vertical-crs` mowi dzis o "default").
 
 #### Do v1.0.0 — roadmapa
 
