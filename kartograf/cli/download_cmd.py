@@ -7,6 +7,7 @@ import contextlib
 import json
 import math
 import sys
+from collections import Counter
 from collections.abc import Iterator, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -37,6 +38,12 @@ from kartograf.download.manager import (
     DownloadResult,
     SheetFetch,
     UpdateMode,
+)
+from kartograf.download.updates import (
+    PlanItem,
+    UpdatePlan,
+    check_updates,
+    upgrade,
 )
 from kartograf.exceptions import (
     DownloadError,
@@ -1168,6 +1175,14 @@ def cmd_download(args: argparse.Namespace) -> int:
     # every product supports year flags.
     if _reject_laz_only_opts(args) or _reject_full_sheet_for_laz(args):
         return 1
+    if _update_modes_requested(args) and (
+        args.product == "laz"
+        or (
+            not has_sheet
+            and (args.country != "pl" or getattr(args, "target_crs", None))
+        )
+    ):
+        return _reject_update_modes()
 
     country_flag = args.country
     product = args.product
@@ -1193,6 +1208,8 @@ def cmd_download(args: argparse.Namespace) -> int:
             # a CZ sheet code regardless of `country_flag` (explicit cz or auto)
             if _reject_campaign_opts_without_pl(args, ("CZ",)):
                 return 1
+            if _update_modes_requested(args):
+                return _reject_update_modes()
             return _run_cz(args)
         try:
             parsed = SheetParser(args.sheet)
@@ -1253,8 +1270,11 @@ def cmd_download(args: argparse.Namespace) -> int:
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
-
+        _info_legacy_campaigns(manager)
         update = _update_mode(args)
+        planned = _run_plan_modes(args, manager, _requested_sheets(args))
+        if planned is not None:
+            return planned
 
         try:
             if args.scale:
@@ -1299,33 +1319,20 @@ def cmd_download(args: argparse.Namespace) -> int:
                     # `last_sheet.skipped` = Mock (truthy).
                     fetch = manager.last_sheet
                     sheet = fetch if isinstance(fetch, SheetFetch) else None
-                    # U15: when the standard path keeps a newer flight, name the
-                    # campaign file of this request instead.
-                    where = result
-                    if sheet is not None and sheet.link_outside_range is not None:
-                        where = (sheet.downloaded or sheet.reused)[0]
                     if not args.quiet:
-                        if all_campaigns and sheet is not None:
-                            # M-1: like the list - campaign files, not a sheet
-                            _print_campaign_summary(
-                                len(sheet.downloaded), 1, output_dir, len(sheet.reused)
-                            )
-                        elif sheet is not None and sheet.skipped:
-                            print(f"Skipped {args.sheet} - already exists at {where}")
-                        elif (
-                            sheet is not None
-                            and len(sheet.downloaded + sheet.reused) > 1
-                        ):
-                            # --full-sheet: the newest and the newest full flight
-                            _print_campaign_summary(
-                                len(sheet.downloaded), 1, output_dir, len(sheet.reused)
-                            )
-                        else:
-                            print(f"Downloaded to {where}")
+                        if sheet is not None and sheet.files:
+                            for line in _status_lines(
+                                args.sheet, sheet.files, sheet.newer
+                            ):
+                                print(line)
+                        else:  # a manager stand-in without version facts
+                            print(f"{args.sheet}: {result}")
+                    if sheet is not None and sheet.newer is not None:
+                        _info_newer({args.sheet: sheet.newer})
                     if sheet is not None and sheet.unverified is not None:
                         print(
                             f"Warning: {args.sheet}: skorowidz GUGiK niedostepny "
-                            "— uzyto lokalnej kampanii bez sprawdzenia nowszej "
+                            "— uzyto lokalnej wersji bez sprawdzenia nowszej "
                             f"({sheet.unverified})",
                             file=sys.stderr,
                         )
@@ -1375,9 +1382,160 @@ def _last_result(manager: DownloadManager) -> DownloadResult:
     return result
 
 
+def _update_modes_requested(args: argparse.Namespace) -> bool:
+    return bool(
+        getattr(args, "check_updates", False) or getattr(args, "upgrade", False)
+    )
+
+
+def _reject_update_modes() -> int:
+    """Plan 1/3 decision 8: the versioned store covers PL sheets only so far."""
+    print(
+        "Error: --check-updates/--upgrade dzialaja w tej wersji tylko dla arkuszy "
+        "PL nmt/nmpt/orto (--sheet albo --bbox/--geometry z --country pl, bez "
+        "--target-crs); LAZ, CZ i wycinki: pobranie bez tych flag albo --force",
+        file=sys.stderr,
+    )
+    return 1
+
+
 def _update_mode(args: argparse.Namespace) -> UpdateMode | None:
-    """``update`` of the PL sheet download: ``--force`` -> ``"force"``."""
+    """``update`` of the PL sheet download (spec 4.2): ``--upgrade`` /
+    ``--force``; ``--check-updates`` never downloads (``_run_plan_modes``)."""
+    if getattr(args, "upgrade", False):
+        return "upgrade"
     return "force" if args.force else None
+
+
+def _requested_sheets(args: argparse.Namespace) -> list[str]:
+    """Sheets of the sheet-code mode (``--scale``: its descendants)."""
+    if args.scale:
+        return [
+            d.sheet for d in SheetParser(args.sheet).get_all_descendants(args.scale)
+        ]
+    return [args.sheet]
+
+
+def _info_legacy_campaigns(manager: DownloadManager) -> None:
+    """Spec 4.5: a 0.7.x ``kampanie/`` directory is not used (no migration, D10).
+
+    ``is True``: a manager stand-in (``Mock``) answers with a ``Mock``."""
+    if manager.storage.has_legacy_campaigns() is True:
+        print(
+            "Info: katalog kampanie/ z wersji 0.7.x nie jest uzywany; dane "
+            "zostana pobrane ponownie do versions/",
+            file=sys.stderr,
+        )
+
+
+_PLAN_TEXT = {
+    "current": "aktualne",
+    "missing": "do pobrania",
+    "unverifiable": "nie da sie sprawdzic bez pobrania",
+}
+
+
+def _plan_line(item: PlanItem) -> str:
+    if item.status == "newer":
+        text = f"nowsza: {item.available_label} (lokalna {item.local_label})"
+    elif item.status == "check_failed":
+        text = f"nie udalo sie sprawdzic: {item.error}"
+    else:
+        text = _PLAN_TEXT[item.status]
+        label = item.local_label or item.available_label
+        if label:
+            text += f" ({label})"
+    return f"{item.sheet}: {text}"
+
+
+def _run_plan_modes(
+    args: argparse.Namespace, manager: DownloadManager, sheets: list[str]
+) -> int | None:
+    """``--check-updates [--plan]`` and ``--upgrade --plan`` (spec 4.4).
+
+    ``None`` = neither: the caller downloads. The report goes to stdout also
+    with ``-q`` (it is the result); a position that could not be checked, a
+    stale position or a failure = code 1 (partial success).
+    """
+    if getattr(args, "check_updates", False):
+        plan = check_updates(manager, sheets)
+        for item in plan.items:
+            print(_plan_line(item))
+        if args.plan:
+            Path(args.plan).write_text(plan.to_json(), encoding="utf-8")
+            print(f"Info: zapisano plan aktualizacji {args.plan}", file=sys.stderr)
+        return 1 if any(i.status == "check_failed" for i in plan.items) else 0
+    if not (getattr(args, "upgrade", False) and args.plan):
+        return None
+    try:
+        plan = UpdatePlan.from_json(Path(args.plan).read_text(encoding="utf-8"))
+    except OSError as e:
+        print(f"Error: nie udalo sie odczytac planu {args.plan}: {e}", file=sys.stderr)
+        return 1
+    report = upgrade(manager, plan)
+    if not args.quiet:
+        for fetch in report.done:
+            for line in _status_lines(fetch.sheet, fetch.files, fetch.newer):
+                print(line)
+    for item in report.stale:
+        print(
+            f"Error: {item.sheet}: zrodlo zmienilo sie od planu "
+            f"({item.available_label}) — sprawdz ponownie (--check-updates)",
+            file=sys.stderr,
+        )
+    for sheet, message in report.failed.items():
+        print(f"Error: {sheet}: {message}", file=sys.stderr)
+    return 1 if report.stale or report.failed else 0
+
+
+_STATUS_TEXT = {
+    "new": "nowa wersja",
+    "relabeled": "nowa etykieta",
+    "unchanged": "bez zmian",
+    "local": "lokalna wersja",
+}
+
+
+def _status_lines(
+    sheet: str, files: tuple[tuple[str, str], ...], newer: str | None
+) -> list[str]:
+    """One line per file (spec 4.5): ``<sheet>: nowa wersja <label>_<sha8>``,
+    ``nowa etykieta <label> (ta sama tresc)``, ``bez zmian <label>``,
+    ``lokalna wersja <label>`` (+ the newer campaign, D5)."""
+    lines = []
+    for dirname, status in files:
+        label = dirname.rsplit("_", 1)[0] if status != "new" else dirname
+        text = f"{sheet}: {_STATUS_TEXT.get(status, status)} {label}"
+        if status == "relabeled":
+            text += " (ta sama tresc)"
+        if status == "local" and newer is not None:
+            text += f"; dostepna nowsza {newer} (--upgrade)"
+            newer = None
+        lines.append(text)
+    return lines
+
+
+def _print_version_summary(result: DownloadResult, output_dir: Path) -> None:
+    """Counters of the files of the task (spec 4.5)."""
+    counts = Counter(s for files in result.files.values() for _, s in files)
+    print(
+        f"Nowe: {counts['new']}, nowa etykieta: {counts['relabeled']}, "
+        f"bez zmian: {counts['unchanged']}, lokalne: {counts['local']}, "
+        f"bledy: {len(result.failed)} ({output_dir})"
+    )
+
+
+def _info_newer(newer: dict[str, str]) -> None:
+    """D5: newer campaigns exist but the default mode did not download them."""
+    if not newer:
+        return
+    sheets = list(newer)
+    shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
+    print(
+        f"Info: dostepna nowsza kampania dla {len(sheets)} arkuszy ({shown}) — "
+        "uzyto lokalnych wersji; pobierz: --upgrade",
+        file=sys.stderr,
+    )
 
 
 def _download_sheet_list(
@@ -1432,23 +1590,13 @@ def _print_coverage_hints(result: DownloadResult) -> None:
         )
 
 
-def _print_campaign_summary(
-    downloaded: int, sheets: int, output_dir: Path, existed: int
-) -> None:
-    """Summary of ``--all-campaigns`` (sheet list and a single sheet code)."""
-    print(
-        f"Downloaded {downloaded} campaign files for "
-        f"{sheets} sheets to {output_dir} ({existed} already existed)"
-    )
-
-
 def _warn_unverified(unverified: dict[str, str]) -> None:
     """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
     sheets = list(unverified)
     shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
-        f"{len(sheets)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
+        f"{len(sheets)} arkuszy uzyto lokalnych wersji bez sprawdzenia nowszej "
         f"({shown}) ({unverified[sheets[0]]})",
         file=sys.stderr,
     )
@@ -1500,25 +1648,16 @@ def _finish_pl_sheets(
     _print_link_outside_range(result.link_outside_range, result.full_link_outside_range)
     if result.unverified:
         _warn_unverified(result.unverified)
+    _info_newer(result.newer)
     if not quiet:
         # the progress bar ends with "skipped"/"downloading" without a newline
         print()
+        for sheet, files in result.files.items():
+            for line in _status_lines(sheet, files, result.newer.get(sheet)):
+                print(line)
     if not quiet and paths:
         # O-7: with no file and no skip (only gaps/failures) a summary of 0 is noise
-        if all_campaigns or full_sheet:
-            # `campaign_files` = downloaded + local; local ones separately
-            # (`reused_campaign_files`, a per-sheet subset)
-            files = result.campaign_files
-            existed = sum(len(f) for f in result.reused_campaign_files.values())
-            total_files = sum(len(f) for f in files.values())
-            _print_campaign_summary(
-                total_files - existed, len(files), output_dir, existed
-            )
-        else:
-            print(
-                f"Downloaded {len(result.succeeded)} files to {output_dir} "
-                f"({len(result.skipped)} already existed)"
-            )
+        _print_version_summary(result, output_dir)
     total = result.total
     hard = result.hard_failures
     missing = result.no_coverage
@@ -1681,7 +1820,7 @@ def _print_link_outside_range(
     print(
         f"Info: {len(rows)} dowiazan wskazuje lokalny lot spoza tego zadania "
         "(dowiazanie nigdy nie cofa sie na starszy lot); pobrane loty sa "
-        "w <segment>/kampanie/:",
+        "w <segment>/versions/:",
         file=sys.stderr,
     )
     for sheet, tree, target in rows[:10]:
@@ -2011,6 +2150,10 @@ def _download_pl_sheet_list(
                 max_year=max_year,
                 full_sheet=full_sheet,
             )
+            _info_legacy_campaigns(manager)
+            planned = _run_plan_modes(args, manager, sheet_list)
+            if planned is not None:
+                return planned
             all_paths, result = _download_sheet_list(
                 manager, sheet_list, update, on_progress
             )

@@ -150,6 +150,8 @@ class DownloadResult:
     newer : dict[str, str]
         Default mode: sheet -> label of a newer campaign available in the
         index that was NOT downloaded (``update="upgrade"`` fetches it, D5).
+    files : dict[str, tuple[tuple[str, str], ...]]
+        Successful sheets: ``SheetFetch.files`` (version directory, status).
 
     Notes
     -----
@@ -176,6 +178,7 @@ class DownloadResult:
     full_link_outside_range: dict[str, Path] = field(default_factory=dict)
     without_full: list[str] = field(default_factory=list)
     newer: dict[str, str] = field(default_factory=dict)
+    files: dict[str, tuple[tuple[str, str], ...]] = field(default_factory=dict)
 
     @property
     def total(self) -> int:
@@ -263,6 +266,9 @@ class SheetFetch:
     newer : str or None
         Default mode, newest flight: label of a newer campaign in the index
         kept out of the store (the local version stays, D5).
+    files : tuple[tuple[str, str], ...]
+        One entry per file of this call: version directory ``<label>_<sha8>``
+        and its status (``new``/``relabeled``/``unchanged``/``local``).
     """
 
     sheet: str
@@ -279,6 +285,7 @@ class SheetFetch:
     full_link_outside_range: Path | None = None
     no_full_flight: bool = False
     newer: str | None = None
+    files: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -759,6 +766,7 @@ class DownloadManager:
             status="local",
             version=version.label,
             unverified=str(error),
+            files=((version.path.parent.name, "local"),),
             full_link=full if linked_version(full) is not None else None,
         )
 
@@ -1147,7 +1155,12 @@ class DownloadManager:
                 logger.info(f"{sheet}: lokalna wersja {newest.label}")
                 self._link(std, newest.path, version_key(newest), refresh=False)
                 return SheetFetch(
-                    sheet, std, skipped=True, status="local", version=newest.label
+                    sheet,
+                    std,
+                    skipped=True,
+                    status="local",
+                    version=newest.label,
+                    files=((newest.path.parent.name, "local"),),
                 )
         if on_download is not None:
             on_download()
@@ -1177,7 +1190,12 @@ class DownloadManager:
                 refresh=commit.status != "unchanged",
             )
         return SheetFetch(
-            sheet, std, skipped=False, status=commit.status, version=commit.label
+            sheet,
+            std,
+            skipped=False,
+            status=commit.status,
+            version=commit.label,
+            files=((commit.path.parent.name, commit.status),),
         )
 
     @staticmethod
@@ -1430,12 +1448,14 @@ class DownloadManager:
         commits: list[VersionCommit] = []
         started = False
         newer: str | None = None
+        files: list[tuple[str, str]] = []
         for pick in picks:
             if pick.local is not None and pick.local_ref is not None:
                 logger.info(f"{sheet} {pick.local.label}: lokalna wersja")
                 if pick.newer:
                     newer = pick.ref.dirname
                 reused.append(pick.local.path)
+                files.append((pick.local.path.parent.name, "local"))
                 local.append((pick.local_ref, pick.local.path))
                 continue
             if on_download is not None and not started:
@@ -1450,6 +1470,7 @@ class DownloadManager:
                 errors.append((pick.ref.dirname, e))
                 continue
             commits.append(commit)
+            files.append((commit.path.parent.name, commit.status))
             downloaded.append(commit.path)
             local.append((pick.ref, commit.path))
         refreshed = {c.path for c in commits if c.status != "unchanged"}
@@ -1524,6 +1545,7 @@ class DownloadManager:
             full_link_outside_range=full_link_outside_range,
             no_full_flight=no_full_flight,
             newer=newer,
+            files=tuple(files),
         )
 
     def _add_range_flights(
@@ -1608,6 +1630,7 @@ class DownloadManager:
             status="local",
             version=_label_of(target),
             unverified=str(error),
+            files=((target.parent.name, "local"),),
             full_link=full if linked_version(full) is not None else None,
         )
 
@@ -1689,6 +1712,8 @@ class DownloadManager:
                 result.without_full.append(sheet)
             if fetch.newer is not None:
                 result.newer[sheet] = fetch.newer
+            if fetch.files:
+                result.files[sheet] = fetch.files
         elif status in ("failed", "no_coverage"):
             # R5: no data at the source — a list failure, but recognizable
             result.failed.append(sheet)

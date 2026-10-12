@@ -262,12 +262,36 @@ def create_parser() -> argparse.ArgumentParser:
         help="Katalog wyniku (wymagany); pliki trafiaja do "
         "<DIR>/<produkt>/<segment>/...",
     )
-    download_parser.add_argument(
+    update_modes = download_parser.add_mutually_exclusive_group()
+    update_modes.add_argument(
+        "--check-updates",
+        action="store_true",
+        help="Tylko PL --sheet/--bbox/--geometry --country pl (bez --target-crs): "
+        "porownaj lokalne wersje ze skorowidzem GUGiK i wypisz raport "
+        "(aktualne / nowsza / do pobrania); niczego nie pobiera",
+    )
+    update_modes.add_argument(
+        "--upgrade",
+        action="store_true",
+        help="Tylko PL --sheet/--bbox/--geometry --country pl (bez --target-crs): "
+        "pobierz nowsza kampanie, gdy jest w skorowidzu (domyslnie tylko "
+        "Info: o nowszej); z --plan wykonaj zapisany plan",
+    )
+    update_modes.add_argument(
         "--force",
         action="store_true",
-        help="Overwrite existing files (PL nmt/nmpt/orto: pobiera ponownie "
-        "wybrane kampanie i odswieza ich liste z GUGiK; wycinek --target-crs "
-        "PL pobiera zawsze, --force nic nie zmienia)",
+        help="PL nmt/nmpt/orto: pobierz ponownie wybrane kampanie i odswiez ich "
+        "liste z GUGiK (ta sama tresc = bez zmian, inna = nowa wersja; nic nie "
+        "jest nadpisywane); wycinek --target-crs PL pobiera zawsze; CZ i LAZ: "
+        "nadpisz istniejace pliki",
+    )
+    download_parser.add_argument(
+        "--plan",
+        metavar="PLIK",
+        default=None,
+        help="Z --check-updates: zapisz plan aktualizacji (JSON kartograf-plan/1); "
+        "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad, bez "
+        "pobrania)",
     )
     download_parser.add_argument(
         "--quiet",
@@ -317,7 +341,7 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Tylko PL: bez flagi najnowszy lot na arkusz w zakresie lat "
         "(jeden lot); z flaga wszystkie loty z zakresu lat do "
-        "<segment>/kampanie/; flagi roku ograniczaja tylko dopuszczalne lata; "
+        "<segment>/versions/; flagi roku ograniczaja tylko dopuszczalne lata; "
         "LAZ: bez deduplikacji pokrycia; nie dziala z --target-crs",
     )
     download_parser.add_argument(

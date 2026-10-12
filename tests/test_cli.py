@@ -62,8 +62,22 @@ def _sheet_list_manager(*paths, failed=(), no_coverage=(), skipped=()):
         failed=[*failed, *no_coverage],
         skipped=list(skipped),
         no_coverage=list(no_coverage),
+        files={
+            Path(p).stem: (
+                (
+                    "2025-01-01_1_0a1b2c3d",
+                    "local" if Path(p).stem in skipped else "new",
+                ),
+            )
+            for p in paths
+        },
     )
     return manager
+
+
+def _files(sheets, status="new"):
+    """``DownloadResult.files`` of a fake: one version file per sheet."""
+    return {sheet: (("2025-01-01_1_0a1b2c3d", status),) for sheet in sheets}
 
 
 def _mock_manager(path):
@@ -874,7 +888,7 @@ class TestCmdDownload:
         assert result == 0
         captured = capsys.readouterr()
         assert "Downloading" in captured.out
-        assert "Downloaded to" in captured.out
+        assert "N-34-130-D-d-2-4: " in captured.out  # result line (mock manager)
 
     # --- hierarchy exit code (A2-3) ---
 
@@ -961,7 +975,12 @@ class TestCmdDownload:
         """D10: sea sheets under a 1:50000 code = Warning + exit code 0 (as --bbox)."""
         paths = [tmp_path / f"test{i}.asc" for i in range(3)]
         mock_manager_class.return_value = self._hierarchy_manager(
-            DownloadResult(succeeded=paths, failed=["A"], no_coverage=["A"])
+            DownloadResult(
+                succeeded=paths,
+                failed=["A"],
+                no_coverage=["A"],
+                files=_files(["B", "C", "D"]),
+            )
         )
 
         result = main(
@@ -988,7 +1007,9 @@ class TestCmdDownload:
         captured = capsys.readouterr()
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy (A)" in captured.err
         assert "Error:" not in captured.err
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 1" in (
+            captured.out
+        )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_hierarchy_all_no_coverage_returns_exit_1(
@@ -1030,7 +1051,12 @@ class TestCmdDownload:
     ):
         """Only skips (the files already exist) is still a success."""
         mock_manager = self._hierarchy_manager(
-            DownloadResult(succeeded=[], failed=[], skipped=["A", "B", "C", "D"])
+            DownloadResult(
+                succeeded=[],
+                failed=[],
+                skipped=["A", "B", "C", "D"],
+                files=_files(["A", "B", "C", "D"], "local"),
+            )
         )
         mock_manager.download_sheet.return_value = [tmp_path / "x.asc"] * 4
         mock_manager_class.return_value = mock_manager
@@ -1058,8 +1084,10 @@ class TestCmdDownload:
         assert result == 0
         captured = capsys.readouterr()
         assert captured.err == ""
-        assert "Downloaded 0 files" in captured.out
-        assert "4 already existed" in captured.out
+        assert "A: lokalna wersja 2025-01-01_1" in captured.out
+        assert "Nowe: 0, nowa etykieta: 0, bez zmian: 0, lokalne: 4, bledy: 0" in (
+            captured.out
+        )
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
     def test_hierarchy_scale_mode_failure_returns_exit_1(
@@ -2386,7 +2414,7 @@ class TestCmdDownloadBBox:
         # --workers reaches the manager, not the CLI loop
         assert mock_manager_cls.call_args.kwargs["max_workers"] == 1
         captured = capsys.readouterr()
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
 
 class _SheetProvider:
@@ -2514,7 +2542,7 @@ class TestSheetListExitCode:
         assert "Error:" not in captured.err
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy" in captured.err
         assert "(N-34-130-D-d-2-1)" in captured.err
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
     def test_all_no_coverage_returns_1(self, tmp_path, capsys):
         """Zero files and all without data = exit code 1 (nothing to download)."""
@@ -2649,7 +2677,7 @@ class TestSheetListExitCode:
         assert len(provider.calls) == 4
         captured = capsys.readouterr()
         assert "Warning: GUGiK nie ma danych dla 1 z 4 arkuszy" in captured.err
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
 
 class TestProgressNoCoverage:
@@ -3629,7 +3657,7 @@ class TestCmdDownloadGeometry:
         mock_manager.download_sheets.assert_called_once()
         assert mock_manager.download_sheets.call_args.args[0] == ["A", "B"]
         captured = capsys.readouterr()
-        assert "Downloaded 3 files" in captured.out
+        assert "Nowe: 3," in captured.out
 
 
 # ===========================================================================
@@ -8585,7 +8613,7 @@ class TestPartialSheetWarning:
 
 
 class TestSingleSheetSkipMessage:
-    """E15 (E2E-B C17): skipping one sheet code says skip, not ``Downloaded to``."""
+    """E15 + spec 4.5: one sheet code reports the version status per file."""
 
     @staticmethod
     def _run(tmp_path, provider, *extra):
@@ -8617,27 +8645,27 @@ class TestSingleSheetSkipMessage:
                 ]
             )
 
-    def test_second_run_reports_skip(self, tmp_path, capsys):
+    def test_second_run_reports_local_version(self, tmp_path, capsys):
         provider = _SheetProvider({})
         assert self._run(tmp_path, provider) == 0
         first = capsys.readouterr().out
-        assert "Downloaded to" in first
+        assert "N-34-130-D-d-2-4: nowa wersja " in first
 
         assert self._run(tmp_path, provider) == 0
 
         out = capsys.readouterr().out
         assert provider.calls == ["N-34-130-D-d-2-4"]  # the second run without network
-        assert "Downloaded to" not in out
-        assert "Skipped N-34-130-D-d-2-4 - already exists at" in out
+        assert "nowa wersja" not in out
+        assert "N-34-130-D-d-2-4: lokalna wersja " in out
 
-    def test_force_reports_download(self, tmp_path, capsys):
+    def test_force_reports_unchanged_content(self, tmp_path, capsys):
         provider = _SheetProvider({})
         self._run(tmp_path, provider)
         capsys.readouterr()
 
         assert self._run(tmp_path, provider, "--force") == 0
 
-        assert "Downloaded to" in capsys.readouterr().out
+        assert "N-34-130-D-d-2-4: bez zmian " in capsys.readouterr().out
         assert len(provider.calls) == 2
 
 
@@ -8773,7 +8801,7 @@ class TestUnreadableMetadataCache:
         assert files == ["N-34-130-D-d-2-4.asc"]
         assert providers[0].calls == ["N-34-130-D-d-2-4"]
         captured = capsys.readouterr()
-        assert "Downloaded to" in captured.out
+        assert "N-34-130-D-d-2-4: nowa wersja " in captured.out
         assert "Error:" not in captured.err
         assert len(self._cache_warnings(captured.err)) == 1
         assert captured.err.startswith("Warning: cache metadanych nieczytelny (")
@@ -10123,138 +10151,99 @@ class TestCampaignOptions:
         assert _CAMPAIGN_INFO not in err
         mock_cz.assert_not_called()
 
+    @staticmethod
+    def _single(tmp_path):
+        return main(
+            [
+                "download",
+                "--product",
+                "nmt",
+                "--country",
+                "auto",
+                "--resolution",
+                "pl=1m,cz=2m",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--sheet",
+                "N-34-130-D-d-2-4",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_skip_message_from_last_sheet(
+    def test_single_sheet_local_version_with_newer_campaign(
         self, mock_manager_class, capsys, tmp_path
     ):
         from kartograf.download.manager import SheetFetch
 
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            status="local",
+            newer="2025-10-21_84183",
+            files=(("2025-04-27_83233_0a1b2c3d", "local"),),
+        )
         mock_manager_class.return_value = manager
 
+        assert self._single(tmp_path) == 0
+        captured = capsys.readouterr()
         assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            == 0
-        )
-        out = capsys.readouterr().out
-        assert f"Skipped N-34-130-D-d-2-4 - already exists at {path}" in out
-        assert "Downloaded to" not in out
+            "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233; dostepna nowsza "
+            "2025-10-21_84183 (--upgrade)"
+        ) in captured.out
+        assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_mock_manager_reports_downloaded(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        """I-1: a Mock() fake has ``last_sheet.skipped`` = Mock (truthy)."""
-        mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
-
-        assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            == 0
-        )
-        out = capsys.readouterr().out
-        assert "Downloaded to" in out
-        assert "Skipped" not in out
-
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_single_sheet_existing_link_but_new_campaign_reports_downloaded(
-        self, mock_manager_class, capsys, tmp_path
-    ):
+    def test_single_sheet_new_version_line(self, mock_manager_class, capsys, tmp_path):
         from kartograf.download.manager import SheetFetch
 
         target = tmp_path / "N-34-130-D-d-2-4.asc"
-        target.write_bytes(b"old link target")
         manager = _mock_manager(target)
-        manager.storage.get_path.return_value = target
         manager.last_sheet = SheetFetch(
             "N-34-130-D-d-2-4",
             target,
             skipped=False,
-            downloaded=(tmp_path / "versions" / "new.asc",),
             status="new",
+            files=(("2025-10-21_84183_0a1b2c3d", "new"),),
         )
         mock_manager_class.return_value = manager
 
-        assert (
-            main(
-                [
-                    "download",
-                    "--product",
-                    "nmt",
-                    "-o",
-                    "./data",
-                    "--country",
-                    "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
-                    "--vertical-crs",
-                    "pl=EVRF2007,cz=Bpv",
-                    "--sheet",
-                    "N-34-130-D-d-2-4",
-                    "-o",
-                    str(tmp_path),
-                ]
-            )
-            == 0
-        )
+        assert self._single(tmp_path) == 0
         out = capsys.readouterr().out
-        assert f"Downloaded to {target}" in out
-        assert "Skipped" not in out
+        assert "N-34-130-D-d-2-4: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
+
+    @patch("kartograf.cli.download_cmd.DownloadManager")
+    def test_single_sheet_mock_manager_reports_result_path(
+        self, mock_manager_class, capsys, tmp_path
+    ):
+        """I-1: a Mock() fake has no ``SheetFetch``: the result path only."""
+        mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
+
+        assert self._single(tmp_path) == 0
+        assert f"N-34-130-D-d-2-4: {tmp_path / 'a.asc'}" in capsys.readouterr().out
 
     @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
     @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_summary_counts_campaign_files(
+    def test_all_list_status_line_per_file_and_counters(
         self, mock_manager_class, mock_find, capsys, tmp_path
     ):
         mock_find.return_value = ["A", "B", "C"]
         a, b, c = (tmp_path / f"{n}.asc" for n in "abc")
-        manager = _sheet_list_manager(a, b, c, skipped=["C"])
-        manager.last_result.succeeded = [a, b]
-        manager.last_result.campaign_files = {
-            "A": (tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            "B": (tmp_path / "k1" / "b.asc",),
-            "C": (tmp_path / "k1" / "c.asc", tmp_path / "k2" / "c.asc"),
-        }
-        # a skipped sheet = all its campaigns already local (like the manager)
-        manager.last_result.reused_campaign_files = {
-            "C": manager.last_result.campaign_files["C"]
+        manager = _sheet_list_manager(a, b, c)
+        manager.last_result.files = {
+            "A": (
+                ("2025-10-21_84183_0a1b2c3d", "new"),
+                ("2023-09-05_78047_1a1b2c3d", "local"),
+            ),
+            "B": (("2025-10-21_84190_2a1b2c3d", "relabeled"),),
+            "C": (
+                ("2025-10-21_84191_3a1b2c3d", "unchanged"),
+                ("2019-04-18_73021_4a1b2c3d", "local"),
+            ),
         }
         mock_manager_class.return_value = manager
 
@@ -10263,8 +10252,6 @@ class TestCampaignOptions:
                 "download",
                 "--product",
                 "nmt",
-                "-o",
-                "./data",
                 "--country",
                 "auto",
                 "--resolution",
@@ -10280,54 +10267,14 @@ class TestCampaignOptions:
 
         assert rc == 0
         out = capsys.readouterr().out
+        assert "A: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
+        assert "A: lokalna wersja 2023-09-05_78047" in out
+        assert "B: nowa etykieta 2025-10-21_84190 (ta sama tresc)" in out
+        assert "C: bez zmian 2025-10-21_84191" in out
         assert (
-            f"Downloaded 3 campaign files for 3 sheets to {tmp_path} "
-            "(2 already existed)"
+            "Nowe: 1, nowa etykieta: 1, bez zmian: 1, lokalne: 2, bledy: 0 "
+            f"({tmp_path})"
         ) in out
-        assert "Downloaded 2 files" not in out
-
-    @patch("kartograf.cli.download_cmd.find_sheets_for_bbox")
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_summary_partially_new_sheets(
-        self, mock_manager_class, mock_find, capsys, tmp_path
-    ):
-        """Fix 1: 10 sheets x (1 new + 3 local) -> 10 downloaded, 30 local."""
-        sheets = [f"N-34-130-D-d-2-{i}" for i in range(10)]
-        mock_find.return_value = sheets
-        paths = [tmp_path / f"{g}.asc" for g in sheets]
-        manager = _sheet_list_manager(*paths)
-        files = {
-            g: tuple(tmp_path / f"k{k}" / f"{g}.asc" for k in range(4)) for g in sheets
-        }
-        manager.last_result.campaign_files = files
-        manager.last_result.reused_campaign_files = {g: f[1:] for g, f in files.items()}
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                *_PL_BBOX_2180,
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert rc == 0
-        assert (
-            f"Downloaded 10 campaign files for 10 sheets to {tmp_path} "
-            "(30 already existed)"
-        ) in capsys.readouterr().out
 
     @patch("kartograf.download.cutout.prepare_pl_cutout")
     @patch("kartograf.cli.download_cmd._run_cz")
@@ -10689,7 +10636,7 @@ class TestCampaignOptions:
         err = capsys.readouterr().err
         assert (
             "Warning: N-34-130-D-d-2-4: skorowidz GUGiK niedostepny — uzyto "
-            "lokalnej kampanii bez sprawdzenia nowszej "
+            "lokalnej wersji bez sprawdzenia nowszej "
             "(pobranie nieudane po 3 probach: HTTP 503)"
         ) in err
 
@@ -10766,8 +10713,8 @@ class TestCampaignOptions:
         assert rc == 0
         err = capsys.readouterr().err
         assert (
-            "Warning: skorowidz GUGiK niedostepny — dla 2 arkuszy uzyto lokalnej "
-            "kampanii bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
+            "Warning: skorowidz GUGiK niedostepny — dla 2 arkuszy uzyto lokalnych "
+            "wersji bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
             "(HTTP 503)"
         ) in err
 
@@ -10818,99 +10765,6 @@ class TestCampaignOptions:
     # M-1: single sheet code with --all-campaigns — summary line as for a list
     # -------------------------------------------------------------------------
 
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_single_sheet_summary_counts_campaign_files(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        from kartograf.download.manager import SheetFetch
-
-        path = tmp_path / "a.asc"
-        manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=False,
-            downloaded=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            reused=(tmp_path / "k3" / "a.asc",),
-            status="new",
-        )
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert rc == 0
-        out = capsys.readouterr().out
-        assert (
-            f"Downloaded 2 campaign files for 1 sheets to {tmp_path} "
-            "(1 already existed)"
-        ) in out
-        assert "Downloaded to" not in out
-        assert "Skipped" not in out
-
-    @patch("kartograf.cli.download_cmd.DownloadManager")
-    def test_all_single_sheet_all_local_summary(
-        self, mock_manager_class, capsys, tmp_path
-    ):
-        from kartograf.download.manager import SheetFetch
-
-        path = tmp_path / "a.asc"
-        manager = _mock_manager(path)
-        manager.last_sheet = SheetFetch(
-            "N-34-130-D-d-2-4",
-            path,
-            skipped=True,
-            reused=(tmp_path / "k1" / "a.asc", tmp_path / "k2" / "a.asc"),
-            status="local",
-        )
-        mock_manager_class.return_value = manager
-
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert rc == 0
-        out = capsys.readouterr().out
-        assert (
-            f"Downloaded 0 campaign files for 1 sheets to {tmp_path} "
-            "(2 already existed)"
-        ) in out
-
 
 class TestListMessagesUx:
     """O-3 / O-6 / O-7: CLI messages on no data, skip and download."""
@@ -10919,12 +10773,17 @@ class TestListMessagesUx:
     def test_single_sheet_skip_has_no_downloading_line(
         self, mock_manager_class, capsys, tmp_path
     ):
-        """O-3: Skipped is not preceded by 'Downloading ...'."""
+        """O-3: a local version is not preceded by 'Downloading ...'."""
         from kartograf.download.manager import SheetFetch
 
         path = tmp_path / "a.asc"
         manager = _mock_manager(path)  # the mock does not call on_download (skip)
-        manager.last_sheet = SheetFetch("N-34-130-D-d-2-4", path, skipped=True)
+        manager.last_sheet = SheetFetch(
+            "N-34-130-D-d-2-4",
+            path,
+            skipped=True,
+            files=(("2025-04-27_83233_0a1b2c3d", "local"),),
+        )
         mock_manager_class.return_value = manager
 
         rc = main(
@@ -10949,7 +10808,7 @@ class TestListMessagesUx:
 
         assert rc == 0
         out = capsys.readouterr().out
-        assert "Skipped" in out
+        assert "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233" in out
         assert "Downloading" not in out
 
     @patch("kartograf.cli.download_cmd.DownloadManager")
@@ -11592,7 +11451,7 @@ class TestFullSheetOption:
         assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert fake.downloads == [REC["84183"].url, REC["83233"].url]
-        assert "Downloaded 2 campaign files for 1 sheets" in captured.out
+        assert captured.out.count(f"{self.G}: nowa wersja ") == 2
         first = self._partial_warning(captured.err)
         assert self.G in first and "full_sheet/" in first
         assert "uzyj --full-sheet" not in first
@@ -11600,7 +11459,7 @@ class TestFullSheetOption:
         assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert len(fake.downloads) == 2
-        assert f"Skipped {self.G}" in captured.out
+        assert captured.out.count(f"{self.G}: lokalna wersja ") == 2
         assert self._partial_warning(captured.err) == first
 
     def test_without_flag_hints_full_sheet(self, capsys, tmp_path):
