@@ -63,7 +63,7 @@ class GugikNmptProvider(GugikProvider):
     }
 
     # WMS endpoints for NMPT indexes (1m only)
-    WMS_SKOROWIDZE_ENDPOINTS = {
+    WMS_INDEX_ENDPOINTS = {
         "1m": {
             "KRON86": (
                 "https://mapy.geoportal.gov.pl"

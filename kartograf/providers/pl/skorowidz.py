@@ -20,7 +20,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
-from kartograf.sources.registry import parse_pl_uklad
+from kartograf.sources.registry import parse_pl_system
 from kartograf.transport.http import SessionPerThread, download_to, get_with_retry
 
 logger = logging.getLogger(__name__)
@@ -38,9 +38,9 @@ _OGC_TEXT = re.compile(
 
 
 def _horizontal_crs(value: str | None) -> tuple[str | None, int | None]:
-    """``(uklad, zone)`` of a record; ``(None, None)`` = record without a CRS
-    (rejected in ``select_sheet_record``). Parser: ``parse_pl_uklad`` (D3)."""
-    return parse_pl_uklad(value) or (None, None)
+    """``(system, zone)`` of a record; ``(None, None)`` = record without a CRS
+    (rejected in ``select_sheet_record``). Parser: ``parse_pl_system`` (D3)."""
+    return parse_pl_system(value) or (None, None)
 
 
 def _metres(value: str | None) -> float | None:
@@ -54,11 +54,11 @@ def _metres(value: str | None) -> float | None:
 @dataclass(frozen=True)
 class SkorowidzRecord:
     url: str
-    godlo: str
+    sheet: str
     aktualnosc: str
     dt_pzgik: str | None
     layer: str
-    uklad: str | None
+    system: str | None
     zone: int | None
     resolution_m: float | None
     full_sheet: bool | None
@@ -79,7 +79,7 @@ class SkorowidzRecord:
             "url": self.url,
             "index_url": endpoint,
             "layer": self.layer,
-            "sheet": self.godlo,
+            "sheet": self.sheet,
             "acquisition_date": self.aktualnosc,
             "acquisition_year": self.raw.get("aktualnoscRok") or self.aktualnosc[:4],
             "pzgik_date": self.dt_pzgik,
@@ -109,7 +109,7 @@ class SkorowidzRecord:
         if "archive_module" not in source:
             # 0.7.1 key: older cache entries are a miss (cached_record)
             raise KeyError("archive_module")
-        uklad, zone = _horizontal_crs(source.get("declared_crs") or "")
+        system, zone = _horizontal_crs(source.get("declared_crs") or "")
         raw = {
             key: str(source[field])
             for key, field in (
@@ -127,11 +127,11 @@ class SkorowidzRecord:
         }
         return cls(
             url=source["url"],
-            godlo=source["sheet"],
+            sheet=source["sheet"],
             aktualnosc=source["acquisition_date"],
             dt_pzgik=source.get("pzgik_date"),
             layer=source["layer"],
-            uklad=uklad,
+            system=system,
             zone=zone,
             resolution_m=source.get("resolution_m"),
             full_sheet=source.get("full_sheet"),
@@ -176,13 +176,13 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
             logger.warning("Warstwa %s: pominieto rekord bez URL HTTPS", layer)
             continue
         try:
-            godlo = SheetParser(raw.get("godlo", "")).godlo
+            sheet = SheetParser(raw.get("godlo", "")).sheet
         except (ParseError, ValidationError):
             logger.warning(
                 "Warstwa %s: nieprawidlowe godlo %r", layer, raw.get("godlo")
             )
             continue
-        uklad, zone = _horizontal_crs(
+        system, zone = _horizontal_crs(
             raw.get("ukladWspolrzednychPoziomych") or raw.get("ukladWspolrzednych", "")
         )
         resolution_text = raw.get("charakterystykaPrzestrzenna") or raw.get(
@@ -194,11 +194,11 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
         )
         record = SkorowidzRecord(
             url=url,
-            godlo=godlo,
+            sheet=sheet,
             aktualnosc=raw.get("aktualnosc", ""),
             dt_pzgik=raw.get("dt_pzgik"),
             layer=layer,
-            uklad=uklad,
+            system=system,
             zone=zone,
             resolution_m=resolution,
             full_sheet={"TAK": True, "NIE": False}.get(full_sheet or ""),
@@ -214,7 +214,7 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
                 logger.warning(
                     "Warstwa %s: rekord %s ma rok %s poza partycja warstwy",
                     layer,
-                    godlo,
+                    sheet,
                     record_year,
                 )
         records.append(record)
@@ -224,27 +224,27 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
 def _matches(
     record: SkorowidzRecord,
     *,
-    godlo: str,
-    uklad: str,
+    sheet: str,
+    system: str,
     zone: int | None,
     resolution_m: float | None,
     predicate: Callable[[SkorowidzRecord], bool] | None,
 ) -> bool:
     """ADR-028 hard filter shared by single-record selection and campaign lists.
 
-    ``godlo`` must already be normalized; called once per record (the warning
+    ``sheet`` must already be normalized; called once per record (the warning
     about a missing CRS/resolution is not duplicated).
     """
-    if record.uklad is None or record.resolution_m is None:
+    if record.system is None or record.resolution_m is None:
         logger.warning(
             "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci — pominieto",
             record.layer,
-            record.godlo,
+            record.sheet,
         )
         return False
-    if record.godlo != godlo or record.uklad != uklad:
+    if record.sheet != sheet or record.system != system:
         return False
-    if uklad == "2000" and record.zone != zone:
+    if system == "2000" and record.zone != zone:
         return False
     if resolution_m is not None and abs(record.resolution_m - resolution_m) >= 1e-6:
         return False
@@ -258,21 +258,21 @@ def _campaign_key(record: SkorowidzRecord) -> tuple[str, str, str]:
 def select_sheet_record(
     records: Iterable[SkorowidzRecord],
     *,
-    godlo: str,
-    uklad: str,
+    sheet: str,
+    system: str,
     zone: int | None = None,
     resolution_m: float | None = None,
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
 ) -> SkorowidzRecord | None:
     """Pick the newest campaign meeting ALL requirements of the request."""
-    godlo = SheetParser(godlo).godlo
+    sheet = SheetParser(sheet).sheet
     matching = [
         record
         for record in records
         if _matches(
             record,
-            godlo=godlo,
-            uklad=uklad,
+            sheet=sheet,
+            system=system,
             zone=zone,
             resolution_m=resolution_m,
             predicate=predicate,
@@ -284,21 +284,21 @@ def select_sheet_record(
 def select_campaign_records(
     records: Iterable[SkorowidzRecord],
     *,
-    godlo: str,
-    uklad: str,
+    sheet: str,
+    system: str,
     zone: int | None = None,
     resolution_m: float | None = None,
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
 ) -> list[SkorowidzRecord]:
     """All records passing the ``select_sheet_record`` filter, without
     duplicate URLs, descending by ``(aktualnosc, dt_pzgik, url)``."""
-    godlo = SheetParser(godlo).godlo
+    sheet = SheetParser(sheet).sheet
     unique: dict[str, SkorowidzRecord] = {}
     for record in records:
         if _matches(
             record,
-            godlo=godlo,
-            uklad=uklad,
+            sheet=sheet,
+            system=system,
             zone=zone,
             resolution_m=resolution_m,
             predicate=predicate,
@@ -313,7 +313,7 @@ def query_skorowidz_layer(
     layer: str,
     *,
     query_bbox: str,
-    godlo: str,
+    sheet: str,
     timeout: float,
     retries: int = 3,
     label: str | None = None,
@@ -339,7 +339,7 @@ def query_skorowidz_layer(
         "I": 50,
         "J": 50,
     }
-    description = f"{godlo}: warstwa {layer}"
+    description = f"{sheet}: warstwa {layer}"
     response = get_with_retry(
         session,
         f"{endpoint}?{urlencode(params)}",
@@ -352,11 +352,11 @@ def query_skorowidz_layer(
         match = _OGC_TEXT.search(text)
         excerpt = " ".join((match[1] if match else text).split())[:200]
         raise DownloadError(
-            f"{description}: raport wyjatku OGC: {excerpt}", godlo=godlo
+            f"{description}: raport wyjatku OGC: {excerpt}", sheet=sheet
         )
     if not is_skorowidz_answer(text):
         raise DownloadError(
-            f"{description}: odpowiedz nie jest szablonem skorowidza GUGiK", godlo=godlo
+            f"{description}: odpowiedz nie jest szablonem skorowidza GUGiK", sheet=sheet
         )
     return parse_skorowidz_records(text, label or layer)
 
@@ -375,14 +375,14 @@ class SkorowidzQuery:
 
 def _zone(parser: SheetParser) -> int | None:
     """PL-2000 zone of the sheet code (record filter); PL-1992 -> ``None``."""
-    return int(parser.godlo.split(".")[0]) if parser.uklad == "2000" else None
+    return int(parser.sheet.split(".")[0]) if parser.system == "2000" else None
 
 
-def _cached_no_coverage_message(godlo: str) -> str:
+def _cached_no_coverage_message(sheet: str) -> str:
     """Message of a cached no-coverage entry written without one (before
     2026-10-07). A cache hit never calls the provider's ``no_coverage`` -
     that may query the network (variant hints, P10)."""
-    return f"Brak danych dla {godlo} (z cache metadanych)"
+    return f"Brak danych dla {sheet} (z cache metadanych)"
 
 
 class SourceInfoMixin:
@@ -393,11 +393,11 @@ class SourceInfoMixin:
         self._sources: dict[str, dict] = {}
         self._sources_lock = threading.Lock()
 
-    def _remember_source(self, godlo: str, source: dict) -> None:
+    def _remember_source(self, sheet: str, source: dict) -> None:
         with self._sources_lock:
-            self._sources[SheetParser(godlo).godlo] = dict(source)
+            self._sources[SheetParser(sheet).sheet] = dict(source)
 
-    def source_info(self, godlo: str) -> dict | None:
+    def source_info(self, sheet: str) -> dict | None:
         """Origin of the sheet's index record (URL, layer, acquisition date).
 
         Filled by the single-record flow (``_resolve_record``: ``download``,
@@ -410,7 +410,7 @@ class SourceInfoMixin:
         failed.
         """
         with self._sources_lock:
-            source = self._sources.get(SheetParser(godlo).godlo)
+            source = self._sources.get(SheetParser(sheet).sheet)
             return dict(source) if source is not None else None
 
 
@@ -439,9 +439,9 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         """Provider hook: cache key, endpoint and product filter for a sheet."""
         raise NotImplementedError
 
-    def _resolve_sheet(self, godlo: str, timeout: int | None = None) -> SkorowidzRecord:
+    def _resolve_sheet(self, sheet: str, timeout: int | None = None) -> SkorowidzRecord:
         """Cache -> layers newest first -> hard filter -> newest campaign."""
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         return self._resolve_record(
             parser,
             self.DEFAULT_TIMEOUT if timeout is None else timeout,
@@ -470,42 +470,42 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             endpoint,
             layer,
             query_bbox=query_bbox,
-            godlo=parser.godlo,
+            sheet=parser.sheet,
             timeout=timeout,
             retries=self.MAX_RETRIES,
         )
 
     @staticmethod
-    def _missing_endpoint(query: SkorowidzQuery, godlo: str) -> DownloadError:
+    def _missing_endpoint(query: SkorowidzQuery, sheet: str) -> DownloadError:
         return DownloadError(
             f"Brak endpointu WMS dla {query.cache_key[1]}, {query.cache_key[2]}",
-            godlo=godlo,
+            sheet=sheet,
         )
 
     def _resolve_record(
         self, parser: SheetParser, timeout: int, query: SkorowidzQuery
     ) -> SkorowidzRecord:
         """Resolve a sheet over layers: cache, product filter and no-coverage hint."""
-        godlo = parser.godlo
+        sheet = parser.sheet
         if self._cache is not None:
             cached = self._cache.get_record(*query.cache_key)
             if cached is not None:
                 if cached.get("no_coverage"):
                     raise NoCoverageError(
-                        cached.get("message") or _cached_no_coverage_message(godlo),
-                        godlo=godlo,
+                        cached.get("message") or _cached_no_coverage_message(sheet),
+                        sheet=sheet,
                         hints=tuple(cached.get("hints") or ()),
                     )
                 source = cached.get("source")
                 record = cached_record(source)
                 if record is not None and isinstance(source, dict):
-                    self._remember_source(godlo, source)
+                    self._remember_source(sheet, source)
                     return record
                 # pre-ADR-031 payload (Polish keys) = cache miss
-                logger.debug("%s: unreadable record_cache entry — refreshing", godlo)
+                logger.debug("%s: unreadable record_cache entry — refreshing", sheet)
 
         if query.endpoint is None:
-            raise self._missing_endpoint(query, godlo)
+            raise self._missing_endpoint(query, sheet)
         rejected: list[SkorowidzRecord] = []
         query_bbox = self._query_bbox(parser)
         for layer in self._layers(query.endpoint, timeout):
@@ -514,15 +514,15 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             )
             chosen = select_sheet_record(
                 records,
-                godlo=godlo,
-                uklad=parser.uklad,
+                sheet=sheet,
+                system=parser.system,
                 zone=_zone(parser),
                 resolution_m=query.resolution_m,
                 predicate=query.predicate,
             )
             if chosen is not None:
                 source = self.record_source(chosen)
-                self._remember_source(godlo, source)
+                self._remember_source(sheet, source)
                 if self._cache is not None:
                     self._cache.set_record(*query.cache_key, {"source": source})
                 return chosen
@@ -551,14 +551,14 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         pre-ADR-031 payload. A failed layer never writes to the cache. File
         format remains outside the provider's hard filter (errata 2 N-2).
         """
-        godlo = parser.godlo
+        sheet = parser.sheet
         if self._cache is not None:
             cached = self._cache.get_campaigns(*query.cache_key)
             if cached is not None and cached.get("scanned_from") is None:
                 if cached.get("no_coverage"):
                     raise NoCoverageError(
-                        cached.get("message") or _cached_no_coverage_message(godlo),
-                        godlo=godlo,
+                        cached.get("message") or _cached_no_coverage_message(sheet),
+                        sheet=sheet,
                         hints=tuple(cached.get("hints") or ()),
                     )
                 sources = cached.get("sources")
@@ -566,10 +566,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 if sources and all(r is not None for r in restored):
                     return [r for r in restored if r is not None]
                 # pre-ADR-031 payload (Polish keys) = cache miss
-                logger.debug("%s: unreadable campaigns_cache entry — refreshing", godlo)
+                logger.debug("%s: unreadable campaigns_cache entry — refreshing", sheet)
 
         if query.endpoint is None:
-            raise self._missing_endpoint(query, godlo)
+            raise self._missing_endpoint(query, sheet)
         found: list[SkorowidzRecord] = []
         rejected: list[SkorowidzRecord] = []
         query_bbox = self._query_bbox(parser)
@@ -579,8 +579,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             )
             matched = select_campaign_records(
                 records,
-                godlo=godlo,
-                uklad=parser.uklad,
+                sheet=sheet,
+                system=parser.system,
                 zone=_zone(parser),
                 resolution_m=query.resolution_m,
                 predicate=query.predicate,
@@ -615,7 +615,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
     def resolve_campaigns(
         self,
-        godlo: str,
+        sheet: str,
         *,
         campaigns: str = "newest",
         min_year: int | None = None,
@@ -640,8 +640,8 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         validate_campaign_args(campaigns, min_year, max_year)
         if timeout is None:
             timeout = self.DEFAULT_TIMEOUT
-        parser = SheetParser(godlo)
-        godlo = parser.godlo
+        parser = SheetParser(sheet)
+        sheet = parser.sheet
         query = self._skorowidz_query(parser)
         if min_year is None and max_year is None and campaigns == "newest":
             return [self._resolve_record(parser, timeout, query)]
@@ -665,22 +665,22 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                     )
                 )
                 if not years:
-                    raise NoCoverageError(f"Brak kampanii {godlo}", godlo=godlo)
-                raise year_range_error({godlo: years}, min_year, max_year, total=1)
+                    raise NoCoverageError(f"Brak kampanii {sheet}", sheet=sheet)
+                raise year_range_error({sheet: years}, min_year, max_year, total=1)
         if campaigns == "newest":
             return [kept[0]]
         # the manager logs the campaign count at INFO (`_fetch_campaigns`, M-7)
-        logger.debug("%s: %s kampanii", godlo, len(kept))
+        logger.debug("%s: %s kampanii", sheet, len(kept))
         return kept
 
     def available_years(
-        self, godlo: str, timeout: int | None = None
+        self, sheet: str, timeout: int | None = None
     ) -> tuple[int, ...]:
         """Ascending distinct acquisition years of a sheet's complete campaign list."""
         # local import avoids the download -> manager -> providers import cycle
         from kartograf.download.campaigns import record_year
 
-        parser = SheetParser(godlo)
+        parser = SheetParser(sheet)
         found = self._resolve_all(
             parser,
             self.DEFAULT_TIMEOUT if timeout is None else timeout,
@@ -694,7 +694,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
 
     def record_source(self, record: SkorowidzRecord) -> dict:
         """Record metadata (``to_source``) with the endpoint and ``source_extra``."""
-        query = self._skorowidz_query(SheetParser(record.godlo))
+        query = self._skorowidz_query(SheetParser(record.sheet))
         source = record.to_source(query.endpoint or "")
         if query.source_extra:
             source.update(query.source_extra)
@@ -713,7 +713,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             Path(output_path),
             timeout=self.DEFAULT_TIMEOUT if timeout is None else timeout,
             retries=self.MAX_RETRIES,
-            # file name from the URL (campaign id + godlo) tells campaigns apart in logs
+            # file name from the URL (campaign id + sheet) tells campaigns apart in logs
             description=f"{record.url.rsplit('/', 1)[-1]} ({self.DOWNLOAD_LABEL})",
         )
 
@@ -722,10 +722,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         self._layers_lock = threading.Lock()
         self._validated_layers: dict[str, list[str]] = {}
 
-    def validate_godlo(self, godlo: str) -> bool:
+    def validate_sheet(self, sheet: str) -> bool:
         """Sheet code parsable by ``SheetParser`` (PL-1992 or PL-2000)."""
         try:
-            SheetParser(godlo)
+            SheetParser(sheet)
             return True
         except ParseError:
             return False
@@ -808,15 +808,15 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
     """
     hints = set()
     for record in records:
-        if parser.uklad == "2000" and record.godlo.startswith(parser.godlo + "."):
-            scale = SheetParser(record.godlo).scale
-            hints.add(f"Dostepny potomek {record.godlo} — uzyj --scale {scale}")
-        elif record.uklad is not None and record.uklad != parser.uklad:
-            scale = SheetParser(record.godlo).scale
+        if parser.system == "2000" and record.sheet.startswith(parser.sheet + "."):
+            scale = SheetParser(record.sheet).scale
+            hints.add(f"Dostepny potomek {record.sheet} — uzyj --scale {scale}")
+        elif record.system is not None and record.system != parser.system:
+            scale = SheetParser(record.sheet).scale
             hints.add(
-                f"Skorowidz ma ten obszar w PL-{record.uklad}: "
-                f"{record.godlo} ({scale}) — uzyj tego godla lub "
-                f"--system {record.uklad} --scale {scale}"
+                f"Skorowidz ma ten obszar w PL-{record.system}: "
+                f"{record.sheet} ({scale}) — uzyj tego godla lub "
+                f"--system {record.system} --scale {scale}"
             )
     return hints
 
@@ -828,4 +828,4 @@ def no_coverage_error(
     ordered = sorted(hints)
     if ordered:
         message += ". " + "; ".join(ordered)
-    return NoCoverageError(message, godlo=parser.godlo, hints=tuple(ordered))
+    return NoCoverageError(message, sheet=parser.sheet, hints=tuple(ordered))

@@ -75,7 +75,7 @@ class SoilGridsProvider(LandCoverProvider):
 
     Supports two download modes:
     - By bbox: downloads data for specified bounding box
-    - By sheet code (godlo): converts map sheet ID to bbox and downloads
+    - By sheet code: converts map sheet ID to bbox and downloads
 
     TERYT (administrative unit) selection is not supported - SoilGrids is a
     global raster service and has no notion of Polish administrative
@@ -94,8 +94,8 @@ class SoilGridsProvider(LandCoverProvider):
     ...     bbox, Path("./soc.tif"), property="soc", depth="0-5cm"
     ... )
     >>>
-    >>> # Download clay content by sheet code (godlo)
-    >>> provider.download_by_godlo(
+    >>> # Download clay content by sheet code
+    >>> provider.download_by_sheet(
     ...     "N-34-130-D", Path("./clay.tif"), property="clay", depth="15-30cm"
     ... )
     """
@@ -371,11 +371,11 @@ class SoilGridsProvider(LandCoverProvider):
         Raises
         ------
         NotImplementedError
-            Always - use download_by_bbox() or download_by_godlo() instead
+            Always - use download_by_bbox() or download_by_sheet() instead
         """
         raise NotImplementedError(
             "SoilGrids does not support TERYT selection - use --bbox or "
-            "--godlo (download_by_bbox / download_by_godlo)"
+            "--sheet (download_by_bbox / download_by_sheet)"
         )
 
     # =========================================================================

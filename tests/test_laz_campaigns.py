@@ -64,7 +64,7 @@ def test_c13_all_returns_both_systems_tiles():
     keys = {(t.year, t.crs) for t in selection.tiles}
     assert (2022, "PL-2000:S7") in keys
     assert (2025, "PL-1992") in keys
-    assert {t.uklad for t in selection.tiles} == {"1992", "2000"}
+    assert {t.system for t in selection.tiles} == {"1992", "2000"}
     assert not [s for s in selection.superseded if s.reason == "covered"]
 
 
@@ -72,7 +72,7 @@ def test_c13_newest_unchanged_single_tile():
     selection = GugikLazProvider(session=laz_session()).select_tiles(
         W2_BBOX, campaigns="newest"
     )
-    assert [(t.godlo, t.year) for t in selection.tiles] == [
+    assert [(t.sheet, t.year) for t in selection.tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2025)
     ]
     assert {s.reason for s in selection.superseded} == {"covered"}
@@ -91,7 +91,7 @@ def test_discover_tiles_max_year_uses_reference_coverage():
     tiles = GugikLazProvider(session=laz_session()).discover_tiles(
         W2_BBOX, max_year=2023
     )
-    assert [(tile.godlo, tile.year) for tile in tiles] == [
+    assert [(tile.sheet, tile.year) for tile in tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2023)
     ]
 
@@ -100,7 +100,7 @@ def test_min_year_applies_to_newest_too():
     session = laz_session()
     provider = GugikLazProvider(session=session)
     selection = provider.select_tiles(W2_BBOX, min_year=2024)
-    assert [(t.godlo, t.year) for t in selection.tiles] == [
+    assert [(t.sheet, t.year) for t in selection.tiles] == [
         ("N-34-139-A-c-1-1-3-4", 2025)
     ]
     assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
@@ -144,11 +144,11 @@ def test_all_still_drops_outside_tiles():
     selection = GugikLazProvider(
         session=laz_session(replay_any_bbox=True)
     ).select_tiles(area, campaigns="all")
-    assert "7.173.21.06.2" not in {tile.godlo for tile in selection.tiles}
+    assert "7.173.21.06.2" not in {tile.sheet for tile in selection.tiles}
     (entry,) = (
         skipped
         for skipped in selection.superseded
-        if skipped.tile.godlo == "7.173.21.06.2"
+        if skipped.tile.sheet == "7.173.21.06.2"
     )
     assert entry.reason == "outside"
 

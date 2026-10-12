@@ -229,7 +229,7 @@ resolution = 1    # meters or pixels?
 |---------|-----------|----------------------|
 | `download_*` | Pobranie pliku / archiwum | `download_sheet()`, `download_bbox()` |
 | `parse_*` | Parsowanie danych | `parse_bbox_arg()`, `parse_skorowidz_records()` |
-| `calculate_*` | Obliczenie wyniku | `calculate_hsg_by_godlo()` |
+| `calculate_*` | Obliczenie wyniku | `calculate_hsg_by_sheet()` |
 | `get_*` | Pobranie atrybutu / danych | `get_parent()`, `get_children()` |
 | `list_*` | Listowanie zasobow | `list_files()` |
 | `classify_*` | Klasyfikacja | `classify_usda_texture()` |
@@ -277,7 +277,7 @@ ruff check --fix .
 
 # GOOD — multi-line when exceeds 88 chars
 def download_hierarchy(
-    godlo: str,
+    sheet: str,
     target_scale: str,
     skip_existing: bool = True,
     on_progress: ProgressCallback | None = None,
@@ -285,7 +285,7 @@ def download_hierarchy(
     pass
 
 # BAD — too long
-def download_hierarchy(godlo: str, target_scale: str, skip_existing: bool = True) -> list[Path]:
+def download_hierarchy(sheet: str, target_scale: str, skip_existing: bool = True) -> list[Path]:
     pass
 ```
 
@@ -396,7 +396,7 @@ reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
   wskazuja na repo — **zawsze podawaj `--output` jawnie**:
 
   ```bash
-  kartograf download N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data
+  kartograf download --sheet N-34-130-D-d-2-4 -o <katalog-danych>/kartograf/data
   kartograf download --bbox 530000,382000,533000,386000 --target-crs EPSG:5514 \
       -o <katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>
   ```
@@ -443,14 +443,14 @@ Nie tworz osobnych plikow konfiguracyjnych (`setup.cfg`, `tox.ini`, `.flake8`, i
 
 ```python
 # GOOD — modern syntax
-def download_sheet(godlo: str) -> Path:
+def download_sheet(sheet: str) -> Path:
     pass
 
 def get_provider(name: str | None = None) -> LandCoverProvider | None:
     pass
 
 def download_hierarchy(
-    godlo: str,
+    sheet: str,
     target_scale: str,
     on_progress: ProgressCallback | None = None,
 ) -> list[Path]:
@@ -493,7 +493,7 @@ dostaje sygnature z adnotacjami (inaczej mypy pomija jej cialo —
 
 ```python
 def download_sheet(
-    godlo: str,
+    sheet: str,
     output_dir: str = "./data",
 ) -> Path:
     """
@@ -529,16 +529,16 @@ def download_sheet(
 ```python
 class SheetParser:
     """
-    Parser for Polish topographic map sheet identifiers (godlo).
+    Parser for Polish topographic map sheet codes.
 
     Supports scales from 1:1,000,000 to 1:10,000 in "1992" and "2000"
     coordinate system layouts.
 
     Parameters
     ----------
-    godlo : str
-        Sheet identifier (e.g. "N-34-130-D-d-2-4").
-    uklad : str or None, optional
+    sheet : str
+        Sheet code (e.g. "N-34-130-D-d-2-4").
+    system : str or None, optional
         Coordinate system layout ("1992" or "2000").
 
     Examples
@@ -575,8 +575,9 @@ Regula obowiazujaca (decyzja wlasciciela projektu, 2026-10-08):
 - **Dokumentacja** — po polsku: `docs/`, `README.md`, `CLAUDE.md` i inne
   pliki `.md`
 - **Identyfikatory** (nowe nazwy w kodzie i API, klucze danych, np. sidecara)
-  — po angielsku; klucze sidecara od 0.7.0, istniejace polskie nazwy API/CLI
-  dostaja angielskie aliasy i znikaja w v1.0.0 (ADR-031 w `docs/DECISIONS.md`)
+  — po angielsku; klucze sidecara od 0.7.0, polskie nazwy publicznego API
+  i CLI (`godlo`, `uklad`, ...) zastapione angielskimi w 0.8.0 bez aliasow
+  (ADR-031 i jego errata w `docs/DECISIONS.md`)
 
 Stan zastany: czesc kodu sprzed tej decyzji ma docstringi i komentarze po
 polsku bez polskich znakow (m.in. `download/cutout.py`, `transport/mosaic.py`,
@@ -628,7 +629,7 @@ sprawdzaj je recznie przed merge (sekcja 18).
 ```python
 # Pattern: test_<function>_<scenario>[_<expected>]
 
-def test_parse_valid_godlo_10k():
+def test_parse_valid_sheet_10k():
     """Test parsing 1:10000 scale sheet identifier."""
     pass
 
@@ -636,8 +637,8 @@ def test_download_with_retry_on_timeout():
     """Test download retries on HTTP timeout."""
     pass
 
-def test_parse_invalid_godlo_raises():
-    """Test that invalid godlo raises ParseError."""
+def test_parse_invalid_sheet_raises():
+    """Test that an invalid sheet code raises ParseError."""
     pass
 ```
 
@@ -664,15 +665,15 @@ import pytest
 from unittest.mock import Mock, patch
 
 @pytest.fixture
-def sample_godlo():
+def sample_sheet():
     """Fixture with sample sheet identifier."""
     return "N-34-130-D-d-2-4"
 
-def test_download_with_mock_http(sample_godlo):
+def test_download_with_mock_http(sample_sheet):
     """Test download using mocked HTTP response."""
     with patch("requests.get") as mock_get:
         mock_get.return_value = Mock(status_code=200, content=b"data")
-        result = provider.download(sample_godlo, Path("/tmp/test.asc"))
+        result = provider.download(sample_sheet, Path("/tmp/test.asc"))
         assert result.exists()
 ```
 
@@ -715,12 +716,12 @@ listy klas. Zasady:
 ### 11.2 Walidacja na wejsciu
 
 ```python
-def download_sheet(godlo: str) -> Path:
+def download_sheet(sheet: str) -> Path:
     """Download NMT sheet."""
-    if not godlo or not godlo.strip():
-        raise ValidationError("Godlo cannot be empty")
+    if not sheet or not sheet.strip():
+        raise ValidationError("Sheet code cannot be empty")
 
-    parser = SheetParser(godlo)  # raises ParseError if invalid
+    parser = SheetParser(sheet)  # raises ParseError if invalid
     ...
 ```
 
@@ -731,7 +732,7 @@ def download_sheet(godlo: str) -> Path:
 try:
     response = requests.get(url, timeout=30)
 except requests.RequestException as e:
-    raise DownloadError(f"Failed to download {godlo}: {e}") from e
+    raise DownloadError(f"Failed to download {sheet}: {e}") from e
 
 # BAD — loses original traceback
 except requests.RequestException as e:
@@ -754,7 +755,7 @@ logger = logging.getLogger(__name__)
 
 ```python
 # DEBUG — development only
-logger.debug("Parsing sheet: %s", godlo)
+logger.debug("Parsing sheet: %s", sheet)
 
 # INFO — normal operations
 logger.info("Downloaded %s successfully", filename)
@@ -783,11 +784,11 @@ Poprawnosc > Czytelnosc > Wydajnosc
 ```python
 # GOOD — reuse session for multiple requests
 session = requests.Session()
-for godlo in godla:
+for sheet in sheets:
     response = session.get(url, timeout=30)
 
 # BAD — new connection each time
-for godlo in godla:
+for sheet in sheets:
     response = requests.get(url)
 ```
 
@@ -959,7 +960,7 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 # 2. Zaimplementuj metody abstrakcyjne — te oznaczone @abstractmethod
 #    w kartograf/providers/base.py (LandCoverProvider i jego baza
 #    DataSourceProvider): wlasciwosci name i base_url oraz download_by_bbox.
-#    download_by_godlo jest dziedziczone (godlo -> bbox EPSG:2180 ->
+#    download_by_sheet jest dziedziczone (godlo -> bbox EPSG:2180 ->
 #    download_by_bbox); nadpisz je tylko, gdy zrodlo ma wlasny tor godla.
 #    download_by_admin_unit (TERYT) jest opcjonalne — domyslnie
 #    NotImplementedError; download_by_teryt to zdeprecjonowany alias z bazy.

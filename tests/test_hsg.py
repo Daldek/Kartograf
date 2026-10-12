@@ -362,17 +362,17 @@ class TestHSGCLI:
         from kartograf.cli.commands import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(["soilgrids", "hsg", "--godlo", "N-34-130-D"])
+        args = parser.parse_args(["soilgrids", "hsg", "--sheet", "N-34-130-D"])
         assert args.command == "soilgrids"
         assert args.soilgrids_command == "hsg"
-        assert args.godlo == "N-34-130-D"
+        assert args.sheet == "N-34-130-D"
 
     def test_soilgrids_hsg_default_values(self):
         """Test default values for soilgrids hsg command."""
         from kartograf.cli.commands import create_parser
 
         parser = create_parser()
-        args = parser.parse_args(["soilgrids", "hsg", "--godlo", "N-34-130-D"])
+        args = parser.parse_args(["soilgrids", "hsg", "--sheet", "N-34-130-D"])
 
         assert args.depth == "0-5cm"
         assert args.output == "./data/hsg"
@@ -388,7 +388,7 @@ class TestHSGCLI:
             [
                 "soilgrids",
                 "hsg",
-                "--godlo",
+                "--sheet",
                 "N-34-130-D",
                 "--depth",
                 "15-30cm",
@@ -433,8 +433,8 @@ def _create_test_raster(path, data, transform=None, crs="EPSG:2180", nodata=0):
 class TestHSGCalculatorCalculateFull:
     """Test HSGCalculator calculation with mocked provider and rasterio."""
 
-    def test_calculate_hsg_by_godlo(self, tmp_path):
-        """calculate_hsg_by_godlo downloads clay/sand/silt and produces HSG."""
+    def test_calculate_hsg_by_sheet(self, tmp_path):
+        """calculate_hsg_by_sheet downloads clay/sand/silt and produces HSG."""
         mock_provider = Mock()
         calc = HSGCalculator(provider=mock_provider)
 
@@ -463,7 +463,7 @@ class TestHSGCalculatorCalculateFull:
             )
             mock_parser_cls.return_value = mock_parser
 
-            result = calc.calculate_hsg_by_godlo("N-34-130-D", output)
+            result = calc.calculate_hsg_by_sheet("N-34-130-D", output)
 
         assert result == output
         assert output.exists()
@@ -728,11 +728,11 @@ class TestHSGSidecar:
         assert meta["extra"]["depth"] == "5-15cm"
         assert meta["extra"]["stat"] == "mean"
 
-    def test_sidecar_by_godlo_records_sheet(self, tmp_path):
+    def test_sidecar_by_sheet_records_sheet(self, tmp_path):
         import json
 
         out = tmp_path / "hsg_sheet.tif"
-        self._calc().calculate_hsg_by_godlo("N-34-130-D", out)
+        self._calc().calculate_hsg_by_sheet("N-34-130-D", out)
 
         request = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())[
             "request"
@@ -741,12 +741,12 @@ class TestHSGSidecar:
         assert request["bbox_crs"] == "EPSG:2180"
         assert len(request["bbox"]) == 4
 
-    def test_sidecar_by_godlo_leading_zeros_canonical(self, tmp_path):
-        """A7: the HSG sidecar records the canonical godlo, as NMT/land cover do."""
+    def test_sidecar_by_sheet_leading_zeros_canonical(self, tmp_path):
+        """A7: the HSG sidecar records the canonical sheet, as NMT/land cover do."""
         import json
 
         out = tmp_path / "hsg_sheet.tif"
-        self._calc().calculate_hsg_by_godlo("M-33-036-A", out)
+        self._calc().calculate_hsg_by_sheet("M-33-036-A", out)
 
         meta = json.loads((tmp_path / "hsg_sheet.tif.meta.json").read_text())
         assert meta["request"]["sheet"] == "M-33-36-A"

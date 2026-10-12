@@ -132,7 +132,7 @@ class TestGugikNmptProviderEndpoints:
     def test_wms_endpoints_are_nmpt(self):
         """Test that the WMS index endpoints contain 'NMPT'."""
         provider = GugikNmptProvider()
-        for resolution, crs_endpoints in provider.WMS_SKOROWIDZE_ENDPOINTS.items():
+        for resolution, crs_endpoints in provider.WMS_INDEX_ENDPOINTS.items():
             for crs, url in crs_endpoints.items():
                 assert "NMPT" in url, (
                     f"WMS endpoint for {resolution}/{crs} should contain 'NMPT'"
@@ -203,7 +203,7 @@ class TestGugikNmptProviderDownload:
     def test_download_uses_opendata(
         self, tmp_path, mock_wms_response, mock_opendata_response
     ):
-        """Test that download(godlo) uses WMS + OpenData (like GugikProvider)."""
+        """Test that download uses WMS + OpenData (like GugikProvider)."""
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=[mock_wms_response, mock_opendata_response])
 

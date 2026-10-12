@@ -132,14 +132,14 @@ class TestSoilGridsOutputParams:
     def test_file_without_nodata_gives_null(self, tmp_path):
         assert _sidecar(self._download(tmp_path, nodata=None))["nodata"] is None
 
-    def test_godlo_mode(self, tmp_path):
+    def test_sheet_mode(self, tmp_path):
         manager = LandCoverManager(output_dir=tmp_path, provider=SoilGridsProvider())
         with patch(
             "kartograf.providers.soilgrids.download_to",
             side_effect=_fake_download_to(_tiny_geotiff(-32768, 1)),
         ):
-            path = manager.download_by_godlo("N-34-130-D", property="silt")
-        assert path.name == "soilgrids_silt_0-5cm_mean_godlo_N-34-130-D.tif"
+            path = manager.download_by_sheet("N-34-130-D", property="silt")
+        assert path.name == "soilgrids_silt_0-5cm_mean_sheet_N-34-130-D.tif"
         assert _sidecar(path)["request"] == {
             "sheet": "N-34-130-D",
             "property": "silt",
@@ -161,7 +161,7 @@ class TestSoilGridsOutputParams:
 class TestCorineOutputParams:
     """CORINE: year in the file name and in the sidecar."""
 
-    def _download(self, tmp_path, godlo: str | None = None, **kwargs) -> Path:
+    def _download(self, tmp_path, sheet: str | None = None, **kwargs) -> Path:
         manager = LandCoverManager(
             output_dir=tmp_path, provider=CorineProvider(use_proxy=False)
         )
@@ -169,8 +169,8 @@ class TestCorineOutputParams:
             "kartograf.providers.corine.download_to",
             side_effect=_fake_download_to(b"\x89PNG fake"),
         ):
-            if godlo is not None:
-                return manager.download(godlo=godlo, **kwargs)
+            if sheet is not None:
+                return manager.download(sheet=sheet, **kwargs)
             return manager.download(bbox=BBOX, **kwargs)
 
     def test_different_years_keep_both_files(self, tmp_path):
@@ -185,9 +185,9 @@ class TestCorineOutputParams:
         assert path.name == f"corine_2018_bbox_{COORDS}.png"
         assert _sidecar(path)["request"]["year"] == 2018
 
-    def test_godlo_mode(self, tmp_path):
-        path = self._download(tmp_path, godlo="N-34-130-D", year=2006)
-        assert path.name == "corine_2006_godlo_N-34-130-D.png"
+    def test_sheet_mode(self, tmp_path):
+        path = self._download(tmp_path, sheet="N-34-130-D", year=2006)
+        assert path.name == "corine_2006_sheet_N-34-130-D.png"
         assert _sidecar(path)["request"] == {"sheet": "N-34-130-D", "year": 2006}
 
     def test_same_year_same_path(self, tmp_path):
@@ -195,10 +195,10 @@ class TestCorineOutputParams:
             tmp_path, year=2000
         )
 
-    def test_godlo_leading_zeros_canonical(self, tmp_path):
-        """A7: land cover names and sidecars use the canonical godlo."""
-        path = self._download(tmp_path, godlo="M-33-036-A", year=2006)
-        assert path.name == "corine_2006_godlo_M-33-36-A.png"
+    def test_sheet_leading_zeros_canonical(self, tmp_path):
+        """A7: land cover names and sidecars use the canonical sheet."""
+        path = self._download(tmp_path, sheet="M-33-036-A", year=2006)
+        assert path.name == "corine_2006_sheet_M-33-36-A.png"
         assert _sidecar(path)["request"]["sheet"] == "M-33-36-A"
 
     def test_clms_geotiff_name_and_nodata_from_file(self, tmp_path):

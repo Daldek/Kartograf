@@ -99,7 +99,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 ),
             ),
             tile_scheme=None,
-            storage_subdir="nmt/pl_{uklad}_1m_{vcrs}",
+            storage_subdir="nmt/pl_{system}_1m_{vcrs}",
             default_extension=".asc",
             license=_GUGIK_LICENSE,
             resolution="1m",
@@ -120,7 +120,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 ),
             ),
             tile_scheme=None,
-            storage_subdir="nmt/pl_{uklad}_5m_{vcrs}",
+            storage_subdir="nmt/pl_{system}_5m_{vcrs}",
             default_extension=".asc",
             license=_GUGIK_LICENSE,
             resolution="5m",
@@ -150,7 +150,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 ),
             ),
             tile_scheme=None,
-            storage_subdir="nmpt/pl_{uklad}_1m_{vcrs}",
+            storage_subdir="nmpt/pl_{system}_1m_{vcrs}",
             default_extension=".asc",
             license=_GUGIK_LICENSE,
             resolution="1m",
@@ -169,7 +169,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 ),
             ),
             tile_scheme=None,
-            storage_subdir="orto/pl_{uklad}",
+            storage_subdir="orto/pl_{system}",
             default_extension=".tif",
             license=_GUGIK_LICENSE,
         ),
@@ -189,7 +189,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                 ),
             ),
             tile_scheme=None,
-            storage_subdir="laz/pl_{uklad}_{vcrs}",
+            storage_subdir="laz/pl_{system}_{vcrs}",
             default_extension=".laz",
             license=_GUGIK_LICENSE,
         ),
@@ -410,15 +410,15 @@ def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
     return code
 
 
-def horizontal_crs_for_godlo(godlo: str) -> str:
+def horizontal_crs_for_sheet(sheet: str) -> str:
     """Horizontal CRS of a PL sheet code: PL-1992 -> 2180, PL-2000 -> its zone."""
-    parser = SheetParser(godlo)
-    if parser.uklad == "2000":
-        return ZONE_EPSG[int(parser.godlo.split(".")[0])]
+    parser = SheetParser(sheet)
+    if parser.system == "2000":
+        return ZONE_EPSG[int(parser.sheet.split(".")[0])]
     return PL_1992_CRS
 
 
-def parse_pl_uklad(value: str | None) -> tuple[str, int | None] | None:
+def parse_pl_system(value: str | None) -> tuple[str, int | None] | None:
     """The ONLY parser of GUGiK horizontal CRS values (review-1 D3, E11).
 
     The index fields ``ukladWspolrzednychPoziomych``/``ukladWspolrzednych``
@@ -428,8 +428,8 @@ def parse_pl_uklad(value: str | None) -> tuple[str, int | None] | None:
     ``"PL-2000:S9"``, different letter case, ``None``) -> ``None``. Real GUGiK
     data (E2E 2026-10-06) contains only recognized values.
 
-    Consumers (index record selection, ``horizontal_crs_for_uklad``,
-    ``LazTile.uklad``) treat ``None`` consistently: the record/tile is rejected
+    Consumers (index record selection, ``horizontal_crs_for_system``,
+    ``LazTile.system``) treat ``None`` consistently: the record/tile is rejected
     or an explicit error is raised - never a ``pl_2000`` segment with an EPSG:2180
     sidecar.
     """
@@ -440,12 +440,12 @@ def parse_pl_uklad(value: str | None) -> tuple[str, int | None] | None:
     return ("2000", int(match[1])) if match else None
 
 
-def horizontal_crs_for_uklad(uklad: str | None) -> str | None:
+def horizontal_crs_for_system(system: str | None) -> str | None:
     """EPSG code from a GUGiK CRS name ("PL-1992", "PL-2000:S6"); None if unknown.
 
-    Value recognition: ``parse_pl_uklad`` (shared with the index and LAZ).
+    Value recognition: ``parse_pl_system`` (shared with the index and LAZ).
     """
-    parsed = parse_pl_uklad(uklad)
+    parsed = parse_pl_system(system)
     if parsed is None:
         return None
     _system, zone = parsed

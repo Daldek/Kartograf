@@ -34,7 +34,7 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.providers.pl import require_nmt_vertical_crs
-from kartograf.sources.registry import horizontal_crs_for_godlo
+from kartograf.sources.registry import horizontal_crs_for_sheet
 
 if TYPE_CHECKING:
     from kartograf.cache import MetadataCache
@@ -68,7 +68,7 @@ class _ProgressPrinter:
 
         line = (
             f"\r[{bar}] {progress.current}/{progress.total} "
-            f"{status_icon} {progress.godlo}"
+            f"{status_icon} {progress.sheet}"
         )
 
         # Pad to overwrite previous longer lines
@@ -231,12 +231,12 @@ def _product_label(product: str, resolution: str | None) -> str:
 
 
 def _print_sheet_list(
-    godla: list[str], target_scale: str, *, what: str, label: str
+    sheets: list[str], target_scale: str, *, what: str, label: str
 ) -> None:
     """Header of the PL sheet list (list mode, D15): up to 10 sheet codes
     in full, a longer list as the first 3 + ``...`` + the last 2."""
-    print(f"Found {len(godla)} sheets at {target_scale} for {what} ({label})")
-    sample = godla if len(godla) <= 10 else godla[:3] + ["..."] + godla[-2:]
+    print(f"Found {len(sheets)} sheets at {target_scale} for {what} ({label})")
+    sample = sheets if len(sheets) <= 10 else sheets[:3] + ["..."] + sheets[-2:]
     print(f"  Sheets: {', '.join(sample)}")
     print()
 
@@ -955,21 +955,21 @@ def cmd_download(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     _cache_warnings_shown.clear()
-    has_godlo = args.godlo is not None
+    has_sheet = args.sheet is not None
     has_bbox = args.bbox is not None
     has_geometry = getattr(args, "geometry", None) is not None
 
-    provided = sum([has_godlo, has_bbox, has_geometry])
+    provided = sum([has_sheet, has_bbox, has_geometry])
     if provided > 1:
         print(
-            "Error: Specify only one of: godlo, --bbox, or --geometry",
+            "Error: Specify only one of: --sheet, --bbox, or --geometry",
             file=sys.stderr,
         )
         return 1
 
     if provided == 0:
         print(
-            "Error: Must specify one of: godlo, --bbox, or --geometry",
+            "Error: Must specify one of: --sheet, --bbox, or --geometry",
             file=sys.stderr,
         )
         return 1
@@ -1014,14 +1014,14 @@ def cmd_download(args: argparse.Namespace) -> int:
     country_flag = getattr(args, "country", "auto")
     product = getattr(args, "product", "nmt")
 
-    if has_godlo:
+    if has_sheet:
         # the registry ends with the pl1992 fallback (always matches, never None)
-        system = detect_system(args.godlo)
+        system = detect_system(args.sheet)
         system_id = system.id
         system_country = system.country
         if country_flag != "auto" and country_flag.upper() != system_country:
             print(
-                f"Error: Godlo '{args.godlo}' nalezy do systemu {system_id} "
+                f"Error: Godlo '{args.sheet}' nalezy do systemu {system_id} "
                 f"(kraj {system_country}), a podano --country {country_flag}",
                 file=sys.stderr,
             )
@@ -1037,9 +1037,9 @@ def cmd_download(args: argparse.Namespace) -> int:
             return 1
         if getattr(args, "target_crs", None) is not None:
             print(
-                "Error: --target-crs dziala tylko z --bbox/--geometry; godlo "
+                "Error: --target-crs dziala tylko z --bbox/--geometry; --sheet "
                 "wyznacza zasieg i uklad produktu (arkusz PL 1:1 w ukladzie "
-                "godla, arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce "
+                "arkusza, arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce "
                 "EPSG:3045)",
                 file=sys.stderr,
             )
@@ -1060,7 +1060,7 @@ def cmd_download(args: argparse.Namespace) -> int:
     # --- Sheet code mode (existing logic) ---
     try:
         # Validate sheet code first
-        SheetParser(args.godlo)
+        SheetParser(args.sheet)
     except (ParseError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -1106,15 +1106,15 @@ def cmd_download(args: argparse.Namespace) -> int:
             if args.scale:
                 # Download hierarchy
                 if not args.quiet:
-                    count = manager.count_sheets(args.godlo, args.scale)
+                    count = manager.count_sheets(args.sheet, args.scale)
                     print(
-                        f"Downloading {count} sheets from {args.godlo} to "
+                        f"Downloading {count} sheets from {args.sheet} to "
                         f"{args.scale} ({label})"
                     )
                     print()
 
                 paths = manager.download_hierarchy(
-                    args.godlo,
+                    args.sheet,
                     args.scale,
                     skip_existing=skip_existing,
                     on_progress=on_progress,
@@ -1124,14 +1124,14 @@ def cmd_download(args: argparse.Namespace) -> int:
                 def announce() -> None:
                     # O-3: only when the download starts (not on Skipped/Error)
                     if not args.quiet:
-                        print(f"Downloading {args.godlo} ({label})...")
+                        print(f"Downloading {args.sheet} ({label})...")
 
-                parsed = SheetParser(args.godlo)
-                if parsed.uklad != "2000" and parsed.scale != "1:10000":
+                parsed = SheetParser(args.sheet)
+                if parsed.system != "2000" and parsed.scale != "1:10000":
                     announce()  # coarser sheet code: expanded to a hierarchy
 
                 result = manager.download_sheet(
-                    args.godlo,
+                    args.sheet,
                     skip_existing=skip_existing,
                     on_progress=on_progress,
                     on_download=announce,
@@ -1157,7 +1157,7 @@ def cmd_download(args: argparse.Namespace) -> int:
                                 len(sheet.downloaded), 1, output_dir, len(sheet.reused)
                             )
                         elif sheet is not None and sheet.skipped:
-                            print(f"Skipped {args.godlo} - already exists at {where}")
+                            print(f"Skipped {args.sheet} - already exists at {where}")
                         elif (
                             sheet is not None
                             and len(sheet.downloaded + sheet.reused) > 1
@@ -1169,10 +1169,10 @@ def cmd_download(args: argparse.Namespace) -> int:
                         else:
                             print(f"Downloaded to {where}")
                     if sheet is not None and sheet.link == "copy":
-                        _warn_copied_links([args.godlo])
+                        _warn_copied_links([args.sheet])
                     if sheet is not None and sheet.unverified is not None:
                         print(
-                            f"Warning: {args.godlo}: skorowidz GUGiK niedostepny "
+                            f"Warning: {args.sheet}: skorowidz GUGiK niedostepny "
                             "— uzyto lokalnej kampanii bez sprawdzenia nowszej "
                             f"({sheet.unverified})",
                             file=sys.stderr,
@@ -1223,9 +1223,9 @@ def _last_result(manager: DownloadManager) -> DownloadResult:
     return result
 
 
-def _download_godlo_list(
+def _download_sheet_list(
     manager: DownloadManager,
-    godlo_list: list[str],
+    sheet_list: list[str],
     skip_existing: bool,
     on_progress,
 ) -> tuple[list[Path], DownloadResult]:
@@ -1246,17 +1246,17 @@ def _download_godlo_list(
         and a per-sheet summary (``manager.last_result``).
     """
     paths = manager.download_sheets(
-        godlo_list, skip_existing=skip_existing, on_progress=on_progress
+        sheet_list, skip_existing=skip_existing, on_progress=on_progress
     )
     return list(paths), _last_result(manager)
 
 
-def _warn_copied_links(godla: Sequence[str]) -> None:
+def _warn_copied_links(sheets: Sequence[str]) -> None:
     """``Warning:`` about the standard path being a COPY of a campaign (ADR-030)."""
-    shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+    shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
     print(
         "Warning: hardlink niedostepny na tym systemie plikow — sciezka "
-        f"standardowa jest KOPIA najnowszej kampanii dla {len(godla)} arkuszy "
+        f"standardowa jest KOPIA najnowszej kampanii dla {len(sheets)} arkuszy "
         f"({shown}) (extra.link=copy)",
         file=sys.stderr,
     )
@@ -1300,12 +1300,12 @@ def _print_campaign_summary(
 
 def _warn_unverified(unverified: dict[str, str]) -> None:
     """``Warning:`` for sheets taken from a local campaign unverified (I-1)."""
-    godla = list(unverified)
-    shown = ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+    sheets = list(unverified)
+    shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
     print(
         "Warning: skorowidz GUGiK niedostepny — dla "
-        f"{len(godla)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
-        f"({shown}) ({unverified[godla[0]]})",
+        f"{len(sheets)} arkuszy uzyto lokalnej kampanii bez sprawdzenia nowszej "
+        f"({shown}) ({unverified[sheets[0]]})",
         file=sys.stderr,
     )
 
@@ -1473,8 +1473,8 @@ def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
         for path in paths
         if Path(path).stem in shown
     }
-    for godlo, better_id in shown.items():
-        meta = sidecars.get(godlo) or {}
+    for sheet, better_id in shown.items():
+        meta = sidecars.get(sheet) or {}
         extra = meta.get("extra")
         if not isinstance(extra, dict):
             extra = {}
@@ -1507,7 +1507,7 @@ def _print_better_coverage(result: DownloadResult, paths: list[Path]) -> None:
             )
         else:
             detail = f"wieksze pokrycie: lot {better_id} (brak szczegolow w sidecarze)"
-        print(f"  {godlo}: {detail}", file=sys.stderr)
+        print(f"  {sheet}: {detail}", file=sys.stderr)
     if len(better) > len(shown):
         print(f"  ... i {len(better) - len(shown)} innych", file=sys.stderr)
 
@@ -1531,8 +1531,8 @@ def _print_link_outside_range(
     and tree.
     """
     rows = sorted(
-        [(godlo, "sciezka standardowa", t) for godlo, t in outside.items()]
-        + [(godlo, "full_sheet/", t) for godlo, t in (full_outside or {}).items()]
+        [(sheet, "sciezka standardowa", t) for sheet, t in outside.items()]
+        + [(sheet, "full_sheet/", t) for sheet, t in (full_outside or {}).items()]
     )
     if not rows:
         return
@@ -1542,30 +1542,30 @@ def _print_link_outside_range(
         "w <segment>/kampanie/:",
         file=sys.stderr,
     )
-    for godlo, tree, target in rows[:10]:
+    for sheet, tree, target in rows[:10]:
         print(
-            f"  {godlo}: {tree} -> dowiazanie {_campaign_dirname(target)}",
+            f"  {sheet}: {tree} -> dowiazanie {_campaign_dirname(target)}",
             file=sys.stderr,
         )
     if len(rows) > 10:
         print(f"  ... i {len(rows) - 10} innych", file=sys.stderr)
 
 
-def _sheet_result(sheet: SheetFetch | None) -> DownloadResult:
+def _sheet_result(fetch: SheetFetch | None) -> DownloadResult:
     """One-element ``DownloadResult`` with the message facts of one sheet."""
     result = DownloadResult()
-    if sheet is None:
+    if fetch is None:
         return result
-    g = sheet.godlo
-    if sheet.better_coverage is not None:
-        result.better_coverage[g] = sheet.better_coverage
-    if sheet.link_outside_range is not None:
-        result.link_outside_range[g] = sheet.link_outside_range
-    if sheet.full_link is not None:
-        result.full_links[g] = sheet.full_link
-    if sheet.full_link_outside_range is not None:
-        result.full_link_outside_range[g] = sheet.full_link_outside_range
-    if sheet.no_full_flight:
+    g = fetch.sheet
+    if fetch.better_coverage is not None:
+        result.better_coverage[g] = fetch.better_coverage
+    if fetch.link_outside_range is not None:
+        result.link_outside_range[g] = fetch.link_outside_range
+    if fetch.full_link is not None:
+        result.full_links[g] = fetch.full_link
+    if fetch.full_link_outside_range is not None:
+        result.full_link_outside_range[g] = fetch.full_link_outside_range
+    if fetch.no_full_flight:
         result.without_full.append(g)
     return result
 
@@ -1589,17 +1589,17 @@ def _sheet_crs_mismatch(path: Path) -> tuple[str, str, str] | None:
     if meta is None or meta.get("country") != "PL":
         return None
     request = meta.get("request")
-    godlo = request.get("sheet") if isinstance(request, dict) else None
+    sheet = request.get("sheet") if isinstance(request, dict) else None
     actual = meta.get("horizontal_crs")
-    if not isinstance(godlo, str) or not isinstance(actual, str):
+    if not isinstance(sheet, str) or not isinstance(actual, str):
         return None
     try:
-        expected = horizontal_crs_for_godlo(godlo)
+        expected = horizontal_crs_for_sheet(sheet)
     except KartografError:
         return None
     if expected == actual:
         return None
-    return godlo, expected, actual
+    return sheet, expected, actual
 
 
 def _warn_crs_mismatch_sheets(paths) -> None:
@@ -1611,8 +1611,8 @@ def _warn_crs_mismatch_sheets(paths) -> None:
         return
     found.sort()
     shown = ", ".join(
-        f"{godlo} (godlo: {expected}, plik: {actual})"
-        for godlo, expected, actual in found[:10]
+        f"{sheet} (godlo: {expected}, plik: {actual})"
+        for sheet, expected, actual in found[:10]
     ) + (" ..." if len(found) > 10 else "")
     print(
         f"Warning: {len(found)} arkuszy GUGiK opublikowano w innym ukladzie "
@@ -1633,8 +1633,8 @@ def _warn_sheet_sidecars(
     _warn_crs_mismatch_sheets(paths)
 
 
-def _godla_text(godla: list[str]) -> str:
-    return ", ".join(godla[:10]) + (" ..." if len(godla) > 10 else "")
+def _sheets_text(sheets: list[str]) -> str:
+    return ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
 
 
 def _warn_partial_sheets(
@@ -1661,13 +1661,13 @@ def _warn_partial_sheets(
     missing = [g for g in rest if g not in absent]
     groups = []
     if linked:
-        groups.append(f"pelny lot w <segment>/full_sheet/: {_godla_text(linked)}")
+        groups.append(f"pelny lot w <segment>/full_sheet/: {_sheets_text(linked)}")
     if absent:
         scope = " w zakresie lat zadania" if ranged else ""
-        groups.append(f"brak pelnego lotu w skorowidzu{scope}: {_godla_text(absent)}")
+        groups.append(f"brak pelnego lotu w skorowidzu{scope}: {_sheets_text(absent)}")
     if missing:
         hint = "" if full_sheet else " — uzyj --full-sheet"
-        groups.append(f"pelny lot nie pobrany: {_godla_text(missing)}{hint}")
+        groups.append(f"pelny lot nie pobrany: {_sheets_text(missing)}{hint}")
     print(
         f"Warning: najnowsza kampania GUGiK jest niepelna dla {len(partial)} "
         "arkuszy — skorowidz deklaruje arkusz nie w calosci wypelniony "
@@ -1799,23 +1799,23 @@ def _download_pl_bbox(
 
     # Find sheets covering the bbox (no network, no cache)
     try:
-        godlo_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
+        sheet_list = find_sheets_for_bbox(bbox, target_scale, system=args.system)
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    if not godlo_list:
+    if not sheet_list:
         print("Error: No sheets found for the given bbox", file=sys.stderr)
         return 1
 
     return _download_pl_sheet_list(
-        args, godlo_list, parent_request, what="bbox", target_scale=target_scale
+        args, sheet_list, parent_request, what="bbox", target_scale=target_scale
     )
 
 
 def _download_pl_sheet_list(
     args: argparse.Namespace,
-    godlo_list: list[str],
+    sheet_list: list[str],
     parent_request: dict,
     *,
     what: str,
@@ -1839,7 +1839,7 @@ def _download_pl_sheet_list(
 
     if not args.quiet:
         _print_sheet_list(
-            godlo_list,
+            sheet_list,
             target_scale,
             what=what,
             label=_product_label(product, resolution),
@@ -1866,8 +1866,8 @@ def _download_pl_sheet_list(
                 max_year=max_year,
                 full_sheet=full_sheet,
             )
-            all_paths, result = _download_godlo_list(
-                manager, godlo_list, skip_existing, on_progress
+            all_paths, result = _download_sheet_list(
+                manager, sheet_list, skip_existing, on_progress
             )
         except DownloadError as e:
             print(f"{_error_lead(on_progress)}Error: {e}", file=sys.stderr)
@@ -1918,7 +1918,7 @@ def _resolve_laz_bbox(args: argparse.Namespace) -> BBox | None:
         return transform_bbox(bbox, "EPSG:2180")
 
     # sheet code mode - SheetParser validates and transforms to EPSG:2180
-    return SheetParser(args.godlo).get_bbox(crs="EPSG:2180")
+    return SheetParser(args.sheet).get_bbox(crs="EPSG:2180")
 
 
 def _laz_parent_request(args: argparse.Namespace, bbox: BBox) -> dict | None:
@@ -1929,7 +1929,7 @@ def _laz_parent_request(args: argparse.Namespace, bbox: BBox) -> dict | None:
     ``--geometry`` as an EPSG:2180 envelope; ``countries`` = ``["PL"]`` - LAZ
     queries GUGiK only.
     """
-    if args.godlo is not None:
+    if args.sheet is not None:
         return None
     if args.bbox is not None:
         parts = [float(x.strip()) for x in args.bbox.split(",")]
@@ -1938,7 +1938,7 @@ def _laz_parent_request(args: argparse.Namespace, bbox: BBox) -> dict | None:
 
 
 def _laz_tile_label(tile) -> str:
-    return f"{tile.godlo} ({tile.year}, {tile.crs})"
+    return f"{tile.sheet} ({tile.year}, {tile.crs})"
 
 
 def _print_laz_superseded(superseded) -> None:
@@ -1998,7 +1998,7 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     # of a country). A PL sheet code unambiguously points to the country - no guard.
     if (
         getattr(args, "country", "auto") == "auto"
-        and args.godlo is None
+        and args.sheet is None
         and "CZ" in _countries_for_bbox(bbox)
     ):
         print(
@@ -2070,14 +2070,14 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     if result.failed:
         # Code 1 => `Error:` (convention: `Warning:` only with code 0) and the FULL
         # list of failed tiles to retry - model `_finish_pl_sheets` (N6).
-        names = ", ".join(f.tile.godlo for f in result.failed)
+        names = ", ".join(f.tile.sheet for f in result.failed)
         print(
             f"Error: {len(result.failed)} z {total} kafli LAZ nie pobrano "
             f"(blad pobrania): {names} — ponow pobranie",
             file=sys.stderr,
         )
         for failure in result.failed:
-            print(f"  {failure.tile.godlo}: {failure.error}", file=sys.stderr)
+            print(f"  {failure.tile.sheet}: {failure.error}", file=sys.stderr)
         return 1
 
     return 0
@@ -2104,7 +2104,7 @@ def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
         )
 
 
-def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> int:
+def _cz_download_sheet(args, provider, *, quiet: bool, skip_existing: bool) -> int:
     """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu) into FileStorage."""
     import logging
 
@@ -2112,15 +2112,15 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     from kartograf.download.storage import storage_for_provider
     from kartograf.sources.registry import get_source
 
-    godlo = args.godlo
-    system = detect_system(godlo)
+    sheet = args.sheet
+    system = detect_system(sheet)
     descriptor = get_source(provider.descriptor_key)
     storage = storage_for_provider(args.output, provider)
-    target = storage.get_raw_path(godlo, f"{godlo}{descriptor.default_extension}")
+    target = storage.get_raw_path(sheet, f"{sheet}{descriptor.default_extension}")
 
     if skip_existing and target.exists():
         if not quiet:
-            print(f"Skipped {godlo} - already exists at {target}")
+            print(f"Skipped {sheet} - already exists at {target}")
         _print_legacy_krovak_info(target)
         return 0
 
@@ -2128,10 +2128,10 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
         # O-3 as in the PL flow: only when the transfer really starts (after
         # the provider's validations: SM5 sheet index, TM33 grid parse)
         if not quiet:
-            print(f"Downloading {godlo} (CZ, resolution: {provider.resolution})...")
+            print(f"Downloading {sheet} (CZ, resolution: {provider.resolution})...")
 
     try:
-        provider.download(godlo, target, on_download=announce)
+        provider.download(sheet, target, on_download=announce)
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
@@ -2142,19 +2142,19 @@ def _cz_download_godlo(args, provider, *, quiet: bool, skip_existing: bool) -> i
     extra: dict = {}
     if is_sm5:
         try:
-            info = provider.sheet_index.sm5_sheet(godlo)
+            info = provider.sheet_index.sm5_sheet(sheet)
             if info.name is not None:
                 extra["mapname"] = info.name
             if info.podil is not None:
                 extra["cz_share"] = info.podil
         except Exception as e:  # noqa: BLE001 — data matters more than metadata
             logging.getLogger(__name__).warning(
-                f"Sidecar {godlo} bez extra.cz_share (PODIL; blad indeksu): {e}"
+                f"Sidecar {sheet} bez extra.cz_share (PODIL; blad indeksu): {e}"
             )
     _write_cz_sidecar(
         provider,
         target,
-        request={"sheet": godlo},
+        request={"sheet": sheet},
         capability="sheet_files" if is_sm5 else "bbox_raster",
         # an SM5 sheet arrives in Krovak, a TM33 tile in the UTM33/ETRS89 grid
         horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",
@@ -2257,7 +2257,7 @@ def _cmd_download_cz(
         Parsed arguments (sheet code / --bbox / --target-crs / --resolution ...).
     bbox : BBox, optional
         Bbox of area mode (``_dispatch_area`` always passes it, also
-        with an explicit ``--country cz``); ``None`` = sheet code mode (``args.godlo``).
+        with an explicit ``--country cz``); ``None`` = sheet code mode (``args.sheet``).
     parent_request : dict, optional
         The user's original task before the per-country split; goes to the sidecar's
         ``extra.parent_request``.
@@ -2280,11 +2280,11 @@ def _cmd_download_cz(
     from kartograf.providers.cuzk import create_dmr_provider
     from kartograf.transform.crs import TransformError
 
-    has_godlo = bbox is None
+    has_sheet = bbox is None
     # An SM5 sheet is a ready-made DMR 4G file that exists only at 5 m, so the
     # sheet itself determines the resolution; TM33 tiles and bbox cutouts are
     # cut from the service, where 2 m (default) and 5 m are a real choice.
-    is_sm5 = has_godlo and detect_system(args.godlo).id == "cz_sm5"
+    is_sm5 = has_sheet and detect_system(args.sheet).id == "cz_sm5"
     resolution = args.resolution or ("5m" if is_sm5 else "2m")
     vertical_crs = args.vertical_crs or "Bpv"
 
@@ -2300,7 +2300,7 @@ def _cmd_download_cz(
         print(
             f"Error: Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) — pomin "
             f"--resolution albo podaj 5m; dla {resolution} uzyj godla TM33 "
-            f"albo --bbox [godlo: {args.godlo}]",
+            f"albo --bbox [arkusz: {args.sheet}]",
             file=sys.stderr,
         )
         return 1
@@ -2310,10 +2310,10 @@ def _cmd_download_cz(
             file=sys.stderr,
         )
         return 1
-    if has_godlo and args.target_crs is not None:
+    if has_sheet and args.target_crs is not None:
         # the provider ignores target_crs in sheet code mode - silence would be a lie
         raise ValidationError(
-            "--target-crs dziala tylko z --bbox/--geometry; godlo wyznacza "
+            "--target-crs dziala tylko z --bbox/--geometry; --sheet wyznacza "
             "zasieg i uklad produktu (arkusz SM5 1:1 w EPSG:5514, kafel TM33 "
             "na siatce EPSG:3045)"
         )
@@ -2326,7 +2326,7 @@ def _cmd_download_cz(
             provider = create_dmr_provider(
                 resolution=resolution,
                 cache=cache,
-                target_crs=None if has_godlo else args.target_crs,
+                target_crs=None if has_sheet else args.target_crs,
                 vertical_crs=vertical_crs,
             )
         except TransformError as e:
@@ -2338,7 +2338,7 @@ def _cmd_download_cz(
         quiet = args.quiet
         skip_existing = not args.force
         if bbox is None:
-            return _cz_download_godlo(
+            return _cz_download_sheet(
                 args, provider, quiet=quiet, skip_existing=skip_existing
             )
         return _cz_download_bbox(
@@ -2435,20 +2435,20 @@ def _download_pl_geometry(
     layer = getattr(args, "layer", None)
 
     try:
-        godlo_list = find_sheets_for_geometry(
+        sheet_list = find_sheets_for_geometry(
             filepath, target_scale=target_scale, layer=layer, system=args.system
         )
     except ValidationError as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 
-    if not godlo_list:
+    if not sheet_list:
         print("Error: No sheets found for the given geometry", file=sys.stderr)
         return 1
 
     return _download_pl_sheet_list(
         args,
-        godlo_list,
+        sheet_list,
         parent_request,
         what=f"geometry {filepath.name}",
         target_scale=target_scale,

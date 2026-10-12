@@ -63,12 +63,12 @@ EXCEPTION_XML = """\
 
 
 def _feature(
-    godlo, year, lower, upper, density="25 p/m2", seq="100", dens_code="81121"
+    sheet, year, lower, upper, density="25 p/m2", seq="100", dens_code="81121"
 ):
     """Build a member with (E, N) inputs serialized in URN axis order (N, E)."""
     url = (
         "https://opendata.geoportal.gov.pl/NumDaneWys/DanePomiaroweLAZ/"
-        f"{dens_code}/{dens_code}_{seq}_{godlo}.laz"
+        f"{dens_code}/{dens_code}_{seq}_{sheet}.laz"
     )
     return f"""\
   <wfs:member>
@@ -79,7 +79,7 @@ def _feature(
           <gml:upperCorner>{upper[1]} {upper[0]}</gml:upperCorner>
         </gml:Envelope>
       </gml:boundedBy>
-      <gugik:godlo>{godlo}</gugik:godlo>
+      <gugik:godlo>{sheet}</gugik:godlo>
       <gugik:akt_rok>{year}</gugik:akt_rok>
       <gugik:format>LAZ</gugik:format>
       <gugik:char_przestrz>{density}</gugik:char_przestrz>
@@ -206,7 +206,7 @@ class TestInitAndProperties:
 class TestLazTile:
     def test_filename_from_url(self):
         tile = LazTile(
-            godlo="N-33-131-B-a-1-1-4",
+            sheet="N-33-131-B-a-1-1-4",
             url="https://opendata.geoportal.gov.pl/x/81121/81121_1573132_N-33-131-B-a-1-1-4.laz",
             year=2024,
             density=25,
@@ -220,16 +220,16 @@ class TestLazTile:
 
 
 class TestLazTileUklad:
-    """LAZ tile CRS from uklad_xy (``parse_pl_uklad``, D3); unknown = error.
+    """LAZ tile CRS from uklad_xy (``parse_pl_system``, D3); unknown = error.
 
     Moved from tests/test_cli.py::TestLazUklad (finding 8, review max
-    2026-08-30) - ``LazTile.uklad`` is now the single source of truth, used
+    2026-08-30) - ``LazTile.system`` is now the single source of truth, used
     by both the CLI and the library (``FileStorage.get_raw_path``).
     """
 
-    def _tile(self, godlo="N-33-131-B-a-1-1-4", crs="PL-2000:S6"):
+    def _tile(self, sheet="N-33-131-B-a-1-1-4", crs="PL-2000:S6"):
         return LazTile(
-            godlo=godlo,
+            sheet=sheet,
             url="u/f.laz",
             year=2024,
             density=25,
@@ -240,15 +240,15 @@ class TestLazTileUklad:
             max_y=1.0,
         )
 
-    def test_crs_pl2000_wins_over_dash_godlo(self):
+    def test_crs_pl2000_wins_over_dash_sheet(self):
         # hyphenated sheet code, but uklad_xy says PL-2000 - the CRS wins
-        assert self._tile().uklad == "2000"
+        assert self._tile().system == "2000"
 
     def test_crs_pl1992(self):
-        assert self._tile(crs="PL-1992").uklad == "1992"
+        assert self._tile(crs="PL-1992").system == "1992"
 
     @pytest.mark.parametrize(
-        ("godlo", "crs"),
+        ("sheet", "crs"),
         [
             ("6.162.34.02.3", None),
             ("N-33-131-B-a-1-1-4", None),
@@ -257,12 +257,12 @@ class TestLazTileUklad:
             ("XYZ99", None),
         ],
     )
-    def test_unrecognized_crs_is_an_error_not_a_guess(self, godlo, crs):
+    def test_unrecognized_crs_is_an_error_not_a_guess(self, sheet, crs):
         """D3: without a recognised uklad_xy we do not guess from the sheet code
         (formerly: sheet code -> 2000 cascade, a pl_2000 segment with an EPSG:2180
         sidecar)."""
         with pytest.raises(ValidationError, match="uklad_xy"):
-            self._tile(godlo=godlo, crs=crs).uklad  # noqa: B018
+            self._tile(sheet=sheet, crs=crs).system  # noqa: B018
 
 
 # ===========================================================================
@@ -413,8 +413,8 @@ class TestDiscoverTiles:
         p, _ = _provider_with_getfeature(COLLECTION_2024)
         tiles = p.discover_tiles(QUERY_BBOX, year=2024)
         # Tile far outside the bbox is dropped by the intersection post-filter
-        godla = [t.godlo for t in tiles]
-        assert godla == ["N-33-131-B-a-1-1-4", "N-33-131-B-a-1-2-3"]
+        sheets = [t.sheet for t in tiles]
+        assert sheets == ["N-33-131-B-a-1-1-4", "N-33-131-B-a-1-2-3"]
 
     def test_tile_attributes_parsed(self):
         p, _ = _provider_with_getfeature(COLLECTION_2024)
@@ -436,7 +436,7 @@ class TestDiscoverTiles:
         p, _ = _provider_with_getfeature(_collection([SPYTKOWICE_MEMBER]))
         tiles = p.discover_tiles(SPYTKOWICE_BBOX, year=2023)
 
-        assert [tile.godlo for tile in tiles] == ["M-34-76-A-a-1-1-3"]
+        assert [tile.sheet for tile in tiles] == ["M-34-76-A-a-1-1-3"]
         tile = tiles[0]
         assert (tile.min_x, tile.min_y, tile.max_x, tile.max_y) == (
             535830,
@@ -454,7 +454,7 @@ class TestDiscoverTiles:
             _collection([SPYTKOWICE_MEMBER, LUBUSKIE_MEMBER])
         )
         tiles = p.discover_tiles(SPYTKOWICE_BBOX, year=2023)
-        assert [tile.godlo for tile in tiles] == ["M-34-76-A-a-1-1-3"]
+        assert [tile.sheet for tile in tiles] == ["M-34-76-A-a-1-1-3"]
 
     def test_only_transposed_tiles_raise_axis_error(self):
         p, _ = _provider_with_getfeature(_collection([LUBUSKIE_MEMBER]))
@@ -482,7 +482,7 @@ class TestDiscoverTiles:
             )
         p, _ = _provider_with_getfeature(_collection([member]))
         tiles = p.discover_tiles(SPYTKOWICE_BBOX, year=2023)
-        assert [(t.godlo, t.min_x, t.min_y, t.max_x, t.max_y) for t in tiles] == [
+        assert [(t.sheet, t.min_x, t.min_y, t.max_x, t.max_y) for t in tiles] == [
             ("M-34-76-A-a-1-1-3", 535830, 234772, 536958, 235938)
         ]
 
@@ -507,9 +507,9 @@ class TestDiscoverTiles:
         ]
         p, _ = _provider_with_getfeature(_collection(members))
         tiles = p.discover_tiles(QUERY_BBOX, year=2024, min_density=12)
-        assert [t.godlo for t in tiles] == ["BBB"]
+        assert [t.sheet for t in tiles] == ["BBB"]
 
-    def test_newest_per_godlo_dedup(self):
+    def test_newest_per_sheet_dedup(self):
         # Same sheet code present in 2024 and 2023 -> keep 2024
         coll_2024 = _collection(
             [_feature("SAME", 2024, (530500, 382500), (531000, 383000), seq="new")]
@@ -545,7 +545,7 @@ class TestDiscoverTiles:
         p._available_years["EVRF2007"] = [2024]
         with patch.object(GugikLazProvider, "PAGE_SIZE", 2):
             tiles = p.discover_tiles(QUERY_BBOX, year=2024)
-        assert {t.godlo for t in tiles} == {"P1", "P2", "P3"}
+        assert {t.sheet for t in tiles} == {"P1", "P2", "P3"}
         assert session.get.call_count == 2
 
     def test_unknown_year_reports_available_years_without_retry(self):
@@ -630,7 +630,7 @@ class TestDiscoverTiles:
             patch("kartograf.transport.http.time.sleep"),
         ):
             tiles = p.discover_tiles(QUERY_BBOX, year=2024)
-        assert [tile.godlo for tile in tiles] == [
+        assert [tile.sheet for tile in tiles] == [
             "N-33-131-B-a-1-1-4",
             "N-33-131-B-a-1-2-3",
         ]

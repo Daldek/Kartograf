@@ -68,12 +68,12 @@ def _square(x0, y0, x1, y1):
     return ((x0, y0), (x1, y0), (x1, y1), (x0, y1))
 
 
-def _tile(godlo, year, footprint, *, full_sheet=True, date=None, crs="PL-1992"):
+def _tile(sheet, year, footprint, *, full_sheet=True, date=None, crs="PL-1992"):
     xs = [p[0] for p in footprint]
     ys = [p[1] for p in footprint]
     return LazTile(
-        godlo=godlo,
-        url=f"https://opendata.geoportal.gov.pl/x/{year}_{godlo}.laz",
+        sheet=sheet,
+        url=f"https://opendata.geoportal.gov.pl/x/{year}_{sheet}.laz",
         year=year,
         density=12,
         crs=crs,
@@ -155,7 +155,7 @@ class TestFootprintParsing:
     def test_real_pl2000_footprint_is_easting_northing(self):
         provider = GugikLazProvider(session=laz_session())
         (tile,) = provider.select_tiles(W2_AREA, year=2022).tiles
-        assert tile.godlo == OLD_2000
+        assert tile.sheet == OLD_2000
         assert tile.footprint is not None
         # posList GUGiK: "486799.764986 637347.517691 ..." = (N, E)
         assert len(tile.footprint) == 4  # no closing vertex
@@ -175,16 +175,16 @@ class TestSelectTilesOnRealWfs:
     def test_newest_tile_covers_area_older_systems_are_skipped(self):
         """C13 L1: 2025/PL-1992 covers the area -> 2022/PL-2000 and 2023 skipped."""
         selection = GugikLazProvider(session=laz_session()).select_tiles(W2_AREA)
-        assert [(t.godlo, t.year) for t in selection.tiles] == [(NEW_1992, 2025)]
-        skipped = {(s.tile.godlo, s.tile.year): s for s in selection.superseded}
+        assert [(t.sheet, t.year) for t in selection.tiles] == [(NEW_1992, 2025)]
+        skipped = {(s.tile.sheet, s.tile.year): s for s in selection.superseded}
         assert set(skipped) == {(OLD_2000, 2022), (NEW_1992, 2023)}
         for entry in skipped.values():
-            assert [(t.godlo, t.year) for t in entry.covered_by] == [(NEW_1992, 2025)]
+            assert [(t.sheet, t.year) for t in entry.covered_by] == [(NEW_1992, 2025)]
             assert entry.reason == "covered"
 
     def test_discover_tiles_returns_the_selected_tiles(self):
         provider = GugikLazProvider(session=laz_session())
-        assert [(t.godlo, t.year) for t in provider.discover_tiles(W2_AREA)] == [
+        assert [(t.sheet, t.year) for t in provider.discover_tiles(W2_AREA)] == [
             (NEW_1992, 2025)
         ]
 
@@ -192,14 +192,14 @@ class TestSelectTilesOnRealWfs:
         selection = GugikLazProvider(session=laz_session()).select_tiles(
             W2_AREA, year=2022
         )
-        assert [(t.godlo, t.year) for t in selection.tiles] == [(OLD_2000, 2022)]
+        assert [(t.sheet, t.year) for t in selection.tiles] == [(OLD_2000, 2022)]
         assert selection.superseded == ()
 
     def test_kron86_newest_year_covers_2012(self):
         selection = GugikLazProvider(
             session=laz_session(), vertical_crs="KRON86"
         ).select_tiles(W2_AREA)
-        assert [(t.godlo, t.year) for t in selection.tiles] == [(NEW_1992, 2018)]
+        assert [(t.sheet, t.year) for t in selection.tiles] == [(NEW_1992, 2018)]
         assert [(s.tile.year, s.reason) for s in selection.superseded] == [
             (2012, "covered")
         ]
@@ -219,58 +219,58 @@ class TestSelectNewestCover:
         new = _tile("NEW", 2024, _square(50, 50, 250, 250))
         for tiles in ([old, new], [new, old]):
             selection = select_newest_cover(tiles, AREA)
-            assert [t.godlo for t in selection.tiles] == ["NEW"]
-            assert [s.tile.godlo for s in selection.superseded] == ["OLD"]
+            assert [t.sheet for t in selection.tiles] == ["NEW"]
+            assert [s.tile.sheet for s in selection.superseded] == ["OLD"]
 
     def test_union_of_newer_tiles_covers_older(self):
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         west = _tile("W", 2024, _square(0, 0, 150, 300))
         east = _tile("E", 2024, _square(150, 0, 300, 300))
         selection = select_newest_cover([old, west, east], AREA)
-        assert sorted(t.godlo for t in selection.tiles) == ["E", "W"]
+        assert sorted(t.sheet for t in selection.tiles) == ["E", "W"]
         (entry,) = selection.superseded
-        assert sorted(t.godlo for t in entry.covered_by) == ["E", "W"]
+        assert sorted(t.sheet for t in entry.covered_by) == ["E", "W"]
 
     def test_gap_within_tolerance_is_covered(self):
         # the newer tile ends 0.5 m before the area edge
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 199.5, 300))
         selection = select_newest_cover([old, new], AREA)
-        assert [t.godlo for t in selection.tiles] == ["NEW"]
+        assert [t.sheet for t in selection.tiles] == ["NEW"]
         assert COVERAGE_TOLERANCE_M == 1.0
 
     def test_gap_beyond_tolerance_keeps_older(self):
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 198, 300))
         selection = select_newest_cover([old, new], AREA)
-        assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
+        assert sorted(t.sheet for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_zero_tolerance_keeps_older_for_half_metre_gap(self):
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 199.5, 300))
         selection = select_newest_cover([old, new], AREA, tolerance_m=0.0)
-        assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
+        assert sorted(t.sheet for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_partial_newer_sheet_does_not_cover(self):
         """``czy_ark_wypelniony=NIE``: footprint = sheet frame, not the data extent."""
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         new = _tile("NEW", 2024, _square(0, 0, 300, 300), full_sheet=False)
         selection = select_newest_cover([old, new], AREA)
-        assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
+        assert sorted(t.sheet for t in selection.tiles) == ["NEW", "OLD"]
 
     def test_same_year_duplicate_is_deduplicated_by_coverage(self):
         # sheet codes in reverse to dates: the newer akt_data wins, not sheet code order
         newer = _tile("Z", 2024, _square(0, 0, 300, 300), date="2024-08-01")
         older = _tile("A", 2024, _square(0, 0, 300, 300), date="2024-03-01")
         selection = select_newest_cover([older, newer], AREA)
-        assert [t.godlo for t in selection.tiles] == ["Z"]
-        assert [s.tile.godlo for s in selection.superseded] == ["A"]
+        assert [t.sheet for t in selection.tiles] == ["Z"]
+        assert [s.tile.sheet for s in selection.superseded] == ["A"]
 
     def test_older_tile_outside_newer_cover_kept(self):
         new = _tile("NEW", 2024, _square(0, 0, 150, 300))
         old = _tile("OLD", 2020, _square(150, 0, 300, 300))
         selection = select_newest_cover([new, old], AREA)
-        assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
+        assert sorted(t.sheet for t in selection.tiles) == ["NEW", "OLD"]
         assert selection.superseded == ()
 
     def test_tiles_without_geometry_are_kept(self):
@@ -278,9 +278,9 @@ class TestSelectNewestCover:
         tile = LazTile("X", "u/x.laz", 2020, 12, "PL-1992", nan, nan, nan, nan)
         new = _tile("NEW", 2024, _square(0, 0, 300, 300))
         selection = select_newest_cover([tile, new], AREA)
-        assert sorted(t.godlo for t in selection.tiles) == ["NEW", "X"]
+        assert sorted(t.sheet for t in selection.tiles) == ["NEW", "X"]
 
-    def test_same_godlo_covers_without_footprint(self):
+    def test_same_sheet_covers_without_footprint(self):
         """A tile without msGeometry: the same sheet code (same frame) still covers."""
         new = LazTile("SAME", "u/new.laz", 2024, 12, "PL-1992", 0, 0, 300, 300)
         old = LazTile("SAME", "u/old.laz", 2023, 12, "PL-1992", 0, 0, 300, 300)
@@ -293,9 +293,9 @@ class TestSelectNewestCover:
         new = LazTile("NEW", "u/new.laz", 2024, 12, "PL-1992", 0, 0, 300, 300)
         old = _tile("OLD", 2020, _square(0, 0, 300, 300))
         selection = select_newest_cover([old, new], AREA)
-        assert sorted(t.godlo for t in selection.tiles) == ["NEW", "OLD"]
+        assert sorted(t.sheet for t in selection.tiles) == ["NEW", "OLD"]
 
-    def test_partial_same_godlo_does_not_cover(self):
+    def test_partial_same_sheet_does_not_cover(self):
         """Wroclaw 2025: two deliveries of NOT the same sheet - both stay."""
         a = _tile(
             "G", 2025, _square(0, 0, 300, 300), full_sheet=False, date="2025-08-12"

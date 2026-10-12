@@ -216,10 +216,11 @@ class TestTargetCrsValidations:
 
     _BBOX = ["--bbox", "530010,382010,530190,382090", "--country", "pl"]
 
-    def test_pl_godlo_rejected(self, tmp_path, capsys):
+    def test_pl_sheet_rejected(self, tmp_path, capsys):
         rc = main(
             [
                 "download",
+                "--sheet",
                 "N-34-130-D-d-2-4",
                 "--target-crs",
                 "EPSG:2180",

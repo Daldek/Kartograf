@@ -27,7 +27,7 @@ Example usage::
     # Download Land Cover data
     from kartograf import LandCoverManager
     lc_manager = LandCoverManager()
-    lc_manager.download(godlo="N-34-130-D")
+    lc_manager.download(sheet="N-34-130-D")
 """
 
 from kartograf.cache.metadata import MetadataCache

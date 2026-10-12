@@ -9,14 +9,14 @@ Unlike NMT / NMPT / Ortofoto (which discover OpenData URLs through WMS
 ``GetFeatureInfo``), LAZ tiles are discovered through a **WFS** ``GetFeature``
 query. Each WFS feature already carries the full download URL
 (``url_do_pobrania``) plus metadata, so no URL has to be constructed and the
-fine tile godlo never has to be parsed.
+fine tile sheet never has to be parsed.
 
 Key differences from the other GUGiK products:
 
-- Discovery is **area-based**: a bbox (derived from a godlo / ``--bbox`` /
+- Discovery is **area-based**: a bbox (derived from a sheet / ``--bbox`` /
   ``--geometry``) is sent to the WFS, which returns every LAZ tile intersecting
   it. GUGiK tiles LAZ far finer than 1:10000, so a single 1:10000 sheet maps to
-  *many* LAZ tiles, each with its own (opaque) godlo.
+  *many* LAZ tiles, each with its own (opaque) sheet.
 - Two services split by height system: ``EVRF2007`` (current, years 2018+) and
   ``KRON86`` (legacy, years 2010–2019).
 - A point density (``char_przestrz``, e.g. ``25 p/m2``) and acquisition year
@@ -29,7 +29,7 @@ Examples
 >>> bbox = BBox(530469, 382961, 532660, 385291, "EPSG:2180")
 >>> tiles = provider.discover_tiles(bbox)
 >>> for tile in tiles:
-...     provider.download(tile.url, Path("./laz") / f"{tile.godlo}.laz")
+...     provider.download(tile.url, Path("./laz") / f"{tile.sheet}.laz")
 """
 
 import logging
@@ -57,7 +57,7 @@ from kartograf.core.coverage import (
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
-from kartograf.sources.registry import parse_pl_uklad
+from kartograf.sources.registry import parse_pl_system
 from kartograf.transport.http import (
     MAX_RETRIES,
     SessionPerThread,
@@ -90,7 +90,7 @@ class LazTile:
 
     Attributes
     ----------
-    godlo : str
+    sheet : str
         Tile identifier as published by GUGiK (opaque — finer than 1:10000,
         PL-1992 or PL-2000 form). Used only for labelling / storage.
     url : str
@@ -116,7 +116,7 @@ class LazTile:
         frame, and the data fills it only partially.
     """
 
-    godlo: str
+    sheet: str
     url: str
     year: int | None
     density: int | None
@@ -135,22 +135,22 @@ class LazTile:
         return self.url.rstrip("/").rsplit("/", 1)[-1]
 
     @property
-    def uklad(self) -> str:
+    def system(self) -> str:
         """Horizontal system of the tile for the storage segment: "1992" or "2000".
 
         Single source of truth for the CLI and the library (review max
         2026-08-30, finding 8), parsed from ``crs`` (``uklad_xy``) by
-        ``sources.registry.parse_pl_uklad`` — the same parser as the index
-        (skorowidz) records and ``horizontal_crs_for_uklad`` (sidecar), review-1
+        ``sources.registry.parse_pl_system`` — the same parser as the index
+        (skorowidz) records and ``horizontal_crs_for_system`` (sidecar), review-1
         D3. An unrecognized or missing ``uklad_xy`` (e.g. ``"PL-2000"``
-        without a zone) raises ``ValidationError``: guessing from the godlo format used
+        without a zone) raises ``ValidationError``: guessing from the sheet format used
         to put such a tile into ``pl_2000`` with an EPSG:2180 sidecar.
         ``discover_tiles`` never returns such tiles (they are skipped).
         """
-        parsed = parse_pl_uklad(self.crs)
+        parsed = parse_pl_system(self.crs)
         if parsed is None:
             raise ValidationError(
-                f"Kafel {self.godlo}: nierozpoznany uklad_xy {self.crs!r} "
+                f"Kafel {self.sheet}: nierozpoznany uklad_xy {self.crs!r} "
                 "(oczekiwano 'PL-1992' albo 'PL-2000:S5'..'S8')"
             )
         return parsed[0]
@@ -178,7 +178,7 @@ class SupersededLazTile:
 
 @dataclass(frozen=True)
 class LazTileSelection:
-    """Tile selection result: ``tiles`` to download (by godlo) and ``superseded``."""
+    """Tile selection result: ``tiles`` to download (by sheet) and ``superseded``."""
 
     tiles: tuple[LazTile, ...]
     superseded: tuple[SupersededLazTile, ...] = field(default=())
@@ -190,7 +190,7 @@ def _tile_order_key(tile: LazTile) -> tuple:
         -(tile.year or 0),
         _negated_date(tile.date),
         -(tile.density or 0),
-        tile.godlo,
+        tile.sheet,
         tile.url,
     )
 
@@ -242,12 +242,12 @@ def _add_full_cover(
     oy: float,
     tolerance_m: float,
     covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]],
-    full_by_godlo: dict[str, LazTile],
+    full_by_sheet: dict[str, LazTile],
 ) -> None:
     """Index a full tile's footprint and sheet code for the shared coverage rule."""
     if tile.full_sheet is False:
         return
-    full_by_godlo.setdefault(tile.godlo, tile)
+    full_by_sheet.setdefault(tile.sheet, tile)
     if tile.footprint is not None:
         grown = expand_convex(_shift(tile.footprint, ox, oy), tolerance_m)
         covers.append((tile, grown, _bounds(grown)))
@@ -257,7 +257,7 @@ def _uncovered_parts(
     tile: LazTile,
     part: Polygon | None,
     covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]],
-    full_by_godlo: Mapping[str, LazTile],
+    full_by_sheet: Mapping[str, LazTile],
 ) -> tuple[list[Polygon] | None, tuple[LazTile, ...]]:
     """Return uncovered area and relevant covers; None means geometry is unknown.
 
@@ -266,7 +266,7 @@ def _uncovered_parts(
     the caller's tolerance. Both greedy selection and range checking use this
     exact rule.
     """
-    same = full_by_godlo.get(tile.godlo)
+    same = full_by_sheet.get(tile.sheet)
     if same is not None:
         return [], (same,)
     if part is None:
@@ -298,7 +298,7 @@ def select_newest_cover(
     Greedy selection of LAZ tiles from the newest: no area duplication.
 
     Tiles are scanned from the newest ``year`` (within a year: newer ``date``,
-    higher density, godlo, URL). A tile is skipped if its intersection with
+    higher density, sheet, URL). A tile is skipped if its intersection with
     ``area`` is already covered by the union of previously selected tiles,
     each expanded by ``tolerance_m`` (a strip narrower than the tolerance does
     not save the tile); a tile contributing an uncovered piece stays. All in
@@ -310,10 +310,10 @@ def select_newest_cover(
       the tile stays more easily),
     - only tiles with ``full_sheet`` other than ``False`` cover, and only
       with their ``footprint`` (the envelope of a rotated frame sticks out
-      beyond it by even ~15 m) or with the same godlo (the same sheet frame —
+      beyond it by even ~15 m) or with the same sheet (the same sheet frame —
       this is how a tile without geometry covers too),
     - a tile without any geometry (NaN) stays, unless a full tile with the
-      same godlo has already been selected.
+      same sheet has already been selected.
 
     ``area`` must be in EPSG:2180 (like the WFS tiles).
     """
@@ -327,12 +327,12 @@ def select_newest_cover(
     # (tile, expanded extent, envelope of the expanded extent)
     covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]] = []
     superseded: list[SupersededLazTile] = []
-    # selected full tiles by godlo: the same godlo = the same sheet frame
-    full_by_godlo: dict[str, LazTile] = {}
+    # selected full tiles by sheet: the same sheet = the same sheet frame
+    full_by_sheet: dict[str, LazTile] = {}
     for tile in sorted(tiles, key=_tile_order_key):
         region = _tile_region(tile, ox, oy)
         part = clip_convex(region, area_poly) if region is not None else None
-        remaining, covered_by = _uncovered_parts(tile, part, covers, full_by_godlo)
+        remaining, covered_by = _uncovered_parts(tile, part, covers, full_by_sheet)
         if part is not None and remaining is None and not covered_by:
             superseded.append(SupersededLazTile(tile=tile))  # envelope only
             continue
@@ -340,11 +340,11 @@ def select_newest_cover(
             superseded.append(SupersededLazTile(tile=tile, covered_by=covered_by))
             continue
         kept.append(tile)  # unknown geometry stays (doubt = download)
-        _add_full_cover(tile, ox, oy, tolerance_m, covers, full_by_godlo)
+        _add_full_cover(tile, ox, oy, tolerance_m, covers, full_by_sheet)
     return LazTileSelection(
-        tiles=tuple(sorted(kept, key=lambda t: (t.godlo, t.url))),
+        tiles=tuple(sorted(kept, key=lambda t: (t.sheet, t.url))),
         superseded=tuple(
-            sorted(superseded, key=lambda s: (s.tile.godlo, -(s.tile.year or 0)))
+            sorted(superseded, key=lambda s: (s.tile.sheet, -(s.tile.year or 0)))
         ),
     )
 
@@ -377,9 +377,9 @@ def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSele
             continue
         kept.append(tile)
     return LazTileSelection(
-        tiles=tuple(sorted(kept, key=lambda t: (t.godlo, t.url))),
+        tiles=tuple(sorted(kept, key=lambda t: (t.sheet, t.url))),
         superseded=tuple(
-            sorted(superseded, key=lambda s: (s.tile.godlo, -(s.tile.year or 0)))
+            sorted(superseded, key=lambda s: (s.tile.sheet, -(s.tile.year or 0)))
         ),
     )
 
@@ -404,9 +404,9 @@ def _reference_year_conflicts(
     ox, oy = area.min_x, area.min_y
     area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
     covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]] = []
-    full_by_godlo: dict[str, LazTile] = {}
+    full_by_sheet: dict[str, LazTile] = {}
     for tile in selected.tiles:
-        _add_full_cover(tile, ox, oy, tolerance_m, covers, full_by_godlo)
+        _add_full_cover(tile, ox, oy, tolerance_m, covers, full_by_sheet)
 
     conflicts: dict[str, tuple[int, ...]] = {}
     labels: dict[str, str] = {}
@@ -417,7 +417,7 @@ def _reference_year_conflicts(
             continue
         region = _tile_region(tile, ox, oy)
         part = clip_convex(region, area_poly) if region is not None else None
-        remaining, _ = _uncovered_parts(tile, part, covers, full_by_godlo)
+        remaining, _ = _uncovered_parts(tile, part, covers, full_by_sheet)
         if remaining == []:
             continue
         if regions is None:
@@ -427,7 +427,7 @@ def _reference_year_conflicts(
         for other, other_region in regions:
             if other.year is None:
                 continue
-            touches = (remaining is None and other.godlo == tile.godlo) or (
+            touches = (remaining is None and other.sheet == tile.sheet) or (
                 remaining is not None
                 and other_region is not None
                 and any(
@@ -439,11 +439,11 @@ def _reference_year_conflicts(
                 partial_only[other.year] = partial_only.get(other.year, True) and (
                     other.full_sheet is False
                 )
-        conflicts[tile.godlo] = tuple(sorted(partial_only))
-        labels[tile.godlo] = f"({tile.year}, {tile.crs})"
+        conflicts[tile.sheet] = tuple(sorted(partial_only))
+        labels[tile.sheet] = f"({tile.year}, {tile.crs})"
         partial = frozenset(y for y, only in partial_only.items() if only)
         if partial:
-            partial_years[tile.godlo] = partial
+            partial_years[tile.sheet] = partial
     return conflicts, labels, partial_years
 
 
@@ -453,7 +453,7 @@ class GugikLazProvider(BaseProvider):
 
     Discovery is area-based: :meth:`discover_tiles` queries the WFS index
     (skorowidze) for every tile intersecting a bbox; :meth:`download` fetches
-    a single tile by its URL. The fine tile godlo is treated as an opaque label
+    a single tile by its URL. The fine tile sheet is treated as an opaque label
     and is never
     passed to ``SheetParser``.
 
@@ -639,7 +639,7 @@ class GugikLazProvider(BaseProvider):
         max_year: int | None = None,
     ) -> list[LazTile]:
         """
-        Discover the LAZ tiles to download for ``bbox`` (sorted by godlo).
+        Discover the LAZ tiles to download for ``bbox`` (sorted by sheet).
 
         Shortcut for ``select_tiles(...).tiles`` — see :meth:`select_tiles`
         for the selection rule (newest tile per area, no duplicated area
@@ -707,7 +707,7 @@ class GugikLazProvider(BaseProvider):
         Returns
         -------
         LazTileSelection
-            ``tiles`` to download (sorted by godlo) and ``superseded`` —
+            ``tiles`` to download (sorted by sheet) and ``superseded`` —
             skipped tiles with the tiles covering them.
 
         Raises
@@ -880,15 +880,15 @@ class GugikLazProvider(BaseProvider):
             return None
 
         url = text("url_do_pobrania")
-        godlo = text("godlo")
-        if not url or not godlo:
+        sheet = text("godlo")
+        if not url or not sheet:
             return None
         crs = text("uklad_xy")
-        if parse_pl_uklad(crs) is None:
+        if parse_pl_system(crs) is None:
             # D3: the same parser as the index and the sidecar — a tile without
             # a recognized CRS is skipped (like an index record) rather than
-            # guessed from the godlo (pl_2000 segment + EPSG:2180 sidecar)
-            logger.warning(f"Kafel {godlo}: nierozpoznany uklad_xy {crs!r} — pominiety")
+            # guessed from the sheet (pl_2000 segment + EPSG:2180 sidecar)
+            logger.warning(f"Kafel {sheet}: nierozpoznany uklad_xy {crs!r} — pominiety")
             return None
 
         year_text = text("akt_rok")
@@ -922,7 +922,7 @@ class GugikLazProvider(BaseProvider):
         full_sheet = {"TAK": True, "NIE": False}.get((full_text or "").upper())
 
         return LazTile(
-            godlo=godlo,
+            sheet=sheet,
             url=url,
             year=year,
             density=density,
@@ -968,7 +968,7 @@ class GugikLazProvider(BaseProvider):
         Note
         ----
         Unlike the other providers, the first argument is the tile's download
-        URL (obtained from :meth:`discover_tiles`), not a godlo — LAZ tiles are
+        URL (obtained from :meth:`discover_tiles`), not a sheet — LAZ tiles are
         identified by opaque finer-than-1:10000 ids that are not parseable.
 
         Parameters
