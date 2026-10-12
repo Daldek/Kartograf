@@ -1980,6 +1980,19 @@ zatwierdzeniu specu i planu.
 - [ ] 4. Wtyczka QGIS
 - [ ] 5. GUI webowe (lokalny manager danych)
 
+Czytelnosc ukladu `data/` po magazynie wersjonowanym (przeglad
+2026-10-12; zasada samoopisowych nazw plikow weszla do specu jako D25,
+reszta na kolejne etapy, decyzja uzytkownika 2026-10-12):
+
+- [ ] `versions/README.txt` w segmencie, tworzony przy pierwszym zapisie:
+  objasnienie nazwy `<data>_<id>_<sha8>`, hardlinkow i tego, ze wersji nie
+  usuwa sie recznie.
+- [ ] Widok "kampania -> arkusze" (komenda albo GUI) zamiast katalogu
+  `kampanie/` — indeks z sidecarow (podprojekty 2 i 5).
+- [ ] `docs/USAGE.md`: przykladowe drzewo `data/` z wersjami oraz uwaga,
+  ze Eksplorator Windows liczy hardlinki osobno (pozorny rozmiar 2-3x;
+  faktyczny pokazuje `du`).
+
 #### Do 0.7.1 — wymagania Hydrografa (2026-10-08)
 
 Zgloszenie Hydrografa (pozycje A na 0.7.1, B na 0.8.0) przejrzane wzgledem
