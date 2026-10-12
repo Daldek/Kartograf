@@ -8,6 +8,7 @@ across all test modules.
 import ipaddress
 import json
 import socket
+from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
 
@@ -421,6 +422,14 @@ class FakeCorine:
             return response
         self.previews += 1
         return _body_response(self.preview, "image/png")
+
+
+@pytest.fixture
+def frozen_clock(monkeypatch: pytest.MonkeyPatch) -> datetime:
+    """Freeze result timestamps while leaving TTL and cleanup clocks real."""
+    instant = datetime(2026, 10, 12, 8, 30, 45, 123456, tzinfo=UTC)
+    monkeypatch.setattr("kartograf._clock.now", lambda: instant)
+    return instant
 
 
 @pytest.fixture

@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from kartograf import _clock
 from kartograf.download.campaigns import AscCoverage, measure_coverage
 from kartograf.exceptions import DownloadError
 from kartograf.sources.sidecar import file_digest
@@ -76,7 +77,7 @@ class VersionRef:
     @staticmethod
     def downloaded(now: datetime | None = None) -> "VersionRef":
         """Label of a source without a campaign or edition: UTC download date."""
-        moment = (now or datetime.now(UTC)).astimezone(UTC)
+        moment = (now or _clock.now()).astimezone(UTC)
         return VersionRef(moment.date().isoformat(), "downloaded")
 
 

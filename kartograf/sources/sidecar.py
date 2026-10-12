@@ -14,9 +14,9 @@ import logging
 import os
 import threading
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
 from pathlib import Path
 
+from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.exceptions import DownloadError
@@ -182,7 +182,7 @@ def _select_channel_by_capability(
 def _now_iso() -> str:
     """``downloaded_at``: UTC with microseconds — orders two versions of
     one file downloaded within the same second (``version_key``)."""
-    return datetime.now(UTC).isoformat(timespec="microseconds")
+    return _clock.now().isoformat(timespec="microseconds")
 
 
 def build_metadata(
