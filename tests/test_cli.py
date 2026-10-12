@@ -5002,6 +5002,11 @@ def _cz_provider_mock(resolution="2m"):
     provider.resolution = resolution
     provider.vertical_crs = "Bpv"
     provider.vertical_transform = None
+    provider.sm5_signal.return_value = {
+        "etag": '"d19f2c604d89dc1:0"',
+        "last_modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+        "content_length": 752795,
+    }
 
     def fake_horizontal(target_crs):
         """CuzkDmrProvider.horizontal_transform contract: None for native."""
@@ -5014,10 +5019,20 @@ def _cz_provider_mock(resolution="2m"):
 
     provider.horizontal_transform.side_effect = fake_horizontal
 
-    def fake_download(sheet, target, timeout=60, *, on_download=None):
+    def fake_download(sheet, target, timeout=60, *, on_download=None, on_response=None):
         # provider contract: announce after validation, before the transfer
         if on_download is not None:
             on_download()
+        if on_response is not None:
+            on_response(
+                Mock(
+                    headers={
+                        "ETag": '"d19f2c604d89dc1:0"',
+                        "Last-Modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+                        "Content-Length": "752795",
+                    }
+                )
+            )
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(b"II*\x00dane")
         return target
@@ -5146,7 +5161,7 @@ class TestCzDownloadingAfterValidation:
     ) -> None:
         seen_at_fetch: list[str] = []
 
-        def fake_fetch(url, output_path, *, unzip_single=None):
+        def fake_fetch(url, output_path, *, unzip_single=None, on_response=None):
             seen_at_fetch.append(capsys.readouterr().out)
             self._write_tif(output_path, crs=None)
             return output_path
@@ -5318,9 +5333,14 @@ class TestCmdDownloadCz:
         assert result == 0
         assert factory.call_args.kwargs["resolution"] == "2m"
         assert factory.call_args.kwargs["vertical_crs"] == "Bpv"
-        target = provider.download.call_args.args[1]
-        assert target == (
-            tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
+        staged = provider.download.call_args.args[1]
+        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
+        assert staged.name == target.name
+        assert ".incoming" in staged.parts
+        assert target.read_bytes() == b"II*\x00dane"
+        assert (
+            json.loads(Path(f"{target}.meta.json").read_text())["extra"]["link"]
+            == "hardlink"
         )
 
     @pytest.mark.parametrize("force", [False, True])
@@ -5599,7 +5619,13 @@ class TestCmdDownloadCz:
             / "bbox"
             / "-447000_-1114000_-446000_-1113000.tif"
         )
-        assert provider.download_bbox.call_args.args[1] == target
+        staged = provider.download_bbox.call_args.args[1]
+        assert staged.name == target.name
+        assert staged.parent.parent.name == ".incoming"
+        assert staged.parent.parent.parent == (
+            tmp_path / "nmt" / "cz_dmr5g_bpv" / "versions"
+        )
+        assert target.exists()
         payload = json.loads(
             (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -5646,13 +5672,17 @@ class TestCmdDownloadCz:
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:5514"
         assert -450000 < sent_bbox.min_x < -440000  # Krovak: negative values
-        assert target.parent == tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox"
+        assert target.parent.parent.name == ".incoming"
+        assert target.parent.parent.parent == (
+            tmp_path / "nmt" / "cz_dmr5g_bpv" / "versions"
+        )
         assert target.name == (
             f"{format(sent_bbox.min_x, '.10g')}"
             f"_{format(sent_bbox.min_y, '.10g')}"
             f"_{format(sent_bbox.max_x, '.10g')}"
             f"_{format(sent_bbox.max_y, '.10g')}.tif"
         )
+        assert (tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox" / target.name).exists()
 
     def test_bbox_with_target_crs_records_pinned_transform(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -5668,8 +5698,10 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["target_crs"] == "EPSG:3045"
         sent_bbox, target = provider.download_bbox.call_args.args[:2]
         assert sent_bbox.crs == "EPSG:3045"
+        assert target.parent.parent.name == ".incoming"
+        link = tmp_path / "nmt" / "cz_dmr5g_bpv" / "bbox" / target.name
         payload = json.loads(
-            (target.parent / f"{target.name}.meta.json").read_text(encoding="utf-8")
+            (link.parent / f"{link.name}.meta.json").read_text(encoding="utf-8")
         )
         assert payload["horizontal_crs"] == "EPSG:3045"
         assert payload["transform"] == {
@@ -5820,7 +5852,7 @@ class TestCmdDownloadCz:
         assert "404 openzu" in capsys.readouterr().err
         assert not (tmp_path / "nmt" / "cz_dmr5g_bpv").exists()
 
-    def test_skip_existing(self, tmp_path):
+    def test_legacy_plain_sheet_is_replaced_by_version(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
@@ -5830,19 +5862,25 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = _cmd_download_cz(_cz_args(tmp_path))
         assert result == 0
-        provider.download.assert_not_called()
+        provider.download.assert_called_once()
+        assert target.read_bytes() == b"II*\x00dane"
+        assert (
+            json.loads(Path(f"{target}.meta.json").read_text())["extra"]["link"]
+            == "hardlink"
+        )
 
-    def test_force_overwrites_existing(self, tmp_path):
+    def test_force_redownloads_existing_version_without_overwrite(self, tmp_path):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        target.parent.mkdir(parents=True)
-        target.write_bytes(b"stare")
         provider = _cz_provider_mock()
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            result = _cmd_download_cz(_cz_args(tmp_path, force=True))
-        assert result == 0
-        provider.download.assert_called_once()
+            assert _cmd_download_cz(_cz_args(tmp_path)) == 0
+            before = next((tmp_path / "nmt").rglob("versions/**/*.tif"))
+            assert _cmd_download_cz(_cz_args(tmp_path, force=True)) == 0
+        assert provider.download.call_count == 2
+        assert target.read_bytes() == b"II*\x00dane"
+        assert list((tmp_path / "nmt").rglob("versions/**/*.tif")) == [before]
 
     def test_evrf2007_transform_lands_in_sidecar(self, tmp_path):
         """Bpv->EVRF2007 vertical transformation recorded in the sidecar.
@@ -5875,8 +5913,8 @@ class TestCmdDownloadCz:
             "pinned: Baltic 1957 height to EVRF2007 height (1) (0.1 m)"
         )
 
-    def test_sidecar_failure_does_not_fail_download(self, tmp_path, caplog):
-        """A sidecar write error = warning, not a download failure."""
+    def test_version_sidecar_failure_aborts_download(self, tmp_path, capsys):
+        """A version without a sidecar cannot become a valid local version."""
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
@@ -5889,10 +5927,9 @@ class TestCmdDownloadCz:
         ):
             result = _cmd_download_cz(_cz_args(tmp_path))
 
-        assert result == 0
-        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        assert target.exists()
-        assert not (target.parent / "302_5550.tif.meta.json").exists()
+        assert result == 1
+        assert "deskryptor padl" in capsys.readouterr().err
+        assert not list((tmp_path / "nmt").rglob("*.tif"))
 
     def test_factory_validation_error_returns_1(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
@@ -5960,7 +5997,7 @@ class TestCmdDownloadCz:
 
         from kartograf.cli.download_cmd import _cmd_download_cz
 
-        def real_tif(sheet, target, timeout=60, *, on_download=None):
+        def real_tif(sheet, target, timeout=60, *, on_download=None, on_response=None):
             target.parent.mkdir(parents=True, exist_ok=True)
             with rasterio.open(
                 target,
@@ -6125,59 +6162,33 @@ class TestCmdDownloadCz:
             json.dumps({"transform": transform}), encoding="utf-8"
         )
 
-    @pytest.mark.parametrize(
-        ("horizontal", "expect_info"),
-        [
-            ("S-JTSK to ETRS89 (3) + UTM zone 33N (0.5 m)", True),
-            ("S-JTSK to ETRS89 (1) + UTM zone 33N (1 m)", False),
-            (None, False),
-        ],
-    )
-    def test_skipped_tm33_tile_reports_legacy_krovak_sidecar(
-        self, tmp_path, capsys, horizontal, expect_info
+    def test_legacy_bbox_cutout_replaced_by_version_without_legacy_warning(
+        self, tmp_path, capsys
     ):
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        self._existing_with_sidecar(target, horizontal)
-        provider = _cz_provider_mock()
-        with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            rc = _cmd_download_cz(_cz_args(tmp_path))
-
-        assert rc == 0
-        provider.download.assert_not_called()
-        err = capsys.readouterr().err
-        assert ("sprzed naprawy operacji S-JTSK" in err) is expect_info
-        if expect_info:
-            assert str(target) in err and "--force" in err
-
-    def test_skipped_bbox_cutout_reports_legacy_krovak_sidecar(self, tmp_path, capsys):
         from kartograf.cli.download_cmd import _cmd_download_cz
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        args = _cz_args(tmp_path, sheet=None, target_crs="EPSG:2180")
-        with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            assert _cmd_download_cz(args, bbox=bbox) == 0
-        target = next((tmp_path / "nmt").rglob("*.tif"))
+        target = (
+            tmp_path
+            / "nmt"
+            / "cz_dmr5g_bpv"
+            / "bbox"
+            / "-447000_-1114000_-446000_-1113000.tif"
+        )
         self._existing_with_sidecar(target, "S-JTSK to ETRS89 (3) -> EPSG:2180")
-        capsys.readouterr()
-
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
-            assert _cmd_download_cz(args, bbox=bbox) == 0
+            assert _cmd_download_cz(_cz_args(tmp_path, sheet=None), bbox=bbox) == 0
 
         provider.download_bbox.assert_called_once()
-        assert "sprzed naprawy operacji S-JTSK" in capsys.readouterr().err
-
-    def test_skipped_file_without_sidecar_is_silent(self, tmp_path, capsys):
-        from kartograf.cli.download_cmd import _cmd_download_cz
-
-        target = tmp_path / "nmt" / "cz_dmr5g_bpv" / "302" / "5550" / "302_5550.tif"
-        target.parent.mkdir(parents=True)
-        target.write_bytes(b"stare")
-        with patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()):
-            assert _cmd_download_cz(_cz_args(tmp_path)) == 0
-        assert capsys.readouterr().err == ""
+        assert target.read_bytes() != b"stare"
+        assert "sprzed naprawy operacji S-JTSK" not in capsys.readouterr().err
+        assert (
+            json.loads(target.with_name(target.name + ".meta.json").read_text())[
+                "extra"
+            ]["link"]
+            == "hardlink"
+        )
 
     def test_target_crs_with_sheet_message_names_product_frames(self, tmp_path):
         """K2: the message says WHAT the code defines (SM5 in 5514, TM33 on 3045)."""

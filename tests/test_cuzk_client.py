@@ -190,6 +190,27 @@ class TestFetchFile:
         # ZIP cleaned up
         assert list(tmp_path.glob("*.zip")) == []
 
+    def test_zip_on_response_receives_source_zip_headers(self, tmp_path):
+        received = []
+        target = tmp_path / "CTES96.tif"
+        archive = _zip_bytes({"CTES96.tif": b"II*\x00tifdata"})
+
+        def fake_download(session, url, output_path, *, timeout, on_response):
+            on_response(Mock(headers={"ETag": '"d19f2c604d89dc1:0"'}))
+            Path(output_path).write_bytes(archive)
+            return Path(output_path)
+
+        with patch(_DOWNLOAD_TO_PATCH, side_effect=fake_download):
+            CuzkClient(session=Mock()).fetch_file(
+                "http://x/CTES96.zip",
+                target,
+                unzip_single=".tif",
+                on_response=received.append,
+            )
+        assert target.read_bytes() == b"II*\x00tifdata"
+        assert received[0].headers["ETag"] == '"d19f2c604d89dc1:0"'
+        assert len(received) == 1
+
     def test_unzip_single_without_expected_file_raises(self, tmp_path):
         zip_content = _zip_bytes({"readme.txt": b"nic"})
         target = tmp_path / "CTES96.tif"

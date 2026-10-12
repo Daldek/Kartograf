@@ -1,6 +1,8 @@
 """A6: CZ cutout in the library: sidecar, all-nodata flag, failures."""
 
 import json
+import os
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import Mock
 
@@ -10,7 +12,11 @@ import rasterio
 from rasterio.transform import from_origin
 
 from kartograf.core.bbox import BBox
-from kartograf.download.cz_cutout import CzCutoutResult, run_cz_cutout
+from kartograf.download.cz_cutout import (
+    CzCutoutResult,
+    check_cz_cutout,
+    run_cz_cutout,
+)
 
 
 def _write_tif(path: Path, bbox: BBox, value: float, nodata: float = -9999.0):
@@ -52,19 +58,34 @@ B = BBox(330001.3, 260003.7, 331000.2, 261001.1, "EPSG:2180")
 COORDS = [B.min_x, B.min_y, B.max_x, B.max_y]
 
 
-def test_run_writes_sidecar_and_result(tmp_path):
+def test_cz_cutout_version_and_link(tmp_path):
     result = run_cz_cutout(
         _provider(300.0), B, output_dir=tmp_path, image_crs="EPSG:2180"
     )
     assert isinstance(result, CzCutoutResult)
-    assert result.path.exists() and not result.all_nodata and not result.skipped
-    meta = json.loads(
-        result.path.with_name(result.path.name + ".meta.json").read_text()
+    assert result.file is not None
+    assert result.file.status == "new" and not result.all_nodata
+    assert result.file.path.exists()
+    assert result.file.version_path.parent.parent.name == "bbox"
+    assert os.path.samefile(result.file.path, result.file.version_path)
+    version_meta = json.loads(
+        result.file.version_path.with_name(
+            result.file.version_path.name + ".meta.json"
+        ).read_text()
     )
-    assert meta["horizontal_crs"] == "EPSG:2180"
-    assert meta["extra"]["all_nodata"] is False
-    # grid from the requested bbox, as the CLI does today (no alignment in 0.7.1)
-    assert meta["request"]["bbox"] == COORDS
+    link_meta = json.loads(
+        result.file.path.with_name(result.file.path.name + ".meta.json").read_text()
+    )
+    assert version_meta["sha256"] == result.file.sha256
+    assert version_meta["extra"]["version"] == {
+        "label": result.file.label,
+        "label_source": "downloaded",
+    }
+    assert "link" not in version_meta["extra"]
+    assert link_meta["extra"]["link"] == "hardlink"
+    assert version_meta["horizontal_crs"] == "EPSG:2180"
+    assert version_meta["extra"]["all_nodata"] is False
+    assert version_meta["request"]["bbox"] == COORDS
 
 
 def test_all_nodata_is_flagged(tmp_path, caplog):
@@ -74,18 +95,25 @@ def test_all_nodata_is_flagged(tmp_path, caplog):
     assert result.all_nodata is True
     # A6: not silent in the library either
     assert "nodata" in caplog.text
+    assert result.file is not None
     meta = json.loads(
-        result.path.with_name(result.path.name + ".meta.json").read_text()
+        result.file.version_path.with_name(
+            result.file.version_path.name + ".meta.json"
+        ).read_text()
     )
     assert meta["extra"]["all_nodata"] is True
 
 
-def test_skipped_existing_all_nodata_flag(tmp_path):
-    """Review Focus 5: an existing empty cutout still reports all_nodata."""
-    run_cz_cutout(_provider(-9999.0), B, output_dir=tmp_path, image_crs="EPSG:2180")
+def test_cz_cutout_default_local_without_network(tmp_path):
+    first = run_cz_cutout(
+        _provider(-9999.0), B, output_dir=tmp_path, image_crs="EPSG:2180"
+    )
     provider = _provider(300.0)
     again = run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
-    assert again.skipped is True and again.all_nodata is True
+    assert first.file is not None and again.file is not None
+    assert again.file.status == "local" and again.file.unverified == "none"
+    assert again.file.version_path == first.file.version_path
+    assert again.all_nodata is True
     provider.download_bbox.assert_not_called()
 
 
@@ -100,10 +128,11 @@ def test_unreadable_result_is_not_flagged(tmp_path):
 
     provider.download_bbox.side_effect = write_garbage
     result = run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
-    assert result.path.exists() and result.all_nodata is False
+    assert result.file is not None
+    assert result.file.path.exists() and result.all_nodata is False
 
 
-def test_failure_leaves_no_empty_dirs(tmp_path):
+def test_cz_cutout_failure_leaves_no_version_and_no_empty_tree(tmp_path):
     from kartograf.exceptions import DownloadError
 
     provider = _provider(1.0)
@@ -122,8 +151,11 @@ def test_parent_request_in_sidecar(tmp_path):
         image_crs="EPSG:2180",
         parent_request=parent,
     )
+    assert result.file is not None
     meta = json.loads(
-        result.path.with_name(result.path.name + ".meta.json").read_text()
+        result.file.version_path.with_name(
+            result.file.version_path.name + ".meta.json"
+        ).read_text()
     )
     assert meta["extra"]["parent_request"] == parent
 
@@ -147,8 +179,9 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
         resolution="2m",
     )
     assert seen["target_crs"] == "EPSG:2180" and seen["vertical_crs"] == "EVRF2007"
+    assert result.file is not None
     meta = json.loads(
-        result.path.with_name(result.path.name + ".meta.json").read_text()
+        result.file.path.with_name(result.file.path.name + ".meta.json").read_text()
     )
     assert meta["horizontal_crs"] == "EPSG:2180"
 
@@ -174,11 +207,129 @@ def test_native_target_crs_gives_native_provider(tmp_path, monkeypatch, caplog):
         resolution="2m",
     )
     assert seen["target_crs"] is None
+    assert result.file is not None
     meta = json.loads(
-        result.path.with_name(result.path.name + ".meta.json").read_text()
+        result.file.path.with_name(result.file.path.name + ".meta.json").read_text()
     )
     assert meta["horizontal_crs"] == "EPSG:5514"
     assert result.all_nodata is True
     assert any(
         r.levelname == "WARNING" and "nodata" in r.getMessage() for r in caplog.records
     )
+
+
+def test_cz_cutout_force_same_content_unchanged(tmp_path):
+    provider = _provider(15.0)
+    first = run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    again = run_cz_cutout(
+        provider, B, output_dir=tmp_path, image_crs="EPSG:2180", update="force"
+    )
+    assert first.file is not None and again.file is not None
+    assert again.file.status == "unchanged"
+    assert again.file.version_path == first.file.version_path
+    assert provider.download_bbox.call_count == 2
+    versions = list(
+        again.file.version_path.parent.parent.glob(f"*/{again.file.path.name}")
+    )
+    assert versions == [first.file.version_path]
+
+
+def test_cz_cutout_local_all_nodata_from_sidecar(tmp_path, monkeypatch):
+    from kartograf.download import cz_cutout
+
+    run_cz_cutout(_provider(-9999.0), B, output_dir=tmp_path, image_crs="EPSG:2180")
+
+    def raster_read_is_forbidden(*args, **kwargs):
+        raise AssertionError("local result must not read the raster")
+
+    monkeypatch.setattr(cz_cutout, "read_tif_nodata", raster_read_is_forbidden)
+    monkeypatch.setattr(cz_cutout, "_all_nodata", raster_read_is_forbidden)
+    provider = _provider(1.0)
+    local = run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    assert local.file is not None and local.file.status == "local"
+    assert local.all_nodata is True
+    provider.download_bbox.assert_not_called()
+
+
+def test_check_cz_cutout_never_downloads(tmp_path):
+    provider = _provider(1.0)
+    plan = check_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    assert plan.store == str(tmp_path.resolve())
+    assert len(plan.items) == 1
+    assert plan.items[0].track == "cz_cutout"
+    assert plan.items[0].status == "missing"
+    assert plan.items[0].unit == plan.items[0].name.removesuffix(".tif")
+    assert plan.items[0].segment == "nmt/cz_dmr5g_evrf2007"
+    assert plan.items[0].hierarchy == "bbox"
+    assert plan.items[0].available_label is None
+    assert plan.items[0].available_signal is None
+    provider.download_bbox.assert_not_called()
+
+    done = run_cz_cutout(
+        provider,
+        B,
+        output_dir=tmp_path,
+        image_crs="EPSG:2180",
+        update="upgrade",
+        plan=plan,
+    )
+    assert done.file is not None and done.file.status == "new"
+    assert done.stale == ()
+    current = check_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    assert current.items[0].status == "unverifiable"
+    provider.download_bbox.assert_called_once()
+
+
+def test_cz_cutout_upgrade_plan_excluded_missing_and_stale(tmp_path):
+    provider = _provider(1.0)
+    plan = check_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    excluded = replace(plan, items=())
+    missing = run_cz_cutout(
+        provider,
+        B,
+        output_dir=tmp_path,
+        image_crs="EPSG:2180",
+        update="upgrade",
+        plan=excluded,
+    )
+    assert missing.file is None and missing.stale == ()
+    stale_plan = replace(plan, items=(replace(plan.items[0], available_label="older"),))
+    stale = run_cz_cutout(
+        provider,
+        B,
+        output_dir=tmp_path,
+        image_crs="EPSG:2180",
+        update="upgrade",
+        plan=stale_plan,
+    )
+    assert stale.file is None and stale.stale == stale_plan.items
+    provider.download_bbox.assert_not_called()
+    first = run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    assert first.file is not None
+    provider.download_bbox.reset_mock()
+    local = run_cz_cutout(
+        provider,
+        B,
+        output_dir=tmp_path,
+        image_crs="EPSG:2180",
+        update="upgrade",
+        plan=stale_plan,
+    )
+    assert local.file is not None and local.file.status == "local"
+    assert local.file.version_path == first.file.version_path
+    assert local.file.unverified is None and local.stale == stale_plan.items
+    provider.download_bbox.assert_not_called()
+
+
+def test_cz_cutout_legacy_plain_file_replaced_by_link(tmp_path):
+    from kartograf.download.storage import bbox_cutout_path
+
+    legacy = bbox_cutout_path(tmp_path, "nmt/cz_dmr5g_evrf2007", B, ".tif")
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"legacy")
+    provider = _provider(15.0)
+    result = run_cz_cutout(provider, B, output_dir=tmp_path, image_crs="EPSG:2180")
+    assert result.file is not None and result.file.status == "new"
+    assert legacy.read_bytes() != b"legacy"
+    assert os.path.samefile(legacy, result.file.version_path)
+    provider.download_bbox.assert_called_once()

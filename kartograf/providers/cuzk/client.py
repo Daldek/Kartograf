@@ -9,6 +9,7 @@ Retry/backoff and atomic write come from transport/http.py.
 import os
 import threading
 import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from urllib.parse import urlencode
 
@@ -111,19 +112,36 @@ class CuzkClient:
         output_path: Path,
         *,
         unzip_single: str | None = None,
+        on_response: Callable[[requests.Response], None] | None = None,
     ) -> Path:
         """Download a file; with unzip_single extract the only file with that
         extension (+ the accompanying .tfw), write atomically (both files
         together or neither), delete the ZIP. Any extraction error =>
-        DownloadError, leaving no partial results on disk."""
+        DownloadError, leaving no partial results on disk.
+
+        ``on_response`` receives the HTTP response of the source file (ZIP
+        when extracting one), not the unpacked TIFF.
+        """
         output_path = Path(output_path)
         if unzip_single is None:
-            return download_to(self._session, url, output_path, timeout=self._timeout)
+            return download_to(
+                self._session,
+                url,
+                output_path,
+                timeout=self._timeout,
+                on_response=on_response,
+            )
 
         zip_path = output_path.with_name(
             f"{output_path.name}.{os.getpid()}_{threading.get_ident()}.zip"
         )
-        download_to(self._session, url, zip_path, timeout=self._timeout)
+        download_to(
+            self._session,
+            url,
+            zip_path,
+            timeout=self._timeout,
+            on_response=on_response,
+        )
         try:
             _extract_zip_pair(zip_path, output_path, unzip_single, url)
         finally:

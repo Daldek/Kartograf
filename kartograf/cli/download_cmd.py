@@ -30,8 +30,6 @@ from kartograf.download.countries import CountryPart
 from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
 from kartograf.download.countries import countries_for_bbox as _countries_for_bbox
 from kartograf.download.countries import country_bbox as _country_bbox
-from kartograf.download.cz_cutout import read_tif_nodata as _read_tif_nodata
-from kartograf.download.cz_cutout import write_cz_sidecar as _write_cz_sidecar
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import (
     DownloadManager,
@@ -2374,94 +2372,6 @@ def _cmd_download_laz(args: argparse.Namespace) -> int:
     return 0
 
 
-def _warn_cz_all_nodata(target: Path, nodata: float | None) -> None:
-    """N2: ``Warning:`` when a CZ raster has not a single valid pixel (code 0).
-
-    Best-effort like ``_read_tif_nodata`` - a read error = silence (provider
-    mocks do not write a file). No nodata tag: CUZK writes -9999.
-    """
-    from kartograf.providers.cuzk.dmr import CUZK_NODATA
-    from kartograf.transport.mosaic import has_valid_pixels
-
-    try:
-        empty = not has_valid_pixels(target, CUZK_NODATA if nodata is None else nodata)
-    except Exception:  # noqa: BLE001 — a warning never aborts the download
-        return
-    if empty:
-        print(
-            f"Warning: {target} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)",
-            file=sys.stderr,
-        )
-
-
-def _cz_download_sheet(args, provider, *, quiet: bool, skip_existing: bool) -> int:
-    """CZ sheet code: TM33 tile (exportImage) or SM5 sheet (openzu) into FileStorage."""
-    import logging
-
-    from kartograf.core.parser_registry import detect_system
-    from kartograf.download.storage import storage_for_provider
-    from kartograf.sources.registry import get_source
-
-    sheet = args.sheet
-    system = detect_system(sheet)
-    descriptor = get_source(provider.descriptor_key)
-    storage = storage_for_provider(
-        args.output,
-        provider,
-        resolution=provider.resolution,
-        vertical_crs=provider.vertical_crs,
-    )
-    target = storage.get_raw_path(sheet, f"{sheet}{descriptor.default_extension}")
-
-    if skip_existing and target.exists():
-        if not quiet:
-            print(f"Skipped {sheet} - already exists at {target}")
-        _print_legacy_krovak_info(target)
-        return 0
-
-    def announce() -> None:
-        # O-3 as in the PL flow: only when the transfer really starts (after
-        # the provider's validations: SM5 sheet index, TM33 grid parse)
-        if not quiet:
-            print(f"Downloading {sheet} (CZ, resolution: {provider.resolution})...")
-
-    try:
-        provider.download(sheet, target, on_download=announce)
-    except (DownloadError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-    nodata = _read_tif_nodata(target)
-    _warn_cz_all_nodata(target, nodata)
-    is_sm5 = system.id == "cz_sm5"
-    extra: dict = {}
-    if is_sm5:
-        try:
-            info = provider.sheet_index.sm5_sheet(sheet)
-            if info.name is not None:
-                extra["mapname"] = info.name
-            if info.podil is not None:
-                extra["cz_share"] = info.podil
-        except Exception as e:  # noqa: BLE001 — data matters more than metadata
-            logging.getLogger(__name__).warning(
-                f"Sidecar {sheet} bez extra.cz_share (PODIL; blad indeksu): {e}"
-            )
-    _write_cz_sidecar(
-        provider,
-        target,
-        request={"sheet": sheet},
-        capability="sheet_files" if is_sm5 else "bbox_raster",
-        # an SM5 sheet arrives in Krovak, a TM33 tile in the UTM33/ETRS89 grid
-        horizontal_crs="EPSG:5514" if is_sm5 else "EPSG:3045",
-        nodata=nodata,
-        extra=extra or None,
-    )
-    if not quiet:
-        print(f"Downloaded to {target}")
-    return 0
-
-
 @contextlib.contextmanager
 def _library_log_muted(name: str) -> Iterator[None]:
     """Mute one library logger while the CLI prints the same message itself."""
@@ -2512,26 +2422,27 @@ def _cz_download_bbox(
                 bbox,
                 output_dir=args.output,
                 image_crs=args.target_crs,
-                force=not skip_existing,
+                update=None if skip_existing else "force",
                 parent_request=parent_request,
                 on_download=announce,
             )
     except (DownloadError, ValidationError) as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    if result.skipped:
+    assert result.file is not None  # without a plan a cutout always has a file
+    if result.file.status == "local":
         if not quiet:
-            print(f"Skipped - already exists at {result.path}")
-        _print_legacy_krovak_info(result.path)
+            print(f"Skipped - already exists at {result.file.path}")
+        _print_legacy_krovak_info(result.file.path)
         return 0
     if result.all_nodata:
         print(
-            f"Warning: {result.path} jest w calosci nodata — obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)",
+            f"Warning: {result.file.path} jest w calosci nodata - obszar poza "
+            "pokryciem DMR CUZK (poza granica CZ?)",
             file=sys.stderr,
         )
     if not quiet:
-        print(f"Downloaded to {result.path}")
+        print(f"Downloaded to {result.file.path}")
     return 0
 
 
@@ -2545,7 +2456,7 @@ def _cmd_download_cz(
 
     Model: :func:`_cmd_download_laz` - a flow outside ``DownloadManager``, because a
     CZ task yields exactly one file (a TM33 tile, an SM5 sheet or an
-    `exportImage` cutout), and the sidecars are written by the CLI layer.
+    `exportImage` cutout); the library writes its versioned sidecar.
 
     Parameters
     ----------
@@ -2621,9 +2532,43 @@ def _cmd_download_cz(
         quiet = args.quiet
         skip_existing = not args.force
         if bbox is None:
-            return _cz_download_sheet(
-                args, provider, quiet=quiet, skip_existing=skip_existing
-            )
+            from kartograf.download.cz_sheets import run_cz_sheet
+
+            def announce() -> None:
+                if not quiet:
+                    print(
+                        f"Downloading {args.sheet} (CZ, resolution: "
+                        f"{provider.resolution})..."
+                    )
+
+            try:
+                with _library_log_muted("kartograf.download.cz_sheets"):
+                    result = run_cz_sheet(
+                        provider,
+                        args.sheet,
+                        output_dir=args.output,
+                        update="force" if args.force else None,
+                        on_download=announce,
+                    )
+            except (DownloadError, ValidationError) as e:
+                print(f"Error: {e}", file=sys.stderr)
+                return 1
+            assert result.file is not None  # without a plan, a sheet always has a file
+            if result.file.status == "local":
+                if not quiet:
+                    print(
+                        f"Skipped {args.sheet} - already exists at {result.file.path}"
+                    )
+                return 0
+            if result.all_nodata:
+                print(
+                    f"Warning: {result.file.path} jest w calosci nodata — "
+                    "obszar poza pokryciem DMR CUZK (poza granica CZ?)",
+                    file=sys.stderr,
+                )
+            if not quiet:
+                print(f"Downloaded to {result.file.path}")
+            return 0
         return _cz_download_bbox(
             args,
             provider,
