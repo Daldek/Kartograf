@@ -247,24 +247,32 @@ w Polsce (część CZ bywa wtedy w całości nodata).
 ### 1.5 Pokrycie terenu, gleby, HSG, cache
 
 ```bash
-kartograf landcover download --source bdot10k --teryt 1465 -o ./data/landcover
-kartograf landcover download --source bdot10k --teryt 1465 --format SHP -o ./data/landcover # archiwum .zip
+kartograf landcover download --source bdot10k --teryt 1465 -o ./data
+#   landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: nowa wersja 2026-10-12_f3550257
+kartograf landcover download --source bdot10k --teryt 1465 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp/teryt/1465.zip: nowa wersja ...  (archiwum .zip)
 # Obszar z dwóch powiatów (TERYT z WFS PRG): pakiet KAŻDEGO powiatu, osobny plik
-kartograf landcover download --source bdot10k --bbox 340000,290000,350000,300000 -o ./dane
-#   -> Downloaded to: dane/bdot10k_teryt_0208.gpkg
-#   -> Downloaded to: dane/bdot10k_teryt_0224.gpkg
-#   (nazwa zawsze teryt_<TERYT> — pakiet to cały powiat; obszar żądania
+kartograf landcover download --source bdot10k --bbox 626000,480000,628000,482000 -o ./data
+#   landcover/pl_bdot10k_gpkg/teryt/1421.gpkg: nowa wersja 2026-10-12_38da4056
+#   landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja 2026-10-12 (bez sprawdzania; --check-updates)
+#   Nowe: 1, nowa etykieta: 0, bez zmian: 0, lokalne: 1, bledy: 0 (./data)
+#   (ścieżka zawsze teryt/<TERYT> — pakiet to cały powiat; obszar żądania
 #    w sidecarze extra.parent_request; to samo dla --sheet i --geometry)
-kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data/landcover
-#   -> corine_2018_sheet_N-34-130-D.tif (bez credentials CLMS: .png z WMS)
-kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm -o ./data/landcover --stat mean
-#   -> soilgrids_clay_15-30cm_mean_sheet_N-34-130-D.tif
-# Nazwa niesie każdy parametr treści (także domyślny), więc --property sand
-# dla tego samego obszaru daje osobny plik; parametry są też w sidecarze
+kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data
+#   z CLMS_CREDENTIALS: landcover/eu_corine_2018/N-34/130/D/N-34-130-D.tif: nowa wersja V2020_20u1_<sha8>
+#   bez: Info: CORINE 2018: podglad WMS ...
+#        landcover/eu_corine_2018_preview/N-34/130/D/N-34-130-D.png: nowa wersja 2026-10-12_<sha8>
+kartograf landcover download --source soilgrids --bbox 626000,480000,628000,482000 --property clay --depth 0-5cm --stat mean -o ./data
+#   soil/global_soilgrids_clay_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_717f0989
+# Segment niesie każdy parametr treści (lowercase), więc --property sand
+# dla tego samego obszaru to osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
 
-# Hydrologic Soil Groups dla metody SCS-CN
-kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data/hsg --depth 0-5cm
+# Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
+kartograf soilgrids hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
+#   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
+#   hsg/global_soilgrids_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_470ef3d9
+# Ponownie (także z --force, gdy treść wejść się nie zmieniła): ... uzyta ponownie 2.0
 
 # Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
@@ -274,12 +282,17 @@ kartograf cache clear
 kartograf cache path
 ```
 
-`--teryt` dotyczy tylko BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`,
-`--geometry`). BDOT10k z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie
-powiaty obszaru (lista z WFS PRG, odpowiedzi w cache metadanych — `cache
-stats` liczy je w `TERYT entries`); obszar bez powiatu (morze) to `Error:`.
-CORINE bez credentials CLMS pobiera podgląd PNG (sekcja 6).
-Warstwy BDOT10k, parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
+`--output` to katalog magazynu (wersje w `versions/`, ścieżka standardowa
+= hardlink; ARCHITECTURE 3.3 reguła 8); `soilgrids hsg -o plik.tif` to
+`Error:` (plik poza magazynem: `hsg_from_rasters`). `--teryt` dotyczy tylko
+BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`, `--geometry`). BDOT10k
+z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
+z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
+w `TERYT entries`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
+się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
+`--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
+credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
+parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
 
 ### 1.6 Kiedy `--scale` jest wymagane
 
@@ -390,29 +403,36 @@ area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:21
 kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
 path = kron.download_bbox(area, Path("my_area.tif"))
 
-# Land Cover: BDOT10k / CORINE / SoilGrids (provider wymagany)
+# Land Cover: BDOT10k / CORINE / SoilGrids do magazynu (output_dir = --output)
 from kartograf import LandCoverManager
-lc = LandCoverManager("./data/landcover", "bdot10k")
-lc.download(teryt="1465")                   # BDOT10k (powiat)
+lc = LandCoverManager("./data", "bdot10k")
+result = lc.download(teryt="1465")         # BDOT10k (powiat)
+print(result.file.path, result.file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
 # BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo sheet=),
-# tylko wybrane warstwy -> [bdot10k_PTWP-SWKN-SWRM-SWRS_teryt_<T>.gpkg, ...];
-# keep_raw=True zostawia obok oryginalny ZIP GUGiK (bdot10k_teryt_<T>_GPKG.zip,
-# pełny pakiet niezależnie od layers=, z własnym sidecarem; tylko GPKG)
-paths = lc.download_all_counties(
+# tylko wybrane warstwy -> landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
+# keep_raw=True: oryginalny ZIP GUGiK jako osobna wersja
+# (landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip, pełny pakiet; tylko GPKG)
+area = lc.download_all_counties(
     bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
     layers=["SWRS", "SWKN", "SWRM", "PTWP"],
     keep_raw=True,
 )
+paths = [r.file.path for r in area.files]  # area.failed: powiaty z błędem
 # lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
 # kodów (kilka powiatów) / NoCoverageError (żaden)
 lc.set_provider("corine")
-lc.download(sheet="N-34-130-D", year=2018)  # CORINE
+lc.download(sheet="N-34-130-D", year=2018)  # CORINE (CLMS albo podgląd _preview)
+lc.set_provider("soilgrids")
+plan = lc.check(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean")
+lc.download(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean",
+            update="upgrade", plan=plan)    # tylko pozycje planu
 
-# Hydrologic Soil Groups
+# Hydrologic Soil Groups (wejścia = wersje SoilGrids w tym samym magazynie)
 from kartograf import HSGCalculator
-calc = HSGCalculator()
-calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"), depth="0-5cm", stat="mean")
-stats = calc.get_hsg_statistics(Path("./hsg.tif"))
+calc = HSGCalculator("./data")
+hsg = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+print(hsg.file.status, hsg.file.label)      # new 2.0 (ponownie: reused 2.0)
+stats = calc.get_hsg_statistics(hsg.file.path)
 
 # HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
 from kartograf import BBox, hsg_from_rasters
@@ -479,7 +499,7 @@ manager = DownloadManager(
     ),  # albo GugikProvider(..., cache=...)
 )
 # Land cover: cache dla providera tworzonego po nazwie (BDOT10k: odpowiedzi PRG)
-lc = LandCoverManager("./data/landcover", "bdot10k", cache=MetadataCache(".kartograf_cache.db"))
+lc = LandCoverManager("./data", "bdot10k", cache=MetadataCache(".kartograf_cache.db"))
 ```
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`,
@@ -724,8 +744,9 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 
 Dotyczy każdego toru `kartograf download`: arkuszy PL NMT/NMPT/orto,
 kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
-`--target-crs`. Flagi wykluczają się wzajemnie. Tabela niżej opisuje
-arkusze PL (sygnał: skorowidz); pozostałe tory różnią się sygnałem:
+`--target-crs`, a także `landcover download` i `soilgrids hsg`. Flagi
+wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
+skorowidz); pozostałe tory różnią się sygnałem:
 
 | Tor | Sygnał świeżości | Uwagi |
 |---|---|---|
@@ -733,6 +754,9 @@ arkusze PL (sygnał: skorowidz); pozostałe tory różnią się sygnałem:
 | kafle LAZ | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
 | arkusze SM5 (CZ) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
 | kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
+| SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
+| BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
+| HSG (`soilgrids hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
 z pozycjami PL i CZ (pole `track`), a `--upgrade --plan PLIK` wykonuje
@@ -780,7 +804,9 @@ report = upgrade(manager, UpdatePlan.from_json(plan.to_json()))
 print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-10-21_84183
 # LAZ / CZ / wycinki: run_laz_download(..., update=, plan=), check_laz_updates,
 # run_cz_cutout(..., update=, plan=), check_cz_cutout, run_pl_wcs_cutout(...,
-# update=, plan=), check_pl_cutout; pozycje planu: item.track, item.unit
+# update=, plan=), check_pl_cutout; land cover: LandCoverManager.download(...,
+# update=, plan=), check, check_all_counties; HSG: calculate_hsg_by_*(...,
+# update=, plan=), check_hsg_by_*; pozycje planu: item.track, item.unit
 ```
 
 ---
@@ -790,10 +816,13 @@ print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-1
 - SoilGrids (ISRIC): 11 parametrów, 6 głębokości, 5 statystyk,
   rozdzielczość 250 m — tabela parametrów i jednostek: PRD 3.7;
   `kartograf landcover list-layers --source soilgrids`.
-- HSG (`kartograf soilgrids hsg`, `HSGCalculator`) pobiera `clay`/`sand`/
-  `silt` z SoilGrids, klasyfikuje teksturę wg trójkąta USDA (12 klas)
-  i mapuje ją na grupy A–D; wynik to GeoTIFF 1–4 (0 = nodata) z sidecarem
-  (PRD 3.8).
+- HSG (`kartograf soilgrids hsg`, `HSGCalculator(output_dir)`) bierze
+  `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
+  (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)
+  i mapuje ją na grupy A–D; wynik to wersja GeoTIFF 1–4 (0 = nodata)
+  w `hsg/global_soilgrids_<głębokość>_<stat>/` z sidecarem
+  (`extra.source_files`: ścieżki wersji i sha256 wejść; PRD 3.8). Te same
+  wejścia = wersja użyta ponownie, bez liczenia.
 - `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
   robi to samo z gotowych rastrow (g/kg) na siatce o zadanym ukladzie
   i pikselu, bez wartosci domyslnych. Nodata wejscia tylko z jego tagu,
@@ -860,6 +889,13 @@ proxy).
 
 - Kartograf nie scala rastrów PL i CZ w jedną powierzchnię przygraniczną
   (R6); wyniki są osobne, powiązane przez `extra.parent_request`.
+- Land cover i HSG (od 0.8.0): poprawkę danych w obrębie tego samego
+  wydania SoilGrids/CORINE (bez zmiany etykiety wydania) wykrywa tylko
+  `--force`; BDOT10k i podgląd CORINE nie mają taniego sygnału świeżości.
+  Pobranie CORINE z CLMS (z `CLMS_CREDENTIALS`) nie było sprawdzone na
+  żywo w 0.8.0 (odczyt wydania z katalogu CLMS — tak). Pliki land cover
+  i HSG z 0.7.x (`bdot10k_teryt_*.gpkg`, `soilgrids_*.tif`,
+  `hsg_*.tif`) nie są rozpoznawane — pobierz ponownie do magazynu.
 - Gdy skorowidz dla godła PL-2000 1:10000 udostępnia tylko arkusze potomne,
   pobranie zwraca `NoCoverageError` z podpowiedzią `--scale 1:2000`; nie
   pobiera arkusza PL-1992 jako zamiennika.

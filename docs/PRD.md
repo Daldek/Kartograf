@@ -296,24 +296,26 @@ kartograf download --geometry area.shp --product laz --country pl --vertical-crs
 
 #### Description
 Pobieranie danych pokrycia terenu z polskiej bazy BDOT10k (TERYT powiatu,
-godło lub bbox). Format GPKG (domyślny — warstwy scalane w jeden plik `.gpkg`,
-składany w lokalnym katalogu tymczasowym i przenoszony do `--output`, więc
+godło lub bbox) do magazynu wersji (`landcover/pl_bdot10k_<format>[_<warstwy>]/teryt/<T>`,
+ADR-036). Format GPKG (domyślny — warstwy scalane w jeden plik `.gpkg`,
+składany w lokalnym katalogu tymczasowym i przenoszony do magazynu, więc
 działa także na udziałach sieciowych) albo SHP (archiwum `.zip`).
 
 #### Capabilities
 ```python
-from pathlib import Path
+from kartograf import LandCoverManager
 
-from kartograf import LandCoverManager, Bdot10kProvider
-
-# katalog wyjściowy ustawia KONSTRUKTOR; download() przyjmuje output_path=
+# katalog magazynu ustawia KONSTRUKTOR (bez output_path; plik poza
+# magazynem: Bdot10kProvider.download_package)
 lc = LandCoverManager("./data", "bdot10k")
 
-# Pobieranie przez TERYT (powiat) — nazwa pliku generowana automatycznie
-lc.download(teryt="1465")
+# Pobieranie przez TERYT (powiat) -> landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
+result = lc.download(teryt="1465")
+print(result.file.path, result.file.status)
 
-# Pobieranie przez godło z jawną ścieżką pliku
-lc.download(sheet="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg"))
+# Pobieranie przez godło (jeden powiat) albo każdego powiatu obszaru
+lc.download(sheet="N-34-130-D")
+lc.download_all_counties(sheet="N-34-130-D", layers=["PTWP", "SWRS"])
 ```
 
 #### Warstwy (15 warstw — pobierany caly plik)
@@ -343,8 +345,8 @@ lc.download(sheet="N-34-130-D", output_path=Path("./data/bdot10k_N-34-130-D.gpkg
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source bdot10k --teryt 1465 -o ./data/landcover
-kartograf landcover download --source bdot10k --sheet N-34-130-D -o ./data/landcover
+kartograf landcover download --source bdot10k --teryt 1465 -o ./data
+kartograf landcover download --source bdot10k --sheet N-34-130-D -o ./data
 kartograf landcover list-layers --source bdot10k
 ```
 
@@ -360,18 +362,14 @@ Pobieranie europejskiej klasyfikacji pokrycia terenu CORINE (44 klasy).
 
 #### Capabilities
 ```python
-from pathlib import Path
-
-from kartograf import LandCoverManager, CorineProvider
+from kartograf import LandCoverManager
 
 lc = LandCoverManager("./data", "corine")
 
-# Pobieranie przez godło (rozszerzenie wymusza provider: .tif, .png dla WMS)
-lc.download(
-    sheet="N-34-130-D",
-    year=2018,
-    output_path=Path("./data/corine_2018_N-34-130-D.tif"),
-)
+# CLMS (CLMS_CREDENTIALS) -> landcover/eu_corine_2018/.../N-34-130-D.tif,
+# wersja z etykieta wydania (np. V2020_20u1); bez credentials podglad
+# landcover/eu_corine_2018_preview/.../N-34-130-D.png (etykieta = data)
+result = lc.download(sheet="N-34-130-D", year=2018)
 ```
 
 #### Dostępne lata
@@ -398,7 +396,7 @@ ani tokenu. Bez credentials — podgląd PNG przez WMS (sidecar
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data/landcover
+kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data
 kartograf landcover list-layers --source corine
 ```
 
@@ -414,20 +412,19 @@ Pobieranie globalnych danych glebowych z ISRIC SoilGrids (rozdzielczość 250m).
 
 #### Capabilities
 ```python
-from pathlib import Path
-
-from kartograf import LandCoverManager, SoilGridsProvider
+from kartograf import LandCoverManager
 
 lc = LandCoverManager("./data", "soilgrids")
 
 # Pobieranie węgla organicznego (selekcja: godło albo bbox — TERYT
 # nie jest obsługiwany przez SoilGrids i kończy się NotImplementedError)
+# -> soil/global_soilgrids_soc_0-5cm_mean/N-34/130/D/N-34-130-D.tif,
+#    wersja z etykietą wydania SoilGrids (np. 2.0)
 lc.download(
     sheet="N-34-130-D",
     property="soc",
     depth="0-5cm",
     stat="mean",
-    output_path=Path("./data/soilgrids_soc_0-5cm.tif"),
 )
 
 # Pobieranie zawartości gliny
@@ -462,8 +459,8 @@ mean, Q0.05, Q0.5, Q0.95, uncertainty
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source soilgrids --sheet N-34-130-D --property soc -o ./data/landcover --depth 0-5cm --stat mean
-kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm -o ./data/landcover --stat mean
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property soc -o ./data --depth 0-5cm --stat mean
+kartograf landcover download --source soilgrids --sheet N-34-130-D --property clay --depth 15-30cm -o ./data --stat mean
 kartograf landcover list-layers --source soilgrids
 ```
 
@@ -475,20 +472,22 @@ kartograf landcover list-layers --source soilgrids
 **Status:** Production
 
 #### Description
-Kalkulacja grup hydrologicznych gleb (HSG) dla metody SCS-CN na podstawie danych tekstury z SoilGrids.
+Kalkulacja grup hydrologicznych gleb (HSG) dla metody SCS-CN na podstawie danych
+tekstury z SoilGrids — wejścia clay/sand/silt są wersjami SoilGrids w tym samym
+magazynie, wynik to wersja w `hsg/global_soilgrids_<głębokość>_<stat>/`
+(te same wejścia = wersja użyta ponownie, ADR-036 D33).
 
 #### Capabilities
 ```python
 from kartograf import HSGCalculator
-from pathlib import Path
 
-calc = HSGCalculator()
+calc = HSGCalculator("./data")
 
 # Oblicz HSG dla godła
-calc.calculate_hsg_by_sheet("N-34-130-D", Path("./hsg.tif"), depth="0-5cm", stat="mean")
+result = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
 
 # Statystyki HSG
-stats = calc.get_hsg_statistics(Path("./hsg.tif"))
+stats = calc.get_hsg_statistics(result.file.path)
 for group, data in stats.items():
     print(f"Grupa {group}: {data['percent']:.1f}%")
 ```
@@ -509,17 +508,17 @@ Raster GeoTIFF z wartościami:
 - 4 = Grupa D
 - 0 = NoData
 
-Wynik dostaje sidecar `.meta.json` (`extra.derived = "hsg"`, warstwy
-źródłowe, głębokość, statystyka, kody klas).
+Wynik dostaje sidecar wersji `.meta.json` (`extra.derived = "hsg"`, warstwy
+źródłowe, głębokość, statystyka, kody klas, `extra.source_files` ze ścieżkami
+wersji i sha256 wejść).
 
 #### CLI Commands
 ```bash
-kartograf soilgrids hsg --sheet N-34-130-D -o ./data/hsg --depth 0-5cm
-kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data/hsg --depth 0-5cm
-kartograf soilgrids hsg --sheet N-34-130-D --depth 15-30cm --output /tmp/hsg.tif
-kartograf soilgrids hsg --sheet N-34-130-D --keep-intermediate -o ./data/hsg --depth 0-5cm
-kartograf soilgrids hsg --bbox 450000,550000,460000,560000 -o ./data/hsg --depth 0-5cm
-kartograf soilgrids hsg --geometry area.gpkg --layer catchments -o ./data/hsg --depth 0-5cm
+kartograf soilgrids hsg --sheet N-34-130-D -o ./data --depth 0-5cm
+kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
+kartograf soilgrids hsg --bbox 450000,550000,460000,560000 -o ./data --depth 0-5cm
+kartograf soilgrids hsg --geometry area.gpkg --layer catchments -o ./data --depth 0-5cm
+kartograf soilgrids hsg --sheet N-34-130-D -o ./data --depth 0-5cm --check-updates --plan plan.json
 ```
 
 ---

@@ -126,8 +126,10 @@ kartograf ──> core, download, providers, landcover, hydrology,
 cli ──> kartograf (__version__), download, landcover, core, sources,
         providers (l), transform (l), transport (l), hydrology (l), cache (l)
 download ──> providers, sources, transform, core, transport (l)
-landcover ──> providers, download (FileStorage), core, cache, sources (l)
-hydrology ──> core, providers (l), sources (l), transform (l)
+landcover ──> providers, download (fetch, plan, storage, versions), core,
+        cache, sources
+hydrology ──> core, download, landcover, providers (l), sources (l),
+        transform (l)
 providers ──> sources, transform, transport, core, cache,
         auth (l), download (l)
 sources ──> core, kartograf (l, __version__)
@@ -196,13 +198,18 @@ Uwagi, ktore latwo przeoczyc:
   importuje `MetadataCache` na poziomie modulu (adnotacja) i przekazuje go
   providerom tworzonym po nazwie (`Bdot10kProvider(cache=)` — odpowiedzi
   PRG, `SoilGridsProvider(cache=)`); CORINE cache nie ma.
-- `hydrology ──> core` istnieje na poziomie modulu tylko pod
-  `if TYPE_CHECKING:` (adnotacja `BBox` w `hsg_from_rasters`; wg reguly grafu
-  to import na poziomie modulu). Reszta jest leniwa: `providers.soilgrids`
-  (warstwy gleb), `core.sheet_parser` (godlo -> bbox), `core.bbox`
+- `landcover ──> download`: `LandCoverManager` uzywa wspolnej polityki
+  wersji (`download.fetch.use_local`/`store_file`/`inspect_version`,
+  `download.plan`, `download.storage.bbox_slot`, `download.versions`);
+  `download` nie importuje `landcover` (cyklu nie ma).
+- `hydrology ──> core, download, landcover` istnieje na poziomie modulu
+  tylko pod `if TYPE_CHECKING:` (adnotacje `BBox`, `VersionedFile`,
+  `PlanItem`, `LandCoverResult`...; wg reguly grafu to import na poziomie
+  modulu). W czasie wykonania wszystko jest leniwe: `landcover.manager`
+  (wejscia clay/sand/silt jako wersje), `download.fetch`/`plan`/`versions`
+  (wersja HSG), `providers.soilgrids`, `core.sheet_parser`, `core.bbox`
   (`transform_bbox`), `transform` (przypieta reprojekcja wejsc
-  `hsg_from_rasters`) i `sources.sidecar` (`emit_sidecar`, `file_digest` —
-  sidecar wyniku HSG).
+  `hsg_from_rasters`) i `sources.sidecar` (`emit_sidecar`, `file_digest`).
 - `sources` i `transport` siegaja do pakietu glownego leniwie i tylko po
   `__version__` (sidecar, naglowek `User-Agent`) — import przy imporcie
   modulu dalby cykl, bo `kartograf/__init__.py` importuje providery.
@@ -247,6 +254,7 @@ kartograf/
 │   ├── registry.py      # Rejestr PL/CZ/EU/GLOBAL: get_source, sources_for, get_country,
 │   │                    # all_countries, vertical_crs_code, resolve_vertical_crs (rodzina ->
 │   │                    # realizacja), parse_pl_system, horizontal_crs_for_sheet/_for_system
+│   ├── edition.py       # Edition (wydanie zrodla, sygnal metadata D29), edition_label
 │   └── sidecar.py       # ResultMetadata, build_metadata, write_sidecar, emit_sidecar
 │                        # (jedyna polityka zapisu), pl_sheet_horizontal_crs, read_asc_nodata
 ├── transform/           # Transformacje wspolrzednych i rastrow
@@ -316,9 +324,11 @@ kartograf/
 │   ├── updates.py       # Plan aktualizacji kartograf-plan/1 (ADR-036): check_updates, upgrade
 │   └── versions.py      # Magazyn wersjonowany (ADR-036): zapis wylaczny, etykiety,
 │                        # lista wersji, sprzatanie .incoming/
-├── landcover/manager.py # LandCoverManager — dispatch do providerow pokrycia terenu;
-│                        # download_all_counties (BDOT10k z kazdego powiatu obszaru)
-├── hydrology/hsg.py     # HSGCalculator — klasyfikacja USDA -> HSG (ADR-025)
+├── landcover/manager.py # LandCoverManager — land cover w magazynie wersji (D29-D32): segmenty,
+│                        # update/plan, check/check_all_counties, LandCoverResult/AreaResult
+├── landcover/store.py   # landcover_segment, hsg_segment, selection_slot, selection_unit (spec 3.4)
+├── hydrology/hsg.py     # HSGCalculator — HSG z wersji wejsc SoilGrids (D33, reused),
+│                        # klasyfikacja USDA -> HSG (ADR-025), hsg_from_rasters
 ├── auth/                # proxy.py (subprocess izolujacy credentials CLMS), client.py
 │                        # (AuthProxyClient — singleton, sam uruchamia proxy)
 └── cli/                 # _parser.py (argparse: top-level + subkomendy), parse_cmd.py,
@@ -352,22 +362,25 @@ to `resolve_subdir()`.
 | `pl.gugik.laz` | `laz/pl_{system}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
 | `cz.cuzk.dmr4g` | `nmt/cz_dmr4g_{vcrs}` | `.tif` |
-| `pl.gugik.bdot10k` | `None` | `.gpkg` |
-| `eu.clms.corine` | `None` | `.tif` |
-| `global.isric.soilgrids` | `None` | `.tif` |
+| `pl.gugik.bdot10k` | `landcover/pl_bdot10k` (prefiks + tokeny, regula 8) | `.gpkg` |
+| `eu.clms.corine` | `landcover/eu_corine` (prefiks + tokeny) | `.tif` |
+| `global.isric.soilgrids` | `soil/global_soilgrids` (prefiks + tokeny) | `.tif` |
 
 NMT 1 m i NMPT maja kanal WCS `bbox_raster` dla obu ukladow pionowych
 (`EPSG:9650` KRON86, `EPSG:9651` EVRF2007); kanal `sheet_files` sluzy
 osobno arkuszom OpenData. NMT 5 m nie ma kanalu WCS.
 
-`None` oznacza zrodlo obslugiwane przez `LandCoverManager`, ktory ma wlasna
-konwencje nazw i wlasny domyslny `--output` (sekcja 4.8).
+`storage_subdir` jest zawsze napisem (od 0.8.0). Zrodla land cover maja
+prefiks bez placeholderow, ktory `landcover/store.py::landcover_segment`
+uzupelnia tokenami tresci (sekcja 3.3 regula 8, sekcja 4.8). CORINE ma
+dwa kanaly: `CLMS_API` (dane, sygnal `metadata`) i `WMS` (podglad PNG,
+`none`, `EPSG:3857`).
 
 **`SourceDescriptor.resolve_subdir(*, system=None, vertical_crs=None) -> str`**
 wypelnia szablon przez `str.replace`, a nie `str.format` — czesciowe
 wypelnienie jest legalne. `vertical_crs` jest normalizowany do lowercase
 (`"Bpv"` -> `"bpv"`). Podanie wymiaru, ktorego szablon nie ma, to no-op
-(orto ignoruje `vertical_crs`). Zrodlo bez `storage_subdir` rzuca `ValueError`.
+(orto ignoruje `vertical_crs`).
 Pusty string (albo sam whitespace) w `system`/`vertical_crs` to
 `ValidationError` — `None` znaczy "wypelnij pozniej", a pusty napis dawal
 cichy segment `nmt/pl_1992_1m_` (review max zn. 7).
@@ -535,7 +548,15 @@ data/
 ├── orto/pl_1992_cir/...                     # wariant CIR (B/W: pl_<uklad>_bw), E12
 ├── laz/pl_2000_evrf2007/<hier>/<plik>.laz   # DOWIAZANIE; uklad poziomy per kafel (uklad_xy), pionowy z flagi
 ├── laz/pl_2000_evrf2007/versions/<hier>/<data>_<zgloszenie>_<sha8>/<plik>.laz   # wersja (D26)
-└── landcover/...                            # wlasny katalog (--output wymagane)
+├── landcover/
+│   ├── pl_bdot10k_gpkg/teryt/1465.gpkg          # DOWIAZANIE; wersje w versions/teryt/<data>_<sha8>/
+│   ├── pl_bdot10k_gpkg_ptwp-swrs/teryt/1465.gpkg # filtr warstw (kody posortowane, lowercase)
+│   ├── pl_bdot10k_gpkg_zip/teryt/1465.zip      # keep_raw: oryginalny ZIP paczki
+│   ├── pl_bdot10k_shp/teryt/1465.zip           # paczka SHP
+│   ├── eu_corine_2018/N-34/130/D/N-34-130-D.tif  # CLMS; wersje <wydanie>_<sha8> (np. V2020_20u1_...)
+│   └── eu_corine_2018_preview/bbox/<coords>.png  # podglad WMS bez credentials (D31)
+├── soil/global_soilgrids_clay_0-5cm_mean/bbox/<coords>.tif   # wersje 2.0_<sha8> (wydanie)
+└── hsg/global_soilgrids_0-5cm_mean/bbox/<coords>.tif         # pochodna z wersji clay/sand/silt (D33)
 ```
 
 **Reguly segmentow:**
@@ -602,7 +623,7 @@ data/
    `storage.bbox_slot`); wspolna polityka plikow bez kampanii:
    `download/fetch.py::fetch_version`. Stary zwykly plik 0.7.x w sciezce
    standardowej (sidecar bez `extra.link`) jest zastepowany dowiazaniem
-   (D24). BDOT10k i land cover nie uzywaja jeszcze `versions/` (plan 3/3).
+   (D24). Land cover i HSG (plan 3/3) — regula 8.
    Kopiowanie `data/`: `rsync -aH`/`cp -a` (bez zachowania hardlinkow
    powstaje duplikat).
 
@@ -620,6 +641,18 @@ data/
    Kolizja z hierarchia niemozliwa: pierwszy czlon hierarchii to arkusz
    1:1M albo strefa (`N-34`, `7`). LAZ, CZ, wycinki i land cover nie maja
    `full_sheet/`.
+
+8. **Land cover i HSG (ADR-036 D29-D33, spec 3.4).** Segment = prefiks
+   `storage_subdir` deskryptora (`landcover/pl_bdot10k`,
+   `landcover/eu_corine`, `soil/global_soilgrids`; HSG: stala
+   `HSG_SEGMENT_PREFIX = "hsg/global_soilgrids"`) + `_` + tokeny tresci
+   lowercase (`[a-z0-9.-]+`, `landcover/store.py::landcover_segment`):
+   BDOT10k `gpkg[_<warstwy>]`/`gpkg_zip`/`shp`, CORINE `<rok>[_preview]`,
+   SoilGrids `<wlasciwosc>_<glebokosc>_<stat>`, HSG `<glebokosc>_<stat>`.
+   Pod segmentem (`selection_slot`): `teryt/<T><ext>` (BDOT10k, takze przy
+   wyborze bboxem/arkuszem), `bbox/<coords><ext>` (EPSG:2180, `.10g`, jak
+   wycinki) albo hierarchia godla (`path_parts`, kanoniczne godlo). Wersje
+   jak w regule 6 (`versions/<ta sama hierarchia>/`).
 
 Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
 `nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.
@@ -1367,129 +1400,126 @@ i `min_density`, gdy podane — E16).
 
 ### 4.8 Land cover i gleby (BDOT10k, CORINE, SoilGrids)
 
-Uklad katalogow ADR-026 tych zrodel nie dotyczy (`storage_subdir = None`).
-Zmiany od 0.6.x (szczegoly: `docs/CHANGELOG.md`): sidecary wynikow,
-rozszerzenie pliku z faktycznego formatu (N14), SHP BDOT10k jako `.zip`
-(N1), sidecar wyniku HSG, scalanie GPKG BDOT10k w lokalnym katalogu
-tymczasowym. `LandCoverManager` ma **wlasny domyslny katalog**
-(`./data/landcover`, CLI `--output`) i wlasna konwencje nazw plikow
-(`_generate_output_path`): `<zrodlo>[_<parametr>...]_<tryb>_<id>.<ext>`,
-gdzie `<zrodlo>` to klucz `--source` (`bdot10k`/`corine`/`soilgrids`;
-provider spoza rejestru: nazwa malymi literami, spacje -> `_`), `<tryb>_<id>`
-to `teryt_<teryt>`, `bbox_<minx>_<miny>_<maxx>_<maxy>` (EPSG:2180, liczby
-calkowite; `--geometry` = obwiednia) albo `godlo_<godlo>` — z wyjatkiem
-BDOT10k, ktorego plik nazywa sie ZAWSZE `teryt_<teryt>` (nizej), a parametry to
-KAZDA opcja zmieniajaca tresc wyniku, z wartoscia domyslna wlacznie
-(`LandCoverManager._content_params`, U3):
+**Magazyn wersji (ADR-036 D29-D33, plan 3/3, od 0.8.0).** `LandCoverManager(
+output_dir, provider, cache=None)` pisze WYLACZNIE do magazynu
+`output_dir` (= `--output`; bez `output_path`, D32) w segmentach reguly 8
+sekcji 3.3; wynik to `LandCoverResult(unit, file: VersionedFile | None,
+raw, stale)` (`file` = `None` tylko z `plan=` dla pozycji spoza planu bez
+lokalnej wersji). Opcje sa sprawdzane przed siecia: nieznana opcja (np.
+`output_path`) = `TypeError`, brak wymaganej (`year`, `property`/`depth`/
+`stat`) = `TypeError`, zla wartosc = `ValueError`. Polityka plikow jest
+wspolna z innymi torami (`download/fetch.py`): `use_local` (decyzja bez
+pobierania danych), pobranie do `versions/.incoming/`, `store_file`
+(sha256 jednym odczytem, `commit_version`, sidecar wersji, hardlink).
+Sygnal per kanal (`AccessChannel.update_signal`):
 
-| Zrodlo | Parametry w nazwie | Przyklad |
-|---|---|---|
-| SoilGrids | `<property>_<depth>_<stat>` | `soilgrids_clay_0-5cm_mean_bbox_770000_509000_772000_511000.tif` |
-| CORINE | `<year>` | `corine_2018_sheet_N-34-130-D.tif` (`.png` z podgladu WMS) |
-| BDOT10k | opcjonalny filtr warstw `<kod>-<kod>...` (kody posortowane); `format` niesie rozszerzenie | `bdot10k_teryt_1465.gpkg`, `bdot10k_PTWP-SWRS_teryt_1465.gpkg` (`layers=`), `bdot10k_teryt_1465.zip` (SHP) |
+| Zrodlo / kanal | Sygnal | Etykieta wersji | Segment |
+|---|---|---|---|
+| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
+| CORINE CLMS (`uses_clms(year)`: token i rok w `CLMS_YEARS`) | `metadata`: `CorineProvider.edition(year)` — `characteristics_release_major_version` z `@search?UID=<uid>&fullobjects=1` (bez tokenu) | wydanie (`V2020_20u1`) | `landcover/eu_corine_<rok>` |
+| CORINE podglad WMS (bez credentials; 1990 zawsze) | `none` | data pobrania | `landcover/eu_corine_<rok>_preview` (`.png`) |
+| BDOT10k paczka powiatu | `none` | data pobrania | `landcover/pl_bdot10k_gpkg[_<warstwy>]`, `_shp`, `_gpkg_zip` |
 
-Rozne parametry = rozne pliki; te same parametry = ta sama sciezka (ponowne
-pobranie nadpisuje plik, land cover nie pomija istniejacych wynikow). Te
-same wartosci trafiaja do sidecara `request` (`property`/`depth`/`stat`,
-`year`, `format`, `layers`; klucze ADR-031) obok `teryt`/`bbox`+`bbox_crs`/`sheet`,
-a `nodata` wyniku GeoTIFF jest czytane z pliku (`null`, gdy plik go nie
-deklaruje — np. GeoTIFF z WCS SoilGrids bywa bez tagu NoData; Kartograf nie
-dopisuje wartosci z dokumentacji zrodla). Nazwy sprzed 0.7.0
-(`soilgrids_bbox_<coords>.tif`, `corine_land_cover_...`) nie sa rozpoznawane.
-Rozszerzenie FAKTYCZNEGO pliku nadaje provider: BDOT10k `.gpkg`, CORINE
-`.tif` (CLMS) albo `.png` (podglad WMS), SoilGrids `.tif`; zwracana
-sciezka i sidecar dotycza tego pliku (review 2026-10-06 N14). BDOT10k
-z `format="SHP"` (`--format SHP`) zapisuje oryginalne archiwum
-GUGiK z shapefile'ami pod ta sama nazwa z rozszerzeniem `.zip`
-(np. `bdot10k_teryt_1465.zip`, sidecar `bdot10k_teryt_1465.zip.meta.json`);
-rozszerzenie nadaje `Bdot10kProvider.download_package`, a CLI drukuje
-faktyczna sciezke (review 2026-10-06 N1). Sidecary pisze `LandCoverManager` tak samo jak
-pozostale warstwy zarzadzajace.
+`metadata` (tabela decyzji 2 planu 3/3): wydanie jest pytane raz na plik
+(`memoized_edition`) PRZED pobraniem — bez wydania nie powstaje wersja
+(blad pliku, D30). Lokalna wersja z etykieta wydania: rowna = lokalna,
+inna = domyslnie `newer=<wydanie>` (CLI: `dostepna nowsza ... (--upgrade)`),
+`upgrade` pobiera; wydanie niedostepne = domyslnie `unverified="check_failed:
+..."` (CLI `Warning:`), `upgrade`/`force` = blad. Wersja nie z wydania jest
+nieporownywalna (`unverified="none"`). Ta sama tresc pod nowym wydaniem
+= `relabeled` (D23). `none`: lokalna wersja niesprawdzona; naglowki HTTP
+trafiaja do `extra.http`, ale nie sa sygnalem (ta sama tresc innego dnia
+= `unchanged`). `check(...)`/`check_all_counties(...)` buduja plan
+`kartograf-plan/1` (tor `landcover`, `unit` = TERYT / wspolrzedne bbox /
+godlo) bez pobierania danych (dozwolone: GetCapabilities, katalog CLMS,
+PRG); `download(..., update="upgrade", plan=)` wykonuje tylko pozycje
+planu, zmienione od planu wracaja w `stale`.
+
+Parametry tresci (`_content_params`, U3) niosa segment i `request`
+sidecara (`property`/`depth`/`stat`, `year`, `format`, `layers`) obok
+wyboru (`teryt` / `bbox`+`bbox_crs` / `sheet` kanoniczne); `nodata` GeoTIFF
+czytane z pliku (`null`, gdy brak tagu). Sidecar wersji SoilGrids/CORINE CLMS
+ma `extra.edition` (`id`, `url`, `title` / `dataset_uid`). Podglad
+CORINE: `horizontal_crs` uslugi WMS (EPSG:3857, 1990 EPSG:4326),
+`extra.fallback = "wms_png"`, `extra.note = "podglad WMS, nie dane"`.
 
 **BDOT10k z wielu powiatow (od 0.7.1, A2).** Pakiet BDOT10k jest zawsze
-pakietem CALEGO powiatu, wiec nazwa pliku i `request` sidecara opisuja
-tresc: `bdot10k[_<warstwy>]_teryt_<TERYT>.<ext>`, `request = {teryt,
-format[, layers]}` — takze przy zadaniu przez `--bbox`/`--sheet`/`--geometry`
-(dawne nazwy `bdot10k_bbox_*`/`bdot10k_godlo_*` nie sa rozpoznawane).
+pakietem CALEGO powiatu, wiec sciezka i `request` sidecara opisuja
+tresc: `landcover/pl_bdot10k_<format>[_<warstwy>]/teryt/<TERYT>.<ext>`,
+`request = {teryt, format[, layers]}` — takze przy zadaniu przez
+`--bbox`/`--sheet`/`--geometry`.
 Obszar zadania idzie do `extra.parent_request`: `{bbox, bbox_crs,
 countries: ["PL"]}` albo `{sheet, countries: ["PL"]}`.
 `LandCoverManager.download_all_counties(bbox=|sheet=, format=, layers=,
-timeout=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
+keep_raw=, timeout=, update=, plan=)` pyta PRG (`Bdot10kProvider.teryts_for_area` ->
 `discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
-pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow,
-przez `Bdot10kProvider.download_package(code, path, *, timeout, format,
-layers, keep_raw, raw_path) -> Bdot10kPackage(path, teryt, url, format, http,
-raw_path)`; jeden plik i sidecar per powiat (`_download_county`, jedyna
-sciezka pobrania BDOT10k w menedzerze, takze dla `--teryt`); brak powiatu =
-`NoCoverageError`, awaria PRG albo pakietu = `DownloadError` (pliki pobrane wczesniej zostaja). CLI
-`landcover download --source bdot10k` z `--bbox`/`--sheet`/`--geometry`
-wola te metode i drukuje `Downloaded to:` dla kazdego pliku; `--teryt`
-bez zmian. Stare `download_by_bbox`/`download_by_sheet` (menedzera bez
-jawnego `output_path` i providera) pobieraja JEDEN powiat ta sama sciezka
-(`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
+pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow;
+wynik `LandCoverAreaResult(files, failed, stale)` — blad pakietu jednego
+powiatu (`DownloadError`) trafia do `failed` (`LandCoverFailure(unit,
+error)`), pozostale powiaty sa pobierane (spec 4.2); brak powiatu =
+`NoCoverageError`, awaria PRG = `DownloadError`. CLI `landcover download
+--source bdot10k` z `--bbox`/`--sheet`/`--geometry` wypisuje linie statusu,
+`Error: <TERYT>: ...` per powiat, podsumowanie i konczy kodem 1 przy
+jakimkolwiek bledzie. `download_by_bbox`/`download_by_sheet` BDOT10k
+pobieraja JEDEN powiat (`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
 z lista kodow i wskazaniem `download_all_counties`. Opcja `timeout`
 (provider: domyslnie 120 s; menedzer: gdy nie podana, PRG 30 s) dziala od
 0.7.2 takze na zapytanie PRG, nie tylko na pobranie paczki. `layers=` (kody
 4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
 wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
 `DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
-nosi token warstw w nazwie, bo nie jest juz pelnym pakietem. Scalanie
+nosi token warstw w segmencie, bo nie jest juz pelnym pakietem. Scalanie
 pakietu (`_merge_gpkg_files`) konczy sie `DownloadError`, gdy nazwa
 tabeli powtarza sie w dwoch plikach pakietu (dotad druga kopia byla po
 cichu pomijana); w prawdziwej paczce (63 pliki `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`,
-po jednej tabeli) duplikatow nie ma. CORINE bez credentials CLMS pobiera podglad
-PNG przez WMS: sidecar ma wtedy `horizontal_crs` uslugi WMS (EPSG:3857, dla
-rocznika 1990 EPSG:4326) oraz `extra.fallback = "wms_png"` i `extra.note`
-(`"podglad WMS, nie dane"`).
+po jednej tabeli) duplikatow nie ma.
 
 BDOT10k GPKG: archiwum ZIP z GUGiK jest rozpakowywane, a warstwy scalane
 w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
-`--output` trafia gotowy plik (kopia jako `<nazwa>.gpkg.<pid>_<tid>.tmp` + `os.replace`).
+`versions/.incoming/` magazynu trafia gotowy plik (kopia jako `<nazwa>.gpkg.<pid>_<tid>.tmp` + `os.replace`).
 Powod: SQLite na udzialach CIFS/SMB bez blokad zakresow bajtow konczyl
 scalanie bledem `database is locked` (`Bdot10kProvider._merge_gpkg_files`).
 
-**Pochodzenie pakietu BDOT10k w sidecarze (od 0.7.1, A4).** Sidecar pliku
-BDOT10k (`LandCoverManager._write_bdot_sidecars`) ma `extra.source = {url,
-teryt, format}` (URL paczki OpenData, z ktorej powstal plik) oraz
-`extra.http = {etag, last_modified, content_length}` — naglowki odpowiedzi
-GUGiK zapisane tak, jak przyszly (brak naglowka = `null`, nic nie jest
-zgadywane). Serwer paczek BDOT10k nie podaje dzis `ETag` ani
-`Last-Modified` (ani w `HEAD`, ani w `GET`), tylko `Content-Length`, i
-ignoruje `Range`; o zmianie paczki u zrodla mowi wiec glownie `sha256`
-pliku. `keep_raw=True` (biblioteka: `download_package`, `LandCoverManager.
-download*`; tylko GPKG — przy SHP `ValidationError`, bo wynik SHP to juz
-oryginalny ZIP) zapisuje obok GPKG nietkniete archiwum GUGiK. Archiwum
-to zawsze PELNY pakiet powiatu, wiec na sciezce standardowej nosi
-standardowa nazwe BEZ tokenu warstw (A2): `bdot10k_teryt_<TERYT>_GPKG.zip`
-(np. `bdot10k_teryt_1465_GPKG.zip`) — ten sam plik niezaleznie od filtra
-`layers=` (menedzer podaje go jako `download_package(raw_path=)`); przy
-jawnym `output_path` nazwe wybiera wywolujacy: `<rdzen output_path>_GPKG.zip`.
-Archiwum ma wlasny sidecar (`request` jak pliku wyniku, ale bez `layers`,
-np. `{teryt, format}`; `extra.source` bez `raw_file`; `sha256`/`size_bytes`
-archiwum); sidecar GPKG dostaje wtedy
-`extra.source.raw_file` = nazwa archiwum. Archiwum jest zapisywane
-atomowo i dopiero po udanym scaleniu, wiec blad rozpakowania nie zostawia
-ZIP bez sidecara. Scalony GPKG czeka w `<nazwa>.gpkg.<pid>_<tid>.tmp` i zastepuje
-poprzedni plik dopiero po udanym zapisie archiwum (od 0.7.2): nieudany zapis
-archiwum albo podmiany zostawia poprzedni GPKG i jego sidecar bez zmian
-(przy pierwszym pobraniu — brak pliku), bo sidecar GPKG powstaje dopiero po
-powrocie z `download_package`. Okno resztkowe: blad miedzy podmiana
-archiwum i GPKG zostawia nowe archiwum ze starym sidecarem. Blad
-wejscia-wyjscia przy rozpakowaniu (warstwy kopiowane strumieniowo), scalaniu
-albo zapisie archiwum to `DownloadError`. `keep_raw` nie zmienia tresci GPKG, wiec nie trafia do
-nazwy pliku ani do `request`. `extra.parent_request` (obszar zadania)
-zostaje obok `source` i `http`.
+**Pochodzenie pakietu BDOT10k w sidecarze (A4, decyzja 9 planu 3/3).**
+Sidecar wersji pliku BDOT10k ma `extra.source = {url, teryt, format}` (URL
+paczki OpenData) oraz `extra.http = {etag, last_modified, content_length}` —
+naglowki odpowiedzi GUGiK tak, jak przyszly (serwer nie podaje `ETag` ani
+`Last-Modified`, tylko `Content-Length`; kanal `none`). `keep_raw=True`
+(tylko GPKG — przy SHP `ValidationError`) zapisuje nietkniete archiwum
+GUGiK jako WLASNA wersje w `landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip`
+(pelny pakiet: jeden plik dla kazdego filtra `layers=`, `request` bez
+`layers`); paczka jest pobierana, gdy KTORYKOLWIEK z plikow (GPKG, ZIP)
+wymaga pobrania, oba pliki ida przez `store_file` (ta sama tresc =
+`unchanged`): najpierw ZIP, potem GPKG z `extra.source_files = [{name:
+"package", file: <sciezka wersji ZIP wzgledem --output>, sha256}]`.
+Pliki paczki powstaja w `.incoming/` wlasnych segmentow; blad pobrania,
+rozpakowania albo zapisu archiwum nie zostawia wersji ani katalogu
+roboczego, poprzednie wersje i dowiazania zostaja. `extra.parent_request`
+(obszar zadania) obok `source` i `http`. Powtarzalnosc: GPKG scalony
+z tej samej paczki ma ten sam sha256 (live 2026-10-12: `--force` = `bez
+zmian`).
 
-`HSGCalculator` (`hydrology/hsg.py`) liczy grupy glebowe z warstw SoilGrids
-(`clay`, `sand`, `silt`) wg kanonicznego trojkata USDA (ADR-025) i pisze
-sidecar wyniku (`HSGCalculator._write_sidecar` -> `emit_sidecar`, best-effort):
+`HSGCalculator(output_dir, provider=None)` (`hydrology/hsg.py`, D33)
+liczy grupy glebowe z wersji SoilGrids `clay`/`sand`/`silt` w tym samym
+magazynie (`LandCoverManager(output_dir, provider)`, ten sam wybor i
+`update`; blad wejscia = wyjatek, HSG nie powstaje) wg kanonicznego
+trojkata USDA (ADR-025). Wynik `HsgResult(unit, file, inputs, stale)` w
+`hsg/global_soilgrids_<gl>_<stat>/` (`bbox/<coords>` albo hierarchia
+godla). Wersja HSG, ktorej `extra.source_files` ma te same trzy sha256
+wejsc (kolejnosc clay, sand, silt), jest uzywana ponownie (`reused`,
+bez liczenia, dowiazanie na nia); inaczej klasyfikacja do `.incoming/`
+i `store_file` z etykieta = posortowane unikalne etykiety wejsc laczone `+`
+(`label_source = "edition"`). `--force` dotyczy wejsc. Sidecar wersji:
 deskryptor `global.isric.soilgrids`, `capability="bbox_raster"`, `request`
-= bbox z jego ukladem (+ `sheet` = godlo, gdy zadanie szlo przez
-`--sheet`/`calculate_hsg_by_sheet`; domyslna nazwa pliku CLI zawiera
-glebokosc: `hsg_<godlo>_<depth>.tif`, `hsg_bbox_<depth>.tif`),
-`horizontal_crs` = uklad rastra wyniku, `nodata: 0`,
-`extra` = `{derived: "hsg", source_layers: ["clay", "sand", "silt"], depth,
-stat, classes: "1=A, 2=B, 3=C, 4=D"}`.
+= wybor (`bbox`+`bbox_crs` albo `sheet`), `horizontal_crs` = uklad rastra,
+`nodata: 0`, `extra` = `{derived: "hsg", depth, stat, classes, source_layers,
+source_files: [{name, file (sciezka wersji wejscia), sha256, label}]}`.
+`check_hsg_by_bbox/by_sheet` = 3 pozycje `landcover` + pozycja `hsg`
+(`current`, gdy jest wersja HSG z sha256 biezacych lokalnych wejsc i kazde
+wejscie jest `current`; wejscie `check_failed` = `check_failed`; inaczej
+`missing`; nigdy `newer`). Ograniczenie: HSG o identycznej tresci z innych
+wejsc to istniejaca wersja z pierwszymi wejsciami w `source_files` — takie
+wejscia licza HSG przy kazdym uruchomieniu (wersje sa niezmienne).
 
 `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
 (od 0.7.1, A8) liczy HSG z gotowych rastrow (g/kg, SoilGrids) bez pobierania
