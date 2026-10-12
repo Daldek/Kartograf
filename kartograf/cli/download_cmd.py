@@ -8,7 +8,7 @@ import json
 import math
 import sys
 from collections import Counter
-from collections.abc import Iterator, Sequence
+from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -1101,22 +1101,16 @@ def _plan_context(args: argparse.Namespace) -> _PlanContext:
     return ctx
 
 
-def cmd_download(args: argparse.Namespace) -> int:
-    """
-    Execute the download command.
+def run_with_plan_file(
+    args: argparse.Namespace, body: Callable[[argparse.Namespace], int]
+) -> int:
+    """Plan file cycle of a store command (``download``, ``landcover
+    download``, ``soilgrids hsg``; spec 4.4).
 
-    ``--upgrade --plan`` reads the plan before any work; ``--check-updates
-    --plan`` writes the plan of every track of the task after it.
-
-    Parameters
-    ----------
-    args : argparse.Namespace
-        Parsed command-line arguments
-
-    Returns
-    -------
-    int
-        Exit code (0 for success, 1 for error)
+    ``--upgrade --plan`` reads the plan before any work (``_PlanContext.loaded``);
+    ``--check-updates --plan`` writes the plans collected by ``body``
+    (``_report_plan``) as ONE file after it. A plan that cannot be read =
+    ``Error:``, code 1, no work.
     """
     ctx = _PlanContext()
     args.plan_ctx = ctx
@@ -1134,7 +1128,7 @@ def cmd_download(args: argparse.Namespace) -> int:
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
-    rc = _cmd_download(args)
+    rc = body(args)
     if getattr(args, "check_updates", False) and plan_file and ctx.plans:
         plan = ctx.plans[0]
         for other in ctx.plans[1:]:
@@ -1142,6 +1136,27 @@ def cmd_download(args: argparse.Namespace) -> int:
         Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
         print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
     return rc
+
+
+def cmd_download(args: argparse.Namespace) -> int:
+    """
+    Execute the download command.
+
+    ``--upgrade --plan`` reads the plan before any work; ``--check-updates
+    --plan`` writes the plan of every track of the task after it
+    (`run_with_plan_file`).
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed command-line arguments
+
+    Returns
+    -------
+    int
+        Exit code (0 for success, 1 for error)
+    """
+    return run_with_plan_file(args, _cmd_download)
 
 
 def _cmd_download(args: argparse.Namespace) -> int:
@@ -1477,12 +1492,20 @@ def _plan_line(item: PlanItem) -> str:
     return f"{item.unit}: {text}"
 
 
-def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
+def _report_plan(
+    args: argparse.Namespace,
+    plan: UpdatePlan,
+    label: Callable[[PlanItem], str] | None = None,
+) -> int:
     """``--check-updates``: print the positions (stdout, also with ``-q`` — it
     is the result) and keep the plan for ``--plan`` (written once by
-    ``cmd_download``). A position that could not be checked = code 1."""
+    `run_with_plan_file`). ``label`` names a position in its line (default:
+    its unit). A position that could not be checked = code 1."""
     for item in plan.items:
-        print(_plan_line(item))
+        line = _plan_line(item)
+        if label is not None:
+            line = f"{label(item)}{line[len(item.unit) :]}"
+        print(line)
     _plan_context(args).plans.append(plan)
     return 1 if any(i.status == "check_failed" for i in plan.items) else 0
 
@@ -1528,6 +1551,7 @@ _STATUS_TEXT = {
     "relabeled": "nowa etykieta",
     "unchanged": "bez zmian",
     "local": "lokalna wersja",
+    "reused": "uzyta ponownie",
 }
 
 
@@ -1600,12 +1624,14 @@ def _unit_of(path: Path, output_dir: Path) -> str:
 def _print_version_summary(
     statuses: Sequence[str], failed: int, output_dir: Path
 ) -> None:
-    """Counters of the files of the task (spec 4.5)."""
+    """Counters of the files of the task (spec 4.5); ``uzyte ponownie`` (HSG,
+    D33) only when a derived file was reused."""
     counts = Counter(statuses)
+    reused = f"uzyte ponownie: {counts['reused']}, " if counts["reused"] else ""
     print(
         f"Nowe: {counts['new']}, nowa etykieta: {counts['relabeled']}, "
         f"bez zmian: {counts['unchanged']}, lokalne: {counts['local']}, "
-        f"bledy: {failed} ({output_dir})"
+        f"{reused}bledy: {failed} ({output_dir})"
     )
 
 
