@@ -376,10 +376,12 @@ usluga, nie lokalne pliki — wersjonowane jak produkty zrodlowe (sekcja 4.6).
 - Wejscia spoza tresci (maska PRG `extra.mask`, `composition: "server"`)
   zostaja w sidecarze wersji; zmiana maski u zrodla jest niewykrywalna bez
   `--force` (jak cicha poprawka, sekcja 4.1).
-- Powtarzalnosc bajtowa wycinka (naglowki TIFF serwera, maska, zszycie
-  kawalkow, wersje GDAL/PROJ) jest niesprawdzona: bez niej kazde `--force`
-  to nowa wersja (setki MB-GiB, bez usuwania do podprojektu 2). Do
-  sprawdzenia w inwentaryzacji (sekcja 8).
+- Powtarzalnosc bajtowa (inwentaryzacja 2026-10-12, sekcja 8): wycinek PL
+  WCS (EPSG:2180 i 3045), wycinek CZ (natywny i EPSG:2180), arkusz SM5,
+  kafel TM33 i surowy kafel LAZ — dwa pobrania o identycznym sha256. Przy
+  niezmienionej tresci zrodla `--force` daje "bez zmian", nie nowa wersje.
+  Zmiana GDAL/PROJ albo naglowkow serwera moze to zmienic (wtedy nowa
+  wersja, bez usuwania do podprojektu 2).
 - Wycinek CZ: ta sama regula nazw i trybow.
 
 ## 5. Zmiany w kodzie
@@ -487,6 +489,28 @@ surowe odpowiedzi jako fixtury:
 
 Wynik ustala `update_signal` i etykiete zrodla per deskryptor; zrodlo bez
 taniego sygnalu dostaje `none`.
+
+**Wynik (2026-10-12,** raport
+`docs/research/2026-10-12-signal-inventory/raport.md`, naglowki
+`tests/fixtures/signals/real_2026_10_12/`**):**
+
+| Deskryptor / kanal | Sygnal | Etykieta | Powtarzalnosc bajtowa |
+|---|---|---|---|
+| `pl.gugik.nmt_1m`/`nmt_5m`/`nmpt`/`orto` — arkusze | `index` | `campaign` | — |
+| `pl.gugik.nmt_1m`/`nmpt` — WCS (`bbox/`) | `none` (bez `ETag`/`Last-Modified`, GetCapabilities bez daty) | `downloaded` | tak |
+| `pl.gugik.laz` — pliki | `index` (rekord WFS; `HEAD` tylko `Content-Length`) | `campaign` (D26) | tak (surowy kafel) |
+| `cz.cuzk.dmr4g` — pliki SM5 (`openzu`) | `http` (`ETag`, `Last-Modified`) | `downloaded` | tak |
+| `cz.cuzk.dmr4g`/`dmr5g` — `exportImage` (TM33, wycinki) | `none` | `downloaded` | tak |
+| `pl.gugik.bdot10k` | `none` (tylko `Content-Length`) | `downloaded` | tak (GPKG skladany lokalnie) |
+| `global.isric.soilgrids` | do decyzji w planie 3/3: `metadata` tylko na poziomie wydania (tytul GetCapabilities `SoilGrids250m 2.0`) albo `none` | `edition` `SoilGrids250m 2.0` albo `downloaded` | tak |
+| `eu.clms.corine` | `metadata` (`year`) — niesprawdzone (brak `CLMS_CREDENTIALS`) | `edition` `<rok>` | nie sprawdzono |
+
+Ustalenia poza oczekiwaniami: `exportImage` CUZK zwraca `ETag`, ale zalezny
+od parametrow zadania (bbox, rozmiar, format), bez dowodu, ze sledzi edycje
+rastra, a wycinek i kafel TM33 ponad budzet pikseli sa mozaika wielu zadan —
+zostaje `none`. Warstwa CUZK `Metadata` (`rok`) to rok aktualizacji
+obszaru, nie tozsamosc wersji pobieranego pliku — nie jest sygnalem ani
+etykieta. `ETag` dokumentu `ImageServer?f=json` dotyczy dokumentu JSON.
 
 ## 9. Dokumentacja
 

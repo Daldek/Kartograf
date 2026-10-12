@@ -1,0 +1,9 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/GRID1/WCS/DigitalTerrainModelFormatTIFF?SERVICE=WCS&REQUEST=GetCapabilities&VERSION=2.0.1",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Content-Type": "text/html"
+  },
+  "recorded": "2026-10-12"
+}
