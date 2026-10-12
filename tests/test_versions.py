@@ -361,3 +361,26 @@ def test_same_http_signal_rules(local, remote, expected):
     if expected in (0, 1):
         expected = bool(expected)
     assert v.same_http_signal(local, remote) is expected
+
+
+@pytest.mark.parametrize("variant", ["removed_after_create", "exists_but_gone"])
+def test_new_incoming_dir_survives_concurrent_cleanup(tmp_path, monkeypatch, variant):
+    """A failed download of another worker removes the empty ``.incoming``
+    tree while we create it; staging must still be created."""
+    real_mkdir = os.mkdir
+    raced = []
+
+    def racing_mkdir(path, mode=0o777):
+        if Path(path).name == v.INCOMING_DIR and not raced:
+            raced.append(path)
+            if variant == "exists_but_gone":
+                # another worker created it, the cleanup removed it again
+                raise FileExistsError(path)
+            real_mkdir(path, mode)
+            os.rmdir(path)
+            return
+        real_mkdir(path, mode)
+
+    monkeypatch.setattr(os, "mkdir", racing_mkdir)
+    staging = v.new_incoming_dir(tmp_path / "versions")
+    assert staging.is_dir() and raced
