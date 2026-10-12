@@ -39,10 +39,14 @@ Example usage::
         product="nmt",
     )
 
-    # Download Land Cover data
-    from kartograf import LandCoverManager
-    lc_manager = LandCoverManager("./data/landcover", "bdot10k")
-    lc_manager.download(sheet="N-34-130-D")
+    # Land cover and HSG in the same store (versions, result with the file)
+    from kartograf import HSGCalculator, LandCoverManager
+    lc = LandCoverManager("./data", "bdot10k").download(teryt="1465")
+    print(lc.file.path, lc.file.status)  # data/landcover/pl_bdot10k_gpkg/...
+    hsg = HSGCalculator("./data").calculate_hsg_by_sheet(
+        "N-34-130-D", depth="0-5cm", stat="mean"
+    )
+    print(hsg.file.path, hsg.file.label)  # data/hsg/..., SoilGrids edition
 """
 
 from kartograf.cache.metadata import MetadataCache
@@ -101,8 +105,13 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
-from kartograf.hydrology.hsg import HSGCalculator, hsg_from_rasters
-from kartograf.landcover.manager import LandCoverManager
+from kartograf.hydrology.hsg import HSGCalculator, HsgResult, hsg_from_rasters
+from kartograf.landcover.manager import (
+    LandCoverAreaResult,
+    LandCoverFailure,
+    LandCoverManager,
+    LandCoverResult,
+)
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
@@ -118,6 +127,7 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.sources.edition import Edition
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
@@ -173,6 +183,10 @@ __all__ = [
     "run_laz_download",
     # Land Cover
     "LandCoverManager",
+    "LandCoverResult",
+    "LandCoverAreaResult",
+    "LandCoverFailure",
+    "Edition",
     # Providers
     "BaseProvider",
     "GugikProvider",
@@ -194,6 +208,7 @@ __all__ = [
     "teryt_for_point",
     # Hydrology
     "HSGCalculator",
+    "HsgResult",
     "hsg_from_rasters",
     # Transport and mosaic (stable since 0.7.1)
     "get_with_retry",
