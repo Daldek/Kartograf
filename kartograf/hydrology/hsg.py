@@ -623,9 +623,11 @@ class HSGCalculator:
             todo, skipped = select_planned(plan, [fresh], _HSG_TRACK)
             planned_hsg, stale = bool(todo), list(skipped)
 
+        from kartograf.landcover.manager import LandCoverResult
+
         manager = self._manager()
         where = _where(selection)
-        inputs = tuple(
+        areas = [
             manager.download(
                 **where,
                 update=update,
@@ -636,9 +638,14 @@ class HSGCalculator:
                 timeout=timeout,
             )
             for prop in _INPUTS
+        ]
+        # one raster per input; a plan may leave it without a file
+        inputs = tuple(
+            area.files[0] if area.files else LandCoverResult(unit, None)
+            for area in areas
         )
-        for result in inputs:
-            stale.extend(result.stale)
+        for area in areas:
+            stale.extend(area.stale)
         files = [r.file for r in inputs]
         if not planned_hsg or any(f is None for f in files):
             return HsgResult(unit, _local_only(slot), inputs, tuple(stale))

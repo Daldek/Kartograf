@@ -17,12 +17,12 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.download.area import bbox_to_2180
 from kartograf.download.laz import (
     NO_TILES_MESSAGE,
     LazDownloadResult,
     _check_selection,
     _run_laz_download,
-    area_to_2180,
     check_laz_area,
     download_laz_area,
     laz_slot,
@@ -644,7 +644,7 @@ class TestDownloadLazArea:
     def test_area_wgs84_across_19e_keeps_southern_band(self):
         """K6: an envelope from densified edges - four corners lost
         ~479 m in the S for a bbox through 19E (LAZ tile selection too narrow)."""
-        bbox = area_to_2180(BBox(18, 50, 20, 50.2, "EPSG:4326"))
+        bbox = bbox_to_2180(BBox(18, 50, 20, 50.2, "EPSG:4326"))
         assert bbox.crs == "EPSG:2180"
         assert bbox.min_y == pytest.approx(236968.4486, abs=0.01)
 
@@ -669,7 +669,7 @@ class TestDownloadLazArea:
                 core_bbox, "_transformer", wraps=core_bbox._transformer
             ) as plain,
         ):
-            bbox = area_to_2180(czech)
+            bbox = bbox_to_2180(czech)
         assert bbox.crs == "EPSG:2180"
         assert pinned.called
         plain.assert_not_called()

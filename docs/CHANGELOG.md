@@ -55,6 +55,24 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `max_workers=` -> `workers=`; `check_laz_updates(selection, ...)` ->
   `check_laz_area(bbox, output_dir=..., vertical_crs=..., ...)`; plan
   wykonuj przez `download_laz_area(..., update="upgrade", plan=plan)`.
+- Land cover: `LandCoverManager.download(*, teryt, sheet, bbox, geometry,
+  layer, update, plan, workers, on_notice, **opcje)` i `check` z tym samym
+  wyborem sa funkcjami poziomu komendy (jedno wywolanie = `kartograf
+  landcover download`). `download` zawsze zwraca `LandCoverAreaResult`
+  (`files`, `failed`, `stale`, `notices`, `ok`); BDOT10k z `sheet`/`bbox`/
+  `geometry` pobiera kazdy powiat obszaru (rownolegle z `workers`);
+  `bbox` w dowolnym obslugiwanym CRS, `geometry` = obwiednia pliku;
+  komunikaty `corine_preview` i `geometry_layer_default` w `notices`.
+  `LandCoverManager(cache=True)` = domyslny cache w cwd. Usuniete:
+  `download_all_counties`, `check_all_counties`, `download_by_teryt`,
+  `download_by_bbox`, `download_by_sheet`, `download_batch`,
+  `LandCoverResult.stale`; wybor `teryt` dla CORINE/SoilGrids to
+  `ValidationError` (nie `NotImplementedError`). Co zrobic (takze Hydrograf
+  `scripts/download_landcover.py`): `download_*`/`download_all_counties` ->
+  `download(teryt=|sheet=|bbox=|geometry=)`; plik pojedynczego wyboru:
+  `result.files[0].file`; nieaktualne pozycje planu: `result.stale`;
+  `download_batch(items)` -> petla po `download` albo `workers=` dla
+  powiatow obszaru.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

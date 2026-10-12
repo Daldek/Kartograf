@@ -407,20 +407,23 @@ path = kron.download_bbox(area, Path("my_area.tif"))
 # Land Cover: BDOT10k / CORINE / SoilGrids do magazynu (output_dir = --output)
 from kartograf import LandCoverManager
 lc = LandCoverManager("./data", "bdot10k")
-result = lc.download(teryt="1465")         # BDOT10k (powiat)
-print(result.file.path, result.file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
-# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo sheet=),
-# tylko wybrane warstwy -> landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
+result = lc.download(teryt="1465")         # BDOT10k (powiat) -> LandCoverAreaResult
+file = result.files[0].file
+print(file.path, file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
+# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, sheet= albo
+# geometry=), powiaty równolegle (workers=), tylko wybrane warstwy ->
+# landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
 # keep_raw=True: oryginalny ZIP GUGiK jako osobna wersja
 # (landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip, pełny pakiet; tylko GPKG)
-area = lc.download_all_counties(
+area = lc.download(
     bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
     layers=["SWRS", "SWKN", "SWRM", "PTWP"],
     keep_raw=True,
+    workers=4,
 )
 paths = [r.file.path for r in area.files]  # area.failed: powiaty z błędem
-# lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
-# kodów (kilka powiatów) / NoCoverageError (żaden)
+print(area.ok, area.notices)                 # ok = brak błędów i nieaktualnych pozycji
+# obszar bez powiatu: NoCoverageError
 lc.set_provider("corine")
 lc.download(sheet="N-34-130-D", year=2018)  # CORINE (CLMS albo podgląd _preview)
 lc.set_provider("soilgrids")
@@ -813,7 +816,7 @@ print(report.stale, report.files.get(godlo, ()))
 # wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
 # download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
 # check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
-# update=, plan=), check, check_all_counties; HSG: calculate_hsg_by_*(...,
+# update=, plan=) + check (te same argumenty); HSG: calculate_hsg_by_*(...,
 # update=, plan=), check_hsg_by_*; pozycje planu: item.track, item.unit
 ```
 

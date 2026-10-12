@@ -9,12 +9,14 @@ This module tests:
 """
 
 import threading
+import time
 from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
 from kartograf.cli.commands import create_parser, main
+from kartograf.core.bbox import BBox
 from kartograf.download.manager import (
     DownloadManager,
     DownloadResult,
@@ -412,66 +414,58 @@ class TestProviderThreadSafety:
 
 
 class TestLandCoverParallelDownload:
-    """Tests for LandCoverManager.download_batch."""
+    """``LandCoverManager.download(workers=)``: powiats of a BDOT10k area."""
 
-    @staticmethod
-    def _bdot(tmp_path, fail=()):
+    BBOX = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+    TERYTS = ["0616", "1261", "1465"]
+
+    def _bdot(self, tmp_path, fail=()):
         from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 
         provider = Bdot10kProvider()
         calls: list[str] = []
         lock = threading.Lock()
+        state = {"active": 0, "peak": 0}
 
         def package(code, output_path, **kwargs):
             with lock:
                 calls.append(code)
+                state["active"] += 1
+                state["peak"] = max(state["peak"], state["active"])
+            time.sleep(0.05)
+            with lock:
+                state["active"] -= 1
             if code in fail:
                 raise DownloadError("Network error")
             output_path.write_bytes(f"data-{code}".encode())
             return Bdot10kPackage(path=output_path, teryt=code, url="u", format="GPKG")
 
-        patcher = patch.object(provider, "download_package", side_effect=package)
-        return LandCoverManager(output_dir=tmp_path, provider=provider), calls, patcher
-
-    ITEMS = [{"teryt": "1465"}, {"teryt": "1261"}, {"teryt": "0616"}]
+        patchers = (
+            patch.object(provider, "download_package", side_effect=package),
+            patch.object(provider, "teryts_for_area", return_value=self.TERYTS),
+        )
+        return LandCoverManager(tmp_path, provider), calls, state, patchers
 
     @pytest.mark.parametrize("workers", [1, 2])
-    def test_download_batch_every_item_in_store(self, tmp_path, workers):
-        manager, calls, patcher = self._bdot(tmp_path)
-        with patcher:
-            results = manager.download_batch(self.ITEMS, max_workers=workers)
-        assert sorted(calls) == ["0616", "1261", "1465"]
-        assert sorted(r.unit for r in results) == ["0616", "1261", "1465"]
-        for r in results:
+    def test_workers_parallel_counties(self, tmp_path, workers):
+        manager, calls, state, (pkg, prg) = self._bdot(tmp_path)
+        with pkg, prg:
+            area = manager.download(bbox=self.BBOX, workers=workers)
+        assert sorted(calls) == self.TERYTS
+        assert [r.unit for r in area.files] == self.TERYTS  # TERYT order
+        for r in area.files:
             assert r.file.path.read_bytes() == f"data-{r.unit}".encode()
+        assert 1 <= state["peak"] <= workers
+        if workers > 1:
+            assert state["peak"] == workers
 
-    def test_download_batch_handles_failures(self, tmp_path):
-        """A failed item is logged; the others still land in the store."""
-        manager, _, patcher = self._bdot(tmp_path, fail={"1261"})
-        with patcher:
-            results = manager.download_batch(self.ITEMS, max_workers=2)
-        assert sorted(r.unit for r in results) == ["0616", "1465"]
-
-    def test_download_batch_empty_list(self, tmp_path):
-        manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
-        assert manager.download_batch([], max_workers=2) == []
-
-    def test_download_batch_with_kwargs(self, tmp_path):
-        """Batch options (CORINE ``year``) select the segment of every item."""
-        from kartograf.providers.corine import CorineProvider
-        from tests.conftest import FakeCorine
-
-        provider = CorineProvider(session=FakeCorine(), use_proxy=False)
-        manager = LandCoverManager(output_dir=tmp_path, provider=provider)
-        items = [{"sheet": "N-34-130-D"}, {"sheet": "N-34-130-C"}]
-        with patch.object(CorineProvider, "has_clms_token", new=False):
-            results = manager.download_batch(items, max_workers=1, year=2012)
-        assert sorted(r.file.path.name for r in results) == [
-            "N-34-130-C.png",
-            "N-34-130-D.png",
-        ]
-        for r in results:
-            assert "eu_corine_2012_preview" in r.file.path.parts[-5]
+    def test_parallel_county_failure_others_downloaded(self, tmp_path):
+        manager, _, _, (pkg, prg) = self._bdot(tmp_path, fail={"1261"})
+        with pkg, prg:
+            area = manager.download(bbox=self.BBOX, workers=2)
+        assert [r.unit for r in area.files] == ["0616", "1465"]
+        assert [f.unit for f in area.failed] == ["1261"]
+        assert not area.ok
 
 
 class TestCLIWorkersFlag:

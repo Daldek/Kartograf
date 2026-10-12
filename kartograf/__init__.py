@@ -43,7 +43,7 @@ Example usage::
     # Land cover and HSG in the same store (versions, result with the file)
     from kartograf import HSGCalculator, LandCoverManager
     lc = LandCoverManager("./data", "bdot10k").download(teryt="1465")
-    print(lc.file.path, lc.file.status)  # data/landcover/pl_bdot10k_gpkg/...
+    print(lc.files[0].file.path, lc.ok)  # data/landcover/pl_bdot10k_gpkg/...
     hsg = HSGCalculator("./data").calculate_hsg_by_sheet(
         "N-34-130-D", depth="0-5cm", stat="mean"
     )

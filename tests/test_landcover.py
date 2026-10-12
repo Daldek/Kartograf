@@ -164,13 +164,11 @@ class TestBdot10kPrgTimeout:
             patch(self.DISCOVER, return_value=["0208"]) as discover,
             patch.object(manager, "_run"),
         ):
-            manager.download_by_bbox(self.BBOX, timeout=7)
+            manager.download(bbox=self.BBOX, timeout=7)
             assert discover.call_args.kwargs["timeout"] == 7
-            manager.download_by_sheet("N-34-130-D", timeout=8)
+            manager.download(sheet="N-34-130-D", timeout=8)
             assert discover.call_args.kwargs["timeout"] == 8
-            manager.download_all_counties(bbox=self.BBOX, timeout=9)
-            assert discover.call_args.kwargs["timeout"] == 9
-            manager.download_by_bbox(self.BBOX)
+            manager.download(bbox=self.BBOX)
             assert discover.call_args.kwargs["timeout"] == 30
 
 
@@ -1615,7 +1613,7 @@ class TestLandCoverNoSideEffectsOnInit:
         manager = LandCoverManager(output_dir=out_dir, provider=provider)
         assert not out_dir.exists()
 
-        file = manager.download(teryt="1465", format="SHP").file
+        file = manager.download(teryt="1465", format="SHP").files[0].file
 
         assert file.path == out_dir / "landcover/pl_bdot10k_shp/teryt/1465.zip"
         assert file.path.read_bytes() == b"PK zip"
@@ -1817,9 +1815,10 @@ class TestBdot10kSidecarSource:
         first = _bdot_zip(z1, ["OT_PTWP_A"])
         manager.provider._sessions = SessionPerThread(self._session(first, {}))
         result = manager.download(teryt="0262", keep_raw=True)
-        gpkg = result.file.path
+        (item,) = result.files
+        gpkg = item.file.path
         before = gpkg.read_bytes()
-        sidecar = json.loads(Path(f"{result.file.version_path}.meta.json").read_text())
+        sidecar = json.loads(Path(f"{item.file.version_path}.meta.json").read_text())
 
         second = _bdot_zip(z2, ["OT_PTWP_A", "OT_SWRS_L"])
         manager.provider._sessions = SessionPerThread(self._session(second, {}))

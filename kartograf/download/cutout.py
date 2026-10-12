@@ -36,7 +36,8 @@ from pathlib import Path
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox, is_czech_crs, transform_bbox
+from kartograf.core.bbox import BBox
+from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -141,26 +142,6 @@ class PlCutoutResult:
     zero_pixels: int = 0
     stale: tuple[PlanItem, ...] = ()
     notices: tuple[Notice, ...] = ()
-
-
-def bbox_to_2180(bbox: BBox) -> BBox:
-    """Request in EPSG:2180: Czech CRSs via the pinned operation, the rest as before.
-
-    PL/WGS84 CRSs — deliberately the default transformer, as in the whole PL
-    flow, envelope from densified edges (``core.bbox.transform_bbox``; four
-    corners lost a strip at 19E — up to ~480 m in the S for a 2 x 0.2 deg
-    bbox). The CLI passes a bbox here already after ``_country_bbox``, which
-    leaves Czech CRSs via the pinned operation; the Czech branch therefore
-    concerns library calls. The CRS label is compared case- and
-    whitespace-insensitively (``is_czech_crs``): a literal comparison let
-    ``"epsg:5514"`` through the default transformer (beside ADR-024, final
-    wave review, m-2).
-    """
-    if is_czech_crs(bbox.crs):
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
-
-        return bbox_to_crs(bbox, "EPSG:2180")
-    return transform_bbox(bbox, "EPSG:2180")
 
 
 def _prepare_pl_cutout(

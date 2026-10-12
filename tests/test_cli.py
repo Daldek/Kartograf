@@ -2774,7 +2774,7 @@ class TestCmdLandcoverDownload:
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
         mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_result(tmp_path / "out.gpkg")
+        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2816,7 +2816,7 @@ class TestCmdLandcoverDownload:
         )
         assert result == 1
         captured = capsys.readouterr()
-        assert "Error: SoilGrids does not support TERYT" in captured.err
+        assert "Error: SoilGrids: wybor teryt dziala tylko dla BDOT10k" in captured.err
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_sheet(self, mock_mgr_cls, capsys, tmp_path):
@@ -2824,7 +2824,7 @@ class TestCmdLandcoverDownload:
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
         mock_mgr.output_dir = tmp_path
-        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
+        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2840,10 +2840,9 @@ class TestCmdLandcoverDownload:
             ]
         )
         assert result == 0
-        mock_mgr.download_all_counties.assert_called_once()
-        call_kwargs = mock_mgr.download_all_counties.call_args
+        mock_mgr.download.assert_called_once()
+        call_kwargs = mock_mgr.download.call_args
         assert call_kwargs.kwargs.get("sheet") == "N-34-130-D"
-        mock_mgr.download.assert_not_called()
         assert "out.gpkg: nowa wersja " in capsys.readouterr().out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
@@ -2852,7 +2851,7 @@ class TestCmdLandcoverDownload:
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
         mock_mgr.output_dir = tmp_path
-        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
+        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -2868,9 +2867,8 @@ class TestCmdLandcoverDownload:
             ]
         )
         assert result == 0
-        mock_mgr.download_all_counties.assert_called_once()
-        assert mock_mgr.download_all_counties.call_args.kwargs.get("bbox") is not None
-        mock_mgr.download.assert_not_called()
+        mock_mgr.download.assert_called_once()
+        assert mock_mgr.download.call_args.kwargs.get("bbox") is not None
         captured = capsys.readouterr()
         assert "out.gpkg: nowa wersja " in captured.out
 
@@ -2880,7 +2878,7 @@ class TestCmdLandcoverDownload:
         mock_mgr = Mock()
         mock_mgr.provider_name = "CORINE Land Cover"
         mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_result(tmp_path / "out.png")
+        mock_mgr.download.return_value = _lc_area(tmp_path / "out.png")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -3716,18 +3714,16 @@ class TestCmdDownloadGeometry:
 class TestCmdLandcoverDownloadGeometry:
     """Tests for landcover download command with --geometry option."""
 
-    @patch("kartograf.core.geometry.get_overall_bbox")
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_geometry_basic(self, mock_mgr_cls, mock_bbox, capsys, tmp_path):
-        """--geometry computes overall bbox and downloads."""
+    def test_landcover_geometry_basic(self, mock_mgr_cls, capsys, tmp_path):
+        """--geometry/--layer go to the library unchanged (envelope there)."""
         shp_file = tmp_path / "area.shp"
         shp_file.touch()
 
-        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
         mock_mgr = Mock()
         mock_mgr.provider_name = "BDOT10k"
         mock_mgr.output_dir = tmp_path
-        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
+        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
         mock_mgr_cls.return_value = mock_mgr
 
         result = main(
@@ -3738,51 +3734,18 @@ class TestCmdLandcoverDownloadGeometry:
                 "bdot10k",
                 "--geometry",
                 str(shp_file),
+                "--layer",
+                "obszar",
                 "-o",
                 str(tmp_path),
             ]
         )
 
         assert result == 0
-        mock_bbox.assert_called_once()
-        mock_mgr.download_all_counties.assert_called_once()
-        call_kwargs = mock_mgr.download_all_counties.call_args
-        assert call_kwargs.kwargs.get("bbox") is not None
-        mock_mgr.download.assert_not_called()
+        kwargs = mock_mgr.download.call_args.kwargs
+        assert kwargs["geometry"] == shp_file and kwargs["layer"] == "obszar"
+        assert kwargs["bbox"] is None
         assert "out.gpkg: nowa wersja " in capsys.readouterr().out
-
-    @patch("kartograf.core.geometry.get_overall_bbox")
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_geometry_multi_layer_info(
-        self, mock_mgr_cls, mock_bbox, capsys, tmp_path
-    ):
-        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
-        mock_bbox.return_value = BBox(420000, 230000, 421000, 231000, "EPSG:2180")
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.output_dir = tmp_path
-        mock_mgr.download_all_counties.return_value = _lc_area(tmp_path / "out.gpkg")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--source",
-                "bdot10k",
-                "--geometry",
-                str(gpkg),
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert result == 0
-        info = [
-            line for line in capsys.readouterr().err.splitlines() if "warstw" in line
-        ]
-        assert len(info) == 1 and "'layer_a'" in info[0] and "layer_b" in info[0]
-        assert mock_bbox.call_args.kwargs["layer"] == "layer_a"
 
     def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
         """--geometry + --teryt -> mutual exclusivity error."""
