@@ -34,7 +34,7 @@ Example usage::
     # One NMT GeoTIFF for an area (PL cutout from GUGiK WCS, ADR-035)
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-        "EPSG:2180",
+        target_crs="EPSG:2180",
         output_dir="./data",
         vertical_crs="EVRF2007",
         product="nmt",
@@ -62,12 +62,9 @@ from kartograf.download.countries import (
     split_bbox_by_country,
 )
 from kartograf.download.cutout import (
-    PlCutout,
     PlCutoutResult,
     check_pl_cutout,
     download_pl_cutout,
-    prepare_pl_cutout,
-    run_pl_wcs_cutout,
 )
 from kartograf.download.cz_cutout import (
     CzCutoutResult,
@@ -151,12 +148,9 @@ __all__ = [
     "PlanItem",
     "UpdatePlan",
     # Download (PL cutout: WCS ADR-035)
-    "PlCutout",
     "PlCutoutResult",
     "check_pl_cutout",
     "download_pl_cutout",
-    "prepare_pl_cutout",
-    "run_pl_wcs_cutout",
     # Download (CZ cutout, countries)
     "CountryPart",
     "countries_for_bbox",

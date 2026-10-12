@@ -50,7 +50,10 @@ class NoticeSink:
 
     def emit(self, level: Literal["info", "warning"], code: str, text: str) -> None:
         """Record a notice before forwarding it to the optional callback."""
-        notice = Notice(level, code, text)
+        self.add(Notice(level, code, text))
+
+    def add(self, notice: Notice) -> None:
+        """Record an already built notice (e.g. from a nested call) and forward it."""
         self._notices.append(notice)
         if self._on_notice is not None:
             self._on_notice(notice)

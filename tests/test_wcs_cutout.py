@@ -16,13 +16,14 @@ import requests
 from kartograf.cli.commands import main
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.cutout import (
+    _prepare_pl_cutout,
+    _run_pl_wcs_cutout,
     check_pl_cutout,
     download_pl_cutout,
-    prepare_pl_cutout,
-    run_pl_wcs_cutout,
 )
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.prg import LandMask
@@ -100,7 +101,11 @@ def _synthetic_session(values) -> Mock:
 
 def _cutout(tmp_path, target_crs="EPSG:2180", bbox=BBOX, **kwargs):
     kwargs = {"vertical_crs": "EVRF2007", "product": "nmt", **kwargs}
-    return prepare_pl_cutout(bbox, target_crs, output_dir=tmp_path, **kwargs)
+    return _prepare_pl_cutout(bbox, target_crs, output_dir=tmp_path, **kwargs)
+
+
+# Selection arguments shared by ``download_pl_cutout`` and ``check_pl_cutout``.
+ARGS = {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"}
 
 
 def _meta(path: Path) -> dict:
@@ -114,7 +119,7 @@ def test_wcs_cutout_2180_corner_on_sheet_grid(tmp_path):
         patch(MASK, return_value=ALL_LAND) as mask,
         patch.object(provider, "_download_wcs", wraps=provider._download_wcs) as wcs,
     ):
-        result = run_pl_wcs_cutout(_cutout(tmp_path), provider=provider, now=NOW)
+        result = _run_pl_wcs_cutout(_cutout(tmp_path), provider=provider, now=NOW)
 
     assert [_subset(c.args[0]) for c in session.get.call_args_list] == [WINDOW]
     work = wcs.call_args.args[1]
@@ -140,7 +145,7 @@ def test_pl_cutout_default_local_without_prg_or_wcs(tmp_path):
     cut = _cutout(tmp_path)
     first_session = _recorded_session()
     with patch(MASK, return_value=ALL_LAND):
-        first = run_pl_wcs_cutout(
+        first = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=first_session, vertical_crs="EVRF2007", resolution="1m"
@@ -149,7 +154,7 @@ def test_pl_cutout_default_local_without_prg_or_wcs(tmp_path):
         )
     second_session = _recorded_session()
     with patch(MASK) as mask:
-        second = run_pl_wcs_cutout(
+        second = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=second_session, vertical_crs="EVRF2007", resolution="1m"
@@ -174,7 +179,7 @@ def test_wcs_cutout_5514_uses_pinned_warp(tmp_path):
         patch(MASK, return_value=ALL_LAND) as mask,
         patch.object(raster_mod, "warp_to_grid", wraps=raster_mod.warp_to_grid) as warp,
     ):
-        result = run_pl_wcs_cutout(
+        result = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
@@ -203,14 +208,14 @@ def test_wcs_cutout_5514_uses_pinned_warp(tmp_path):
 
 def test_pl_cutout_undated_link_and_version(tmp_path):
     with patch(MASK, return_value=ALL_LAND):
-        nmt = run_pl_wcs_cutout(
+        nmt = _run_pl_wcs_cutout(
             _cutout(tmp_path),
             provider=GugikProvider(
                 session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
             ),
             now=NOW,
         )
-        nmpt = run_pl_wcs_cutout(
+        nmpt = _run_pl_wcs_cutout(
             _cutout(
                 tmp_path,
                 product="nmpt",
@@ -260,10 +265,10 @@ def test_pl_cutout_force_same_content_unchanged(tmp_path):
         return GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
 
     with patch(MASK, return_value=ALL_LAND):
-        first = run_pl_wcs_cutout(cut, provider=provider(_recorded_session()), now=NOW)
+        first = _run_pl_wcs_cutout(cut, provider=provider(_recorded_session()), now=NOW)
         original_sidecar = _meta(first.file.version_path)
         session = _recorded_session()
-        second = run_pl_wcs_cutout(
+        second = _run_pl_wcs_cutout(
             cut, provider=provider(session), update="force", now=NOW
         )
     assert session.get.call_count == 1
@@ -279,7 +284,7 @@ def test_pl_cutout_force_same_content_unchanged(tmp_path):
 def test_pl_cutout_force_new_content_new_version_link_moves(tmp_path):
     cut = _cutout(tmp_path)
     with patch(MASK, return_value=ALL_LAND):
-        first = run_pl_wcs_cutout(
+        first = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=_synthetic_session(lambda x, y: 1.0),
@@ -289,7 +294,7 @@ def test_pl_cutout_force_new_content_new_version_link_moves(tmp_path):
             now=NOW,
         )
         session = _synthetic_session(lambda x, y: 2.0)
-        second = run_pl_wcs_cutout(
+        second = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
@@ -314,7 +319,7 @@ def test_pl_cutout_force_new_content_new_version_link_moves(tmp_path):
 def test_pl_cutout_failure_keeps_previous_version_and_link(tmp_path):
     cut = _cutout(tmp_path)
     with patch(MASK, return_value=ALL_LAND):
-        first = run_pl_wcs_cutout(
+        first = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
@@ -328,7 +333,7 @@ def test_pl_cutout_failure_keeps_previous_version_and_link(tmp_path):
         return_value=recorded_response(WCS_FIXTURES / "exception_report.xml")
     )
     with patch(MASK, return_value=ALL_LAND), pytest.raises(DownloadError):
-        run_pl_wcs_cutout(
+        _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=failing, vertical_crs="EVRF2007", resolution="1m"
@@ -352,7 +357,7 @@ def test_pl_cutout_dated_files_ignored(tmp_path):
     legacy.parent.mkdir(parents=True)
     legacy.write_bytes(b"legacy cutout")
     with patch(MASK, return_value=ALL_LAND):
-        result = run_pl_wcs_cutout(
+        result = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
@@ -372,7 +377,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.providers.pl.create_nmt_provider") as factory,
     ):
-        missing = check_pl_cutout(cut)
+        missing = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
     assert missing.items[0].track == "pl_cutout"
     assert missing.items[0].unit == cut.target_path.stem
     assert missing.items[0].status == "missing"
@@ -381,7 +386,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
     mask.assert_not_called()
     factory.assert_not_called()
     with patch(MASK, return_value=ALL_LAND):
-        run_pl_wcs_cutout(
+        _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
@@ -392,7 +397,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.providers.pl.create_nmt_provider") as factory,
     ):
-        local = check_pl_cutout(cut)
+        local = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
     assert local.items[0].status == "unverifiable"
     assert local.items[0].local_sha256
     mask.assert_not_called()
@@ -401,14 +406,14 @@ def test_check_pl_cutout_never_downloads(tmp_path):
 
 def test_pl_cutout_plan_skips_missing_or_stale_without_fetch(tmp_path):
     cut = _cutout(tmp_path)
-    missing = check_pl_cutout(cut)
+    missing = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
     session = _recorded_session()
     provider = GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
     with patch(MASK) as mask:
-        removed = run_pl_wcs_cutout(
+        removed = _run_pl_wcs_cutout(
             cut, provider=provider, update="upgrade", plan=replace(missing, items=())
         )
-        stale = run_pl_wcs_cutout(
+        stale = _run_pl_wcs_cutout(
             cut,
             provider=provider,
             update="upgrade",
@@ -424,12 +429,12 @@ def test_pl_cutout_plan_skips_missing_or_stale_without_fetch(tmp_path):
     mask.assert_not_called()
     session.get.assert_not_called()
     with patch(MASK, return_value=ALL_LAND):
-        fetched = run_pl_wcs_cutout(
+        fetched = _run_pl_wcs_cutout(
             cut, provider=provider, update="upgrade", plan=missing, now=NOW
         )
     assert fetched.file.status == "new"
     with patch(MASK) as mask:
-        local = run_pl_wcs_cutout(
+        local = _run_pl_wcs_cutout(
             cut, provider=provider, update="upgrade", plan=missing
         )
     assert local.file.status == "local" and local.stale == ()
@@ -447,7 +452,7 @@ def test_disk_space_checked_only_when_fetching(tmp_path):
         patch(MASK, return_value=ALL_LAND),
         patch("kartograf.download.cutout._check_wcs_disk_space") as disk,
     ):
-        first = run_pl_wcs_cutout(cut, provider=provider, now=NOW)
+        first = _run_pl_wcs_cutout(cut, provider=provider, now=NOW)
     assert disk.call_count == 1
     staged = disk.call_args.args[1]
     assert staged.parent.parent.name == ".incoming"
@@ -464,10 +469,10 @@ def test_disk_space_checked_only_when_fetching(tmp_path):
         ) as disk,
     ):
         for update in (None, "upgrade"):
-            reused = run_pl_wcs_cutout(cut, provider=later_provider, update=update)
+            reused = _run_pl_wcs_cutout(cut, provider=later_provider, update=update)
             assert reused.file.status == "local"
         with pytest.raises(ValidationError, match="disk full"):
-            run_pl_wcs_cutout(cut, provider=later_provider, update="force")
+            _run_pl_wcs_cutout(cut, provider=later_provider, update="force")
     assert disk.call_count == 1
     mask.assert_not_called()
     later_session.get.assert_not_called()
@@ -480,7 +485,7 @@ def test_prg_failure_makes_no_wcs_request(tmp_path):
         patch(MASK, side_effect=DownloadError("PRG WFS: blad uslugi")),
         pytest.raises(DownloadError, match="PRG"),
     ):
-        run_pl_wcs_cutout(
+        _run_pl_wcs_cutout(
             _cutout(tmp_path),
             provider=GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
@@ -497,7 +502,7 @@ def test_mask_counts_and_sidecar(tmp_path):
     land = LandMask((_square(500000, 200000, 567590.5, 300000),), ())
     session = _synthetic_session(lambda xs, ys: np.where(xs < 567585.5, 0.0, 7.0))
     with patch(MASK, return_value=land):
-        result = run_pl_wcs_cutout(
+        result = _run_pl_wcs_cutout(
             _cutout(tmp_path),
             provider=GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
@@ -551,7 +556,7 @@ def test_pl_cutout_local_result_fields_from_sidecar(tmp_path):
     land = LandMask((_square(500000, 200000, 567590.5, 300000),), ())
     session = _synthetic_session(lambda xs, ys: np.where(xs < 567585.5, 0.0, 7.0))
     with patch(MASK, return_value=land):
-        fetched = run_pl_wcs_cutout(
+        fetched = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=session, vertical_crs="EVRF2007", resolution="1m"
@@ -563,7 +568,7 @@ def test_pl_cutout_local_result_fields_from_sidecar(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.transport.mosaic.has_valid_pixels") as scan,
     ):
-        local = run_pl_wcs_cutout(
+        local = _run_pl_wcs_cutout(
             cut,
             provider=GugikProvider(
                 session=next_session, vertical_crs="EVRF2007", resolution="1m"
@@ -583,7 +588,7 @@ def test_pl_cutout_local_result_fields_from_sidecar(tmp_path):
 
 def test_zero_pixels_absent_from_sidecar_when_none(tmp_path):
     with patch(MASK, return_value=ALL_LAND):
-        result = run_pl_wcs_cutout(
+        result = _run_pl_wcs_cutout(
             _cutout(tmp_path),
             provider=GugikProvider(
                 session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
@@ -597,7 +602,7 @@ def test_zero_pixels_absent_from_sidecar_when_none(tmp_path):
 def test_all_outside_land_is_all_nodata(tmp_path):
     abroad = LandMask((_square(0, 0, 10, 10),), ())
     with patch(MASK, return_value=abroad):
-        result = run_pl_wcs_cutout(
+        result = _run_pl_wcs_cutout(
             _cutout(tmp_path),
             provider=GugikProvider(
                 session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
@@ -609,7 +614,7 @@ def test_all_outside_land_is_all_nodata(tmp_path):
     assert result.masked_pixels == 400
     assert _meta(result.file.path)["extra"]["all_nodata"] is True
     with patch(MASK) as mask:
-        local = run_pl_wcs_cutout(_cutout(tmp_path), update="upgrade")
+        local = _run_pl_wcs_cutout(_cutout(tmp_path), update="upgrade")
     assert local.file.status == "local"
     assert local.all_nodata and local.masked_pixels == 400
     mask.assert_not_called()
@@ -628,16 +633,139 @@ def test_download_pl_cutout_writes_parent_request(tmp_path):
     ):
         result = download_pl_cutout(
             BBOX,
-            "EPSG:2180",
             output_dir=tmp_path,
             parent_request={"p": 1},
-            vertical_crs="EVRF2007",
-            product="nmt",
+            cache=False,
+            **ARGS,
         )
 
     assert result.file.path == _cutout(tmp_path).target_path
     assert _meta(result.file.path)["extra"]["parent_request"] == {"p": 1}
     assert session.get.call_count == 1
+
+
+def _factory(session):
+    """Patch of the default NMT provider factory used by ``download_pl_cutout``."""
+    return patch(
+        "kartograf.providers.pl.create_nmt_provider",
+        return_value=GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="1m"
+        ),
+    )
+
+
+def test_target_crs_keyword_only(tmp_path):
+    with pytest.raises(TypeError):
+        download_pl_cutout(  # type: ignore[misc]
+            BBOX,
+            "EPSG:2180",
+            output_dir=tmp_path,
+            vertical_crs="EVRF2007",
+            product="nmt",
+        )
+    with pytest.raises(TypeError):
+        check_pl_cutout(  # type: ignore[misc]
+            BBOX,
+            "EPSG:2180",
+            output_dir=tmp_path,
+            vertical_crs="EVRF2007",
+            product="nmt",
+        )
+
+
+def test_check_pl_cutout_same_args_as_download(tmp_path):
+    """The check takes the download's selection and plans exactly its file."""
+    selection = {"output_dir": tmp_path, "cache": False, **ARGS}
+    before = check_pl_cutout(BBOX, **selection)
+    with _factory(_recorded_session()), patch(MASK, return_value=ALL_LAND):
+        result = download_pl_cutout(BBOX, **selection)
+    after = check_pl_cutout(BBOX, **selection)
+
+    assert before.items[0].status == "missing"
+    assert before.items[0].unit == result.file.path.stem == after.items[0].unit
+    assert after.items[0].status == "unverifiable"
+    assert after.items[0].local_sha256 == result.file.sha256
+
+
+def test_download_pl_cutout_plan_stale_no_download(tmp_path):
+    missing = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
+    changed = replace(missing.items[0], available_label="different")
+    session = _recorded_session()
+    with _factory(session), patch(MASK) as mask:
+        result = download_pl_cutout(
+            BBOX,
+            output_dir=tmp_path,
+            update="upgrade",
+            plan=replace(missing, items=(changed,)),
+            cache=False,
+            **ARGS,
+        )
+    assert result.file is None
+    assert result.stale == (changed,)
+    mask.assert_not_called()
+    session.get.assert_not_called()
+
+
+def test_cutout_size_notice_before_first_wcs_request(tmp_path):
+    """Several WCS chunks: ``CUTOUT_SIZE`` reaches ``on_notice`` before any WCS call."""
+    events: list[object] = []
+    provider = GugikProvider(
+        session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+    )
+
+    def wcs(*_args, **_kwargs):
+        events.append("wcs")
+        raise DownloadError("stop after the first request")
+
+    with (
+        patch("kartograf.providers.pl.create_nmt_provider", return_value=provider),
+        patch.object(provider, "plan_wcs_chunks", return_value=[object(), object()]),
+        patch.object(provider, "_download_wcs", side_effect=wcs),
+        patch(MASK, return_value=ALL_LAND),
+        pytest.raises(DownloadError),
+    ):
+        download_pl_cutout(
+            BBOX, output_dir=tmp_path, cache=False, on_notice=events.append, **ARGS
+        )
+    assert events == [
+        Notice(
+            "info",
+            CUTOUT_SIZE,
+            "wycinek 20 x 20 px float32 (~0 MiB), 2 zapytan WCS GUGiK "
+            "pobieranych po kolei",
+        ),
+        "wcs",
+    ]
+
+
+def test_cutout_size_notice_absent_for_one_small_chunk(tmp_path):
+    with _factory(_recorded_session()), patch(MASK, return_value=ALL_LAND):
+        result = download_pl_cutout(BBOX, output_dir=tmp_path, cache=False, **ARGS)
+    assert result.file.status == "new"
+    assert result.notices == ()
+
+
+def test_all_nodata_notice(tmp_path):
+    abroad = LandMask((_square(0, 0, 10, 10),), ())
+    seen: list[Notice] = []
+    with _factory(_recorded_session()), patch(MASK, return_value=abroad):
+        result = download_pl_cutout(
+            BBOX, output_dir=tmp_path, cache=False, on_notice=seen.append, **ARGS
+        )
+    expected = Notice(
+        "warning",
+        ALL_NODATA,
+        "wycinek w calosci nodata - obszar poza ladem PL (maska PRG: granica "
+        "panstwa bez morza terytorialnego i wod wewnetrznych)",
+    )
+    assert result.all_nodata
+    assert result.notices == (expected,)
+    assert seen == [expected]
+    with patch(MASK) as mask:
+        local = download_pl_cutout(BBOX, output_dir=tmp_path, cache=False, **ARGS)
+    assert local.file.status == "local" and local.all_nodata
+    assert local.notices == ()
+    mask.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -662,7 +790,7 @@ def test_download_pl_cutout_writes_parent_request(tmp_path):
 def test_provider_mismatch_rejected(tmp_path, cutout_kwargs, provider):
     session = _recorded_session()
     with patch(MASK) as mask, pytest.raises(ValidationError, match="niezgodny"):
-        run_pl_wcs_cutout(
+        _run_pl_wcs_cutout(
             _cutout(tmp_path, **cutout_kwargs), provider=provider(session), now=NOW
         )
     mask.assert_not_called()
@@ -677,12 +805,12 @@ def test_prepare_rejects_unknown_product(tmp_path):
 class TestCli:
     """``download --bbox/--geometry --target-crs`` for PL goes through WCS."""
 
-    _FACTORY = "kartograf.cli.download_cmd._create_provider_and_storage"
+    _FACTORY = "kartograf.download.cutout._wcs_cutout_provider"
     _BBOX_ARGS = ["--bbox", "567580.6,243664.7,567600.4,243684.3", "--country", "pl"]
 
     def _main(self, tmp_path, provider, *extra, mask=ALL_LAND):
         with (
-            patch(self._FACTORY, return_value=(provider, Mock())) as factory,
+            patch(self._FACTORY, return_value=provider) as factory,
             patch(MASK, return_value=mask) as fetch_mask,
         ):
             rc = main(
@@ -816,11 +944,8 @@ class TestCli:
         with (
             patch(
                 self._FACTORY,
-                return_value=(
-                    GugikProvider(
-                        session=session, vertical_crs="EVRF2007", resolution="1m"
-                    ),
-                    Mock(),
+                return_value=GugikProvider(
+                    session=session, vertical_crs="EVRF2007", resolution="1m"
                 ),
             ),
             patch(MASK, side_effect=DownloadError("PRG WFS: blad uslugi")),
@@ -917,11 +1042,8 @@ class TestCli:
             patch("kartograf.core.geometry.get_overall_bbox", return_value=BBOX),
             patch(
                 self._FACTORY,
-                return_value=(
-                    GugikProvider(
-                        session=session, vertical_crs="EVRF2007", resolution="1m"
-                    ),
-                    Mock(),
+                return_value=GugikProvider(
+                    session=session, vertical_crs="EVRF2007", resolution="1m"
                 ),
             ),
             patch(MASK, return_value=ALL_LAND),
@@ -987,11 +1109,8 @@ class TestCli:
             ),
             patch(
                 self._FACTORY,
-                return_value=(
-                    GugikProvider(
-                        session=pl_session, vertical_crs="EVRF2007", resolution="1m"
-                    ),
-                    Mock(),
+                return_value=GugikProvider(
+                    session=pl_session, vertical_crs="EVRF2007", resolution="1m"
                 ),
             ),
             patch(MASK, return_value=ALL_LAND),

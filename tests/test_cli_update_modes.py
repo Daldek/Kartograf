@@ -7,6 +7,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from kartograf.cli.commands import main
+from kartograf.download.cutout import PlCutoutResult
 from tests.test_cli import _CZ_FACTORY_PATCH, _cz_provider_mock
 from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
@@ -185,9 +186,11 @@ def test_update_flags_accepted_for_every_download_track(tmp_path, capsys, track,
         patch(_CZ_FACTORY_PATCH, return_value=cz),
         patch("kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=laz),
         _no_pl_wcs() as prg,
-        patch("kartograf.download.cutout.run_pl_wcs_cutout") as pl_run,
+        patch(
+            "kartograf.download.cutout.download_pl_cutout",
+            return_value=PlCutoutResult(None),
+        ) as pl_run,
     ):
-        pl_run.return_value = Mock(file=None, all_nodata=False, stale=())
         rc = _download(tmp_path / "out", *TRACKS[track], flag)
     err = capsys.readouterr().err
     assert rc == 0, err

@@ -22,6 +22,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wartosci zwroconej, aktualizuj wywolania metod i odczyty plikow z
   `result.files`, a komunikaty wypisuj z `on_notice` bez ponownego
   przetwarzania `result.notices`.
+- Wycinek PL: `download_pl_cutout(bbox, *, target_crs, ...)` i
+  `check_pl_cutout(bbox, *, target_crs, ...)` przyjmuja te same argumenty
+  wyboru (`target_crs` tylko jako nazwany), `download_pl_cutout` dostaje
+  `plan=`, `cache=` (`True` = domyslny cache w cwd) i `on_notice=`;
+  `PlCutoutResult.notices` niesie komunikaty o rozmiarze wycinka
+  (`cutout_size`, przed pierwszym zapytaniem WCS) i wycinku bez danych
+  (`all_nodata`). `prepare_pl_cutout`, `run_pl_wcs_cutout` i `PlCutout`
+  sa krokami wewnetrznymi (poza `__all__`). Co zrobic: podawaj
+  `target_crs=` nazwany; `check_pl_cutout(cutout)` ->
+  `check_pl_cutout(bbox, target_crs=..., output_dir=..., vertical_crs=...,
+  product=...)`; plan wykonuj przez `download_pl_cutout(..., plan=plan)`.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

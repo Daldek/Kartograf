@@ -9752,7 +9752,7 @@ class TestCampaignOptions:
         kwargs = mock_run.call_args.kwargs
         assert kwargs["all_campaigns"] is True and kwargs["min_year"] == 2020
 
-    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    @patch("kartograf.download.cutout.download_pl_cutout")
     def test_target_crs_with_campaigns_all_rejected_before_network(
         self, mock_prepare, capsys, tmp_path
     ):
@@ -9789,7 +9789,7 @@ class TestCampaignOptions:
     @pytest.mark.parametrize("location", [_PL_BBOX_2180, _BORDER_BBOX])
     @pytest.mark.parametrize("flag", ["--year", "--min-year", "--max-year"])
     @patch("kartograf.cli.download_cmd._run_cz")
-    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    @patch("kartograf.download.cutout.download_pl_cutout")
     def test_cli_year_flags_rejected_with_target_crs(
         self, mock_prepare, mock_run_cz, flag, location, capsys, tmp_path
     ):
@@ -9823,7 +9823,7 @@ class TestCampaignOptions:
         mock_prepare.assert_not_called()
         mock_run_cz.assert_not_called()
 
-    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    @patch("kartograf.download.cutout.download_pl_cutout")
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_target_crs_with_all_cross_border_rejected_before_cz(
         self, mock_run_cz, mock_prepare, capsys, tmp_path
@@ -10380,7 +10380,7 @@ class TestCampaignOptions:
             f"({tmp_path})"
         ) in out
 
-    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    @patch("kartograf.download.cutout.download_pl_cutout")
     @patch("kartograf.cli.download_cmd._run_cz")
     def test_target_crs_with_all_cross_border_no_info_before_error(
         self, mock_run_cz, mock_prepare, capsys, tmp_path
@@ -11319,7 +11319,7 @@ class TestLazOnlyOptions:
         with (
             patch("kartograf.cli.download_cmd.DownloadManager") as manager,
             patch("kartograf.cli.download_cmd._create_provider_and_storage") as factory,
-            patch("kartograf.download.cutout.prepare_pl_cutout") as cutout,
+            patch("kartograf.download.cutout.download_pl_cutout") as cutout,
             patch("kartograf.cli.download_cmd._run_cz") as run_cz,
             patch("kartograf.cli.download_cmd._cmd_download_cz") as cmd_cz,
             patch("kartograf.providers.pl.gugik_laz.GugikLazProvider") as laz,
@@ -11493,7 +11493,7 @@ class TestFullSheetOption:
 
     @pytest.mark.parametrize("location", [_PL_BBOX_2180, _BORDER_BBOX])
     @patch("kartograf.cli.download_cmd._run_cz")
-    @patch("kartograf.download.cutout.prepare_pl_cutout")
+    @patch("kartograf.download.cutout.download_pl_cutout")
     def test_target_crs_rejected_before_network(
         self, prepare, run_cz, location, capsys, tmp_path
     ):

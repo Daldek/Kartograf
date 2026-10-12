@@ -40,7 +40,7 @@ from kartograf.exceptions import (
     ParseError,
     ValidationError,
 )
-from kartograf.notices import Notice
+from kartograf.notices import CACHE_DISABLED, Notice
 from kartograf.providers.pl import require_nmt_vertical_crs
 from kartograf.sources.registry import horizontal_crs_for_sheet
 
@@ -169,8 +169,15 @@ def _warn_cache_disabled(notice: Notice) -> None:
     print(f"Warning: {notice.text}", file=sys.stderr, flush=True)
 
 
-def _print_sheet_notice(notice: Notice) -> None:
-    """Print each library sheet notice when it is emitted, also in quiet mode."""
+def _print_notice(notice: Notice) -> None:
+    """Print each library data notice when it is emitted, also in quiet mode.
+
+    A disabled-cache warning is printed once per command (several tracks may
+    open the same cache file).
+    """
+    if notice.code == CACHE_DISABLED:
+        _warn_cache_disabled(notice)
+        return
     prefix = "Info" if notice.level == "info" else "Warning"
     print(f"{prefix}: {notice.text}", file=sys.stderr)
 
@@ -1285,7 +1292,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
                 min_year=min_year,
                 max_year=max_year,
                 full_sheet=full_sheet,
-                on_notice=_print_sheet_notice,
+                on_notice=_print_notice,
             )
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
@@ -1966,74 +1973,45 @@ def _download_pl_cutout(
     bbox: BBox,
     parent_request: dict,
 ) -> int:
-    """Polish --target-crs cutout from GUGiK WCS (ADR-035): a CLI overlay on
-    ``download/cutout.py``.
+    """Polish --target-crs cutout from GUGiK WCS (ADR-035): ``download_pl_cutout``.
 
     Called after ``_resolve_pl_options`` (nmt/nmpt, 1m only). ``bbox`` is
     the request or the ``--geometry`` envelope. Preparation errors
     (``TransformError``/``ValidationError``) and EVERY download or build
     error (PRG, WCS) end with code 1 and a message, not a traceback: an
     exception leaking out of the country loop of ``_dispatch_area`` would break
-    the partial success contract (ADR-023 points 4-5). ``--force`` fetches a
-    new version; by default a local version is reused. ``--workers`` and
-    ``--scale`` have no effect. An all-nodata cutout = ``Warning:``, code 0.
+    the partial success contract (ADR-023 points 4-5). Data notices (cutout
+    size, all-nodata) come from the library via ``on_notice``.
     """
-    from kartograf.download.cutout import prepare_pl_cutout, run_pl_wcs_cutout
+    from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
     from kartograf.transform.crs import TransformError
 
-    product = args.product
     output_dir = Path(args.output)
-    try:
-        # fail-fast: the pinned operation is built BEFORE any network access
-        cutout = prepare_pl_cutout(
-            bbox,
-            args.target_crs,
-            output_dir=output_dir,
-            vertical_crs=args.vertical_crs,
-            product=product,
-        )
-    except TransformError as e:
-        return _print_transform_error(e)
-    except ValidationError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    provider, _storage = _create_provider_and_storage(
-        product, output_dir, args.vertical_crs, args.resolution
-    )
-    if getattr(args, "check_updates", False):
-        from kartograf.download.cutout import check_pl_cutout
-
-        return _report_plan(args, check_pl_cutout(cutout))
-    chunks = len(provider.plan_wcs_chunks(cutout.bbox_source_2180))
-    fetching = args.force or not cutout.target_path.exists()
-    if fetching and (chunks > 1 or cutout.estimated_bytes >= 2**30):
-        # stderr, not stdout: -q does NOT suppress Info:/Warning:
-        height, width = cutout.grid_shape
-        print(
-            f"Info: wycinek {width} x {height} px float32 "
-            f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan WCS "
-            "GUGiK pobieranych po kolei",
-            file=sys.stderr,
-        )
+    selection = {
+        "target_crs": args.target_crs,
+        "output_dir": output_dir,
+        "vertical_crs": args.vertical_crs,
+        "product": args.product,
+        "on_notice": _print_notice,
+    }
     update = _update_mode(args)
     try:
-        result = run_pl_wcs_cutout(
-            cutout,
-            provider=provider,
+        if getattr(args, "check_updates", False):
+            return _report_plan(args, check_pl_cutout(bbox, **selection))
+        result = download_pl_cutout(
+            bbox,
             update=update,
             plan=_plan_context(args).loaded,
             parent_request=parent_request,
+            **selection,
         )
+    except TransformError as e:
+        return _print_transform_error(e)
     except Exception as e:  # noqa: BLE001 — code 1 instead of a traceback (ADR-023)
         print(f"Error: {e}", file=sys.stderr)
         return 1
-    if result.all_nodata and result.file is not None and result.file.status != "local":
-        print(
-            "Warning: wycinek w calosci nodata — obszar poza ladem PL (maska PRG: "
-            "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
-            file=sys.stderr,
-        )
-    _report_file(args, _unit_of(cutout.target_path, output_dir), result.file, update)
+    if result.file is not None:
+        _report_file(args, _unit_of(result.file.path, output_dir), result.file, update)
     return _report_stale(result.stale)
 
 
@@ -2125,7 +2103,7 @@ def _download_pl_sheet_list(
                 min_year=min_year,
                 max_year=max_year,
                 full_sheet=full_sheet,
-                on_notice=_print_sheet_notice,
+                on_notice=_print_notice,
             )
             _info_legacy_campaigns(manager)
             planned = _run_plan_modes(args, manager, sheet_list)

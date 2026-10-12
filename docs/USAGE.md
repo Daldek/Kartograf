@@ -444,19 +444,18 @@ hsg_from_rasters(
 )
 
 # Scalony wycinek WCS NMT lub NMPT PL (GeoTIFF + sidecar)
-from kartograf import download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
+from kartograf import check_pl_cutout, download_pl_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-result = download_pl_cutout(
-    bbox, "EPSG:5514", output_dir="./data", vertical_crs="EVRF2007", product="nmpt",
-)
+selection = dict(target_crs="EPSG:5514", output_dir="./data",
+                 vertical_crs="EVRF2007", product="nmpt")
+result = download_pl_cutout(bbox, **selection)
 print(result.file.path, result.file.status, result.masked_pixels, result.all_nodata)
+for notice in result.notices:               # rozmiar wycinka, wycinek bez danych
+    print(notice.level, notice.text)
 # domyślnie istniejąca wersja bez zapytań PRG/WCS; update="force" pobiera ponownie
-# osobne kroki przy własnym providerze; maska PRG pobierana przed WCS
-cutout = prepare_pl_cutout(
-    bbox, "EPSG:2180", output_dir="./data", vertical_crs="EVRF2007", product="nmt"
-)
-result = run_pl_wcs_cutout(cutout)
+plan = check_pl_cutout(bbox, **selection)   # te same argumenty, bez pobierania
+result = download_pl_cutout(bbox, **selection, update="upgrade", plan=plan)
 
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
