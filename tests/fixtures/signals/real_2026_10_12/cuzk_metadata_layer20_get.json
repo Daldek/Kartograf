@@ -1,0 +1,11 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis/rest/services/Metadata/MapServer/20?f=json",
+  "method": "GET",
+  "status": 200,
+  "headers": {
+    "Cache-Control": "must-revalidate,max-age=0,public",
+    "Content-Type": "application/json; charset=UTF-8",
+    "ETag": "\"3df42b18\""
+  },
+  "recorded": "2026-10-12"
+}

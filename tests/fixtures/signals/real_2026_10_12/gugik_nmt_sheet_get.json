@@ -1,0 +1,11 @@
+{
+  "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/82060/82060_1692108_N-34-130-D-d-1-1.asc",
+  "method": "GET",
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "37738988",
+    "Cache-Control": "must-revalidate"
+  },
+  "recorded": "2026-10-12"
+}

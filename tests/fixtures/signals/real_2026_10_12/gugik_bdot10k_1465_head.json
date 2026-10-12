@@ -1,0 +1,11 @@
+{
+  "url": "https://opendata.geoportal.gov.pl/bdot10k/schemat2021/GPKG/14/1465_GPKG.zip",
+  "method": "HEAD",
+  "status": 200,
+  "headers": {
+    "Content-Type": "application/octet-stream",
+    "Content-Length": "88227835",
+    "Cache-Control": "must-revalidate"
+  },
+  "recorded": "2026-10-12"
+}
