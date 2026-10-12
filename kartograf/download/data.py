@@ -201,17 +201,9 @@ def _error_text(error: Exception) -> str:
 
 
 def _task(**kwargs) -> SimpleNamespace:
-    """The request as one namespace; ``bbox`` coordinates as ``float`` (the
-    sidecar ``request``/``parent_request`` of ``BBox(1, ...)`` and of the CLI
-    ``--bbox 1,...`` must be byte-identical)."""
     task = SimpleNamespace(**kwargs)
     task.output_dir = Path(task.output_dir) if task.output_dir is not None else None
     task.geometry = Path(task.geometry) if task.geometry is not None else None
-    if task.bbox is not None:
-        b = task.bbox
-        task.bbox = BBox(
-            float(b.min_x), float(b.min_y), float(b.max_x), float(b.max_y), b.crs
-        )
     return task
 
 

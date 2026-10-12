@@ -931,13 +931,14 @@ def _write_rasters_sidecar(
     output_path: Path, grid: "BBox", crs: str, layers: dict[str, Path]
 ) -> None:
     """Best-effort sidecar of hsg_from_rasters (inputs identified by sha256)."""
+    from kartograf.core.bbox import bbox_coords
     from kartograf.sources.sidecar import emit_sidecar, file_digest
 
     emit_sidecar(
         "global.isric.soilgrids",
         output_path,
         request={
-            "bbox": [grid.min_x, grid.min_y, grid.max_x, grid.max_y],
+            "bbox": bbox_coords(grid),
             "bbox_crs": crs,
         },
         horizontal_crs=crs,
@@ -957,8 +958,10 @@ def _write_rasters_sidecar(
 
 def _bbox_request(bbox: "BBox") -> dict:
     """HSG selection of a bbox: sidecar ``request`` + the ``BBox`` itself."""
+    from kartograf.core.bbox import bbox_coords
+
     return {
-        "bbox": [bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y],
+        "bbox": bbox_coords(bbox),
         "bbox_crs": bbox.crs,
         "bbox_obj": bbox,
     }

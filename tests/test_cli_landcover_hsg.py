@@ -6,12 +6,16 @@ Update modes, plan files and status lines (spec 4.2, 4.4, 4.5) through
 
 import json
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
 from kartograf.cli.commands import main
+from kartograf.core.bbox import BBox
+from kartograf.download.fetch import VersionedFile
 from kartograf.exceptions import DownloadError
+from kartograf.landcover.manager import LandCoverAreaResult, LandCoverResult
+from kartograf.notices import NO_COVERAGE_SOME, Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from tests.conftest import FakeCorine, FakeSoilGrids
@@ -228,3 +232,141 @@ def test_hsg_cli_stats_from_store_path(tmp_path, capsys):
     assert "Group B: " in out or "Group A: " in out
     store = Path(tmp_path / "out" / "hsg/global_soilgrids_0-5cm_mean/bbox")
     assert (store / f"{COORDS}.tif").exists()
+
+
+# --- R7 flags: --layers, --keep-raw, --bbox-crs, --workers, --quiet ----------
+
+_MANAGER = "kartograf.cli.landcover_cmd.LandCoverManager"
+_HSG = "kartograf.hydrology.HSGCalculator"
+
+
+def _bdot(tmp_path, *flags):
+    return ["landcover", "download", "--source", "bdot10k", "-o", str(tmp_path), *flags]
+
+
+def _file(path: Path) -> VersionedFile:
+    return VersionedFile(path, "new", "2026-10-12", "0" * 64, path)
+
+
+def _manager(tmp_path, result=None):
+    manager = MagicMock()
+    manager.output_dir = tmp_path
+    manager.download.return_value = result or LandCoverAreaResult(())
+    return manager
+
+
+def test_layers_flag_comma_list(tmp_path):
+    manager = _manager(tmp_path)
+    with patch(_MANAGER, return_value=manager):
+        assert main(_bdot(tmp_path, "--teryt", "1465", "--layers", "SWRS,PTWP")) == 0
+    assert manager.download.call_args.kwargs["layers"] == ("SWRS", "PTWP")
+
+
+def test_layers_bad_code_is_library_error_before_network(tmp_path, capsys):
+    with patch(
+        "kartograf.providers.pl.bdot10k.Bdot10kProvider.download_package"
+    ) as get:
+        rc = main(_bdot(tmp_path, "--teryt", "1465", "--layers", "SWRS,swrs1"))
+    assert rc == 1
+    get.assert_not_called()
+    (line,) = capsys.readouterr().err.splitlines()
+    assert line.startswith("Error: ") and "swrs1" in line
+
+
+@pytest.mark.parametrize("flag", ["--layers", "--keep-raw"])
+def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
+    argv = [
+        "landcover",
+        "download",
+        "--source",
+        "corine",
+        "--year",
+        "2018",
+        "--sheet",
+        "N-34-130-D",
+        "-o",
+        str(tmp_path),
+        flag,
+        *(["SWRS"] if flag == "--layers" else []),
+    ]
+    with patch(_MANAGER) as manager:
+        assert main(argv) == 1
+    manager.assert_not_called()
+    assert f"Error: {flag} dziala tylko z --source bdot10k" in capsys.readouterr().err
+
+
+def test_keep_raw_flag(tmp_path):
+    manager = _manager(tmp_path)
+    with patch(_MANAGER, return_value=manager):
+        assert main(_bdot(tmp_path, "--teryt", "1465", "--keep-raw")) == 0
+        assert manager.download.call_args.kwargs["keep_raw"] is True
+        assert main(_bdot(tmp_path, "--teryt", "1465")) == 0
+        assert "keep_raw" not in manager.download.call_args.kwargs
+
+
+def test_bbox_crs_landcover_and_hsg(tmp_path):
+    expected = BBox(18.6, 49.7, 18.7, 49.8, "EPSG:4326")
+    manager = _manager(tmp_path)
+    with patch(_MANAGER, return_value=manager):
+        main(
+            _bdot(tmp_path, "--bbox", "18.6,49.7,18.7,49.8", "--bbox-crs", "EPSG:4326")
+        )
+    assert manager.download.call_args.kwargs["bbox"] == expected
+    with patch(_HSG) as calc:
+        calc.return_value.calculate_hsg.return_value = MagicMock(
+            inputs=(), file=None, stale=(), ok=True
+        )
+        main(
+            [
+                "soilgrids",
+                "hsg",
+                "--bbox",
+                "18.6,49.7,18.7,49.8",
+                "--bbox-crs",
+                "EPSG:4326",
+                "--depth",
+                "0-5cm",
+                "-o",
+                str(tmp_path),
+            ]
+        )
+    assert calc.return_value.calculate_hsg.call_args.kwargs["bbox"] == expected
+
+
+def test_workers_landcover(tmp_path):
+    manager = _manager(tmp_path)
+    with patch(_MANAGER, return_value=manager):
+        main(_bdot(tmp_path, "--sheet", "N-34-130-D", "--workers", "3"))
+        assert manager.download.call_args.kwargs["workers"] == 3
+        main(_bdot(tmp_path, "--sheet", "N-34-130-D"))
+        assert manager.download.call_args.kwargs["workers"] == 1
+
+
+def test_quiet_suppresses_status_lines_not_notices(tmp_path, capsys):
+    notice = Notice("warning", NO_COVERAGE_SOME, "powiat 1465 bez danych")
+    path = tmp_path / "landcover" / "pl_bdot10k_gpkg" / "teryt" / "1465.gpkg"
+    result = LandCoverAreaResult((LandCoverResult("1465", _file(path)),))
+
+    def download(**kwargs):
+        kwargs["on_notice"](notice)
+        return result
+
+    manager = _manager(tmp_path)
+    manager.download.side_effect = download
+    with patch(_MANAGER, return_value=manager):
+        assert main(_bdot(tmp_path, "--sheet", "N-34-130-D")) == 0
+        loud = capsys.readouterr()
+        assert main(_bdot(tmp_path, "--sheet", "N-34-130-D", "-q")) == 0
+        quiet = capsys.readouterr()
+    assert "nowa wersja" in loud.out and quiet.out == ""
+    assert quiet.err == loud.err == "Warning: powiat 1465 bez danych\n"
+
+
+def test_quiet_hsg_prints_nothing_on_stdout(tmp_path, capsys):
+    with patch(_HSG) as calc:
+        calc.return_value.calculate_hsg.return_value = MagicMock(
+            inputs=(), file=None, stale=(), ok=True
+        )
+        argv = ["soilgrids", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"]
+        assert main([*argv, "-o", str(tmp_path), "-q"]) == 0
+    assert capsys.readouterr().out == ""

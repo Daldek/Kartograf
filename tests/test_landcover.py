@@ -378,7 +378,7 @@ class TestLandCoverCLI:
         result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
         assert result == 1
         captured = capsys.readouterr()
-        assert "Must provide one of" in captured.err
+        assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
     def test_landcover_download_invalid_bbox(self, capsys):
         """Test download with invalid bbox."""

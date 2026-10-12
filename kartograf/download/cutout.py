@@ -36,7 +36,7 @@ from pathlib import Path
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox
+from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.fetch import (
     FileSlot,
@@ -337,7 +337,7 @@ def write_pl_wcs_cutout_sidecar(
         _cutout_descriptor_key(cutout),
         path,
         request={
-            "bbox": [b.min_x, b.min_y, b.max_x, b.max_y],
+            "bbox": bbox_coords(b),
             "bbox_crs": cutout.target_crs,
         },
         vertical_crs=cutout.vertical_crs,

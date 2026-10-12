@@ -100,6 +100,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `transform_bbox`, `parent_request_for`. Co zrobic: skrypty wolajace CLI
   przez `subprocess` moga przejsc na `download_data` z tymi samymi
   wartosciami (`resolution={"pl": "1m", "cz": "2m"}` zamiast `pl=1m,cz=2m`).
+- `kartograf landcover download` i `kartograf soilgrids hsg`: jedno
+  wywolanie biblioteki na komende; nowe flagi `--bbox-crs` (bbox w dowolnym
+  ukladzie z listy, jak w `download`) i `--quiet` (bez linii statusu na
+  stdout; `Info:`/`Warning:` na stderr zostaja), w `landcover download`
+  takze `--layers KODY` (filtr warstw BDOT10k GPKG, np. `SWRS,PTWP`),
+  `--keep-raw` (oryginalny ZIP GUGiK w magazynie) i `--workers N`
+  (rownolegle powiaty obszaru BDOT10k, domyslnie 1). Brak albo kilka
+  wyborow obszaru: blad biblioteki `Podaj dokladnie jeden wybor: ...`
+  zamiast `Must provide one of`/`Provide only one of`.
+- Sidecar: wspolrzedne `request.bbox` i `extra.parent_request.bbox` zawsze
+  jako liczby zmiennoprzecinkowe (`770000.0`), takze dla `BBox` z liczb
+  calkowitych - ten sam plik z CLI i z biblioteki. Co zrobic: nic
+  (porownanie wartosci liczbowych bez zmian); porownania tekstowe sidecarow
+  musza przyjac zapis `.0`.
 
 - Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
   i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa

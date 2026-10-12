@@ -72,6 +72,40 @@ _BBOX_EXPECTED = "Expected: min_x,min_y,max_x,max_y (e.g., 450000,550000,460000,
 _LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
 )
+BBOX_CRS_CHOICES = (
+    "EPSG:2180",
+    "EPSG:4326",
+    "EPSG:2176",
+    "EPSG:2177",
+    "EPSG:2178",
+    "EPSG:2179",
+    "EPSG:5514",
+    "EPSG:3045",
+)
+
+
+def _add_bbox_crs(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--bbox-crs",
+        choices=BBOX_CRS_CHOICES,
+        default="EPSG:2180",
+        help="CRS for --bbox coordinates (default: EPSG:2180)",
+    )
+
+
+def _add_quiet(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--quiet",
+        "-q",
+        action="store_true",
+        help="Suppress progress output",
+    )
+
+
+def _layer_codes(text: str) -> tuple[str, ...]:
+    """``--layers SWRS,PTWP`` -> ``("SWRS", "PTWP")``; codes checked by the library."""
+    return tuple(code.strip() for code in text.split(","))
+
 
 # Admissible values of the download data choices (0.8.0: no defaults): one
 # wording for --help and for the library ``ValidationError`` of a missing value.
@@ -206,21 +240,7 @@ def create_parser() -> argparse.ArgumentParser:
         help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180; "
         "ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: --bbox=-447000,...)",
     )
-    download_parser.add_argument(
-        "--bbox-crs",
-        choices=[
-            "EPSG:2180",
-            "EPSG:4326",
-            "EPSG:2176",
-            "EPSG:2177",
-            "EPSG:2178",
-            "EPSG:2179",
-            "EPSG:5514",
-            "EPSG:3045",
-        ],
-        default="EPSG:2180",
-        help="CRS for --bbox coordinates (default: EPSG:2180)",
-    )
+    _add_bbox_crs(download_parser)
     download_parser.add_argument(
         "--country",
         choices=["pl", "cz", "auto"],
@@ -279,12 +299,7 @@ def create_parser() -> argparse.ArgumentParser:
         "kartograf-plan/1, przy --country auto jeden plan PL i CZ); z --upgrade: "
         "wykonaj plan (pozycje zmienione od planu = blad, bez pobrania)",
     )
-    download_parser.add_argument(
-        "--quiet",
-        "-q",
-        action="store_true",
-        help="Suppress progress output",
-    )
+    _add_quiet(download_parser)
     download_parser.add_argument(
         "--vertical-crs",
         metavar="VCRS",
@@ -422,8 +437,9 @@ def create_parser() -> argparse.ArgumentParser:
     lc_download.add_argument(
         "--bbox",
         metavar="BBOX",
-        help="Bounding box: min_x,min_y,max_x,max_y in EPSG:2180",
+        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180)",
     )
+    _add_bbox_crs(lc_download)
     lc_download.add_argument(
         "--sheet",
         metavar="SHEET",
@@ -466,6 +482,28 @@ def create_parser() -> argparse.ArgumentParser:
         "(archiwum ZIP z plikami Shapefile)",
     )
     lc_download.add_argument(
+        "--layers",
+        metavar="KODY",
+        type=_layer_codes,
+        default=None,
+        help="Tylko BDOT10k GPKG: zostaw wybrane warstwy, kody po przecinku "
+        "(np. SWRS,PTWP); domyslnie wszystkie",
+    )
+    lc_download.add_argument(
+        "--keep-raw",
+        action="store_true",
+        help="Tylko BDOT10k GPKG: zachowaj oryginalny ZIP GUGiK obok pliku "
+        "(wersja surowa w magazynie)",
+    )
+    lc_download.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        default=1,
+        help="Tylko BDOT10k obszaru (wiele powiatow): liczba rownoleglych "
+        "pobran (domyslnie 1)",
+    )
+    lc_download.add_argument(
         "--geometry",
         metavar="FILE",
         help="Geometry file (SHP or GPKG) for area selection",
@@ -499,7 +537,7 @@ def create_parser() -> argparse.ArgumentParser:
         "Q0.5 (mediana), Q0.95 (95. percentyl), "
         "uncertainty (niepewnosc predykcji)",
     )
-    lc_download.set_defaults(quiet=False)
+    _add_quiet(lc_download)
 
     # Landcover list-sources command
     landcover_subparsers.add_parser(
@@ -550,8 +588,9 @@ def create_parser() -> argparse.ArgumentParser:
     sg_hsg.add_argument(
         "--bbox",
         metavar="BBOX",
-        help="Bounding box: min_x,min_y,max_x,max_y in EPSG:2180",
+        help="Bounding box: min_x,min_y,max_x,max_y (default CRS: EPSG:2180)",
     )
+    _add_bbox_crs(sg_hsg)
     sg_hsg.add_argument(
         "--geometry",
         metavar="FILE",
@@ -593,7 +632,7 @@ def create_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print HSG statistics after calculation",
     )
-    sg_hsg.set_defaults(quiet=False)
+    _add_quiet(sg_hsg)
 
     # Cache command group
     cache_parser = subparsers.add_parser(

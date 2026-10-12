@@ -61,6 +61,15 @@ def _same_crs(src: str, dst: str) -> bool:
     return bool(CRS.from_user_input(src) == CRS.from_user_input(dst))
 
 
+def bbox_coords(bbox: BBox) -> list[float]:
+    """``[min_x, min_y, max_x, max_y]`` as floats: the sidecar ``request`` form.
+
+    ``BBox(1, ...)`` and ``BBox(1.0, ...)`` (library call vs parsed CLI flag)
+    must give the same sidecar bytes.
+    """
+    return [float(bbox.min_x), float(bbox.min_y), float(bbox.max_x), float(bbox.max_y)]
+
+
 def validate_bbox(bbox: BBox, *, crs: str | None = None) -> None:
     """
     Validate a bbox.
