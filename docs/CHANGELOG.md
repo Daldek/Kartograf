@@ -475,6 +475,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   listy, `files`) i komunikaty (np. lista arkuszy bez danych GUGiK)
   w kolejnosci zlecenia, nie zakonczenia - to samo zadanie daje zawsze ten
   sam raport (wykryte testem zgodnosci CLI = API).
+- `--check-updates --plan PLIK` z katalogiem PLIKU, ktory nie istnieje:
+  `Error: nie udalo sie zapisac planu <PLIK>: ...` (kod 1) zamiast
+  `Error: FileNotFoundError: ...` z podpowiedzia `KARTOGRAF_DEBUG`
+  (weryfikacja na zywo 2026-10-12).
 
 ## [0.7.2] - 2026-10-11
 
