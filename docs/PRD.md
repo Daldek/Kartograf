@@ -109,7 +109,7 @@ Pobieranie danych wysokościowych NMT z GUGiK w rozdzielczościach 1m i 5m
   awaria pobrania = kod 1 z pełną listą porażek.
 - Pobieranie równoległe arkuszy (`--workers`, domyślnie 4 w CLI; 1
   w bibliotece — `DownloadManager(max_workers=1)`), pomijanie istniejących.
-- Kampanie GUGiK (`--campaigns`, `--min-year`) — sekcja 3.11.
+- Kampanie GUGiK (`--all-campaigns`, `--min-year`) — sekcja 3.11.
 
 #### Capabilities
 ```python
@@ -265,7 +265,7 @@ selection = provider.select_tiles(bbox, year=2024)  # LazTileSelection(tiles, su
 kartograf download --sheet N-34-130-D-d-2-4 --product laz
 kartograf download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12
 kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86
-kartograf download --bbox 530000,382000,533000,386000 --product laz --campaigns all
+kartograf download --bbox 530000,382000,533000,386000 --product laz --all-campaigns
 kartograf download --geometry area.shp --product laz
 ```
 
@@ -278,7 +278,7 @@ kartograf download --geometry area.shp --product laz
   z obszarem pokrywają już wybrane (ramy w EPSG:2180, tolerancja
   `COVERAGE_TOLERANCE_M`); pominięte kafle = `Info:` na stderr.
 - `--year` — tylko ten rocznik (sprawdzany wobec GetCapabilities);
-  `--min-year` — dolna granica `akt_rok`; `--campaigns all` — wszystkie kafle,
+  `--min-year` — dolna granica `akt_rok`; `--all-campaigns` — wszystkie kafle,
   których rama przecina obszar, bez deduplikacji pokryciowej (sekcja 3.11).
   `--year` i `--min-year` wykluczają się.
 - Porażka choć jednego kafla = `Error:` z pełną listą i kod 1 (pobrane kafle
@@ -555,7 +555,7 @@ DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
   piksel dokładnie 2 m / 5 m.
 - Indeks arkuszy SM5 cache'owany w `MetadataCache` (`sheet_cache`, TTL 30 dni;
   `--force` odpytuje na nowo).
-- CZ nie ma kampanii: `--campaigns all`/`--min-year` bez części PL = `Error:`
+- CZ nie ma kampanii: `--all-campaigns`/`--min-year` bez części PL = `Error:`
   przed siecią (sekcja 3.11).
 
 #### Capabilities
@@ -608,7 +608,7 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
   Wynik caly nodata = `Warning:`, kod 0.
 - WCS daje kompozycje serwera, nie wybor najnowszego arkusza
   dokladnie 1 m wg ADR-028; na locie 0,5 m 1 m jest decymacja.
-  Bez wyboru roku i kampanii: `--campaigns all`, flagi roku
+  Bez wyboru roku i kampanii: `--all-campaigns`, flagi roku
   i `--full-sheet` z `--target-crs` = `Error:`.
 - Kazdy przebieg pobiera (nie pomija istniejacego wycinka);
   wynik z tego samego dnia atomowo zastepuje wczesniejszy
@@ -645,14 +645,14 @@ pomiarowych. Kartograf przechowuje każdą pobraną kampanię osobno i jawnie
 wskazuje, która jest "bieżąca".
 
 #### Requirements
-- `--campaigns newest` (domyślnie): najnowsza kampania arkusza wg reguły
+- Domyślnie: najnowsza kampania arkusza wg reguły
   ADR-028 w zakresie lat, rozwiązywana przy każdym uruchomieniu (sieć, gdy
   wygasł cache 7 dni); pobierane są tylko brakujące kampanie.
-- `--campaigns all`: każda kampania arkusza (w zakresie lat) po twardym
+- `--all-campaigns`: każda kampania arkusza (w zakresie lat) po twardym
   filtrze ADR-028, bez limitu liczby.
 - Rok danych (ADR-032): `--year RRRR` = `--min-year RRRR --max-year RRRR`,
   granice domknięte 1900..2100; flagi roku wyznaczają tylko dopuszczalne
-  lata, `--campaigns` liczbę lotów. Najpierw sprawdzenie pełnej listy
+  lata, `--all-campaigns` liczbę lotów. Najpierw sprawdzenie pełnej listy
   kampanii każdego arkusza: dane tylko z innych lat = `YearRangeError`
   (`Error:` z latami i podpowiedzią) i nic nie jest pobierane.
 - Pliki kampanii w `<segment>/kampanie/<data>_<id>/<hierarchia godła>/`
@@ -668,16 +668,16 @@ wskazuje, która jest "bieżąca".
   pełny (`calyArkuszWypelnionyTrescia = TAK`, pełny = w granicach Polski);
   `--full-sheet` / `DownloadManager(full_sheet=True)` dociąga najwyżej
   jeden taki lot na arkusz, gdy najnowszy w zakresie lat nie jest pełny.
-- Skorowidz GUGiK niedostępny (błąd transportu) przy `newest` bez
+- Skorowidz GUGiK niedostępny (błąd transportu) przy domyślnym wyborze bez
   flag roku i `--force` oraz istniejącej lokalnej kampanii: arkusz brany
   z lokalnej kampanii z `Warning:` (errata 5 ADR-030); biblioteka:
   `SheetFetch.unverified` / `DownloadResult.unverified` /
   `PlCutoutResult.unverified`.
-- Tylko PL: zadanie bez części PL z `--campaigns all`, flagą roku albo
+- Tylko PL: zadanie bez części PL z `--all-campaigns`, flagą roku albo
   `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` =
-  `Info:`, CZ pobierane w bieżącej wersji. Wycinek `--target-crs` nie
-  przyjmuje `all`, flag roku ani `--full-sheet`.
-- LAZ: `--campaigns all` = kafle bez deduplikacji pokryciowej, flagi roku
+  `Info:`, CZ pobierane w bieżącej wersji. Wycinek `--target-crs`
+  nie przyjmuje `--all-campaigns`, flag roku ani `--full-sheet`.
+- LAZ: `--all-campaigns` = kafle bez deduplikacji pokryciowej, flagi roku
   = granice `akt_rok`; LAZ bez dowiązań i bez `--full-sheet`.
 
 #### Capabilities
@@ -695,9 +695,9 @@ manager.last_result.without_full   # arkusze bez pełnego lotu w zakresie
 
 #### CLI Commands
 ```bash
-kartograf download --sheet N-34-130-D-d-2-4 --campaigns all
+kartograf download --sheet N-34-130-D-d-2-4 --all-campaigns
 kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024
-kartograf download --bbox 530000,382000,533000,386000 --campaigns all --min-year 2022
+kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet
 ```
 
@@ -919,7 +919,7 @@ mypy >= 1.13           # Type checking
   poprzedni plik
 - Skip-existing dotyczy arkuszy i innych pobran; wycinek PL WCS
   nigdy nie pomija istniejacego pliku, pobiera przy kazdym wywolaniu.
-  Arkusze pod `--campaigns newest` sprawdzaja dostepnosc nowszej kampanii
+  Arkusze przy domyślnym wyborze sprawdzają dostępność nowszej kampanii
 - Integralność treści: plik kampanii GUGiK weryfikowany formatem treści
   (nagłówek AAIGrid / sygnatura TIFF); brak sum kontrolnych
 

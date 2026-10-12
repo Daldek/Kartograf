@@ -102,7 +102,7 @@ def sidecar(path: Path) -> Path:
 
 def test_end_to_end_all_on_real_c14_bodies(tmp_path):
     m = DownloadManager(
-        tmp_path, provider=GugikProvider(session=c14_session(G)), campaigns="all"
+        tmp_path, provider=GugikProvider(session=c14_session(G)), all_campaigns=True
     )
     m.download_sheet(G)
 
@@ -150,7 +150,7 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
     )
     session = nmt_session(G2, "nmt1_evr", downloads={url: XYZ_HEAD})
     m = DownloadManager(
-        tmp_path, provider=GugikProvider(session=session), campaigns="all"
+        tmp_path, provider=GugikProvider(session=session), all_campaigns=True
     )
     m.download_sheet(G2)
 

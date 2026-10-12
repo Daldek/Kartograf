@@ -26,7 +26,7 @@ from kartograf.download.campaigns import (
     in_year_range,
     measure_coverage,
     record_year,
-    validate_campaign_args,
+    validate_year_bounds,
     verify_file_format,
     verify_record_url,
     verify_record_vertical_crs,
@@ -265,10 +265,11 @@ class CampaignProvider(Protocol):
         self,
         sheet: str,
         *,
-        campaigns: str = "newest",
+        all_campaigns: bool = False,
         min_year: int | None = None,
         max_year: int | None = None,
-    ) -> list[SkorowidzRecord]: ...
+    ) -> list[SkorowidzRecord]:
+        """False selects the newest flight within year bounds; True selects all."""
 
     def download_record(self, record: SkorowidzRecord, output_path: Path) -> Path: ...
 
@@ -367,7 +368,7 @@ class DownloadManager:
         resolution: str = "1m",
         max_workers: int = 1,
         sidecar_extra: dict | None = None,
-        campaigns: str = "newest",
+        all_campaigns: bool = False,
         min_year: int | None = None,
         max_year: int | None = None,
         full_sheet: bool = False,
@@ -404,27 +405,27 @@ class DownloadManager:
         sidecar_extra : dict, optional
             Extra fields merged into the `extra` of every sidecar (stage 1:
             `parent_request` in bbox/geometry mode).
-        campaigns : str, optional
-            ADR-030 campaign strategy, i.e. how many flights per sheet:
-            ``"newest"`` (default) = the newest flight within the year bounds,
-            ``"all"`` = every flight within them. Year bounds only restrict the
-            admissible years (ADR-032 point 3). Only PL GUGiK supports campaigns.
+        all_campaigns : bool, optional
+            False (default) selects the newest flight per sheet within the year
+            bounds; True selects every flight within them. Year bounds only
+            restrict admissible years. Only PL GUGiK supports campaigns;
+            LAZ with True does not deduplicate coverage.
         min_year, max_year : int, optional
             Inclusive bounds on the campaign acquisition year.
         full_sheet : bool, optional
-            ADR-033: with ``campaigns="newest"``, when the newest flight within
+            ADR-033: with ``all_campaigns=False``, when the newest flight within
             the year bounds is not declared full, also download the newest
             flight declared full within them (at most one extra flight per
-            sheet) and link it in ``full_sheet/``. No effect with ``all``.
+            sheet) and link it in ``full_sheet/``. No effect with True.
 
         Raises
         ------
         ValidationError
-            Invalid strategy/bounds or a provider without campaigns used with
-            a year bound, ``campaigns="all"`` or ``full_sheet=True``;
+            Invalid year bounds or a provider without campaigns used with
+            a year bound, ``all_campaigns=True`` or ``full_sheet=True``;
             incompatible resolution/CRS.
         """
-        validate_campaign_args(campaigns, min_year, max_year)
+        validate_year_bounds(min_year, max_year)
         # The "5m => EVRF2007" rule (D11): without a provider the factory
         # rejects 5m + KRON86 with ValidationError (0.7.1, no silent swap).
         self._provider = provider or create_nmt_provider(
@@ -464,16 +465,13 @@ class DownloadManager:
             getattr(self._provider, "supports_campaigns", False) is True
         )
         if not self._campaign_aware and (
-            campaigns == "all"
-            or min_year is not None
-            or max_year is not None
-            or full_sheet
+            all_campaigns or min_year is not None or max_year is not None or full_sheet
         ):
             raise ValidationError(
                 f"Provider {self._provider.name} nie obsluguje kampanii "
-                f"(--campaigns/--min-year/--max-year/--year/--full-sheet)"
+                f"(--all-campaigns/--min-year/--max-year/--year/--full-sheet)"
             )
-        self._campaigns = campaigns
+        self._all_campaigns = all_campaigns
         self._min_year = min_year
         self._max_year = max_year
         self._full_sheet = full_sheet
@@ -492,9 +490,9 @@ class DownloadManager:
         return self._resolution
 
     @property
-    def campaigns(self) -> str:
-        """Campaign strategy (``newest``/``all``)."""
-        return self._campaigns
+    def all_campaigns(self) -> bool:
+        """False selects the newest flight in the year range; True selects all."""
+        return self._all_campaigns
 
     @property
     def full_sheet(self) -> bool:
@@ -547,7 +545,7 @@ class DownloadManager:
         ) -> tuple[str, tuple[SkorowidzRecord, ...], tuple[int, ...], Exception | None]:
             try:
                 records = self._campaign_provider.resolve_campaigns(
-                    sheet, campaigns="all"
+                    sheet, all_campaigns=True
                 )
             except DownloadError as e:
                 return sheet, (), (), e
@@ -565,7 +563,7 @@ class DownloadManager:
                     reverse=True,
                 )
             )
-            if self._campaigns == "newest":
+            if not self._all_campaigns:
                 selected = selected[:1]
             return sheet, selected, years, None
 
@@ -954,7 +952,7 @@ class DownloadManager:
 
         ``full_sheet=True`` with ``newest``: when the chosen record is not
         declared full, the full list within the year bounds
-        (``resolve_campaigns(campaigns="all")``) supplies the newest
+        (``resolve_campaigns(all_campaigns=True)``) supplies the newest
         declared-full record as one extra campaign; none =
         ``SheetFetch.no_full_flight``. An index error of that call is a
         sheet failure, as with ``all``.
@@ -975,11 +973,11 @@ class DownloadManager:
         if records is None:
             try:
                 chosen = self._campaign_provider.resolve_campaigns(
-                    sheet, campaigns=self._campaigns, min_year=self._min_year
+                    sheet, all_campaigns=self._all_campaigns, min_year=self._min_year
                 )
             except DownloadError as e:
                 if (
-                    self._campaigns == "newest"
+                    not self._all_campaigns
                     and not self._has_range
                     and skip_existing
                     and _is_transport_failure(e)
@@ -993,12 +991,12 @@ class DownloadManager:
         no_full_flight = False
         if (
             self._full_sheet
-            and self._campaigns == "newest"
+            and not self._all_campaigns
             and chosen[0].full_sheet is not True
         ):
             pool = self._campaign_provider.resolve_campaigns(
                 sheet,
-                campaigns="all",
+                all_campaigns=True,
                 min_year=self._min_year,
                 max_year=self._max_year,
             )
@@ -1007,7 +1005,12 @@ class DownloadManager:
                 no_full_flight = True
             else:
                 chosen = [*chosen, extra_full]
-        logger.info("%s: %d kampanii (%s)", sheet, len(chosen), self._campaigns)
+        logger.info(
+            "%s: %d kampanii (%s)",
+            sheet,
+            len(chosen),
+            "all" if self._all_campaigns else "newest",
+        )
         downloaded: list[Path] = []
         reused: list[Path] = []
         local: list[tuple[CampaignRef, Path]] = []
@@ -1121,7 +1124,7 @@ class DownloadManager:
                 problems.append(f"dowiazanie {full}: {full_link_error}")
             raise DownloadError(f"{sheet}: " + "; ".join(problems), sheet=sheet)
         better_coverage = None
-        if self._has_range and self._campaigns == "all" and linked_target is not None:
+        if self._has_range and self._all_campaigns and linked_target is not None:
             better_coverage = self._add_range_flights(std, local, linked_target)
         # ADR-032 point 3 (U15): the link never moves back, so with year bounds
         # it may keep pointing at a newer local flight this request did not pick.
@@ -1614,7 +1617,10 @@ class DownloadManager:
         (R13), plus all available years for range-checked requests. Failure
         is a campaign ``DownloadError`` (the caller removes the data file).
         """
-        request: dict = {"sheet": sheet, "campaigns": self._campaigns}
+        request: dict = {
+            "sheet": sheet,
+            "campaigns": "all" if self._all_campaigns else "newest",
+        }
         if self._full_sheet:  # describes the request, not this flight
             request["full_sheet"] = True
         if self._min_year is not None:

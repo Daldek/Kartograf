@@ -177,7 +177,7 @@ patrz sekcja 3.2, znane ograniczenie.
 - Kafle drobniejsze niż 1:10000 (jedno godło 1:10000 → wiele kafli .laz)
 - url_do_pobrania brany wprost z atrybutu WFS (godło kafla nieparsowane)
 - Domyślnie najnowszy kafel per obszar (ADR-029); flagi --year/--min-year/--max-year
-  (przedział lat, ADR-032), --vertical-crs, --min-density, --campaigns (sekcja 2.12)
+  (przedział lat, ADR-032), --vertical-crs, --min-density, --all-campaigns (sekcja 2.12)
 - Dwa układy wysokościowe: EVRF2007 (domyślny, 2018+), KRON86 (legacy, 2010-2019)
 - Pobieranie równoległe (--workers), pomijanie istniejących plików
 - Biblioteka: download_laz_area (wybór + pobranie + sidecary, wynik
@@ -270,12 +270,12 @@ kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto   # bbox trans
 kartograf download --bbox ... --country cz --target-crs EPSG:2180   # reprojekcja lokalna (pinned)
 kartograf download --bbox ... --country pl --target-crs EPSG:2180   # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
 kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007    # Bpv -> EVRF2007 (EPSG:5621)
-kartograf download --sheet <godlo> --campaigns all              # wszystkie kampanie GUGiK arkusza (ADR-030)
+kartograf download --sheet <godlo> --all-campaigns              # wszystkie kampanie GUGiK arkusza (ADR-030)
 kartograf download --sheet <godlo> --year 2025                  # najnowszy lot z roku (ADR-032)
-kartograf download --sheet <godlo> --year 2025 --campaigns all  # wszystkie loty z roku
+kartograf download --sheet <godlo> --year 2025 --all-campaigns  # wszystkie loty z roku
 kartograf download --sheet <godlo> --min-year 2024              # najnowszy lot, nie starszy niż rok
 kartograf download --bbox ... --max-year 2022           # najnowszy lot do roku (dowiązanie nigdy wstecz)
-kartograf download --bbox ... --product laz --campaigns all   # LAZ bez deduplikacji pokrycia
+kartograf download --bbox ... --product laz --all-campaigns   # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod>
 kartograf landcover download --source corine --sheet <arkusz>
 kartograf landcover download --source soilgrids --property <param>  # --sheet/--bbox (bez --teryt)
@@ -350,12 +350,12 @@ from kartograf import (
 
 ```python
 # Strategie (tylko PL; CZ zawsze bieżąca mozaika):
-- --campaigns newest (domyślnie): najnowszy rekord skorowidza (ADR-028)
+- Bez `--all-campaigns` (domyślnie): najnowszy rekord skorowidza (ADR-028)
   w zakresie lat, sprawdzany przy każdym uruchomieniu po wygaśnięciu cache (7 dni)
-- --campaigns all: każda kampania arkusza (w zakresie lat) po twardym filtrze ADR-028
+- `--all-campaigns`: każda kampania arkusza (w zakresie lat) po twardym filtrze ADR-028
 - Rok danych (ADR-032; NMT/NMPT/orto: aktualnosc, LAZ: akt_rok):
   --year RRRR = --min-year RRRR --max-year RRRR; flagi roku wyznaczają tylko
-  dopuszczalne lata, --campaigns liczbę lotów (model A; każda kombinacja dozwolona)
+  dopuszczalne lata, --all-campaigns liczbę lotów (model A; każda kombinacja dozwolona)
 - Najpierw sprawdzenie pełnej listy kampanii każdego arkusza, potem pobranie:
   arkusz z danymi tylko z innych lat = Error: z latami i podpowiedzią, nic nie
   pobrane; arkusz bez danych = Warning: (pominięty); awaria skorowidza = Error:
@@ -364,23 +364,23 @@ from kartograf import (
 - Drugie dowiązanie full_sheet/ (ADR-033): najnowszy lokalny lot z
   calyArkuszWypelnionyTrescia = TAK (pełny = w granicach Polski), obok
   ścieżki standardowej; --full-sheet dociąga najwyżej jeden lot na arkusz,
-  gdy najnowszy w zakresie nie jest pełny (z all bez skutku); Warning: E13
+  gdy najnowszy w zakresie nie jest pełny (z --all-campaigns bez skutku); Warning: E13
   wskazuje full_sheet/ albo podpowiada --full-sheet
-- LAZ: --campaigns all (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029);
+- LAZ: --all-campaigns (kafle z ramą przecinającą obszar, bez deduplikacji ADR-029);
   przedział lat z kontrolą pokrycia kafli referencji (ADR-032 P8); --year
   wyklucza się z --min-year/--max-year (Error:)
 - Wycinek WCS `--target-crs`: kompozycja serwera bez wyboru roku
-  lub kampanii (all/--year/--min-year/--max-year/--full-sheet =
+  lub kampanii (--all-campaigns/--year/--min-year/--max-year/--full-sheet =
   Error:); LAZ z --full-sheet = Error:
-- CZ nie ma kampanii ani wyboru roku: zadanie bez części PL z --campaigns all,
+- CZ nie ma kampanii ani wyboru roku: zadanie bez części PL z --all-campaigns,
   flagą roku albo --full-sheet = Error: przed siecią; obszar PL+CZ pod auto =
   Info:, CZ w bieżącej wersji
 - Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF),
   format z pola `format` rekordu; sidecar kampanii obowiązkowy
-- Skorowidz GUGiK niedostępny (błąd transportu) przy newest bez flag roku
+- Skorowidz GUGiK niedostępny (błąd transportu) przy domyślnym wyborze bez flag roku
   i --force, z lokalną kampanią: arkusz z lokalnej kampanii + Warning:,
-  kod bez zmian (errata 5 ADR-030); all/flaga roku/brak lokalnej = błąd
-- API: DownloadManager(campaigns=, min_year=, max_year=, full_sheet=),
+  kod bez zmian (errata 5 ADR-030); --all-campaigns/flaga roku/brak lokalnej = błąd
+- API: DownloadManager(all_campaigns: bool = False, min_year=, max_year=, full_sheet=),
   .check_year_range(), YearRangeError, available_years (providery GUGiK),
   SheetFetch (.unverified, .better_coverage, .full_link),
   DownloadResult (.unverified, .reused_campaign_files, .better_coverage,
@@ -664,7 +664,7 @@ kartograf/
 │   ├── links.py              # Dowiązanie ścieżki standardowej do najnowszej kampanii (hardlink -> kopia)
 │   ├── cutout.py             # Wycinek PL --target-crs jako API (download_pl_cutout; prepare/select/run)
 │   ├── laz.py                # Kafle LAZ jako API (download_laz_area, run_laz_download; ADR-029)
-│   ├── manager.py            # DownloadManager (campaigns=, min_year=, sidecar_extra=; download_sheets/expand_sheets)
+│   ├── manager.py            # DownloadManager (all_campaigns=, min_year=, sidecar_extra=; download_sheets/expand_sheets)
 │   └── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
 ├── landcover/             # Land Cover management
 │   └── manager.py
@@ -728,7 +728,7 @@ pyshp >= 2.3.0         # Shapefile reading
 - Wycinek NMT/NMPT PL 1 m (--target-crs / download_pl_cutout): jeden GeoTIFF
   z WCS GUGiK na siatce arkuszy (EPSG:2180) albo w EPSG:5514/3045; poza
   ladem PL (maska PRG) nodata -9999
-- Kampanie GUGiK: --campaigns newest/all, --year/--min-year/--max-year; pliki
+- Kampanie GUGiK: --all-campaigns, --year/--min-year/--max-year; pliki
   w kampanie/, ścieżka standardowa jako dowiązanie twarde (albo kopia) do najnowszej
 - LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area
 - Integracja z Hydrograf/Hydrolog działa
