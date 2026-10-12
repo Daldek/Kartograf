@@ -29,7 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata 1-8, ADR-032 + errata 2, ADR-033) | ✅ Gotowy | `--all-campaigns` (od 0.8.0-dev; wczesniej `--campaigns {newest,all}`), `--year`/`--min-year`/`--max-year` (v0.7.2), `--full-sheet`; pliki w `<segment>/kampanie/`, sciezka standardowa i `full_sheet/` = hardlink/kopia; fallback offline I-1 = errata 5 (`docs/DECISIONS.md`); zweryfikowany na zywo (`docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-10-full-sheet-link/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`) |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | v0.7.2: WCS 1 m z maska ladu PRG, data w nazwie, NMT i NMPT; NMPT `download_bbox` float32; kawalki ASC NMPT 4 Mpx coverage (ADR-035 errata 1); zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-11-test-przed-0.7.2/raport.md`). Arkuszowy tor ADR-027 usuniety na `develop` (0.8.0-dev, ADR-035 errata 2) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): spec zaakceptowany, plan 1/3 gotowy; zmiany lamiace 0.8.0 wdrozone na `develop` 2026-10-12 — nastepnie rebase `feat/versioned-store` i plan 1/3 |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plan 1/3 wykonany na `feat/versioned-store`, plan 2/3 napisany (2026-10-12, rewizja specu D26-D28), plan 3/3 do napisania |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -103,13 +103,15 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec drugiej sesji):**
-> 1. **Plan 1/3 magazynu wersjonowanego ZROBIONY** na galezi
->    `feat/versioned-store` (Task 1-9, ADR-036, CHANGELOG [0.8.0] na
->    galezi; sesja "plan 1/3" nizej). Galaz trafia do `develop` dopiero po
->    planie 3/3. Nastepny krok: napisac plan 2/3 (inwentaryzacja sygnalow
->    spec 8, LAZ, CZ, wycinki `bbox/` D15, `download_bbox`, `extra.http`)
->    na podstawie specu i stanu galezi.
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec trzeciej sesji):**
+> 1. **Plan 2/3 magazynu wersjonowanego NAPISANY** na galezi
+>    `feat/versioned-store` (`ce6a45b`):
+>    `docs/superpowers/plans/2026-10-12-versioned-store-2-laz-cz-cutouts.md`
+>    (Task 1-13; sesja "plan 2/3" nizej). Nastepny krok: przeglad planu
+>    przez uzytkownika, potem realizacja od Task 1 (inwentaryzacja na
+>    zywo — zapytac o katalog danych). Spec: rewizja 2026-10-12, D26-D28.
+>    Plan 1/3 ZROBIONY (Task 1-9, ADR-036, CHANGELOG [0.8.0] na galezi).
+>    Galaz trafia do `develop` dopiero po planie 3/3.
 > 2. Udzial SMB bez `serverino` (`samefile` falszywe dla hardlinkow):
 >    ROZWIAZANE na galezi (`1c84b3e`, decyzja uzytkownika 2026-10-12) —
 >    `linked_version` potwierdza dowiazanie trescia (oba pliki > 1 link,
@@ -121,7 +123,7 @@
 >    `docs/research/2026-10-12-test-0.8.0/raport.md`).
 > **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
 > NIEWYPCHNIETE na `origin`; `feat/versioned-store` po rebase na `develop`
-> (2026-10-12), z planem 1/3 i poprawka `1c84b3e` — rozjechana z `origin`
+> (2026-10-12), z planem 1/3, poprawka `1c84b3e` i planem 2/3 `ce6a45b` — rozjechana z `origin`
 > (wymaga `push --force-with-lease`). Push tylko za zgoda uzytkownika
 > (2026-10-12: "nic teraz").
 > **PROGRESS tylko na `develop`:** galaz nie zmienia `docs/PROGRESS.md`
@@ -134,9 +136,10 @@
 > (ADR-031 errata 1); `--all-campaigns` (ADR-032 errata 2); bez wartosci
 > domyslnych wplywajacych na dane (ADR-004 errata 1, ADR-023 errata 2) —
 > CHANGELOG [0.8.0] BREAKING.
-> **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11, decyzje D1-D24
-> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, plan 1/3
-> i ADR-036 na galezi `feat/versioned-store`). Samoopisowe nazwy
+> **Magazyn wersjonowany:** spec ZAAKCEPTOWANY 2026-10-11, decyzje D1-D24,
+> rewizja 2026-10-12 D26-D28
+> (`docs/superpowers/specs/2026-10-08-versioned-store-design.md`, plany 1/3
+> i 2/3 oraz ADR-036 na galezi `feat/versioned-store`). Samoopisowe nazwy
 > plikow (proponowane D25) ODRZUCONE 2026-10-12 — parametry niesie
 > sciezka. Poprawki czytelnosci ukladu na pozniej: backlog "Do v1.0.0".
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
@@ -158,6 +161,28 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 (trzecia) — weryfikacja specu i plan 2/3 magazynu wersjonowanego
+
+- Stan po planie 1/3 sprawdzony na galezi (`1c84b3e`): `versions.py`,
+  `updates.py`, tor bez kampanii, tymczasowe odrzucenie trybow dla LAZ, CZ,
+  `--target-crs` i `--country auto` (`_reject_update_modes`).
+- Weryfikacja specu wzgledem kodu i probnych `HEAD` (bez pobierania
+  danych): kafel LAZ tylko `Content-Length`; plik SM5 CUZK (`openzu`)
+  `ETag` + `Last-Modified`; `ImageServer?f=json` CUZK bez pola edycji.
+  Decyzje uzytkownika (spec D26-D28): LAZ wersjonowany per plik (nazwa
+  kafla niesie id rekordu; nowszy nalot pobiera sie domyslnie — wyjatek
+  od D5); `DownloadManager.download_bbox` usuniete (od v0.2.0 `dace652`,
+  ADR-004; pisze w korzen `--output` i nadpisuje; Hydrograf go nie wola);
+  `Content-Length` nie jest sygnalem uzupelniajacym. Doprecyzowanie:
+  `update_signal` per kanal dostepu (`AccessChannel`).
+- Plan 2/3 (`ce6a45b`): inwentaryzacja na zywo (Task 1, takze zrodla planu
+  3/3), `update_signal`, sygnal HTTP w transporcie, wspolna polityka
+  `download/fetch.py` (+ D23 dla `http`), `download/plan.py` z torem
+  pozycji, LAZ, arkusze CZ w bibliotece (`download/cz_sheets.py`), wycinki
+  CZ i PL na wersjach (D15), usuniecie `download_bbox`, CLI dla wszystkich
+  torow `download`, dokumentacja, weryfikacja na zywo. Kodu nie zmieniano;
+  brama nieuruchamiana (tylko dokumenty).
 
 ### Sesja 2026-10-12 (druga) — rebase, plan 1/3 magazynu wersjonowanego, test na zywo 0.8.0
 
