@@ -38,7 +38,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
         "pl=1m,cz=2m",
         "--vertical-crs",
         "EVRF2007",
-        "--system",
+        "--sheet-system",
         "2000",
         "--scale",
         "1:2000",
@@ -57,7 +57,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
     assert kwargs["bbox"] == BBox(18.6, 49.73, 18.66, 49.76, "EPSG:4326")
     assert kwargs["resolution"] == {"pl": "1m", "cz": "2m"}
     assert kwargs["vertical_crs"] == "EVRF2007"
-    assert (kwargs["country"], kwargs["system"], kwargs["scale"]) == (
+    assert (kwargs["country"], kwargs["sheet_system"], kwargs["scale"]) == (
         "auto",
         "2000",
         "1:2000",
@@ -77,7 +77,8 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
                 "obszar",
                 "--country",
                 "pl",
-                "--target-crs",
+                "--cutout",
+                "--horizontal-crs",
                 "EPSG:2180",
                 "-o",
                 str(tmp_path),
@@ -85,7 +86,8 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
         )
     kwargs = download.call_args.kwargs
     assert (kwargs["geometry"], kwargs["layer"]) == (shp, "obszar")
-    assert kwargs["target_crs"] == "EPSG:2180" and kwargs["bbox"] is None
+    assert kwargs["cutout"] is True and kwargs["horizontal_crs"] == "EPSG:2180"
+    assert kwargs["bbox"] is None
 
 
 def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):

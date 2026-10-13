@@ -175,11 +175,11 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
     result = cz_cutout.download_cz_cutout(
         B,
         output_dir=tmp_path,
-        target_crs="EPSG:2180",
+        horizontal_crs="EPSG:2180",
         vertical_crs="EVRF2007",
         resolution="2m",
     )
-    assert seen["target_crs"] == "EPSG:2180" and seen["vertical_crs"] == "EVRF2007"
+    assert seen["horizontal_crs"] == "EPSG:2180" and seen["vertical_crs"] == "EVRF2007"
     assert result.file is not None
     meta = json.loads(
         result.file.path.with_name(result.file.path.name + ".meta.json").read_text()
@@ -187,9 +187,9 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
     assert meta["horizontal_crs"] == "EPSG:2180"
 
 
-def test_native_target_crs_gives_native_provider(tmp_path, monkeypatch):
-    """P9d: ``target_crs="EPSG:5514"`` (native) -> provider without
-    reprojection (``target_crs=None``); an all-nodata result is a notice."""
+def test_native_horizontal_crs_gives_native_provider(tmp_path, monkeypatch):
+    """P9d: ``horizontal_crs="EPSG:5514"`` (native) -> provider without
+    reprojection (``horizontal_crs=None``); an all-nodata result is a notice."""
     from kartograf.download import cz_cutout
 
     seen = {}
@@ -203,11 +203,11 @@ def test_native_target_crs_gives_native_provider(tmp_path, monkeypatch):
     result = cz_cutout.download_cz_cutout(
         native,
         output_dir=tmp_path,
-        target_crs="EPSG:5514",
+        horizontal_crs="EPSG:5514",
         vertical_crs="EVRF2007",
         resolution="2m",
     )
-    assert seen["target_crs"] is None
+    assert seen["horizontal_crs"] is None
     assert result.file is not None
     meta = json.loads(
         result.file.path.with_name(result.file.path.name + ".meta.json").read_text()
@@ -225,7 +225,11 @@ def test_native_target_crs_gives_native_provider(tmp_path, monkeypatch):
 
 
 # Selection shared by ``download_cz_cutout`` and ``check_cz_cutout``.
-SELECTION = {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "resolution": "2m"}
+SELECTION = {
+    "horizontal_crs": "EPSG:2180",
+    "vertical_crs": "EVRF2007",
+    "resolution": "2m",
+}
 
 
 def test_check_cz_cutout_same_args_as_download(tmp_path, monkeypatch):

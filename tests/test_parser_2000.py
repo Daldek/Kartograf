@@ -1694,7 +1694,9 @@ class TestFindSheets2000DenseEnvelope:
     def test_row_across_central_meridian_is_kept(self):
         from kartograf.core.sheet_parser import find_sheets_for_bbox
 
-        result = find_sheets_for_bbox(self.BBOX, system="2000", target_scale="1:10000")
+        result = find_sheets_for_bbox(
+            self.BBOX, sheet_system="2000", target_scale="1:10000"
+        )
         assert {"6.135.17", "6.135.18", "6.135.19"} <= set(result)
         assert len(result) == 16
 

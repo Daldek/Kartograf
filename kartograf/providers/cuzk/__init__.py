@@ -21,14 +21,14 @@ def create_dmr_provider(
     resolution: str,
     session: requests.Session | None = None,
     cache: MetadataCache | None = None,
-    target_crs: str | None = None,
+    horizontal_crs: str | None = None,
     *,
     vertical_crs: str,
 ) -> CuzkDmrProvider:
     """Build CZ DMR: 2m DMR 5G or 5m DMR 4G (SM5 sheets).
 
     ``vertical_crs`` is "Bpv" (native Baltic heights) or "EVRF2007"
-    (reprojected European heights). ``target_crs=None`` keeps native
+    (reprojected European heights). ``horizontal_crs=None`` keeps native
     EPSG:5514; ``session=None`` creates a session and ``cache=None``
     disables metadata caching.
     """
@@ -40,6 +40,6 @@ def create_dmr_provider(
         resolution=resolution,
         session=session,
         cache=cache,
-        target_crs=target_crs,
+        horizontal_crs=horizontal_crs,
         vertical_crs=vertical_crs,
     )

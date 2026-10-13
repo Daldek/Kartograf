@@ -191,9 +191,17 @@ def _no_pl_wcs():
 TRACKS = {
     "laz": ("--product", "laz", "--sheet", LAZ_SHEET, "--vertical-crs", "EVRF2007"),
     "cz-sheet": ("--sheet", "302_5550", *CZ_2M),
-    "cz-bbox": (*CZ_BBOX, "--country", "cz", *CZ_2M),
-    "pl-cutout": (*PL_BBOX, *PL_1M, "--target-crs", "EPSG:5514"),
-    "auto": (*BORDER, *AUTO, "--target-crs", "EPSG:3045"),
+    "cz-bbox": (
+        *CZ_BBOX,
+        "--country",
+        "cz",
+        *CZ_2M,
+        "--cutout",
+        "--horizontal-crs",
+        "EPSG:5514",
+    ),
+    "pl-cutout": (*PL_BBOX, *PL_1M, "--cutout", "--horizontal-crs", "EPSG:5514"),
+    "auto": (*BORDER, *AUTO, "--cutout", "--horizontal-crs", "EPSG:3045"),
 }
 
 
@@ -231,7 +239,8 @@ def test_check_updates_auto_writes_merged_plan(tmp_path, capsys):
             out,
             *BORDER,
             *AUTO,
-            "--target-crs",
+            "--cutout",
+            "--horizontal-crs",
             "EPSG:3045",
             "--check-updates",
             "--plan",
@@ -250,7 +259,7 @@ def test_upgrade_plan_executes_only_planned_tracks(tmp_path, capsys):
     plan = tmp_path / "plan.json"
     out = tmp_path / "out"
     cz = _cz_provider_mock()
-    argv = (*BORDER, *AUTO, "--target-crs", "EPSG:3045")
+    argv = (*BORDER, *AUTO, "--cutout", "--horizontal-crs", "EPSG:3045")
     with patch(_CZ_FACTORY_PATCH, return_value=cz), _no_pl_wcs() as prg:
         _download(out, *argv, "--check-updates", "--plan", str(plan))
         payload = json.loads(plan.read_text(encoding="utf-8"))

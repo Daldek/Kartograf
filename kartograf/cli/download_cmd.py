@@ -372,9 +372,10 @@ def _download_arguments(args: argparse.Namespace) -> dict:
         "country": args.country,
         "vertical_crs": _per_country(args.vertical_crs, "--vertical-crs"),
         "resolution": _per_country(args.resolution, "--resolution"),
-        "system": getattr(args, "system", None),
+        "sheet_system": getattr(args, "sheet_system", None),
         "scale": getattr(args, "scale", None),
-        "target_crs": getattr(args, "target_crs", None),
+        "cutout": getattr(args, "cutout", False),
+        "horizontal_crs": getattr(args, "horizontal_crs", None),
         "year": getattr(args, "year", None),
         "min_year": getattr(args, "min_year", None),
         "max_year": getattr(args, "max_year", None),
@@ -436,7 +437,7 @@ def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> 
             args.product == "laz"
             or len(report.files) > 1
             or bool(getattr(args, "scale", None))
-            or (args.sheet is None and getattr(args, "target_crs", None) is None)
+            or (args.sheet is None and not getattr(args, "cutout", False))
         )
         if several and (report.files or args.product == "laz"):
             _print_version_summary(

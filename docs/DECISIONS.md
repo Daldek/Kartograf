@@ -44,11 +44,11 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) | Walidacja warstw WMS przez GetCapabilities | 2026-03-24 | Przyjeta — czesciowo zastapiona przez [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (warstwy wylacznie z GetCapabilities, bez list zaszytych i fallbacku; errata 3) |
 | [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) | LAZ (chmury punktów LIDAR) — discovery przez WFS, area-based | 2026-06-24 | Przyjeta — czesciowo zastapiona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (regula newest-per-tile) |
 | [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) | Architektura zrodel wielokrajowych — deskryptory, rejestry, sidecar, twarda polityka transformacji (etap 0) | 2026-08-10 | Przyjeta — uzupelniona przez [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (formalny interfejs silnika: `CuzkClient`, (a)) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (angielskie nazwy kluczy sidecara) |
-| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0); errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0) |
+| [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (obszar CZ zawsze wycinkiem; teraz `--cutout`); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0); errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0) |
 | [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
 | [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i [ADR-036](#adr-036-magazyn-wersjonowany) (`<segment>/versions/`; errata 3); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
-| [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
+| [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwa `--target-crs`, wlaczanie wycinka flaga ukladu); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback), uzupelnia [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`record_cache`) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`--campaigns all`/`--min-year` dla LAZ; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial lat i pokrycie referencji; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile), uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) ((f).1 obejmuje LAZ) |
 | [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7) i [ADR-036](#adr-036-magazyn-wersjonowany) (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
@@ -58,7 +58,8 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, plan 2/3) |
 | [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
-| [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta; uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
+| [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
+| [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
 
 ---
 
@@ -579,7 +580,7 @@ ktoregokolwiek rocznika po ponowieniach konczy `discover_tiles`
 ## ADR-023: Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1)
 
 **Data:** 2026-08-11
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ) i ADR-034 (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia ADR-022; errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-024 (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i ADR-027 (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6) i ADR-038 (obszar CZ zawsze wycinkiem; teraz `--cutout`); uzupelniona przez ADR-029 ((f).1 obejmuje LAZ) i ADR-034 (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia ADR-022; errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0)
 
 **Kontekst:** Etap 1 dodaje pierwsze zagraniczne zrodlo danych — CUZK (Czeski
 Urzad Zememericky a Katastralni), DMR 5G (2 m, `exportImage`) i DMR 4G (5 m,
@@ -1283,7 +1284,7 @@ deskryptorow, tokeny tresci lowercase), pod nimi `teryt/<T>`,
 ## ADR-027: --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp)
 
 **Data:** 2026-08-28
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-035 (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035); uzupelniona przez ADR-030 (tylko przestarzaly tor arkuszowy); zastepuje czesc ADR-023 (`--target-crs` wylacznie dla CZ) i ADR-003 (bbox = WCS GeoTIFF)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-035 (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035) i ADR-038 (nazwa `--target-crs`, wlaczanie wycinka flaga ukladu); uzupelniona przez ADR-030 (tylko przestarzaly tor arkuszowy); zastepuje czesc ADR-023 (`--target-crs` wylacznie dla CZ) i ADR-003 (bbox = WCS GeoTIFF)
 
 **Kontekst:** `--target-crs` istnial tylko dla CZ; scenariusz "obszar
 zainteresowania w jednym kraju + dociagniecie danych z drugiego" wymagal
@@ -2625,7 +2626,7 @@ nie obowiazuje. Tory sa wywolywane przez `download_data`/`check_data`
 ## ADR-037: Spojnosc CLI i API
 
 **Data:** 2026-10-12 (spec `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md`, plan `docs/superpowers/plans/2026-10-12-cli-api-consistency.md`)
-**Status:** Przyjeta; uzupelnia ADR-036 (arkusz CZ w publicznym API; errata 1 ADR-036) i ADR-031 (jezyk tekstow dla uzytkownika)
+**Status:** Przyjeta — uzupelniona przez ADR-038 (nazwy flag i parametrow ukladow); uzupelnia ADR-036 (arkusz CZ w publicznym API; errata 1 ADR-036) i ADR-031 (jezyk tekstow dla uzytkownika)
 
 **Kontekst:** Audyt 2026-10-12 pokazal, ze to samo zadanie z CLI
 i z biblioteki dawalo rozne wyniki: logika danych tylko w CLI (`--country
@@ -2708,6 +2709,58 @@ jest `Notice` z biblioteki, ale CLI wyswietla liste arkuszy jako naglowek
 na stdout (zamiast `Info:` na stderr); pozostale komunikaty danych
 `Notice` ida na stderr, rowniez przy `--quiet`. Dodatkowy komunikat
 CLI o zapisaniu pliku `--plan` dotyczy operacji na pliku planu, nie danych.
+
+---
+
+## ADR-038: Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system)
+
+**Data:** 2026-10-13
+**Status:** Przyjeta; czesciowo zastepuje ADR-027 (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i ADR-023 (obszar CZ zawsze wycinkiem, bez flagi trybu); uzupelnia ADR-037 (nazwy CLI = API)
+
+**Kontekst:** Uzytkownik zapytal, czy `--horizontal-crs`/`--datum` nie
+bylyby czytelniejsze niz `--target-crs`/`--system`. Kod 0.8.0-dev:
+`--target-crs` robi dwie rzeczy naraz - podaje uklad wyniku i dla PL
+`--bbox`/`--geometry` przelacza pobieranie arkuszy na jeden wycinek z WCS
+GUGiK (ADR-027, ADR-035); dla CZ obszar daje zawsze wycinek (`exportImage`,
+bez flagi natywnie EPSG:5514). `--system` wybiera uklad godel arkuszy PL
+(1992 -> pliki EPSG:2180; 2000 -> pliki w strefie arkusza EPSG:2176-2179),
+nie datum (oba uklady maja datum ETRF2000-PL). 0.8.0 i tak lamie CLI/API.
+
+**Opcje:**
+- A) Bez zmian nazw; lepsza pomoc i `Info:` o trybie.
+- B) Jawna flaga trybu `--cutout`, uklad wycinka `--horizontal-crs`
+  (symetria z `--vertical-crs`), uklad godel `--sheet-system`.
+- C) Jedna flaga `--horizontal-crs` zamiast `--system` (EPSG:2180 =
+  arkusze 1992, EPSG:2176-2179 = arkusze 2000 jednej strefy) - obszar
+  PL-2000 w kilku strefach nie mialby wartosci, wycinek EPSG:5514/3045
+  nie ma odpowiednika arkuszowego.
+
+**Decyzja:** B (decyzja uzytkownika 2026-10-13), bez aliasow starych nazw:
+- D1. `--cutout` / `cutout: bool` wlacza tryb jednego wycinka; tylko
+  z `--bbox`/`--geometry` (z `--sheet` blad).
+- D2. `--horizontal-crs` / `horizontal_crs=` = uklad wycinka, wymagany
+  z `--cutout` (bez wartosci domyslnej, takze natywny CZ:
+  `--horizontal-crs EPSG:5514`); bez `--cutout` blad.
+- D3. Obszar CZ bez `--cutout` = blad (CUZK nie ma trybu arkuszy dla
+  obszaru); `--country auto` z obszarem siegajacym CZ wymaga `--cutout`,
+  a wtedy czesc PL tez jest wycinkiem (bez kombinacji arkusze PL +
+  wycinek CZ).
+- D4. `--sheet-system` / `sheet_system=` zamiast `--system` / `system=`
+  w publicznym API wszedzie, gdzie parametr oznacza uklad godel arkuszy PL.
+- D5. `horizontal_crs=` zamiast `target_crs=` w funkcjach zadania
+  (`download_data`/`check_data`, `download_pl_cutout`/`check_pl_cutout`,
+  `download_cz_cutout`/`check_cz_cutout`) i w providerze CUZK
+  (`create_dmr_provider`, `CuzkDmrProvider`); ogolne funkcje transformacji
+  (`transform_bbox`, `get_overall_bbox`) zostaja z `target_crs` (cel
+  transformacji, nie tryb zadania).
+- D6. Sidecar `kartograf-meta/1` bez zmian (klucz `horizontal_crs` juz
+  opisuje uklad pliku; `system` ani `target_crs` nie sa kluczami sidecara).
+
+**Konsekwencje:** Zmiana lamiaca CLI i API w 0.8.0 (CHANGELOG [0.8.0]
+"Co zrobic"): stare flagi daja blad argparse, stare argumenty `TypeError`.
+Wycinek wymaga trzech flag (`--cutout --horizontal-crs ...` + obszar),
+ale tryb i uklad wyniku sa widoczne w komendzie. Pobranie obszaru CZ
+wymaga `--cutout` takze dla natywnego ukladu.
 
 ---
 

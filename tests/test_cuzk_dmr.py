@@ -499,7 +499,7 @@ class TestHorizontalReprojection:
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -515,7 +515,7 @@ class TestHorizontalReprojection:
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, tmp_path / "area.tif")
 
@@ -546,7 +546,7 @@ class TestHorizontalReprojection:
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, tmp_path / "area.tif")
 
@@ -562,7 +562,7 @@ class TestHorizontalReprojection:
         """Native request margin = 4 px (8 m at 2 m) on each side."""
         bbox = BBox(530000, 382000, 532000, 384000, "EPSG:2180")
         provider = CuzkDmrProvider(
-            resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+            resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
         )
         native = provider._bbox_to_crs(bbox, "EPSG:5514")
         sent = provider._native_request_bbox(bbox)
@@ -585,7 +585,7 @@ class TestHorizontalReprojection:
                 [], nodata_west_of=-449000.0, flat=300.0
             )
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -603,7 +603,7 @@ class TestHorizontalReprojection:
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server([])
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -622,7 +622,7 @@ class TestHorizontalReprojection:
         ):
             client_cls.return_value.export_image.side_effect = self._fake_server([])
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -650,7 +650,7 @@ class TestHorizontalReprojection:
             client_cls.return_value.export_image.side_effect = _garbage
             if kind == "bbox":
                 provider = CuzkDmrProvider(
-                    resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                    resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
                 )
                 provider.download_bbox(_NATIVE_BBOX, target)
             else:
@@ -686,7 +686,7 @@ class TestHorizontalReprojection:
             client_cls.return_value.export_image.side_effect = _server_emulator()
             if kind == "bbox":
                 provider = CuzkDmrProvider(
-                    resolution="2m", target_crs=target_crs, vertical_crs="Bpv"
+                    resolution="2m", horizontal_crs=target_crs, vertical_crs="Bpv"
                 )
                 provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
             else:
@@ -735,7 +735,9 @@ class TestHorizontalReprojection:
             ),
             pytest.raises(TransformUnavailableError),
         ):
-            CuzkDmrProvider(resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv")
+            CuzkDmrProvider(
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            )
         client_cls.return_value.export_image.assert_not_called()
 
 
@@ -774,7 +776,7 @@ class TestProbePoint:
         with patch(_GROUP_PATCH, return_value=_group_of(t_bad, t_good)):
             provider = CuzkDmrProvider(
                 resolution="2m",
-                target_crs="EPSG:2180",
+                horizontal_crs="EPSG:2180",
                 session=MagicMock(),
                 vertical_crs="Bpv",
             )
@@ -841,7 +843,7 @@ class TestProbePoint:
                 flat=300.0
             )
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="EVRF2007"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="EVRF2007"
             )
             provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
 
@@ -881,15 +883,15 @@ class TestDownloadBbox:
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr4g/ImageServer"
         )
 
-    def test_target_crs_produces_target_grid_from_native_request(self, tmp_path):
-        """`--target-crs` changes the RESULT grid, but not the REQUEST CRS."""
+    def test_horizontal_crs_produces_target_grid_from_native_request(self, tmp_path):
+        """`horizontal_crs` changes the RESULT grid, but not the REQUEST CRS."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         target = tmp_path / "area.tif"
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
             client.export_image.side_effect = _server_emulator()
             provider = CuzkDmrProvider(
-                resolution="2m", target_crs="EPSG:2180", vertical_crs="Bpv"
+                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -1024,7 +1026,7 @@ class TestOnDownloadCallback:
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = fake_export
             CuzkDmrProvider(
-                resolution="2m", target_crs=target_crs, vertical_crs="Bpv"
+                resolution="2m", horizontal_crs=target_crs, vertical_crs="Bpv"
             ).download_bbox(bbox, tmp_path / "a.tif", on_download=announce)
         assert events == ["announce", "export"]
 

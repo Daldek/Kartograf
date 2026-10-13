@@ -601,7 +601,7 @@ class TestCoverageHints:
     _EXPECTED = {
         "Dostepny potomek 6.129.30.13.4 - uzyj --scale 1:1000",
         "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) - uzyj "
-        "tego godla lub --system 1992",
+        "tego godla lub --sheet-system 1992",
     }
 
     def test_helper(self):
@@ -613,7 +613,7 @@ class TestCoverageHints:
 
     @pytest.mark.parametrize("product", ["nmt", "orto"])
     def test_providers_share_hints(self, product):
-        """Orto had a shorter hint about another CRS (without ``--system``/
+        """Orto had a shorter hint about another CRS (without ``--sheet-system``/
         ``--scale``) - after unification both providers say the same."""
         from kartograf.core.sheet_parser import SheetParser
         from kartograf.providers.pl.gugik import GugikProvider

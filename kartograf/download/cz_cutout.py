@@ -112,7 +112,7 @@ def write_cz_sidecar(
     """Write the mandatory, exclusive sidecar of a versioned CZ cutout.
 
     `horizontal_crs` is the CRS of the ACTUAL result (TM33 tile: EPSG:3045,
-    --target-crs: the CRS requested by the user), not the channel's default CRS.
+    --horizontal-crs: the CRS requested by the user), not the channel's default CRS.
 
     Both `transform` entries describe PINNED operations performed locally -
     horizontal and vertical alike (ADR-024). Previously the horizontal field carried
@@ -279,24 +279,24 @@ def _image_crs(target_crs: str) -> str | None:
 
 def _cz_provider(
     *,
-    target_crs: str,
+    horizontal_crs: str,
     vertical_crs: str,
     resolution: str,
     cache: MetadataCache | None,
 ):
     """CZ DMR provider of a cutout (``TransformError`` before any network)."""
-    from kartograf.download.cutout import SUPPORTED_TARGET_CRS
+    from kartograf.download.cutout import CUTOUT_CRS
     from kartograf.providers.cuzk import create_dmr_provider
 
-    if target_crs not in SUPPORTED_TARGET_CRS:
+    if horizontal_crs not in CUTOUT_CRS:
         raise ValidationError(
-            f"Nieobslugiwany uklad docelowy wycinka CZ: {target_crs!r} "
-            f"(dostepne: {', '.join(SUPPORTED_TARGET_CRS)})"
+            f"Nieobslugiwany uklad docelowy wycinka CZ: {horizontal_crs!r} "
+            f"(dostepne: {', '.join(CUTOUT_CRS)})"
         )
     return create_dmr_provider(
         resolution=resolution,
         cache=cache,
-        target_crs=_image_crs(target_crs),
+        horizontal_crs=_image_crs(horizontal_crs),
         vertical_crs=vertical_crs,
     )
 
@@ -305,7 +305,7 @@ def check_cz_cutout(
     bbox: BBox,
     *,
     output_dir: str | Path,
-    target_crs: str,
+    horizontal_crs: str,
     vertical_crs: str,
     resolution: str,
     cache: MetadataCache | bool = True,
@@ -323,13 +323,13 @@ def check_cz_cutout(
     validate_request_bbox(bbox)
     del cache, on_notice  # same signature as the download (Z2); unused here
     provider = _cz_provider(
-        target_crs=target_crs,
+        horizontal_crs=horizontal_crs,
         vertical_crs=vertical_crs,
         resolution=resolution,
         cache=None,
     )
     return _check_cutout(
-        provider, bbox, output_dir=output_dir, image_crs=_image_crs(target_crs)
+        provider, bbox, output_dir=output_dir, image_crs=_image_crs(horizontal_crs)
     )
 
 
@@ -337,7 +337,7 @@ def download_cz_cutout(
     bbox: BBox,
     *,
     output_dir: str | Path,
-    target_crs: str,
+    horizontal_crs: str,
     vertical_crs: str,
     resolution: str,
     update: UpdateMode | None = None,
@@ -347,11 +347,11 @@ def download_cz_cutout(
     on_notice: Callable[[Notice], None] | None = None,
     on_download: Callable[[], None] | None = None,
 ) -> CzCutoutResult:
-    """CZ DMR cutout in ``target_crs`` (e.g. EPSG:2180 + EVRF2007, A6).
+    """CZ DMR cutout in ``horizontal_crs`` (e.g. EPSG:2180 + EVRF2007, A6).
 
     No configuration defaults (A8): output directory, CRSs and resolution
     (``"2m"`` DMR 5G / ``"5m"`` DMR 4G) are explicit. The grid starts at
-    ``bbox`` converted to ``target_crs``. ``plan`` (from ``check_cz_cutout``
+    ``bbox`` converted to ``horizontal_crs``. ``plan`` (from ``check_cz_cutout``
     with ``update="upgrade"``) downloads only its missing position; a changed
     position lands in ``stale``. ``cache``: ``True`` = default metadata cache
     in the current directory, a ``MetadataCache`` = that cache, ``False`` =
@@ -363,7 +363,7 @@ def download_cz_cutout(
     ValidationError
         Bad resolution, CRS, vertical CRS or plan/update combination.
     TransformError
-        No safe pinned operation to ``target_crs``.
+        No safe pinned operation to ``horizontal_crs``.
     DownloadError
         CUZK service failure.
     """
@@ -374,7 +374,7 @@ def download_cz_cutout(
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
         provider = _cz_provider(
-            target_crs=target_crs,
+            horizontal_crs=horizontal_crs,
             vertical_crs=vertical_crs,
             resolution=resolution,
             cache=metadata,
@@ -383,7 +383,7 @@ def download_cz_cutout(
             provider,
             bbox,
             output_dir=output_dir,
-            image_crs=_image_crs(target_crs),
+            image_crs=_image_crs(horizontal_crs),
             update=update,
             plan=plan,
             parent_request=parent_request,

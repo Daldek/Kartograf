@@ -375,7 +375,7 @@ class SkorowidzQuery:
 
 def _zone(parser: SheetParser) -> int | None:
     """PL-2000 zone of the sheet code (record filter); PL-1992 -> ``None``."""
-    return int(parser.sheet.split(".")[0]) if parser.system == "2000" else None
+    return int(parser.sheet.split(".")[0]) if parser.sheet_system == "2000" else None
 
 
 def _cached_no_coverage_message(sheet: str) -> str:
@@ -385,15 +385,23 @@ def _cached_no_coverage_message(sheet: str) -> str:
     return f"Brak danych dla {sheet} (z cache metadanych)"
 
 
+# Flags renamed in 0.8.0 (ADR-038): a cached hint naming one is outdated.
+_OLD_FLAGS = ("--system ", "--target-crs")
+
+
 def _current_texts(cached: dict) -> bool:
-    """Whether a cached no-coverage entry carries current (ASCII) texts.
+    """Whether a cached no-coverage entry carries current texts.
 
     Entries written before 0.8.0 may hold a message or hints with Polish
-    diacritics or an em dash; they would break ``Notice`` (ASCII only), so
-    such an entry is a cache miss and the index is asked again.
+    diacritics or an em dash (they would break ``Notice``, ASCII only) or
+    a flag renamed in 0.8.0 (``--system``); such an entry is a cache miss
+    and the index is asked again.
     """
     texts = [cached.get("message") or "", *(cached.get("hints") or ())]
-    return all(isinstance(t, str) and t.isascii() for t in texts)
+    return all(
+        isinstance(t, str) and t.isascii() and not any(f in t for f in _OLD_FLAGS)
+        for t in texts
+    )
 
 
 class SourceInfoMixin:
@@ -526,7 +534,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             chosen = select_sheet_record(
                 records,
                 sheet=sheet,
-                system=parser.system,
+                system=parser.sheet_system,
                 zone=_zone(parser),
                 resolution_m=query.resolution_m,
                 predicate=query.predicate,
@@ -591,7 +599,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             matched = select_campaign_records(
                 records,
                 sheet=sheet,
-                system=parser.system,
+                system=parser.sheet_system,
                 zone=_zone(parser),
                 resolution_m=query.resolution_m,
                 predicate=query.predicate,
@@ -814,19 +822,21 @@ def coverage_hints(parser: SheetParser, records: Iterable[SkorowidzRecord]) -> s
 
     A PL-2000 descendant of the requested sheet code -> the descendant's
     ``--scale``; a record in another CRS -> its sheet code or
-    ``--system``/``--scale``. ``records`` are already filtered by the provider
+    ``--sheet-system``/``--scale``. ``records`` are already filtered by the provider
     (NMT resolution); the provider's own hints (resolution, orto colour
     variants) stay with it.
     """
     hints = set()
     for record in records:
-        if parser.system == "2000" and record.sheet.startswith(parser.sheet + "."):
+        if parser.sheet_system == "2000" and record.sheet.startswith(
+            parser.sheet + "."
+        ):
             scale = SheetParser(record.sheet).scale
             hints.add(f"Dostepny potomek {record.sheet} - uzyj --scale {scale}")
-        elif record.system is not None and record.system != parser.system:
+        elif record.system is not None and record.system != parser.sheet_system:
             scale = SheetParser(record.sheet).scale
             # PL-1992 sheets come only at 1:10000 (no --scale); PL-2000 needs it
-            flags = f"--system {record.system}"
+            flags = f"--sheet-system {record.system}"
             if record.system == "2000":
                 flags += f" --scale {scale}"
             hints.add(

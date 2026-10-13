@@ -10,10 +10,10 @@ scenario                                   test
 PL-1992 sheet 1:10000                      test_pl_sheet
 coarser sheet code (expansion)             test_coarser_sheet_expands_with_no_cov...
 PL-2000 with ``scale``                     test_pl2000_sheet_with_scale
-PL area ``system=1992`` / ``2000``         test_pl_area_system
+PL area ``sheet_system=1992`` / ``2000``   test_pl_area_sheet_system
 PL ``geometry``                            test_pl_geometry
 campaigns (all, ``min_year``, full sheet)  test_campaign_options
-PL cutout ``target_crs``                   test_pl_cutout_target_crs
+PL cutout ``cutout`` + ``horizontal_crs``  test_pl_cutout
 CZ sheet TM33 / SM5                        test_cz_sheet / test_cz_sm5_sheet
 CZ cutout                                  test_cz_cutout
 ``auto`` PL+CZ, partial success            test_auto_partial_success
@@ -135,6 +135,9 @@ def test_cz_cutout(tmp_path):
                 "2m",
                 "--vertical-crs",
                 "Bpv",
+                "--cutout",
+                "--horizontal-crs",
+                "EPSG:5514",
                 "-q",
             ],
             lambda out: download_data(
@@ -144,6 +147,8 @@ def test_cz_cutout(tmp_path):
                 country="cz",
                 resolution="2m",
                 vertical_crs="Bpv",
+                cutout=True,
+                horizontal_crs="EPSG:5514",
             ),
             tmp_path,
         )
@@ -180,7 +185,8 @@ def test_auto_partial_success(tmp_path):
                 "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
-                "--target-crs",
+                "--cutout",
+                "--horizontal-crs",
                 "EPSG:3045",
                 "-q",
             ],
@@ -191,7 +197,8 @@ def test_auto_partial_success(tmp_path):
                 country="auto",
                 resolution={"pl": "1m", "cz": "2m"},
                 vertical_crs={"pl": "EVRF2007", "cz": "Bpv"},
-                target_crs="EPSG:3045",
+                cutout=True,
+                horizontal_crs="EPSG:3045",
             ),
             tmp_path,
         )
@@ -337,7 +344,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
         "product": "nmt",
         "bbox": bbox,
         "country": "pl",
-        "system": "1992",
+        "sheet_system": "1992",
         "resolution": "1m",
         "vertical_crs": "EVRF2007",
         "cache": False,
@@ -351,7 +358,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
         bbox.crs,
         "--country",
         "pl",
-        "--system",
+        "--sheet-system",
         "1992",
         "--resolution",
         "1m",
@@ -444,19 +451,19 @@ def test_pl2000_sheet_with_scale(tmp_path):
 
 
 @pytest.mark.usefixtures("frozen_clock")
-@pytest.mark.parametrize("system", ["1992", "2000"])
-def test_pl_area_system(tmp_path, system):
+@pytest.mark.parametrize("sheet_system", ["1992", "2000"])
+def test_pl_area_sheet_system(tmp_path, sheet_system):
     bbox = _inner(G)
-    scale = ["--scale", "1:5000"] if system == "2000" else []
+    scale = ["--scale", "1:5000"] if sheet_system == "2000" else []
     run = _pl(
         tmp_path,
         AnySheetProvider(C14),
-        [_bbox_arg(bbox), "--country", "pl", "--system", system, *scale]
+        [_bbox_arg(bbox), "--country", "pl", "--sheet-system", sheet_system, *scale]
         + PL_SHEET_ARGS,
         bbox=bbox,
         country="pl",
-        system=system,
-        scale="1:5000" if system == "2000" else None,
+        sheet_system=sheet_system,
+        scale="1:5000" if sheet_system == "2000" else None,
         **PL_SHEET_KW,
     )
     _same(run, run.api_result)
@@ -475,11 +482,11 @@ def test_pl_geometry(tmp_path):
         run = _pl(
             tmp_path,
             FakeCampaignProvider(C14),
-            ["--geometry", str(shp), "--country", "pl", "--system", "1992"]
+            ["--geometry", str(shp), "--country", "pl", "--sheet-system", "1992"]
             + PL_SHEET_ARGS,
             geometry=shp,
             country="pl",
-            system="1992",
+            sheet_system="1992",
             **PL_SHEET_KW,
         )
     _same(run, run.api_result, statuses=["new"])
@@ -509,7 +516,7 @@ def test_campaign_options(tmp_path, cli, api):
 
 
 @pytest.mark.usefixtures("frozen_clock")
-def test_pl_cutout_target_crs(tmp_path):
+def test_pl_cutout(tmp_path):
     from tests.test_wcs_cutout import ALL_LAND, BBOX, MASK, _synthetic_session
 
     def provider(*_args, **_kwargs):
@@ -525,13 +532,14 @@ def test_pl_cutout_target_crs(tmp_path):
     ):
         run = run_both(
             ["download", "--product", "nmt", _bbox_arg(BBOX), "--country", "pl"]
-            + ["--target-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
+            + ["--cutout", "--horizontal-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
             lambda out: download_data(
                 product="nmt",
                 output_dir=out,
                 bbox=BBOX,
                 country="pl",
-                target_crs="EPSG:2180",
+                cutout=True,
+                horizontal_crs="EPSG:2180",
                 **PL_SHEET_KW,
             ),
             tmp_path,
@@ -573,13 +581,14 @@ def test_auto_narrowed_to_pl(tmp_path):
     ):
         run = run_both(
             ["download", "--product", "nmt", _bbox_arg(bbox), "--country", "auto"]
-            + ["--target-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
+            + ["--cutout", "--horizontal-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
             lambda out: download_data(
                 product="nmt",
                 output_dir=out,
                 bbox=bbox,
                 country="auto",
-                target_crs="EPSG:2180",
+                cutout=True,
+                horizontal_crs="EPSG:2180",
                 **PL_SHEET_KW,
             ),
             tmp_path,
