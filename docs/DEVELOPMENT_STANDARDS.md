@@ -399,7 +399,7 @@ reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
   kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m \
       --vertical-crs EVRF2007 -o <katalog-danych>/kartograf/data
   kartograf download --bbox 530000,382000,533000,386000 --country pl \
-      --product nmt --vertical-crs EVRF2007 --target-crs EPSG:5514 \
+      --product nmt --vertical-crs EVRF2007 --cutout --horizontal-crs EPSG:5514 \
       -o <katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>
   ```
 

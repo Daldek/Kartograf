@@ -2746,7 +2746,12 @@ nie datum (oba uklady maja datum ETRF2000-PL). 0.8.0 i tak lamie CLI/API.
   a wtedy czesc PL tez jest wycinkiem (bez kombinacji arkusze PL +
   wycinek CZ).
 - D4. `--sheet-system` / `sheet_system=` zamiast `--system` / `system=`
-  w publicznym API wszedzie, gdzie parametr oznacza uklad godel arkuszy PL.
+  w wyborze arkuszy: `download_data`/`check_data`, `find_sheets_for_bbox`,
+  `find_sheets_for_geometry`, `SheetParser(sheet_system=)` i
+  `SheetParser.sheet_system`. Bez zmian zostaja nazwy niskiego poziomu
+  opisujace uklad pliku lub segmentu (`LazTile.system`,
+  `FileStorage.get_raw_path(system=)`, szablon `{system}`, klucz cache
+  indeksu arkuszy CZ).
 - D5. `horizontal_crs=` zamiast `target_crs=` w funkcjach zadania
   (`download_data`/`check_data`, `download_pl_cutout`/`check_pl_cutout`,
   `download_cz_cutout`/`check_cz_cutout`) i w providerze CUZK
