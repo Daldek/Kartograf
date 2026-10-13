@@ -1137,7 +1137,7 @@ def test_leading_zero_sheet_same_path_and_sidecar(tmp_path):
 
     provider.download.side_effect = fake_download
     manager = DownloadManager(output_dir=tmp_path, provider=provider)
-    path = manager.download_sheet("M-33-036-A-a-1-1")
+    path = manager.download_sheet("M-33-036-A-a-1-1").succeeded[0]
     assert path.name == "M-33-36-A-a-1-1.asc"
     assert provider.download.call_args[0][0] == "M-33-36-A-a-1-1"
     meta = json.loads(path.with_name(path.name + ".meta.json").read_text())

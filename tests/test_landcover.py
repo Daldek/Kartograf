@@ -80,7 +80,7 @@ class TestBdot10kProvider:
     def test_layer_description(self):
         """Test layer descriptions."""
         provider = Bdot10kProvider()
-        assert provider.get_layer_description("PTLZ") == "Tereny leśne"
+        assert provider.get_layer_description("PTLZ") == "Tereny lesne"
         assert provider.get_layer_description("PTWP") == "Wody powierzchniowe"
 
     def test_supported_formats(self):
@@ -125,7 +125,7 @@ class TestBdot10kProvider:
             provider.download_by_teryt("invalid", Path("/tmp/test.gpkg"))
 
     def test_download_by_bbox_any_crs(self, tmp_path):
-        """A bbox in EPSG:4326 goes unchanged to the PRG discovery (no ValueError)."""
+        """A bbox in EPSG:4326 reaches PRG discovery without CRS rejection."""
         provider = Bdot10kProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
         with (
@@ -164,13 +164,11 @@ class TestBdot10kPrgTimeout:
             patch(self.DISCOVER, return_value=["0208"]) as discover,
             patch.object(manager, "_run"),
         ):
-            manager.download_by_bbox(self.BBOX, timeout=7)
+            manager.download(bbox=self.BBOX, timeout=7)
             assert discover.call_args.kwargs["timeout"] == 7
-            manager.download_by_sheet("N-34-130-D", timeout=8)
+            manager.download(sheet="N-34-130-D", timeout=8)
             assert discover.call_args.kwargs["timeout"] == 8
-            manager.download_all_counties(bbox=self.BBOX, timeout=9)
-            assert discover.call_args.kwargs["timeout"] == 9
-            manager.download_by_bbox(self.BBOX)
+            manager.download(bbox=self.BBOX)
             assert discover.call_args.kwargs["timeout"] == 30
 
 
@@ -216,14 +214,14 @@ class TestCorineProvider:
         """Test download with wrong CRS."""
         provider = CorineProvider()
         bbox = BBox(14.0, 52.0, 15.0, 53.0, "EPSG:4326")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             provider.download_by_bbox(bbox, Path("/tmp/test.png"), year=2018)
 
     def test_download_by_bbox_invalid_year(self):
         """Test download with invalid year."""
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             provider.download_by_bbox(bbox, Path("/tmp/test.png"), year=2020)
 
     def test_construct_wms_url_eea(self):
@@ -289,7 +287,7 @@ class TestLandCoverManager:
 
     def test_init_invalid_provider(self):
         """Test initialization with invalid provider."""
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             LandCoverManager(output_dir="data", provider="invalid")
 
     def test_set_provider_by_name(self):
@@ -313,13 +311,13 @@ class TestLandCoverManager:
     def test_download_no_selection(self):
         """Test download with no selection method."""
         manager = LandCoverManager(output_dir="data", provider="bdot10k")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             manager.download()
 
     def test_download_multiple_selection(self):
         """Test download with multiple selection methods."""
         manager = LandCoverManager(output_dir="data", provider="bdot10k")
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             manager.download(teryt="1465", sheet="N-34-130-D")
 
     def test_repr(self):
@@ -362,7 +360,7 @@ class TestLandCoverCLI:
         assert result == 0
         captured = capsys.readouterr()
         assert "PTLZ" in captured.out
-        assert "Tereny leśne" in captured.out
+        assert "Tereny lesne" in captured.out
 
     def test_landcover_list_layers_corine(self, capsys):
         """Test list-layers for CORINE."""
@@ -380,7 +378,7 @@ class TestLandCoverCLI:
         result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
         assert result == 1
         captured = capsys.readouterr()
-        assert "Must provide one of" in captured.err
+        assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
     def test_landcover_download_invalid_bbox(self, capsys):
         """Test download with invalid bbox."""
@@ -400,10 +398,10 @@ class TestLandCoverCLI:
         )
         assert result == 1
         captured = capsys.readouterr()
-        assert "Invalid bbox" in captured.err
-        # the "Expected" hint goes to stderr together with the error (review-1 D4)
-        assert "Expected" in captured.err
-        assert "Expected" not in captured.out
+        assert "Nieprawidlowy bbox" in captured.err
+        # the "Oczekiwano" hint goes to stderr together with the error (review-1 D4)
+        assert "Oczekiwano" in captured.err
+        assert "Oczekiwano" not in captured.out
 
     @pytest.mark.parametrize(
         "bbox",
@@ -428,9 +426,9 @@ class TestLandCoverCLI:
         assert result == 1
         manager.assert_not_called()
         captured = capsys.readouterr()
-        assert "Error: Invalid bbox format" in captured.err
+        assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
-        assert "Expected" not in captured.out
+        assert "Oczekiwano" not in captured.out
 
 
 class TestLandCoverInvalidOptions:
@@ -456,7 +454,7 @@ class TestLandCoverInvalidOptions:
                     "--stat",
                     "mean",
                 ],
-                "Invalid property",
+                "Nieprawidlowa wlasciwosc",
             ),
             (
                 [
@@ -469,7 +467,7 @@ class TestLandCoverInvalidOptions:
                     "--stat",
                     "mean",
                 ],
-                "Invalid depth",
+                "Nieprawidlowa glebokosc",
             ),
             (
                 [
@@ -482,7 +480,7 @@ class TestLandCoverInvalidOptions:
                     "--stat",
                     "median",
                 ],
-                "Invalid stat",
+                "Nieprawidlowa statystyka",
             ),
             (["--source", "corine", "--year", "1999"], "1999"),
         ],
@@ -580,9 +578,9 @@ class TestBdot10kProviderDownload:
     """Test Bdot10kProvider download methods with mocks."""
 
     def test_download_by_teryt_invalid_format(self):
-        """Invalid format raises ValueError."""
+        """Invalid format raises ValidationError."""
         provider = Bdot10kProvider()
-        with pytest.raises(ValueError, match="Unsupported format"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany format"):
             provider.download_by_teryt("1465", Path("/tmp/out.gpkg"), format="XML")
 
     def test_download_by_teryt_success(self, tmp_path):
@@ -773,20 +771,20 @@ class TestBdot10kRetryAndIO:
         assert [p.name for p in output.parent.iterdir()] == [output.name]
 
     def test_extract_gpkg_bad_zip(self, tmp_path):
-        """Invalid ZIP -> DownloadError."""
+        """Nieprawidlowy plik ZIP -> DownloadError."""
         provider = Bdot10kProvider()
         output = tmp_path / "merged.gpkg"
 
         mock_resp = Mock()
         mock_resp.iter_content.return_value = [b"not a zip file"]
 
-        with pytest.raises(DownloadError, match="Invalid ZIP"):
+        with pytest.raises(DownloadError, match="Nieprawidlowy plik ZIP"):
             provider._extract_gpkg_from_zip(mock_resp, output)
 
     def test_merge_gpkg_files_empty(self):
         """Empty file list -> DownloadError."""
         provider = Bdot10kProvider()
-        with pytest.raises(DownloadError, match="No files to merge"):
+        with pytest.raises(DownloadError, match="Brak plikow do scalenia"):
             provider._merge_gpkg_files([], Path("/tmp/out.gpkg"))
 
     def test_merge_gpkg_files(self, tmp_path):
@@ -1615,7 +1613,7 @@ class TestLandCoverNoSideEffectsOnInit:
         manager = LandCoverManager(output_dir=out_dir, provider=provider)
         assert not out_dir.exists()
 
-        file = manager.download(teryt="1465", format="SHP").file
+        file = manager.download(teryt="1465", format="SHP").files[0].file
 
         assert file.path == out_dir / "landcover/pl_bdot10k_shp/teryt/1465.zip"
         assert file.path.read_bytes() == b"PK zip"
@@ -1817,9 +1815,10 @@ class TestBdot10kSidecarSource:
         first = _bdot_zip(z1, ["OT_PTWP_A"])
         manager.provider._sessions = SessionPerThread(self._session(first, {}))
         result = manager.download(teryt="0262", keep_raw=True)
-        gpkg = result.file.path
+        (item,) = result.files
+        gpkg = item.file.path
         before = gpkg.read_bytes()
-        sidecar = json.loads(Path(f"{result.file.version_path}.meta.json").read_text())
+        sidecar = json.loads(Path(f"{item.file.version_path}.meta.json").read_text())
 
         second = _bdot_zip(z2, ["OT_PTWP_A", "OT_SWRS_L"])
         manager.provider._sessions = SessionPerThread(self._session(second, {}))

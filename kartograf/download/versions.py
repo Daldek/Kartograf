@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
+from kartograf import _clock
 from kartograf.download.campaigns import AscCoverage, measure_coverage
 from kartograf.exceptions import DownloadError
 from kartograf.sources.sidecar import file_digest
@@ -76,7 +77,7 @@ class VersionRef:
     @staticmethod
     def downloaded(now: datetime | None = None) -> "VersionRef":
         """Label of a source without a campaign or edition: UTC download date."""
-        moment = (now or datetime.now(UTC)).astimezone(UTC)
+        moment = (now or _clock.now()).astimezone(UTC)
         return VersionRef(moment.date().isoformat(), "downloaded")
 
 
@@ -434,7 +435,7 @@ def commit_version(
             _discard(staged)
             raise DownloadError(
                 f"{target}: plik wersji ma inne sha256 ({existing[:8]}) niz pobrany "
-                f"({digest.sha256[:8]}) — kolizja albo uszkodzony plik"
+                f"({digest.sha256[:8]}) - kolizja albo uszkodzony plik"
             ) from None
         if _sidecar(target).exists():
             _discard(staged)

@@ -268,6 +268,13 @@ kartograf landcover download --source soilgrids --bbox 626000,480000,628000,4820
 # dla tego samego obszaru to osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
 
+# Tylko wybrane warstwy BDOT10k (GPKG) + oryginalny ZIP, bbox w WGS84,
+# 4 powiaty równolegle, bez linii statusu (Info:/Warning:/Error: zostają)
+kartograf landcover download --source bdot10k --bbox 16.70,50.45,16.80,50.55 \
+    --bbox-crs EPSG:4326 --layers SWRS,PTWP --keep-raw --workers 4 -q -o ./data
+#   -> landcover/pl_bdot10k_gpkg_ptwp-swrs/teryt/<T>.gpkg
+#      i landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip
+
 # Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
 kartograf soilgrids hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
 #   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
@@ -288,7 +295,7 @@ kartograf cache path
 BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`, `--geometry`). BDOT10k
 z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
 z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
-w `TERYT entries`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
+w `Wpisy TERYT`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
 się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
 credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
@@ -347,7 +354,7 @@ dane tam są:
 - pojedyncze godło: `Error:` (kod 1), a w treści błędu np.
   `Dostepny potomek 5.167.25.13 — uzyj --scale 1:2000`;
 - lista arkuszy (`--bbox`/`--geometry`, godło rozwijane): arkusze bez
-  danych mają status `no_coverage` (`∅`), na stderr `Warning: GUGiK nie ma
+  danych mają status `no_coverage` (ikona `0` na pasku postepu), na stderr `Warning: GUGiK nie ma
   danych dla N z M arkuszy ...` (kod 0, gdy pobrano choć jeden arkusz)
   albo — gdy żaden arkusz nie ma danych — `Error: GUGiK nie ma danych dla
   zadnego z M arkuszy obszaru` (kod 1); w obu przypadkach pod spodem
@@ -377,6 +384,43 @@ z podpowiedzianą skalą.
 
 ## 2. Biblioteka Python
 
+Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
+(nazwy parametrów = nazwy flag w `snake_case`) i tym samym wynikiem
+(ADR-037): `kartograf download` = `download_data`/`check_data`,
+`landcover download` = `LandCoverManager.download`/`.check`,
+`soilgrids hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`. Błąd wejścia
+to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
+(CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
+`on_notice`.
+
+```python
+from kartograf import BBox, check_data, download_data
+
+# = kartograf download --product nmt --bbox 18.60,49.73,18.66,49.76
+#   --bbox-crs EPSG:4326 --country auto --resolution pl=1m,cz=2m
+#   --vertical-crs pl=EVRF2007,cz=Bpv --target-crs EPSG:3045 -o ./data
+selection = dict(
+    product="nmt",
+    output_dir="./data",
+    bbox=BBox(18.60, 49.73, 18.66, 49.76, "EPSG:4326"),
+    country="auto",
+    resolution={"pl": "1m", "cz": "2m"},     # jedna wartość: resolution="1m"
+    vertical_crs={"pl": "EVRF2007", "cz": "Bpv"},
+    target_crs="EPSG:3045",
+)
+report = download_data(**selection, on_notice=lambda n: print(n.level, n.text))
+for item in report.files:                    # UnitFile(unit, country, file)
+    print(item.country, item.unit, item.file.path, item.file.status)
+for failure in report.failed:                # UnitFailure(unit, country, error, kind)
+    print(failure.country, failure.error)
+print(report.ok)  # kod wyjścia CLI: True = 0 (także częściowy sukces auto)
+
+plan = check_data(**selection)               # = --check-updates, bez pobierania
+report = download_data(**selection, update="upgrade", plan=plan)  # = --upgrade --plan
+```
+
+Niższy poziom (tory) — te same pliki i sidecary co `download_data`:
+
 ```python
 from pathlib import Path
 from kartograf import SheetParser, DownloadManager, BBox, GugikProvider
@@ -391,9 +435,10 @@ bbox = parser.get_bbox(crs="EPSG:2180")  # lub "EPSG:4326"
 # Pobieranie przez godło -> ASC (OpenData); hierarchia: download_hierarchy()
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 manager = DownloadManager("./data", provider)
-path = manager.download_sheet("N-34-130-D-d-2-4")
+result = manager.download_sheet("N-34-130-D-d-2-4")
+path = result.files["N-34-130-D-d-2-4"][0].version_path
 # NMT 5 m tylko w EVRF2007: GugikProvider(resolution="5m", vertical_crs="KRON86")
-# -> ValueError (create_nmt_provider: ValidationError)
+# -> ValidationError
 
 # Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF):
 # provider.download_bbox(bbox, path) — jednopasmowy float32 GeoTIFF na
@@ -406,20 +451,23 @@ path = kron.download_bbox(area, Path("my_area.tif"))
 # Land Cover: BDOT10k / CORINE / SoilGrids do magazynu (output_dir = --output)
 from kartograf import LandCoverManager
 lc = LandCoverManager("./data", "bdot10k")
-result = lc.download(teryt="1465")         # BDOT10k (powiat)
-print(result.file.path, result.file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
-# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, albo sheet=),
-# tylko wybrane warstwy -> landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
+result = lc.download(teryt="1465")         # BDOT10k (powiat) -> LandCoverAreaResult
+file = result.files[0].file
+print(file.path, file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
+# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, sheet= albo
+# geometry=), powiaty równolegle (workers=), tylko wybrane warstwy ->
+# landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
 # keep_raw=True: oryginalny ZIP GUGiK jako osobna wersja
 # (landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip, pełny pakiet; tylko GPKG)
-area = lc.download_all_counties(
+area = lc.download(
     bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
     layers=["SWRS", "SWKN", "SWRM", "PTWP"],
     keep_raw=True,
+    workers=4,
 )
 paths = [r.file.path for r in area.files]  # area.failed: powiaty z błędem
-# lc.download(bbox=...) dla BDOT10k: jeden powiat albo ValidationError z listą
-# kodów (kilka powiatów) / NoCoverageError (żaden)
+print(area.ok, area.notices)                 # ok = brak błędów i nieaktualnych pozycji
+# obszar bez powiatu: NoCoverageError
 lc.set_provider("corine")
 lc.download(sheet="N-34-130-D", year=2018)  # CORINE (CLMS albo podgląd _preview)
 lc.set_provider("soilgrids")
@@ -427,11 +475,13 @@ plan = lc.check(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean")
 lc.download(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean",
             update="upgrade", plan=plan)    # tylko pozycje planu
 
-# Hydrologic Soil Groups (wejścia = wersje SoilGrids w tym samym magazynie)
+# Hydrologic Soil Groups (wejścia = wersje SoilGrids "mean" w tym samym magazynie);
+# wybór: sheet=, bbox= (dowolny układ) albo geometry= (obwiednia pliku)
 from kartograf import HSGCalculator
 calc = HSGCalculator("./data")
-hsg = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+hsg = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
 print(hsg.file.status, hsg.file.label)      # new 2.0 (ponownie: reused 2.0)
+plan = calc.check_hsg(sheet="N-34-130-D", depth="0-5cm")  # bez pobierania
 stats = calc.get_hsg_statistics(hsg.file.path)
 
 # HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
@@ -443,19 +493,18 @@ hsg_from_rasters(
 )
 
 # Scalony wycinek WCS NMT lub NMPT PL (GeoTIFF + sidecar)
-from kartograf import download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
+from kartograf import check_pl_cutout, download_pl_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-result = download_pl_cutout(
-    bbox, "EPSG:5514", output_dir="./data", vertical_crs="EVRF2007", product="nmpt",
-)
+selection = dict(target_crs="EPSG:5514", output_dir="./data",
+                 vertical_crs="EVRF2007", product="nmpt")
+result = download_pl_cutout(bbox, **selection)
 print(result.file.path, result.file.status, result.masked_pixels, result.all_nodata)
+for notice in result.notices:               # rozmiar wycinka, wycinek bez danych
+    print(notice.level, notice.text)
 # domyślnie istniejąca wersja bez zapytań PRG/WCS; update="force" pobiera ponownie
-# osobne kroki przy własnym providerze; maska PRG pobierana przed WCS
-cutout = prepare_pl_cutout(
-    bbox, "EPSG:2180", output_dir="./data", vertical_crs="EVRF2007", product="nmt"
-)
-result = run_pl_wcs_cutout(cutout)
+plan = check_pl_cutout(bbox, **selection)   # te same argumenty, bez pobierania
+result = download_pl_cutout(bbox, **selection, update="upgrade", plan=plan)
 
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
@@ -475,18 +524,36 @@ print(cz.file.path)           # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
 # obwiedni CZ sięga w głąb Polski) — plik powstaje, flaga też w sidecarze
 print(cz.all_nodata)
 # Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
-# Własny provider: run_cz_cutout(provider, bbox, output_dir=, image_crs=).
 
-# Sprawdzenie bez pobierania (plan kartograf-plan/1) dla każdego toru:
-from kartograf import check_cz_cutout, check_laz_updates, check_pl_cutout
-plan = check_pl_cutout(cutout)          # status "unverifiable"/"missing"
+# Arkusz CZ: SM5 (gotowy plik DMR 4G, tylko 5m - resolution można pominąć)
+# albo kafel TM33 (resolution wymagane: "2m" / "5m")
+from kartograf import check_cz_sheet, download_cz_sheet
+
+sm5 = download_cz_sheet("CTES96", output_dir="./data", vertical_crs="Bpv")
+tm33 = download_cz_sheet(
+    "302_5550", output_dir="./data", vertical_crs="EVRF2007", resolution="2m"
+)
+
+# Sprawdzenie bez pobierania (plan kartograf-plan/1): blizniak check_* z tymi
+# samymi argumentami co pobranie; plan wykonuje pobranie z update="upgrade"
+plan = check_cz_sheet("CTES96", output_dir="./data", vertical_crs="Bpv")
 print([(i.track, i.unit, i.status) for i in plan.items])
+sm5 = download_cz_sheet(
+    "CTES96", output_dir="./data", vertical_crs="Bpv", update="upgrade", plan=plan
+)
 ```
 
-**Cache metadanych w bibliotece.** Bez `MetadataCache` provider NMT pyta
-skorowidz GUGiK przy KAŻDYM `download_sheet`, także dla arkusza już
-pobranego. Przekaż cache providerowi, a zapytania o arkusz ograniczą się do
-raz na TTL cache (7 dni):
+**Cache metadanych w bibliotece.** Funkcje poziomu komendy i torów
+(`download_data`, `check_data`, `download_pl_cutout`, `download_cz_*`,
+`download_laz_area`, `LandCoverManager`, `HSGCalculator`) przyjmują
+`cache: MetadataCache | bool = True`: domyślnie ten sam plik co CLI
+(`<cwd>/.kartograf_cache.db`, TTL 7 dni), `False` = bez cache, własny
+`MetadataCache` = ten. `update="force"` pomija odczyty z cache w tym
+wywołaniu (jak `--force`). Katalog tylko do odczytu: cache wyłączony
+z `Notice` `cache_disabled`, pobieranie idzie dalej. Provider tworzony
+ręcznie (niżej) bez `MetadataCache` pyta skorowidz GUGiK przy KAŻDYM
+`download_sheet`; przekaż mu cache, a zapytania o arkusz ograniczą się do
+raz na TTL:
 
 ```python
 from kartograf import DownloadManager, MetadataCache
@@ -512,37 +579,29 @@ w SCOPE 2.10 i PRD 5.
 
 ## 3. Wynik pobrania
 
-**Wartość zwracana.** `DownloadManager.download_sheet()` zwraca `Path` dla
-arkusza 1:10000 i dla godła PL-2000 (pobierane bezpośrednio), a
-`list[Path]` dla godła PL-1992 grubszego niż 1:10000 — takie godło jest
-rozwijane do arkuszy 1:10000 przez `download_hierarchy()` (ta zawsze zwraca
-`list[Path]`). Kod wołający musi obsłużyć oba warianty.
-`download_sheets(godla)` pobiera listę godeł (grubsze PL-1992 rozwijane do
-1:10000 — `expand_sheets()`) i nie przerywa się na porażce arkusza.
+**Wartosc zwracana.** `download_sheet`, `download_hierarchy` i
+`download_sheets` zwracaja `DownloadResult`. Godlo PL-1992 grubsze niz
+1:10000 rozwija sie na arkusze 1:10000 (`expand_sheets`); porazki
+pojedynczych arkuszy listy i hierarchii nie przerywaja pozostalych.
+`result.files[godlo]` zawiera krotke `VersionedFile`: `path` to sciezka
+standardowa, `version_path` to plik wersji, `label` i `status` opisuja
+wybrana wersje.
 
-**Podsumowania** (pola: dataclassy w kodzie, opis — ARCHITECTURE 4.1–4.3):
+**Podsumowanie:** `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze,
+dla ktorych GUGiK nie ma danych; podzbior `failed`), `campaign_files`,
+`reused_campaign_files`, statusy `new`/`relabeled`/`unchanged`/`local`,
+`newer`, `unverified` i `no_coverage_hints`. `stale` zawiera nieaktualne
+pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
+`on_notice`. Pozostaja pola `better_coverage`, `link_outside_range`,
+`full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1 i 4.2).
 
-- `DownloadManager.last_result` (`DownloadResult`) po liście/hierarchii
-  (także po pojedynczym arkuszu — wynik jednoelementowy):
-  `succeeded`, `failed`, `skipped`, `no_coverage` (arkusze, dla których
-  GUGiK nie ma danych — `NoCoverageError`, podklasa `DownloadError`; są też
-  w `failed`), pliki kampanii, `unverified`, statusy wersji `new`/
-  `relabeled`/`unchanged`/`local`, `newer` i `files` (sekcja 4).
-- `DownloadManager.last_sheet` (`SheetFetch`) po pojedynczym arkuszu:
-  `path`, `skipped`, `downloaded`, `reused`, `status`, `version`, `newer`,
-  `files`, `unverified`, `better_coverage`, `link_outside_range`, `full_link`,
-  `full_link_outside_range` (sekcje 4.1–4.3).
-- `DownloadResult` ma też `no_coverage_hints` (godło -> podpowiedzi przy
-  braku pokrycia, sekcja 1.6), `better_coverage`, `link_outside_range`,
-  `full_links`, `full_link_outside_range` i `without_full` (sekcje 4.1
-  i 4.2).
 - `PlCutoutResult` (wycinek WCS): `file` (`VersionedFile`),
-  `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`.
-- `CzCutoutResult` (wycinek CZ, `download_cz_cutout`/`run_cz_cutout`):
-  `file`, `all_nodata`, `stale`.
+  `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`, `notices`.
+- `CzCutoutResult` (wycinek CZ, `download_cz_cutout`) i `CzSheetResult`
+  (arkusz CZ, `download_cz_sheet`): `file`, `all_nodata`, `stale`, `notices`.
 - `LazDownloadResult` (`download_laz_area`): `files` (`VersionedFile` na
   kafel), `failed`, `superseded` (kafle pominięte jako pokryte przez
-  nowsze), `stale`.
+  nowsze), `stale`, `notices`.
 - `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
   (`new`/`unchanged`/`relabeled`/`local`), `label`, `sha256`,
   `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
@@ -592,16 +651,15 @@ dowiązaniem twardym do najnowszej lokalnej wersji
 samej treści to „bez zmian”, inna treść to nowa wersja obok starej.
 Szczegóły trybów: sekcja 4.3.
 
-- **Skorowidz niedostępny:** gdy skorowidz GUGiK nie odpowiada (sieć, HTTP
-  429/5xx), a arkusz ma już lokalną wersję, tryb domyślny jej używa (każda
-  strategia) i drukuje `Warning: <godło>: skorowidz GUGiK niedostepny —
-  uzyto lokalnej wersji bez sprawdzenia nowszej (...)` (kod bez zmian,
-  także z `-q`). Z flagą roku: gdy KAŻDY arkusz zadania ma lokalną wersję
-  z zakresu lat — lokalne wersje z ostrzeżeniem, inaczej całe zadanie kończy
-  się błędem bez pobrań. Bez lokalnej wersji, z `--upgrade` albo `--force`
-  błąd kończy pobranie porażką. Biblioteka:
-  `DownloadManager.last_sheet.unverified` / `DownloadResult.unverified`
-  (treść błędu transportu).
+- **Skorowidz niedostepny:** gdy skorowidz GUGiK nie odpowiada (siec, HTTP
+  429/5xx), a arkusz ma juz lokalna wersje, tryb domyslny jej uzywa (kazda
+  strategia) i drukuje ostrzezenie o lokalnej wersji bez sprawdzenia nowszej
+  (kod bez zmian, takze z `-q`). Z flaga roku: gdy KAZDY arkusz zadania
+  ma lokalna wersje z zakresu lat — lokalne wersje z ostrzezeniem,
+  inaczej cale zadanie konczy sie bledem bez pobran. Bez lokalnej wersji,
+  z `--upgrade` albo `--force` blad konczy pobranie porazka. Biblioteka:
+  `DownloadResult.unverified` (tresc bledu transportu) i `notices` z kodem
+  `UNVERIFIED_LOCAL`.
 - **Wymagane hardlinki:** ścieżka standardowa to dowiązanie twarde do pliku
   wersji (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
@@ -735,7 +793,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 - **Nie działa:** z `--product laz` i `--target-crs` (`Error:` przed siecią);
   dla CZ jak inne opcje kampanii.
 - **Biblioteka:** `DownloadManager(full_sheet=True)`;
-  `SheetFetch.full_link`, `DownloadResult.full_links` (godło -> ścieżka
+  `DownloadResult.full_links` (godło -> ścieżka
   `full_sheet/`), `DownloadResult.without_full`,
   `DownloadResult.full_link_outside_range`.
 
@@ -794,19 +852,25 @@ podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
 Biblioteka:
 
 ```python
-from kartograf import DownloadManager, GugikProvider, UpdatePlan, check_updates, upgrade
+from kartograf import DownloadManager, GugikProvider, UpdatePlan
 
-manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
-manager.download_sheet("N-34-139-C-a-3-1")                     # domyślnie
-manager.download_sheet("N-34-139-C-a-3-1", update="upgrade")   # albo "force"
-plan = check_updates(manager, ["N-34-139-C-a-3-1"])            # nic nie pobiera
-report = upgrade(manager, UpdatePlan.from_json(plan.to_json()))
-print(manager.last_sheet.status, manager.last_sheet.version)    # np. new 2025-10-21_84183
-# LAZ / CZ / wycinki: run_laz_download(..., update=, plan=), check_laz_updates,
-# run_cz_cutout(..., update=, plan=), check_cz_cutout, run_pl_wcs_cutout(...,
-# update=, plan=), check_pl_cutout; land cover: LandCoverManager.download(...,
-# update=, plan=), check, check_all_counties; HSG: calculate_hsg_by_*(...,
-# update=, plan=), check_hsg_by_*; pozycje planu: item.track, item.unit
+godlo = "N-34-139-C-a-3-1"
+manager = DownloadManager(
+    "./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+)
+result = manager.download_sheet(godlo)
+print(result.files[godlo][0].status, result.files[godlo][0].label)
+plan = manager.check_sheets([godlo])  # niczego nie pobiera
+report = manager.download_sheets(
+    [godlo], update="upgrade", plan=UpdatePlan.from_json(plan.to_json())
+)
+print(report.stale, report.files.get(godlo, ()))
+# LAZ: download_laz_area(..., update=, plan=) + check_laz_area (te same argumenty);
+# wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
+# download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
+# check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
+# update=, plan=) + check (te same argumenty); HSG: calculate_hsg(...,
+# update=, plan=) + check_hsg; pozycje planu: item.track, item.unit
 ```
 
 ---

@@ -318,7 +318,7 @@ def select_newest_cover(
     ``area`` must be in EPSG:2180 (like the WFS tiles).
     """
     if area.crs != "EPSG:2180":
-        raise ValueError(f"area must be in EPSG:2180, got {area.crs}")
+        raise ValidationError(f"obszar musi byc w EPSG:2180, podano {area.crs}")
     # Local coordinate origin: coordinates of ~10^5-10^6 m eat up precision.
     ox, oy = area.min_x, area.min_y
     area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
@@ -361,7 +361,7 @@ def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSele
     A tile without any geometry (NaN) stays. ``area`` in EPSG:2180.
     """
     if area.crs != "EPSG:2180":
-        raise ValueError(f"area must be in EPSG:2180, got {area.crs}")
+        raise ValidationError(f"obszar musi byc w EPSG:2180, podano {area.crs}")
     ox, oy = area.min_x, area.min_y
     area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
 
@@ -500,9 +500,9 @@ class GugikLazProvider(BaseProvider):
         cache=None,
     ):
         if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
-            raise ValueError(
-                f"Unsupported vertical_crs: '{vertical_crs}'. "
-                f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
+            raise ValidationError(
+                f"Nieobslugiwany uklad wysokosci: '{vertical_crs}'. "
+                f"Obslugiwane: {self.SUPPORTED_VERTICAL_CRS}"
             )
         # One session per thread (the CLI pool downloads tiles in parallel,
         # and requests.Session is not thread-safe); an injected session wins —
@@ -518,7 +518,7 @@ class GugikLazProvider(BaseProvider):
     @property
     def name(self) -> str:
         """Return provider name."""
-        return "GUGiK LAZ (chmura punktów)"
+        return "GUGiK LAZ (chmura punktow)"
 
     @property
     def base_url(self) -> str:
@@ -546,13 +546,13 @@ class GugikLazProvider(BaseProvider):
                 description=description,
             )
         except DownloadError as e:
-            raise DownloadError(f"{e} — wynik bylby niepelny, ponow pobranie") from e
+            raise DownloadError(f"{e} - wynik bylby niepelny, ponow pobranie") from e
 
         try:
             root = ET.fromstring(response.text)
         except ET.ParseError as e:
             raise DownloadError(
-                f"{description}: odpowiedz WFS nieczytelna: {e} — "
+                f"{description}: odpowiedz WFS nieczytelna: {e} - "
                 "wynik bylby niepelny, ponow pobranie"
             ) from e
 
@@ -563,7 +563,7 @@ class GugikLazProvider(BaseProvider):
                 if _localname(elem.tag) == "ExceptionText" and elem.text
             )
             raise DownloadError(
-                f"{description}: ExceptionReport: {details} — "
+                f"{description}: ExceptionReport: {details} - "
                 "wynik bylby niepelny, ponow pobranie"
             )
         return root
@@ -605,7 +605,7 @@ class GugikLazProvider(BaseProvider):
 
         if not years:
             raise DownloadError(
-                f"{description}: brak typow obiektow LIDAR — "
+                f"{description}: brak typow obiektow LIDAR - "
                 "wynik bylby niepelny, ponow pobranie"
             )
 
@@ -714,11 +714,9 @@ class GugikLazProvider(BaseProvider):
 
         Raises
         ------
-        ValueError
-            If ``bbox`` is not in EPSG:2180.
         ValidationError
-            Invalid year bounds or ``year`` together with
-            ``min_year``/``max_year``.
+            If ``bbox`` is not in EPSG:2180, the year bounds are invalid, or
+            ``year`` is combined with ``min_year``/``max_year``.
         DownloadError
             WFS discovery failure or a range without a year in the service.
         YearRangeError
@@ -737,16 +735,16 @@ class GugikLazProvider(BaseProvider):
         lo, hi = (year, year) if year is not None else (min_year, max_year)
         validate_year_bounds(lo, hi)
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
-                f"bbox must be in EPSG:2180, got {bbox.crs}. "
-                f"Transform it first (e.g. SheetParser.get_bbox(crs='EPSG:2180'))."
+            raise ValidationError(
+                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
+                "Najpierw przelicz (np. SheetParser.get_bbox(crs='EPSG:2180'))."
             )
 
         vcrs = vertical_crs or self._vertical_crs
         if vcrs not in self.SUPPORTED_VERTICAL_CRS:
-            raise ValueError(
-                f"Unsupported vertical_crs: '{vcrs}'. "
-                f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
+            raise ValidationError(
+                f"Nieobslugiwany uklad wysokosci: '{vcrs}'. "
+                f"Obslugiwane: {self.SUPPORTED_VERTICAL_CRS}"
             )
 
         available_years = self._get_available_years(vcrs, timeout)
@@ -846,7 +844,7 @@ class GugikLazProvider(BaseProvider):
             if returned and not kept:
                 raise DownloadError(
                     f"WFS {layer}: serwer zwrocil {returned} kafli, zaden nie "
-                    "przecina zadanego bboxa — niezgodnosc kolejnosci osi "
+                    "przecina zadanego bboxa - niezgodnosc kolejnosci osi "
                     "(zglos blad)"
                 )
 
@@ -890,7 +888,7 @@ class GugikLazProvider(BaseProvider):
             # D3: the same parser as the index and the sidecar — a tile without
             # a recognized CRS is skipped (like an index record) rather than
             # guessed from the sheet (pl_2000 segment + EPSG:2180 sidecar)
-            logger.warning(f"Kafel {sheet}: nierozpoznany uklad_xy {crs!r} — pominiety")
+            logger.warning(f"Kafel {sheet}: nierozpoznany uklad_xy {crs!r} - pominiety")
             return None
 
         year_text = text("akt_rok")

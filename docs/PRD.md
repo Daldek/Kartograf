@@ -108,8 +108,8 @@ wymagany od 0.8.0, bez wartości domyślnej).
 - Lista arkuszy toleruje brak pokrycia (R5): arkusz bez danych = `Warning:`
   i status `no_coverage`, kod 0 przy co najmniej jednym pliku; twarda
   awaria pobrania = kod 1 z pełną listą porażek.
-- Pobieranie równoległe arkuszy (`--workers`, domyślnie 4 w CLI; 1
-  w bibliotece — `DownloadManager(max_workers=1)`), pomijanie istniejących.
+- Pobieranie równoległe arkuszy (`--workers` = `download_data(workers=4)`;
+  niższy poziom `DownloadManager(workers=1)`), pomijanie istniejących.
 - Kampanie GUGiK (`--all-campaigns`, `--min-year`) — sekcja 3.11.
 
 #### Capabilities
@@ -133,9 +133,14 @@ from kartograf import find_sheets_for_geometry
 sheets = find_sheets_for_geometry(Path("area.shp"), "1:10000", system="1992")
 
 # Pobieranie przez godło (ASC) — plik w data/nmt/pl_1992_1m_evrf2007/...
+# = kartograf download --product nmt --sheet ... (ADR-037)
+from kartograf import download_data
+report = download_data(product="nmt", output_dir="./data", sheet="N-34-130-D-d-2-4",
+                       resolution="1m", vertical_crs="EVRF2007")
+file = report.files[0].file  # VersionedFile: path, status, label, newer, unverified
+# niższy poziom: DownloadManager(...).download_sheet(...) -> DownloadResult
 manager = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="1m"))
-path = manager.download_sheet("N-34-130-D-d-2-4")
-fetch = manager.last_sheet  # SheetFetch: status, version, newer, files, unverified, full_link
+result = manager.download_sheet("N-34-130-D-d-2-4")
 
 # Surowy WCS NMT 1m poza magazynem wersji: KRON86 z TIFF, EVRF2007 z ASC
 # multipart; obie sciezki daja GeoTIFF float32 z wysokosciami (NMPT tez).
@@ -310,12 +315,11 @@ from kartograf import LandCoverManager
 lc = LandCoverManager("./data", "bdot10k")
 
 # Pobieranie przez TERYT (powiat) -> landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
-result = lc.download(teryt="1465")
-print(result.file.path, result.file.status)
+result = lc.download(teryt="1465")          # LandCoverAreaResult
+print(result.files[0].file.path, result.files[0].file.status, result.ok)
 
-# Pobieranie przez godło (jeden powiat) albo każdego powiatu obszaru
-lc.download(sheet="N-34-130-D")
-lc.download_all_counties(sheet="N-34-130-D", layers=["PTWP", "SWRS"])
+# Każdy powiat obszaru (sheet=, bbox= w dowolnym układzie, geometry=)
+lc.download(sheet="N-34-130-D", layers=["PTWP", "SWRS"], workers=4)
 ```
 
 #### Warstwy (15 warstw — pobierany caly plik)
@@ -484,7 +488,7 @@ from kartograf import HSGCalculator
 calc = HSGCalculator("./data")
 
 # Oblicz HSG dla godła
-result = calc.calculate_hsg_by_sheet("N-34-130-D", depth="0-5cm", stat="mean")
+result = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")  # statystyka mean
 
 # Statystyki HSG
 stats = calc.get_hsg_statistics(result.file.path)
@@ -616,17 +620,14 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
 
 #### Capabilities
 ```python
-from kartograf import BBox, download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout
+from kartograf import BBox, check_pl_cutout, download_pl_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-result = download_pl_cutout(
-    bbox, "EPSG:5514", output_dir="./data", vertical_crs="EVRF2007", product="nmpt"
-)
-result.path, result.masked_pixels, result.zero_pixels, result.all_nodata
-prepared = prepare_pl_cutout(
-    bbox, "EPSG:2180", output_dir="./data", vertical_crs="EVRF2007", product="nmt"
-)
-result_nmt = run_pl_wcs_cutout(prepared)
+selection = dict(target_crs="EPSG:5514", output_dir="./data",
+                 vertical_crs="EVRF2007", product="nmpt")
+result = download_pl_cutout(bbox, **selection)
+result.file.path, result.masked_pixels, result.zero_pixels, result.all_nodata
+plan = check_pl_cutout(bbox, **selection)   # bez pobierania
 ```
 
 #### CLI Commands
@@ -677,7 +678,7 @@ wskazuje, która jest "bieżąca".
 - Skorowidz GUGiK niedostępny (błąd transportu) przy domyślnym wyborze bez
   flag roku i `--force` oraz istniejącej lokalnej kampanii: arkusz brany
   z lokalnej kampanii z `Warning:` (errata 5 ADR-030); biblioteka:
-  `SheetFetch.unverified` / `DownloadResult.unverified` /
+  `DownloadResult.unverified` /
   `PlCutoutResult.unverified`.
 - Tylko PL: zadanie bez części PL z `--all-campaigns`, flagą roku albo
   `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` =
@@ -692,11 +693,10 @@ from kartograf import DownloadManager, GugikProvider
 
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 manager = DownloadManager("./data", provider, min_year=2022, full_sheet=True)
-manager.download_sheet("N-34-139-C-a-3-1")
-manager.last_sheet.downloaded      # pliki kampanii pobrane teraz
-manager.last_sheet.link            # "hardlink" | "copy"
-manager.last_sheet.full_link       # ścieżka full_sheet/ albo None
-manager.last_result.without_full   # arkusze bez pełnego lotu w zakresie
+result = manager.download_sheet("N-34-139-C-a-3-1")  # DownloadResult
+result.campaign_files              # godło -> pliki kampanii (pobrane i użyte)
+result.full_links                  # godło -> ścieżka full_sheet/
+result.without_full                # arkusze bez pełnego lotu w zakresie
 # CampaignRef — opis kampanii (id, data, dt_pzgik, url, ...)
 ```
 
@@ -781,8 +781,8 @@ transform/ (przypięte transformacje CRS), cache/ (MetadataCache, SQLite).
 ┌─────────────────────────────────────────────────────────────┐
 │                    HSGCalculator                            │
 ├─────────────────────────────────────────────────────────────┤
-│  calculate_hsg_by_sheet()                                   │
-│  calculate_hsg_by_bbox()                                    │
+│  calculate_hsg(sheet= | bbox= | geometry=)                  │
+│  check_hsg(...)                                             │
 │  get_hsg_statistics()                                       │
 └──────────────────────────┬──────────────────────────────────┘
                            │
@@ -811,6 +811,9 @@ from kartograf import (
     # Cache
     MetadataCache,
 
+    # Notices
+    Notice,
+
     # Core
     SheetParser,
     Parser2000,
@@ -819,30 +822,61 @@ from kartograf import (
     find_sheets_for_bbox,
     find_sheets_2000_for_bbox,
     find_sheets_for_geometry,
+    get_overall_bbox,
+    transform_bbox,
+    parent_request_for,
 
-    # Download (NMT/NMPT/Orto, kampanie ADR-030)
+    # Download (command level: `kartograf download`, spec 4.1)
+    download_data,
+    check_data,
+    DataReport,
+    UnitFile,
+    UnitFailure,
+
+    # Download (NMT)
     DownloadManager,
     DownloadProgress,
     DownloadResult,
-    SheetFetch,
     CampaignRef,
     FileStorage,
 
-    # Download — wycinek PL WCS (ADR-035)
-    PlCutout,
-    PlCutoutResult,
-    download_pl_cutout,
-    prepare_pl_cutout,
-    run_pl_wcs_cutout,
+    # Download (versioned store, update plan)
+    UpdateMode,
+    VersionedFile,
+    VersionRef,
+    PlanItem,
+    UpdatePlan,
 
-    # Download — kafle LAZ (ADR-029)
+    # Download (PL cutout: WCS ADR-035)
+    PlCutoutResult,
+    check_pl_cutout,
+    download_pl_cutout,
+
+    # Download (CZ cutout, countries)
+    CountryPart,
+    countries_for_bbox,
+    split_bbox_by_country,
+    CzCutoutResult,
+    check_cz_cutout,
+    download_cz_cutout,
+
+    # Download (CZ sheet: SM5 sheet / TM33 tile, R4)
+    CzSheetResult,
+    check_cz_sheet,
+    download_cz_sheet,
+
+    # Download (LAZ tiles, D17)
     LazDownloadResult,
     LazTileFailure,
+    check_laz_area,
     download_laz_area,
-    run_laz_download,
 
     # Land Cover
     LandCoverManager,
+    LandCoverResult,
+    LandCoverAreaResult,
+    LandCoverFailure,
+    Edition,
 
     # Providers
     BaseProvider,
@@ -855,23 +889,38 @@ from kartograf import (
     SupersededLazTile,
     LandCoverProvider,
     Bdot10kProvider,
+    Bdot10kPackage,
     CorineProvider,
     SoilGridsProvider,
-    CuzkDmrProvider,        # CZ (CUZK, etap 1)
+    CuzkDmrProvider,
     create_dmr_provider,
+
+    # TERYT (PRG)
+    discover_teryts_for_bbox,
+    teryt_for_point,
 
     # Hydrology
     HSGCalculator,
+    HsgResult,
+    hsg_from_rasters,
+
+    # Transport and mosaic (stable since 0.7.1)
+    get_with_retry,
+    make_gugik_session,
+    mosaic_and_crop,
+    check_source_grid,
 
     # Exceptions
     KartografError,
     ParseError,
     ValidationError,
     DownloadError,
-    NoCoverageError,        # (DownloadError)
+    NoCoverageError,
+    YearRangeError,
+    CacheError,
 
     # Version
-    __version__,            # "0.8.0-dev"
+    __version__,
 )
 ```
 

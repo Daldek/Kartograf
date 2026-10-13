@@ -174,7 +174,7 @@ def write_link_sidecar(link: Path, target: Path) -> None:
         if meta is None:
             sidecar.unlink(missing_ok=True)
             logger.warning(
-                f"Sidecar wersji {target} nieczytelny — brak sidecara {sidecar}"
+                f"Sidecar wersji {target} nieczytelny - brak sidecara {sidecar}"
             )
             return
         extra = meta.get("extra")

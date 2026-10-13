@@ -183,7 +183,7 @@ def _provider_with_getfeature(text):
 class TestInitAndProperties:
     def test_defaults(self):
         p = GugikLazProvider(vertical_crs="EVRF2007")
-        assert p.name == "GUGiK LAZ (chmura punktów)"
+        assert p.name == "GUGiK LAZ (chmura punktow)"
         assert p.base_url == "https://mapy.geoportal.gov.pl"
         assert p.default_extension == ".laz"
         assert p.vertical_crs == "EVRF2007"
@@ -193,7 +193,7 @@ class TestInitAndProperties:
         assert p.vertical_crs == "KRON86"
 
     def test_invalid_vertical_crs(self):
-        with pytest.raises(ValueError, match="Unsupported vertical_crs"):
+        with pytest.raises(ValidationError, match="Nieobslugiwany uklad wysokosci"):
             GugikLazProvider(vertical_crs="NONSENSE")
 
     def test_endpoints_present(self):
@@ -406,7 +406,7 @@ class TestSessionPerThread:
 class TestDiscoverTiles:
     def test_requires_epsg_2180(self):
         p = GugikLazProvider(vertical_crs="EVRF2007")
-        with pytest.raises(ValueError, match="EPSG:2180"):
+        with pytest.raises(ValidationError, match="EPSG:2180"):
             p.discover_tiles(BBox(0, 0, 1, 1, "EPSG:4326"), year=2024)
 
     def test_parses_and_filters_outside_tiles(self):

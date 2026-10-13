@@ -111,7 +111,7 @@ class PinnedTransform:
         if self.src_crs is None or self.dst_crs is None:
             raise TransformError(
                 f"Operacja GDAL wymaga znanej pary ukladow "
-                f"[{self.description}] — PinnedTransform zbudowany bez nich"
+                f"[{self.description}] - PinnedTransform zbudowany bez nich"
             )
         pipeline = str(self._transformer.definition).strip()
         if not pipeline.startswith("proj=pipeline"):
@@ -149,7 +149,7 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "EPSG:5514",
         "EPSG:2180",
         1.0,
-        "EPSG:1622 S-JTSK to ETRS89 (1), Czechy; pin DATUM_STEP_PINS — "
+        "EPSG:1622 S-JTSK to ETRS89 (1), Czechy; pin DATUM_STEP_PINS - "
         "EPSG:4829 (0,5 m) to operacja slowacka; reprojekcja tresci LOKALNA, "
         "serwer CUZK gubi datum shift dla imageSR=2180 (ADR-024)",
     ),
@@ -203,7 +203,7 @@ DATUM_STEP_PINS: dict[int, frozenset[str]] = {
 }
 
 _KRON86_EVRF_REMEDY = (
-    "Siatki pl86_2019/pl07_2019 nie sa publiczne — zainstaluj je recznie do "
+    "Siatki pl86_2019/pl07_2019 nie sa publiczne - zainstaluj je recznie do "
     "PROJ_DATA albo uzyj EVRF2007 (EPSG:5621)."
 )
 

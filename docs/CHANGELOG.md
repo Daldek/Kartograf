@@ -9,6 +9,140 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- `DownloadManager.download_sheet`, `download_hierarchy` i
+  `download_sheets` zwracaja teraz `DownloadResult` zamiast sciezki lub listy
+  sciezek. `result.files[godlo]` zawiera `VersionedFile` (m.in. `path`,
+  `version_path`, `label`, `status`), a `result.stale` i `result.notices`
+  przekazuja nieaktualne pozycje planu i komunikaty o danych.
+  `check_updates(manager, sheets)` -> `manager.check_sheets(sheets)`;
+  `upgrade(manager, plan)` -> `manager.download_sheets(sheets, update="upgrade",
+  plan=plan)`. Usunieto `last_result`, `last_sheet`, `UpgradeReport` oraz
+  eksport `SheetFetch`; `max_workers=` menedzera -> `workers=`, dodano
+  `year=` i `on_notice=`. Co zrobic (takze w Hydrografie,
+  `scripts/download_dem.py`): korzystaj z wartosci zwroconej, aktualizuj
+  wywolania metod i odczyty plikow z `result.files`, a komunikaty wypisuj
+  z `on_notice` bez ponownego przetwarzania `result.notices`.
+- Cache metadanych (Z6, ADR-037): funkcje publiczne (`download_data`,
+  `check_data`, tory `download_*`/`check_*`, `LandCoverManager`,
+  `HSGCalculator`) przyjmuja `cache: MetadataCache | bool = True` -
+  domyslnie ten sam plik co CLI (`<cwd>/.kartograf_cache.db`), dotad
+  biblioteka pracowala bez cache. `update="force"` pomija odczyty z cache
+  (jak `--force`). Co zrobic: proces w katalogu bez prawa zapisu albo
+  testy bez stanu - `cache=False`; wlasny plik - `cache=MetadataCache(...)`.
+- Wycinek PL: `download_pl_cutout(bbox, *, target_crs, ...)` i
+  `check_pl_cutout(bbox, *, target_crs, ...)` przyjmuja te same argumenty
+  wyboru (`target_crs` tylko jako nazwany), `download_pl_cutout` dostaje
+  `plan=`, `cache=` (`True` = domyslny cache w cwd) i `on_notice=`;
+  `PlCutoutResult.notices` niesie komunikaty o rozmiarze wycinka
+  (`cutout_size`, przed pierwszym zapytaniem WCS) i wycinku bez danych
+  (`all_nodata`). `prepare_pl_cutout`, `run_pl_wcs_cutout` i `PlCutout`
+  sa krokami wewnetrznymi (poza `__all__`). Co zrobic: podawaj
+  `target_crs=` nazwany; `check_pl_cutout(cutout)` ->
+  `check_pl_cutout(bbox, target_crs=..., output_dir=..., vertical_crs=...,
+  product=...)`; plan wykonuj przez `download_pl_cutout(..., plan=plan)`.
+- CZ: arkusz CZ ma publiczne API `download_cz_sheet(sheet, *, output_dir,
+  vertical_crs, resolution=None, update, plan, cache, on_notice)` i
+  `check_cz_sheet` z tymi samymi argumentami (`CzSheetResult`; arkusz SM5
+  tylko `5m`, kafel TM33 wymaga `2m`/`5m`; errata decyzji 9 planu 2/3).
+  `check_cz_cutout(bbox, *, output_dir, target_crs, vertical_crs,
+  resolution)` przyjmuje argumenty `download_cz_cutout` (bez providera
+  i `image_crs`); `download_cz_cutout` dostaje `plan=`, `on_notice=`,
+  `cache=True` (domyslny cache w cwd). Wyniki CZ maja `notices`
+  (`all_nodata` zamiast ostrzezenia w logu). `run_cz_cutout` poza API.
+  Co zrobic: `run_cz_cutout(provider, bbox, ...)` ->
+  `download_cz_cutout(bbox, ...)`; `check_cz_cutout(provider, bbox,
+  output_dir=, image_crs=)` -> `check_cz_cutout(bbox, output_dir=,
+  target_crs=, vertical_crs=, resolution=)`.
+- LAZ: `download_laz_area` przyjmuje `bbox` w dowolnym obslugiwanym CRS
+  (uklady CZ tylko przez przypieta operacje), `plan=`, `cache=True`,
+  `on_notice=` (`laz_superseded` zamiast wypisywania przez CLI) i
+  `workers=` zamiast `max_workers=`; nowy blizniak `check_laz_area` z tymi
+  samymi argumentami. `on_progress` dostaje `(0, total)` przed pierwszym
+  kaflem. `run_laz_download` i `check_laz_updates` poza API. Co zrobic:
+  `max_workers=` -> `workers=`; `check_laz_updates(selection, ...)` ->
+  `check_laz_area(bbox, output_dir=..., vertical_crs=..., ...)`; plan
+  wykonuj przez `download_laz_area(..., update="upgrade", plan=plan)`.
+- Land cover: `LandCoverManager.download(*, teryt, sheet, bbox, geometry,
+  layer, update, plan, workers, on_notice, **opcje)` i `check` z tym samym
+  wyborem sa funkcjami poziomu komendy (jedno wywolanie = `kartograf
+  landcover download`). `download` zawsze zwraca `LandCoverAreaResult`
+  (`files`, `failed`, `stale`, `notices`, `ok`); BDOT10k z `sheet`/`bbox`/
+  `geometry` pobiera kazdy powiat obszaru (rownolegle z `workers`);
+  `bbox` w dowolnym obslugiwanym CRS, `geometry` = obwiednia pliku;
+  komunikaty `corine_preview` i `geometry_layer_default` w `notices`.
+  `LandCoverManager(cache=True)` = domyslny cache w cwd. Usuniete:
+  `download_all_counties`, `check_all_counties`, `download_by_teryt`,
+  `download_by_bbox`, `download_by_sheet`, `download_batch`,
+  `LandCoverResult.stale`; wybor `teryt` dla CORINE/SoilGrids to
+  `ValidationError` (nie `NotImplementedError`). Co zrobic (takze Hydrograf
+  `scripts/download_landcover.py`): `download_*`/`download_all_counties` ->
+  `download(teryt=|sheet=|bbox=|geometry=)`; plik pojedynczego wyboru:
+  `result.files[0].file`; nieaktualne pozycje planu: `result.stale`;
+  `download_batch(items)` -> petla po `download` albo `workers=` dla
+  powiatow obszaru.
+- HSG: `HSGCalculator.calculate_hsg(*, sheet, bbox, geometry, layer, depth,
+  update, plan, timeout, on_notice)` i `check_hsg` z tym samym wyborem
+  zastepuja `calculate_hsg_by_sheet/bbox` i `check_hsg_by_sheet/bbox`.
+  Bez parametru `stat`: HSG zawsze ze statystyki `mean` (segmenty
+  `soil/global_soilgrids_<wlasciwosc>_<glebokosc>_mean` i
+  `hsg/global_soilgrids_<glebokosc>_mean` bez zmian - istniejace magazyny
+  dzialaja bez migracji). `bbox` w dowolnym CRS, `geometry` = obwiednia
+  pliku; `HsgResult.notices` i `ok`; `HSGCalculator(cache=True)`. Co
+  zrobic (Hydrograf `core/cn_calculator.py`, `scripts/bootstrap.py`):
+  `calculate_hsg_by_bbox(bbox, depth=..., stat="mean")` ->
+  `calculate_hsg(bbox=bbox, depth=...)`; analogicznie arkusz i `check_hsg`.
+- `kartograf download` = `download_data(...)` / `check_data(...)` (nowe,
+  `kartograf.download.data`): cala logika komendy (godlo i kraj,
+  `country="auto"` z zawezeniem do PL i czesciowym sukcesem, walidacja
+  kazdego kraju przed pobraniem, rozwiniecie obszaru PL na arkusze,
+  `parent_request`) jest w bibliotece; wynik `DataReport(files, failed,
+  stale, superseded, notices, ok)`, CLI tylko tlumaczy flagi i wypisuje
+  raport. Bledy wejscia to `ValidationError` z tekstem jak w CLI.
+  Komunikaty o danych (`Info:`/`Warning:`) powstaja w bibliotece jako
+  `Notice` (m.in. przyciecie `auto`, brak pokrycia, dowiazania spoza
+  zakresu); stopnie w komunikatach przyciecia jako `st.N`/`st.E` (ASCII).
+  W podsumowaniu `bledy:` liczy nieudane czesci zadania (arkusze bez danych
+  GUGiK to `Warning:`, nie blad). Dodane do API: `download_data`,
+  `check_data`, `DataReport`, `UnitFile`, `UnitFailure`, `get_overall_bbox`,
+  `transform_bbox`, `parent_request_for`. Co zrobic: skrypty wolajace CLI
+  przez `subprocess` moga przejsc na `download_data` z tymi samymi
+  wartosciami (`resolution={"pl": "1m", "cz": "2m"}` zamiast `pl=1m,cz=2m`).
+- `kartograf landcover download` i `kartograf soilgrids hsg`: jedno
+  wywolanie biblioteki na komende; nowe flagi `--bbox-crs` (bbox w dowolnym
+  ukladzie z listy, jak w `download`) i `--quiet` (bez linii statusu na
+  stdout; `Info:`/`Warning:` na stderr zostaja), w `landcover download`
+  takze `--layers KODY` (filtr warstw BDOT10k GPKG, np. `SWRS,PTWP`),
+  `--keep-raw` (oryginalny ZIP GUGiK w magazynie) i `--workers N`
+  (rownolegle powiaty obszaru BDOT10k, domyslnie 1). Brak albo kilka
+  wyborow obszaru: blad biblioteki `Podaj dokladnie jeden wybor: ...`
+  zamiast `Must provide one of`/`Provide only one of`.
+- Sidecar: wspolrzedne `request.bbox` i `extra.parent_request.bbox` zawsze
+  jako liczby zmiennoprzecinkowe (`770000.0`), takze dla `BBox` z liczb
+  calkowitych - ten sam plik z CLI i z biblioteki. Co zrobic: nic
+  (porownanie wartosci liczbowych bez zmian); porownania tekstowe sidecarow
+  musza przyjac zapis `.0`.
+- Jezyk (Z5): pomoc wszystkich komend, komunikaty CLI, teksty `Notice`
+  i bledow `KartografError` po polsku i wylacznie w ASCII. Zmienione m.in.:
+  `Invalid bbox format` -> `Nieprawidlowy bbox`, `Must provide one of` /
+  `Specify only one of` -> `Podaj (dokladnie jeden) wybor obszaru`,
+  `File not found` -> `Brak pliku`, `Unsupported ...`/`Invalid ...` ->
+  `Nieobslugiwany ...`/`Nieprawidlowy ...`, `Found N sheets ...` ->
+  `Znaleziono arkuszy w skali ...`, `Downloading ...` -> `Pobieranie ...`,
+  wyjscie `parse` (`Godlo:`, `Skala:`, `Uklad:`, `Czlony:`, `Hierarchia`,
+  `Arkusze potomne`), `cache stats` (`Wpisy rekordow:` ...), komunikaty
+  `sheet_parser` bez polskich znakow (`Nieprawidlowe godlo`), opisy warstw
+  BDOT10k (`Tereny lesne`), `metavar` (`GODLO`, `KATALOG`, `PLIK`, `ROK`,
+  `NAZWA`, `KOD`, `SKALA`); ikony paska postepu ASCII: `>` pobieranie,
+  `+` pobrano, `o` pominieto, `x` blad, `0` brak danych (bylo `↓ ✓ ○ ✗ ∅`).
+  Co zrobic: skrypty dopasowujace teksty CLI albo `str(wyjatek)` - nowe
+  brzmienie; lepiej typ wyjatku (`ValidationError`) i kod wyjscia.
+
+- Biblioteka: bledne wartosci wejscia providerow, magazynu, wycinka LAZ
+  i skali docelowej arkuszy zglaszaja `ValidationError` (podklasa
+  `KartografError`), a nie `ValueError`; CLI nie przechwytuje juz
+  `ValueError` jako bledu uzytkownika. Co zrobic: zmien
+  `except ValueError` na `except ValidationError` dla bledow argumentow;
+  nie obejmuj nim bledow wewnetrznych niezmiennikow programu.
 - Usunieto arkuszowy tor wycinkow PL: `PlCutoutSheets`,
   `select_pl_cutout_sheets`, `run_pl_cutout`, `build_pl_cutout`,
   `build_cutout_from_sheets` oraz powiazane funkcje do estymacji miejsca,
@@ -42,7 +176,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Biblioteka: polskie identyfikatory publicznego API zastapione
   angielskimi, bez aliasow (ADR-031 errata 1). `godlo` -> `sheet`,
   `godla` -> `sheets` we wszystkich parametrach i atrybutach (m.in.
-  `SheetParser.sheet`, `SheetFetch.sheet`, `DownloadProgress.sheet`,
+  `SheetParser.sheet`, `DownloadProgress.sheet`,
   `LazTile.sheet`, `DownloadError.sheet`/`NoCoverageError.sheet`,
   `DownloadManager.download_sheet(sheet)`, `check_year_range(sheets)`,
   `MetadataCache.get_record(..., sheet)`, `LandCoverManager.download(sheet=)`,
@@ -274,6 +408,22 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Biblioteka (ADR-037): `download_data`/`check_data` = komenda
+  `kartograf download` (wynik `DataReport`, `UnitFile`, `UnitFailure`),
+  `download_cz_sheet`/`check_cz_sheet`, `check_laz_area`,
+  `get_overall_bbox`, `transform_bbox`, `parent_request_for` w API;
+  testy zgodnosci CLI = API (`tests/test_parity.py`,
+  `tests/test_parity_landcover.py`). CLI: flagi `landcover download
+  --layers --keep-raw --bbox-crs --workers --quiet` i `soilgrids hsg
+  --bbox-crs --quiet` (szczegoly w BREAKING wyzej).
+- Biblioteka: `Notice(level, code, text)` w publicznym API oraz
+  `kartograf.notices.NoticeSink` (zbieranie komunikatow i przekazanie do
+  callbacku); tekst komunikatow ograniczony do ASCII, kody sa stale.
+- Biblioteka i CLI: `kartograf.cache.defaults.open_cache(cache, force=...)`
+  wspoldzieli domyslna baze metadanych `.kartograf_cache.db` w katalogu
+  biezacym (`default_cache_path()`); `cache=False` pomija cache, a `force=True`
+  dla przekazanej instancji uzywa osobnego polaczenia bez zmiany jej odczytow.
+  Wylaczenie cache jest zglaszane przez `Notice` (`cache_disabled`).
 - CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
   plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
   nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
@@ -321,6 +471,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `soilgrids hsg --bbox ... -o <katalog>` pisal `hsg_bbox_<glebokosc>.tif`
   bez wspolrzednych — dwa obszary nadpisywaly jeden plik. Teraz
   `hsg/global_soilgrids_<gl>_<stat>/bbox/<wsp>.tif`.
+- Arkusze PL pobierane rownolegle (`workers > 1`): wynik (`DownloadResult`
+  listy, `files`) i komunikaty (np. lista arkuszy bez danych GUGiK)
+  w kolejnosci zlecenia, nie zakonczenia - to samo zadanie daje zawsze ten
+  sam raport (wykryte testem zgodnosci CLI = API).
+- `--check-updates --plan PLIK` z katalogiem PLIKU, ktory nie istnieje:
+  `Error: nie udalo sie zapisac planu <PLIK>: ...` (kod 1) zamiast
+  `Error: FileNotFoundError: ...` z podpowiedzia `KARTOGRAF_DEBUG`
+  (weryfikacja na zywo 2026-10-12).
 
 ## [0.7.2] - 2026-10-11
 

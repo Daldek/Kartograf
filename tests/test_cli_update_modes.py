@@ -2,11 +2,13 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import pytest
 
 from kartograf.cli.commands import main
+from kartograf.download.cutout import PlCutoutResult
+from kartograf.download.cz_sheets import CzSheetResult
 from tests.test_cli import _CZ_FACTORY_PATCH, _cz_provider_mock
 from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
@@ -16,7 +18,7 @@ G = "N-34-139-C-a-3-1"
 
 def _run(fake, out, *argv):
     with patch(
-        "kartograf.cli.download_cmd._create_provider_and_storage",
+        "kartograf.download.data._create_provider_and_storage",
         return_value=(fake, None),
     ):
         return main(
@@ -111,6 +113,25 @@ def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys
     assert fake.downloads == [REC["84183"].url]
 
 
+def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
+    """Live 2026-10-12: a --plan path in a missing directory crashed with
+    ``Error: FileNotFoundError: ...`` and the debug hint."""
+    plan = tmp_path / "missing" / "plan.json"
+    rc = _run(
+        FakeCampaignProvider(C14),
+        tmp_path / "data",
+        "--sheet",
+        G,
+        "--check-updates",
+        "--plan",
+        str(plan),
+    )
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert f"Error: nie udalo sie zapisac planu {plan}: " in err
+    assert "KARTOGRAF_DEBUG" not in err and "FileNotFoundError" not in err
+
+
 def test_upgrade_plan_of_other_store_is_error(tmp_path, capsys):
     fake = FakeCampaignProvider(C14)
     plan = tmp_path / "plan.json"
@@ -185,9 +206,11 @@ def test_update_flags_accepted_for_every_download_track(tmp_path, capsys, track,
         patch(_CZ_FACTORY_PATCH, return_value=cz),
         patch("kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=laz),
         _no_pl_wcs() as prg,
-        patch("kartograf.download.cutout.run_pl_wcs_cutout") as pl_run,
+        patch(
+            "kartograf.download.cutout.download_pl_cutout",
+            return_value=PlCutoutResult(None),
+        ) as pl_run,
     ):
-        pl_run.return_value = Mock(file=None, all_nodata=False, stale=())
         rc = _download(tmp_path / "out", *TRACKS[track], flag)
     err = capsys.readouterr().err
     assert rc == 0, err
@@ -306,11 +329,11 @@ def test_laz_summary_counters(tmp_path, capsys):
     [((), None), (("--upgrade",), "upgrade"), (("--force",), "force")],
 )
 def test_cz_sheet_cli_uses_library(tmp_path, flag, update):
-    with (
-        patch(_CZ_FACTORY_PATCH, return_value=_cz_provider_mock()),
-        patch("kartograf.download.cz_sheets.run_cz_sheet") as run,
-    ):
-        run.return_value = Mock(file=None, all_nodata=False, stale=())
+    with patch(
+        "kartograf.download.cz_sheets.download_cz_sheet",
+        return_value=CzSheetResult(None, False),
+    ) as run:
         assert _download(tmp_path, "--sheet", "302_5550", *CZ_2M, *flag) == 0
-    assert run.call_args.args[1] == "302_5550"
+    assert run.call_args.args[0] == "302_5550"
     assert run.call_args.kwargs["update"] == update
+    assert run.call_args.kwargs["resolution"] == "2m"

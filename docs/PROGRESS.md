@@ -103,7 +103,19 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec szostej sesji):**
+> **START NASTEPNEJ SESJI (stan 2026-10-12, koniec osmej sesji):**
+> 0. **Spojnosc CLI/biblioteka/API WDROZONA** na galezi
+>    `chore/cli-api-consistency` (od `develop` `d5215e8`, 20 commitow
+>    `be6131e`..`bdbfe51`; plan
+>    `docs/superpowers/plans/2026-10-12-cli-api-consistency.md` Task 0-17
+>    zrobione, ADR-037). Brama zielona (pytest offline, ruff, ruff format,
+>    mypy). Weryfikacja na zywo: 10 scenariuszy CLI = API, 0 roznic
+>    (`docs/research/2026-10-12-cli-api-consistency-live/raport.md`).
+>    Nastepny krok (Task 18): merge `--no-ff` galezi do `develop` i push -
+>    WYLACZNIE za zgoda uzytkownika (`develop` sie nie ruszyl, rebase
+>    zbedny). Potem przed wydaniem 0.8.0: Hydrograf/Hydrolog wg CHANGELOG
+>    [0.8.0] "Co zrobic" (m.in. `DownloadResult` z wartosci zwracanej,
+>    `LandCoverAreaResult`, `calculate_hsg` bez `stat`, cache w cwd).
 > 1. **Magazyn wersjonowany (plany 1/3-3/3) SCALONY do `develop`
 >    lokalnie** (merge `--no-ff` `423a664` po rebase na `develop`, brama
 >    zielona; plan 3/3: `d2e936c`..`3f313a2`, E2E na zywo calosci PASS:
@@ -159,6 +171,65 @@
 > ("Otwarte drobne"), do decyzji uzytkownika.
 > Dane testow na zywo: poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); katalog `e2e-data/` w repo nie istnieje.
+
+### Sesja 2026-10-12 (osma) — wdrozenie spojnosci CLI, biblioteki i API
+
+- Galaz `chore/cli-api-consistency`, commity `be6131e`..`bdbfe51` (plan
+  Task 0-17): zegar wynikow `_clock.py` i helper zgodnosci
+  (`tests/parity.py`), `ValidationError` zamiast `ValueError` (Z4),
+  `Notice`/`NoticeSink` (Z3), wspolny cache `cache/defaults.py` (Z6);
+  tory z para `download_*`/`check_*` (arkusze PL `DownloadResult` z wartosci
+  zwracanej, wycinek PL, arkusz i wycinek CZ, LAZ w dowolnym CRS, land cover
+  `LandCoverAreaResult`, HSG `calculate_hsg` bez `stat`); komenda download
+  w bibliotece `download/data.py` (`download_data`/`check_data`,
+  `DataReport`), `download/options.py`, `download/area.py`; CLI tylko
+  tlumaczy (test importow), flagi R7 (`landcover --layers --keep-raw
+  --bbox-crs --workers --quiet`, `soilgrids hsg --bbox-crs --quiet`);
+  pomoc, komunikaty i bledy po polsku ASCII (Z5); dokumentacja (ADR-037,
+  STANDARDS 7.3/9.4, ARCHITECTURE, USAGE, PRD, SCOPE, README, CHANGELOG
+  [0.8.0]).
+- Testy zgodnosci CLI = API (`tests/test_parity.py`,
+  `tests/test_parity_landcover.py`, zamrozony zegar, porownanie bajtowe
+  magazynu) wykryly i usunely dwie rozbieznosci: bbox sidecara z liczb
+  calkowitych vs zmiennoprzecinkowych (`core.bbox.bbox_coords`) i kolejnosc
+  wyniku arkuszy rownoleglych zalezna od watkow (`93eee02`). Mutacja
+  kontrolna: zmiana tekstu `Notice` tylko w CLI -> 13 testow czerwonych,
+  inny bbox tylko w CLI -> 5.
+- Na zywo (`docs/research/2026-10-12-cli-api-consistency-live/raport.md`):
+  10 scenariuszy, 0 roznic CLI/API; usterka CLI (zapis `--plan`
+  w nieistniejacym katalogu) poprawiona w `c44c026`.
+- Testy offline: 3379 -> 3488; brama zielona. Subagenci niedostepni
+  (limit uzycia) - praca bez delegacji.
+- Do zrobienia: Task 18 (merge do `develop`, push) za zgoda uzytkownika.
+
+### Sesja 2026-10-12 (siodma) — audyt spojnosci CLI, biblioteki i API; spec i plan
+
+- Galaz `chore/cli-api-consistency` od `develop` `d5215e8`; tylko dokumenty
+  (bez commitu, bez zmian kodu): raport
+  `docs/research/2026-10-12-cli-api-consistency/raport.md` (R1-R13), spec
+  `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md`
+  (ZAAKCEPTOWANY, Z1-Z7, S1-S6), plan
+  `docs/superpowers/plans/2026-10-12-cli-api-consistency.md` (Task 0-18).
+  Metoda audytu: `--help` kazdej komendy, `inspect.signature` `__all__`,
+  lektura torow CLI, parsowanie 67 przykladow CLI z dokumentacji (wszystkie
+  OK), smoke bibliotek z bbox EPSG:4326 (LAZ: `ValueError`, land cover/HSG:
+  `ValidationError`).
+- Najwazniejsze ustalenia: logika tylko w CLI (`--country auto`, walidacja
+  `--system`/`--scale`, `parent_request`, `--geometry`/`--bbox-crs` poza
+  `download` arkuszy), cztery ksztalty wyniku/planu (arkusze PL ze stanem
+  `last_result`), `stat` HSG zaszyte w CLI, mieszane typy wyjatkow (36
+  `ValueError` / 122 `ValidationError`), mieszany jezyk pomocy CLI (141
+  literalow spoza ASCII), CLI `landcover` pobiera wszystkie powiaty, a
+  `LandCoverManager.download(bbox=)` jeden.
+- Decyzje uzytkownika: R1-R5, R7, R11-R13; R3 bez `stat` (HSG tylko
+  `mean`, sciezki magazynu bez zmian); R6 wariant B; R9 polski ASCII; R12
+  biblioteka z cache jak CLI; S1-S6 wg propozycji specu (m.in.
+  `download_data`/`check_data`, kroki wewnetrzne poza `__all__`); kryterium
+  zgodnosci przy zamrozonym zegarze (pola czasowe to fakt przebiegu);
+  `LandCoverManager.download_by_*`/`download_batch` usuwane w Task 9.
+- Sprawdzone uzycie API w `../Hydrograf` (spec sekcja 8); `../Hydrolog` bez
+  importow `kartograf`.
+- Brama nieuruchamiana (bez zmian kodu).
 
 ### Sesja 2026-10-12 (szosta) — wdrozenie planu 3/3 magazynu wersjonowanego
 
@@ -2239,17 +2310,16 @@ wchodza w tym samym wydaniu (decyzja uzytkownika). Kazda na wlasnej galezi.
     1 m, uklad pionowy CZ) i wartosc domyslna, jesli zostaje. Komunikat
     bledu przy braku wartosci podaje te sama liste. Sprawdzic tez
     istniejace opisy (np. `--vertical-crs` mowi dzis o "default").
-- [ ] **Spojnosc CLI, biblioteki i API (przed wydaniem 0.8.0; decyzja
-  uzytkownika 2026-10-12):** sprawdzic, czy CLI (`kartograf --help` kazdej
-  komendy), biblioteka (funkcje `run_*`/`download_*`/`check_*`, menedzery,
-  providery) i publiczne API (`kartograf/__init__.py` `__all__`) maja te
-  same mozliwosci, flagi/parametry i logike dzialania: kazda flaga CLI ma
-  odpowiednik w API i odwrotnie (np. tryby `update`, `--plan`, zakres lat,
-  `--full-sheet`, `--target-crs`, `--country auto`), te same wartosci
-  domyslne, walidacje i komunikaty bledow, te same statusy wyniku. Wynik:
-  tabela flaga/parametr -> CLI / biblioteka / `__all__` z lukami;
-  rozbieznosci naprawic albo zapisac jako decyzje (np. arkusz CZ bez
-  publicznego API — decyzja 9 planu 2/3 magazynu).
+- [x] **Spojnosc CLI, biblioteki i API (przed wydaniem 0.8.0; decyzja
+  uzytkownika 2026-10-12):** ZROBIONE 2026-10-12 na galezi
+  `chore/cli-api-consistency` (plan Task 0-17, ADR-037): CLI tylko tlumaczy
+  (`download_data`/`check_data`, `LandCoverManager.download`,
+  `HSGCalculator.calculate_hsg`), wspolny ksztalt wyniku i planu, `Notice`,
+  wspolny cache, `ValidationError`, polski ASCII, flagi R7, testy
+  zgodnosci CLI = API offline (`tests/test_parity*.py`) i na zywo
+  (`docs/research/2026-10-12-cli-api-consistency-live/raport.md`, 0 roznic).
+  Raport wejsciowy R1-R13:
+  `docs/research/2026-10-12-cli-api-consistency/raport.md`.
 
 #### Do v1.0.0 — roadmapa
 

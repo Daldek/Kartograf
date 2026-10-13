@@ -79,7 +79,7 @@ class TestSoilGridsEdition:
 
     def test_unknown_property_rejected_before_network(self):
         session = _session(content=CAPABILITIES)
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             SoilGridsProvider(session=session).edition("gold")
         session.get.assert_not_called()
 

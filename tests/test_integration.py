@@ -140,8 +140,8 @@ class TestDownloadManagerIntegration:
 
         result = manager.download_sheet("N-34-130-D-d-2-4")
 
-        # Should return path without calling provider
-        assert result.exists()
+        assert result.files["N-34-130-D-d-2-4"][0].path.exists()
+        assert result.skipped == ["N-34-130-D-d-2-4"]
         mock_provider.download.assert_not_called()
 
     def test_manager_hierarchy_counting(self, test_data_dir):
@@ -290,7 +290,7 @@ class TestErrorHandling:
         """Test that requesting larger scale descendants raises error."""
         parser = SheetParser("N-34-130-D-d-2-4")  # 1:10k
 
-        with pytest.raises(ValueError):
+        with pytest.raises(ValidationError):
             parser.get_all_descendants("1:100000")  # Can't go to larger scale
 
 

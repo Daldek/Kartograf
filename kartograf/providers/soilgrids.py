@@ -39,7 +39,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.sources.edition import Edition, edition_label
 from kartograf.transform.bbox import envelope_from_2180
@@ -61,12 +61,12 @@ _EDITION_RE = re.compile(r"^SoilGrids250m (\S+) - ")
 
 # Soil property descriptions
 PROPERTY_DESCRIPTIONS = {
-    "bdod": "Bulk density (kg/dm³)",
+    "bdod": "Bulk density (kg/dm3)",
     "cec": "Cation exchange capacity (cmol/kg)",
     "cfvo": "Coarse fragments (%)",
     "clay": "Clay content (%)",
     "nitrogen": "Total nitrogen (g/kg)",
-    "ocd": "Organic carbon density (kg/m³)",
+    "ocd": "Organic carbon density (kg/m3)",
     "ocs": "Organic carbon stock (t/ha)",
     "phh2o": "pH in H2O",
     "sand": "Sand content (%)",
@@ -188,8 +188,9 @@ class SoilGridsProvider(LandCoverProvider):
             HTTP failure, unreadable XML or a title without an edition.
         """
         if property not in self.PROPERTIES:
-            raise ValueError(
-                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
+            raise ValidationError(
+                f"Nieprawidlowa wlasciwosc: {property}. "
+                f"Dostepne: {', '.join(self.PROPERTIES)}"
             )
         url = self.capabilities_url(property)
         response = get_with_retry(
@@ -264,34 +265,35 @@ class SoilGridsProvider(LandCoverProvider):
 
         Raises
         ------
-        ValueError
+        ValidationError
             If bbox CRS is not EPSG:2180 or parameters are invalid
         DownloadError
             If the download fails
         """
         # Validate CRS
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
-                f"BBox must be in EPSG:2180, got {bbox.crs}. "
-                f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
+            raise ValidationError(
+                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
+                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
             )
 
         # Validate property
         if property not in self.PROPERTIES:
-            raise ValueError(
-                f"Invalid property: {property}. Available: {', '.join(self.PROPERTIES)}"
+            raise ValidationError(
+                f"Nieprawidlowa wlasciwosc: {property}. "
+                f"Dostepne: {', '.join(self.PROPERTIES)}"
             )
 
         # Validate depth
         if depth not in self.DEPTHS:
-            raise ValueError(
-                f"Invalid depth: {depth}. Available: {', '.join(self.DEPTHS)}"
+            raise ValidationError(
+                f"Nieprawidlowa glebokosc: {depth}. Dostepne: {', '.join(self.DEPTHS)}"
             )
 
         # Validate stat
         if stat not in self.STATS:
-            raise ValueError(
-                f"Invalid stat: {stat}. Available: {', '.join(self.STATS)}"
+            raise ValidationError(
+                f"Nieprawidlowa statystyka: {stat}. Dostepne: {', '.join(self.STATS)}"
             )
 
         output_path = Path(output_path)

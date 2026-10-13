@@ -6,14 +6,14 @@ import pytest
 
 from kartograf.cli.commands import main
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.cutout import prepare_pl_cutout
+from kartograf.download.cutout import _prepare_pl_cutout
 from kartograf.transform.crs import TransformUnavailableError
 
 
 class TestPreparePlCutout:
     def test_target_2180_no_pinned_and_native_name(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             bbox,
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -34,7 +34,7 @@ class TestPreparePlCutout:
 
     def test_target_5514_builds_pinned_and_names_in_target(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             bbox,
             "EPSG:5514",
             output_dir=str(tmp_path),
@@ -65,7 +65,7 @@ class TestPreparePlCutout:
         from kartograf.providers.cuzk.dmr import bbox_to_crs
 
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             bbox,
             "EPSG:5514",
             output_dir=str(tmp_path),
@@ -82,7 +82,7 @@ class TestPreparePlCutout:
 
     def test_vertical_kron86_lands_in_kron86_segment(self, tmp_path):
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             bbox,
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -102,7 +102,7 @@ class TestPreparePlCutout:
         from kartograf.core.bbox import transform_bbox
 
         coords = (-455000.0, -1117000.0, -454000.0, -1116000.0)  # Cieszyn (PL)
-        pinned = prepare_pl_cutout(
+        pinned = _prepare_pl_cutout(
             BBox(*coords, "EPSG:5514"),
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -115,7 +115,7 @@ class TestPreparePlCutout:
         shift = max(abs(a - b) for a, b in zip(pinned[:4], unpinned[:4], strict=True))
         assert shift > 0.01
 
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             BBox(*coords, label),
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -129,7 +129,7 @@ class TestPreparePlCutout:
         """m-2: ``"epsg:2180"`` is the cutout CRS without a transformation, and
         the ``PlCutout`` fields carry the canonical label - as before
         normalisation, when such a bbox went through an identity transformation."""
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             BBox(530010, 382010, 530190, 382090, "epsg:2180"),
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -145,7 +145,7 @@ class TestPreparePlCutout:
         edge is an arc bent to the south, and four corners lost ~479 m of the
         strip (min_y 237447.4 instead of 236968.4). The file name carries the
         correct extent."""
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             BBox(18.0, 50.0, 20.0, 50.2, "EPSG:4326"),
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -160,7 +160,7 @@ class TestPreparePlCutout:
         """D7: the cutout name is ``format(v, ".10g")`` of the result grid -
         a UTM northing (7 digits) without exponent notation; the same function
         as the CZ path."""
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
             "EPSG:3045",
             output_dir=str(tmp_path),
@@ -174,7 +174,7 @@ class TestPreparePlCutout:
 
     def test_wgs84_bbox_normalized_to_2180(self, tmp_path):
         bbox = BBox(18.60, 49.75, 18.65, 49.77, "EPSG:4326")
-        cut = prepare_pl_cutout(
+        cut = _prepare_pl_cutout(
             bbox,
             "EPSG:2180",
             output_dir=str(tmp_path),
@@ -194,26 +194,13 @@ class TestPreparePlCutout:
             ),
             pytest.raises(TransformUnavailableError),
         ):
-            prepare_pl_cutout(
+            _prepare_pl_cutout(
                 bbox,
                 "EPSG:5514",
                 output_dir=str(tmp_path),
                 vertical_crs="EVRF2007",
                 product="nmt",
             )
-
-    def test_public_exports(self):
-        import kartograf
-
-        for name in (
-            "PlCutout",
-            "PlCutoutResult",
-            "check_pl_cutout",
-            "download_pl_cutout",
-            "prepare_pl_cutout",
-            "run_pl_wcs_cutout",
-        ):
-            assert name in kartograf.__all__ and hasattr(kartograf, name)
 
     @pytest.mark.parametrize(
         "kwargs",
@@ -234,7 +221,7 @@ class TestPreparePlCutout:
         }
         target = params.pop("target_crs")
         with pytest.raises(ValidationError):
-            prepare_pl_cutout(
+            _prepare_pl_cutout(
                 BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
                 target,
                 output_dir=tmp_path,

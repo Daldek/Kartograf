@@ -24,10 +24,10 @@ def format_sheet_info(parser: SheetParser) -> str:
         Formatted information string
     """
     lines = [
-        f"Sheet:     {parser.sheet}",
-        f"Scale:     {parser.scale}",
-        f"Layout:    {parser.system}",
-        "Components:",
+        f"Godlo:     {parser.sheet}",
+        f"Skala:     {parser.scale}",
+        f"Uklad:     {parser.system}",
+        "Czlony:",
     ]
 
     for name, value in parser.components.items():
@@ -59,11 +59,11 @@ def format_hierarchy(parser: SheetParser) -> str:
     """
     hierarchy = parser.get_hierarchy_up()
     top_scale = hierarchy[-1].scale if hierarchy else parser.scale
-    lines = [f"Hierarchy (from current to {top_scale}):", ""]
+    lines = [f"Hierarchia (od arkusza do {top_scale}):", ""]
 
     for i, level in enumerate(hierarchy):
         indent = "  " * i
-        arrow = "└─ " if i > 0 else ""
+        arrow = "`- " if i > 0 else ""
         lines.append(f"{indent}{arrow}{level.sheet} ({level.scale})")
 
     return "\n".join(lines)
@@ -87,12 +87,12 @@ def format_children(parser: SheetParser) -> str:
 
     if not children:
         return (
-            f"Sheet {parser.sheet} has no children "
-            f"(already at finest scale {parser.scale})"
+            f"Arkusz {parser.sheet} nie ma arkuszy potomnych "
+            f"(najdokladniejsza skala {parser.scale})"
         )
 
     lines = [
-        f"Children of {parser.sheet} ({len(children)} sheets):",
+        f"Arkusze potomne {parser.sheet} ({len(children)}):",
         "",
     ]
 
@@ -121,7 +121,7 @@ def format_descendants(parser: SheetParser, target_scale: str) -> str:
     descendants = parser.get_all_descendants(target_scale)
 
     lines = [
-        f"Descendants of {parser.sheet} to {target_scale} ({len(descendants)} sheets):",
+        f"Arkusze potomne {parser.sheet} do skali {target_scale} ({len(descendants)}):",
         "",
     ]
 

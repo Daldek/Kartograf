@@ -183,11 +183,11 @@ class MetadataCache:
         if is_lock_error(error):
             message = (
                 f"cache metadanych zablokowany przez inny proces "
-                f"({self._db_path}): {error} — praca bez cache do konca zadania"
+                f"({self._db_path}): {error} - praca bez cache do konca zadania"
             )
         else:
             message = (
-                f"cache metadanych nieczytelny ({self._db_path}): {error} — "
+                f"cache metadanych nieczytelny ({self._db_path}): {error} - "
                 f"praca bez cache; uzyj `kartograf cache clear` albo usun plik"
             )
         self._error_message = message

@@ -59,7 +59,7 @@ Kartograf automatyzuje ten proces oferując:
   CLI `--bbox` bez `--target-crs`: arkusze OpenData.
 - Wycinek bbox z WCS GUGiK: `--target-crs {EPSG:2180,EPSG:5514,
   EPSG:3045}` w trybie `--bbox`/`--geometry` dla NMT **i NMPT** 1 m
-  (`download_pl_cutout` -> `prepare_pl_cutout`/`run_pl_wcs_cutout`);
+  (`download_pl_cutout`/`check_pl_cutout`; w CLI przez `download_data`);
   maska ladu PRG `A00 - W02 - W03` i nodata -9999 poza ladem,
   0,0 na ladzie zachowane; bbox wyrownany NA ZEWNATRZ do siatki
   arkuszy 1 m (`k + 0,5`), lokalna przypieta reprojekcja.
@@ -186,9 +186,10 @@ patrz sekcja 3.2, znane ograniczenie.
   (ADR-036 D26): kafel z lokalną wersją nie jest pobierany ponownie,
   nowszy nalot (inne pliki) pobiera się domyślnie; --check-updates,
   --upgrade, --force, --plan
-- Biblioteka: download_laz_area (wybór + pobranie + sidecary, wynik
-  LazDownloadResult: files/failed/superseded/stale; check_laz_updates) albo
-  GugikLazProvider.select_tiles + run_laz_download
+- Biblioteka: download_data(product="laz", ...) (= CLI) albo
+  download_laz_area (bbox w dowolnym układzie; wybór + pobranie + sidecary,
+  wynik LazDownloadResult: files/failed/superseded/stale/notices) i
+  check_laz_area (plan bez pobierania)
 - Porażka choć jednego kafla = Error: z pełną listą, kod 1 (pobrane zostają)
 
 # Źródło: GUGiK
@@ -210,7 +211,7 @@ patrz sekcja 3.2, znane ograniczenie.
   zakresów bajtów)
 - Magazyn wersji (0.8.0): landcover/pl_bdot10k_gpkg[_<warstwy>]/teryt/<T>,
   sygnał: brak (lokalna wersja niesprawdzona, --force pobiera); keep_raw =
-  osobna wersja ZIP; download_all_counties: błąd per powiat
+  osobna wersja ZIP; obszar = każdy powiat (LandCoverAreaResult), błąd per powiat
 
 # CORINE Land Cover (Copernicus):
 - 44 klasy pokrycia terenu
@@ -292,7 +293,7 @@ kartograf download --sheet <godlo> --year 2025 --all-campaigns --product nmt --r
 kartograf download --sheet <godlo> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot, nie starszy niż rok
 kartograf download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data # najnowszy lot do roku (dowiązanie nigdy wstecz)
 kartograf download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ bez deduplikacji pokrycia
-kartograf landcover download --source bdot10k --teryt <kod> -o ./data
+kartograf landcover download --source bdot10k --teryt <kod> -o ./data  # obszar: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
 kartograf landcover download --source corine --sheet <arkusz> -o ./data --year 2018
 kartograf landcover download --source soilgrids --property <param> -o ./data --depth 0-5cm --stat mean # --sheet/--bbox (bez --teryt)
 kartograf landcover list-sources
@@ -308,31 +309,46 @@ kartograf cache stats|clear|path           # cache metadanych (SQLite)
 # Public API — źródło prawdy: kartograf/__init__.py (__all__); lista poniżej
 # jest z nim zgodna i aktualizowana razem z nim.
 from kartograf import (
-    # Core
-    SheetParser, Parser2000, ParserTM33, BBox,
-    find_sheets_for_bbox, find_sheets_2000_for_bbox, find_sheets_for_geometry,
-    # Download (NMT/NMPT/Orto, kampanie ADR-030)
-    DownloadManager, DownloadProgress, DownloadResult, SheetFetch, CampaignRef,
-    FileStorage,
-    # Download — wycinek PL WCS (ADR-035)
-    PlCutout, PlCutoutResult,
-    download_pl_cutout, prepare_pl_cutout, run_pl_wcs_cutout,
-    # Download — kafle LAZ (ADR-029)
-    LazDownloadResult, LazTileFailure, download_laz_area, run_laz_download,
     # Cache
     MetadataCache,
+    # Notices
+    Notice,
+    # Core
+    SheetParser, Parser2000, ParserTM33, BBox, find_sheets_for_bbox,
+    find_sheets_2000_for_bbox, find_sheets_for_geometry, get_overall_bbox,
+    transform_bbox, parent_request_for,
+    # Download (command level: `kartograf download`, spec 4.1)
+    download_data, check_data, DataReport, UnitFile, UnitFailure,
+    # Download (NMT)
+    DownloadManager, DownloadProgress, DownloadResult, CampaignRef, FileStorage,
+    # Download (versioned store, update plan)
+    UpdateMode, VersionedFile, VersionRef, PlanItem, UpdatePlan,
+    # Download (PL cutout: WCS ADR-035)
+    PlCutoutResult, check_pl_cutout, download_pl_cutout,
+    # Download (CZ cutout, countries)
+    CountryPart, countries_for_bbox, split_bbox_by_country, CzCutoutResult,
+    check_cz_cutout, download_cz_cutout,
+    # Download (CZ sheet: SM5 sheet / TM33 tile, R4)
+    CzSheetResult, check_cz_sheet, download_cz_sheet,
+    # Download (LAZ tiles, D17)
+    LazDownloadResult, LazTileFailure, check_laz_area, download_laz_area,
     # Land Cover
-    LandCoverManager,
+    LandCoverManager, LandCoverResult, LandCoverAreaResult, LandCoverFailure,
+    Edition,
     # Providers
     BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
     GugikLazProvider, LazTile, LazTileSelection, SupersededLazTile,
-    LandCoverProvider, Bdot10kProvider, CorineProvider, SoilGridsProvider,
-    # Providers — CZ (CUZK, etap 1)
-    CuzkDmrProvider, create_dmr_provider,
+    LandCoverProvider, Bdot10kProvider, Bdot10kPackage, CorineProvider,
+    SoilGridsProvider, CuzkDmrProvider, create_dmr_provider,
+    # TERYT (PRG)
+    discover_teryts_for_bbox, teryt_for_point,
     # Hydrology
-    HSGCalculator,
+    HSGCalculator, HsgResult, hsg_from_rasters,
+    # Transport and mosaic (stable since 0.7.1)
+    get_with_retry, make_gugik_session, mosaic_and_crop, check_source_grid,
     # Exceptions
     KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
+    YearRangeError, CacheError,
     # Version
     __version__,
 )
@@ -407,7 +423,6 @@ from kartograf import (
   kod bez zmian (errata 5 ADR-030); --all-campaigns/flaga roku/brak lokalnej = błąd
 - API: DownloadManager(all_campaigns: bool = False, min_year=, max_year=, full_sheet=),
   .check_year_range(), YearRangeError, available_years (providery GUGiK),
-  SheetFetch (.unverified, .better_coverage, .full_link),
   DownloadResult (.unverified, .reused_campaign_files, .better_coverage,
   .full_links, .without_full), FileStorage.get_full_sheet_path,
   CampaignRef, PlCutoutResult.unverified
@@ -483,7 +498,7 @@ from kartograf import (
   get_with_retry; stałe i szczegóły: DEVELOPMENT_STANDARDS 13.4)
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
   między plikami, przez ThreadPoolExecutor/--workers; domyślnie 4 workery
-  w CLI, 1 w bibliotece — DownloadManager(max_workers=1))
+  w CLI i download_data(workers=4), 1 w DownloadManager(workers=1))
 - NMT 5m (PL) wymaga EVRF2007
 - WCS (`provider.download_bbox`) NMT i NMPT daje wysokosci 1 m float32
   w obu ukladach wysokosciowych; NMT 5 m tylko z OpenData
@@ -687,25 +702,30 @@ kartograf/
 │   └── soilgrids.py          # SoilGridsProvider
 ├── cache/                 # Cache metadanych
 │   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache (TTL 7d), sheet_cache (TTL 30d)
-├── download/              # Download management (NMT/NMPT/Orto, wycinek PL, LAZ, kampanie; CZ ma własny przepływ w CLI)
+├── download/              # Pobieranie: komenda download w bibliotece (data.py) i tory
+│   ├── data.py               # download_data/check_data = `kartograf download` (ADR-037)
+│   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help)
+│   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── links.py              # Dowiązanie ścieżki standardowej do najnowszej kampanii (hardlink -> kopia)
-│   ├── cutout.py             # Wycinek PL --target-crs jako API (download_pl_cutout; prepare/select/run)
-│   ├── laz.py                # Kafle LAZ jako API (download_laz_area, run_laz_download; ADR-029)
+│   ├── cutout.py             # Wycinek PL --target-crs (download_pl_cutout/check_pl_cutout)
+│   ├── cz_cutout.py          # Wycinek CZ (download_cz_cutout/check_cz_cutout)
+│   ├── cz_sheets.py          # Arkusz CZ TM33/SM5 (download_cz_sheet/check_cz_sheet)
+│   ├── laz.py                # Kafle LAZ (download_laz_area/check_laz_area; ADR-029)
 │   ├── manager.py            # DownloadManager (all_campaigns=, min_year=, sidecar_extra=; download_sheets/expand_sheets)
 │   └── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
 ├── landcover/             # Land Cover w magazynie wersji
-│   ├── manager.py            # LandCoverManager (update=, plan=, check)
+│   ├── manager.py            # LandCoverManager (download/check: teryt|sheet|bbox|geometry)
 │   └── store.py              # segmenty i sloty land cover/HSG (spec 3.4)
 ├── hydrology/             # Obliczenia hydrologiczne
-│   └── hsg.py                # HSGCalculator (wersje wejść, reused)
+│   └── hsg.py                # HSGCalculator (calculate_hsg/check_hsg, wersje wejść, reused)
 ├── auth/                  # Autentykacja (CLMS)
 │   ├── proxy.py               # Auth Proxy server
 │   └── client.py               # Auth Proxy client
-└── cli/                   # CLI interface (podzielony na moduły per komenda)
+└── cli/                   # CLI: tylko tłumaczenie flag i wypisanie wyniku (ADR-037)
     ├── _parser.py             # argparse — top-level + subkomendy (--country, --target-crs PL/CZ)
     ├── parse_cmd.py           # `kartograf parse`
-    ├── download_cmd.py        # `kartograf download` (godło / bbox / geometry / LAZ / CZ)
+    ├── download_cmd.py        # `kartograf download` -> download_data/check_data
     ├── landcover_cmd.py       # `kartograf landcover`
     ├── soilgrids_cmd.py       # `kartograf soilgrids`
     ├── cache_cmd.py           # `kartograf cache`

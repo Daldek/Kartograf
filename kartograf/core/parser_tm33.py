@@ -36,7 +36,7 @@ class ParserTM33:
         if e_km % 2 or n_km % 2:
             raise ParseError(
                 f"Niepoprawne godlo TM33: '{sheet}' "
-                f"(kafle co 2 km — kilometry musza byc parzyste)"
+                f"(kafle co 2 km - kilometry musza byc parzyste)"
             )
         self.sheet = sheet
         self._west = e_km * 1000

@@ -175,24 +175,24 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             If None, no caching is performed (default behavior).
         """
         if resolution not in self.SUPPORTED_RESOLUTIONS:
-            raise ValueError(
-                f"Unsupported resolution: '{resolution}'. "
-                f"Supported: {self.SUPPORTED_RESOLUTIONS}"
+            raise ValidationError(
+                f"Nieobslugiwana rozdzielczosc: '{resolution}'. "
+                f"Obslugiwane: {self.SUPPORTED_RESOLUTIONS}"
             )
 
         # 5m resolution only supports EVRF2007
         if resolution == "5m":
             if vertical_crs not in self.SUPPORTED_VERTICAL_CRS_5M:
-                raise ValueError(
-                    f"Resolution 5m is only available for EVRF2007, "
-                    f"got vertical_crs='{vertical_crs}'. "
-                    f"Use vertical_crs='EVRF2007' for 5m resolution."
+                raise ValidationError(
+                    f"Rozdzielczosc 5m jest dostepna tylko dla EVRF2007, "
+                    f"podano vertical_crs='{vertical_crs}'. "
+                    "Dla 5m uzyj vertical_crs='EVRF2007'."
                 )
         else:
             if vertical_crs not in self.SUPPORTED_VERTICAL_CRS:
-                raise ValueError(
-                    f"Unsupported vertical CRS: '{vertical_crs}'. "
-                    f"Supported: {self.SUPPORTED_VERTICAL_CRS}"
+                raise ValidationError(
+                    f"Nieobslugiwany uklad wysokosci: '{vertical_crs}'. "
+                    f"Obslugiwane: {self.SUPPORTED_VERTICAL_CRS}"
                 )
 
         super().__init__()
@@ -323,7 +323,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
             if record.resolution_m != wanted_resolution:
                 if record.sheet == parser.sheet and record.resolution_m is not None:
                     hints.add(
-                        f"GUGiK ma ten arkusz w {record.resolution_m:g} m — "
+                        f"GUGiK ma ten arkusz w {record.resolution_m:g} m - "
                         f"Kartograf pobiera dokladnie {wanted_resolution:g} m"
                     )
                 continue
@@ -403,7 +403,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                         flags.append(f"--vertical-crs {vertical_crs}")
                     hints.add(
                         f"Skorowidz GUGiK ma ten arkusz w "
-                        f"{self._CACHE_PRODUCT.upper()} {variant} — uzyj "
+                        f"{self._CACHE_PRODUCT.upper()} {variant} - uzyj "
                         + " ".join(flags)
                     )
         return hints
@@ -448,11 +448,10 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         ------
         DownloadError
             If the download fails
-        ValueError
-            If format is not supported, bbox CRS is not EPSG:2180,
-            or resolution is 5m (WCS not available for 5m)
         ValidationError
-            If the vertical CRS is in ``WITHDRAWN_WCS_VERTICAL_CRS`` (none today)
+            If format is not supported, bbox CRS is not EPSG:2180,
+            resolution is 5m (WCS not available for 5m), or the vertical
+            CRS is in ``WITHDRAWN_WCS_VERTICAL_CRS`` (none today)
 
         Notes
         -----
@@ -478,28 +477,30 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         # WCS is only available for 1m resolution
         if self._resolution == "5m":
-            raise ValueError(
-                "WCS download (download_bbox) is not available for 5m resolution. "
-                "Use download() with a godło instead, or use resolution='1m'."
+            raise ValidationError(
+                "Pobieranie WCS (download_bbox) nie jest dostepne dla "
+                "rozdzielczosci 5m. Pobierz arkusz przez download() albo uzyj "
+                "resolution='1m'."
             )
 
         if bbox.crs != "EPSG:2180":
-            raise ValueError(
-                f"BBox must be in EPSG:2180, got {bbox.crs}. "
-                f"Use SheetParser.get_bbox(crs='EPSG:2180') to convert."
+            raise ValidationError(
+                f"bbox musi byc w EPSG:2180, podano {bbox.crs}. "
+                "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
             )
 
         if format not in self.WCS_FORMATS:
-            raise ValueError(
-                f"Unsupported WCS format: '{format}'. "
-                f"Supported formats: {list(self.WCS_FORMATS.keys())}"
+            raise ValidationError(
+                f"Nieobslugiwany format WCS: '{format}'. "
+                f"Obslugiwane formaty: {list(self.WCS_FORMATS.keys())}"
             )
 
         if self._vertical_crs in self.WITHDRAWN_WCS_VERTICAL_CRS:
             raise ValidationError(
-                f"WCS {self._CACHE_PRODUCT.upper()} 1m for {self._vertical_crs} is "
-                "not available (endpoint withdrawn by GUGiK). Download sheets by "
-                "sheet code instead."
+                f"WCS {self._CACHE_PRODUCT.upper()} 1m dla {self._vertical_crs} "
+                "nie jest "
+                "dostepny (usluga wycofana przez GUGiK). Pobierz arkusze przez "
+                "godlo."
             )
 
         return self._download_wcs(
