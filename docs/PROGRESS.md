@@ -29,7 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata, ADR-032, ADR-033) | ✅ Gotowy | `--all-campaigns`, `--year`/`--min-year`/`--max-year`, `--full-sheet`; od 0.8.0 wersje w `<segment>/versions/`, sciezka standardowa i `full_sheet/` = hardlink; brak odczytu starych `kampanie/`; fallback przy niedostepnym skorowidzu wg ADR-030; weryfikacje na zywo: `docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-12-store-e2e/raport.md` |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | WCS 1 m z maska ladu PRG, NMT i NMPT; wersja w `versions/bbox/`, sciezka `bbox/<wsp>.tif` jako hardlink (od 0.8.0); NMPT `download_bbox` float32, kawalki ASC NMPT 4 Mpx coverage; arkuszowy tor ADR-027 usuniety; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-12-store-e2e/raport.md`) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane i scalone do `develop` (merge `423a664`, 2026-10-12; E2E na zywo PASS) |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane i scalone do `develop` (merge `423a664`, 2026-10-12; E2E na zywo PASS); podprojekt 3: inwentaryzacja GUGiK/CUZK z probkami (`docs/research/2026-10-13-katalog-produktow/`) i spec do akceptacji (`docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -111,9 +111,9 @@
 >    (ADR-038: `--cutout`/`--horizontal-crs`/`--sheet-system`) scalony
 >    (`eaf194d`) i wypchniety 2026-10-13 za zgoda uzytkownika. Push tylko
 >    za zgoda uzytkownika; stan sprawdzaj `git log origin/develop..develop`.
->    Lokalnie (niewypchniete, decyzja uzytkownika 2026-10-13): `56dd7f2`
->    README - orto "wg kampanii" (czesc U6) i ten wpis; wypchnac RAZEM
->    z reszta U6 (SCOPE, PRD, docstring `gugik_orto.py`) w kolejnej sesji.
+>    `56dd7f2` (README - orto "wg kampanii", czesc U6) jest juz na
+>    `origin/develop` (sprawdzone 2026-10-13); reszta U6 (SCOPE, PRD,
+>    docstring `gugik_orto.py`) do zrobienia.
 >    Hydrograf/Hydrolog: takze nowe nazwy flag i argumentow (CHANGELOG
 >    [0.8.0], pierwszy wpis BREAKING).
 > 1. **Przed wydaniem 0.8.0:** dostosowac Hydrograf/Hydrolog wg CHANGELOG
@@ -128,6 +128,12 @@
 >    pobranie CLMS niesprawdzone na zywo (backlog razem z CLMS 1990).
 >    Stara, rozjechana `feat/versioned-store` na `origin`: push
 >    `--force-with-lease` albo usuniecie WYLACZNIE za zgoda uzytkownika.
+> 3. **Podprojekt 3 - spec do akceptacji:** katalog produktow GUGiK/CUZK
+>    (`docs/research/2026-10-13-katalog-produktow/raport.md`, dowody
+>    `probki.md`) i spec
+>    `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`
+>    (rejestr wariantow + NMT/NMPT 0,5 m + raport dostepnosci jako plan A).
+>    Najpierw decyzje uzytkownika z sekcji 9 specu, potem plan A.
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
 > `origin`; szczegoly w sesjach nizej i w `docs/CHANGELOG.md` [0.7.2].
 > **Katalog danych testow na zywo:** poza repo, jawne `--output`
@@ -141,6 +147,35 @@
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`). Otwarte drobiazgi ADR-030
 > w dzienniku nizej ("Otwarte drobne"), do decyzji uzytkownika.
+
+### Sesja 2026-10-13 (druga) — katalog produktow GUGiK i CUZK, spec podprojektu 3
+
+- Inwentaryzacja z oficjalnych katalogow: GUGiK (strony "Dane" geoportalu,
+  32 uslugi WMS modulu "Pobierz dane" z linkami z `GetFeatureInfo`,
+  WFS/WCS/ATOM/OGC API) i CUZK (114 uslug ATOM, 73 uslugi ArcGIS,
+  `Formy_poskytovani_dat_ZU.pdf`). Raport:
+  `docs/research/2026-10-13-katalog-produktow/raport.md` - statusy
+  produktow (obslugiwany / do dodania z priorytetem / poza zakresem /
+  do ponownej weryfikacji); dowody: `probki.md` (212 probek z sha256
+  i weryfikacja `gdalinfo`/`ogrinfo`, pliki poza repo).
+- Subagenci inwentaryzacji (4) przerwani limitem uzycia bez raportow;
+  probki bez pochodzenia usuniete, inwentaryzacja powtorzona skryptem
+  z logiem (URL, czas, naglowki, sha256).
+- Ustalenia: skorowidze 2025 - NMT tylko 0,5 m i 5 m, NMPT 73% 0,5 m
+  (Kartograf nie widzi nowych lotow); orto 2025 piksel 5 cm, 1,1 GB na
+  arkusz, `opendata.geoportal.gov.pl` ignoruje `Range`; CZ ArcGIS WFS
+  wymaga BBOX X,Y dla EPSG:5514; przyklady w katalogu GUGiK (PRNG WFS,
+  POLSA WCS) nieaktualne. Do ponownej weryfikacji: 4 feedy ATOM RUIAN
+  (UUP, SP-AD) wskazuja usuniete pliki (HTTP 404).
+- Spec `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`
+  (PROJEKT): rejestr wariantow produktu (K1-K2), raport dostepnosci
+  `check_availability`/`kartograf availability` (K3-K4), generyczne
+  silniki kanalow (K5), fale produktow (plany A-E), decyzje do podjecia
+  (sekcja 9).
+- Backlog (prosba uzytkownika): sprawdzenie dostepnosci danych dla
+  obszaru przed pobraniem (lata, uklady, rozdzielczosci, pelne pokrycie)
+  - wpis w "Funkcje na przyszlosc", w specu jako plan A.
+- Kod bez zmian (brama nieuruchamiana - zmiany tylko w dokumentacji).
 
 ### Sesja 2026-10-13 — ponowna weryfikacja spojnosci CLI/API i aktualizacja dokumentacji
 
@@ -2405,6 +2440,26 @@ Funkcje na przyszlosc (bez przypisanego wydania):
   zachowanie wycinka WCS (siatka 0,5 m?) i NMPT 0,5 m. Zaczac od
   inwentaryzacji skorowidza na zywo (jakie rozdzielczosci, uklady,
   pokrycie) i specu.
+- [ ] **Sprawdzenie dostepnosci danych dla obszaru przed pobraniem (prosba
+  uzytkownika 2026-10-13):** dla wskazanego obszaru (`--bbox`/`--geometry`/
+  `--sheet`/`--teryt`) i produktu (np. NMT) raport BEZ pobierania plikow:
+  jakie naloty/kampanie sa dostepne (rok i data aktualnosci, nr zgloszenia),
+  w jakich ukladach poziomych (PL-1992/PL-2000, strefa), rozdzielczosciach
+  (0,5/1/5 m) i ukladach wysokosci (EVRF2007/KRON86), oraz dla ktorych
+  kombinacji (rok x uklad x rozdzielczosc x uklad wysokosci) obszar ma
+  PELNE pokrycie (a dla pozostalych - procent pokrycia/brakujace arkusze).
+  Zrodlo: skorowidze WFS/WMS GUGiK (pola `akt_rok`, `akt_data`,
+  `char_przestrz`, `uklad_xy`, `uklad_h`, `nr_zglosz`,
+  `czy_ark_wypelniony`; pokrycie liczone z geometrii arkuszy wzgledem
+  obszaru, z uwzglednieniem lotow niepelnych - mechanizm pomiaru pokrycia
+  jest juz w ADR-029/ADR-033). Logika w bibliotece (ADR-037: funkcja API
+  zwracajaca strukture, CLI tylko drukuje tabele; np. `kartograf
+  availability`/`check_data(..., inventory=True)` - nazwa do specu),
+  wspolny cache metadanych. Zakres: najpierw NMT/NMPT/orto/LAZ PL, potem
+  CZ (CUZK nie ma kampanii - raport wydania) i nowe produkty katalogu.
+  Powiazane: NMT 0,5 m (wyzej) i wybor roku (ADR-032). Inwentaryzacja
+  2026-10-13: skorowidz NMT EVRF2007 2025 ma rekordy 0,5 m i 5 m, NMPT 2025
+  glownie 0,5 m (`docs/research/2026-10-13-katalog-produktow/`).
 
 Czytelnosc ukladu `data/` po magazynie wersjonowanym (przeglad
 2026-10-12, poprawki na kolejne etapy; decyzja uzytkownika 2026-10-12).
