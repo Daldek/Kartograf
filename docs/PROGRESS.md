@@ -2286,6 +2286,26 @@ w tym samym wydaniu (decyzja uzytkownika).
   `--target-crs`/`--system`. `--target-crs` nie tylko zmienia uklad:
   dla PL `--bbox`/`--geometry` przechodzi z pobierania arkuszy na
   wycinek WCS. Rozstrzygnac nazwy i jawnie komunikowac zmiane trybu.
+- [ ] **`nowa etykieta ... (ta sama tresc)` przy `--all-campaigns` -
+  zweryfikowac i doprecyzowac komunikat (zgloszenie uzytkownika
+  2026-10-13):** `kartograf download --sheet M-33-20-D-a-3-2 --product nmt
+  --resolution 1m --vertical-crs EVRF2007 -o data/ --all-campaigns` dal:
+  `lokalna wersja 2025-04-16_83836`, `nowa etykieta 2023-06-04_78954 (ta
+  sama tresc)`, `nowa etykieta 2021-10-03_75109 (ta sama tresc)`, `nowa
+  wersja 2021-09-26_74953_463ce1e0`. Status `relabeled`
+  (`download/versions.py` `commit_version`, ~l. 406-421) znaczy: sha256
+  pobranego pliku = sha256 ISTNIEJACEJ wersji (`same[0]`, ktorakolwiek), wiec
+  trzy rekordy skorowidza (2025, 2023, 2021-10) dalyby bajtowo ten sam plik.
+  Do sprawdzenia: (1) czy to prawda - porownac sha256 plikow w
+  `versions/.../M-33-20-D-a-3-2/` i URL-e rekordow skorowidza (czy GUGiK
+  publikuje ten sam ASC pod rozne kampanie/daty, czy rekordy wskazuja ten
+  sam URL, czy blad w wyborze/pobraniu); (2) komunikat jest nieintuicyjny -
+  nie mowi, z KTORA wersja tresc jest identyczna; zmienic na np. `nowa
+  etykieta 2023-06-04_78954 (plik identyczny z 2025-04-16_83836)`
+  (`VersionCommit` zna zrodlo `same[0]`; przekazac etykiete do
+  `VersionedFile` i do linii statusu CLI oraz `Notice`, jesli dotyczy);
+  (3) sprawdzic, czy wybor `same[0]` (pierwsza z listy, nie najnowsza) daje
+  deterministyczna etykiete w komunikacie.
 
 #### Do v1.0.0 — roadmapa
 
