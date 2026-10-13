@@ -55,3 +55,13 @@ pokrycie wg skorowidza dokladnie 100,0000%; 2018 (1 m: 58,38%; 5 m i 25 m:
   "pelnosc nieznana (arkusze niepelne: N)" zamiast liczby.
 - Opcja `--measure` (pobiera arkusze `NIE` do magazynu i mierzy tresc,
   jak ADR-033) - do rozstrzygniecia w planie A.
+
+## Dodatek: zasieg z kafli LAZ tej samej kampanii (opcje `--measure`)
+
+Sprawdzone 2026-10-13 dla obszaru Pomorze i NMT 2025 0,5 m
+(`DFT.7201.024.2024`): skorowidz LAZ (`SkorowidzDanychPomiarowychLIDAR2025`)
+ma 21 kafli tego zgloszenia (11 `NIE`, 10 `TAK`). Suma poligonow kafli
+pokrywa 100% ladu (kafle `NIE` to tez pelne poligony), a sama suma kafli
+`TAK` daje 65,7% ladu przy faktycznych 91,5% danych NMT; 66 759 px
+kafli `TAK` nie ma danych NMT. Kafle LAZ nie sa wiarygodnym zasiegiem
+NMT/NMPT ani dolna granica pokrycia.
