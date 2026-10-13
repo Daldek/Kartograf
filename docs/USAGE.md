@@ -855,8 +855,11 @@ kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vert
 ```
 
 Wynik: jedna linia na plik — `nowa wersja <etykieta>_<sha8>`, `nowa
-etykieta <etykieta> (ta sama tresc)` (GUGiK opublikował tę samą treść pod
-nowym rekordem), `bez zmian <etykieta>`, `lokalna wersja <etykieta>`
+etykieta <etykieta> (plik identyczny z <etykieta>)` (GUGiK opublikował pod
+nowym rekordem plik bajtowo identyczny z najnowszą istniejącą wersją; nowy
+katalog wersji to dowiązanie, bez dodatkowego miejsca na dysku;
+w bibliotece `VersionedFile.same_as`), `bez zmian <etykieta>`,
+`lokalna wersja <etykieta>`
 (z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)`), po liście
 podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
 (także dla kafli LAZ). Arkusz CZ i wycinek dają jedną linię statusu

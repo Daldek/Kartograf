@@ -9928,7 +9928,14 @@ class TestCampaignOptions:
                 _version(a, "2025-10-21_84183_0a1b2c3d"),
                 _version(a, "2023-09-05_78047_1a1b2c3d", "local"),
             ),
-            "B": (_version(b, "2025-10-21_84190_2a1b2c3d", "relabeled"),),
+            "B": (
+                _version(
+                    b,
+                    "2025-10-21_84190_2a1b2c3d",
+                    "relabeled",
+                    same_as="2023-09-05_78047",
+                ),
+            ),
             "C": (
                 _version(c, "2025-10-21_84191_3a1b2c3d", "unchanged"),
                 _version(c, "2019-04-18_73021_4a1b2c3d", "local"),
@@ -9958,7 +9965,10 @@ class TestCampaignOptions:
         out = capsys.readouterr().out
         assert "A: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
         assert "A: lokalna wersja 2023-09-05_78047" in out
-        assert "B: nowa etykieta 2025-10-21_84190 (ta sama tresc)" in out
+        assert (
+            "B: nowa etykieta 2025-10-21_84190 (plik identyczny z 2023-09-05_78047)"
+            in out
+        )
         assert "C: bez zmian 2025-10-21_84191" in out
         assert (
             "Nowe: 1, nowa etykieta: 1, bez zmian: 1, lokalne: 2, bledy: 0 "

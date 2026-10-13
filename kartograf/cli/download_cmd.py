@@ -285,7 +285,7 @@ def _status_lines(
         label = dirname.rsplit("_", 1)[0] if status != "new" else dirname
         text = f"{sheet}: {_STATUS_TEXT.get(status, status)} {label}"
         if status == "relabeled":
-            text += " (ta sama tresc)"
+            text += f" (plik identyczny z {file.same_as or 'istniejaca wersja'})"
         if status == "local" and newer is not None:
             text += f"; dostepna nowsza {newer} (--upgrade)"
             newer = None

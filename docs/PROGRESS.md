@@ -173,7 +173,12 @@
   = brak wpisu (test regresji w `tests/test_gugik_orto.py`). Testy: 3597.
 - Zgloszenie uzytkownika: `nowa etykieta ... (ta sama tresc)` przy
   `--all-campaigns` (M-33-20-D-a-3-2) - backlog "Do 0.8.0" (`639c269`):
-  zweryfikowac identycznosc plikow i doprecyzowac komunikat.
+  zweryfikowac identycznosc plikow i doprecyzowac komunikat. Zrobione:
+  identycznosc potwierdzona na zywo (GUGiK publikuje ten sam ASC pod trzema
+  kampaniami), komunikat `(plik identyczny z <etykieta>)` +
+  `VersionedFile.same_as`; testy 3598, brama zielona.
+- Usunieta galaz `feat/versioned-store` (origin i lokalnie; tresc w
+  `develop` przez merge `423a664`, decyzja uzytkownika).
 
 ### Sesja 2026-10-12 (osma) — wdrozenie spojnosci CLI, biblioteki i API
 
@@ -2299,7 +2304,7 @@ w tym samym wydaniu (decyzja uzytkownika).
   `--target-crs`/`--system`. `--target-crs` nie tylko zmienia uklad:
   dla PL `--bbox`/`--geometry` przechodzi z pobierania arkuszy na
   wycinek WCS. Rozstrzygnac nazwy i jawnie komunikowac zmiane trybu.
-- [ ] **`nowa etykieta ... (ta sama tresc)` przy `--all-campaigns` -
+- [x] **`nowa etykieta ... (ta sama tresc)` przy `--all-campaigns` -
   zweryfikowac i doprecyzowac komunikat (zgloszenie uzytkownika
   2026-10-13):** `kartograf download --sheet M-33-20-D-a-3-2 --product nmt
   --resolution 1m --vertical-crs EVRF2007 -o data/ --all-campaigns` dal:
@@ -2319,6 +2324,15 @@ w tym samym wydaniu (decyzja uzytkownika).
   `VersionedFile` i do linii statusu CLI oraz `Notice`, jesli dotyczy);
   (3) sprawdzic, czy wybor `same[0]` (pierwsza z listy, nie najnowsza) daje
   deterministyczna etykiete w komunikacie.
+  **ZROBIONE 2026-10-13:** (1) prawda - na zywo rekordy 2025-04-16
+  (`83836`, DFT.7201.009.2025), 2023-06-04 (`78954`, DFT.7201.002.2023)
+  i 2021-10-03 (`75109`, DFT.7201.030.2021) to rozne URL-e i zgloszenia,
+  ale bajtowo ten sam ASC (sha256 `388c14a2d417...`, 37 892 762 B) -
+  GUGiK publikuje ten sam NMT pod kilkoma kampaniami, kod dziala poprawnie;
+  (2) `VersionCommit.same_as`/`VersionedFile.same_as`, CLI `nowa etykieta
+  X (plik identyczny z Y)`; (3) `same_as` = najnowsza identyczna wersja
+  (`version_key`), nie pierwszy katalog (test
+  `test_relabeled_names_newest_identical_version`).
 
 #### Do v1.0.0 — roadmapa
 

@@ -1009,7 +1009,9 @@ z `plan=`, gdy plan nie wykonuje pliku i nie ma wersji lokalnej) i
 `zero_pixels`) pochodza z sidecara wersji, bez odczytu rastra.
 
 CLI drukuje jedna linie na plik: `<godlo>: nowa wersja <etykieta>_<sha8>`,
-`nowa etykieta <etykieta> (ta sama tresc)`, `bez zmian <etykieta>`,
+`nowa etykieta <etykieta> (plik identyczny z <etykieta>)` (najnowsza
+istniejaca wersja o tym samym sha256, `VersionedFile.same_as`),
+`bez zmian <etykieta>`,
 `lokalna wersja <etykieta>`, a po liscie (bez `-q`) `Nowe: N, nowa
 etykieta: N, bez zmian: N, lokalne: N, bledy: N (<dir>)` (arkusze PL
 i kafle LAZ; jednostka LAZ = nazwa pliku, wycinka = sciezka pod
