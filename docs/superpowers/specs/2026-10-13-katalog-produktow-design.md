@@ -1,7 +1,8 @@
 # Spec: Katalog produktow GUGiK i CUZK oraz raport dostepnosci (podprojekt 3 roadmapy v1.0.0)
 
 **Data:** 2026-10-13
-**Status:** PROJEKT - do akceptacji uzytkownika (decyzje otwarte: sekcja 9)
+**Status:** ZAAKCEPTOWANY przez uzytkownika 2026-10-13 (decyzje 9.1-9.7
+rozstrzygniete); nastepny krok: plan implementacji A po wydaniu 0.8.0
 **Wersja docelowa:** od 0.9.0 (strumien; kazdy plan = osobne wydanie)
 **Warunek wstepny:** wydanie 0.8.0 (magazyn wersjonowany ADR-036, CLI = API
 ADR-037, jawny tryb wycinka ADR-038, grupy komend CLI wg typu danych -
@@ -312,17 +313,15 @@ skladany lokalnie (jak BDOT10k - SQLite nie na udziale sieciowym).
 - E2E per plan do `<katalog-danych>/kartograf/e2e/<data>-<plan>/`
   z raportem w `docs/research/`.
 
-## 9. Decyzje do podjecia przez uzytkownika
+## 9. Decyzje (rozstrzygniete 2026-10-13)
 
-1. **Kolejnosc planow** (rewizja 2026-10-13 po decyzjach 9.2-9.7):
-   0.8.0 grupy CLI -> A `elevation` PL -> B `elevation` CZ -> C dane
-   jednostkowe/obszarowe PL + silniki -> D CZ obszarowe i obrazy -> E.
-   Zmiana wzgledem pierwszej wersji: plan "B - silniki" usuniety jako
-   osobny etap (silniki w C z pierwszymi produktami), wysokosci CZ
-   przesuniete z D do B (ta sama grupa i rejestr co A, istniejacy tor
-   CZ), POLSA usunieta, archiwum BDOT10k jako `--year` w C. Alternatywa:
-   C przed B, jesli dane referencyjne PL sa pilniejsze niz NMPT CZ.
-   Do potwierdzenia przez uzytkownika.
+1. ~~**Kolejnosc planow**~~ - zaakceptowana 2026-10-13: 0.8.0 grupy CLI
+   -> A `elevation` PL -> B `elevation` CZ -> C dane jednostkowe/obszarowe
+   PL + silniki -> D CZ obszarowe i obrazy -> E. Zmiana wzgledem pierwszej
+   wersji: plan "B - silniki" usuniety jako osobny etap (silniki w C
+   z pierwszymi produktami), wysokosci CZ przesuniete z D do B (ta sama
+   grupa i rejestr co A, istniejacy tor CZ), POLSA usunieta, archiwum
+   BDOT10k jako `--year` w C.
 2. ~~**Nazwy w CLI**~~ - rozstrzygniete 2026-10-13: grupy wg typu danych
    (6.1), LAZ w `elevation`, `models3d`, przebudowa istniejacych komend
    w 0.8.0.

@@ -41,6 +41,7 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 | Gdzie zapisywac pobrane dane | STANDARDS 6.4 |
 | Git, commity, jezyk, testy, wyjatki, timeouty i retry (zasady) | STANDARDS 1-2, 9.4, 10-11, 13.4 |
 | Roadmapa do v1.0.0 (podprojekty, kolejnosc, zasady) | `docs/SCOPE.md` 3.3 |
+| Katalog produktow GUGiK/CUZK (statusy, probki, pulapki uslug) i plany podprojektu 3 (A-E, grupy CLI, raport dostepnosci) | `docs/research/2026-10-13-katalog-produktow/raport.md`; `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` |
 | Zakres, co jest poza nim, ograniczenia techniczne (timeouty per provider, CZ, `--country auto`), zaleznosci | `docs/SCOPE.md` 2, 3.1, 3.2, 4.2 |
 | Wymagania produktowe (warstwy BDOT10k, parametry SoilGrids, lata CORINE) | `docs/PRD.md` |
 | Moduly i zaleznosci miedzy warstwami | `docs/ARCHITECTURE.md` 2 |
