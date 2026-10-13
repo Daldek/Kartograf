@@ -385,6 +385,17 @@ def _cached_no_coverage_message(sheet: str) -> str:
     return f"Brak danych dla {sheet} (z cache metadanych)"
 
 
+def _current_texts(cached: dict) -> bool:
+    """Whether a cached no-coverage entry carries current (ASCII) texts.
+
+    Entries written before 0.8.0 may hold a message or hints with Polish
+    diacritics or an em dash; they would break ``Notice`` (ASCII only), so
+    such an entry is a cache miss and the index is asked again.
+    """
+    texts = [cached.get("message") or "", *(cached.get("hints") or ())]
+    return all(isinstance(t, str) and t.isascii() for t in texts)
+
+
 class SourceInfoMixin:
     """Origin per sheet code, independent of thread completion order."""
 
@@ -490,7 +501,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         if self._cache is not None:
             cached = self._cache.get_record(*query.cache_key)
             if cached is not None:
-                if cached.get("no_coverage"):
+                if cached.get("no_coverage") and _current_texts(cached):
                     raise NoCoverageError(
                         cached.get("message") or _cached_no_coverage_message(sheet),
                         sheet=sheet,
@@ -555,7 +566,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
         if self._cache is not None:
             cached = self._cache.get_campaigns(*query.cache_key)
             if cached is not None and cached.get("scanned_from") is None:
-                if cached.get("no_coverage"):
+                if cached.get("no_coverage") and _current_texts(cached):
                     raise NoCoverageError(
                         cached.get("message") or _cached_no_coverage_message(sheet),
                         sheet=sheet,

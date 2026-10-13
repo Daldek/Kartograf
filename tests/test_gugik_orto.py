@@ -401,6 +401,26 @@ class TestGugikOrtoProviderCache:
             provider._get_opendata_url(SHEET)
         session.get.assert_not_called()
 
+    def test_pre_080_no_coverage_entry_with_non_ascii_hint_is_a_miss(self, cache):
+        """Live 2026-10-13: a 0.7.x entry (hint with an em dash) crashed the
+        CLI with 'Tekst komunikatu musi byc zapisany w ASCII' (Notice).
+        Such an entry is refreshed from the index; its texts never surface."""
+        old = {
+            "no_coverage": True,
+            "message": "Brak danych",
+            "hints": ["Dostepny potomek 5.167.25.13 \u2014 uzyj --scale 1:2000"],
+        }
+        cache.set_record("orto", "RGB", "none", SHEET, old)
+        session = Mock(spec=requests.Session)
+        session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
+        provider = GugikOrtoProvider(session=session, cache=cache, color="RGB")
+
+        assert provider._get_opendata_url(SHEET) == RGB_2024
+        session.get.assert_called()
+        assert cache.get_record("orto", "RGB", "none", SHEET)["source"]["url"] == (
+            RGB_2024
+        )
+
     def test_negative_cache_preserves_variant_hint(self, cache):
         body = orto_body(
             [orto_record(kolor="CIR", aktualnosc="2024-06-21", url=CIR_2024)]
