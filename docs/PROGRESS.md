@@ -162,6 +162,18 @@
   (rekomendacja: bez zmiany nazw; ewentualnie jawny tryb wycinka), pozycja
   w backlogu "Do 0.8.0" do decyzji.
 - Testy offline: 3488 -> 3596; brama zielona.
+- Pelna weryfikacja `docs/USAGE.md` i `docs/SCOPE.md` (`53be1bf`; subagenci
+  niedostepni - limit uzycia, zrobione recznie): cytaty komunikatow wg kodu
+  (ASCII), pola wynikow, drzewo modulow, fallback skorowidza (D14), API
+  kampanii; 50 przykladow `kartograf download` przez walidacje biblioteki
+  przy zablokowanej sieci, 45 wywolan Pythona zgodnych z sygnaturami.
+- Znaleziony przy tym blad (`1672a44`): wpis "brak pokrycia" z cache 0.7.x
+  z myslnikiem w podpowiedzi konczyl pobieranie
+  `ValueError: Tekst komunikatu musi byc zapisany w ASCII`; teraz taki wpis
+  = brak wpisu (test regresji w `tests/test_gugik_orto.py`). Testy: 3597.
+- Zgloszenie uzytkownika: `nowa etykieta ... (ta sama tresc)` przy
+  `--all-campaigns` (M-33-20-D-a-3-2) - backlog "Do 0.8.0" (`639c269`):
+  zweryfikowac identycznosc plikow i doprecyzowac komunikat.
 
 ### Sesja 2026-10-12 (osma) — wdrozenie spojnosci CLI, biblioteki i API
 
