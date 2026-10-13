@@ -20,7 +20,6 @@ AUTO_NARROWED_TO_PL    info     ``auto`` + PL-only choice (ADR-023 pkt 5)
 AUTO_CLIPPED           info     ``auto``: country part clipped to its envelope
 AUTO_AREA_OUTSIDE      info     ``auto``: part of the area outside PL/CZ
 AUTO_PARTIAL_SUCCESS   warning  ``auto``: one country failed, another succeeded
-CAMPAIGN_OPTS_PL_ONLY  info     campaign/year options in a PL+CZ request
 LEGACY_CAMPAIGNS_DIR   info     0.7.x ``kampanie/`` directory present
 NEWER_AVAILABLE        info     (DownloadManager) newer campaign, local used
 UNVERIFIED_LOCAL       warning  (DownloadManager) index down, local used
@@ -71,7 +70,8 @@ from kartograf.download.options import (
     cz_option_error,
     pl_option_error,
     pl_target_scale,
-    reject_campaign_opts_with_target_crs,
+    reject_campaign_opts_with_cutout,
+    require_cz_cutout,
     resolve_pl_options,
     validate_request,
 )
@@ -85,7 +85,6 @@ from kartograf.notices import (
     AUTO_NARROWED_TO_PL,
     AUTO_PARTIAL_SUCCESS,
     BETTER_COVERAGE,
-    CAMPAIGN_OPTS_PL_ONLY,
     CHECK_FAILED,
     INCOMPLETE_CAMPAIGN,
     LEGACY_CAMPAIGNS_DIR,
@@ -253,9 +252,10 @@ def download_data(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
-    system: str | None = None,
+    sheet_system: str | None = None,
     scale: str | None = None,
-    target_crs: str | None = None,
+    cutout: bool = False,
+    horizontal_crs: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -275,7 +275,10 @@ def download_data(
     ``snake_case``. Every data choice is explicit (no defaults): ``product``,
     ``output_dir``, ``vertical_crs``/``resolution`` (plain or per country,
     ``{"pl": "1m", "cz": "2m"}``), ``country`` (``pl``/``cz``/``auto``,
-    required with ``bbox``/``geometry``), ``system``/``scale`` for PL areas.
+    required with ``bbox``/``geometry``), ``sheet_system``/``scale`` for PL
+    sheets of an area. ``cutout=True`` with ``horizontal_crs`` gives ONE
+    cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an area
+    reaching CZ requires it).
     ``bbox`` may be in any supported CRS; ``geometry`` is a SHP/GPKG file.
     ``update``/``plan``: modes of every track (``plan`` from ``check_data``
     with ``update="upgrade"``). ``cache``: ``True`` = default metadata cache
@@ -325,9 +328,10 @@ def check_data(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
-    system: str | None = None,
+    sheet_system: str | None = None,
     scale: str | None = None,
-    target_crs: str | None = None,
+    cutout: bool = False,
+    horizontal_crs: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -374,9 +378,10 @@ _SELECTION = (
     "country",
     "vertical_crs",
     "resolution",
-    "system",
+    "sheet_system",
     "scale",
-    "target_crs",
+    "cutout",
+    "horizontal_crs",
     "year",
     "min_year",
     "max_year",
@@ -412,17 +417,12 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
         if system.country == "CZ":
             if task.product != "nmt":
                 raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
-            _reject_campaign_opts_without_pl(task, ("CZ",), run)
+            _reject_campaign_opts_without_pl(task, ("CZ",))
             return _download_cz(task, run)
         parsed = SheetParser(task.sheet)
-        resolve_pl_options(task, sheet_system=parsed.system, sheet_scale=parsed.scale)
-        if task.target_crs is not None:
-            raise ValidationError(
-                "--target-crs dziala tylko z --bbox/--geometry; --sheet "
-                "wyznacza zasieg i uklad produktu (arkusz PL 1:1 w ukladzie "
-                "arkusza, arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce "
-                "EPSG:3045)"
-            )
+        resolve_pl_options(
+            task, code_system=parsed.sheet_system, code_scale=parsed.scale
+        )
     if task.product == "laz":
         return _download_laz(task, run)
     if task.geometry is not None:
@@ -433,23 +433,15 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
 
 
 def _reject_campaign_opts_without_pl(
-    task: SimpleNamespace, countries: tuple[str, ...], run: _Run
+    task: SimpleNamespace, countries: tuple[str, ...]
 ) -> None:
-    """PL-only campaign/year choices: rejected in CZ, described once in PL+CZ."""
-    if not campaign_opts_given(task):
-        return
-    if "PL" not in countries:
+    """PL-only campaign/year choices are rejected for a CZ-only request (a
+    PL+CZ area is a cutout, which rejects them itself, ADR-038)."""
+    if campaign_opts_given(task) and "PL" not in countries:
         raise ValidationError(
             "CZ (CUZK) nie ma kampanii - "
             "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
             "tylko PL"
-        )
-    if "CZ" in countries:
-        run.sink.emit(
-            "info",
-            CAMPAIGN_OPTS_PL_ONLY,
-            "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
-            "tylko czesci PL (CZ: biezaca wersja danych CUZK)",
         )
 
 
@@ -482,13 +474,14 @@ def _dispatch_area(
             countries = ("PL",)
     if countries == ("CZ",) and task.product != "nmt":
         raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
+    _reject_campaign_opts_without_pl(task, countries)
+    require_cz_cutout(task, countries)
     _validate_cross_country(task, countries)
     if "PL" in countries:
-        reject_campaign_opts_with_target_crs(task)
-    _reject_campaign_opts_without_pl(task, countries, run)
+        reject_campaign_opts_with_cutout(task)
 
     parent_request = parent_request_for(bbox, countries)
-    cz_crs = task.target_crs or "EPSG:5514"
+    cz_crs = task.horizontal_crs or "EPSG:5514"
     # per-country parts BEFORE any download (TransformError fails the request)
     parts = {
         code: country_bbox(bbox, code, auto=auto, cz_crs=cz_crs) for code in countries
@@ -499,8 +492,8 @@ def _dispatch_area(
             bbox,
             countries,
             parts,
-            pl_geometry_sheets=filepath is not None and not task.target_crs,
-            pl_sheet_list=filepath is None and not task.target_crs,
+            pl_geometry_sheets=filepath is not None and not task.cutout,
+            pl_sheet_list=filepath is None and not task.cutout,
         )
 
     results: list[tuple[str, int]] = []
@@ -568,11 +561,10 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
     if task.country == "cz":
         if task.product != "nmt":
             raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
-        _reject_campaign_opts_without_pl(task, ("CZ",), run)
+        _reject_campaign_opts_without_pl(task, ("CZ",))
+        require_cz_cutout(task, ("CZ",))
         task.layer = resolve_geometry_layer(task.geometry, task.layer, run.sink)
-        bbox = cz_geometry_bbox(
-            task.geometry, task.layer, task.target_crs or "EPSG:5514"
-        )
+        bbox = cz_geometry_bbox(task.geometry, task.layer, task.horizontal_crs)
         return _download_cz(
             task, run, bbox=bbox, parent_request=parent_request_for(bbox, ("CZ",))
         )
@@ -725,7 +717,7 @@ def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
                 )
                 return _finish_pl_sheets(task, run, result)
             parsed = SheetParser(task.sheet)
-            expanded = parsed.system != "2000" and parsed.scale != "1:10000"
+            expanded = parsed.sheet_system != "2000" and parsed.scale != "1:10000"
             announce = _announcer(run, task.sheet, label)
             if expanded:
                 announce()
@@ -762,12 +754,12 @@ def _result_paths(result: DownloadResult) -> list[Path]:
 def _download_pl_bbox(
     task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
 ) -> int:
-    """PL part of a bbox request: a cutout (``target_crs``) or a sheet list."""
+    """PL part of a bbox request: a cutout (``cutout``) or a sheet list."""
     resolve_pl_options(task)
-    if task.target_crs is not None:
+    if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
     target_scale = pl_target_scale(task)
-    sheets = find_sheets_for_bbox(bbox, target_scale, system=task.system)
+    sheets = find_sheets_for_bbox(bbox, target_scale, sheet_system=task.sheet_system)
     if not sheets:
         return run.fail("PL", "PL", "Brak arkuszy dla podanego bbox", "no_coverage")
     return _download_pl_sheet_list(
@@ -783,15 +775,18 @@ def _download_pl_geometry(
     bbox: BBox,
 ) -> int:
     """PL part of a geometry request: sheets per feature, or a cutout of the
-    (clipped) envelope with ``target_crs``."""
+    (clipped) envelope with ``cutout``."""
     from kartograf.core.geometry import find_sheets_for_geometry
 
     resolve_pl_options(task)
-    if task.target_crs is not None:
+    if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
     target_scale = pl_target_scale(task)
     sheets = find_sheets_for_geometry(
-        filepath, target_scale=target_scale, layer=task.layer, system=task.system
+        filepath,
+        target_scale=target_scale,
+        layer=task.layer,
+        sheet_system=task.sheet_system,
     )
     if not sheets:
         return run.fail("PL", "PL", "Brak arkuszy dla podanej geometrii", "no_coverage")
@@ -814,7 +809,7 @@ def _download_pl_sheet_list(
     what: str,
     target_scale: str,
 ) -> int:
-    """PL sheet list (area without ``target_crs``): manager + finish (D15)."""
+    """PL sheet list (area without ``cutout``): manager + finish (D15)."""
     sample = sheets if len(sheets) <= 10 else sheets[:3] + ["..."] + sheets[-2:]
     run.sink.emit(
         "info",
@@ -1138,7 +1133,7 @@ def _unit_of(path: Path, output_dir: Path) -> str:
 def _download_pl_cutout(
     task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
 ) -> int:
-    """PL ``target_crs`` cutout from GUGiK WCS (ADR-035).
+    """PL cutout (``cutout``) from GUGiK WCS (ADR-035).
 
     A source failure is recorded for the PL part; invalid input and unexpected
     errors propagate to the caller.
@@ -1146,7 +1141,7 @@ def _download_pl_cutout(
     from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
 
     selection = {
-        "target_crs": task.target_crs,
+        "horizontal_crs": task.horizontal_crs,
         "output_dir": task.output_dir,
         "vertical_crs": task.vertical_crs,
         "product": task.product,
@@ -1193,12 +1188,6 @@ def _download_cz(
     resolution = country_value(task.resolution, "CZ") or "5m"  # only SM5 omits it
     vertical_crs = country_value(task.vertical_crs, "CZ")
     assert vertical_crs is not None  # required: checked by cz_option_error
-    if has_sheet and task.target_crs is not None:
-        raise ValidationError(
-            "--target-crs dziala tylko z --bbox/--geometry; --sheet wyznacza "
-            "zasieg i uklad produktu (arkusz SM5 1:1 w EPSG:5514, kafel TM33 "
-            "na siatce EPSG:3045)"
-        )
     common = {
         "output_dir": task.output_dir,
         "vertical_crs": vertical_crs,
@@ -1223,13 +1212,13 @@ def _download_cz(
             run.add(task.sheet, "CZ", sheet.file)
             return run.add_stale(sheet.stale)
         assert bbox is not None
-        target = task.target_crs or "EPSG:5514"
+        target = task.horizontal_crs
         if run.check:
-            run.plans.append(check_cz_cutout(bbox, target_crs=target, **common))
+            run.plans.append(check_cz_cutout(bbox, horizontal_crs=target, **common))
             return 0
         cutout = download_cz_cutout(
             bbox,
-            target_crs=target,
+            horizontal_crs=target,
             update=run.update,
             plan=run.loaded,
             parent_request=parent_request,

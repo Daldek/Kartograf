@@ -23,17 +23,17 @@ class TestSheetParserBasic:
 
     def test_parse_valid_sheet_1m(self):
         """Test of parsing a 1:1000000 sheet code."""
-        parser = SheetParser("N-34", system="1992")
+        parser = SheetParser("N-34", sheet_system="1992")
 
         assert parser.sheet == "N-34"
         assert parser.scale == "1:1000000"
-        assert parser.system == "1992"
+        assert parser.sheet_system == "1992"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
 
     def test_parse_valid_sheet_500k(self):
         """Test of parsing a 1:500000 sheet code."""
-        parser = SheetParser("N-34-A", system="1992")
+        parser = SheetParser("N-34-A", sheet_system="1992")
 
         assert parser.sheet == "N-34-A"
         assert parser.scale == "1:500000"
@@ -43,7 +43,7 @@ class TestSheetParserBasic:
 
     def test_parse_valid_sheet_200k(self):
         """Test of parsing a 1:200000 sheet code."""
-        parser = SheetParser("N-34-130", system="1992")
+        parser = SheetParser("N-34-130", sheet_system="1992")
 
         assert parser.sheet == "N-34-130"
         assert parser.scale == "1:200000"
@@ -53,7 +53,7 @@ class TestSheetParserBasic:
 
     def test_parse_valid_sheet_100k(self):
         """Test of parsing a 1:100000 sheet code."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
 
         assert parser.sheet == "N-34-130-D"
         assert parser.scale == "1:100000"
@@ -64,7 +64,7 @@ class TestSheetParserBasic:
 
     def test_parse_valid_sheet_50k(self):
         """Test of parsing a 1:50000 sheet code."""
-        parser = SheetParser("N-34-130-D-d", system="1992")
+        parser = SheetParser("N-34-130-D-d", sheet_system="1992")
 
         assert parser.sheet == "N-34-130-D-d"
         assert parser.scale == "1:50000"
@@ -76,7 +76,7 @@ class TestSheetParserBasic:
 
     def test_parse_valid_sheet_25k(self):
         """Test of parsing a 1:25000 sheet code."""
-        parser = SheetParser("N-34-130-D-d-2", system="1992")
+        parser = SheetParser("N-34-130-D-d-2", sheet_system="1992")
 
         assert parser.sheet == "N-34-130-D-d-2"
         assert parser.scale == "1:25000"
@@ -89,11 +89,11 @@ class TestSheetParserBasic:
 
     def test_parse_valid_sheet_10k(self):
         """Test of parsing a 1:10000 sheet code."""
-        parser = SheetParser("N-34-130-D-d-2-4", system="1992")
+        parser = SheetParser("N-34-130-D-d-2-4", sheet_system="1992")
 
         assert parser.sheet == "N-34-130-D-d-2-4"
         assert parser.scale == "1:10000"
-        assert parser.system == "1992"
+        assert parser.sheet_system == "1992"
         assert parser.components["pas"] == "N"
         assert parser.components["slup"] == "34"
         assert parser.components["arkusz_200k"] == "130"
@@ -108,27 +108,27 @@ class TestSheetParserNormalization:
 
     def test_normalize_lowercase_pas(self):
         """Test of normalising a lowercase belt letter to uppercase."""
-        parser = SheetParser("n-34-130-D", system="1992")
+        parser = SheetParser("n-34-130-D", sheet_system="1992")
         assert parser.sheet == "N-34-130-D"
 
     def test_normalize_lowercase_100k(self):
         """Test of normalising a lowercase 100k sheet letter to uppercase."""
-        parser = SheetParser("N-34-130-d", system="1992")
+        parser = SheetParser("N-34-130-d", sheet_system="1992")
         assert parser.sheet == "N-34-130-D"
 
     def test_normalize_uppercase_50k_to_lowercase(self):
         """Test of normalising an uppercase 50k sheet letter to lowercase."""
-        parser = SheetParser("N-34-130-D-D", system="1992")
+        parser = SheetParser("N-34-130-D-D", sheet_system="1992")
         assert parser.sheet == "N-34-130-D-d"
 
     def test_normalize_mixed_case(self):
         """Test of normalising mixed letter case."""
-        parser = SheetParser("n-34-130-d-D-2-4", system="1992")
+        parser = SheetParser("n-34-130-d-D-2-4", sheet_system="1992")
         assert parser.sheet == "N-34-130-D-d-2-4"
 
     def test_strip_whitespace(self):
         """Test of whitespace removal."""
-        parser = SheetParser("  N-34-130-D  ", system="1992")
+        parser = SheetParser("  N-34-130-D  ", sheet_system="1992")
         assert parser.sheet == "N-34-130-D"
 
 
@@ -137,28 +137,28 @@ class TestSheetParserUklad:
 
     def test_system_1992(self):
         """Test of the 1992 system."""
-        parser = SheetParser("N-34-130-D", system="1992")
-        assert parser.system == "1992"
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
+        assert parser.sheet_system == "1992"
 
     def test_system_2000(self):
         """Test of the 2000 system with a PL-2000 sheet code."""
-        parser = SheetParser("6.179.12", system="2000")
-        assert parser.system == "2000"
+        parser = SheetParser("6.179.12", sheet_system="2000")
+        assert parser.sheet_system == "2000"
 
     def test_auto_detect_system(self):
         """Test of automatic system detection (default 1992)."""
         parser = SheetParser("N-34-130-D")
-        assert parser.system == "1992"
+        assert parser.sheet_system == "1992"
 
     def test_invalid_system(self):
         """Test of validation of an invalid system."""
         with pytest.raises(ValidationError, match="Nieprawidlowy uklad"):
-            SheetParser("N-34-130-D", system="1965")
+            SheetParser("N-34-130-D", sheet_system="1965")
 
     def test_invalid_system_wrong_type(self):
         """Test of validation of a system of the wrong type."""
         with pytest.raises(ValidationError, match="Nieprawidlowy uklad"):
-            SheetParser("N-34-130-D", system="PUWG")
+            SheetParser("N-34-130-D", sheet_system="PUWG")
 
 
 class TestSheetParserValidation:
@@ -198,7 +198,7 @@ class TestSheetParserValidation:
     def test_bare_zone_number_with_explicit_system(self, zone, system):
         """A zone number with an explicit system gives the same zone message."""
         with pytest.raises(ParseError, match="numer strefy PL-2000") as exc:
-            SheetParser(zone, system=system)
+            SheetParser(zone, sheet_system=system)
         msg = str(exc.value)
         assert "6.179.12" in msg
         assert "format PL-1992" not in msg
@@ -256,26 +256,26 @@ class TestSheetParserEdgeCases:
     def test_single_digit_slup_out_of_range(self):
         """A7: a one-digit column is outside the PL-1992 range (33-35)."""
         with pytest.raises(ParseError, match="slup 1 "):
-            SheetParser("M-1", system="1992")
+            SheetParser("M-1", sheet_system="1992")
 
     def test_double_digit_slup_out_of_range(self):
         """A7: column 99 is outside the PL-1992 range (33-35)."""
         with pytest.raises(ParseError, match="slup 99 "):
-            SheetParser("M-99", system="1992")
+            SheetParser("M-99", sheet_system="1992")
 
     def test_three_digit_arkusz_200k(self):
         """Test of a three-digit 200k sheet number."""
-        parser = SheetParser("N-34-130", system="1992")
+        parser = SheetParser("N-34-130", sheet_system="1992")
         assert parser.components["arkusz_200k"] == "130"
 
     def test_single_digit_arkusz_200k(self):
         """Test of a single-digit 200k sheet number."""
-        parser = SheetParser("N-34-1", system="1992")
+        parser = SheetParser("N-34-1", sheet_system="1992")
         assert parser.components["arkusz_200k"] == "1"
 
     def test_all_a_subdivisions(self):
         """Test of a sheet with all divisions 'A/a/1'."""
-        parser = SheetParser("N-34-130-A-a-1-1", system="1992")
+        parser = SheetParser("N-34-130-A-a-1-1", sheet_system="1992")
         assert parser.components["arkusz_100k"] == "A"
         assert parser.components["arkusz_50k"] == "a"
         assert parser.components["arkusz_25k"] == "1"
@@ -283,7 +283,7 @@ class TestSheetParserEdgeCases:
 
     def test_all_d_subdivisions(self):
         """Test of a sheet with all divisions 'D/d/4'."""
-        parser = SheetParser("N-34-130-D-d-4-4", system="1992")
+        parser = SheetParser("N-34-130-D-d-4-4", sheet_system="1992")
         assert parser.components["arkusz_100k"] == "D"
         assert parser.components["arkusz_50k"] == "d"
         assert parser.components["arkusz_25k"] == "4"
@@ -295,7 +295,7 @@ class TestSheetParserStringRepresentations:
 
     def test_repr(self):
         """Test __repr__."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
         repr_str = repr(parser)
 
         assert "SheetParser" in repr_str
@@ -305,7 +305,7 @@ class TestSheetParserStringRepresentations:
 
     def test_str(self):
         """Test __str__."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
         str_repr = str(parser)
 
         assert "N-34-130-D" in str_repr
@@ -318,36 +318,36 @@ class TestSheetParserEquality:
 
     def test_equal_parsers(self):
         """Test of equality of identical parsers."""
-        parser1 = SheetParser("N-34-130-D", system="1992")
-        parser2 = SheetParser("N-34-130-D", system="1992")
+        parser1 = SheetParser("N-34-130-D", sheet_system="1992")
+        parser2 = SheetParser("N-34-130-D", sheet_system="1992")
 
         assert parser1 == parser2
 
     def test_different_sheet(self):
         """Test of inequality for different sheet codes."""
-        parser1 = SheetParser("N-34-130-D", system="1992")
-        parser2 = SheetParser("N-34-130-C", system="1992")
+        parser1 = SheetParser("N-34-130-D", sheet_system="1992")
+        parser2 = SheetParser("N-34-130-C", sheet_system="1992")
 
         assert parser1 != parser2
 
     def test_different_system(self):
         """Test of inequality for different systems - PL-1992 vs PL-2000."""
-        parser1 = SheetParser("N-34-130-D", system="1992")
-        parser2 = SheetParser("6.179.12", system="2000")
+        parser1 = SheetParser("N-34-130-D", sheet_system="1992")
+        parser2 = SheetParser("6.179.12", sheet_system="2000")
 
         assert parser1 != parser2
 
     def test_hash_equal_parsers(self):
         """Test of the hash for equal parsers."""
-        parser1 = SheetParser("N-34-130-D", system="1992")
-        parser2 = SheetParser("N-34-130-D", system="1992")
+        parser1 = SheetParser("N-34-130-D", sheet_system="1992")
+        parser2 = SheetParser("N-34-130-D", sheet_system="1992")
 
         assert hash(parser1) == hash(parser2)
 
     def test_hash_different_parsers(self):
         """Test of the hash for different parsers."""
-        parser1 = SheetParser("N-34-130-D", system="1992")
-        parser2 = SheetParser("N-34-130-C", system="1992")
+        parser1 = SheetParser("N-34-130-D", sheet_system="1992")
+        parser2 = SheetParser("N-34-130-C", sheet_system="1992")
 
         # The hash may differ (it need not, but usually does)
         # We only test that the hash works
@@ -356,7 +356,7 @@ class TestSheetParserEquality:
 
     def test_not_equal_to_other_types(self):
         """Test of inequality with other types."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
 
         assert parser != "N-34-130-D"
         assert parser != 123
@@ -368,7 +368,7 @@ class TestSheetParserComponentsImmutability:
 
     def test_components_returns_copy(self):
         """Test that components returns a copy of the dictionary."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
         components1 = parser.components
         components2 = parser.components
 
@@ -417,7 +417,7 @@ class TestSheetParserGetParent:
         assert parent is not None
         assert parent.sheet == "N-34-130-D-d-2"
         assert parent.scale == "1:25000"
-        assert parent.system == "1992"
+        assert parent.sheet_system == "1992"
 
     def test_get_parent_from_25k(self):
         """Test of get_parent() for the 1:25000 scale."""
@@ -500,10 +500,10 @@ class TestSheetParserGetParent:
 
     def test_get_parent_preserves_system(self):
         """Test that get_parent() preserves the system."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
         parent = parser.get_parent()
 
-        assert parent.system == "1992"
+        assert parent.sheet_system == "1992"
 
     @pytest.mark.parametrize("nr", range(1, 145))
     def test_parent_bbox_contains_child_bbox_for_all_200k_numbers(self, nr):
@@ -623,10 +623,10 @@ class TestSheetParserGetChildren:
 
     def test_get_children_preserves_system(self):
         """Test that get_children() preserves the system."""
-        parser = SheetParser("N-34-130-D", system="1992")
+        parser = SheetParser("N-34-130-D", sheet_system="1992")
         children = parser.get_children()
 
-        assert all(c.system == "1992" for c in children)
+        assert all(c.sheet_system == "1992" for c in children)
 
 
 class TestSheetParserGetHierarchyUp:
@@ -759,10 +759,10 @@ class TestSheetParserGetAllDescendants:
 
     def test_descendants_preserves_system(self):
         """Test that get_all_descendants() preserves the system."""
-        parser = SheetParser("N-34-130-D-d", system="1992")
+        parser = SheetParser("N-34-130-D-d", sheet_system="1992")
         descendants = parser.get_all_descendants("1:10000")
 
-        assert all(d.system == "1992" for d in descendants)
+        assert all(d.sheet_system == "1992" for d in descendants)
 
 
 class TestSheetParserHierarchyRoundTrip:
@@ -1051,7 +1051,7 @@ class TestFindSheetsForBBox:
             "EPSG:4326",
         )
 
-        result = find_sheets_for_bbox(inner_bbox, "1:10000", system="1992")
+        result = find_sheets_for_bbox(inner_bbox, "1:10000", sheet_system="1992")
         assert result == [sheet]
 
     def test_100k_contains_64_sheets(self):
@@ -1070,7 +1070,7 @@ class TestFindSheetsForBBox:
             "EPSG:4326",
         )
 
-        result = find_sheets_for_bbox(inner_bbox, "1:10000", system="1992")
+        result = find_sheets_for_bbox(inner_bbox, "1:10000", sheet_system="1992")
         assert len(result) == 64
         # All should start with N-34-130-D
         assert all(g.startswith("N-34-130-D") for g in result)
@@ -1092,14 +1092,14 @@ class TestFindSheetsForBBox:
             "EPSG:2180",
         )
 
-        result = find_sheets_for_bbox(inner_bbox, "1:10000", system="1992")
+        result = find_sheets_for_bbox(inner_bbox, "1:10000", sheet_system="1992")
         assert sheet in result
 
     def test_bbox_epsg4326(self):
         """Test of a bbox in EPSG:4326 → correct result."""
         # A small bbox in the centre of Krakow (should hit M-34)
         bbox = BBox(19.93, 50.05, 19.95, 50.07, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:10000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
         assert len(result) >= 1
         # Should be in the M-34 area
         assert all(g.startswith("M-34") for g in result)
@@ -1109,7 +1109,7 @@ class TestFindSheetsForBBox:
         # A bbox spanning the boundary of belts N and M (52°N)
         # N: 52-56°N, M: 48-52°N
         bbox = BBox(20.0, 51.99, 20.1, 52.01, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:1000000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:1000000", sheet_system="1992")
         sheets = sorted(result)
         # Should contain both belts: M (48-52) and N (52-56)
         pasy = {g.split("-")[0] for g in sheets}
@@ -1119,7 +1119,7 @@ class TestFindSheetsForBBox:
     def test_target_scale_1m(self):
         """Test of target 1:1M → returns 1:1M sheet codes."""
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:1000000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:1000000", sheet_system="1992")
         assert len(result) >= 1
         # Check the format - a 1:1M sheet code is X-YY
         for sheet in result:
@@ -1129,7 +1129,7 @@ class TestFindSheetsForBBox:
     def test_target_scale_200k(self):
         """Test of target 1:200k → sheet codes of the N-34-XXX format."""
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:200000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:200000", sheet_system="1992")
         assert len(result) >= 1
         for sheet in result:
             parser = SheetParser(sheet)
@@ -1139,25 +1139,25 @@ class TestFindSheetsForBBox:
         """Test of a wrong target scale → ValidationError."""
         bbox = BBox(20.0, 52.0, 20.5, 52.5, "EPSG:4326")
         with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
-            find_sheets_for_bbox(bbox, "1:5000", system="1992")
+            find_sheets_for_bbox(bbox, "1:5000", sheet_system="1992")
 
     def test_invalid_crs(self):
         """Test of an unsupported CRS → ValidationError."""
         bbox = BBox(0, 0, 1, 1, "EPSG:3857")
         with pytest.raises(ValidationError, match="Nieobslugiwany CRS"):
-            find_sheets_for_bbox(bbox, "1:10000", system="1992")
+            find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
 
     def test_sorted_output(self):
         """Test that the result is sorted."""
         # A bbox covering several sheets
         bbox = BBox(20.0, 52.5, 20.3, 52.7, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:10000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
         assert result == sorted(result)
 
     def test_target_scale_500k(self):
         """Test target 1:500k."""
         bbox = BBox(20.0, 52.5, 20.5, 53.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:500000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:500000", sheet_system="1992")
         assert len(result) >= 1
         for sheet in result:
             parser = SheetParser(sheet)
@@ -1166,7 +1166,7 @@ class TestFindSheetsForBBox:
     def test_bbox_equal_to_sheet_returns_only_its_children(self):
         """A bbox equal to a 1:100k sheet → only its 4 sheets of 1:50k (A1-7)."""
         bbox = SheetParser("N-34-130-D").get_bbox(crs="EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:50000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:50000", sheet_system="1992")
         assert result == [
             "N-34-130-D-a",
             "N-34-130-D-b",
@@ -1178,18 +1178,18 @@ class TestFindSheetsForBBox:
         """A bbox equal to a 1:10k sheet → exactly that one sheet (A1-7)."""
         sheet = "N-34-130-D-d-2-4"
         bbox = SheetParser(sheet).get_bbox(crs="EPSG:4326")
-        assert find_sheets_for_bbox(bbox, "1:10000", system="1992") == [sheet]
+        assert find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992") == [sheet]
 
     def test_bbox_equal_to_100k_sheet_on_1m_grid_returns_four(self):
         """A bbox of a sheet touching the edge of 1:1M → 4 descendant sheets."""
         bbox = SheetParser("N-34-1").get_bbox(crs="EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:100000", system="1992")
+        result = find_sheets_for_bbox(bbox, "1:100000", sheet_system="1992")
         assert result == ["N-34-1-A", "N-34-1-B", "N-34-1-C", "N-34-1-D"]
 
     def test_point_bbox_on_grid_line_returns_single_sheet(self):
         """A degenerate bbox at a grid line intersection → exactly 1 sheet."""
         bbox = BBox(21.0, 52.0, 21.0, 52.0, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="1992")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", sheet_system="1992")
         assert len(result) == 1
         sheet_bbox = SheetParser(result[0]).get_bbox(crs="EPSG:4326")
         # The sheet NE of the grid line intersection
@@ -1209,16 +1209,16 @@ class TestFindSheetsForBBox:
             "EPSG:4326",
         )
         # Overlap on each side of the line <= _EDGE_TOL → without normalisation: []
-        assert find_sheets_for_bbox(bbox, target_scale="1:10000", system="1992") == [
-            "N-34-139-C-c-3-3"
-        ]
+        assert find_sheets_for_bbox(
+            bbox, target_scale="1:10000", sheet_system="1992"
+        ) == ["N-34-139-C-c-3-3"]
 
     def test_point_bbox_inside_sheet_returns_single_sheet(self):
         """A degenerate bbox inside a sheet → exactly 1 sheet."""
         result = find_sheets_for_bbox(
             BBox(21.1, 52.1, 21.1, 52.1, "EPSG:4326"),
             target_scale="1:10000",
-            system="1992",
+            sheet_system="1992",
         )
         assert len(result) == 1
 
@@ -1226,9 +1226,9 @@ class TestFindSheetsForBBox:
         """Unknown sheet code system → ValidationError, not a silent PL-1992 (A9-1)."""
         bbox = BBox(19.0, 50.0, 19.1, 50.1, "EPSG:4326")
         with pytest.raises(ValidationError, match="system"):
-            find_sheets_for_bbox(bbox, "1:100000", system="banana")
+            find_sheets_for_bbox(bbox, "1:100000", sheet_system="banana")
         with pytest.raises(ValidationError, match="system"):
-            find_sheets_for_bbox(bbox, "1:100000", system=2000)  # type: ignore[arg-type]
+            find_sheets_for_bbox(bbox, "1:100000", sheet_system=2000)  # type: ignore[arg-type]
 
     def test_roundtrip_single_sheet_all_scales(self):
         """Round-trip test: get_bbox → find_sheets_for_bbox for various scales."""
@@ -1254,7 +1254,7 @@ class TestFindSheetsForBBox:
                 bbox.max_y - shrink,
                 "EPSG:4326",
             )
-            result = find_sheets_for_bbox(inner_bbox, scale, system="1992")
+            result = find_sheets_for_bbox(inner_bbox, scale, sheet_system="1992")
             assert sheet in result, f"Expected {sheet} in result for scale {scale}"
 
     def test_top_edge_across_central_meridian_keeps_sheets(self):
@@ -1285,7 +1285,9 @@ class TestFindSheetsForBBox:
             )
             assert inside.any(), sheet
 
-        assert expected <= set(find_sheets_for_bbox(bbox, "1:10000", system="1992"))
+        assert expected <= set(
+            find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
+        )
 
 
 # =============================================================================
@@ -1298,26 +1300,26 @@ class TestSheetParserAutoDetection:
 
     def test_pl1992_detected(self):
         p = SheetParser("N-34-130-D")
-        assert p.system == "1992"
+        assert p.sheet_system == "1992"
 
     def test_pl2000_detected(self):
         p = SheetParser("6.179.12")
-        assert p.system == "2000"
+        assert p.sheet_system == "2000"
         assert p.scale == "1:10000"
 
     def test_pl2000_2k(self):
         p = SheetParser("6.179.12.20")
-        assert p.system == "2000"
+        assert p.sheet_system == "2000"
         assert p.scale == "1:2000"
 
     def test_pl2000_5k(self):
         p = SheetParser("6.179.12.3")
-        assert p.system == "2000"
+        assert p.sheet_system == "2000"
         assert p.scale == "1:5000"
 
     def test_pl2000_500(self):
         p = SheetParser("6.179.12.01.1.1")
-        assert p.system == "2000"
+        assert p.sheet_system == "2000"
         assert p.scale == "1:500"
 
     def test_pl2000_bbox(self):
@@ -1351,16 +1353,16 @@ class TestSheetParserAutoDetection:
         assert all(isinstance(d, SheetParser) for d in desc)
 
     def test_explicit_system_2000_match(self):
-        p = SheetParser("6.179.12", system="2000")
-        assert p.system == "2000"
+        p = SheetParser("6.179.12", sheet_system="2000")
+        assert p.sheet_system == "2000"
 
     def test_explicit_system_1992_conflict(self):
         with pytest.raises(ValidationError):
-            SheetParser("6.179.12", system="1992")
+            SheetParser("6.179.12", sheet_system="1992")
 
     def test_explicit_system_2000_conflict_with_1992_format(self):
         with pytest.raises(ValidationError):
-            SheetParser("N-34-130-D", system="2000")
+            SheetParser("N-34-130-D", sheet_system="2000")
 
     def test_pl2000_components(self):
         p = SheetParser("6.179.12")
@@ -1385,7 +1387,7 @@ class TestSheetParserAutoDetection:
     def test_pl1992_backward_compat(self):
         """Existing PL-1992 usage unchanged."""
         p = SheetParser("N-34-130-D-d-2-4")
-        assert p.system == "1992"
+        assert p.sheet_system == "1992"
         assert p.scale == "1:10000"
         bbox = p.get_bbox()
         assert bbox.crs == "EPSG:2180"
@@ -1397,27 +1399,27 @@ class TestFindSheetsForBBoxSystem:
     def test_default_system_1992(self):
         """Default system='1992' returns PL-1992 sheets (dash-separated)."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
-        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="1992")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", sheet_system="1992")
         assert all("-" in g for g in result)
 
     def test_system_2000(self):
         """system='2000' returns PL-2000 sheets (dot-separated)."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
-        result = find_sheets_for_bbox(bbox, target_scale="1:10000", system="2000")
+        result = find_sheets_for_bbox(bbox, target_scale="1:10000", sheet_system="2000")
         assert all("." in g for g in result)
         assert len(result) > 0
 
     def test_backward_compatible(self):
         """Calling without system param gives same result as system='1992'."""
         bbox = BBox(400000, 500000, 410000, 510000, "EPSG:2180")
-        result_default = find_sheets_for_bbox(bbox, "1:10000", system="1992")
-        result_explicit = find_sheets_for_bbox(bbox, "1:10000", system="1992")
+        result_default = find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
+        result_explicit = find_sheets_for_bbox(bbox, "1:10000", sheet_system="1992")
         assert result_default == result_explicit
 
     def test_system_2000_wgs84(self):
         """system='2000' works with WGS84 bbox, zone detected from longitude."""
         bbox = BBox(17.0, 52.0, 17.1, 52.1, "EPSG:4326")
-        result = find_sheets_for_bbox(bbox, "1:10000", system="2000")
+        result = find_sheets_for_bbox(bbox, "1:10000", sheet_system="2000")
         assert all(g.startswith("6.") for g in result)
 
 
@@ -1473,7 +1475,9 @@ class TestSheetParserBBoxViaCoreBBox:
         """Formerly BBox(10,10,5,5) gave the junk sheet ['L-33-1-D-c-4-3']."""
         with pytest.raises(ValidationError, match="odwrocony"):
             find_sheets_for_bbox(
-                BBox(10, 10, 5, 5, "EPSG:2180"), target_scale="1:10000", system="1992"
+                BBox(10, 10, 5, 5, "EPSG:2180"),
+                target_scale="1:10000",
+                sheet_system="1992",
             )
 
     @pytest.mark.parametrize("system", ["1992", "2000"])
@@ -1481,7 +1485,7 @@ class TestSheetParserBBoxViaCoreBBox:
         with pytest.raises(ValidationError, match="skonczone"):
             find_sheets_for_bbox(
                 BBox(float("nan"), 1, 2, 3, "EPSG:2180"),
-                system=system,
+                sheet_system=system,
                 target_scale="1:10000",
             )
 
@@ -1491,7 +1495,7 @@ class TestSheetParserBBoxViaCoreBBox:
                 find_sheets_for_bbox(
                     BBox(19.5, 50.5, 19.5, 50.5, "EPSG:4326"),
                     target_scale="1:10000",
-                    system="1992",
+                    sheet_system="1992",
                 )
             )
             == 1
@@ -1560,7 +1564,7 @@ class TestFindSheetsOutsideRange:
         from kartograf.core.bbox import BBox
 
         sheets = find_sheets_for_bbox(
-            BBox(11.9, 50.4, 12.2, 50.6, "EPSG:4326"), "1:100000", system="1992"
+            BBox(11.9, 50.4, 12.2, 50.6, "EPSG:4326"), "1:100000", sheet_system="1992"
         )
         assert sheets
         assert all(s.startswith("M-33-") for s in sheets)
@@ -1570,7 +1574,7 @@ class TestFindSheetsOutsideRange:
         from kartograf.core.bbox import BBox
 
         sheets = find_sheets_for_bbox(
-            BBox(15.0, 47.9, 15.2, 48.1, "EPSG:4326"), "1:100000", system="1992"
+            BBox(15.0, 47.9, 15.2, 48.1, "EPSG:4326"), "1:100000", sheet_system="1992"
         )
         assert sheets
         assert all(s.startswith("M-33-") for s in sheets)
@@ -1579,4 +1583,4 @@ class TestFindSheetsOutsideRange:
         from kartograf.core.bbox import BBox
 
         bbox = BBox(5.0, 45.0, 5.5, 45.5, "EPSG:4326")
-        assert find_sheets_for_bbox(bbox, "1:100000", system="1992") == []
+        assert find_sheets_for_bbox(bbox, "1:100000", sheet_system="1992") == []

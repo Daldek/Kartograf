@@ -209,17 +209,19 @@ class GugikOrtoProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     def _no_coverage(
         self, parser: SheetParser, records: list[SkorowidzRecord]
     ) -> NoCoverageError:
-        zone = int(parser.sheet.split(".")[0]) if parser.system == "2000" else None
+        zone = (
+            int(parser.sheet.split(".")[0]) if parser.sheet_system == "2000" else None
+        )
         variants = sorted(
             (record.aktualnosc, record.raw.get("kolor") or "?")
             for record in records
             if record.sheet == parser.sheet
-            and record.system == parser.system
+            and record.system == parser.sheet_system
             and record.zone == zone
         )
         message = (
             f"Brak ortofotomapy {self._color} dla {parser.sheet} "
-            f"(uklad PL-{parser.system})"
+            f"(uklad PL-{parser.sheet_system})"
         )
         if variants:
             message += ". Dostepne warianty tego arkusza: " + ", ".join(

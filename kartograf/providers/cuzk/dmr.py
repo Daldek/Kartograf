@@ -102,7 +102,7 @@ class CuzkDmrProvider(BaseProvider):
         resolution: str,
         session: requests.Session | None = None,
         cache: MetadataCache | None = None,
-        target_crs: str | None = None,
+        horizontal_crs: str | None = None,
         *,
         vertical_crs: str,
     ):
@@ -111,7 +111,7 @@ class CuzkDmrProvider(BaseProvider):
         ``resolution`` is "2m" for DMR 5G raster export or "5m" for
         DMR 4G and SM5 sheets. ``vertical_crs`` is "Bpv" (native Baltic
         heights) or "EVRF2007" (transformed European heights); KRON86 has
-        no available transformation. ``target_crs=None`` keeps native
+        no available transformation. ``horizontal_crs=None`` keeps native
         EPSG:5514, ``session=None`` creates a session and ``cache=None``
         disables the sheet index cache.
         """
@@ -133,7 +133,7 @@ class CuzkDmrProvider(BaseProvider):
         self.descriptor_key = _RESOLUTION_KEYS[resolution]
         self._resolution = resolution
         self._pixel_size = _PIXEL_SIZES[resolution]
-        self._target_crs = target_crs
+        self._target_crs = horizontal_crs
         self._vertical_crs = vertical_crs
         self._session = session or requests.Session()
         self._client = CuzkClient(session=self._session, timeout=_DEFAULT_TIMEOUT)
@@ -150,8 +150,8 @@ class CuzkDmrProvider(BaseProvider):
         )
         # The same rule for the horizontal part: when the user requested a CRS other
         # than native, the lack of a safe operation must abort before the transfer.
-        if target_crs is not None:
-            self.horizontal_transform(target_crs)
+        if horizontal_crs is not None:
+            self.horizontal_transform(horizontal_crs)
 
         descriptor = get_source(self.descriptor_key)
         image_endpoint = _endpoint_for(descriptor.channels, TransportKind.ARCGIS_IMAGE)
@@ -270,7 +270,7 @@ class CuzkDmrProvider(BaseProvider):
         *,
         on_download: Callable[[], None] | None = None,
     ) -> Path:
-        """A single cutout for any bbox (`--target-crs` => local warp).
+        """A single cutout for any bbox (other CRS than EPSG:5514 => local warp).
 
         ``on_download``: called once right before the first ``exportImage``
         request, after format and CRS validation (see :meth:`download`).

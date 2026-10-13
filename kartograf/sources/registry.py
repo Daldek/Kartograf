@@ -458,7 +458,7 @@ def resolve_vertical_crs(name: str, options: tuple[str, ...]) -> str:
 def horizontal_crs_for_sheet(sheet: str) -> str:
     """Horizontal CRS of a PL sheet code: PL-1992 -> 2180, PL-2000 -> its zone."""
     parser = SheetParser(sheet)
-    if parser.system == "2000":
+    if parser.sheet_system == "2000":
         return ZONE_EPSG[int(parser.sheet.split(".")[0])]
     return PL_1992_CRS
 

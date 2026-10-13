@@ -157,7 +157,7 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "EPSG:2180",
         "EPSG:5514",
         1.0,
-        "wycinek PL --target-crs (ADR-027); pin odwrotnej EPSG:1622: "
+        "wycinek PL --cutout (ADR-027, ADR-038); pin odwrotnej EPSG:1622: "
         "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) "
         "+ Inverse of S-JTSK to ETRS89 (1) + Krovak East North",
     ),
@@ -178,7 +178,7 @@ KNOWN_PATHS: tuple[KnownPath, ...] = (
         "EPSG:2180",
         "EPSG:3045",
         0.0,
-        "wycinek PL --target-crs (ADR-027) na siatke kafla TM33; zmierzone: "
+        "wycinek PL --cutout (ADR-027, ADR-038) na siatke kafla TM33; zmierzone: "
         "Inverse of Poland CS92 + ETRF2000-PL to ETRS89 (1) + UTM zone 33N",
     ),
     KnownPath("EPSG:8353", "EPSG:2180", 0.001, "SK, bez siatek"),

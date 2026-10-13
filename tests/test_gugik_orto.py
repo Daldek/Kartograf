@@ -401,15 +401,22 @@ class TestGugikOrtoProviderCache:
             provider._get_opendata_url(SHEET)
         session.get.assert_not_called()
 
-    def test_pre_080_no_coverage_entry_with_non_ascii_hint_is_a_miss(self, cache):
+    @pytest.mark.parametrize(
+        "hint",
+        [
+            "Dostepny potomek 5.167.25.13 \u2014 uzyj --scale 1:2000",
+            "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) - uzyj "
+            "tego godla lub --system 1992",
+        ],
+        ids=["em-dash", "renamed-flag"],
+    )
+    def test_pre_080_no_coverage_entry_with_stale_hint_is_a_miss(self, cache, hint):
         """Live 2026-10-13: a 0.7.x entry (hint with an em dash) crashed the
-        CLI with 'Tekst komunikatu musi byc zapisany w ASCII' (Notice).
-        Such an entry is refreshed from the index; its texts never surface."""
-        old = {
-            "no_coverage": True,
-            "message": "Brak danych",
-            "hints": ["Dostepny potomek 5.167.25.13 \u2014 uzyj --scale 1:2000"],
-        }
+        CLI with 'Tekst komunikatu musi byc zapisany w ASCII' (Notice); a hint
+        naming a flag renamed in 0.8.0 (ADR-038) would point to a removed
+        option. Such an entry is refreshed from the index; its texts never
+        surface."""
+        old = {"no_coverage": True, "message": "Brak danych", "hints": [hint]}
         cache.set_record("orto", "RGB", "none", SHEET, old)
         session = Mock(spec=requests.Session)
         session.get = Mock(return_value=gfi_response(sample("orto_2024.html")))
