@@ -104,25 +104,25 @@
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
 > **START NASTEPNEJ SESJI (stan 2026-10-12, koniec osmej sesji):**
-> 0. **Spojnosc CLI/biblioteka/API WDROZONA** na galezi
->    `chore/cli-api-consistency` (od `develop` `d5215e8`, 20 commitow
->    `be6131e`..`bdbfe51`; plan
->    `docs/superpowers/plans/2026-10-12-cli-api-consistency.md` Task 0-17
->    zrobione, ADR-037). Brama zielona (pytest offline, ruff, ruff format,
->    mypy). Weryfikacja na zywo: 10 scenariuszy CLI = API, 0 roznic
+> 0. **Spojnosc CLI/biblioteka/API SCALONA do `develop` i WYPCHNIETA**
+>    (merge `--no-ff` `67f6d8d` galezi `chore/cli-api-consistency`,
+>    commity `be6131e`..`aa52fa4`; plan
+>    `docs/superpowers/plans/2026-10-12-cli-api-consistency.md` Task 0-18
+>    zrobione, ADR-037; push `develop` za zgoda uzytkownika 2026-10-12).
+>    Brama na `develop` zielona. Weryfikacja na zywo: 10 scenariuszy
+>    CLI = API, 0 roznic
 >    (`docs/research/2026-10-12-cli-api-consistency-live/raport.md`).
->    Nastepny krok (Task 18): merge `--no-ff` galezi do `develop` i push -
->    WYLACZNIE za zgoda uzytkownika (`develop` sie nie ruszyl, rebase
->    zbedny). Potem przed wydaniem 0.8.0: Hydrograf/Hydrolog wg CHANGELOG
+>    Nastepny krok przed wydaniem 0.8.0: Hydrograf/Hydrolog wg CHANGELOG
 >    [0.8.0] "Co zrobic" (m.in. `DownloadResult` z wartosci zwracanej,
 >    `LandCoverAreaResult`, `calculate_hsg` bez `stat`, cache w cwd).
-> 1. **Magazyn wersjonowany (plany 1/3-3/3) SCALONY do `develop`
->    lokalnie** (merge `--no-ff` `423a664` po rebase na `develop`, brama
->    zielona; plan 3/3: `d2e936c`..`3f313a2`, E2E na zywo calosci PASS:
->    `docs/research/2026-10-12-store-e2e/raport.md`). Nastepny krok:
->    push `develop` i decyzja o galezi `feat/versioned-store` na `origin`
->    (`push --force-with-lease` albo usuniecie) — WYLACZNIE za zgoda
->    uzytkownika (2026-10-12: "Rebase + merge lokalnie", bez push).
+>    Galaz `chore/cli-api-consistency` istnieje tylko lokalnie.
+> 1. **Magazyn wersjonowany (plany 1/3-3/3) SCALONY do `develop`**
+>    (merge `--no-ff` `423a664`, wypchniety razem z `develop` 2026-10-12;
+>    plan 3/3: `d2e936c`..`3f313a2`, E2E na zywo calosci PASS:
+>    `docs/research/2026-10-12-store-e2e/raport.md`). Otwarte: decyzja
+>    o galezi `feat/versioned-store` na `origin` (stara, rozjechana wersja:
+>    `push --force-with-lease` albo usuniecie) — WYLACZNIE za zgoda
+>    uzytkownika.
 >    `CLMS_CREDENTIALS` odlozone (decyzja uzytkownika 2026-10-12) —
 >    pobranie CLMS zostaje niesprawdzone na zywo (backlog, razem z CLMS
 >    1990 jako dane).
@@ -135,10 +135,10 @@
 >    "Co zrobic") — sprawdzic przed wydaniem 0.8.0.
 > 4. Test na zywo zmian lamiacych 0.8.0 na `develop` ZROBIONY (0 FAIL,
 >    `docs/research/2026-10-12-test-0.8.0/raport.md`).
-> **Stan galezi (sprawdzaj w gicie):** `develop` ma lokalne commity
-> NIEWYPCHNIETE na `origin` (w tym merge magazynu `423a664`);
-> `feat/versioned-store` lokalnie = stan scalony (po rebase), na `origin`
-> stara wersja (rozjechana; push tylko za zgoda uzytkownika).
+> **Stan galezi (sprawdzaj w gicie):** `develop` = `origin/develop`
+> (push 2026-10-12, w tym merge magazynu `423a664` i spojnosci CLI/API
+> `67f6d8d`); `feat/versioned-store` lokalnie = stan scalony, na `origin`
+> stara wersja (rozjechana; push/usuniecie tylko za zgoda uzytkownika).
 > CHANGELOG [0.8.0] dla magazynu i ADR-036 sa na `develop`.
 > **v0.8.0-dev:** cykl OTWARTY (`chore(release): poczatek cyklu 0.8.0`).
 > Zrobione: usuniecie przestarzalego toru arkuszowego wycinkow PL i
@@ -200,7 +200,9 @@
   w nieistniejacym katalogu) poprawiona w `c44c026`.
 - Testy offline: 3379 -> 3488; brama zielona. Subagenci niedostepni
   (limit uzycia) - praca bez delegacji.
-- Do zrobienia: Task 18 (merge do `develop`, push) za zgoda uzytkownika.
+- Task 18: `develop` bez zmian od rozgalezienia (rebase zbedny); merge
+  `--no-ff` `67f6d8d`, brama na `develop` zielona, push `develop` za zgoda
+  uzytkownika 2026-10-12.
 
 ### Sesja 2026-10-12 (siodma) — audyt spojnosci CLI, biblioteki i API; spec i plan
 
