@@ -450,6 +450,8 @@ class LandCoverManager:
         """
         sink = NoticeSink(on_notice)
         validate_update(update)
+        if bbox is not None:  # the CLI parses --bbox first: the same first error
+            validate_request_bbox(bbox)
         self._check_options(options)
         teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
         failed: tuple[LandCoverFailure, ...] = ()
@@ -495,6 +497,8 @@ class LandCoverManager:
         position). ``keep_raw`` adds the raw ZIP position of the same unit.
         """
         sink = NoticeSink(on_notice)
+        if bbox is not None:
+            validate_request_bbox(bbox)
         self._check_options(options)
         teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
         with self._session(force=False, sink=sink):

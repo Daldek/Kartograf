@@ -38,7 +38,7 @@ _CLI_ERRORS = [
     (["download", "--product", "nmt", "-o", "o"], "Podaj"),
     (["landcover", "download", "-o", "o", "--teryt", "1465"], "wymagane"),
     (["landcover", "list-layers"], "wymagane"),
-    (["soilgrids", "hsg", "-o", "o"], "wymagane"),
+    (["soilgrids", "hsg", "-o", "o"], "Podaj"),
     (["parse", "Q-99"], "Nieprawidlowe"),
 ]
 
