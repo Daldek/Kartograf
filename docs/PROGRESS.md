@@ -107,11 +107,12 @@
 > 0. **Cykl 0.8.0-dev OTWARTY.** Magazyn wersjonowany (ADR-036, plany
 >    1/3-3/3) i spojnosc CLI/API (ADR-037) scalone do `develop`;
 >    poprawki spojnosci (`b3f05aa`, `c67d445`, `c0ff7e1`) i aktualizacja
->    dokumentacji (`e4af37c`) sa na `origin/develop`. Galaz
->    `refactor/crs-flags` (ADR-038: `--cutout`/`--horizontal-crs`/
->    `--sheet-system`) czeka na merge do `develop` i push - tylko za zgoda
->    uzytkownika; stan sprawdzaj `git log origin/develop..develop` i
->    `git branch`.
+>    dokumentacji (`e4af37c`) sa na `origin/develop`; jawny tryb wycinka
+>    (ADR-038: `--cutout`/`--horizontal-crs`/`--sheet-system`) scalony
+>    (`eaf194d`) i wypchniety 2026-10-13 za zgoda uzytkownika. Push tylko
+>    za zgoda uzytkownika; stan sprawdzaj `git log origin/develop..develop`.
+>    Hydrograf/Hydrolog: takze nowe nazwy flag i argumentow (CHANGELOG
+>    [0.8.0], pierwszy wpis BREAKING).
 > 1. **Przed wydaniem 0.8.0:** dostosowac Hydrograf/Hydrolog wg CHANGELOG
 >    [0.8.0] "Co zrobic" (`DownloadResult` z wartosci zwracanej,
 >    `LandCoverAreaResult`, `calculate_hsg` bez `stat`, cache w cwd);
