@@ -17,7 +17,7 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **NMT (PL)** — Numeryczny Model Terenu z GUGiK (1 m / 5 m)
 - **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
 - **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK
-- **Ortofotomapa** — zdjęcia lotnicze GUGiK (25 cm)
+- **Ortofotomapa** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm)
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
