@@ -56,13 +56,13 @@ tylko podglad, duplikaty INSPIRE, dane nieprzestrzenne), manifest projektu
 | K1 | Wariant produktu = rekord rejestru (`ProductVariant`: produkt, kraj, rozdzielczosc w m jako `Decimal`, uklad poziomy, uklad wysokosci, format, kanal, warstwa/typ skorowidza, pole rozdzielczosci w skorowidzu). Walidacja CLI/API, `--help`, `storage_subdir` i filtr rekordow skorowidza czytaja rejestr | kolejne stale `("1m","5m")` w `options.py`, providerze i `FileStorage` (dzis 7 miejsc - backlog) |
 | K2 | Etykieta rozdzielczosci w CLI i segmencie: `0.5m`, `1m`, `5m` (kropka dozwolona w segmencie `[a-z0-9.-]`, regula 8 ARCHITECTURE 3.3); API przyjmuje te same napisy | `50cm` (dwie jednostki w jednym parametrze); `0_5m` |
 | K3 | Raport dostepnosci jako funkcja biblioteki `check_availability(...) -> AvailabilityReport` + podkomenda grupy CLI `kartograf <grupa> availability` (np. `kartograf elevation availability`; ADR-037: decyzje w bibliotece, CLI drukuje) | flaga `--dry-run` w `download` (miesza dwa wyniki w jednym typie); rozszerzenie `--check-updates` (ten porownuje z magazynem, nie z obszarem) |
-| K4 | Pokrycie liczone z geometrii rekordow skorowidza wzgledem obszaru (powierzchnia przeciecia / powierzchnia obszaru), osobno dla kazdej kombinacji (rok x uklad poziomy x rozdzielczosc x uklad wysokosci); "pelne" = >= 99,9% przy tolerancji zaokraglen, z uwzglednieniem `czy_ark_wypelniony = NIE` (lot czesciowy - pokrycie z geometrii lotu, jesli skorowidz ja podaje, inaczej oznaczenie "nieznane") | pokrycie z liczby arkuszy (arkusz niepelny liczony jako pelny) |
+| K4 | Pokrycie = ulamek pikseli ladu PL (maska PRG, jak wycinki ADR-035) w obszarze objetych arkuszami kombinacji (rok x uklad poziomy x rozdzielczosc x uklad wysokosci); "pelne" = 100% bez progu i bez tolerancji. Arkusz `czy_ark_wypelniony = NIE`: pokrycie z `extra.coverage` lokalnej wersji, inaczej status "pelnosc nieznana (arkusze niepelne: N)". Uzasadnienie pomiarem: `docs/research/2026-10-13-katalog-produktow/pokrycie.md` (arkusze TAK = 100% danych na ladzie, bez brakow na stykach; arkusze NIE - poligon skorowidza 100%, dane 91,5% ladu) | prog 99,9% (0,1% bboxa 4x4 km = 16 000 m2 brakow uznanych za pelne); pokrycie z poligonow skorowidza bez maski ladu (bbox przy brzegu nigdy "pelny") i bez rozroznienia NIE |
 | K5 | Nowe kanaly jako generyczne silniki sterowane deskryptorem (`AccessChannel.endpoint` + nowe pole `params`): `index_files` (skorowidz WMS/WFS -> plik), `unit_package` (paczka per jednostka administracyjna: URL z szablonu albo z `GetFeatureInfo`), `wcs_bbox`, `feature_bbox` (WFS / OGC API Features / ArcGIS query z paginacja), `atom_files` (CUZK: szablon URL arkusz/kafel/KU/obec/kraj), `arcgis_image` (istniejacy) | provider per produkt (dzis wzorzec `providers/pl/*.py`) |
 | K6 | Kazdy nowy produkt od razu w magazynie wersjonowanym (ADR-036), z sidecarem i sygnalem swiezosci kanalu: skorowidz `index` (akt_data/nr_zglosz), CUZK `http` (ETag/Last-Modified - openzu je podaje), ATOM `<updated>` jako `metadata`, WFS/OGC API bez sygnalu = `none` | wyjatki od magazynu dla danych wektorowych |
-| K7 | Dane krajowe w jednym pliku (ZABAGED 5,8 GB, Data50, HY-NET, PRG kraj) pobierane wylacznie przez kanal obszarowy (`feature_bbox`), a plik krajowy tylko na jawne zadanie (`--whole-country`) z ostrzezeniem o rozmiarze | domyslne pobieranie calego kraju dla malego bboxa |
+| K7 | Dane krajowe w jednym pliku (ZABAGED 5,8 GB, Data50, HY-NET, PRG kraj) domyslnie przez kanal obszarowy (`feature_bbox`); plik krajowy na jawne zadanie `--whole-country` z ostrzezeniem o rozmiarze (z `HEAD`) - decyzja uzytkownika 2026-10-13: udostepniamy | domyslne pobieranie calego kraju dla malego bboxa; brak opcji krajowej |
 | K8 | Wybor wariantu pozostaje jawny (zasada "bez wartosci domyslnych wplywajacych na dane", 0.8.0): `--resolution` wymagane tam, gdzie produkt ma >1 rozdzielczosc; raport dostepnosci podpowiada wartosci | automatyczny wybor "najlepszej" rozdzielczosci |
 | K9 | Pobieranie bez `Range` po stronie GUGiK `opendata` (zmierzone): ortofotomapa 5 cm = 1,1 GB/arkusz; wycinek orto wylacznie przez WCS (`orto` + `--cutout`), arkusze orto z ostrzezeniem o rozmiarze z `HEAD Content-Length` przed pobraniem | czesciowe pobieranie arkusza (serwer nie wspiera) |
-| K10 | Produkty spoza GUGiK hostowane na geoportalu (POLSA LandCover) wchodza dopiero po potwierdzeniu licencji (osobny deskryptor z `provider_name="POLSA"`) | traktowanie jako produkt GUGiK |
+| K10 | Produkty spoza GUGiK hostowane na geoportalu (POLSA LandCover) - pominiete na razie (decyzja uzytkownika 2026-10-13); powrot dopiero z potwierdzona licencja | traktowanie jako produkt GUGiK |
 
 ## 3. Rejestr wariantow i NMT/NMPT 0,5 m (plan A)
 
@@ -175,7 +175,7 @@ przy bledzie zrodla.
 |---|---|---|
 | `WMS_SHEET_INDEX` / `WFS` (istnieja) | skorowidz, pola rekordu | NMT/NMPT 0,5 m, OI, orto ukosna, mesh 3D |
 | `DIRECT_FILES` + `unit_package` | szablon URL per jednostka (`{teryt}`, `{woj}`, `{rok}`) albo warstwa WMS z linkiem w `GetFeatureInfo` | BDOT10k archiwalny, modele 3D budynkow/drzew, EGiB paczki, PRG paczki, osnowy, BDOO |
-| `WCS` (istnieje) | coverage, format, siatka | orto Standard/High/True, POLSA |
+| `WCS` (istnieje) | coverage, format, siatka | orto Standard/High/True |
 | `WFS` / `OGC_API_FEATURES` / `ARCGIS_QUERY` (`feature_bbox`) | typ/kolekcja/warstwa, limit strony, kolejnosc osi BBOX | PRG, PRNG, EGiB WFS; CZ ZABAGED, RUIAN, HY-NET, Geonames, Bodova pole |
 | `DIRECT_FILES` (`atom_files`, CZ) | szablon `openzu.../<PRODUKT>/epsg-<5514/3045>/<arkusz>.zip`, indeks arkuszy | DMR 5G/4G LAZ, DMP 1G, DMP OK, ortofoto, ZTM, warstwice |
 | `ARCGIS_IMAGE` (istnieje) | usluga ImageServer | DMP 1G/OK raster (wycinek) |
@@ -203,7 +203,8 @@ magazynie (`orto --cutout`, Standard/High; dzis tylko poza magazynem, D27).
 
 **Plan D - CZ (W/S):** `cz.cuzk.dmpok` (TIFF 0,5 m arkusze + wycinek
 ImageServer), `cz.cuzk.dmp1g`, LAZ CZ (DMR 5G/4G, DMP 1G/OK; tor `laz`
-z `--country cz`), `cz.cuzk.ortofoto` (SM5 JPEG+JGW -> GeoTIFF?, sekcja 9),
+z `--country cz`), `cz.cuzk.ortofoto` (SM5, zapis jak w zrodle: JPEG + JGW
+S-JTSK i TM33N, decyzja 2026-10-13),
 `cz.cuzk.zabaged` (bbox przez WFS/REST; land cover CZ - mapowanie klas jak
 BDOT10k PT*, research 2026-08-10 sekcja 5), `cz.cuzk.ruian` (jednostki),
 `cz.cuzk.hydro_inspire` (HY-NET bbox).
@@ -230,7 +231,7 @@ aliasow); nowe grupy powstaja razem z produktami:
 |---|---|
 | `elevation` | NMT, NMPT, LAZ PL; DMR 5G/4G CZ (dzis `kartograf download`) -> NMT/NMPT 0,5 m, NMT 100 m, DMP 1G, DMP OK, LAZ CZ |
 | `imagery` | ortofotomapa PL (dzis `download --product orto`) -> true orto, orto ukosna, obrazy intensywnosci, ortofoto CZ |
-| `landcover` | BDOT10k, CORINE -> archiwum BDOT10k (`--year`), ZABAGED, POLSA |
+| `landcover` | BDOT10k, CORINE -> archiwum BDOT10k (`--year`), ZABAGED |
 | `soil` | SoilGrids i HSG (dzis `landcover --source soilgrids`, `soilgrids hsg`) |
 | `boundaries` | PRG, RUIAN |
 | `cadastre` | EGiB, katastralni mapa CZ |
@@ -283,11 +284,11 @@ skladany lokalnie (jak BDOT10k - SQLite nie na udziale sieciowym).
    w 0.8.0.
 3. **BDOT10k archiwalny:** `--year` w `landcover` (segment z rokiem) vs
    osobne zrodlo `bdot10k-archive`.
-4. **Ortofoto CZ:** zapis oryginalnego JPEG+JGW (1:1 ze zrodlem) vs
-   konwersja do GeoTIFF z CRS (wygodniejsze, ale nie bajtowo zrodlo).
-5. **Prog "pelnego pokrycia"** w raporcie (K4): 99,9% vs 100% z tolerancja
-   1 piksela na krawedzi.
-6. **POLSA LandCover:** wlaczyc do planu C po potwierdzeniu licencji czy
-   pominac.
-7. **Pliki krajowe (K7):** czy w ogole udostepniac `--whole-country`
-   (ZABAGED 5,8 GB, PRG 377 MB, HY-P 445 MB).
+4. ~~**Ortofoto CZ**~~ - rozstrzygniete 2026-10-13: zapis jak w zrodle
+   (JPEG + JGW), bez konwersji.
+5. ~~**Prog "pelnego pokrycia"**~~ - rozstrzygniete pomiarem 2026-10-13
+   (`pokrycie.md`): 100% ladu PL, bez progu; arkusze `NIE` = "pelnosc
+   nieznana" bez lokalnej wersji (K4). Otwarte w planie A: opcja
+   `--measure` (pobranie arkuszy `NIE` do magazynu i pomiar tresci).
+6. ~~**POLSA LandCover**~~ - pominiete na razie (K10).
+7. ~~**Pliki krajowe**~~ - udostepniamy przez `--whole-country` (K7).
