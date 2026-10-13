@@ -2370,6 +2370,28 @@ zatwierdzeniu specu i planu.
 - [ ] 4. Wtyczka QGIS
 - [ ] 5. GUI webowe (lokalny manager danych)
 
+Funkcje na przyszlosc (bez przypisanego wydania):
+
+- [ ] **NMT 0,5 m i wszystkie rozdzielczosci GUGiK (prosba uzytkownika
+  2026-10-13):** dodac pobieranie NMT 0,5 m (skorowidz GUGiK ma takie
+  rekordy - `resolution_m=0.5`, fixtury w `tests/test_real_gugik_responses.py`;
+  na zywo 2026-10-12 NMPT N-34-139-C-a-3-1 byl dostepny tylko w 0,5 m).
+  Wymog: kod przygotowac tak, zeby obslugiwal KAZDA rozdzielczosc dostepna
+  w zrodle, a nie kolejna zaszyta wartosc. Dzis rozdzielczosci sa listami
+  w wielu miejscach: `options.py` (`RESOLUTION_PL`, `("1m", "5m")`),
+  `GugikProvider.SUPPORTED_RESOLUTIONS`/`WMS_INDEX_ENDPOINTS` (warstwy
+  skorowidza per rozdzielczosc), `FileStorage.SUPPORTED_RESOLUTIONS`
+  i `_RESOLUTION_SOURCES` (deskryptory `pl.gugik.nmt_1m`/`nmt_5m`, segment
+  `pl_1992_<res>_<vcrs>`), regula "5m tylko EVRF2007"
+  (`require_nmt_vertical_crs`), NMPT tylko 1m, wycinek WCS tylko 1m,
+  `resolution_m=float(res[:-1])` w providerze. Kierunek: jedno zrodlo prawdy
+  (deskryptor/rejestr rozdzielczosci per produkt i uklad wysokosci, z
+  warstwami skorowidza i ograniczeniami), z ktorego wynikaja walidacja,
+  `--help`, segment i wybor rekordu; ustalic etykiete (`0.5m`/`50cm`),
+  zachowanie wycinka WCS (siatka 0,5 m?) i NMPT 0,5 m. Zaczac od
+  inwentaryzacji skorowidza na zywo (jakie rozdzielczosci, uklady,
+  pokrycie) i specu.
+
 Czytelnosc ukladu `data/` po magazynie wersjonowanym (przeglad
 2026-10-12, poprawki na kolejne etapy; decyzja uzytkownika 2026-10-12).
 Samoopisowe nazwy plikow ODRZUCONE: parametry niesie sciezka, nazwe przy
