@@ -33,7 +33,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, LAZ, Land Cover, SoilGrids
 2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/LAZ/BDOT10k), CUZK (DMR 5G/4G, Czechy — etap 1), CORINE, SoilGrids
 3. **Intelligent Selection** - godło (PL-1992/PL-2000, CZ TM33/SM5), TERYT, bbox, plik geometrii; wybór kraju `--country {pl,cz,auto}`
-4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--target-crs`)
+4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--cutout --horizontal-crs`)
 5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla pobrań do magazynu, jawny wybór zakresu kampanii GUGiK
 6. **Secure Auth** - Auth Proxy dla izolacji credentials CLMS
 
@@ -95,8 +95,8 @@ wymagany od 0.8.0, bez wartości domyślnej).
   do arkuszy 1:10000 bez dodatkowych flag. Dla PL-2000 `--scale` jest
   wymagane z obszarem i godłem 1:10000; wskazuje skalę publikowanych arkuszy
   (zwykle 1:2000; USAGE 1.6).
-- `--bbox` / `--geometry` (SHP/GPKG) bez `--target-crs` rozwija obszar na
-  listę arkuszy OpenData (`--system {1992,2000}`); stykające się krawędzie
+- `--bbox` / `--geometry` (SHP/GPKG) bez `--cutout` rozwija obszar na
+  listę arkuszy OpenData (`--sheet-system {1992,2000}`); stykające się krawędzie
   nie są przecięciem.
 - Wybór pliku arkusza ze skorowidza GUGiK (ADR-028): warstwy wyłącznie
   z GetCapabilities, twardy filtr (całe godło, układ, rozdzielczość),
@@ -164,16 +164,16 @@ kartograf parse N-34-130-D --hierarchy
 kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf download --sheet N-34-130-D --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # godło grubsze -> arkusze 1:10000 (bez --scale)
 kartograf download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
-kartograf download --bbox 771000,509000,772000,510000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
-kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf download --sheet N-34-130-D --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data
 kartograf download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
 kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --system 1992 -o ./data
-kartograf download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
-kartograf download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
-kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
+kartograf download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
 ```
 
 ---
@@ -187,7 +187,7 @@ kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 -
 Pobieranie danych NMPT (Digital Surface Model) z GUGiK — teren + obiekty powierzchniowe (drzewa, budynki).
 Tylko 1m; układy wysokościowe KRON86 i EVRF2007. Wybór rekordu skorowidza
 i kampanie jak dla NMT (sekcje 3.1, 3.11). CLI `--bbox` bez
-`--target-crs` pobiera arkusze OpenData; z `--target-crs` wycinek WCS
+`--cutout` pobiera arkusze OpenData; z `--cutout` wycinek WCS
 (sekcja 3.10). `GugikNmptProvider.download_bbox` zwraca wysokosci
 float32 z WCS, nie kolorowy TIFF.
 
@@ -208,7 +208,7 @@ provider.download_bbox(bbox, Path("./area.tif"))
 #### CLI Commands
 ```bash
 kartograf download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 771000,509000,772000,510000 --product nmpt --country pl --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product nmpt --country pl --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
 
 ---
@@ -241,7 +241,7 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 #### CLI Commands
 ```bash
 kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
-kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --system 1992 -o ./data
+kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
 ```
 
 ---
@@ -553,10 +553,12 @@ DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
   przy porażce drugiego `Warning:`.
 - Opcje bez odpowiednika czeskiego (`--product nmpt|orto`, `--vertical-crs
   KRON86`, `--resolution 1m`) rozstrzygają obszar sporny do PL z `Info:`.
-- Żądania do CUZK wyłącznie w natywnym EPSG:5514; reprojekcja pozioma
-  lokalnie (`--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}`, tylko
-  `--bbox`/`--geometry`) przypiętą operacją — krok S-JTSK → ETRS89 przez
-  EPSG:1622/1623 (ADR-024). `--target-crs` z godłem = błąd.
+- Żądania do CUZK wyłącznie w natywnym EPSG:5514; obszar CZ to zawsze
+  jeden wycinek i wymaga `--cutout --horizontal-crs {EPSG:2180,EPSG:5514,
+  EPSG:3045}` (ADR-038; tylko `--bbox`/`--geometry`); reprojekcja pozioma
+  lokalnie przypiętą operacją — krok S-JTSK → ETRS89 przez
+  EPSG:1622/1623 (ADR-024). `--cutout` z godłem = błąd. Pod `auto` obszar
+  PL+CZ też wymaga `--cutout` (część PL = wycinek WCS).
 - Układ wysokościowy natywny Bpv; opcjonalnie `--vertical-crs EVRF2007`
   (EPSG:5621, przypięta operacja). KRON86 nieosiągalny dla CZ.
 - `exportImage` kafelkowany po stronie klienta (budżet 4 Mpx na żądanie),
@@ -585,21 +587,21 @@ provider_evrf.download_bbox(bbox, Path("./area.tif"))      # wycinek exportImage
 kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (TM33), 2m, Bpv
 kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (SM5, tylko 5m), kraj z godła
 kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv --system 1992 -o ./data
-kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --target-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
-kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --resolution 5m --product nmt --vertical-crs Bpv -o ./data
+kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
+kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
+kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
 ```
 
 ---
 
-### 3.10 Feature: Wycinek NMT/NMPT PL (`--target-crs`, ADR-035)
+### 3.10 Feature: Wycinek NMT/NMPT PL (`--cutout`, ADR-035, ADR-038)
 
 **Priority:** P1 (High)
 **Status:** Production (od v0.7.2; magazyn wersji w 0.8.0-dev)
 
 #### Description
 Jeden GeoTIFF NMT albo NMPT 1 m z WCS GUGiK dla `--bbox` lub
-obwiedni `--geometry` + `--target-crs`. Maska ladu PRG nadaje
+obwiedni `--geometry` + `--cutout --horizontal-crs`. Maska ladu PRG nadaje
 nodata poza Polska; lokalny warp uzywa przypietej operacji.
 Wynik: `<segment>/bbox/<coords>.tif` (dowiazanie do wersji w
 `versions/bbox/`, ADR-036 D15) z sidecarem;
@@ -618,19 +620,19 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
 - WCS daje kompozycje serwera, nie wybor najnowszego arkusza
   dokladnie 1 m wg ADR-028; na locie 0,5 m 1 m jest decymacja.
   Bez wyboru roku i kampanii: `--all-campaigns`, flagi roku
-  i `--full-sheet` z `--target-crs` = `Error:`.
+  i `--full-sheet` z `--cutout` = `Error:`.
 - Domyślnie lokalna wersja wycinka jest używana bez zapytań PRG/WCS
   (brak taniego sygnału aktualizacji); `--force` pobiera ponownie.
   Nowa treść staje się niezmienną wersją, a dowiązanie zmienia się
   dopiero po sukcesie; przy identycznej treści wersja nie przybywa.
-  `--workers`, `--scale` bez wpływu na tor WCS. 5 m: arkusze bez `--target-crs`.
+  `--workers`, `--scale` bez wpływu na tor WCS. 5 m: arkusze bez `--cutout`.
 
 #### Capabilities
 ```python
 from kartograf import BBox, check_pl_cutout, download_pl_cutout
 
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
-selection = dict(target_crs="EPSG:5514", output_dir="./data",
+selection = dict(horizontal_crs="EPSG:5514", output_dir="./data",
                  vertical_crs="EVRF2007", product="nmpt")
 result = download_pl_cutout(bbox, **selection)
 result.file.path, result.masked_pixels, result.zero_pixels, result.all_nodata
@@ -639,8 +641,8 @@ plan = check_pl_cutout(bbox, **selection)   # bez pobierania
 
 #### CLI Commands
 ```bash
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --target-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --target-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --cutout --horizontal-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
 ```
 
 ---
@@ -688,9 +690,9 @@ wskazuje, która jest "bieżąca".
   z lokalnej kampanii z `Warning:` (errata 5 ADR-030); biblioteka:
   `DownloadResult.unverified` / `VersionedFile.unverified`.
 - Tylko PL: zadanie bez części PL z `--all-campaigns`, flagą roku albo
-  `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` =
-  `Info:`, CZ pobierane w bieżącej wersji. Wycinek `--target-crs`
-  nie przyjmuje `--all-campaigns`, flag roku ani `--full-sheet`.
+  `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` wymaga
+  `--cutout` (ADR-038), a wycinek `--cutout` nie przyjmuje
+  `--all-campaigns`, flag roku ani `--full-sheet` (arkusze PL: `--country pl`).
 - LAZ: `--all-campaigns` = kafle bez deduplikacji pokryciowej, flagi roku
   = granice `akt_rok`; LAZ bez dowiązań i bez `--full-sheet`.
 
@@ -711,7 +713,7 @@ result.without_full                # arkusze bez pełnego lotu w zakresie
 ```bash
 kartograf download --sheet N-34-130-D-d-2-4 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 ```
 
@@ -1011,7 +1013,7 @@ mypy >= 1.13           # Type checking
 - [ ] CZ: DMP (odpowiednik NMPT), ortofoto, LAZ; ZABAGED (etap 3)
 - [ ] Wielokąt granicy kraju zamiast prostokątnej obwiedni (`--country auto`)
 - [ ] Scalanie wycinków PL+CZ w jedną powierzchnię przygraniczną (R6)
-- [ ] Wycinek PL `--target-crs` z arkuszy PL-2000
+- [ ] Wycinek PL `--cutout` z arkuszy PL-2000
 - [ ] Składanie kampanii w jedną powierzchnię
 
 ### Version 1.0.0 — roadmapa (kolejność i zasady: `docs/SCOPE.md` 3.3)

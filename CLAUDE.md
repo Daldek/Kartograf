@@ -48,7 +48,7 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 | Uklad `data/`, kampanie `kampanie/`, dowiazania i `full_sheet/` | ARCHITECTURE 3.3 |
 | Godlo PL, skorowidz GUGiK, `MetadataCache`/`--force`, kampanie (`--campaigns`, `--min-year`, `--full-sheet`, I-1) | ARCHITECTURE 4.1 |
 | Lista arkuszy PL (R5, kody wyjscia), WCS `download_bbox` (siatka zrodla, kawalki `transport/chunks.py`, ADR-034) | ARCHITECTURE 4.2 |
-| Wycinek PL `--target-crs` (ADR-027) | ARCHITECTURE 4.3 |
+| Wycinek `--cutout --horizontal-crs`, `--sheet-system` (ADR-027, ADR-038) | ARCHITECTURE 4.3 |
 | CZ (CUZK), `--country auto` | ARCHITECTURE 4.4-4.6 |
 | LAZ (ADR-029) | ARCHITECTURE 4.7 |
 | Land cover, BDOT10k, CORINE, SoilGrids, HSG | ARCHITECTURE 4.8 |
