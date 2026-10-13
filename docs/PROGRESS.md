@@ -111,6 +111,9 @@
 >    (ADR-038: `--cutout`/`--horizontal-crs`/`--sheet-system`) scalony
 >    (`eaf194d`) i wypchniety 2026-10-13 za zgoda uzytkownika. Push tylko
 >    za zgoda uzytkownika; stan sprawdzaj `git log origin/develop..develop`.
+>    Lokalnie (niewypchniete, decyzja uzytkownika 2026-10-13): `56dd7f2`
+>    README - orto "wg kampanii" (czesc U6) i ten wpis; wypchnac RAZEM
+>    z reszta U6 (SCOPE, PRD, docstring `gugik_orto.py`) w kolejnej sesji.
 >    Hydrograf/Hydrolog: takze nowe nazwy flag i argumentow (CHANGELOG
 >    [0.8.0], pierwszy wpis BREAKING).
 > 1. **Przed wydaniem 0.8.0:** dostosowac Hydrograf/Hydrolog wg CHANGELOG
@@ -192,6 +195,16 @@
   (sekwencyjnie z `reload` - LSP bez reload psul offsety), testy
   przepisane recznie (subagent: limit uzycia). Testy 3610, brama
   zielona; smoke CLI offline: 8 sciezek bledow + `--help`.
+- Merge `refactor/crs-flags` -> `develop` (`eaf194d`, brama zielona)
+  i push za zgoda uzytkownika. Weryfikacja przykladow offline (siec
+  zablokowana): USAGE 44 przyklady `kartograf download` zgodne z kodem,
+  README 9 przykladow CLI + przyklad biblioteki zgodne; jedyna nieaktualna
+  rzecz w README - orto "25 cm" (U6), poprawione lokalnie w `56dd7f2`.
+- Backlog: "Funkcje na przyszlosc" - NMT 0,5 m i obsluga wszystkich
+  rozdzielczosci GUGiK (`047cbb5`); postep pobierania kampanii przy
+  `--all-campaigns` (`3ddfb39`).
+- Uwaga procesowa: jedna poprawka w PROGRESS zrobiona `sed` zamiast
+  narzedzia edycji (tresc poprawna).
 
 ### Sesja 2026-10-12 (osma) — wdrozenie spojnosci CLI, biblioteki i API
 
@@ -2563,7 +2576,9 @@ uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
 - [ ] **U6 — rozdzielczosc ortofotomapy w dokumentacji:** README, SCOPE, PRD
   i docstring `providers/pl/gugik_orto.py` podaja 25 cm, a pobrany arkusz ma
   0,1 m (`extra.source.resolution_m`); rozdzielczosc zalezy od kampanii —
-  opisac jako "wg kampanii (np. 25 cm, 10 cm)".
+  opisac jako "wg kampanii (np. 25 cm, 10 cm)". README poprawione
+  lokalnie (`56dd7f2`, niewypchniete); zostaja SCOPE, PRD, docstring -
+  potem push calosci (decyzja uzytkownika 2026-10-13).
 - [ ] **U2 — podpowiedzi braku pokrycia w liscie PL-2000 bez `--scale`:**
   drukowane dwa razy (linia `No data for ...` bez prefiksu + `Info:`), a
   podpowiedz wymienia jednego potomka zamiast wszystkich z obszaru.
