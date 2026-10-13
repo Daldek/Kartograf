@@ -106,10 +106,11 @@
 > **START NASTEPNEJ SESJI (stan 2026-10-13):**
 > 0. **Cykl 0.8.0-dev OTWARTY.** Magazyn wersjonowany (ADR-036, plany
 >    1/3-3/3) i spojnosc CLI/API (ADR-037) scalone do `develop`;
->    `develop` ma lokalnie commity ponad `origin/develop` (poprawki
->    spojnosci `b3f05aa`, `c67d445`, `c0ff7e1` i aktualizacja dokumentacji
->    z sesji 2026-10-13) - push tylko za zgoda uzytkownika; stan sprawdzaj
->    `git log origin/develop..develop`.
+>    poprawki spojnosci (`b3f05aa`, `c67d445`, `c0ff7e1`) i aktualizacja
+>    dokumentacji (`e4af37c`) sa na `origin/develop`; lokalnie ponad
+>    `origin` (stan 2026-10-13): backlog `639c269`, poprawka cache
+>    `1672a44`, weryfikacja USAGE/SCOPE `53be1bf` i ten wpis - push tylko
+>    za zgoda uzytkownika; stan sprawdzaj `git log origin/develop..develop`.
 > 1. **Przed wydaniem 0.8.0:** dostosowac Hydrograf/Hydrolog wg CHANGELOG
 >    [0.8.0] "Co zrobic" (`DownloadResult` z wartosci zwracanej,
 >    `LandCoverAreaResult`, `calculate_hsg` bez `stat`, cache w cwd);
