@@ -3220,19 +3220,20 @@ class TestCmdSoilgrids:
         assert "ValueError" not in captured.err
         assert "Oczekiwano" not in captured.out
 
-    @pytest.mark.parametrize(
-        ("flags", "missing"),
-        [
-            (["--depth", "0-5cm"], "--output"),
-            (["--output", "out"], "--depth"),
-        ],
-    )
-    def test_hsg_missing_choice_fails_before_calculation(self, flags, missing, capsys):
+    def test_hsg_missing_output_fails_before_calculation(self, capsys):
         with patch("kartograf.hydrology.HSGCalculator") as calculator:
-            rc = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", *flags])
+            rc = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
         assert rc == 1
         calculator.assert_not_called()
-        assert f"Error: {missing}" in capsys.readouterr().err
+        assert "Error: --output" in capsys.readouterr().err
+
+    def test_hsg_missing_depth_is_library_error(self, tmp_path, capsys):
+        """The library text (same as ``calculate_hsg(depth=None)``), no network."""
+        rc = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", "-o", str(tmp_path)])
+        assert rc == 1
+        assert capsys.readouterr().err.startswith(
+            "Error: --depth wymagane dla soilgrids: 0-5cm"
+        )
 
     def test_soilgrids_hsg_no_selection(self, capsys):
         """soilgrids hsg without --sheet or --bbox -> exit 1."""

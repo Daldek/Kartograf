@@ -71,11 +71,6 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
             "--output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
             "HSG w <KATALOG>/hsg/...)"
         )
-    if args.depth is None:
-        missing.append(
-            "--depth wymagane: 0-5cm, 5-15cm, 15-30cm, 30-60cm, "
-            "60-100cm, 100-200cm (przedzial glebokosci ponizej powierzchni)"
-        )
     if missing:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)

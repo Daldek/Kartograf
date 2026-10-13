@@ -280,6 +280,9 @@ def validate_request(task: SimpleNamespace) -> None:
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
     LAZ-only and non-LAZ options. Narrows ``task.min_year``/``max_year``.
     """
+    # the CLI parses --bbox before anything else: the same first error
+    if task.bbox is not None:
+        validate_request_bbox(task.bbox)
     provided = sum(v is not None for v in (task.sheet, task.bbox, task.geometry))
     if provided > 1:
         raise ValidationError(
@@ -317,8 +320,6 @@ def validate_request(task: SimpleNamespace) -> None:
             f"--target-crs {task.target_crs!r}: nieznana wartosc - dostepne: "
             f"{', '.join(SUPPORTED_TARGET_CRS)}"
         )
-    if task.bbox is not None:
-        validate_request_bbox(task.bbox)
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
     year = task.year
