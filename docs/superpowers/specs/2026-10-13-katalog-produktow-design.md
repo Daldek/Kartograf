@@ -282,8 +282,14 @@ skladany lokalnie (jak BDOT10k - SQLite nie na udziale sieciowym).
 2. ~~**Nazwy w CLI**~~ - rozstrzygniete 2026-10-13: grupy wg typu danych
    (6.1), LAZ w `elevation`, `models3d`, przebudowa istniejacych komend
    w 0.8.0.
-3. **BDOT10k archiwalny:** `--year` w `landcover` (segment z rokiem) vs
-   osobne zrodlo `bdot10k-archive`.
+3. ~~**BDOT10k archiwalny**~~ - rozstrzygniete 2026-10-13
+   (`bdot10k-archiwum.md`): `landcover download --source bdot10k --year R`,
+   format zrodlowy (`--format GML|SHP` - archiwum nie ma GPKG, sprawdzone
+   dla 4 powiatow i lat 2014-2025), rok w segmencie
+   (`landcover/pl_bdot10k_<format>_<rok>/`), bo GUGiK publikuje jedna
+   paczke na rocznik (stan z poczatku roku); identyczne roczniki =
+   `relabeled` (D23); sygnal `none`; zmiany TERYT od roku R - tylko opis
+   w dokumentacji.
 4. ~~**Ortofoto CZ**~~ - rozstrzygniete 2026-10-13: zapis jak w zrodle
    (JPEG + JGW), bez konwersji.
 5. ~~**Prog "pelnego pokrycia"**~~ - rozstrzygniete pomiarem 2026-10-13
