@@ -121,7 +121,7 @@ class Bdot10kProvider(LandCoverProvider):
     - By TERYT code: that powiat (``download_package``)
     - By bbox or sheet code: the ONE powiat intersecting the area;
       several powiats = ``ValidationError`` (use
-      ``LandCoverManager.download_all_counties`` or ``teryts_for_area``),
+      ``LandCoverManager.download(bbox=...)`` or ``teryts_for_area``),
       none = ``NoCoverageError``. The area may be in any supported CRS.
 
     Examples
@@ -247,9 +247,11 @@ class Bdot10kProvider(LandCoverProvider):
             package files with the same table name.
         """
         if not self.validate_admin_unit(code):
-            raise ValidationError(f"Invalid TERYT code: {code}")
+            raise ValidationError(f"Nieprawidlowy kod TERYT: {code}")
         if format not in ["GPKG", "SHP"]:
-            raise ValueError(f"Unsupported format: {format}. Use 'GPKG' or 'SHP'")
+            raise ValidationError(
+                f"Nieobslugiwany format: {format}. Uzyj 'GPKG' albo 'SHP'"
+            )
         wanted = None
         if layers is not None:
             wanted = normalize_layers(layers)
@@ -345,8 +347,8 @@ class Bdot10kProvider(LandCoverProvider):
 
         if woj_code not in WOJEWODZTWO_NAMES:
             raise ValidationError(
-                f"Unknown województwo code: {woj_code}. "
-                f"Valid codes: {list(WOJEWODZTWO_NAMES.keys())}"
+                f"Nieznany kod wojewodztwa: {woj_code}. "
+                f"Dostepne kody: {list(WOJEWODZTWO_NAMES.keys())}"
             )
 
         pattern = self.OPENDATA_PATTERNS.get(format, self.OPENDATA_PATTERNS["GPKG"])
@@ -371,7 +373,7 @@ class Bdot10kProvider(LandCoverProvider):
         if len(teryts) > 1:
             raise ValidationError(
                 f"{what}: obszar przecina {len(teryts)} powiaty ({', '.join(teryts)}); "
-                "uzyj LandCoverManager.download_all_counties albo pobierz kazdy "
+                "uzyj LandCoverManager.download(bbox=...) albo pobierz kazdy "
                 "powiat przez --teryt"
             )
         return teryts[0]
@@ -389,7 +391,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         Finds the ONE powiat (county) intersecting the sheet frame (PRG WFS)
         and downloads the entire county package. A sheet spanning several
-        powiats is an error - use ``LandCoverManager.download_all_counties``.
+        powiats is an error - use ``LandCoverManager.download(sheet=...)``.
 
         Parameters
         ----------
@@ -422,7 +424,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         bbox = SheetParser(sheet).get_bbox(crs="EPSG:2180")
         teryt = self._single_teryt(bbox, f"BDOT10k {sheet}", timeout)
-        logger.info(f"Godło {sheet} is in powiat {teryt}, downloading county package")
+        logger.info(f"Godlo {sheet} is in powiat {teryt}, downloading county package")
         return self.download_by_admin_unit(
             teryt, output_path, timeout, format=format, **kwargs
         )
@@ -440,7 +442,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         Finds the ONE powiat (county) intersecting the bbox (PRG WFS) and
         downloads the entire county package. A bbox spanning several powiats
-        is an error - use ``LandCoverManager.download_all_counties``.
+        is an error - use ``LandCoverManager.download(bbox=...)``.
 
         Note: The returned data covers the entire county, not just the bbox.
         Use GIS software to clip to the exact bbox if needed.
@@ -543,7 +545,7 @@ class Bdot10kProvider(LandCoverProvider):
 
                 if not all_gpkg:
                     raise DownloadError(
-                        f"No GPKG files found in ZIP. Contents: {zf.namelist()}"
+                        f"Brak plikow GPKG w ZIP. Zawartosc: {zf.namelist()}"
                     )
 
                 if layers is not None:
@@ -607,7 +609,7 @@ class Bdot10kProvider(LandCoverProvider):
                     return output_gpkg
 
         except zipfile.BadZipFile as e:
-            raise DownloadError(f"Invalid ZIP file: {e}") from e
+            raise DownloadError(f"Nieprawidlowy plik ZIP: {e}") from e
         except OSError as e:
             # disk full, no memory for the temp file, share errors: a
             # KartografError, not a bare OSError
@@ -656,7 +658,7 @@ class Bdot10kProvider(LandCoverProvider):
             would silently lose the second copy)
         """
         if not source_files:
-            raise DownloadError("No files to merge")
+            raise DownloadError("Brak plikow do scalenia")
 
         # SQLite ALWAYS writes in a local temp directory: on a CIFS/SMB share without
         # `nobrl`, byte-range locks ended the merge with `database is locked`. The
@@ -722,7 +724,7 @@ class Bdot10kProvider(LandCoverProvider):
                 if cursor.fetchone():
                     raise DownloadError(
                         f"Paczka BDOT10k: tabela {table_name} wystepuje w wiecej niz "
-                        f"jednym pliku ({source_path.name}) — scalenie zgubiloby dane"
+                        f"jednym pliku ({source_path.name}) - scalenie zgubiloby dane"
                     )
 
                 # Get table schema from source
@@ -853,20 +855,20 @@ class Bdot10kProvider(LandCoverProvider):
     def _layer_descriptions() -> dict[str, str]:
         """Return mapping of layer codes to descriptions."""
         return {
-            "PTGN": "Grunty nieużytkowe",
+            "PTGN": "Grunty nieuzytkowe",
             "PTKM": "Tereny komunikacyjne",
-            "PTLZ": "Tereny leśne",
+            "PTLZ": "Tereny lesne",
             "PTNZ": "Tereny niezabudowane",
             "PTPL": "Place",
-            "PTRK": "Roślinność krzewiasta",
-            "PTSO": "Składowiska",
+            "PTRK": "Roslinnosc krzewiasta",
+            "PTSO": "Skladowiska",
             "PTTR": "Tereny rolne",
-            "PTUT": "Uprawy trwałe",
+            "PTUT": "Uprawy trwale",
             "PTWP": "Wody powierzchniowe",
             "PTWZ": "Tereny zabagnione",
             "PTZB": "Tereny zabudowane",
             "SWRS": "Rzeki i strumienie",
-            "SWKN": "Kanały",
+            "SWKN": "Kanaly",
             "SWRM": "Rowy melioracyjne",
         }
 

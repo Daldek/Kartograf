@@ -2,6 +2,11 @@
 Kartograf - download spatial data: NMT/NMPT/orthophoto/LAZ from GUGiK (PL),
 DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
+Every CLI command has one library function with the same choices and the same
+result (ADR-037): ``kartograf download`` = ``download_data``/``check_data``,
+``landcover download`` = ``LandCoverManager.download``/``.check``,
+``soilgrids hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``.
+
 Example usage::
 
     from kartograf import (
@@ -9,6 +14,7 @@ Example usage::
         DownloadManager,
         GugikProvider,
         SheetParser,
+        download_data,
         download_laz_area,
         download_pl_cutout,
     )
@@ -17,11 +23,22 @@ Example usage::
     parser = SheetParser("N-34-130-D-d-2-4")
     print(f"Scale: {parser.scale}")
 
+    # The `kartograf download` command: files, failures, notices, ok
+    report = download_data(
+        product="nmt",
+        output_dir="./data",
+        sheet="N-34-130-D-d-2-4",
+        resolution="1m",
+        vertical_crs="EVRF2007",
+    )
+    print([item.file.path for item in report.files], report.ok)
+
     # Download NMT data (one sheet from GUGiK OpenData); every data choice
     # (product, resolution, vertical CRS, output) is explicit
     provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
     manager = DownloadManager("./data", provider)
-    path = manager.download_sheet("N-34-130-D-d-2-4")
+    result = manager.download_sheet("N-34-130-D-d-2-4")
+    print(result.files["N-34-130-D-d-2-4"][0].version_path)
 
     # LAZ tiles for an area: newest per area, sidecars, failures in result
     laz = download_laz_area(
@@ -33,7 +50,7 @@ Example usage::
     # One NMT GeoTIFF for an area (PL cutout from GUGiK WCS, ADR-035)
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-        "EPSG:2180",
+        target_crs="EPSG:2180",
         output_dir="./data",
         vertical_crs="EVRF2007",
         product="nmt",
@@ -42,18 +59,18 @@ Example usage::
     # Land cover and HSG in the same store (versions, result with the file)
     from kartograf import HSGCalculator, LandCoverManager
     lc = LandCoverManager("./data", "bdot10k").download(teryt="1465")
-    print(lc.file.path, lc.file.status)  # data/landcover/pl_bdot10k_gpkg/...
-    hsg = HSGCalculator("./data").calculate_hsg_by_sheet(
-        "N-34-130-D", depth="0-5cm", stat="mean"
-    )
+    print(lc.files[0].file.path, lc.ok)  # data/landcover/pl_bdot10k_gpkg/...
+    hsg = HSGCalculator("./data").calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
     print(hsg.file.path, hsg.file.label)  # data/hsg/..., SoilGrids edition
 """
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.geometry import find_sheets_for_geometry
+from kartograf.core.bbox import transform_bbox
+from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
+from kartograf.download.area import parent_request_for
 from kartograf.download.campaigns import CampaignRef
 from kartograf.download.countries import (
     CountryPart,
@@ -61,40 +78,37 @@ from kartograf.download.countries import (
     split_bbox_by_country,
 )
 from kartograf.download.cutout import (
-    PlCutout,
     PlCutoutResult,
     check_pl_cutout,
     download_pl_cutout,
-    prepare_pl_cutout,
-    run_pl_wcs_cutout,
 )
 from kartograf.download.cz_cutout import (
     CzCutoutResult,
     check_cz_cutout,
     download_cz_cutout,
-    run_cz_cutout,
+)
+from kartograf.download.cz_sheets import (
+    CzSheetResult,
+    check_cz_sheet,
+    download_cz_sheet,
+)
+from kartograf.download.data import (
+    DataReport,
+    UnitFailure,
+    UnitFile,
+    check_data,
+    download_data,
 )
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.laz import (
     LazDownloadResult,
     LazTileFailure,
-    check_laz_updates,
+    check_laz_area,
     download_laz_area,
-    run_laz_download,
 )
-from kartograf.download.manager import (
-    DownloadManager,
-    DownloadProgress,
-    DownloadResult,
-    SheetFetch,
-)
+from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
-from kartograf.download.updates import (
-    UpgradeReport,
-    check_updates,
-    upgrade,
-)
 from kartograf.download.versions import VersionRef
 from kartograf.exceptions import (
     CacheError,
@@ -112,6 +126,7 @@ from kartograf.landcover.manager import (
     LandCoverManager,
     LandCoverResult,
 )
+from kartograf.notices import Notice
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
@@ -136,6 +151,8 @@ __version__ = "0.8.0-dev"
 __all__ = [
     # Cache
     "MetadataCache",
+    # Notices
+    "Notice",
     # Core
     "SheetParser",
     "Parser2000",
@@ -144,11 +161,19 @@ __all__ = [
     "find_sheets_for_bbox",
     "find_sheets_2000_for_bbox",
     "find_sheets_for_geometry",
+    "get_overall_bbox",
+    "transform_bbox",
+    "parent_request_for",
+    # Download (command level: `kartograf download`, spec 4.1)
+    "download_data",
+    "check_data",
+    "DataReport",
+    "UnitFile",
+    "UnitFailure",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",
     "DownloadResult",
-    "SheetFetch",
     "CampaignRef",
     "FileStorage",
     # Download (versioned store, update plan)
@@ -157,16 +182,10 @@ __all__ = [
     "VersionRef",
     "PlanItem",
     "UpdatePlan",
-    "UpgradeReport",
-    "check_updates",
-    "upgrade",
     # Download (PL cutout: WCS ADR-035)
-    "PlCutout",
     "PlCutoutResult",
     "check_pl_cutout",
     "download_pl_cutout",
-    "prepare_pl_cutout",
-    "run_pl_wcs_cutout",
     # Download (CZ cutout, countries)
     "CountryPart",
     "countries_for_bbox",
@@ -174,13 +193,15 @@ __all__ = [
     "CzCutoutResult",
     "check_cz_cutout",
     "download_cz_cutout",
-    "run_cz_cutout",
+    # Download (CZ sheet: SM5 sheet / TM33 tile, R4)
+    "CzSheetResult",
+    "check_cz_sheet",
+    "download_cz_sheet",
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
-    "check_laz_updates",
+    "check_laz_area",
     "download_laz_area",
-    "run_laz_download",
     # Land Cover
     "LandCoverManager",
     "LandCoverResult",

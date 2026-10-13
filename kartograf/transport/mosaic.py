@@ -220,14 +220,14 @@ def mosaic_and_crop(
         if len(dtype_set) > 1:
             raise ValidationError(
                 "mosaic_and_crop: zrodla maja rozne typy pasm "
-                f"({', '.join(sorted(dtype_set))}) — podaj dtype="
+                f"({', '.join(sorted(dtype_set))}) - podaj dtype="
             )
     if wrap:
         for path, meta in zip(paths, metas, strict=True):
             if meta["count"] != 1:
                 raise ValidationError(
                     f"mosaic_and_crop: zrodlo {path.name} ma {meta['count']} "
-                    "pasm — owijanie w VRT (dtype) obsluguje tylko "
+                    "pasm - owijanie w VRT (dtype) obsluguje tylko "
                     "rastry jednopasmowe"
                 )
             band_type = dtype or meta["dtype"]

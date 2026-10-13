@@ -117,9 +117,9 @@ class FileStorage:
             self._resolution = resolution or ""
         else:
             if resolution not in self.SUPPORTED_RESOLUTIONS:
-                raise ValueError(
-                    f"Unsupported resolution: '{resolution}'. "
-                    f"Supported: {self.SUPPORTED_RESOLUTIONS}"
+                raise ValidationError(
+                    f"Nieobslugiwana rozdzielczosc: '{resolution}'. "
+                    f"Obslugiwane: {self.SUPPORTED_RESOLUTIONS}"
                 )
             self._product = None
             self._resolution = resolution

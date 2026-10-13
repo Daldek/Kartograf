@@ -61,7 +61,7 @@ def require_nmt_vertical_crs(resolution: str, vertical_crs: str) -> str:
     actual = nmt_vertical_crs(resolution, vertical_crs, log=False)
     if actual != vertical_crs:
         raise ValidationError(
-            f"NMT {resolution} (PL) jest dostepny tylko w {actual} — podano "
+            f"NMT {resolution} (PL) jest dostepny tylko w {actual} - podano "
             f"vertical_crs={vertical_crs!r}; uzyj vertical_crs={actual!r} "
             f"albo resolution='1m'"
         )

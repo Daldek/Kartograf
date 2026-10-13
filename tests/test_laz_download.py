@@ -16,12 +16,27 @@ from urllib.parse import parse_qs, urlparse
 
 import pytest
 
-from kartograf import check_laz_updates, download_laz_area, run_laz_download
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.laz import LazDownloadResult, laz_slot, laz_version_ref
+from kartograf.download.area import bbox_to_2180
+from kartograf.download.laz import (
+    NO_TILES_MESSAGE,
+    LazDownloadResult,
+    _check_selection,
+    _run_laz_download,
+    check_laz_area,
+    download_laz_area,
+    laz_slot,
+    laz_version_ref,
+)
 from kartograf.download.plan import UpdatePlan
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
+from kartograf.exceptions import (
+    DownloadError,
+    NoCoverageError,
+    ValidationError,
+    YearRangeError,
+)
+from kartograf.notices import LAZ_SUPERSEDED, Notice
 from kartograf.providers.pl.gugik_laz import (
     GugikLazProvider,
     LazTile,
@@ -144,7 +159,7 @@ class TestRunLazDownload:
     def test_laz_tile_lands_as_version_with_link(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(tile),
             provider=provider,
             bbox=BBOX,
@@ -200,7 +215,7 @@ class TestRunLazDownload:
     def test_parent_request_written_to_every_tile_sidecar(self, tmp_path):
         """N15: ADR-023 (f).1 — LAZ tiles from an area carry the grouping key."""
         tiles = [_tile("N-33-131-B-a-1-1-4"), _tile("M-34-1-A-a-1-1-1", "PL-1992")]
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(*tiles),
             provider=FakeProvider(),
             bbox=BBOX,
@@ -220,7 +235,7 @@ class TestRunLazDownload:
             "kartograf.sources.sidecar.build_metadata",
             side_effect=RuntimeError("zepsuty deskryptor"),
         ):
-            result = run_laz_download(
+            result = _run_laz_download(
                 _selection(tile),
                 provider=FakeProvider(),
                 bbox=BBOX,
@@ -240,7 +255,7 @@ class TestRunLazDownload:
         ``pl.gugik.laz``, not silence (``emit_sidecar`` itself would skip it)."""
         provider = FakeProvider()
         provider.descriptor_key = None
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(_tile("N-33-131-B-a-1-1-4")),
             provider=provider,
             bbox=BBOX,
@@ -251,7 +266,7 @@ class TestRunLazDownload:
     def test_failures_are_collected_not_raised(self, tmp_path):
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]
         provider = FakeProvider(failing={"1-1-2", "1-1-4"})
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(*tiles), provider=provider, bbox=BBOX, output_dir=tmp_path
         )
         assert len(result.files) == 2
@@ -267,10 +282,10 @@ class TestRunLazDownload:
     def test_laz_force_same_content_is_unchanged(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
-        first = run_laz_download(
+        first = _run_laz_download(
             _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
         )
-        forced = run_laz_download(
+        forced = _run_laz_download(
             _selection(tile),
             provider=provider,
             bbox=BBOX,
@@ -288,7 +303,7 @@ class TestRunLazDownload:
     def test_laz_force_new_content_is_new_version(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
-        original = run_laz_download(
+        original = _run_laz_download(
             _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
         ).files[0]
 
@@ -298,7 +313,7 @@ class TestRunLazDownload:
             return target
 
         provider.download = revised
-        changed = run_laz_download(
+        changed = _run_laz_download(
             _selection(tile),
             provider=provider,
             bbox=BBOX,
@@ -320,10 +335,10 @@ class TestRunLazDownload:
             date="2025-08-12",
         )
         provider = FakeProvider()
-        previous = run_laz_download(
+        previous = _run_laz_download(
             _selection(first_tile), provider=provider, bbox=BBOX, output_dir=tmp_path
         ).files[0]
-        current = run_laz_download(
+        current = _run_laz_download(
             _selection(first_tile, second_tile),
             provider=provider,
             bbox=BBOX,
@@ -338,11 +353,11 @@ class TestRunLazDownload:
     def test_check_laz_never_downloads(self, tmp_path):
         current, missing = (_tile(f"N-33-131-B-a-1-1-{i}") for i in (1, 2))
         provider = FakeProvider()
-        run_laz_download(
+        _run_laz_download(
             _selection(current), provider=provider, bbox=BBOX, output_dir=tmp_path
         )
         provider.calls.clear()
-        plan = check_laz_updates(
+        plan = _check_selection(
             _selection(current, missing), provider=provider, output_dir=tmp_path
         )
         assert plan.store == str(tmp_path.resolve())
@@ -367,11 +382,11 @@ class TestRunLazDownload:
     def test_laz_upgrade_plan_stale_tile(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
-        plan = check_laz_updates(
+        plan = _check_selection(
             _selection(tile), provider=provider, output_dir=tmp_path
         )
         changed = replace(tile, url=tile.url.replace("81121", "93455"))
-        outcome = run_laz_download(
+        outcome = _run_laz_download(
             _selection(changed),
             provider=provider,
             bbox=BBOX,
@@ -383,7 +398,7 @@ class TestRunLazDownload:
         assert provider.calls == []
         # A changed index record must also be stale even if the file name stays.
         changed_record = replace(tile, date="2025-08-12", year=2025)
-        stale_record = run_laz_download(
+        stale_record = _run_laz_download(
             _selection(changed_record),
             provider=provider,
             bbox=BBOX,
@@ -392,7 +407,7 @@ class TestRunLazDownload:
             plan=plan,
         )
         assert stale_record.files == () and stale_record.stale == plan.items
-        removed = run_laz_download(
+        removed = _run_laz_download(
             _selection(),
             provider=provider,
             bbox=BBOX,
@@ -406,7 +421,7 @@ class TestRunLazDownload:
     def test_laz_upgrade_plan_skips_removed_items(self, tmp_path):
         first, removed = (_tile(f"N-33-131-B-a-1-1-{i}") for i in (1, 2))
         provider = FakeProvider()
-        checked = check_laz_updates(
+        checked = _check_selection(
             _selection(first, removed), provider=provider, output_dir=tmp_path
         )
         plan = UpdatePlan(
@@ -415,7 +430,7 @@ class TestRunLazDownload:
             kartograf_version=checked.kartograf_version,
             items=checked.items[:1],
         )
-        outcome = run_laz_download(
+        outcome = _run_laz_download(
             _selection(first, removed),
             provider=provider,
             bbox=BBOX,
@@ -444,7 +459,7 @@ class TestRunLazDownload:
         old_sidecar = slot.std.with_name(f"{slot.name}.meta.json")
         old_sidecar.write_text('{"schema":"kartograf-meta/1","extra":{}}')
         provider = FakeProvider()
-        (file,) = run_laz_download(
+        (file,) = _run_laz_download(
             _selection(tile), provider=provider, bbox=BBOX, output_dir=tmp_path
         ).files
         assert provider.calls == [tile.url] and file.status == "new"
@@ -456,7 +471,7 @@ class TestRunLazDownload:
         tile = _tile("N-33-131-B-a-1-1-4")
         provider = FakeProvider()
         with pytest.raises(ValidationError, match="check"):
-            run_laz_download(
+            _run_laz_download(
                 _selection(tile),
                 provider=provider,
                 bbox=BBOX,
@@ -469,7 +484,7 @@ class TestRunLazDownload:
         kept = _tile("N-34-139-A-c-1-1-3-4", "PL-1992", 2025)
         old = SupersededLazTile(tile=_tile("7.173.21.06.2", "PL-2000:S7", 2022),
                                 covered_by=(kept,))  # fmt: skip
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(kept, superseded=[old]),
             provider=FakeProvider(),
             bbox=BBOX,
@@ -481,12 +496,12 @@ class TestRunLazDownload:
     def test_laz_parallel_workers_one_version_per_tile(self, tmp_path: Path) -> None:
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 7)]
         progress: list[tuple[int, int]] = []
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(*tiles),
             provider=FakeProvider(),
             bbox=BBOX,
             output_dir=tmp_path,
-            max_workers=3,
+            workers=3,
             on_progress=lambda done, total: progress.append((done, total)),
         )
         assert len(result.files) == 6
@@ -496,11 +511,11 @@ class TestRunLazDownload:
             for file in result.files
         )
         assert len(list(tmp_path.rglob("versions/**/*.laz.meta.json"))) == 6
-        assert progress == [(i, 6) for i in range(1, 7)]
+        assert progress == [(i, 6) for i in range(0, 7)]
 
     def test_kron86_segment_follows_provider(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")
-        result = run_laz_download(
+        result = _run_laz_download(
             _selection(tile),
             provider=FakeProvider(vertical_crs="KRON86"),
             bbox=BBOX,
@@ -582,7 +597,7 @@ class TestDownloadLazArea:
         session.get.assert_not_called()
 
     def test_vertical_crs_mismatch_with_provider_is_rejected(self, tmp_path):
-        with pytest.raises(ValueError, match="KRON86"):
+        with pytest.raises(ValidationError, match="KRON86"):
             download_laz_area(
                 W2_AREA,
                 output_dir=tmp_path,
@@ -591,6 +606,183 @@ class TestDownloadLazArea:
                     session=wfs_session(), vertical_crs="EVRF2007"
                 ),
             )
+
+    def test_bbox_epsg4326_same_tiles_as_2180(self, tmp_path):
+        """A WGS84 area selects what its densified EPSG:2180 envelope selects."""
+        from pyproj import Transformer
+
+        from kartograf.core.bbox import transform_bbox
+
+        to_wgs = Transformer.from_crs("EPSG:2180", "EPSG:4326", always_xy=True)
+        lon0, lat0 = to_wgs.transform(637410, 487010)
+        lon1, lat1 = to_wgs.transform(637440, 487040)
+        wgs = BBox(
+            float(f"{lon0:.6f}"),
+            float(f"{lat0:.6f}"),
+            float(f"{lon1:.6f}"),
+            float(f"{lat1:.6f}"),
+            "EPSG:4326",
+        )
+        args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
+        from_wgs = check_laz_area(
+            wgs,
+            provider=GugikLazProvider(
+                session=wfs_session("wgs"), vertical_crs="EVRF2007"
+            ),
+            **args,
+        )
+        from_2180 = check_laz_area(
+            transform_bbox(wgs, "EPSG:2180"),
+            provider=GugikLazProvider(
+                session=wfs_session("wgs"), vertical_crs="EVRF2007"
+            ),
+            **args,
+        )
+        assert from_wgs.items == from_2180.items
+        assert [i.unit for i in from_wgs.items]
+
+    def test_area_wgs84_across_19e_keeps_southern_band(self):
+        """K6: an envelope from densified edges - four corners lost
+        ~479 m in the S for a bbox through 19E (LAZ tile selection too narrow)."""
+        bbox = bbox_to_2180(BBox(18, 50, 20, 50.2, "EPSG:4326"))
+        assert bbox.crs == "EPSG:2180"
+        assert bbox.min_y == pytest.approx(236968.4486, abs=0.01)
+
+    @pytest.mark.parametrize(
+        "czech",
+        [
+            BBox(-788231, -1052442, -741087, -1013379, "EPSG:5514"),
+            BBox(450000, 5540000, 455000, 5545000, "EPSG:3045"),
+        ],
+    )
+    def test_area_from_czech_crs_never_uses_plain_transformer(self, czech):
+        """Czech CRSs leave only via the pinned operation, never via an unpinned
+        pyproj transformer (ballpark selection on the border strip)."""
+        from unittest.mock import patch
+
+        from kartograf.core import bbox as core_bbox
+        from kartograf.providers.cuzk import dmr
+
+        with (
+            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
+            patch.object(
+                core_bbox, "_transformer", wraps=core_bbox._transformer
+            ) as plain,
+        ):
+            bbox = bbox_to_2180(czech)
+        assert bbox.crs == "EPSG:2180"
+        assert pinned.called
+        plain.assert_not_called()
+
+    def test_bbox_epsg5514_uses_pinned_transform(self, tmp_path):
+        from unittest.mock import patch
+
+        krovak = BBox(-500000, -1100000, -499950, -1099950, "EPSG:5514")
+        with patch(
+            "kartograf.providers.cuzk.dmr.bbox_to_crs", return_value=W2_AREA
+        ) as pinned:
+            plan = check_laz_area(
+                krovak,
+                output_dir=tmp_path,
+                vertical_crs="EVRF2007",
+                cache=False,
+                provider=GugikLazProvider(
+                    session=wfs_session(), vertical_crs="EVRF2007"
+                ),
+            )
+        pinned.assert_called_once_with(krovak, "EPSG:2180")
+        assert [i.unit for i in plan.items] == ["N-34-139-A-c-1-1-3-4"]
+
+    def test_check_laz_area_same_args(self, tmp_path):
+        args = {
+            "output_dir": tmp_path,
+            "vertical_crs": "EVRF2007",
+            "min_density": 4,
+            "cache": False,
+        }
+
+        def provider():
+            return GugikLazProvider(session=wfs_session(), vertical_crs="EVRF2007")
+
+        before = check_laz_area(W2_AREA, provider=provider(), **args)
+        result = download_laz_area(W2_AREA, provider=provider(), **args)
+        after = check_laz_area(W2_AREA, provider=provider(), **args)
+        assert [(i.unit, i.status) for i in before.items] == [
+            ("N-34-139-A-c-1-1-3-4", "missing")
+        ]
+        assert [i.name for i in after.items] == [f.path.name for f in result.files]
+        assert after.items[0].status == "current"
+
+    def test_download_laz_area_plan_stale(self, tmp_path):
+        args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
+        plan = check_laz_area(
+            W2_AREA,
+            provider=GugikLazProvider(session=wfs_session(), vertical_crs="EVRF2007"),
+            **args,
+        )
+        changed = replace(plan.items[0], available_label="different")
+        session = wfs_session()
+        result = download_laz_area(
+            W2_AREA,
+            update="upgrade",
+            plan=replace(plan, items=(changed,)),
+            provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
+            **args,
+        )
+        assert result.files == () and result.stale == (changed,)
+        assert downloaded_urls(session) == []
+
+    def test_superseded_notice(self, tmp_path):
+        seen: list[Notice] = []
+        result = download_laz_area(
+            W2_AREA,
+            output_dir=tmp_path,
+            vertical_crs="EVRF2007",
+            cache=False,
+            on_notice=seen.append,
+            provider=GugikLazProvider(session=wfs_session(), vertical_crs="EVRF2007"),
+        )
+        (notice,) = result.notices
+        assert seen == [notice]
+        assert notice.level == "info" and notice.code == LAZ_SUPERSEDED
+        lines = notice.text.split("\n")
+        assert lines[0] == (
+            "pominieto 2 kafli LAZ - obszar pokrywaja nowsze kafle (domyslnie "
+            "najnowszy rocznik per obszar; inny rocznik: --year/--min-year/--max-year)"
+        )
+        assert (
+            "  7.173.21.06.2 (2022, PL-2000:S7): pokryty przez "
+            "N-34-139-A-c-1-1-3-4 (2025, PL-1992)"
+        ) in lines
+
+    def test_no_tiles_is_no_coverage_error(self, tmp_path):
+        provider = MagicMock(vertical_crs="EVRF2007")
+        provider.select_tiles.return_value = _selection()
+        with pytest.raises(NoCoverageError) as caught:
+            download_laz_area(
+                W2_AREA,
+                output_dir=tmp_path,
+                vertical_crs="EVRF2007",
+                cache=False,
+                provider=provider,
+            )
+        assert str(caught.value) == NO_TILES_MESSAGE
+        provider.download.assert_not_called()
+
+    def test_workers_param_name(self, tmp_path):
+        tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]
+        provider = FakeProvider()
+        provider.select_tiles = MagicMock(return_value=_selection(*tiles))
+        result = download_laz_area(
+            W2_AREA,
+            output_dir=tmp_path,
+            vertical_crs="EVRF2007",
+            workers=4,
+            cache=False,
+            provider=provider,  # type: ignore[arg-type]
+        )
+        assert len(result.files) == 4 and result.ok
+        assert len(provider.calls) == 4
 
 
 # =============================================================================

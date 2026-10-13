@@ -56,8 +56,9 @@ class TestSoilGridsStore:
     def test_soilgrids_lands_as_edition_version(self, tmp_path):
         session = FakeSoilGrids("2.0")
         result = _soil(tmp_path, session).download(sheet="N-34-130-D", **CLAY)
-        file = result.file
-        assert result.unit == "N-34-130-D"
+        (item,) = result.files
+        file = item.file
+        assert item.unit == "N-34-130-D"
         assert file.path == tmp_path / SOIL_SEG / "N-34/130/D/N-34-130-D.tif"
         assert file.status == "new" and file.label == "2.0"
         assert file.version_path.parent.name == f"2.0_{file.sha256[:8]}"
@@ -84,8 +85,8 @@ class TestSoilGridsStore:
     def test_different_params_keep_both_files(self, tmp_path, first, second):
         session = FakeSoilGrids(values={"clay": 11, "sand": 22})
         manager = _soil(tmp_path, session)
-        a = manager.download(bbox=BBOX, **{**CLAY, **first}).file
-        b = manager.download(bbox=BBOX, **{**CLAY, **second}).file
+        a = manager.download(bbox=BBOX, **{**CLAY, **first}).files[0].file
+        b = manager.download(bbox=BBOX, **{**CLAY, **second}).files[0].file
         assert a.path != b.path
         assert a.path.parent.parent != b.path.parent.parent  # own segments
         assert a.path.name == b.path.name == f"{COORDS}.tif"
@@ -93,27 +94,29 @@ class TestSoilGridsStore:
     def test_quantile_stat_segment_lowercase(self, tmp_path):
         manager = _soil(tmp_path, FakeSoilGrids())
         result = manager.download(bbox=BBOX, **{**CLAY, "stat": "Q0.95"})
-        assert result.file.path == (
+        file = result.files[0].file
+        assert file.path == (
             tmp_path / "soil/global_soilgrids_clay_0-5cm_q0.95/bbox" / f"{COORDS}.tif"
         )
-        assert _sidecar(result.file.version_path)["request"]["stat"] == "Q0.95"
+        assert _sidecar(file.version_path)["request"]["stat"] == "Q0.95"
 
     def test_soilgrids_default_local_one_capabilities_no_wcs(self, tmp_path):
         _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids("2.0")
         result = _soil(tmp_path, session).download(bbox=BBOX, **CLAY)
-        assert (result.file.status, result.file.label) == ("local", "2.0")
-        assert result.file.newer is None and result.file.unverified is None
+        file = result.files[0].file
+        assert (file.status, file.label) == ("local", "2.0")
+        assert file.newer is None and file.unverified is None
         assert (session.capabilities, session.coverages) == (1, 0)
 
     def test_soilgrids_new_edition_default_info_upgrade_downloads(self, tmp_path):
         _soil(tmp_path, FakeSoilGrids("2.0", {"clay": 1})).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids("2.1", {"clay": 7})
         manager = _soil(tmp_path, session)
-        info = manager.download(bbox=BBOX, **CLAY).file
+        info = manager.download(bbox=BBOX, **CLAY).files[0].file
         assert (info.status, info.label, info.newer) == ("local", "2.0", "2.1")
         assert session.coverages == 0
-        upgraded = manager.download(bbox=BBOX, update="upgrade", **CLAY).file
+        upgraded = manager.download(bbox=BBOX, update="upgrade", **CLAY).files[0].file
         assert (upgraded.status, upgraded.label) == ("new", "2.1")
         assert session.coverages == 1
         assert _first_pixel(upgraded.path) == 7
@@ -133,7 +136,7 @@ class TestSoilGridsStore:
         _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids(404)
         manager = _soil(tmp_path, session)
-        file = manager.download(bbox=BBOX, **CLAY).file
+        file = manager.download(bbox=BBOX, **CLAY).files[0].file
         assert file.status == "local"
         assert (file.unverified or "").startswith("check_failed: ")
         with pytest.raises(DownloadError):
@@ -141,10 +144,15 @@ class TestSoilGridsStore:
         assert session.coverages == 0
 
     def test_soilgrids_force_same_content_unchanged(self, tmp_path):
-        first = _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY).file
+        first = (
+            _soil(tmp_path, FakeSoilGrids("2.0"))
+            .download(bbox=BBOX, **CLAY)
+            .files[0]
+            .file
+        )
         session = FakeSoilGrids("2.0")
         again = _soil(tmp_path, session).download(bbox=BBOX, update="force", **CLAY)
-        assert (again.file.status, again.file.version_path) == (
+        assert (again.files[0].file.status, again.files[0].file.version_path) == (
             "unchanged",
             first.version_path,
         )
@@ -177,7 +185,8 @@ class TestSoilGridsStore:
         result = _soil(tmp_path, session).download(
             bbox=BBOX, update="upgrade", plan=plan, **CLAY
         )
-        assert result.file.status == "local" and result.file.label == "2.0"
+        assert result.files[0].file.status == "local"
+        assert result.files[0].file.label == "2.0"
         assert [i.available_label for i in result.stale] == ["2.1"]
         assert session.coverages == 0
         # a position removed from the plan file is never executed
@@ -186,15 +195,16 @@ class TestSoilGridsStore:
         result = _soil(tmp_path, session).download(
             bbox=BBOX, update="upgrade", plan=empty, **CLAY
         )
-        assert result.file.label == "2.0" and session.coverages == 0
+        assert result.files[0].file.label == "2.0" and session.coverages == 0
         # the planned position, unchanged source: executed
         session = FakeSoilGrids("2.1")
         result = _soil(tmp_path, session).download(
             bbox=BBOX, update="upgrade", plan=plan, **CLAY
         )
         # same pixels under the new edition: own version directory (D23)
-        assert (result.file.status, result.file.label) == ("relabeled", "2.1")
-        assert result.stale == ()
+        file = result.files[0].file
+        assert (file.status, file.label) == ("relabeled", "2.1")
+        assert result.stale == () and result.ok
 
     def test_plan_requires_upgrade_and_own_store(self, tmp_path):
         plan = _soil(tmp_path, FakeSoilGrids()).check(bbox=BBOX, **CLAY)
@@ -207,7 +217,7 @@ class TestSoilGridsStore:
 
     def test_soilgrids_teryt_not_supported_before_network(self, tmp_path):
         session = FakeSoilGrids()
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(ValidationError, match="teryt dziala tylko dla BDOT10k"):
             _soil(tmp_path, session).download(teryt="1465", **CLAY)
         assert session.capabilities == 0
 
@@ -231,7 +241,7 @@ class TestCorineStore:
             patch.object(CorineProvider, "has_clms_token", new=True),
             self._clms_tiff(manager.provider),
         ):
-            file = manager.download(sheet="M-33-036-A", year=2018).file
+            file = manager.download(sheet="M-33-036-A", year=2018).files[0].file
         assert (
             file.path == tmp_path / "landcover/eu_corine_2018/M-33/36/A/M-33-36-A.tif"
         )
@@ -250,7 +260,9 @@ class TestCorineStore:
     def test_corine_preview_separate_segment_downloaded_label(self, tmp_path):
         session = FakeCorine()
         with patch.object(CorineProvider, "has_clms_token", new=False):
-            file = _corine(tmp_path, session).download(bbox=BBOX, year=2018).file
+            file = (
+                _corine(tmp_path, session).download(bbox=BBOX, year=2018).files[0].file
+            )
             assert file.path == (
                 tmp_path / "landcover/eu_corine_2018_preview/bbox" / f"{COORDS}.png"
             )
@@ -262,19 +274,26 @@ class TestCorineStore:
             assert "edition" not in meta["extra"]
             assert session.catalogue == 0  # no edition for a preview
             # rerun: local, no signal (none)
-            again = _corine(tmp_path, session).download(bbox=BBOX, year=2018).file
+            again = (
+                _corine(tmp_path, session).download(bbox=BBOX, year=2018).files[0].file
+            )
             assert (again.status, again.unverified) == ("local", "none")
             assert session.previews == 1
         assert not (tmp_path / "landcover/eu_corine_2018").exists()
 
     def test_corine_1990_preview_only(self, tmp_path):
         with patch.object(CorineProvider, "has_clms_token", new=True):
-            file = _corine(tmp_path, FakeCorine()).download(bbox=BBOX, year=1990).file
+            file = (
+                _corine(tmp_path, FakeCorine())
+                .download(bbox=BBOX, year=1990)
+                .files[0]
+                .file
+            )
         assert file.path.parent.parent.name == "eu_corine_1990_preview"
         assert _sidecar(file.version_path)["horizontal_crs"] == "EPSG:4326"
 
     def test_corine_teryt_not_supported(self, tmp_path):
-        with pytest.raises(NotImplementedError):
+        with pytest.raises(ValidationError, match="teryt dziala tylko dla BDOT10k"):
             _corine(tmp_path, FakeCorine()).download(teryt="1465", year=2018)
 
 
@@ -358,8 +377,9 @@ class TestBdot10kStore:
 
     def test_bdot_gpkg_version_and_link(self, tmp_path):
         result = _bdot(tmp_path, FakePackages()).download(teryt="1465")
-        file = result.file
-        assert result.unit == "1465" and result.raw is None
+        (item,) = result.files
+        file = item.file
+        assert item.unit == "1465" and item.raw is None
         assert file.path == tmp_path / "landcover/pl_bdot10k_gpkg/teryt/1465.gpkg"
         assert file.version_path.parent.parent == (
             tmp_path / "landcover/pl_bdot10k_gpkg/versions/teryt"
@@ -380,6 +400,7 @@ class TestBdot10kStore:
         file = (
             _bdot(tmp_path, FakePackages())
             .download(teryt="1465", layers=["SWRS", "PTWP", "SWRS"])
+            .files[0]
             .file
         )
         assert file.path == (
@@ -394,7 +415,12 @@ class TestBdot10kStore:
         assert packages.calls == []
 
     def test_bdot_shp_segment_zip(self, tmp_path):
-        file = _bdot(tmp_path, FakePackages()).download(teryt="1465", format="SHP").file
+        file = (
+            _bdot(tmp_path, FakePackages())
+            .download(teryt="1465", format="SHP")
+            .files[0]
+            .file
+        )
         assert file.path == tmp_path / "landcover/pl_bdot10k_shp/teryt/1465.zip"
         assert _sidecar(file.version_path)["request"]["format"] == "SHP"
 
@@ -402,13 +428,14 @@ class TestBdot10kStore:
         result = _bdot(tmp_path, FakePackages()).download(
             teryt="1465", keep_raw=True, layers=["PTWP"]
         )
-        raw = result.raw
+        (item,) = result.files
+        raw = item.raw
         assert raw is not None
         assert raw.path == tmp_path / "landcover/pl_bdot10k_gpkg_zip/teryt/1465.zip"
         assert raw.path.read_bytes() == b"zip 1465"
         raw_meta = _sidecar(raw.version_path)
         assert raw_meta["request"] == {"teryt": "1465", "format": "GPKG"}
-        meta = _sidecar(result.file.version_path)
+        meta = _sidecar(item.file.version_path)
         assert meta["extra"]["source_files"] == [
             {
                 "name": "package",
@@ -424,8 +451,9 @@ class TestBdot10kStore:
         manager.download(teryt="1465")
         result = manager.download(teryt="1465", keep_raw=True)
         assert packages.calls == ["1465", "1465"]
-        assert result.file.status == "unchanged"
-        assert result.raw is not None and result.raw.status == "new"
+        (item,) = result.files
+        assert item.file.status == "unchanged"
+        assert item.raw is not None and item.raw.status == "new"
 
     def test_bdot_default_local_without_package_request(self, tmp_path):
         packages = FakePackages()
@@ -433,15 +461,16 @@ class TestBdot10kStore:
         manager.download(teryt="1465", keep_raw=True)
         result = manager.download(teryt="1465", keep_raw=True)
         assert packages.calls == ["1465"]
-        assert (result.file.status, result.file.unverified) == ("local", "none")
-        assert result.raw is not None and result.raw.status == "local"
+        (item,) = result.files
+        assert (item.file.status, item.file.unverified) == ("local", "none")
+        assert item.raw is not None and item.raw.status == "local"
 
     def test_bdot_force_same_content_unchanged_next_day(self, tmp_path):
         manager = _bdot(tmp_path, FakePackages())
-        first = manager.download(teryt="1465").file
+        first = manager.download(teryt="1465").files[0].file
         nxt = VersionRef("2099-01-02", "downloaded")
         with patch.object(VersionRef, "downloaded", staticmethod(lambda now=None: nxt)):
-            again = manager.download(teryt="1465", update="force").file
+            again = manager.download(teryt="1465", update="force").files[0].file
         assert (again.status, again.label) == ("unchanged", first.label)
         assert len(list_versions(first.version_path.parent.parent, "1465.gpkg")) == 1
 
@@ -449,7 +478,7 @@ class TestBdot10kStore:
         packages = FakePackages()
         manager = _bdot(tmp_path, packages)
         manager.download(teryt="1465")
-        file = manager.download(teryt="1465", update="upgrade").file
+        file = manager.download(teryt="1465", update="upgrade").files[0].file
         assert (file.status, file.unverified) == ("local", "none")
         assert packages.calls == ["1465"]
 
@@ -463,31 +492,30 @@ class TestBdot10kStore:
             ("landcover/pl_bdot10k_gpkg_zip", "missing"),
         ]
         assert {i.unit for i in plan.items} == {"1465"}
-        area = manager.check_all_counties(bbox=BBOX)
+        area = manager.check(bbox=BBOX)
         assert [i.unit for i in area.items] == ["1465"]
         assert packages.calls == ["1465"]
 
-    def test_all_counties_error_per_powiat(self, tmp_path):
+    def test_bdot_one_county_failure_others_downloaded_ok_false(self, tmp_path):
         packages = FakePackages(fail={"0224"})
-        area = _bdot(
-            tmp_path, packages, ["0208", "0224", "0261"]
-        ).download_all_counties(bbox=BBOX)
+        area = _bdot(tmp_path, packages, ["0208", "0224", "0261"]).download(bbox=BBOX)
         assert [r.unit for r in area.files] == ["0208", "0261"]
         assert [f.unit for f in area.failed] == ["0224"]
         assert "HTTP 500" in area.failed[0].error
         assert packages.calls == ["0208", "0224", "0261"]
         assert not (tmp_path / "landcover/pl_bdot10k_gpkg/teryt/0224.gpkg").exists()
+        assert not area.ok
 
     def test_bdot_area_parent_request_in_version_sidecar(self, tmp_path):
         manager = _bdot(tmp_path, FakePackages(), ["0208"])
-        by_sheet = manager.download(sheet="M-33-048-A").file
+        by_sheet = manager.download(sheet="M-33-048-A").files[0].file
         meta = _sidecar(by_sheet.version_path)
         assert meta["request"] == {"teryt": "0208", "format": "GPKG"}
         assert meta["extra"]["parent_request"] == {
             "sheet": "M-33-48-A",
             "countries": ["PL"],
         }
-        area = manager.download_all_counties(bbox=BBOX, update="force")
+        area = manager.download(bbox=BBOX, update="force")
         meta = _sidecar(area.files[0].file.version_path)
         assert area.files[0].file.status == "unchanged"
         # same content = the version of the first download keeps its sidecar
@@ -497,6 +525,7 @@ class TestBdot10kStore:
         file = (
             _bdot(tmp_path, FakePackages(), ["0208"])
             .download(bbox=BBox(16.70, 50.45, 16.80, 50.55, "EPSG:4326"))
+            .files[0]
             .file
         )
         assert file.path.name == "0208.gpkg"
@@ -504,9 +533,13 @@ class TestBdot10kStore:
             "EPSG:4326"
         )
 
-    def test_many_counties_single_download_raises(self, tmp_path):
-        with pytest.raises(ValidationError, match="0208, 0224.*download_all_counties"):
-            _bdot(tmp_path, FakePackages(), ["0208", "0224"]).download(bbox=BBOX)
+    def test_bdot_bbox_downloads_every_county(self, tmp_path):
+        """An area of 2 powiats gives 2 files (as the CLI always did)."""
+        packages = FakePackages()
+        area = _bdot(tmp_path, packages, ["0208", "0224"]).download(bbox=BBOX)
+        assert [r.unit for r in area.files] == ["0208", "0224"]
+        assert area.failed == () and area.ok
+        assert packages.calls == ["0208", "0224"]
 
     def test_bdot_failure_leaves_no_version_and_no_staging(self, tmp_path):
         packages = FakePackages(fail={"1465"})
@@ -514,12 +547,109 @@ class TestBdot10kStore:
             _bdot(tmp_path, packages).download(teryt="1465", keep_raw=True)
         assert list(tmp_path.iterdir()) == []
 
-    def test_non_bdot_provider_rejected(self, tmp_path):
-        with pytest.raises(ValidationError, match="BDOT10k"):
-            LandCoverManager(tmp_path, "corine").download_all_counties(bbox=BBOX)
-
     def test_no_county_raises_no_coverage(self, tmp_path):
         from kartograf.exceptions import NoCoverageError
 
         with pytest.raises(NoCoverageError):
-            _bdot(tmp_path, FakePackages(), []).download_all_counties(bbox=BBOX)
+            _bdot(tmp_path, FakePackages(), []).download(bbox=BBOX)
+
+
+# --- command level: download / check (S3) -----------------------------------
+
+
+class TestCommandLevel:
+    def teardown_method(self):
+        patch.stopall()
+
+    def test_teryt_single_element(self, tmp_path):
+        area = _bdot(tmp_path, FakePackages()).download(teryt="1465")
+        assert [r.unit for r in area.files] == ["1465"]
+        assert area.failed == () and area.stale == () and area.notices == ()
+        assert area.ok
+
+    def test_soilgrids_bbox_epsg4326(self, tmp_path):
+        """A WGS84 bbox lands in the slot of its EPSG:2180 envelope."""
+        from kartograf.core.bbox import transform_bbox
+
+        wgs = BBox(23.40, 54.05, 23.43, 54.07, "EPSG:4326")
+        area = _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=wgs, **CLAY)
+        in_2180 = _soil(tmp_path, FakeSoilGrids("2.0")).download(
+            bbox=transform_bbox(wgs, "EPSG:2180"), **CLAY
+        )
+        (first,) = area.files
+        (second,) = in_2180.files
+        assert first.file.path == second.file.path
+        assert first.file.path.parent.name == "bbox"
+        assert second.file.status == "local"
+        assert _sidecar(first.file.version_path)["request"]["bbox_crs"] == "EPSG:2180"
+
+    def test_geometry_envelope_selection(self, tmp_path):
+        """``geometry`` = the EPSG:2180 envelope of the file (get_overall_bbox)."""
+        shp = tmp_path / "area.shp"
+        shp.touch()
+        with patch(
+            "kartograf.core.geometry.get_overall_bbox", return_value=BBOX
+        ) as envelope:
+            by_geometry = _soil(tmp_path, FakeSoilGrids("2.0")).download(
+                geometry=shp, **CLAY
+            )
+        by_bbox = _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
+        assert envelope.call_args.kwargs["target_crs"] == "EPSG:2180"
+        assert by_geometry.files[0].file.path == by_bbox.files[0].file.path
+        assert by_bbox.files[0].file.status == "local"
+
+    def test_geometry_gpkg_many_layers_notice(self, tmp_path):
+        from kartograf.notices import GEOMETRY_LAYER_DEFAULT, Notice
+        from tests.conftest import write_gpkg_layers
+
+        gpkg = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
+        seen: list[Notice] = []
+        with patch(
+            "kartograf.core.geometry.get_overall_bbox", return_value=BBOX
+        ) as envelope:
+            area = _soil(tmp_path, FakeSoilGrids("2.0")).download(
+                geometry=gpkg, on_notice=seen.append, **CLAY
+            )
+        expected = Notice(
+            "info",
+            GEOMETRY_LAYER_DEFAULT,
+            "area.gpkg: liczba warstw 2, uzyto pierwszej 'layer_a' (pozostale: "
+            "layer_b); inna warstwa: --layer NAZWA",
+        )
+        assert area.notices == (expected,) and seen == [expected]
+        assert envelope.call_args.kwargs["layer"] == "layer_a"
+
+    def test_corine_preview_notice(self, tmp_path):
+        from kartograf.notices import CORINE_PREVIEW, Notice
+
+        seen: list[Notice] = []
+        with patch.object(CorineProvider, "has_clms_token", new=False):
+            area = _corine(tmp_path, FakeCorine()).download(
+                bbox=BBOX, year=2018, on_notice=seen.append
+            )
+        expected = Notice(
+            "info",
+            CORINE_PREVIEW,
+            "CORINE 2018: podglad WMS (stylizowany PNG, nie dane; dane CLMS "
+            "wymagaja CLMS_CREDENTIALS)",
+        )
+        assert area.notices == (expected,) and seen == [expected]
+        assert seen[0] == area.notices[0]
+
+    def test_check_matches_download_selection(self, tmp_path):
+        """``check`` plans exactly the files ``download`` writes (BDOT10k area)."""
+        manager = _bdot(tmp_path, FakePackages(), ["0208", "0224"])
+        plan = manager.check(sheet="M-33-048-A", keep_raw=True)
+        area = manager.download(sheet="M-33-048-A", keep_raw=True)
+        planned = {(i.segment, i.hierarchy, i.name) for i in plan.items}
+        written = {
+            (
+                f.path.parent.parent.relative_to(tmp_path).as_posix(),
+                f.path.parent.name,
+                f.path.name,
+            )
+            for r in area.files
+            for f in (r.file, r.raw)
+            if f is not None
+        }
+        assert planned == written and len(planned) == 4

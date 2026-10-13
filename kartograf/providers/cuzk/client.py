@@ -182,7 +182,7 @@ class CuzkClient:
         if len(chunks) > 1 and wkid(aligned.crs) != wkid(image_sr):
             raise ValidationError(
                 f"Kafelkowanie exportImage wymaga bbox.crs == image_sr "
-                f"(bbox: {aligned.crs}, image_sr: {image_sr}) — znormalizuj bbox "
+                f"(bbox: {aligned.crs}, image_sr: {image_sr}) - znormalizuj bbox "
                 f"do ukladu wyjsciowego przed eksportem"
             )
 

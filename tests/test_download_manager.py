@@ -264,15 +264,18 @@ class TestDownloadManagerDownloadSheet:
         provider.download = mock_download
         return provider
 
-    def test_download_sheet_success(self, tmp_path, mock_provider):
-        """Test of a successful download of a 1:10000 sheet as ASC."""
+    def test_download_sheet_returns_result_with_versioned_files(
+        self, tmp_path, mock_provider
+    ):
         manager = DownloadManager(output_dir=tmp_path, provider=mock_provider)
-
-        result = manager.download_sheet("N-34-130-D-d-2-4")
-
-        assert isinstance(result, Path)
-        assert result.suffix == ".asc"
-        assert result.exists()
+        sheet = "N-34-130-D-d-2-4"
+        result = manager.download_sheet(sheet)
+        assert len(result.succeeded) == 1
+        (file,) = result.files[sheet]
+        assert file.path == result.succeeded[0]
+        assert file.path.exists() and file.path.suffix == ".asc"
+        assert file.version_path.exists() and file.label
+        assert file.status == "new"
 
     def test_download_sheet_skip_existing(self, tmp_path, mock_provider):
         """A local version is used without a download (skip_existing)."""
@@ -285,9 +288,11 @@ class TestDownloadManagerDownloadSheet:
         mock_provider.download = must_not_download
         result = manager.download_sheet("N-34-130-D-d-2-4")
 
-        assert result == first
-        assert result.read_bytes() == b"ASC data"
-        assert manager.last_sheet.status == "local"
+        assert result.succeeded == []
+        assert result.files["N-34-130-D-d-2-4"][0].path == first.succeeded[0]
+        assert first.succeeded[0].read_bytes() == b"ASC data"
+        assert result.skipped == ["N-34-130-D-d-2-4"]
+        assert result.files["N-34-130-D-d-2-4"][0].status == "local"
 
     def test_download_sheet_overwrite_existing(self, tmp_path, mock_provider):
         """Test of overwriting an existing file."""
@@ -301,9 +306,8 @@ class TestDownloadManagerDownloadSheet:
 
         result = manager.download_sheet("N-34-130-D-d-2-4", update="force")
 
-        assert isinstance(result, Path)
-        assert result.exists()
-        assert result.read_bytes() == b"ASC data"  # New data
+        assert len(result.succeeded) == 1
+        assert result.succeeded[0].read_bytes() == b"ASC data"
 
     def test_download_sheet_expands_25k_to_10k(self, tmp_path, mock_provider):
         """download_sheet with a 1:25000 sheet code expands to 4 sheets 1:10000."""
@@ -311,10 +315,8 @@ class TestDownloadManagerDownloadSheet:
 
         result = manager.download_sheet("N-34-130-D-d-2")
 
-        assert isinstance(result, list)
-        assert len(result) == 4
-        assert all(p.suffix == ".asc" for p in result)
-        assert all(p.exists() for p in result)
+        assert len(result.succeeded) == 4
+        assert all(p.suffix == ".asc" and p.exists() for p in result.succeeded)
 
     def test_download_sheet_expands_50k_to_10k(self, tmp_path, mock_provider):
         """download_sheet with a 1:50000 sheet code expands to 16 sheets 1:10000."""
@@ -322,10 +324,8 @@ class TestDownloadManagerDownloadSheet:
 
         result = manager.download_sheet("N-34-130-D-d")
 
-        assert isinstance(result, list)
-        assert len(result) == 16
-        assert all(p.suffix == ".asc" for p in result)
-        assert all(p.exists() for p in result)
+        assert len(result.succeeded) == 16
+        assert all(p.suffix == ".asc" and p.exists() for p in result.succeeded)
 
     def test_download_sheet_expands_100k_to_10k(self, tmp_path, mock_provider):
         """download_sheet with a 1:100000 code expands to 64 sheets 1:10000."""
@@ -333,9 +333,8 @@ class TestDownloadManagerDownloadSheet:
 
         result = manager.download_sheet("N-34-130-D")
 
-        assert isinstance(result, list)
-        assert len(result) == 64
-        assert all(p.suffix == ".asc" for p in result)
+        assert len(result.succeeded) == 64
+        assert all(p.suffix == ".asc" for p in result.succeeded)
 
     def test_download_sheet_expands_with_progress(self, tmp_path, mock_provider):
         """Test that download_sheet passes on_progress when expanding."""
@@ -348,14 +347,13 @@ class TestDownloadManagerDownloadSheet:
 
         result = manager.download_sheet("N-34-130-D-d-2", on_progress=on_progress)
 
-        assert isinstance(result, list)
-        assert len(result) == 4
+        assert len(result.succeeded) == 4
         # Each sheet gets 2 progress calls (downloading + completed)
         assert len(progress_calls) == 8
 
 
-class TestLastResultSingleSheet:
-    """A9: download_sheet() of one sheet sets last_result too."""
+class TestDirectSheetResult:
+    """A sheet call reports only that call's outcomes."""
 
     @staticmethod
     def _plain_manager(tmp_path, fail=False):
@@ -372,38 +370,31 @@ class TestLastResultSingleSheet:
         provider.download = fake_download
         return DownloadManager(output_dir=tmp_path, provider=provider)
 
-    def test_single_sheet_sets_last_result(self, tmp_path):
+    def test_single_sheet_result(self, tmp_path):
         manager = self._plain_manager(tmp_path)
-        path = manager.download_sheet("N-34-130-D-d-2-4")
-        assert manager.last_sheet is not None
-        assert manager.last_result is not None
-        assert manager.last_result.succeeded == [path]
-        assert manager.last_result.failed == []
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        assert len(result.succeeded) == 1
+        assert result.failed == []
 
     def test_single_sheet_skipped_is_in_skipped(self, tmp_path):
         manager = self._plain_manager(tmp_path)
         manager.download_sheet("N-34-130-D-d-2-4")
-        manager.download_sheet("N-34-130-D-d-2-4")
-        assert manager.last_result.skipped == ["N-34-130-D-d-2-4"]
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        assert result.skipped == ["N-34-130-D-d-2-4"]
 
-    def test_single_sheet_error_leaves_none(self, tmp_path):
+    def test_single_sheet_error_does_not_store_result(self, tmp_path):
         manager = self._plain_manager(tmp_path, fail=True)
         with pytest.raises(DownloadError):
             manager.download_sheet("N-34-130-D-d-2-4")
-        assert manager.last_result is None
+        assert not hasattr(manager, "last_result")
 
-    def test_single_sheet_after_list_run_has_only_its_sheet(self, tmp_path):
-        """P9e: a single sheet after a hierarchy run on the same manager -
-        the one-element result carries no list state (no campaign files, no
-        copies, no other sheets)."""
+    def test_single_sheet_after_hierarchy_contains_only_its_sheet(self, tmp_path):
         manager = self._plain_manager(tmp_path)
-        manager.download_sheet("N-34-130-D-d-2")  # 1:25000 -> 4 sheets
-        assert len(manager.last_result.succeeded) == 4
-        path = manager.download_sheet("N-34-130-D-d-1-1")
-        result = manager.last_result
-        assert result.succeeded == [path]
+        manager.download_sheet("N-34-130-D-d-2")
+        result = manager.download_sheet("N-34-130-D-d-1-1")
+        assert len(result.succeeded) == 1
         assert result.skipped == [] and result.failed == []
-        assert result.campaign_files == {} and result.new == ["N-34-130-D-d-1-1"]
+        assert set(result.files) == {"N-34-130-D-d-1-1"}
 
 
 class TestDownloadManagerDownloadHierarchy:
@@ -430,9 +421,8 @@ class TestDownloadManagerDownloadHierarchy:
         # Download 1:50k → 1:10k (16 sheets)
         results = manager.download_hierarchy("N-34-130-D-d", "1:10000")
 
-        assert len(results) == 16
-        assert all(p.exists() for p in results)
-        assert all(p.suffix == ".asc" for p in results)
+        assert len(results.succeeded) == 16
+        assert all(p.exists() and p.suffix == ".asc" for p in results.succeeded)
 
     def test_download_hierarchy_with_progress(self, tmp_path, mock_provider):
         """Test of download with a progress callback."""
@@ -462,8 +452,8 @@ class TestDownloadManagerDownloadHierarchy:
             "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
 
-        # All 4 should be returned
-        assert len(results) == 4
+        assert len(results.succeeded) == 2
+        assert len(results.skipped) == 2
 
         # Check that 2 were skipped
         skipped = [p for p in progress_calls if p.status == "skipped"]
@@ -498,8 +488,8 @@ class TestDownloadManagerDownloadHierarchy:
             "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
 
-        # Should have 3 successful downloads
-        assert len(results) == 3
+        assert len(results.succeeded) == 3
+        assert len(results.failed) == 1
 
         # Check failed status was reported
         failed = [p for p in progress_calls if p.status == "failed"]
@@ -543,25 +533,25 @@ class TestDownloadResultNoCoverage:
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_no_coverage_is_subset_of_failed(self, tmp_path, provider, workers):
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=workers)
-        result = manager.last_result
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, workers=workers
+        )
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
         assert sorted(result.failed) == ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]
-        assert result.no_coverage == ["N-34-130-D-d-2-1"]
         assert len(result.succeeded) == 2
+        assert result.no_coverage == ["N-34-130-D-d-2-1"]
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_no_coverage_hints_kept_only_for_no_coverage(
         self, tmp_path, provider, workers
     ):
-        """O-6: NoCoverageError hints in the list result; a hard failure has none."""
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=workers)
-        result = manager.last_result
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, workers=workers
+        )
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
         assert result.no_coverage_hints == {
             "N-34-130-D-d-2-1": ("uzyj --scale 1:2000",)
         }
-        assert "N-34-130-D-d-2-2" in result.failed
         assert "N-34-130-D-d-2-2" not in result.no_coverage_hints
 
     @pytest.mark.parametrize("workers", [1, 4])
@@ -570,15 +560,15 @@ class TestDownloadResultNoCoverage:
     ) -> None:
         """D2/D11: ``hard_failures`` = failures worth a retry; a sheet without
         data reports the ``no_coverage`` status (not ``failed``)."""
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, workers=workers
+        )
         statuses: dict[str, str] = {}
-        manager.download_sheets(
+        result = manager.download_sheets(
             ["N-34-130-D-d-2"],
-            max_workers=workers,
             on_progress=lambda p: statuses.__setitem__(p.sheet, p.status),
         )
-        result = manager.last_result
-        assert result is not None
+        assert sorted(result.failed) == ["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"]
         assert result.hard_failures == ["N-34-130-D-d-2-2"]
         assert statuses["N-34-130-D-d-2-1"] == "no_coverage"
         assert statuses["N-34-130-D-d-2-2"] == "failed"
@@ -586,7 +576,7 @@ class TestDownloadResultNoCoverage:
 
 
 class TestDownloadManagerDownloadSheets:
-    """download_sheets(): sheet list -> 1:10000 leaves, failures in last_result."""
+    """download_sheets() expands leaves and collects failures."""
 
     @pytest.fixture
     def provider(self):
@@ -619,36 +609,39 @@ class TestDownloadManagerDownloadSheets:
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_expands_coarse_and_dedupes(self, tmp_path, provider, workers):
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        paths = manager.download_sheets(
-            ["N-34-130-D-d-2", "N-34-130-D-d-2-4", "N-34-130-D-d-2-4"],
-            max_workers=workers,
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, workers=workers
         )
-        assert len(paths) == 4
+        result = manager.download_sheets(
+            ["N-34-130-D-d-2", "N-34-130-D-d-2-4", "N-34-130-D-d-2-4"],
+        )
+        assert len(result.succeeded) == 4
         assert sorted(provider.calls) == [f"N-34-130-D-d-2-{i}" for i in (1, 2, 3, 4)]
-        assert manager.last_result.total == 4 and manager.last_result.failed == []
+        assert result.total == 4 and result.failed == []
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_failures_collected_not_raised(self, tmp_path, provider, workers):
         provider.fail = {"N-34-130-D-d-2-1", "N-34-130-D-d-2-3"}
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        paths = manager.download_sheets(["N-34-130-D-d-2"], max_workers=workers)
-        assert len(paths) == 2
-        assert sorted(manager.last_result.failed) == [
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, workers=workers
+        )
+        result = manager.download_sheets(["N-34-130-D-d-2"])
+        assert len(result.succeeded) == 2
+        assert sorted(result.failed) == [
             "N-34-130-D-d-2-1",
             "N-34-130-D-d-2-3",
         ]
-        assert manager.last_result.total == 4
+        assert result.total == 4
 
     def test_skip_existing(self, tmp_path, provider):
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
         manager.download_sheets(["N-34-130-D-d-2-1"])
         provider.calls.clear()
-        manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
+        result = manager.download_sheets(["N-34-130-D-d-2-1", "N-34-130-D-d-2-2"])
         assert provider.calls == ["N-34-130-D-d-2-2"]
-        assert manager.last_result.skipped == ["N-34-130-D-d-2-1"]
-        assert manager.last_result.local == ["N-34-130-D-d-2-1"]
-        assert manager.last_result.new == ["N-34-130-D-d-2-2"]
+        assert result.skipped == ["N-34-130-D-d-2-1"]
+        assert result.files["N-34-130-D-d-2-1"][0].status == "local"
+        assert result.files["N-34-130-D-d-2-2"][0].status == "new"
 
     def test_invalid_sheet_raises_before_any_download(self, tmp_path, provider):
         from kartograf.exceptions import ParseError
@@ -872,9 +865,8 @@ class TestDownloadManagerPL2000:
 
         result = manager.download_sheet("6.179.12")
 
-        assert isinstance(result, Path)
-        assert result.suffix == ".asc"
-        assert result.exists()
+        assert len(result.succeeded) == 1
+        assert result.succeeded[0].suffix == ".asc" and result.succeeded[0].exists()
 
     def test_download_sheet_pl2000_sub10k_direct(self, tmp_path):
         """Test that PL-2000 1:2000 downloads directly."""
@@ -898,10 +890,10 @@ class TestDownloadManagerPL2000:
         # PL-2000 1:2000 sheet code - should download directly, NOT expand to 1:10000
         result = manager.download_sheet("6.179.12.20")
 
-        assert isinstance(result, Path)
-        assert result.suffix == ".asc"
-        assert result.exists()
-        assert "6.179.12.20" in str(result)
+        assert len(result.succeeded) == 1
+        assert result.succeeded[0].suffix == ".asc"
+        assert result.succeeded[0].exists()
+        assert "6.179.12.20" in str(result.succeeded[0])
 
     def test_download_sheet_pl2000_5k_direct(self, tmp_path):
         """download_sheet with a PL-2000 1:5000 code downloads it directly."""
@@ -925,9 +917,8 @@ class TestDownloadManagerPL2000:
         # PL-2000 1:5000 sheet code - should download directly
         result = manager.download_sheet("6.179.12.1")
 
-        assert isinstance(result, Path)
-        assert result.suffix == ".asc"
-        assert result.exists()
+        assert len(result.succeeded) == 1
+        assert result.succeeded[0].suffix == ".asc" and result.succeeded[0].exists()
 
 
 class TestCreateNmtProviderFactory:
@@ -1000,7 +991,7 @@ class TestSidecarWritten:
         import json
 
         manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         sidecar = result.parent / f"{result.name}.meta.json"
         assert sidecar.exists()
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
@@ -1016,7 +1007,7 @@ class TestSidecarWritten:
         import json
 
         manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -1035,13 +1026,18 @@ class TestSidecarWritten:
             return written(sheet, target.with_name(f"{target.stem}_v2.asc"))
 
         provider.download.side_effect = download_elsewhere
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager = DownloadManager(
+            output_dir=tmp_path,
+            provider=provider,
+            workers=1 if mode != "list_parallel" else 3,
+        )
         sheet = "N-34-130-D-d-2-4"
-        if mode == "sheet":
-            path = manager.download_sheet(sheet)
-        else:
-            workers = 1 if mode == "list_seq" else 3
-            (path,) = manager.download_sheets([sheet], max_workers=workers)
+        result = (
+            manager.download_sheet(sheet)
+            if mode == "sheet"
+            else manager.download_sheets([sheet])
+        )
+        (path,) = result.succeeded
         assert path == manager.storage.get_path(sheet, ".asc")
         assert "1 2" in path.read_text()
         assert (path.parent / f"{path.name}.meta.json").exists()
@@ -1080,7 +1076,7 @@ class TestSidecarWritten:
         del provider.descriptor_key  # Mock attribute, not str
         provider.descriptor_key = object()
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -1102,7 +1098,7 @@ class TestSidecarWritten:
             provider=self._mock_provider(),
             sidecar_extra={"parent_request": parent},
         )
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -1112,7 +1108,7 @@ class TestSidecarWritten:
         import json
 
         manager = DownloadManager(output_dir=tmp_path, provider=self._mock_provider())
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -1139,7 +1135,7 @@ class TestSidecarWritten:
             provider=provider,
             sidecar_extra={"parent_request": {"bbox_crs": "EPSG:2180"}},
         )
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -1154,14 +1150,14 @@ class TestSidecarWritten:
 
         provider = self._mock_provider()  # MagicMock: source_info(...) -> MagicMock
         manager = DownloadManager(output_dir=tmp_path, provider=provider)
-        result = manager.download_sheet("N-34-130-D-d-2-4")
+        result = manager.download_sheet("N-34-130-D-d-2-4").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
         assert "source" not in payload["extra"]
 
         provider.source_info = lambda sheet: None
-        result = manager.download_sheet("N-34-130-D-d-2-4", update="force")
+        result = manager.download_sheet("N-34-130-D-d-2-4", update="force").succeeded[0]
         payload = json.loads(
             (result.parent / f"{result.name}.meta.json").read_text(encoding="utf-8")
         )
@@ -1181,9 +1177,9 @@ def test_reuse_keeps_parent_request_of_the_creating_request(tmp_path):
             sidecar_extra={"parent_request": request},
         )
 
-    path = manager(first).download_sheet("N-34-130-D-d-2-4")
+    path = manager(first).download_sheet("N-34-130-D-d-2-4").succeeded[0]
     sidecar = path.parent / f"{path.name}.meta.json"
     before = sidecar.read_bytes()
-    manager(second).download_sheets(["N-34-130-D-d-2-4"], max_workers=3)
+    manager(second).download_sheets(["N-34-130-D-d-2-4"])
     assert sidecar.read_bytes() == before
     assert b"parent_requests" not in before

@@ -386,7 +386,7 @@ class TestPl2000SheetPublishedIn2180:
                 output_dir=tmp_path,
                 provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
             )
-            path = manager.download_sheet(self.SHEET)
+            path = manager.download_sheet(self.SHEET).succeeded[0]
 
         assert path.relative_to(tmp_path).parts[:2] == ("nmt", "pl_2000_1m_evrf2007")
         assert session.get.call_args_list[-1][0][0] == self.URL

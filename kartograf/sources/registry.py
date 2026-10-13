@@ -61,7 +61,7 @@ _CLMS_LICENSE = LicenseInfo(
 
 _SOILGRIDS_LICENSE = LicenseInfo(
     id="CC-BY-4.0",
-    attribution="SoilGrids — ISRIC World Soil Information, CC BY 4.0",
+    attribution="SoilGrids - ISRIC World Soil Information, CC BY 4.0",
     url="https://www.isric.org/explore/soilgrids",
 )
 
@@ -121,7 +121,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=("EPSG:9651",),
                     capabilities=frozenset({"sheet_files"}),
-                    notes="WCS niedostepne dla 5m — tylko arkusze OpenData",
+                    notes="WCS niedostepne dla 5m - tylko arkusze OpenData",
                 ),
             ),
             tile_scheme=None,
@@ -194,7 +194,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     vertical_crs_options=_PL_VERTICAL_BOTH,
                     capabilities=frozenset({"area_files"}),
-                    notes="WMS skorowidzy LAZ zwraca 401 — WFS jedyna droga",
+                    notes="WMS skorowidzy LAZ zwraca 401 - WFS jedyna droga",
                 ),
             ),
             tile_scheme=None,
@@ -206,7 +206,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.bdot10k",
             country="PL",
             product="landcover",
-            name="BDOT10k — baza danych obiektow topograficznych",
+            name="BDOT10k - baza danych obiektow topograficznych",
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -256,7 +256,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="global.isric.soilgrids",
             country="GLOBAL",
             product="soil",
-            name="SoilGrids — globalne dane glebowe",
+            name="SoilGrids - globalne dane glebowe",
             provider_name="ISRIC",
             channels=(
                 AccessChannel(
@@ -276,7 +276,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="cz.cuzk.dmr5g",
             country="CZ",
             product="nmt",
-            name="DMR 5G — Digitalni model reliefu (raster 2 m z exportImage)",
+            name="DMR 5G - Digitalni model reliefu (raster 2 m z exportImage)",
             provider_name="CUZK",
             channels=(
                 AccessChannel(
@@ -312,7 +312,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="cz.cuzk.dmr4g",
             country="CZ",
             product="nmt",
-            name="DMR 4G — Digitalni model reliefu (GeoTIFF 5 m, arkusze SM5)",
+            name="DMR 4G - Digitalni model reliefu (GeoTIFF 5 m, arkusze SM5)",
             provider_name="CUZK",
             channels=(
                 AccessChannel(

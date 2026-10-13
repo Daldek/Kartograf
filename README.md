@@ -65,22 +65,26 @@ kraju (`--country`), scalony wycinek (`--target-crs`) i kampanie GUGiK:
 ### Biblioteka Python
 
 ```python
-from kartograf import BBox, DownloadManager, GugikProvider, download_pl_cutout
+from kartograf import BBox, DownloadManager, GugikProvider, download_data
 
-# Arkusz NMT po godle — każdy wybór danych jawny (od 0.8.0 bez wartości domyślnych)
+# To samo co `kartograf download ...` — te same pliki, sidecary, komunikaty
+# i błędy (każdy wybór danych jawny; od 0.8.0 bez wartości domyślnych)
+report = download_data(
+    product="nmt",
+    output_dir="./data",
+    bbox=BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
+    country="pl",
+    target_crs="EPSG:2180",   # jeden wycinek WCS 1 m z maską lądu
+    resolution="1m",
+    vertical_crs="EVRF2007",
+)
+print([item.file.path for item in report.files], report.ok, report.notices)
+
+# Niższy poziom: arkusz NMT po godle przez DownloadManager
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 manager = DownloadManager("./data", provider)
-path = manager.download_sheet("N-34-130-D-d-2-4")
-
-# Obszar NMT PL jako wycinek WCS 1 m z maską lądu, jeden GeoTIFF w zadanym układzie
-result = download_pl_cutout(
-    BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-    "EPSG:2180",
-    output_dir="./data",
-    vertical_crs="EVRF2007",
-    product="nmt",
-)
-print(result.path)
+result = manager.download_sheet("N-34-130-D-d-2-4")
+path = result.files["N-34-130-D-d-2-4"][0].version_path
 ```
 
 ## Gdzie trafiają dane

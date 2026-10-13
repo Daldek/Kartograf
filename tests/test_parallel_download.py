@@ -8,20 +8,21 @@ This module tests:
 - CLI --workers flag
 """
 
-import logging
 import threading
+import time
 from pathlib import Path
 from unittest.mock import Mock, PropertyMock, patch
 
 import pytest
 
 from kartograf.cli.commands import create_parser, main
+from kartograf.core.bbox import BBox
 from kartograf.download.manager import (
     DownloadManager,
     DownloadResult,
 )
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.gugik import GugikProvider
 
@@ -61,7 +62,7 @@ class TestDownloadResult:
 
 
 class TestParallelDownloadHierarchy:
-    """Tests for parallel download_hierarchy with max_workers > 1."""
+    """Tests for parallel download_hierarchy with multiple workers."""
 
     @pytest.fixture
     def mock_provider(self):
@@ -80,32 +81,29 @@ class TestParallelDownloadHierarchy:
     def test_parallel_download_hierarchy_success(self, tmp_path, mock_provider):
         """Test parallel download with max_workers=2 produces same results."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, max_workers=2
+            output_dir=tmp_path, provider=mock_provider, workers=2
         )
 
         # Download 1:25k -> 1:10k (4 sheets)
-        results = manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=2)
-
-        assert len(results) == 4
-        assert all(p.exists() for p in results)
-        assert all(p.suffix == ".asc" for p in results)
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
+        assert len(result.succeeded) == 4
+        assert all(p.exists() and p.suffix == ".asc" for p in result.succeeded)
 
     def test_parallel_download_hierarchy_large(self, tmp_path, mock_provider):
         """Test parallel download with 16 sheets and 4 workers."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, max_workers=4
+            output_dir=tmp_path, provider=mock_provider, workers=4
         )
 
         # Download 1:50k -> 1:10k (16 sheets)
-        results = manager.download_hierarchy("N-34-130-D-d", "1:10000", max_workers=4)
+        result = manager.download_hierarchy("N-34-130-D-d", "1:10000")
+        assert len(result.succeeded) == 16
+        assert all(p.exists() for p in result.succeeded)
 
-        assert len(results) == 16
-        assert all(p.exists() for p in results)
-
-    def test_sequential_when_max_workers_1(self, tmp_path, mock_provider):
+    def test_sequential_when_workers_1(self, tmp_path, mock_provider):
         """Test that max_workers=1 uses sequential path."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, max_workers=1
+            output_dir=tmp_path, provider=mock_provider, workers=1
         )
 
         progress_calls = []
@@ -113,11 +111,10 @@ class TestParallelDownloadHierarchy:
         def on_progress(p):
             progress_calls.append(p)
 
-        results = manager.download_hierarchy(
-            "N-34-130-D-d-2", "1:10000", max_workers=1, on_progress=on_progress
+        result = manager.download_hierarchy(
+            "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
-
-        assert len(results) == 4
+        assert len(result.succeeded) == 4
         # Sequential mode sends downloading + completed for each = 8
         assert len(progress_calls) == 8
         # Sequential mode should maintain order
@@ -128,15 +125,12 @@ class TestParallelDownloadHierarchy:
             assert statuses[i + 1] == "completed"
 
     def test_parallel_uses_instance_default(self, tmp_path, mock_provider):
-        """Test that max_workers=None uses instance default."""
+        """The manager's worker setting applies to a hierarchy call."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, max_workers=3
+            output_dir=tmp_path, provider=mock_provider, workers=3
         )
-
-        results = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
-
-        # Should work with 3 workers (instance default)
-        assert len(results) == 4
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
+        assert len(result.succeeded) == 4
 
     def test_parallel_download_handles_failures(self, tmp_path):
         """Test parallel download handles individual failures gracefully."""
@@ -158,19 +152,18 @@ class TestParallelDownloadHierarchy:
 
         provider.download = mock_download
 
-        manager = DownloadManager(output_dir=tmp_path, provider=provider, max_workers=2)
+        manager = DownloadManager(output_dir=tmp_path, provider=provider, workers=2)
 
         progress_calls = []
 
         def on_progress(p):
             progress_calls.append(p)
 
-        results = manager.download_hierarchy(
-            "N-34-130-D-d-2", "1:10000", max_workers=2, on_progress=on_progress
+        result = manager.download_hierarchy(
+            "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
-
-        # Should have 3 successful downloads (1 failed)
-        assert len(results) == 3
+        assert len(result.succeeded) == 3
+        assert len(result.failed) == 1
 
         # Check that failed status was reported
         failed = [p for p in progress_calls if p.status == "failed"]
@@ -179,7 +172,7 @@ class TestParallelDownloadHierarchy:
     def test_parallel_download_skip_existing(self, tmp_path, mock_provider):
         """Test that parallel download skips existing files correctly."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, max_workers=2
+            output_dir=tmp_path, provider=mock_provider, workers=2
         )
 
         # Pre-download some sheets (local versions)
@@ -190,11 +183,11 @@ class TestParallelDownloadHierarchy:
         def on_progress(p):
             progress_calls.append(p)
 
-        results = manager.download_hierarchy(
-            "N-34-130-D-d-2", "1:10000", max_workers=2, on_progress=on_progress
+        result = manager.download_hierarchy(
+            "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
-
-        assert len(results) == 4
+        assert len(result.succeeded) == 2
+        assert len(result.skipped) == 2
 
         # Check that 2 were skipped
         skipped = [p for p in progress_calls if p.status == "skipped"]
@@ -205,7 +198,7 @@ class TestParallelDownloadHierarchy:
     ):
         """Test that progress callback is called for every sheet."""
         manager = DownloadManager(
-            output_dir=tmp_path, provider=mock_provider, max_workers=2
+            output_dir=tmp_path, provider=mock_provider, workers=2
         )
 
         progress_calls = []
@@ -213,33 +206,24 @@ class TestParallelDownloadHierarchy:
         def on_progress(p):
             progress_calls.append(p)
 
-        results = manager.download_hierarchy(
-            "N-34-130-D-d-2", "1:10000", max_workers=2, on_progress=on_progress
+        result = manager.download_hierarchy(
+            "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
-
-        assert len(results) == 4
+        assert len(result.succeeded) == 4
         # Each sheet gets at least one progress call (completed or skipped)
         assert len(progress_calls) >= 4
 
-    def test_max_workers_init_minimum_1(self, tmp_path):
-        """Test that max_workers is clamped to minimum 1."""
-        manager = DownloadManager(
-            tmp_path,
-            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
-            max_workers=0,
-        )
-        assert manager._max_workers == 1
-
-        manager = DownloadManager(
-            tmp_path,
-            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
-            max_workers=-5,
-        )
-        assert manager._max_workers == 1
+    @pytest.mark.parametrize("count", [0, -5])
+    def test_workers_init_minimum_1(self, tmp_path, mock_provider, count):
+        """Invalid worker counts cannot disable downloads."""
+        manager = DownloadManager(tmp_path, provider=mock_provider, workers=count)
+        result = manager.download_sheet("N-34-130-D-d-2-4")
+        assert len(result.succeeded) == 1
+        assert result.succeeded[0].exists()
 
 
-class TestDownloadHierarchyLastResult:
-    """Tests of the DownloadManager.last_result attribute filled by the hierarchy."""
+class TestDownloadHierarchyResult:
+    """Hierarchy results report each success, skip and failure directly."""
 
     @pytest.fixture
     def flaky_provider(self):
@@ -257,38 +241,28 @@ class TestDownloadHierarchyLastResult:
         provider.download = mock_download
         return provider
 
-    def test_last_result_is_none_before_download(self, tmp_path, flaky_provider):
-        """Before the first hierarchy last_result is None."""
+    def test_no_last_result_attribute(self, tmp_path, flaky_provider):
         manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
-
-        assert manager.last_result is None
+        assert not hasattr(manager, "last_result")
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
+        assert result.failed == ["N-34-130-D-d-2-1"]
+        assert not hasattr(manager, "last_result")
 
     @pytest.mark.parametrize("workers", [1, 4])
-    def test_last_result_counts_succeeded_skipped_failed(
-        self, tmp_path, flaky_provider, caplog, workers
+    def test_hierarchy_returns_result_failures_collected(
+        self, tmp_path, flaky_provider, workers
     ):
-        """last_result separates downloaded, skipped and failed sheets."""
-        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
-
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=flaky_provider, workers=workers
+        )
         existing_sheet = "N-34-130-D-d-2-2"
-        manager.download_sheets([existing_sheet])  # a local version
-
-        with caplog.at_level(logging.INFO, logger="kartograf.download.manager"):
-            paths = manager.download_hierarchy(
-                "N-34-130-D-d-2", "1:10000", max_workers=workers
-            )
-
-        assert manager.last_result is not None
-        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
-        assert set(manager.last_result.skipped) == {existing_sheet}
-        assert len(manager.last_result.succeeded) == 2
-        assert manager.last_result.total == 4
-
-        # Return type unchanged: a list of paths (2 downloaded + 1 skipped)
-        assert len(paths) == 3
-        assert all(isinstance(p, Path) for p in paths)
-
-        assert "2 downloaded, 1 skipped, 1 failed" in caplog.text
+        manager.download_sheet(existing_sheet)
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
+        assert result.failed == ["N-34-130-D-d-2-1"]
+        assert result.skipped == [existing_sheet]
+        assert len(result.succeeded) == 2
+        assert all(path.exists() for path in result.succeeded)
+        assert result.files[existing_sheet][0].status == "local"
 
     @pytest.mark.parametrize("workers", [1, 4])
     def test_progress_reports_final_status_and_message_per_sheet(
@@ -312,14 +286,15 @@ class TestDownloadHierarchyLastResult:
             return path
 
         provider.download = mock_download
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=provider, workers=workers
+        )
         manager.download_sheets(["N-34-130-D-d-2-2"])  # a local version
 
         events = []
         manager.download_hierarchy(
             "N-34-130-D-d-2",
             "1:10000",
-            max_workers=workers,
             on_progress=events.append,
         )
 
@@ -342,7 +317,7 @@ class TestDownloadHierarchyLastResult:
         expected = ["N-34-130-D-d-2-1", "N-34-130-D-d-2-3", "N-34-130-D-d-2-4"]
         assert downloading == (expected if workers == 1 else [])
 
-    def test_last_result_counts_unexpected_error_as_failed(self, tmp_path):
+    def test_unexpected_error_collected_as_failed(self, tmp_path):
         """A non-DownloadError exception in parallel mode lands in failed."""
         provider = Mock(spec=GugikProvider, resolution="1m", vertical_crs="EVRF2007")
         type(provider).default_extension = PropertyMock(return_value=".asc")
@@ -355,80 +330,10 @@ class TestDownloadHierarchyLastResult:
             return path
 
         provider.download = mock_download
-        manager = DownloadManager(output_dir=tmp_path, provider=provider)
-
-        paths = manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=4)
-
-        assert len(paths) == 3
-        assert manager.last_result is not None
-        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
-        assert len(manager.last_result.succeeded) == 3
-
-    def test_last_result_reset_when_next_hierarchy_fails_before_loop(
-        self, tmp_path, flaky_provider
-    ):
-        """A new hierarchy call clears the previous result before entering the loop."""
-        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
-
-        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
-        assert manager.last_result is not None
-        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
-
-        with pytest.raises(ValidationError):
-            manager.download_hierarchy("N-34-130-D-d-2", "1:5000")
-
-        # The caller must not get the result of the PREVIOUS run.
-        assert manager.last_result is None
-
-    def test_last_result_reset_when_sequential_run_aborts(
-        self, tmp_path, flaky_provider
-    ):
-        """An exception other than DownloadError (sequential) leaves no old result."""
-        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
-
-        manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=1)
-        assert manager.last_result is not None
-
-        def boom(sheet, path, timeout=30):
-            raise RuntimeError("boom")
-
-        flaky_provider.download = boom
-
-        with pytest.raises(RuntimeError):
-            manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
-
-        assert manager.last_result is None
-
-    def test_last_result_reset_by_download_sheet_of_single_10k(
-        self, tmp_path, flaky_provider
-    ):
-        """download_sheet of a single 1:10000 replaces the previous hierarchy result."""
-        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
-
-        manager.download_hierarchy("N-34-130-D-d-1", "1:10000", max_workers=1)
-        assert manager.last_result is not None
-        assert manager.last_result.failed == ["N-34-130-D-d-1-1"]
-
-        path = manager.download_sheet("N-34-130-D-d-2-4")
-
-        assert path.exists()
-        # A9: a single sheet sets its own one-element result (old one not leaked)
-        assert manager.last_result is not None
-        assert manager.last_result.succeeded == [path]
-        assert manager.last_result.failed == []
-
-    def test_last_result_set_when_download_sheet_expands_hierarchy(
-        self, tmp_path, flaky_provider
-    ):
-        """download_sheet with a code coarser than 1:10000 still fills last_result."""
-        manager = DownloadManager(output_dir=tmp_path, provider=flaky_provider)
-
-        paths = manager.download_sheet("N-34-130-D-d-2")
-
-        assert isinstance(paths, list)
-        assert manager.last_result is not None
-        assert manager.last_result.failed == ["N-34-130-D-d-2-1"]
-        assert len(manager.last_result.succeeded) == 3
+        manager = DownloadManager(output_dir=tmp_path, provider=provider, workers=4)
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
+        assert result.failed == ["N-34-130-D-d-2-1"]
+        assert len(result.succeeded) == 3
 
 
 class TestProviderThreadSafety:
@@ -454,15 +359,12 @@ class TestProviderThreadSafety:
 
         provider.download = mock_download
 
-        manager = DownloadManager(output_dir=tmp_path, provider=provider, max_workers=4)
+        manager = DownloadManager(output_dir=tmp_path, provider=provider, workers=4)
 
         # Download 1:50k -> 1:10k (16 sheets) with 4 workers
-        results = manager.download_hierarchy("N-34-130-D-d", "1:10000", max_workers=4)
-
-        assert len(results) == 16
-
-        # Verify each file has correct content
-        for path in results:
+        result = manager.download_hierarchy("N-34-130-D-d", "1:10000")
+        assert len(result.succeeded) == 16
+        for path in result.succeeded:
             content = path.read_bytes().decode()
             sheet = path.stem  # e.g. "N-34-130-D-d-1-1"
             assert content == f"data-for-{sheet}", (
@@ -512,66 +414,58 @@ class TestProviderThreadSafety:
 
 
 class TestLandCoverParallelDownload:
-    """Tests for LandCoverManager.download_batch."""
+    """``LandCoverManager.download(workers=)``: powiats of a BDOT10k area."""
 
-    @staticmethod
-    def _bdot(tmp_path, fail=()):
+    BBOX = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
+    TERYTS = ["0616", "1261", "1465"]
+
+    def _bdot(self, tmp_path, fail=()):
         from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 
         provider = Bdot10kProvider()
         calls: list[str] = []
         lock = threading.Lock()
+        state = {"active": 0, "peak": 0}
 
         def package(code, output_path, **kwargs):
             with lock:
                 calls.append(code)
+                state["active"] += 1
+                state["peak"] = max(state["peak"], state["active"])
+            time.sleep(0.05)
+            with lock:
+                state["active"] -= 1
             if code in fail:
                 raise DownloadError("Network error")
             output_path.write_bytes(f"data-{code}".encode())
             return Bdot10kPackage(path=output_path, teryt=code, url="u", format="GPKG")
 
-        patcher = patch.object(provider, "download_package", side_effect=package)
-        return LandCoverManager(output_dir=tmp_path, provider=provider), calls, patcher
-
-    ITEMS = [{"teryt": "1465"}, {"teryt": "1261"}, {"teryt": "0616"}]
+        patchers = (
+            patch.object(provider, "download_package", side_effect=package),
+            patch.object(provider, "teryts_for_area", return_value=self.TERYTS),
+        )
+        return LandCoverManager(tmp_path, provider), calls, state, patchers
 
     @pytest.mark.parametrize("workers", [1, 2])
-    def test_download_batch_every_item_in_store(self, tmp_path, workers):
-        manager, calls, patcher = self._bdot(tmp_path)
-        with patcher:
-            results = manager.download_batch(self.ITEMS, max_workers=workers)
-        assert sorted(calls) == ["0616", "1261", "1465"]
-        assert sorted(r.unit for r in results) == ["0616", "1261", "1465"]
-        for r in results:
+    def test_workers_parallel_counties(self, tmp_path, workers):
+        manager, calls, state, (pkg, prg) = self._bdot(tmp_path)
+        with pkg, prg:
+            area = manager.download(bbox=self.BBOX, workers=workers)
+        assert sorted(calls) == self.TERYTS
+        assert [r.unit for r in area.files] == self.TERYTS  # TERYT order
+        for r in area.files:
             assert r.file.path.read_bytes() == f"data-{r.unit}".encode()
+        assert 1 <= state["peak"] <= workers
+        if workers > 1:
+            assert state["peak"] == workers
 
-    def test_download_batch_handles_failures(self, tmp_path):
-        """A failed item is logged; the others still land in the store."""
-        manager, _, patcher = self._bdot(tmp_path, fail={"1261"})
-        with patcher:
-            results = manager.download_batch(self.ITEMS, max_workers=2)
-        assert sorted(r.unit for r in results) == ["0616", "1465"]
-
-    def test_download_batch_empty_list(self, tmp_path):
-        manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
-        assert manager.download_batch([], max_workers=2) == []
-
-    def test_download_batch_with_kwargs(self, tmp_path):
-        """Batch options (CORINE ``year``) select the segment of every item."""
-        from kartograf.providers.corine import CorineProvider
-        from tests.conftest import FakeCorine
-
-        provider = CorineProvider(session=FakeCorine(), use_proxy=False)
-        manager = LandCoverManager(output_dir=tmp_path, provider=provider)
-        items = [{"sheet": "N-34-130-D"}, {"sheet": "N-34-130-C"}]
-        with patch.object(CorineProvider, "has_clms_token", new=False):
-            results = manager.download_batch(items, max_workers=1, year=2012)
-        assert sorted(r.file.path.name for r in results) == [
-            "N-34-130-C.png",
-            "N-34-130-D.png",
-        ]
-        for r in results:
-            assert "eu_corine_2012_preview" in r.file.path.parts[-5]
+    def test_parallel_county_failure_others_downloaded(self, tmp_path):
+        manager, _, _, (pkg, prg) = self._bdot(tmp_path, fail={"1261"})
+        with pkg, prg:
+            area = manager.download(bbox=self.BBOX, workers=2)
+        assert [r.unit for r in area.files] == ["0616", "1465"]
+        assert [f.unit for f in area.failed] == ["1261"]
+        assert not area.ok
 
 
 class TestCLIWorkersFlag:
@@ -601,9 +495,9 @@ class TestCLIWorkersFlag:
         """Test that --workers value is passed to DownloadManager."""
         with (
             patch(
-                "kartograf.cli.download_cmd._create_provider_and_storage"
+                "kartograf.download.data._create_provider_and_storage"
             ) as mock_create,
-            patch("kartograf.cli.download_cmd.DownloadManager") as mock_dm_class,
+            patch("kartograf.download.data.DownloadManager") as mock_dm_class,
         ):
             mock_provider = Mock()
             mock_provider.default_extension = ".asc"
@@ -611,8 +505,9 @@ class TestCLIWorkersFlag:
             mock_create.return_value = (mock_provider, mock_storage)
 
             mock_dm = Mock()
-            mock_dm.last_result = None
-            mock_dm.download_sheet.return_value = Path("test.asc")
+            mock_dm.download_sheet.return_value = DownloadResult(
+                succeeded=[Path("test.asc")]
+            )
             mock_dm_class.return_value = mock_dm
 
             main(
@@ -638,33 +533,20 @@ class TestCLIWorkersFlag:
                 ]
             )
 
-            # Verify DownloadManager was created with max_workers=8
             mock_dm_class.assert_called_once()
-            call_kwargs = mock_dm_class.call_args.kwargs
-            assert call_kwargs["max_workers"] == 8
+            assert mock_dm_class.call_args.kwargs["workers"] == 8
 
 
 class TestDownloadManagerRepr:
-    """Tests for updated repr with max_workers."""
+    """Tests for the manager's worker representation."""
 
-    def test_repr_includes_max_workers(self, tmp_path):
-        """Test that repr includes max_workers."""
+    def test_repr_includes_workers(self, tmp_path):
         manager = DownloadManager(
             output_dir=tmp_path,
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
-            max_workers=4,
+            workers=4,
         )
-        repr_str = repr(manager)
-        assert "max_workers=4" in repr_str
-
-    def test_repr_default_max_workers(self, tmp_path):
-        """Test that repr shows max_workers=1 by default."""
-        manager = DownloadManager(
-            output_dir=tmp_path,
-            provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
-        )
-        repr_str = repr(manager)
-        assert "max_workers=1" in repr_str
+        assert "workers=4" in repr(manager)
 
 
 class TestParallelDownloadRaceConditions:
@@ -695,15 +577,13 @@ class TestParallelDownloadRaceConditions:
         work_dir.mkdir()
 
         manager = DownloadManager(
-            output_dir=work_dir, provider=mock_provider, max_workers=4
+            output_dir=work_dir, provider=mock_provider, workers=4
         )
 
-        results = manager.download_hierarchy("N-34-130-D-d-2", "1:10000", max_workers=4)
-
-        assert len(results) == 4
-        # Verify all files exist and have correct content
+        result = manager.download_hierarchy("N-34-130-D-d-2", "1:10000")
+        assert len(result.succeeded) == 4
         sheets_found = set()
-        for path in results:
+        for path in result.succeeded:
             assert path.exists()
             content = path.read_bytes().decode()
             sheet = path.stem
@@ -720,7 +600,7 @@ class TestParallelDownloadRaceConditions:
         work_dir.mkdir()
 
         manager = DownloadManager(
-            output_dir=work_dir, provider=mock_provider, max_workers=4
+            output_dir=work_dir, provider=mock_provider, workers=4
         )
 
         progress_calls = []
@@ -730,11 +610,10 @@ class TestParallelDownloadRaceConditions:
             with lock:
                 progress_calls.append(p)
 
-        results = manager.download_hierarchy(
-            "N-34-130-D-d-2", "1:10000", max_workers=4, on_progress=on_progress
+        result = manager.download_hierarchy(
+            "N-34-130-D-d-2", "1:10000", on_progress=on_progress
         )
-
-        assert len(results) == 4
+        assert len(result.succeeded) == 4
         # Each sheet gets exactly one progress call (completed)
         assert len(progress_calls) == 4
 

@@ -437,6 +437,36 @@ tam jego opis w tym samym commicie.
 Wszystkie narzedzia konfiguruj w jednym pliku `pyproject.toml`.
 Nie tworz osobnych plikow konfiguracyjnych (`setup.cfg`, `tox.ini`, `.flake8`, itp.).
 
+### 7.3 CLI tylko tlumaczy (ADR-037)
+
+To samo zadanie z CLI i z biblioteki daje ten sam magazyn (bajtowo), te
+same statusy, plan, komunikaty i bledy. Reguly:
+
+- **Z1:** komenda w `kartograf/cli/` zamienia flagi na argumenty jednej
+  funkcji biblioteki poziomu komendy (`download_data`/`check_data`,
+  `LandCoverManager.download`/`.check`, `HSGCalculator.calculate_hsg`/
+  `.check_hsg`) i wypisuje jej wynik. W CLI nie wolno walidowac wartosci
+  danych, wybierac krajow, arkuszy, skali, kampanii ani powiatow, budowac
+  `parent_request` ani czytac sidecarow w celu decyzji. Wolno: parsowac
+  tekst flag (`--bbox`, `pl=..,cz=..`, `--layers`), czytac i zapisywac
+  plik planu, formatowac wynik, wyliczac kod wyjscia z pol wyniku (`ok`),
+  rysowac postep z `on_progress`. CLI nie importuje providerow ani
+  doboru arkuszy (`tests/test_cli_translation.py`).
+- **Z2:** kazda publiczna funkcja pobierajaca ma `check_*` z tymi samymi
+  argumentami (bez `update`, `plan`, `workers`, `on_progress`); kazda
+  pobierajaca przyjmuje `update=` i `plan=`.
+- **Z3:** komunikaty o danych powstaja w bibliotece jako `Notice` (pole
+  `notices` wyniku i `on_notice`), z kodem z `kartograf/notices.py`; CLI
+  wypisuje `Info:`/`Warning:` na stderr. Biblioteka nie loguje dodatkowo
+  tego samego tekstu.
+- **Z6:** parametr `cache: MetadataCache | bool = True` (cache w cwd jak
+  w CLI); `update="force"` bez odczytow z cache.
+- **Z7:** nowa flaga albo nowy tor = scenariusz w `tests/test_parity.py`
+  (albo `tests/test_parity_landcover.py`) przez `kartograf.cli.main`
+  i przez API, z `frozen_clock`.
+
+Wyjatki: 11.1 (Z4); jezyk: 9.4 (Z5).
+
 ---
 
 ## 8. Python — type hints
@@ -580,6 +610,16 @@ Regula obowiazujaca (decyzja wlasciciela projektu, 2026-10-08):
   — po angielsku; klucze sidecara od 0.7.0, polskie nazwy publicznego API
   i CLI (`godlo`, `uklad`, ...) zastapione angielskimi w 0.8.0 bez aliasow
   (ADR-031 i jego errata w `docs/DECISIONS.md`)
+- **Teksty dla uzytkownika** (Z5, ADR-037): pomoc CLI (`help`,
+  `description`, `metavar`), komunikaty CLI (`Error:`/`Warning:`/`Info:`,
+  linie statusu, pasek postepu), teksty `Notice` i wyjatkow `KartografError`
+  (`ValidationError`, `DownloadError`, ...) - po polsku, wylacznie ASCII
+  (bez polskich znakow, `—` -> `-`, `°` -> ` st.`, ikony postepu ASCII).
+  Prefiksy `Error:`/`Warning:`/`Info:` i wbudowane teksty `argparse`
+  (`usage:`, `options:`) zostaja. Wyjatki bledow programisty (`TypeError`,
+  `ValueError`, `RuntimeError`, `NotImplementedError`) i logi `logging`
+  moga byc po angielsku. Pilnuja `tests/test_cli_language.py` i ASCII
+  w `Notice`.
 
 Stan zastany: czesc kodu sprzed tej decyzji ma docstringi i komentarze po
 polsku bez polskich znakow (m.in. `download/cutout.py`, `transport/mosaic.py`,
@@ -715,17 +755,31 @@ listy klas. Zasady:
   sekcja 6.2) — komunikat ma byc zrozumialy dla uzytkownika.
 - Zawsze zachowuj lancuch wyjatkow: `raise ... from err` (sekcja 11.3).
 
+**Z4 (0.8.0) - rodzaj bledu jest czescia kontraktu API:** nieprawidlowe
+wartosci argumentow wywolania to `ValidationError` (godlo: `ParseError`),
+problem z odpowiedzia lub pobraniem ze zrodla to `DownloadError`
+(`NoCoverageError`, `YearRangeError`), a awaria cache to `CacheError`.
+Naruszenie wewnetrznego niezmiennika (blad programu) zachowuje wbudowany
+wyjatek, np. `ValueError`/`RuntimeError`; nieznany argument daje `TypeError`.
+`ValidationError` NIE dziedziczy z `ValueError`: wewnetrzne
+`except ValueError` przy dekodowaniu danych nie moga ukrywac bledow wejscia.
+
+
 ### 11.2 Walidacja na wejsciu
 
 ```python
 def download_sheet(sheet: str) -> Path:
     """Download NMT sheet."""
     if not sheet or not sheet.strip():
-        raise ValidationError("Sheet code cannot be empty")
+        raise ValidationError("Godlo arkusza nie moze byc puste")
 
     parser = SheetParser(sheet)  # raises ParseError if invalid
     ...
 ```
+
+Walidacja wartosci na granicy CLI i biblioteki musi uzywac Z4 z 11.1:
+nie obejmuj `except ValueError` bledow wejscia. Nieznana nazwa parametru
+lub brak wymaganego argumentu funkcji pozostaje pythonowym `TypeError`.
 
 **Bez wartosci domyslnych wplywajacych na dane (od 0.8.0).** Parametr API
 i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,
