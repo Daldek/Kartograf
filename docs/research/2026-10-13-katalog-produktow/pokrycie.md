@@ -46,17 +46,21 @@ pokrycie wg skorowidza dokladnie 100,0000%; 2018 (1 m: 58,38%; 5 m i 25 m:
    wzgledem ladu PL (maska PRG), inaczej bbox przy brzegu nigdy nie
    bedzie "pelny".
 
-## Rekomendacja (do specu, K4)
+## Rekomendacja (do specu, K4; rewizja 2026-10-13)
 
-- Pokrycie = ulamek pikseli **ladu PL** w obszarze (maska PRG) objetych
-  arkuszami kombinacji; "pelne" = 100% (bez progu i bez tolerancji).
-- Arkusz `NIE`: pokrycie z `extra.coverage` lokalnej wersji, jesli
-  istnieje; w przeciwnym razie kombinacja z takim arkuszem ma status
-  "pelnosc nieznana (arkusze niepelne: N)" zamiast liczby.
-- Opcja `--measure` (pobiera arkusze `NIE` do magazynu i mierzy tresc,
-  jak ADR-033) - do rozstrzygniecia w planie A.
+Uzytkownikowi chodzi o dane wysokosciowe: czy dla obszaru jest komplet
+pelnych arkuszy danego roku. Pomiar potwierdza, ze to wynika ze
+skorowidza: arkusze `TAK` maja dane na calym ladzie PL i stykaja sie bez
+szczelin. Zatem:
 
-## Dodatek: zasieg z kafli LAZ tej samej kampanii (opcje `--measure`)
+- kombinacja jest kompletna, gdy suma poligonow jej arkuszy `TAK` pokrywa
+  obszar przeciety z ladem PL (maska PRG) - bez progu i bez pomiaru
+  tresci;
+- arkusze `NIE` i czesci obszaru bez arkusza wypisywane z godlami;
+- pomiar tresci (`--measure`) odrzucony - pobieranie nie jest potrzebne
+  do odpowiedzi na to pytanie.
+
+## Dodatek: zasieg z kafli LAZ tej samej kampanii
 
 Sprawdzone 2026-10-13 dla obszaru Pomorze i NMT 2025 0,5 m
 (`DFT.7201.024.2024`): skorowidz LAZ (`SkorowidzDanychPomiarowychLIDAR2025`)

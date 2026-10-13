@@ -57,7 +57,7 @@ tylko podglad, duplikaty INSPIRE, dane nieprzestrzenne), manifest projektu
 | K1 | Wariant produktu = rekord rejestru (`ProductVariant`: produkt, kraj, rozdzielczosc w m jako `Decimal`, uklad poziomy, uklad wysokosci, format, kanal, warstwa/typ skorowidza, pole rozdzielczosci w skorowidzu). Walidacja CLI/API, `--help`, `storage_subdir` i filtr rekordow skorowidza czytaja rejestr | kolejne stale `("1m","5m")` w `options.py`, providerze i `FileStorage` (dzis 7 miejsc - backlog) |
 | K2 | Etykieta rozdzielczosci w CLI i segmencie: `0.5m`, `1m`, `5m` (kropka dozwolona w segmencie `[a-z0-9.-]`, regula 8 ARCHITECTURE 3.3); API przyjmuje te same napisy | `50cm` (dwie jednostki w jednym parametrze); `0_5m` |
 | K3 | Raport dostepnosci jako funkcja biblioteki `check_availability(...) -> AvailabilityReport` + podkomenda grupy CLI `kartograf <grupa> availability` (np. `kartograf elevation availability`; ADR-037: decyzje w bibliotece, CLI drukuje) | flaga `--dry-run` w `download` (miesza dwa wyniki w jednym typie); rozszerzenie `--check-updates` (ten porownuje z magazynem, nie z obszarem) |
-| K4 | Pokrycie = ulamek pikseli ladu PL (maska PRG, jak wycinki ADR-035) w obszarze objetych arkuszami kombinacji (rok x uklad poziomy x rozdzielczosc x uklad wysokosci); "pelne" = 100% bez progu i bez tolerancji. Arkusz `czy_ark_wypelniony = NIE`: pokrycie z `extra.coverage` lokalnej wersji, inaczej status "pelnosc nieznana (arkusze niepelne: N)". Uzasadnienie pomiarem: `docs/research/2026-10-13-katalog-produktow/pokrycie.md` (arkusze TAK = 100% danych na ladzie, bez brakow na stykach; arkusze NIE - poligon skorowidza 100%, dane 91,5% ladu) | prog 99,9% (0,1% bboxa 4x4 km = 16 000 m2 brakow uznanych za pelne); pokrycie z poligonow skorowidza bez maski ladu (bbox przy brzegu nigdy "pelny") i bez rozroznienia NIE |
+| K4 | Raport odpowiada na pytanie "czy dla obszaru jest komplet PELNYCH arkuszy danej kombinacji" (rok x uklad poziomy x rozdzielczosc x uklad wysokosci) wylacznie ze skorowidza: kombinacja jest kompletna, gdy suma poligonow jej arkuszy z `czy_ark_wypelniony = TAK` pokrywa obszar przeciety z ladem PL (maska PRG, jak wycinki ADR-035). Arkusze `NIE` i brakujace arkusze sa wypisane z godlami; zadnych pobran ani pomiaru tresci. Podstawa: pomiar `pokrycie.md` (arkusze TAK = 100% danych na ladzie, poligony TAK stykaja sie bez szczelin; "pelny" = w granicach PL) | procent pikseli z pomiaru tresci i opcja `--measure` (pobieranie w raporcie, wbrew "bez pobierania"); prog 99,9%; obszar bez maski ladu (bbox przy brzegu nigdy kompletny) |
 | K5 | Nowe kanaly jako generyczne silniki sterowane deskryptorem (`AccessChannel.endpoint` + nowe pole `params`): `index_files` (skorowidz WMS/WFS -> plik), `unit_package` (paczka per jednostka administracyjna: URL z szablonu albo z `GetFeatureInfo`), `wcs_bbox`, `feature_bbox` (WFS / OGC API Features / ArcGIS query z paginacja), `atom_files` (CUZK: szablon URL arkusz/kafel/KU/obec/kraj), `arcgis_image` (istniejacy) | provider per produkt (dzis wzorzec `providers/pl/*.py`) |
 | K6 | Kazdy nowy produkt od razu w magazynie wersjonowanym (ADR-036), z sidecarem i sygnalem swiezosci kanalu: skorowidz `index` (akt_data/nr_zglosz), CUZK `http` (ETag/Last-Modified - openzu je podaje), ATOM `<updated>` jako `metadata`, WFS/OGC API bez sygnalu = `none` | wyjatki od magazynu dla danych wektorowych |
 | K7 | Dane krajowe w jednym pliku (ZABAGED 5,8 GB, Data50, HY-NET, PRG kraj) domyslnie przez kanal obszarowy (`feature_bbox`); plik krajowy na jawne zadanie `--whole-country` z ostrzezeniem o rozmiarze (z `HEAD`) - decyzja uzytkownika 2026-10-13: udostepniamy | domyslne pobieranie calego kraju dla malego bboxa; brak opcji krajowej |
@@ -112,7 +112,13 @@ Rejestr wypelnia sie z deskryptorow (`SourceDescriptor.variants`).
   i API.
 - Test zgodnosci CLI = API (`tests/test_parity.py`) dla 0,5 m.
 
-## 4. Raport dostepnosci (plan A)
+## 4. Raport dostepnosci danych wysokosciowych (plan A, CZ w planie B)
+
+Cel (prosba uzytkownika 2026-10-13): przed pobraniem wiedziec, dla jakich
+lat, ukladow, rozdzielczosci i ukladow wysokosci obszar ma **komplet
+pelnych arkuszy** - na podstawie skorowidza, bez pobierania danych.
+Zakres: grupa `elevation` (NMT, NMPT, LAZ). Inne grupy - tylko gdy pojawi
+sie potrzeba.
 
 ### 4.1 API
 
@@ -120,21 +126,25 @@ Rejestr wypelnia sie z deskryptorow (`SourceDescriptor.variants`).
 check_availability(
     *, product: str, country: str,
     bbox: BBox | None = None, geometry: Path | None = None,
-    sheet: str | None = None, teryt: str | None = None,
+    sheet: str | None = None,
     year: int | None = None, min_year: int | None = None, max_year: int | None = None,
     cache: bool | MetadataCache = True,
 ) -> AvailabilityReport
 ```
 
-`AvailabilityReport`: `area` (obszar w EPSG:2180 i jego powierzchnia),
+`AvailabilityReport`: `area` (obszar w EPSG:2180 przeciety z ladem PL),
 `combinations: list[AvailabilityCombination]`, `notices`, `ok`.
 
 `AvailabilityCombination`: `year`, `acquisition_dates` (min-max
 `akt_data`), `campaigns` (`nr_zglosz`), `horizontal` (`PL-1992`/`PL-2000`
 + strefa), `resolution` (etykieta K2), `vertical_crs`, `format`,
-`coverage_pct`, `full` (K4), `sheets_total`, `sheets_partial`
-(`czy_ark_wypelniony = NIE`), `missing_area_m2`, `download_hint`
-(gotowe flagi `kartograf <grupa> download` dla tej kombinacji).
+`complete` (K4), `sheets_full` (godla `TAK`), `sheets_partial` (godla
+`NIE`), `uncovered` (czy czesc obszaru nie ma w tej kombinacji zadnego
+arkusza), `download_hint` (gotowe flagi `kartograf elevation download`).
+
+Kompletnosc liczona geometrycznie na poligonach skorowidza (rasteryzacja
+na siatce 1 m obszaru albo operacje wektorowe - do wyboru w planie;
+pomiar w `pokrycie.md` uzywal rasteryzacji).
 
 ### 4.2 CLI
 
@@ -142,30 +152,37 @@ check_availability(
 kartograf elevation availability --product nmt --country pl --bbox 566000,243000,569000,246000
 ```
 
-Tabela posortowana: rok malejaco, potem pokrycie; kolumna "pelne"
-(`tak`/`nie (87,3%)`); stopka z `download_hint` dla najnowszej pelnej
-kombinacji. `--json` wypisuje strukture `AvailabilityReport` (ten sam
-ksztalt co API). Kod wyjscia 0 takze przy braku danych (to raport), 1
-przy bledzie zrodla.
+Tabela posortowana: rok malejaco; kolumna "komplet pelnych" (`tak` /
+`nie: 2 niepelne, brak arkuszy dla czesci obszaru`); `--details`
+wypisuje godla arkuszy niepelnych i kombinacje bez pokrycia; stopka
+z `download_hint` dla najnowszej kompletnej kombinacji. `--json` wypisuje
+strukture `AvailabilityReport` (ten sam ksztalt co API). Kod wyjscia 0
+takze przy braku danych (to raport), 1 przy bledzie zrodla.
 
 ### 4.3 Zrodla danych raportu
 
-- PL NMT/NMPT/orto/LAZ/OI: skorowidze WFS (`...EVRF2007/WFS/Skorowidze`,
-  `...KRON86/WFS/Skorowidze`, `ORTO/WFS/Skorowidze`, `OI/WFS/...`) - pola
-  `godlo`, `akt_rok`, `akt_data`, `char_przestrz`, `uklad_xy`, `uklad_h`,
-  `nr_zglosz`, `czy_ark_wypelniony`, `url_do_pobrania`, geometria arkusza;
-  zapytanie BBOX z paginacja (`next`), wynik w cache metadanych (ADR-037).
-- CZ: DMR/DMP/ortofoto nie maja kampanii - raport podaje produkty
-  i kanaly dostepne dla obszaru (indeks `KladyMapovychListu`, `PODIL`),
-  date z `<updated>` feedu ATOM i `Last-Modified` pliku.
-- Nowe produkty z planow B-D dopisuja sie przez rejestr wariantow.
+- PL NMT/NMPT/LAZ: skorowidze WFS (`NumerycznyModelTerenu{EVRF2007,KRON86}`,
+  `NumerycznyModelPokryciaTerenu*`, `DanePomiaroweLidar*`) - pola `godlo`,
+  `akt_rok`, `akt_data`, `char_przestrz`, `uklad_xy`, `uklad_h`,
+  `nr_zglosz`, `czy_ark_wypelniony`, geometria arkusza; zapytanie BBOX
+  z paginacja (`next`), wynik w cache metadanych (ADR-037); maska ladu:
+  `providers/pl/prg.py::fetch_land_mask`.
+- CZ (plan B): DMR/DMP nie maja lotow ani flagi pelnosci - raport podaje
+  dostepne produkty i arkusze dla obszaru (indeks `KladyMapovychListu`,
+  `PODIL`) oraz date z `<updated>` feedu ATOM i `Last-Modified` pliku.
 
 ### 4.4 Kryteria akceptacji
 
-- Dla bboxa z probki (Krakow, powiat 1261) raport NMT pokazuje co najmniej
-  kombinacje 2025/PL-1992/1m/EVRF2007 i 2019/5m (zgodnie ze skorowidzem
-  z dnia testu) i oznacza pelnosc; wynik offline z fixtur prawdziwych
+- Krakow (bbox E 565000-569000, N 242000-246000): kombinacje 2019, 2022,
+  2023, 2024, 2025 (1 m, PL-1992, EVRF2007) kompletne; 2018 1 m
+  niekompletna (czesc obszaru bez arkuszy) - zgodnie ze skorowidzem
+  z 2026-10-13 (`pokrycie.md`); test offline z fixtur prawdziwych
   odpowiedzi WFS.
+- Pomorze (E 339000-343000, N 744800-747000): 2025 0,5 m - niekompletna,
+  4 arkusze niepelne z godlami (skorowidz pokrywa caly lad, ale wszystkie
+  arkusze `NIE`); 2022 1 m - niekompletna wylacznie przez brak arkusza
+  dla 35 153 px ladu (ok. 0,9 ha przy pikselu 0,5 m), 3 arkusze `TAK`;
+  morze (ok. 35% bboxa) nie wplywa na wynik.
 - Brak pobran plikow danych (test: atrapa transportu odrzuca kazdy URL
   `opendata`).
 - Zgodnosc CLI `--json` = API (bajtowo przy zamrozonym zegarze).
@@ -203,8 +220,7 @@ produktu nie ma czym byc zweryfikowany na zywo.
 
 **Plan A - `elevation` PL (W), od 0.9.0:** rejestr wariantow (K1-K2),
 NMT i NMPT 0,5 m (sekcja 3), `kartograf elevation availability` dla PL
-(sekcja 4, pokrycie wg K4: maska ladu PRG, arkusze `NIE` = "pelnosc
-nieznana" bez lokalnej wersji). Otwarte w planie: opcja `--measure`.
+(sekcja 4, K4: komplet pelnych arkuszy wg skorowidza, maska ladu PRG).
 
 **Plan B - `elevation` CZ (W/S):** `cz.cuzk.dmpok` (TIFF 0,5 m arkusze
 SM5/TM33 + wycinek ImageServer), `cz.cuzk.dmp1g` (LAZ + wycinek
@@ -320,9 +336,10 @@ skladany lokalnie (jak BDOT10k - SQLite nie na udziale sieciowym).
    w dokumentacji.
 4. ~~**Ortofoto CZ**~~ - rozstrzygniete 2026-10-13: zapis jak w zrodle
    (JPEG + JGW), bez konwersji.
-5. ~~**Prog "pelnego pokrycia"**~~ - rozstrzygniete pomiarem 2026-10-13
-   (`pokrycie.md`): 100% ladu PL, bez progu; arkusze `NIE` = "pelnosc
-   nieznana" bez lokalnej wersji (K4). Otwarte w planie A: opcja
-   `--measure` (pobranie arkuszy `NIE` do magazynu i pomiar tresci).
+5. ~~**Prog "pelnego pokrycia"**~~ - rozstrzygniete 2026-10-13: bez
+   progu; raport sprawdza komplet arkuszy `TAK` wg skorowidza wzgledem
+   ladu PL (K4, `pokrycie.md`). `--measure` odrzucone - uzytkownikowi
+   chodzi o komplet pelnych arkuszy danych wysokosciowych, ktory wynika
+   ze skorowidza.
 6. ~~**POLSA LandCover**~~ - pominiete na razie (K10).
 7. ~~**Pliki krajowe**~~ - udostepniamy przez `--whole-country` (K7).
