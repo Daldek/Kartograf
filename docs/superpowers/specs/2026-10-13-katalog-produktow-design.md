@@ -55,7 +55,7 @@ tylko podglad, duplikaty INSPIRE, dane nieprzestrzenne), manifest projektu
 |---|---|---|
 | K1 | Wariant produktu = rekord rejestru (`ProductVariant`: produkt, kraj, rozdzielczosc w m jako `Decimal`, uklad poziomy, uklad wysokosci, format, kanal, warstwa/typ skorowidza, pole rozdzielczosci w skorowidzu). Walidacja CLI/API, `--help`, `storage_subdir` i filtr rekordow skorowidza czytaja rejestr | kolejne stale `("1m","5m")` w `options.py`, providerze i `FileStorage` (dzis 7 miejsc - backlog) |
 | K2 | Etykieta rozdzielczosci w CLI i segmencie: `0.5m`, `1m`, `5m` (kropka dozwolona w segmencie `[a-z0-9.-]`, regula 8 ARCHITECTURE 3.3); API przyjmuje te same napisy | `50cm` (dwie jednostki w jednym parametrze); `0_5m` |
-| K3 | Raport dostepnosci jako funkcja biblioteki `check_availability(...) -> AvailabilityReport` + komenda CLI `kartograf availability` (ADR-037: decyzje w bibliotece, CLI drukuje) | flaga `--dry-run` w `download` (miesza dwa wyniki w jednym typie); rozszerzenie `--check-updates` (ten porownuje z magazynem, nie z obszarem) |
+| K3 | Raport dostepnosci jako funkcja biblioteki `check_availability(...) -> AvailabilityReport` + podkomenda grupy CLI `kartograf <grupa> availability` (np. `kartograf elevation availability`; ADR-037: decyzje w bibliotece, CLI drukuje) | flaga `--dry-run` w `download` (miesza dwa wyniki w jednym typie); rozszerzenie `--check-updates` (ten porownuje z magazynem, nie z obszarem) |
 | K4 | Pokrycie liczone z geometrii rekordow skorowidza wzgledem obszaru (powierzchnia przeciecia / powierzchnia obszaru), osobno dla kazdej kombinacji (rok x uklad poziomy x rozdzielczosc x uklad wysokosci); "pelne" = >= 99,9% przy tolerancji zaokraglen, z uwzglednieniem `czy_ark_wypelniony = NIE` (lot czesciowy - pokrycie z geometrii lotu, jesli skorowidz ja podaje, inaczej oznaczenie "nieznane") | pokrycie z liczby arkuszy (arkusz niepelny liczony jako pelny) |
 | K5 | Nowe kanaly jako generyczne silniki sterowane deskryptorem (`AccessChannel.endpoint` + nowe pole `params`): `index_files` (skorowidz WMS/WFS -> plik), `unit_package` (paczka per jednostka administracyjna: URL z szablonu albo z `GetFeatureInfo`), `wcs_bbox`, `feature_bbox` (WFS / OGC API Features / ArcGIS query z paginacja), `atom_files` (CUZK: szablon URL arkusz/kafel/KU/obec/kraj), `arcgis_image` (istniejacy) | provider per produkt (dzis wzorzec `providers/pl/*.py`) |
 | K6 | Kazdy nowy produkt od razu w magazynie wersjonowanym (ADR-036), z sidecarem i sygnalem swiezosci kanalu: skorowidz `index` (akt_data/nr_zglosz), CUZK `http` (ETag/Last-Modified - openzu je podaje), ATOM `<updated>` jako `metadata`, WFS/OGC API bez sygnalu = `none` | wyjatki od magazynu dla danych wektorowych |
@@ -101,7 +101,7 @@ Rejestr wypelnia sie z deskryptorow (`SourceDescriptor.variants`).
 
 ### 3.3 Kryteria akceptacji
 
-- `kartograf download --sheet N-33-58-A-c-1-4 --product nmt --resolution
+- `kartograf elevation download --sheet N-33-58-A-c-1-4 --product nmt --resolution
   0.5m --vertical-crs EVRF2007 -o <dir>` zapisuje
   `nmt/pl_1992_0.5m_evrf2007/.../N-33-58-A-c-1-4.asc` (probka
   `pl.gugik.nmt_0_5m`: 4202x2600 px, piksel 0,5 m) jako wersje z etykieta
@@ -133,12 +133,12 @@ check_availability(
 + strefa), `resolution` (etykieta K2), `vertical_crs`, `format`,
 `coverage_pct`, `full` (K4), `sheets_total`, `sheets_partial`
 (`czy_ark_wypelniony = NIE`), `missing_area_m2`, `download_hint`
-(gotowe flagi `kartograf download` dla tej kombinacji).
+(gotowe flagi `kartograf <grupa> download` dla tej kombinacji).
 
 ### 4.2 CLI
 
 ```
-kartograf availability --product nmt --country pl --bbox 566000,243000,569000,246000
+kartograf elevation availability --product nmt --country pl --bbox 566000,243000,569000,246000
 ```
 
 Tabela posortowana: rok malejaco, potem pokrycie; kolumna "pelne"
@@ -219,16 +219,28 @@ segment `data/` (regula ARCHITECTURE 3.3), sygnal swiezosci (K6), fixtury
 z prawdziwych odpowiedzi (probki z `probki.md` jako zrodlo), scenariusz
 zgodnosci CLI = API, wpis CHANGELOG/USAGE/SCOPE.
 
-### 6.1 CLI - nazwy produktow (propozycja, do decyzji 9.2)
+### 6.1 CLI - grupy komend wg typu danych (decyzja uzytkownika 2026-10-13)
 
-`download --product`: `nmt`, `nmpt`, `orto`, `laz` (istnieja; rozszerzone
-o warianty i CZ), nowe: `intensity`, `orto-true`, `orto-oblique`,
-`buildings-3d`, `trees-3d`, `mesh-3d`. Dane wektorowe i jednostkowe:
-nowa komenda `kartograf vector download --source <prg|prng|egib|bdoo|
-bdot10k-archive|zabaged|ruian|hy-net|...>` z wyborem `--teryt/--bbox/
---geometry/--sheet` (wzor `landcover download`). BDOT10k zostaje w
-`landcover` (zgodnosc 0.8.0); `bdot10k-archive` = `landcover --source
-bdot10k --year RRRR` (sekcja 9.3).
+Kazdy typ danych ma grupe z podkomendami `download`, `list-sources`
+i `availability` (sekcja 4), wylacznie z flagami tej grupy. Istniejace
+komendy przebudowane w 0.8.0 (backlog "Do 0.8.0", BREAKING, bez
+aliasow); nowe grupy powstaja razem z produktami:
+
+| Grupa | Produkty (dzis -> z planow C-E) |
+|---|---|
+| `elevation` | NMT, NMPT, LAZ PL; DMR 5G/4G CZ (dzis `kartograf download`) -> NMT/NMPT 0,5 m, NMT 100 m, DMP 1G, DMP OK, LAZ CZ |
+| `imagery` | ortofotomapa PL (dzis `download --product orto`) -> true orto, orto ukosna, obrazy intensywnosci, ortofoto CZ |
+| `landcover` | BDOT10k, CORINE -> archiwum BDOT10k (`--year`), ZABAGED, POLSA |
+| `soil` | SoilGrids i HSG (dzis `landcover --source soilgrids`, `soilgrids hsg`) |
+| `boundaries` | PRG, RUIAN |
+| `cadastre` | EGiB, katastralni mapa CZ |
+| `models3d` | modele 3D budynkow LoD1/LoD2, drzewa, mesh 3D |
+| `names` | PRNG, Geonames |
+| `maps` | wizualizacje BDOT10k, ZTM |
+
+Mniejsze zbiory (osnowy, quasi-geoidy, siec HY-NET) dostaja grupe przy
+wejsciu do planu. Biblioteka bez zmian ksztaltu (CLI tlumaczy na
+`download_data`, menedzery i kalkulatory, ADR-037).
 
 ## 7. Uklad `data/` (nowe segmenty)
 
@@ -238,9 +250,9 @@ nmpt/pl_1992_0.5m_evrf2007/...
 intensity/pl_<uklad>/...                 # arkusze OI
 orto/pl_1992_true/bbox/<wsp>.tif         # wariant orto (regula 5)
 orto/pl_1992/bbox/<wsp>.tif              # wycinek WCS w magazynie
-3d/pl_buildings_lod1_<rok>/teryt/<T>.zip
-vector/pl_prg_units/bbox/<wsp>.gpkg      # wynik feature_bbox jako GPKG
-vector/pl_egib/teryt/<T>.gpkg
+models3d/pl_buildings_lod1_<rok>/teryt/<T>.zip
+boundaries/pl_prg_units/bbox/<wsp>.gpkg  # wynik feature_bbox jako GPKG
+cadastre/pl_egib/teryt/<T>.gpkg
 landcover/pl_bdot10k_<format>_<rok>/teryt/<T>...   # archiwum (9.3)
 nmpt/cz_dmpok_bpv/CTES/96/CTES96.tif
 laz/cz_dmr5g_bpv/CTES/96/CTES96.laz
@@ -266,9 +278,9 @@ skladany lokalnie (jak BDOT10k - SQLite nie na udziale sieciowym).
 1. **Kolejnosc planow:** proponowana A (rejestr wariantow + 0,5 m +
    raport dostepnosci) -> B (silniki) -> C (PL referencyjne) -> D (CZ) ->
    E. Alternatywa: D przed C, jesli zlewnie transgraniczne sa pilniejsze.
-2. **Nazwy w CLI:** nowe wartosci `--product` + komenda `vector` (6.1) vs
-   jedna komenda `download` dla wszystkiego (dluzsza lista `--product`,
-   wiecej walidacji warunkowej).
+2. ~~**Nazwy w CLI**~~ - rozstrzygniete 2026-10-13: grupy wg typu danych
+   (6.1), LAZ w `elevation`, `models3d`, przebudowa istniejacych komend
+   w 0.8.0.
 3. **BDOT10k archiwalny:** `--year` w `landcover` (segment z rokiem) vs
    osobne zrodlo `bdot10k-archive`.
 4. **Ortofoto CZ:** zapis oryginalnego JPEG+JGW (1:1 ze zrodlem) vs
