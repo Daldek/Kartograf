@@ -85,6 +85,16 @@ def test_commit_same_content_new_campaign_label_is_relabeled(tmp_path):
     assert labels == {"2024-05-10_80000", "2025-02-01_90000"}
 
 
+def test_relabeled_names_newest_identical_version(tmp_path):
+    """``same_as`` = newest identical version, not the first directory."""
+    commit(tmp_path, label="2025-04-16_83836")
+    older = commit(tmp_path, label="2021-10-03_75109")
+    middle = commit(tmp_path, label="2023-06-04_78954")
+    assert older.same_as == "2025-04-16_83836"
+    assert middle.same_as == "2025-04-16_83836"
+    assert commit(tmp_path, label="2025-04-16_83836").same_as is None  # unchanged
+
+
 def test_commit_same_content_downloaded_label_is_unchanged(tmp_path):
     commit(tmp_path, label="2026-10-10", source="downloaded")
     again = commit(tmp_path, label="2026-10-11", source="downloaded")

@@ -123,7 +123,9 @@ class VersionedFile:
     mode, the source signal differs from the local version (ETag or
     Last-Modified of the source, or the newer edition). ``unverified``: the
     local version was used without a comparison — ``"none"`` (no cheap or
-    comparable signal) or ``"check_failed: <error>"``.
+    comparable signal) or ``"check_failed: <error>"``. ``same_as``: for
+    ``relabeled``, the label of the newest existing version with identical
+    content; otherwise ``None``.
     """
 
     path: Path
@@ -133,6 +135,7 @@ class VersionedFile:
     version_path: Path
     newer: str | None = None
     unverified: str | None = None
+    same_as: str | None = None
 
 
 def link_version(std: Path, version: LocalVersion, *, refresh: bool) -> None:
@@ -324,7 +327,12 @@ def store_file(
         raise DownloadError(f"{commit.path}: wersja bez czytelnego sidecara")
     link_version(slot.std, committed, refresh=commit.status != "unchanged")
     return VersionedFile(
-        slot.std, commit.status, commit.label, commit.sha256, commit.path
+        slot.std,
+        commit.status,
+        commit.label,
+        commit.sha256,
+        commit.path,
+        same_as=commit.same_as,
     )
 
 

@@ -103,12 +103,17 @@ class LocalVersion:
 
 @dataclass(frozen=True)
 class VersionCommit:
-    """Outcome of ``commit_version``; ``path`` is the version data file."""
+    """Outcome of ``commit_version``; ``path`` is the version data file.
+
+    ``same_as``: for ``relabeled``, the label of the newest existing version
+    with the same content (``version_key``); otherwise ``None``.
+    """
 
     status: CommitStatus
     path: Path
     sha256: str
     label: str
+    same_as: str | None = None
 
 
 def read_content(path: Path, *, ext: str, coverage: bool) -> ContentDigest:
@@ -380,7 +385,8 @@ def commit_version(
     a version with that sha256 (``same_http_signal``). Otherwise — a new
     campaign/edition label or the same content under a new HTTP signal —
     the version gets its own directory hardlinked to the existing data,
-    ``relabeled`` (D23). New content: ``os.link`` publishes the data
+    ``relabeled`` (D23; ``same_as`` = label of the newest such version). New
+    content: ``os.link`` publishes the data
     exclusively (D18); an existing target is compared by sha256:
     different = ``DownloadError``, equal with a sidecar = ``unchanged``
     (e.g. a second download on the same day), equal without = repair.
@@ -406,6 +412,7 @@ def commit_version(
     same = [v for v in list_versions(root, name) if v.sha256 == digest.sha256]
     source = staged
     status: CommitStatus = "new"
+    same_as: str | None = None
     if same:
         labelled = [v for v in same if v.label == version.label]
         if not labelled and version.label_source == "downloaded":
@@ -418,7 +425,8 @@ def commit_version(
             match = max(labelled, key=version_key)
             _discard(staged)
             return VersionCommit("unchanged", match.path, digest.sha256, match.label)
-        source, status = same[0].path, "relabeled"
+        identical = max(same, key=version_key)
+        source, status, same_as = identical.path, "relabeled", identical.label
     else:
         _fsync(staged)
 
@@ -466,4 +474,4 @@ def commit_version(
         raise DownloadError(
             f"{target}: nie udalo sie zapisac sidecara wersji: {e}"
         ) from e
-    return VersionCommit(status, target, digest.sha256, version.label)
+    return VersionCommit(status, target, digest.sha256, version.label, same_as)

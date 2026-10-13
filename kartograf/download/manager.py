@@ -1410,6 +1410,7 @@ class DownloadManager:
                     commit.label,
                     commit.sha256,
                     commit.path,
+                    same_as=commit.same_as,
                 )
             )
             downloaded.append(commit.path)

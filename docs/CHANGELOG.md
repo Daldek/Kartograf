@@ -301,7 +301,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     deskryptora: sidecar okrojony), porazka zapisu = blad arkusza.
   - CLI: zamiast `Downloaded to`, `Skipped ... already exists` i `Downloaded
     N files ...` jedna linia na plik (`<godlo>: nowa wersja
-    <etykieta>_<sha8>` / `nowa etykieta ... (ta sama tresc)` / `bez zmian
+    <etykieta>_<sha8>` / `nowa etykieta ... (plik identyczny z
+    <etykieta>)` / `bez zmian
     ...` / `lokalna wersja ...`) i podsumowanie `Nowe: N, nowa etykieta:
     N, bez zmian: N, lokalne: N, bledy: N`. Co zrobic: skrypty parsujace
     wyjscie przestaw na nowe linie albo na biblioteke.
@@ -454,7 +455,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `response_signal`, `head_signal`, `download_to(on_response=)`,
   `get_with_retry(headers=)`; sidecary `extra.version`, `extra.http`
   (SM5), `extra.edition` i status `relabeled` (ta sama tresc pod nowa
-  etykieta).
+  etykieta; `VersionedFile.same_as` = etykieta najnowszej identycznej
+  wersji, w CLI `(plik identyczny z <etykieta>)`).
 
 ### Naprawione
 
