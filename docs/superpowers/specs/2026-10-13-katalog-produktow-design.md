@@ -4,7 +4,8 @@
 **Status:** PROJEKT - do akceptacji uzytkownika (decyzje otwarte: sekcja 9)
 **Wersja docelowa:** od 0.9.0 (strumien; kazdy plan = osobne wydanie)
 **Warunek wstepny:** wydanie 0.8.0 (magazyn wersjonowany ADR-036, CLI = API
-ADR-037, jawny tryb wycinka ADR-038)
+ADR-037, jawny tryb wycinka ADR-038, grupy komend CLI wg typu danych -
+backlog "Do 0.8.0", decyzja 2026-10-13)
 **Dokumenty zrodlowe:**
 - `docs/research/2026-10-13-katalog-produktow/raport.md` (inwentaryzacja,
   statusy produktow) i `probki.md` (dowody dostepnosci, 212 probek)
@@ -169,7 +170,7 @@ przy bledzie zrodla.
   `opendata`).
 - Zgodnosc CLI `--json` = API (bajtowo przy zamrozonym zegarze).
 
-## 5. Silniki kanalow (plan B, fundament dla C-D)
+## 5. Silniki kanalow (wchodza razem z pierwszym produktem, ktory ich uzywa)
 
 | Silnik (`TransportKind`) | Wejscie z deskryptora | Produkty |
 |---|---|---|
@@ -191,29 +192,50 @@ Wymagania wspolne (z pulapek raportu):
 - Timeouty i ponowienia jak dzis (STANDARDS 13.4); ATOM GUGiK z dluzszym
   timeoutem (zmierzony timeout 120 s).
 
-## 6. Produkty - fale (plany C, D, E)
+## 6. Produkty - fale (plany A-E, rewizja kolejnosci 2026-10-13)
 
-Kolejnosc wg priorytetow raportu (W/S/N); kazda fala = plan + wydanie.
+Kazdy plan = jedna grupa CLI (6.1) albo jej czesc + wydanie. Kolejnosc
+wynika z priorytetow raportu (W/S/N) i zaleznosci: plany A i B rozszerzaja
+istniejace tory (skorowidz GUGiK, arkusze CZ z `openzu`, `exportImage`)
+i nie potrzebuja nowych silnikow; silniki `unit_package` i `feature_bbox`
+(sekcja 5) powstaja w planie C razem z pierwszymi produktami - silnik bez
+produktu nie ma czym byc zweryfikowany na zywo.
 
-**Plan C - PL dane referencyjne i zmiany w czasie (W/S):**
-`pl.gugik.prg_units` (granice: WFS bbox + paczki), `pl.gugik.bdot10k_archive`
-(2014-2025, `--year`), `pl.gugik.buildings_3d` (LoD1/LoD2 per powiat),
-`pl.gugik.egib` (paczki powiatowe GPKG; WFS bbox), wycinek orto WCS w
-magazynie (`orto --cutout`, Standard/High; dzis tylko poza magazynem, D27).
+**Plan A - `elevation` PL (W), od 0.9.0:** rejestr wariantow (K1-K2),
+NMT i NMPT 0,5 m (sekcja 3), `kartograf elevation availability` dla PL
+(sekcja 4, pokrycie wg K4: maska ladu PRG, arkusze `NIE` = "pelnosc
+nieznana" bez lokalnej wersji). Otwarte w planie: opcja `--measure`.
 
-**Plan D - CZ (W/S):** `cz.cuzk.dmpok` (TIFF 0,5 m arkusze + wycinek
-ImageServer), `cz.cuzk.dmp1g`, LAZ CZ (DMR 5G/4G, DMP 1G/OK; tor `laz`
-z `--country cz`), `cz.cuzk.ortofoto` (SM5, zapis jak w zrodle: JPEG + JGW
-S-JTSK i TM33N, decyzja 2026-10-13),
-`cz.cuzk.zabaged` (bbox przez WFS/REST; land cover CZ - mapowanie klas jak
-BDOT10k PT*, research 2026-08-10 sekcja 5), `cz.cuzk.ruian` (jednostki),
-`cz.cuzk.hydro_inspire` (HY-NET bbox).
+**Plan B - `elevation` CZ (W/S):** `cz.cuzk.dmpok` (TIFF 0,5 m arkusze
+SM5/TM33 + wycinek ImageServer), `cz.cuzk.dmp1g` (LAZ + wycinek
+ImageServer), DMR 4G TIFF ETRS89/EVRS, LAZ CZ (DMR 5G/4G, DMP 1G/OK;
+`elevation download --product laz --country cz`), raport dostepnosci CZ.
+Wszystko na istniejacym torze arkuszy CZ (`download/cz_sheets.py`,
+indeks `KladyMapovychListu`, szablon `openzu`) i rejestrze wariantow
+z planu A. Zaleznosc tylko od A.
 
-**Plan E - niski priorytet (N):** NMT 100 m, obrazy intensywnosci,
-true orto, orto ukosna, mesh 3D, modele drzew, wizualizacje BDOT10k,
-BDOO, PRG adresy i granice specjalne, PRNG (RP i swiat), osnowy, RCN,
-quasi-geoida PL-geoid2021; CZ: warstwice, Data50/250, katastralni mapa,
-Geonames, ZTM, QGZU, Bodova pole, geomorfologia.
+**Plan C - dane jednostkowe i obszarowe PL (W/S) + silniki:**
+`unit_package` z `landcover --source bdot10k --year` (archiwum 2014-2025,
+GML/SHP, decyzja 9.3) i `models3d` (budynki LoD1/LoD2 per powiat);
+`feature_bbox` z `boundaries` (PRG: WFS bbox, paczki woj./kraj,
+`--whole-country`, K7) i `cadastre` (EGiB: paczki powiatowe GPKG, WFS
+bbox).
+
+**Plan D - CZ dane obszarowe i obrazy (W/S):** `landcover --source
+zabaged` (`feature_bbox` ArcGIS WFS/REST z kolejnoscia osi X,Y;
+`--whole-country` = GPKG 5,8 GB; mapowanie klas jak BDOT10k PT*, research
+2026-08-10 sekcja 5), `boundaries` RUIAN, siec HY-NET, `imagery`:
+ortofoto CZ (SM5, zapis jak w zrodle: JPEG + JGW S-JTSK i TM33N) oraz
+wycinek ortofotomapy PL z WCS w magazynie (`imagery download --product
+orto --cutout`, Standard/High; dzis tylko poza magazynem, D27).
+Zaleznosc: silniki z C.
+
+**Plan E - niski priorytet (N), pojedynczo wg potrzeb:** NMT 100 m,
+obrazy intensywnosci, true orto, orto ukosna, mesh 3D, modele drzew,
+wizualizacje BDOT10k, BDOO, PRG adresy i granice specjalne, PRNG (RP
+i swiat), osnowy, RCN, quasi-geoida PL-geoid2021; CZ: warstwice,
+Data50/250, katastralni mapa, Geonames, ZTM, QGZU, Bodova pole,
+geomorfologia.
 
 Dla kazdego produktu plan zawiera: wpis deskryptora (klucz z raportu),
 segment `data/` (regula ARCHITECTURE 3.3), sygnal swiezosci (K6), fixtury
@@ -227,7 +249,7 @@ i `availability` (sekcja 4), wylacznie z flagami tej grupy. Istniejace
 komendy przebudowane w 0.8.0 (backlog "Do 0.8.0", BREAKING, bez
 aliasow); nowe grupy powstaja razem z produktami:
 
-| Grupa | Produkty (dzis -> z planow C-E) |
+| Grupa | Produkty (dzis -> z planow A-E) |
 |---|---|
 | `elevation` | NMT, NMPT, LAZ PL; DMR 5G/4G CZ (dzis `kartograf download`) -> NMT/NMPT 0,5 m, NMT 100 m, DMP 1G, DMP OK, LAZ CZ |
 | `imagery` | ortofotomapa PL (dzis `download --product orto`) -> true orto, orto ukosna, obrazy intensywnosci, ortofoto CZ |
@@ -276,9 +298,15 @@ skladany lokalnie (jak BDOT10k - SQLite nie na udziale sieciowym).
 
 ## 9. Decyzje do podjecia przez uzytkownika
 
-1. **Kolejnosc planow:** proponowana A (rejestr wariantow + 0,5 m +
-   raport dostepnosci) -> B (silniki) -> C (PL referencyjne) -> D (CZ) ->
-   E. Alternatywa: D przed C, jesli zlewnie transgraniczne sa pilniejsze.
+1. **Kolejnosc planow** (rewizja 2026-10-13 po decyzjach 9.2-9.7):
+   0.8.0 grupy CLI -> A `elevation` PL -> B `elevation` CZ -> C dane
+   jednostkowe/obszarowe PL + silniki -> D CZ obszarowe i obrazy -> E.
+   Zmiana wzgledem pierwszej wersji: plan "B - silniki" usuniety jako
+   osobny etap (silniki w C z pierwszymi produktami), wysokosci CZ
+   przesuniete z D do B (ta sama grupa i rejestr co A, istniejacy tor
+   CZ), POLSA usunieta, archiwum BDOT10k jako `--year` w C. Alternatywa:
+   C przed B, jesli dane referencyjne PL sa pilniejsze niz NMPT CZ.
+   Do potwierdzenia przez uzytkownika.
 2. ~~**Nazwy w CLI**~~ - rozstrzygniete 2026-10-13: grupy wg typu danych
    (6.1), LAZ w `elevation`, `models3d`, przebudowa istniejacych komend
    w 0.8.0.
