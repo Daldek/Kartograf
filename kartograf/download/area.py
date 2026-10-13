@@ -134,8 +134,9 @@ def pl_only_flags(product: str, vertical_crs: object, resolution: object) -> lis
     """Choices with no CZ counterpart: they resolve ``country="auto"`` to PL.
 
     ADR-023 point 5; DELIBERATELY narrow: LAZ has its own flow, ``5m``
-    exists on both sides, per-country values name both countries, ``system``
-    is required for every PL area, ``target_crs`` and campaign options work
+    exists on both sides, per-country values name both countries,
+    ``sheet_system`` is required for every PL sheet area, ``cutout`` and
+    campaign options work
     with both countries.
     """
     flags: list[str] = []

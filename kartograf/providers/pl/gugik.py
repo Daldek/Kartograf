@@ -333,7 +333,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         return no_coverage_error(
             parser,
             f"Brak danych {self._CACHE_PRODUCT.upper()} {self._resolution} dla "
-            f"{parser.sheet} (uklad PL-{parser.system}, {self._vertical_crs})",
+            f"{parser.sheet} (uklad PL-{parser.sheet_system}, {self._vertical_crs})",
             hints,
         )
 
@@ -355,7 +355,9 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         """
         hints: set[str] = set()
         query_bbox = self._query_bbox(parser)
-        zone = int(parser.sheet.split(".")[0]) if parser.system == "2000" else None
+        zone = (
+            int(parser.sheet.split(".")[0]) if parser.sheet_system == "2000" else None
+        )
         for resolution, by_crs in self.WMS_INDEX_ENDPOINTS.items():
             for vertical_crs, endpoint in by_crs.items():
                 if (resolution, vertical_crs) == (self._resolution, self._vertical_crs):
@@ -391,7 +393,7 @@ class GugikProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
                 found = select_sheet_record(
                     records,
                     sheet=parser.sheet,
-                    system=parser.system,
+                    system=parser.sheet_system,
                     zone=zone,
                     resolution_m=float(resolution[:-1]),
                 )

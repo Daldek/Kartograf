@@ -1,7 +1,7 @@
 """
 Merged NMT/NMPT PL cutout in a requested CRS (ADR-027, ADR-035) — library layer.
 
-WCS path (CLI ``--target-crs`` and ``download_pl_cutout``, ADR-035):
+WCS path (CLI ``--cutout`` and ``download_pl_cutout``, ADR-035/038):
 ``_prepare_pl_cutout`` -> ``_run_pl_wcs_cutout``. One GetCoverage area from GUGiK
 WCS on the 1 m sheet grid (chunks, ADR-034), the PL land mask from PRG (nodata
 -9999 outside ``A00 - W02 - W03``), then for EPSG:2180 the file as is, for
@@ -20,7 +20,7 @@ Example::
 
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-        target_crs="EPSG:5514",
+        horizontal_crs="EPSG:5514",
         output_dir="./data", vertical_crs="EVRF2007", product="nmt",
     )
     print(result.file.path)
@@ -71,7 +71,7 @@ PL_NODATA = -9999.0
 # PL WCS cutouts have exactly one admissible resolution: 1 m.
 PIXEL_SIZE = 1.0
 # target CRS with a pinned EPSG:2180 -> target operation (KNOWN_PATHS, ADR-027)
-SUPPORTED_TARGET_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
+CUTOUT_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
 # CONTENT reprojection operation policy (CONTENT_POLICY) and source envelope
 # margin (WARP_MARGIN_PX) — shared with the CZ flow, from transform/crs.py (D9).
 _VERTICAL_CRS = ("EVRF2007", "KRON86")
@@ -89,14 +89,14 @@ LAND_MASK_LAYERS = (
 class PlCutout:
     """A prepared NMT/NMPT PL WCS cutout, always on the 1m grid (internal step).
 
-    ``target_crs`` is EPSG:2180 (native PL), EPSG:5514 or EPSG:3045
+    ``horizontal_crs`` is EPSG:2180 (native PL), EPSG:5514 or EPSG:3045
     (reprojected). ``vertical_crs`` is EVRF2007 (current heights) or KRON86
     (legacy heights). ``output_dir`` is the explicit output base directory;
     ``product`` is "nmt" (terrain heights) or "nmpt" (surface heights).
     Remaining fields contain the prepared extent, transform and result path.
     """
 
-    target_crs: str
+    horizontal_crs: str
     vertical_crs: str
     output_dir: Path
     bbox_2180: BBox
@@ -146,7 +146,7 @@ class PlCutoutResult:
 
 def _prepare_pl_cutout(
     bbox: BBox,
-    target_crs: str,
+    horizontal_crs: str,
     *,
     output_dir: str | Path,
     vertical_crs: str,
@@ -154,7 +154,7 @@ def _prepare_pl_cutout(
 ) -> PlCutout:
     """Prepare a PL WCS cutout without network access.
 
-    ``bbox`` is the requested extent in a supported CRS. ``target_crs`` is
+    ``bbox`` is the requested extent in a supported CRS. ``horizontal_crs`` is
     "EPSG:2180" (native), "EPSG:5514" or "EPSG:3045" (pinned reprojection).
     ``output_dir`` selects the result directory. ``vertical_crs`` is
     "EVRF2007" (current heights) or "KRON86" (legacy heights).
@@ -172,10 +172,10 @@ def _prepare_pl_cutout(
         raise ValidationError(
             f"Produkt wycinka PL: {' albo '.join(CUTOUT_PRODUCTS)} (podano {product})"
         )
-    if target_crs not in SUPPORTED_TARGET_CRS:
+    if horizontal_crs not in CUTOUT_CRS:
         raise ValidationError(
-            f"Nieobslugiwany uklad docelowy wycinka PL: {target_crs} "
-            f"(dostepne: {', '.join(SUPPORTED_TARGET_CRS)})"
+            f"Nieobslugiwany uklad docelowy wycinka PL: {horizontal_crs} "
+            f"(dostepne: {', '.join(CUTOUT_CRS)})"
         )
     if vertical_crs not in _VERTICAL_CRS:
         raise ValidationError(
@@ -192,16 +192,16 @@ def _prepare_pl_cutout(
     pinned = None
     bbox_target = bbox_2180
     bbox_source_2180 = bbox_2180
-    if target_crs != "EPSG:2180":
+    if horizontal_crs != "EPSG:2180":
         center = (
             (bbox_2180.min_x + bbox_2180.max_x) / 2,
             (bbox_2180.min_y + bbox_2180.max_y) / 2,
         )
         # content policy as in the CZ flow + probe at the request center
         pinned = build_pinned_transform(
-            "EPSG:2180", target_crs, replace(CONTENT_POLICY, probe_point=center)
+            "EPSG:2180", horizontal_crs, replace(CONTENT_POLICY, probe_point=center)
         )
-        bbox_target = bbox_to_crs(bbox_2180, target_crs, pinned)
+        bbox_target = bbox_to_crs(bbox_2180, horizontal_crs, pinned)
         # The source must cover the WHOLE result grid: the target envelope maps
         # back to 2180 larger than the request (CRS rotation), and the
         # interpolator needs a halo. Mirror of the CZ flow's _native_request_bbox.
@@ -220,7 +220,7 @@ def _prepare_pl_cutout(
     key = "pl.gugik.nmpt" if product == "nmpt" else "pl.gugik.nmt_1m"
     subdir = get_source(key).resolve_subdir(system="1992", vertical_crs=vertical_crs)
     return PlCutout(
-        target_crs=target_crs,
+        horizontal_crs=horizontal_crs,
         vertical_crs=vertical_crs,
         output_dir=Path(output_dir),
         bbox_2180=bbox_2180,
@@ -341,10 +341,10 @@ def write_pl_wcs_cutout_sidecar(
         path,
         request={
             "bbox": bbox_coords(b),
-            "bbox_crs": cutout.target_crs,
+            "bbox_crs": cutout.horizontal_crs,
         },
         vertical_crs=cutout.vertical_crs,
-        horizontal_crs=cutout.target_crs,
+        horizontal_crs=cutout.horizontal_crs,
         pinned_transforms={"horizontal": cutout.pinned},
         capability="bbox_raster",
         nodata=PL_NODATA,
@@ -380,7 +380,7 @@ def _check_prepared(cutout: PlCutout) -> UpdatePlan:
 def check_pl_cutout(
     bbox: BBox,
     *,
-    target_crs: str,
+    horizontal_crs: str,
     output_dir: str | Path,
     vertical_crs: str,
     product: str,
@@ -399,7 +399,7 @@ def check_pl_cutout(
     del cache, on_notice  # same signature as the download (Z2); unused here
     cutout = _prepare_pl_cutout(
         bbox,
-        target_crs,
+        horizontal_crs,
         output_dir=output_dir,
         vertical_crs=vertical_crs,
         product=product,
@@ -564,7 +564,7 @@ def _run_pl_wcs_cutout(
 def download_pl_cutout(
     bbox: BBox,
     *,
-    target_crs: str,
+    horizontal_crs: str,
     output_dir: str | Path,
     vertical_crs: str,
     product: str,
@@ -574,7 +574,7 @@ def download_pl_cutout(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> PlCutoutResult:
-    """One versioned NMT/NMPT PL GeoTIFF in ``target_crs`` from GUGiK WCS.
+    """One versioned NMT/NMPT PL GeoTIFF in ``horizontal_crs`` from GUGiK WCS.
 
     ADR-035: the source on the 1 m sheet grid, the server's flight
     composition (not the newest flight per ADR-028), nodata -9999 outside PL
@@ -586,7 +586,7 @@ def download_pl_cutout(
     pass its envelope as ``bbox`` (e.g. via
     ``get_overall_bbox(path, target_crs="EPSG:2180")``).
 
-    ``output_dir`` selects the base directory; ``target_crs`` is
+    ``output_dir`` selects the base directory; ``horizontal_crs`` is
     "EPSG:2180", "EPSG:5514" or "EPSG:3045"; ``vertical_crs`` is
     "EVRF2007" (current heights) or "KRON86" (legacy heights), and
     ``product`` is "nmt" (terrain) or "nmpt" (surface). The only WCS cutout
@@ -609,7 +609,7 @@ def download_pl_cutout(
         Bad product, CRS, vertical CRS or update mode, or too little disk
         space on download.
     TransformError
-        No safe pinned EPSG:2180 -> ``target_crs`` operation (before any
+        No safe pinned EPSG:2180 -> ``horizontal_crs`` operation (before any
         network).
     DownloadError
         PRG or WCS failure; no new version is committed.
@@ -617,7 +617,7 @@ def download_pl_cutout(
     validate_update(update)
     cutout = _prepare_pl_cutout(
         bbox,
-        target_crs,
+        horizontal_crs,
         output_dir=output_dir,
         vertical_crs=vertical_crs,
         product=product,

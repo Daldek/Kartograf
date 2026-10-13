@@ -13,7 +13,7 @@ from types import SimpleNamespace
 
 from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.campaigns import validate_year_bounds
-from kartograf.download.cutout import SUPPORTED_TARGET_CRS
+from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
 from kartograf.exceptions import ValidationError
 from kartograf.providers.pl import require_nmt_vertical_crs
@@ -37,7 +37,7 @@ VERTICAL_CRS_CZ = (
     "Bpv (natywny uklad CUZK), EVRF2007 (transformacja z Bpv, "
     "ok. +0,11..+0,15 m, rosnaco S->N)"
 )
-SYSTEM_CHOICES = (
+SHEET_SYSTEM_CHOICES = (
     "1992 (godla PL-1992, arkusze 1:10000), 2000 (godla PL-2000, strefy "
     "EPSG:2176-2179; wymaga --scale)"
 )
@@ -63,7 +63,7 @@ CZ_ONLY_NMT = "--product {product} dla CZ bedzie dostepny w etapie 2 - teraz tyl
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
 _PRODUCTS = ("nmt", "nmpt", "orto", "laz")
 _COUNTRIES = ("pl", "cz", "auto")
-_SYSTEMS = ("1992", "2000")
+_SHEET_SYSTEMS = ("1992", "2000")
 
 _COUNTRY_KEYS = ("pl", "cz")
 
@@ -114,34 +114,28 @@ def _per_country_hint(raw: PerCountry, flag: str, countries: tuple[str, ...]) ->
 def pl_option_error(
     task: SimpleNamespace,
     *,
-    sheet_system: str | None = None,
-    sheet_scale: str | None = None,
+    code_system: str | None = None,
+    code_scale: str | None = None,
     countries: tuple[str, ...] = ("PL",),
 ) -> str | None:
     """Error text for the PL data choices of the request (``None`` = valid).
 
-    ``sheet_system``/``sheet_scale`` describe a sheet request (system and
+    ``code_system``/``code_scale`` describe a sheet request (sheet system and
     scale of the code); ``None`` = area request (bbox/geometry).
     """
     product = task.product
     resolution = country_value(task.resolution, "PL")
     vertical_crs = country_value(task.vertical_crs, "PL")
-    target_crs = task.target_crs
+    cutout = task.cutout
     res_hint = _per_country_hint(task.resolution, "--resolution", countries)
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
 
-    if target_crs is not None and product in ("orto", "laz"):
-        return (
-            "--target-crs dla PL dziala tylko z --product nmt albo nmpt "
-            "(wycinek wysokosci z WCS GUGiK; orto i laz - pobierz bez "
-            "--target-crs)"
-        )
     if product == "nmt":
-        if target_crs is not None:
+        if cutout:
             if resolution not in (None, "1m"):
                 return (
-                    "wycinki --target-crs sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
-                    "pomin --target-crs; wycinek: --resolution 1m albo pomin "
+                    "wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
+                    "pomin --cutout; wycinek: --resolution 1m albo pomin "
                     "--resolution"
                 )
         elif resolution is None:
@@ -186,22 +180,25 @@ def pl_option_error(
 
     if product == "laz":
         return None  # LAZ: per-tile system from WFS, no sheet scale
-    system = task.system
+    sheet_system = task.sheet_system
     scale = task.scale
-    if target_crs is not None:
-        if system not in (None, "1992"):
+    if cutout:
+        if sheet_system not in (None, "1992"):
             return (
-                "--target-crs nie dziala z --system 2000 - bbox wielostrefowy "
-                "dalby arkusze w roznych CRS (2176-2179); wycinek: --system 1992 "
-                "albo pomin --system"
+                "--cutout nie dziala z --sheet-system 2000 - bbox wielostrefowy "
+                "dalby arkusze w roznych CRS (2176-2179); wycinek: --sheet-system "
+                "1992 albo pomin --sheet-system"
             )
         return None
-    if sheet_system is None:
-        if system is None:
-            return f"--system wymagane dla --bbox/--geometry w PL: {SYSTEM_CHOICES}"
-        effective = system
-    else:
+    if code_system is None:
+        if sheet_system is None:
+            return (
+                f"--sheet-system wymagane dla --bbox/--geometry w PL: "
+                f"{SHEET_SYSTEM_CHOICES}; jeden wycinek zamiast arkuszy: --cutout"
+            )
         effective = sheet_system
+    else:
+        effective = code_system
     if effective == "1992":
         if scale is not None:
             return (
@@ -210,7 +207,7 @@ def pl_option_error(
                 "do 1:10000 samo - pomin --scale"
             )
         return None
-    if scale is None and (sheet_system is None or sheet_scale == "1:10000"):
+    if scale is None and (code_system is None or code_scale == "1:10000"):
         return f"--scale wymagane dla arkuszy PL-2000: {SCALE_2000_CHOICES}"
     if scale is not None and scale not in SCALES_2000:
         return f"Nieznana skala PL-2000 {scale} - dostepne: {SCALE_2000_CHOICES}"
@@ -247,9 +244,25 @@ def cz_option_error(
             f"{vertical_crs} nie jest dostepny dla CZ - dostepne: "
             f"{VERTICAL_CRS_CZ}{vcrs_hint}"
         )
-    if "PL" not in countries and task.system is not None:
-        return "--system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+    if "PL" not in countries and task.sheet_system is not None:
+        return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
     return None
+
+
+def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
+    """An area reaching CZ needs ``cutout``: CUZK has no sheets for an area."""
+    if task.sheet is not None or "CZ" not in countries or task.cutout:
+        return
+    if "PL" in countries:
+        raise ValidationError(
+            "obszar siega CZ, a CUZK daje dla obszaru tylko jeden wycinek - "
+            "dodaj --cutout --horizontal-crs <uklad> (czesc PL tez bedzie "
+            "wycinkiem z WCS GUGiK) albo uzyj --country pl (tylko arkusze PL)"
+        )
+    raise ValidationError(
+        "obszar CZ (CUZK) jest pobierany tylko jako jeden wycinek - dodaj "
+        "--cutout --horizontal-crs <uklad> (np. EPSG:5514, uklad natywny CUZK)"
+    )
 
 
 def validate_request_bbox(bbox: BBox) -> None:
@@ -311,14 +324,15 @@ def validate_request(task: SimpleNamespace) -> None:
             f"--country {task.country!r}: nieznana wartosc - dostepne: "
             f"{COUNTRY_CHOICES}"
         )
-    if task.system is not None and task.system not in _SYSTEMS:
+    if task.sheet_system is not None and task.sheet_system not in _SHEET_SYSTEMS:
         raise ValidationError(
-            f"--system {task.system!r}: nieznana wartosc - dostepne: {SYSTEM_CHOICES}"
+            f"--sheet-system {task.sheet_system!r}: nieznana wartosc - dostepne: "
+            f"{SHEET_SYSTEM_CHOICES}"
         )
-    if task.target_crs is not None and task.target_crs not in SUPPORTED_TARGET_CRS:
+    if task.horizontal_crs is not None and task.horizontal_crs not in CUTOUT_CRS:
         raise ValidationError(
-            f"--target-crs {task.target_crs!r}: nieznana wartosc - dostepne: "
-            f"{', '.join(SUPPORTED_TARGET_CRS)}"
+            f"--horizontal-crs {task.horizontal_crs!r}: nieznana wartosc - "
+            f"dostepne: {', '.join(CUTOUT_CRS)}"
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
@@ -348,6 +362,29 @@ def validate_request(task: SimpleNamespace) -> None:
             "--full-sheet dziala tylko z NMT/NMPT/orto (podano laz) - LAZ "
             "nie ma sciezki standardowej ani dowiazania full_sheet/; pomin --full-sheet"
         )
+    if task.cutout:
+        if task.sheet is not None:
+            raise ValidationError(
+                "--cutout dziala tylko z --bbox/--geometry; --sheet wyznacza "
+                "zasieg i uklad produktu (arkusz PL 1:1 w ukladzie arkusza, "
+                "arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce EPSG:3045)"
+            )
+        if task.product in ("orto", "laz"):
+            raise ValidationError(
+                "--cutout dziala tylko z --product nmt albo nmpt (wycinek "
+                "wysokosci); orto i laz - pobierz bez --cutout"
+            )
+        if task.horizontal_crs is None:
+            raise ValidationError(
+                f"--horizontal-crs wymagane z --cutout (uklad wycinka): "
+                f"{', '.join(CUTOUT_CRS)}"
+            )
+    elif task.horizontal_crs is not None:
+        raise ValidationError(
+            "--horizontal-crs dziala tylko z --cutout (uklad jednego wycinka); "
+            "arkusze maja uklad z godla - dodaj --cutout albo pomin "
+            "--horizontal-crs"
+        )
 
 
 def campaign_opts_given(task: SimpleNamespace) -> bool:
@@ -361,9 +398,9 @@ def campaign_opts_given(task: SimpleNamespace) -> bool:
     )
 
 
-def reject_campaign_opts_with_target_crs(task: SimpleNamespace) -> None:
+def reject_campaign_opts_with_cutout(task: SimpleNamespace) -> None:
     """A PL cutout (WCS, ADR-035) has no year or campaign choice."""
-    if task.target_crs is None:
+    if not task.cutout:
         return
     flag = next(
         (
@@ -379,19 +416,19 @@ def reject_campaign_opts_with_target_crs(task: SimpleNamespace) -> None:
     )
     if flag is not None:
         raise ValidationError(
-            f"{flag} nie dziala z --target-crs - wycinek z WCS GUGiK ma "
+            f"{flag} nie dziala z --cutout - wycinek z WCS GUGiK ma "
             "kompozycje lotow serwera (bez wyboru roku); rok danych: pobierz "
-            "arkusze bez --target-crs"
+            "arkusze bez --cutout"
         )
     if task.all_campaigns:
         raise ValidationError(
-            "--all-campaigns nie dziala z --target-crs - wycinek z WCS "
+            "--all-campaigns nie dziala z --cutout - wycinek z WCS "
             "GUGiK ma jedna kompozycje lotow serwera; wszystkie kampanie: "
-            "pobierz arkusze bez --target-crs"
+            "pobierz arkusze bez --cutout"
         )
     if task.full_sheet:
         raise ValidationError(
-            "--full-sheet nie dziala z --target-crs - wycinek pochodzi "
+            "--full-sheet nie dziala z --cutout - wycinek pochodzi "
             "z WCS GUGiK, nie z arkuszy"
         )
 
@@ -399,30 +436,30 @@ def reject_campaign_opts_with_target_crs(task: SimpleNamespace) -> None:
 def resolve_pl_options(
     task: SimpleNamespace,
     *,
-    sheet_system: str | None = None,
-    sheet_scale: str | None = None,
+    code_system: str | None = None,
+    code_scale: str | None = None,
 ) -> None:
     """Validate the PL choices and narrow ``task`` to the plain PL values.
 
     Called on the PL branch only, on a COPY of the request (the CZ branch
     keeps its own values). Single-valued choices are filled in: NMPT and the
-    ``target_crs`` cutout are 1m only, the cutout is PL-1992 only, a sheet
-    request takes its system from the code.
+    cutout are 1m only, the cutout is PL-1992 only, a sheet request takes
+    its sheet system from the code.
     """
-    error = pl_option_error(task, sheet_system=sheet_system, sheet_scale=sheet_scale)
+    error = pl_option_error(task, code_system=code_system, code_scale=code_scale)
     if error is not None:
         raise ValidationError(error)
     resolution = country_value(task.resolution, "PL")
-    if resolution is None and (task.product == "nmpt" or task.target_crs is not None):
+    if resolution is None and (task.product == "nmpt" or task.cutout):
         resolution = "1m"
     task.resolution = resolution
     task.vertical_crs = country_value(task.vertical_crs, "PL")
-    if sheet_system is not None:
-        task.system = sheet_system
-    elif task.target_crs is not None:
-        task.system = "1992"
+    if code_system is not None:
+        task.sheet_system = code_system
+    elif task.cutout:
+        task.sheet_system = "1992"
 
 
 def pl_target_scale(task: SimpleNamespace) -> str:
     """Sheet scale of a PL area request: PL-1992 fixed 1:10000, PL-2000 ``scale``."""
-    return task.scale if task.system == "2000" else "1:10000"
+    return task.scale if task.sheet_system == "2000" else "1:10000"

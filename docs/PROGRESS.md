@@ -107,10 +107,11 @@
 > 0. **Cykl 0.8.0-dev OTWARTY.** Magazyn wersjonowany (ADR-036, plany
 >    1/3-3/3) i spojnosc CLI/API (ADR-037) scalone do `develop`;
 >    poprawki spojnosci (`b3f05aa`, `c67d445`, `c0ff7e1`) i aktualizacja
->    dokumentacji (`e4af37c`) sa na `origin/develop`; lokalnie ponad
->    `origin` (stan 2026-10-13): backlog `639c269`, poprawka cache
->    `1672a44`, weryfikacja USAGE/SCOPE `53be1bf` i ten wpis - push tylko
->    za zgoda uzytkownika; stan sprawdzaj `git log origin/develop..develop`.
+>    dokumentacji (`e4af37c`) sa na `origin/develop`. Galaz
+>    `refactor/crs-flags` (ADR-038: `--cutout`/`--horizontal-crs`/
+>    `--sheet-system`) czeka na merge do `develop` i push - tylko za zgoda
+>    uzytkownika; stan sprawdzaj `git log origin/develop..develop` i
+>    `git branch`.
 > 1. **Przed wydaniem 0.8.0:** dostosowac Hydrograf/Hydrolog wg CHANGELOG
 >    [0.8.0] "Co zrobic" (`DownloadResult` z wartosci zwracanej,
 >    `LandCoverAreaResult`, `calculate_hsg` bez `stat`, cache w cwd);
@@ -179,6 +180,17 @@
   `VersionedFile.same_as`; testy 3598, brama zielona.
 - Usunieta galaz `feat/versioned-store` (origin i lokalnie; tresc w
   `develop` przez merge `423a664`, decyzja uzytkownika).
+- ADR-038 (decyzje uzytkownika 2026-10-13, galaz `refactor/crs-flags`):
+  `--target-crs` -> `--cutout` (jawny tryb wycinka) + `--horizontal-crs`
+  (wymagane z `--cutout`), `--system` -> `--sheet-system`; obszar CZ bez
+  `--cutout` = blad, pod `auto` obszar PL+CZ tylko jako dwa wycinki
+  (arkusze PL: `--country pl`), `Notice` `campaign_opts_pl_only` usuniety.
+  API: `sheet_system=`, `cutout=`, `horizontal_crs=` (`download_data`,
+  tory wycinkow, `create_dmr_provider`, `SheetParser`, `find_sheets_*`);
+  wpis cache z podpowiedzia `--system` = brak wpisu. Rename przez LSP
+  (sekwencyjnie z `reload` - LSP bez reload psul offsety), testy
+  przepisane recznie (subagent: limit uzycia). Testy 3610, brama
+  zielona; smoke CLI offline: 8 sciezek bledow + `--help`.
 
 ### Sesja 2026-10-12 (osma) — wdrozenie spojnosci CLI, biblioteki i API
 
@@ -2295,15 +2307,14 @@ w tym samym wydaniu (decyzja uzytkownika).
   nie musi omijac cache nalezacego do przekazanej instancji providera.
   Doprecyzowac umowe w API/dokumentacji (bez obietnicy odswiezenia
   cudzego cache).
-- [ ] **`--bbox-crs EPSG:2176-2179` z `--system 1992`:** CRS jest na
+- [ ] **`--bbox-crs EPSG:2176-2179` z `--sheet-system 1992`:** CRS jest na
   liscie `--bbox-crs`, ale wybieranie arkuszy PL-1992 moze odrzucic
   taki bbox; zbadac ograniczenie ukladu arkuszy i zapewnic spojnosc
   listy flag z rzeczywistym torem biblioteki.
-- [ ] **Nazwy CRS i tryb wyniku:** pytanie uzytkownika, czy
-  `--horizontal-crs`/`--datum` beda czytelniejsze niz
-  `--target-crs`/`--system`. `--target-crs` nie tylko zmienia uklad:
-  dla PL `--bbox`/`--geometry` przechodzi z pobierania arkuszy na
-  wycinek WCS. Rozstrzygnac nazwy i jawnie komunikowac zmiane trybu.
+- [x] **Nazwy CRS i tryb wyniku:** ZROBIONE 2026-10-13 (ADR-038):
+  `--cutout` + `--horizontal-crs` zamiast `--target-crs`, `--sheet-system`
+  zamiast `--system` (`--datum` odrzucone: 1992 i 2000 maja to samo datum);
+  obszar CZ wymaga `--cutout`.
 - [x] **`nowa etykieta ... (ta sama tresc)` przy `--all-campaigns` -
   zweryfikowac i doprecyzowac komunikat (zgloszenie uzytkownika
   2026-10-13):** `kartograf download --sheet M-33-20-D-a-3-2 --product nmt
@@ -2358,6 +2369,28 @@ zatwierdzeniu specu i planu.
 - [ ] 3. Katalog GUGiK i gotowe dane (strumien produktow)
 - [ ] 4. Wtyczka QGIS
 - [ ] 5. GUI webowe (lokalny manager danych)
+
+Funkcje na przyszlosc (bez przypisanego wydania):
+
+- [ ] **NMT 0,5 m i wszystkie rozdzielczosci GUGiK (prosba uzytkownika
+  2026-10-13):** dodac pobieranie NMT 0,5 m (skorowidz GUGiK ma takie
+  rekordy - `resolution_m=0.5`, fixtury w `tests/test_real_gugik_responses.py`;
+  na zywo 2026-10-12 NMPT N-34-139-C-a-3-1 byl dostepny tylko w 0,5 m).
+  Wymog: kod przygotowac tak, zeby obslugiwal KAZDA rozdzielczosc dostepna
+  w zrodle, a nie kolejna zaszyta wartosc. Dzis rozdzielczosci sa listami
+  w wielu miejscach: `options.py` (`RESOLUTION_PL`, `("1m", "5m")`),
+  `GugikProvider.SUPPORTED_RESOLUTIONS`/`WMS_INDEX_ENDPOINTS` (warstwy
+  skorowidza per rozdzielczosc), `FileStorage.SUPPORTED_RESOLUTIONS`
+  i `_RESOLUTION_SOURCES` (deskryptory `pl.gugik.nmt_1m`/`nmt_5m`, segment
+  `pl_1992_<res>_<vcrs>`), regula "5m tylko EVRF2007"
+  (`require_nmt_vertical_crs`), NMPT tylko 1m, wycinek WCS tylko 1m,
+  `resolution_m=float(res[:-1])` w providerze. Kierunek: jedno zrodlo prawdy
+  (deskryptor/rejestr rozdzielczosci per produkt i uklad wysokosci, z
+  warstwami skorowidza i ograniczeniami), z ktorego wynikaja walidacja,
+  `--help`, segment i wybor rekordu; ustalic etykiete (`0.5m`/`50cm`),
+  zachowanie wycinka WCS (siatka 0,5 m?) i NMPT 0,5 m. Zaczac od
+  inwentaryzacji skorowidza na zywo (jakie rozdzielczosci, uklady,
+  pokrycie) i specu.
 
 Czytelnosc ukladu `data/` po magazynie wersjonowanym (przeglad
 2026-10-12, poprawki na kolejne etapy; decyzja uzytkownika 2026-10-12).

@@ -44,8 +44,8 @@ class SheetParser:
         Normalized sheet code (e.g. "N-34-130-D-d-2-4")
     scale : str
         Map scale (e.g. "1:10000")
-    system : str
-        Coordinate system ("1992" or "2000")
+    sheet_system : str
+        Sheet system ("1992" = PL-1992 sheets, "2000" = PL-2000 sheets)
     components : Dict[str, str]
         Sheet code components (pas, slup, and optional subdivisions)
 
@@ -111,7 +111,7 @@ class SheetParser:
     VALID_COLUMNS = range(33, 36)
     VALID_SHEET_NUMBERS = range(1, 145)
 
-    def __init__(self, sheet: str, system: str | None = None):
+    def __init__(self, sheet: str, sheet_system: str | None = None):
         """
         Initialize the parser for the given sheet code.
 
@@ -119,8 +119,8 @@ class SheetParser:
         ----------
         sheet : str
             Map sheet code (e.g. "N-34-130-D-d-2-4")
-        system : str, optional
-            Coordinate system ("1992" or "2000").
+        sheet_system : str, optional
+            Sheet system ("1992" or "2000").
             If None, it defaults to "1992".
 
         Raises
@@ -147,9 +147,10 @@ class SheetParser:
         if _is_pl2000_format(cleaned):
             from kartograf.core.parser_2000 import Parser2000
 
-            if system is not None and system != "2000":
+            if sheet_system is not None and sheet_system != "2000":
                 raise ValidationError(
-                    f"Godlo '{cleaned}' ma format PL-2000, ale podano system='{system}'"
+                    f"Godlo '{cleaned}' ma format PL-2000, ale podano "
+                    f"sheet_system='{sheet_system}'"
                 )
             self._pl2000: Parser2000 | None = Parser2000(cleaned)
             self._original_sheet = cleaned
@@ -160,9 +161,10 @@ class SheetParser:
         else:
             if cleaned in _PL2000_ZONES:
                 raise _zone_number_error(cleaned)
-            if system is not None and system == "2000":
+            if sheet_system is not None and sheet_system == "2000":
                 raise ValidationError(
-                    f"Godlo '{cleaned}' ma format PL-1992, ale podano system='2000'"
+                    f"Godlo '{cleaned}' ma format PL-1992, ale podano "
+                    "sheet_system='2000'"
                 )
             self._pl2000 = None
             self._original_sheet = cleaned
@@ -171,7 +173,7 @@ class SheetParser:
             self._sheet = self._normalize_sheet(self._original_sheet)
 
             # Validate and set the coordinate system
-            self._system = self._validate_system(system)
+            self._system = self._validate_system(sheet_system)
 
             # Determine the scale and validate the format
             self._scale = self._determine_scale()
@@ -341,8 +343,8 @@ class SheetParser:
         return self._scale
 
     @property
-    def system(self) -> str:
-        """Return the coordinate system."""
+    def sheet_system(self) -> str:
+        """Return the sheet system ("1992" or "2000")."""
         return self._system
 
     @property
@@ -953,7 +955,7 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
 def find_sheets_for_bbox(
     bbox: BBox,
     target_scale: str,
-    system: str,
+    sheet_system: str,
 ) -> list[str]:
     """
     Find the sheet codes of the sheets covering the given bounding box.
@@ -993,14 +995,14 @@ def find_sheets_for_bbox(
         If the system, target_scale or CRS is unsupported, and also for an
         inverted bbox (min > max) or one with a NaN/inf value
     """
-    if system not in ("1992", "2000"):
+    if sheet_system not in ("1992", "2000"):
         raise ValidationError(
-            f"Nieobslugiwany system godel: {system!r}. Dozwolone: '1992', '2000'"
+            f"Nieobslugiwany system godel: {sheet_system!r}. Dozwolone: '1992', '2000'"
         )
 
     validate_bbox(bbox)
 
-    if system == "2000":
+    if sheet_system == "2000":
         from kartograf.core.parser_2000 import find_sheets_2000_for_bbox
 
         return find_sheets_2000_for_bbox(bbox, target_scale)

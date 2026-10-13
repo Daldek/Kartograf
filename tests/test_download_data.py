@@ -109,20 +109,60 @@ def test_area_outside_countries_is_validation_error(tmp_path):
         ({"product": "foo"}, "--product 'foo': nieznana wartosc - dostepne: nmt"),
         ({"country": "xx"}, "--country 'xx': nieznana wartosc - dostepne: pl"),
         ({"country": "PL"}, "--country 'PL': nieznana wartosc - dostepne: pl"),
-        ({"system": "1993"}, "--system '1993': nieznana wartosc - dostepne: 1992"),
         (
-            {"target_crs": "EPSG:3857"},
-            "--target-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+            {"sheet_system": "1993"},
+            "--sheet-system '1993': nieznana wartosc - dostepne: 1992",
+        ),
+        (
+            {"cutout": True, "horizontal_crs": "EPSG:3857"},
+            "--horizontal-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
         ),
         (
             {
                 "country": "cz",
                 "resolution": "2m",
                 "vertical_crs": "Bpv",
-                "system": None,
-                "target_crs": "EPSG:3857",
+                "sheet_system": None,
+                "cutout": True,
+                "horizontal_crs": "EPSG:3857",
             },
-            "--target-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+            "--horizontal-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+        ),
+        (
+            {"sheet": "N-34-130-D-d-2-4", "bbox": None, "cutout": True},
+            "--cutout dziala tylko z --bbox/--geometry",
+        ),
+        (
+            {"sheet_system": None, "cutout": True},
+            "--horizontal-crs wymagane z --cutout (uklad wycinka): EPSG:2180",
+        ),
+        (
+            {"horizontal_crs": "EPSG:2180"},
+            "--horizontal-crs dziala tylko z --cutout",
+        ),
+        (
+            {"product": "orto", "vertical_crs": None, "cutout": True},
+            "--cutout dziala tylko z --product nmt albo nmpt",
+        ),
+        (
+            {
+                "country": "cz",
+                "resolution": "2m",
+                "vertical_crs": "Bpv",
+                "sheet_system": None,
+                "bbox": BBox(-740000, -1050000, -739000, -1049000, "EPSG:5514"),
+            },
+            "obszar CZ (CUZK) jest pobierany tylko jako jeden wycinek - dodaj "
+            "--cutout --horizontal-crs",
+        ),
+        (
+            {
+                "country": "auto",
+                "resolution": {"pl": "1m", "cz": "2m"},
+                "vertical_crs": {"pl": "EVRF2007", "cz": "Bpv"},
+                "bbox": BBox(15.85, 50.45, 15.95, 50.55, "EPSG:4326"),
+            },
+            "obszar siega CZ, a CUZK daje dla obszaru tylko jeden wycinek",
         ),
         (
             {"bbox": BBox(10, 10, 5, 5, "EPSG:2180")},
@@ -156,7 +196,7 @@ def test_invalid_choices_and_bboxes_fail_before_source(
         "country": "pl",
         "resolution": "1m",
         "vertical_crs": "EVRF2007",
-        "system": "1992",
+        "sheet_system": "1992",
         "cache": False,
         **overrides,
     }
@@ -191,7 +231,8 @@ def test_pl_cutout_input_error_propagates_instead_of_country_failure(
             country="pl",
             resolution="1m",
             vertical_crs="EVRF2007",
-            target_crs="EPSG:2180",
+            cutout=True,
+            horizontal_crs="EPSG:2180",
             cache=False,
         )
 
@@ -245,7 +286,8 @@ def test_partial_success_auto_ok_true_with_notice(tmp_path):
             product="nmt",
             output_dir=tmp_path,
             bbox=BORDER,
-            target_crs="EPSG:3045",
+            cutout=True,
+            horizontal_crs="EPSG:3045",
             on_notice=seen.append,
             cache=False,
             **AUTO,
@@ -269,7 +311,8 @@ def test_notices_before_first_download(tmp_path):
             product="nmt",
             output_dir=tmp_path,
             bbox=BBox(455000, 773000, 459000, 784000, "EPSG:2180"),
-            target_crs="EPSG:2180",
+            cutout=True,
+            horizontal_crs="EPSG:2180",
             on_notice=lambda n: order.append(n.code),
             cache=False,
             **AUTO,
@@ -289,6 +332,8 @@ def test_explicit_country_failure_ok_false(tmp_path):
             country="cz",
             resolution="2m",
             vertical_crs="Bpv",
+            cutout=True,
+            horizontal_crs="EPSG:5514",
             cache=False,
         )
     assert not report.ok
@@ -305,7 +350,8 @@ def test_check_data_auto_one_merged_plan(tmp_path):
             product="nmt",
             output_dir=tmp_path,
             bbox=BORDER,
-            target_crs="EPSG:3045",
+            cutout=True,
+            horizontal_crs="EPSG:3045",
             cache=False,
             **AUTO,
         )
@@ -342,7 +388,7 @@ def test_per_country_wrong_type_fails_before_source(tmp_path, operation, flag, i
         "country": "pl",
         "resolution": "1m",
         "vertical_crs": "EVRF2007",
-        "system": "1992",
+        "sheet_system": "1992",
         "cache": False,
         flag: invalid,
     }
@@ -365,7 +411,7 @@ _BBOX_TRACKS = (
             "country": "pl",
             "resolution": "1m",
             "vertical_crs": "EVRF2007",
-            "system": "1992",
+            "sheet_system": "1992",
         },
     ),
     (
@@ -375,24 +421,24 @@ _BBOX_TRACKS = (
             "country": "pl",
             "resolution": "1m",
             "vertical_crs": "EVRF2007",
-            "system": "1992",
+            "sheet_system": "1992",
         },
     ),
     (
         check_pl_cutout,
-        {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"},
+        {"horizontal_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"},
     ),
     (
         download_pl_cutout,
-        {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"},
+        {"horizontal_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"},
     ),
     (
         check_cz_cutout,
-        {"target_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
+        {"horizontal_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
     ),
     (
         download_cz_cutout,
-        {"target_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
+        {"horizontal_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
     ),
     (check_laz_area, {"vertical_crs": "EVRF2007"}),
     (download_laz_area, {"vertical_crs": "EVRF2007"}),
@@ -421,7 +467,7 @@ def test_all_public_bbox_tracks_reject_invalid_input_before_network(
 
 
 @pytest.mark.parametrize("operation", [check_cz_cutout, download_cz_cutout])
-def test_cz_cutout_unknown_target_crs_is_validation_error(tmp_path, operation):
+def test_cz_cutout_unknown_horizontal_crs_is_validation_error(tmp_path, operation):
     with (
         patch(CZ_FACTORY) as factory,
         pytest.raises(
@@ -431,7 +477,7 @@ def test_cz_cutout_unknown_target_crs_is_validation_error(tmp_path, operation):
         operation(
             BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
             output_dir=tmp_path,
-            target_crs="EPSG:9999",
+            horizontal_crs="EPSG:9999",
             vertical_crs="Bpv",
             resolution="2m",
             cache=False,
@@ -463,7 +509,7 @@ def test_pl_sheet_list_failure_contains_per_sheet_cause(tmp_path):
             country="pl",
             resolution="1m",
             vertical_crs="EVRF2007",
-            system="1992",
+            sheet_system="1992",
             cache=False,
             workers=2,
         )
@@ -484,7 +530,8 @@ def test_check_data_auto_partial_names_failed_country_without_download_claim(tmp
             product="nmt",
             output_dir=tmp_path,
             bbox=BORDER,
-            target_crs="EPSG:3045",
+            cutout=True,
+            horizontal_crs="EPSG:3045",
             cache=False,
             on_notice=notices.append,
             **AUTO,

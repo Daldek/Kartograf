@@ -172,7 +172,7 @@ class TestPreparePlCutout:
     @pytest.mark.parametrize(
         "kwargs",
         [
-            {"target_crs": "EPSG:4326"},
+            {"horizontal_crs": "EPSG:4326"},
             {"vertical_crs": "Bpv"},
             {"product": "orto"},
         ],
@@ -181,12 +181,12 @@ class TestPreparePlCutout:
         from kartograf.exceptions import ValidationError
 
         params = {
-            "target_crs": "EPSG:2180",
+            "horizontal_crs": "EPSG:2180",
             "vertical_crs": "EVRF2007",
             "product": "nmt",
             **kwargs,
         }
-        target = params.pop("target_crs")
+        target = params.pop("horizontal_crs")
         with pytest.raises(ValidationError):
             _prepare_pl_cutout(
                 BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
@@ -217,7 +217,8 @@ class TestTargetCrsValidations:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "--target-crs",
+                "--cutout",
+                "--horizontal-crs",
                 "EPSG:2180",
                 "-o",
                 str(tmp_path),
@@ -244,7 +245,8 @@ class TestTargetCrsValidations:
                 *self._BBOX,
                 "--product",
                 product,
-                "--target-crs",
+                "--cutout",
+                "--horizontal-crs",
                 "EPSG:2180",
                 "-o",
                 str(tmp_path),
@@ -268,9 +270,10 @@ class TestTargetCrsValidations:
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 *self._BBOX,
-                "--system",
+                "--sheet-system",
                 "2000",
-                "--target-crs",
+                "--cutout",
+                "--horizontal-crs",
                 "EPSG:2180",
                 "-o",
                 str(tmp_path),

@@ -497,7 +497,7 @@ albo domyslnie po ksztalcie zadania (`bbox` w `request` -> kanal z
 pionowego jest mapowana na realizacje krajowa, jesli kanal deklaruje wlasnie
 ja (`resolve_vertical_crs`: `EPSG:5621` -> `EPSG:9651` dla PL).
 
-**Wycinek PL WCS (`--target-crs`) w sidecarze.** Biblioteka
+**Wycinek PL WCS (`--cutout`) w sidecarze.** Biblioteka
 (`download/cutout.py::write_pl_wcs_cutout_sidecar`) buduje rekord z
 `capability="bbox_raster"` deskryptora NMT 1 m albo NMPT, `nodata=-9999`,
 `horizontal_crs` w ukladzie docelowym i `request` =
@@ -596,15 +596,15 @@ data/
    PL-1992 `N-34-130-D-d-2-4` -> `N-34/130/D/d/2/4`, PL-2000 `6.179.12.20` ->
    `6/179/12/20`, TM33 `302_5550` -> `302/5550`, SM5 `CTES96` -> `CTES/96`.
 3. Podkatalog `bbox/` wewnatrz segmentu trzyma dowiazania wycinkow PL WCS
-   (`--target-crs`) i CZ: `<coords>.tif` bez daty (D15); wersje w
+   (`--cutout`) i CZ: `<coords>.tif` bez daty (D15); wersje w
    `<segment>/versions/bbox/<RRRR-MM-DD>_<sha8>/<coords>.tif`.
-   Wspolrzedne sa w ukladzie WYNIKU (po `--target-crs`), formatowane
+   Wspolrzedne sa w ukladzie WYNIKU (`--horizontal-crs`), formatowane
    `%.10g` i sklejane `_`. Nazwa niesie ZADANIE, nie dokladny zasieg
    rastra: wycinek PL w EPSG:2180 siega do < 1 px dalej po wyrownaniu
    na zewnatrz do siatki 1 m, a siatka warpa (`warp_to_grid` z
    `transform/raster.py`, wspolna dla PL i CZ) ma calkowita liczbe
    pikseli od NW, wiec E/S moze odbiegac o do 0,5 px (sekcja 4.3). PL bez
-   `--target-crs` zapisuje arkusze w hierarchii godel (sekcja 4.2).
+   `--cutout` zapisuje arkusze w hierarchii godel (sekcja 4.2).
 4. Rozdzielczosc wchodzi do segmentu tylko tam, gdzie jest parametrem API
    (NMT/NMPT). Nie ma jej dla CZ (`dmr5g` to z definicji 2 m, `dmr4g` 5 m)
    ani dla orto/LAZ (brak takiego parametru).
@@ -727,7 +727,7 @@ uklad i kraje faktycznie odpytane w tym wywolaniu (probowane, nie pobrane).
 W trybie `--geometry` "zadanie" to obwiednia geometrii: dla pliku w ukladzie
 czeskim (EPSG:5514/3045) w ukladzie PLIKU (od 2026-09-28), dla pozostalych
 w EPSG:2180; jawne `--country cz` zapisuje obwiednie w ukladzie zadania CZ
-(EPSG:5514 albo `--target-crs`). Klucz buduje `download/area.py::parent_request_for`,
+(`--horizontal-crs`). Klucz buduje `download/area.py::parent_request_for`,
 wywolywany przez `download_data`; bezposrednie wywolanie toru bibliotecznego
 zapisuje go tylko po przekazaniu `parent_request=`.
 Wersja z sidecarem zachowuje `parent_request` zadania, ktore ja
@@ -840,7 +840,7 @@ usuwa nieczytelny plik z `-wal`/`-shm`.
 nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
 po jego wygasnieciu zapytanie do skorowidza) i stosuje tryb `update`
-(ponizej, "Tryby i plan aktualizacji"). `--target-crs` w trybie godlowym jest
+(ponizej, "Tryby i plan aktualizacji"). `--cutout` w trybie godlowym jest
 **odrzucane** (kod 1) — godlo PL dostarcza arkusz natywny 1:1.
 
 **Niepelna najnowsza kampania (E13).** Rekord z `full_sheet: false`
@@ -874,7 +874,7 @@ brak = `DownloadResult.without_full`.
 Awaria tego zapytania albo pobrania lotu pelnego = porazka arkusza
 (sciezka standardowa i tak wskazuje najnowszy). Sidecar kampanii zadania
 z flaga: `request.full_sheet: true`. Z `all` flaga bez skutku; z
-`--target-crs` i LAZ `Error:` przed siecia. Przy przedziale lat
+`--cutout` i LAZ `Error:` przed siecia. Przy przedziale lat
 dowiazanie pelne spoza zadania: `full_link_outside_range` i wspolny
 `Info:` z U15.
 
@@ -1049,7 +1049,7 @@ Wynik: `data/nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/<data>_<id>_<sha8
 dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla orto
 `data/orto/pl_1992/...`.
 
-### 4.2 Bbox / geometria PL bez `--target-crs`
+### 4.2 Bbox / geometria PL bez `--cutout`
 
 Bbox trafia do `download_data` (`download/data.py`), ktore rozstrzyga kraje
 (sekcja 4.6), a czesc polska idzie do toru arkuszy PL. `find_sheets_for_bbox` (czysta matematyka
@@ -1087,7 +1087,7 @@ nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
 
 **WCS (`provider.download_bbox`) w bibliotece: NMT/NMPT 1 m i orto.**
-CLI PL uzywa WCS tylko z `--target-crs` (sekcja 4.3); bez tej flagi
+CLI PL uzywa WCS tylko z `--cutout` (sekcja 4.3); bez tej flagi
 pobiera arkusze OpenData. `GugikProvider.download_bbox` dla NMT 1 m i
 `GugikNmptProvider.download_bbox` dla NMPT daja jednopasmowy GeoTIFF
 float32 z wysokosciami na siatce 1 m EPSG:2180 (bez nodata, maski PRG,
@@ -1131,11 +1131,14 @@ Wynik: **wiele plikow** — lista arkuszy w segmencie jak w 4.1 (dowiazania do
 wersji w `versions/`; przy `all` dodatkowo kazda kampania). To jest
 asymetria wzgledem CZ, gdzie bbox daje jeden wycinek.
 
-### 4.3 Bbox / geometria PL z `--target-crs` (ADR-035)
+### 4.3 Bbox / geometria PL z `--cutout` (ADR-035, ADR-038)
 
-CLI `download --bbox`/`--geometry --target-crs` oraz biblioteczne
+CLI `download --bbox`/`--geometry --cutout --horizontal-crs` oraz
+biblioteczne `download_data(cutout=True, horizontal_crs=...)` i
 `download_pl_cutout()` pobieraja NMT albo NMPT 1 m z WCS GUGiK, nie
-mozaikuja arkuszy. Biblioteka: `download_pl_cutout(bbox, *, target_crs,
+mozaikuja arkuszy. Tryb jest jawny: `--horizontal-crs` jest wymagane
+z `--cutout`, bez `--cutout` to `Error:`, `--cutout` z `--sheet` tez.
+Biblioteka: `download_pl_cutout(bbox, *, horizontal_crs,
 output_dir, vertical_crs, product="nmt"|"nmpt", update, plan,
 parent_request, cache, on_notice)` -> `PlCutoutResult`;
 `check_pl_cutout(...)` z ta sama selekcja daje plan bez pobierania.
@@ -1148,7 +1151,7 @@ Przygotowanie (walidacja bez sieci) i wykonanie sa krokami wewnetrznymi
    przypietej operacji transformacji. Bbox docelowy wyznacza bbox
    zrodla EPSG:2180; dla warpu ma on zapas 4 px na interpolacje.
    `--geometry` daje obwiednie calej geometrii, bez maskowania do jej
-   obiektow. `--system 2000`, `--target-crs` z godlem lub z orto/LAZ
+   obiektow. `--sheet-system 2000`, `--cutout` z godlem lub z orto/LAZ
    nadal sa odrzucane przed pobraniem.
 2. `download_pl_cutout` pobiera i buduje maske ladu PRG **przed**
    jakimkolwiek zapytaniem WCS: `A00_Granice_panstwa` minus
@@ -1196,7 +1199,7 @@ i siatki sa zgodne, zmierzone WCS i arkusz sa bit w bit zgodne
 (`docs/research/2026-10-10-wcs-limits/raport.md` pkt 4, 8 oraz
 `docs/research/2026-10-11-wcs-cutouts/raport.md` pkt 2-4).
 `--year`, `--min-year`, `--max-year`, `--all-campaigns` i
-`--full-sheet` z `--target-crs` pozostaja `Error:` przed siecia;
+`--full-sheet` z `--cutout` pozostaja `Error:` przed siecia;
 serwer nie udostepnia wyboru lotu.
 
 Tor arkuszowy wycinka (ADR-027: `select_pl_cutout_sheets`,
@@ -1229,10 +1232,12 @@ EPSG:3045) albo `data/nmt/cz_dmr4g_bpv/CTES/96/CTES96.tif`
 
 ### 4.5 Bbox CZ
 
-Jeden wycinek `exportImage`. Bbox jest najpierw normalizowany do ukladu WYNIKU
-(`--target-crs` albo natywny EPSG:5514), zeby nazwa pliku niosla wspolrzedne
+Jeden wycinek `exportImage`; obszar CZ wymaga `--cutout --horizontal-crs`
+(ADR-038; bez `--cutout` `ValidationError` przed siecia). Bbox jest
+najpierw normalizowany do ukladu WYNIKU (`--horizontal-crs`, natywnie
+EPSG:5514), zeby nazwa pliku niosla wspolrzedne
 faktycznie zadanego wycinka. Zadanie do serwera idzie natywnie; przy
-`--target-crs` innym niz 5514 tresc reprojektuje lokalny warp
+`--horizontal-crs` innym niz 5514 tresc reprojektuje lokalny warp
 z czeska operacja przypieta. Serwer deklaruje sufity 15000 x 4100 px,
 lecz realnie odrzuca zadania powyzej ok. 8 Mpx. `CuzkClient.export_image`
 uzywa `transport/chunks.py`: `align_bbox` bez siatki zrodla zachowuje
@@ -1245,7 +1250,7 @@ o <= 0,5 px (nazwa pliku i `request.bbox` niosa bbox sprzed snapu).
 Wycinek w calosci nodata daje `Warning:` i kod 0, nie pozorna cisze.
 
 Tor bbox CZ jest w bibliotece (`download/cz_cutout.py`):
-`download_cz_cutout(bbox, *, output_dir, target_crs, vertical_crs,
+`download_cz_cutout(bbox, *, output_dir, horizontal_crs, vertical_crs,
 resolution, update, plan, parent_request, cache, on_notice, on_download)`
 buduje providera (`create_dmr_provider`), normalizuje bbox, wyznacza slot
 wersji (`bbox_slot`), pobiera (`fetch_version`, sygnal `none`), sprawdza
@@ -1278,13 +1283,16 @@ wywoluje go `download_data`, ADR-037): `countries_for_bbox` porownuje bbox
 kazdego kraju z rejestru. Obwiednie sa **prostokatami**, nie wielokatami
 granic, wiec obszar w glebi jednego kraju rutynowo trafia takze do drugiego.
 Konsekwencje: (1) obszar przecinajacy oba prostokaty pobiera sie z KAZDEGO
-kraju — osobne pliki i sidecary, wspolny `parent_request`; (2) na obszarze
-spornym flaga bez odpowiednika czeskiego (`--product nmpt|orto`, `--system`,
+kraju — osobne pliki i sidecary, wspolny `parent_request`; wymaga to
+`--cutout` (obszar CZ jest zawsze wycinkiem, ADR-038), wiec czesc PL jest
+wtedy wycinkiem WCS; bez `--cutout` `ValidationError` z podpowiedzia
+`--country pl` (arkusze PL); (2) na obszarze
+spornym flaga bez odpowiednika czeskiego (`--product nmpt|orto`,
 `--vertical-crs KRON86`, `--resolution 1m`) ROZSTRZYGA kraj do `pl`
 z komunikatem `Info:` zamiast przewracac zadanie; (3) porazka jednego kraju
 przy sukcesie drugiego daje kod 0 i `Warning:` — kod 1 zostaje dla jawnego
 `--country` i dla porazki wszystkich krajow. `Info:`/`Warning:` ida na stderr,
-wiec `-q` ich nie tlumi. `--target-crs` NIE rozstrzyga kraju w zadna strone,
+wiec `-q` ich nie tlumi. `--cutout` NIE rozstrzyga kraju w zadna strone,
 bo od ADR-027 dziala po obu stronach granicy.
 
 Czesc zadania dla kazdego kraju jest pod `auto` PRZYCINANA do jego
@@ -1296,9 +1304,10 @@ przez WGS84. Przed pobraniem `download_data` emituje `Notice`
 (`AUTO_CLIPPED`, `AUTO_AREA_OUTSIDE`; CLI: `Info:`) o przycieciu oraz
 o obszarze pozostawionym poza oboma prostokatami (takze naroznym).
 Nazwa pliku i `request.bbox` niosa bbox przyciety, oryginal tylko
-w `extra.parent_request`. Tryb listy PL (`--bbox` bez `--target-crs`)
-wyznacza arkusze z przycietego bboxa, a ich sidecary maja `request.sheet`
-(oryginal: `extra.parent_request.bbox`). Przy geometrii bez `--target-crs`
+w `extra.parent_request`. Tryb listy PL (`--bbox` bez `--cutout`, tylko
+obszar bez CZ) wyznacza arkusze z przycietego bboxa, a ich sidecary maja
+`request.sheet` (oryginal: `extra.parent_request.bbox`). Przy geometrii
+bez `--cutout`
 arkusze PL wyznacza sama geometria (cala), wiec nie ma komunikatu
 o przycieciu PL ani o obszarze poza prostokatami; czesc CZ nadal jest
 przycinana i komunikowana. Jawny
@@ -1317,15 +1326,14 @@ niego dostepna, rozne wartosci: `pl=..,cz=..` (biblioteka: slownik
 pobraniem.
 
 Opcje kampanii i flagi roku (ADR-030/032; erraty Q9, N-3) dotycza
-tylko PL; `download_data` sprawdza wszystkie wejscia: zadanie bez PL (godlo CZ pod `cz`/`auto`, jawne
+tylko arkuszy PL; `download_data` sprawdza wszystkie wejscia: zadanie bez PL (godlo CZ pod `cz`/`auto`, jawne
 `--country cz`, obszar w calosci CZ pod `auto`) z `--all-campaigns` lub dowolna
 flaga roku = `ValidationError` (`CZ (CUZK) nie ma kampanii -
 --all-campaigns/--min-year/--max-year/--year dotycza tylko PL`), kod 1 bez
-sieci. Dla obszaru PL+CZ pod `auto` emituje raz `Notice`
-`CAMPAIGN_OPTS_PL_ONLY` (`--all-campaigns/--min-year/--max-year/--year
-dotycza tylko czesci PL (CZ: biezaca wersja danych CUZK)`); czesc CZ jest
-pobierana. Flagi roku nie naleza do `pl_only_flags` i nie zwezaja `auto`
-do PL.
+sieci. Obszar PL+CZ pod `auto` wymaga `--cutout`, a wycinek odrzuca te
+flagi (4.3) - arkusze PL z kampaniami daje tylko `--country pl` (od
+ADR-038; `Notice` `campaign_opts_pl_only` usuniety). Flagi roku nie
+naleza do `pl_only_flags` i nie zwezaja `auto` do PL.
 
 Styk PL/CZ zmierzony na zywo 2026-09-29 (dane wejsciowe do R6; raport:
 `docs/research/2026-09-29-live-e2e-i-audyt-docs/L4-pogranicze-cz-report.md`; oba wycinki
@@ -1368,7 +1376,7 @@ odpowiedza i nie ma zadnych kafli, `download_laz_area` rzuca
 (`_reject_laz_only_opts`). `--year` z dowolna granica roku =
 `Error: --year wyklucza sie z --min-year/--max-year` przed siecia,
 takze w LAZ. Zadanie wylacznie CZ z flagami roku = `Error: CZ (CUZK)
-nie ma kampanii` (4.6). Wycinek `--target-crs` z flaga roku = `Error:`
+nie ma kampanii` (4.6). Wycinek `--cutout` z flaga roku = `Error:`
 (4.3).
 
 **Wybor kafli (ADR-029/032).** Domyslnie (bez granic roku) kafle sa wybierane

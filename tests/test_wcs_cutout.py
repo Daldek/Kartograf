@@ -99,13 +99,13 @@ def _synthetic_session(values) -> Mock:
     return session
 
 
-def _cutout(tmp_path, target_crs="EPSG:2180", bbox=BBOX, **kwargs):
+def _cutout(tmp_path, horizontal_crs="EPSG:2180", bbox=BBOX, **kwargs):
     kwargs = {"vertical_crs": "EVRF2007", "product": "nmt", **kwargs}
-    return _prepare_pl_cutout(bbox, target_crs, output_dir=tmp_path, **kwargs)
+    return _prepare_pl_cutout(bbox, horizontal_crs, output_dir=tmp_path, **kwargs)
 
 
 # Selection arguments shared by ``download_pl_cutout`` and ``check_pl_cutout``.
-ARGS = {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"}
+ARGS = {"horizontal_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"}
 
 
 def _meta(path: Path) -> dict:
@@ -654,7 +654,7 @@ def _factory(session):
     )
 
 
-def test_target_crs_keyword_only(tmp_path):
+def test_horizontal_crs_keyword_only(tmp_path):
     with pytest.raises(TypeError):
         download_pl_cutout(  # type: ignore[misc]
             BBOX,
@@ -803,7 +803,7 @@ def test_prepare_rejects_unknown_product(tmp_path):
 
 
 class TestCli:
-    """``download --bbox/--geometry --target-crs`` for PL goes through WCS."""
+    """``download --bbox/--geometry --cutout`` for PL goes through WCS."""
 
     _FACTORY = "kartograf.download.cutout._wcs_cutout_provider"
     _BBOX_ARGS = ["--bbox", "567580.6,243664.7,567600.4,243684.3", "--country", "pl"]
@@ -827,7 +827,8 @@ class TestCli:
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
                     *self._BBOX_ARGS,
-                    "--target-crs",
+                    "--cutout",
+                    "--horizontal-crs",
                     "EPSG:2180",
                     *extra,
                     "-o",
@@ -838,7 +839,7 @@ class TestCli:
         self.factory, self.fetch_mask = factory, fetch_mask
         return rc
 
-    def test_cli_nmpt_target_crs_allowed(self, tmp_path, capsys):
+    def test_cli_nmpt_cutout_allowed(self, tmp_path, capsys):
         session = _recorded_session("nmpt_evrf2007_20x20_sf05")
         rc = self._main(
             tmp_path,
@@ -857,7 +858,7 @@ class TestCli:
         )
         assert capsys.readouterr().err == ""
 
-    def test_cli_5m_target_crs_rejected_before_network(self, tmp_path, capsys):
+    def test_cli_5m_cutout_rejected_before_network(self, tmp_path, capsys):
         session = _recorded_session()
         rc = self._main(
             tmp_path,
@@ -868,14 +869,14 @@ class TestCli:
 
         assert rc == 1
         err = capsys.readouterr().err
-        assert err.startswith("Error:") and "--target-crs" in err and "1m" in err
+        assert err.startswith("Error:") and "--cutout" in err and "1m" in err
         self.factory.assert_not_called()
         self.fetch_mask.assert_not_called()
         session.get.assert_not_called()
         assert not (tmp_path / "nmt").exists()
 
     @pytest.mark.parametrize("product", ["orto", "laz"])
-    def test_cli_orto_laz_target_crs_still_rejected(self, tmp_path, capsys, product):
+    def test_cli_orto_laz_cutout_still_rejected(self, tmp_path, capsys, product):
         rc = self._main(tmp_path, Mock(), "--product", product)
 
         assert rc == 1
@@ -964,7 +965,8 @@ class TestCli:
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
                     *self._BBOX_ARGS,
-                    "--target-crs",
+                    "--cutout",
+                    "--horizontal-crs",
                     "EPSG:2180",
                 ]
                 + ["-o", str(tmp_path), "-q"]
@@ -1026,8 +1028,8 @@ class TestCli:
             values, np.load(WCS_FIXTURES / "nmt_evrf2007_20x20_sheet_values.npy")
         )
 
-    def test_cli_geometry_target_crs_uses_envelope(self, tmp_path):
-        """``--geometry`` + ``--target-crs``: the WCS area is the envelope of the
+    def test_cli_geometry_cutout_uses_envelope(self, tmp_path):
+        """``--geometry`` + ``--cutout``: the WCS area is the envelope of the
         geometry (on the sheet grid) and the dispatch layer's parent reaches
         the sidecar."""
         from pyproj import CRS
@@ -1061,14 +1063,21 @@ class TestCli:
                     "pl=1m,cz=2m",
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
-                    "--system",
+                    "--sheet-system",
                     "1992",
                     "--geometry",
                     str(geom),
                     "--country",
                     "pl",
                 ]
-                + ["--target-crs", "EPSG:2180", "-o", str(tmp_path), "-q"]
+                + [
+                    "--cutout",
+                    "--horizontal-crs",
+                    "EPSG:2180",
+                    "-o",
+                    str(tmp_path),
+                    "-q",
+                ]
             )
 
         assert rc == 0
@@ -1128,12 +1137,18 @@ class TestCli:
                     "pl=1m,cz=2m",
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
-                    "--system",
+                    "--sheet-system",
                     "1992",
                     "--bbox",
                     "18.80,49.70,18.801,49.7005",
                 ]
-                + ["--bbox-crs", "EPSG:4326", "--target-crs", "EPSG:2180"]
+                + [
+                    "--bbox-crs",
+                    "EPSG:4326",
+                    "--cutout",
+                    "--horizontal-crs",
+                    "EPSG:2180",
+                ]
                 + ["--vertical-crs", "EVRF2007", "-o", str(tmp_path), "-q"]
             )
 

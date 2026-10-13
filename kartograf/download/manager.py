@@ -775,7 +775,7 @@ class DownloadManager:
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         parser = SheetParser(sheet)
-        if parser.system != "2000" and parser.scale != "1:10000":
+        if parser.sheet_system != "2000" and parser.scale != "1:10000":
             return self.download_hierarchy(
                 sheet, "1:10000", update=update, plan=plan, on_progress=on_progress
             )
@@ -850,7 +850,7 @@ class DownloadManager:
         seen: set[str] = set()
         for sheet in sheets:
             parser = SheetParser(sheet)
-            if parser.system != "2000" and parser.scale != "1:10000":
+            if parser.sheet_system != "2000" and parser.scale != "1:10000":
                 expanded = [d.sheet for d in parser.get_all_descendants("1:10000")]
             else:
                 expanded = [parser.sheet]

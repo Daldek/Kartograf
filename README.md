@@ -3,7 +3,7 @@
 Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
 (Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
 geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT PL
-(`--target-crs`) i zapisuje je w uporządkowanym katalogu `data/`
+(`--cutout --horizontal-crs`) i zapisuje je w uporządkowanym katalogu `data/`
 razem z metadanymi każdego pliku. Działa
 jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
@@ -47,8 +47,11 @@ kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vert
 kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 
 # NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
-kartograf download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+
+# Jeden wycinek obszaru zamiast arkuszy (PL: WCS GUGiK 1 m, CZ: CUZK)
+kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --vertical-crs EVRF2007 --cutout --horizontal-crs EPSG:2180 -o ./data
 
 # NMT Czech
 kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
@@ -59,7 +62,7 @@ kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
 ```
 
 Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór
-kraju (`--country`), scalony wycinek (`--target-crs`) i kampanie GUGiK:
+kraju (`--country`), jeden wycinek (`--cutout --horizontal-crs`) i kampanie GUGiK:
 [docs/USAGE.md](docs/USAGE.md).
 
 ### Biblioteka Python
@@ -74,7 +77,8 @@ report = download_data(
     output_dir="./data",
     bbox=BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
     country="pl",
-    target_crs="EPSG:2180",   # jeden wycinek WCS 1 m z maską lądu
+    cutout=True,                  # jeden wycinek WCS 1 m z maską lądu
+    horizontal_crs="EPSG:2180",
     resolution="1m",
     vertical_crs="EVRF2007",
 )

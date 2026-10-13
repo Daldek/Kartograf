@@ -26,14 +26,14 @@ def format_sheet_info(parser: SheetParser) -> str:
     lines = [
         f"Godlo:     {parser.sheet}",
         f"Skala:     {parser.scale}",
-        f"Uklad:     {parser.system}",
+        f"Uklad:     {parser.sheet_system}",
         "Czlony:",
     ]
 
     for name, value in parser.components.items():
         lines.append(f"  {name}: {value}")
 
-    if parser.system == "2000":
+    if parser.sheet_system == "2000":
         from kartograf.core.parser_2000 import ZONE_EPSG
 
         zone = int(parser.components["strefa"])
