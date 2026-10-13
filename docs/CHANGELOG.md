@@ -11,7 +11,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - `DownloadManager.download_sheet`, `download_hierarchy` i
   `download_sheets` zwracaja teraz `DownloadResult` zamiast sciezki lub listy
-  sciezek. `result.files[godlo]` zawiera `VersionedFile` (m.in. `path`,
+  sciezek. `result.files[godlo]` zawiera krotke `VersionedFile` (m.in. `path`,
   `version_path`, `label`, `status`), a `result.stale` i `result.notices`
   przekazuja nieaktualne pozycje planu i komunikaty o danych.
   `check_updates(manager, sheets)` -> `manager.check_sheets(sheets)`;
@@ -35,9 +35,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `plan=`, `cache=` (`True` = domyslny cache w cwd) i `on_notice=`;
   `PlCutoutResult.notices` niesie komunikaty o rozmiarze wycinka
   (`cutout_size`, przed pierwszym zapytaniem WCS) i wycinku bez danych
-  (`all_nodata`). `prepare_pl_cutout`, `run_pl_wcs_cutout` i `PlCutout`
-  sa krokami wewnetrznymi (poza `__all__`). Co zrobic: podawaj
-  `target_crs=` nazwany; `check_pl_cutout(cutout)` ->
+  (`all_nodata`). `prepare_pl_cutout` i `run_pl_wcs_cutout` usunieto,
+  `PlCutout` jest krokiem wewnetrznym (poza `__all__`).
+  Co zrobic: podawaj `target_crs=` nazwany; `check_pl_cutout(cutout)` ->
   `check_pl_cutout(bbox, target_crs=..., output_dir=..., vertical_crs=...,
   product=...)`; plan wykonuj przez `download_pl_cutout(..., plan=plan)`.
 - CZ: arkusz CZ ma publiczne API `download_cz_sheet(sheet, *, output_dir,
@@ -70,8 +70,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `geometry` pobiera kazdy powiat obszaru (rownolegle z `workers`);
   `bbox` w dowolnym obslugiwanym CRS, `geometry` = obwiednia pliku;
   komunikaty `corine_preview` i `geometry_layer_default` w `notices`.
-  `LandCoverManager(cache=True)` = domyslny cache w cwd. Usuniete:
-  `download_all_counties`, `check_all_counties`, `download_by_teryt`,
+  `LandCoverManager(cache=True)` = domyslny cache w cwd. Brak wymaganych
+  opcji zrodla i opcje BDOT10k podane innemu zrodlu daja `ValidationError`.
+  Usuniete: `download_all_counties`, `check_all_counties`, `download_by_teryt`,
   `download_by_bbox`, `download_by_sheet`, `download_batch`,
   `LandCoverResult.stale`; wybor `teryt` dla CORINE/SoilGrids to
   `ValidationError` (nie `NotImplementedError`). Co zrobic (takze Hydrograf
@@ -115,7 +116,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--keep-raw` (oryginalny ZIP GUGiK w magazynie) i `--workers N`
   (rownolegle powiaty obszaru BDOT10k, domyslnie 1). Brak albo kilka
   wyborow obszaru: blad biblioteki `Podaj dokladnie jeden wybor: ...`
-  zamiast `Must provide one of`/`Provide only one of`.
+  (land cover/HSG) lub `Podaj wybor obszaru: ...` /
+  `Podaj dokladnie jeden wybor obszaru: ...` (`download_data`) zamiast
+  angielskich komunikatow.
 - Sidecar: wspolrzedne `request.bbox` i `extra.parent_request.bbox` zawsze
   jako liczby zmiennoprzecinkowe (`770000.0`), takze dla `BBox` z liczb
   calkowitych - ten sam plik z CLI i z biblioteki. Co zrobic: nic
@@ -124,7 +127,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Jezyk (Z5): pomoc wszystkich komend, komunikaty CLI, teksty `Notice`
   i bledow `KartografError` po polsku i wylacznie w ASCII. Zmienione m.in.:
   `Invalid bbox format` -> `Nieprawidlowy bbox`, `Must provide one of` /
-  `Specify only one of` -> `Podaj (dokladnie jeden) wybor obszaru`,
+  `Specify only one of` -> `Podaj wybor obszaru` /
+  `Podaj dokladnie jeden wybor obszaru` (`download_data`),
   `File not found` -> `Brak pliku`, `Unsupported ...`/`Invalid ...` ->
   `Nieobslugiwany ...`/`Nieprawidlowy ...`, `Found N sheets ...` ->
   `Znaleziono arkuszy w skali ...`, `Downloading ...` -> `Pobieranie ...`,
@@ -149,12 +153,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zapisu sidecara i odtwarzania pominietych wycinkow. `PlCutoutResult`
   nie zawiera juz pol arkuszowych (`sheet_paths`, `missing_sheets`,
   `off_grid_sheets`, `partial_sheets`, `unverified`). Co zrobic:
-  dla wycinka NMT/NMPT 1 m uzyj `download_pl_cutout` lub
-  `prepare_pl_cutout` + `run_pl_wcs_cutout`; dla mozaiki arkuszy pobierz
-  arkusze osobno i scal je samodzielnie przez `mosaic_and_crop`.
+  dla wycinka NMT/NMPT 1 m uzyj `download_pl_cutout`; dla mozaiki arkuszy
+  pobierz arkusze osobno i scal je samodzielnie przez `mosaic_and_crop`.
 - `download_pl_cutout` nie przyjmuje juz ignorowanych parametrow
-  `geometry`, `layer`, `scale`, `max_workers`, `force`, `on_progress`,
-  `cache`. Co zrobic: przekaz obwiednie geometrii jako `bbox`; wybor
+  `geometry`, `layer`, `scale`, `max_workers`, `force`, `on_progress`;
+  `cache` zostal przywrocony jako parametr wspolnego cache metadanych.
+  Co zrobic: przekaz obwiednie geometrii jako `bbox`; wybor
   arkuszy, kampanii i 5 m realizuj przez pobieranie arkuszy bez
   `--target-crs`.
 - `mosaic_and_crop` nie przyjmuje juz `snap_to_source_grid` ani
@@ -209,7 +213,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `DownloadManager.all_campaigns` (bool).
 - Bez wartosci domyslnych wplywajacych na dane (CLI i API; DEVELOPMENT_STANDARDS
   11.2, ADR-004 errata 1, ADR-023 errata 2). Brak wartosci: CLI `Error:`
-  z lista dopuszczalnych wartosci (kod 1, przed siecia), API `TypeError`.
+  z lista dopuszczalnych wartosci (kod 1, przed siecia); API:
+  `TypeError` dla wymaganych argumentow sygnatury, `ValidationError`
+  dla brakujacych opcji warunkowych (m.in. `year` CORINE, `depth` HSG).
   - CLI `download`: wymagane `--product` (nmt|nmpt|orto|laz), `--output`,
     `--country` z `--bbox`/`--geometry` (pl|cz|auto; z `--sheet` kraj
     z godla), `--vertical-crs` dla nmt/nmpt/laz (PL EVRF2007|KRON86, CZ
@@ -227,8 +233,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     PL-1992 nie podaje `--scale`.
   - CLI `landcover download`: wymagane `--source`, `--output`, `--year`
     (corine), `--property`/`--depth`/`--stat` (soilgrids); `landcover
-    list-layers --source`; `soilgrids hsg --output` i `--depth`. `--format`
-    zostaje `GPKG`.
+    list-layers --source`; `soilgrids hsg --output` i `--depth`. Dla BDOT10k
+    `--format` domyslnie wybiera `GPKG`; dla innych zrodel jest bledem.
   - API: `DownloadManager(output_dir, provider, *, ...)` — oba wymagane,
     parametry `vertical_crs` i `resolution` usuniete (decyduje provider);
     `FileStorage(output_dir, *, resolution, vertical_crs, ...)`, metody
@@ -239,11 +245,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `GugikOrtoProvider(*, color)`, `create_nmt_provider(vertical_crs,
     resolution)`, `CuzkDmrProvider(resolution, ..., *, vertical_crs)`,
     `create_dmr_provider(resolution, ..., *, vertical_crs)`;
-    `prepare_pl_cutout`/`download_pl_cutout(bbox, target_crs, *, output_dir,
+    `download_pl_cutout(bbox, *, target_crs, output_dir,
     vertical_crs, product)` — parametr `resolution` usuniety (wycinek tylko
-    1 m); `download_laz_area(bbox, *, output_dir, vertical_crs, ...)`,
-    `run_laz_download(..., output_dir)`; `find_sheets_for_bbox(bbox,
-    target_scale, system)`, `find_sheets_2000_for_bbox(bbox, target_scale)`,
+    1 m), a `prepare_pl_cutout` usuniety; `download_laz_area(bbox, *,
+    output_dir, vertical_crs, ...)`; wewnetrzny `run_laz_download` usuniety;
+    `find_sheets_for_bbox(bbox, target_scale, system)`,
+    `find_sheets_2000_for_bbox(bbox, target_scale)`,
     `find_sheets_for_geometry(filepath, target_scale, ..., *, system)`;
     `LandCoverManager(output_dir, provider)`; `CorineProvider.download_by_bbox/
     download_by_sheet(..., *, year)`; `SoilGridsProvider.download_by_bbox(...,
@@ -265,9 +272,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     usunac recznie.
   - Tryb domyslny nie pobiera juz automatycznie nowszej kampanii przy
     `newest`: zostaje lokalna wersja, a CLI dopisuje `; dostepna nowsza
-    <etykieta> (--upgrade)` i `Info:` (`SheetFetch.newer`,
-    `DownloadResult.newer`). Co zrobic: `--upgrade` / `update="upgrade"`,
-    gdy chcesz nowsza kampanie.
+    <etykieta> (--upgrade)` i `Info:` (`DownloadResult.newer`). Co zrobic:
+    `--upgrade` / `update="upgrade"`, gdy chcesz nowsza kampanie.
   - `--force` pobiera ponownie i odswieza cache metadanych, ale niczego
     nie nadpisuje: ta sama tresc = `bez zmian`, inna = nowa wersja obok
     starej. `--force`, `--upgrade` i `--check-updates` wykluczaja sie.
@@ -377,9 +383,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     clay/sand/silt to wersje SoilGrids w magazynie). Co zrobic (Hydrograf:
     `backend/scripts/download_landcover.py`, `backend/core/cn_calculator.py`,
     `backend/scripts/bootstrap.py`): `LandCoverManager(<korzen magazynu>,
-    ...).download_by_*(...)` bez `output_path` i `path = result.file.path`;
-    `HSGCalculator(<korzen>).calculate_hsg_by_bbox(bbox, depth=..., stat=...)`
-    i `result.file.path`. Plik w wybranym miejscu poza magazynem:
+    ...).download(teryt=|sheet=|bbox=|geometry=)` bez `output_path` i
+    `path = result.files[0].file.path` (dla wielu powiatow przejdz po
+    `result.files`); `HSGCalculator(<korzen>).calculate_hsg(bbox=bbox,
+    depth=...)` i `result.file.path`. Plik w wybranym miejscu poza magazynem:
     `provider.download_by_*(..., output_path)` albo `hsg_from_rasters`.
   - Land cover nie pobiera juz ponownie istniejacego pliku: domyslnie
     lokalna wersja (SoilGrids/CORINE CLMS: jedno zapytanie o wydanie,
@@ -433,34 +440,21 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CLI `landcover download` i `soilgrids hsg`: `--check-updates`,
   `--upgrade`, `--force`, `--plan PLIK` (tory planu `landcover` i `hsg`);
   status `uzyta ponownie` (HSG z tych samych wejsc, bez liczenia).
-- Biblioteka: `check_updates`, `upgrade`, `UpdatePlan`, `PlanItem`,
-  `UpgradeReport`, `UpdateMode`, `VersionRef` (w `__all__`);
-  `DownloadManager.inspect_sheets`, `download_records`; `SheetFetch.status`,
-  `.version`, `.newer`, `.files`; `DownloadResult.new`, `.relabeled`,
-  `.unchanged`, `.local`, `.newer`, `.files`; `FileStorage.get_versions_root`,
-  `get_versions_base`, `has_legacy_campaigns`; sidecar `extra.version`
-  (`label`, `label_source`); status `relabeled` (ta sama tresc pod nowym
-  rekordem kampanii).
-- Biblioteka (plan 2/3): `check_laz_updates`, `check_cz_cutout`,
-  `check_pl_cutout` (w `__all__`), `kartograf.download.cz_sheets`
-  (`run_cz_sheet`, `check_cz_sheet`, `CzSheetResult` — bez eksportu w
-  `__all__`), `VersionedFile` (w `__all__`), `fetch_version`/`inspect_version`
-  (`kartograf.download.fetch`), `UpdatePlan.merge`/`items_for`,
-  `select_planned`, `new_plan`; `AccessChannel.update_signal` i
-  `channel_signal`; transport `response_signal`, `head_signal`,
-  `download_to(on_response=)`; `CuzkDmrProvider.sm5_signal`,
-  `download(..., on_response=)`; sidecar `extra.http` (SM5).
-- Biblioteka (plan 3/3): `LandCoverResult`, `LandCoverAreaResult`,
-  `LandCoverFailure`, `HsgResult`, `Edition` (w `__all__`);
-  `LandCoverManager(..., update=, plan=)`, `check`, `check_all_counties`;
-  `HSGCalculator.check_hsg_by_bbox`/`check_hsg_by_sheet`;
-  `SoilGridsProvider.edition`/`capabilities_url`,
-  `CorineProvider.edition`/`uses_clms`; `kartograf.landcover.store`
-  (`landcover_segment`, `hsg_segment`, `selection_slot`, `selection_unit`);
-  `kartograf.download.fetch.use_local`/`store_file`, status `reused`;
-  `fetch_version(edition=)`/`inspect_version(edition=)` (sygnal `metadata`);
-  `get_with_retry(headers=)`; `TransportKind.WMS` (kanal podgladu CORINE);
-  sidecar `extra.edition`.
+- Biblioteka: `UpdatePlan`, `PlanItem`, `UpdateMode`, `VersionRef`,
+  `VersionedFile`, `LandCoverResult`, `LandCoverAreaResult`,
+  `LandCoverFailure`, `HsgResult` i `Edition` w `__all__`;
+  `DownloadManager.check_sheets`, `FileStorage.get_versions_root`,
+  `get_versions_base`, `has_legacy_campaigns`, `UpdatePlan.merge`/`items_for`.
+  `kartograf.download.fetch` dostarcza `fetch_version`/`inspect_version`,
+  `use_local`/`store_file` i sygnal wydania `metadata`; status `reused`
+  oznacza HSG z tych samych wejsc bez ponownego liczenia.
+- Biblioteka: `check_cz_cutout`/`check_pl_cutout`, `check_cz_sheet`/
+  `download_cz_sheet` i `check_laz_area` w `__all__`; kanaly
+  `AccessChannel.update_signal`/`channel_signal`, transport
+  `response_signal`, `head_signal`, `download_to(on_response=)`,
+  `get_with_retry(headers=)`; sidecary `extra.version`, `extra.http`
+  (SM5), `extra.edition` i status `relabeled` (ta sama tresc pod nowa
+  etykieta).
 
 ### Naprawione
 

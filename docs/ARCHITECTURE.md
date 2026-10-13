@@ -36,11 +36,12 @@ deskryptor mowi CO zrodlo potrafi i gdzie ma wyladowac wynik, nie JAK je pobrac.
 i pionowy, `nodata`, oryginalne zadanie, licencja, wersja pakietu, opis
 wykonanych transformacji. Sidecary pisza **warstwy zarzadzajace** —
 `DownloadManager`, `LandCoverManager`, wycinek PL w bibliotece
-(`download/cutout.py::write_pl_cutout_sidecar`), kafle LAZ w bibliotece
+(`download/cutout.py::write_pl_wcs_cutout_sidecar`), kafle LAZ w bibliotece
 (`download/laz.py::write_laz_sidecar`, ADR-029), wynik HSG
-(`HSGCalculator._write_sidecar`, sekcja 4.8) i wynik CZ
-(`download/cz_cutout.py::write_cz_sidecar`, od 0.7.1) — nigdy providery;
-provider zwraca `Path`, metadane skladane sa pietro wyzej, gdzie znany jest
+(`HSGCalculator._reuse_or_compute`, sekcja 4.8) i wynik CZ
+(`download/cz_cutout.py::write_cz_sidecar`, takze z `download/cz_sheets.py`)
+— nigdy providery; provider zwraca `Path`, metadane skladane sa pietro wyzej,
+gdzie znany jest kontekst zadania.
 kontekst zadania. Wynika z tego, ze bezposrednie wywolanie
 providera z biblioteki (np. `GugikProvider.download`,
 `CuzkDmrProvider.download`/`download_bbox`) zapisuje sam plik danych, bez
@@ -51,20 +52,20 @@ sidecara — w szczegolnosci sidecar DMR CZ pisze
 Nowy sidecar powstaje zawsze przez
 `sources/sidecar.py::emit_sidecar` — jedyne miejsce polityki zapisu
 (poza nim: kopia sidecara wersji w sciezce standardowej,
-`download/links.py::write_link_sidecar`, i lista lotow zadania
-`update_sidecar_extra` w sidecarze dowiazania). Zapis
-jest domyslnie best-effort: kazdy blad (IO, brakujacy klucz deskryptora,
-wyjatek w budowie metadanych) konczy sie `logger.warning` i zwrotem `None`,
-nigdy przerwaniem pobrania — dane sa wazniejsze niz metadane. Poza bledem
-zapisu jedyny cichy przypadek braku sidecara przy sukcesie to provider bez
-`descriptor_key` (`descriptor_key` nie bedacy `str`): `emit_sidecar` wraca
-wtedy `None` bez ostrzezenia. Wyjatek: sidecar WERSJI w magazynie
-wersjonowanym (ADR-036, sekcja 3.3) jest obowiazkowy i pisany wylacznie
-(`exclusive=True`: tmp + `fsync` + `os.link`); bez deskryptora powstaje
-sidecar okrojony (`request`, `extra`, `sha256`, `size_bytes`,
-`downloaded_at`), a kazdy inny blad to `DownloadError` i brak wersji.
-Sidecar wersji nigdy sie nie zmienia (`extra.parent_requests` usuniete
-w 0.8.0; `parent_request` opisuje zadanie, ktore utworzylo wersje).
+`download/links.py::write_link_sidecar`, i uzupelnianie informacji o lotach
+przez `update_sidecar_extra` w sidecarze dowiazania). Zapis poza magazynem
+wersjonowanym jest best-effort: blad budowy metadanych lub zapisu konczy sie
+ostrzezeniem (`logger.warning`) bez przerwania pobrania; `emit_sidecar`
+zwraca `None` przy bledzie budowy, natomiast przy bledzie zwyklego zapisu
+`write_sidecar` zwraca sciezke mimo braku pliku. Provider bez
+`descriptor_key` (`descriptor_key` nie bedacy `str`) daje `None` bez
+ostrzezenia. Sidecar WERSJI w magazynie (ADR-036, sekcja 3.3) jest
+obowiazkowy i pisany wylacznie (`exclusive=True`: tmp + `fsync` +
+`os.link`); bez deskryptora powstaje sidecar okrojony (`request`, `extra`,
+`sha256`, `size_bytes`, `downloaded_at`, `kartograf_version`), a kazdy
+inny blad to `DownloadError` i brak wersji. Sidecar wersji nigdy sie nie
+zmienia (`extra.parent_requests` usuniete w 0.8.0; `parent_request`
+opisuje zadanie, ktore utworzylo wersje).
 
 **Polityka transformacji (ADR-024).** Transformacje, ktore przesuwaja TRESC
 rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza przez
@@ -121,26 +122,27 @@ co najmniej jeden import na poziomie modulu (takze pod `if TYPE_CHECKING:`).
 `kartograf` = pakiet glowny (`kartograf/__init__.py`):
 
 ```
-kartograf ──> core, download, providers, landcover, hydrology,
-        cache                          # re-eksport Public API
-cli ──> kartograf (__version__), download, landcover, core, sources,
-        providers (l), transform (l), transport (l), hydrology (l), cache (l)
-download ──> providers, sources, transform, core, transport (l)
-landcover ──> providers, download (fetch, plan, storage, versions), core,
-        cache, sources
-hydrology ──> core, download, landcover, providers (l), sources (l),
-        transform (l)
+kartograf ──> core, download, providers, landcover, hydrology, cache,
+        sources, transport, notices       # re-eksport Public API
+cli ──> _version, download, landcover, core, hydrology, cache,
+        notices, transform
+download ──> providers, sources, transform, core, cache, notices,
+        _version, kartograf (_clock), transport
+landcover ──> providers, download, core, cache, sources, notices
+hydrology ──> core, download, landcover, cache (TYPE_CHECKING), notices,
+        providers (l), sources (l), transform (l)
 providers ──> sources, transform, transport, core, cache,
         auth (l), download (l)
-sources ──> core, kartograf (l, __version__)
+sources ──> core, kartograf (_clock), _version
 transport ──> transform, core, kartograf (l, __version__)
 transform ──> core
-cache ──> core                         # tylko pod TYPE_CHECKING (BBox)
-auth ──> (nic wewnetrznego)
-core ──> (nic wewnetrznego)
+cache ──> core (TYPE_CHECKING), notices
+_version ──> kartograf (l, __version__)
+_clock, notices, auth ──> (nic wewnetrznego)
+core ──> (nic poza exceptions)
 exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
         kartograf, cli, core, sources, transform, transport, providers, download,
-        landcover)
+        landcover, hydrology, cache)
 ```
 
 **Jak odtworzyc graf.** Kod uzywa wylacznie bezwzglednych importow
@@ -166,35 +168,36 @@ Uwagi, ktore latwo przeoczyc:
   Operacja przypieta (ADR-024) wchodzi do `core.bbox.transform_bbox`
   przez duck typing (`transformer=`), bez importu `transform`.
 - `download` siega po `transform` WYLACZNIE w `download/cutout.py`
-  (wycinek PL, sekcja 4.3), a po `transport` w `download/cutout.py`
-  i `download/cz_cutout.py`: przy imporcie `transform.crs`
-  (`PinnedTransform`, `CONTENT_POLICY`, `WARP_MARGIN_PX`), leniwie
-  `transform.crs.build_pinned_transform` (przygotowanie wycinka PL),
-  `transform.raster` (warp wycinka WCS) oraz
-  `transport.mosaic.has_valid_pixels` (wycinki PL i CZ, kontrola
-  `all_nodata`; w `cz_cutout.py` tylko ten leniwy import).
+  (wycinek PL, sekcja 4.3). Po `transport` siega leniwie w
+  `download/cutout.py` i `download/cz_cutout.py` oraz na poziomie modulu
+  w `download/cz_sheets.py` (`response_signal`). `cutout.py` importuje na
+  poziomie modulu `transform.crs` (`PinnedTransform`, `CONTENT_POLICY`,
+  `WARP_MARGIN_PX`), leniwie `build_pinned_transform`, `transform.raster`
+  (warp wycinka WCS), `transport.aaigrid`, `transport.chunks` i
+  `transport.mosaic.has_valid_pixels`; `cz_cutout.py` importuje leniwie
+  ostatnia funkcje (kontrola `all_nodata`).
   `manager.py` i `storage.py` nie importuja zadnego z nich —
   `DownloadManager` pozostaje warstwa koordynacji arkuszy.
 - `cli` tylko tlumaczy flagi na argumenty funkcji poziomu komendy
   i wypisuje wynik (Z1, ADR-037): importuje `download.data`
   (`download_data`/`check_data`), `landcover.manager`, `hydrology`,
-  `download.plan`/`fetch` (plik planu, linie statusu), `notices`
-  i `cache.defaults`; z `transform` bierze tylko `TransformError`. Nie
-  importuje `providers`, `transport` ani doboru arkuszy
+  `download.plan`/`fetch` (plik planu, linie statusu), `notices`,
+  `_version` i `cache`; z `transform` bierze tylko `TransformError`.
+  Nie importuje `providers`, `transport` ani doboru arkuszy
   (`tests/test_cli_translation.py::test_cli_imports_no_data_logic`).
 - `transport ──> transform`: `transport/mosaic.py` owija zrodla mozaiki
   w VRT przez `transform.raster` (`vrt_xml`, `VRT_TYPES`; import na poziomie
   modulu). `transform` nie importuje `transport` — cyklu nie ma.
 - `providers ──> download` jest leniwa i MUSI taka zostac (pakiet
-  `download` importuje `providers` przy imporcie): walidacja opcji kampanii
-  `download.campaigns.validate_campaign_args` w
+  `download` importuje `providers` przy imporcie): walidacja lat i wyboru
+  kampanii z `download.campaigns` w
   `SkorowidzLayersMixin.resolve_campaigns` (`providers/pl/skorowidz.py`)
   i w `GugikLazProvider.select_tiles` (`providers/pl/gugik_laz.py`) oraz
-  przeliczenie obszaru do EPSG:2180 `download.cutout.bbox_to_2180`
+  przeliczenie obszaru do EPSG:2180 `download.area.bbox_to_2180`
   w `providers/pl/prg.py` (jedna regula dla wycinka PL i odkrywania TERYT).
 - `cache ──> core` istnieje tylko pod `if TYPE_CHECKING:` (adnotacja
   `BBox` w `MetadataCache.get_teryts_for_bbox`/`set_teryts_for_bbox`);
-  w czasie wykonania `cache` nie importuje nic wewnetrznego.
+  w czasie wykonania `cache.defaults` importuje `notices`, nie `core`.
 - `landcover ──> cache`: `LandCoverManager(cache=MetadataCache | bool)`
   (`True` = wspolny cache w cwd, `cache/defaults.py::open_cache`) importuje
   `MetadataCache` na poziomie modulu (adnotacja) i przekazuje go
@@ -204,27 +207,30 @@ Uwagi, ktore latwo przeoczyc:
   wersji (`download.fetch.use_local`/`store_file`/`inspect_version`,
   `download.plan`, `download.storage.bbox_slot`, `download.versions`);
   `download` nie importuje `landcover` (cyklu nie ma).
-- `hydrology ──> core, download, landcover` istnieje na poziomie modulu
-  tylko pod `if TYPE_CHECKING:` (adnotacje `BBox`, `VersionedFile`,
-  `PlanItem`, `LandCoverResult`...; wg reguly grafu to import na poziomie
-  modulu). W czasie wykonania wszystko jest leniwe: `landcover.manager`
-  (wejscia clay/sand/silt jako wersje), `download.fetch`/`plan`/`versions`
+- `hydrology ──> core, download, landcover, cache` istnieje na poziomie
+  modulu tylko pod `if TYPE_CHECKING:` (adnotacje `BBox`, `VersionedFile`,
+  `PlanItem`, `LandCoverResult`, `MetadataCache`...; wg reguly grafu to import
+  na poziomie modulu); `notices` jest importowane normalnie.
+  W czasie wykonania reszta jest leniwa: `landcover.manager` (wejscia
+  clay/sand/silt jako wersje), `download.fetch`/`plan`/`versions`
   (wersja HSG), `providers.soilgrids`, `core.sheet_parser`, `core.bbox`
   (`transform_bbox`), `transform` (przypieta reprojekcja wejsc
   `hsg_from_rasters`) i `sources.sidecar` (`emit_sidecar`, `file_digest`).
-- `sources` i `transport` siegaja do pakietu glownego leniwie i tylko po
-  `__version__` (sidecar, naglowek `User-Agent`) — import przy imporcie
-  modulu dalby cykl, bo `kartograf/__init__.py` importuje providery.
+- `sources/sidecar.py` i `download/versions.py` importuja `_clock` przez
+  pakiet glowny przy imporcie modulu, a `sources/sidecar.py` i
+  `download/plan.py` importuja `_version.build_version`. Dopiero
+  `build_version()` siega leniwie po `kartograf.__version__`;
+  `transport/http.py` robi to leniwie dla naglowka `User-Agent`.
 - Krawedz `download ──> providers` siega tez do zamrozonego toru CZ:
-  `download/cutout.py` (tor PL) importuje leniwie generyczny `bbox_to_crs`
-  z `providers/cuzk/dmr.py` (ADR-024); przeniesienie go do `transform/` to
-  etap 2, razem z odmrozeniem toru CZ.
+  `download/cutout.py` i `download/area.py` importuja leniwie generyczny
+  `bbox_to_crs` z `providers/cuzk/dmr.py` (ADR-024); przeniesienie go do
+  `transform/` to etap 2, razem z odmrozeniem toru CZ.
 
 ### Moduly
 
 Drzewo wymienia kazdy modul `.py` pakietu (`auth/` i `cli/` zbiorczo,
 `__init__.py` podpakietow tylko gdy niosa wlasna logike). Zrodlo prawdy:
-`find kartograf -name '*.py'`; Public API: `kartograf/__init__.py` (`__all__`).
+pliki `.py` pod `kartograf/`; Public API: `kartograf/__init__.py` (`__all__`).
 
 Stabilne API transportu i mozaiki (od 0.7.1): `get_with_retry` (dowolny URL
 uslugi, polityka ponowien siec/429/5xx/`Retry-After`, tylko GET),
@@ -234,6 +240,7 @@ z `kartograf`; zmiana sygnatury = zmiana lamiaca w CHANGELOG.
 ```
 kartograf/
 ├── __init__.py          # Public API (BBox, SheetParser, DownloadManager, providery, ...)
+├── _version.py         # build_version() — identyfikator wersji dev (git, leniwie)
 ├── exceptions.py        # KartografError; ParseError; ValidationError;
 │                        # DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — zrodlo nie ma danych
@@ -314,10 +321,11 @@ kartograf/
 │   ├── data.py          # download_data/check_data — komenda `kartograf download` w bibliotece
 │   │                    # (ADR-037): kraj i `auto`, rozwiniecie obszaru PL, wybor toru,
 │   │                    # parent_request, DataReport/UnitFile/UnitFailure, Notice
-│   ├── options.py       # Walidacja wyborow zadania (produkt, kraj, rozdzielczosc, uklad,
-│   │                    # system, skala, lata, opcje LAZ) z tekstami jak w --help
-│   ├── area.py          # Obszar zadania: bbox_to_2180, obwiednie geometrii, parent_request_for,
-│   │                    # przyciecie `auto` do zasiegu krajow (Notice)
+│   ├── options.py       # validate_request / validate_request_bbox (takze bbox CRS),
+│   │                    # walidacja wyborow: produkt, kraj, rozdzielczosc, uklad,
+│   │                    # system, skala, lata, opcje LAZ; teksty jak w --help
+│   ├── area.py          # Obszar zadania: bbox_to_2180, obwiednie geometrii,
+│   │                    # parent_request_for, przyciecie `auto` (Notice)
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu,
 │   │                    # verify_file_format, verify_record_url/verify_sheet_extent (B4),
 │   │                    # verify_record_vertical_crs (uklad wysokosci rekordu)
@@ -418,9 +426,11 @@ klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
 Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
 (`download_data`, `DownloadManager`, `LandCoverManager`, `download_pl_cutout`,
 `download_laz_area`, `download_cz_cutout`, `download_cz_sheet`,
-`HSGCalculator`) zapisuje **dwa** pliki: dane i `<plik>.meta.json` (zapis
-best-effort, wyjatki — sekcja 1); takze `hsg_from_rasters`. Bezposrednie wywolanie providera sidecara nie pisze
-(np. `CuzkDmrProvider.download`); sidecar godla CZ pisze `download/cz_sheets.py`.
+`HSGCalculator`) zapisuje dane i `<plik>.meta.json`: sidecar wersji w
+magazynie jest obowiazkowy, sidecar sciezki standardowej best-effort
+(sekcja 1). Poza magazynem `hsg_from_rasters` pisze sidecar best-effort.
+Bezposrednie wywolanie providera sidecara nie pisze (np.
+`CuzkDmrProvider.download`); sidecar godla CZ pisze `download/cz_sheets.py`.
 
 | Pole | Znaczenie |
 |---|---|
@@ -488,7 +498,7 @@ pionowego jest mapowana na realizacje krajowa, jesli kanal deklaruje wlasnie
 ja (`resolve_vertical_crs`: `EPSG:5621` -> `EPSG:9651` dla PL).
 
 **Wycinek PL WCS (`--target-crs`) w sidecarze.** Biblioteka
-(`download/cutout.py::write_pl_cutout_sidecar`) buduje rekord z
+(`download/cutout.py::write_pl_wcs_cutout_sidecar`) buduje rekord z
 `capability="bbox_raster"` deskryptora NMT 1 m albo NMPT, `nodata=-9999`,
 `horizontal_crs` w ukladzie docelowym i `request` =
 `{"bbox": <bbox_target>, "bbox_crs": <uklad docelowy>}` (bbox po przeliczeniu
@@ -508,10 +518,11 @@ caly wynik jest nodata. `extra.parent_request` powstaje tylko po przekazaniu
 `parent_request=` (w CLI: oryginalne zadanie, sekcja 3.4).
 
 **Magazyn wersjonowany (ADR-036).** Sidecar WERSJI (`versions/.../<etykieta>_<sha8>/<plik>.meta.json`)
-jest OBOWIAZKOWY i niezmienny: `emit_sidecar(..., exclusive=True)` pisze
-go raz (tmp + `fsync` + `os.link`, nigdy nie nadpisuje); porazka zapisu
-rzuca `DownloadError` (zapis usuwa utworzony plik danych, wersji nie ma).
-Pozostale sidecary (wycinek, LAZ, CZ, landcover, HSG) zostaja best-effort.
+jest OBOWIAZKOWY i niezmienny we wszystkich torach (arkusze PL i CZ,
+wycinki PL i CZ, LAZ, land cover, HSG): `emit_sidecar(..., exclusive=True)`
+pisze go raz (tmp + `fsync` + `os.link`, nigdy nie nadpisuje); porazka
+zapisu rzuca `DownloadError` (zapis usuwa utworzony plik danych, wersji
+nie ma). Sidecar poza magazynem zostaje best-effort.
 Sidecar sciezki standardowej (dowiazania) to ZWYKLY plik — kopia sidecara
 wersji z dopisanym `extra.link` (`hardlink`) i `extra.link_target`
 (zapis `tmp` + `os.replace`, nigdy "przez" symlink sidecara pozostawiony
@@ -527,14 +538,15 @@ cztery miejsca po przecinku) ma sidecar wersji KAZDEGO lotu bez
 `full_sheet=true` — liczone z tego samego odczytu co sha256 przy zapisie
 (ASC bez `NODATA_value` = -9999, orto wg nodata/alfa; blad pomiaru = brak
 pola + ostrzezenie), nigdy dopisywane pozniej. Przy przedziale i `all`
-z > 1 lotem, gdy najnowszy lot nie ma `full_sheet=true`, sidecar
-standardowy dostaje `extra.flights` (malejaco wg ADR-028; `id`, `date`,
-`full_sheet`, `coverage` z sidecarow wersji), a przy starszym locie
-o WIEKSZYM pokryciu `extra.better_coverage` = jego `id` (lot zadeklarowany
-jako pelny liczy sie jako pokryty w pelni) i CLI `Info:` na stderr (takze
-z `-q`). Pole `better_coverage` jest usuwane, gdy ponowne zadanie nie
-wykaze lepszego lotu. Pokrycie NIE przestawia dowiazania (najpierw
-najnowszy lot wg ADR-028, zasada "nigdy wstecz"). Sidecar LAZ niesie
+pole + ostrzezenie), nigdy dopisywane pozniej. Przy przedziale i `all`
+sidecar standardowy dostaje `extra.flights` (malejaco wg ADR-028; `id`,
+`date`, `full_sheet`); gdy ma > 1 lot i dowiazany lot nie ma
+`full_sheet=true`, dopisuje tez `coverage` z sidecarow wersji i porownuje
+pokrycie. Przy starszym locie o WIEKSZYM pokryciu `extra.better_coverage` =
+jego `id` (lot zadeklarowany jako pelny liczy sie jako pokryty w pelni) i
+CLI `Info:` na stderr (takze z `-q`). Pole `better_coverage` jest usuwane,
+gdy ponowne zadanie nie wykaze lepszego lotu. Pokrycie NIE przestawia
+dowiazania (najpierw najnowszy lot wg ADR-028, zasada "nigdy wstecz").
 dodatkowo `extra.acquisition_date` (`akt_data`) i `extra.full_sheet`
 (`czy_ark_wypelniony`), gdy znane.
 
@@ -669,8 +681,9 @@ data/
    wycinki) albo hierarchia godla (`path_parts`, kanoniczne godlo). Wersje
    jak w regule 6 (`versions/<ta sama hierarchia>/`).
 
-Nowe zrodlo dodaje sie samym wpisem deskryptora — np.
-`nmt/de_bb_dgm1_dhhn2016/` nie wymaga zadnej zmiany w kodzie sciezek.
+Nowe zrodlo wymaga providera i toru dyspozycji (sekcja 5), ale jego
+`storage_subdir` (np. `nmt/de_bb_dgm1_dhhn2016/`) nie wymaga
+specjalnej reguly w kodzie sciezek.
 
 **Migracja 0.6.x -> 0.7.0 (BREAKING):**
 
@@ -714,8 +727,9 @@ uklad i kraje faktycznie odpytane w tym wywolaniu (probowane, nie pobrane).
 W trybie `--geometry` "zadanie" to obwiednia geometrii: dla pliku w ukladzie
 czeskim (EPSG:5514/3045) w ukladzie PLIKU (od 2026-09-28), dla pozostalych
 w EPSG:2180; jawne `--country cz` zapisuje obwiednie w ukladzie zadania CZ
-(EPSG:5514 albo `--target-crs`). Klucz buduje CLI (`_build_parent_request`);
-API biblioteki zapisuje go tylko po przekazaniu `parent_request=`.
+(EPSG:5514 albo `--target-crs`). Klucz buduje `download/area.py::parent_request_for`,
+wywolywany przez `download_data`; bezposrednie wywolanie toru bibliotecznego
+zapisuje go tylko po przekazaniu `parent_request=`.
 Wersja z sidecarem zachowuje `parent_request` zadania, ktore ja
 UTWORZYLO; kolejne zadania nie zmieniaja sidecara wersji (ADR-036; lista
 `extra.parent_requests` usunieta w 0.8.0). To jest klucz grupowania:

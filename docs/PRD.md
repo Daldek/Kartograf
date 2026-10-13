@@ -1,17 +1,16 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.3
-**Data:** 2026-10-11
+**Wersja:** 4.4
+**Data:** 2026-10-13
 **Product Owner:** Piotr
-**Status:** Wydanie v0.7.2 (2026-10-11)
+**Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu)
 
-> Dokument opisuje wymagania produktowe wersji 0.7.2 w postaci
-> zrealizowanej w kodzie wydania v0.7.2 (w tym rok danych ADR-032,
-> `full_sheet/` ADR-033 i wycinki z WCS ADR-035). Szczegóły
-> zachowania (komunikaty, kody wyjścia, przypadki brzegowe) —
+> Dokument opisuje wymagania produktowe w postaci zrealizowanej w kodzie
+> v0.8.0-dev, w tym magazyn wersjonowany ADR-036 i spójność CLI/API ADR-037.
+> Szczegóły zachowania (komunikaty, kody wyjścia, przypadki brzegowe) —
 > `docs/SCOPE.md` i `docs/ARCHITECTURE.md`; uzasadnienia decyzji —
-> `docs/DECISIONS.md` (ADR-022..ADR-035); historia zmian — `docs/CHANGELOG.md`. Pełna lista
+> `docs/DECISIONS.md`; historia zmian — `docs/CHANGELOG.md`. Pełna lista
 > opcji CLI: `kartograf <komenda> --help`. Wymagania docelowe wersji
 > 1.0.0 — sekcja 8 (roadmapa i kolejność podprojektów: `docs/SCOPE.md` 3.3).
 
@@ -35,7 +34,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/LAZ/BDOT10k), CUZK (DMR 5G/4G, Czechy — etap 1), CORINE, SoilGrids
 3. **Intelligent Selection** - godło (PL-1992/PL-2000, CZ TM33/SM5), TERYT, bbox, plik geometrii; wybór kraju `--country {pl,cz,auto}`
 4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--target-crs`)
-5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla każdego pobrania, jawny wybór kampanii GUGiK
+5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla pobrań do magazynu, jawny wybór zakresu kampanii GUGiK
 6. **Secure Auth** - Auth Proxy dla izolacji credentials CLMS
 
 ### 1.3 Target Users
@@ -61,11 +60,11 @@ Docelowo (v1.0.0, sekcja 8) dochodzą:
 
 | Cel | Target | Status |
 |-----|--------|--------|
-| Test coverage (core) | >= 80% | Brama CI: `fail_under` w `pyproject.toml`; pomiar: `pytest -m "not live" --cov=kartograf` |
-| Testy offline | Każdy test bez sieci (`conftest.py` blokuje gniazda spoza loopbacku) | Spełniony; testy sieciowe tylko z markerem `live` |
-| Reliability | >= 95% success rate | Osiągnięty |
-| Performance | Download < 60s | Osiągnięty |
-| Code quality | ruff (check + format), mypy bez nowego długu | Osiągnięty |
+| Test coverage (core) | >= 80% | Próg bramki `fail_under = 60` w `pyproject.toml`; pomiar: `pytest -m "not live" --cov=kartograf` |
+| Testy offline | Testy bez sieci (`conftest.py` blokuje gniazda spoza loopbacku) | Testy sieciowe mają marker `live` |
+| Reliability | >= 95% success rate | Brak automatycznego pomiaru success rate w kodzie |
+| Performance | Download < 60s | Brak gwarancji: timeout i czas zadania zależą od źródła oraz liczby plików (sekcja 7) |
+| Code quality | ruff (check + format), mypy bez nowego długu | Bramka opisana w `docs/DEVELOPMENT_STANDARDS.md` |
 
 ### 2.2 Integration Goals
 
@@ -92,28 +91,32 @@ wymagany od 0.8.0, bez wartości domyślnej).
 
 #### Requirements
 - Godło PL-1992 (`SheetParser`, skale 1:1M–1:10k) i PL-2000 (`Parser2000`,
-  strefy EPSG:2176–2179); godło grubsze niż 1:10000 rozwijane do arkuszy
-  1:10000 bez dodatkowych flag; `--scale` zmienia skalę docelową — potrzebne,
-  gdy GUGiK publikuje arkusze w innej skali (PL-2000, zwykle 1:2000;
-  USAGE 1.6).
+  strefy EPSG:2176–2179); godło PL-1992 grubsze niż 1:10000 rozwijane
+  do arkuszy 1:10000 bez dodatkowych flag. Dla PL-2000 `--scale` jest
+  wymagane z obszarem i godłem 1:10000; wskazuje skalę publikowanych arkuszy
+  (zwykle 1:2000; USAGE 1.6).
 - `--bbox` / `--geometry` (SHP/GPKG) bez `--target-crs` rozwija obszar na
   listę arkuszy OpenData (`--system {1992,2000}`); stykające się krawędzie
   nie są przecięciem.
 - Wybór pliku arkusza ze skorowidza GUGiK (ADR-028): warstwy wyłącznie
   z GetCapabilities, twardy filtr (całe godło, układ, rozdzielczość),
   najnowsza `aktualnosc`; brak zgodnego rekordu = `NoCoverageError`
-  z podpowiedzią (np. `--scale 1:2000` dla PL-2000), bez cichego fallbacku.
+  z podpowiedzią, bez cichego fallbacku na inny układ albo rozdzielczość.
   Rekordy i brak pokrycia są cache'owane w `MetadataCache` (TTL 7 dni,
   `--force` omija odczyt).
 - Lista arkuszy toleruje brak pokrycia (R5): arkusz bez danych = `Warning:`
   i status `no_coverage`, kod 0 przy co najmniej jednym pliku; twarda
   awaria pobrania = kod 1 z pełną listą porażek.
 - Pobieranie równoległe arkuszy (`--workers` = `download_data(workers=4)`;
-  niższy poziom `DownloadManager(workers=1)`), pomijanie istniejących.
-- Kampanie GUGiK (`--all-campaigns`, `--min-year`) — sekcja 3.11.
+  niższy poziom `DownloadManager(workers=1)`); lokalne wersje są używane
+  ponownie, nowsza kampania domyślnie tylko zgłaszana (`--upgrade` ją pobiera).
+- Kampanie GUGiK (`--all-campaigns`, `--year`/`--min-year`/`--max-year`) — sekcja 3.11.
 
 #### Capabilities
 ```python
+from pathlib import Path
+from kartograf import BBox, DownloadManager, GugikProvider, SheetParser
+
 # Parser godeł
 parser = SheetParser("N-34-130-D-d-2-4")
 print(parser.scale)       # "1:10000"
@@ -151,7 +154,7 @@ path = kron.download_bbox(bbox, Path("area.tif"))
 
 # Rozdzielczość 5m (tylko EVRF2007)
 manager_5m = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="5m"))
-path = manager_5m.download_sheet("N-34-130-D-d-2-4")
+result_5m = manager_5m.download_sheet("N-34-130-D-d-2-4")  # DownloadResult
 ```
 
 #### CLI Commands
@@ -190,7 +193,8 @@ float32 z WCS, nie kolorowy TIFF.
 
 #### Capabilities
 ```python
-from kartograf import GugikNmptProvider
+from pathlib import Path
+from kartograf import BBox, GugikNmptProvider
 
 # NMPT provider (tylko 1m, KRON86 lub EVRF2007)
 provider = GugikNmptProvider(vertical_crs="EVRF2007")
@@ -222,7 +226,8 @@ NMT (sekcja 3.11).
 
 #### Capabilities
 ```python
-from kartograf import GugikOrtoProvider
+from pathlib import Path
+from kartograf import BBox, GugikOrtoProvider
 
 # Ortofoto provider (brak vertical CRS — 2D RGB; color="CIR" — podczerwień)
 provider = GugikOrtoProvider(color="RGB")
@@ -284,9 +289,10 @@ kartograf download --geometry area.shp --product laz --country pl --vertical-crs
   z obszarem pokrywają już wybrane (ramy w EPSG:2180, tolerancja
   `COVERAGE_TOLERANCE_M`); pominięte kafle = `Info:` na stderr.
 - `--year` — tylko ten rocznik (sprawdzany wobec GetCapabilities);
-  `--min-year` — dolna granica `akt_rok`; `--all-campaigns` — wszystkie kafle,
-  których rama przecina obszar, bez deduplikacji pokryciowej (sekcja 3.11).
-  `--year` i `--min-year` wykluczają się.
+  `--min-year`/`--max-year` — domknięty zakres `akt_rok`;
+  `--all-campaigns` — wszystkie kafle, których rama przecina obszar,
+  bez deduplikacji pokryciowej (sekcja 3.11).
+  `--year` wyklucza się z `--min-year`/`--max-year`.
 - Porażka choć jednego kafla = `Error:` z pełną listą i kod 1 (pobrane kafle
   zostają); sidecar kafla, w trybie `--bbox`/`--geometry` z `extra.parent_request`.
 - Tylko PL: na obszarze sięgającym CZ wymagane jawne `--country pl`.
@@ -301,7 +307,7 @@ kartograf download --geometry area.shp --product laz --country pl --vertical-crs
 
 #### Description
 Pobieranie danych pokrycia terenu z polskiej bazy BDOT10k (TERYT powiatu,
-godło lub bbox) do magazynu wersji (`landcover/pl_bdot10k_<format>[_<warstwy>]/teryt/<T>`,
+godło, bbox lub geometria) do magazynu wersji (`landcover/pl_bdot10k_<format>[_<warstwy>]/teryt/<T>`,
 ADR-036). Format GPKG (domyślny — warstwy scalane w jeden plik `.gpkg`,
 składany w lokalnym katalogu tymczasowym i przenoszony do magazynu, więc
 działa także na udziałach sieciowych) albo SHP (archiwum `.zip`).
@@ -322,7 +328,7 @@ print(result.files[0].file.path, result.files[0].file.status, result.ok)
 lc.download(sheet="N-34-130-D", layers=["PTWP", "SWRS"], workers=4)
 ```
 
-#### Warstwy (15 warstw — pobierany caly plik)
+#### Warstwy (15 warstw — cały pakiet źródłowy; w wynikowym GPKG opcjonalny filtr `--layers`)
 
 **Pokrycie terenu (PT* — 12 warstw):**
 | Warstwa | Opis |
@@ -421,7 +427,7 @@ from kartograf import LandCoverManager
 lc = LandCoverManager("./data", "soilgrids")
 
 # Pobieranie węgla organicznego (selekcja: godło albo bbox — TERYT
-# nie jest obsługiwany przez SoilGrids i kończy się NotImplementedError)
+# w LandCoverManager nie jest obsługiwany i kończy się ValidationError)
 # -> soil/global_soilgrids_soc_0-5cm_mean/N-34/130/D/N-34-130-D.tif,
 #    wersja z etykietą wydania SoilGrids (np. 2.0)
 lc.download(
@@ -530,7 +536,7 @@ kartograf soilgrids hsg --sheet N-34-130-D -o ./data --depth 0-5cm --check-updat
 ### 3.9 Feature: NMT Czechy (CUZK DMR 5G/4G, etap 1)
 
 **Priority:** P1 (High)
-**Status:** Development (0.7.0)
+**Status:** Production (etap 1, v0.7.0)
 
 #### Description
 Pobieranie czeskiego modelu terenu z CUZK: DMR 5G (2 m, godło TM33 — obliczalna
@@ -545,8 +551,8 @@ DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
   `auto` daje osobne pliki PL i CZ ze wspólnym `extra.parent_request` (bez
   scalania PL+CZ — R6, etap 2). Kod 0 = sukces co najmniej jednego kraju;
   przy porażce drugiego `Warning:`.
-- Opcje bez odpowiednika czeskiego (`--product nmpt|orto`, `--system`,
-  `KRON86`, `1m`) rozstrzygają obszar sporny do PL z `Info:`.
+- Opcje bez odpowiednika czeskiego (`--product nmpt|orto`, `--vertical-crs
+  KRON86`, `--resolution 1m`) rozstrzygają obszar sporny do PL z `Info:`.
 - Żądania do CUZK wyłącznie w natywnym EPSG:5514; reprojekcja pozioma
   lokalnie (`--target-crs {EPSG:2180,EPSG:5514,EPSG:3045}`, tylko
   `--bbox`/`--geometry`) przypiętą operacją — krok S-JTSK → ETRS89 przez
@@ -589,7 +595,7 @@ kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:55
 ### 3.10 Feature: Wycinek NMT/NMPT PL (`--target-crs`, ADR-035)
 
 **Priority:** P1 (High)
-**Status:** Development (0.7.2)
+**Status:** Production (od v0.7.2; magazyn wersji w 0.8.0-dev)
 
 #### Description
 Jeden GeoTIFF NMT albo NMPT 1 m z WCS GUGiK dla `--bbox` lub
@@ -613,10 +619,11 @@ pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
   dokladnie 1 m wg ADR-028; na locie 0,5 m 1 m jest decymacja.
   Bez wyboru roku i kampanii: `--all-campaigns`, flagi roku
   i `--full-sheet` z `--target-crs` = `Error:`.
-- Kazdy przebieg pobiera (nie pomija istniejacego wycinka);
-  wynik z tego samego dnia atomowo zastepuje wczesniejszy
-  tylko po sukcesie. `--force`, `--workers`, `--scale` bez wplywu
-  na tor WCS. 5 m: arkusze bez `--target-crs`.
+- Domyślnie lokalna wersja wycinka jest używana bez zapytań PRG/WCS
+  (brak taniego sygnału aktualizacji); `--force` pobiera ponownie.
+  Nowa treść staje się niezmienną wersją, a dowiązanie zmienia się
+  dopiero po sukcesie; przy identycznej treści wersja nie przybywa.
+  `--workers`, `--scale` bez wpływu na tor WCS. 5 m: arkusze bez `--target-crs`.
 
 #### Capabilities
 ```python
@@ -641,7 +648,7 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmp
 ### 3.11 Feature: Kampanie GUGiK (ADR-030)
 
 **Priority:** P1 (High)
-**Status:** Development (0.7.0)
+**Status:** Production (od v0.7.0; magazyn wersji w 0.8.0-dev)
 
 #### Description
 Arkusz NMT/NMPT/orto PL bywa publikowany przez GUGiK w wielu kampaniach
@@ -649,9 +656,10 @@ pomiarowych. Kartograf przechowuje każdą pobraną kampanię osobno i jawnie
 wskazuje, która jest "bieżąca".
 
 #### Requirements
-- Domyślnie: najnowsza kampania arkusza wg reguły
-  ADR-028 w zakresie lat, rozwiązywana przy każdym uruchomieniu (sieć, gdy
-  wygasł cache 7 dni); pobierane są tylko brakujące kampanie.
+- Domyślnie: najnowsza kampania arkusza wg reguły ADR-028 w zakresie
+  lat, rozwiązywana przy każdym uruchomieniu (sieć, gdy wygasł cache
+  7 dni); istniejąca lokalna wersja pozostaje bieżąca, a nowsza
+  kampania jest zgłaszana do pobrania przez `--upgrade`.
 - `--all-campaigns`: każda kampania arkusza (w zakresie lat) po twardym
   filtrze ADR-028, bez limitu liczby.
 - Rok danych (ADR-032): `--year RRRR` = `--min-year RRRR --max-year RRRR`,
@@ -678,8 +686,7 @@ wskazuje, która jest "bieżąca".
 - Skorowidz GUGiK niedostępny (błąd transportu) przy domyślnym wyborze bez
   flag roku i `--force` oraz istniejącej lokalnej kampanii: arkusz brany
   z lokalnej kampanii z `Warning:` (errata 5 ADR-030); biblioteka:
-  `DownloadResult.unverified` /
-  `PlCutoutResult.unverified`.
+  `DownloadResult.unverified` / `VersionedFile.unverified`.
 - Tylko PL: zadanie bez części PL z `--all-campaigns`, flagą roku albo
   `--full-sheet` = `Error:` przed siecią; obszar PL+CZ pod `auto` =
   `Info:`, CZ pobierane w bieżącej wersji. Wycinek `--target-crs`
@@ -713,7 +720,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolut
 ### 3.12 Feature: Układ `data/` i metadane pobrań (ADR-026, sidecary)
 
 **Priority:** P0 (Critical)
-**Status:** Development (0.7.0)
+**Status:** Production (magazyn wersji v0.8.0-dev)
 
 #### Requirements
 - Kanoniczny układ `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
@@ -722,7 +729,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolut
   w deskryptorach źródeł (`kartograf/sources/registry.py`). Układ
   `pl_1992`/`pl_2000` z formatu godła każdego pliku (kafle LAZ — z układu
   kafla). Wycinki w `<segment>/bbox/`. Tabela segmentów i migracja:
-  `docs/ARCHITECTURE.md` sekcja 3. `landcover/` bez zmian.
+  `docs/ARCHITECTURE.md` sekcja 3; dodatkowe segmenty `landcover/`, `soil/`, `hsg/`.
 - Każde udane pobranie przez CLI albo warstwę zarządzającą biblioteki
   (`DownloadManager`, `LandCoverManager`, `download_pl_cutout`,
   `download_laz_area`; DMR CZ — tor CLI) oraz wynik `HSGCalculator` dostaje
@@ -730,7 +737,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolut
   `kartograf-meta/1`): zbiór, kraj, produkt, układy poziomy i pionowy,
   rozdzielczość, nodata, żądanie, licencja, wersja Kartografu, `extra`
   (pochodzenie rekordu `extra.source`, `extra.parent_request` itp.).
-  Sidecary są best-effort, z wyjątkiem plików kampanii (sekcja 3.11).
+  Sidecar każdej wersji jest obowiązkowy; sidecar dowiązania best-effort.
 - Sidecar zapisuje faktyczny układ PLIKU; arkusz PL-2000 opublikowany przez
   GUGiK w innym układzie niż wskazuje godło daje `Warning:` (E17).
 

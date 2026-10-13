@@ -229,7 +229,7 @@ resolution = 1    # meters or pixels?
 |---------|-----------|----------------------|
 | `download_*` | Pobranie pliku / archiwum | `download_sheet()`, `download_bbox()` |
 | `parse_*` | Parsowanie danych | `parse_bbox_arg()`, `parse_skorowidz_records()` |
-| `calculate_*` | Obliczenie wyniku | `calculate_hsg_by_sheet()` |
+| `calculate_*` | Obliczenie wyniku | `calculate_hsg()` |
 | `get_*` | Pobranie atrybutu / danych | `get_parent()`, `get_children()` |
 | `list_*` | Listowanie zasobow | `list_files()` |
 | `classify_*` | Klasyfikacja | `classify_usda_texture()` |
@@ -448,17 +448,20 @@ same statusy, plan, komunikaty i bledy. Reguly:
   `.check_hsg`) i wypisuje jej wynik. W CLI nie wolno walidowac wartosci
   danych, wybierac krajow, arkuszy, skali, kampanii ani powiatow, budowac
   `parent_request` ani czytac sidecarow w celu decyzji. Wolno: parsowac
-  tekst flag (`--bbox`, `pl=..,cz=..`, `--layers`), czytac i zapisywac
-  plik planu, formatowac wynik, wyliczac kod wyjscia z pol wyniku (`ok`),
-  rysowac postep z `on_progress`. CLI nie importuje providerow ani
-  doboru arkuszy (`tests/test_cli_translation.py`).
-- **Z2:** kazda publiczna funkcja pobierajaca ma `check_*` z tymi samymi
-  argumentami (bez `update`, `plan`, `workers`, `on_progress`); kazda
-  pobierajaca przyjmuje `update=` i `plan=`.
+  tekst flag (`--bbox`, `pl=..,cz=..`, `--layers`), sprawdzac skladnie
+  `--bbox` i wywolywac wspolna walidacje bbox z biblioteki, czytac
+  i zapisywac plik planu, formatowac wynik, wyliczac kod wyjscia
+  z pol wyniku (`ok`), rysowac postep z `on_progress`. CLI nie importuje
+  providerow ani doboru arkuszy (`tests/test_cli_translation.py`).
+- **Z2:** funkcje biblioteczne poziomu komendy pobierajace dane maja
+  odpowiedniki `check_*` z tymi samymi argumentami wyboru danych (bez
+  `update`, `plan`, `workers`, `on_progress`; `on_notice` jest dostepne
+  rowniez przy sprawdzaniu); pobierajace przyjmuja `update=` i `plan=`.
 - **Z3:** komunikaty o danych powstaja w bibliotece jako `Notice` (pole
   `notices` wyniku i `on_notice`), z kodem z `kartograf/notices.py`; CLI
-  wypisuje `Info:`/`Warning:` na stderr. Biblioteka nie loguje dodatkowo
-  tego samego tekstu.
+  wypisuje `Info:`/`Warning:` na stderr, z wyjatkiem `SHEET_LIST`
+  (naglowek listy arkuszy na stdout, ukryty przez `--quiet`). Biblioteka
+  nie loguje dodatkowo tego samego tekstu.
 - **Z6:** parametr `cache: MetadataCache | bool = True` (cache w cwd jak
   w CLI); `update="force"` bez odczytow z cache.
 - **Z7:** nowa flaga albo nowy tor = scenariusz w `tests/test_parity.py`
@@ -525,33 +528,45 @@ dostaje sygnature z adnotacjami (inaczej mypy pomija jej cialo —
 
 ```python
 def download_sheet(
+    self,
     sheet: str,
-    output_dir: str = "./data",
-) -> Path:
+    *,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    on_progress: ProgressCallback | None = None,
+    on_download: Callable[[], None] | None = None,
+) -> DownloadResult:
     """
-    Download NMT sheet from GUGiK OpenData.
+    Download one NMT sheet from GUGiK OpenData into the versioned store.
 
     Parameters
     ----------
-    godlo : str
+    sheet : str
         Sheet identifier (e.g. "N-34-130-D-d-2-4").
-    output_dir : str, optional
-        Output directory, by default "./data".
+    update : UpdateMode or None, optional
+        Update mode; None uses the existing version if available.
+    plan : UpdatePlan or None, optional
+        Plan to execute with update="upgrade".
+    on_progress : callable or None, optional
+        Download progress callback.
+    on_download : callable or None, optional
+        Callback before a transfer starts.
 
     Returns
     -------
-    Path
-        Full path to the downloaded file.
+    DownloadResult
+        Files and download statuses for this sheet.
 
     Raises
     ------
     DownloadError
-        If download fails after retries.
+        If the download fails after retries.
 
     Examples
     --------
-    >>> manager = DownloadManager()
-    >>> path = manager.download_sheet("N-34-130-D-d-2-4")
+    >>> provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
+    >>> manager = DownloadManager("<katalog-danych>", provider)
+    >>> result = manager.download_sheet("N-34-130-D-d-2-4")
     """
     pass
 ```
@@ -589,8 +604,8 @@ class SheetParser:
 # 1:500k to 1:200k division produces 36 sheets (not 4!)
 children = self._get_children_from_500k()
 
-# EVRF2007 is the current standard; KRON86 is legacy
-default_crs = "EVRF2007"
+# NMT 5m exists only in EVRF2007; reject KRON86 before looking up a sheet
+require_nmt_vertical_crs(resolution or "1m", vertical_crs)
 
 # BAD — states the obvious
 # Set timeout to 30
@@ -704,19 +719,15 @@ def test_sheet_hierarchy_up():
 
 ```python
 import pytest
-from unittest.mock import Mock, patch
 
 @pytest.fixture
 def sample_sheet():
     """Fixture with sample sheet identifier."""
     return "N-34-130-D-d-2-4"
 
-def test_download_with_mock_http(sample_sheet):
-    """Test download using mocked HTTP response."""
-    with patch("requests.get") as mock_get:
-        mock_get.return_value = Mock(status_code=200, content=b"data")
-        result = provider.download(sample_sheet, Path("/tmp/test.asc"))
-        assert result.exists()
+def test_parse_valid_sheet(sample_sheet):
+    """Test parsing an actual sheet identifier without network access."""
+    assert SheetParser(sample_sheet).scale == "1:10000"
 ```
 
 **Izolacja sieci:** `tests/conftest.py` blokuje kazde polaczenie spoza
@@ -784,13 +795,16 @@ lub brak wymaganego argumentu funkcji pozostaje pythonowym `TypeError`.
 **Bez wartosci domyslnych wplywajacych na dane (od 0.8.0).** Parametr API
 i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,
 rozdzielczosc, wybor arkuszy albo miejsce zapisu, sa wymagane — brak
-wartosci to `TypeError` (API) albo `Error:` z lista dopuszczalnych wartosci
-(CLI, kod 1, przed siecia). Domyslne zostaja tylko: format danych
+argumentu wymaganego w sygnaturze to `TypeError` (API), a brak wymaganej
+wartosci danych przekazanej jako `None` to `ValidationError`. CLI wypisuje
+`Error:` z lista dopuszczalnych wartosci (kod 1) dla brakujacych danych
+sprawdzanych w bibliotece; bledy skladni/wyborow przechwycone przez
+`argparse` maja kod 2. Domyslne zostaja tylko: format danych
 (`format="GTiff"`/`"GPKG"`), uklad poziomy PL `EPSG:2180` i natywny
 `EPSG:5514` wyniku CZ, przelaczniki wylaczone (`force`, `full_sheet`,
 `all_campaigns`, ...), `None` = "nie podano", parametry z jedna
 dopuszczalna wartoscia (np. NMPT 1 m) i parametry techniczne (`timeout`,
-`max_workers`, `retries`, ...). Docstring i `--help` kazdego takiego
+`workers`, `retries`, ...). Docstring i `--help` kazdego takiego
 parametru wymieniaja wszystkie wartosci, ich znaczenie i ograniczenia.
 
 ### 11.3 Raise from
@@ -882,15 +896,15 @@ def download_large_file(url: str, filepath: Path) -> None:
   `GugikProvider.DEFAULT_TIMEOUT`, `Bdot10kProvider.DEFAULT_TIMEOUT`; osobne
   stale dla innych operacji, np. `GugikLazProvider.WFS_TIMEOUT`) — to one sa
   zrodlem prawdy, nie dokumentacja: `grep -rn "_TIMEOUT =" kartograf/providers`.
-- **Ponowienia sa w jednym miejscu:** `kartograf/transport/http.py` —
-  `download_to` dla plikow (zapis atomowy przez `os.replace`) i
-  `get_with_retry` dla zapytan. Providery nie implementuja wlasnych petli
-  retry.
+- **Ponowienia sa we wspolnym transporcie:** `kartograf/transport/http.py` —
+  `download_to` dla plikow (zapis atomowy przez `os.replace`),
+  `get_with_retry` dla zapytan GET i `head_signal` dla sygnalow HEAD.
+  Providery nie implementuja wlasnych petli retry dla tych operacji.
 - Ponawiane sa tylko bledy sieci, HTTP 429 i 5xx (`is_retryable`); inne 4xx
   koncza od razu z `DownloadError.status_code`.
-- Najwyzej `MAX_RETRIES` (3) proby, nie konfigurowalne z CLI; przerwa wg
-  `backoff_delay` (2 s, potem 4 s); naglowek `Retry-After` wydluza przerwe,
-  maksymalnie do `MAX_RETRY_AFTER` (60 s).
+- Domyslnie `MAX_RETRIES` (3) proby, nie konfigurowalne z CLI; przerwa wg
+  `backoff_delay` (2 s, potem 4 s); naglowek `Retry-After` wydluza przerwe:
+  wartosc z naglowka jest ograniczona przez `MAX_RETRY_AFTER` (60 s).
 
 ---
 
@@ -1038,8 +1052,9 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 # 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
 # 5. Dodaj eksport do kartograf/__init__.py (__all__)
 # 6. Napisz testy offline w tests/ (fixtury z realnych odpowiedzi serwera)
-# 7. CLI: dopisz zrodlo do choices --source w cli/_parser.py i logike
-#    w cli/landcover_cmd.py; cli/commands.py to tylko fasada zgodnosci
+# 7. CLI: dopisz zrodlo do choices i pomocy --source w
+#    kartograf/cli/_parser.py (download oraz layers); mapowanie argumentow
+#    w kartograf/cli/landcover_cmd.py; cli/commands.py to tylko fasada
 ```
 
 Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,
