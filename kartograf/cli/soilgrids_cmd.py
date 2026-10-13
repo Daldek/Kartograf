@@ -80,13 +80,6 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)
         return 1
-    if Path(args.output).suffix.lower() in (".tif", ".tiff"):
-        print(
-            "Error: --output to katalog magazynu (od 0.8.0); plik poza "
-            "magazynem: hsg_from_rasters",
-            file=sys.stderr,
-        )
-        return 1
 
     from kartograf.hydrology import HSGCalculator
 
@@ -118,9 +111,6 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     try:
         return run_with_plan_file(args, lambda a: _hsg_task(a, calc, selection))
     except (DownloadError, ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-    except Exception as e:
         print(f"Error: {e}", file=sys.stderr)
         return 1
 

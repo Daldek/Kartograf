@@ -308,30 +308,11 @@ def _report_file(
     file: VersionedFile | None,
     update: UpdateMode | None,
 ) -> None:
-    """Status line of one land cover/HSG file and its signal messages.
-
-    A failed signal check is a ``Warning:`` and an unchecked local version
-    with ``--upgrade`` an ``Info:`` (stderr, also with ``-q``). ``file`` is
-    ``None`` only when a plan skipped the file.
-    """
+    """Status line of one land cover/HSG file (data notices come from the API)."""
     if file is None:
         return
-    unverified = file.unverified or ""
-    if unverified.startswith("check_failed"):
-        error = unverified.split(":", 1)[1].strip()
-        print(
-            f"Warning: {unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
-            f"lokalnej wersji {file.label}",
-            file=sys.stderr,
-        )
     if not args.quiet:
         print(_status_line(unit, file, update))
-    if file.status == "local" and unverified == "none" and update == "upgrade":
-        print(
-            f"Info: {unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
-            "bez taniego sygnalu; pobierz ponownie: --force",
-            file=sys.stderr,
-        )
 
 
 def _unit_of(path: Path, output_dir: Path) -> str:
@@ -425,14 +406,10 @@ def _cmd_download(args: argparse.Namespace) -> int:
 
     try:
         if getattr(args, "check_updates", False):
-            if args.product == "laz" and not quiet:
-                print(f"Zapytanie WFS GUGiK o kafle LAZ ({args.vertical_crs})...")
             plan = check_data(**arguments, on_notice=on_notice)
             return _report_plan(args, plan)
         workers = getattr(args, "workers", 4) or 1
         on_progress = create_progress_callback(quiet, workers)
-        if args.product == "laz" and not quiet:
-            print(f"Zapytanie WFS GUGiK o kafle LAZ ({args.vertical_crs})...")
         report = download_data(
             **arguments,
             update=_update_mode(args),

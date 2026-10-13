@@ -12,9 +12,10 @@ import pytest
 
 from kartograf.core.bbox import BBox
 from kartograf.download.plan import UpdatePlan
+from kartograf.exceptions import ValidationError
 from kartograf.hydrology import HSGCalculator
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.notices import Notice
+from kartograf.notices import CHECK_FAILED, Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
@@ -118,6 +119,64 @@ def test_soilgrids(tmp_path):
             tmp_path, "soilgrids", ["--bbox", BBOX_ARG, *CLAY_ARGS], bbox=BBOX, **CLAY
         )
     _same(run, run.api_result.notices, run.api_result.ok)
+
+
+def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
+    edition = ["2.0"]
+    with _providers(
+        soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids(edition[0]))
+    ):
+        _landcover(
+            tmp_path, "soilgrids", ["--bbox", BBOX_ARG, *CLAY_ARGS], bbox=BBOX, **CLAY
+        )
+        edition[0] = 404
+        run = _landcover(
+            tmp_path, "soilgrids", ["--bbox", BBOX_ARG, *CLAY_ARGS], bbox=BBOX, **CLAY
+        )
+    _same(run, run.api_result.notices, run.api_result.ok)
+    (warning,) = run.api_result.notices
+    assert warning.code == CHECK_FAILED and warning.level == "warning"
+    assert warning.text.startswith(
+        "soil/global_soilgrids_clay_0-5cm_mean/bbox/"
+        "770000_509000_772000_511000.tif: nie udalo sie sprawdzic zrodla ("
+    )
+    assert run.cli_stderr.count(f"Warning: {warning.text}\n") == 1
+
+
+@pytest.mark.parametrize(
+    ("source", "flags", "options"),
+    [
+        ("corine", [], {}),
+        (
+            "soilgrids",
+            ["--depth", "0-5cm", "--stat", "mean"],
+            {"depth": "0-5cm", "stat": "mean"},
+        ),
+        (
+            "corine",
+            ["--year", "2018", "--layers", "PTWP"],
+            {"year": 2018, "layers": ("PTWP",)},
+        ),
+        (
+            "corine",
+            ["--year", "2018", "--format", "SHP"],
+            {"year": 2018, "format": "SHP"},
+        ),
+        (
+            "corine",
+            ["--year", "2018", "--format", "GPKG"],
+            {"year": 2018, "format": "GPKG"},
+        ),
+        ("bdot10k", ["--year", "2018"], {"year": 2018}),
+    ],
+)
+def test_invalid_landcover_options_match_cli_and_api(tmp_path, source, flags, options):
+    run = _landcover(
+        tmp_path, source, ["--bbox", BBOX_ARG, *flags], bbox=BBOX, **options
+    )
+    assert run.cli_code == 1 and isinstance(run.api_error, ValidationError)
+    assert run.cli_stderr == f"Error: {run.api_error}\n"
+    assert not run.cli_store.exists() and not run.api_store.exists()
 
 
 def _hsg(tmp_path, cli_args, **api_kwargs):

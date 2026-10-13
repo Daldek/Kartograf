@@ -54,7 +54,13 @@ from kartograf.download.plan import (
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.landcover.store import landcover_segment, selection_slot, selection_unit
-from kartograf.notices import CORINE_PREVIEW, Notice, NoticeSink
+from kartograf.notices import (
+    CHECK_FAILED,
+    CORINE_PREVIEW,
+    UNVERIFIED_LOCAL,
+    Notice,
+    NoticeSink,
+)
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider, normalize_layers
@@ -73,17 +79,38 @@ PROVIDERS = {
     "soilgrids": SoilGridsProvider,
 }
 
-# Options each provider accepts (anything else is a TypeError: e.g. the
-# removed ``output_path``, D32).
-_OPTIONS: dict[type, frozenset[str]] = {
-    Bdot10kProvider: frozenset({"format", "layers", "timeout", "keep_raw"}),
-    CorineProvider: frozenset({"year", "timeout"}),
-    SoilGridsProvider: frozenset({"property", "depth", "stat", "timeout"}),
+# Options belonging to a different source are input errors; options not
+# belonging to any source are programming errors (e.g. removed output_path).
+_SOURCE_OPTIONS: dict[str, frozenset[str]] = {
+    "bdot10k": frozenset({"format", "layers", "keep_raw"}),
+    "corine": frozenset({"year"}),
+    "soilgrids": frozenset({"property", "depth", "stat"}),
 }
+_OPTIONS: dict[type, frozenset[str]] = {
+    Bdot10kProvider: _SOURCE_OPTIONS["bdot10k"] | {"timeout"},
+    CorineProvider: _SOURCE_OPTIONS["corine"] | {"timeout"},
+    SoilGridsProvider: _SOURCE_OPTIONS["soilgrids"] | {"timeout"},
+}
+_KNOWN_OPTIONS = frozenset().union(*_OPTIONS.values())
 _REQUIRED: dict[type, tuple[str, ...]] = {
     Bdot10kProvider: (),
     CorineProvider: ("year",),
     SoilGridsProvider: ("property", "depth", "stat"),
+}
+_REQUIRED_MESSAGES = {
+    "year": "--year wymagane dla corine: 2018, 2012, 2006, 2000 "
+    "(edycje pokrycia terenu CLMS/WMS), 1990 (tylko podglad WMS)",
+    "property": "--property wymagane dla soilgrids: bdod (gestosc objetosciowa), "
+    "cec (pojemnosc sorpcyjna), cfvo (frakcja szkieletowa), clay (il), "
+    "nitrogen (azot), ocd (gestosc wegla organicznego), "
+    "ocs (zasob wegla organicznego), phh2o (pH), sand (piasek), "
+    "silt (pyl), soc (wegiel organiczny)",
+    "depth": "--depth wymagane dla soilgrids: 0-5cm, 5-15cm, 15-30cm, "
+    "30-60cm, 60-100cm, 100-200cm "
+    "(przedzial glebokosci ponizej powierzchni)",
+    "stat": "--stat wymagane dla soilgrids: mean (srednia), "
+    "Q0.05 (5. percentyl), Q0.5 (mediana), "
+    "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)",
 }
 _PREVIEW_NOTE = {"fallback": "wms_png", "note": "podglad WMS, nie dane"}
 _TRACK: Track = "landcover"
@@ -413,7 +440,7 @@ class LandCoverManager:
             Not exactly one selection, invalid source options, a plan of
             another store or without ``update="upgrade"``.
         TypeError
-            An option the provider does not accept (e.g. ``output_path``).
+            An option that belongs to no source (e.g. ``output_path``).
         NoCoverageError
             A BDOT10k area intersecting no powiat.
         DownloadError
@@ -441,6 +468,10 @@ class LandCoverManager:
                 planned, stale = self._planned(jobs, update, plan)
                 result = self._run(jobs, options, update, planned, parent=parent)
                 files = (result,) if result.file is not None else ()
+        for item in files:
+            for file in (item.file, item.raw):
+                if file is not None:
+                    self._emit_file_notices(file, update, sink)
         return LandCoverAreaResult(files, failed, stale, sink.notices)
 
     def check(
@@ -499,7 +530,7 @@ class LandCoverManager:
             try:
                 return self._run(jobs[teryt], options, update, planned, parent=parent)
             except DownloadError as e:
-                logger.error(f"BDOT10k {teryt}: {e}")
+                logger.debug("BDOT10k %s: %s", teryt, e)
                 return LandCoverFailure(teryt, str(e))
 
         if workers > 1 and len(teryts) > 1:
@@ -566,18 +597,30 @@ class LandCoverManager:
         )
 
     def _check_options(self, kwargs: dict) -> None:
-        """Reject unknown options (TypeError) and invalid values (ValidationError)."""
+        """Reject wrong-source values and missing required options as input errors."""
         kind = self._kind()
-        unknown = sorted(set(kwargs) - _OPTIONS[kind])
+        unknown = sorted(set(kwargs) - _KNOWN_OPTIONS)
         if unknown:
             raise TypeError(
                 f"{self._provider.name}: nieznane opcje {unknown} (dozwolone: "
                 f"{sorted(_OPTIONS[kind])}; plik poza magazynem: "
                 "provider.download_by_*)"
             )
-        missing = [k for k in _REQUIRED[kind] if kwargs.get(k) is None]
-        if missing:
-            raise TypeError(f"{self._provider.name}: wymagane opcje {missing}")
+        for name in _REQUIRED[kind]:
+            if kwargs.get(name) is None:
+                raise ValidationError(_REQUIRED_MESSAGES[name])
+        for name in kwargs:
+            if name not in _OPTIONS[kind] and kwargs[name] is not None:
+                if name == "keep_raw" and not kwargs[name]:
+                    continue
+                source = next(
+                    source
+                    for source, options in _SOURCE_OPTIONS.items()
+                    if name in options
+                )
+                raise ValidationError(
+                    f"--{name.replace('_', '-')} dziala tylko z --source {source}"
+                )
         provider = self._provider
         if isinstance(provider, SoilGridsProvider):
             for name, label, allowed in (
@@ -610,6 +653,28 @@ class LandCoverManager:
                 raise ValidationError(
                     "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
                 )
+
+    def _emit_file_notices(
+        self, file: VersionedFile, update: UpdateMode | None, sink: NoticeSink
+    ) -> None:
+        """Report signal failures and unchecked local versions of a store file."""
+        unit = file.path.relative_to(self._output_dir).as_posix()
+        unverified = file.unverified or ""
+        if unverified.startswith("check_failed"):
+            error = unverified.split(":", 1)[1].strip()
+            sink.emit(
+                "warning",
+                CHECK_FAILED,
+                f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
+                f"lokalnej wersji {file.label}",
+            )
+        if file.status == "local" and unverified == "none" and update == "upgrade":
+            sink.emit(
+                "info",
+                UNVERIFIED_LOCAL,
+                f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
+                "bez taniego sygnalu; pobierz ponownie: --force",
+            )
 
     def _content_params(self, kwargs: dict) -> dict[str, object]:
         """Provider options that change the CONTENT of the result.

@@ -725,7 +725,7 @@ class DownloadManager:
             raise error
         std = self._storage.get_path(sheet, self._default_ext)
         self._link(std, version.path, version_key(version), refresh=False)
-        logger.warning(
+        logger.debug(
             f"{sheet}: skorowidz GUGiK niedostepny ({error}) - uzyto lokalnej "
             f"wersji {version.label} z zakresu lat bez sprawdzenia nowszej"
         )
@@ -1321,8 +1321,8 @@ class DownloadManager:
         mode: when ``resolve_campaigns`` ends with a TRANSPORT error
         (``_is_transport_failure``) and the standard path points to an
         existing local version (``linked_version``) — NOT a failure:
-        ``logger.warning`` and ``SheetFetch(skipped=True,
-        unverified=<error>)`` from the local version, link unchanged.
+        ``SheetFetch(skipped=True, unverified=<error>)`` from the local version;
+        ``UNVERIFIED_LOCAL`` is emitted by ``_finish_result``, link unchanged.
         ``upgrade``/``force``, no local version or another error — an
         exception. With year bounds the outage is handled per task (D14,
         ``_checked_range``).
@@ -1558,7 +1558,7 @@ class DownloadManager:
             ensure_link(std, target, ("", "", ""))
         except (OSError, DownloadError):
             return None
-        logger.warning(
+        logger.debug(
             f"{sheet}: skorowidz GUGiK niedostepny ({error}) - uzyto lokalnej "
             f"wersji {target} bez sprawdzenia nowszej"
         )

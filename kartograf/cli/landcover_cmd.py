@@ -141,36 +141,6 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
             "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/... "
             "i <KATALOG>/soil/...)"
         )
-    if args.source == "corine" and args.year is None:
-        missing.append(
-            "--year wymagane dla corine: 2018, 2012, 2006, 2000 "
-            "(edycje pokrycia terenu CLMS/WMS), 1990 (tylko podglad WMS)"
-        )
-    if args.source == "soilgrids":
-        if args.property is None:
-            missing.append(
-                "--property wymagane dla soilgrids: bdod (gestosc objetosciowa), "
-                "cec (pojemnosc sorpcyjna), cfvo (frakcja szkieletowa), clay (il), "
-                "nitrogen (azot), ocd (gestosc wegla organicznego), "
-                "ocs (zasob wegla organicznego), phh2o (pH), sand (piasek), "
-                "silt (pyl), soc (wegiel organiczny)"
-            )
-        if args.depth is None:
-            missing.append(
-                "--depth wymagane dla soilgrids: 0-5cm, 5-15cm, 15-30cm, "
-                "30-60cm, 60-100cm, 100-200cm "
-                "(przedzial glebokosci ponizej powierzchni)"
-            )
-        if args.stat is None:
-            missing.append(
-                "--stat wymagane dla soilgrids: mean (srednia), "
-                "Q0.05 (5. percentyl), Q0.5 (mediana), "
-                "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)"
-            )
-    if args.source != "bdot10k":
-        for flag, given in (("--layers", args.layers), ("--keep-raw", args.keep_raw)):
-            if given:
-                missing.append(f"{flag} dziala tylko z --source bdot10k")
     if missing:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)
@@ -186,17 +156,19 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         "layer": args.layer,
     }
     options: dict = {}
-    if args.source == "corine":
+    if args.year is not None:
         options["year"] = args.year
-    if args.source == "bdot10k":
+    if args.format is not None:
         options["format"] = args.format
-        if args.layers is not None:
-            options["layers"] = args.layers
-        if args.keep_raw:
-            options["keep_raw"] = True
-    if args.source == "soilgrids":
+    if args.layers is not None:
+        options["layers"] = args.layers
+    if args.keep_raw:
+        options["keep_raw"] = True
+    if args.property is not None:
         options["property"] = args.property
+    if args.depth is not None:
         options["depth"] = args.depth
+    if args.stat is not None:
         options["stat"] = args.stat
 
     manager = LandCoverManager(output_dir=Path(args.output), provider=args.source)

@@ -21,6 +21,7 @@ from kartograf.download.plan import UpdatePlan
 from kartograf.download.versions import VersionRef, list_versions
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
+from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
@@ -136,9 +137,19 @@ class TestSoilGridsStore:
         _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids(404)
         manager = _soil(tmp_path, session)
-        file = manager.download(bbox=BBOX, **CLAY).files[0].file
+        observed = []
+        result = manager.download(bbox=BBOX, on_notice=observed.append, **CLAY)
+        file = result.files[0].file
         assert file.status == "local"
         assert (file.unverified or "").startswith("check_failed: ")
+        assert result.notices == tuple(observed)
+        (warning,) = result.notices
+        assert warning.level == "warning" and warning.code == CHECK_FAILED
+        error = file.unverified.split(":", 1)[1].strip()
+        assert warning.text == (
+            f"{SOIL_SEG}/bbox/{COORDS}.tif: nie udalo sie sprawdzic zrodla "
+            f"({error}) - uzyto lokalnej wersji {file.label}"
+        )
         with pytest.raises(DownloadError):
             manager.download(bbox=BBOX, update="upgrade", **CLAY)
         assert session.coverages == 0
@@ -321,9 +332,35 @@ def test_no_dir_created_on_init(tmp_path):
     assert list(tmp_path.iterdir()) == []
 
 
-def test_missing_required_option_is_type_error(tmp_path):
-    with pytest.raises(TypeError, match="year"):
-        LandCoverManager(tmp_path, "corine").download(bbox=BBOX)
+@pytest.mark.parametrize(
+    ("source", "options", "missing"),
+    [
+        ("corine", {}, "--year wymagane dla corine:"),
+        (
+            "soilgrids",
+            {"depth": "0-5cm", "stat": "mean"},
+            "--property wymagane dla soilgrids:",
+        ),
+        (
+            "soilgrids",
+            {"property": "clay", "stat": "mean"},
+            "--depth wymagane dla soilgrids:",
+        ),
+        (
+            "soilgrids",
+            {"property": "clay", "depth": "0-5cm"},
+            "--stat wymagane dla soilgrids:",
+        ),
+    ],
+)
+@pytest.mark.parametrize("method", ["download", "check"])
+def test_missing_required_option_is_validation_error(
+    tmp_path, source, options, missing, method
+):
+    manager = LandCoverManager(tmp_path, source)
+    with pytest.raises(ValidationError) as caught:
+        getattr(manager, method)(bbox=BBOX, **options)
+    assert str(caught.value).startswith(missing)
 
 
 # --- BDOT10k --------------------------------------------------------------------
@@ -395,6 +432,27 @@ class TestBdot10kStore:
         assert meta["extra"]["http"]["content_length"] == 10
         assert meta["extra"]["version"]["label_source"] == "downloaded"
         assert "source_files" not in meta["extra"]
+
+    def test_bdot_upgrade_unverified_notice_once_for_each_store_file(self, tmp_path):
+        manager = _bdot(tmp_path, FakePackages())
+        manager.download(teryt="1465", keep_raw=True)
+        observed = []
+        result = manager.download(
+            teryt="1465", keep_raw=True, update="upgrade", on_notice=observed.append
+        )
+        assert result.notices == tuple(observed)
+        files = (result.files[0].file, result.files[0].raw)
+        assert result.notices == tuple(
+            Notice(
+                "info",
+                UNVERIFIED_LOCAL,
+                f"{file.path.relative_to(tmp_path).as_posix()}: lokalna wersja "
+                f"{file.label} niesprawdzona - zrodlo bez taniego sygnalu; "
+                "pobierz ponownie: --force",
+            )
+            for file in files
+        )
+        assert all(file.status == "local" for file in files)
 
     def test_bdot_layers_segment_lowercase_sorted(self, tmp_path):
         file = (
