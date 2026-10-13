@@ -248,11 +248,12 @@ def create_parser() -> argparse.ArgumentParser:
         # extending it on one side only requires per-country validation
         choices=list(SUPPORTED_TARGET_CRS),
         default=None,
-        help="Reprojekcja wyniku, wykonywana lokalnie przypieta operacja "
-        "(tylko tryb --bbox/--geometry). PL: wycinek 1 m z WCS GUGiK (--product "
-        "nmt albo nmpt, tylko --system 1992 i --resolution 1m) na siatce "
-        "arkuszy, maska ladu PL (poza ladem nodata), nazwa z data pobrania "
-        "<wsp>_RRRRMMDD.tif, kazde uruchomienie pobiera; kompozycja lotow "
+        help="Uklad wyniku obszaru; wlacza tryb JEDNEGO wycinka zamiast "
+        "arkuszy (tylko --bbox/--geometry), reprojekcja lokalna przypieta "
+        "operacja. PL: wycinek 1 m z WCS GUGiK (--product nmt albo nmpt, tylko "
+        "--system 1992 i --resolution 1m) na siatce arkuszy, maska ladu PL "
+        "(poza ladem nodata), plik <wsp>.tif (wersje w versions/, ponowne "
+        "uruchomienie uzywa lokalnej wersji; --force pobiera); kompozycja lotow "
         "serwera (najnowszy lot arkuszy: pobierz arkusze bez --target-crs); "
         "w trybie --geometry obejmuje CALA obwiednie geometrii. CZ: wycinek "
         "exportImage",

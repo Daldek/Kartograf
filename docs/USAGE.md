@@ -113,11 +113,13 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
 
 - Domyślne `--bbox-crs` to `EPSG:2180`; plik geometrii: SHP albo GPKG.
   `--layer` wybiera warstwę GPKG. Bez tej flagi GPKG z wieloma warstwami
-  używa pierwszej; CLI wypisuje jeden `Info:` z wybraną warstwą, listą
-  pozostałych i podpowiedzią `--layer NAZWA` (również przy `-q`).
-  Dotyczy też `landcover download` i `soilgrids hsg`; biblioteka przy
-  domyślnym wyborze z wielu warstw emituje `logger.warning` przy każdym
-  rozstrzygnięciu — podaj `layer=`, aby wskazać warstwę jawnie.
+  używa pierwszej; biblioteka emituje jeden `Notice`
+  `geometry_layer_default` z wybraną warstwą, listą pozostałych
+  i podpowiedzią `--layer NAZWA` (CLI: `Info:`, również przy `-q`).
+  Dotyczy też `landcover download` i `soilgrids hsg` (`LandCoverManager`,
+  `HSGCalculator`). Niskopoziomowe funkcje `kartograf.core.geometry`
+  (np. `find_sheets_for_geometry`) wywołane bez `layer=` logują
+  ostrzeżenie (`logger.warning`) — podaj `layer=`, aby wskazać warstwę jawnie.
 - PL bez `--target-crs` zapisuje **listę arkuszy** w hierarchii godeł;
   arkusz bez danych GUGiK jest pomijany z `Warning:` (kod 0, gdy pobrano
   choć jeden arkusz).
@@ -358,12 +360,12 @@ dane tam są:
   danych dla N z M arkuszy ...` (kod 0, gdy pobrano choć jeden arkusz)
   albo — gdy żaden arkusz nie ma danych — `Error: GUGiK nie ma danych dla
   zadnego z M arkuszy obszaru` (kod 1); w obu przypadkach pod spodem
-  podpowiedzi `Info: Dostepny potomek <godło> — uzyj --scale <skala>`;
+  podpowiedzi `Info: Dostepny potomek <godło> - uzyj --scale <skala>`;
 - gdy skorowidz ma ten obszar w drugim układzie, podpowiedź wskazuje jego
   godło albo `--system <układ> --scale <skala>`;
 - NMT i NMPT (od 0.7.2): gdy arkusza nie ma w wybranej rozdzielczości albo
   układzie wysokości, a skorowidz GUGiK ma go w innym wariancie, podpowiedź
-  to np. `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj
+  to np. `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 - uzyj
   --resolution 1m` (albo `--vertical-crs KRON86`) — przy pojedynczym
   godle w treści `Error:` (kod 1), przy liście arkuszy jako `Info:`.
   GUGiK ma duże braki pokrycia EVRF2007, także NMT 5 m (np.
@@ -638,7 +640,7 @@ GUGiK publikuje ten sam arkusz w kilku kampaniach (różne lata pozyskania).
 Domyślnie (również z flagami roku) pobiera najnowszą kampanię;
 `--all-campaigns` — każdą. Wybór roku (`--year`, `--min-year`,
 `--max-year`) opisuje sekcja 4.1. Kampanie i rok dotyczą tylko PL — dla CZ
-opcje dają `Error: CZ (CUZK) nie ma kampanii — ...` (zadanie wyłącznie
+opcje dają `Error: CZ (CUZK) nie ma kampanii - ...` (zadanie wyłącznie
 czeskie) albo `Info:` (obszar PL+CZ pod `auto`, CZ w bieżącej wersji).
 
 Prawdziwe pliki NMT/NMPT/orto leżą jako **wersje** w
@@ -719,7 +721,7 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
   czegokolwiek (także z pozostałych arkuszy):
 
   ```
-  Error: brak danych z roku 2024 dla 2 z 4 arkuszy — nic nie pobrano:
+  Error: brak danych z roku 2024 dla 2 z 4 arkuszy - nic nie pobrano:
     N-34-139-C-a-3-1: dostepne roczniki 2019, 2023, 2025
     N-34-139-C-a-3-3: dostepne roczniki 2019, 2025
   Podpowiedz: --min-year 2024 (rok 2024 i nowsze) albo --max-year 2024 (rok 2024 i starsze)
@@ -741,7 +743,7 @@ domknięte; `--year RRRR` to skrót `--min-year RRRR --max-year RRRR`
 - **LAZ:** wybór ADR-029 w obrębie przedziału. Kafel, który bez flag roku
   zostałby wybrany, a ma rok spoza przedziału, musi być pokryty kaflami
   z przedziału; inaczej `Error: brak kafli LAZ z roku ... dla N z M kafli
-  obszaru — nic nie pobrano:` z rocznikami per kafel. Zapytania WFS idą do
+  obszaru - nic nie pobrano:` z rocznikami per kafel. Zapytania WFS idą do
   wszystkich roczników usługi. Sidecar kafla ma `extra.acquisition_date`
   i `extra.full_sheet`.
 - **Nie działa:** z `--target-crs` (`Error: --year nie dziala z
