@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.20
-**Data:** 2026-10-12
-**Status:** Wydanie v0.7.2 (2026-10-11)
+**Wersja:** 3.21
+**Data:** 2026-10-13
+**Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu; ostatnie wydanie v0.7.2, 2026-10-11)
 
 ---
 
@@ -37,7 +37,7 @@ Kartograf automatyzuje ten proces oferując:
 
 ---
 
-## 2. Zakres - Wersja 0.7.0
+## 2. Zakres - Wersja 0.8.0
 
 ### 2.1 NMT (Numeryczny Model Terenu) - IN SCOPE
 
@@ -72,9 +72,10 @@ Kartograf automatyzuje ten proces oferując:
   5 m pozostaje dostepne jako arkusze bez tej flagi.
 - Rozdzielczości: 1m (GRID1), 5m (GRID5)
 - Układy wysokościowe: KRON86, EVRF2007
-- Godło PL-2000 1:10000, dla którego GUGiK ma wyłącznie arkusze
-  potomne, daje `NoCoverageError` z podpowiedzią `--scale 1:2000`
-  (bez cichego pobrania zastępczego PL-1992)
+- Godło PL-2000 1:10000: w CLI i `download_data` `--scale` jest wymagane
+  (błąd przed siecią, lista skal); provider/`DownloadManager` wywołany
+  bez skali, gdy GUGiK ma wyłącznie arkusze potomne, daje `NoCoverageError`
+  z podpowiedzią `--scale 1:2000` (bez cichego pobrania zastępczego PL-1992)
 
 # Źródło: GUGiK (Główny Urząd Geodezji i Kartografii)
 # API: WCS, WMS GetFeatureInfo, OpenData
@@ -201,9 +202,11 @@ patrz sekcja 3.2, znane ograniczenie.
 ```python
 # BDOT10k (GUGiK):
 - 15 warstw (12 pokrycia terenu PT* + 3 hydrograficzne SW*)
-- Pobieranie calego pliku BDOT10k (wszystkie warstwy)
+- Pobieranie całego pakietu powiatu; w GPKG opcjonalny filtr warstw
+  (`--layers`/`layers=`, np. SWRS,PTWP) i oryginalny ZIP (`--keep-raw`)
 - Pobieranie przez TERYT (powiat)
-- Pobieranie przez godło lub bbox
+- Pobieranie przez godło, bbox (dowolny obsługiwany układ, `--bbox-crs`)
+  lub geometrię — pakiet KAŻDEGO powiatu obszaru (`--workers` równolegle)
 - Format: GeoPackage (domyślny) albo Shapefile (archiwum .zip, bez rozpakowania)
 - Automatyczne scalanie warstw z zachowaniem rtree spatial index; GPKG
   składany w lokalnym katalogu tymczasowym i przenoszony do magazynu
@@ -216,7 +219,7 @@ patrz sekcja 3.2, znane ograniczenie.
 # CORINE Land Cover (Copernicus):
 - 44 klasy pokrycia terenu
 - Lata: 1990, 2000, 2006, 2012, 2018
-- Pobieranie przez godło lub bbox
+- Pobieranie przez godło, bbox lub geometrię (bez TERYT)
 - Format: GeoTIFF (CLMS API) lub PNG (WMS fallback: EEA Discomap, dla 1990
   DLR; sidecar extra.fallback = "wms_png")
 - OAuth2 RSA authentication (opcjonalne; CLMS_CREDENTIALS na każdym systemie,
@@ -237,7 +240,7 @@ patrz sekcja 3.2, znane ograniczenie.
 - 6 głębokości (0-5cm do 100-200cm)
 - 5 statystyk (mean, Q0.05, Q0.5, Q0.95, uncertainty)
 - Rozdzielczość: 250m (globalne)
-- Pobieranie przez godło lub bbox (BEZ TERYT — patrz 3.2)
+- Pobieranie przez godło, bbox lub geometrię (BEZ TERYT — patrz 3.2)
 - Format: GeoTIFF
 - Magazyn wersji (0.8.0): soil/global_soilgrids_<wł>_<gł>_<stat>/,
   etykieta = wydanie SoilGrids z GetCapabilities (sygnał metadata)
@@ -282,7 +285,7 @@ kartograf download --geometry area.shp --product nmt --country pl --resolution 1
 kartograf download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --system 1992 -o ./data
 kartograf download --sheet <godlo> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
 kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (CZ), godlo TM33
-kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), godlo SM5, kraj auto
+kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), godlo SM5, kraj z godla
 kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv --system 1992 -o ./data # bbox transgraniczny -> pliki per kraj
 kartograf download --bbox ... --country cz --target-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data # reprojekcja lokalna (pinned)
 kartograf download --bbox ... --country pl --target-crs EPSG:2180 --product nmt --vertical-crs EVRF2007 -o ./data # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
@@ -400,6 +403,7 @@ from kartograf import (
 - Najpierw sprawdzenie pełnej listy kampanii każdego arkusza, potem pobranie:
   arkusz z danymi tylko z innych lat = Error: z latami i podpowiedzią, nic nie
   pobrane; arkusz bez danych = Warning: (pominięty); awaria skorowidza = Error:
+  (wyjątek: lokalna wersja, punkt niżej)
 - Kilka lotów w przedziale (all): pomiar pokrycia gdy najnowszy niepełny;
   Info: + extra.better_coverage, dowiązanie bez zmian (najnowszy)
 - Drugie dowiązanie full_sheet/ (ADR-033): najnowszy lokalny lot z
@@ -418,19 +422,23 @@ from kartograf import (
   Info:, CZ w bieżącej wersji
 - Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF),
   format z pola `format` rekordu; sidecar kampanii obowiązkowy
-- Skorowidz GUGiK niedostępny (błąd transportu) przy domyślnym wyborze bez flag roku
-  i --force, z lokalną kampanią: arkusz z lokalnej kampanii + Warning:,
-  kod bez zmian (errata 5 ADR-030); --all-campaigns/flaga roku/brak lokalnej = błąd
-- API: DownloadManager(all_campaigns: bool = False, min_year=, max_year=, full_sheet=),
-  .check_year_range(), YearRangeError, available_years (providery GUGiK),
-  DownloadResult (.unverified, .reused_campaign_files, .better_coverage,
-  .full_links, .without_full), FileStorage.get_full_sheet_path,
-  CampaignRef, PlCutoutResult.unverified
+- Skorowidz GUGiK niedostępny (błąd transportu) w trybie domyślnym (bez
+  --upgrade/--force): arkusz z lokalnej wersji + Warning:, kod bez zmian —
+  bez flag roku dla każdej strategii (także --all-campaigns), gdy ścieżka
+  standardowa wskazuje lokalną wersję (errata 5 ADR-030); z flagami roku,
+  gdy KAŻDY arkusz zadania ma lokalną wersję z zakresu lat (ADR-036 D14).
+  Brak lokalnej wersji, --upgrade albo --force = błąd
+- API: DownloadManager(year=, all_campaigns: bool = False, min_year=, max_year=,
+  full_sheet=), .check_year_range(), YearRangeError, available_years
+  (providery GUGiK), DownloadResult (.unverified, .reused_campaign_files,
+  .better_coverage, .full_links, .without_full), FileStorage.get_full_sheet_path,
+  CampaignRef; download_data(year=, min_year=, max_year=, all_campaigns=,
+  full_sheet=) = flagi CLI
 ```
 
 ---
 
-## 3. Out of Scope - Wersja 0.7.0
+## 3. Out of Scope - Wersja 0.8.0
 
 ### 3.1 Funkcjonalności Zaplanowane - FUTURE
 
@@ -661,7 +669,10 @@ szczegółowy — `docs/ARCHITECTURE.md`.
 ```
 kartograf/
 ├── __init__.py           # Public API exports
-├── exceptions.py         # KartografError, ParseError, ValidationError, GridMismatchError(ValidationError), DownloadError, NoCoverageError(DownloadError)
+├── _clock.py             # now() — jedno źródło czasu wyników (zamrażane w testach zgodności)
+├── _version.py           # build_version() — identyfikator wersji
+├── notices.py            # Notice, NoticeSink, kody komunikatów o danych (ADR-037)
+├── exceptions.py         # KartografError, ValidationError -> ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError
 ├── core/                 # Logika bazowa
 │   ├── bbox.py              # BBox, validate_bbox, transform_bbox, is_czech_crs
 │   ├── sheet_parser.py      # SheetParser — parser godeł map topograficznych
@@ -680,7 +691,9 @@ kartograf/
 │   ├── crs.py                # TransformerGroup (allow_ballpark=False, probe pod polityką sieci); PinnedTransform.transform polimorficzne
 │   └── raster.py             # warp_to_grid — lokalny warp na siatkę, operacja WYMUSZONA (ADR-027)
 ├── transport/             # Wspólny transport pobierania
-│   ├── http.py               # download_to — atomic write + retry
+│   ├── http.py               # download_to (atomic write + retry), get_with_retry, sesje, sygnały HTTP
+│   ├── aaigrid.py            # odczyt odpowiedzi ASC (AAIGrid) WCS
+│   ├── chunks.py             # kawałki zapytań obszarowych na siatce źródła (ADR-034)
 │   └── mosaic.py             # mosaic_and_crop — merge kafli (rasterio) + przycięcie (opcjonalnie na siatce zrodel, zrodla w VRT)
 ├── providers/             # Providery danych
 │   ├── base.py               # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider
@@ -692,6 +705,7 @@ kartograf/
 │   │   ├── skorowidz.py         # Skorowidz GUGiK: rekordy GetFeatureInfo, wybór kampanii (ADR-028/030)
 │   │   ├── wcs.py               # GugikWcsMixin — wspólny URL WCS GetCoverage (NMT/NMPT 1m, orto)
 │   │   ├── bdot10k.py           # Bdot10kProvider
+│   │   ├── prg.py               # WFS PRG: maska lądu (wycinek PL), TERYT dla obszaru/punktu
 │   │   └── __init__.py          # create_nmt_provider() — fabryka providera NMT (vertical_crs, resolution wymagane)
 │   ├── cuzk/                  # Providery czeskie (CUZK, etap 1)
 │   │   ├── client.py            # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST + openzu)
@@ -701,19 +715,25 @@ kartograf/
 │   ├── corine.py             # CorineProvider
 │   └── soilgrids.py          # SoilGridsProvider
 ├── cache/                 # Cache metadanych
+│   ├── defaults.py           # open_cache — wspólny cache CLI i biblioteki (<cwd>/.kartograf_cache.db)
 │   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache (TTL 7d), sheet_cache (TTL 30d)
 ├── download/              # Pobieranie: komenda download w bibliotece (data.py) i tory
 │   ├── data.py               # download_data/check_data = `kartograf download` (ADR-037)
 │   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help)
 │   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
-│   ├── links.py              # Dowiązanie ścieżki standardowej do najnowszej kampanii (hardlink -> kopia)
+│   ├── countries.py          # Podział obszaru na kraje (countries_for_bbox, split_bbox_by_country)
+│   ├── fetch.py              # Polityka plików bez kampanii: fetch_version, VersionedFile
+│   ├── plan.py               # Plan aktualizacji kartograf-plan/1 (PlanItem, UpdatePlan)
+│   ├── links.py              # Dowiązanie ścieżki standardowej do wersji (wyłącznie hardlink, nigdy wstecz)
 │   ├── cutout.py             # Wycinek PL --target-crs (download_pl_cutout/check_pl_cutout)
 │   ├── cz_cutout.py          # Wycinek CZ (download_cz_cutout/check_cz_cutout)
 │   ├── cz_sheets.py          # Arkusz CZ TM33/SM5 (download_cz_sheet/check_cz_sheet)
 │   ├── laz.py                # Kafle LAZ (download_laz_area/check_laz_area; ADR-029)
 │   ├── manager.py            # DownloadManager (all_campaigns=, min_year=, sidecar_extra=; download_sheets/expand_sheets)
-│   └── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
+│   ├── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
+│   ├── updates.py            # Pozycje planu arkuszy PL
+│   └── versions.py           # Magazyn wersjonowany (ADR-036): zapis wyłączny, etykiety, lista wersji
 ├── landcover/             # Land Cover w magazynie wersji
 │   ├── manager.py            # LandCoverManager (download/check: teryt|sheet|bbox|geometry)
 │   └── store.py              # segmenty i sloty land cover/HSG (spec 3.4)
@@ -766,7 +786,7 @@ pyshp >= 2.3.0         # Shapefile reading
 ```
 - Parser poprawnie parsuje godła 1:1M - 1:10k (PL-1992), PL-2000, TM33/SM5 (CZ)
 - NMT pobiera się w rozdzielczościach 1m i 5m (PL), 2m i 5m (CZ)
-- BDOT10k pobiera się przez TERYT i godło
+- BDOT10k pobiera się przez TERYT, godło, bbox i geometrię (każdy powiat obszaru)
 - CORINE pobiera się przez godło (GeoTIFF lub PNG fallback)
 - SoilGrids pobiera dane glebowe
 - HSG oblicza grupy hydrologiczne z danych SoilGrids
@@ -826,9 +846,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-10 | 3.18 | Drugie dowiązanie `full_sheet/` i `--full-sheet` (ADR-033) w 2.11 i 2.12 |
 | 2026-10-11 | 3.19 | Wydanie v0.7.2: wycinki NMT/NMPT PL z WCS GUGiK z maską lądu PRG (ADR-035), kawałki zapytań obszarowych na siatce źródła (ADR-034), status |
 | 2026-10-12 | 3.20 | Magazyn wersjonowany plan 2/3 (ADR-036): LAZ, CZ i wycinki `bbox/` bez daty w wersjach, tryby update dla każdego toru, `DownloadManager.download_bbox` usunięte |
+| 2026-10-13 | 3.21 | Pełna weryfikacja z kodem 0.8.0-dev (ADR-037): status i nagłówki 0.8.0, `--scale` dla PL-2000, BDOT10k/CORINE/SoilGrids przez geometrię i filtr warstw, fallback przy niedostępnym skorowidzu (D14), API kampanii, drzewo modułów (brakujące moduły, wyjątki), kryteria 6.1 |
 
 ---
 
-**Wersja dokumentu:** 3.19
-**Data ostatniej aktualizacji:** 2026-10-11
-**Status:** Wydanie v0.7.2 (2026-10-11)
+**Wersja dokumentu:** 3.21
+**Data ostatniej aktualizacji:** 2026-10-13
+**Status:** Kod v0.8.0-dev (ostatnie wydanie v0.7.2, 2026-10-11)
