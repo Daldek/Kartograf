@@ -878,8 +878,8 @@ def _is_cir(record):
 
 def _sheet_args(sheet):
     parser = SheetParser(sheet)
-    zone = int(sheet.split(".")[0]) if parser.system == "2000" else None
-    return {"sheet": sheet, "system": parser.system, "zone": zone}
+    zone = int(sheet.split(".")[0]) if parser.sheet_system == "2000" else None
+    return {"sheet": sheet, "system": parser.sheet_system, "zone": zone}
 
 
 def _real_cases() -> list[tuple]:

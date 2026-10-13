@@ -12,7 +12,7 @@ from typing import Any, NoReturn
 
 from kartograf._version import build_version
 from kartograf.core.bbox import BBox
-from kartograf.download.cutout import SUPPORTED_TARGET_CRS
+from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
     BBOX_CRS_CHOICES,
@@ -21,7 +21,7 @@ from kartograf.download.options import (
     PRODUCT_CHOICES,
     RESOLUTION_PL,
     SCALE_2000_CHOICES,
-    SYSTEM_CHOICES,
+    SHEET_SYSTEM_CHOICES,
     VERTICAL_CRS_CZ,
     VERTICAL_CRS_PL,
     validate_request_bbox,
@@ -209,12 +209,12 @@ def create_parser() -> argparse.ArgumentParser:
         description=(
             "Pobierz dane z GUGiK (PL: NMT, NMPT, ortofotomapa, LAZ) i CUZK "
             "(CZ: DMR 5G/4G). Dla PL --bbox/--geometry rozwija sie na "
-            "arkusze zrodlowe, a z --target-crs daje JEDEN wycinek 1 m z WCS "
-            "GUGiK (ADR-035); dla CZ --bbox/--geometry zawsze zwraca jeden wycinek "
-            "(exportImage pobierany natywnie w EPSG:5514, z --target-crs "
-            "reprojektowany lokalnie). Dane zrodlowe 1:1 daja arkusze PL "
-            "i arkusz SM5; kafel TM33 to lokalny warp z EPSG:5514 na siatke "
-            "EPSG:3045 (ADR-024)."
+            "arkusze zrodlowe, a z --cutout --horizontal-crs daje JEDEN "
+            "wycinek 1 m z WCS GUGiK (ADR-035); obszar CZ jest dostepny tylko "
+            "jako wycinek (--cutout; exportImage pobierany natywnie "
+            "w EPSG:5514, w innym ukladzie reprojektowany lokalnie). Dane "
+            "zrodlowe 1:1 daja arkusze PL i arkusz SM5; kafel TM33 to lokalny "
+            "warp z EPSG:5514 na siatke EPSG:3045 (ADR-024)."
         ),
     )
     download_parser.add_argument(
@@ -243,31 +243,37 @@ def create_parser() -> argparse.ArgumentParser:
         "musi sie z nim zgadzac)",
     )
     download_parser.add_argument(
-        "--target-crs",
+        "--cutout",
+        action="store_true",
+        help="Tryb JEDNEGO wycinka zamiast arkuszy (tylko --bbox/--geometry; "
+        "wymaga --horizontal-crs). PL: wycinek 1 m z WCS GUGiK (--product nmt "
+        "albo nmpt, tylko --sheet-system 1992 i --resolution 1m) na siatce "
+        "arkuszy, maska ladu PL (poza ladem nodata), plik <wsp>.tif (wersje "
+        "w versions/, ponowne uruchomienie uzywa lokalnej wersji; --force "
+        "pobiera); kompozycja lotow serwera (najnowszy lot arkuszy: pobierz "
+        "arkusze bez --cutout); w trybie --geometry obejmuje CALA obwiednie "
+        "geometrii. CZ: wycinek exportImage - obszar CZ (takze czesc CZ przy "
+        "--country auto) wymaga --cutout",
+    )
+    download_parser.add_argument(
+        "--horizontal-crs",
         # the PL cutout set (download/cutout.py) also constrains the CZ path -
         # extending it on one side only requires per-country validation
-        choices=list(SUPPORTED_TARGET_CRS),
+        choices=list(CUTOUT_CRS),
         default=None,
-        help="Uklad wyniku obszaru; wlacza tryb JEDNEGO wycinka zamiast "
-        "arkuszy (tylko --bbox/--geometry), reprojekcja lokalna przypieta "
-        "operacja. PL: wycinek 1 m z WCS GUGiK (--product nmt albo nmpt, tylko "
-        "--system 1992 i --resolution 1m) na siatce arkuszy, maska ladu PL "
-        "(poza ladem nodata), plik <wsp>.tif (wersje w versions/, ponowne "
-        "uruchomienie uzywa lokalnej wersji; --force pobiera); kompozycja lotow "
-        "serwera (najnowszy lot arkuszy: pobierz arkusze bez --target-crs); "
-        "w trybie --geometry obejmuje CALA obwiednie geometrii. CZ: wycinek "
-        "exportImage",
+        help="Uklad poziomy wycinka - wymagany z --cutout (bez --cutout blad); "
+        "reprojekcja lokalna przypieta operacja; natywny CZ: EPSG:5514",
     )
     download_parser.add_argument(
         "--scale",
         metavar="SKALA",
         help="Skala arkuszy PL-2000 do pobrania - wymagana z --bbox/--geometry "
-        "--system 2000 i z godlem PL-2000 1:10000 (np. 7.171.21): "
+        "--sheet-system 2000 i z godlem PL-2000 1:10000 (np. 7.171.21): "
         f"{SCALE_2000_CHOICES}; z drobniejszym godlem PL-2000 opcjonalna "
         "(rozwija godlo do potomkow w tej skali). PL-1992: niedozwolona - "
         "GUGiK publikuje arkusze PL-1992 tylko w 1:10000 (godlo 7-czlonowe), "
         "grubsze godlo rozwija sie do 1:10000 samo. Nie dotyczy CZ, LAZ "
-        "i --target-crs. Szczegoly: docs/USAGE.md 1.6",
+        "i --cutout. Szczegoly: docs/USAGE.md 1.6",
     )
     download_parser.add_argument(
         "--output",
@@ -310,7 +316,7 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="RES",
         default=None,
         help="Rozdzielczosc siatki NMT - wymagana tam, gdzie jest wybor. PL: "
-        f"{RESOLUTION_PL}; wycinek --target-crs tylko 1m. CZ: "
+        f"{RESOLUTION_PL}; wycinek --cutout tylko 1m. CZ: "
         f"{RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna pominac). NMPT tylko "
         "1m (mozna pominac); orto i LAZ bez rozdzielczosci. Jedna wartosc "
         "dotyczy kazdego kraju zadania; zadanie PL+CZ z roznymi: "
@@ -329,7 +335,7 @@ def create_parser() -> argparse.ArgumentParser:
         help="Tylko ten rok danych (PL: rok pozyskania aktualnosc NMT/NMPT/orto, "
         "akt_rok LAZ); skrot --min-year ROK --max-year ROK; najnowszy lot "
         "z tego roku (wszystkie: --all-campaigns); brak roku na ktoryms "
-        "arkuszu/kaflu = blad przed pobraniem; nie dziala z --target-crs",
+        "arkuszu/kaflu = blad przed pobraniem; nie dziala z --cutout",
     )
     download_parser.add_argument(
         "--all-campaigns",
@@ -337,14 +343,14 @@ def create_parser() -> argparse.ArgumentParser:
         help="Tylko PL: bez flagi najnowszy lot na arkusz w zakresie lat "
         "(jeden lot); z flaga wszystkie loty z zakresu lat do "
         "<segment>/versions/; flagi roku ograniczaja tylko dopuszczalne lata; "
-        "LAZ: bez deduplikacji pokrycia; nie dziala z --target-crs",
+        "LAZ: bez deduplikacji pokrycia; nie dziala z --cutout",
     )
     download_parser.add_argument(
         "--min-year",
         type=int,
         metavar="ROK",
         help="Tylko PL: dolna granica roku danych (wlacznie); najnowszy lot "
-        "z lat >= ROK (wszystkie: --all-campaigns); nie dziala z --target-crs",
+        "z lat >= ROK (wszystkie: --all-campaigns); nie dziala z --cutout",
     )
     download_parser.add_argument(
         "--max-year",
@@ -352,7 +358,7 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="ROK",
         help="Tylko PL: gorna granica roku danych (wlacznie); najnowszy lot "
         "z lat <= ROK (wszystkie: --all-campaigns); sciezka standardowa nigdy "
-        "nie cofa sie na starszy lot; nie dziala z --target-crs",
+        "nie cofa sie na starszy lot; nie dziala z --cutout",
     )
     download_parser.add_argument(
         "--full-sheet",
@@ -361,7 +367,7 @@ def create_parser() -> argparse.ArgumentParser:
         "(calyArkuszWypelnionyTrescia), pobierz tez najnowszy pelny lot "
         "z zakresu lat (najwyzej jeden dodatkowy lot na arkusz) i dowiaz go "
         "w <segment>/full_sheet/; pelny = w granicach Polski; nie dziala "
-        "z --target-crs ani z LAZ",
+        "z --cutout ani z LAZ",
     )
     download_parser.add_argument(
         "--min-density",
@@ -374,7 +380,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--geometry",
         metavar="PLIK",
         help="Plik geometrii obszaru (SHP albo GPKG): arkusze i kafle LAZ "
-        "przecinajace obiekty; wycinek (--target-crs, CZ) - obwiednia geometrii",
+        "przecinajace obiekty; wycinek (--cutout) - obwiednia geometrii",
     )
     download_parser.add_argument(
         "--layer",
@@ -382,11 +388,11 @@ def create_parser() -> argparse.ArgumentParser:
         help=_LAYER_HELP,
     )
     download_parser.add_argument(
-        "--system",
+        "--sheet-system",
         choices=["1992", "2000"],
         default=None,
         help="Uklad godel arkuszy PL - wymagany z --bbox/--geometry dla PL "
-        f"(bez --target-crs): {SYSTEM_CHOICES}. Wycinek --target-crs: tylko "
+        f"(bez --cutout): {SHEET_SYSTEM_CHOICES}. Wycinek --cutout: tylko "
         "1992 (mozna pominac). Nie dotyczy --sheet (uklad z godla), LAZ "
         "(uklad kazdego kafla z WFS) ani CZ",
     )

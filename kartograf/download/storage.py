@@ -677,7 +677,7 @@ def bbox_cutout_path(
 
     ``<coords>`` = ``min_x_min_y_max_x_max_y`` with ``format(v, ".10g")`` —
     the result grid coordinates in its own CRS. One name for the PL cutout
-    (``--target-crs``) and the CZ cutout (D7).
+    (``--cutout``) and the CZ cutout (D7).
     """
     coords = "_".join(
         format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)

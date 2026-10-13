@@ -50,7 +50,7 @@ Example usage::
     # One NMT GeoTIFF for an area (PL cutout from GUGiK WCS, ADR-035)
     result = download_pl_cutout(
         BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
-        target_crs="EPSG:2180",
+        horizontal_crs="EPSG:2180",
         output_dir="./data",
         vertical_crs="EVRF2007",
         product="nmt",

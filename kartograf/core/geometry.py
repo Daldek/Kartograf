@@ -613,7 +613,7 @@ def find_sheets_for_geometry(
     target_scale: str,
     layer: str | None = None,
     *,
-    system: str,
+    sheet_system: str,
 ) -> list[str]:
     """
     Find map sheets intersecting features in a geometry file.
@@ -649,7 +649,7 @@ def find_sheets_for_geometry(
 
     all_sheets: set[str] = set()
     for bbox in bboxes:
-        sheets = find_sheets_for_bbox(bbox, target_scale, system=system)
+        sheets = find_sheets_for_bbox(bbox, target_scale, sheet_system=sheet_system)
         all_sheets.update(sheets)
 
     return sorted(all_sheets)
