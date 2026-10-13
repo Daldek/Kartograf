@@ -232,15 +232,16 @@ w Polsce (część CZ bywa wtedy w całości nodata).
 - CZ `--bbox` zawsze daje jeden plik (wycinek), PL bez `--target-crs`
   listę arkuszy.
 - Porażka jednego kraju pod `auto` (brak danych albo awaria źródła) przy
-  sukcesie drugiego kończy się kodem 0 i `Warning:` na stderr; kod 1, gdy
-  żaden kraj nie dał wyniku albo `--country` było jawne.
+  sukcesie drugiego kończy się kodem 0: na stderr `Warning:` o częściowym
+  sukcesie i `Error:` z przyczyną porażki; kod 1, gdy żaden kraj nie dał
+  wyniku albo `--country` było jawne.
 - Natywnie S-JTSK/Bpv (EPSG:5514); `KRON86` dla CZ jest nieosiągalny.
   Szczegóły: SCOPE 2.2 i 3.2, ARCHITECTURE 4.4–4.6.
 - Magazyn wersji (0.8.0): arkusz CZ i wycinek CZ leżą jako wersje
   w `<segment>/versions/`, ścieżka arkusza i `bbox/<współrzędne>.tif` to
   hardlinki. Arkusz SM5 ma tani sygnał (`ETag`/`Last-Modified` pliku
   `openzu`, zapisany w `extra.http` sidecara wersji): domyślnie jedno
-  `HEAD` na plik z lokalną wersją — nowsza treść daje dopisek `; dostępna
+  `HEAD` na plik z lokalną wersją — nowsza treść daje dopisek `; dostepna
   nowsza ... (--upgrade)`, a `--upgrade` ją pobiera; nieudane `HEAD` to
   `Warning:` i lokalna wersja (z `--upgrade` — błąd). Kafel TM33 i wycinek
   CZ (`exportImage`) nie mają taniego sygnału: lokalna wersja bez
@@ -354,7 +355,7 @@ arkusza PL-1992). Skorowidz zwraca jednak arkusze z miejsca zapytania
 dane tam są:
 
 - pojedyncze godło: `Error:` (kod 1), a w treści błędu np.
-  `Dostepny potomek 5.167.25.13 — uzyj --scale 1:2000`;
+  `Dostepny potomek 5.167.25.13 - uzyj --scale 1:2000`;
 - lista arkuszy (`--bbox`/`--geometry`, godło rozwijane): arkusze bez
   danych mają status `no_coverage` (ikona `0` na pasku postepu), na stderr `Warning: GUGiK nie ma
   danych dla N z M arkuszy ...` (kod 0, gdy pobrano choć jeden arkusz)
@@ -601,11 +602,20 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
   `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`, `notices`.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`) i `CzSheetResult`
   (arkusz CZ, `download_cz_sheet`): `file`, `all_nodata`, `stale`, `notices`.
-- `LazDownloadResult` (`download_laz_area`): `files` (`VersionedFile` na
-  kafel), `failed`, `superseded` (kafle pominięte jako pokryte przez
-  nowsze), `stale`, `notices`.
+- `LazDownloadResult` (`download_laz_area`): `tiles` (wybrane kafle),
+  `files` (`VersionedFile` na kafel), `failed`, `superseded` (kafle
+  pominięte jako pokryte przez nowsze), `stale`, `notices`.
+- `DataReport` (`download_data`, komenda `kartograf download`): `files`
+  (`UnitFile(unit, country, file)`), `failed` (`UnitFailure(unit, country,
+  error, kind)`), `stale`, `superseded`, `notices`, `ok` (kod wyjścia CLI:
+  `True` = 0).
+- `LandCoverAreaResult` (`LandCoverManager.download`): `files`
+  (`LandCoverResult(unit, file, raw)`; `raw` = oryginalny ZIP przy
+  `keep_raw`), `failed` (`LandCoverFailure(unit, error)`), `stale`,
+  `notices`, `ok`; `HsgResult` (`HSGCalculator.calculate_hsg`): `unit`,
+  `file`, `inputs` (wejścia clay/sand/silt), `stale`, `notices`, `ok`.
 - `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
-  (`new`/`unchanged`/`relabeled`/`local`), `label`, `sha256`,
+  (`new`/`unchanged`/`relabeled`/`local`, dla HSG także `reused`), `label`, `sha256`,
   `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
   `unverified` (`"none"` — brak taniego sygnału, `"check_failed: ..."`).
   `file` wyników jednoplikowych jest `None` tylko z `plan=`, gdy plan nie
@@ -626,11 +636,11 @@ sam plik danych, bez sidecara.
 **Gdzie leżą pliki.** `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
 — kanoniczna tabela, przykłady i migracja z 0.6.x: ARCHITECTURE 3.3.
 
-**Starsze pliki CZ.** Pliki, których sidecar w
-`transform.horizontal` zawiera `S-JTSK to ETRS89 (3)`, nie są
-przebudowywane automatycznie; przy pominięciu istniejącego pliku
-CLI drukuje `Info:`, a ponowne pobranie wymusza `--force`.
-Wycinki PL WCS nie są pomijane — każdy przebieg pobiera na nowo.
+**Pliki z 0.7.x.** Zwykły plik w ścieżce standardowej (bez sidecara
+dowiązania do wersji) nie jest wersją magazynu: pierwsze uruchomienie 0.8.0
+pobiera dane do `versions/` i zastępuje plik dowiązaniem (ADR-036 D24);
+pliki wycinków PL z datą w nazwie (`<współrzędne>_<RRRRMMDD>.tif`) nie są
+rozpoznawane (sekcja 1.3).
 
 ---
 
@@ -687,7 +697,8 @@ Szczegóły trybów: sekcja 4.3.
   serwera (nie z kampanii arkuszy, sekcja 1.3) i nie przyjmuje
   `--all-campaigns`, flag roku ani `--full-sheet`.
 - **LAZ:** `--all-campaigns` pobiera wszystkie kafle, których rama przecina
-  obszar (bez deduplikacji ADR-029). LAZ nie używa dowiązań.
+  obszar (bez deduplikacji ADR-029). Kafle LAZ są wersjami z dowiązaniem
+  ścieżki standardowej, bez `full_sheet/`.
   `--min-density` jest tylko dla LAZ (z innymi produktami: `Error:`,
   sekcja 1.1).
 - Składanie kilku kampanii w jedną powierzchnię nie jest częścią
@@ -782,7 +793,7 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 - **Brak pełnego lotu:** w `full_sheet/` nie ma pliku. `Warning:` o niepełnej
   najnowszej kampanii dzieli arkusze na: `pelny lot w <segment>/full_sheet/`,
   `brak pelnego lotu w skorowidzu` (przy flagach roku: `... w zakresie lat
-  zadania`) i `pelny lot nie pobrany ... — uzyj --full-sheet`.
+  zadania`) i `pelny lot nie pobrany: ... - uzyj --full-sheet`.
 - **Pełny = w granicach Polski.** Arkusz graniczny oznaczony jako pełny ma
   nodata po stronie zagranicznej ramki — to normalne. `full_sheet/` ufa
   deklaracji skorowidza, nie mierzy pokrycia.
@@ -825,7 +836,7 @@ pozycje każdego toru.
 | Sytuacja | domyślnie | `--check-updates` | `--upgrade` | `--force` |
 |---|---|---|---|---|
 | lokalna wersja aktualna | lokalna wersja | `aktualne` | lokalna wersja | pobiera ponownie |
-| w skorowidzu nowsza kampania | lokalna wersja + `Info:` | `nowsza: <etykieta>` | pobiera nowszą | pobiera |
+| w skorowidzu nowsza kampania | lokalna wersja + `Info:` | `nowsza: <etykieta> (lokalna <etykieta>)` | pobiera nowszą | pobiera |
 | brak lokalnej wersji | pobiera | `do pobrania` | pobiera | pobiera |
 
 `--check-updates` niczego nie pobiera; z `--plan PLIK` zapisuje plan JSON
@@ -962,9 +973,11 @@ proxy).
   żywo w 0.8.0 (odczyt wydania z katalogu CLMS — tak). Pliki land cover
   i HSG z 0.7.x (`bdot10k_teryt_*.gpkg`, `soilgrids_*.tif`,
   `hsg_*.tif`) nie są rozpoznawane — pobierz ponownie do magazynu.
-- Gdy skorowidz dla godła PL-2000 1:10000 udostępnia tylko arkusze potomne,
-  pobranie zwraca `NoCoverageError` z podpowiedzią `--scale 1:2000`; nie
-  pobiera arkusza PL-1992 jako zamiennika.
+- Godło PL-2000 1:10000 wymaga w CLI i `download_data` jawnego `--scale`
+  (sekcja 1.6); provider/`DownloadManager` wywołany bez skali, gdy
+  skorowidz ma tylko arkusze potomne, zwraca `NoCoverageError`
+  z podpowiedzią `--scale 1:2000`. Arkusz PL-1992 nigdy nie jest pobierany
+  jako zamiennik.
 - Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
@@ -980,7 +993,7 @@ proxy).
   zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
-  `Warning: cache metadanych nieczytelny (...)` i pracuje bez cache.
+  `Warning: cache metadanych nieczytelny (<plik>): ...` i pracuje bez cache.
   Naprawa: `kartograf cache clear` (usuwa nieczytelny plik wraz
   z `-wal`/`-shm`) albo ręczne usunięcie pliku.
 
