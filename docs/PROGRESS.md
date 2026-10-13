@@ -2333,6 +2333,19 @@ w tym samym wydaniu (decyzja uzytkownika).
   X (plik identyczny z Y)`; (3) `same_as` = najnowsza identyczna wersja
   (`version_key`), nie pierwszy katalog (test
   `test_relabeled_names_newest_identical_version`).
+- [ ] **Postep pobierania z `--all-campaigns` (zgloszenie uzytkownika
+  2026-10-13):** linie `nowa wersja` / `nowa etykieta` / `lokalna wersja`
+  pojawiaja sie dopiero PO pobraniu calego zadania, wiec w trakcie nie
+  wiadomo, ktore kampanie zostana pobrane ani ktora jest pobierana teraz
+  (pliki NMT 1 m ~38 MB, kilka lotow na arkusz). Stan kodu:
+  `DownloadProgress` (`cli/download_cmd.py` `__call__`) raportuje arkusz
+  (`start`, pasek `current/total`), nie kampanie; linie statusu drukuje
+  `_print_report` z gotowego `DataReport`. Do zrobienia: przed pobraniem
+  lista wybranych kampanii arkusza (etykieta, lokalna/do pobrania) i
+  zdarzenie postepu per kampania (np. `Pobieranie <arkusz> <etykieta>
+  (k/n)`) z biblioteki (`on_progress`, ADR-037: decyzja w bibliotece, CLI
+  tylko drukuje); linie statusu najlepiej od razu po zapisie wersji.
+  Sprawdzic tez inne tory wieloplikowe (LAZ, lista arkuszy, BDOT10k).
 
 #### Do v1.0.0 — roadmapa
 
