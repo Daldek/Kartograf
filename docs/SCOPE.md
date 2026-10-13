@@ -1,7 +1,7 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.22
+**Wersja:** 3.23
 **Data:** 2026-10-13
 **Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu; ostatnie wydanie v0.7.2, 2026-10-11)
 
@@ -652,7 +652,7 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 |---|------------|--------|-----------|
 | 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`); stan 2026-10-12: plany 1/3 (arkusze PL), 2/3 (LAZ, CZ, wycinki) i 3/3 (land cover, HSG) wykonane i scalone do `develop` (E2E na żywo: `docs/research/2026-10-12-store-e2e/raport.md`); do wydania 0.8.0: CLMS z credentials niesprawdzony na żywo | — |
 | 2 | Manifest projektu | plik manifestu w katalogu projektu; CLI: pobranie do projektu, weryfikacja (sumy kontrolne), wykrywanie nowszych danych u źródła | 1 |
-| 3 | Katalog GUGiK i gotowe dane | strumień kolejnych produktów (inwentaryzacja usług w specu podprojektu, m.in. PRG, PRNG, EGiB w zakresie publicznym, BDOO, modele 3D, zdjęcia lotnicze, obrazy intensywności, archiwalny BDOT10k); każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących | 1 |
+| 3 | Katalog GUGiK i gotowe dane | strumień kolejnych produktów GUGiK i ČÚZK; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13: `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — NMT/NMPT 0,5 m i raport dostępności pełnych arkuszy; B: `elevation` CZ; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
 | 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |
 | — | ADR-031 (angielskie identyfikatory) | API i CLI po angielsku w 0.8.0 bez aliasów (errata 1) | zrobione (0.8.0) |
@@ -852,9 +852,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-12 | 3.20 | Magazyn wersjonowany plan 2/3 (ADR-036): LAZ, CZ i wycinki `bbox/` bez daty w wersjach, tryby update dla każdego toru, `DownloadManager.download_bbox` usunięte |
 | 2026-10-13 | 3.21 | Pełna weryfikacja z kodem 0.8.0-dev (ADR-037): status i nagłówki 0.8.0, `--scale` dla PL-2000, BDOT10k/CORINE/SoilGrids przez geometrię i filtr warstw, fallback przy niedostępnym skorowidzu (D14), API kampanii, drzewo modułów (brakujące moduły, wyjątki), kryteria 6.1 |
 | 2026-10-13 | 3.22 | Jawny tryb wycinka (ADR-038): `--cutout` + `--horizontal-crs` zamiast `--target-crs`, `--sheet-system` zamiast `--system`; obszar CZ wymaga `--cutout` |
+| 2026-10-13 | 3.23 | Podprojekt 3: odwołanie do inwentaryzacji GUGiK/ČÚZK i zaakceptowanego specu (kolejność planów A–E) |
 
 ---
 
-**Wersja dokumentu:** 3.22
+**Wersja dokumentu:** 3.23
 **Data ostatniej aktualizacji:** 2026-10-13
 **Status:** Kod v0.8.0-dev (ostatnie wydanie v0.7.2, 2026-10-11)

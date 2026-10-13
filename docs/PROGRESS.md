@@ -29,7 +29,7 @@
 | Kampanie GUGiK (ADR-030 + errata, ADR-032, ADR-033) | ✅ Gotowy | `--all-campaigns`, `--year`/`--min-year`/`--max-year`, `--full-sheet`; od 0.8.0 wersje w `<segment>/versions/`, sciezka standardowa i `full_sheet/` = hardlink; brak odczytu starych `kampanie/`; fallback przy niedostepnym skorowidzu wg ADR-030; weryfikacje na zywo: `docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-12-store-e2e/raport.md` |
 | Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | WCS 1 m z maska ladu PRG, NMT i NMPT; wersja w `versions/bbox/`, sciezka `bbox/<wsp>.tif` jako hardlink (od 0.8.0); NMPT `download_bbox` float32, kawalki ASC NMPT 4 Mpx coverage; arkuszowy tor ADR-027 usuniety; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-12-store-e2e/raport.md`) |
 
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane i scalone do `develop` (merge `423a664`, 2026-10-12; E2E na zywo PASS); podprojekt 3: inwentaryzacja GUGiK/CUZK z probkami (`docs/research/2026-10-13-katalog-produktow/`) i spec do akceptacji (`docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`) |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane i scalone do `develop` (merge `423a664`, 2026-10-12; E2E na zywo PASS); podprojekt 3: inwentaryzacja GUGiK/CUZK z probkami (`docs/research/2026-10-13-katalog-produktow/`) i spec zaakceptowany 2026-10-13 (`docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`; plany A-E, A po wydaniu 0.8.0) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -130,12 +130,14 @@
 >    pobranie CLMS niesprawdzone na zywo (backlog razem z CLMS 1990).
 >    Stara, rozjechana `feat/versioned-store` na `origin`: push
 >    `--force-with-lease` albo usuniecie WYLACZNIE za zgoda uzytkownika.
-> 3. **Podprojekt 3 - spec do akceptacji:** katalog produktow GUGiK/CUZK
->    (`docs/research/2026-10-13-katalog-produktow/raport.md`, dowody
->    `probki.md`) i spec
+> 3. **Podprojekt 3 - spec ZAAKCEPTOWANY 2026-10-13:**
 >    `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`
->    (rejestr wariantow + NMT/NMPT 0,5 m + raport dostepnosci jako plan A).
->    Najpierw decyzje uzytkownika z sekcji 9 specu, potem plan A.
+>    (inwentaryzacja: `docs/research/2026-10-13-katalog-produktow/`).
+>    Kolejnosc: 0.8.0 grupy CLI -> A `elevation` PL (rejestr wariantow,
+>    NMT/NMPT 0,5 m, `elevation availability` = komplet pelnych arkuszy wg
+>    skorowidza) -> B `elevation` CZ -> C PL jednostkowe/obszarowe
+>    (archiwum BDOT10k, PRG, EGiB, `models3d`) -> D CZ obszarowe i obrazy
+>    -> E. Nastepny krok po 0.8.0: plan implementacji A.
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
 > `origin`; szczegoly w sesjach nizej i w `docs/CHANGELOG.md` [0.7.2].
 > **Katalog danych testow na zywo:** poza repo, jawne `--output`
@@ -169,14 +171,30 @@
   wymaga BBOX X,Y dla EPSG:5514; przyklady w katalogu GUGiK (PRNG WFS,
   POLSA WCS) nieaktualne. Do ponownej weryfikacji: 4 feedy ATOM RUIAN
   (UUP, SP-AD) wskazuja usuniete pliki (HTTP 404).
-- Spec `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`
-  (PROJEKT): rejestr wariantow produktu (K1-K2), raport dostepnosci
-  `check_availability`/`kartograf availability` (K3-K4), generyczne
-  silniki kanalow (K5), fale produktow (plany A-E), decyzje do podjecia
-  (sekcja 9).
+- Spec `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`:
+  rejestr wariantow produktu (K1-K2), raport dostepnosci (K3-K4),
+  generyczne silniki kanalow (K5), fale produktow (plany A-E).
+  ZAAKCEPTOWANY 2026-10-13 po decyzjach uzytkownika:
+  - CLI: grupy komend wg typu danych w 0.8.0 (`elevation` z NMT, NMPT
+    i LAZ; `imagery`; `landcover`; `soil`; pozniej `boundaries`,
+    `cadastre`, `models3d`, `names`, `maps`) - backlog "Do 0.8.0";
+  - raport dostepnosci tylko dla danych wysokosciowych: kombinacja
+    kompletna, gdy arkusze `TAK` pokrywaja obszar przeciety z ladem PL
+    (maska PRG), bez progu i bez pobierania; `--measure` odrzucone.
+    Pomiar: `pokrycie.md` (arkusze `TAK` = 100% danych na ladzie, bez
+    szczelin; arkusze `NIE` maja w skorowidzu poligon calego arkusza,
+    dane 91,5% ladu; kafle LAZ nie wyznaczaja zasiegu NMT);
+  - archiwum BDOT10k: `landcover --source bdot10k --year R`, format
+    zrodlowy GML/SHP (GPKG nie istnieje - sprawdzone), rok w segmencie
+    (jedna paczka na rocznik, stan z poczatku roku): `bdot10k-archiwum.md`;
+  - ortofoto CZ jak w zrodle (JPEG + JGW); POLSA pominieta; pliki
+    krajowe przez `--whole-country`;
+  - kolejnosc planow A-E (silniki kanalow w planie C z pierwszymi
+    produktami, wysokosci CZ w B).
 - Backlog (prosba uzytkownika): sprawdzenie dostepnosci danych dla
-  obszaru przed pobraniem (lata, uklady, rozdzielczosci, pelne pokrycie)
-  - wpis w "Funkcje na przyszlosc", w specu jako plan A.
+  obszaru przed pobraniem - wpis w "Funkcje na przyszlosc", w specu jako
+  plan A (`elevation availability`).
+- SCOPE 3.23: wiersz podprojektu 3 z odwolaniem do specu.
 - Kod bez zmian (brama nieuruchamiana - zmiany tylko w dokumentacji).
 
 ### Sesja 2026-10-13 — ponowna weryfikacja spojnosci CLI/API i aktualizacja dokumentacji
@@ -2465,26 +2483,19 @@ Funkcje na przyszlosc (bez przypisanego wydania):
   zachowanie wycinka WCS (siatka 0,5 m?) i NMPT 0,5 m. Zaczac od
   inwentaryzacji skorowidza na zywo (jakie rozdzielczosci, uklady,
   pokrycie) i specu.
-- [ ] **Sprawdzenie dostepnosci danych dla obszaru przed pobraniem (prosba
-  uzytkownika 2026-10-13):** dla wskazanego obszaru (`--bbox`/`--geometry`/
-  `--sheet`/`--teryt`) i produktu (np. NMT) raport BEZ pobierania plikow:
-  jakie naloty/kampanie sa dostepne (rok i data aktualnosci, nr zgloszenia),
-  w jakich ukladach poziomych (PL-1992/PL-2000, strefa), rozdzielczosciach
-  (0,5/1/5 m) i ukladach wysokosci (EVRF2007/KRON86), oraz dla ktorych
-  kombinacji (rok x uklad x rozdzielczosc x uklad wysokosci) obszar ma
-  PELNE pokrycie (a dla pozostalych - procent pokrycia/brakujace arkusze).
-  Zrodlo: skorowidze WFS/WMS GUGiK (pola `akt_rok`, `akt_data`,
-  `char_przestrz`, `uklad_xy`, `uklad_h`, `nr_zglosz`,
-  `czy_ark_wypelniony`; pokrycie liczone z geometrii arkuszy wzgledem
-  obszaru, z uwzglednieniem lotow niepelnych - mechanizm pomiaru pokrycia
-  jest juz w ADR-029/ADR-033). Logika w bibliotece (ADR-037: funkcja API
-  zwracajaca strukture, CLI tylko drukuje tabele; np. `kartograf
-  availability`/`check_data(..., inventory=True)` - nazwa do specu),
-  wspolny cache metadanych. Zakres: najpierw NMT/NMPT/orto/LAZ PL, potem
-  CZ (CUZK nie ma kampanii - raport wydania) i nowe produkty katalogu.
-  Powiazane: NMT 0,5 m (wyzej) i wybor roku (ADR-032). Inwentaryzacja
-  2026-10-13: skorowidz NMT EVRF2007 2025 ma rekordy 0,5 m i 5 m, NMPT 2025
-  glownie 0,5 m (`docs/research/2026-10-13-katalog-produktow/`).
+- [ ] **Sprawdzenie dostepnosci danych wysokosciowych dla obszaru przed
+  pobraniem (prosba uzytkownika 2026-10-13; spec podprojektu 3, plan A,
+  sekcja 4):** `kartograf elevation availability` / `check_availability`
+  dla `--bbox`/`--geometry`/`--sheet` i produktu NMT/NMPT/LAZ, BEZ
+  pobierania: kombinacje rok x uklad poziomy x rozdzielczosc x uklad
+  wysokosci ze skorowidza WFS (`akt_rok`, `akt_data`, `char_przestrz`,
+  `uklad_xy`, `uklad_h`, `nr_zglosz`, `czy_ark_wypelniony`) i dla kazdej
+  odpowiedz "komplet pelnych arkuszy": arkusze `TAK` pokrywaja obszar
+  przeciety z ladem PL (maska PRG); arkusze `NIE` i brakujace arkusze
+  z godlami. Bez progu i bez pomiaru tresci (`--measure` odrzucone;
+  podstawa: `docs/research/2026-10-13-katalog-produktow/pokrycie.md`).
+  CZ w planie B (bez lotow - dostepne produkty i arkusze). Powiazane:
+  NMT 0,5 m (wyzej), wybor roku (ADR-032).
 
 Czytelnosc ukladu `data/` po magazynie wersjonowanym (przeglad
 2026-10-12, poprawki na kolejne etapy; decyzja uzytkownika 2026-10-12).
