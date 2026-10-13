@@ -498,6 +498,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   niedostepny`) i porazki powiatow BDOT10k obnizone do `debug`.
   `Zapytanie WFS GUGiK ...` LAZ zastapione zdarzeniem postepu po walidacji
   (z ukladem PL), `soilgrids hsg` bez wlasnego przechwytywania wyjatkow.
+- Druga runda (2026-10-12): bbox sprawdzany (wspolrzedne i uklad z listy
+  `--bbox-crs`, nieznany uklad = `ValidationError`, nie `CRSError`) takze
+  w `download_pl_cutout`/`check_pl_cutout`, `download_cz_cutout`/
+  `check_cz_cutout`, `download_laz_area`/`check_laz_area`,
+  `LandCoverManager` i `HSGCalculator`; `resolution`/`vertical_crs` innego
+  typu niz tekst/slownik = `ValidationError`; kod TERYT sprawdzany takze
+  w `check`. Bez angielskich linii logu na stderr (`No data for ...`,
+  `Failed to download ...`, podglad CORINE) - przyczyna porazki arkusza
+  jest w tekscie bledu (`DataReport.failed`, `Error:`). Arkusz PL uzyty
+  lokalnie przy niedostepnym skorowidzu daje jeden komunikat (dotad dwa).
+  `--check-updates` pod `auto` z awaria jednego kraju: komunikat bez
+  "pobrano", blad z nazwa kraju. `Info:` podgladu CORINE dopiero po
+  walidacji zadania; `soilgrids hsg` bez naglowka przed walidacja.
 
 ## [0.7.2] - 2026-10-11
 

@@ -15,6 +15,7 @@ from kartograf.core.bbox import BBox
 from kartograf.download.cutout import SUPPORTED_TARGET_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
+    BBOX_CRS_CHOICES,
     BBOX_EXPECTED,
     COUNTRY_CHOICES,
     PRODUCT_CHOICES,
@@ -75,16 +76,6 @@ _SHEET_HELP = "Godlo arkusza (np. N-34-130-D)"
 _GEOMETRY_HELP = "Plik geometrii (SHP albo GPKG); obszar = obwiednia obiektow"
 _LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
-)
-BBOX_CRS_CHOICES = (
-    "EPSG:2180",
-    "EPSG:4326",
-    "EPSG:2176",
-    "EPSG:2177",
-    "EPSG:2178",
-    "EPSG:2179",
-    "EPSG:5514",
-    "EPSG:3045",
 )
 
 

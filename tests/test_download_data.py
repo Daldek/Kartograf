@@ -6,14 +6,25 @@ from unittest.mock import patch
 import pytest
 
 from kartograf.core.bbox import BBox
-from kartograf.download.cutout import PlCutoutResult
+from kartograf.download.cutout import (
+    PlCutoutResult,
+    check_pl_cutout,
+    download_pl_cutout,
+)
+from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
 from kartograf.download.data import UnitFile, check_data, download_data
-from kartograf.download.laz import LazDownloadResult
+from kartograf.download.laz import (
+    LazDownloadResult,
+    check_laz_area,
+    download_laz_area,
+)
 from kartograf.download.manager import DownloadProgress
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import (
     AUTO_CLIPPED,
     AUTO_PARTIAL_SUCCESS,
+    CHECK_FAILED,
+    NO_COVERAGE_SOME,
     Notice,
 )
 from tests.test_cli import _cz_provider_mock
@@ -116,6 +127,14 @@ def test_area_outside_countries_is_validation_error(tmp_path):
         (
             {"bbox": BBox(10, 10, 5, 5, "EPSG:2180")},
             "Nieprawidlowy bbox: bbox odwrocony",
+        ),
+        (
+            {"bbox": BBox(1, 2, 3, 4, "bogus")},
+            "Nieprawidlowy bbox: nieobslugiwany uklad 'bogus'",
+        ),
+        (
+            {"bbox": BBox(1, 2, 3, 4, "EPSG:9999")},
+            "Nieprawidlowy bbox: nieobslugiwany uklad 'EPSG:9999'",
         ),
         (
             {"bbox": BBox(float("nan"), 0, 5, 5, "EPSG:2180")},
@@ -310,3 +329,168 @@ def test_check_then_upgrade_with_plan_downloads_planned(tmp_path):
         report = download_data(**selection, update="upgrade", plan=plan)
     assert report.ok and [f.unit for f in report.files] == [G]
     assert fake.downloads == [REC["84183"].url]
+
+
+@pytest.mark.parametrize("operation", [download_data, check_data])
+@pytest.mark.parametrize("flag", ["resolution", "vertical_crs"])
+@pytest.mark.parametrize("invalid", [7, ["pl=1m"]])
+def test_per_country_wrong_type_fails_before_source(tmp_path, operation, flag, invalid):
+    selection = {
+        "product": "nmt",
+        "output_dir": tmp_path,
+        "bbox": BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
+        "country": "pl",
+        "resolution": "1m",
+        "vertical_crs": "EVRF2007",
+        "system": "1992",
+        "cache": False,
+        flag: invalid,
+    }
+    with (
+        patch("kartograf.download.data._create_provider_and_storage") as provider,
+        pytest.raises(
+            ValidationError,
+            match=f"--{flag.replace('_', '-')}: nieprawidlowa wartosc",
+        ),
+    ):
+        operation(**selection)
+    provider.assert_not_called()
+
+
+_BBOX_TRACKS = (
+    (
+        download_data,
+        {
+            "product": "nmt",
+            "country": "pl",
+            "resolution": "1m",
+            "vertical_crs": "EVRF2007",
+            "system": "1992",
+        },
+    ),
+    (
+        check_data,
+        {
+            "product": "nmt",
+            "country": "pl",
+            "resolution": "1m",
+            "vertical_crs": "EVRF2007",
+            "system": "1992",
+        },
+    ),
+    (
+        check_pl_cutout,
+        {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"},
+    ),
+    (
+        download_pl_cutout,
+        {"target_crs": "EPSG:2180", "vertical_crs": "EVRF2007", "product": "nmt"},
+    ),
+    (
+        check_cz_cutout,
+        {"target_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
+    ),
+    (
+        download_cz_cutout,
+        {"target_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
+    ),
+    (check_laz_area, {"vertical_crs": "EVRF2007"}),
+    (download_laz_area, {"vertical_crs": "EVRF2007"}),
+)
+
+
+@pytest.mark.parametrize("operation,choices", _BBOX_TRACKS)
+@pytest.mark.parametrize(
+    ("bbox", "reason"),
+    [
+        (BBox(1, 2, 3, 4, "bogus"), "nieobslugiwany uklad 'bogus'"),
+        (BBox(1, 2, 3, 4, "EPSG:9999"), "nieobslugiwany uklad 'EPSG:9999'"),
+        (BBox(1, 2, 3, 4, "epsg:2180"), "nieobslugiwany uklad 'epsg:2180'"),
+        (BBox(10, 10, 5, 5, "EPSG:2180"), "bbox odwrocony"),
+    ],
+)
+def test_all_public_bbox_tracks_reject_invalid_input_before_network(
+    tmp_path, operation, choices, bbox, reason
+):
+    with (
+        patch("socket.socket.connect", side_effect=AssertionError("network")),
+        pytest.raises(ValidationError) as exc,
+    ):
+        operation(bbox=bbox, output_dir=tmp_path, cache=False, **choices)
+    assert str(exc.value).startswith(f"Nieprawidlowy bbox: {reason}")
+
+
+@pytest.mark.parametrize("operation", [check_cz_cutout, download_cz_cutout])
+def test_cz_cutout_unknown_target_crs_is_validation_error(tmp_path, operation):
+    with (
+        patch(CZ_FACTORY) as factory,
+        pytest.raises(
+            ValidationError, match="Nieobslugiwany uklad docelowy wycinka CZ"
+        ),
+    ):
+        operation(
+            BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
+            output_dir=tmp_path,
+            target_crs="EPSG:9999",
+            vertical_crs="Bpv",
+            resolution="2m",
+            cache=False,
+        )
+    factory.assert_not_called()
+
+
+def test_pl_sheet_list_failure_contains_per_sheet_cause(tmp_path):
+    from kartograf.download.storage import FileStorage
+
+    failed = "N-34-139-C-a-3-2"
+    missing = "N-34-139-C-a-3-3"
+    fake = FakeCampaignProvider(C14, errors={failed: DownloadError("zrodlo HTTP 503")})
+    storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
+    with (
+        patch(
+            "kartograf.download.data._create_provider_and_storage",
+            return_value=(fake, storage),
+        ),
+        patch(
+            "kartograf.download.data.find_sheets_for_bbox",
+            return_value=[G, failed, missing],
+        ),
+    ):
+        report = download_data(
+            product="nmt",
+            output_dir=tmp_path,
+            bbox=BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
+            country="pl",
+            resolution="1m",
+            vertical_crs="EVRF2007",
+            system="1992",
+            cache=False,
+            workers=2,
+        )
+    assert not report.ok
+    assert len(report.files) == 1
+    assert len(report.failed) == 1
+    assert report.failed[0].kind == "download"
+    assert f"{failed}: zrodlo HTTP 503" in report.failed[0].error
+    assert "GUGiK nie ma danych" in next(
+        n.text for n in report.notices if n.code == NO_COVERAGE_SOME
+    )
+
+
+def test_check_data_auto_partial_names_failed_country_without_download_claim(tmp_path):
+    notices: list[Notice] = []
+    with patch(CZ_FACTORY, side_effect=DownloadError("CUZK 503")):
+        plan = check_data(
+            product="nmt",
+            output_dir=tmp_path,
+            bbox=BORDER,
+            target_crs="EPSG:3045",
+            cache=False,
+            on_notice=notices.append,
+            **AUTO,
+        )
+    assert [item.track for item in plan.items] == ["pl_cutout"]
+    partial = next(n for n in notices if n.code == AUTO_PARTIAL_SUCCESS)
+    assert "sprawdzono PL" in partial.text and "pobrano" not in partial.text
+    failed = [n for n in notices if n.code == CHECK_FAILED]
+    assert len(failed) == 1 and failed[0].text == "CZ: CUZK 503"

@@ -555,6 +555,7 @@ class HSGCalculator:
         """HSG selection: the canonical sheet or an EPSG:2180 bbox."""
         from kartograf.core.sheet_parser import SheetParser
         from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
+        from kartograf.download.options import validate_request_bbox
         from kartograf.exceptions import ValidationError
 
         if sum(v is not None for v in (sheet, bbox, geometry)) != 1:
@@ -566,6 +567,7 @@ class HSGCalculator:
         if geometry is not None:
             return _bbox_request(geometry_envelope_2180(geometry, layer, sink))
         assert bbox is not None
+        validate_request_bbox(bbox)
         return _bbox_request(bbox_to_2180(bbox))
 
     # -------------------------------------------------------------------------

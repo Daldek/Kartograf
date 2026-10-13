@@ -1622,10 +1622,10 @@ class DownloadManager:
                     available=check.available[sheet] if check is not None else None,
                 )
         except NoCoverageError as e:
-            logger.warning(f"No data for {sheet}: {e}")
+            logger.debug("No data for %s: %s", sheet, e)
             return (sheet, None, "no_coverage", str(e), e.hints)
         except DownloadError as e:
-            logger.error(f"Failed to download {sheet}: {e}")
+            logger.debug("Failed to download %s: %s", sheet, e)
             return (sheet, None, "failed", str(e), ())
         if fetch.skipped:
             return (sheet, fetch, "skipped", "Already exists", ())
@@ -1784,7 +1784,7 @@ class DownloadManager:
                     try:
                         sheet, fetch, status, message, hints = future.result()
                     except Exception as e:
-                        logger.error(f"Unexpected error downloading {sheet}: {e}")
+                        logger.debug("Unexpected error downloading %s: %s", sheet, e)
                         fetch, status, message, hints = None, "failed", str(e), ()
                     counter += 1
                     outcomes[sheet] = (fetch, status, hints, message)

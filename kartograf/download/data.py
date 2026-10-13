@@ -163,13 +163,20 @@ class _Run:
     superseded: list[SupersededLazTile] = field(default_factory=list)
     plans: list[UpdatePlan] = field(default_factory=list)
 
-    def add(self, unit: str, country: str, file: VersionedFile | None) -> None:
-        """Record a file and the data notices of its signal check."""
+    def add(
+        self,
+        unit: str,
+        country: str,
+        file: VersionedFile | None,
+        *,
+        reported_check_failure: bool = False,
+    ) -> None:
+        """Record a file and signal notices not already emitted by its manager."""
         if file is None:
             return
         self.files.append(UnitFile(unit, country, file))
         unverified = file.unverified or ""
-        if unverified.startswith("check_failed"):
+        if unverified.startswith("check_failed") and not reported_check_failure:
             error = unverified.split(":", 1)[1].strip()
             self.sink.emit(
                 "warning",
@@ -350,7 +357,7 @@ def check_data(
         error = run.failed[0].error if run.failed else "brak pozycji planu"
         raise DownloadError(error)
     for failure in run.failed:
-        run.sink.emit("warning", CHECK_FAILED, failure.error)
+        run.sink.emit("warning", CHECK_FAILED, f"{failure.unit}: {failure.error}")
     merged = run.plans[0]
     for other in run.plans[1:]:
         merged = merged.merge(other)
@@ -522,13 +529,19 @@ def _dispatch_area(
     if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
-        run.sink.emit(
-            "warning",
-            AUTO_PARTIAL_SUCCESS,
-            f"czesc {', '.join(failed)} zadania zakonczyla sie bledem "
-            f"(patrz Error) - pobrano {', '.join(ok)}; kod 0 "
-            "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)",
-        )
+        if run.check:
+            text = (
+                f"czesc {', '.join(failed)} zadania nie mogla zostac sprawdzona "
+                f"- sprawdzono {', '.join(ok)}; kod 0 "
+                "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
+            )
+        else:
+            text = (
+                f"czesc {', '.join(failed)} zadania zakonczyla sie bledem "
+                f"(patrz Error) - pobrano {', '.join(ok)}; kod 0 "
+                "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
+            )
+        run.sink.emit("warning", AUTO_PARTIAL_SUCCESS, text)
         return 0
     return max(exit_codes)
 
@@ -655,9 +668,15 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
     if run.update != "upgrade" or run.loaded is None:
         return None
     report = manager.download_sheets(sheets, update="upgrade", plan=run.loaded)
+    reported = any(n.code == UNVERIFIED_LOCAL for n in report.notices)
     for sheet, files in report.files.items():
         for file in files:
-            run.add(sheet, "PL", file)
+            run.add(
+                sheet,
+                "PL",
+                file,
+                reported_check_failure=reported or sheet in report.unverified,
+            )
     rc = run.add_stale(report.stale)
     for sheet, message in report.errors.items():
         run.fail(sheet, "PL", f"{sheet}: {message}", "download")
@@ -720,8 +739,14 @@ def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
             return run.fail(task.sheet, "PL", str(e), "download")
     if expanded:
         return _finish_pl_sheets(task, run, result)
+    reported = any(n.code == UNVERIFIED_LOCAL for n in result.notices)
     for file in result.files.get(parsed.sheet, ()):
-        run.add(parsed.sheet, "PL", file)
+        run.add(
+            parsed.sheet,
+            "PL",
+            file,
+            reported_check_failure=reported or parsed.sheet in result.unverified,
+        )
     paths = _result_paths(result)
     _sheet_sidecar_notices(task, run, result, paths)
     return 0
@@ -823,9 +848,15 @@ def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) 
     """
     paths = _result_paths(result)
     _sheet_sidecar_notices(task, run, result, paths)
+    reported = any(n.code == UNVERIFIED_LOCAL for n in result.notices)
     for sheet, files in result.files.items():
         for file in files:
-            run.add(sheet, "PL", file)
+            run.add(
+                sheet,
+                "PL",
+                file,
+                reported_check_failure=reported or sheet in result.unverified,
+            )
     total = result.total
     hard = result.hard_failures
     missing = result.no_coverage
@@ -841,11 +872,15 @@ def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) 
         )
         _coverage_hints(run, result)
     if hard:
+        causes = "; ".join(
+            f"{sheet}: {result.errors[sheet].removeprefix(sheet + ': ')}"
+            for sheet in hard
+        )
         return run.fail(
             "PL",
             "PL",
             f"{len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
-            f"nie brak danych): {', '.join(hard)} - ponow pobranie",
+            f"nie brak danych): {causes} - ponow pobranie",
             "download",
         )
     if not paths:

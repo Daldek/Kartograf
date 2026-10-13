@@ -286,7 +286,7 @@ class CorineProvider(LandCoverProvider):
                 self._clms_auth = CLMSAuth(clms_credentials)
                 logger.info("CLMS OAuth2 authentication configured (direct mode)")
             except Exception as e:
-                logger.warning(f"Failed to initialize CLMS auth: {e}")
+                logger.debug("Failed to initialize CLMS auth: %s", e)
 
         self.descriptor_key = "eu.clms.corine"
 
@@ -473,7 +473,7 @@ class CorineProvider(LandCoverProvider):
 
         url = self._construct_wms_url(target_bounds, year, width_px, height_px)
 
-        logger.warning(
+        logger.debug(
             "Downloading CLC %s preview via WMS "
             "(no CLMS credentials - styled PNG, not class codes)",
             year,
@@ -617,7 +617,7 @@ class CorineProvider(LandCoverProvider):
             )
 
             if not response or response.get("status_code") != 200:
-                logger.warning("CLMS status check failed via proxy")
+                logger.debug("CLMS status check failed via proxy")
                 time.sleep(self.CLMS_POLL_INTERVAL)
                 continue
 
@@ -750,7 +750,7 @@ class CorineProvider(LandCoverProvider):
                 time.sleep(self.CLMS_POLL_INTERVAL)
 
             except requests.RequestException as e:
-                logger.warning(f"CLMS status check failed: {e}")
+                logger.debug("CLMS status check failed: %s", e)
                 time.sleep(self.CLMS_POLL_INTERVAL)
 
         raise DownloadError(

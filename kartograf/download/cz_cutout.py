@@ -285,8 +285,14 @@ def _cz_provider(
     cache: MetadataCache | None,
 ):
     """CZ DMR provider of a cutout (``TransformError`` before any network)."""
+    from kartograf.download.cutout import SUPPORTED_TARGET_CRS
     from kartograf.providers.cuzk import create_dmr_provider
 
+    if target_crs not in SUPPORTED_TARGET_CRS:
+        raise ValidationError(
+            f"Nieobslugiwany uklad docelowy wycinka CZ: {target_crs!r} "
+            f"(dostepne: {', '.join(SUPPORTED_TARGET_CRS)})"
+        )
     return create_dmr_provider(
         resolution=resolution,
         cache=cache,
@@ -312,6 +318,9 @@ def check_cz_cutout(
     are accepted for symmetry with the download. Invalid choices raise the
     same ``ValidationError``/``TransformError`` as the download.
     """
+    from kartograf.download.options import validate_request_bbox
+
+    validate_request_bbox(bbox)
     del cache, on_notice  # same signature as the download (Z2); unused here
     provider = _cz_provider(
         target_crs=target_crs,
@@ -358,6 +367,9 @@ def download_cz_cutout(
     DownloadError
         CUZK service failure.
     """
+    from kartograf.download.options import validate_request_bbox
+
+    validate_request_bbox(bbox)
     validate_update(update)
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:

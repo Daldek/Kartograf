@@ -68,6 +68,7 @@ def _sheet_list_manager(*paths, failed=(), no_coverage=(), skipped=()):
         failed=[*failed, *no_coverage],
         skipped=list(skipped),
         no_coverage=list(no_coverage),
+        errors={sheet: f"siec {sheet}" for sheet in failed},
         files={
             Path(p).stem: (
                 _version(p, status="local" if Path(p).stem in skipped else "new"),
@@ -922,7 +923,12 @@ class TestCmdDownload:
     ):
         """100% download failures in the hierarchy: an error listing all sheets."""
         mock_manager_class.return_value = self._hierarchy_manager(
-            DownloadResult(succeeded=[], failed=["A", "B", "C", "D"], skipped=[])
+            DownloadResult(
+                succeeded=[],
+                failed=["A", "B", "C", "D"],
+                skipped=[],
+                errors={sheet: "zrodlo 503" for sheet in ("A", "B", "C", "D")},
+            )
         )
 
         result = main(
@@ -948,7 +954,8 @@ class TestCmdDownload:
         assert result == 1
         err = capsys.readouterr().err
         assert "Error: 4 z 4 arkuszy nie pobrano" in err
-        assert "A, B, C, D" in err and "ponow pobranie" in err
+        assert all(f"{sheet}: zrodlo 503" in err for sheet in ("A", "B", "C", "D"))
+        assert "ponow pobranie" in err
 
     @patch("kartograf.download.data.DownloadManager")
     def test_hierarchy_partial_failure_returns_exit_1(
@@ -957,7 +964,9 @@ class TestCmdDownload:
         """A download failure (not missing data) ends with 1 despite partial success."""
         paths = [tmp_path / f"test{i}.asc" for i in range(3)]
         mock_manager_class.return_value = self._hierarchy_manager(
-            DownloadResult(succeeded=paths, failed=["A"], skipped=[])
+            DownloadResult(
+                succeeded=paths, failed=["A"], skipped=[], errors={"A": "siec"}
+            )
         )
 
         result = main(
@@ -1115,7 +1124,8 @@ class TestCmdDownload:
         mock_manager = Mock()
         mock_manager.count_sheets.return_value = 4
         mock_manager.download_hierarchy.return_value = DownloadResult(
-            failed=["A", "B", "C", "D"]
+            failed=["A", "B", "C", "D"],
+            errors={sheet: "siec" for sheet in ("A", "B", "C", "D")},
         )
         mock_manager_class.return_value = mock_manager
 
@@ -2577,6 +2587,8 @@ class TestSheetListExitCode:
         error_line = next(line for line in err.splitlines() if "Error:" in line)
         warning_line = next(line for line in err.splitlines() if "Warning:" in line)
         assert "N-34-130-D-d-2-3" in error_line and "ponow pobranie" in error_line
+        assert "N-34-130-D-d-2-3: timeout N-34-130-D-d-2-3" in error_line
+        assert all(line.startswith(("Warning:", "Error:")) for line in err.splitlines())
         assert "1 z 4 arkuszy nie pobrano" in error_line
         assert "N-34-130-D-d-2-1" in warning_line
         assert "GUGiK nie ma danych dla 1 z 4 arkuszy" in warning_line
@@ -10333,6 +10345,7 @@ class TestCampaignOptions:
             "lokalnej wersji bez sprawdzenia nowszej "
             "(pobranie nieudane po 3 probach: HTTP 503)"
         ) in err
+        assert err.count("Warning:") == 1
 
     @patch("kartograf.download.data.DownloadManager")
     def test_verified_single_sheet_has_no_unverified_warning(
@@ -10434,6 +10447,7 @@ class TestCampaignOptions:
             "wersji bez sprawdzenia nowszej (N-34-130-D-d-2-4, N-34-130-D-d-2-3) "
             "(HTTP 503)"
         ) in err
+        assert err.count("Warning:") == 1
 
     def test_unverified_end_to_end_with_real_manager(self, capsys, tmp_path):
         """A real ``DownloadManager`` + a campaign provider without network: the second
@@ -10473,6 +10487,7 @@ class TestCampaignOptions:
             assert main(argv) == 0
             err = capsys.readouterr().err
             assert f"Warning: {sheet}: skorowidz GUGiK niedostepny" in err
+            assert err.count(f"Warning: {sheet}: skorowidz GUGiK niedostepny") == 1
 
             fake.resolve_error = DownloadError("raport wyjatku OGC")
             assert main(argv) == 1
