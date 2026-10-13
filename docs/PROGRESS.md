@@ -119,7 +119,9 @@
 > 1. **Przed wydaniem 0.8.0:** dostosowac Hydrograf/Hydrolog wg CHANGELOG
 >    [0.8.0] "Co zrobic" (`DownloadResult` z wartosci zwracanej,
 >    `LandCoverAreaResult`, `calculate_hsg` bez `stat`, cache w cwd);
->    rozstrzygnac otwarte drobiazgi w backlogu "Do 0.8.0".
+>    rozstrzygnac otwarte drobiazgi w backlogu "Do 0.8.0"; przebudowac CLI
+>    na grupy wg typu danych (`elevation`, `imagery`, `landcover`, `soil`;
+>    decyzja 2026-10-13, backlog "Do 0.8.0").
 >    Weryfikacja na zywo spojnosci CLI = API: 10 scenariuszy, 0 roznic
 >    (`docs/research/2026-10-12-cli-api-consistency-live/raport.md`);
 >    test zmian lamiacych 0.8.0: 0 FAIL
@@ -2406,6 +2408,29 @@ w tym samym wydaniu (decyzja uzytkownika).
   (k/n)`) z biblioteki (`on_progress`, ADR-037: decyzja w bibliotece, CLI
   tylko drukuje); linie statusu najlepiej od razu po zapisie wersji.
   Sprawdzic tez inne tory wieloplikowe (LAZ, lista arkuszy, BDOT10k).
+- [ ] **Grupy komend CLI wg typu danych (decyzja uzytkownika
+  2026-10-13, wchodzi do 0.8.0, BREAKING, bez aliasow - jak errata
+  ADR-031):** kazda grupa ma podkomendy `download` (+ `list-sources`,
+  pozniej `availability`) i wylacznie swoje flagi. Przebudowa
+  istniejacych komend w 0.8.0:
+  `kartograf download` -> `kartograf elevation download --product
+  nmt|nmpt|laz` (NMT/NMPT PL, DMR CZ, LAZ; `--resolution`,
+  `--vertical-crs`, `--cutout`, `--min-density`, kampanie, `--country
+  auto`) i `kartograf imagery download --product orto` (bez
+  `--vertical-crs`/`--resolution`); `kartograf landcover` zostaje
+  (BDOT10k, CORINE); SoilGrids z `landcover --source soilgrids`
+  i `kartograf soilgrids hsg` -> `kartograf soil download` / `kartograf
+  soil hsg`. `parse` i `cache` bez zmian. Grupy dla nowych produktow
+  powstaja razem z produktami (spec podprojektu 3, sekcja 6.1):
+  `boundaries`, `cadastre`, `models3d`, `names`, `maps`. Biblioteka bez
+  zmian (CLI tylko tlumaczy na `download_data`, `LandCoverManager`,
+  `HSGCalculator`, ADR-037); segmenty `data/` bez zmian. Do zrobienia:
+  `cli/_parser.py` i komendy, testy CLI i zgodnosci, przyklady (USAGE,
+  SCOPE, PRD, README, ARCHITECTURE, STANDARDS 6.4), CHANGELOG [0.8.0]
+  BREAKING z "Co zrobic", nowy ADR (struktura CLI) w `docs/DECISIONS.md`
+  (CRLF). Rozwiazuje kolizje znaczen `--year` (filtr lotow vs wydanie)
+  i `--sheet` (plik vs obszar) miedzy komendami. Hydrograf/Hydrolog:
+  sprawdzic wywolania CLI przed wydaniem.
 
 #### Do v1.0.0 — roadmapa
 
