@@ -479,6 +479,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Error: nie udalo sie zapisac planu <PLIK>: ...` (kod 1) zamiast
   `Error: FileNotFoundError: ...` z podpowiedzia `KARTOGRAF_DEBUG`
   (weryfikacja na zywo 2026-10-12).
+- Ponowna weryfikacja spojnosci CLI = API (ADR-037, 2026-10-12):
+  `download_data`/`check_data` sprawdzaja przed siecia `product`,
+  `country`, `system`, `target_crs` (wartosci jak w `--help`) i bbox
+  (odwrocony, nieskonczony: ten sam tekst `Nieprawidlowy bbox: ...` co
+  CLI); bledy wejscia wewnatrz czesci kraju (np. bbox EPSG:2177 z
+  `--system 1992`) sa `ValidationError`, a nie pozycja `failed`
+  ani `DownloadError`. `LandCoverManager`: brak opcji (`year` CORINE,
+  `property`/`depth`/`stat` SoilGrids) i opcje tylko BDOT10k (`format`,
+  `layers`, `keep_raw`) dla innego zrodla to `ValidationError` z tekstem
+  CLI (dotad `TypeError`); `landcover download --format` z innym zrodlem
+  niz bdot10k to blad (dotad po cichu pomijany). `HSGCalculator("x.tif")`
+  odrzuca katalog `.tif` jak CLI; `check_hsg` ma `timeout`; odczyt
+  `HSGCalculator.provider` nie wylacza juz cache. Komunikaty
+  `nie udalo sie sprawdzic zrodla` i `lokalna wersja ... niesprawdzona` dla
+  land cover i HSG sa `Notice` biblioteki (dotad tylko w CLI). Bez
+  podwojnych linii na stderr: logi duplikujace `Notice` (`skorowidz GUGiK
+  niedostepny`) i porazki powiatow BDOT10k obnizone do `debug`.
+  `Zapytanie WFS GUGiK ...` LAZ zastapione zdarzeniem postepu po walidacji
+  (z ukladem PL), `soilgrids hsg` bez wlasnego przechwytywania wyjatkow.
 
 ## [0.7.2] - 2026-10-11
 

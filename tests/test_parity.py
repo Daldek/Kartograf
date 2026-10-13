@@ -35,6 +35,7 @@ from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.data import check_data, download_data
+from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED
 from kartograf.providers.pl.gugik import GugikProvider
 from tests.parity import assert_notices_printed, assert_same_store, run_both
@@ -315,6 +316,57 @@ def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     assert run.cli_code == 1
     assert type(run.api_error).__name__ == "ValidationError"
     assert run.cli_stderr.strip() == f"Error: {run.api_error}"
+    assert not run.cli_store.exists() and not run.api_store.exists()
+
+
+@pytest.mark.parametrize("check", [False, True], ids=["download", "check"])
+@pytest.mark.parametrize(
+    ("bbox_text", "bbox"),
+    [
+        ("10,10,5,5", BBox(10, 10, 5, 5, "EPSG:2180")),
+        ("nan,1,2,3", BBox(float("nan"), 1, 2, 3, "EPSG:2180")),
+        (
+            "750000,5500000,750100,5500100",
+            BBox(750000, 5500000, 750100, 5500100, "EPSG:2177"),
+        ),
+    ],
+    ids=["inverted", "nan", "unsupported-sheet-crs"],
+)
+def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
+    options = {
+        "product": "nmt",
+        "bbox": bbox,
+        "country": "pl",
+        "system": "1992",
+        "resolution": "1m",
+        "vertical_crs": "EVRF2007",
+        "cache": False,
+    }
+    argv = [
+        "download",
+        "--product",
+        "nmt",
+        f"--bbox={bbox_text}",
+        "--bbox-crs",
+        bbox.crs,
+        "--country",
+        "pl",
+        "--system",
+        "1992",
+        "--resolution",
+        "1m",
+        "--vertical-crs",
+        "EVRF2007",
+        "-q",
+    ]
+    if check:
+        argv.append("--check-updates")
+    operation = check_data if check else download_data
+    run = run_both(argv, lambda out: operation(output_dir=out, **options), tmp_path)
+    assert run.cli_code == 1
+    assert type(run.api_error) is ValidationError
+    assert run.cli_stderr == f"Error: {run.api_error}\n"
+    assert run.cli_stdout == ""
     assert not run.cli_store.exists() and not run.api_store.exists()
 
 

@@ -5,6 +5,7 @@ Update modes, plan files and status lines (spec 4.2, 4.4, 4.5) through
 """
 
 import json
+import logging
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -13,7 +14,8 @@ import pytest
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
 from kartograf.download.fetch import VersionedFile
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.hydrology import HSGCalculator
 from kartograf.landcover.manager import LandCoverAreaResult, LandCoverResult
 from kartograf.notices import NO_COVERAGE_SOME, Notice
 from kartograf.providers.corine import CorineProvider
@@ -112,7 +114,7 @@ def test_landcover_upgrade_plan_stale_exit_1(tmp_path, capsys):
     )
 
 
-def test_landcover_status_lines_and_summary(tmp_path, capsys):
+def test_landcover_status_lines_and_summary(tmp_path, capsys, caplog):
     def package(code, output_path, **kwargs):
         if code == "0224":
             raise DownloadError("BDOT10k TERYT 0224: HTTP 500")
@@ -130,11 +132,17 @@ def test_landcover_status_lines_and_summary(tmp_path, capsys):
     assert rc == 1
     captured = capsys.readouterr()
     assert "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: nowa wersja " in captured.out
-    assert "Error: 0224: BDOT10k TERYT 0224: HTTP 500" in captured.err
+    error = "Error: 0224: BDOT10k TERYT 0224: HTTP 500"
+    assert captured.err.splitlines().count(error) == 1
     assert (
         "Nowe: 1, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 1 "
         f"({tmp_path / 'out'})"
     ) in captured.out
+    assert not any(
+        record.name == "kartograf.landcover.manager"
+        and record.levelno >= logging.WARNING
+        for record in caplog.records
+    )
 
 
 def test_landcover_bdot_rerun_unchecked_line(tmp_path, capsys):
@@ -182,7 +190,9 @@ def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
         )
     assert rc == 1
     assert fake.capabilities == 0
-    assert "Error: --output to katalog magazynu (od 0.8.0)" in capsys.readouterr().err
+    with pytest.raises(ValidationError) as error:
+        HSGCalculator(tmp_path / "hsg.tif")
+    assert capsys.readouterr().err == f"Error: {error.value}\n"
 
 
 def test_hsg_cli_keep_intermediate_removed(tmp_path):
@@ -232,6 +242,18 @@ def test_hsg_cli_stats_from_store_path(tmp_path, capsys):
     assert "Grupa B: " in out or "Grupa A: " in out
     store = Path(tmp_path / "out" / "hsg/global_soilgrids_0-5cm_mean/bbox")
     assert (store / f"{COORDS}.tif").exists()
+
+
+def test_hsg_unexpected_error_uses_main_barrier(tmp_path, capsys, monkeypatch):
+    with patch(_HSG) as calc:
+        calc.return_value.calculate_hsg.side_effect = RuntimeError("nieoczekiwany blad")
+        assert _hsg(tmp_path) == 1
+        (line, hint) = capsys.readouterr().err.splitlines()
+        assert line == "Error: RuntimeError: nieoczekiwany blad"
+        assert hint == "Ustaw KARTOGRAF_DEBUG=1, aby zobaczyc pelny traceback."
+        monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
+        with pytest.raises(RuntimeError, match="nieoczekiwany blad"):
+            _hsg(tmp_path)
 
 
 # --- R7 flags: --layers, --keep-raw, --bbox-crs, --workers, --quiet ----------
@@ -289,9 +311,7 @@ def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
         flag,
         *(["SWRS"] if flag == "--layers" else []),
     ]
-    with patch(_MANAGER) as manager:
-        assert main(argv) == 1
-    manager.assert_not_called()
+    assert main(argv) == 1
     assert f"Error: {flag} dziala tylko z --source bdot10k" in capsys.readouterr().err
 
 

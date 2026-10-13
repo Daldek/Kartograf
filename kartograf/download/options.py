@@ -11,7 +11,9 @@ Nothing here touches the network.
 from collections.abc import Mapping
 from types import SimpleNamespace
 
+from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.campaigns import validate_year_bounds
+from kartograf.download.cutout import SUPPORTED_TARGET_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
 from kartograf.exceptions import ValidationError
 from kartograf.providers.pl import require_nmt_vertical_crs
@@ -47,6 +49,11 @@ SCALE_2000_CHOICES = (
 SCALES_2000 = ("1:5000", "1:2000", "1:1000", "1:500")
 
 CZ_ONLY_NMT = "--product {product} dla CZ bedzie dostepny w etapie 2 - teraz tylko nmt"
+BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
+_PRODUCTS = ("nmt", "nmpt", "orto", "laz")
+_COUNTRIES = ("pl", "cz", "auto")
+_SYSTEMS = ("1992", "2000")
+
 _COUNTRY_KEYS = ("pl", "cz")
 
 PerCountry = str | Mapping[str, str] | None
@@ -228,6 +235,22 @@ def cz_option_error(
     return None
 
 
+def validate_request_bbox(bbox: BBox) -> None:
+    """Validate parsed bbox coordinates with the same text for CLI and API."""
+    # CLI numbers are floats; library callers may use ints for the same bbox.
+    normalized = BBox(
+        float(bbox.min_x),
+        float(bbox.min_y),
+        float(bbox.max_x),
+        float(bbox.max_y),
+        bbox.crs,
+    )
+    try:
+        validate_bbox(normalized)
+    except ValidationError as e:
+        raise ValidationError(f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}") from e
+
+
 def validate_request(task: SimpleNamespace) -> None:
     """Checks of the whole request before anything else (no network).
 
@@ -244,6 +267,11 @@ def validate_request(task: SimpleNamespace) -> None:
         raise ValidationError("Podaj wybor obszaru: --sheet, --bbox albo --geometry")
     if task.product is None:
         raise ValidationError(f"--product wymagane: {PRODUCT_CHOICES}")
+    if task.product not in _PRODUCTS:
+        raise ValidationError(
+            f"--product {task.product!r}: nieznana wartosc - dostepne: "
+            f"{PRODUCT_CHOICES}"
+        )
     if task.output_dir is None:
         raise ValidationError(
             "--output wymagane: katalog wyniku (pliki trafiaja do "
@@ -253,6 +281,22 @@ def validate_request(task: SimpleNamespace) -> None:
         raise ValidationError(
             f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
         )
+    if task.country is not None and task.country not in _COUNTRIES:
+        raise ValidationError(
+            f"--country {task.country!r}: nieznana wartosc - dostepne: "
+            f"{COUNTRY_CHOICES}"
+        )
+    if task.system is not None and task.system not in _SYSTEMS:
+        raise ValidationError(
+            f"--system {task.system!r}: nieznana wartosc - dostepne: {SYSTEM_CHOICES}"
+        )
+    if task.target_crs is not None and task.target_crs not in SUPPORTED_TARGET_CRS:
+        raise ValidationError(
+            f"--target-crs {task.target_crs!r}: nieznana wartosc - dostepne: "
+            f"{', '.join(SUPPORTED_TARGET_CRS)}"
+        )
+    if task.bbox is not None:
+        validate_request_bbox(task.bbox)
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
     year = task.year

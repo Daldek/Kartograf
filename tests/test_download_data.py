@@ -8,6 +8,8 @@ import pytest
 from kartograf.core.bbox import BBox
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.data import UnitFile, check_data, download_data
+from kartograf.download.laz import LazDownloadResult
+from kartograf.download.manager import DownloadProgress
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import (
     AUTO_CLIPPED,
@@ -87,6 +89,110 @@ def test_area_outside_countries_is_validation_error(tmp_path):
             cache=False,
             **AUTO,
         )
+
+
+@pytest.mark.parametrize("operation", [download_data, check_data])
+@pytest.mark.parametrize(
+    ("overrides", "message"),
+    [
+        ({"product": "foo"}, "--product 'foo': nieznana wartosc - dostepne: nmt"),
+        ({"country": "xx"}, "--country 'xx': nieznana wartosc - dostepne: pl"),
+        ({"country": "PL"}, "--country 'PL': nieznana wartosc - dostepne: pl"),
+        ({"system": "1993"}, "--system '1993': nieznana wartosc - dostepne: 1992"),
+        (
+            {"target_crs": "EPSG:3857"},
+            "--target-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+        ),
+        (
+            {
+                "country": "cz",
+                "resolution": "2m",
+                "vertical_crs": "Bpv",
+                "system": None,
+                "target_crs": "EPSG:3857",
+            },
+            "--target-crs 'EPSG:3857': nieznana wartosc - dostepne: EPSG:2180",
+        ),
+        (
+            {"bbox": BBox(10, 10, 5, 5, "EPSG:2180")},
+            "Nieprawidlowy bbox: bbox odwrocony",
+        ),
+        (
+            {"bbox": BBox(float("nan"), 0, 5, 5, "EPSG:2180")},
+            "Nieprawidlowy bbox: wspolrzedne bboxa musza byc skonczone",
+        ),
+        (
+            {"bbox": BBox(750000, 5500000, 750100, 5500100, "EPSG:2177")},
+            "Nieobslugiwany CRS",
+        ),
+    ],
+)
+def test_invalid_choices_and_bboxes_fail_before_source(
+    tmp_path, operation, overrides, message
+):
+    selection = {
+        "product": "nmt",
+        "output_dir": tmp_path,
+        "bbox": BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
+        "country": "pl",
+        "resolution": "1m",
+        "vertical_crs": "EVRF2007",
+        "system": "1992",
+        "cache": False,
+        **overrides,
+    }
+    with (
+        patch("kartograf.download.data._create_provider_and_storage") as pl_provider,
+        patch(CZ_FACTORY) as cz_provider,
+        pytest.raises(ValidationError) as exc,
+    ):
+        operation(**selection)
+    assert type(exc.value) is ValidationError
+    assert str(exc.value).startswith(message)
+    pl_provider.assert_not_called()
+    cz_provider.assert_not_called()
+
+
+@pytest.mark.parametrize("operation", [download_data, check_data])
+def test_pl_cutout_input_error_propagates_instead_of_country_failure(
+    tmp_path, operation
+):
+    name = "download_pl_cutout" if operation is download_data else "check_pl_cutout"
+    with (
+        patch(
+            f"kartograf.download.cutout.{name}",
+            side_effect=ValidationError("zly bbox wycinka"),
+        ),
+        pytest.raises(ValidationError, match="^zly bbox wycinka$"),
+    ):
+        operation(
+            product="nmt",
+            output_dir=tmp_path,
+            bbox=BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
+            country="pl",
+            resolution="1m",
+            vertical_crs="EVRF2007",
+            target_crs="EPSG:2180",
+            cache=False,
+        )
+
+
+def test_laz_start_progress_uses_resolved_pl_vertical_crs(tmp_path):
+    events: list[DownloadProgress] = []
+    with patch(
+        "kartograf.download.laz.download_laz_area",
+        return_value=LazDownloadResult(tiles=()),
+    ):
+        report = download_data(
+            product="laz",
+            output_dir=tmp_path,
+            sheet=G,
+            vertical_crs={"pl": "KRON86", "cz": "Bpv"},
+            on_progress=events.append,
+            cache=False,
+        )
+    assert report.ok
+    assert events == [DownloadProgress(0, 1, "kafle LAZ", "start", "WFS GUGiK, KRON86")]
 
 
 def _border_tracks(order: list[str], *, cz_error: Exception | None = None):

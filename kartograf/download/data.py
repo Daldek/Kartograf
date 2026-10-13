@@ -397,7 +397,7 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
         # the registry ends with the pl1992 fallback (always matches)
         system = detect_system(task.sheet)
         country = task.country
-        if country not in (None, "auto") and country.upper() != system.country:
+        if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
                 f"Godlo '{task.sheet}' nalezy do systemu {system.id} "
                 f"(kraj {system.country}), a podano --country {country}"
@@ -455,7 +455,9 @@ def _dispatch_area(
     the envelope); the bbox recognizes countries and gives ``parent_request``.
     """
     auto = task.country == "auto"
-    countries = countries_for_bbox(bbox) if auto else (task.country.upper(),)
+    countries = (
+        countries_for_bbox(bbox) if auto else ({"pl": "PL", "cz": "CZ"}[task.country],)
+    )
     if not countries:
         raise ValidationError(
             "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)"
@@ -510,7 +512,7 @@ def _dispatch_area(
                 )
             else:
                 rc = _download_pl_bbox(country_task, run, part, parent_request)
-        except KartografError as e:
+        except DownloadError as e:
             rc = run.fail(code, code, _error_text(e), "country")
         results.append((code, rc))
 
@@ -1103,8 +1105,8 @@ def _download_pl_cutout(
 ) -> int:
     """PL ``target_crs`` cutout from GUGiK WCS (ADR-035).
 
-    Every preparation or download error is a failure of the PL part, not an
-    exception: it must not break ``auto`` partial success (ADR-023 4-5).
+    A source failure is recorded for the PL part; invalid input and unexpected
+    errors propagate to the caller.
     """
     from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
 
@@ -1127,7 +1129,7 @@ def _download_pl_cutout(
             parent_request=parent_request,
             **selection,
         )
-    except Exception as e:  # noqa: BLE001 - a failure of the part (ADR-023)
+    except DownloadError as e:
         return run.fail("PL", "PL", _error_text(e), "download")
     if result.file is not None:
         run.add(_unit_of(result.file.path, task.output_dir), "PL", result.file)
@@ -1245,6 +1247,8 @@ def _download_laz(task: SimpleNamespace, run: _Run) -> int:
     if run.check:
         run.plans.append(check_laz_area(bbox, **selection))
         return 0
+    if run.on_progress is not None:
+        _announcer(run, "kafle LAZ", f"WFS GUGiK, {task.vertical_crs}")()
     on_progress = run.on_progress
 
     def tiles(done: int, total: int) -> None:

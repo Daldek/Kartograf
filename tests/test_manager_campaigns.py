@@ -1046,7 +1046,11 @@ def test_range_index_down_all_local_uses_local(tmp_path, caplog):
     assert result.files[G][0].unverified
     assert result.unverified.keys() == {G}
     assert "84183" in linked(std_path(tmp_path))
-    assert "skorowidz GUGiK niedostepny" in caplog.text
+    assert len(result.notices) == 1
+    assert result.notices[0].code == UNVERIFIED_LOCAL
+    assert not any(
+        "skorowidz GUGiK niedostepny" in r.getMessage() for r in caplog.records
+    )
 
 
 def test_range_index_down_one_missing_fails_task(tmp_path):
@@ -1526,8 +1530,10 @@ def test_newest_transport_failure_uses_local_campaign(tmp_path, failure, caplog)
     assert fetch.version_path == target and fetch.status == "local"
     assert fetch.label == "2025-10-21_84183"
     assert fetch.unverified and str(fake.resolve_error) in fetch.unverified
-    assert any(
-        r.levelno == logging.WARNING and G in r.getMessage() for r in caplog.records
+    assert len(result.notices) == 1
+    assert result.notices[0].code == UNVERIFIED_LOCAL
+    assert not any(
+        "skorowidz GUGiK niedostepny" in r.getMessage() for r in caplog.records
     )
 
 

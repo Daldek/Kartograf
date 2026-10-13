@@ -23,6 +23,7 @@ from kartograf.hydrology.hsg import (
     texture_to_hsg,
     texture_to_hsg_array,
 )
+from kartograf.notices import CHECK_FAILED, Notice
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.edition import Edition
 
@@ -316,6 +317,32 @@ class TestHSGCalculator:
 
         calc = HSGCalculator(tmp_path)
         assert isinstance(calc.provider, SoilGridsProvider)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_reading_provider_keeps_default_cache_for_checks(
+        self, tmp_path, monkeypatch
+    ):
+        monkeypatch.chdir(tmp_path)
+        calc = HSGCalculator(tmp_path / "data")
+        assert isinstance(calc.provider, SoilGridsProvider)
+
+        def edition_requiring_cache(provider, property, timeout=120):
+            if provider._cache is None:
+                raise DownloadError("brak cache")
+            return Edition("2.0", f"https://example.test/{property}")
+
+        with patch.object(SoilGridsProvider, "edition", edition_requiring_cache):
+            plan = calc.check_hsg(bbox=BBOX, depth="0-5cm")
+        assert [item.status for item in plan.items] == ["missing"] * 4
+
+    def test_output_path_must_be_a_store_directory(self, tmp_path):
+        for extension in (".tif", ".tiff"):
+            with pytest.raises(ValidationError) as caught:
+                HSGCalculator(tmp_path / f"hsg{extension}")
+            assert str(caught.value) == (
+                "--output to katalog magazynu (od 0.8.0); plik poza "
+                "magazynem: hsg_from_rasters"
+            )
         assert list(tmp_path.iterdir()) == []
 
     def test_conversion_factor(self):
@@ -715,6 +742,37 @@ class TestHSGCalculatorCalculateFull:
         failed = calc.check_hsg(bbox=BBOX, depth="0-5cm")
         assert failed.items[3].status == "check_failed"
         assert len(provider.downloads) == 3  # only the calculate call above
+
+    def test_check_hsg_uses_requested_timeout_for_source_status(self, tmp_path):
+        class TimeoutSoilGrids(RasterSoilGrids):
+            def edition(self, property, timeout=120):
+                if timeout == 17:
+                    raise DownloadError("limit 17 sekund")
+                return super().edition(property, timeout=timeout)
+
+        calc = HSGCalculator(tmp_path, TimeoutSoilGrids())
+        normal = calc.check_hsg(bbox=BBOX, depth="0-5cm")
+        short = calc.check_hsg(bbox=BBOX, depth="0-5cm", timeout=17)
+        assert [item.status for item in normal.items] == ["missing"] * 4
+        assert [item.status for item in short.items] == ["check_failed"] * 4
+        assert all(item.error == "limit 17 sekund" for item in short.items)
+
+    def test_hsg_input_check_failure_notice_reaches_result_and_callback(self, tmp_path):
+        provider = RasterSoilGrids()
+        calc = HSGCalculator(tmp_path, provider)
+        calc.calculate_hsg(bbox=BBOX, depth="0-5cm")
+        provider.editions["clay"] = DownloadError("caps 503")
+        observed = []
+        result = calc.calculate_hsg(bbox=BBOX, depth="0-5cm", on_notice=observed.append)
+        assert result.file.status == "reused"
+        assert result.inputs[0].file.status == "local"
+        expected = Notice(
+            "warning",
+            CHECK_FAILED,
+            f"soil/global_soilgrids_clay_0-5cm_mean/bbox/{COORDS}.tif: "
+            "nie udalo sie sprawdzic zrodla (caps 503) - uzyto lokalnej wersji 2.0",
+        )
+        assert result.notices == tuple(observed) == (expected,)
 
     def test_hsg_plan_upgrade_recomputes_with_new_input(self, tmp_path):
         provider = RasterSoilGrids()

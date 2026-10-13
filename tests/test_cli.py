@@ -2952,55 +2952,12 @@ class TestCmdLandcoverDownload:
         [
             (["-o", "out"], "--source", "bdot10k"),
             (["--source", "bdot10k"], "--output", "katalog"),
-            (["--source", "corine", "-o", "out"], "--year", "1990"),
-            (
-                [
-                    "--source",
-                    "soilgrids",
-                    "-o",
-                    "out",
-                    "--depth",
-                    "0-5cm",
-                    "--stat",
-                    "mean",
-                ],
-                "--property",
-                "bdod",
-            ),
-            (
-                [
-                    "--source",
-                    "soilgrids",
-                    "-o",
-                    "out",
-                    "--property",
-                    "soc",
-                    "--stat",
-                    "mean",
-                ],
-                "--depth",
-                "100-200cm",
-            ),
-            (
-                [
-                    "--source",
-                    "soilgrids",
-                    "-o",
-                    "out",
-                    "--property",
-                    "soc",
-                    "--depth",
-                    "0-5cm",
-                ],
-                "--stat",
-                "uncertainty",
-            ),
         ],
     )
-    def test_missing_data_choice_fails_before_download(
+    def test_missing_manager_argument_fails_before_download(
         self, flags, missing, choices, capsys
     ):
-        """Each missing source-specific choice is explained before accessing data."""
+        """CLI checks the arguments needed to construct the manager."""
         with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
             rc = main(["landcover", "download", "--sheet", "N-34-130-D", *flags])
         assert rc == 1

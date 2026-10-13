@@ -11,10 +11,11 @@ from collections.abc import Sequence
 from typing import Any, NoReturn
 
 from kartograf._version import build_version
-from kartograf.core.bbox import BBox, validate_bbox
+from kartograf.core.bbox import BBox
 from kartograf.download.cutout import SUPPORTED_TARGET_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
+    BBOX_EXPECTED,
     COUNTRY_CHOICES,
     PRODUCT_CHOICES,
     RESOLUTION_PL,
@@ -22,6 +23,7 @@ from kartograf.download.options import (
     SYSTEM_CHOICES,
     VERTICAL_CRS_CZ,
     VERTICAL_CRS_PL,
+    validate_request_bbox,
 )
 from kartograf.exceptions import ValidationError
 
@@ -68,7 +70,6 @@ def add_update_flags(
     parser.add_argument("--plan", metavar="PLIK", default=None, help=plan_help)
 
 
-_BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
 _BBOX_HELP = "Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180)"
 _SHEET_HELP = "Godlo arkusza (np. N-34-130-D)"
 _GEOMETRY_HELP = "Plik geometrii (SHP albo GPKG); obszar = obwiednia obiektow"
@@ -141,7 +142,7 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
     parts = text.split(",")
     if len(parts) != 4:
         reason = f"oczekiwano 4 wartosci rozdzielonych przecinkami, podano {len(parts)}"
-        raise ValidationError(f"Nieprawidlowy bbox: {reason}. {_BBOX_EXPECTED}")
+        raise ValidationError(f"Nieprawidlowy bbox: {reason}. {BBOX_EXPECTED}")
     values = []
     for part in parts:
         try:
@@ -149,13 +150,10 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
         except ValueError:
             reason = f"{part.strip()!r} nie jest liczba"
             raise ValidationError(
-                f"Nieprawidlowy bbox: {reason}. {_BBOX_EXPECTED}"
+                f"Nieprawidlowy bbox: {reason}. {BBOX_EXPECTED}"
             ) from None
     bbox = BBox(values[0], values[1], values[2], values[3], crs)
-    try:
-        validate_bbox(bbox)
-    except ValidationError as e:
-        raise ValidationError(f"Nieprawidlowy bbox: {e}. {_BBOX_EXPECTED}") from e
+    validate_request_bbox(bbox)
     return bbox
 
 
@@ -484,7 +482,7 @@ def create_parser() -> argparse.ArgumentParser:
         "--format",
         "-f",
         choices=["GPKG", "SHP"],
-        default="GPKG",
+        default=None,
         help="Tylko BDOT10k: GPKG (GeoPackage, domyslnie) lub SHP "
         "(archiwum ZIP z plikami Shapefile)",
     )

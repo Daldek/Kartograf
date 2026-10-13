@@ -9,6 +9,7 @@ import pytest
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
 from kartograf.download.data import DataReport, UnitFailure
+from kartograf.download.laz import LazDownloadResult
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED, NO_COVERAGE_SOME, Notice
@@ -166,6 +167,43 @@ def test_validation_error_single_error_line(tmp_path, capsys):
         rc = main(["download", "--sheet", "X", "-o", str(tmp_path)])
     assert rc == 1
     assert capsys.readouterr().err.splitlines() == ["Error: --product wymagane: x"]
+
+
+@pytest.mark.parametrize("check", [False, True], ids=["download", "check"])
+def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check):
+    argv = [
+        "download",
+        "--product",
+        "laz",
+        "--sheet",
+        "N-34-139-C-a-3-1",
+        "-o",
+        str(tmp_path),
+    ]
+    if check:
+        argv.append("--check-updates")
+    with (
+        patch(
+            "kartograf.download.laz.download_laz_area",
+            return_value=LazDownloadResult(tiles=()),
+        ),
+        patch(
+            "kartograf.download.laz.check_laz_area",
+            return_value=new_plan(tmp_path, []),
+        ),
+    ):
+        assert main(argv) == 1
+        invalid = capsys.readouterr()
+        assert invalid.out == ""
+        assert invalid.err.startswith("Error: --vertical-crs wymagane")
+        assert main([*argv, "--vertical-crs", "pl=KRON86,cz=Bpv"]) == 0
+    valid = capsys.readouterr()
+    assert valid.err == ""
+    if check:
+        assert valid.out == ""
+    else:
+        assert valid.out.startswith("Pobieranie kafle LAZ (WFS GUGiK, KRON86)...\n")
+        assert "pl=KRON86,cz=Bpv" not in valid.out
 
 
 _FORBIDDEN = {

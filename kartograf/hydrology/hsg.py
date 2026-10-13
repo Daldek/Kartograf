@@ -24,6 +24,7 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
+from kartograf.exceptions import ValidationError
 from kartograf.notices import Notice, NoticeSink
 
 if TYPE_CHECKING:
@@ -450,17 +451,22 @@ class HSGCalculator:
             ``MetadataCache`` = that cache, ``False`` = none (default provider).
         """
         self._output_dir = Path(output_dir)
+        if self._output_dir.suffix.lower() in (".tif", ".tiff"):
+            raise ValidationError(
+                "--output to katalog magazynu (od 0.8.0); plik poza "
+                "magazynem: hsg_from_rasters"
+            )
         self._provider = provider
         self._cache = cache
 
     @property
     def provider(self):
-        """Lazy-load SoilGridsProvider."""
-        if self._provider is None:
-            from kartograf.providers.soilgrids import SoilGridsProvider
+        """Return the input provider without changing cache ownership."""
+        if self._provider is not None:
+            return self._provider
+        from kartograf.providers.soilgrids import SoilGridsProvider
 
-            self._provider = SoilGridsProvider()
-        return self._provider
+        return SoilGridsProvider()
 
     def calculate_hsg(
         self,
@@ -529,13 +535,14 @@ class HSGCalculator:
         geometry: str | Path | None = None,
         layer: str | None = None,
         depth: str,
+        timeout: int = 120,
         on_notice: "Callable[[Notice], None] | None" = None,
     ) -> "UpdatePlan":
         """Plan of ``calculate_hsg`` with the same selection, WITHOUT
         downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
         sink = NoticeSink(on_notice)
         selection = self._selection(sheet, bbox, geometry, layer, sink)
-        return self._check(selection, depth, _HSG_STAT, sink)
+        return self._check(selection, depth, _HSG_STAT, timeout, sink)
 
     @staticmethod
     def _selection(
@@ -582,17 +589,17 @@ class HSGCalculator:
         )
 
     def _check(
-        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
+        self, selection: dict, depth: str, stat: str, timeout: int, sink: "NoticeSink"
     ) -> "UpdatePlan":
         from kartograf.download.plan import new_plan
 
-        inputs = self._input_items(selection, depth, stat, sink)
+        inputs = self._input_items(selection, depth, stat, timeout, sink)
         return new_plan(
             self._output_dir, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
         )
 
     def _input_items(
-        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
+        self, selection: dict, depth: str, stat: str, timeout: int, sink: "NoticeSink"
     ) -> list:
         manager = self._manager()
         where = _where(selection)
@@ -600,7 +607,12 @@ class HSGCalculator:
             item
             for prop in _INPUTS
             for item in manager.check(
-                **where, property=prop, depth=depth, stat=stat, on_notice=sink.add
+                **where,
+                property=prop,
+                depth=depth,
+                stat=stat,
+                timeout=timeout,
+                on_notice=sink.add,
             ).items
         ]
 
@@ -672,7 +684,10 @@ class HSGCalculator:
             require_store(plan, store_id(self._output_dir))
             # The HSG position is checked BEFORE the inputs change.
             fresh = self._hsg_item(
-                selection, depth, stat, self._input_items(selection, depth, stat, sink)
+                selection,
+                depth,
+                stat,
+                self._input_items(selection, depth, stat, timeout, sink),
             )
             todo, skipped = select_planned(plan, [fresh], _HSG_TRACK)
             planned_hsg, stale = bool(todo), list(skipped)
