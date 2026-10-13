@@ -16,7 +16,11 @@ from kartograf.core.bbox import BBox
 from kartograf.download.fetch import VersionedFile
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.hydrology import HSGCalculator
-from kartograf.landcover.manager import LandCoverAreaResult, LandCoverResult
+from kartograf.landcover.manager import (
+    LandCoverAreaResult,
+    LandCoverManager,
+    LandCoverResult,
+)
 from kartograf.notices import NO_COVERAGE_SOME, Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
@@ -163,7 +167,7 @@ def test_landcover_bdot_rerun_unchecked_line(tmp_path, capsys):
     )
 
 
-def test_landcover_corine_preview_line(tmp_path, capsys):
+def test_landcover_corine_preview_line(tmp_path, capsys, caplog):
     with (
         _session(FakeCorine()),
         patch.object(CorineProvider, "has_clms_token", new=False),
@@ -171,11 +175,142 @@ def test_landcover_corine_preview_line(tmp_path, capsys):
         rc = _lc(tmp_path, "--source", "corine", "--year", "2018", "--bbox", BBOX_ARG)
     assert rc == 0
     captured = capsys.readouterr()
-    assert "Info: CORINE 2018: podglad WMS" in captured.err
+    assert captured.err == (
+        "Info: CORINE 2018: podglad WMS (stylizowany PNG, nie dane; "
+        "dane CLMS wymagaja CLMS_CREDENTIALS)\n"
+    )
     assert (
         f"landcover/eu_corine_2018_preview/bbox/{COORDS}.png: nowa wersja "
         in captured.out
     )
+    assert not any(
+        record.name == "kartograf.providers.corine"
+        and record.levelno >= logging.WARNING
+        for record in caplog.records
+    )
+
+
+def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
+    with patch.object(CorineProvider, "has_clms_token", new=False):
+        manager = LandCoverManager(tmp_path / "api", "corine", cache=False)
+        with pytest.raises(ValidationError) as exc:
+            manager.download(sheet="XYZ", year=2018)
+        assert (
+            _lc(tmp_path, "--source", "corine", "--sheet", "XYZ", "--year", "2018") == 1
+        )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: {exc.value}\n"
+
+
+def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
+    with pytest.raises(ValidationError) as exc:
+        HSGCalculator(tmp_path / "api", cache=False).calculate_hsg(
+            sheet="XYZ", depth="0-5cm"
+        )
+    assert (
+        main(
+            [
+                "soilgrids",
+                "hsg",
+                "--sheet",
+                "XYZ",
+                "--depth",
+                "0-5cm",
+                "-o",
+                str(tmp_path / "cli"),
+            ]
+        )
+        == 1
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: {exc.value}\n"
+
+
+@pytest.mark.parametrize("mode", ["check", "download"])
+def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
+    manager = LandCoverManager(tmp_path / "api", "bdot10k", cache=False)
+    with pytest.raises(ValidationError, match="^Nieprawidlowy kod TERYT: 14$") as exc:
+        getattr(manager, mode)(teryt="14")
+    flags = ["--check-updates"] if mode == "check" else []
+    assert _lc(tmp_path, "--source", "bdot10k", "--teryt", "14", *flags) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: {exc.value}\n"
+
+
+@pytest.mark.parametrize(
+    ("coordinates", "bbox"),
+    [
+        ("2,1,1,2", BBox(2, 1, 1, 2, "EPSG:2180")),
+        ("nan,1,2,2", BBox(float("nan"), 1, 2, 2, "EPSG:2180")),
+    ],
+)
+@pytest.mark.parametrize("mode", ["check", "download"])
+def test_invalid_landcover_bbox_matches_cli_and_api(
+    tmp_path, capsys, coordinates, bbox, mode
+):
+    manager = LandCoverManager(tmp_path / "api", "bdot10k", cache=False)
+    with pytest.raises(ValidationError) as exc:
+        getattr(manager, mode)(bbox=bbox)
+    flags = ["--check-updates"] if mode == "check" else []
+    assert _lc(tmp_path, "--source", "bdot10k", "--bbox", coordinates, *flags) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: {exc.value}\n"
+
+
+@pytest.mark.parametrize(
+    ("coordinates", "bbox"),
+    [
+        ("2,1,1,2", BBox(2, 1, 1, 2, "EPSG:2180")),
+        ("nan,1,2,2", BBox(float("nan"), 1, 2, 2, "EPSG:2180")),
+    ],
+)
+@pytest.mark.parametrize("mode", ["check_hsg", "calculate_hsg"])
+def test_invalid_hsg_bbox_matches_cli_and_api(
+    tmp_path, capsys, coordinates, bbox, mode
+):
+    calc = HSGCalculator(tmp_path / "api", cache=False)
+    with pytest.raises(ValidationError) as exc:
+        getattr(calc, mode)(bbox=bbox, depth="0-5cm")
+    flags = ["--check-updates"] if mode == "check_hsg" else []
+    assert (
+        main(
+            [
+                "soilgrids",
+                "hsg",
+                "--bbox",
+                coordinates,
+                "--depth",
+                "0-5cm",
+                "-o",
+                str(tmp_path / "cli"),
+                *flags,
+            ]
+        )
+        == 1
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == f"Error: {exc.value}\n"
+
+
+@pytest.mark.parametrize("mode", ["check", "download"])
+def test_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
+    manager = LandCoverManager(tmp_path / "api", "corine", cache=False)
+    with pytest.raises(ValidationError, match="Nieprawidlowy bbox:") as exc:
+        getattr(manager, mode)(bbox=BBox(0, 0, 1, 1, "EPSG:999999"), year=2018)
+    assert "EPSG:999999" in str(exc.value)
+
+
+@pytest.mark.parametrize("mode", ["check_hsg", "calculate_hsg"])
+def test_hsg_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
+    calc = HSGCalculator(tmp_path / "api", cache=False)
+    with pytest.raises(ValidationError, match="Nieprawidlowy bbox:") as exc:
+        getattr(calc, mode)(bbox=BBox(0, 0, 1, 1, "EPSG:999999"), depth="0-5cm")
+    assert "EPSG:999999" in str(exc.value)
 
 
 # --- soilgrids hsg ------------------------------------------------------------

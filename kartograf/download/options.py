@@ -47,6 +47,17 @@ SCALE_2000_CHOICES = (
 )
 # PL-2000 sheet scales GUGiK can publish below the 1:10000 frame.
 SCALES_2000 = ("1:5000", "1:2000", "1:1000", "1:500")
+BBOX_CRS_CHOICES = (
+    "EPSG:2180",
+    "EPSG:4326",
+    "EPSG:2176",
+    "EPSG:2177",
+    "EPSG:2178",
+    "EPSG:2179",
+    "EPSG:5514",
+    "EPSG:3045",
+)
+
 
 CZ_ONLY_NMT = "--product {product} dla CZ bedzie dostepny w etapie 2 - teraz tylko nmt"
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
@@ -70,16 +81,22 @@ def country_value(raw: PerCountry, code: str) -> str | None:
 
 
 def check_per_country(raw: PerCountry, flag: str) -> None:
-    """``ValidationError`` for a per-country mapping with unknown or empty keys."""
+    """``ValidationError`` for choices other than a plain string or valid mapping."""
     if raw is None or isinstance(raw, str):
         return
-    keys = [k.strip().lower() for k in raw]
-    if (
-        any(k not in _COUNTRY_KEYS for k in keys)
-        or len(set(keys)) != len(keys)
-        or any(not str(v).strip() for v in raw.values())
-    ):
+    if isinstance(raw, Mapping):
         shown = ",".join(f"{k}={v}" for k, v in raw.items())
+        keys = [k.strip().lower() for k in raw if isinstance(k, str)]
+        valid = (
+            len(keys) == len(raw)
+            and all(k in _COUNTRY_KEYS for k in keys)
+            and len(set(keys)) == len(keys)
+            and all(isinstance(v, str) and v.strip() for v in raw.values())
+        )
+    else:
+        shown = str(raw)
+        valid = False
+    if not valid:
         raise ValidationError(
             f"{flag}: nieprawidlowa wartosc {shown!r} - podaj jedna wartosc dla "
             f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
@@ -237,6 +254,11 @@ def cz_option_error(
 
 def validate_request_bbox(bbox: BBox) -> None:
     """Validate parsed bbox coordinates with the same text for CLI and API."""
+    if bbox.crs not in BBOX_CRS_CHOICES:
+        raise ValidationError(
+            f"Nieprawidlowy bbox: nieobslugiwany uklad {bbox.crs!r} - dostepne: "
+            f"{', '.join(BBOX_CRS_CHOICES)}"
+        )
     # CLI numbers are floats; library callers may use ints for the same bbox.
     normalized = BBox(
         float(bbox.min_x),

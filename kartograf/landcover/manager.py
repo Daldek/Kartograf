@@ -42,6 +42,7 @@ from kartograf.download.fetch import (
     use_local,
     validate_update,
 )
+from kartograf.download.options import validate_request_bbox
 from kartograf.download.plan import (
     PlanItem,
     Track,
@@ -451,7 +452,6 @@ class LandCoverManager:
         validate_update(update)
         self._check_options(options)
         teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
-        self._corine_preview(options, sink)
         failed: tuple[LandCoverFailure, ...] = ()
         with self._session(force=update == "force", sink=sink):
             if teryt is None and isinstance(self._provider, Bdot10kProvider):
@@ -466,6 +466,7 @@ class LandCoverManager:
                         bbox=bbox, sheet=sheet, kwargs=options
                     )
                 planned, stale = self._planned(jobs, update, plan)
+                self._corine_preview(options, sink)
                 result = self._run(jobs, options, update, planned, parent=parent)
                 files = (result,) if result.file is not None else ()
         for item in files:
@@ -567,10 +568,18 @@ class LandCoverManager:
             raise ValidationError(
                 "Podaj dokladnie jeden wybor: teryt, sheet, bbox albo geometry"
             )
+        if (
+            teryt is not None
+            and isinstance(self._provider, Bdot10kProvider)
+            and not self._provider.validate_admin_unit(teryt)
+        ):
+            raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
         if geometry is not None:
             bbox = geometry_envelope_2180(geometry, layer, sink)
-        elif bbox is not None and not isinstance(self._provider, Bdot10kProvider):
-            bbox = bbox_to_2180(bbox)
+        elif bbox is not None:
+            validate_request_bbox(bbox)
+            if not isinstance(self._provider, Bdot10kProvider):
+                bbox = bbox_to_2180(bbox)
         return teryt, sheet, bbox
 
     def _corine_preview(self, options: dict, sink: NoticeSink) -> None:

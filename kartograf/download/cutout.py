@@ -165,6 +165,9 @@ def _prepare_pl_cutout(
     when no safe pinned reprojection is available. The GeoTIFF
     ``target_path`` is the undated standard link to the versioned result.
     """
+    from kartograf.download.options import validate_request_bbox
+
+    validate_request_bbox(bbox)
     if product not in CUTOUT_PRODUCTS:
         raise ValidationError(
             f"Produkt wycinka PL: {' albo '.join(CUTOUT_PRODUCTS)} (podano {product})"

@@ -94,20 +94,6 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     }
     calc = HSGCalculator(Path(args.output))
 
-    if not args.quiet:
-        print("Obliczanie grup hydrologicznych gleb (HSG)...")
-        if args.sheet:
-            print(f"  Godlo: {args.sheet}")
-        if geometry is not None:
-            print(f"  Geometria: {geometry.name}")
-        if bbox:
-            print(
-                f"  BBox: ({bbox.min_x}, {bbox.min_y}) - ({bbox.max_x}, {bbox.max_y})"
-                f" {bbox.crs}"
-            )
-        print(f"  Glebokosc: {args.depth}")
-        print()
-
     try:
         return run_with_plan_file(args, lambda a: _hsg_task(a, calc, selection))
     except (DownloadError, ParseError, ValidationError) as e:

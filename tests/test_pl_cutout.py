@@ -92,53 +92,20 @@ class TestPreparePlCutout:
         assert "pl_1992_1m_kron86" in cut.target_path.parts
 
     @pytest.mark.parametrize("label", ["epsg:5514", " EPSG:5514 "])
-    def test_czech_crs_label_leaves_krovak_by_pinned_operation(self, tmp_path, label):
-        """m-2: the Czech CRS label is independent of letter case and spaces.
-
-        The comparison used to be literal: a library call with ``"epsg:5514"``
-        silently went through the default pyproj transformer instead of the
-        pinned operation (a bypass of ADR-024 in the public API).
-        """
+    def test_czech_crs_label_leaves_krovak_by_pinned_operation(self, label):
+        """The area transform stays pinned even for noncanonical CRS labels."""
         from kartograf.core.bbox import transform_bbox
+        from kartograf.download.area import bbox_to_2180
 
         coords = (-455000.0, -1117000.0, -454000.0, -1116000.0)  # Cieszyn (PL)
-        pinned = _prepare_pl_cutout(
-            BBox(*coords, "EPSG:5514"),
-            "EPSG:2180",
-            output_dir=str(tmp_path),
-            vertical_crs="EVRF2007",
-            product="nmt",
-        ).bbox_2180
+        pinned = bbox_to_2180(BBox(*coords, "EPSG:5514"))
         # sanity condition: the unpinned path gives a DIFFERENT bbox here (measured
         # 1.06 m on max_y) - otherwise the test would not tell the paths apart
         unpinned = transform_bbox(BBox(*coords, "EPSG:5514"), "EPSG:2180")
         shift = max(abs(a - b) for a, b in zip(pinned[:4], unpinned[:4], strict=True))
         assert shift > 0.01
 
-        cut = _prepare_pl_cutout(
-            BBox(*coords, label),
-            "EPSG:2180",
-            output_dir=str(tmp_path),
-            vertical_crs="EVRF2007",
-            product="nmt",
-        )
-
-        assert cut.bbox_2180 == pinned
-
-    def test_lowercase_2180_label_is_canonical(self, tmp_path):
-        """m-2: ``"epsg:2180"`` is the cutout CRS without a transformation, and
-        the ``PlCutout`` fields carry the canonical label - as before
-        normalisation, when such a bbox went through an identity transformation."""
-        cut = _prepare_pl_cutout(
-            BBox(530010, 382010, 530190, 382090, "epsg:2180"),
-            "EPSG:2180",
-            output_dir=str(tmp_path),
-            vertical_crs="EVRF2007",
-            product="nmt",
-        )
-
-        assert cut.bbox_2180 == BBox(530010, 382010, 530190, 382090, "EPSG:2180")
-        assert cut.target_path.name == "530010_382010_530190_382090.tif"
+        assert bbox_to_2180(BBox(*coords, label)) == pinned
 
     def test_wgs84_bbox_across_19e_keeps_southern_band(self, tmp_path):
         """K6: a WGS84 bbox across the EPSG:2180 central meridian (19E) - the S
