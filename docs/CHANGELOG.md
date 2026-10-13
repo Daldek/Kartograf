@@ -505,6 +505,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--check-updates` pod `auto` z awaria jednego kraju: komunikat bez
   "pobrano", blad z nazwa kraju. `Info:` podgladu CORINE dopiero po
   walidacji zadania; `soilgrids hsg` bez naglowka przed walidacja.
+- Wpis "brak pokrycia" w cache metadanych zapisany przed 0.8.0 (komunikat
+  albo podpowiedz z polskimi znakami lub myslnikiem `—`) przerywal
+  pobieranie bledem `Tekst komunikatu musi byc zapisany w ASCII` (np.
+  `kartograf download --sheet N-34-130-D --resolution 5m ...` z cache
+  z 0.7.x). Taki wpis jest teraz traktowany jak brak wpisu i skorowidz jest
+  odpytywany ponownie. Co zrobic: nic (opcjonalnie `kartograf cache clear`).
 
 ## [0.7.2] - 2026-10-11
 
