@@ -9,6 +9,8 @@ from unittest.mock import Mock
 import pytest
 
 from kartograf.core.bbox import BBox
+from kartograf.download.availability import check_availability
+from kartograf.download.collections import check_collection, download_collection
 from kartograf.download.data import check_data, download_data
 from kartograf.download.laz import check_laz_area, download_laz_area
 from kartograf.download.manager import DownloadManager
@@ -122,3 +124,48 @@ def test_laz_area_rejects_text_workers(tmp_path):
         download_laz_area(
             AREA, output_dir=tmp_path, vertical_crs="EVRF2007", workers="2"
         )
+
+
+@pytest.mark.parametrize(
+    ("argument", "flag"),
+    [
+        ({"year": "2021"}, "--year"),
+        ({"lod": 1.0, "year": 2021}, "--lod"),
+        ({"whole_country": "no"}, "--whole-country"),
+    ],
+)
+@pytest.mark.parametrize("call", [download_collection, check_collection])
+def test_collection_rejects_wrong_types(tmp_path, call, argument, flag):
+    request = {"product": "buildings", "teryt": "1465", "lod": 1} | argument
+    with pytest.raises(ValidationError, match=flag):
+        call(output_dir=tmp_path, cache=False, **request)
+    assert not any(tmp_path.iterdir())
+
+
+def test_collection_rejects_text_workers(tmp_path):
+    with pytest.raises(ValidationError, match="--workers .*'2'"):
+        download_collection(
+            product="buildings",
+            output_dir=tmp_path,
+            teryt="1465",
+            lod=1,
+            year=2021,
+            workers="2",
+            cache=False,
+        )
+    assert not any(tmp_path.iterdir())
+
+
+@pytest.mark.parametrize(
+    ("argument", "flag"),
+    [({"year": "2018"}, "--year"), ({"force": "no"}, "--force")],
+)
+def test_availability_rejects_wrong_types(argument, flag):
+    with pytest.raises(ValidationError, match=flag):
+        check_availability(product="nmt", sheet=SHEET, cache=False, **argument)
+
+
+def test_bdot10k_archive_rejects_float_year(tmp_path):
+    manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
+    with pytest.raises(ValidationError, match="--year .*2020.0"):
+        manager.download(teryt="1465", year=2020.0, format="SHP")

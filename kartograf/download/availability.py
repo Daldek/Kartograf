@@ -56,6 +56,7 @@ from kartograf.core.coverage import (
 )
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.area import bbox_to_2180, resolve_geometry_layer
+from kartograf.download.arguments import require_bool
 from kartograf.download.campaigns import in_year_range, year_range_label
 from kartograf.download.options import (
     product_choices,
@@ -289,6 +290,7 @@ def check_availability(
     request = _validated(
         product, country, sheet, bbox, geometry, layer, year, min_year, max_year
     )
+    require_bool(force, "--force")  # library calls only (STANDARDS 11.2)
     sink = NoticeSink(on_notice)
     layer_name = (
         resolve_geometry_layer(request.geometry, layer, sink)
