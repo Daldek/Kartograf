@@ -1,0 +1,48 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:budynki&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-15T21:04:36" numberMatched="1" numberReturned="1">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>487080.598350 637104.585495</gml:lowerCorner>
+      		<gml:upperCorner>487182.353300 637183.551450</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <ms:budynki gml:id="budynki.146510_8.0309.18_BUD">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>487080.598350 637104.585495</gml:lowerCorner>
+        		<gml:upperCorner>487182.353300 637183.551450</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:geom>
+          <gml:Polygon gml:id="budynki.146510_8.0309.18_BUD.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487090.945536 637183.551450 487176.563416 637149.458300 487166.205404 637123.444534 487080.598350 637157.567380 487090.945536 637183.551450 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:geom>
+        <ms:geom>
+          <gml:Polygon gml:id="budynki.146510_8.0309.18_BUD.2" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">487172.610491 637118.197776 487182.353300 637114.318863 487178.494646 637104.585495 487168.751286 637108.444423 487169.848285 637111.234108 487170.679085 637110.901177 487172.345395 637115.115129 487171.503775 637115.418360 487172.610491 637118.197776 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:geom>
+        <ms:ID_BUDYNKU>146510_8.0309.18_BUD</ms:ID_BUDYNKU>
+        <ms:RODZAJ>k</ms:RODZAJ>
+        <ms:KONDYGNACJE_NADZIEMNE>5</ms:KONDYGNACJE_NADZIEMNE>
+        <ms:KONDYGNACJE_PODZIEMNE></ms:KONDYGNACJE_PODZIEMNE>
+      </ms:budynki>
+    </wfs:member>
+</wfs:FeatureCollection>
+
