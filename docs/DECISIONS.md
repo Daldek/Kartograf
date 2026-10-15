@@ -3049,6 +3049,34 @@ CZ (uzupelnienie ADR-041).
 - prog pokrycia w raporcie: kompletnosc jest binarna wg obrysow arkuszy
   `TAK`, niepokryty lad raport podaje w m2.
 
+**Uzupelnienie (2026-10-15, zakonczenie planu A):**
+- R5 doprecyzowane: serwer stronicuje odpowiedz kilku typow niespojnie
+  (powtorzenia i braki, nagranie 2026-10-15), jeden typ spojnie;
+  odpowiedz kilku typow z atrybutem `next` jest odrzucana i kazdy typ jest
+  odpytywany osobno; obiekt powtorzony na kolejnej stronie = `DownloadError`.
+- R6 poprawione: 42 rekordy NMT EVRF2007 2019 (kampania 72675, arkusze
+  N-33-69) maja format siatki i nazwe pliku `.xyz`, a w srodku AAIGrid
+  (naglowki wszystkich 42 plikow sprawdzone na zywo 2026-10-15; 0.7.x je
+  pobieralo) - sa siatkami ASC: `FORMATS` przyjmuje dla ASC URL `.asc`
+  i `.xyz`, tresc po pobraniu sprawdza `verify_file_format`. Niespojny
+  zostaje m.in. format siatki z URL archiwum i archiwum z URL `.asc`.
+- R8 doprecyzowane: `Info:` raportu ma kod `index_unsupported` (rekordy
+  spoza rejestru: godla 8-czlonowe, format niezgodny z plikiem); z `--sheet`
+  pomiar pomija pas 1 m przy ramie arkusza (rama z godla rozni sie od ramy
+  GUGiK o centymetry), `--bbox`/`--geometry` mierzone dokladnie; LAZ ma
+  obwiednie jak pobieranie LAZ; `--country` wymagane tylko z `--bbox`/
+  `--geometry`; cache metadanych trzyma typy WFS, rekordy obszaru
+  z obrysami i maske ladu (ponowny raport bez sieci, `--force` pomija cache).
+- Manifest (ADR-040): `elevation availability` nie ustawia `_task`
+  (`project add` ja odrzuca); `COMMANDS["elevation download"]` ma opcje
+  `format`; kazda podpowiedz raportu przechodzi `project add` bez sieci.
+- E2E na zywo 2026-10-15 (`docs/research/2026-10-15-plan-a-e2e/raport.md`):
+  siatki 0.15m, 0.5m (NMT i NMPT, EVRF2007 i KRON86) i 0.6m pobrane
+  z pikselem rownym etykiecie; raporty Krakowa i Pomorza zgodne z pomiarami
+  planu; JSON CLI = API; pobrane godla = `sheets_full` kombinacji; raport
+  LAZ pyta tylko WFS i PRG; wycinek 1 m bajtowo rowny wycinkowi z `develop`;
+  archiwum TBD 25 m pobrane, ZIP kompletny, ponowne uruchomienie lokalne.
+
 ---
 
 ## Szablon nowego ADR
