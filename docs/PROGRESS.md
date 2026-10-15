@@ -2370,7 +2370,9 @@ w tym samym wydaniu (decyzja uzytkownika).
   **ZROBIONE 2026-10-15 (galaz `fix/backlog-0.8.0`):** zasada w STANDARDS
   11.2 - zly typ = `ValidationError` przed siecia, bez konwersji
   (`kartograf/download/arguments.py`; `download_data`/`check_data`,
-  `LandCoverManager`, `HSGCalculator`, `DownloadManager`, LAZ); testy
+  `LandCoverManager` z archiwum BDOT10k, `HSGCalculator`,
+  `DownloadManager`, LAZ, po scaleniu planow A/C takze
+  `download_collection`/`check_collection` i `check_availability`); testy
   `tests/test_argument_types.py`; CHANGELOG [0.8.0] BREAKING.
 - [x] **Dwie jednakowe linie planu BDOT10k:** `landcover download
   --check-updates --keep-raw` moze wypisac dwie linie dla GPKG i ZIP z
