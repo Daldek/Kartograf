@@ -1,7 +1,7 @@
 """
 Downloading LAZ tiles for an area — library layer (review-1 D17).
 
-Pattern: ``download/cutout.py`` — the CLI (``kartograf download --product
+Pattern: ``download/cutout.py`` — the CLI (``kartograf elevation download --product
 laz``) is a thin layer over this module: it prints messages and translates
 the result into an exit code. There is no ``print`` or argparse here.
 

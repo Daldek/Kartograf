@@ -1,4 +1,5 @@
-"""CLI ``download``: --check-updates / --upgrade / --force / --plan (spec 4.2-4.5)."""
+"""CLI ``elevation download``: --check-updates / --upgrade / --force / --plan
+(spec 4.2-4.5)."""
 
 import json
 from types import SimpleNamespace
@@ -23,6 +24,7 @@ def _run(fake, out, *argv):
     ):
         return main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -177,7 +179,7 @@ class LazCliProvider(FakeProvider):
 
 
 def _download(out, *argv):
-    return main(["download", "--product", "nmt", "-o", str(out), *argv])
+    return main(["elevation", "download", "--product", "nmt", "-o", str(out), *argv])
 
 
 def _no_pl_wcs():

@@ -1,5 +1,5 @@
-"""CLI = API parity (Z7, spec 6) for ``landcover download`` and
-``soilgrids hsg``: same store bytes, statuses, plan and notices, frozen clock.
+"""CLI = API parity (Z7, spec 6) for ``landcover download``, ``soil download``
+and ``soil hsg``: same store bytes, statuses, plan and notices, frozen clock.
 
 Scenarios: BDOT10k ``teryt``, BDOT10k area of several powiats (one failing),
 CORINE CLMS and WMS preview, SoilGrids, HSG ``bbox`` and ``geometry``,
@@ -54,9 +54,17 @@ def _bdot(teryts, packages):
     )
 
 
+# The CLI command of each LandCoverManager source (ADR-039: SoilGrids in ``soil``).
+_COMMAND = {
+    "bdot10k": ["landcover", "download", "--source", "bdot10k"],
+    "corine": ["landcover", "download", "--source", "corine"],
+    "soilgrids": ["soil", "download"],
+}
+
+
 def _landcover(tmp_path, source, cli_args, **api_kwargs):
     return run_both(
-        ["landcover", "download", "--source", source, *cli_args],
+        [*_COMMAND[source], *cli_args],
         lambda out: LandCoverManager(out, source).download(**api_kwargs),
         tmp_path,
     )
@@ -182,7 +190,7 @@ def test_invalid_landcover_options_match_cli_and_api(tmp_path, source, flags, op
 def _hsg(tmp_path, cli_args, **api_kwargs):
     with _providers(soilgrids=RasterSoilGrids):
         return run_both(
-            ["soilgrids", "hsg", "--depth", "0-5cm", "-q", *cli_args],
+            ["soil", "hsg", "--depth", "0-5cm", "-q", *cli_args],
             lambda out: HSGCalculator(out).calculate_hsg(depth="0-5cm", **api_kwargs),
             tmp_path,
         )
@@ -210,8 +218,7 @@ def test_check_plan_upgrade(tmp_path):
     args = ["--bbox", BBOX_ARG, *CLAY_ARGS]
     with soil:
         checked = run_both(
-            ["landcover", "download", "--source", "soilgrids", *args]
-            + ["--check-updates", "--plan", str(plan_file)],
+            ["soil", "download", *args, "--check-updates", "--plan", str(plan_file)],
             lambda out: LandCoverManager(out, "soilgrids").check(bbox=BBOX, **CLAY),
             tmp_path,
         )
@@ -219,8 +226,7 @@ def test_check_plan_upgrade(tmp_path):
         cli_plan = UpdatePlan.from_json(plan_file.read_text(encoding="utf-8"))
         assert cli_plan.items == api_plan.items
         upgraded = run_both(
-            ["landcover", "download", "--source", "soilgrids", *args]
-            + ["--upgrade", "--plan", str(plan_file)],
+            ["soil", "download", *args, "--upgrade", "--plan", str(plan_file)],
             lambda out: LandCoverManager(out, "soilgrids").download(
                 bbox=BBOX, update="upgrade", plan=api_plan, **CLAY
             ),

@@ -396,9 +396,9 @@ reczne wywolania CLI, dane do analiz) zapisuj POZA repozytorium i poza
   wskazuj katalog danych poza repo:
 
   ```bash
-  kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m \
+  kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m \
       --vertical-crs EVRF2007 -o <katalog-danych>/kartograf/data
-  kartograf download --bbox 530000,382000,533000,386000 --country pl \
+  kartograf elevation download --bbox 530000,382000,533000,386000 --country pl \
       --product nmt --vertical-crs EVRF2007 --cutout --horizontal-crs EPSG:5514 \
       -o <katalog-danych>/kartograf/e2e/<RRRR-MM-DD>-<cel>
   ```
@@ -1052,9 +1052,11 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 # 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
 # 5. Dodaj eksport do kartograf/__init__.py (__all__)
 # 6. Napisz testy offline w tests/ (fixtury z realnych odpowiedzi serwera)
-# 7. CLI: dopisz zrodlo do choices i pomocy --source w
-#    kartograf/cli/_parser.py (download oraz layers); mapowanie argumentow
-#    w kartograf/cli/landcover_cmd.py; cli/commands.py to tylko fasada
+# 7. CLI: dopisz zrodlo do choices i pomocy --source w grupie
+#    kartograf/cli/groups/landcover.py (download oraz list-layers); mapowanie
+#    argumentow w kartograf/cli/landcover_cmd.py; nowa grupa komend = jeden
+#    nowy modul kartograf/cli/groups/<grupa>.py z register() (wykrywany
+#    automatycznie, ADR-039); cli/commands.py to tylko fasada
 ```
 
 Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,

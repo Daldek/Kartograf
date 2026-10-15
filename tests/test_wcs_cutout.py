@@ -815,6 +815,7 @@ class TestCli:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -875,9 +876,10 @@ class TestCli:
         session.get.assert_not_called()
         assert not (tmp_path / "nmt").exists()
 
-    @pytest.mark.parametrize("product", ["orto", "laz"])
-    def test_cli_orto_laz_cutout_still_rejected(self, tmp_path, capsys, product):
-        rc = self._main(tmp_path, Mock(), "--product", product)
+    def test_cli_laz_cutout_still_rejected(self, tmp_path, capsys):
+        """``elevation download --product laz --cutout``: an error before WCS
+        (orto has no ``--cutout`` flag: ``imagery download``)."""
+        rc = self._main(tmp_path, Mock(), "--product", "laz")
 
         assert rc == 1
         assert capsys.readouterr().err.startswith("Error:")
@@ -953,6 +955,7 @@ class TestCli:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -1052,6 +1055,7 @@ class TestCli:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -1126,6 +1130,7 @@ class TestCli:
         ):
             return main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",

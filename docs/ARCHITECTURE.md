@@ -318,7 +318,7 @@ kartograf/
 ├── cache/defaults.py    # open_cache(cache: MetadataCache | bool, force) — wspolny cache
 │                        # CLI i biblioteki w <cwd>/.kartograf_cache.db (Z6)
 ├── download/            # Pobieranie: komenda download (data.py) i tory
-│   ├── data.py          # download_data/check_data — komenda `kartograf download` w bibliotece
+│   ├── data.py          # download_data/check_data — komendy `kartograf elevation download` / `imagery download` w bibliotece
 │   │                    # (ADR-037): kraj i `auto`, rozwiniecie obszaru PL, wybor toru,
 │   │                    # parent_request, DataReport/UnitFile/UnitFailure, Notice
 │   ├── options.py       # validate_request / validate_request_bbox (takze bbox CRS),
@@ -356,8 +356,11 @@ kartograf/
 ├── auth/                # proxy.py (subprocess izolujacy credentials CLMS), client.py
 │                        # (AuthProxyClient — singleton, sam uruchamia proxy)
 └── cli/                 # Tylko tlumaczenie flag i wypisanie wyniku (Z1, ADR-037):
-                         # _parser.py (argparse), download_cmd.py (download_data/check_data),
-                         # landcover_cmd.py, soilgrids_cmd.py (HSG), parse_cmd.py,
+                         # _parser.py (parser glowny), _args.py (wspolne flagi),
+                         # groups/ (grupy komend wg typu danych, ADR-039: elevation,
+                         # imagery, landcover, soil — jeden modul = jedna grupa),
+                         # download_cmd.py (download_data/check_data),
+                         # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG), parse_cmd.py,
                          # cache_cmd.py, commands.py (entry point main)
 ```
 
@@ -752,8 +755,8 @@ utworzeniu.
 | dowiazanie do wersji | kolejne zadania przestawiaja je tylko na wersje o kluczu `(aktualnosc, dt_pzgik, url)` wiekszym niz klucz biezacego celu; rowny klucz (nowa tresc tej samej kampanii) tylko, gdy wersja powstala w tym wywolaniu |
 | dowiazanie, ktorego `extra.link_target` nie istnieje (katalog wersji usuniety) | brak pliku — pobranie od nowa |
 
-**Komenda `download` w bibliotece (ADR-037, od 0.8.0).** `kartograf download`
-i `download_data(...)`/`check_data(...)` (`download/data.py`) to ta sama
+**Komenda `download` w bibliotece (ADR-037, od 0.8.0).** `kartograf elevation download`
+i `kartograf imagery download` (grupy CLI, ADR-039) oraz `download_data(...)`/`check_data(...)` (`download/data.py`) to ta sama
 sciezka: CLI zamienia flagi na argumenty (`--bbox` -> `BBox`,
 `pl=..,cz=..` -> slownik) i wypisuje wynik. `download_data` waliduje cale
 zadanie przed siecia (`download/options.py`: wybor obszaru, produkt,
@@ -1133,7 +1136,7 @@ asymetria wzgledem CZ, gdzie bbox daje jeden wycinek.
 
 ### 4.3 Bbox / geometria PL z `--cutout` (ADR-035, ADR-038)
 
-CLI `download --bbox`/`--geometry --cutout --horizontal-crs` oraz
+CLI `elevation download --bbox`/`--geometry --cutout --horizontal-crs` oraz
 biblioteczne `download_data(cutout=True, horizontal_crs=...)` i
 `download_pl_cutout()` pobieraja NMT albo NMPT 1 m z WCS GUGiK, nie
 mozaikuja arkuszy. Tryb jest jawny: `--horizontal-crs` jest wymagane
@@ -1513,7 +1516,7 @@ zawsze wynik `LandCoverAreaResult(files, failed, stale, notices, ok)`
 powiatu (`DownloadError`) trafia do `failed` (`LandCoverFailure(unit,
 error)`), pozostale powiaty sa pobierane (spec 4.2); brak powiatu =
 `NoCoverageError`, awaria PRG = `DownloadError`; `workers` pobiera powiaty
-rownolegle. CLI `landcover download` jest jednym wywolaniem `download`
+rownolegle. CLI `landcover download` (grupa `landcover`, ADR-039) jest jednym wywolaniem `download`
 (flagi `--layers`, `--keep-raw`, `--bbox-crs`, `--workers`, `--quiet`),
 wypisuje linie statusu, `Error: <TERYT>: ...` per powiat, podsumowanie
 i konczy kodem 1, gdy `ok` jest `False`. `Bdot10kProvider.download_by_bbox`/
@@ -1655,8 +1658,8 @@ Checklist na przykladzie DE (Brandenburgia, DGM1):
    w `download/data.py` (`_dispatch_area` -> funkcja toru kraju) i uzupelnij
    walidacje `download/options.py` (`validate_request`, `check_per_country`)
    oraz `download/area.py::pl_only_flags` o opcje, ktore w tym kraju nie
-   istnieja; CLI nie zmienia sie poza wyborami flag w `cli/_parser.py`
-   (stale z `download/options.py`). Scenariusz kraju w `tests/test_parity.py`. Reprojekcje rob lokalnie, przypieta operacja — nigdy przez
+   istnieja; CLI nie zmienia sie poza wyborami flag w module grupy
+   `cli/groups/elevation.py` / `imagery.py` (stale z `download/options.py`). Scenariusz kraju w `tests/test_parity.py`. Reprojekcje rob lokalnie, przypieta operacja — nigdy przez
    parametr CRS serwera (ADR-024).
 6. **Testy**: fixtury z REALNYCH odpowiedzi serwera (wzor `tests/fixtures/cuzk/`),
    test spojnosci deskryptor-provider, wpis w `KNOWN_PATHS` dla kazdej
