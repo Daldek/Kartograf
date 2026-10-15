@@ -643,7 +643,11 @@ pozycja na komende danych CLI w `kartograf/project/commands.py`:
 Z kazdego `VersionedFile` powstaje `PinnedFile`: `path` z
 `VersionedFile.path`, `version` z `VersionedFile.version_path` (obie
 wzgledne do magazynu), `label`, `sha256`, a `size_bytes` z sidecara
-wersji, ktory musi istniec.
+wersji, ktory musi istniec. Kazda pozycja ma tez walidacje wyboru bez
+sieci (`project add`): te sama funkcje, ktora funkcja pobrania wywoluje
+przed pierwszym zapytaniem (dzis: `validate_request` dla `download_data`,
+kontrola opcji i wyboru `LandCoverManager`, wybor `HSGCalculator`),
+oraz zbior dozwolonych opcji rowny flagom danych komendy w CLI.
 
 - **Nowy produkt w istniejacej komendzie** (plany A, B, E: np. NMT 0,5 m,
   NMT 100 m, orto prawdziwa w `elevation`/`imagery`): zero zmian
@@ -653,7 +657,8 @@ wersji, ktory musi istniec.
   poziomu komendy z `output_dir`, wyborem, `update`, `cache`,
   `on_notice` i wynikiem z `VersionedFile` na plik oraz `ok`/`failed`,
   a obok blizniaka `check_*` zwracajacego `UpdatePlan` (plan C:
-  `download_collection`/`check_collection`); (2) dodac pozycje
+  `download_collection`/`check_collection`) i walidacje wyboru bez sieci
+  wspolna z funkcja pobrania; (2) dodac pozycje
   w `kartograf/project/commands.py`; (3) w parserze komendy ustawic
   `_task` (nizej); (4) dodac test jednego zadania projektu dla nowej
   rodziny wyniku. Kolejnosc scalania z planami C-E jest dowolna: kto
