@@ -1,4 +1,5 @@
-"""``kartograf download`` only translates flags and prints the report (Z1)."""
+"""``elevation download``/``imagery download`` only translate flags and print
+the report (Z1)."""
 
 import ast
 from pathlib import Path
@@ -25,6 +26,7 @@ def _report(*, ok=True, failed=(), notices=()) -> DataReport:
 def test_flags_map_to_download_data_kwargs(tmp_path):
     shp = tmp_path / "a.shp"
     argv = [
+        "elevation",
         "download",
         "--product",
         "nmt",
@@ -68,6 +70,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
     with patch(_DOWNLOAD, return_value=_report()) as download:
         main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -94,6 +97,7 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
     with patch(_DOWNLOAD) as download:
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -117,6 +121,7 @@ def test_check_updates_calls_check_data_and_writes_plan(tmp_path, capsys):
     with patch(_CHECK, return_value=plan) as check, patch(_DOWNLOAD) as download:
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -139,7 +144,18 @@ def test_check_updates_calls_check_data_and_writes_plan(tmp_path, capsys):
 def test_report_ok_false_exit_1(tmp_path, capsys):
     failure = UnitFailure("PL", "PL", "2 z 4 arkuszy nie pobrano", "download")
     with patch(_DOWNLOAD, return_value=_report(ok=False, failed=[failure])):
-        rc = main(["download", "--product", "nmt", "--sheet", "X", "-o", str(tmp_path)])
+        rc = main(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmt",
+                "--sheet",
+                "X",
+                "-o",
+                str(tmp_path),
+            ]
+        )
     assert rc == 1
     assert "Error: 2 z 4 arkuszy nie pobrano" in capsys.readouterr().err
 
@@ -155,7 +171,17 @@ def test_notices_printed_once_on_stderr_in_order(tmp_path, capsys):
 
     with patch(_DOWNLOAD, side_effect=fake):
         rc = main(
-            ["download", "--product", "nmt", "--sheet", "X", "-q", "-o", str(tmp_path)]
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmt",
+                "--sheet",
+                "X",
+                "-q",
+                "-o",
+                str(tmp_path),
+            ]
         )
     assert rc == 0
     assert capsys.readouterr().err.splitlines() == [
@@ -165,15 +191,19 @@ def test_notices_printed_once_on_stderr_in_order(tmp_path, capsys):
 
 
 def test_validation_error_single_error_line(tmp_path, capsys):
-    with patch(_DOWNLOAD, side_effect=ValidationError("--product wymagane: x")):
-        rc = main(["download", "--sheet", "X", "-o", str(tmp_path)])
+    with patch(_DOWNLOAD, side_effect=ValidationError("--vertical-crs wymagane: x")):
+        rc = main(
+            ["elevation", "download", "--product", "nmt", "--sheet", "X"]
+            + ["-o", str(tmp_path)]
+        )
     assert rc == 1
-    assert capsys.readouterr().err.splitlines() == ["Error: --product wymagane: x"]
+    assert capsys.readouterr().err.splitlines() == ["Error: --vertical-crs wymagane: x"]
 
 
 @pytest.mark.parametrize("check", [False, True], ids=["download", "check"])
 def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check):
     argv = [
+        "elevation",
         "download",
         "--product",
         "laz",
@@ -226,7 +256,8 @@ def test_cli_imports_no_data_logic():
     the suite, because a regression here is invisible to behaviour tests
     until the CLI and the library diverge again."""
     offenders = []
-    for path in sorted(Path("kartograf/cli").glob("*.py")):
+    # the command modules and the group modules of kartograf/cli/groups/
+    for path in sorted(Path("kartograf/cli").rglob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom):
                 module = node.module or ""
@@ -247,7 +278,14 @@ def test_missing_choice_is_error_before_network(flag, tmp_path, capsys):
         "--output": ["-o", str(tmp_path)],
         "--vertical-crs": ["--vertical-crs", "EVRF2007"],
     }
-    args = ["download", "--sheet", "N-34-139-C-a-3-1", "--resolution", "1m"]
+    args = [
+        "elevation",
+        "download",
+        "--sheet",
+        "N-34-139-C-a-3-1",
+        "--resolution",
+        "1m",
+    ]
     for name, values in argv.items():
         if name != flag:
             args += values

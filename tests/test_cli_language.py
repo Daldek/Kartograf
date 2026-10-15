@@ -23,9 +23,9 @@ def _all_parsers(parser: argparse.ArgumentParser):
 
 def test_help_of_every_command_is_ascii():
     parsers = list(_all_parsers(create_parser()))
-    assert (
-        len(parsers) >= 10
-    )  # top, parse, download, landcover x4, soilgrids x2, cache x4
+    # top, parse, cache x4 and the groups: elevation x3, imagery x3,
+    # landcover x4, soil x5
+    assert len(parsers) >= 21
     for parser in parsers:
         text = parser.format_help()
         assert text.isascii(), (parser.prog, [c for c in text if not c.isascii()])
@@ -33,12 +33,17 @@ def test_help_of_every_command_is_ascii():
 
 # (argv, expected Polish word) - representative input errors of the CLI
 _CLI_ERRORS = [
-    (["download", "--sheet", "X"], "wymagane"),
-    (["download", "--product", "nmt", "--bbox", "1,2,3", "-o", "o"], "Nieprawidlowy"),
-    (["download", "--product", "nmt", "-o", "o"], "Podaj"),
+    (["elevation", "download", "--sheet", "X"], "wymagane"),
+    (
+        ["elevation", "download", "--product", "nmt", "--bbox", "1,2,3", "-o", "o"],
+        "Nieprawidlowy",
+    ),
+    (["elevation", "download", "--product", "nmt", "-o", "o"], "Podaj"),
     (["landcover", "download", "-o", "o", "--teryt", "1465"], "wymagane"),
     (["landcover", "list-layers"], "wymagane"),
-    (["soilgrids", "hsg", "-o", "o"], "Podaj"),
+    (["imagery", "download", "--sheet", "X", "-o", "o"], "wymagane"),
+    (["soil", "download", "--sheet", "N-34-130-D"], "wymagane"),
+    (["soil", "hsg", "-o", "o"], "Podaj"),
     (["parse", "Q-99"], "Nieprawidlowe"),
 ]
 

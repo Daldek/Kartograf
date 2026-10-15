@@ -899,6 +899,7 @@ class TestForceRefreshesRecordCache:
         with patch(SESSION_FACTORY, return_value=session):
             rc = main(
                 [
+                    "imagery",
                     "download",
                     "--sheet",
                     SHEET,

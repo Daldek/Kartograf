@@ -7,6 +7,8 @@ import pytest
 from kartograf.cli.commands import main
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.cutout import _prepare_pl_cutout
+from kartograf.download.data import download_data
+from kartograf.exceptions import ValidationError
 from kartograf.transform.crs import TransformUnavailableError
 
 
@@ -204,6 +206,7 @@ class TestTargetCrsValidations:
     def test_pl_sheet_rejected(self, tmp_path, capsys):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -228,36 +231,25 @@ class TestTargetCrsValidations:
         assert "--bbox/--geometry" in capsys.readouterr().err
 
     @pytest.mark.parametrize("product", ["orto", "laz"])
-    def test_non_height_product_rejected(self, product, tmp_path, capsys):
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                *self._BBOX,
-                "--product",
-                product,
-                "--cutout",
-                "--horizontal-crs",
-                "EPSG:2180",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert rc == 1
-        assert "--product nmt" in capsys.readouterr().err
+    def test_non_height_product_rejected(self, product, tmp_path):
+        """A cutout is an elevation product (nmt, nmpt): the library rejects
+        orto and LAZ (``imagery download`` has no ``--cutout`` at all)."""
+        with pytest.raises(ValidationError, match="--product nmt"):
+            download_data(
+                product=product,
+                output_dir=tmp_path,
+                bbox=BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
+                country="pl",
+                cutout=True,
+                horizontal_crs="EPSG:2180",
+                cache=False,
+            )
+        assert not any(tmp_path.iterdir())
 
     def test_system_2000_rejected_with_remedy(self, tmp_path, capsys):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",

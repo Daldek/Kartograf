@@ -440,58 +440,30 @@ class TestLandCoverInvalidOptions:
     test).
     """
 
+    _SOIL = ["soil", "download"]
+
     @pytest.mark.parametrize(
-        ("extra", "fragment"),
+        ("command", "fragment"),
         [
             (
-                [
-                    "--source",
-                    "soilgrids",
-                    "--property",
-                    "foo",
-                    "--depth",
-                    "0-5cm",
-                    "--stat",
-                    "mean",
-                ],
+                [*_SOIL, "--property", "foo", "--depth", "0-5cm", "--stat", "mean"],
                 "Nieprawidlowa wlasciwosc",
             ),
             (
-                [
-                    "--source",
-                    "soilgrids",
-                    "--property",
-                    "soc",
-                    "--depth",
-                    "1-2cm",
-                    "--stat",
-                    "mean",
-                ],
+                [*_SOIL, "--property", "soc", "--depth", "1-2cm", "--stat", "mean"],
                 "Nieprawidlowa glebokosc",
             ),
             (
-                [
-                    "--source",
-                    "soilgrids",
-                    "--property",
-                    "soc",
-                    "--depth",
-                    "0-5cm",
-                    "--stat",
-                    "median",
-                ],
+                [*_SOIL, "--property", "soc", "--depth", "0-5cm", "--stat", "median"],
                 "Nieprawidlowa statystyka",
             ),
-            (["--source", "corine", "--year", "1999"], "1999"),
+            (["landcover", "download", "--source", "corine", "--year", "1999"], "1999"),
         ],
     )
-    def test_invalid_option_is_user_error(self, extra, fragment, tmp_path, capsys):
+    def test_invalid_option_is_user_error(self, command, fragment, tmp_path, capsys):
         from kartograf.cli.commands import main
 
-        rc = main(
-            ["landcover", "download", "--sheet", "N-34-130-D", "-o", str(tmp_path)]
-            + extra
-        )
+        rc = main([*command, "--sheet", "N-34-130-D", "-o", str(tmp_path)])
         err = capsys.readouterr().err
         assert rc == 1
         assert fragment in err
@@ -1595,7 +1567,10 @@ class TestLandCoverNoSideEffectsOnInit:
             ["landcover", "list-sources"],
             ["landcover", "list-layers", "--source", "bdot10k"],
             ["landcover", "list-layers", "--source", "corine"],
-            ["landcover", "list-layers", "--source", "soilgrids"],
+            ["soil", "list-layers"],
+            ["soil", "list-sources"],
+            ["elevation", "list-sources"],
+            ["imagery", "list-sources"],
         ],
     )
     def test_cli_list_commands_create_nothing(self, empty_cwd, argv, capsys):

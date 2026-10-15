@@ -1,5 +1,6 @@
-"""``download_data`` / ``check_data``: the ``kartograf download`` command as a
-library function (spec 4.1): validation, countries, report and notices."""
+"""``download_data`` / ``check_data``: ``kartograf elevation download`` and
+``kartograf imagery download`` as a library function (spec 4.1): validation,
+countries, report and notices."""
 
 from unittest.mock import patch
 

@@ -1,13 +1,16 @@
 """
-``kartograf soilgrids`` command group (HSG calculation).
+``soil download``, ``soil list-layers`` and ``soil hsg`` (Z1).
+
+SoilGrids layers go through ``LandCoverManager`` (``run_land_cover``), the
+HSG through ``HSGCalculator``; the CLI translates flags and prints results.
 """
 
 import argparse
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from kartograf.cli._parser import parse_bbox_arg
+from kartograf.cli._args import parse_bbox_arg
 from kartograf.cli.download_cmd import (
     _plan_context,
     _print_notice,
@@ -18,42 +21,58 @@ from kartograf.cli.download_cmd import (
     _update_mode,
     run_with_plan_file,
 )
+from kartograf.cli.landcover_cmd import run_land_cover
 from kartograf.download.plan import PlanItem
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
+from kartograf.landcover.manager import LandCoverManager
 
 if TYPE_CHECKING:
     from kartograf.hydrology import HSGCalculator
 
 
-def cmd_soilgrids(args: argparse.Namespace) -> int:
-    """
-    Execute soilgrids commands.
+def cmd_soil_download(args: argparse.Namespace) -> int:
+    """``soil download``: one SoilGrids layer (property, depth, stat) of an area."""
+    if args.output is None:
+        print(
+            "Error: --output wymagane: katalog magazynu (pliki w <KATALOG>/soil/...)",
+            file=sys.stderr,
+        )
+        return 1
+    options: dict = {}
+    if args.property is not None:
+        options["property"] = args.property
+    if args.depth is not None:
+        options["depth"] = args.depth
+    if args.stat is not None:
+        options["stat"] = args.stat
+    return run_land_cover(args, "soilgrids", options)
 
-    Parameters
-    ----------
-    args : argparse.Namespace
-        Parsed command-line arguments
 
-    Returns
-    -------
-    int
-        Exit code (0 for success, 1 for error)
-    """
-    if args.soilgrids_command is None:
-        print("Uzycie: kartograf soilgrids <komenda>")
-        print("Komendy: hsg")
-        print("Szczegoly: kartograf soilgrids <komenda> --help")
-        return 0
-
-    if args.soilgrids_command == "hsg":
-        return cmd_soilgrids_hsg(args)
-
+def cmd_soil_list_layers(args: argparse.Namespace) -> int:
+    """``soil list-layers``: properties, depths and statistics of SoilGrids."""
+    # the catalogue of the source (no network, nothing written)
+    provider: Any = LandCoverManager(".", "soilgrids", cache=False).provider
+    print(f"Warstwy zrodla {provider.name}:")
+    print()
+    print("  Wlasciwosci gleb:")
+    for prop in provider.get_available_properties():
+        print(f"    {prop:10} - {provider.get_property_description(prop)}")
+    print()
+    print("  Glebokosci:")
+    for depth in provider.get_available_depths():
+        print(f"    {depth}")
+    print()
+    print("  Statystyki:")
+    for stat in provider.get_available_stats():
+        print(f"    {stat}")
+    print()
+    print("  Wybor pobrania: --property, --depth, --stat.")
     return 0
 
 
-def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
+def cmd_soil_hsg(args: argparse.Namespace) -> int:
     """
-    Execute soilgrids HSG calculation command.
+    ``soil hsg``: hydrologic soil groups from SoilGrids clay, sand and silt.
 
     Parameters
     ----------
@@ -65,15 +84,12 @@ def cmd_soilgrids_hsg(args: argparse.Namespace) -> int:
     int
         Exit code (0 for success, 1 for error)
     """
-    missing = []
     if args.output is None:
-        missing.append(
-            "--output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
-            "HSG w <KATALOG>/hsg/...)"
+        print(
+            "Error: --output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
+            "HSG w <KATALOG>/hsg/...)",
+            file=sys.stderr,
         )
-    if missing:
-        for error in missing:
-            print(f"Error: {error}", file=sys.stderr)
         return 1
 
     from kartograf.hydrology import HSGCalculator
@@ -105,8 +121,8 @@ def _plan_label(item: PlanItem) -> str:
 
 
 def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) -> int:
-    """One ``soilgrids hsg`` request: a plan (``--check-updates``) or the
-    inputs and the HSG with one status line each (spec 4.5)."""
+    """One ``soil hsg`` request: a plan (``--check-updates``) or the inputs
+    and the HSG with one status line each (spec 4.5)."""
     if args.check_updates:
         plan = calc.check_hsg(**selection, depth=args.depth, on_notice=_print_notice)
         return _report_plan(args, plan, _plan_label)

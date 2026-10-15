@@ -1,21 +1,22 @@
 """
-CLI commands for Kartograf — compatibility facade.
+CLI entry point of Kartograf and a facade of its public names.
 
-The implementations live in the _parser/parse_cmd/download_cmd/landcover_cmd/
-soilgrids_cmd/cache_cmd modules; this module re-exports public names only
-(``create_parser``, ``cmd_*``, formatters) and keeps the `main` entry point
-(pyproject: kartograf = "kartograf.cli.commands:main"). Private helpers
-are imported from the target module (e.g. ``kartograf.cli.download_cmd``).
+``main`` is the entry point (pyproject: kartograf = "kartograf.cli.commands:main").
+Commands live in ``_parser`` (``parse``, ``cache``) and in the data groups of
+``kartograf/cli/groups/`` (ADR-039), which set the handler of each command;
+the translation to the library is in the ``*_cmd`` modules. This module
+re-exports public names only (``create_parser``, ``cmd_*``, formatters);
+private helpers are imported from the target module (e.g.
+``kartograf.cli.download_cmd``).
 """
 
 import argparse
 import os
 import sys
 
-from kartograf.cli._parser import create_parser
+from kartograf.cli._parser import create_parser, removed_command_error
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.download_cmd import cmd_download, create_progress_callback
-from kartograf.cli.landcover_cmd import cmd_landcover
 from kartograf.cli.parse_cmd import (
     cmd_parse,
     format_children,
@@ -23,7 +24,6 @@ from kartograf.cli.parse_cmd import (
     format_hierarchy,
     format_sheet_info,
 )
-from kartograf.cli.soilgrids_cmd import cmd_soilgrids
 from kartograf.exceptions import KartografError
 
 __all__ = [
@@ -31,8 +31,6 @@ __all__ = [
     "main",
     "cmd_parse",
     "cmd_download",
-    "cmd_landcover",
-    "cmd_soilgrids",
     "cmd_cache",
     "create_progress_callback",
     "format_sheet_info",
@@ -44,35 +42,22 @@ __all__ = [
 
 def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) -> int:
     """Dispatch the parsed arguments to the right command."""
-    if parsed_args.command is None:
-        parser.print_help()
-        return 0
-
     if parsed_args.command == "parse":
         return cmd_parse(parsed_args)
+    if parsed_args.command == "cache":
+        return cmd_cache(parsed_args)
 
-    # --plan needs a mode in every store command (download, landcover
-    # download, soilgrids hsg)
+    handler = getattr(parsed_args, "_handler", None)
+    if handler is None:
+        # no command, or a data group without its command: that level's help
+        getattr(parsed_args, "_group_parser", parser).print_help()
+        return 0
+    # --plan needs a mode in every store command
     if getattr(parsed_args, "plan", None) is not None and not (
         parsed_args.check_updates or parsed_args.upgrade
     ):
         parser.error("--plan wymaga --check-updates albo --upgrade")
-
-    if parsed_args.command == "download":
-        return cmd_download(parsed_args)
-
-    if parsed_args.command == "landcover":
-        return cmd_landcover(parsed_args)
-
-    if parsed_args.command == "soilgrids":
-        return cmd_soilgrids(parsed_args)
-
-    if parsed_args.command == "cache":
-        return cmd_cache(parsed_args)
-
-    # Unknown command (shouldn't happen with argparse)
-    print(f"Error: nieznana komenda: {parsed_args.command}", file=sys.stderr)
-    return 1
+    return handler(parsed_args)
 
 
 def main(args: list[str] | None = None) -> int:
@@ -90,6 +75,9 @@ def main(args: list[str] | None = None) -> int:
         Exit code (0 for success, non-zero for error)
     """
     parser = create_parser()
+    removed = removed_command_error(sys.argv[1:] if args is None else args)
+    if removed is not None:
+        parser.error(removed)  # exit 2, like any unknown command
     # argparse raises SystemExit for --help/--version - let it pass unchanged
     parsed_args = parser.parse_args(args)
 
