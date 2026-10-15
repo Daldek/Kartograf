@@ -2389,10 +2389,16 @@ w tym samym wydaniu (decyzja uzytkownika).
   zachowuje wlasny cache (pelne odswiezenie: `MetadataCache(...,
   refresh=True)`) - docstringi `DownloadManager`/`LandCoverManager`,
   ARCHITECTURE 4.1, USAGE "Cache metadanych w bibliotece".
-- [ ] **`--bbox-crs EPSG:2176-2179` z `--sheet-system 1992`:** CRS jest na
+- [x] **`--bbox-crs EPSG:2176-2179` z `--sheet-system 1992`:** CRS jest na
   liscie `--bbox-crs`, ale wybieranie arkuszy PL-1992 moze odrzucic
   taki bbox; zbadac ograniczenie ukladu arkuszy i zapewnic spojnosc
   listy flag z rzeczywistym torem biblioteki.
+  **ZROBIONE 2026-10-15:** potwierdzone (`Nieobslugiwany CRS: 'EPSG:2177'`
+  z `find_sheets_for_bbox`, tor arkuszy PL-1992 przyjmowal tylko
+  EPSG:2180/4326, a `country_bbox` zostawia uklad zadania). Ograniczenie
+  bylo tylko w kodzie (otoczka liczona przez WGS84 jak dla PL-2000):
+  PL-1992 przyjmuje teraz EPSG:2176-2179; test
+  `test_pl2000_zone_bbox_selects_pl1992_sheets`.
 - [x] **Nazwy CRS i tryb wyniku:** ZROBIONE 2026-10-13 (ADR-038):
   `--cutout` + `--horizontal-crs` zamiast `--target-crs`, `--sheet-system`
   zamiast `--system` (`--datum` odrzucone: 1992 i 2000 maja to samo datum);

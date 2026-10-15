@@ -542,8 +542,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `download_data`/`check_data` sprawdzaja przed siecia `product`,
   `country`, `sheet_system`, `horizontal_crs` (wartosci jak w `--help`) i bbox
   (odwrocony, nieskonczony: ten sam tekst `Nieprawidlowy bbox: ...` co
-  CLI); bledy wejscia wewnatrz czesci kraju (np. bbox EPSG:2177 z
-  `--sheet-system 1992`) sa `ValidationError`, a nie pozycja `failed`
+  CLI); bledy wejscia wewnatrz czesci kraju sa `ValidationError`, a nie
+  pozycja `failed`
   ani `DownloadError`. `LandCoverManager`: brak opcji (`year` CORINE,
   `property`/`depth`/`stat` SoilGrids) i opcje tylko BDOT10k (`format`,
   `layers`, `keep_raw`) dla innego zrodla to `ValidationError` z tekstem
@@ -583,6 +583,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: do pobrania`, `soil hsg`:
   zamiast `clay <wsp>` / `hsg <wsp>`). Co zrobic: skrypty parsujace linie
   planu tych komend czytaja sciezke (plik planu JSON bez zmian).
+- `--bbox-crs EPSG:2176-2179` (strefy PL-2000) z `--sheet-system 1992`
+  konczyl sie `Error: Nieobslugiwany CRS: 'EPSG:2177'. Obslugiwane:
+  EPSG:2180, EPSG:4326`, choc uklad jest na liscie `--bbox-crs`.
+  `find_sheets_for_bbox(..., sheet_system="1992")` przyjmuje teraz te same
+  polskie uklady co PL-2000 (EPSG:2180, EPSG:4326, EPSG:2176-2179); uklady
+  CZ zamienia wczesniej `download_data` operacja przypieta.
 
 ## [0.7.2] - 2026-10-11
 

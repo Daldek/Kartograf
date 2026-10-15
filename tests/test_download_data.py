@@ -6,7 +6,8 @@ from unittest.mock import patch
 
 import pytest
 
-from kartograf.core.bbox import BBox
+from kartograf.core.bbox import BBox, transform_bbox
+from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.cutout import (
     PlCutoutResult,
     check_pl_cutout,
@@ -181,10 +182,6 @@ def test_area_outside_countries_is_validation_error(tmp_path):
             {"bbox": BBox(float("nan"), 0, 5, 5, "EPSG:2180")},
             "Nieprawidlowy bbox: wspolrzedne bboxa musza byc skonczone",
         ),
-        (
-            {"bbox": BBox(750000, 5500000, 750100, 5500100, "EPSG:2177")},
-            "Nieobslugiwany CRS",
-        ),
     ],
 )
 def test_invalid_choices_and_bboxes_fail_before_source(
@@ -211,6 +208,32 @@ def test_invalid_choices_and_bboxes_fail_before_source(
     assert str(exc.value).startswith(message)
     pl_provider.assert_not_called()
     cz_provider.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    ("sheet", "zone_crs"),
+    [("M-33-20-D-a-3-2", "EPSG:2176"), ("N-34-130-D-d-2-4", "EPSG:2179")],
+)
+def test_pl2000_zone_bbox_selects_pl1992_sheets(tmp_path, sheet, zone_crs):
+    """``--bbox-crs EPSG:2176-2179`` with ``--sheet-system 1992`` (backlog 0.8.0)."""
+    frame = SheetParser(sheet).get_bbox(crs="EPSG:2180")
+    cx, cy = (frame.min_x + frame.max_x) / 2, (frame.min_y + frame.max_y) / 2
+    inner = BBox(cx - 50, cy - 50, cx + 50, cy + 50, "EPSG:2180")
+    with patch(
+        "kartograf.download.data._download_pl_sheet_list", return_value=0
+    ) as sheet_list:
+        report = download_data(
+            product="nmt",
+            output_dir=tmp_path,
+            bbox=transform_bbox(inner, zone_crs),
+            country="pl",
+            resolution="1m",
+            vertical_crs="EVRF2007",
+            sheet_system="1992",
+            cache=False,
+        )
+    assert report.ok
+    assert sheet_list.call_args.args[2] == [sheet]
 
 
 @pytest.mark.parametrize("operation", [download_data, check_data])
