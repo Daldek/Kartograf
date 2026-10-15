@@ -26,6 +26,12 @@ from typing import Any, Literal, Protocol
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox
+from kartograf.download.collections import (
+    check_collection,
+    download_collection,
+    require_collection_product,
+    validate_collection_request,
+)
 from kartograf.download.data import (
     UnitFailure,
     UnitFile,
@@ -338,6 +344,62 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
     )
 
 
+def _collection_command(
+    name: str, group: str, options: dict[str, OptionKind]
+) -> TaskCommand:
+    """``download_collection``/``check_collection`` limited to the products of
+    a collection group (``boundaries``, ``cadastre``, ``models3d``; ADR-042);
+    the result family is ``CollectionReport`` (``unit_report_files``)."""
+
+    def validate(output_dir: Path, opts: Options) -> None:
+        require_collection_product(opts.get("product"), group)
+        validate_collection_request(output_dir=output_dir, **opts)
+
+    def download(
+        output_dir: Path,
+        opts: Options,
+        *,
+        update: UpdateMode | None,
+        cache: MetadataCache | bool,
+        on_progress: Callable[[DownloadProgress], None] | None,
+        on_notice: Callable[[Notice], None] | None,
+    ) -> object:
+        require_collection_product(opts.get("product"), group)
+        return download_collection(
+            output_dir=output_dir,
+            update=update,
+            cache=cache,
+            on_notice=on_notice,
+            **opts,
+        )
+
+    def check(
+        output_dir: Path,
+        opts: Options,
+        *,
+        cache: MetadataCache | bool,
+        on_notice: Callable[[Notice], None] | None,
+    ) -> UpdatePlan:
+        require_collection_product(opts.get("product"), group)
+        return check_collection(
+            output_dir=output_dir, cache=cache, on_notice=on_notice, **opts
+        )
+
+    return TaskCommand(
+        name, MappingProxyType(options), validate, download, check, unit_report_files
+    )
+
+
+# The selection of a collection group (ADR-042 D9): product, country, unit
+# or area; each group adds only its own content flags.
+_COLLECTION: dict[str, OptionKind] = {
+    "product": "str",
+    "country": "str",
+    "teryt": "str",
+    **_AREA,
+}
+
+
 COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
     {
         command.name: command
@@ -390,6 +452,17 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                 {**_AREA, "property": "str", "depth": "str", "stat": "str"},
             ),
             _hsg_command("soil hsg", {**_AREA, "depth": "str"}),
+            _collection_command(
+                "boundaries download",
+                "boundaries",
+                {**_COLLECTION, "whole_country": "flag", "level": "per_country"},
+            ),
+            _collection_command("cadastre download", "cadastre", dict(_COLLECTION)),
+            _collection_command(
+                "models3d download",
+                "models3d",
+                {**_COLLECTION, "lod": "int", "year": "int"},
+            ),
         )
     }
 )

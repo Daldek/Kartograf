@@ -14,16 +14,56 @@ from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+import pytest
+
 from kartograf import init_project
 from kartograf.core.bbox import BBox
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
+from tests.fake_packages import FakePackageSession, package_route
 from tests.test_cli import _cz_provider_mock
+from tests.test_collections_products import serve_prg_obreby
+from tests.test_feature_bbox import PRG_BBOX
 from tests.test_landcover_output_params import FakePackages
 from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, FakeCampaignProvider
 from tests.test_wcs_cutout import ALL_LAND, MASK, _synthetic_session
+
+# Collections (ADR-042): PRG obreby of a recorded area, 3D models and the
+# BDOT10k archive of powiat 1261 from fixture packages.
+PRG_AREA = {"product": "admin", "country": "pl", "level": "obreb", "bbox": PRG_BBOX}
+BUILDINGS = {"product": "buildings", "teryt": "1261", "lod": 1, "year": 2024}
+BDOT_ARCHIVE = {"source": "bdot10k", "teryt": "1261", "year": 2024, "format": "SHP"}
+
+
+@contextmanager
+def collection_sources() -> Iterator[FakePackageSession]:
+    """PRG WFS (A06 answers), the LoD1 2024 and BDOT10k 2024 SHP packages of
+    1261 for ``download_collection`` and the BDOT10k archive."""
+    session = FakePackageSession(
+        dict(
+            package_route(name)
+            for name in ("buildings_lod1_2024_1261", "bdot10k_2024_shp_1261")
+        )
+    )
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        service = serve_prg_obreby(monkeypatch)
+        wfs_get = service.get
+
+        def route(url, params=None, **kwargs):
+            if url in session.routes:
+                return session.get(url, **kwargs)
+            return wfs_get(url, params=params, **kwargs)
+
+        monkeypatch.setattr(service, "get", route)
+        monkeypatch.setattr(
+            LandCoverManager,
+            "_get_provider_by_name",
+            staticmethod(lambda name, cache=None: Bdot10kProvider(session=session)),
+        )
+        yield session
+
 
 G = "N-34-139-C-a-3-1"
 PL_SHEET = {

@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from kartograf.core.bbox import BBox
+from kartograf.download.collections import download_collection
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.data import download_data
 from kartograf.exceptions import DownloadError, KartografError, ValidationError
@@ -198,7 +199,8 @@ def test_task_command_lists_data_commands():
     error = _raised(lambda: task_command("elevation list-sources"))
     assert str(error) == (
         "do projektu mozna dodac komendy zapisujace dane: elevation download, "
-        "imagery download, landcover download, soil download, soil hsg"
+        "imagery download, landcover download, soil download, soil hsg, "
+        "boundaries download, cadastre download, models3d download"
     )
 
 
@@ -235,6 +237,21 @@ VALIDATION = {
         lambda out, o: HSGCalculator(out, cache=False).calculate_hsg(
             **{"depth": None, **o}
         ),
+    ),
+    "boundaries download": (
+        {"product": "admin", "teryt": "12"},
+        {"product": "admin", "teryt": "1261"},
+        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+    ),
+    "cadastre download": (
+        {"product": "map", "country": "pl", "bbox": _BBOX},
+        {"product": "map", "bbox": _BBOX},
+        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+    ),
+    "models3d download": (
+        {"product": "buildings", "teryt": "1261", "lod": 2},
+        {"product": "buildings", "teryt": "1261", "lod": 1},
+        lambda out, o: download_collection(output_dir=out, cache=False, **o),
     ),
 }
 

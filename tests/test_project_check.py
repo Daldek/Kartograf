@@ -24,12 +24,16 @@ from kartograf.project.commands import task_command
 from kartograf.project.manifest import MANIFEST_NAME
 from tests.project_fixtures import (
     AUTO_CUTOUT,
+    BDOT_ARCHIVE,
+    BUILDINGS,
     HSG_SHEET,
     LAZ_AREA,
     PL_SHEET,
+    PRG_AREA,
     LazTiles,
     auto_pl_cz,
     bdot,
+    collection_sources,
     copy_manifest,
     landcover_sources,
     laz_tiles,
@@ -52,6 +56,32 @@ def _pl(tmp_path: Path, fake: FakeCampaignProvider | None = None) -> Path:
     with pl_sheets(fake):
         assert download_project(project).ok
     return project
+
+
+def test_check_collection_files_pair_with_pins(tmp_path):
+    """Plan positions of the collection slots (``unit_slot``: bbox and teryt
+    of ``boundaries``/``models3d``, the BDOT10k archive on the ``landcover``
+    track) are the pinned standard paths: every pin is paired, nothing
+    ``added``/``removed``; GUGiK has no cheap signal (``unverifiable``)."""
+    project = new_project(tmp_path)
+    tasks = {
+        "granice": ("boundaries download", PRG_AREA),
+        "budynki": ("models3d download", BUILDINGS),
+        "archiwum": ("landcover download", BDOT_ARCHIVE),
+    }
+    for name, (command, options) in tasks.items():
+        add_project_task(project, name=name, command=command, options=options)
+    with collection_sources() as session:
+        assert download_project(project).ok
+        transfers = session.gets()
+        before = (project / MANIFEST_NAME).read_bytes()
+        report = check_project(project)
+        assert session.gets() == transfers
+    pins = {pin.path for task in open_project(project).tasks for pin in task.files}
+    assert report.ok and len(pins) == 3
+    assert {item.path for item in report.files} == pins
+    assert {item.status for item in report.files} == {"unverifiable"}
+    assert (project / MANIFEST_NAME).read_bytes() == before
 
 
 def test_status_only_stats_files_and_reports_missing(tmp_path):

@@ -26,14 +26,18 @@ from kartograf.sources.sidecar import file_digest
 from tests.conftest import FakeCorine, FakeSoilGrids
 from tests.project_fixtures import (
     AUTO_CUTOUT,
+    BDOT_ARCHIVE,
     BDOT_BBOX,
+    BUILDINGS,
     HSG_SHEET,
     LAZ_AREA,
     PL_SHEET,
+    PRG_AREA,
     G,
     LazTiles,
     auto_pl_cz,
     bdot,
+    collection_sources,
     copy_manifest,
     landcover_sources,
     laz_tiles,
@@ -101,6 +105,19 @@ FIRST = {
         {"sheet": HSG_SHEET, "depth": "0-5cm"},
         lambda: landcover_sources(soilgrids=RasterSoilGrids),
         ["output", "input", "input", "input"],
+    ),
+    "prg-area-level": (
+        "boundaries download",
+        PRG_AREA,
+        collection_sources,
+        ["output"],
+    ),
+    "buildings-teryt": ("models3d download", BUILDINGS, collection_sources, ["output"]),
+    "bdot10k-archive": (
+        "landcover download",
+        BDOT_ARCHIVE,
+        collection_sources,
+        ["output"],
     ),
 }
 
