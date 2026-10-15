@@ -275,37 +275,37 @@ patrz sekcja 3.2, znane ograniczenie.
 # Komendy:
 kartograf parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
 kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
-kartograf download --sheet <godlo> --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMT
-kartograf download --sheet <godlo> --product nmpt --vertical-crs EVRF2007 -o ./data # pobierz NMPT
-kartograf download --sheet <godlo> --product orto -o ./data # pobierz ortofoto
-kartograf download --sheet <godlo> --product laz --vertical-crs EVRF2007 -o ./data # pobierz chmury punktów LAZ (wiele kafli)
-kartograf download --bbox ... --product laz --year 2024 --min-density 12 --country pl --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox min_x,min_y,max_x,max_y --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT dla bbox
-kartograf download --bbox ... --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data # NMT w ukladzie PL-2000 (arkusze 1:2000)
-kartograf download --bbox ... --product orto --country pl --sheet-system 1992 -o ./data # ortofoto dla bbox
-kartograf download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT z pliku geometrii
-kartograf download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf download --sheet <godlo> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
-kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (CZ), godlo TM33
-kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), godlo SM5, kraj z godla
-kartograf download --bbox ... --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data # bbox transgraniczny -> wycinek per kraj
-kartograf download --bbox ... --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data # reprojekcja lokalna (pinned)
-kartograf download --bbox ... --country pl --cutout --horizontal-crs EPSG:2180 --product nmt --vertical-crs EVRF2007 -o ./data # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
-kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
-kartograf download --sheet <godlo> --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie kampanie GUGiK arkusza (ADR-030)
-kartograf download --sheet <godlo> --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot z roku (ADR-032)
-kartograf download --sheet <godlo> --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z roku
-kartograf download --sheet <godlo> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot, nie starszy niż rok
-kartograf download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # najnowszy lot do roku (dowiązanie nigdy wstecz)
-kartograf download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ bez deduplikacji pokrycia
+kartograf elevation download --sheet <godlo> --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMT
+kartograf elevation download --sheet <godlo> --product nmpt --vertical-crs EVRF2007 -o ./data # pobierz NMPT
+kartograf imagery download --sheet <godlo> --product orto -o ./data # pobierz ortofoto
+kartograf elevation download --sheet <godlo> --product laz --vertical-crs EVRF2007 -o ./data # pobierz chmury punktów LAZ (wiele kafli)
+kartograf elevation download --bbox ... --product laz --year 2024 --min-density 12 --country pl --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox min_x,min_y,max_x,max_y --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT dla bbox
+kartograf elevation download --bbox ... --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data # NMT w ukladzie PL-2000 (arkusze 1:2000)
+kartograf imagery download --bbox ... --product orto --country pl --sheet-system 1992 -o ./data # ortofoto dla bbox
+kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT z pliku geometrii
+kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --sheet <godlo> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
+kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (CZ), godlo TM33
+kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), godlo SM5, kraj z godla
+kartograf elevation download --bbox ... --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data # bbox transgraniczny -> wycinek per kraj
+kartograf elevation download --bbox ... --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data # reprojekcja lokalna (pinned)
+kartograf elevation download --bbox ... --country pl --cutout --horizontal-crs EPSG:2180 --product nmt --vertical-crs EVRF2007 -o ./data # wycinek NMT/NMPT 1 m WCS + maska PRG (ADR-035)
+kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
+kartograf elevation download --sheet <godlo> --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie kampanie GUGiK arkusza (ADR-030)
+kartograf elevation download --sheet <godlo> --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot z roku (ADR-032)
+kartograf elevation download --sheet <godlo> --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z roku
+kartograf elevation download --sheet <godlo> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot, nie starszy niż rok
+kartograf elevation download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # najnowszy lot do roku (dowiązanie nigdy wstecz)
+kartograf elevation download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod> -o ./data  # obszar: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
 kartograf landcover download --source corine --sheet <arkusz> -o ./data --year 2018
-kartograf landcover download --source soilgrids --property <param> -o ./data --depth 0-5cm --stat mean # --sheet/--bbox (bez --teryt)
+kartograf soil download --property <param> -o ./data --depth 0-5cm --stat mean # --sheet/--bbox (bez --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
-kartograf soilgrids hsg --sheet <arkusz> -o ./data --depth 0-5cm # oblicz HSG z wersji SoilGrids
+kartograf soil hsg --sheet <arkusz> -o ./data --depth 0-5cm # oblicz HSG z wersji SoilGrids
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
-# Pełna lista opcji: kartograf <komenda> --help
+# Pełna lista opcji: kartograf <grupa> <komenda> --help
 ```
 
 ### 2.10 Python API - IN SCOPE
@@ -322,7 +322,7 @@ from kartograf import (
     SheetParser, Parser2000, ParserTM33, BBox, find_sheets_for_bbox,
     find_sheets_2000_for_bbox, find_sheets_for_geometry, get_overall_bbox,
     transform_bbox, parent_request_for,
-    # Download (command level: `kartograf download`, spec 4.1)
+    # Download (command level: `kartograf elevation download` / `imagery download`, spec 4.1)
     download_data, check_data, DataReport, UnitFile, UnitFailure,
     # Download (NMT)
     DownloadManager, DownloadProgress, DownloadResult, CampaignRef, FileStorage,
@@ -379,7 +379,7 @@ from kartograf import (
   hardlink do najnowszej lokalnej wersji (bez kopii i symlinkow; system
   plikow z hardlinkami wymagany); `kampanie/` z 0.7.x bez migracji;
   tryby `--check-updates`/`--upgrade`/`--force`, plan `kartograf-plan/1`
-  dla kazdego toru `download`, `landcover download` i `soilgrids hsg`
+  dla kazdego toru `elevation download`, `imagery download`, `landcover download`, `soil download` i `soil hsg`
   (sygnal swiezosci per kanal: skorowidz, rekord WFS, `ETag` SM5,
   wydanie SoilGrids/CORINE CLMS, brak dla WCS/`exportImage`/BDOT10k)
 - Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>` do
@@ -722,7 +722,7 @@ kartograf/
 │   ├── defaults.py           # open_cache — wspólny cache CLI i biblioteki (<cwd>/.kartograf_cache.db)
 │   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache (TTL 7d), sheet_cache (TTL 30d)
 ├── download/              # Pobieranie: komenda download w bibliotece (data.py) i tory
-│   ├── data.py               # download_data/check_data = `kartograf download` (ADR-037)
+│   ├── data.py               # download_data/check_data = `kartograf elevation download` / `imagery download` (ADR-037)
 │   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help)
 │   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
@@ -747,11 +747,14 @@ kartograf/
 │   ├── proxy.py               # Auth Proxy server
 │   └── client.py               # Auth Proxy client
 └── cli/                   # CLI: tylko tłumaczenie flag i wypisanie wyniku (ADR-037)
-    ├── _parser.py             # argparse — top-level + subkomendy (--country, --cutout, --horizontal-crs, --sheet-system)
+    ├── _parser.py             # argparse — parser główny (parse, cache, błąd usuniętych komend)
+    ├── _args.py               # wspólne flagi (obszar, tryby aktualizacji, --quiet)
+    ├── groups/                # grupy komend wg typu danych (ADR-039): elevation, imagery, landcover, soil
+    │                          #   (jeden moduł = jedna grupa z register(); wykrywane automatycznie)
     ├── parse_cmd.py           # `kartograf parse`
-    ├── download_cmd.py        # `kartograf download` -> download_data/check_data
-    ├── landcover_cmd.py       # `kartograf landcover`
-    ├── soilgrids_cmd.py       # `kartograf soilgrids`
+    ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
+    ├── landcover_cmd.py       # `landcover download` -> LandCoverManager
+    ├── soil_cmd.py            # `soil download`, `soil hsg`
     ├── cache_cmd.py           # `kartograf cache`
     └── commands.py            # Fasada zgodności — re-eksport + entry point `main`
 ```

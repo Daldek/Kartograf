@@ -3,9 +3,10 @@ Kartograf - download spatial data: NMT/NMPT/orthophoto/LAZ from GUGiK (PL),
 DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
 Every CLI command has one library function with the same choices and the same
-result (ADR-037): ``kartograf download`` = ``download_data``/``check_data``,
-``landcover download`` = ``LandCoverManager.download``/``.check``,
-``soilgrids hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``.
+result (ADR-037): ``elevation download`` and ``imagery download`` =
+``download_data``/``check_data``, ``landcover download`` and ``soil download`` =
+``LandCoverManager.download``/``.check``,
+``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``.
 
 Example usage::
 
@@ -23,7 +24,8 @@ Example usage::
     parser = SheetParser("N-34-130-D-d-2-4")
     print(f"Scale: {parser.scale}")
 
-    # The `kartograf download` command: files, failures, notices, ok
+    # The `elevation download` / `imagery download` commands: files, failures,
+    # notices, ok
     report = download_data(
         product="nmt",
         output_dir="./data",
@@ -164,7 +166,7 @@ __all__ = [
     "get_overall_bbox",
     "transform_bbox",
     "parent_request_for",
-    # Download (command level: `kartograf download`, spec 4.1)
+    # Download (command level: `elevation download` / `imagery download`, spec 4.1)
     "download_data",
     "check_data",
     "DataReport",

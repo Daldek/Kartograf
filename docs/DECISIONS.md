@@ -60,6 +60,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
 | [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
+| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
 
 ---
 
@@ -2766,6 +2767,82 @@ nie datum (oba uklady maja datum ETRF2000-PL). 0.8.0 i tak lamie CLI/API.
 Wycinek wymaga trzech flag (`--cutout --horizontal-crs ...` + obszar),
 ale tryb i uklad wyniku sa widoczne w komendzie. Pobranie obszaru CZ
 wymaga `--cutout` takze dla natywnego ukladu.
+
+---
+
+## ADR-039: Grupy komend CLI wg typu danych
+
+**Data:** 2026-10-15
+**Status:** Przyjeta; uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag)
+
+**Kontekst:** CLI 0.8.0-dev mialo jedna komende `download` dla NMT, NMPT,
+ortofotomapy i LAZ (z flagami dotyczacymi tylko czesci produktow:
+`--vertical-crs`, `--resolution`, `--cutout`, `--min-density`),
+`landcover` z `--source` obejmujacym takze SoilGrids oraz `soilgrids hsg`.
+`--help` jednej komendy mieszal flagi niezwiazane z wybranym produktem,
+a `--year` i `--sheet` znaczyly co innego w roznych komendach. Roadmapa
+(podprojekt 3) dodaje kolejne typy danych (granice, dzialki, modele 3D,
+nazwy, mapy), ktore nie zmieszcza sie w jednej komendzie.
+
+**Opcje:**
+- A) Jedna komenda `download` z kolejnymi `--product`; flagi walidowane
+  w bibliotece (stan dotychczasowy).
+- B) Grupy komend wg typu danych: `kartograf <grupa> <komenda>`; kazda
+  grupa ma wlasne flagi i pomoc; nowy typ danych = nowa grupa.
+- C) Komenda per produkt (`kartograf nmt`, `kartograf orto`, ...).
+
+**Decyzja:** B (decyzja uzytkownika 2026-10-13, wchodzi do 0.8.0), bez
+aliasow starych nazw:
+- D1. Grupy 0.8.0: `elevation` (`--product nmt|nmpt|laz`; NMT/NMPT PL,
+  DMR CZ, LAZ), `imagery` (`--product orto`), `landcover` (`--source
+  bdot10k|corine`), `soil` (SoilGrids, HSG). `parse` i `cache` zostaja
+  poza grupami. Komendy grupy: `download`, `list-sources` (kazda grupa),
+  `list-layers` (`landcover`, `soil`), `hsg` (`soil`).
+- D2. Kazda grupa jest jednym modulem `kartograf/cli/groups/<grupa>.py`
+  z `register(subparsers)`; `register_groups` wykrywa moduly przez
+  `pkgutil` (alfabetycznie, moduly `_*` sa pomocnicze), wiec nowa grupa to
+  jeden nowy modul bez zmian we wspolnym pliku. Wspolne flagi (obszar,
+  tryby aktualizacji, `--quiet`, `parse_bbox_arg`) w `cli/_args.py`;
+  `cli/_parser.py` zawiera tylko parser glowny, `parse`, `cache` i blad
+  usunietych komend.
+- D3. Grupa ma tylko swoje flagi: `imagery download` nie przyjmuje
+  `--vertical-crs`, `--resolution`, `--cutout`, `--horizontal-crs`,
+  `--min-density`; `--country` w `imagery` to `pl|auto` (brak ortofotomapy
+  CZ; `cz` dojdzie razem z planem D). Flaga spoza grupy to blad argparse.
+  Reguly biblioteki (orto + CZ, orto + wycinek) obowiazuja nadal na
+  poziomie `download_data` (ADR-037).
+- D4. `--sheet` ma jedna definicje we wszystkich grupach: obszar arkusza
+  o tym godle. Gdy zrodlo publikuje produkt w tych arkuszach (NMT, NMPT,
+  orto PL; DMR CZ), wynik to pliki arkusza 1:1; inaczej dane z zasiegu
+  arkusza (LAZ: kafle, BDOT10k: powiaty, CORINE/SoilGrids/HSG: wycinek).
+  Nazwa flagi bez zmian.
+- D5. `--year` ma jedna definicje: rok, ktory opisuja dane. `elevation`
+  i `imagery`: filtr lotow (najnowszy lot z roku, z `--min-year`/
+  `--max-year`); `landcover`: wydanie (CORINE 2018; pozniej rocznik
+  BDOT10k z planu C).
+- D6. Brak `--product` (albo `--source` w `landcover`) daje komunikat
+  wymieniajacy tylko wybory grupy (`options.product_choices()`); wartosc
+  dalej waliduje argparse i biblioteka. `soil download` nie ma `--source`
+  (jedno zrodlo). `list-sources` wypisuje tabele z rejestru deskryptorow
+  (WYBOR, KRAJ, DOSTAWCA, KLUCZ = `dataset` sidecara, NAZWA) bez sieci.
+- D7. Usuniete komendy koncza sie bledem parsera (kod 2) z nazwa nowej
+  komendy, bez dzialajacego aliasu: `download`, `soilgrids`,
+  `landcover ... --source soilgrids`. Biblioteka i sidecar
+  `kartograf-meta/1` bez zmian; segmenty `data/` bez zmian.
+- D8. Komendy CLI nadal tylko tlumacza na funkcje biblioteki (ADR-037):
+  `elevation download` i `imagery download` -> `download_data`/
+  `check_data`, `landcover download` i `soil download` ->
+  `LandCoverManager`, `soil hsg` -> `HSGCalculator`.
+  `kartograf.cli.commands` traci `cmd_landcover`/`cmd_soilgrids`;
+  `parse_bbox_arg` jest w `kartograf.cli._args`.
+
+**Konsekwencje:** Zmiana lamiaca CLI w 0.8.0 (CHANGELOG [0.8.0] "Co
+zrobic": tabela stara -> nowa komenda). `--help` grupy zawiera tylko
+istotne flagi. Nowe produkty dodaja grupy bez zmian w istniejacych;
+galezie z nowymi grupami musza uzyc `cli/groups/<grupa>.py` oraz
+`add_group`/`add_list_sources` z `kartograf.cli.groups` i flag z
+`kartograf.cli._args`. Skrypty wolajace stare komendy (takze
+Hydrograf/Hydrolog) trzeba zaktualizowac.
 
 ---
 
