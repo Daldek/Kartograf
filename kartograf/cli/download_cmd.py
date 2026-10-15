@@ -363,13 +363,10 @@ def _per_country(raw: str | None, flag: str) -> str | dict[str, str] | None:
     return values
 
 
-def _download_arguments(args: argparse.Namespace) -> dict:
-    """``download_data``/``check_data`` arguments of the parsed flags (a group
-    without a flag, e.g. ``imagery`` without ``--vertical-crs``, passes the
-    library default)."""
+def download_task_arguments(args: argparse.Namespace) -> dict:
+    """Data options shared by a group download and a project task."""
     return {
         "product": args.product,
-        "output_dir": args.output,
         "sheet": args.sheet,
         "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
         "geometry": Path(args.geometry) if getattr(args, "geometry", None) else None,
@@ -390,6 +387,11 @@ def _download_arguments(args: argparse.Namespace) -> dict:
         "full_sheet": getattr(args, "full_sheet", False),
         "min_density": getattr(args, "min_density", None),
     }
+
+
+def _download_arguments(args: argparse.Namespace) -> dict:
+    """Library request, including the store, from the same task translation."""
+    return {**download_task_arguments(args), "output_dir": args.output}
 
 
 def cmd_download(
