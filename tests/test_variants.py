@@ -12,9 +12,25 @@ import pytest
 
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import TransportKind
-from kartograf.sources.registry import get_source, resolve_vertical_crs, sources_for
+from kartograf.sources.registry import (
+    CZ_SYSTEM_CRS,
+    channel_for,
+    get_source,
+    resolve_vertical_crs,
+    sources_for,
+)
 from kartograf.sources.variants import (
+    CZ_LAZ_VERTICAL_TEXT,
+    CZ_MODELS,
+    CZ_VERTICAL_TEXT,
     ProductVariant,
+    cz_laz_error,
+    cz_model_text,
+    cz_resolution_text,
+    cz_sheet_system,
+    cz_variant_error,
+    find_cz_laz_variant,
+    find_cz_variant,
     find_variant,
     parse_resolution,
     resolution_label,
@@ -394,4 +410,249 @@ def test_variant_error_for_country_without_variants():
     assert (
         variant_error(product="nmt", country="DE", resolution="1m", vertical_crs=None)
         == "--product nmt nie ma wariantow w DE"
+    )
+
+
+# =============================================================================
+# CZ (plan B): rows of the route table (decision 2)
+# =============================================================================
+
+_F = TransportKind.DIRECT_FILES
+_I = TransportKind.ARCGIS_IMAGE
+_CZ_MODELS = ("dmr5g", "dmr4g", "dmp1g", "dmpok")
+# (product, label or model, height system, sheet system, transport): a CUZK
+# file where one is published (S-JTSK files in Bpv, also EVRF2007 through the
+# pinned operation; ETRS89 files in EVRF2007), else the ImageServer warped
+# onto the TM33 grid; LAZ only as published (S-JTSK = Bpv, ETRS89 = EVRF2007).
+_CZ_ROUTES = {
+    ("nmt", "2m", "Bpv", "tm33", _I),
+    ("nmt", "2m", "EVRF2007", "tm33", _I),
+    ("nmt", "5m", "Bpv", "sm5", _F),
+    ("nmt", "5m", "EVRF2007", "sm5", _F),
+    ("nmt", "5m", "EVRF2007", "tm33", _F),
+    ("nmt", "5m", "Bpv", "tm33", _I),
+    ("nmpt", "0.5m", "Bpv", "sm5", _F),
+    ("nmpt", "0.5m", "EVRF2007", "sm5", _F),
+    ("nmpt", "0.5m", "EVRF2007", "tm33", _F),
+    ("nmpt", "0.5m", "Bpv", "tm33", _I),
+    ("nmpt", "2m", "Bpv", "tm33", _I),
+    ("nmpt", "2m", "EVRF2007", "tm33", _I),
+    *(("laz", model, "Bpv", "sm5", _F) for model in _CZ_MODELS),
+    *(("laz", model, "EVRF2007", "tm33", _F) for model in _CZ_MODELS),
+}
+CZ_VARIANTS = variants(country="CZ")
+
+
+def _cz_id(v: ProductVariant) -> str:
+    return f"{v.product}-{v.label or v.model}-{v.vertical_crs}-{v.systems[0]}"
+
+
+def test_cz_registry_matches_publication():
+    found = {
+        (v.product, v.label or v.model, v.vertical_crs, v.systems[0], v.channel)
+        for v in CZ_VARIANTS
+    }
+    assert found == _CZ_ROUTES
+    assert len(CZ_VARIANTS) == len(_CZ_ROUTES)
+    for v in CZ_VARIANTS:
+        assert len(v.systems) == 1 and v.index_ref is None
+        assert v.model in CZ_MODELS
+        assert v.format == ("LAZ" if v.product == "laz" else "TIFF")
+
+
+@pytest.mark.parametrize("variant", CZ_VARIANTS, ids=_cz_id)
+def test_cz_row_has_its_channel(variant):
+    """A row names one channel of its descriptor (files: in the CRS of the
+    sheet system); heights are native for the S-JTSK file and the ImageServer
+    in Bpv and for the ETRS89 file in EVRF2007, otherwise transformed."""
+    descriptor = get_source(variant.source)
+    assert variant in descriptor.variants
+    assert descriptor.product == variant.product
+    system = variant.systems[0]
+    crs = CZ_SYSTEM_CRS[system] if variant.channel == _F else None
+    channel = channel_for(variant.source, variant.channel, crs)
+    code = resolve_vertical_crs(variant.vertical_crs, channel.vertical_crs_options)
+    native = variant.vertical_crs == "Bpv" or (
+        variant.channel == _F and system == "tm33"
+    )
+    assert (code in channel.vertical_crs_options) is native
+    if variant.product == "laz":
+        assert native  # point clouds are never transformed
+
+
+def test_cz_model_values():
+    found = variants(product="laz", country="CZ", vertical_crs="Bpv")
+    assert [v.model for v in found] == list(_CZ_MODELS)
+    assert cz_model_text() == (
+        "dmr5g (teren, DMR 5G), dmr4g (teren, siatka 5 m), dmp1g (powierzchnia, "
+        "DMP 1G), dmpok (powierzchnia, korelacja obrazowa)"
+    )
+    assert cz_resolution_text("nmt") == "2m (DMR 5G), 5m (DMR 4G)"
+    assert cz_resolution_text("nmpt") == "0.5m (DMP OK), 2m (DMP 1G)"
+
+
+@pytest.mark.parametrize(
+    ("sheet", "system"), [("CTES96", "sm5"), (" 760_5518 ", "tm33")]
+)
+def test_cz_sheet_system(sheet, system):
+    assert cz_sheet_system(sheet) == system
+
+
+def test_cz_sheet_system_rejects_pl_code():
+    with pytest.raises(ValidationError, match="nie nalezy do zadnego systemu CZ"):
+        cz_sheet_system("N-34-130-D")
+
+
+@pytest.mark.parametrize(
+    ("product", "resolution", "vertical_crs", "system", "message"),
+    [
+        (
+            "nmt",
+            "2m",
+            "Bpv",
+            "sm5",
+            "Arkusze SM5 NMT CZ sa tylko w 5m (DMR 4G) - pomin --resolution albo "
+            "podaj 5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+        ),
+        (
+            "nmpt",
+            "2m",
+            None,
+            "sm5",
+            "Arkusze SM5 NMPT CZ sa tylko w 0.5m (DMP OK) - pomin --resolution "
+            "albo podaj 0.5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+        ),
+        (
+            "nmt",
+            None,
+            "Bpv",
+            "tm33",
+            "--resolution wymagane dla NMT CZ: 2m (DMR 5G), 5m (DMR 4G)",
+        ),
+        (
+            "nmpt",
+            None,
+            "Bpv",
+            None,
+            "--resolution wymagane dla NMPT CZ: 0.5m (DMP OK), 2m (DMP 1G)",
+        ),
+        (
+            "nmpt",
+            "1m",
+            "Bpv",
+            None,
+            "CZ nie ma rozdzielczosci 1m dla NMPT - dostepne: 0.5m (DMP OK), "
+            "2m (DMP 1G)",
+        ),
+        (
+            "nmt",
+            "5m",
+            "KRON86",
+            "tm33",
+            f"KRON86 nie jest dostepny dla CZ - dostepne: {CZ_VERTICAL_TEXT}",
+        ),
+        ("orto", None, None, None, "--product orto nie ma wariantow rastrowych w CZ"),
+    ],
+)
+def test_cz_variant_error_names_flags_and_registry_values(
+    product, resolution, vertical_crs, system, message
+):
+    error = cz_variant_error(
+        product=product,
+        resolution=resolution,
+        vertical_crs=vertical_crs,
+        system=system,
+    )
+    assert error == message
+
+
+@pytest.mark.parametrize(
+    ("product", "resolution", "vertical_crs", "system", "source", "channel"),
+    [
+        # SM5 sheets: the only label with SM5 files may be omitted
+        ("nmt", None, "Bpv", "sm5", "cz.cuzk.dmr4g", _F),
+        ("nmpt", None, "EVRF2007", "sm5", "cz.cuzk.dmpok", _F),
+        # TM33 5 m in EVRF2007: the ETRS89 file (no longer a warp)
+        ("nmt", "5m", "EVRF2007", "tm33", "cz.cuzk.dmr4g", _F),
+        ("nmt", "5m", "Bpv", "tm33", "cz.cuzk.dmr4g", _I),
+        ("nmpt", "2m", "EVRF2007", "tm33", "cz.cuzk.dmp1g", _I),
+    ],
+)
+def test_find_cz_variant(product, resolution, vertical_crs, system, source, channel):
+    found = find_cz_variant(
+        product=product,
+        resolution=resolution,
+        vertical_crs=vertical_crs,
+        system=system,
+    )
+    assert (found.source, found.channel, found.systems) == (source, channel, (system,))
+    assert found.vertical_crs == vertical_crs
+
+
+def test_find_cz_variant_raises_the_error_text():
+    with pytest.raises(ValidationError, match="Arkusze SM5 NMT CZ sa tylko w 5m"):
+        find_cz_variant(
+            product="nmt", resolution="2m", vertical_crs="Bpv", system="sm5"
+        )
+
+
+_MODELS_TEXT = (
+    "dmr5g (teren, DMR 5G), dmr4g (teren, siatka 5 m), dmp1g (powierzchnia, "
+    "DMP 1G), dmpok (powierzchnia, korelacja obrazowa)"
+)
+
+
+@pytest.mark.parametrize(
+    ("model", "vertical_crs", "system", "message"),
+    [
+        (None, "Bpv", None, f"--model wymagane dla --product laz w CZ: {_MODELS_TEXT}"),
+        (
+            "dmr6g",
+            "Bpv",
+            None,
+            f"--model 'dmr6g': nieznana wartosc - dostepne: {_MODELS_TEXT}",
+        ),
+        (
+            "dmr5g",
+            "EVRF2007",
+            "sm5",
+            "LAZ CZ - arkusze SM5 (S-JTSK) sa tylko w Bpv, podano --vertical-crs "
+            "EVRF2007 (chmury punktow bez transformacji); EVRF2007: kafle TM33 "
+            "(ETRS89), np. 760_5518, albo obszar (--bbox/--geometry)",
+        ),
+        (
+            "dmpok",
+            "Bpv",
+            "tm33",
+            "LAZ CZ - kafle TM33 (ETRS89) sa tylko w EVRF2007, podano --vertical-crs "
+            "Bpv (chmury punktow bez transformacji); Bpv: arkusze SM5 (S-JTSK), "
+            "np. CTES96, albo obszar (--bbox/--geometry)",
+        ),
+        (
+            "dmr4g",
+            "KRON86",
+            None,
+            f"KRON86 nie jest dostepny dla LAZ CZ - dostepne: {CZ_LAZ_VERTICAL_TEXT}",
+        ),
+    ],
+)
+def test_cz_laz_error(model, vertical_crs, system, message):
+    assert (
+        cz_laz_error(model=model, vertical_crs=vertical_crs, system=system) == message
+    )
+    with pytest.raises(ValidationError) as exc:
+        find_cz_laz_variant(model=model, vertical_crs=vertical_crs, system=system)
+    assert str(exc.value) == message
+
+
+@pytest.mark.parametrize(
+    ("vertical_crs", "system"), [("Bpv", "sm5"), ("EVRF2007", "tm33")]
+)
+def test_find_cz_laz_variant_by_height_system(vertical_crs, system):
+    """The height system chooses the files of an area (no --sheet-system)."""
+    found = find_cz_laz_variant(model="dmpok", vertical_crs=vertical_crs)
+    assert (found.source, found.systems) == ("cz.cuzk.dmpok_laz", (system,))
+    assert (
+        find_cz_laz_variant(model="dmpok", vertical_crs=vertical_crs, system=system)
+        == found
     )

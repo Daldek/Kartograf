@@ -326,6 +326,227 @@ _PL_SHEET_SOURCES = (
     _pl_sheet_source("nmpt", "1m", _KRON, format="XYZ"),
 )
 
+# --- CUZK (CZ, plan B) -----------------------------------------------------------
+_AGS = "https://ags.cuzk.gov.cz/arcgis2/rest/services"
+_OPENZU = "https://openzu.cuzk.gov.cz/opendata"
+# Horizontal CRS of the CZ sheet systems (``ProductVariant.systems``): SM5 sheets
+# in S-JTSK / Krovak, TM33 tiles 2x2 km in ETRS89 / TM33N.
+CZ_SYSTEM_CRS = {"sm5": "EPSG:5514", "tm33": "EPSG:3045"}
+# Height system of the CUZK files of a sheet system: S-JTSK files in Bpv, ETRS89
+# files in EVRF2007 (CSW metadata of the datasets; research 2026-10-15, 3.3).
+_CZ_FILE_VERTICAL = {"sm5": "Bpv", "tm33": "EVRF2007"}
+_CZ_VERTICAL = ("Bpv", "EVRF2007")
+_CZ_FILE_NOTES = {
+    "sm5": "arkusze SM5 (S-JTSK, wysokosci Bpv); plik 1:1 z ZIP, CRS z kanalu",
+    "tm33": "kafle TM33 2x2 km (ETRS89, wysokosci EVRF2007); plik 1:1 z ZIP",
+}
+_CZ_TM33_SCHEME = TileScheme(
+    kind="computable",
+    crs="EPSG:3045",
+    width_m=2000.0,
+    height_m=2000.0,
+    description="TM33 {E_km}_{N_km}, naroznik SW",
+)
+_CZ_SM5_SCHEME = TileScheme(
+    kind="index",
+    crs="EPSG:5514",
+    width_m=2500.0,
+    height_m=2000.0,
+    description=(
+        "SM5: 2 albo 4 litery miasta + 2 cyfry (indeks KladyMapovychListu w. 24); "
+        "kafle TM33 {E_km}_{N_km} (w. 26)"
+    ),
+)
+
+
+def _cz_image(service: str) -> AccessChannel:
+    """ImageServer of a CUZK model: requests only in EPSG:5514 + Bpv (ADR-024)."""
+    return AccessChannel(
+        transport=TransportKind.ARCGIS_IMAGE,
+        update_signal="none",
+        horizontal_crs="EPSG:5514",
+        vertical_crs_options=("EPSG:8357",),
+        server_reprojection=False,
+        notes=(
+            "Serwer obsluguje imageSR, ale ADR-024 zabrania - "
+            "reprojekcja tresci wylacznie lokalna, przypieta operacja"
+        ),
+        capabilities=frozenset({"bbox_raster"}),
+        endpoint=f"{_AGS}/{service}/ImageServer",
+    )
+
+
+def _cz_files(directory: str, system: str) -> AccessChannel:
+    """openzu files of one sheet system (one ZIP per sheet, signal ``http``)."""
+    crs = CZ_SYSTEM_CRS[system]
+    return AccessChannel(
+        transport=TransportKind.DIRECT_FILES,
+        update_signal="http",
+        horizontal_crs=crs,
+        vertical_crs_options=(_VERTICAL_CRS_CODES[_CZ_FILE_VERTICAL[system]],),
+        capabilities=frozenset({"sheet_files"}),
+        endpoint=f"{_OPENZU}/{directory}/epsg-{crs.split(':')[1]}/{{sheet}}.zip",
+        notes=_CZ_FILE_NOTES[system],
+    )
+
+
+def _cz_raster_source(
+    model: str,
+    product: str,
+    resolution: str,
+    name: str,
+    service: str,
+    files: str | None,
+) -> SourceDescriptor:
+    """A CUZK raster model: the rows of the route table (plan B, decision 2).
+
+    With files (``files`` = the openzu directory, e.g. ``DMR4G-TIFF``): SM5
+    sheets from the S-JTSK file in Bpv and EVRF2007 (pinned operation), TM33
+    tiles from the ETRS89 file in EVRF2007 (native) and from the ImageServer
+    warped onto the tile grid in Bpv. Without files: TM33 tiles from the
+    ImageServer in both height systems, no SM5 sheets. A cutout is the
+    ImageServer channel (not a row).
+    """
+    key = f"cz.cuzk.{model}"
+    value = parse_resolution(resolution)
+    if value is None:
+        raise ValueError(f"etykieta rozdzielczosci spoza K2: {resolution!r}")
+    rows = []
+    for system in ("sm5", "tm33"):
+        for vertical_crs in _CZ_VERTICAL:
+            if files is None and system == "sm5":
+                continue
+            from_file = files is not None and (
+                system == "sm5" or vertical_crs == _CZ_FILE_VERTICAL[system]
+            )
+            rows.append(
+                ProductVariant(
+                    source=key,
+                    product=product,
+                    country="CZ",
+                    resolution_m=value,
+                    vertical_crs=vertical_crs,
+                    format="TIFF",
+                    systems=(system,),
+                    channel=(
+                        TransportKind.DIRECT_FILES
+                        if from_file
+                        else TransportKind.ARCGIS_IMAGE
+                    ),
+                    index_ref=None,
+                    model=model,
+                )
+            )
+    file_channels = (
+        ()
+        if files is None
+        else tuple(_cz_files(files, system) for system in ("sm5", "tm33"))
+    )
+    return SourceDescriptor(
+        key=key,
+        country="CZ",
+        product=product,
+        name=name,
+        provider_name="CUZK",
+        channels=(*file_channels, _cz_image(service)),
+        tile_scheme=_CZ_TM33_SCHEME if files is None else _CZ_SM5_SCHEME,
+        storage_subdir=f"{product}/cz_{model}_{{vcrs}}",
+        default_extension=".tif",
+        license=_CUZK_LICENSE,
+        resolution=resolution,
+        variants=tuple(rows),
+    )
+
+
+def _cz_laz_source(model: str, directory: str, name: str) -> SourceDescriptor:
+    """Point clouds of a CUZK model: S-JTSK sheets in Bpv, ETRS89 tiles in
+    EVRF2007 - the file as published, never transformed."""
+    key = f"cz.cuzk.{model}_laz"
+    return SourceDescriptor(
+        key=key,
+        country="CZ",
+        product="laz",
+        name=name,
+        provider_name="CUZK",
+        channels=tuple(_cz_files(directory, system) for system in ("sm5", "tm33")),
+        tile_scheme=_CZ_SM5_SCHEME,
+        storage_subdir=f"laz/cz_{model}_{{vcrs}}",
+        default_extension=".laz",
+        license=_CUZK_LICENSE,
+        variants=tuple(
+            ProductVariant(
+                source=key,
+                product="laz",
+                country="CZ",
+                resolution_m=None,
+                vertical_crs=_CZ_FILE_VERTICAL[system],
+                format="LAZ",
+                systems=(system,),
+                channel=TransportKind.DIRECT_FILES,
+                index_ref=None,
+                model=model,
+            )
+            for system in ("sm5", "tm33")
+        ),
+    )
+
+
+# CUZK products (research 2026-10-15, 3.1-3.3): DMR 5G and DMP 1G have no
+# raster files (DMR5G-TIFF/DMP1G-TIFF = 404), every model has LAZ files.
+_CZ_SOURCES = (
+    _cz_raster_source(
+        "dmr5g",
+        "nmt",
+        "2m",
+        "DMR 5G - Digitalni model reliefu 5. generace (2 m, ImageServer: kafel "
+        "TM33 i wycinek)",
+        "dmr5g",
+        None,
+    ),
+    _cz_raster_source(
+        "dmr4g",
+        "nmt",
+        "5m",
+        "DMR 4G - Digitalni model reliefu 4. generace (5 m, arkusze SM5 i kafle TM33)",
+        "dmr4g",
+        "DMR4G-TIFF",
+    ),
+    _cz_raster_source(
+        "dmp1g",
+        "nmpt",
+        "2m",
+        "DMP 1G - Digitalni model povrchu 1. generace (2 m, ImageServer: kafel "
+        "TM33 i wycinek)",
+        "dmp1g",
+        None,
+    ),
+    _cz_raster_source(
+        "dmpok",
+        "nmpt",
+        "0.5m",
+        "DMP OK - Digitalni model povrchu z obrazove korelace (0,5 m, arkusze "
+        "SM5 i kafle TM33)",
+        "dmp_obrazova_korelace",
+        "DMPOK-TIFF",
+    ),
+    _cz_laz_source(
+        "dmr5g", "DMR5G", "DMR 5G - chmura punktow LAZ (arkusze SM5 i kafle TM33)"
+    ),
+    _cz_laz_source(
+        "dmr4g",
+        "DMR4G",
+        "DMR 4G - chmura punktow LAZ (siatka 5 m; arkusze SM5 i kafle TM33)",
+    ),
+    _cz_laz_source(
+        "dmp1g", "DMP1G", "DMP 1G - chmura punktow LAZ (arkusze SM5 i kafle TM33)"
+    ),
+    _cz_laz_source(
+        "dmpok",
+        "DMPOK-LAZ",
+        "DMP OK - chmura punktow LAZ (korelacja obrazowa; arkusze SM5 i kafle TM33)",
+    ),
+)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -648,91 +869,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             default_extension=".tif",
             license=_SOILGRIDS_LICENSE,
         ),
-        SourceDescriptor(
-            key="cz.cuzk.dmr5g",
-            country="CZ",
-            product="nmt",
-            name="DMR 5G - Digitalni model reliefu (raster 2 m z exportImage)",
-            provider_name="CUZK",
-            channels=(
-                AccessChannel(
-                    transport=TransportKind.ARCGIS_IMAGE,
-                    update_signal="none",
-                    horizontal_crs="EPSG:5514",
-                    vertical_crs_options=("EPSG:8357",),
-                    server_reprojection=False,
-                    notes=(
-                        "Serwer obsluguje imageSR, ale ADR-024 zabrania - "
-                        "reprojekcja tresci wylacznie lokalna, przypieta operacja"
-                    ),
-                    capabilities=frozenset({"bbox_raster"}),
-                    endpoint=(
-                        "https://ags.cuzk.gov.cz/arcgis2/rest/services/"
-                        "dmr5g/ImageServer"
-                    ),
-                ),
-            ),
-            tile_scheme=TileScheme(
-                kind="computable",
-                crs="EPSG:3045",
-                width_m=2000.0,
-                height_m=2000.0,
-                description="TM33 {E_km}_{N_km}, naroznik SW",
-            ),
-            storage_subdir="nmt/cz_dmr5g_{vcrs}",
-            default_extension=".tif",
-            license=_CUZK_LICENSE,
-            resolution="2m",
-        ),
-        SourceDescriptor(
-            key="cz.cuzk.dmr4g",
-            country="CZ",
-            product="nmt",
-            name="DMR 4G - Digitalni model reliefu (GeoTIFF 5 m, arkusze SM5)",
-            provider_name="CUZK",
-            channels=(
-                AccessChannel(
-                    transport=TransportKind.DIRECT_FILES,
-                    update_signal="http",
-                    horizontal_crs="EPSG:5514",
-                    vertical_crs_options=("EPSG:8357",),
-                    capabilities=frozenset({"sheet_files"}),
-                    endpoint=(
-                        "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/"
-                        "epsg-5514/{sheet}.zip"
-                    ),
-                ),
-                AccessChannel(
-                    transport=TransportKind.ARCGIS_IMAGE,
-                    update_signal="none",
-                    horizontal_crs="EPSG:5514",
-                    vertical_crs_options=("EPSG:8357",),
-                    server_reprojection=False,
-                    notes=(
-                        "Serwer obsluguje imageSR, ale ADR-024 zabrania - "
-                        "reprojekcja tresci wylacznie lokalna, przypieta operacja"
-                    ),
-                    capabilities=frozenset({"bbox_raster"}),
-                    endpoint=(
-                        "https://ags.cuzk.gov.cz/arcgis2/rest/services/"
-                        "dmr4g/ImageServer"
-                    ),
-                ),
-            ),
-            tile_scheme=TileScheme(
-                kind="index",
-                crs="EPSG:5514",
-                width_m=2500.0,
-                height_m=2000.0,
-                description=(
-                    "SM5: 4 litery miasta + 2 cyfry; indeks KladyMapovychListu w. 24"
-                ),
-            ),
-            storage_subdir="nmt/cz_dmr4g_{vcrs}",
-            default_extension=".tif",
-            license=_CUZK_LICENSE,
-            resolution="5m",
-        ),
+        *_CZ_SOURCES,
     )
 }
 
@@ -747,7 +884,7 @@ _COUNTRIES: dict[str, CountryProfile] = {
         code="CZ",
         name="Czechy",
         extent_wgs84=BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326"),
-        dataset_keys=("cz.cuzk.dmr4g", "cz.cuzk.dmr5g"),
+        dataset_keys=tuple(sorted(k for k in _SOURCES if k.startswith("cz."))),
     ),
 }
 
@@ -762,24 +899,76 @@ def get_source(key: str) -> SourceDescriptor:
         ) from None
 
 
-def channel_signal(key: str, transport: TransportKind) -> SignalKind:
-    """Freshness signal of the ``transport`` channel of source ``key``.
+def _channels(
+    key: str, transport: TransportKind, horizontal_crs: str | None
+) -> list[AccessChannel]:
+    """Channels of ``key`` with ``transport`` (in ``horizontal_crs``, if given);
+    ``ValidationError`` for an unknown source or no such channel."""
+    source = _SOURCES.get(key)
+    if source is None:
+        raise ValidationError(f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}")
+    found = [
+        channel
+        for channel in source.channels
+        if channel.transport == transport
+        and (horizontal_crs is None or channel.horizontal_crs == horizontal_crs)
+    ]
+    if not found:
+        where = f" w {horizontal_crs}" if horizontal_crs is not None else ""
+        raise ValidationError(
+            f"Zrodlo '{key}' nie ma kanalu {transport.value!r}{where} (kanaly: "
+            f"{[(c.transport.value, c.horizontal_crs) for c in source.channels]})"
+        )
+    return found
+
+
+def channel_for(
+    key: str, transport: TransportKind, horizontal_crs: str | None = None
+) -> AccessChannel:
+    """The ONE channel of source ``key`` with ``transport`` and ``horizontal_crs``.
+
+    CZ descriptors publish one file channel per sheet system (SM5 in
+    EPSG:5514, TM33 tiles in EPSG:3045): the CRS chooses the endpoint.
+    ``horizontal_crs=None`` is enough for a transport with one channel.
 
     Raises
     ------
     ValidationError
-        Unknown source or a source without such a channel.
+        Unknown source, no such channel, or several channels left (the CRS
+        is needed to choose).
     """
-    source = _SOURCES.get(key)
-    if source is None:
-        raise ValidationError(f"Nieznane zrodlo: '{key}'. Dostepne: {sorted(_SOURCES)}")
-    for channel in source.channels:
-        if channel.transport == transport:
-            return channel.update_signal
-    raise ValidationError(
-        f"Zrodlo '{key}' nie ma kanalu {transport.value!r} "
-        f"(kanaly: {[c.transport.value for c in source.channels]})"
-    )
+    found = _channels(key, transport, horizontal_crs)
+    if len(found) > 1:
+        raise ValidationError(
+            f"Zrodlo '{key}' ma kilka kanalow {transport.value!r} "
+            f"({', '.join(c.horizontal_crs for c in found)}) - wybor wymaga "
+            "ukladu poziomego kanalu"
+        )
+    return found[0]
+
+
+def channel_signal(
+    key: str, transport: TransportKind, horizontal_crs: str | None = None
+) -> SignalKind:
+    """Freshness signal of the ``transport`` channel of source ``key``.
+
+    ``horizontal_crs`` chooses among channels of one transport (CZ files of
+    SM5 and TM33); without it every channel of the transport must declare the
+    same signal.
+
+    Raises
+    ------
+    ValidationError
+        Unknown source, a source without such a channel, or channels of the
+        transport with different signals and no ``horizontal_crs``.
+    """
+    signals = {c.update_signal for c in _channels(key, transport, horizontal_crs)}
+    if len(signals) > 1:
+        raise ValidationError(
+            f"Kanaly {transport.value!r} zrodla '{key}' maja rozne sygnaly "
+            f"({', '.join(sorted(signals))}) - wybor wymaga ukladu poziomego kanalu"
+        )
+    return signals.pop()
 
 
 def sources_for(

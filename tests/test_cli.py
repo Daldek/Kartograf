@@ -7085,12 +7085,13 @@ class TestCountryDispatch:
 # ===========================================================================
 
 # Choices the registry has only for PL decide `--country auto` (ADR-023
-# point 5): NMT grid labels without a CZ source (CZ: DMR 5G 2m, DMR 4G 5m)
-# and NMPT (no CZ source at all).
-_CZ_NMT_LABELS = {d.resolution for d in sources_for(country="CZ", product="nmt")}
+# point 5): grid labels without a CZ source of the product (CZ: NMT DMR 5G 2m
+# and DMR 4G 5m, NMPT DMP OK 0.5m and DMP 1G 2m) - e.g. NMT 1m, NMPT 0.6m.
 _PL_ONLY_CHOICES = [
-    *(("nmt", label) for label in _grid_labels("nmt") if label not in _CZ_NMT_LABELS),
-    ("nmpt", "0.5m"),
+    (product, label)
+    for product in ("nmt", "nmpt")
+    for label in _grid_labels(product)
+    if label not in {d.resolution for d in sources_for(country="CZ", product=product)}
 ]
 
 
@@ -7811,7 +7812,7 @@ class TestAutoSplitBBox:
     def test_pl_only_flags_from_registry(
         self, mock_manager_class, mock_find, mock_cz, product, label, tmp_path, capsys
     ):
-        """A label or product without a CZ source in the registry resolves
+        """A label without a CZ source of the product in the registry resolves
         ``auto`` to PL with one Info line; CZ never runs and PL downloads that
         variant."""
         self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
@@ -7823,9 +7824,11 @@ class TestAutoSplitBBox:
 
         assert result == 0
         mock_cz.assert_not_called()
-        flag = f"--resolution {label}" if product == "nmt" else f"--product {product}"
         err = capsys.readouterr().err
-        assert f"Info: --country auto -> pl ({flag} dotyczy tylko PL)\n" in err
+        assert (
+            f"Info: --country auto -> pl (--resolution {label} dotyczy tylko PL)\n"
+            in err
+        )
         variant = mock_manager_class.call_args.kwargs["provider"].variant
         assert (variant.product, variant.label) == (product, label)
 
