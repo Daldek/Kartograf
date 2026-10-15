@@ -48,7 +48,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Literal
+from typing import Literal, cast
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
@@ -69,6 +69,7 @@ from kartograf.download.options import (
     campaign_opts_given,
     country_value,
     cz_option_error,
+    is_source_file_request,
     pl_option_error,
     pl_target_scale,
     reject_campaign_opts_with_cutout,
@@ -98,6 +99,7 @@ from kartograf.notices import (
     Notice,
     NoticeSink,
 )
+from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.sources.registry import horizontal_crs_for_sheet
 
@@ -259,6 +261,7 @@ def download_data(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
     cutout: bool = False,
@@ -281,9 +284,13 @@ def download_data(
     Parameter names and values are the ``elevation download`` / ``imagery download``
     flags in ``snake_case``. Every data choice is explicit (no defaults): ``product``,
     ``output_dir``, ``vertical_crs``/``resolution`` (plain or per country,
-    ``{"pl": "1m", "cz": "2m"}``), ``country`` (``pl``/``cz``/``auto``,
+    ``{"pl": "1m", "cz": "2m"}``; PL values from the variant registry,
+    ``kartograf.sources.variants``), ``country`` (``pl``/``cz``/``auto``,
     required with ``bbox``/``geometry``), ``sheet_system``/``scale`` for PL
-    sheets of an area. ``cutout=True`` with ``horizontal_crs`` gives ONE
+    sheets of an area. ``format`` (PL NMT/NMPT): ``None`` = ASC grids, an
+    archive token (``"XYZ"``, ``"TBD"``, ...) = the original files of the
+    index, whose sheets (any scale) come from the index (ADR-041).
+    ``cutout=True`` with ``horizontal_crs`` gives ONE
     cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an area
     reaching CZ requires it).
     ``bbox`` may be in any supported CRS; ``geometry`` is a SHP/GPKG file.
@@ -335,6 +342,7 @@ def check_data(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
     cutout: bool = False,
@@ -386,6 +394,7 @@ def validate_data_request(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
     cutout: bool = False,
@@ -436,6 +445,7 @@ _SELECTION = (
     "country",
     "vertical_crs",
     "resolution",
+    "format",
     "sheet_system",
     "scale",
     "cutout",
@@ -487,6 +497,16 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
         return _download_geometry(task, run)
     if task.bbox is not None:
         return _dispatch_area(task, run, task.bbox)
+    if is_source_file_request(task):
+        from kartograf.providers.pl.skorowidz_wfs import sheet_frame_2180
+
+        return _download_pl_archive(
+            task,
+            run,
+            [sheet_frame_2180(task.sheet)],
+            None,
+            what=f"arkusza {task.sheet}",
+        )
     return _download_pl_sheet(task, run)
 
 
@@ -521,7 +541,9 @@ def _dispatch_area(
         )
     # ADR-023 point 5: a choice without a CZ counterpart decides the country
     if auto and len(countries) > 1 and "PL" in countries:
-        pl_only = pl_only_flags(task.product, task.vertical_crs, task.resolution)
+        pl_only = pl_only_flags(
+            task.product, task.vertical_crs, task.resolution, task.format
+        )
         if pl_only:
             run.sink.emit(
                 "info",
@@ -636,24 +658,33 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
 # =============================================================================
 
 
-def _product_label(product: str, resolution: str | None) -> str:
-    """Request label in messages: orto has no resolution (K5)."""
+def _product_label(product: str, resolution: str | None, fmt: str | None = None) -> str:
+    """Request label in messages: orto has no resolution (K5), archives name
+    their format."""
     if product == "orto":
         return "product: orto"
+    if fmt is not None and fmt != "ASC":
+        return f"format: {fmt}, resolution: {resolution or '-'}"
     return f"resolution: {resolution}"
 
 
 def _create_provider_and_storage(
-    product, output_dir, vertical_crs, resolution, cache=None
+    product, output_dir, vertical_crs, resolution, cache=None, fmt=None
 ):
     """Provider and storage of a PL sheet product (``cache``: ``MetadataCache``
-    or ``None``; GUGiK index records go through it, N6)."""
+    or ``None``; GUGiK index records go through it, N6). ``fmt``: ``None``
+    = ASC grids, else an archive format of the variant registry."""
     from kartograf.download.storage import storage_for_provider
 
     if product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        provider = GugikNmptProvider(vertical_crs=vertical_crs, cache=cache)
+        provider = GugikNmptProvider(
+            vertical_crs=vertical_crs,
+            resolution=resolution,
+            format=fmt or "ASC",
+            cache=cache,
+        )
     elif product == "orto":
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
@@ -663,7 +694,10 @@ def _create_provider_and_storage(
         from kartograf.providers.pl import create_nmt_provider
 
         provider = create_nmt_provider(
-            vertical_crs=vertical_crs, resolution=resolution, cache=cache
+            vertical_crs=vertical_crs,
+            resolution=resolution,
+            cache=cache,
+            format=fmt or "ASC",
         )
     else:
         raise ValidationError(f"Nieobslugiwany produkt arkuszy PL: {product}")
@@ -685,6 +719,7 @@ def _manager(
         task.vertical_crs,
         task.resolution,
         cache=metadata,
+        fmt=task.format,
     )
     manager = DownloadManager(
         output_dir=task.output_dir,
@@ -818,6 +853,18 @@ def _download_pl_bbox(
     resolve_pl_options(task)
     if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
+    if is_source_file_request(task):
+        from kartograf.core.coverage import rectangle
+        from kartograf.download.area import bbox_to_2180
+
+        area = bbox_to_2180(bbox)
+        return _download_pl_archive(
+            task,
+            run,
+            [rectangle(area.min_x, area.min_y, area.max_x, area.max_y)],
+            parent_request,
+            what="bbox",
+        )
     target_scale = pl_target_scale(task)
     sheets = find_sheets_for_bbox(bbox, target_scale, sheet_system=task.sheet_system)
     if not sheets:
@@ -841,6 +888,17 @@ def _download_pl_geometry(
     resolve_pl_options(task)
     if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
+    if is_source_file_request(task):
+        from kartograf.core.coverage import rectangle
+        from kartograf.core.geometry import read_feature_bboxes
+
+        areas = [
+            rectangle(b.min_x, b.min_y, b.max_x, b.max_y)
+            for b in read_feature_bboxes(filepath, task.layer, "EPSG:2180")
+        ]
+        return _download_pl_archive(
+            task, run, areas, parent_request, what=f"geometry {filepath.name}"
+        )
     target_scale = pl_target_scale(task)
     sheets = find_sheets_for_geometry(
         filepath,
@@ -872,19 +930,85 @@ def _download_pl_sheet_list(
     """PL sheet list (area without ``cutout``): manager + finish (D15)."""
     if run.dry:
         return 0
-    sample = sheets if len(sheets) <= 10 else sheets[:3] + ["..."] + sheets[-2:]
-    run.sink.emit(
-        "info",
-        SHEET_LIST,
-        f"Znaleziono arkuszy w skali {target_scale}: {len(sheets)} dla {what} "
-        f"({_product_label(task.product, task.resolution)})\n"
-        f"  Arkusze: {', '.join(sample)}",
-    )
+    _emit_sheet_list(run, task, sheets, f"w skali {target_scale}", what)
     with open_cache(
         run.cache, force=run.update == "force", on_notice=run.sink.add
     ) as metadata:
         try:
             manager = _manager(task, run, metadata, parent_request)
+            planned = _plan_modes(run, manager, sheets)
+            if planned is not None:
+                return planned
+            result = manager.download_sheets(
+                sheets, update=run.update, on_progress=run.on_progress
+            )
+        except DownloadError as e:
+            return run.fail("PL", "PL", str(e), "download")
+    return _finish_pl_sheets(task, run, result)
+
+
+def _emit_sheet_list(
+    run: _Run, task: SimpleNamespace, sheets: list[str], where: str, what: str
+) -> None:
+    """``SHEET_LIST``: the sheets of a PL area request (header of the result)."""
+    sample = sheets if len(sheets) <= 10 else sheets[:3] + ["..."] + sheets[-2:]
+    run.sink.emit(
+        "info",
+        SHEET_LIST,
+        f"Znaleziono arkuszy {where}: {len(sheets)} dla {what} "
+        f"({_product_label(task.product, task.resolution, task.format)})\n"
+        f"  Arkusze: {', '.join(sample)}",
+    )
+
+
+def _download_pl_archive(
+    task: SimpleNamespace,
+    run: _Run,
+    areas: list,
+    parent_request: dict | None,
+    *,
+    what: str,
+) -> int:
+    """PL archive files (``format`` other than ASC) of an area (ADR-041).
+
+    Archives lie on sheets of several scales (1:25000 and 1:10000 frames of
+    one variant, PL-2000 sheets), so the sheets are the variant's records of
+    the WFS index overlapping ``areas`` (convex EPSG:2180 polygons: the sheet
+    frame, the bbox, the feature envelopes of a geometry), within the year
+    bounds - then the usual sheet flow (campaigns, versions, sidecars).
+    """
+    if run.dry:
+        return 0
+    with open_cache(
+        run.cache, force=run.update == "force", on_notice=run.sink.add
+    ) as metadata:
+        try:
+            manager = _manager(task, run, metadata, parent_request)
+            provider = cast(GugikProvider, manager.provider)
+            sheets = provider.index_sheets(
+                areas,
+                system=task.sheet_system,
+                min_year=task.min_year,
+                max_year=task.max_year,
+            )
+            if not sheets:
+                from kartograf.download.campaigns import year_range_label
+
+                years = (
+                    ""
+                    if task.min_year is None and task.max_year is None
+                    else " " + year_range_label(task.min_year, task.max_year)
+                )
+                return run.fail(
+                    "PL",
+                    "PL",
+                    f"Skorowidz GUGiK nie ma plikow {provider.describe()} "
+                    f"{task.vertical_crs} (PL-{task.sheet_system}){years} dla "
+                    f"{what} - dostepne dane obszaru: kartograf elevation "
+                    "availability",
+                    "no_coverage",
+                )
+            _emit_sheet_list(run, task, sheets, "w skorowidzu GUGiK", what)
             planned = _plan_modes(run, manager, sheets)
             if planned is not None:
                 return planned

@@ -14,9 +14,9 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 
 ## Obsługiwane dane
 
-- **NMT (PL)** — Numeryczny Model Terenu z GUGiK (1 m / 5 m)
+- **NMT (PL)** — Numeryczny Model Terenu z GUGiK: siatki 0,15–10 m (np. 0,5 m, 1 m, 5 m) i archiwa GUGiK jako pliki źródłowe
 - **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
-- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK
+- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK (0,5 m, 0,6 m, 1 m)
 - **Ortofotomapa** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm)
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
@@ -44,7 +44,11 @@ kartograf parse N-34-130-D-d-2-4
 
 # NMT dla arkusza, inne produkty GUGiK
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+
+# Jakie lata, rozdzielczości i formaty mają komplet arkuszy dla obszaru (bez pobierania)
+kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
 
 # NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data

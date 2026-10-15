@@ -1,16 +1,23 @@
 """
 Regression tests of record selection and data handling on RAW GUGiK responses.
 
-Fixtures in ``tests/fixtures/gugik_skorowidz/real_2026_10_06/`` (NMT/NMPT/ortho)
-are unedited bodies from the live E2E round of 2026-10-06
-(``docs/research/2026-10-06-e2e-brzegowe-i-review/``, requirement E18);
+NMT/NMPT: WFS sheet index answers recorded 2026-10-15
+(``tests/fixtures/gugik_wfs/real_2026_10_15/``, cases in its README). A
+sheet lookup sends ONE GetFeature - every yearly type of the service, the
+20 m square around the sheet centre - and ``recorded_wfs`` answers it with
+the unedited recording of exactly that query; a case the round did not
+record builds its answer with ``wfs_record``/``render_wfs_body`` from the
+values of the live round of 2026-10-06. Orthophoto fixtures in
+``tests/fixtures/gugik_skorowidz/real_2026_10_06/orto`` are unedited WMS
+bodies from the live E2E round of 2026-10-06
+(``docs/research/2026-10-06-e2e-brzegowe-i-review/``, requirement E18), each
+index layer returned from a file of its name (layer order: newest -> oldest);
 ``tests/fixtures/gugik_laz/real_2026_10_10/`` (LAZ WFS) holds unedited bodies
-recorded 2026-10-10 for exactly ``W2_BBOX`` and ``WRO_BBOX``. Each
-index layer is returned from a file of its name, exactly as the server
-answered (layer order: newest -> oldest).
-The tests cover behaviours the code ALREADY has and the round confirmed.
+recorded 2026-10-10 for exactly ``W2_BBOX`` and ``WRO_BBOX``.
 """
 
+import xml.etree.ElementTree as ET
+from collections.abc import Callable
 from pathlib import Path
 from unittest.mock import MagicMock, Mock
 from urllib.parse import parse_qs, urlparse
@@ -18,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 import pytest
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.laz import download_laz_area
 from kartograf.exceptions import DownloadError, NoCoverageError, YearRangeError
@@ -30,6 +38,18 @@ from kartograf.providers.pl.skorowidz import (
     parse_skorowidz_records,
     select_campaign_records,
     select_sheet_record,
+)
+from kartograf.providers.pl.skorowidz_wfs import GUGIK_NS, parse_index_feature
+from kartograf.sources.variants import source_format, variants
+from tests.conftest import (
+    WFS_FIXTURES,
+    render_wfs_body,
+    wfs_endpoint,
+    wfs_fixture,
+    wfs_record,
+    wfs_requests,
+    wfs_response,
+    wfs_types,
 )
 
 REAL = Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "real_2026_10_06"
@@ -68,27 +88,9 @@ def routed_session(path_for_layer) -> Mock:
     return session
 
 
-def nmt_session(sheet: str, prefix: str) -> Mock:
-    """Raw body: ``real_2026_10_06/nmt/<sheet>/<prefix>__<warstwa>.body``."""
-
-    def path_for_layer(layer):
-        path = REAL / "nmt" / sheet / f"{prefix}__{layer}.body"
-        return path if path.exists() else None
-
-    return routed_session(path_for_layer)
-
-
 def orto_session(sheet: str) -> Mock:
     def path_for_layer(layer):
         path = REAL / "orto" / f"{sheet}_{layer}.html"
-        return path if path.exists() else None
-
-    return routed_session(path_for_layer)
-
-
-def c14_session(sheet: str) -> Mock:
-    def path_for_layer(layer):
-        path = REAL / "nmt" / "c14" / f"{sheet}_EVRF2007_{layer}.html"
         return path if path.exists() else None
 
     return routed_session(path_for_layer)
@@ -98,13 +100,249 @@ def layer_records(path: Path, layer: str):
     return parse_skorowidz_records(path.read_text(encoding="utf-8"), layer)
 
 
-def queried_layers(session: Mock) -> list[str]:
-    return [_layer_of(call.args[0]) for call in session.get.call_args_list]
-
-
 def file_id(url: str) -> str:
     """``78954_1462161`` from ``.../78954/78954_1462161_M-33-57-C-b-4-2.asc``."""
     return "_".join(url.rsplit("/", 1)[-1].split("_")[:2])
+
+
+# =============================================================================
+# WFS sheet index of NMT/NMPT: answers recorded 2026-10-15
+# =============================================================================
+
+NMT_EVRF2007 = wfs_endpoint("nmt_evrf2007")
+NMT_KRON86 = wfs_endpoint("nmt_kron86")
+NMT_FILES = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT"
+# A valid empty answer: the service has no record at the point
+EMPTY_WFS = render_wfs_body([])
+WFS_TAGS = ("nmt_evrf2007", "nmt_kron86", "nmpt_evrf2007", "nmpt_kron86")
+_URN_2180 = "urn:ogc:def:crs:EPSG::2180"
+
+
+def recorded_sheets(tag: str) -> dict[str, str]:
+    """Sheet code -> file of the recorded answers ``sheet_<tag>_<sheet>.xml``."""
+    prefix = f"sheet_{tag}_"
+    return {
+        path.name[len(prefix) : -len(".xml")]: path.name
+        for path in WFS_FIXTURES.glob(f"{prefix}*.xml")
+    }
+
+
+def _centre_square(sheet: str) -> tuple[float, float, float, float]:
+    """Recorded query square of a sheet (N, E axes): frame centre +- 10 m."""
+    frame = SheetParser(sheet).get_bbox(crs="EPSG:2180")
+    east = (frame.min_x + frame.max_x) / 2
+    north = (frame.min_y + frame.max_y) / 2
+    return (north - 10, east - 10, north + 10, east + 10)
+
+
+def recorded_wfs(
+    answers: dict[tuple[str, str], str] | None = None,
+    *,
+    fail: tuple[str, ...] = (),
+) -> Mock:
+    """Session replaying the NMT/NMPT WFS answers recorded 2026-10-15.
+
+    A GetFeature equal to the recorded query - every yearly type of the
+    service, ``SRSNAME`` and ``COUNT`` of the README, ``BBOX`` = the square
+    around a sheet centre - is answered with ``sheet_<tag>_<sheet>.xml``.
+    ``answers`` maps ``(tag, sheet)`` to the body of a query the round did
+    not record (or to an edited recording); the services of the tags in
+    ``fail`` answer HTTP 503. An OpenData file answers ``b"DATA"``; any other
+    request fails the test.
+    """
+    replies = dict(answers or {})
+    tags = {wfs_endpoint(tag): tag for tag in WFS_TAGS}
+    session = Mock(spec=requests.Session)
+
+    def get(url, **kwargs):
+        if url.startswith("https://opendata.geoportal.gov.pl/"):
+            response = wfs_response("")
+            response.iter_content = Mock(return_value=[b"DATA"])
+            return response
+        endpoint, _, query = url.partition("?")
+        tag = tags[endpoint]
+        params = {key: values[0] for key, values in parse_qs(query).items()}
+        assert params["REQUEST"] == "GetFeature", url
+        if tag in fail:
+            return wfs_response("<html>Service Unavailable</html>", status=503)
+        assert params["TYPENAMES"] == ",".join(wfs_types(tag)), url
+        assert (params["SRSNAME"], params["COUNT"]) == (_URN_2180, "1000"), url
+        *corners, crs = params["BBOX"].split(",")
+        assert crs == _URN_2180, url
+        recorded = recorded_sheets(tag)
+        for sheet in {*recorded, *(code for key, code in replies if key == tag)}:
+            square = _centre_square(sheet)
+            if all(
+                abs(float(a) - b) < 1e-6 for a, b in zip(corners, square, strict=True)
+            ):
+                if (tag, sheet) in replies:
+                    return wfs_response(replies[tag, sheet])
+                return wfs_response(wfs_fixture(recorded[sheet]))
+        raise AssertionError(f"WFS query without a recorded answer: {url}")
+
+    session.get = Mock(side_effect=get)
+    return session
+
+
+def sheet_records(tag: str, sheet: str) -> list[SkorowidzRecord]:
+    """Parsed records of the recorded answer at the centre of ``sheet``
+    (every sheet code, format and resolution the service has there)."""
+    root = ET.fromstring(wfs_fixture(f"sheet_{tag}_{sheet}.xml"))
+    return [
+        record
+        for elem in root.iter()
+        if isinstance(elem.tag, str)
+        and elem.tag.startswith(f"{{{GUGIK_NS}}}Skorowidz")
+        and (record := parse_index_feature(elem)) is not None
+    ]
+
+
+def in_format(token: str) -> Callable[[SkorowidzRecord], bool]:
+    """Hard filter of a variant's format: the record ``format`` AND its URL."""
+    return lambda record: source_format(record.file_format, record.url) == token
+
+
+# =============================================================================
+# NMT/NMPT: the record of exactly the variant (plan A, ADR-041)
+# =============================================================================
+
+
+class TestVariantRecordOnRealWfs:
+    """One answer holds every resolution, format and sheet code of the point;
+    the provider takes the newest record of exactly its variant."""
+
+    def test_select_0_5m_2025(self):
+        sheet = "N-33-58-A-c-1-4"
+        session = recorded_wfs()
+        provider = GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="0.5m"
+        )
+        record = provider._resolve_sheet(sheet)
+        assert file_id(record.url) == "84020_1844081"
+        assert record.url.endswith(f"_{sheet}.asc")
+        assert (record.layer, record.aktualnosc, record.full_sheet) == (
+            "SkorowidzNMT2025",
+            "2025-01-30",
+            False,
+        )
+        source = provider.source_info(sheet)
+        assert (source["index_url"], source["layer"]) == (
+            NMT_EVRF2007,
+            "SkorowidzNMT2025",
+        )
+        # one GetFeature with every yearly type of the service, no layer walk
+        [query] = wfs_requests(session)
+        assert query["TYPENAMES"] == ",".join(wfs_types("nmt_evrf2007"))
+
+    def test_nmpt_0_5m(self):
+        sheet = "N-33-58-A-d-1-2"
+        session = recorded_wfs()
+        records = {
+            label: GugikNmptProvider(
+                session=session, vertical_crs="EVRF2007", resolution=label
+            )._resolve_sheet(sheet)
+            for label in ("0.5m", "1m")
+        }
+        assert {label: (file_id(r.url), r.layer) for label, r in records.items()} == {
+            "0.5m": ("84018_1843926", "SkorowidzNMPT2025"),
+            "1m": ("76027_1185054", "SkorowidzNMPT2022"),
+        }
+        assert {c.args[0].split("?")[0] for c in session.get.call_args_list} == {
+            wfs_endpoint("nmpt_evrf2007")
+        }
+
+    def test_kron86_0_5m_pl2000(self):
+        """6.130.26.07.1.2 (PL-2000:S6, 1:500): the 0.5 m KRON86 grid of 2018."""
+        sheet = "6.130.26.07.1.2"
+        record = GugikProvider(
+            session=recorded_wfs(), vertical_crs="KRON86", resolution="0.5m"
+        )._resolve_sheet(sheet)
+        assert file_id(record.url) == "70042_814868"
+        assert record.url.endswith(f"_{sheet}.asc")
+        assert (record.sheet, record.system, record.zone) == (sheet, "2000", 6)
+        assert record.raw["ukladWspolrzednychPionowych"] == "PL-KRON86-NH"
+
+    def test_0_15m_and_10m_pl2000(self):
+        session = recorded_wfs()
+
+        def newest(label, sheet):
+            return GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution=label
+            )._resolve_sheet(sheet)
+
+        fine = newest("0.15m", "7.159.25.12.2")
+        assert file_id(fine.url) == "80085_1530441"
+        assert (fine.layer, fine.resolution_m, fine.system, fine.zone) == (
+            "SkorowidzNMT2023",
+            0.15,
+            "2000",
+            7,
+        )
+        # 6.125.25: the 5 m and 10 m grids of one delivery (2021, partial sheet)
+        coarse = {label: newest(label, "6.125.25") for label in ("5m", "10m")}
+        assert {label: file_id(r.url) for label, r in coarse.items()} == {
+            "5m": "73929_1056345",
+            "10m": "73928_1056333",
+        }
+        assert {(r.system, r.zone, r.full_sheet) for r in coarse.values()} == {
+            ("2000", 6, False)
+        }
+
+    def test_format_filter_rejects_archives(self):
+        """Review Focus 2: an archive of the same delivery never takes the
+        grid's place; a grid published under a ``.xyz`` name stays a grid."""
+        sheet = "M-34-64-D-d-2-1"
+        records = {file_id(r.url): r for r in sheet_records("nmt_evrf2007", sheet)}
+        grid, archive = records["73122_944493"], records["73123_940315"]
+        # the ASCII NMT archive has the date, dt_pzgik and resolution of the 5 m
+        # grid and a later URL: only the format keeps it from winning
+        assert archive.file_format == "ASCII NMT"
+        assert (archive.aktualnosc, archive.dt_pzgik, archive.resolution_m) == (
+            grid.aktualnosc,
+            grid.dt_pzgik,
+            grid.resolution_m,
+        )
+        assert archive.url > grid.url
+        session = recorded_wfs()
+        found = {
+            token: GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="5m", format=token
+            ).resolve_campaigns(sheet, all_campaigns=True)
+            for token in ("ASC", "XYZ", "ASCII-NMT")
+        }
+        assert {t: [file_id(r.url) for r in recs] for t, recs in found.items()} == {
+            "ASC": ["73122_944493"],
+            "XYZ": ["70950_853179"],
+            "ASCII-NMT": ["73123_940315"],
+        }
+        # N-33-69-A-d-1-3: the only 1 m grid of 2019 (campaign 72675) is an
+        # AAIGrid published under a `.xyz` name
+        sheet = "N-33-69-A-d-1-3"
+        (old,) = GugikProvider(
+            session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(sheet, max_year=2019)
+        assert (file_id(old.url), old.url[-4:], old.aktualnosc) == (
+            "72675_858106",
+            ".xyz",
+            "2019-04-29",
+        )
+
+    def test_campaigns_and_year_range_from_wfs(self):
+        """KRON86 M-34-64-D-d-2-1: 1 m grids of 2012 and 2017, each beside an
+        XYZ archive of the delivery; XYZ 1 m 2015 and TBD/TIN/TTN 2009 of the
+        1:25000 sheet M-34-64-D-d-2 in the same answer."""
+        sheet = "M-34-64-D-d-2-1"
+        provider = GugikProvider(
+            session=recorded_wfs(), vertical_crs="KRON86", resolution="1m"
+        )
+        every = provider.resolve_campaigns(sheet, all_campaigns=True)
+        assert [(file_id(r.url), r.aktualnosc) for r in every] == [
+            ("67253_783211", "2017-11-05"),
+            ("4262_281430", "2012-07-06"),
+        ]
+        [older] = provider.resolve_campaigns(sheet, max_year=2016)
+        assert file_id(older.url) == "4262_281430"
+        assert provider.available_years(sheet) == (2012, 2017)
 
 
 # =============================================================================
@@ -112,147 +350,102 @@ def file_id(url: str) -> str:
 # =============================================================================
 
 
-class TestNmtRecordSelectionOnRealBodies:
-    def test_c1b_several_campaigns_in_one_layer_newest_wins(self):
-        """M-34-66-B-a-2-1: 2019-02-16, 2022-05-31, 2023-03-29 w 2023iStarsze."""
-        sheet = "M-34-66-B-a-2-1"
-        records = layer_records(
-            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
-            "SkorowidzeNMT2023iStarsze",
-        )
-        assert sorted(r.aktualnosc for r in records) == [
-            "2019-02-16",
-            "2022-05-31",
-            "2023-03-29",
-        ]
-        session = nmt_session(sheet, "nmt1_evr")
-        provider = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )
-        url = provider._get_opendata_url(sheet)
-        assert file_id(url) == "77381_1339240"
-        assert provider.source_info(sheet)["acquisition_date"] == "2023-03-29"
-        # Layers 2026..2024 empty -> fall through to the aggregate one, no error
-        assert queried_layers(session)[-1] == "SkorowidzeNMT2023iStarsze"
-
-    def test_c3_layer_2025_only_half_metre_falls_through_to_1m_older_layer(self):
-        """M-33-57-C-b-4-2: 2025 has ONLY 0.5 m, 1 m is in 2023iStarsze."""
-        sheet = "M-33-57-C-b-4-2"
-        newer = layer_records(
-            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2025.body",
-            "SkorowidzeNMT2025",
-        )
-        assert [r.resolution_m for r in newer] == [0.5]
-        session = nmt_session(sheet, "nmt1_evr")
-        provider = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )
-        record = provider._resolve_sheet(sheet)
-        assert file_id(record.url) == "78954_1462161"
-        assert record.resolution_m == 1.0
-        assert record.aktualnosc == "2023-05-04"
-        assert queried_layers(session) == [
-            "SkorowidzeNMT2026",
-            "SkorowidzeNMT2025",
-            "SkorowidzeNMT2024",
-            "SkorowidzeNMT2023iStarsze",
-        ]
-
-    def test_c3_pooled_records_pick_resolution_by_request(self):
-        """The same record pool: 0,5 m -> 2025 (84161), 1 m -> 2023 (78954)."""
-        sheet = "M-33-57-C-b-4-2"
-        pool = []
-        for layer in ("SkorowidzeNMT2025", "SkorowidzeNMT2023iStarsze"):
-            pool += layer_records(
-                REAL / "nmt" / sheet / f"nmt1_evr__{layer}.body", layer
-            )
-        half = select_sheet_record(pool, sheet=sheet, system="1992", resolution_m=0.5)
-        one = select_sheet_record(pool, sheet=sheet, system="1992", resolution_m=1.0)
-        assert file_id(half.url) == "84161_1849941"
-        assert file_id(one.url) == "78954_1462161"
-
-    def test_c6_two_records_of_same_pl2000_sheet_newest_wins(self):
-        """7.125.11.19 (PL-2000:S7): 2021-10-05 (75172) i 2023-03-17 (77912)."""
-        session = nmt_session("M-34-64-D-d-2-3", "nmt1_evr")
+class TestNmtRecordSelectionOnRealWfs:
+    def test_c1b_c6_newest_campaign_wins_pl2000_records_ignored(self):
+        """M-34-64-D-d-2-1: 1 m campaigns 2019 and 2022-2025 of the sheet and
+        two of 7.125.11.04 (PL-2000:S7, 2021, 2023) in one answer."""
+        sheet = "M-34-64-D-d-2-1"
         record = GugikProvider(
-            session=session, vertical_crs="EVRF2007", resolution="1m"
-        )._resolve_sheet("7.125.11.19")
-        assert file_id(record.url) == "77912_1384976"
-        assert (record.system, record.zone) == ("2000", 7)
-        assert record.aktualnosc == "2023-03-17"
-
-    def test_c6_pl1992_sheet_in_same_body_ignores_pl2000_records(self):
-        """The same point, PL-1992 sheet code: the newest layer wins (2025, 83137)."""
-        sheet = "M-34-64-D-d-2-3"
-        record = GugikProvider(
-            session=nmt_session(sheet, "nmt1_evr"),
-            vertical_crs="EVRF2007",
-            resolution="1m",
+            session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
         )._resolve_sheet(sheet)
-        assert file_id(record.url) == "83137_1729557"
-        assert record.system == "1992"
+        assert file_id(record.url) == "83137_1729555"
+        assert (record.sheet, record.system, record.aktualnosc) == (
+            sheet,
+            "1992",
+            "2025-04-28",
+        )
+
+    def test_c3_newest_record_of_another_resolution_never_wins(self):
+        """N-33-58-A-c-1-4: the newest records are 0.5 m (2025-01-30) and 5 m
+        (2025-04-21); the 1 m grid has only 2022."""
+        sheet = "N-33-58-A-c-1-4"
+        session = recorded_wfs()
+        found = {
+            label: GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution=label
+            )._resolve_sheet(sheet)
+            for label in ("1m", "5m")
+        }
+        assert {
+            label: (file_id(r.url), r.resolution_m) for label, r in found.items()
+        } == {"1m": ("76036_1189924", 1.0), "5m": ("83830_1796314", 5.0)}
 
     def test_campaign_date_beats_dt_pzgik(self):
-        """N-33-69-A-d-3-2 (2024): 2024-09-23 (81025) before 2024-07-21 (81616),
+        """N-33-69-A-d-1-3 (2024): 2024-09-23 (81025) before 2024-07-21 (81616),
         although the latter has a later ``dt_pzgik`` (2025-06-20)."""
-        sheet = "N-33-69-A-d-3-2"
-        records = layer_records(
-            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2024.body",
-            "SkorowidzeNMT2024",
-        )
-        by_id = {file_id(r.url): r for r in records}
-        assert by_id["81616_1669599"].dt_pzgik > by_id["81025_1562196"].dt_pzgik
+        sheet = "N-33-69-A-d-1-3"
+        by_id = {file_id(r.url): r for r in sheet_records("nmt_evrf2007", sheet)}
+        assert by_id["81616_1669592"].dt_pzgik > by_id["81025_1562189"].dt_pzgik
         record = GugikProvider(
-            session=nmt_session(sheet, "nmt1_evr"),
-            vertical_crs="EVRF2007",
-            resolution="1m",
+            session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
         )._resolve_sheet(sheet)
-        assert file_id(record.url) == "81025_1562196"
+        assert file_id(record.url) == "81025_1562189"
 
-    def test_c9_xyz_record_is_parsed_but_never_decides(self):
-        """A ``.xyz`` record (72675, 2019-04-29) is read (H1: no extension
-        filter), but loses to newer ones."""
-        sheet = "N-33-69-A-d-3-2"
-        records = layer_records(
-            REAL / "nmt" / sheet / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
-            "SkorowidzeNMT2023iStarsze",
-        )
-        assert [r.url.rsplit(".", 1)[-1] for r in records].count("xyz") == 1
-        assert len(records) == 3
-        chosen = select_sheet_record(records, sheet=sheet, system="1992")
-        assert file_id(chosen.url) == "75506_1144309"
-        assert chosen.url.endswith(".asc")
-
-    def test_c9_uppercase_asc_record_is_available_but_loses_to_newer_layer(self):
-        """5 m N-33-115-C-d-2-2: ``.ASC`` from 2022iStarsze is available alone,
-        but across the whole index 2025-03-20 (``.asc``) wins."""
+    def test_c9_uppercase_asc_record_is_available_but_loses_to_newer(self):
+        """5 m N-33-115-C-d-2-2 (records of 2026-10-06): the ``.ASC`` grid of
+        2022 is an ASC record on its own, but 2025-03-20 (``.asc``) wins."""
         sheet = "N-33-115-C-d-2-2"
-        old = layer_records(
-            REAL / "nmt" / sheet / "nmt5_evr__SkorowidzeNMT2022iStarsze.body",
-            "SkorowidzeNMT2022iStarsze",
+        old = wfs_record(
+            sheet,
+            resolution="5.00 m",
+            akt_data="2022-07-24",
+            dt_pzgik="2023-04-04",
+            czy_ark_wypelniony="NIE",
+            url=f"{NMT_FILES}/76969/76969_1297751_{sheet}.ASC",
         )
-        assert [r.url.rsplit(".", 1)[-1] for r in old] == ["ASC"]
-        alone = select_sheet_record(old, sheet=sheet, system="1992", resolution_m=5.0)
-        assert alone is not None and alone.url.endswith(".ASC")
+        newer = [
+            wfs_record(
+                sheet,
+                resolution="5.00 m",
+                akt_data=date,
+                dt_pzgik=pzgik,
+                url=f"{NMT_FILES}/{url}_{sheet}.asc",
+            )
+            for date, pzgik, url in (
+                ("2023-05-09", "2024-02-15", "78939/78939_1445968"),
+                ("2025-03-20", "2026-03-20", "83841/83841_1816160"),
+            )
+        ]
 
-        provider = GugikProvider(
-            session=nmt_session(sheet, "nmt5_evr"),
-            resolution="5m",
-            vertical_crs="EVRF2007",
-        )
-        record = provider._resolve_sheet(sheet)
-        assert file_id(record.url) == "83841_1816160"
-        assert record.aktualnosc == "2025-03-20"
+        def newest(records):
+            answer = {("nmt_evrf2007", sheet): render_wfs_body(records)}
+            return GugikProvider(
+                session=recorded_wfs(answer), vertical_crs="EVRF2007", resolution="5m"
+            )._resolve_sheet(sheet)
+
+        alone = newest([old])
+        assert file_id(alone.url) == "76969_1297751"
+        assert alone.url.endswith(".ASC")
+        assert file_id(newest([old, *newer]).url) == "83841_1816160"
 
     def test_c9a_lowercase_sheet_in_record_is_normalised(self):
-        """KRON86 N-33-59-C-a-1-3: record ``sheet:"N-33-59-c-a-1-3"`` (lower-case c)."""
+        """KRON86 N-33-59-C-a-1-3: ``godlo`` ``N-33-59-c-a-1-3`` (lower-case c,
+        the record of 2026-10-06)."""
         sheet = "N-33-59-C-a-1-3"
-        body = (REAL / "nmt" / sheet / "nmt1_krn__SkorowidzeNMT2018.body").read_text(
-            encoding="utf-8"
+        body = render_wfs_body(
+            [
+                wfs_record(
+                    "N-33-59-c-a-1-3",
+                    akt_data="2018-04-21",
+                    dt_pzgik="2018-07-25",
+                    uklad_h="PL-KRON86-NH",
+                    url=f"{NMT_FILES}/67106/67106_778610_{sheet}.asc",
+                )
+            ]
         )
-        assert 'godlo:"N-33-59-c-a-1-3"' in body  # raw body, unedited
+        assert "<gugik:godlo>N-33-59-c-a-1-3</gugik:godlo>" in body
         provider = GugikProvider(
-            session=nmt_session(sheet, "nmt1_krn"),
+            session=recorded_wfs({("nmt_kron86", sheet): body}),
             vertical_crs="KRON86",
             resolution="1m",
         )
@@ -263,203 +456,229 @@ class TestNmtRecordSelectionOnRealBodies:
 
 
 # =============================================================================
-# NoCoverageError: hints (C6f, C6g, C10g)
+# NoCoverageError: hints (C6f, C6g, C10g, P10)
 # =============================================================================
 
 
-class TestNoCoverageHintsOnRealBodies:
-    def test_c6f_pl2000_1_10000_hints_descendant_scale_and_pl1992_sheet(self):
-        sheet = "6.129.30"
-        provider = GugikProvider(
-            session=nmt_session(sheet, "nmt1_evr"),
-            vertical_crs="EVRF2007",
-            resolution="1m",
+class TestNoCoverageHintsOnRealWfs:
+    @pytest.mark.parametrize(
+        ("sheet", "vertical_crs", "records", "hints"),
+        [
+            pytest.param(
+                "6.129.30",
+                "EVRF2007",
+                [
+                    wfs_record(
+                        "M-34-63-A-c-2-1",
+                        akt_data="2025-04-03",
+                        dt_pzgik="2026-03-24",
+                        url=f"{NMT_FILES}/83884/83884_1833346_M-34-63-A-c-2-1.asc",
+                    ),
+                    wfs_record(
+                        "6.129.30.13.4",
+                        system="PL-2000:S6",
+                        akt_data="2020-05-08",
+                        dt_pzgik="2020-10-28",
+                        url=f"{NMT_FILES}/73736/73736_1019437_6.129.30.13.4.asc",
+                    ),
+                    wfs_record(
+                        "6.129.30.13.4",
+                        resolution="0.50 m",
+                        system="PL-2000:S6",
+                        akt_data="2023-07-05",
+                        dt_pzgik="2024-06-07",
+                        url=f"{NMT_FILES}/79108/79108_1494890_6.129.30.13.4.asc",
+                    ),
+                ],
+                (
+                    "Dostepny potomek 6.129.30.13.4 - uzyj --scale 1:1000",
+                    "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1 (1:10000) "
+                    "- uzyj tego godla lub --sheet-system 1992",
+                ),
+                id="c6f-1_10000",
+            ),
+            pytest.param(
+                "5.167.25",
+                "KRON86",
+                [
+                    wfs_record(
+                        "M-33-8-A-a-3-1",
+                        akt_data="2011-07-26",
+                        dt_pzgik="2012-07-30",
+                        uklad_h="PL-KRON86-NH",
+                        url=f"{NMT_FILES}/4148/4148_105823_M-33-8-A-a-3-1.asc",
+                    ),
+                    wfs_record(
+                        "5.167.25.13",
+                        system="PL-2000:S5",
+                        akt_data="2019-06-03",
+                        dt_pzgik="2019-11-14",
+                        uklad_h="PL-KRON86-NH",
+                        url=f"{NMT_FILES}/72980/72980_898837_5.167.25.13.asc",
+                    ),
+                ],
+                (
+                    "Dostepny potomek 5.167.25.13 - uzyj --scale 1:2000",
+                    "Skorowidz ma ten obszar w PL-1992: M-33-8-A-a-3-1 (1:10000) "
+                    "- uzyj tego godla lub --sheet-system 1992",
+                ),
+                id="c6g-kron86",
+            ),
+        ],
+    )
+    def test_c6f_c6g_pl2000_hints_descendant_scale_and_pl1992_sheet(
+        self, sheet, vertical_crs, records, hints
+    ):
+        """Records of 2026-10-06 at the centre of a PL-2000 1:10000 sheet: a
+        descendant sheet and the PL-1992 sheet, none of the sheet itself."""
+        own, other = (
+            ("nmt_evrf2007", "nmt_kron86")
+            if vertical_crs == "EVRF2007"
+            else ("nmt_kron86", "nmt_evrf2007")
+        )
+        session = recorded_wfs(
+            {(own, sheet): render_wfs_body(records), (other, sheet): EMPTY_WFS}
         )
         with pytest.raises(NoCoverageError) as exc:
-            provider._resolve_sheet(sheet)
-        message = str(exc.value)
-        assert "Dostepny potomek 6.129.30.13.4" in message
-        assert "--scale 1:1000" in message
-        assert "Skorowidz ma ten obszar w PL-1992: M-34-63-A-c-2-1" in message
-        assert exc.value.sheet == sheet
-
-    def test_c6g_pl2000_kron86_hint_points_to_1_2000(self):
-        sheet = "5.167.25"
-        provider = GugikProvider(
-            session=nmt_session(sheet, "nmt1_krn"),
-            vertical_crs="KRON86",
-            resolution="1m",
-        )
-        with pytest.raises(NoCoverageError, match="--scale 1:2000") as exc:
-            provider._resolve_sheet(sheet)
-        assert "5.167.25.13" in str(exc.value)
-        # KRON86 layers: all checked before no coverage was reported (the
-        # variant check, P10, then asks the other indexes in one query each)
-        kron86 = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["KRON86"]
-        calls = provider._sessions.injected.get.call_args_list
-        assert [
-            _layer_of(c.args[0]) for c in calls if c.args[0].startswith(kron86)
-        ] == [
-            "SkorowidzeNMT2019",
-            "SkorowidzeNMT2018",
-            "SkorowidzeNMT2017iStarsze",
-        ]
-
-    def test_c10g_nmpt_only_half_metre_names_the_resolution(self):
-        sheet = "N-33-77-A-d-2-2"
-        provider = GugikNmptProvider(
-            session=nmt_session(sheet, "nmpt_evr"), vertical_crs="EVRF2007"
-        )
-        with pytest.raises(NoCoverageError) as exc:
-            provider._resolve_sheet(sheet)
-        assert "GUGiK ma ten arkusz w 0.5 m" in str(exc.value)
-        assert "Kartograf pobiera dokladnie 1 m" in str(exc.value)
-
-
-REAL_U1 = (
-    Path(__file__).parent
-    / "fixtures"
-    / "gugik_skorowidz"
-    / "real_2026_10_10"
-    / "nmt"
-    / "N-34-130-D-d-1-1"
-)
-U1 = "N-34-130-D-d-1-1"
-NMT_ENDPOINTS = GugikProvider.WMS_INDEX_ENDPOINTS
-
-
-def variant_session(fail_prefix: str | None = None, bodies=None) -> Mock:
-    """GetFeatureInfo body by (endpoint, layer) from ``real_2026_10_10``.
-
-    The 5 m and 1 m EVRF2007 indexes share layer names, so the plain
-    ``routed_session`` (layer only) cannot tell them apart. A query with
-    several layers (``LAYERS=a,b``) is answered by ``<prefix>__all.body``.
-    ``fail_prefix``: that endpoint answers a page that is not an index
-    template (``DownloadError``, no retries).
-    """
-    prefixes = {
-        NMT_ENDPOINTS["5m"]["EVRF2007"]: "nmt5_evr",
-        NMT_ENDPOINTS["1m"]["EVRF2007"]: "nmt1_evr",
-        NMT_ENDPOINTS["1m"]["KRON86"]: "nmt1_krn",
-    }
-    bodies = bodies or {}
-    session = Mock(spec=requests.Session)
-
-    def get(url, **kwargs):
-        prefix = prefixes[url.split("?", 1)[0]]
-        if prefix == fail_prefix:
-            return _response("<html><body>Service Unavailable</body></html>")
-        layer = _layer_of(url)
-        name = "all" if "," in layer else layer
-        if (prefix, name) in bodies:
-            return _response(bodies[(prefix, name)])
-        path = REAL_U1 / f"{prefix}__{name}.body"
-        return _response(path.read_text(encoding="utf-8") if path.exists() else EMPTY)
-
-    session.get = Mock(side_effect=get)
-    return session
-
-
-def _variant_hints(exc: pytest.ExceptionInfo) -> list[str]:
-    return [h for h in exc.value.hints if h.startswith("Skorowidz GUGiK ma ten arkusz")]
-
-
-class TestVariantHintOnRealBodies:
-    """P10: no record in the chosen variant -> a hint naming the variants
-    (resolution, vertical CRS) whose index has the sheet (U1, 2026-10-10)."""
-
-    def test_variant_hint_for_5m_gap(self, caplog):
-        provider = GugikProvider(
-            resolution="5m", session=variant_session(), vertical_crs="EVRF2007"
-        )
-        with pytest.raises(NoCoverageError) as exc:
-            provider._resolve_sheet(U1)
-        # one answer for all layers: no per-layer year check ("EVRF2007" in
-        # a label must not read as the layer year 2007)
-        assert "poza partycja" not in caplog.text
-        hints = _variant_hints(exc)
-        assert len(hints) == 2
-        evrf = next(h for h in hints if "EVRF2007" in h)
-        kron = next(h for h in hints if "KRON86" in h)
-        assert "--resolution 1m" in evrf and "--vertical-crs" not in evrf
-        assert "--resolution 1m --vertical-crs KRON86" in kron
-        assert U1 not in evrf  # one CLI line for many sheets
-
-    def test_one_query_per_variant(self):
-        session = variant_session()
-        with pytest.raises(NoCoverageError):
             GugikProvider(
-                resolution="5m", session=session, vertical_crs="EVRF2007"
-            )._resolve_sheet(U1)
-        variant_calls = [
-            c.args[0] for c in session.get.call_args_list if "," in _layer_of(c.args[0])
+                session=session, vertical_crs=vertical_crs, resolution="1m"
+            )._resolve_sheet(sheet)
+        assert exc.value.hints == hints
+        assert exc.value.sheet == sheet
+        # every year of the height system in one query
+        assert len(wfs_requests(session, wfs_endpoint(own))) == 1
+
+    def test_no_coverage_hints_other_resolution_without_network(self):
+        """N-33-58-A-c-1-3 has only 0.5 m grids (2021, 2022, 2025)."""
+        sheet = "N-33-58-A-c-1-3"
+        session = recorded_wfs({("nmt_kron86", sheet): EMPTY_WFS})
+        with pytest.raises(NoCoverageError) as exc:
+            GugikProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._resolve_sheet(sheet)
+        assert str(exc.value) == (
+            "Brak danych NMT 1m dla N-33-58-A-c-1-3 (uklad PL-1992, EVRF2007). "
+            "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - uzyj --resolution 0.5m"
+        )
+        # the hint comes from the answer itself, not from a second query
+        assert len(wfs_requests(session, NMT_EVRF2007)) == 1
+
+    def test_c10g_nmpt_hints_its_resolutions_from_nmpt_services_only(self):
+        """NMPT N-33-77-B-c-3-3: 0.5 m (2022, 2024) and 0.6 m (2024), no 1 m."""
+        sheet = "N-33-77-B-c-3-3"
+        session = recorded_wfs({("nmpt_kron86", sheet): EMPTY_WFS})
+        with pytest.raises(NoCoverageError) as exc:
+            GugikNmptProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            )._resolve_sheet(sheet)
+        assert exc.value.hints == (
+            "Skorowidz GUGiK ma ten arkusz w NMPT 0.5m EVRF2007 - uzyj "
+            "--resolution 0.5m",
+            "Skorowidz GUGiK ma ten arkusz w NMPT 0.6m EVRF2007 - uzyj "
+            "--resolution 0.6m",
+        )
+        # its own service and, for P10, the other height system - never NMT
+        assert [c.args[0].split("?")[0] for c in session.get.call_args_list] == [
+            wfs_endpoint("nmpt_evrf2007"),
+            wfs_endpoint("nmpt_kron86"),
         ]
-        assert len(variant_calls) == 2
+
+    def test_archive_only_sheet_hint(self):
+        """KRON86 N-34-58-D-c-3 (1:25000): its only 1 m record is the XYZ
+        archive of 2016; TBD/TIN/TTN archives of 2000 and 2010 beside it."""
+        sheet = "N-34-58-D-c-3"
+        session = recorded_wfs({("nmt_evrf2007", sheet): EMPTY_WFS})
+        with pytest.raises(NoCoverageError) as exc:
+            GugikProvider(
+                session=session, vertical_crs="KRON86", resolution="1m"
+            )._resolve_sheet(sheet)
+        assert exc.value.hints == (
+            "Skorowidz GUGiK ma ten arkusz w NMT TBD 25m KRON86 - uzyj --format TBD "
+            "--resolution 25m",
+            "Skorowidz GUGiK ma ten arkusz w NMT TBD 30m KRON86 - uzyj --format TBD "
+            "--resolution 30m",
+            "Skorowidz GUGiK ma ten arkusz w NMT TIN KRON86 - uzyj --format TIN",
+            "Skorowidz GUGiK ma ten arkusz w NMT TTN KRON86 - uzyj --format TTN",
+            "Skorowidz GUGiK ma ten arkusz w NMT XYZ 1m KRON86 - uzyj --format XYZ",
+        )
+        assert all(sheet not in hint for hint in exc.value.hints)
+
+
+class TestVariantHintOnRealWfs:
+    """P10: no record of the variant -> hints naming the variants of the
+    sheet: other resolutions from the same answer without network, the other
+    height system by one query to its service (both recorded here)."""
+
+    SHEET = "N-33-58-A-c-1-4"
+    EVRF2007_HINTS = (
+        "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - uzyj --resolution 0.5m",
+        "Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 - uzyj --resolution 1m",
+        "Skorowidz GUGiK ma ten arkusz w NMT 5m EVRF2007 - uzyj --resolution 5m",
+    )
+    KRON86_HINT = (
+        "Skorowidz GUGiK ma ten arkusz w NMT 1m KRON86 - uzyj --resolution 1m "
+        "--vertical-crs KRON86"
+    )
+
+    def provider(self, session, **kwargs):
+        return GugikProvider(
+            session=session, vertical_crs="EVRF2007", resolution="0.6m", **kwargs
+        )
+
+    def test_variant_hints_for_0_6m_gap(self):
+        session = recorded_wfs()
+        with pytest.raises(NoCoverageError) as exc:
+            self.provider(session)._resolve_sheet(self.SHEET)
+        assert set(exc.value.hints) == {*self.EVRF2007_HINTS, self.KRON86_HINT}
+        # one query per service: its own and the other height system
+        assert len(wfs_requests(session, NMT_EVRF2007)) == 1
+        assert len(wfs_requests(session, NMT_KRON86)) == 1
 
     def test_variant_with_other_sheet_gives_no_hint(self):
-        body = (REAL_U1 / "nmt1_krn__all.body").read_text(encoding="utf-8")
-        other = body.replace(U1, "N-34-130-D-d-1-2")
+        """The KRON86 records at the point belong to another sheet code."""
+        body = wfs_fixture(f"sheet_nmt_kron86_{self.SHEET}.xml")
+        other = body.replace(self.SHEET, "N-33-58-A-c-1-2")
         assert other != body
-        session = variant_session(bodies={("nmt1_krn", "all"): other})
+        session = recorded_wfs({("nmt_kron86", self.SHEET): other})
         with pytest.raises(NoCoverageError) as exc:
-            GugikProvider(
-                resolution="5m", session=session, vertical_crs="EVRF2007"
-            )._resolve_sheet(U1)
-        assert [h for h in _variant_hints(exc) if "KRON86" in h] == []
+            self.provider(session)._resolve_sheet(self.SHEET)
+        assert exc.value.hints == self.EVRF2007_HINTS
 
-    def test_failed_variant_is_not_asked_again(self):
-        """Review: an outage of a variant index costs one attempt per provider,
-        not one (with retries) per missing sheet."""
-        session = variant_session(fail_prefix="nmt1_evr")
-        provider = GugikProvider(
-            resolution="5m", session=session, vertical_crs="EVRF2007"
-        )
-        evrf_1m = NMT_ENDPOINTS["1m"]["EVRF2007"]
-        for _ in range(2):
-            with pytest.raises(NoCoverageError):
-                provider._resolve_sheet(U1)
-        calls = [c for c in session.get.call_args_list if c.args[0].startswith(evrf_1m)]
-        assert len(calls) == 1
-
-    def test_variant_query_failure_keeps_no_coverage(self, caplog):
-        session = variant_session(fail_prefix="nmt1_evr")
-        with pytest.raises(NoCoverageError) as exc:
-            GugikProvider(
-                resolution="5m", session=session, vertical_crs="EVRF2007"
-            )._resolve_sheet(U1)
-        hints = _variant_hints(exc)
-        assert all("EVRF2007" not in h for h in hints)
-        assert any("KRON86" in h for h in hints)
+    def test_no_coverage_hint_other_vertical_crs_one_query(self, caplog):
+        """Review: an outage of the other service costs ONE attempt per
+        provider (no retries, not one per sheet) and leaves no coverage."""
+        session = recorded_wfs(fail=("nmt_kron86",))
+        provider = self.provider(session)
+        caught = []
+        for sheet in (self.SHEET, "N-33-58-A-c-1-3"):
+            with pytest.raises(NoCoverageError) as exc:
+                provider._resolve_sheet(sheet)
+            caught.append(exc.value.hints)
+        assert caught == [
+            self.EVRF2007_HINTS,
+            (
+                "Skorowidz GUGiK ma ten arkusz w NMT 0.5m EVRF2007 - uzyj "
+                "--resolution 0.5m",
+            ),
+        ]
+        assert len(wfs_requests(session, NMT_KRON86)) == 1
+        assert len(wfs_requests(session, NMT_EVRF2007)) == 2
         assert any(
-            r.levelname == "WARNING" and "1m EVRF2007" in r.getMessage()
+            r.levelname == "WARNING"
+            and "nie sprawdzono ukladu KRON86" in r.getMessage()
             for r in caplog.records
         )
 
     def test_variant_hint_cached_with_no_coverage(self, tmp_path):
-        from kartograf.cache.metadata import MetadataCache
-
         cache = MetadataCache(tmp_path / "c.db")
-        first = variant_session()
-        with pytest.raises(NoCoverageError) as exc1:
-            GugikProvider(
-                resolution="5m", session=first, cache=cache, vertical_crs="EVRF2007"
-            )._resolve_sheet(U1)
-        again = variant_session()
-        with pytest.raises(NoCoverageError) as exc2:
-            GugikProvider(
-                resolution="5m", session=again, cache=cache, vertical_crs="EVRF2007"
-            )._resolve_sheet(U1)
+        with pytest.raises(NoCoverageError) as first:
+            self.provider(recorded_wfs(), cache=cache)._resolve_sheet(self.SHEET)
+        again = Mock(spec=requests.Session)
+        with pytest.raises(NoCoverageError) as second:
+            self.provider(again, cache=cache)._resolve_sheet(self.SHEET)
         again.get.assert_not_called()
-        assert exc2.value.hints == exc1.value.hints
-
-    def test_nmpt_queries_only_nmpt_indexes(self):
-        sheet = "N-33-77-A-d-2-2"
-        session = nmt_session(sheet, "nmpt_evr")
-        with pytest.raises(NoCoverageError):
-            GugikNmptProvider(session=session, vertical_crs="EVRF2007")._resolve_sheet(
-                sheet
-            )
-        assert all("/NMPT/" in c.args[0] for c in session.get.call_args_list)
+        assert second.value.hints == first.value.hints
+        assert self.KRON86_HINT in second.value.hints
 
 
 # =============================================================================
@@ -553,40 +772,27 @@ class TestOrtoRecordSelectionOnRealBodies:
 
 
 class TestCutoutSheetsFromDifferentCampaigns:
-    @pytest.mark.parametrize(
-        ("sheet", "expected_id", "layer", "full_sheet"),
-        [
-            ("N-34-139-C-a-3-1", "84183_1852496", "SkorowidzeNMT2025", False),
-            ("N-34-139-C-a-3-2", "83998_1841627", "SkorowidzeNMT2026", True),
-            ("N-34-139-C-a-3-3", "84183_1852498", "SkorowidzeNMT2025", False),
-            ("N-34-139-C-a-3-4", "83998_1841628", "SkorowidzeNMT2026", True),
-        ],
-    )
-    def test_c14_each_sheet_gets_its_own_newest_campaign(
-        self, sheet, expected_id, layer, full_sheet
-    ):
-        provider = GugikProvider(
-            session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
-        )
-        record = provider._resolve_sheet(sheet)
-        assert file_id(record.url) == expected_id
-        assert record.layer == layer
-        assert record.full_sheet is full_sheet
-        source = provider.source_info(sheet)
-        assert source["url"] == record.url
-        assert source["full_sheet"] is full_sheet
+    """One provider (a cutout over several sheets) gives every sheet the
+    newest 1 m record of its own: campaigns differ from sheet to sheet."""
 
-    def test_c14_four_sheets_four_distinct_sources_two_prefixes(self):
-        prefixes = set()
-        urls = set()
-        for sheet in (f"N-34-139-C-a-3-{n}" for n in range(1, 5)):
-            record = GugikProvider(
-                session=c14_session(sheet), vertical_crs="EVRF2007", resolution="1m"
-            )._resolve_sheet(sheet)
-            prefixes.add(file_id(record.url).split("_")[0])
-            urls.add(record.url)
-        assert prefixes == {"84183", "83998"}
-        assert len(urls) == 4
+    EXPECTED = {
+        "N-33-77-B-c-3-3": ("80196_1534047", "SkorowidzNMT2024"),
+        "N-33-77-D-a-1-2": ("80196_1534063", "SkorowidzNMT2024"),
+        "M-34-29-A-b-4-2": ("83852_1826359", "SkorowidzNMT2025"),
+        "N-34-121-C-b-3-3": ("81136_1575486", "SkorowidzNMT2024"),
+    }
+
+    def test_c14_each_sheet_gets_its_own_newest_campaign(self):
+        provider = GugikProvider(
+            session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
+        )
+        records = {sheet: provider._resolve_sheet(sheet) for sheet in self.EXPECTED}
+        assert {
+            sheet: (file_id(r.url), r.layer) for sheet, r in records.items()
+        } == self.EXPECTED
+        assert {sheet: provider.source_info(sheet)["url"] for sheet in records} == {
+            sheet: r.url for sheet, r in records.items()
+        }
 
 
 # =============================================================================
@@ -846,18 +1052,8 @@ class TestLazDiscoveryOnRealWfs:
 
 
 # =============================================================================
-# ADR-030: campaign list (select_campaign_records) on real bodies
+# ADR-030: campaign list (select_campaign_records) on real answers
 # =============================================================================
-
-NMT_DIR = REAL / "nmt"
-
-
-def _c14_records(sheet):
-    return [
-        r
-        for f in sorted((NMT_DIR / "c14").glob(f"{sheet}_EVRF2007_*.html"))
-        for r in layer_records(f, f.stem.split("_EVRF2007_")[1])
-    ]
 
 
 def _orto_records(sheet):
@@ -882,59 +1078,71 @@ def _sheet_args(sheet):
     return {"sheet": sheet, "system": parser.sheet_system, "zone": zone}
 
 
-def _real_cases() -> list[tuple]:
-    """(sheet code, records, resolution_m, predicate) for every real body."""
-    cases: list[tuple] = []
-    for folder in sorted(NMT_DIR.iterdir()):
-        if folder.name == "c14":
-            continue
-        by_prefix: dict[str, list] = {}
-        for body in sorted(folder.glob("*.body")):
-            prefix, layer = body.stem.split("__", 1)
-            by_prefix.setdefault(prefix, []).extend(layer_records(body, layer))
-        for prefix, records in by_prefix.items():
-            if prefix == "nmpt_evr":
-                continue
-            res = 5.0 if prefix.startswith("nmt5_") else 1.0
-            cases.append((folder.name, records, res, None))
-    for sheet in (
-        "N-34-139-C-a-3-1",
-        "N-34-139-C-a-3-2",
-        "N-34-139-C-a-3-3",
-        "N-34-139-C-a-3-4",
-    ):
-        cases.append((sheet, _c14_records(sheet), 1.0, None))
+def _real_cases() -> list[tuple[str, list[SkorowidzRecord], dict]]:
+    """(sheet code, records, filter) for every real answer: each recorded WFS
+    sheet answer with every registered variant of its product and height
+    system, each orthophoto body with RGB and CIR."""
+    cases: list[tuple[str, list[SkorowidzRecord], dict]] = []
+    for tag in WFS_TAGS:
+        product, vertical_crs = tag.split("_")
+        found = variants(
+            product=product, country="PL", vertical_crs=vertical_crs.upper()
+        )
+        for sheet in sorted(recorded_sheets(tag)):
+            records = sheet_records(tag, sheet)
+            for variant in found:
+                resolution = variant.resolution_m
+                wanted = {
+                    "resolution_m": None if resolution is None else float(resolution),
+                    "predicate": in_format(variant.format),
+                    "require_resolution": resolution is not None,
+                }
+                cases.append((sheet, records, wanted))
     for sheet in sorted(
         {f.name.rsplit("_Skorowidze", 1)[0] for f in (REAL / "orto").glob("*.html")}
     ):
         for pred in (_is_rgb, _is_cir):
-            cases.append((sheet, _orto_records(sheet), None, pred))
+            cases.append((sheet, _orto_records(sheet), {"predicate": pred}))
     return cases
 
 
 class TestCampaignListsOnRealBodies:
-    def test_c14_all_campaigns_n34_139_c_a_3_1(self):
-        recs = select_campaign_records(
-            _c14_records("N-34-139-C-a-3-1"),
-            sheet="N-34-139-C-a-3-1",
-            system="1992",
-            resolution_m=1.0,
+    def test_campaign_list_of_each_sheet_code_in_one_answer(self):
+        """M-34-64-D-d-2-1: the answer also holds 7.125.11.04 (PL-2000:S7,
+        1 m 2021 and 2023) - each sheet code gets its own campaigns."""
+        records = sheet_records("nmt_evrf2007", "M-34-64-D-d-2-1")
+        grid = {"resolution_m": 1.0, "predicate": in_format("ASC")}
+        pl1992 = select_campaign_records(
+            records, sheet="M-34-64-D-d-2-1", system="1992", **grid
         )
-        assert [file_id(r.url).split("_")[0] for r in recs] == [
-            "84183",
-            "83233",
-            "78047",
-            "73021",
+        assert [file_id(r.url) for r in pl1992] == [
+            "83137_1729555",
+            "81428_1632968",
+            "78992_1476934",
+            "76531_1216448",
+            "73228_990051",
         ]
+        pl2000 = select_campaign_records(
+            records, sheet="7.125.11.04", system="2000", zone=7, **grid
+        )
+        assert [file_id(r.url) for r in pl2000] == ["77912_1385041", "75172_1140019"]
+        assert (
+            select_campaign_records(
+                records, sheet="7.125.11.04", system="2000", zone=6, **grid
+            )
+            == []
+        )
 
-    def test_select_sheet_record_equals_head_of_campaign_list_on_every_real_body(self):
-        cases = _real_cases()
-        assert len(cases) >= 15
-        for sheet, records, res, pred in cases:
-            args = {**_sheet_args(sheet), "resolution_m": res, "predicate": pred}
+    def test_select_sheet_record_equals_head_of_campaign_list_on_every_answer(self):
+        selected = 0
+        for sheet, records, wanted in _real_cases():
+            args = {**_sheet_args(sheet), **wanted}
             single = select_sheet_record(records, **args)
             listed = select_campaign_records(records, **args)
-            assert single == (listed or [None])[0], (sheet, pred)
+            assert single == (listed or [None])[0], (sheet, wanted)
+            selected += single is not None
+        # most cases select a record: the comparison is not vacuous
+        assert selected >= 50
 
     def test_orto_all_rgb_m34_90_c_b_4_4_excludes_cir_and_parent_sheet(self):
         sheet = "M-34-90-C-b-4-4"
@@ -952,37 +1160,24 @@ class TestCampaignListsOnRealBodies:
         ]
 
     def test_duplicate_url_across_layers_listed_once(self):
-        sheet = "N-34-139-C-a-3-1"
-        body = next((NMT_DIR / "c14").glob(f"{sheet}_EVRF2007_*2025.html"))
-        twice = layer_records(body, "SkorowidzeNMT2025") + layer_records(
-            body, "SkorowidzeNMT2024"
+        """A record repeated in the answers of two layers is one campaign."""
+        sheet = "M-34-90-C-b-4-4"
+        body = REAL / "orto" / f"{sheet}_SkorowidzeOrtofotomapy2026.html"
+        twice = layer_records(body, "SkorowidzeOrtofotomapy2026") + layer_records(
+            body, "SkorowidzeOrtofotomapy2025"
         )
-        recs = select_campaign_records(
-            twice, sheet=sheet, system="1992", resolution_m=1.0
-        )
-        assert len(recs) == len({r.url for r in recs}) > 0
-
-    def _xyz_record(self):
-        [r] = [
-            r
-            for r in layer_records(
-                NMT_DIR
-                / "N-33-69-A-d-3-2"
-                / "nmt1_evr__SkorowidzeNMT2023iStarsze.body",
-                "SkorowidzeNMT2023iStarsze",
-            )
-            if "72675" in r.url
-        ]
-        return r
-
-    def test_real_72675_record_has_aaigrid_format(self):
-        r = self._xyz_record()
-        assert r.url.endswith(".xyz") and r.file_format == "ARC/INFO ASCII GRID"
+        recs = select_campaign_records(twice, predicate=_is_rgb, **_sheet_args(sheet))
+        assert [file_id(r.url) for r in recs] == ["84466_1602825"]
 
     def test_record_format_survives_cache_roundtrip(self):
-        r = self._xyz_record()
-        back = SkorowidzRecord.from_source(r.to_source("https://wms"))
-        assert back.file_format == "ARC/INFO ASCII GRID"
+        """The record ``format`` decides the variant of a cached record too:
+        an XYZ archive stays XYZ, the ``.xyz`` name of a 72675 grid stays ASC."""
+        sheet = "N-33-69-A-d-1-3"
+        records = {file_id(r.url): r for r in sheet_records("nmt_evrf2007", sheet)}
+        for key, token in (("73843_1035648", "XYZ"), ("72675_858106", "ASC")):
+            back = SkorowidzRecord.from_source(records[key].to_source(NMT_EVRF2007))
+            assert back.file_format == records[key].file_format
+            assert source_format(back.file_format, back.url) == token
 
     def test_orto_record_has_no_format_and_roundtrip_keeps_none(self):
         recs = _orto_records("M-34-90-C-b-4-4")
@@ -999,16 +1194,16 @@ class TestCampaignListsOnRealBodies:
 # =============================================================================
 
 
-class TestDeclaredVerticalCrsOnRealBodies:
+class TestDeclaredVerticalCrsOnRealWfs:
     """``GugikProvider.download`` (path without the manager) checks the record."""
 
-    SHEET = "N-33-59-C-a-1-3"  # raw KRON86 bodies: records PL-KRON86-NH
-    KRN_2018 = REAL / "nmt" / SHEET / "nmt1_krn__SkorowidzeNMT2018.body"
+    SHEET = "N-33-58-A-c-1-4"  # KRON86 answer: records PL-KRON86-NH
 
     def test_kron86_record_from_evrf2007_index_is_not_downloaded(self, tmp_path):
-        """E5: the EVRF2007 index answers with a KRON86 record -> DownloadError."""
+        """E5: the EVRF2007 service answers with KRON86 records -> DownloadError."""
+        kron86 = wfs_fixture(f"sheet_nmt_kron86_{self.SHEET}.xml")
         provider = GugikProvider(
-            session=routed_session(lambda layer: self.KRN_2018),
+            session=recorded_wfs({("nmt_evrf2007", self.SHEET): kron86}),
             vertical_crs="EVRF2007",
             resolution="1m",
         )
@@ -1023,11 +1218,10 @@ class TestDeclaredVerticalCrsOnRealBodies:
 
     def test_kron86_record_from_kron86_index_is_downloaded(self, tmp_path):
         provider = GugikProvider(
-            session=nmt_session(self.SHEET, "nmt1_krn"),
-            vertical_crs="KRON86",
-            resolution="1m",
+            session=recorded_wfs(), vertical_crs="KRON86", resolution="1m"
         )
         provider.download_record = Mock(return_value=tmp_path / "a.asc")
         provider.download(self.SHEET, tmp_path / "a.asc")
         record = provider.download_record.call_args.args[0]
+        assert file_id(record.url) == "3646_66649"
         assert record.raw["ukladWspolrzednychPionowych"] == "PL-KRON86-NH"

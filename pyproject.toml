@@ -79,6 +79,7 @@ addopts = "-v --tb=short"
 markers = [
     "live: marks tests that require network access to GUGiK WMS (deselect with '-m \"not live\"')",
     "real_wms_layers: opt out of the offline GetCapabilities stub (tests that exercise _fetch_wms_layers itself)",
+    "real_wfs_types: opt out of the offline WFS feature-type stub of the NMT/NMPT index services (tests that exercise WfsIndex.feature_types itself)",
 ]
 
 [tool.coverage.run]

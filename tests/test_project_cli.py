@@ -299,7 +299,23 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
 
 @pytest.mark.parametrize(
     "invalid",
-    [["parse"], ["cache"], ["soil", "list-layers"], ["elevation", "list-sources"]],
+    [
+        ["parse"],
+        ["cache"],
+        ["soil", "list-layers"],
+        ["elevation", "list-sources"],
+        # the report writes nothing: not a data command (no ``_task``)
+        [
+            "elevation",
+            "availability",
+            "--product",
+            "nmt",
+            "--country",
+            "pl",
+            "--bbox",
+            "565000,242000,569000,246000",
+        ],
+    ],
 )
 def test_add_rejects_commands_without_data(tmp_path, capsys, invalid):
     project = tmp_path / "projekt"

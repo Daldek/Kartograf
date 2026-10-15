@@ -26,6 +26,10 @@ LAZ_SUPERSEDED = "laz_superseded"
 CORINE_PREVIEW = "corine_preview"
 CACHE_DISABLED = "cache_disabled"
 PROJECT_GEOMETRY_CHANGED = "project_geometry_changed"
+# Availability report: index records Kartograf does not download (outside the
+# variant registry, format inconsistent with the file, sheet code outside
+# SheetParser).
+INDEX_UNSUPPORTED = "index_unsupported"
 
 
 @dataclass(frozen=True)

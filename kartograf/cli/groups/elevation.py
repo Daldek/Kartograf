@@ -9,35 +9,46 @@ from kartograf.cli._args import (
     add_quiet,
     add_update_flags,
 )
+from kartograf.cli.availability_cmd import cmd_availability
 from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
+from kartograf.download.availability import AVAILABILITY_COUNTRIES
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
     COUNTRY_CHOICES,
     ELEVATION_PRODUCTS,
-    RESOLUTION_PL,
     SCALE_2000_CHOICES,
     SHEET_SYSTEM_CHOICES,
     VERTICAL_CRS_CZ,
-    VERTICAL_CRS_PL,
+    format_text,
     product_choices,
+    resolution_text,
+    vertical_crs_text,
 )
 from kartograf.sources.descriptor import SourceDescriptor
 
 
 def _source_choice(source: SourceDescriptor) -> str:
-    """Flags selecting ``source`` in ``elevation download``."""
+    """Flags selecting ``source`` in ``elevation download`` (variant registry);
+    ``--vertical-crs`` only when the source has one height system."""
     flags = f"--product {source.product}"
-    if source.product != "nmt":
-        return flags
     if source.country == "CZ":
-        flags += " --country cz"
-    return f"{flags} --resolution {source.resolution}"
+        return f"{flags} --country cz --resolution {source.resolution}"
+    if not source.variants or source.product == "laz":
+        return flags
+    variant = source.variants[0]
+    if variant.source_file:
+        flags += f" --format {variant.format}"
+    if variant.label is not None:
+        flags += f" --resolution {variant.label}"
+    if len(source.variants) == 1:
+        flags += f" --vertical-crs {variant.vertical_crs}"
+    return flags
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
-    """``elevation download`` and ``elevation list-sources``."""
+    """``elevation download``, ``list-sources`` and ``availability``."""
     commands = add_group(
         subparsers,
         "elevation",
@@ -95,21 +106,32 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "-r",
         metavar="RES",
         default=None,
-        help="Rozdzielczosc siatki NMT - wymagana tam, gdzie jest wybor. PL: "
-        f"{RESOLUTION_PL}; wycinek --cutout tylko 1m. CZ: "
-        f"{RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna pominac). NMPT tylko "
-        "1m (mozna pominac); LAZ bez rozdzielczosci. Jedna wartosc dotyczy "
-        "kazdego kraju zadania; zadanie PL+CZ z roznymi: pl=WARTOSC,cz=WARTOSC "
+        help="Rozdzielczosc siatki - wymagana tam, gdzie jest wybor. PL "
+        f"(siatki ASC): {resolution_text()}; wycinek --cutout tylko 1m (mozna "
+        "pominac); archiwa (--format): rozdzielczosci w kartograf elevation "
+        f"list-sources. CZ: {RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna "
+        "pominac). LAZ bez rozdzielczosci. Jedna wartosc dotyczy kazdego kraju "
+        "zadania; zadanie PL+CZ z roznymi: pl=WARTOSC,cz=WARTOSC "
         "(np. pl=1m,cz=2m)",
     )
     product.add_argument(
         "--vertical-crs",
         metavar="VCRS",
         default=None,
-        help=f"Uklad wysokosci (wymagany). PL: {VERTICAL_CRS_PL}. CZ: "
+        help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}. CZ: "
         f"{VERTICAL_CRS_CZ}. Jedna wartosc dotyczy kazdego kraju zadania i musi "
         "byc dla niego dostepna; zadanie PL+CZ z roznymi ukladami: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=EVRF2007,cz=Bpv)",
+    )
+    product.add_argument(
+        "--format",
+        metavar="FORMAT",
+        default=None,
+        help="Format pliku NMT/NMPT PL. Bez flagi: siatka ASC (format "
+        "produktu). Archiwa GUGiK - pliki zrodlowe jak w skorowidzu (bez "
+        "konwersji, bez --cutout; arkusze roznych skal wynikaja ze "
+        f"skorowidza, bez --scale): {format_text()}. Warianty archiwow: "
+        "kartograf elevation list-sources",
     )
     sheets = download.add_argument_group("Arkusze obszaru")
     sheets.add_argument(
@@ -247,3 +269,78 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
 
     add_list_sources(commands, "elevation", ELEVATION_PRODUCTS, _source_choice)
+    _register_availability(commands)
+
+
+def _register_availability(commands: argparse._SubParsersAction) -> None:
+    """``elevation availability``: the report of ``check_availability``.
+
+    Not a data command of a project manifest (no ``_task``, ADR-040): it
+    writes nothing, the report is its result.
+    """
+    report = commands.add_parser(
+        "availability",
+        help="Raport dostepnosci NMT, NMPT i LAZ dla obszaru (bez pobierania)",
+        description=(
+            "Dla jakich lat, ukladow, rozdzielczosci, ukladow wysokosci "
+            "i formatow obszar ma komplet pelnych arkuszy (LAZ: kafli) wg "
+            "skorowidza GUGiK - bez pobierania danych (tylko skorowidz WFS "
+            "i maska ladu PRG). Kompletna kombinacja: caly lad obszaru lezy "
+            "w arkuszach pelnych (calyArkuszWypelnionyTrescia). Stopka podaje "
+            "polecenie pobrania najnowszej kompletnej kombinacji."
+        ),
+    )
+    selection = report.add_argument_group("Produkt i obszar")
+    selection.add_argument(
+        "--product",
+        choices=ELEVATION_PRODUCTS,
+        default=None,
+        help=f"Produkt (wymagany): {product_choices(ELEVATION_PRODUCTS)}",
+    )
+    add_area_flags(
+        selection,
+        sheet_help="Godlo arkusza PL (PL-1992 albo PL-2000): obszar = rama arkusza",
+        geometry_help="Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie "
+        "obiektow (LAZ: obwiednia calej warstwy) - jak w elevation download",
+    )
+    selection.add_argument(
+        "--country",
+        choices=list(AVAILABILITY_COUNTRIES),
+        default=None,
+        help="Kraj - wymagany z --bbox/--geometry: "
+        f"{', '.join(AVAILABILITY_COUNTRIES.values())}. Z --sheet kraj wynika "
+        "z godla",
+    )
+    years = report.add_argument_group("Rok danych")
+    years.add_argument(
+        "--year",
+        type=int,
+        metavar="ROK",
+        help="Tylko ten rok (warstwa roczna skorowidza); skrot --min-year ROK "
+        "--max-year ROK",
+    )
+    years.add_argument(
+        "--min-year", type=int, metavar="ROK", help="Dolna granica roku (wlacznie)"
+    )
+    years.add_argument(
+        "--max-year", type=int, metavar="ROK", help="Gorna granica roku (wlacznie)"
+    )
+    output = report.add_argument_group("Wynik")
+    output.add_argument(
+        "--details",
+        action="store_true",
+        help="Dla kazdej kombinacji: godla arkuszy niepelnych, lad bez arkuszy "
+        "i polecenia pobrania",
+    )
+    output.add_argument(
+        "--json",
+        action="store_true",
+        help="Wypisz raport jako JSON (kartograf-availability/1, ten sam "
+        "ksztalt co check_availability)",
+    )
+    output.add_argument(
+        "--force",
+        action="store_true",
+        help="Pomin cache metadanych (odpytaj skorowidz i PRG ponownie, nadpisz cache)",
+    )
+    report.set_defaults(_handler=cmd_availability)

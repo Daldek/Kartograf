@@ -130,22 +130,39 @@ def cz_geometry_bbox(path: Path, layer: str | None, image_crs: str) -> BBox:
     return bbox_to_crs(bbox, image_crs)
 
 
-def pl_only_flags(product: str, vertical_crs: object, resolution: object) -> list[str]:
+def pl_only_flags(
+    product: str,
+    vertical_crs: object,
+    resolution: object,
+    format: object = None,
+) -> list[str]:
     """Choices with no CZ counterpart: they resolve ``country="auto"`` to PL.
 
-    ADR-023 point 5; DELIBERATELY narrow: LAZ has its own flow, ``5m``
-    exists on both sides, per-country values name both countries,
-    ``sheet_system`` is required for every PL sheet area, ``cutout`` and
-    campaign options work
-    with both countries.
+    ADR-023 point 5; DELIBERATELY narrow: LAZ has its own flow, per-country
+    values name both countries, ``sheet_system`` is required for every PL
+    sheet area, ``cutout`` and campaign options work with both countries.
+    PL-only is read from the registries: a product, height system or
+    resolution without a CZ source of the product, and ``--format`` (PL
+    files only).
     """
+    # local import: options imports cutout, which imports this module
+    from kartograf.download.options import CZ_VERTICAL_CRS
+    from kartograf.sources.registry import sources_for
+    from kartograf.sources.variants import variants
+
+    cz = sources_for(country="CZ", product=product)
+    cz_variants = variants(country="CZ", product=product)
+    cz_labels = {d.resolution for d in cz} | {v.label for v in cz_variants}
+    cz_vertical = {v.vertical_crs for v in cz_variants} | set(CZ_VERTICAL_CRS)
     flags: list[str] = []
-    if product in ("nmpt", "orto"):
+    if product in ("nmt", "nmpt", "orto") and not cz:
         flags.append(f"--product {product}")
-    if vertical_crs == "KRON86":
-        flags.append("--vertical-crs KRON86")
-    if resolution == "1m":
-        flags.append("--resolution 1m")
+    if isinstance(vertical_crs, str) and vertical_crs not in cz_vertical:
+        flags.append(f"--vertical-crs {vertical_crs}")
+    if isinstance(resolution, str) and cz and resolution not in cz_labels:
+        flags.append(f"--resolution {resolution}")
+    if isinstance(format, str):
+        flags.append(f"--format {format}")
     return flags
 
 

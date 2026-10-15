@@ -1,4 +1,8 @@
-"""Tests of source descriptors and the registry (kartograf.sources)."""
+"""Tests of source descriptors and the registry (kartograf.sources).
+
+PL NMT/NMPT sheets: one descriptor per (product, format, resolution) of the
+variant registry (ADR-041), sheet records from the GUGiK WFS index.
+"""
 
 import dataclasses
 
@@ -25,11 +29,51 @@ from kartograf.sources.registry import (
     sources_for,
     vertical_crs_code,
 )
+from kartograf.sources.variants import ProductVariant, variants
 
-EXPECTED_KEYS = {
+# Sidecar `dataset` keys of the PL NMT/NMPT sheet sources (ADR-041): ASC grids
+# (`pl.gugik.nmt_1m`, `pl.gugik.nmt_5m` and `pl.gugik.nmpt` = NMPT 1 m keep the
+# keys of existing sidecars) and archives downloaded as source files.
+PL_GRID_KEYS = (
+    "pl.gugik.nmt_0_15m",
+    "pl.gugik.nmt_0_5m",
+    "pl.gugik.nmt_0_6m",
     "pl.gugik.nmt_1m",
     "pl.gugik.nmt_5m",
+    "pl.gugik.nmt_10m",
+    "pl.gugik.nmpt_0_5m",
+    "pl.gugik.nmpt_0_6m",
     "pl.gugik.nmpt",
+)
+PL_ARCHIVE_KEYS = (
+    "pl.gugik.nmt_xyz_1m",
+    "pl.gugik.nmt_xyz_5m",
+    "pl.gugik.nmt_ascii_nmt_0_5m",
+    "pl.gugik.nmt_ascii_nmt_1m",
+    "pl.gugik.nmt_ascii_nmt_5m",
+    "pl.gugik.nmt_tbd_1m",
+    "pl.gugik.nmt_tbd_5m",
+    "pl.gugik.nmt_tbd_10m",
+    "pl.gugik.nmt_tbd_15m",
+    "pl.gugik.nmt_tbd_20m",
+    "pl.gugik.nmt_tbd_25m",
+    "pl.gugik.nmt_tbd_30m",
+    "pl.gugik.nmt_tbd_40m",
+    "pl.gugik.nmt_tbd_50m",
+    "pl.gugik.nmt_tin",
+    "pl.gugik.nmt_ttn",
+    "pl.gugik.nmt_grd_5m",
+    "pl.gugik.nmt_dxf_25m",
+    "pl.gugik.nmt_dgn_25m",
+    "pl.gugik.nmpt_xyz_0_5m",
+    "pl.gugik.nmpt_xyz_1m",
+)
+PL_SHEET_KEYS = PL_GRID_KEYS + PL_ARCHIVE_KEYS
+# Grids with a WCS cutout channel (1 m only)
+PL_WCS_KEYS = ("pl.gugik.nmt_1m", "pl.gugik.nmpt")
+
+EXPECTED_KEYS = {
+    *PL_SHEET_KEYS,
     "pl.gugik.orto",
     "pl.gugik.laz",
     "pl.gugik.bdot10k",
@@ -39,13 +83,11 @@ EXPECTED_KEYS = {
     "cz.cuzk.dmr4g",
 }
 
-# Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md).
+# Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
+# NMT/NMPT sheets: WFS index since ADR-041, a new index record = new data).
 CHANNEL_SIGNALS = [
-    ("pl.gugik.nmt_1m", TransportKind.WMS_SHEET_INDEX, "index"),
-    ("pl.gugik.nmt_1m", TransportKind.WCS, "none"),
-    ("pl.gugik.nmt_5m", TransportKind.WMS_SHEET_INDEX, "index"),
-    ("pl.gugik.nmpt", TransportKind.WMS_SHEET_INDEX, "index"),
-    ("pl.gugik.nmpt", TransportKind.WCS, "none"),
+    *((key, TransportKind.WFS, "index") for key in PL_SHEET_KEYS),
+    *((key, TransportKind.WCS, "none") for key in PL_WCS_KEYS),
     ("pl.gugik.orto", TransportKind.WMS_SHEET_INDEX, "index"),
     ("pl.gugik.laz", TransportKind.WFS, "index"),
     ("pl.gugik.bdot10k", TransportKind.DIRECT_FILES, "none"),
@@ -56,6 +98,26 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.dmr4g", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.dmr4g", TransportKind.ARCGIS_IMAGE, "none"),
 ]
+
+PL_VARIANTS = variants(country="PL")
+
+
+def _variant_id(v: ProductVariant) -> str:
+    return f"{v.product}-{v.format}-{v.label}-{v.vertical_crs}"
+
+
+def _provider_for(variant: ProductVariant):
+    """The provider a CLI/API choice of ``variant`` builds."""
+    from kartograf import GugikLazProvider, GugikNmptProvider, GugikProvider
+
+    if variant.product == "laz":
+        return GugikLazProvider(vertical_crs=variant.vertical_crs)
+    cls = GugikNmptProvider if variant.product == "nmpt" else GugikProvider
+    return cls(
+        vertical_crs=variant.vertical_crs,
+        resolution=variant.label,
+        format=variant.format,
+    )
 
 
 @pytest.mark.parametrize(("key", "transport", "signal"), CHANNEL_SIGNALS)
@@ -151,9 +213,15 @@ class TestRegistry:
 
     def test_sources_for_filters(self):
         pl = sources_for(country="PL")
-        assert len(pl) == 6
+        assert {d.key for d in pl} == {k for k in EXPECTED_KEYS if k.startswith("pl.")}
         nmt = sources_for(country="PL", product="nmt")
-        assert {d.key for d in nmt} == {"pl.gugik.nmt_1m", "pl.gugik.nmt_5m"}
+        assert {d.key for d in nmt} == {
+            k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmt_")
+        }
+        nmpt = sources_for(country="PL", product="nmpt")
+        assert {d.key for d in nmpt} == {
+            k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmpt")
+        }
         cz = sources_for(country="CZ")
         assert {d.key for d in cz} == {"cz.cuzk.dmr4g", "cz.cuzk.dmr5g"}
 
@@ -205,13 +273,48 @@ class TestRegistry:
         assert horizontal_crs_for_system("") is None
         assert horizontal_crs_for_system(None) is None
 
-    def test_nmt_1m_entry_values(self):
-        d = get_source("pl.gugik.nmt_1m")
-        assert d.storage_subdir == "nmt/pl_{system}_1m_{vcrs}"
-        assert d.default_extension == ".asc"
-        assert d.resolution == "1m"
-        transports = {ch.transport for ch in d.channels}
-        assert transports == {TransportKind.WMS_SHEET_INDEX, TransportKind.WCS}
+    @pytest.mark.parametrize(
+        ("key", "segment", "extension"),
+        [
+            # segments of existing data stay unchanged
+            ("pl.gugik.nmt_1m", "nmt/pl_{system}_1m_{vcrs}", ".asc"),
+            ("pl.gugik.nmt_5m", "nmt/pl_{system}_5m_{vcrs}", ".asc"),
+            ("pl.gugik.nmpt", "nmpt/pl_{system}_1m_{vcrs}", ".asc"),
+            # new grids: label K2 in the segment
+            ("pl.gugik.nmt_0_15m", "nmt/pl_{system}_0.15m_{vcrs}", ".asc"),
+            ("pl.gugik.nmt_0_5m", "nmt/pl_{system}_0.5m_{vcrs}", ".asc"),
+            ("pl.gugik.nmt_10m", "nmt/pl_{system}_10m_{vcrs}", ".asc"),
+            ("pl.gugik.nmpt_0_6m", "nmpt/pl_{system}_0.6m_{vcrs}", ".asc"),
+            # archives: format token before the label, extension from the format
+            ("pl.gugik.nmt_xyz_1m", "nmt/pl_{system}_xyz_1m_{vcrs}", ".zip"),
+            ("pl.gugik.nmt_tbd_25m", "nmt/pl_{system}_tbd_25m_{vcrs}", ".zip"),
+            (
+                "pl.gugik.nmt_ascii_nmt_5m",
+                "nmt/pl_{system}_ascii-nmt_5m_{vcrs}",
+                ".zip",
+            ),
+            ("pl.gugik.nmt_tin", "nmt/pl_{system}_tin_{vcrs}", ".zip"),
+            ("pl.gugik.nmt_ttn", "nmt/pl_{system}_ttn_{vcrs}", ".ttn"),
+            ("pl.gugik.nmt_grd_5m", "nmt/pl_{system}_grd_5m_{vcrs}", ".grd"),
+            ("pl.gugik.nmt_dxf_25m", "nmt/pl_{system}_dxf_25m_{vcrs}", ".dxf"),
+            ("pl.gugik.nmt_dgn_25m", "nmt/pl_{system}_dgn_25m_{vcrs}", ".dgn"),
+            ("pl.gugik.nmpt_xyz_0_5m", "nmpt/pl_{system}_xyz_0.5m_{vcrs}", ".zip"),
+        ],
+    )
+    def test_pl_sheet_segments(self, key, segment, extension):
+        d = get_source(key)
+        assert d.storage_subdir == segment
+        assert d.default_extension == extension
+
+    @pytest.mark.parametrize("key", PL_SHEET_KEYS)
+    def test_pl_sheet_channel_capabilities(self, key):
+        """Sheet files from the WFS index; the WCS channel (1 m) serves bboxes."""
+        capabilities = {
+            ch.transport: ch.capabilities for ch in get_source(key).channels
+        }
+        assert capabilities[TransportKind.WFS] == frozenset({"sheet_files"})
+        if key in PL_WCS_KEYS:
+            assert capabilities[TransportKind.WCS] == frozenset({"bbox_raster"})
 
     def test_no_vertical_for_orto_and_landcover(self):
         for key in (
@@ -288,81 +391,64 @@ class TestRegistry:
 class TestDescriptorProviderConsistency:
     """Spec 6.12: the descriptor must agree with the provider's actual state."""
 
-    def test_nmt_1m(self, tmp_path):
-        from kartograf import FileStorage, GugikProvider
+    @pytest.mark.parametrize("variant", PL_VARIANTS, ids=_variant_id)
+    def test_variant_matches_provider(self, variant, tmp_path):
+        """Segment, extension and channels of a variant agree with the provider
+        built from that variant (CLI/API choice -> files of the descriptor)."""
+        from kartograf import FileStorage
+        from kartograf.download.storage import storage_for_provider
 
-        d = get_source("pl.gugik.nmt_1m")
-        provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
-        assert d.default_extension == provider.default_extension
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
-        supported = provider.get_supported_vertical_crs_for_resolution("1m")
-        # Compared per channel: the WMS index (skorowidz) and the WCS channel
-        # declare the vertical CRS for which the provider has a working source.
-        sheets_ch = next(
-            ch for ch in d.channels if ch.transport == TransportKind.WMS_SHEET_INDEX
+        d = get_source(variant.source)
+        provider = _provider_for(variant)
+        assert provider.descriptor_key == variant.source
+        assert provider.default_extension == d.default_extension
+
+        segment = d.resolve_subdir(vertical_crs=variant.vertical_crs)
+        storage = storage_for_provider(
+            tmp_path,
+            provider,
+            resolution=variant.label,
+            vertical_crs=variant.vertical_crs,
         )
-        sheet_codes = {
-            resolve_vertical_crs(n, sheets_ch.vertical_crs_options) for n in supported
-        }
-        assert set(sheets_ch.vertical_crs_options) == sheet_codes
-        assert sheet_codes == {"EPSG:9650", "EPSG:9651"}
-
-        wcs_ch = next(ch for ch in d.channels if ch.transport == TransportKind.WCS)
-        wcs_supported = {
-            n
-            for n in supported
-            if GugikProvider(resolution="1m", vertical_crs=n).is_wcs_available()
-        }
-        wcs_codes = {
-            resolve_vertical_crs(n, wcs_ch.vertical_crs_options) for n in wcs_supported
-        }
-        assert set(wcs_ch.vertical_crs_options) == wcs_codes
-        assert wcs_codes == {"EPSG:9650", "EPSG:9651"}
-
-    def test_nmpt_wcs_channel_matches_provider(self):
-        from kartograf import GugikNmptProvider
-
-        d = get_source("pl.gugik.nmpt")
-        wcs_ch = next(ch for ch in d.channels if ch.transport == TransportKind.WCS)
-        assert wcs_ch.capabilities == frozenset({"bbox_raster"})
-        wcs_codes = {
-            resolve_vertical_crs(n, wcs_ch.vertical_crs_options)
-            for n in ("KRON86", "EVRF2007")
-            if GugikNmptProvider(vertical_crs=n).is_wcs_available()
-        }
-        assert set(wcs_ch.vertical_crs_options) == wcs_codes
-        assert wcs_codes == {"EPSG:9650", "EPSG:9651"}
-
-    def test_nmt_5m(self, tmp_path):
-        from kartograf import FileStorage, GugikProvider
-
-        d = get_source("pl.gugik.nmt_5m")
-        provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
-        assert d.default_extension == provider.default_extension
-        storage = FileStorage(tmp_path, resolution="5m", vertical_crs="EVRF2007")
-        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
-        supported = provider.get_supported_vertical_crs_for_resolution("5m")
-        assert {
-            resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
-            for n in supported
-        } == set(d.channels[0].vertical_crs_options)
-
-    def test_nmpt(self, tmp_path):
-        from kartograf import FileStorage, GugikNmptProvider
-
-        d = get_source("pl.gugik.nmpt")
-        provider = GugikNmptProvider(vertical_crs="EVRF2007")
-        assert d.default_extension == provider.default_extension
-        storage = FileStorage(
-            tmp_path, resolution="1m", vertical_crs="EVRF2007", product="nmpt"
+        assert storage._subdir == segment
+        # the store opened for the same choice without a provider: same segment
+        assert (
+            FileStorage(
+                tmp_path,
+                resolution=variant.label,
+                vertical_crs=variant.vertical_crs,
+                product=variant.product,
+                format=variant.format,
+            )._subdir
+            == segment
         )
-        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
-        codes = {
-            resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
-            for n in provider.SUPPORTED_VERTICAL_CRS
-        }
-        assert set(d.channels[0].vertical_crs_options) == codes
+        assert segment.endswith(f"_{variant.vertical_crs.lower()}")
+        if variant.label is not None:
+            assert f"_{variant.label}_" in segment
+
+        if variant.product != "laz":
+            has_wcs = any(ch.transport == TransportKind.WCS for ch in d.channels)
+            assert provider.has_wcs() is has_wcs
+            assert provider.is_wcs_available() is has_wcs
+
+    @pytest.mark.parametrize("key", (*PL_SHEET_KEYS, "pl.gugik.laz"))
+    def test_channel_vertical_crs_matches_providers(self, key):
+        """Each channel declares exactly the height systems for which the
+        provider of a variant has a working source (WCS: is_wcs_available)."""
+        d = get_source(key)
+        assert d.variants
+        for ch in d.channels:
+            working = [
+                v
+                for v in d.variants
+                if ch.transport != TransportKind.WCS
+                or _provider_for(v).is_wcs_available()
+            ]
+            codes = {
+                resolve_vertical_crs(v.vertical_crs, ch.vertical_crs_options)
+                for v in working
+            }
+            assert set(ch.vertical_crs_options) == codes, (key, ch.transport)
 
     def test_orto(self, tmp_path):
         from kartograf import FileStorage, GugikOrtoProvider
@@ -377,22 +463,6 @@ class TestDescriptorProviderConsistency:
             )._subdir
         )
         assert d.channels[0].vertical_crs_options == ()
-
-    def test_laz(self, tmp_path):
-        from kartograf import FileStorage, GugikLazProvider
-
-        d = get_source("pl.gugik.laz")
-        provider = GugikLazProvider(vertical_crs="EVRF2007")
-        assert d.default_extension == provider.default_extension
-        storage = FileStorage(
-            tmp_path, resolution=None, vertical_crs="EVRF2007", product="laz"
-        )
-        assert d.resolve_subdir(vertical_crs="EVRF2007") == storage._subdir
-        codes = {
-            resolve_vertical_crs(n, d.channels[0].vertical_crs_options)
-            for n in provider.SUPPORTED_VERTICAL_CRS
-        }
-        assert set(d.channels[0].vertical_crs_options) == codes
 
     def test_landcover_and_soil(self):
         from kartograf import Bdot10kProvider, CorineProvider, SoilGridsProvider
@@ -421,16 +491,9 @@ class TestDescriptorProviderConsistency:
 
     def test_horizontal_crs_matches_channel_reality(self):
         """Descriptor horizontal CRS = the CRS the channel actually returns."""
-        for key in (
-            "pl.gugik.nmt_1m",
-            "pl.gugik.nmt_5m",
-            "pl.gugik.nmpt",
-            "pl.gugik.orto",
-            "pl.gugik.laz",
-            "pl.gugik.bdot10k",
-        ):
-            for ch in get_source(key).channels:
-                assert ch.horizontal_crs == "EPSG:2180", key
+        for d in sources_for(country="PL"):
+            for ch in d.channels:
+                assert ch.horizontal_crs == "EPSG:2180", d.key
         # CORINE: EPSG:3035 is the CLMS GeoTIFF channel; the WMS preview channel
         # is EPSG:3857 (1990 DLR: EPSG:4326, set by LandCoverManager per file)
         assert get_source("eu.clms.corine").channels[0].horizontal_crs == "EPSG:3035"
@@ -452,9 +515,21 @@ class TestDescriptorProviderConsistency:
         )
 
         expected = {
+            # keys of existing sidecars stay (NMPT 1 m = `pl.gugik.nmpt`)
             GugikProvider(resolution="1m", vertical_crs="EVRF2007"): "pl.gugik.nmt_1m",
             GugikProvider(resolution="5m", vertical_crs="EVRF2007"): "pl.gugik.nmt_5m",
-            GugikNmptProvider(vertical_crs="EVRF2007"): "pl.gugik.nmpt",
+            GugikNmptProvider(
+                resolution="1m", vertical_crs="EVRF2007"
+            ): "pl.gugik.nmpt",
+            GugikProvider(resolution="0.5m", vertical_crs="KRON86"): (
+                "pl.gugik.nmt_0_5m"
+            ),
+            GugikNmptProvider(resolution="0.5m", vertical_crs="EVRF2007"): (
+                "pl.gugik.nmpt_0_5m"
+            ),
+            GugikProvider(resolution="25m", vertical_crs="KRON86", format="TBD"): (
+                "pl.gugik.nmt_tbd_25m"
+            ),
             GugikOrtoProvider(color="RGB"): "pl.gugik.orto",
             GugikLazProvider(vertical_crs="EVRF2007"): "pl.gugik.laz",
             Bdot10kProvider(): "pl.gugik.bdot10k",
