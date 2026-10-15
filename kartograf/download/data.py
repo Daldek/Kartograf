@@ -61,6 +61,7 @@ from kartograf.download.area import (
     pl_only_flags,
     resolve_geometry_layer,
 )
+from kartograf.download.arguments import require_int
 from kartograf.download.countries import countries_for_bbox, country_bbox
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
@@ -228,6 +229,7 @@ def _start(
     from kartograf.download.fetch import validate_update
 
     validate_update(update)
+    require_int(workers, "--workers")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     run = _Run(
@@ -291,8 +293,9 @@ def download_data(
     Raises
     ------
     ValidationError
-        Invalid or missing choice (before any download; texts name the CLI
-        flags, the CLI prints them as ``Error:``).
+        Invalid or missing choice, or an argument of a wrong type
+        (``year="2018"``, ``workers="4"``; never converted) - before any
+        download; texts name the CLI flags, the CLI prints them as ``Error:``.
     ParseError
         Malformed sheet code.
     TransformError

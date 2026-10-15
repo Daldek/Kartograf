@@ -12,6 +12,7 @@ from collections.abc import Iterable, Mapping
 from types import SimpleNamespace
 
 from kartograf.core.bbox import BBox, validate_bbox
+from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
@@ -302,10 +303,20 @@ def validate_request(task: SimpleNamespace) -> None:
     Exactly one selection, explicit product/output, country for areas,
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
     LAZ-only and non-LAZ options. Narrows ``task.min_year``/``max_year``.
+    Types of library arguments first (``year="2018"``, ``cutout="no"``:
+    ``ValidationError``, no conversion; STANDARDS 11.2).
     """
     # the CLI parses --bbox before anything else: the same first error
     if task.bbox is not None:
         validate_request_bbox(task.bbox)
+    for flag, name in (
+        ("--cutout", "cutout"),
+        ("--all-campaigns", "all_campaigns"),
+        ("--full-sheet", "full_sheet"),
+    ):
+        require_bool(getattr(task, name), flag)
+    if task.min_density is not None:
+        require_int(task.min_density, "--min-density")
     provided = sum(v is not None for v in (task.sheet, task.bbox, task.geometry))
     if provided > 1:
         raise ValidationError(

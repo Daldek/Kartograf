@@ -1,0 +1,124 @@
+"""Library argument types (STANDARDS 11.2): a value of a wrong type is a
+``ValidationError`` before any network or file access, never converted and
+never a late ``TypeError``/``ValueError`` from a provider (backlog "Do
+0.8.0", 2026-10-15). The CLI parses its flags itself, so it never reaches
+these errors."""
+
+from unittest.mock import Mock
+
+import pytest
+
+from kartograf.core.bbox import BBox
+from kartograf.download.data import check_data, download_data
+from kartograf.download.laz import check_laz_area, download_laz_area
+from kartograf.download.manager import DownloadManager
+from kartograf.exceptions import ValidationError
+from kartograf.hydrology.hsg import HSGCalculator
+from kartograf.landcover.manager import LandCoverManager
+
+SHEET = "N-34-130-D-d-2-4"
+AREA = BBox(450000, 550000, 451000, 551000, "EPSG:2180")
+SHEET_REQUEST = {
+    "product": "nmt",
+    "sheet": SHEET,
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
+
+
+@pytest.mark.parametrize(
+    ("argument", "flag"),
+    [
+        ({"year": "2018"}, "--year"),
+        ({"min_year": 2018.0}, "--min-year"),
+        ({"all_campaigns": "yes"}, "--all-campaigns"),
+        ({"full_sheet": 1}, "--full-sheet"),
+        ({"cutout": "false"}, "--cutout"),
+    ],
+)
+@pytest.mark.parametrize("call", [download_data, check_data])
+def test_download_data_rejects_wrong_types(tmp_path, call, argument, flag):
+    with pytest.raises(ValidationError, match=flag):
+        call(**SHEET_REQUEST, output_dir=tmp_path, **argument)
+    assert not any(tmp_path.iterdir())
+
+
+def test_download_data_rejects_text_density_and_workers(tmp_path):
+    laz = {"product": "laz", "sheet": SHEET, "vertical_crs": "EVRF2007"}
+    with pytest.raises(ValidationError, match="--min-density .*'10'"):
+        download_data(**laz, output_dir=tmp_path, min_density="10")
+    with pytest.raises(ValidationError, match="--workers .*'4'"):
+        download_data(**SHEET_REQUEST, output_dir=tmp_path, workers="4")
+
+
+def test_layers_text_is_not_read_character_by_character(tmp_path):
+    manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
+    with pytest.raises(ValidationError, match="--layers: podaj liste kodow"):
+        manager.download(teryt="1465", layers="SWRS,PTWP")
+    with pytest.raises(ValidationError, match="--layers: podaj liste kodow"):
+        manager.check(teryt="1465", layers="SWRS")
+
+
+@pytest.mark.parametrize(
+    ("source", "options", "match"),
+    [
+        ("corine", {"year": "2018"}, "--year .*'2018'"),
+        ("corine", {"year": 2018, "timeout": "120"}, "timeout .*'120'"),
+        ("corine", {"year": 2018, "timeout": 0}, "timeout musi byc wiekszy od 0"),
+        ("bdot10k", {"keep_raw": "true"}, "--keep-raw"),
+        ("bdot10k", {"layers": ["SWRS", 7]}, "kody musza byc napisami"),
+    ],
+)
+def test_landcover_rejects_wrong_option_types(tmp_path, source, options, match):
+    manager = LandCoverManager(tmp_path, source, cache=False)
+    selection = {"teryt": "1465"} if source == "bdot10k" else {"bbox": AREA}
+    with pytest.raises(ValidationError, match=match):
+        manager.download(**selection, **options)
+
+
+def test_landcover_accepts_float_timeout_and_rejects_text_workers(tmp_path):
+    manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
+    manager._check_options({"timeout": 2.5, "layers": ("PTWP",), "keep_raw": True})
+    with pytest.raises(ValidationError, match="--workers"):
+        manager.download(teryt="1465", workers="2")
+
+
+@pytest.mark.parametrize("method", ["calculate_hsg", "check_hsg"])
+def test_hsg_rejects_text_timeout(tmp_path, method):
+    calc = HSGCalculator(tmp_path)
+    with pytest.raises(ValidationError, match="timeout .*'120'"):
+        getattr(calc, method)(bbox=AREA, depth="0-5cm", timeout="120")
+
+
+@pytest.mark.parametrize(
+    ("argument", "name"),
+    [
+        ({"workers": "4"}, "workers"),
+        ({"all_campaigns": "no"}, "all_campaigns"),
+        ({"full_sheet": None}, "full_sheet"),
+    ],
+)
+def test_download_manager_rejects_wrong_types(tmp_path, argument, name):
+    with pytest.raises(ValidationError, match=name):
+        DownloadManager(tmp_path, Mock(), **argument)
+
+
+@pytest.mark.parametrize(
+    ("argument", "name"),
+    [
+        ({"year": "2024"}, "year"),
+        ({"min_density": "12"}, "min_density"),
+        ({"all_campaigns": "no"}, "all_campaigns"),
+    ],
+)
+@pytest.mark.parametrize("call", [download_laz_area, check_laz_area])
+def test_laz_area_rejects_wrong_types_before_wfs(tmp_path, call, argument, name):
+    with pytest.raises(ValidationError, match=name):
+        call(AREA, output_dir=tmp_path, vertical_crs="EVRF2007", **argument)
+
+
+def test_laz_area_rejects_text_workers(tmp_path):
+    with pytest.raises(ValidationError, match="workers"):
+        download_laz_area(
+            AREA, output_dir=tmp_path, vertical_crs="EVRF2007", workers="2"
+        )

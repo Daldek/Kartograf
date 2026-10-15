@@ -518,8 +518,12 @@ class HSGCalculator:
         DownloadError
             An input failed (no HSG is written) or a store failure.
         ValidationError
-            Not exactly one selection, bad mode or a plan of another store.
+            Not exactly one selection, bad mode, a plan of another store or
+            a ``timeout`` that is not a positive number (``"120"``).
         """
+        from kartograf.download.arguments import require_timeout
+
+        require_timeout(timeout)
         sink = NoticeSink(on_notice)
         selection = self._selection(sheet, bbox, geometry, layer, sink)
         result = self._calculate(
@@ -540,6 +544,9 @@ class HSGCalculator:
     ) -> "UpdatePlan":
         """Plan of ``calculate_hsg`` with the same selection, WITHOUT
         downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
+        from kartograf.download.arguments import require_timeout
+
+        require_timeout(timeout)
         sink = NoticeSink(on_notice)
         selection = self._selection(sheet, bbox, geometry, layer, sink)
         return self._check(selection, depth, _HSG_STAT, timeout, sink)

@@ -19,6 +19,7 @@ from typing import Literal, Protocol, cast
 import requests
 
 from kartograf.core.sheet_parser import SheetParser
+from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import (
     CampaignRef,
     campaign_extension,
@@ -491,8 +492,12 @@ class DownloadManager:
         ValidationError
             Invalid year bounds or a provider without campaigns used with
             a year bound, ``all_campaigns=True`` or ``full_sheet=True``;
-            incompatible resolution/CRS.
+            incompatible resolution/CRS; ``workers`` not an ``int`` or a
+            switch not a ``bool``.
         """
+        require_int(workers, "workers")
+        require_bool(all_campaigns, "all_campaigns")
+        require_bool(full_sheet, "full_sheet")
         if year is not None:
             if min_year is not None or max_year is not None:
                 raise ValidationError(
