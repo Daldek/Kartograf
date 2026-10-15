@@ -7,11 +7,14 @@ Tests cover:
 - MetadataCache management (clear, stats, vacuum, close)
 - Lazy opening (no database file until the first write; CLI cache commands)
 - Migration of a legacy database (url_cache table dropped)
-- GugikProvider cache integration (hit, no-coverage hit, miss, K3-safe failure)
-- GugikNmptProvider cache integration (product key "nmpt")
+- GugikProvider cache integration (hit, no-coverage hit, miss, K3-safe failure;
+  key = (variant source, resolution label, vertical CRS, sheet))
+- GugikNmptProvider cache integration (its own variant key "pl.gugik.nmpt")
 - Bdot10kProvider TERYT cache integration (cache passed to PRG discovery, hit)
 - SoilGridsProvider cache parameter acceptance
 - CLI cache commands (stats, clear, path)
+- Index area cache of the availability report (key -> JSON payload, TTL,
+  refresh, management)
 """
 
 import logging
@@ -33,20 +36,30 @@ from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
-from tests.conftest import gfi_record, render_gfi_body
+from tests.conftest import (
+    render_wfs_body,
+    wfs_endpoint,
+    wfs_record,
+    wfs_requests,
+    wfs_response,
+    wfs_types,
+)
 
 SHEET = "N-34-130-D-d-2-4"
+
+# Record cache keys of the variants (variant source, label, vertical CRS, sheet)
+NMT_1M = ("pl.gugik.nmt_1m", "1m", "EVRF2007", SHEET)
+NMT_5M = ("pl.gugik.nmt_5m", "5m", "EVRF2007", SHEET)
+NMPT_1M = ("pl.gugik.nmpt", "1m", "EVRF2007", SHEET)
+NMT_EVRF2007 = wfs_endpoint("nmt_evrf2007")
 
 # A `source` payload with the SkorowidzRecord.to_source keys (cache contract).
 SOURCE = {
     "url": (
         f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/78955/78955_1_{SHEET}.asc"
     ),
-    "index_url": (
-        "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WMS/"
-        "SkorowidzeUkladEVRF2007"
-    ),
-    "layer": "SkorowidzeNMT2024",
+    "index_url": NMT_EVRF2007,
+    "layer": "SkorowidzNMT2024",
     "sheet": SHEET,
     "acquisition_date": "2024-09-03",
     "acquisition_year": "2024",
@@ -63,13 +76,18 @@ SOURCE = {
 }
 
 
-def _gfi_response(body: str) -> Mock:
-    """Fake GetFeatureInfo response with the GUGiK index template."""
-    resp = Mock(spec=requests.Response)
-    resp.status_code = 200
-    resp.text = body
-    resp.raise_for_status = Mock()
-    return resp
+def _wfs_session(records: list[dict], endpoint: str = NMT_EVRF2007) -> Mock:
+    """Session answering ``records`` from ``endpoint``, an empty collection
+    from every other index service (the P10 query of the other height system)."""
+    session = Mock(spec=requests.Session)
+
+    def get(url, *args, **kwargs):
+        if url.startswith(f"{endpoint}?"):
+            return wfs_response(render_wfs_body(records))
+        return wfs_response(render_wfs_body([]))
+
+    session.get.side_effect = get
+    return session
 
 
 # =========================================================================
@@ -453,11 +471,11 @@ class TestMetadataCacheManagement:
 
 
 class TestGugikProviderCacheIntegration:
-    """GugikProvider._resolve_sheet: cache -> index layers -> cache."""
+    """GugikProvider._resolve_sheet: cache -> WFS index -> cache."""
 
     def test_cache_hit_source_skips_network(self, cache):
         """A `source` hit = no network; URL and source_info from the payload."""
-        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        cache.set_record(*NMT_1M, {"source": SOURCE})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(
@@ -469,7 +487,7 @@ class TestGugikProviderCacheIntegration:
         assert provider.source_info(SHEET) == SOURCE
 
     def test_cache_hit_no_coverage_raises_without_network(self, cache):
-        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True})
+        cache.set_record(*NMT_1M, {"no_coverage": True})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(
@@ -480,42 +498,38 @@ class TestGugikProviderCacheIntegration:
             provider._get_opendata_url(SHEET)
         mock_session.get.assert_not_called()
 
-    def test_cache_miss_queries_wms_and_stores_source(self, cache):
-        """Miss: the first layer with a record ends the loop; cache gets `source`."""
-        mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(SHEET)])
-        )
+    def test_cache_miss_queries_wfs_and_stores_source(self, cache):
+        """Miss: one GetFeature of the variant's service; cache gets `source`."""
+        record = wfs_record(SHEET, akt_data="2025-05-01")
+        mock_session = _wfs_session([record])
 
         provider = GugikProvider(
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
         result = provider._get_opendata_url(SHEET)
 
-        expected_url = gfi_record(SHEET)["url"]
-        assert result == expected_url
+        assert result == record["url_do_pobrania"]
         assert mock_session.get.call_count == 1
-        cached = cache.get_record("nmt", "1m", "EVRF2007", SHEET)
-        assert cached["source"]["url"] == expected_url
-        assert cached["source"]["layer"] == "SkorowidzeNMT2026"
+        cached = cache.get_record(*NMT_1M)
+        assert cached["source"]["url"] == record["url_do_pobrania"]
+        assert cached["source"]["index_url"] == NMT_EVRF2007
+        assert cached["source"]["layer"] == "SkorowidzNMT2025"
         assert provider.source_info(SHEET) == cached["source"]
 
     def test_no_coverage_hints_survive_cache(self, cache):
         """NoCoverageError hints: stored in the cache and restored from a hit."""
         sheet = "N-33-90-C-c-2-4"
-        mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(sheet, resolution="5.00 m")])
-        )
+        mock_session = _wfs_session([wfs_record(sheet, resolution="5.00 m")])
         provider = GugikProvider(
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
         with pytest.raises(NoCoverageError) as first:
             provider._get_opendata_url(sheet)
-        assert first.value.hints
-        assert cache.get_record("nmt", "1m", "EVRF2007", sheet)["hints"] == list(
-            first.value.hints
+        assert first.value.hints == (
+            "Skorowidz GUGiK ma ten arkusz w NMT 5m EVRF2007 - uzyj --resolution 5m",
         )
+        key = ("pl.gugik.nmt_1m", "1m", "EVRF2007", sheet)
+        assert cache.get_record(*key)["hints"] == list(first.value.hints)
 
         offline = Mock(spec=requests.Session)
         with pytest.raises(NoCoverageError) as hit:
@@ -526,9 +540,7 @@ class TestGugikProviderCacheIntegration:
         assert hit.value.hints == first.value.hints
 
     def test_old_cache_entry_without_hints_gives_no_hints(self, cache):
-        cache.set_record(
-            "nmt", "1m", "EVRF2007", SHEET, {"no_coverage": True, "message": "Brak. X"}
-        )
+        cache.set_record(*NMT_1M, {"no_coverage": True, "message": "Brak. X"})
         with pytest.raises(NoCoverageError) as hit:
             GugikProvider(
                 session=Mock(spec=requests.Session),
@@ -538,10 +550,9 @@ class TestGugikProviderCacheIntegration:
             )._get_opendata_url(SHEET)
         assert hit.value.hints == ()
 
-    def test_cache_miss_all_layers_empty_stores_no_coverage(self, cache):
-        """Empty responses from ALL layers = confirmed no coverage in the cache."""
-        mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = _gfi_response(render_gfi_body([]))
+    def test_cache_miss_empty_index_stores_no_coverage(self, cache):
+        """A valid empty answer of every yearly type = confirmed no coverage."""
+        mock_session = _wfs_session([])
 
         provider = GugikProvider(
             session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
@@ -549,12 +560,10 @@ class TestGugikProviderCacheIntegration:
         with pytest.raises(NoCoverageError, match=SHEET):
             provider._get_opendata_url(SHEET)
 
-        own = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
-        own_calls = [
-            c for c in mock_session.get.call_args_list if c.args[0].startswith(own)
-        ]
-        assert len(own_calls) == 4  # every layer of its own index
-        cached = cache.get_record("nmt", "1m", "EVRF2007", SHEET)
+        own = wfs_requests(mock_session, NMT_EVRF2007)
+        assert len(own) == 1  # one GetFeature with every yearly type
+        assert own[0]["TYPENAMES"] == ",".join(wfs_types("nmt_evrf2007"))
+        cached = cache.get_record(*NMT_1M)
         assert cached is not None and cached["no_coverage"] is True
         assert "Brak danych" in cached["message"]
 
@@ -570,28 +579,23 @@ class TestGugikProviderCacheIntegration:
             provider._get_opendata_url(SHEET)
 
         assert not isinstance(excinfo.value, NoCoverageError)
-        assert "SkorowidzeNMT2026" in str(excinfo.value)
+        assert "SkorowidzNMT" in str(excinfo.value)
+        assert "wynik bylby niepelny" in str(excinfo.value)
         assert mock_session.get.call_count == 3
         assert sleep.call_count == 2
-        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) is None
+        assert cache.get_record(*NMT_1M) is None
 
     def test_no_cache_backward_compat(self):
         """cache=None: the same resolution, without writing."""
-        mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(SHEET)])
-        )
-
+        record = wfs_record(SHEET)
         provider = GugikProvider(
-            session=mock_session, vertical_crs="EVRF2007", resolution="1m"
+            session=_wfs_session([record]), vertical_crs="EVRF2007", resolution="1m"
         )
-        assert provider._get_opendata_url(SHEET) == gfi_record(SHEET)["url"]
+        assert provider._get_opendata_url(SHEET) == record["url_do_pobrania"]
 
     def test_5m_resolution_with_cache(self, cache):
-        """5m key: a hit without network, a miss writes under ("nmt","5m",...)."""
-        cache.set_record(
-            "nmt", "5m", "EVRF2007", SHEET, {"source": {**SOURCE, "resolution_m": 5.0}}
-        )
+        """5m key: a hit without network, a miss writes under the 5m variant."""
+        cache.set_record(*NMT_5M, {"source": {**SOURCE, "resolution_m": 5.0}})
         mock_session = Mock(spec=requests.Session)
         provider = GugikProvider(
             session=mock_session, resolution="5m", cache=cache, vertical_crs="EVRF2007"
@@ -601,14 +605,14 @@ class TestGugikProviderCacheIntegration:
 
         cache.clear()
         url_5m = "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/5m/x.asc"
-        mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(SHEET, resolution="5.00 m", url=url_5m)])
-        )
+        mock_session.get.side_effect = _wfs_session(
+            [wfs_record(SHEET), wfs_record(SHEET, resolution="5.00 m", url=url_5m)]
+        ).get.side_effect
         assert provider._get_opendata_url(SHEET) == url_5m
-        cached = cache.get_record("nmt", "5m", "EVRF2007", SHEET)
+        cached = cache.get_record(*NMT_5M)
         assert cached["source"]["url"] == url_5m
         assert cached["source"]["resolution_m"] == 5.0
-        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) is None
+        assert cache.get_record(*NMT_1M) is None
 
 
 # =========================================================================
@@ -617,39 +621,41 @@ class TestGugikProviderCacheIntegration:
 
 
 class TestGugikNmptProviderCacheIntegration:
-    """GugikNmptProvider uses the product="nmpt" key (not "nmt")."""
+    """GugikNmptProvider uses its own variant key (not the NMT one)."""
 
     def test_cache_hit_source_skips_network(self, cache):
         nmpt_source = {**SOURCE, "url": "https://opendata.cached.com/nmpt.asc"}
-        cache.set_record("nmpt", "1m", "EVRF2007", SHEET, {"source": nmpt_source})
+        cache.set_record(*NMPT_1M, {"source": nmpt_source})
 
         mock_session = Mock(spec=requests.Session)
         provider = GugikNmptProvider(
-            session=mock_session, cache=cache, vertical_crs="EVRF2007"
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
 
         assert provider._get_opendata_url(SHEET) == nmpt_source["url"]
         mock_session.get.assert_not_called()
 
     def test_nmt_entry_does_not_serve_nmpt(self, cache):
-        """An "nmt" entry is no NMPT hit - the miss goes to the network as "nmpt"."""
-        cache.set_record("nmt", "1m", "EVRF2007", SHEET, {"source": SOURCE})
+        """An NMT entry is no NMPT hit - the miss goes to the NMPT index."""
+        cache.set_record(*NMT_1M, {"source": SOURCE})
         nmpt_url = "https://opendata.geoportal.gov.pl/NumDaneWys/NMPT/1/x.asc"
-        mock_session = Mock(spec=requests.Session)
-        mock_session.get.return_value = _gfi_response(
-            render_gfi_body([gfi_record(SHEET, url=nmpt_url)])
+        nmpt_index = wfs_endpoint("nmpt_evrf2007")
+        mock_session = _wfs_session(
+            [wfs_record(SHEET, product="NMPT", akt_data="2025-05-01", url=nmpt_url)],
+            endpoint=nmpt_index,
         )
 
         provider = GugikNmptProvider(
-            session=mock_session, cache=cache, vertical_crs="EVRF2007"
+            session=mock_session, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         )
         assert provider._get_opendata_url(SHEET) == nmpt_url
 
+        assert len(wfs_requests(mock_session, nmpt_index)) == 1
         assert mock_session.get.call_count == 1
-        cached = cache.get_record("nmpt", "1m", "EVRF2007", SHEET)
+        cached = cache.get_record(*NMPT_1M)
         assert cached["source"]["url"] == nmpt_url
-        assert cached["source"]["layer"] == "SkorowidzeNMPT2026"
-        assert cache.get_record("nmt", "1m", "EVRF2007", SHEET) == {"source": SOURCE}
+        assert cached["source"]["layer"] == "SkorowidzNMPT2025"
+        assert cache.get_record(*NMT_1M) == {"source": SOURCE}
 
 
 # =========================================================================
@@ -1276,6 +1282,7 @@ class TestLazyOpen:
             "campaign_count": 0,
             "teryt_count": 0,
             "sheet_count": 0,
+            "index_area_count": 0,
             "db_size_bytes": 0,
             "db_path": str(cache_path),
             "db_exists": False,
@@ -1718,3 +1725,76 @@ class TestCLICacheCommandsUnreadable:
         captured = capsys.readouterr()
         assert captured.out == f"{db}\n"
         assert captured.err == ""
+
+
+class TestIndexAreaCache:
+    """``index_area_cache``: payloads of the availability report under a key
+    built by the caller (index records, feature types, land masks)."""
+
+    KEY = "wfs|https://example/WFS/Skorowidze|gugik:SkorowidzNMT2025|1,2,3,4"
+    PAYLOAD = [{"sheet": "N-34-130-D-d-2-4", "footprint": [[1.5, 2.5], [3.0, 4.0]]}]
+
+    def test_round_trip_and_replace(self, tmp_path):
+        cache = MetadataCache(tmp_path / "cache.db")
+        assert cache.get_index_area(self.KEY) is None
+
+        cache.set_index_area(self.KEY, self.PAYLOAD)
+        assert cache.get_index_area(self.KEY) == self.PAYLOAD
+        assert cache.get_index_area(self.KEY + "x") is None
+        cache.set_index_area(self.KEY, ["other"])
+        assert cache.get_index_area(self.KEY) == ["other"]
+        assert cache.stats()["index_area_count"] == 1
+        cache.close()
+
+    def test_expired_entry_is_a_miss_and_pruned(self, tmp_path):
+        cache = MetadataCache(tmp_path / "cache.db", ttl_seconds=60)
+        cache.set_index_area(self.KEY, self.PAYLOAD)
+        cache.set_index_area("prg|1,2,3,4", {"country": [], "water": []})
+        later = time.time() + 61
+
+        with patch("time.time", return_value=later):
+            assert cache.get_index_area(self.KEY) is None
+            assert cache.prune_expired() == 1  # the second entry
+        assert cache.stats()["index_area_count"] == 0
+        cache.close()
+
+    def test_refresh_reads_miss_and_writes_replace(self, tmp_path):
+        path = tmp_path / "cache.db"
+        cache = MetadataCache(path)
+        cache.set_index_area(self.KEY, self.PAYLOAD)
+        forced = MetadataCache(path, refresh=True)
+
+        assert forced.get_index_area(self.KEY) is None
+        forced.set_index_area(self.KEY, ["fresh"])
+        assert cache.get_index_area(self.KEY) == ["fresh"]
+        forced.close()
+        cache.close()
+
+    def test_clear_removes_entries(self, tmp_path):
+        cache = MetadataCache(tmp_path / "cache.db")
+        cache.set_index_area(self.KEY, self.PAYLOAD)
+
+        cache.clear()
+
+        assert cache.get_index_area(self.KEY) is None
+        cache.close()
+
+    def test_database_of_older_version_gets_the_table(self, tmp_path):
+        """A cache file written before 0.8.0 (no ``index_area_cache``) is
+        read and written without errors - the table is created on open."""
+        path = tmp_path / "cache.db"
+        conn = sqlite3.connect(path)
+        conn.execute(
+            "CREATE TABLE record_cache (godlo TEXT NOT NULL, resolution TEXT NOT "
+            "NULL, vertical_crs TEXT NOT NULL, product TEXT NOT NULL, payload TEXT "
+            "NOT NULL, cached_at REAL NOT NULL, PRIMARY KEY (godlo, resolution, "
+            "vertical_crs, product))"
+        )
+        conn.commit()
+        conn.close()
+        cache = MetadataCache(path, strict=True)
+
+        assert cache.get_index_area(self.KEY) is None
+        cache.set_index_area(self.KEY, self.PAYLOAD)
+        assert cache.get_index_area(self.KEY) == self.PAYLOAD
+        cache.close()

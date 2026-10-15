@@ -604,8 +604,8 @@ class SheetParser:
 # 1:500k to 1:200k division produces 36 sheets (not 4!)
 children = self._get_children_from_500k()
 
-# NMT 5m exists only in EVRF2007; reject KRON86 before looking up a sheet
-require_nmt_vertical_crs(resolution or "1m", vertical_crs)
+# local import: the registry builds its descriptors from this module
+from kartograf.sources.registry import all_sources
 
 # BAD — states the obvious
 # Set timeout to 30
@@ -733,14 +733,33 @@ def test_parse_valid_sheet(sample_sheet):
 **Izolacja sieci:** `tests/conftest.py` blokuje kazde polaczenie spoza
 loopback (`_block_network`, autouse) — testy jednostkowe MUSZA byc offline;
 siec realna wymaga jawnego markera `@pytest.mark.live` (domyslnie
-odfiltrowanego przez `-m "not live"`), a GetCapabilities WMS jest domyslnie
-serwowane offline przez stub (`_offline_wms_layers`, autouse), ktory testy
-cwiczace sam `_fetch_wms_layers` jawnie wylaczaja markerem
-`@pytest.mark.real_wms_layers`.
+odfiltrowanego przez `-m "not live"`). Dwa autouse stuby serwuja odkrywanie
+warstw skorowidzy bez sieci:
+
+- `_offline_wms_layers` — GetCapabilities WMS skorowidza **ortofotomapy**
+  (NMT/NMPT nie uzywaja juz WMS); testy cwiczace sam `_fetch_wms_layers`
+  wylaczaja go markerem `@pytest.mark.real_wms_layers`.
+- `_offline_wfs_types` — typy roczne uslug WFS skorowidzy NMT i NMPT
+  (EVRF2007, KRON86) z nagranych GetCapabilities
+  `tests/fixtures/gugik_wfs/real_2026_10_15/caps_*.xml` (stub
+  `WfsIndex._fetch_types`; uslugi LAZ nie sa podmieniane); testy, ktore
+  sprawdzaja samo `WfsIndex.feature_types`, wylaczaja go markerem
+  `@pytest.mark.real_wfs_types`.
+
+`RecordedIndex` (`tests/conftest.py`) to atrapa `requests.Session` dla
+skorowidzy WFS NMT/NMPT/LAZ i maski ladu PRG, odpowiadajaca z nagranych
+odpowiedzi (`area_<produkt>_<uklad>_<obszar>.xml.gz`, `caps_*.xml`, PRG
+A00/W02/W03): `GetFeature` dostaje nagrane obiekty typow z `TYPENAMES`,
+ktorych obwiednia przecina `BBOX`, jako jedna strona; parametr `fail`
+podstawia blad albo odpowiedz dla prefiksu URL, `urls` zapisuje kazde
+zapytanie. Kazdy inny URL (w tym plik danych OpenData) to
+`AssertionError` — tak testy raportu dostepnosci dowodza, ze niczego nie
+pobiera.
 
 **Fixtury z realnych odpowiedzi:** odpowiedzi serwerow w testach offline
 buduj z SUROWYCH odpowiedzi zapisanych z prawdziwych uslug (wzor:
-`tests/fixtures/cuzk/`, `tests/fixtures/gugik_skorowidz/`), nie
+`tests/fixtures/cuzk/`, `tests/fixtures/gugik_skorowidz/`,
+`tests/fixtures/gugik_wfs/real_2026_10_15/`), nie
 z wyobrazenia o formacie.
 
 ---

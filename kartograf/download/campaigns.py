@@ -4,8 +4,9 @@ GUGiK campaign identity (ADR-030) — a PL-ONLY mechanism.
 A campaign is one GUGiK data delivery (an index (skorowidz) record). Its
 version label is ``<acquisition date>_<id>``, where ``id`` is the first
 numeric segment of the file name in the URL. File validation reads ASC
-headers or TIFF signatures; ``measure_coverage`` additionally streams ASC
-pixels or reads GeoTIFF mask windows from an already downloaded file.
+headers, TIFF signatures and the signatures of the archive formats (ZIP,
+Intergraph, DXF); ``measure_coverage`` additionally streams ASC pixels or
+reads GeoTIFF mask windows from an already downloaded file.
 ``verify_record_vertical_crs`` checks the vertical datum declared by the
 record (no IO).
 """
@@ -14,6 +15,7 @@ import contextlib
 import hashlib
 import logging
 import re
+import zipfile
 from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
@@ -23,14 +25,19 @@ from urllib.parse import urlparse
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError, ValidationError, YearRangeError
 from kartograf.sources.sidecar import read_asc_header
+from kartograf.sources.variants import FORMATS
 
 logger = logging.getLogger(__name__)
 
 # Second link to the newest local flight declared full in the index (ADR-033).
 FULL_SHEET_DIR = "full_sheet"
 
-# record `format` field -> canonical extension (errata 2 N-2)
-FILE_FORMATS: Mapping[str, str] = {"ARC/INFO ASCII GRID": ".asc"}
+# record `format` field -> canonical extension (errata 2 N-2): every format of
+# the variant registry (ASC grids and the archive formats, ADR-041)
+FILE_FORMATS: Mapping[str, str] = {f.index_name: f.extension for f in FORMATS}
+
+# Extensions whose valid-pixel share can be measured (``measure_coverage``).
+RASTER_EXTENSIONS = (".asc", ".tif")
 
 _ID = re.compile(r"(\d+)_")
 _DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -48,7 +55,18 @@ _AAIGRID_KEYS = (
     "dy",
 )
 _TIFF_SIGNATURES = (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+")
-_FORMAT_NAMES = {".asc": "AAIGrid (ARC/INFO ASCII GRID)", ".tif": "TIFF"}
+_FORMAT_NAMES = {
+    ".asc": "AAIGrid (ARC/INFO ASCII GRID)",
+    ".tif": "TIFF",
+    ".zip": "archiwum ZIP",
+    ".ttn": "Intergraph TTN",
+    ".grd": "Intergraph GRD",
+    ".dxf": "DXF",
+    ".dgn": "DGN",
+}
+# Compound endings of GUGiK archive file names before the sheet code test
+# (B4): `<id>_<n>_<sheet>.xyz.zip`, `.zip.zip`, `_asc.zip`, `_tin.zip`.
+_ARCHIVE_ENDINGS = (".zip.zip", ".xyz.zip", "_asc.zip", "_tin.zip")
 
 # Share of the file extent that must lie inside the sheet frame (B4): a
 # partial sheet lies inside, a neighbour or a file of another place does not.
@@ -353,25 +371,44 @@ def campaign_extension(ref: CampaignRef, default_ext: str) -> str:
     )
 
 
-def verify_file_format(path: Path, ext: str) -> None:
-    """Verify the file content after download (first 64 bytes).
+def _intergraph(head: bytes) -> bool:
+    """IGDS header element (type 9) of Intergraph DGN v7/GRD: level byte
+    ``0x08`` with optional flags, type ``0x09``."""
+    return len(head) >= 2 and head[0] & 0x3F == 0x08 and head[1] == 0x09
 
-    '.asc' -> AAIGrid header, '.tif' -> TIFF/BigTIFF signature. A mismatch,
-    an extension outside {'.asc', '.tif'} or a read error (``OSError``)
-    raises DownloadError.
+
+def verify_file_format(path: Path, ext: str) -> None:
+    """Verify the file content after download.
+
+    '.asc' -> AAIGrid header, '.tif' -> TIFF/BigTIFF signature, archives
+    (ADR-041): '.zip' -> a complete ZIP (central directory readable, so a
+    truncated transfer fails), '.ttn' -> ``TTN`` signature, '.grd'/'.dgn' ->
+    Intergraph header (DGN v8: OLE signature), '.dxf' -> ``SECTION`` in the
+    first group codes. A mismatch, another extension or a read error
+    (``OSError``) raises DownloadError.
     """
     if ext not in _FORMAT_NAMES:
         raise DownloadError(f"{path.name}: brak weryfikacji formatu dla {ext!r}")
     try:
         with path.open("rb") as fh:
             head = fh.read(64)
+        if ext == ".zip":
+            ok = zipfile.is_zipfile(path)
+        elif ext == ".asc":
+            words = head.lstrip().lower().split(None, 1)
+            ok = bool(words) and words[0].decode("ascii", "ignore") in _AAIGRID_KEYS
+        elif ext == ".tif":
+            ok = head.startswith(_TIFF_SIGNATURES)
+        elif ext == ".ttn":
+            ok = head.startswith(b"TTN")
+        elif ext == ".dxf":
+            ok = b"SECTION" in head.upper() and head.lstrip()[:1] == b"0"
+        elif ext == ".dgn":
+            ok = _intergraph(head) or head.startswith(b"\xd0\xcf\x11\xe0")
+        else:  # .grd
+            ok = _intergraph(head)
     except OSError as e:
         raise DownloadError(f"{path.name}: odczyt do weryfikacji formatu: {e}") from e
-    if ext == ".asc":
-        words = head.lstrip().lower().split(None, 1)
-        ok = bool(words) and words[0].decode("ascii", "ignore") in _AAIGRID_KEYS
-    else:
-        ok = head.startswith(_TIFF_SIGNATURES)
     if not ok:
         raise DownloadError(
             f"{path.name}: tresc nie jest {_FORMAT_NAMES[ext]} "
@@ -508,20 +545,35 @@ def measure_coverage(path: Path, ext: str) -> float | None:
     raise DownloadError(f"{path.name}: brak pomiaru pokrycia dla {ext!r}")
 
 
+def _alnum(text: str) -> str:
+    return re.sub(r"[^0-9A-Za-z]", "", text)
+
+
 def verify_record_url(url: str, sheet: str) -> None:
     """The record URL file name must end with the sheet code (B4).
 
     GUGiK names files ``<id>_<number>_<sheet>.<ext>``; a URL without the
     sheet code (or with another one) points to an unknown file. Both codes
-    are compared in canonical form (``SheetParser.sheet``).
+    are compared in canonical form (``SheetParser.sheet``). Archive names
+    (full WFS inventory 2026-10-15): compound endings (``.xyz.zip``,
+    ``.zip.zip``, ``_asc.zip``, ``_tin.zip``), an ``NMT-`` prefix
+    (``NMT-N-33-77-B-c-3-3.zip``) and the code without separators
+    (``NMT-N34121Cb33.xyz.zip``) name the sheet too; a name of another
+    sheet (2 archive records of the inventory) is still an error.
     """
-    stem = PurePosixPath(urlparse(url).path).stem
+    name = PurePosixPath(urlparse(url).path).name
+    lowered = name.lower()
+    ending = next((e for e in _ARCHIVE_ENDINGS if lowered.endswith(e)), None)
+    stem = name[: -len(ending)] if ending else PurePosixPath(name).stem
     token = stem.rsplit("_", 1)[-1]
+    if token.upper().startswith("NMT-"):
+        token = token[4:]
+    expected = SheetParser(sheet).sheet
     try:
-        named = SheetParser(token).sheet
+        named: str | None = SheetParser(token).sheet
     except ValidationError:
         named = None
-    if named != SheetParser(sheet).sheet:
+    if named != expected and _alnum(token) != _alnum(expected):
         raise DownloadError(
             f"URL rekordu skorowidza nie zawiera godla {sheet}: {url}", sheet=sheet
         )

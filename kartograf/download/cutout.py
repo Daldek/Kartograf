@@ -61,7 +61,8 @@ from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.sources.descriptor import TransportKind
-from kartograf.sources.registry import channel_signal
+from kartograf.sources.registry import channel_signal, get_source
+from kartograf.sources.variants import ProductVariant, variants
 from kartograf.transform.crs import CONTENT_POLICY, WARP_MARGIN_PX, PinnedTransform
 
 logger = logging.getLogger(__name__)
@@ -74,7 +75,6 @@ PIXEL_SIZE = 1.0
 CUTOUT_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
 # CONTENT reprojection operation policy (CONTENT_POLICY) and source envelope
 # margin (WARP_MARGIN_PX) — shared with the CZ flow, from transform/crs.py (D9).
-_VERTICAL_CRS = ("EVRF2007", "KRON86")
 # Products of a PL WCS cutout.
 CUTOUT_PRODUCTS = ("nmt", "nmpt")
 # Layers of the PL land mask (sidecar ``extra.mask.layers``, ADR-035).
@@ -177,9 +177,13 @@ def _prepare_pl_cutout(
             f"Nieobslugiwany uklad docelowy wycinka PL: {horizontal_crs} "
             f"(dostepne: {', '.join(CUTOUT_CRS)})"
         )
-    if vertical_crs not in _VERTICAL_CRS:
+    if wcs_variant(product, vertical_crs) is None:
+        systems = sorted(
+            {v.vertical_crs for v in variants(product=product, country="PL")}
+        )
         raise ValidationError(
-            f"Uklad wysokosci NMT PL: EVRF2007 albo KRON86 (podano {vertical_crs})"
+            f"Uklad wysokosci {product.upper()} PL: {' albo '.join(systems)} "
+            f"(podano {vertical_crs})"
         )
 
     from kartograf.providers.cuzk.dmr import bbox_to_crs
@@ -217,7 +221,7 @@ def _prepare_pl_cutout(
             "EPSG:2180",
         )
 
-    key = "pl.gugik.nmpt" if product == "nmpt" else "pl.gugik.nmt_1m"
+    key = _cutout_descriptor_key(product, vertical_crs)
     subdir = get_source(key).resolve_subdir(system="1992", vertical_crs=vertical_crs)
     return PlCutout(
         horizontal_crs=horizontal_crs,
@@ -232,9 +236,21 @@ def _prepare_pl_cutout(
     )
 
 
-def _cutout_descriptor_key(cutout: PlCutout) -> str:
-    """Source descriptor for the cutout's explicit product (always 1m)."""
-    return "pl.gugik.nmpt" if cutout.product == "nmpt" else "pl.gugik.nmt_1m"
+def wcs_variant(product: str, vertical_crs: str) -> ProductVariant | None:
+    """The product's variant with a WCS channel (the 1 m grid, registry)."""
+    for variant in variants(product=product, country="PL", vertical_crs=vertical_crs):
+        channels = get_source(variant.source).channels
+        if any(channel.transport == TransportKind.WCS for channel in channels):
+            return variant
+    return None
+
+
+def _cutout_descriptor_key(product: str, vertical_crs: str) -> str:
+    """Source descriptor of the cutout (the WCS variant: 1 m grid)."""
+    variant = wcs_variant(product, vertical_crs)
+    if variant is None:  # pragma: no cover - guarded by _prepare_pl_cutout
+        raise ValidationError(f"{product.upper()} PL nie ma wycinka WCS")
+    return variant.source
 
 
 def _require_matching_provider(cutout: PlCutout, provider) -> None:
@@ -246,7 +262,7 @@ def _require_matching_provider(cutout: PlCutout, provider) -> None:
     checks = (
         ("vertical_crs", cutout.vertical_crs),
         ("resolution", "1m"),
-        ("descriptor_key", _cutout_descriptor_key(cutout)),
+        ("descriptor_key", _cutout_descriptor_key(cutout.product, cutout.vertical_crs)),
     )
     for attr, expected in checks:
         actual = getattr(provider, attr, None)
@@ -263,7 +279,9 @@ def _wcs_cutout_provider(cutout: PlCutout, cache: MetadataCache | None = None):
     if cutout.product == "nmpt":
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
-        return GugikNmptProvider(vertical_crs=cutout.vertical_crs, cache=cache)
+        return GugikNmptProvider(
+            vertical_crs=cutout.vertical_crs, resolution="1m", cache=cache
+        )
     from kartograf.providers.pl import create_nmt_provider
 
     return create_nmt_provider(
@@ -337,7 +355,7 @@ def write_pl_wcs_cutout_sidecar(
         extra["http"] = http
     b = cutout.bbox_target
     emit_sidecar(
-        _cutout_descriptor_key(cutout),
+        _cutout_descriptor_key(cutout.product, cutout.vertical_crs),
         path,
         request={
             "bbox": bbox_coords(b),
@@ -359,9 +377,9 @@ def _pl_cutout_slot(cutout: PlCutout) -> FileSlot:
     """Version slot for the undated bbox link of this prepared cutout."""
     from kartograf.sources.registry import get_source
 
-    subdir = get_source(_cutout_descriptor_key(cutout)).resolve_subdir(
-        system="1992", vertical_crs=cutout.vertical_crs
-    )
+    subdir = get_source(
+        _cutout_descriptor_key(cutout.product, cutout.vertical_crs)
+    ).resolve_subdir(system="1992", vertical_crs=cutout.vertical_crs)
     return bbox_slot(cutout.output_dir, subdir, cutout.bbox_target, ".tif")
 
 
@@ -372,7 +390,10 @@ def _check_prepared(cutout: PlCutout) -> UpdatePlan:
         slot,
         track="pl_cutout",
         unit=slot.std.stem,
-        signal=channel_signal(_cutout_descriptor_key(cutout), TransportKind.WCS),
+        signal=channel_signal(
+            _cutout_descriptor_key(cutout.product, cutout.vertical_crs),
+            TransportKind.WCS,
+        ),
     )
     return new_plan(store_id(cutout.output_dir), (item,))
 
@@ -456,7 +477,9 @@ def _run_pl_wcs_cutout(
     if provider is not None:
         _require_matching_provider(cutout, provider)
     slot = _pl_cutout_slot(cutout)
-    signal = channel_signal(_cutout_descriptor_key(cutout), TransportKind.WCS)
+    signal = channel_signal(
+        _cutout_descriptor_key(cutout.product, cutout.vertical_crs), TransportKind.WCS
+    )
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
         require_store(plan, store_id(cutout.output_dir))

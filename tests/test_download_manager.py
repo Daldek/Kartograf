@@ -5,6 +5,7 @@ This module contains tests for the DownloadManager class with the new architectu
 - download_sheet -> ASC
 """
 
+from decimal import Decimal
 from pathlib import Path
 from unittest.mock import Mock, PropertyMock
 
@@ -107,8 +108,6 @@ class TestDownloadManagerBasic:
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="5m"),
         )
         assert manager.resolution == "5m"
-        # 5m forces EVRF2007
-        assert manager.vertical_crs == "EVRF2007"
 
     def test_repr_includes_resolution(self, tmp_path):
         """Test that repr contains the resolution."""
@@ -129,7 +128,8 @@ class TestDownloadManagerStorageFromDescriptor:
         from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 
         manager = DownloadManager(
-            output_dir=tmp_path, provider=GugikNmptProvider(vertical_crs="EVRF2007")
+            output_dir=tmp_path,
+            provider=GugikNmptProvider(vertical_crs="EVRF2007", resolution="1m"),
         )
 
         assert manager._storage._subdir == "nmpt/pl_{system}_1m_evrf2007"
@@ -143,7 +143,8 @@ class TestDownloadManagerStorageFromDescriptor:
             provider=GugikProvider(vertical_crs="EVRF2007", resolution="1m"),
         )
         nmpt = DownloadManager(
-            output_dir=tmp_path, provider=GugikNmptProvider(vertical_crs="EVRF2007")
+            output_dir=tmp_path,
+            provider=GugikNmptProvider(vertical_crs="EVRF2007", resolution="1m"),
         )
         g = "N-34-130-D-d-2-4"
 
@@ -191,7 +192,7 @@ class TestDownloadManagerStorageFromDescriptor:
         )
         manager = DownloadManager(
             output_dir=tmp_path,
-            provider=GugikNmptProvider(vertical_crs="EVRF2007"),
+            provider=GugikNmptProvider(vertical_crs="EVRF2007", resolution="1m"),
             storage=storage,
         )
 
@@ -922,45 +923,28 @@ class TestDownloadManagerPL2000:
 
 
 class TestCreateNmtProviderFactory:
-    def test_5m_kron86_raises_with_remedy(self, caplog):
-        """0.7.1: no silent swap to EVRF2007 - an error naming the remedy."""
+    def test_rejects_combination_outside_registry_with_registry_text(self, caplog):
+        """No silent swap of the height system and no list of its own: NMT 5m
+        exists only in EVRF2007, the error names the KRON86 labels of the
+        variant registry (``kartograf.sources.variants``); nothing is logged."""
         import logging
 
         from kartograf.providers.pl import create_nmt_provider
+        from kartograf.sources.variants import variants
+
+        grids = sorted(
+            variants(product="nmt", country="PL", vertical_crs="KRON86", format="ASC"),
+            key=lambda v: v.resolution_m or Decimal(0),
+        )
+        labels = ", ".join(v.label for v in grids if v.label is not None)
+        assert labels
 
         with caplog.at_level(logging.WARNING), pytest.raises(ValidationError) as exc:
             create_nmt_provider(vertical_crs="KRON86", resolution="5m")
         message = str(exc.value)
-        assert "NMT 5m (PL) jest dostepny tylko w EVRF2007" in message
-        assert "uzyj vertical_crs='EVRF2007' albo resolution='1m'" in message
-        assert caplog.text == ""
-
-    def test_require_rule_silent_and_public_rule_unchanged(self, caplog):
-        """``require_nmt_vertical_crs`` never logs; ``nmt_vertical_crs`` keeps
-        its 0.7.0 contract (public API: ``log=True`` warns, still corrects)."""
-        import logging
-
-        from kartograf.providers.pl import nmt_vertical_crs, require_nmt_vertical_crs
-
-        with caplog.at_level(logging.DEBUG):
-            assert require_nmt_vertical_crs("5m", "EVRF2007") == "EVRF2007"
-            assert require_nmt_vertical_crs("1m", "KRON86") == "KRON86"
-            with pytest.raises(ValidationError):
-                require_nmt_vertical_crs("5m", "KRON86")
-        assert caplog.text == ""
-        with caplog.at_level(logging.WARNING):
-            assert nmt_vertical_crs("5m", "KRON86") == "EVRF2007"
-        assert "5m only supports EVRF2007" in caplog.text
-
-    def test_rule_without_log_is_silent(self, caplog):
-        """D11: ``log=False`` checks the explicit factory rule silently."""
-        import logging
-
-        from kartograf.providers.pl import nmt_vertical_crs
-
-        with caplog.at_level(logging.WARNING):
-            assert nmt_vertical_crs("5m", "KRON86", log=False) == "EVRF2007"
-            assert nmt_vertical_crs("1m", "KRON86") == "KRON86"
+        assert "5m (PL) jest dostepny tylko w EVRF2007" in message
+        assert "podano --vertical-crs KRON86" in message
+        assert message.endswith(f"; dostepne w KRON86: {labels}")
         assert caplog.text == ""
 
 
@@ -1120,8 +1104,8 @@ class TestSidecarWritten:
 
         source = {
             "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/1/1_N.asc",
-            "index_url": "https://mapy.geoportal.gov.pl/.../SkorowidzeUkladEVRF2007",
-            "layer": "SkorowidzeNMT2026",
+            "index_url": "https://mapy.geoportal.gov.pl/.../WFS/Skorowidze",
+            "layer": "SkorowidzNMT2026",
             "sheet": "N-34-130-D-d-2-4",
             "acquisition_date": "2026-03-01",
             "resolution_m": 1.0,

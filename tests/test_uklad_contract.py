@@ -2,12 +2,12 @@
 Contract of the single GUGiK horizontal CRS parser (review-1 D3, E11).
 
 The CRS field value (``ukladWspolrzednychPoziomych``/``ukladWspolrzednych``
-of the GUGiK index (skorowidz) and ``uklad_xy`` of the LAZ WFS) is read in
-three places: the index record (sheet file selection),
-``horizontal_crs_for_system`` (sidecar) and ``LazTile.system`` (storage
-segment). Each of them MUST give the same answer - otherwise a ``"PL-2000"``
-tile without a zone ended up in ``laz/pl_2000_...`` with an ``EPSG:2180``
-sidecar.
+of the WMS index (orthophoto), ``uklad_xy`` of the WFS index (NMT/NMPT) and
+of the LAZ WFS) is read in four places: the index records (sheet file
+selection), ``horizontal_crs_for_system`` (sidecar) and ``LazTile.system``
+(storage segment). Each of them MUST give the same answer - otherwise a
+``"PL-2000"`` tile without a zone ended up in ``laz/pl_2000_...`` with an
+``EPSG:2180`` sidecar.
 
 Real values (E2E 2026-10-06: 1131 index records, 294 LAZ tiles): only
 ``PL-1992`` and ``PL-2000:S5``..``S8``. Unusual ones are rejected
@@ -21,10 +21,11 @@ import xml.etree.ElementTree as ET
 import pytest
 
 from kartograf.exceptions import ValidationError
-from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
+from kartograf.providers.pl.gugik_laz import LazTile, laz_tile
 from kartograf.providers.pl.skorowidz import parse_skorowidz_records
+from kartograf.providers.pl.skorowidz_wfs import parse_index_feature
 from kartograf.sources.registry import horizontal_crs_for_system, parse_pl_system
-from tests.conftest import gfi_record, render_gfi_body
+from tests.conftest import gfi_record, render_gfi_body, render_wfs_body, wfs_record
 
 REAL = {
     "PL-1992": ("1992", None, "EPSG:2180"),
@@ -45,6 +46,16 @@ def _skorowidz_record(value: str):
     return record
 
 
+def _wfs_index_record(value: str):
+    body = render_wfs_body([wfs_record("N-34-130-D-d-2-4", system=value)])
+    (feature,) = [
+        elem for elem in ET.fromstring(body).iter() if elem.tag.endswith("NMT2024")
+    ]
+    record = parse_index_feature(feature)
+    assert record is not None
+    return record
+
+
 def _laz_tile(value: str) -> LazTile | None:
     xml = f"""<gugik:SkorowidzDanychPomiarowychLIDAR2024
         xmlns:gugik="http://www.gugik.gov.pl">
@@ -54,9 +65,7 @@ def _laz_tile(value: str) -> LazTile | None:
       <gugik:uklad_xy>{value}</gugik:uklad_xy>
       <gugik:url_do_pobrania>https://x/81121_1_6.162.34.02.3.laz</gugik:url_do_pobrania>
     </gugik:SkorowidzDanychPomiarowychLIDAR2024>"""
-    return GugikLazProvider(vertical_crs="EVRF2007")._feature_to_tile(
-        ET.fromstring(xml)
-    )
+    return laz_tile(ET.fromstring(xml))
 
 
 def _hand_tile(value: str | None) -> LazTile:
@@ -70,6 +79,8 @@ def test_known_value_same_answer_everywhere(value):
     assert parse_pl_system(value) == (system, zone)
     record = _skorowidz_record(value)
     assert (record.system, record.zone) == (system, zone)
+    wfs = _wfs_index_record(value)
+    assert (wfs.system, wfs.zone) == (system, zone)
     assert horizontal_crs_for_system(value) == epsg
     tile = _laz_tile(value)
     assert tile is not None and tile.system == system
@@ -80,6 +91,7 @@ def test_known_value_same_answer_everywhere(value):
 def test_atypical_value_rejected_everywhere(value):
     assert parse_pl_system(value) is None
     assert _skorowidz_record(value).system is None
+    assert _wfs_index_record(value).system is None
     assert horizontal_crs_for_system(value) is None
     # discovery skips the tile rather than write it to pl_2000 with a 2180 sidecar
     assert _laz_tile(value) is None
