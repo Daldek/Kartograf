@@ -952,6 +952,18 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     )
 
 
+# CRSs of a PL-1992 sheet search: the Polish ``--bbox-crs`` values (the
+# PL-2000 zones as for the PL-2000 grid, backlog 0.8.0); envelope via WGS84.
+_PL_1992_BBOX_CRS = (
+    "EPSG:2180",
+    "EPSG:4326",
+    "EPSG:2176",
+    "EPSG:2177",
+    "EPSG:2178",
+    "EPSG:2179",
+)
+
+
 def find_sheets_for_bbox(
     bbox: BBox,
     target_scale: str,
@@ -975,7 +987,9 @@ def find_sheets_for_bbox(
     Parameters
     ----------
     bbox : BBox
-        Bounding box in EPSG:2180 or EPSG:4326
+        Bounding box in EPSG:2180, EPSG:4326 or a PL-2000 zone CRS
+        (EPSG:2176-2179), the Polish CRSs of ``--bbox-crs``; Czech CRSs
+        are converted by the caller with the pinned operation
     target_scale : str
         PL-1992: "1:1000000", "1:500000", "1:200000", "1:100000",
         "1:50000", "1:25000" or "1:10000" (published sheet scale).
@@ -1013,9 +1027,10 @@ def find_sheets_for_bbox(
             f"Dozwolone: {', '.join(SheetParser.SCALE_HIERARCHY)}"
         )
 
-    if bbox.crs not in ("EPSG:2180", "EPSG:4326"):
+    if bbox.crs not in _PL_1992_BBOX_CRS:
         raise ValidationError(
-            f"Nieobslugiwany CRS: '{bbox.crs}'. Obslugiwane: EPSG:2180, EPSG:4326"
+            f"Nieobslugiwany CRS: '{bbox.crs}'. Obslugiwane: "
+            f"{', '.join(_PL_1992_BBOX_CRS)}"
         )
 
     # Normalize to WGS84. Densified envelope (core.bbox): in PUWG 1992 a line of

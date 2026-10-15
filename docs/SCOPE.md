@@ -48,7 +48,8 @@ Kartograf automatyzuje ten proces oferując:
 - Auto-detekcja systemu: SheetParser automatycznie rozpoznaje PL-1992 vs PL-2000
 - Hierarchia arkuszy (get_parent, get_children, get_all_descendants)
 - Bounding box arkusza (EPSG:2180, EPSG:4326, EPSG:2176-2179)
-- Reverse lookup: bbox → godła (find_sheets_for_bbox, find_sheets_2000_for_bbox)
+- Reverse lookup: bbox → godła (find_sheets_for_bbox, find_sheets_2000_for_bbox;
+  bbox w EPSG:2180, EPSG:4326 albo EPSG:2176-2179 dla obu systemów)
 - Reverse lookup: geometry file → godła (find_sheets_for_geometry)
 - Selekcja obszaru: godło, bbox, plik geometrii (SHP/GPKG)
 - Pobieranie przez godło → ASC (OpenData)
