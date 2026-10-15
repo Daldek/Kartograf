@@ -94,18 +94,27 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
    data, *, project_dir) -> dict` (argumenty biblioteki, sciezki
    wzgledne rozstrzygniete wzgledem `project_dir`).
 3. **Tabela komend** (`commands.py`): `TaskCommand(name: str, options:
-   frozenset[str], validate, download, check, files)`;
+   Mapping[str, OptionKind], validate, download, check, files)` - KOREKTA:
+   `options` to klucze JSON (flagi danych komendy, z `bbox_crs`) z rodzajem
+   wartosci (`str`, `int`, `flag`, `bbox`, `bbox_crs`, `path`,
+   `per_country`, `str_list`), wiec pozycja sama opisuje typy do walidacji
+   odczytu (`check_options_json`) i konwersji; pozycje buduja fabryki
+   `_data_command`, `_landcover_command`, `_hsg_command`;
    `COMMANDS: Mapping[str, TaskCommand]` z pozycjami `elevation download`,
    `imagery download`, `landcover download`, `soil download`, `soil hsg`
    (spec 5). Sygnatury:
    `validate(output_dir: Path, options: dict) -> None` (bez sieci,
-   `ValidationError`), `download(output_dir, options, *, update, cache,
-   on_progress, on_notice) -> object`, `check(output_dir, options, *, cache,
-   on_notice) -> UpdatePlan`, `files(result) -> TaskFiles`, gdzie
+   `ValidationError`), `download(output_dir, options, /, *, update, cache,
+   on_progress, on_notice) -> object`, `check(output_dir, options, /, *, cache,
+   on_notice) -> UpdatePlan` (protokoly `TaskDownload`/`TaskCheck`),
+   `files(result) -> TaskFiles`, gdzie
    `TaskFiles(complete: bool, files: tuple[tuple[PinRole, str,
    VersionedFile], ...], errors: tuple[str, ...])` realizuje regule
-   pelnego sukcesu specu 4.6. `on_progress` przekazywany tylko funkcjom,
-   ktore go przyjmuja (dzis `download_data`).
+   pelnego sukcesu specu 4.6; `unit_report_files` (protokol `UnitReport`:
+   `files[].unit/file`, `failed[].error`, `ok`) obsluguje `DataReport`
+   i raporty kolekcji planu C bez zmian. `on_progress` przekazywany tylko
+   funkcjom, ktore go przyjmuja (dzis `download_data`). `model.py`
+   (decyzja 1) powstaje w Task 2, bo tabela uzywa `PinRole`.
 4. **Produkty i zrodla grup w bibliotece:** `ELEVATION_PRODUCTS = ("nmt",
    "nmpt", "laz")` i `IMAGERY_PRODUCTS = ("orto",)` w
    `kartograf/download/options.py`, `LANDCOVER_SOURCES = ("bdot10k",
@@ -283,23 +292,23 @@ class HSGCalculator:
 **Interfaces:** decyzje 2-3 i 6 (bez `PinnedFile` - tabela zwraca
 `VersionedFile`, przypiecia buduje `operations.py`).
 
-- [ ] **Step 1: Testy opcji** - `test_options_json_roundtrip`
+- [x] **Step 1: Testy opcji** - `test_options_json_roundtrip`
   (`BBox` z `EPSG:5514`, `Path` wzgledna i bezwzgledna, `{"pl": "1m",
   "cz": "2m"}`, `layers`, `keep_raw=True`: `options_to_json` i
   `options_from_json` sa odwrotne, `None`/`False` pomijane);
   `test_options_reject_unknown_and_foreign` (`vertical_crs` w `landcover
   download`, `source="soilgrids"` w `landcover download`, `product="nmt"`
   w `imagery download`, `timeout`, `output_dir`, `update` -> `ValidationError`).
-- [ ] **Step 2: Testy walidacji** - `test_validate_matches_library`
+- [x] **Step 2: Testy walidacji** - `test_validate_matches_library`
   (dla kazdej pozycji: przypadek poprawny bez wyjatku i bez sieci,
   przypadek bledny = ten sam typ i tekst co Task 1).
-- [ ] **Step 3: Testy rodzin wyniku** (prawdziwe wywolania z fixtur
+- [x] **Step 3: Testy rodzin wyniku** (prawdziwe wywolania z fixtur
   offline): `test_files_pl_sheet_and_laz_tiles` (wszystkie `VersionedFile`,
   role `output`), `test_files_auto_partial_success_incomplete`
   (`DataReport.ok` i jeden kraj w `failed` -> `complete=False`),
   `test_files_bdot_area_failed_powiat_incomplete`,
   `test_files_bdot_keep_raw_has_raw_role`, `test_files_hsg_output_and_three_inputs`.
-- [ ] **Step 4: Implementacja** - pozycje tabeli wolaja: `download_data`/
+- [x] **Step 4: Implementacja** - pozycje tabeli wolaja: `download_data`/
   `check_data` (`elevation download`, `imagery download`, produkt z
   `ELEVATION_PRODUCTS`/`IMAGERY_PRODUCTS`), `LandCoverManager(output_dir,
   source, cache=cache).download/check` (`landcover download`, `source`
@@ -308,7 +317,7 @@ class HSGCalculator:
   cache=cache).calculate_hsg/check_hsg` (`soil hsg`). Walidacja = Task 1.
   Zbior `options` kazdej pozycji = flagi danych komendy (test zgodnosci
   z parserem w Task 8).
-- [ ] **Step 5: Brama i commit** - `feat(project): tabela komend danych projektu`
+- [x] **Step 5: Brama i commit** - `feat(project): tabela komend danych projektu`
 
 ---
 
