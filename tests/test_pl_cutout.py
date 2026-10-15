@@ -230,13 +230,12 @@ class TestTargetCrsValidations:
         assert rc == 1
         assert "--bbox/--geometry" in capsys.readouterr().err
 
-    @pytest.mark.parametrize("product", ["orto", "laz"])
-    def test_non_height_product_rejected(self, product, tmp_path):
-        """A cutout is an elevation product (nmt, nmpt): the library rejects
-        orto and LAZ (``imagery download`` has no ``--cutout`` at all)."""
+    def test_laz_cutout_rejected(self, tmp_path):
+        """LAZ has no cutout (point files): the library rejects it before any
+        request (orto has its own WCS cutout, ``tests/test_orto_cutout.py``)."""
         with pytest.raises(ValidationError, match="--product nmt"):
             download_data(
-                product=product,
+                product="laz",
                 output_dir=tmp_path,
                 bbox=BBox(530010, 382010, 530190, 382090, "EPSG:2180"),
                 country="pl",

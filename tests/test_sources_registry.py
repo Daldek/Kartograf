@@ -21,6 +21,7 @@ from kartograf.sources.descriptor import (
     TileScheme,
     TransportKind,
     UnitPackageParams,
+    WcsCutoutParams,
 )
 from kartograf.sources.registry import (
     all_countries,
@@ -96,6 +97,7 @@ CHANNEL_SIGNALS = [
     *((key, TransportKind.WFS, "index") for key in PL_SHEET_KEYS),
     *((key, TransportKind.WCS, "none") for key in PL_WCS_KEYS),
     ("pl.gugik.orto", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.orto", TransportKind.WCS, "none"),
     ("pl.gugik.laz", TransportKind.WFS, "index"),
     ("pl.gugik.bdot10k", TransportKind.DIRECT_FILES, "none"),
     ("eu.clms.corine", TransportKind.CLMS_API, "metadata"),
@@ -156,8 +158,13 @@ def test_every_channel_has_an_inventoried_signal():
 
 
 def _collection_channels():
+    """Channels of the collection engines (the WCS cutout channels of the
+    orthophotomap carry provider configuration, ADR-042 D14)."""
     return [
-        (d, ch) for d in sources_for() for ch in d.channels if ch.params is not None
+        (d, ch)
+        for d in sources_for()
+        for ch in d.channels
+        if ch.params is not None and not isinstance(ch.params, WcsCutoutParams)
     ]
 
 

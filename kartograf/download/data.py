@@ -32,7 +32,7 @@ SHEET_CRS_MISMATCH     warning  sheet file CRS differs from the sheet code
 INCOMPLETE_CAMPAIGN    warning  newest campaign declares an incomplete sheet
 CHECK_FAILED           warning  local version used, source check failed
 UNVERIFIED_LOCAL       info     ``upgrade``: local version without a signal
-CUTOUT_SIZE            info     (download_pl_cutout) large cutout
+CUTOUT_SIZE            info     (PL cutouts) several WCS requests or >= 1 GiB
 ALL_NODATA             warning  (cutouts, CZ sheet) raster without data
 LAZ_SUPERSEDED         info     (download_laz_area) skipped LAZ tiles
 CACHE_DISABLED         warning  (open_cache) metadata cache unusable
@@ -63,6 +63,7 @@ from kartograf.download.area import (
 )
 from kartograf.download.arguments import require_int
 from kartograf.download.countries import countries_for_bbox, country_bbox
+from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
@@ -78,6 +79,7 @@ from kartograf.download.options import (
     resolve_pl_options,
     validate_request,
 )
+from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, OrtoCutoutResult
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import (
     DownloadError,
@@ -259,6 +261,7 @@ def download_data(
     scale: str | None = None,
     cutout: bool = False,
     horizontal_crs: str | None = None,
+    coverage: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -285,7 +288,11 @@ def download_data(
     index, whose sheets (any scale) come from the index (ADR-041).
     ``cutout=True`` with ``horizontal_crs`` gives ONE
     cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an area
-    reaching CZ requires it).
+    reaching CZ requires it). ``coverage`` - the orthophotomap cutout only
+    (``product="orto"``, ``cutout=True``, PL, ``horizontal_crs="EPSG:2180"``):
+    the WCS coverage ``"standard"`` or ``"high"``, with the cutout pixel in
+    ``resolution`` (``"0.1m"``, ``"0.25m"``, ``"0.5m"``, ``"1m"``; ADR-042
+    D14); orto sheets take neither.
     ``bbox`` may be in any supported CRS; ``geometry`` is a SHP/GPKG file.
     ``update``/``plan``: modes of every track (``plan`` from ``check_data``
     with ``update="upgrade"``). ``cache``: ``True`` = default metadata cache
@@ -341,6 +348,7 @@ def check_data(
     scale: str | None = None,
     cutout: bool = False,
     horizontal_crs: str | None = None,
+    coverage: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -393,6 +401,7 @@ def validate_data_request(
     scale: str | None = None,
     cutout: bool = False,
     horizontal_crs: str | None = None,
+    coverage: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -444,6 +453,7 @@ _SELECTION = (
     "scale",
     "cutout",
     "horizontal_crs",
+    "coverage",
     "year",
     "min_year",
     "max_year",
@@ -536,7 +546,7 @@ def _dispatch_area(
     # ADR-023 point 5: a choice without a CZ counterpart decides the country
     if auto and len(countries) > 1 and "PL" in countries:
         pl_only = pl_only_flags(
-            task.product, task.vertical_crs, task.resolution, task.format
+            task.product, task.vertical_crs, task.resolution, task.format, task.coverage
         )
         if pl_only:
             run.sink.emit(
@@ -546,6 +556,8 @@ def _dispatch_area(
             )
             auto = False
             countries = ("PL",)
+    if task.product == "orto" and task.cutout and "PL" not in countries:
+        raise ValidationError(ORTO_CUTOUT_PL_ONLY)
     if countries == ("CZ",) and task.product != "nmt":
         raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
     _reject_campaign_opts_without_pl(task, countries)
@@ -1315,34 +1327,53 @@ def _unit_of(path: Path, output_dir: Path) -> str:
 def _download_pl_cutout(
     task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
 ) -> int:
-    """PL cutout (``cutout``) from GUGiK WCS (ADR-035).
+    """PL cutout (``cutout``) from GUGiK WCS: NMT/NMPT (ADR-035) or the
+    orthophotomap (``coverage``, ADR-042 D14).
 
     A source failure is recorded for the PL part; invalid input and unexpected
     errors propagate to the caller.
     """
     from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
+    from kartograf.download.orto_cutout import check_orto_cutout, download_orto_cutout
 
     if run.dry:
         return 0
-    selection = {
+    common = {
         "horizontal_crs": task.horizontal_crs,
         "output_dir": task.output_dir,
-        "vertical_crs": task.vertical_crs,
-        "product": task.product,
         "cache": run.cache,
         "on_notice": run.sink.add,
     }
+    result: PlCutoutResult | OrtoCutoutResult
     try:
-        if run.check:
-            run.plans.append(check_pl_cutout(bbox, **selection))
-            return 0
-        result = download_pl_cutout(
-            bbox,
-            update=run.update,
-            plan=run.loaded,
-            parent_request=parent_request,
-            **selection,
-        )
+        if task.product == "orto":
+            orto = {**common, "coverage": task.coverage, "resolution": task.resolution}
+            if run.check:
+                run.plans.append(check_orto_cutout(bbox, **orto))
+                return 0
+            result = download_orto_cutout(
+                bbox,
+                update=run.update,
+                plan=run.loaded,
+                parent_request=parent_request,
+                **orto,
+            )
+        else:
+            selection = {
+                **common,
+                "vertical_crs": task.vertical_crs,
+                "product": task.product,
+            }
+            if run.check:
+                run.plans.append(check_pl_cutout(bbox, **selection))
+                return 0
+            result = download_pl_cutout(
+                bbox,
+                update=run.update,
+                plan=run.loaded,
+                parent_request=parent_request,
+                **selection,
+            )
     except DownloadError as e:
         return run.fail("PL", "PL", _error_text(e), "download")
     if result.file is not None:
