@@ -21,6 +21,7 @@ from kartograf.cli.download_cmd import (
     _unit_of,
     _update_mode,
     run_with_plan_file,
+    store_path_label,
 )
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
@@ -122,9 +123,8 @@ def _landcover_task(
     """One request: a plan (``--check-updates``) or the files with one status
     line each (spec 4.5)."""
     if args.check_updates:
-        return _report_plan(
-            args, manager.check(**selection, on_notice=_print_notice, **options)
-        )
+        plan = manager.check(**selection, on_notice=_print_notice, **options)
+        return _report_plan(args, plan, store_path_label)
     update = _update_mode(args)
     result = manager.download(
         **selection,

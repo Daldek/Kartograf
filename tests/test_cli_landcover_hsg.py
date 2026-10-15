@@ -90,7 +90,7 @@ def test_landcover_check_writes_plan(tmp_path, capsys):
         rc = _soil(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
     assert rc == 0
     assert fake.coverages == 0
-    assert f"{COORDS}: do pobrania (2.0)" in capsys.readouterr().out
+    assert f"{CLAY}: do pobrania (2.0)" in capsys.readouterr().out
     items = json.loads(plan_file.read_text())["items"]
     assert [(i["track"], i["status"]) for i in items] == [("landcover", "missing")]
     assert not (tmp_path / "out" / "soil").exists()
@@ -172,6 +172,21 @@ def test_landcover_bdot_rerun_unchecked_line(tmp_path, capsys):
     assert "Info: landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja" in (
         captured.err
     )
+
+
+def test_landcover_check_keep_raw_lines_name_each_file(tmp_path, capsys):
+    """GPKG and raw ZIP of one TERYT: two distinct plan lines (backlog 0.8.0)."""
+    with patch(
+        "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
+        return_value=["0208"],
+    ):
+        argv = ["--source", "bdot10k", "--bbox", BBOX_ARG, "--keep-raw"]
+        rc = _lc(tmp_path, *argv, "--check-updates")
+    assert rc == 0
+    assert capsys.readouterr().out.splitlines() == [
+        "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: do pobrania",
+        "landcover/pl_bdot10k_gpkg_zip/teryt/0208.zip: do pobrania",
+    ]
 
 
 def test_landcover_corine_preview_line(tmp_path, capsys, caplog):
@@ -366,8 +381,10 @@ def test_hsg_cli_check_plan_tracks(tmp_path, capsys):
         rc = _hsg(tmp_path, "--check-updates", "--plan", str(plan_file))
     assert rc == 0 and fake.coverages == 0
     out = capsys.readouterr().out
-    for layer in ("clay", "sand", "silt", "hsg"):
-        assert f"{layer} {COORDS}: do pobrania (2.0)" in out
+    for segment in ("clay_0-5cm_mean", "sand_0-5cm_mean", "silt_0-5cm_mean"):
+        line = f"soil/global_soilgrids_{segment}/bbox/{COORDS}.tif: do pobrania (2.0)"
+        assert line in out
+    assert f"hsg/global_soilgrids_0-5cm_mean/bbox/{COORDS}.tif: do pobrania" in out
     items = json.loads(plan_file.read_text())["items"]
     assert [i["track"] for i in items] == ["landcover"] * 3 + ["hsg"]
     assert {i["unit"] for i in items} == {COORDS}
