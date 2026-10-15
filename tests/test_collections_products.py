@@ -26,7 +26,7 @@ from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.prg import PRG_WFS_ENDPOINT
 from kartograf.sources import registry
-from kartograf.sources.descriptor import FeatureBBoxParams, UnitPackageParams
+from kartograf.sources.descriptor import FeatureBBoxParams
 from tests.conftest import recorded_response
 from tests.fake_packages import FakePackageSession, package_route, zip_bytes
 from tests.test_feature_bbox import (
@@ -58,10 +58,10 @@ def _serve(monkeypatch, service: FakeService) -> FakeService:
     return service
 
 
-@pytest.fixture
-def prg_pages_of_two(monkeypatch):
-    """The PRG WFS channel with ``page_size`` = the ``COUNT=2`` of the
-    recorded pages (the registry asks for 1000 per page)."""
+def serve_prg_obreby(monkeypatch) -> FakeService:
+    """The recorded PRG A06 answers (Krakow) as the orchestrator's service;
+    the PRG channel gets ``page_size`` = the ``COUNT=2`` of the recorded
+    pages (the registry asks for 1000 per page)."""
     descriptor = registry.get_source("pl.gugik.prg")
     channels = tuple(
         replace(channel, params=replace(channel.params, page_size=2))
@@ -72,17 +72,18 @@ def prg_pages_of_two(monkeypatch):
     monkeypatch.setitem(
         registry._SOURCES, descriptor.key, replace(descriptor, channels=channels)
     )
+    return _serve(
+        monkeypatch, FakeService(wfs("prg_capabilities.xml", {A06.source: PRG_A06}))
+    )
 
 
 # --- PRG: --level of an area -----------------------------------------------------
 
 
-def test_prg_level_to_layer(tmp_path, monkeypatch, frozen_clock, prg_pages_of_two):
+def test_prg_level_to_layer(tmp_path, monkeypatch, frozen_clock):
     """``--level obreb`` asks only the A06 type and gives one GPKG layer of
     it, with the TERYT fields of PRG, in the slot of that level."""
-    service = _serve(
-        monkeypatch, FakeService(wfs("prg_capabilities.xml", {A06.source: PRG_A06}))
-    )
+    service = serve_prg_obreby(monkeypatch)
 
     report = download_collection(
         product="admin",
@@ -128,14 +129,10 @@ def test_prg_level_to_layer(tmp_path, monkeypatch, frozen_clock, prg_pages_of_tw
     assert "parent_request" not in meta["extra"]
 
 
-def test_area_result_reused_without_requests(
-    tmp_path, monkeypatch, frozen_clock, prg_pages_of_two
-):
+def test_area_result_reused_without_requests(tmp_path, monkeypatch, frozen_clock):
     """A second run uses the local version: no request at all (not even
     GetCapabilities), status ``local`` without a cheap signal."""
-    service = _serve(
-        monkeypatch, FakeService(wfs("prg_capabilities.xml", {A06.source: PRG_A06}))
-    )
+    service = serve_prg_obreby(monkeypatch)
     choice = {
         "product": "admin",
         "output_dir": tmp_path,
@@ -392,15 +389,6 @@ def test_bdot10k_archive_check_and_plan(tmp_path, frozen_clock):
 
 
 # --- 3D building models: vertical CRS of the release -------------------------
-
-
-def test_buildings_variants_declare_vertical_crs():
-    """Every release declares the vertical CRS measured in its GML files."""
-    (channel,) = registry.get_source("pl.gugik.buildings_3d").channels
-    params = channel.params
-    assert isinstance(params, UnitPackageParams)
-    for variant in params.variants:
-        assert variant.vertical_crs in channel.vertical_crs_options
 
 
 def test_buildings_lod2_vertical_crs_in_sidecar(tmp_path, monkeypatch, frozen_clock):

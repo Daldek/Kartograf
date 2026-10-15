@@ -820,6 +820,20 @@ dla PRG i LoD1 2024 = EPSG:9651 sprawdza `tests/test_collections.py`.
 - [ ] **Step 5: Brama i commit** - `feat(cli): grupy boundaries,
   cadastre, models3d i landcover --year dla archiwum BDOT10k`
 
+Korekta przy implementacji (2026-10-15): wspolny ksztalt komend trzech grup
+w module pomocniczym `kartograf/cli/groups/_collection.py`
+(`add_collection_commands`; moduly z `_` nie sa grupami), grupa dodaje
+tylko swoje flagi tresci; teksty `--help` z biblioteki
+(`collection_product_choices`, `collection_level_choices`,
+`collection_variant_choices`, `bdot10k_archive_choices`), brak `--product`
+= `require_collection_product` (blad wymienia tylko produkty grupy, ten sam
+w pozycji projektu). `--horizontal-crs` nie wchodzi do grup planu C (zaden
+plik krajowy PL nie ma kilku ukladow; dochodzi z planem D). Testy:
+`tests/test_cli_collections.py` (tlumaczenie, flagi tylko swoje, bledy),
+`tests/test_cli.py::TestCommandGroups` (nowe grupy, `list-sources`),
+parytet w `tests/test_parity_collections.py` i (archiwum BDOT10k)
+`tests/test_parity_landcover.py`.
+
 ### Task 8: Dokumentacja, live E2E i brama koncowa
 
 **Files:**

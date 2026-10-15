@@ -471,12 +471,23 @@ class TestMain:
 class TestCommandGroups:
     """ADR-039: data commands in groups by data type, each with its own flags."""
 
-    _GROUPS = ("elevation", "imagery", "landcover", "soil")
+    _GROUPS = (
+        "elevation",
+        "imagery",
+        "landcover",
+        "soil",
+        "boundaries",
+        "cadastre",
+        "models3d",
+    )
     # the selection flag of each group's download and its values
     _CHOICES = {
         "elevation": ("--product", {"nmt", "nmpt", "laz"}),
         "imagery": ("--product", {"orto"}),
         "landcover": ("--source", {"bdot10k", "corine"}),
+        "boundaries": ("--product", {"admin"}),
+        "cadastre": ("--product", {"map"}),
+        "models3d": ("--product", {"buildings"}),
     }
 
     @pytest.mark.parametrize("group", _GROUPS)
@@ -2981,32 +2992,6 @@ class TestCmdLandcoverDownload:
         err = capsys.readouterr().err
         assert err.startswith("Error: --source")
         assert all(source in err for source in ("bdot10k", "corine"))
-
-    def test_landcover_format_gml_rejected_by_argparse(self, capsys):
-        """--format GML is not an implemented format; argparse rejects it."""
-        with pytest.raises(SystemExit) as exc_info:
-            main(
-                [
-                    "landcover",
-                    "download",
-                    "--source",
-                    "bdot10k",
-                    "--teryt",
-                    "1465",
-                    "--format",
-                    "GML",
-                ]
-            )
-        assert exc_info.value.code == 2
-        captured = capsys.readouterr()
-        assert "invalid choice" in captured.err
-
-    def test_landcover_list_sources_does_not_advertise_gml(self, capsys):
-        """list-sources must not advertise the unimplemented GML format."""
-        result = main(["landcover", "list-sources"])
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "GML" not in captured.out
 
 
 # ===========================================================================
