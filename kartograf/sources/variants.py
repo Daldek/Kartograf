@@ -15,6 +15,12 @@ rules shared by every reader: the resolution label (K2: ``0.5m``, ``10m``),
 the GUGiK file formats of the index (``ASC`` grids and the archive formats
 downloaded as source files) and the variant error messages. Pure data and
 pure functions, no IO.
+
+CZ variants (plan B, ADR-041 supplement) are the rows of the route table:
+one per (product, resolution or model, height system, sheet system ``sm5``
+/``tm33``) with the channel serving it - the CUZK file (``DIRECT_FILES``)
+or the ImageServer warped onto the tile grid (``ARCGIS_IMAGE``). A CZ
+cutout is not a row: it is the ImageServer channel of the descriptor.
 """
 
 import re
@@ -22,6 +28,7 @@ from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from urllib.parse import urlparse
 
+from kartograf.core.parser_registry import detect_system
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import TransportKind
 
@@ -146,6 +153,28 @@ _BY_INDEX_NAME = {f.index_name: f for f in FORMATS}
 # Display names of products in messages (identifiers stay lowercase).
 _PRODUCT_NAMES = {"nmt": "NMT", "nmpt": "NMPT", "laz": "LAZ"}
 
+# CUZK models (``ProductVariant.model``): the name in messages and the
+# description of the ``--model`` choice (LAZ CZ).
+CZ_MODELS: dict[str, tuple[str, str]] = {
+    "dmr5g": ("DMR 5G", "teren, DMR 5G"),
+    "dmr4g": ("DMR 4G", "teren, siatka 5 m"),
+    "dmp1g": ("DMP 1G", "powierzchnia, DMP 1G"),
+    "dmpok": ("DMP OK", "powierzchnia, korelacja obrazowa"),
+}
+# Sheet systems of the CZ codes (``detect_system`` id -> variant system).
+_CZ_SYSTEMS = {"cz_sm5": "sm5", "cz_tm33": "tm33"}
+# Height systems of the CZ rasters (``--vertical-crs`` texts).
+CZ_VERTICAL_TEXT = (
+    "Bpv (natywny dla S-JTSK/SM5 i uslug ImageServer), EVRF2007 (natywny dla "
+    "plikow ETRS89/TM33; z Bpv przypieta transformacja)"
+)
+# LAZ CZ: a point cloud keeps the CRS of its file, the height system chooses
+# the files (S-JTSK sheets in Bpv, ETRS89 tiles in EVRF2007).
+CZ_LAZ_VERTICAL_TEXT = (
+    "Bpv (arkusze SM5, S-JTSK) albo EVRF2007 (kafle TM33, ETRS89); chmury "
+    "punktow bez transformacji"
+)
+
 
 @dataclass(frozen=True)
 class ProductVariant:
@@ -153,19 +182,24 @@ class ProductVariant:
 
     ``systems``: horizontal systems whose sheets the variant may have - PL
     ``("1992", "2000")`` (which one a sheet has is a fact of the index, not
-    of the registry). ``index_ref`` = the WFS index of the records (PL);
-    ``None`` for variants without one.
+    of the registry), CZ ``("sm5",)`` or ``("tm33",)`` (one row of the route
+    table per sheet system). ``channel``: the transport of the file - PL the
+    WFS index, CZ ``DIRECT_FILES`` (CUZK file) or ``ARCGIS_IMAGE`` (the
+    ImageServer warped onto the TM33 grid). ``index_ref`` = the WFS index of
+    the records (PL); ``None`` for variants without one. ``model``: the CUZK
+    model (``dmr5g``, ``dmr4g``, ``dmp1g``, ``dmpok``); ``None`` in PL.
     """
 
     source: str  # descriptor key = sidecar `dataset` ("pl.gugik.nmt_0_5m")
     product: str  # "nmt" | "nmpt" | "laz"
-    country: str  # "PL"
+    country: str  # "PL" | "CZ"
     resolution_m: Decimal | None  # None: LAZ, TIN/TTN (no resolution in the index)
-    vertical_crs: str  # CLI name: "EVRF2007" | "KRON86"
-    format: str  # FileFormat.token: "ASC", "XYZ", ... ; LAZ: "LAZ"
+    vertical_crs: str  # CLI name: "EVRF2007" | "KRON86" | "Bpv"
+    format: str  # FileFormat.token: "ASC", "XYZ", ... ; LAZ: "LAZ"; CZ: "TIFF"
     systems: tuple[str, ...]
     channel: TransportKind
     index_ref: IndexRef | None
+    model: str | None = None
 
     @property
     def label(self) -> str | None:
@@ -236,11 +270,13 @@ def variants(
     resolution: str | None = None,
     system: str | None = None,
     format: str | None = None,
+    model: str | None = None,
 ) -> tuple[ProductVariant, ...]:
     """Registered variants matching every given filter (registry order).
 
     ``resolution`` compares the label K2 (``"0.5m"``), ``system`` looks into
-    ``ProductVariant.systems``, ``format`` compares the token (``"ASC"``).
+    ``ProductVariant.systems``, ``format`` compares the token (``"ASC"``),
+    ``model`` the CUZK model (``"dmr4g"``).
     """
     # local import: the registry builds its descriptors from this module
     from kartograf.sources.registry import all_sources
@@ -255,6 +291,7 @@ def variants(
         and (resolution is None or variant.label == resolution)
         and (system is None or system in variant.systems)
         and (format is None or variant.format == format)
+        and (model is None or variant.model == model)
     )
 
 
@@ -392,3 +429,190 @@ def find_variant(
     if resolution is not None:
         candidates = tuple(v for v in candidates if v.label == resolution)
     return candidates[0]
+
+
+# =============================================================================
+# CZ (plan B): rows of the route table and their messages
+# =============================================================================
+
+# Sheet systems of CZ variants in messages, with an example code.
+_CZ_SYSTEM_TEXT = {
+    "sm5": ("arkusze SM5 (S-JTSK)", "CTES96"),
+    "tm33": ("kafle TM33 (ETRS89)", "760_5518"),
+}
+
+
+def cz_sheet_system(sheet: str) -> str:
+    """``"sm5"``/``"tm33"``: the system of a CZ sheet code (variant ``systems``).
+
+    Raises
+    ------
+    ValidationError
+        A code outside the CZ systems.
+    """
+    sheet = sheet.strip()
+    system = _CZ_SYSTEMS.get(detect_system(sheet).id)
+    if system is None:
+        raise ValidationError(
+            f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ (arkusz SM5, "
+            "np. CTES96, albo kafel TM33, np. 302_5550)"
+        )
+    return system
+
+
+def _model_name(variant: ProductVariant) -> str:
+    return CZ_MODELS[variant.model][0] if variant.model in CZ_MODELS else "?"
+
+
+def _cz_labels(found: tuple[ProductVariant, ...]) -> str:
+    """``2m (DMR 5G), 5m (DMR 4G)``: labels with the model, by resolution."""
+    named = {
+        v.resolution_m: _model_name(v) for v in found if v.resolution_m is not None
+    }
+    return ", ".join(
+        f"{resolution_label(value)} ({named[value]})" for value in sorted(named)
+    )
+
+
+def cz_resolution_text(product: str) -> str:
+    """``2m (DMR 5G), 5m (DMR 4G)``: the CZ grid labels of a product."""
+    return _cz_labels(variants(product=product, country="CZ"))
+
+
+def cz_model_text() -> str:
+    """``dmr5g (teren, DMR 5G), ...``: the models of LAZ CZ (``--model``)."""
+    models = dict.fromkeys(
+        v.model for v in variants(product="laz", country="CZ") if v.model is not None
+    )
+    return ", ".join(f"{model} ({CZ_MODELS[model][1]})" for model in models)
+
+
+def cz_variant_error(
+    *,
+    product: str,
+    resolution: str | None,
+    vertical_crs: str | None,
+    system: str | None = None,
+) -> str | None:
+    """Error text of a CZ raster choice (``None`` = the choice has a variant).
+
+    ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` for an area
+    (a cutout of the ImageServer: any label of the product). An SM5 sheet
+    may omit ``resolution`` when one label of the product has SM5 files.
+    ``vertical_crs=None`` checks only what does not depend on the height
+    system (the caller reports a missing ``--vertical-crs`` itself).
+    """
+    name = _PRODUCT_NAMES.get(product, product.upper())
+    found = tuple(
+        v for v in variants(product=product, country="CZ") if v.product != "laz"
+    )
+    if not found:
+        return f"--product {product} nie ma wariantow rastrowych w CZ"
+    on_sm5 = tuple(v for v in found if "sm5" in v.systems)
+    sm5_labels = {v.label for v in on_sm5 if v.label is not None}
+    if resolution is None:
+        if system != "sm5" or len(sm5_labels) != 1:
+            return f"--resolution wymagane dla {name} CZ: {_cz_labels(found)}"
+    elif resolution not in {v.label for v in found}:
+        return (
+            f"CZ nie ma rozdzielczosci {resolution} dla {name} - dostepne: "
+            f"{_cz_labels(found)}"
+        )
+    elif system == "sm5" and resolution not in sm5_labels:
+        return (
+            f"Arkusze SM5 {name} CZ sa tylko w {_cz_labels(on_sm5)} - pomin "
+            f"--resolution albo podaj {', '.join(_sorted_labels(on_sm5))}; "
+            f"{resolution}: kafel "
+            "TM33 (np. 302_5550) albo --bbox z --cutout"
+        )
+    if vertical_crs is not None and vertical_crs not in {v.vertical_crs for v in found}:
+        return f"{vertical_crs} nie jest dostepny dla CZ - dostepne: {CZ_VERTICAL_TEXT}"
+    return None
+
+
+def find_cz_variant(
+    *,
+    product: str,
+    resolution: str | None,
+    vertical_crs: str,
+    system: str,
+) -> ProductVariant:
+    """The row of the route table of a CZ raster sheet (decision 2 of plan B).
+
+    ``resolution=None`` selects the only SM5 label of the product.
+
+    Raises
+    ------
+    ValidationError
+        ``cz_variant_error`` of the choice.
+    """
+    error = cz_variant_error(
+        product=product,
+        resolution=resolution,
+        vertical_crs=vertical_crs,
+        system=system,
+    )
+    if error is not None:
+        raise ValidationError(error)
+    return next(
+        v
+        for v in variants(
+            product=product, country="CZ", vertical_crs=vertical_crs, system=system
+        )
+        if resolution is None or v.label == resolution
+    )
+
+
+def cz_laz_error(
+    *, model: str | None, vertical_crs: str | None, system: str | None = None
+) -> str | None:
+    """Error text of a LAZ CZ choice (``None`` = the choice has a variant).
+
+    ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` for an area
+    (the height system decides the files). The files exist only in the pairs
+    S-JTSK + Bpv and ETRS89 + EVRF2007; a point cloud is never transformed.
+    ``vertical_crs=None`` checks only the model.
+    """
+    if model is None:
+        return f"--model wymagane dla --product laz w CZ: {cz_model_text()}"
+    rows = variants(product="laz", country="CZ", model=model)
+    if not rows:
+        return f"--model {model!r}: nieznana wartosc - dostepne: {cz_model_text()}"
+    if vertical_crs is None:
+        return None
+    chosen = tuple(v for v in rows if v.vertical_crs == vertical_crs)
+    if not chosen:
+        return (
+            f"{vertical_crs} nie jest dostepny dla LAZ CZ - dostepne: "
+            f"{CZ_LAZ_VERTICAL_TEXT}"
+        )
+    if system is not None and not any(system in v.systems for v in chosen):
+        native = sorted({v.vertical_crs for v in rows if system in v.systems})
+        other = chosen[0].systems[0]
+        shown, _example = _CZ_SYSTEM_TEXT[system]
+        alternative, example = _CZ_SYSTEM_TEXT[other]
+        return (
+            f"LAZ CZ - {shown} sa tylko w {', '.join(native)}, podano "
+            f"--vertical-crs {vertical_crs} (chmury punktow bez transformacji); "
+            f"{vertical_crs}: {alternative}, np. {example}, albo obszar "
+            "(--bbox/--geometry)"
+        )
+    return None
+
+
+def find_cz_laz_variant(
+    *, model: str | None, vertical_crs: str, system: str | None = None
+) -> ProductVariant:
+    """The LAZ CZ row of a model and height system (``system``: of a sheet code).
+
+    Raises
+    ------
+    ValidationError
+        ``cz_laz_error`` of the choice.
+    """
+    error = cz_laz_error(model=model, vertical_crs=vertical_crs, system=system)
+    if error is not None:
+        raise ValidationError(error)
+    return variants(
+        product="laz", country="CZ", model=model, vertical_crs=vertical_crs
+    )[0]

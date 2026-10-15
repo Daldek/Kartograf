@@ -5,7 +5,10 @@ variant registry (ADR-041), sheet records from the GUGiK WFS index.
 """
 
 import dataclasses
+import json
 import re
+from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -24,6 +27,7 @@ from kartograf.sources.descriptor import (
 )
 from kartograf.sources.registry import (
     all_countries,
+    channel_for,
     channel_signal,
     get_country,
     get_source,
@@ -33,7 +37,7 @@ from kartograf.sources.registry import (
     sources_for,
     vertical_crs_code,
 )
-from kartograf.sources.variants import ProductVariant, variants
+from kartograf.sources.variants import ProductVariant, resolution_label, variants
 
 # Sidecar `dataset` keys of the PL NMT/NMPT sheet sources (ADR-041): ASC grids
 # (`pl.gugik.nmt_1m`, `pl.gugik.nmt_5m` and `pl.gugik.nmpt` = NMPT 1 m keep the
@@ -76,6 +80,32 @@ PL_SHEET_KEYS = PL_GRID_KEYS + PL_ARCHIVE_KEYS
 # Grids with a WCS cutout channel (1 m only)
 PL_WCS_KEYS = ("pl.gugik.nmt_1m", "pl.gugik.nmpt")
 
+# CUZK sources (plan B): rasters of four models and the LAZ of each model.
+CZ_MODEL_KEYS = ("dmr5g", "dmr4g", "dmp1g", "dmpok")
+CZ_KEYS = (
+    *(f"cz.cuzk.{model}" for model in CZ_MODEL_KEYS),
+    *(f"cz.cuzk.{model}_laz" for model in CZ_MODEL_KEYS),
+)
+# key -> (product, resolution, openzu directory, ImageServer service); the
+# recorded publication of 2026-10-15 (tests/fixtures/cuzk/real_2026_10_15)
+_CZ_PUBLICATION = {
+    "cz.cuzk.dmr5g": ("nmt", "2m", None, "dmr5g"),
+    "cz.cuzk.dmr4g": ("nmt", "5m", "DMR4G-TIFF", "dmr4g"),
+    "cz.cuzk.dmp1g": ("nmpt", "2m", None, "dmp1g"),
+    "cz.cuzk.dmpok": ("nmpt", "0.5m", "DMPOK-TIFF", "dmp_obrazova_korelace"),
+    "cz.cuzk.dmr5g_laz": ("laz", None, "DMR5G", None),
+    "cz.cuzk.dmr4g_laz": ("laz", None, "DMR4G", None),
+    "cz.cuzk.dmp1g_laz": ("laz", None, "DMP1G", None),
+    "cz.cuzk.dmpok_laz": ("laz", None, "DMPOK-LAZ", None),
+}
+_CUZK_FIXTURES = Path(__file__).parent / "fixtures" / "cuzk" / "real_2026_10_15"
+_OPENZU_HEAD = {
+    response["url"]: response["status"]
+    for response in json.loads((_CUZK_FIXTURES / "openzu_head.json").read_text())[
+        "responses"
+    ]
+}
+
 EXPECTED_KEYS = {
     *PL_SHEET_KEYS,
     "pl.gugik.orto",
@@ -83,8 +113,7 @@ EXPECTED_KEYS = {
     "pl.gugik.bdot10k",
     "eu.clms.corine",
     "global.isric.soilgrids",
-    "cz.cuzk.dmr5g",
-    "cz.cuzk.dmr4g",
+    *CZ_KEYS,
     "pl.gugik.prg",
     "pl.gugik.egib",
     "pl.gugik.buildings_3d",
@@ -104,6 +133,13 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.dmr5g", TransportKind.ARCGIS_IMAGE, "none"),
     ("cz.cuzk.dmr4g", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.dmr4g", TransportKind.ARCGIS_IMAGE, "none"),
+    ("cz.cuzk.dmp1g", TransportKind.ARCGIS_IMAGE, "none"),
+    ("cz.cuzk.dmpok", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.dmpok", TransportKind.ARCGIS_IMAGE, "none"),
+    *(
+        (f"cz.cuzk.{model}_laz", TransportKind.DIRECT_FILES, "http")
+        for model in CZ_MODEL_KEYS
+    ),
     ("pl.gugik.prg", TransportKind.WFS, "none"),
     ("pl.gugik.prg", TransportKind.DIRECT_FILES, "none"),
     ("pl.gugik.egib", TransportKind.DIRECT_FILES, "none"),
@@ -262,7 +298,11 @@ class TestRegistry:
             k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmpt")
         }
         cz = sources_for(country="CZ")
-        assert {d.key for d in cz} == {"cz.cuzk.dmr4g", "cz.cuzk.dmr5g"}
+        assert {d.key for d in cz} == set(CZ_KEYS)
+        assert {d.key for d in sources_for(country="CZ", product="nmpt")} == {
+            "cz.cuzk.dmp1g",
+            "cz.cuzk.dmpok",
+        }
 
     def test_country_pl(self):
         pl = get_country("PL")
@@ -369,62 +409,100 @@ class TestRegistry:
         cz = get_country("CZ")
         assert cz.code == "CZ"
         assert cz.extent_wgs84 == BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326")
-        assert cz.dataset_keys == ("cz.cuzk.dmr4g", "cz.cuzk.dmr5g")
+        assert cz.dataset_keys == tuple(sorted(CZ_KEYS))
 
     def test_all_countries(self):
         codes = [c.code for c in all_countries()]
         assert codes == ["CZ", "PL"]
 
-    def test_cz_dmr5g_entry_values(self):
-        d = get_source("cz.cuzk.dmr5g")
-        assert d.country == "CZ"
-        assert d.product == "nmt"
-        assert d.resolution == "2m"
-        assert d.storage_subdir == "nmt/cz_dmr5g_{vcrs}"
-        assert d.default_extension == ".tif"
+    @pytest.mark.parametrize("key", CZ_KEYS)
+    def test_cz_entry_matches_publication(self, key):
+        """Endpoints, CRSs and signals of the CUZK channels = the recorded
+        publication (openzu HEAD, ImageServer metadata, 2026-10-15)."""
+        product, resolution, files, service = _CZ_PUBLICATION[key]
+        d = get_source(key)
+        model = key.removeprefix("cz.cuzk.").removesuffix("_laz")
+        assert (d.country, d.product, d.resolution) == ("CZ", product, resolution)
+        assert d.storage_subdir == f"{product}/cz_{model}_{{vcrs}}"
+        assert d.default_extension == (".laz" if product == "laz" else ".tif")
         assert d.license.id == "CC-BY-4.0"
-        assert len(d.channels) == 1
-        ch = d.channels[0]
-        assert ch.transport == TransportKind.ARCGIS_IMAGE
-        assert ch.horizontal_crs == "EPSG:5514"
-        assert ch.vertical_crs_options == ("EPSG:8357",)
-        # ADR-024: exportImage only in native 5514, local reprojection
-        assert ch.server_reprojection is False
-        assert "ADR-024" in ch.notes
-        assert ch.capabilities == frozenset({"bbox_raster"})
-        assert ch.endpoint == (
-            "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr5g/ImageServer"
-        )
-        assert d.tile_scheme.kind == "computable"
-        assert d.tile_scheme.crs == "EPSG:3045"
-        assert (d.tile_scheme.width_m, d.tile_scheme.height_m) == (2000.0, 2000.0)
+        expected = set()
+        if files is not None:
+            for epsg, vertical, sheet in (
+                ("5514", "EPSG:8357", "CTES96"),
+                ("3045", "EPSG:5621", "760_5518"),
+            ):
+                ch = channel_for(key, TransportKind.DIRECT_FILES, f"EPSG:{epsg}")
+                url = f"https://openzu.cuzk.gov.cz/opendata/{files}/epsg-{epsg}/"
+                assert ch.endpoint == url + "{sheet}.zip"
+                assert _OPENZU_HEAD[ch.endpoint.format(sheet=sheet)] == 200
+                assert ch.vertical_crs_options == (vertical,)
+                assert (ch.update_signal, ch.capabilities) == (
+                    "http",
+                    frozenset({"sheet_files"}),
+                )
+                expected.add((TransportKind.DIRECT_FILES, f"EPSG:{epsg}"))
+        if service is not None:
+            ch = channel_for(key, TransportKind.ARCGIS_IMAGE)
+            assert ch.endpoint == (
+                f"https://ags.cuzk.gov.cz/arcgis2/rest/services/{service}/ImageServer"
+            )
+            # ADR-024: requests only in the native EPSG:5514 + Bpv of the service
+            assert (ch.horizontal_crs, ch.vertical_crs_options) == (
+                "EPSG:5514",
+                ("EPSG:8357",),
+            )
+            assert ch.server_reprojection is False and "ADR-024" in ch.notes
+            assert (ch.update_signal, ch.capabilities) == (
+                "none",
+                frozenset({"bbox_raster"}),
+            )
+            published = json.loads(
+                (_CUZK_FIXTURES / f"imageserver_{service}.json").read_text()
+            )
+            pixel = resolution_label(Decimal(str(published["pixelSizeX"])))
+            assert pixel == resolution
+            assert published["spatialReference"]["latestWkid"] == 5514
+            assert published["spatialReference"]["vcsWkid"] == 8357
+            expected.add((TransportKind.ARCGIS_IMAGE, "EPSG:5514"))
+        assert {(c.transport, c.horizontal_crs) for c in d.channels} == expected
 
-    def test_cz_dmr4g_entry_values(self):
-        d = get_source("cz.cuzk.dmr4g")
-        assert d.resolution == "5m"
-        assert d.storage_subdir == "nmt/cz_dmr4g_{vcrs}"
-        transports = [ch.transport for ch in d.channels]
-        assert transports == [TransportKind.DIRECT_FILES, TransportKind.ARCGIS_IMAGE]
-        for ch in d.channels:
-            assert ch.horizontal_crs == "EPSG:5514"
-            assert ch.vertical_crs_options == ("EPSG:8357",)
-        files_ch = d.channels[0]
-        assert files_ch.capabilities == frozenset({"sheet_files"})
-        assert files_ch.server_reprojection is False
-        assert files_ch.endpoint == (
-            "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/{sheet}.zip"
+    @pytest.mark.parametrize("directory", ["DMR5G-TIFF", "DMP1G-TIFF"])
+    def test_cz_models_without_raster_files(self, directory):
+        """DMR 5G and DMP 1G have no raster files (404): ImageServer only."""
+        for url, status in _OPENZU_HEAD.items():
+            if f"/opendata/{directory}/" in url:
+                assert status == 404
+        endpoints = {c.endpoint for d in sources_for(country="CZ") for c in d.channels}
+        assert not any(directory in endpoint for endpoint in endpoints)
+
+    def test_channel_for_by_crs(self):
+        files = "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF"
+        key = "cz.cuzk.dmr4g"
+        tm33 = channel_for(key, TransportKind.DIRECT_FILES, "EPSG:3045")
+        assert tm33.endpoint == f"{files}/epsg-3045/{{sheet}}.zip"
+        sm5 = channel_for(key, TransportKind.DIRECT_FILES, "EPSG:5514")
+        assert sm5.endpoint == f"{files}/epsg-5514/{{sheet}}.zip"
+        assert channel_for(key, TransportKind.ARCGIS_IMAGE).endpoint.endswith(
+            "/dmr4g/ImageServer"
         )
-        image_ch = d.channels[1]
-        assert image_ch.capabilities == frozenset({"bbox_raster"})
-        # ADR-024: we do not trust the server imageSR - local reprojection
-        assert image_ch.server_reprojection is False
-        assert "ADR-024" in image_ch.notes
-        assert image_ch.endpoint == (
-            "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr4g/ImageServer"
-        )
-        assert d.tile_scheme.kind == "index"
-        assert d.tile_scheme.crs == "EPSG:5514"
-        assert (d.tile_scheme.width_m, d.tile_scheme.height_m) == (2500.0, 2000.0)
+        # two file channels: the CRS chooses; none in a CRS: error
+        with pytest.raises(ValidationError, match="kilka kanalow"):
+            channel_for(key, TransportKind.DIRECT_FILES)
+        with pytest.raises(ValidationError, match="nie ma kanalu"):
+            channel_for(key, TransportKind.DIRECT_FILES, "EPSG:2180")
+        with pytest.raises(ValidationError, match="nie ma kanalu"):
+            channel_for("cz.cuzk.dmr5g", TransportKind.DIRECT_FILES, "EPSG:5514")
+
+    def test_channel_signal_by_crs(self):
+        key = "cz.cuzk.dmpok"
+        assert channel_signal(key, TransportKind.DIRECT_FILES, "EPSG:3045") == "http"
+        assert channel_signal(key, TransportKind.DIRECT_FILES, "EPSG:5514") == "http"
+        assert channel_signal(key, TransportKind.ARCGIS_IMAGE, "EPSG:5514") == "none"
+        # channels of one transport with the same signal need no CRS
+        assert channel_signal(key, TransportKind.DIRECT_FILES) == "http"
+        with pytest.raises(ValidationError, match="nie ma kanalu"):
+            channel_signal(key, TransportKind.ARCGIS_IMAGE, "EPSG:3045")
 
 
 class TestDescriptorProviderConsistency:

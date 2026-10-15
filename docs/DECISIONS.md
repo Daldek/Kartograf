@@ -3078,6 +3078,47 @@ CZ (uzupelnienie ADR-041).
   LAZ pyta tylko WFS i PRG; wycinek 1 m bajtowo rowny wycinkowi z `develop`;
   archiwum TBD 25 m pobrane, ZIP kompletny, ponowne uruchomienie lokalne.
 
+**Uzupelnienie: warianty CZ (plan B, 2026-10-15):**
+- R1 dla CZ: wiersz rejestru = wiersz tabeli tras planu B
+  (`docs/superpowers/plans/2026-10-15-plan-b-elevation-cz.md`, decyzja 2):
+  (produkt, rozdzielczosc albo model, uklad wysokosci, system arkuszy
+  `sm5`/`tm33`) z kanalem, ktory go obsluguje - plik CUZK
+  (`DIRECT_FILES`, sygnal `http`) albo ImageServer z lokalnym warpem na
+  siatke kafla (`ARCGIS_IMAGE`, sygnal `none`). `ProductVariant.model`
+  (`dmr5g`, `dmr4g`, `dmp1g`, `dmpok`; PL: `None`). Deskryptory:
+  `cz.cuzk.dmr5g` (NMT 2m), `cz.cuzk.dmr4g` (NMT 5m), `cz.cuzk.dmp1g`
+  (NMPT 2m), `cz.cuzk.dmpok` (NMPT 0.5m) i `cz.cuzk.<model>_laz`; segmenty
+  `nmt|nmpt/cz_<model>_<vcrs>`, `laz/cz_<model>_<vcrs>` (model i uklad
+  wysokosci wyznaczaja plik - bez ukladu poziomego w segmencie).
+  Wycinek CZ nie jest wierszem: to kanal ImageServer deskryptora.
+- Trasy: arkusz SM5 = plik S-JTSK (EPSG:5514, Bpv natywnie; EVRF2007 przez
+  przypieta operacje Bpv->EVRF2007); kafel TM33 w EVRF2007 = plik ETRS89
+  (EPSG:3045, EVRF2007 natywnie wg metadanych CSW zbiorow - bez
+  transformacji, sidecar `vertical_crs = EPSG:5621` bez operacji pionowej);
+  kafel TM33 w Bpv i kazdy kafel modelu bez plikow rastrowych (DMR 5G,
+  DMP 1G: `*-TIFF` = 404) = ImageServer + warp (ADR-024). SM5 dla 2m =
+  `Error:` przed siecia. Kanal wybiera `channel_for(klucz, transport,
+  uklad poziomy)`: deskryptor ma po jednym kanale plikow na system.
+- LAZ CZ: `--model` (API `model=`) wymagane dla `--product laz` w CZ,
+  z PL albo innym produktem = `Error:`. Pliki tylko w parach S-JTSK + Bpv
+  (arkusze SM5) i ETRS89 + EVRF2007 (kafle TM33): uklad wysokosci wybiera
+  pliki obszaru, zla para z godlem = `Error:` przed siecia; chmura punktow
+  bez transformacji (plik 1:1 z ZIP).
+- Raport CZ (`check_availability(country="cz"|"auto")`): arkusze indeksu
+  `KladyMapovychListu` przecinajace obszar (SM5 `PODIL > 0`, TM33
+  `IN_CZ`) i `HEAD` kazdego pliku: 200 = arkusz z plikiem, 404 = brak
+  pliku (`sheets_missing`), inny blad = `DownloadError`; `published` =
+  `Last-Modified`, `size_bytes` = `Content-Length`; bez lat nalotu (CUZK
+  ich nie publikuje). Modele bez plikow rastrowych = `Info:`
+  `cz_service_only`.
+- Odrzucone: zapasowy endpoint `dmp` (alias `dmp_obrazova_korelace`:
+  ten sam opis i katalog); ATOM jako sygnal i zrodlo raportu (`<updated>`
+  = `Last-Modified`, feed 24-31 MB); nowa flaga `--sheet-system` dla LAZ
+  CZ (uklad poziomy wynika z ukladu wysokosci plikow); transformacja chmur
+  punktow (zmienia dane zrodlowe, brak przypietej operacji 3D); drugi tor
+  wyboru modelu rastra (`--model` dla NMT/NMPT - rastry wybiera
+  `--resolution`).
+
 ---
 
 ## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
