@@ -1,0 +1,40 @@
+{
+  "schema": "kartograf-project/1",
+  "output_dir": "/srv/dane/kartograf",
+  "tasks": [
+    {
+      "name": "teren",
+      "command": "elevation download",
+      "options": {
+        "product": "nmt",
+        "sheet": "N-34-130-D-d-2-4",
+        "resolution": "1m",
+        "vertical_crs": "EVRF2007"
+      },
+      "pinned_at": "2026-10-20T08:15:02+00:00",
+      "kartograf_version": "0.8.0",
+      "files": [
+        {
+          "role": "output",
+          "unit": "N-34-130-D-d-2-4",
+          "path": "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc",
+          "version": "nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc",
+          "label": "2022-05-10_83233",
+          "sha256": "10be475e6b5c43d54b8dc832ab9816367e3dad4c1bd59bbba25c2b296a2824c6",
+          "size_bytes": 41029733
+        }
+      ]
+    },
+    {
+      "name": "pokrycie",
+      "command": "landcover download",
+      "options": {
+        "source": "bdot10k",
+        "teryt": "1465"
+      },
+      "pinned_at": null,
+      "kartograf_version": null,
+      "files": []
+    }
+  ]
+}
