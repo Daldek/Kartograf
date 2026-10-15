@@ -117,6 +117,12 @@ from kartograf.download.cz_cutout import (
     check_cz_cutout,
     download_cz_cutout,
 )
+from kartograf.download.cz_laz import (
+    CzLazFailure,
+    CzLazResult,
+    check_cz_laz,
+    download_cz_laz,
+)
 from kartograf.download.cz_sheets import (
     CzSheetResult,
     check_cz_sheet,
@@ -176,7 +182,11 @@ from kartograf.project import (
 )
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
-from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
+from kartograf.providers.cuzk import (
+    CuzkDmrProvider,
+    CuzkLazProvider,
+    create_dmr_provider,
+)
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import (
@@ -253,6 +263,11 @@ __all__ = [
     "CzSheetResult",
     "check_cz_sheet",
     "download_cz_sheet",
+    # Download (LAZ CZ: CUZK point clouds, plan B)
+    "CzLazFailure",
+    "CzLazResult",
+    "check_cz_laz",
+    "download_cz_laz",
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
@@ -279,6 +294,7 @@ __all__ = [
     "CorineProvider",
     "SoilGridsProvider",
     "CuzkDmrProvider",
+    "CuzkLazProvider",
     "create_dmr_provider",
     # TERYT (PRG)
     "discover_teryts_for_bbox",

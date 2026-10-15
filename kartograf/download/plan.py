@@ -3,10 +3,10 @@ Update plan ``kartograf-plan/1`` shared by every download track (spec 4.4).
 
 A plan lists the files of a request with their local version and the source
 freshness signal, WITHOUT downloading anything. Every position belongs to a
-track (``pl_sheet``, ``laz_tile``, ``cz_sheet``, ``pl_cutout``,
+track (``pl_sheet``, ``laz_tile``, ``cz_sheet``, ``cz_laz``, ``pl_cutout``,
 ``cz_cutout``, ``landcover``, ``hsg``, ``collection``); ``unit`` is the task
-unit of the track (sheet code, LAZ tile sheet, CZ sheet, bbox coordinates,
-TERYT, country code of a national file).
+unit of the track (sheet code, LAZ tile sheet, CZ sheet, CZ LAZ sheet, bbox
+coordinates, TERYT, country code of a national file).
 Executing a plan (``--upgrade --plan``) re-checks the signal:
 ``select_planned`` keeps only the planned positions
 whose fresh check is identical, the rest are ``stale``; positions removed
@@ -29,6 +29,7 @@ Track = Literal[
     "pl_sheet",
     "laz_tile",
     "cz_sheet",
+    "cz_laz",
     "pl_cutout",
     "cz_cutout",
     "landcover",
