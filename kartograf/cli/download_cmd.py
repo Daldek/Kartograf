@@ -13,6 +13,7 @@ and ``soil hsg``.
 
 import argparse
 import sys
+import threading
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
@@ -36,17 +37,24 @@ class _ProgressPrinter:
 
     With ``--workers > 1`` ``pending`` reflects the last write (at worst
     a redundant or missing ``\\n`` before ``Error:``). ``used``: something was
-    drawn (a blank line separates the bar from the status lines).
+    drawn (a blank line separates the bar from the status lines). Campaign
+    lines may come from worker threads: one lock keeps them whole.
     """
 
     def __init__(self, workers: int = 1) -> None:
         self.pending = False
         self.used = False
         self.workers = workers
+        self._lock = threading.Lock()
 
     def __call__(self, progress: DownloadProgress) -> None:
         """Print progress bar and status (``start``: a transfer begins;
-        ``tiles``: LAZ tile counter)."""
+        ``tiles``: LAZ tile counter; ``campaigns``/``campaign``: flights of
+        a sheet with several selected campaigns)."""
+        if progress.status in ("campaigns", "campaign"):
+            with self._lock:
+                self._campaign_line(progress)
+            return
         if progress.status == "start":
             if progress.total > 1:  # a sheet hierarchy: "<code> to <scale>"
                 print(
@@ -57,7 +65,6 @@ class _ProgressPrinter:
             else:
                 print(f"Pobieranie {progress.sheet} ({progress.message})...")
             return
-        self.used = True
         if progress.status == "tiles":
             if progress.current == 0:
                 print(
@@ -94,6 +101,27 @@ class _ProgressPrinter:
         else:
             print(line, end="", flush=True)
             self.pending = True
+
+    def _campaign_line(self, progress: DownloadProgress) -> None:
+        """``Kampanie <arkusz> (do pobrania k z n): ...`` before the first
+        flight download of a sheet, then ``Pobieranie <arkusz> <etykieta>
+        (k/n)...`` before each one; ends a pending bar line first."""
+        if self.pending:
+            print()
+            self.pending = False
+        self.used = True
+        if progress.status == "campaigns":
+            print(
+                f"  Kampanie {progress.sheet} (do pobrania {progress.current} z "
+                f"{progress.total}): {progress.message}",
+                flush=True,
+            )
+        else:
+            print(
+                f"  Pobieranie {progress.sheet} {progress.message} "
+                f"({progress.current}/{progress.total})...",
+                flush=True,
+            )
 
 
 def create_progress_callback(quiet: bool = False, workers: int = 1):

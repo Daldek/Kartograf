@@ -2445,6 +2445,12 @@ w tym samym wydaniu (decyzja uzytkownika).
   (k/n)`) z biblioteki (`on_progress`, ADR-037: decyzja w bibliotece, CLI
   tylko drukuje); linie statusu najlepiej od razu po zapisie wersji.
   Sprawdzic tez inne tory wieloplikowe (LAZ, lista arkuszy, BDOT10k).
+  **CZESCIOWO 2026-10-15 (galaz `fix/backlog-0.8.0`):** zdarzenia
+  `campaigns`/`campaign` z biblioteki i linie CLI (test
+  `test_all_campaigns_reports_each_flight_before_download`); LAZ (`k/n
+  kafli`) i lista arkuszy (pasek) juz mialy postep. ZOSTAJE: postep
+  powiatow BDOT10k obszaru (`LandCoverManager.download` bez `on_progress`);
+  linie statusu nadal drukowane po zadaniu (z raportu).
 - [x] **ZROBIONE 2026-10-15 (ADR-039, galaz `feat/cli-groups`): grupy komend CLI wg typu danych (decyzja uzytkownika
   2026-10-13, wchodzi do 0.8.0, BREAKING, bez aliasow - jak errata
   ADR-031):** kazda grupa ma podkomendy `download` (+ `list-sources`,
