@@ -1,0 +1,325 @@
+{
+  "recorded": "2026-10-15",
+  "responses": [
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G/epsg-5514/CTES96.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"2ebbc5e3e89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 12:23:07 GMT",
+        "Content-Length": "3199272",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G/epsg-5514/CTES96.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"b18eccf24d89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 14:14:39 GMT",
+        "Content-Length": "181248",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/CTES96.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"d19f2c604d89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 14:10:33 GMT",
+        "Content-Length": "752795",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G/epsg-5514/CTES96.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"7c8eaeb62e9dd91:0\"",
+        "Last-Modified": "Mon, 12 Jun 2023 13:06:34 GMT",
+        "Content-Length": "3780167",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-TIFF/epsg-5514/CTES96.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"121ee94da39dc1:0\"",
+        "Last-Modified": "Fri, 10 Oct 2025 11:39:46 GMT",
+        "Content-Length": "65832922",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-LAZ/epsg-5514/CTES96.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"159a36ef039dc1:0\"",
+        "Last-Modified": "Fri, 10 Oct 2025 14:16:12 GMT",
+        "Content-Length": "350156715",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G-TIFF/epsg-5514/CTES96.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G-TIFF/epsg-5514/CTES96.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G/epsg-5514/CTES86.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"c98b195d3e89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 12:23:05 GMT",
+        "Content-Length": "698424",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G/epsg-5514/CTES86.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"62a763f24d89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 14:14:38 GMT",
+        "Content-Length": "42518",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/CTES86.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"c0d23b5f4d89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 14:10:31 GMT",
+        "Content-Length": "174699",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G/epsg-5514/CTES86.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"d9c8d8b42e9dd91:0\"",
+        "Last-Modified": "Mon, 12 Jun 2023 13:06:31 GMT",
+        "Content-Length": "1387226",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-TIFF/epsg-5514/CTES86.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"47b4686cda39dc1:0\"",
+        "Last-Modified": "Fri, 10 Oct 2025 11:38:39 GMT",
+        "Content-Length": "16660209",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-LAZ/epsg-5514/CTES86.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"45a3b146f039dc1:0\"",
+        "Last-Modified": "Fri, 10 Oct 2025 14:15:05 GMT",
+        "Content-Length": "89371529",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G-TIFF/epsg-5514/CTES86.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G-TIFF/epsg-5514/CTES86.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G/epsg-3045/760_5518.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"24699c354c89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 14:02:12 GMT",
+        "Content-Length": "265558",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G/epsg-3045/760_5518.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"1ac8bc27e489dc1:0\"",
+        "Last-Modified": "Tue, 20 Jan 2026 08:09:52 GMT",
+        "Content-Length": "14166",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-3045/760_5518.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"c38fbfc1e789dc1:0\"",
+        "Last-Modified": "Tue, 20 Jan 2026 08:35:39 GMT",
+        "Content-Length": "59307",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G/epsg-3045/760_5518.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"4d39c33229dd91:0\"",
+        "Last-Modified": "Mon, 12 Jun 2023 11:37:00 GMT",
+        "Content-Length": "252698",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-TIFF/epsg-3045/760_5518.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"c454c6227a30dd1:0\"",
+        "Last-Modified": "Thu, 20 Aug 2026 08:01:41 GMT",
+        "Content-Length": "4196915",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-LAZ/epsg-3045/760_5518.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"ef7ff9af8330dd1:0\"",
+        "Last-Modified": "Thu, 20 Aug 2026 09:10:04 GMT",
+        "Content-Length": "26587004",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G-TIFF/epsg-3045/760_5518.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G-TIFF/epsg-3045/760_5518.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G/epsg-3045/760_5516.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"d67c90354c89dc1:0\"",
+        "Last-Modified": "Mon, 19 Jan 2026 14:02:12 GMT",
+        "Content-Length": "1310709",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G/epsg-3045/760_5516.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"2adcb027e489dc1:0\"",
+        "Last-Modified": "Tue, 20 Jan 2026 08:09:52 GMT",
+        "Content-Length": "78979",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-3045/760_5516.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"271baac1e789dc1:0\"",
+        "Last-Modified": "Tue, 20 Jan 2026 08:35:39 GMT",
+        "Content-Length": "331497",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G/epsg-3045/760_5516.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"38e8633229dd91:0\"",
+        "Last-Modified": "Mon, 12 Jun 2023 11:37:00 GMT",
+        "Content-Length": "2464829",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-TIFF/epsg-3045/760_5516.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"bb6d5d227a30dd1:0\"",
+        "Last-Modified": "Thu, 20 Aug 2026 08:01:41 GMT",
+        "Content-Length": "29625401",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMPOK-LAZ/epsg-3045/760_5516.zip",
+      "status": 200,
+      "headers": {
+        "ETag": "\"4e73eeae8330dd1:0\"",
+        "Last-Modified": "Thu, 20 Aug 2026 09:10:02 GMT",
+        "Content-Length": "182200683",
+        "Content-Type": "application/x-zip-compressed"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR5G-TIFF/epsg-3045/760_5516.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMP1G-TIFF/epsg-3045/760_5516.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-5514/ZZZZ99.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    },
+    {
+      "url": "https://openzu.cuzk.gov.cz/opendata/DMR4G-TIFF/epsg-3045/100_5000.zip",
+      "status": 404,
+      "headers": {
+        "Content-Length": "1245",
+        "Content-Type": "text/html"
+      }
+    }
+  ]
+}
