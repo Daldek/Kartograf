@@ -88,6 +88,9 @@ class FileSlot:
     ``std`` is the standard (link) path, ``versions_base`` the segment's
     ``versions/`` directory (staging ``.incoming/``), ``versions_root`` the
     hierarchy directory holding ``<label>_<sha8>/`` versions.
+    ``related_roots``: hierarchy directories of related slots (other
+    editions of the same product, format and unit, ADR-042 D7) - content
+    already stored there becomes a ``relabeled`` hardlink, not a copy.
     """
 
     output_dir: Path
@@ -95,6 +98,7 @@ class FileSlot:
     versions_base: Path
     versions_root: Path
     ext: str
+    related_roots: tuple[Path, ...] = ()
 
     @property
     def name(self) -> str:
@@ -317,6 +321,7 @@ def store_file(
             digest,
             lambda data, ref, dg: write_sidecar(data, ref, dg, http),
             signal=http if signal == "http" else None,
+            related_roots=slot.related_roots,
         )
     except BaseException:
         discard_staging(staged, slot)

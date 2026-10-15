@@ -1,18 +1,14 @@
-"""Land cover and HSG segments and slots (versioned store spec 3.4)."""
+"""Segments and unit slots of land cover, HSG and collections (spec 3.4,
+ADR-042 D8)."""
 
 from pathlib import Path
 
 import pytest
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.storage import bbox_cutout_path
+from kartograf.download.storage import bbox_cutout_path, content_segment, unit_slot
 from kartograf.exceptions import ValidationError
-from kartograf.landcover.store import (
-    hsg_segment,
-    landcover_segment,
-    selection_slot,
-    selection_unit,
-)
+from kartograf.landcover.store import hsg_segment, selection_unit
 
 BBOX = BBox(450000.5, 550000, 460000, 560000.25, "EPSG:2180")
 
@@ -28,6 +24,7 @@ BBOX = BBox(450000.5, 550000, 460000, 560000.25, "EPSG:2180")
         ),
         ("pl.gugik.bdot10k", ["gpkg", "zip"], "landcover/pl_bdot10k_gpkg_zip"),
         ("pl.gugik.bdot10k", ["shp"], "landcover/pl_bdot10k_shp"),
+        ("pl.gugik.bdot10k", ["shp", "2024"], "landcover/pl_bdot10k_shp_2024"),
         ("eu.clms.corine", ["2018"], "landcover/eu_corine_2018"),
         ("eu.clms.corine", ["1990", "preview"], "landcover/eu_corine_1990_preview"),
         (
@@ -35,10 +32,12 @@ BBOX = BBox(450000.5, 550000, 460000, 560000.25, "EPSG:2180")
             ["clay", "0-5cm", "Q0.05"],
             "soil/global_soilgrids_clay_0-5cm_q0.05",
         ),
+        ("pl.gugik.prg", ["gmina"], "boundaries/pl_prg_gmina"),
+        ("pl.gugik.egib", [], "cadastre/pl_egib"),
     ],
 )
 def test_segments_lowercase_and_tokens(key, tokens, segment):
-    assert landcover_segment(key, tokens) == segment
+    assert content_segment(key, tokens) == segment
 
 
 def test_hsg_segment():
@@ -49,11 +48,11 @@ def test_hsg_segment():
 @pytest.mark.parametrize("token", ["a b", "a/b", "", "x_y", "..\\x"])
 def test_segment_rejects_unsafe_token(token):
     with pytest.raises(ValidationError):
-        landcover_segment("pl.gugik.bdot10k", ["gpkg", token])
+        content_segment("pl.gugik.bdot10k", ["gpkg", token])
 
 
 def test_teryt_slot_paths(tmp_path):
-    slot = selection_slot(tmp_path, "landcover/pl_bdot10k_gpkg", ".gpkg", teryt="1465")
+    slot = unit_slot(tmp_path, "landcover/pl_bdot10k_gpkg", ".gpkg", teryt="1465")
     assert slot.std == tmp_path / "landcover/pl_bdot10k_gpkg/teryt/1465.gpkg"
     assert slot.versions_root == tmp_path / "landcover/pl_bdot10k_gpkg/versions/teryt"
     assert (slot.segment, slot.hierarchy, slot.name) == (
@@ -61,23 +60,42 @@ def test_teryt_slot_paths(tmp_path):
         "teryt",
         "1465.gpkg",
     )
+    assert slot.related_roots == ()
     assert selection_unit(teryt="1465") == "1465"
 
 
 def test_bbox_slot_matches_cutout_convention(tmp_path):
     segment = "soil/global_soilgrids_clay_0-5cm_mean"
-    slot = selection_slot(tmp_path, segment, ".tif", bbox=BBOX)
+    slot = unit_slot(tmp_path, segment, ".tif", bbox=BBOX)
     assert slot.std == bbox_cutout_path(tmp_path, segment, BBOX, ".tif")
     assert slot.std.name == "450000.5_550000_460000_560000.25.tif"
     assert slot.versions_root == tmp_path / segment / "versions" / "bbox"
     assert selection_unit(bbox=BBOX) == "450000.5_550000_460000_560000.25"
 
 
-def test_bbox_slot_requires_2180(tmp_path):
-    with pytest.raises(ValidationError):
-        selection_slot(
-            tmp_path, "s", ".tif", bbox=BBox(19.0, 50.0, 19.1, 50.1, "EPSG:4326")
-        )
+def test_unit_slot_country_and_native_bbox(tmp_path):
+    """ADR-042 D8: national file under ``country/<code>``, an area result in
+    the native CRS of the service (no conversion in the slot)."""
+    country = unit_slot(tmp_path, "boundaries/pl_prg_shp", ".zip", country="PL")
+    assert country.std == tmp_path / "boundaries/pl_prg_shp/country/pl.zip"
+    assert country.versions_root == tmp_path / "boundaries/pl_prg_shp/versions/country"
+    assert (country.hierarchy, country.name) == ("country", "pl.zip")
+
+    krovak = BBox(-460000.5, -1120000, -450000, -1110000, "EPSG:5514")
+    related = (tmp_path / "x" / "versions" / "bbox",)
+    area = unit_slot(
+        tmp_path,
+        "boundaries/cz_ruian_obec",
+        ".gpkg",
+        bbox=krovak,
+        related_roots=related,
+    )
+    assert area.std == (
+        tmp_path
+        / "boundaries/cz_ruian_obec/bbox/-460000.5_-1120000_-450000_-1110000.gpkg"
+    )
+    assert area.versions_root == tmp_path / "boundaries/cz_ruian_obec/versions/bbox"
+    assert area.related_roots == related
 
 
 @pytest.mark.parametrize(
@@ -89,7 +107,7 @@ def test_bbox_slot_requires_2180(tmp_path):
 )
 def test_sheet_slot_uses_sheet_hierarchy(tmp_path, sheet, canonical, parts):
     segment = "landcover/eu_corine_2018"
-    slot = selection_slot(tmp_path, segment, ".tif", sheet=sheet)
+    slot = unit_slot(tmp_path, segment, ".tif", sheet=sheet)
     assert slot.std == tmp_path.joinpath(segment, *parts, f"{canonical}.tif")
     assert slot.versions_root == tmp_path.joinpath(segment, "versions", *parts)
     assert slot.hierarchy == "/".join(parts)
@@ -100,8 +118,17 @@ def test_sheet_slot_uses_sheet_hierarchy(tmp_path, sheet, canonical, parts):
     "kwargs",
     [{}, {"teryt": "1465", "sheet": "N-34-130-D"}, {"teryt": "1465", "bbox": BBOX}],
 )
-def test_selection_slot_requires_exactly_one(tmp_path, kwargs):
+def test_unit_slot_requires_exactly_one(tmp_path, kwargs):
     with pytest.raises(ValidationError):
-        selection_slot(Path(tmp_path), "s", ".tif", **kwargs)
+        unit_slot(Path(tmp_path), "s", ".tif", **kwargs)
     with pytest.raises(ValidationError):
         selection_unit(**kwargs)
+
+
+@pytest.mark.parametrize(
+    "kwargs", [{"teryt": "../12"}, {"teryt": "1"}, {"country": "pol"}, {"country": ""}]
+)
+def test_unit_slot_rejects_unsafe_unit_names(tmp_path, kwargs):
+    """Unit names become path elements: only TERYT digits and country codes."""
+    with pytest.raises(ValidationError):
+        unit_slot(tmp_path, "s", ".zip", **kwargs)

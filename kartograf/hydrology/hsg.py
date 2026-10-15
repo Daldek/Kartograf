@@ -619,9 +619,10 @@ class HSGCalculator:
         return LandCoverManager(self._output_dir, self._provider)
 
     def _slot(self, selection: dict, depth: str, stat: str) -> "FileSlot":
-        from kartograf.landcover.store import hsg_segment, selection_slot
+        from kartograf.download.storage import unit_slot
+        from kartograf.landcover.store import hsg_segment
 
-        return selection_slot(
+        return unit_slot(
             self._output_dir,
             hsg_segment(depth, stat),
             ".tif",
@@ -1032,9 +1033,9 @@ def _input_plan(
         return None
     from dataclasses import replace
 
-    from kartograf.landcover.store import landcover_segment
+    from kartograf.download.storage import content_segment
 
-    segment = landcover_segment("global.isric.soilgrids", (prop, depth, stat))
+    segment = content_segment("global.isric.soilgrids", (prop, depth, stat))
     return replace(plan, items=tuple(i for i in plan.items if i.segment == segment))
 
 

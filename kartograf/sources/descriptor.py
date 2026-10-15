@@ -182,8 +182,9 @@ class SourceDescriptor:
     provider_name: str  # "GUGiK", "CUZK", ...
     channels: tuple[AccessChannel, ...]
     tile_scheme: TileScheme | None
-    # Segment template {system}/{vcrs} (ADR-026); land cover: a prefix completed
-    # by content tokens (landcover.store.landcover_segment, spec 3.4)
+    # Segment template {system}/{vcrs} (ADR-026); land cover and collections: a
+    # prefix completed by content tokens (download.storage.content_segment,
+    # spec 3.4, ADR-042 D8)
     storage_subdir: str
     default_extension: str
     license: LicenseInfo

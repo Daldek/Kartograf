@@ -394,3 +394,60 @@ def test_new_incoming_dir_survives_concurrent_cleanup(tmp_path, monkeypatch, var
     monkeypatch.setattr(os, "mkdir", racing_mkdir)
     staging = v.new_incoming_dir(tmp_path / "versions")
     assert staging.is_dir() and raced
+
+
+# --- ADR-042 D7: D23 across editions (related slots) ---
+
+
+def commit_edition(root: Path, label: str, *, related=(), body=ASC):
+    staged = stage(root, body)
+    digest = v.read_content(staged, ext=".asc", coverage=False)
+    return v.commit_version(
+        staged,
+        root,
+        NAME,
+        v.VersionRef(label, "edition"),
+        digest,
+        sidecar_writer,
+        related_roots=related,
+    )
+
+
+def test_commit_identical_in_related_slot_is_relabeled(tmp_path):
+    """Identical yearly releases (BDOT10k 2022 = 2023) take the space once."""
+    slot_2022, slot_2023 = tmp_path / "shp_2022", tmp_path / "shp_2023"
+    first = commit_edition(slot_2022, "2022")
+    second = commit_edition(slot_2023, "2023", related=(slot_2022,))
+    assert (second.status, second.label, second.same_as) == (
+        "relabeled",
+        "2023",
+        "2022",
+    )
+    assert second.path.parent.parent == slot_2023
+    assert os.stat(second.path).st_ino == os.stat(first.path).st_ino
+    (own,) = v.list_versions(slot_2023, NAME)
+    assert (own.label, own.label_source) == ("2023", "edition")
+    assert not any((slot_2023 / v.INCOMING_DIR).rglob(NAME))
+
+
+def test_related_slot_ignored_when_own_version_matches(tmp_path):
+    slot_a, slot_b = tmp_path / "a", tmp_path / "b"
+    commit_edition(slot_a, "2022")
+    own = commit_edition(slot_b, "2023")
+    again = commit_edition(slot_b, "2023", related=(slot_a,))
+    assert (again.status, again.path, again.same_as) == ("unchanged", own.path, None)
+
+
+def test_related_slot_different_content_is_new(tmp_path):
+    slot_a, slot_b = tmp_path / "a", tmp_path / "b"
+    first = commit_edition(slot_a, "2022")
+    other = commit_edition(
+        slot_b, "2023", related=(slot_a,), body=ASC.replace("4\n", "5\n")
+    )
+    assert (other.status, other.same_as) == ("new", None)
+    assert os.stat(other.path).st_ino != os.stat(first.path).st_ino
+
+
+def test_missing_related_root_is_ignored(tmp_path):
+    created = commit_edition(tmp_path / "b", "2023", related=(tmp_path / "absent",))
+    assert created.status == "new"
