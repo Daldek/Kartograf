@@ -9,7 +9,7 @@ from kartograf.cli._args import (
     add_quiet,
     add_update_flags,
 )
-from kartograf.cli.download_cmd import cmd_download
+from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.download.options import (
     IMAGERY_PRODUCTS,
@@ -155,7 +155,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Liczba rownoleglych pobran (domyslnie 4; 1 = po kolei)",
     )
     add_quiet(output)
-    download.set_defaults(_handler=partial(cmd_download, products=IMAGERY_PRODUCTS))
+    download.set_defaults(
+        _handler=partial(cmd_download, products=IMAGERY_PRODUCTS),
+        _task=download_task_arguments,
+    )
 
     add_list_sources(
         commands,

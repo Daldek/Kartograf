@@ -49,6 +49,39 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     return 0
 
 
+def area_task_arguments(args: argparse.Namespace) -> dict:
+    """Shared area selection for land cover, SoilGrids and HSG tasks."""
+    return {
+        "sheet": args.sheet,
+        "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
+        "geometry": Path(args.geometry) if args.geometry is not None else None,
+        "layer": args.layer,
+    }
+
+
+def _landcover_options(args: argparse.Namespace) -> dict:
+    options: dict = {}
+    if args.year is not None:
+        options["year"] = args.year
+    if args.format is not None:
+        options["format"] = args.format
+    if args.layers is not None:
+        options["layers"] = args.layers
+    if args.keep_raw:
+        options["keep_raw"] = True
+    return options
+
+
+def landcover_task_arguments(args: argparse.Namespace) -> dict:
+    """Data options shared by ``landcover download`` and ``project add``."""
+    return {
+        "source": args.source,
+        "teryt": args.teryt,
+        **area_task_arguments(args),
+        **_landcover_options(args),
+    }
+
+
 def cmd_landcover_download(args: argparse.Namespace) -> int:
     """``landcover download``: flags -> ``LandCoverManager.download``/``.check``."""
     missing = []
@@ -62,15 +95,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)
         return 1
-    options: dict = {}
-    if args.year is not None:
-        options["year"] = args.year
-    if args.format is not None:
-        options["format"] = args.format
-    if args.layers is not None:
-        options["layers"] = args.layers
-    if args.keep_raw:
-        options["keep_raw"] = True
+    options = _landcover_options(args)
     return run_land_cover(
         args, args.source, options, teryt=args.teryt, workers=args.workers
     )
@@ -85,15 +110,8 @@ def run_land_cover(
     workers: int = 1,
 ) -> int:
     """One store request of ``source`` for the area flags of ``args``."""
-    # one area choice: checked by the library (ValidationError -> Error:)
-    bbox = parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None
-    selection: dict = {
-        "teryt": teryt,
-        "sheet": args.sheet,
-        "bbox": bbox,
-        "geometry": Path(args.geometry) if args.geometry is not None else None,
-        "layer": args.layer,
-    }
+    selection = area_task_arguments(args)
+    selection["teryt"] = teryt
     manager = LandCoverManager(output_dir=Path(args.output), provider=source)
     try:
         return run_with_plan_file(

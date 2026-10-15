@@ -14,6 +14,7 @@ from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.cli.landcover_cmd import (
     cmd_landcover_download,
     cmd_landcover_list_layers,
+    landcover_task_arguments,
 )
 from kartograf.landcover.manager import LANDCOVER_SOURCE_CHOICES, LANDCOVER_SOURCES
 from kartograf.sources.descriptor import SourceDescriptor
@@ -124,7 +125,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "pobran (domyslnie 1)",
     )
     add_quiet(output)
-    download.set_defaults(_handler=cmd_landcover_download)
+    download.set_defaults(
+        _handler=cmd_landcover_download, _task=landcover_task_arguments
+    )
 
     add_list_sources(commands, "landcover", ("landcover",), _source_flag)
 
