@@ -17,9 +17,9 @@ country mappings, sequences) and the JSON form of ``tasks[].options``.
 """
 
 import math
+import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from os import PathLike, fspath
 from pathlib import Path, PurePath
 from types import MappingProxyType
 from typing import Any, Literal, Protocol
@@ -450,8 +450,8 @@ def _json_value(kind: OptionKind, value: object) -> object | None:
     if kind == "flag":
         return True if value is True else None
     if kind == "path":
-        if isinstance(value, str | PathLike) and fspath(value):
-            return PurePath(fspath(value)).as_posix()
+        if isinstance(value, str | os.PathLike) and os.fspath(value):
+            return PurePath(os.fspath(value)).as_posix()
         return None
     if kind == "per_country":
         if isinstance(value, str):
@@ -564,7 +564,9 @@ def options_from_json(
             continue
         elif kind == "path":
             path = Path(str(value))
-            options[name] = path if path.is_absolute() else project_dir / path
+            if not path.is_absolute():
+                path = Path(os.path.abspath(project_dir / path))
+            options[name] = path
         elif kind == "str_list":
             options[name] = tuple(value)
         elif kind == "per_country" and isinstance(value, Mapping):
