@@ -113,17 +113,28 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
    `cli/groups/elevation.py::PRODUCTS`, `cli/groups/imagery.py::PRODUCTS`
    i `cli/groups/landcover.py::SOURCES` importuja je (jedna lista; plany
    A/E dopisuja produkty wylacznie tam). Pozycja tabeli odrzuca produkt
-   albo zrodlo spoza swojej komendy.
+   albo zrodlo spoza swojej komendy tymi samymi funkcjami co CLI:
+   `options.py::require_product(product, products)` (tekst "--product
+   wymagane: ..." grupy) i `manager.py::require_landcover_source(source)`
+   (opis zrodel `LANDCOVER_SOURCE_CHOICES` przeniesiony z CLI).
 5. **Walidacja bez sieci** wydzielona z prologow funkcji pobrania
-   (wywolywana takze przez nie - jedno miejsce, bez zmiany tekstow
-   i kolejnosci bledow): `kartograf/download/data.py::validate_data_request(**selection)`
-   (= `validate_request(_task(**selection))`, `_execute` wola ja jak dzis
-   `validate_request`), `LandCoverManager.validate_request(*, teryt=None,
+   (jedno miejsce, bez zmiany tekstow i kolejnosci bledow):
+   `kartograf/download/data.py::validate_data_request(**selection)` -
+   KOREKTA wzgledem pierwszej wersji planu (`validate_request(_task(...))`
+   nie lapie m.in. braku `vertical_crs` arkusza ani CZ bez rozdzielczosci:
+   te reguly sa w galeziach `_execute`): ten sam `_execute` z `_Run(dry=True)`,
+   w ktorym kazdy tor konczy sie tuz przed pierwszym zapytaniem do zrodla
+   (`_download_pl_sheet`, `_download_pl_sheet_list`, `_download_pl_cutout`,
+   `_download_cz`, `_download_laz`); czytany jest tylko plik geometrii.
+   `LandCoverManager.validate_request(*, teryt=None,
    sheet=None, bbox=None, geometry=None, layer=None, **options)` (=
-   `validate_request_bbox` + `_check_options` + `_selection` z prologu
-   `download`/`check`), `HSGCalculator.validate_request(*, sheet=None,
-   bbox=None, geometry=None, layer=None, depth)` (= `_selection` + kontrola
-   `depth` przez `_check_options` menedzera SoilGrids). Metody nie
+   `_validated`: `validate_request_bbox` + `_check_options` + `_selection`
+   z prologu `download`/`check`; do `_selection` przeniesione z `_jobs`
+   "teryt tylko dla BDOT10k" i dodane parsowanie godla - ten sam blad co
+   wczesniej, tylko przed otwarciem cache), `HSGCalculator.validate_request(*,
+   sheet=None, bbox=None, geometry=None, layer=None, depth)` (= `_validated`:
+   `_selection` + `validate_request` menedzera SoilGrids dla wejscia, uzywane
+   tez przez `calculate_hsg`/`check_hsg`). Metody nie
    wchodza do `__all__` jako nowe nazwy (sa metodami klas juz
    eksportowanych); `validate_data_request` zostaje wewnetrzna.
 6. **PinnedFile z wyniku:** `path = VersionedFile.path.relative_to(store)`,
@@ -245,21 +256,21 @@ class HSGCalculator:
                          layer=None, depth: str) -> None: ...
 ```
 
-- [ ] **Step 1: Testy** - `test_validate_data_request_equals_download_error`
+- [x] **Step 1: Testy** - `test_validate_data_request_equals_download_error`
   (parametryzacja: brak `vertical_crs`, dwa wybory obszaru, `bbox` bez
   `country`, `resolution` spoza listy: ten sam typ i tekst wyjatku co
   `download_data` z tymi samymi argumentami, zero zapytan);
   `test_landcover_validate_request_equals_download_error` (CORINE bez
   `year`, `layers` z SHP, zly TERYT, dwa wybory, opcja innego zrodla);
   `test_hsg_validate_request_rejects_depth_and_selection`.
-- [ ] **Step 2: Implementacja** - wydziel funkcje/metody z prologow
+- [x] **Step 2: Implementacja** - wydziel funkcje/metody z prologow
   `_execute`, `LandCoverManager.download`/`check`,
   `HSGCalculator.calculate_hsg`/`check_hsg` i wywolaj je w tych
   prologach. Przenies krotki produktow i zrodel; grupy CLI importuja je
   z biblioteki. Istniejace testy (`tests/test_parity*.py`,
   `tests/test_input_errors.py`, `tests/test_cli*.py`) bez zmian
   i zielone.
-- [ ] **Step 3: Brama i commit** - `refactor(api): walidacja wyboru bez sieci i listy produktow grup w bibliotece`
+- [x] **Step 3: Brama i commit** - `refactor(api): walidacja wyboru bez sieci i listy produktow grup w bibliotece`
 
 ---
 

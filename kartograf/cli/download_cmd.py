@@ -22,7 +22,7 @@ from kartograf.cli._args import parse_bbox_arg
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
-from kartograf.download.options import product_choices
+from kartograf.download.options import require_product
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
@@ -404,8 +404,8 @@ def cmd_download(
     checked by argparse ``choices`` and by the library). ``None``: the
     library message naming every product of ``download_data``.
     """
-    if args.product is None and products is not None:
-        raise ValidationError(f"--product wymagane: {product_choices(products)}")
+    if products is not None:
+        require_product(args.product, products)
     return run_with_plan_file(args, _cmd_download)
 
 

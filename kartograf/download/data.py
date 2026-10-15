@@ -148,7 +148,12 @@ class DataReport:
 
 @dataclass
 class _Run:
-    """State of one call: collected files, failures, plans and notices."""
+    """State of one call: collected files, failures, plans and notices.
+
+    ``dry``: validation only (``validate_data_request``) - every track
+    returns right before its first request to the source (no provider, no
+    cache, nothing written), after all checks the download makes there.
+    """
 
     sink: NoticeSink
     update: UpdateMode | None
@@ -162,6 +167,7 @@ class _Run:
     stale: list[PlanItem] = field(default_factory=list)
     superseded: list[SupersededLazTile] = field(default_factory=list)
     plans: list[UpdatePlan] = field(default_factory=list)
+    dry: bool = False
 
     def add(
         self,
@@ -367,6 +373,57 @@ def check_data(
     for other in run.plans[1:]:
         merged = merged.merge(other)
     return merged
+
+
+def validate_data_request(
+    *,
+    product: str | None,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    country: str | None = None,
+    vertical_crs: str | Mapping[str, str] | None = None,
+    resolution: str | Mapping[str, str] | None = None,
+    sheet_system: str | None = None,
+    scale: str | None = None,
+    cutout: bool = False,
+    horizontal_crs: str | None = None,
+    year: int | None = None,
+    min_year: int | None = None,
+    max_year: int | None = None,
+    all_campaigns: bool = False,
+    full_sheet: bool = False,
+    min_density: int | None = None,
+) -> None:
+    """Every check ``download_data``/``check_data`` make before their first
+    request, without network and without writing (``project add``, ADR-040).
+
+    The same dispatch as ``download_data`` with every track stopping right
+    before its source, so an invalid choice raises exactly what the download
+    raises (type, text and order of the checks). A ``geometry`` file is read
+    (layer, envelope, sheets of the features); nothing else is touched.
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice (``ParseError``: malformed sheet code).
+    TransformError
+        No safe pinned operation for the request area.
+    """
+    task = _task(**_selection_kwargs(locals()))
+    run = _Run(
+        sink=NoticeSink(None),
+        update=None,
+        check=False,
+        loaded=None,
+        cache=False,
+        workers=1,
+        on_progress=None,
+        dry=True,
+    )
+    _execute(task, run)
 
 
 _SELECTION = (
@@ -688,6 +745,8 @@ def _announcer(run: _Run, unit: str, details: str) -> Callable[[], None]:
 
 def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
     """PL sheet code (validated): one sheet, a coarser code or a ``scale`` list."""
+    if run.dry:
+        return 0
     label = _product_label(task.product, task.resolution)
     with open_cache(
         run.cache, force=run.update == "force", on_notice=run.sink.add
@@ -811,6 +870,8 @@ def _download_pl_sheet_list(
     target_scale: str,
 ) -> int:
     """PL sheet list (area without ``cutout``): manager + finish (D15)."""
+    if run.dry:
+        return 0
     sample = sheets if len(sheets) <= 10 else sheets[:3] + ["..."] + sheets[-2:]
     run.sink.emit(
         "info",
@@ -1141,6 +1202,8 @@ def _download_pl_cutout(
     """
     from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
 
+    if run.dry:
+        return 0
     selection = {
         "horizontal_crs": task.horizontal_crs,
         "output_dir": task.output_dir,
@@ -1189,6 +1252,8 @@ def _download_cz(
     resolution = country_value(task.resolution, "CZ") or "5m"  # only SM5 omits it
     vertical_crs = country_value(task.vertical_crs, "CZ")
     assert vertical_crs is not None  # required: checked by cz_option_error
+    if run.dry:
+        return 0
     common = {
         "output_dir": task.output_dir,
         "vertical_crs": vertical_crs,
@@ -1259,6 +1324,8 @@ def _download_laz(task: SimpleNamespace, run: _Run) -> int:
             "--product laz jest dostepny tylko dla PL, a obszar "
             "przecina CZ (LAZ dla CZ: etap 2); uzyj jawnie --country pl"
         )
+    if run.dry:
+        return 0
     selection = {
         "output_dir": task.output_dir,
         "vertical_crs": task.vertical_crs,

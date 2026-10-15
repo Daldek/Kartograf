@@ -521,7 +521,7 @@ class HSGCalculator:
             Not exactly one selection, bad mode or a plan of another store.
         """
         sink = NoticeSink(on_notice)
-        selection = self._selection(sheet, bbox, geometry, layer, sink)
+        selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
         result = self._calculate(
             selection, depth, _HSG_STAT, update, plan, timeout, sink
         )
@@ -541,8 +541,46 @@ class HSGCalculator:
         """Plan of ``calculate_hsg`` with the same selection, WITHOUT
         downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
         sink = NoticeSink(on_notice)
-        selection = self._selection(sheet, bbox, geometry, layer, sink)
+        selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
         return self._check(selection, depth, _HSG_STAT, timeout, sink)
+
+    def validate_request(
+        self,
+        *,
+        sheet: str | None = None,
+        bbox: "BBox | None" = None,
+        geometry: str | Path | None = None,
+        layer: str | None = None,
+        depth: str,
+    ) -> None:
+        """Every check of ``calculate_hsg``/``check_hsg`` before the first
+        request: one selection and the input depth (no network, nothing
+        written; a ``geometry`` file is read for its envelope) - the same
+        exception type and text as ``calculate_hsg`` (``project add``,
+        ADR-040).
+
+        Raises
+        ------
+        ValidationError
+            Not exactly one selection, an invalid sheet code or depth.
+        """
+        self._validated(sheet, bbox, geometry, layer, depth, NoticeSink(None))
+
+    def _validated(
+        self,
+        sheet: str | None,
+        bbox: "BBox | None",
+        geometry: str | Path | None,
+        layer: str | None,
+        depth: str,
+        sink: NoticeSink,
+    ) -> dict:
+        """The selection, then the depth by the input manager's own checks."""
+        selection = self._selection(sheet, bbox, geometry, layer, sink)
+        self._manager().validate_request(
+            **_where(selection), property=_INPUTS[0], depth=depth, stat=_HSG_STAT
+        )
+        return selection
 
     @staticmethod
     def _selection(
