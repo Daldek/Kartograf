@@ -3,7 +3,8 @@
 Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
 (Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
 geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT PL
-(`--cutout --horizontal-crs`) i zapisuje je w uporządkowanym katalogu `data/`
+(`--cutout --horizontal-crs`) — także granice, ewidencję i modele 3D
+budynków GUGiK — i zapisuje je w uporządkowanym katalogu `data/`
 razem z metadanymi każdego pliku. Działa
 jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
@@ -20,6 +21,10 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **Ortofotomapa** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm)
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
+- **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu
+- **Granice administracyjne (PRG)** — granice jednostek administracyjnych i ewidencyjnych z GUGiK
+- **EGiB** — mapa ewidencyjna z GUGiK (działki i budynki)
+- **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
 - **SoilGrids** — globalne dane glebowe (ISRIC)
 - **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
@@ -59,6 +64,12 @@ kartograf elevation download --sheet 302_5550 --country cz --product nmt --resol
 # Pokrycie terenu i grupy hydrologiczne gleb
 kartograf landcover download --source bdot10k --teryt 1465 -o ./data
 kartograf soil hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
+
+# Granice, ewidencja, modele 3D budynków i archiwum BDOT10k (GUGiK)
+kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
+kartograf cadastre download --product map --teryt 1261 -o ./data
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
+kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
 ```
 
 Pełna lista opcji: `kartograf <grupa> <komenda> --help`. Więcej przykładów, wybór

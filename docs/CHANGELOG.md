@@ -469,8 +469,56 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   przeniesiono z parserow CLI do biblioteki (`download/options.py`,
   `landcover/manager.py`): grupy CLI i manifest projektu korzystaja
   z tych samych wyborow (zmiana wewnetrzna).
+- Nowa zaleznosc wykonawcza `pyogrio>=0.10` (GDAL wektorowy; kolo z wlasnym
+  GDAL, ok. 100 MB obok GDAL `rasterio`): zapis GeoPackage wyniku obszaru
+  `boundaries`/`cadastre download` (ADR-042 D5). Co zrobic: zaktualizuj
+  instalacje (`pip install -U kartograf` albo `pip install -e .` w repo) -
+  `pyogrio` instaluje sie razem z pakietem; bez niego pobranie obiektow
+  obszaru konczy sie bledem importu (paczki i pozostale komendy dzialaja).
+- `landcover download --format` przyjmuje takze `GML`, wylacznie z `--year`
+  (archiwum rocznikow BDOT10k); `--year` przy `--source bdot10k` oznacza
+  rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
+  (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
+  z podpowiedzia. Co zrobic: nic.
 
 ### Dodane
+
+- Granice, ewidencja i modele 3D budynkow GUGiK (plan C katalogu, ADR-042):
+  grupy CLI `boundaries` (`--product admin`, PRG: obiekty obszaru z WFS
+  z wymaganym `--level wojewodztwo|powiat|gmina|jednostka-ewidencyjna|obreb`,
+  paczka wojewodztwa `--teryt <2 cyfry>`, plik krajowy `--whole-country`),
+  `cadastre` (`--product map`, EGiB: eksport powiatu `--teryt <4 cyfry>`
+  albo dzialki i budynki obszaru z uslugi zbiorczej WFS) i `models3d`
+  (`--product buildings`, CityGML: `--lod 1 --year 2019|2021|2022|2024`
+  albo `--lod 2`, paczka powiatu albo paczki powiatow obszaru z PRG), kazda
+  z `download` i `list-sources`, trybami `--check-updates`/`--upgrade`/
+  `--force`/`--plan`, `--workers` i `-q`. Pliki w magazynie wersji:
+  `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}`
+  (np. `boundaries/pl_prg_gmina/bbox/<coords>.gpkg`,
+  `cadastre/pl_egib_gpkg/teryt/1261.gpkg`,
+  `models3d/pl_buildings_lod1_2024/teryt/1261.zip`); wynik obszaru to jeden
+  GeoPackage w ukladzie uslugi (EPSG:2180) z pelnymi geometriami,
+  kompletnosc sprawdzana liczba obiektow uslugi; sygnal swiezosci `none`
+  (nowa tresc: `--force`). Opis: `docs/USAGE.md` 1.7, ARCHITECTURE 4.9.
+- Archiwum rocznikow BDOT10k: `landcover download --source bdot10k --year
+  2014..2025 --format GML|SHP` (stan z poczatku roku) zapisuje oryginalna
+  paczke powiatu ZIP 1:1 w `landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip`
+  z etykieta = rok; identyczne roczniki tego samego powiatu zajmuja miejsce
+  raz (status `relabeled`, dowiazanie twarde, ADR-042 D7).
+- Biblioteka (ADR-042 D10): `download_collection`/`check_collection`
+  i `CollectionReport(files, failed, stale, notices, ok)` w `__all__` (=
+  `boundaries`/`cadastre`/`models3d download`, tor planu `collection`),
+  walidacja bez sieci `kartograf.download.collections.validate_collection_request`,
+  `LandCoverManager.download/check(year=, format="GML"|"SHP")` dla archiwum
+  BDOT10k; kody `Notice` `unit_list` (powiaty obszaru wg PRG),
+  `whole_country_size` (rozmiar pliku krajowego przed transferem)
+  i `auto_narrowed_to_cz`; parametry kanalow `AccessChannel.params`
+  (`UnitPackageParams`, `PackageVariant`, `FeatureBBoxParams`,
+  `FeatureLayer` w `kartograf.sources.descriptor`) i deskryptory
+  `pl.gugik.prg`, `pl.gugik.egib`, `pl.gugik.buildings_3d` oraz kanal
+  `archive_unit_files` w `pl.gugik.bdot10k`. Projekt (ADR-040): zadania
+  `boundaries download`, `cadastre download` i `models3d download`.
+  Weryfikacja na zywo: `docs/research/2026-10-15-plan-c-live/raport.md`.
 
 - Projekt (ADR-040): grupa `kartograf project` (`init`, `add`, `remove`,
   `download`, `status`, `verify`) zapisuje zadania i przypiete wersje

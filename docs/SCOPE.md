@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.23
-**Data:** 2026-10-13
+**Wersja:** 3.24
+**Data:** 2026-10-15
 **Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu; ostatnie wydanie v0.7.2, 2026-10-11)
 
 ---
@@ -217,6 +217,15 @@ patrz sekcja 3.2, znane ograniczenie.
 - Magazyn wersji (0.8.0): landcover/pl_bdot10k_gpkg[_<warstwy>]/teryt/<T>,
   sygnał: brak (lokalna wersja niesprawdzona, --force pobiera); keep_raw =
   osobna wersja ZIP; obszar = każdy powiat (LandCoverAreaResult), błąd per powiat
+- Archiwum roczników (0.8.0, ADR-042 D11): `--year 2014..2025` (stan
+  z początku roku) z wymaganym `--format GML|SHP` — oryginalna paczka
+  powiatu ZIP 1:1 w landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip
+  (np. `pl_bdot10k_shp_2024/teryt/1261.zip`); obszar = paczki każdego
+  powiatu (PRG); etykieta wersji = rocznik, sygnał: brak; GPKG, `--layers`,
+  `--keep-raw` z `--year` = błąd, `--format GML` bez `--year` = błąd
+  z podpowiedzią; identyczny rocznik (ten sam SHA-256 w innym wydaniu
+  powiatu) bez duplikatu — dowiązanie twarde, status `relabeled` (D7);
+  brak paczki powiatu (404) = NoCoverageError tego powiatu
 
 # CORINE Land Cover (Copernicus):
 - 44 klasy pokrycia terenu
@@ -299,11 +308,18 @@ kartograf elevation download --sheet <godlo> --min-year 2024 --product nmt --res
 kartograf elevation download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # najnowszy lot do roku (dowiązanie nigdy wstecz)
 kartograf elevation download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ bez deduplikacji pokrycia
 kartograf landcover download --source bdot10k --teryt <kod> -o ./data  # obszar: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
+kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data # archiwum roczników BDOT10k (2014-2025, GML|SHP, ZIP 1:1)
 kartograf landcover download --source corine --sheet <arkusz> -o ./data --year 2018
 kartograf soil download --property <param> -o ./data --depth 0-5cm --stat mean # --sheet/--bbox (bez --teryt)
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
 kartograf soil hsg --sheet <arkusz> -o ./data --depth 0-5cm # oblicz HSG z wersji SoilGrids
+kartograf boundaries download --product admin --country pl --level gmina --bbox ... -o ./data # granice PRG obszaru (GPKG z WFS); --teryt 12 / --whole-country --country pl
+kartograf boundaries list-sources
+kartograf cadastre download --product map --teryt 1261 -o ./data # EGiB powiatu (GPKG); obszar: --country pl --bbox/--sheet/--geometry
+kartograf cadastre list-sources
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data # modele 3D CityGML; --lod 2 (2017) bez --year
+kartograf models3d list-sources
 kartograf project init --output ~/dane/kartograf # manifest projektu ze wspolnym magazynem
 kartograf project add teren elevation download --product nmt --sheet <godlo> --resolution 1m --vertical-crs EVRF2007
 kartograf project download                 # przypnij wersje zadan; --check-updates/--upgrade/--force
@@ -329,6 +345,8 @@ from kartograf import (
     transform_bbox, parent_request_for,
     # Download (command level: `kartograf elevation download` / `imagery download`, spec 4.1)
     download_data, check_data, DataReport, UnitFile, UnitFailure,
+    # Download (collections: `boundaries`/`cadastre`/`models3d download`, ADR-042)
+    download_collection, check_collection, CollectionReport,
     # Download (NMT)
     DownloadManager, DownloadProgress, DownloadResult, CampaignRef, FileStorage,
     # Download (versioned store, update plan)
@@ -390,15 +408,30 @@ from kartograf import (
   plikow z hardlinkami wymagany); `kampanie/` z 0.7.x bez migracji;
   tryby `--check-updates`/`--upgrade`/`--force`, plan `kartograf-plan/1`
   dla kazdego toru `elevation download`, `imagery download`, `landcover download`, `soil download` i `soil hsg`
+  oraz `boundaries`/`cadastre`/`models3d download` (tor `collection`)
   (sygnal swiezosci per kanal: skorowidz, rekord WFS, `ETag` SM5,
-  wydanie SoilGrids/CORINE CLMS, brak dla WCS/`exportImage`/BDOT10k)
+  wydanie SoilGrids/CORINE CLMS, brak dla WCS/`exportImage`/BDOT10k
+  i kolekcji GUGiK)
 - Drugie dowiązanie `<segment>/full_sheet/<hierarchia>/<godło>.<ext>` do
   najnowszego lokalnego lotu pełnego (ADR-033); `list_files()` je pomija,
   `delete()` usuwa oba dowiązania
 - Land cover i HSG w segmentach `landcover/`, `soil/`, `hsg/` (spec 3.4,
   ARCHITECTURE 3.3 regula 8); `--output` = korzen magazynu
+- Kolekcje (ADR-042 D8, rozszerzenie reguły 8):
+  `<grupa>/<kraj>_<źródło>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}<ext>`,
+  wersje w `<segment>/versions/<ta sama hierarchia>/`. Tokeny (`[a-z0-9.-]`)
+  = wariant treści (poziom, LoD, rocznik); wynik obszaru (zawsze GPKG
+  w układzie natywnym usługi, `coords` w tym układzie) bez tokenu formatu,
+  paczka i plik krajowy z tokenem formatu źródła, gdy produkt ma kilka
+  formatów albo także wynik obszaru. Przykłady:
+  `boundaries/pl_prg_gmina/bbox/<coords>.gpkg`, `boundaries/pl_prg_gml/teryt/12.zip`,
+  `boundaries/pl_prg_shp/country/pl.zip`, `cadastre/pl_egib_gpkg/teryt/1261.gpkg`,
+  `cadastre/pl_egib/bbox/<coords>.gpkg`, `models3d/pl_buildings_lod1_2024/teryt/1261.zip`,
+  `models3d/pl_buildings_lod2_2017/teryt/<T>.zip`,
+  `landcover/pl_bdot10k_shp_2024/teryt/1261.zip`; różne treści nigdy
+  nie dzielą slotu
 - Każde udane pobranie (CLI, DownloadManager, LandCoverManager,
-  download_pl_cutout, download_laz_area) i wynik HSG ma sidecar
+  download_pl_cutout, download_laz_area, download_collection) i wynik HSG ma sidecar
   `<plik>.meta.json` (schemat `kartograf-meta/1`, best-effort); sidecar
   wersji jest obowiązkowy (porażka zapisu = brak wersji)
 
@@ -448,6 +481,64 @@ from kartograf import (
   full_sheet=) = flagi CLI
 ```
 
+### 2.13 Granice, ewidencja i modele 3D (GUGiK, ADR-042) - IN SCOPE
+
+```python
+# Grupy CLI (ADR-039, ADR-042 D9): boundaries, cadastre, models3d — każda
+# z download i list-sources; biblioteka: download_collection/check_collection
+# (= CLI, ADR-037), tor planu `collection`. Nowy produkt kolekcji = wpis
+# deskryptora z parametrami kanału, bez providera (DEVELOPMENT_STANDARDS 17.5)
+
+# Granice PRG — `boundaries download --product admin` (pl.gugik.prg):
+- --teryt <2 cyfry>: paczka województwa (GML wszystkich poziomów), ZIP 1:1
+  -> boundaries/pl_prg_gml/teryt/12.zip
+- --whole-country --country pl: plik krajowy SHP (ok. 377 MB; rozmiar
+  w Warning: przed transferem) -> boundaries/pl_prg_shp/country/pl.zip
+- obszar (--bbox/--sheet/--geometry, --country pl) z wymaganym --level
+  wojewodztwo|powiat|gmina|jednostka-ewidencyjna|obreb: jeden GeoPackage
+  z WFS, pełne geometrie jednostek przecinających obszar (bez przycinania),
+  EPSG:2180 -> boundaries/pl_prg_gmina/bbox/<coords>.gpkg
+
+# EGiB (mapa ewidencyjna) — `cadastre download --product map` (pl.gugik.egib):
+- --teryt <4 cyfry>: eksport powiatu (warstwy dzialki, budynki, transakcje;
+  odświeżany co dobę), GPKG rozpakowany z ZIP
+  -> cadastre/pl_egib_gpkg/teryt/1261.gpkg
+- obszar (--country pl): działki i budynki z usługi zbiorczej WFS w jednym
+  GPKG EPSG:2180 -> cadastre/pl_egib/bbox/<coords>.gpkg; powiaty bez
+  integracji z usługą = luki, atrybuty zastrzeżone = `brak_uprawnien`;
+  pole DATA poza plikiem, jego wartości w sidecarze
+  (extra.source.dropped_fields)
+
+# Modele 3D budynków (CityGML) — `models3d download --product buildings`
+# (pl.gugik.buildings_3d):
+- --teryt <4 cyfry> albo obszar (--country pl): paczki każdego powiatu
+  obszaru wg PRG; paczka powiatu ZIP 1:1
+- wydanie: --lod 1 --year 2019|2021|2022|2024 albo --lod 2 (jedyne wydanie
+  2017, --year można pominąć) -> models3d/pl_buildings_lod1_2024/teryt/1261.zip
+- układ wysokości z danych w sidecarze: LoD1 2019 i LoD2 2017 = EPSG:9650
+  (PL-KRON86-NH), LoD1 2021/2022/2024 = EPSG:9651 (PL-EVRF2007-NH)
+- LoD2 nie pokrywa kraju: brak paczki powiatu = błąd tego powiatu
+
+# Wspólne:
+- dokładnie jeden wybór (--teryt / obszar / --whole-country); wariant
+  (poziom, LoD, rok) wymagany, gdy źródło publikuje więcej niż jeden —
+  brak wartości domyślnych wpływających na dane
+- --country pl|cz|auto wymagane z --bbox/--geometry, z --teryt tylko pl;
+  dziś wyłącznie PL (CZ dla tych grup: plan D)
+- --check-updates | --upgrade | --force, --plan, --workers (domyślnie 1), -q;
+  pozycje zadań projektu (`kartograf project add <nazwa> boundaries download ...`)
+- sygnał aktualności none (GUGiK nie podaje ETag/Last-Modified, wynik WFS
+  to migawka): --check-updates raportuje „nie da się sprawdzić bez
+  pobrania”, nową treść daje --force (ta sama treść = bez zmian, inna =
+  nowa wersja)
+- etykieta wersji: rok modeli 3D (np. 2024); PRG i EGiB — data pobrania
+- komunikaty Notice: unit_list (powiaty obszaru wg PRG), whole_country_size
+  (rozmiar pliku krajowego przed transferem)
+
+# Źródło: GUGiK (PRG, EGiB, modele 3D budynków)
+# API: WFS 2.0 (obiekty obszaru), OpenData (paczki ZIP jednostek)
+```
+
 ---
 
 ## 3. Out of Scope - Wersja 0.8.0
@@ -480,6 +571,12 @@ from kartograf import (
 
 # Etap 3 (CZ):
 - ZABAGED — wektorowa baza topograficzna (149 warstw), odpowiednik BDOT10k
+
+# Kolekcje GUGiK (ADR-042) — poza zakresem:
+- Paczka wojewódzka EGiB (ok. 1,4 GB): `cadastre --teryt <2 cyfry>` = błąd
+  z podpowiedzią `--teryt <4 cyfry>`
+- Pliki krajowe modeli 3D budynków (3,5-4,1 GB): `models3d --whole-country` = błąd
+- Mapowanie klas ZABAGED na kody BDOT10k
 
 # Później — inne kraje:
 - Niemcy (DE) — federacja 17 modeli krajów związkowych (BKG/basemap.de)
@@ -612,6 +709,27 @@ from kartograf import (
   w etapie 2
 - extra.parent_request.countries = kraje PRÓBOWANE, nie pobrane (przy
   awarii jednego kraju w trybie auto sidecary drugiego nadal niosą oba kody)
+
+# Kolekcje GUGiK (boundaries, cadastre, models3d, archiwum BDOT10k; ADR-042):
+- PRG `--teryt <4 cyfry>` = błąd (PRG publikuje paczki wojewódzkie; obszar
+  powiatu przez --bbox/--geometry); EGiB `--teryt <2 cyfry>` = błąd
+  z podpowiedzią `--teryt <4 cyfry>`; `models3d --whole-country` = błąd
+- Dziś tylko PL: `--country cz` dla tych grup = błąd (CZ: plan D)
+- LoD2 (jedyne wydanie 2017) nie pokrywa kraju: brak paczki powiatu = błąd
+  tego powiatu
+- Strony WFS GUGiK: kilka sekund na stronę 1000 obiektów (na żywo
+  2026-10-15: 2–4 s); kompletność z liczby obiektów (`RESULTTYPE=hits`),
+  niepełna seria stron = DownloadError; wynik obszaru składany w pamięci
+  (cała warstwa naraz)
+- Bajty GPKG wyniku obszaru są powtarzalne w obrębie jednej wersji GDAL
+  (pyogrio); inna wersja GDAL może dać inne bajty tej samej treści
+- EGiB obszaru: luki w powiatach bez integracji z usługą zbiorczą,
+  atrybuty zastrzeżone = `brak_uprawnien`
+- Sygnał aktualności none: --check-updates nie wykrywa nowszych danych,
+  nową treść daje tylko --force
+- Timeouty: 60 s na zapytanie WFS, 120 s na paczkę, 30 s na HEAD
+  i zapytanie PRG (SERVICE_TIMEOUT, PACKAGE_TIMEOUT, PROBE_TIMEOUT
+  w download/collections.py)
 ```
 
 ---
@@ -663,7 +781,7 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 |---|------------|--------|-----------|
 | 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`); stan 2026-10-12: plany 1/3 (arkusze PL), 2/3 (LAZ, CZ, wycinki) i 3/3 (land cover, HSG) wykonane i scalone do `develop` (E2E na żywo: `docs/research/2026-10-12-store-e2e/raport.md`); do wydania 0.8.0: CLMS z credentials niesprawdzony na żywo | — |
 | 2 | Manifest projektu | zrobione (0.8.0): plik `kartograf-project.json` (`kartograf-project/1`) w katalogu projektu — zadania (komendy danych grup ADR-039 z opcjami) i przypięte wersje plików z magazynu z sumami SHA-256; grupa CLI `project`: `init`, `add`, `remove`, `download` (także `--check-updates`, `--upgrade`, `--force`), `status`, `verify`; odtworzenie danych na nowym magazynie tylko przy identycznych sumach. E2E: `docs/research/2026-10-15-project-e2e/raport.md`. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; grupy komend CLI (ADR-039) |
-| 3 | Katalog GUGiK i gotowe dane | wchodzi do 0.8.0 w całości (plany A-E, decyzja użytkownika 2026-10-15): produkty GUGiK i ČÚZK z katalogu; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13 (rewizja 2026-10-15): `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — rejestr wariantów, siatki NMT/NMPT we wszystkich rozdzielczościach GUGiK i raport dostępności pełnych arkuszy, `docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md`; B: `elevation` CZ — DMP OK, DMP 1G, kafle TM33 ETRS89, LAZ ČÚZK, raport CZ, `docs/superpowers/plans/2026-10-15-plan-b-elevation-cz.md`; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
+| 3 | Katalog GUGiK i gotowe dane | wchodzi do 0.8.0 w całości (plany A-E, decyzja użytkownika 2026-10-15): produkty GUGiK i ČÚZK z katalogu; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13 (rewizja 2026-10-15): `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — rejestr wariantów, siatki NMT/NMPT we wszystkich rozdzielczościach GUGiK i raport dostępności pełnych arkuszy, `docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md`; B: `elevation` CZ — DMP OK, DMP 1G, kafle TM33 ETRS89, LAZ ČÚZK, raport CZ, `docs/superpowers/plans/2026-10-15-plan-b-elevation-cz.md`; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D — zrobione (0.8.0, ADR-042, sekcja 2.13), `docs/superpowers/plans/2026-10-15-plan-c-silniki-i-dane-pl.md`; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
 | 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |
 | — | ADR-031 (angielskie identyfikatory) | API i CLI po angielsku w 0.8.0 bez aliasów (errata 1) | zrobione (0.8.0) |
@@ -698,19 +816,22 @@ kartograf/
 │   ├── geometry.py          # SHP/GPKG reading, find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py          # Wypukłe wielokąty (przecięcie/różnica/bufor) — wybór kafli LAZ (ADR-029)
 ├── sources/               # Deskryptory źródeł jako dane (zero IO przy imporcie)
-│   ├── descriptor.py        # SourceDescriptor, AccessChannel (+endpoint), TransportKind, LicenseInfo, CountryProfile
+│   ├── descriptor.py        # SourceDescriptor, AccessChannel (+endpoint, +params: UnitPackageParams/FeatureBBoxParams, ADR-042), TransportKind, LicenseInfo, CountryProfile
 │   ├── registry.py          # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs
 │   ├── edition.py           # Edition — wydanie źródła (sygnał metadata: SoilGrids, CORINE CLMS)
 │   └── sidecar.py           # ResultMetadata, build_metadata (capability=, nodata=), write_sidecar (<plik>.meta.json)
-├── transform/             # Transformacje CRS i rastrów
+├── transform/             # Transformacje CRS i rastrów, zapis GPKG kolekcji
 │   ├── bbox.py               # envelope_from_2180 — obwiednia bboxa EPSG:2180 w innym CRS (CORINE, SoilGrids)
+│   ├── gpkg.py               # write_gpkg — deterministyczny GPKG wyniku feature_bbox (pyogrio, ADR-042 D5)
 │   ├── crs.py                # TransformerGroup (allow_ballpark=False, probe pod polityką sieci); PinnedTransform.transform polimorficzne
 │   └── raster.py             # warp_to_grid — lokalny warp na siatkę, operacja WYMUSZONA (ADR-027)
 ├── transport/             # Wspólny transport pobierania
 │   ├── http.py               # download_to (atomic write + retry), get_with_retry, sesje, sygnały HTTP
 │   ├── aaigrid.py            # odczyt odpowiedzi ASC (AAIGrid) WCS
 │   ├── chunks.py             # kawałki zapytań obszarowych na siatce źródła (ADR-034)
-│   └── mosaic.py             # mosaic_and_crop — merge kafli (rasterio) + przycięcie (opcjonalnie na siatce zrodel, zrodla w VRT)
+│   ├── feature_bbox.py       # silnik feature_bbox: obiekty obszaru z WFS 2.0 / ArcGIS REST (liczba obiektów, strony, kompletność; ADR-042 D3/D4)
+│   ├── mosaic.py             # mosaic_and_crop — merge kafli (rasterio) + przycięcie (opcjonalnie na siatce zrodel, zrodla w VRT)
+│   └── unit_package.py       # silnik unit_package: paczka ZIP jednostki z szablonu URL (warianty, wymagane człony, unpack; ADR-042 D1)
 ├── providers/             # Providery danych
 │   ├── base.py               # DataSourceProvider (ABC), BaseProvider (NMT), LandCoverProvider
 │   ├── pl/                   # Providery polskie
@@ -736,6 +857,7 @@ kartograf/
 ├── download/              # Pobieranie: komenda download w bibliotece (data.py) i tory
 │   ├── data.py               # download_data/check_data = `kartograf elevation download` / `imagery download` (ADR-037)
 │   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help)
+│   ├── collections.py        # download_collection/check_collection = `boundaries`/`cadastre`/`models3d download` (ADR-042)
 │   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── countries.py          # Podział obszaru na kraje (countries_for_bbox, split_bbox_by_country)
@@ -747,12 +869,12 @@ kartograf/
 │   ├── cz_sheets.py          # Arkusz CZ TM33/SM5 (download_cz_sheet/check_cz_sheet)
 │   ├── laz.py                # Kafle LAZ (download_laz_area/check_laz_area; ADR-029)
 │   ├── manager.py            # DownloadManager (all_campaigns=, min_year=, sidecar_extra=; download_sheets/expand_sheets)
-│   ├── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026)
+│   ├── storage.py            # FileStorage(vertical_crs=) — segmenty z szablonów deskryptora (ADR-026); content_segment/unit_slot (land cover, kolekcje; ADR-042 D8)
 │   ├── updates.py            # Pozycje planu arkuszy PL
 │   └── versions.py           # Magazyn wersjonowany (ADR-036): zapis wyłączny, etykiety, lista wersji
 ├── landcover/             # Land Cover w magazynie wersji
 │   ├── manager.py            # LandCoverManager (download/check: teryt|sheet|bbox|geometry)
-│   └── store.py              # segmenty i sloty land cover/HSG (spec 3.4)
+│   └── store.py              # segment HSG i wybór jednostki land cover (spec 3.4)
 ├── hydrology/             # Obliczenia hydrologiczne
 │   └── hsg.py                # HSGCalculator (calculate_hsg/check_hsg, wersje wejść, reused)
 ├── auth/                  # Autentykacja (CLMS)
@@ -761,11 +883,13 @@ kartograf/
 └── cli/                   # CLI: tylko tłumaczenie flag i wypisanie wyniku (ADR-037)
     ├── _parser.py             # argparse — parser główny (parse, cache, błąd usuniętych komend)
     ├── _args.py               # wspólne flagi (obszar, tryby aktualizacji, --quiet)
-    ├── groups/                # grupy komend wg typu danych (ADR-039): elevation, imagery, landcover, soil
+    ├── groups/                # grupy komend wg typu danych (ADR-039): elevation, imagery, landcover, soil, boundaries, cadastre, models3d
     │                          #   (jeden moduł = jedna grupa z register(); wykrywane automatycznie)
+    │                          #   _collection.py: wspólny kształt download/list-sources grup kolekcji (add_collection_commands)
     ├── parse_cmd.py           # `kartograf parse`
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
     ├── landcover_cmd.py       # `landcover download` -> LandCoverManager
+    ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d download` -> download_collection/check_collection
     ├── soil_cmd.py            # `soil download`, `soil hsg`
     ├── cache_cmd.py           # `kartograf cache`
     └── commands.py            # Fasada zgodności — re-eksport + entry point `main`
@@ -781,6 +905,7 @@ PyJWT[crypto] >= 2.8.0 # OAuth2 JWT (CLMS)
 rasterio >= 1.3.0      # GeoTIFF processing (HSG, CZ exportImage/openzu)
 numpy >= 1.24.0        # Array operations (HSG, transformacja pionowa per-piksel CZ)
 pyshp >= 2.3.0         # Shapefile reading
+pyogrio >= 0.10        # GDAL wektorowy: zapis GPKG wyników obszaru kolekcji (ADR-042)
 ```
 
 ---
@@ -790,6 +915,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | Źródło | Typ danych | API | Autentykacja |
 |--------|-----------|-----|--------------|
 | GUGiK | NMT, NMPT, Ortofoto, LAZ, BDOT10k | WCS, WMS, WFS, OpenData | Brak |
+| GUGiK PRG | Granice jednostek administracyjnych i ewidencyjnych | WFS 2.0, OpenData (paczki ZIP) | Brak |
+| GUGiK EGiB | Mapa ewidencyjna (działki, budynki) | WFS 2.0 (usługa zbiorcza), OpenData (eksport powiatu) | Brak |
+| GUGiK modele 3D | Modele 3D budynków (CityGML LoD1/LoD2) | OpenData (paczki ZIP) | Brak |
+| GUGiK archiwum BDOT10k | Roczniki BDOT10k 2014-2025 (GML/SHP) | OpenData (paczki ZIP) | Brak |
 | CUZK (etap 1) | NMT/DMR 5G/4G (Czechy) | ArcGIS REST (query, exportImage) + pliki openzu | Brak |
 | Copernicus CLMS | CORINE | REST API | OAuth2 RSA |
 | EEA Discomap | CORINE (podgląd) | WMS | Brak |
@@ -820,6 +949,9 @@ pyshp >= 2.3.0         # Shapefile reading
   w versions/, ścieżka standardowa jako dowiązanie twarde do najnowszej;
   --check-updates/--upgrade/--force i plan aktualizacji (ADR-036)
 - LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area
+- Granice PRG, EGiB i modele 3D budynków pobierają się przez TERYT
+  i obszar (download_collection), archiwum BDOT10k przez TERYT i obszar
+  (--year, LandCoverManager); wersje w versions/ i sidecar każdego pliku
 - Integracja z Hydrograf/Hydrolog działa
 ```
 
@@ -868,9 +1000,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-13 | 3.21 | Pełna weryfikacja z kodem 0.8.0-dev (ADR-037): status i nagłówki 0.8.0, `--scale` dla PL-2000, BDOT10k/CORINE/SoilGrids przez geometrię i filtr warstw, fallback przy niedostępnym skorowidzu (D14), API kampanii, drzewo modułów (brakujące moduły, wyjątki), kryteria 6.1 |
 | 2026-10-13 | 3.22 | Jawny tryb wycinka (ADR-038): `--cutout` + `--horizontal-crs` zamiast `--target-crs`, `--sheet-system` zamiast `--system`; obszar CZ wymaga `--cutout` |
 | 2026-10-13 | 3.23 | Podprojekt 3: odwołanie do inwentaryzacji GUGiK/ČÚZK i zaakceptowanego specu (kolejność planów A–E) |
+| 2026-10-15 | 3.24 | Plan C podprojektu 3 (ADR-042): granice PRG, EGiB i modele 3D budynków (grupy `boundaries`, `cadastre`, `models3d`, sekcja 2.13), archiwum roczników BDOT10k (2.6), `download_collection`/`check_collection`, układ segmentów kolekcji (2.11), ograniczenia (3.1, 3.2), moduły i `pyogrio` (4), źródła (5) |
 
 ---
 
-**Wersja dokumentu:** 3.23
-**Data ostatniej aktualizacji:** 2026-10-13
+**Wersja dokumentu:** 3.24
+**Data ostatniej aktualizacji:** 2026-10-15
 **Status:** Kod v0.8.0-dev (ostatnie wydanie v0.7.2, 2026-10-11)

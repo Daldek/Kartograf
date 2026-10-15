@@ -17,6 +17,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.4 Czechy (CUZK)](#14-czechy-cuzk)
    - [1.5 Pokrycie terenu, gleby, HSG, cache](#15-pokrycie-terenu-gleby-hsg-cache)
    - [1.6 Kiedy `--scale` jest wymagane](#16-kiedy---scale-jest-wymagane)
+   - [1.7 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k](#17-granice-ewidencja-modele-3d-budynków-i-archiwum-bdot10k)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
@@ -31,8 +32,11 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 |---|---|---|
 | `elevation` | `download`, `list-sources` | NMT, NMPT (PL, CZ), LAZ (PL) |
 | `imagery` | `download`, `list-sources` | ortofotomapa (PL) |
-| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k, CORINE (`--source`) |
+| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), CORINE (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
+| `boundaries` | `download`, `list-sources` | granice jednostek administracyjnych i ewidencyjnych PRG (PL) |
+| `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
+| `models3d` | `download`, `list-sources` | modele 3D budynków CityGML LoD1/LoD2 (PL) |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
@@ -45,7 +49,9 @@ Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
 `--output` (także `landcover download`, `soil download` i `soil hsg`), `--country`
 (z `--bbox`/`--geometry`), `--vertical-crs` (NMT, NMPT, LAZ),
 `--resolution` (NMT, gdy jest wybór), `--sheet-system` (PL `--bbox`/`--geometry`
-bez `--cutout`), `--horizontal-crs` (z `--cutout`) i `--scale` (PL-2000)
+bez `--cutout`), `--horizontal-crs` (z `--cutout`), `--scale` (PL-2000),
+`--level` (obszar `boundaries`), `--lod` i `--year` (`models3d`, gdy wydań
+jest kilka) oraz `--format` z `--year` (archiwum BDOT10k)
 podaje się jawnie. Brak wartości to `Error:` z listą
 dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
 podaje też `kartograf <grupa> <komenda> --help`. Domyślne zostały tylko format,
@@ -415,6 +421,124 @@ obszaru mają arkusze w różnych skalach, jedno wywołanie z jedną `--scale`
 pobierze tylko część — pozostałe arkusze dociągnij kolejnym wywołaniem
 z podpowiedzianą skalą.
 
+### 1.7 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k
+
+Grupy `boundaries` (granice PRG, `--product admin`), `cadastre` (EGiB,
+`--product map`) i `models3d` (modele 3D budynków, `--product buildings`)
+mają wspólny kształt (ADR-042): dokładnie jeden wybór — `--teryt` (paczka
+jednostki), obszar `--bbox`/`--sheet`/`--geometry` (z `--country`) albo
+`--whole-country` (plik krajowy; tylko `boundaries`) — oraz tryby
+`--check-updates`/`--upgrade`/`--force`/`--plan`, `--workers` i `-q` jak
+w pozostałych grupach. Każda grupa ma tylko swoje flagi treści (`--level`
+w `boundaries`, `--lod`/`--year` w `models3d`; obca flaga to błąd parsera,
+kod 2). Dziś wyłącznie Polska (`--country pl`; dane CZ dla tych grup dojdą
+w kolejnym planie katalogu). Archiwum roczników BDOT10k jest w grupie
+`landcover` (`--year`).
+
+```bash
+# Archiwum roczników BDOT10k: oryginalna paczka powiatu ZIP (GML albo SHP)
+kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp_2024/teryt/1261.zip: nowa wersja 2024_5dbd678a
+kartograf landcover download --source bdot10k --teryt 1261 --year 2022 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp_2022/teryt/1261.zip: nowa wersja 2022_6c64b1d3
+kartograf landcover download --source bdot10k --teryt 1261 --year 2023 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp_2023/teryt/1261.zip: nowa etykieta 2023 (plik identyczny z 2022)
+# Obszar = paczka każdego powiatu (PRG); --workers pobiera powiaty równolegle
+kartograf landcover download --source bdot10k --year 2018 --format GML --bbox 557000,244000,559000,246000 --workers 2 -o ./data
+#   landcover/pl_bdot10k_gml_2018/teryt/1206.zip: nowa wersja 2018_b8b23714
+#   landcover/pl_bdot10k_gml_2018/teryt/1261.zip: nowa wersja 2018_f8f5ead1
+#   Nowe: 2, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 0 (./data)
+
+# Modele 3D budynków (CityGML): wydanie wybierają --lod i --year
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
+#   models3d/pl_buildings_lod1_2024/teryt/1261.zip: nowa wersja 2024_dff392bb
+kartograf models3d download --product buildings --lod 2 --country pl --bbox 566000,243000,566500,243500 -o ./data
+#   Info: buildings: powiaty obszaru wg PRG (1): 1261
+#   models3d/pl_buildings_lod2_2017/teryt/1261.zip: nowa wersja 2017_de14ed18
+
+# Granice PRG: jednostki poziomu --level przecinające obszar (jeden GPKG),
+# paczka województwa (GML wszystkich poziomów) albo plik krajowy (SHP)
+kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
+#   boundaries/pl_prg_gmina/bbox/550000_220000_590000_270000.gpkg: nowa wersja 2026-10-15_d8fd43e6
+kartograf boundaries download --product admin --teryt 12 -o ./data
+#   boundaries/pl_prg_gml/teryt/12.zip: nowa wersja 2026-10-15_919fce9d
+kartograf boundaries download --product admin --country pl --whole-country -o ./data
+#   Warning: admin PL: plik krajowy https://opendata.geoportal.gov.pl/prg/granice/00_jednostki_administracyjne.zip - 377419459 B (ok. 377 MB)
+#   boundaries/pl_prg_shp/country/pl.zip: nowa wersja 2026-10-15_40b93870
+
+# EGiB: eksport powiatu albo działki i budynki obszaru z usługi zbiorczej WFS
+kartograf cadastre download --product map --teryt 1261 -o ./data
+#   cadastre/pl_egib_gpkg/teryt/1261.gpkg: nowa wersja 2026-10-15_fd23bd6e
+kartograf cadastre download --product map --country pl --bbox 565000,243000,567000,245000 -o ./data
+#   cadastre/pl_egib/bbox/565000_243000_567000_245000.gpkg: nowa wersja 2026-10-15_14c95c95
+
+# Ponownie: lokalna wersja bez zapytań; --check-updates: brak taniego sygnału
+kartograf boundaries download --product admin --teryt 12 -o ./data
+#   boundaries/pl_prg_gml/teryt/12.zip: lokalna wersja 2026-10-15 (bez sprawdzania; --check-updates)
+kartograf boundaries download --product admin --teryt 12 --check-updates -o ./data
+#   12: nie da sie sprawdzic bez pobrania (2026-10-15)
+
+# Źródła grup (z rejestru, bez sieci)
+kartograf boundaries list-sources
+kartograf cadastre list-sources
+kartograf models3d list-sources
+```
+
+**Archiwum BDOT10k.** `--year R` (2014–2025) to rocznik archiwum GUGiK —
+stan bazy z początku roku R — a nie rok aktualności obiektów. Paczka
+powiatu jest zapisywana 1:1 (bez scalania w GPKG, więc bez `--layers`
+i `--keep-raw`) i wymaga `--format GML` albo `SHP` (GPKG archiwum nie ma).
+Bez `--year` `landcover download` pobiera bieżące paczki jak dotąd;
+`--format GML` bez `--year` to `Error:` z podpowiedzią. Kody TERYT
+zmieniają się w czasie (podział i łączenie powiatów): powiat bez paczki
+w danym roczniku to `Error: <TERYT>: Zrodlo nie publikuje paczki ...
+(HTTP 404)`, a pozostałe powiaty obszaru się pobierają. Kolejne roczniki
+bywają identyczne (GUGiK nie zmienił danych powiatu): drugi dostaje status
+`nowa etykieta <rok> (plik identyczny z <rok>)` i nie zajmuje miejsca —
+to dowiązanie twarde do tych samych danych.
+
+**Modele 3D.** `--lod 1` ma wydania 2019, 2021, 2022 i 2024 (`--year`
+wymagany), `--lod 2` jedno wydanie 2017 (`--year` można pominąć, inny rok
+to `Error:`); wydania wymieniają `--help` i komunikat błędu. Paczka
+CityGML (ZIP) jest zapisywana 1:1, a układ wysokości z danych trafia do
+sidecara (`vertical_crs`): LoD1 2019 i LoD2 2017 — EPSG:9650 (KRON86),
+LoD1 2021, 2022, 2024 — EPSG:9651 (EVRF2007). LoD2 nie pokrywa całego
+kraju (np. Szczecin i sąsiednie powiaty): brak paczki powiatu to
+`Error: <TERYT>: ... (HTTP 404)` i kod 1, pozostałe powiaty się pobierają.
+Pliki krajowe modeli (3,5–4,1 GB) nie są obsługiwane.
+
+**Granice PRG.** Obszar wymaga `--level` (`wojewodztwo`, `powiat`,
+`gmina`, `jednostka-ewidencyjna`, `obreb`): wynik to jeden GeoPackage
+z pełnymi geometriami jednostek tego poziomu, które przecinają obszar (bez
+przycinania), w EPSG:2180, z warstwą PRG (np. `A03_Granice_gmin`) i jej
+polami (m.in. `JPT_KOD_JE`). `--teryt` przyjmuje tylko województwo
+(2 cyfry: paczka GML poziomów A01, A02, A03, A05, A06); granice powiatu
+pobierz obszarem (`--bbox`/`--geometry`). `--whole-country --country pl`
+to plik krajowy SHP (ok. 377 MB) — jego rozmiar pojawia się jako
+`Warning:` przed transferem.
+
+**EGiB.** `--teryt` (4 cyfry) to eksport powiatu GUGiK: GeoPackage
+z warstwami `dzialki`, `budynki` i `transakcje` (rejestr cen
+nieruchomości), odświeżany co dobę — `--force` następnego dnia zwykle daje
+nową wersję. Paczka województwa (ok. 1,4 GB) nie jest obsługiwana. Obszar
+to działki i budynki z usługi zbiorczej WFS GUGiK w jednym GPKG
+(EPSG:2180, warstwy `dzialki` i `budynki`): powiaty, które nie
+zintegrowały swojej usługi, są lukami, a atrybuty zastrzeżone mają
+wartość `brak_uprawnien`. Pole `DATA` (data stanu danych powiatu) nie
+trafia do pliku — jego wartości są w sidecarze
+(`extra.source.dropped_fields`), więc ta sama treść pobrana innego dnia
+to ta sama wersja.
+
+**Aktualność i wersje.** Paczki i obiekty usług GUGiK nie mają taniego
+sygnału zmian: kolejne uruchomienie używa lokalnej wersji bez zapytań,
+`--check-updates` raportuje `nie da sie sprawdzic bez pobrania`, a nową
+treść daje `--force` (ta sama treść = `bez zmian`, inna = nowa wersja obok
+starej). Etykieta wersji to rocznik archiwum albo rok modeli 3D, a dla PRG
+i EGiB — data pobrania. Sidecar wersji niesie wybór (`request`), źródło
+(`extra.source`: URL paczki albo usługa i liczba obiektów każdej
+warstwy) i obszar zadania (`extra.parent_request`) — ARCHITECTURE 3.2
+i 4.9.
+
 ---
 
 ## 2. Biblioteka Python
@@ -423,7 +547,9 @@ Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 (nazwy parametrów = nazwy flag w `snake_case`) i tym samym wynikiem
 (ADR-037): `kartograf elevation download` i `kartograf imagery download` =
 `download_data`/`check_data`, `landcover download` i `soil download` =
-`LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`. Błąd wejścia
+`LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`,
+`boundaries download`, `cadastre download` i `models3d download` =
+`download_collection`/`check_collection`. Błąd wejścia
 to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 (CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
 `on_notice`.
@@ -454,6 +580,45 @@ print(report.ok)  # kod wyjścia CLI: True = 0 (także częściowy sukces auto)
 plan = check_data(**selection)               # = --check-updates, bez pobierania
 report = download_data(**selection, update="upgrade", plan=plan)  # = --upgrade --plan
 ```
+
+Kolekcje (`boundaries`, `cadastre`, `models3d`; sekcja 1.7) — wynik
+`CollectionReport(files, failed, stale, notices, ok)`, elementy `files`
+i `failed` jak w `DataReport`:
+
+```python
+from kartograf import BBox, LandCoverManager, check_collection, download_collection
+
+out = "./data"
+show = lambda notice: print(notice.level, notice.text)  # = Info:/Warning: w CLI
+# = boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000
+gminy = download_collection(
+    product="admin", output_dir=out, country="pl", level="gmina",
+    bbox=BBox(550000, 220000, 590000, 270000, "EPSG:2180"),
+)
+print(gminy.files[0].file.path)  # data/boundaries/pl_prg_gmina/bbox/550000_220000_590000_270000.gpkg
+download_collection(product="admin", output_dir=out, teryt="12")  # paczka województwa
+download_collection(product="admin", output_dir=out, country="pl", whole_country=True,
+                    on_notice=show)  # Notice whole_country_size przed transferem
+# = cadastre download --product map --teryt 1261 / --country pl --bbox ...
+download_collection(product="map", output_dir=out, teryt="1261")
+download_collection(product="map", output_dir=out, country="pl",
+                    bbox=BBox(565000, 243000, 567000, 245000, "EPSG:2180"))
+# = models3d download --product buildings --lod 1 --year 2024 --teryt 1261
+download_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
+lod2 = download_collection(product="buildings", output_dir=out, lod=2, country="pl",
+                           bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
+                           on_notice=show)  # Notice unit_list: powiaty obszaru
+for failure in lod2.failed:  # kind "no_coverage" = brak paczki powiatu (HTTP 404)
+    print(failure.unit, failure.kind, failure.error)
+plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
+print([(i.track, i.unit, i.status) for i in plan.items])  # [("collection", "1261", "unverifiable")]
+# = landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP
+LandCoverManager(out, "bdot10k").download(teryt="1261", year=2024, format="SHP")
+```
+
+Walidacja bez sieci (np. przed zapisaniem zadania):
+`kartograf.download.collections.validate_collection_request(...)` z tymi
+samymi wyborami (bez `update`, `plan`, `workers`, `cache`, `on_notice`).
 
 Niższy poziom (tory) — te same pliki i sidecary co `download_data`:
 
@@ -854,7 +1019,8 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 20
 
 Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery download`: arkuszy PL NMT/NMPT/orto,
 kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
-`--cutout`, a także `landcover download`, `soil download` i `soil hsg`. Flagi
+`--cutout`, a także `landcover download`, `soil download`, `soil hsg`
+oraz `boundaries download`, `cadastre download` i `models3d download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
 skorowidz); pozostałe tory różnią się sygnałem:
 
@@ -866,6 +1032,7 @@ skorowidz); pozostałe tory różnią się sygnałem:
 | kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
 | SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
 | BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
+| kolekcje (`boundaries`, `cadastre`, `models3d`; tor planu `collection`) i archiwum BDOT10k (`--year`) | brak (`none`) | jak TM33; etykieta = rocznik/rok wydania albo data pobrania (sekcja 1.7) |
 | HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
@@ -925,7 +1092,8 @@ print(report.stale, report.files.get(godlo, ()))
 # download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
 # check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
 # update=, plan=) + check (te same argumenty); HSG: calculate_hsg(...,
-# update=, plan=) + check_hsg; pozycje planu: item.track, item.unit
+# update=, plan=) + check_hsg; kolekcje: download_collection(..., update=,
+# plan=) + check_collection; pozycje planu: item.track, item.unit
 ```
 
 ---
@@ -1033,6 +1201,20 @@ proxy).
   od wyboru kampanii arkusza.
 - Wycinki (PL, CZ) i kafle TM33 nie mają taniego sygnału świeżości:
   zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
+- Granice PRG, EGiB, modele 3D i archiwum BDOT10k (sekcja 1.7) nie mają
+  taniego sygnału świeżości: nowszą treść przynosi tylko `--force`.
+- Strony WFS GUGiK (obiekty obszaru PRG i EGiB) przychodzą po kilka
+  sekund na stronę 1000 obiektów (na żywo 2026-10-15: 2–4 s; limit jednego
+  zapytania 60 s), więc duży obszar EGiB to minuty. Wynik obszaru jest
+  składany w pamięci (cała warstwa naraz) — dla całego powiatu wygodniej
+  pobrać eksport (`cadastre download --teryt`), a granice województwa —
+  paczkę (`boundaries download --teryt <2 cyfry>`).
+- GeoPackage wyniku obszaru ma te same bajty dla tej samej treści tylko
+  w obrębie jednej wersji GDAL (`pyogrio`): po aktualizacji GDAL `--force`
+  może zapisać nową wersję tej samej treści.
+- EGiB obszaru pochodzi z usługi zbiorczej powiatowych WFS: powiat bez
+  integracji to luka w wyniku (bez błędu), atrybuty zastrzeżone mają
+  wartość `brak_uprawnien`. LoD2 modeli 3D nie pokrywa całego kraju.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (<plik>): ...` i pracuje bez cache.
@@ -1071,7 +1253,8 @@ kartograf project verify
 `init` wymaga jawnego `--output`; tworzy manifest i katalog magazynu,
 jesli ich nie ma. `add` przyjmuje po nazwie zadania te same komendy
 i flagi wyboru danych co zwykle `kartograf elevation download`,
-`imagery download`, `landcover download`, `soil download` i `soil hsg`;
+`imagery download`, `landcover download`, `soil download`, `soil hsg`,
+`boundaries download`, `cadastre download` i `models3d download`;
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
 a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa

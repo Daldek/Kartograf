@@ -1105,6 +1105,54 @@ i spec manifestu, sekcja 5.
 # 5. Uruchom caly zestaw testow offline — nic innego nie moze sie zepsuc
 ```
 
+### 17.5 Nowy produkt kolekcji (deskryptor z parametrami kanalu, ADR-042)
+
+Paczki jednostek (powiat, wojewodztwo, plik krajowy) i obiekty obszaru
+z WFS/ArcGIS REST nie dostaja providera ani nowego kodu silnika: produkt
+to wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
+`transport/feature_bbox.py`, `transform/gpkg.py`) i orkiestrator
+`download/collections.py`.
+
+```python
+# 1. Wpis SourceDescriptor w kartograf/sources/registry.py (albo nowy kanal
+#    istniejacego deskryptora, jak archiwum BDOT10k) z AccessChannel.params:
+#    - UnitPackageParams(unit="powiat"|"woj"|"country", variants, unpack):
+#      PackageVariant(choice, url_template, edition, segment_tokens,
+#      members, vertical_crs); w url_template tylko tokeny {teryt} i {woj};
+#      wszystkie warianty kanalu maja te same klucze choice (np. ("lod",
+#      "year")) i rozne wartosci; segment_tokens i edition pasuja do
+#      [a-z0-9.-]+; members = sufiksy wymaganych czlonow ZIP.
+#    - FeatureBBoxParams(protocol="wfs"|"arcgis", native_crs, axis_order
+#      "xy"|"yx", page_size > 0, layers: FeatureLayer(code, source, name,
+#      id_field) z unikalnymi code/source/name (przy selection "level" code
+#      pasuje do [a-z0-9.-]+), selection "level"|"all",
+#      order_field (wymagane dla arcgis), drop_fields); page_size nie wiekszy
+#      niz limit strony uslugi (CountDefault / maxRecordCount - sprawdzane
+#      przy pobraniu).
+#    Protokol zgodny z transportem kanalu (WFS -> "wfs", ARCGIS_QUERY ->
+#    "arcgis"; DIRECT_FILES -> UnitPackageParams); url_template i endpoint
+#    kanalu obiektow zaczynaja sie od https://.
+#    Capability kanalu kolekcji unikalna w deskryptorze (sidecar wybiera
+#    po niej kanal pliku); update_signal kanalu wg sygnalu zrodla
+#    (paczki i wyniki WFS GUGiK: "none").
+# 2. Kolejnosc osi (axis_order) potwierdz testem na prawdziwej odpowiedzi
+#    uslugi: zamiana osi daje pusty wynik BEZ bledu (tests/test_feature_bbox.py).
+# 3. Inwentarz sygnalow w tests/test_sources_registry.py: CHANNEL_SIGNALS
+#    (klucz, transport, sygnal) i COLLECTION_CHANNEL_SIGNALS (klucz,
+#    capability, sygnal); EXPECTED_KEYS dla nowego klucza.
+# 4. Fixtury z prawdziwych odpowiedzi (male; tests/fixtures/pl/feature_bbox/
+#    z naglowkami *.headers.json, tests/fixtures/pl/unit_package/).
+# 5. CLI: nowa grupa = modul kartograf/cli/groups/<grupa>.py z register(),
+#    ktory wola add_collection_commands (kartograf/cli/groups/_collection.py;
+#    download + list-sources, wybory w --help z rejestru); nowy produkt
+#    w istniejacej grupie = tylko wpis deskryptora (nowy wybor --product).
+# 6. Nowa grupa = pozycja projektu w kartograf/project/commands.py::COMMANDS
+#    (sekcja 17.2).
+```
+
+Kontrakt i checklista zrodla: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj);
+decyzje: ADR-042 w `docs/DECISIONS.md`.
+
 ---
 
 ## 18. Pre-merge checklist
