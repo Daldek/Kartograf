@@ -603,6 +603,18 @@ manager = DownloadManager(
 lc = LandCoverManager("./data", "bdot10k", cache=MetadataCache(".kartograf_cache.db"))
 ```
 
+**`update="force"` a cache providera.** `force` pomija odczyty tylko
+z cache, który otwiera sama funkcja (parametr `cache` funkcji poziomu
+komendy; `LandCoverManager` z providerem po nazwie): rekord jest pobrany
+na nowo i zapisany. Provider przekazany jako gotowa instancja
+(`DownloadManager("./data", provider)`, `LandCoverManager("./data",
+Bdot10kProvider(cache=...))`, `download_laz_area(..., provider=...)`)
+zachowuje SWÓJ cache: `update="force"` pobiera pliki ponownie, ale rekordy
+skorowidza albo odpowiedzi PRG może wziąć z tego cache (do końca TTL).
+Pełne odświeżenie: utwórz provider z `MetadataCache(".kartograf_cache.db",
+refresh=True)` albo wywołaj `download_data(..., update="force")`, które
+tworzy provider samo.
+
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`,
 `GugikOrtoProvider`, `GugikLazProvider`/`download_laz_area` dla LAZ,
 `CuzkDmrProvider`/`create_dmr_provider` dla Czech, `Parser2000`,

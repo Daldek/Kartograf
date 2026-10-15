@@ -427,6 +427,13 @@ class DownloadManager:
     and vertical CRS (EVRF2007 or KRON86 for PL). NMT 5m exists only in
     EVRF2007; bbox WCS is available only for 1m.
 
+    The manager owns no metadata cache: index records come from the
+    provider and its own ``cache``. ``update="force"`` downloads the files
+    again but does NOT refresh that cache (records may still be served from
+    it until its TTL); for a full refresh build the provider with
+    ``MetadataCache(path, refresh=True)`` or call
+    ``download_data(update="force")``, which creates its provider itself.
+
     Examples
     --------
     >>> from kartograf.providers.pl import create_nmt_provider
