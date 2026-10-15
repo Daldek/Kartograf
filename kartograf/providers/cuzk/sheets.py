@@ -49,7 +49,7 @@ SM5_SYSTEM = "cz_sm5"  # `system` key in sheet_cache
 _SM5_FIELDS = "MAPNOM,MAPNAME,PODIL"
 _TM33_FIELDS = "MAPNOM,IN_CZ"
 
-_SM5_HINT = "oczekiwano 4 wielkich liter + 2 cyfr, np. CTES96"
+_SM5_HINT = "oczekiwano 2 albo 4 wielkich liter + 2 cyfr, np. CTES96, AS91"
 
 # ArcGIS coordinates carry gridding noise of the order of 1e-3 m (e.g.
 # -449999.999308 instead of -450000), so an edge touch must be detected with a
