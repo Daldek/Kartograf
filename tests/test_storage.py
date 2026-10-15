@@ -5,14 +5,22 @@ This module contains tests for the FileStorage class, verifying the
 correctness of path generation and file operations.
 """
 
+import hashlib
 import io
+import json
 import os
+import re
+from unittest.mock import Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
+import requests
 
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.download.data import download_data
 from kartograf.download.storage import FileStorage, bbox_slot
 from kartograf.exceptions import ValidationError
+from kartograf.sources.variants import variants
+from tests.conftest import wfs_endpoint, wfs_fixture, wfs_response
 
 
 class TestFileStorageBasic:
@@ -432,14 +440,6 @@ class TestFileStorageProduct:
         file_path = current_dir / "N-34-130-D-d-2-4.tif"
         assert file_path.exists()
 
-    def test_product_skips_resolution_validation(self, tmp_path):
-        """Test that product mode skips resolution validation."""
-        # Should not raise ValueError even though resolution default is "1m"
-        storage = FileStorage(
-            tmp_path, product="custom_product", resolution="1m", vertical_crs="EVRF2007"
-        )
-        assert storage._product == "custom_product"
-
     def test_product_repr(self, tmp_path):
         """Test repr includes product."""
         storage = FileStorage(
@@ -448,20 +448,6 @@ class TestFileStorageProduct:
         repr_str = repr(storage)
 
         assert "product='nmpt'" in repr_str
-
-    def test_resolution_subdir_nmt_1m(self, tmp_path):
-        """Test that resolution='1m' maps to 'nmt/pl_1992_1m_evrf2007' subdirectory."""
-        storage = FileStorage(tmp_path, resolution="1m", vertical_crs="EVRF2007")
-        path = storage.get_path("N-34-130-D", ".asc")
-
-        assert "/nmt/pl_1992_1m_evrf2007/" in str(path)
-
-    def test_resolution_subdir_nmt_5m(self, tmp_path):
-        """Test that resolution='5m' maps to 'nmt/pl_1992_5m_evrf2007' subdirectory."""
-        storage = FileStorage(tmp_path, resolution="5m", vertical_crs="EVRF2007")
-        path = storage.get_path("N-34-130-D", ".asc")
-
-        assert "/nmt/pl_1992_5m_evrf2007/" in str(path)
 
 
 class TestFileStoragePL2000:
@@ -844,7 +830,7 @@ class TestFileStorageSegments:
                 "nmt/test_1992_evrf2007",
             ),
             (
-                {"product": "nmpt"},
+                {"product": "nmpt", "resolution": "1m"},
                 "pl.gugik.nmpt",
                 "N-34-130-D-d-2-4",
                 "nmpt/test_1992_evrf2007",
@@ -878,6 +864,146 @@ class TestFileStorageSegments:
         )
         path = storage.get_path(sheet, ".asc")
         assert expected in path.as_posix()
+
+
+def _grid_labels(product: str) -> list[str]:
+    """Labels of the product's PL ASC grids in the variant registry, ascending."""
+    by_value = {
+        v.resolution_m: v.label
+        for v in variants(product=product, country="PL", format="ASC")
+        if v.resolution_m is not None and v.label is not None
+    }
+    return [by_value[value] for value in sorted(by_value)]
+
+
+class TestRegistryVariantStorage:
+    """ADR-041: the segment of an NMT/NMPT file is the descriptor of its
+    variant in the registry (labels K2, archive formats) - in the public
+    ``FileStorage`` and in a real sheet download."""
+
+    SHEET = "N-33-58-A-c-1-4"
+    HIERARCHY = ("N-33", "58", "A", "c", "1", "4")
+
+    @pytest.mark.parametrize(
+        ("kwargs", "segment", "ext"),
+        [
+            (
+                {"resolution": "0.5m", "vertical_crs": "EVRF2007"},
+                ("nmt", "pl_1992_0.5m_evrf2007"),
+                ".asc",
+            ),
+            (
+                {"product": "nmpt", "resolution": "0.6m", "vertical_crs": "EVRF2007"},
+                ("nmpt", "pl_1992_0.6m_evrf2007"),
+                ".asc",
+            ),
+            (
+                {"resolution": "25m", "vertical_crs": "KRON86", "format": "TBD"},
+                ("nmt", "pl_1992_tbd_25m_kron86"),
+                ".zip",
+            ),
+            (
+                {"resolution": None, "vertical_crs": "KRON86", "format": "TIN"},
+                ("nmt", "pl_1992_tin_kron86"),
+                ".zip",
+            ),
+        ],
+        ids=["nmt-0.5m", "nmpt-0.6m", "archive-tbd-25m", "archive-tin"],
+    )
+    def test_filestorage_public_constructor_accepts_registry_labels(
+        self, tmp_path, kwargs, segment, ext
+    ):
+        storage = FileStorage(tmp_path, **kwargs)
+
+        path = storage.get_path(self.SHEET, ext)
+
+        assert path.relative_to(tmp_path).parts == (
+            *segment,
+            *self.HIERARCHY,
+            f"{self.SHEET}{ext}",
+        )
+
+    @pytest.mark.parametrize(
+        ("product", "resolution"),
+        [("nmt", "2m"), ("nmpt", "2m"), ("nmpt", None)],
+        ids=["nmt-2m", "nmpt-2m", "nmpt-without-resolution"],
+    )
+    def test_filestorage_unknown_label_lists_registry_labels(
+        self, tmp_path, product, resolution
+    ):
+        """No default and no label outside the registry: the error lists the
+        product's grid labels, ascending."""
+        with pytest.raises(ValidationError) as exc:
+            FileStorage(
+                tmp_path,
+                product=product,
+                resolution=resolution,
+                vertical_crs="EVRF2007",
+            )
+
+        message = str(exc.value)
+        assert message.startswith(f"Nieobslugiwana rozdzielczosc: '{resolution}'")
+        listed = re.findall(r"'([^']+)'", message.split("Obslugiwane", 1)[1])
+        assert listed == _grid_labels(product)
+
+    def test_segment_from_variant(self, tmp_path):
+        """A real 0.5m sheet download (recorded WFS answer of the sheet, a small
+        ASC inside its frame): file, version and sidecar name the 0.5m variant
+        and the WFS record it came from."""
+        url = (
+            "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/84020/"
+            f"84020_1844081_{self.SHEET}.asc"
+        )
+        frame = SheetParser(self.SHEET).get_bbox(crs="EPSG:2180")
+        body = (
+            f"ncols 2\nnrows 2\nxllcorner {frame.min_x + 10}\n"
+            f"yllcorner {frame.min_y + 10}\ncellsize 0.5\nNODATA_value -9999\n"
+            "1 2\n3 4\n"
+        ).encode("ascii")
+        endpoint = wfs_endpoint("nmt_evrf2007")
+        index = wfs_fixture(f"sheet_nmt_evrf2007_{self.SHEET}.xml")
+
+        def get(requested, **kwargs):
+            if requested.startswith(f"{endpoint}?"):
+                return wfs_response(index)
+            assert requested == url
+            response = Mock(spec=requests.Response)
+            response.status_code = 200
+            response.raise_for_status = Mock()
+            response.headers = {}
+            response.iter_content = Mock(return_value=[body])
+            return response
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=get)
+        with patch("kartograf.transport.http.make_gugik_session", return_value=session):
+            report = download_data(
+                product="nmt",
+                output_dir=tmp_path,
+                sheet=self.SHEET,
+                vertical_crs="EVRF2007",
+                resolution="0.5m",
+                cache=False,
+            )
+
+        assert report.ok, report.failed
+        (unit,) = report.files
+        path = unit.file.path
+        assert path.relative_to(tmp_path).parts == (
+            "nmt",
+            "pl_1992_0.5m_evrf2007",
+            *self.HIERARCHY,
+            f"{self.SHEET}.asc",
+        )
+        sha8 = hashlib.sha256(body).hexdigest()[:8]
+        assert unit.file.version_path.parent.name == f"2025-01-30_84020_{sha8}"
+        meta = json.loads(path.with_name(path.name + ".meta.json").read_text("utf-8"))
+        assert meta["dataset"] == "pl.gugik.nmt_0_5m"
+        assert meta["resolution"] == "0.5m"
+        source = meta["extra"]["source"]
+        assert source["layer"] == "SkorowidzNMT2025"
+        assert source["index_url"] == endpoint
+        assert source["url"] == url
 
 
 class TestPruneEmptyDirs:

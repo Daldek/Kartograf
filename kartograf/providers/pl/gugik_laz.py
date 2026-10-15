@@ -459,6 +459,68 @@ def _laz_indexes() -> dict[str, IndexRef]:
     }
 
 
+def laz_tile(elem: ET.Element) -> LazTile | None:
+    """``LazTile`` of one WFS feature of the LAZ index (``None``: no URL or
+    sheet, or an unrecognized ``uklad_xy``). Shared by the tile discovery
+    and the availability report."""
+    url = feature_text(elem, "url_do_pobrania")
+    sheet = feature_text(elem, "godlo")
+    if not url or not sheet:
+        return None
+    crs = feature_text(elem, "uklad_xy")
+    if parse_pl_system(crs) is None:
+        # D3: the same parser as the index and the sidecar — a tile without
+        # a recognized CRS is skipped (like an index record) rather than
+        # guessed from the sheet (pl_2000 segment + EPSG:2180 sidecar)
+        logger.warning(f"Kafel {sheet}: nierozpoznany uklad_xy {crs!r} - pominiety")
+        return None
+
+    year_text = feature_text(elem, "akt_rok")
+    year = int(year_text) if year_text and year_text.isdigit() else None
+
+    density = None
+    density_text = feature_text(elem, "char_przestrz")
+    if density_text:
+        match = re.search(r"(\d+)", density_text)
+        if match:
+            density = int(match.group(1))
+
+    lower = upper = None
+    for env in elem.iter(f"{{{GML_NS}}}Envelope"):
+        srs_name = env.get("srsName")
+        lc = env.find(f"{{{GML_NS}}}lowerCorner")
+        uc = env.find(f"{{{GML_NS}}}upperCorner")
+        if lc is not None and lc.text:
+            lower = corner_xy(lc.text, srs_name)
+        if uc is not None and uc.text:
+            upper = corner_xy(uc.text, srs_name)
+        break
+
+    if lower is not None and upper is not None:
+        min_x, min_y = lower
+        max_x, max_y = upper
+    else:
+        min_x = min_y = max_x = max_y = math.nan
+
+    full_text = feature_text(elem, "czy_ark_wypelniony")
+    full_sheet = {"TAK": True, "NIE": False}.get((full_text or "").upper())
+
+    return LazTile(
+        sheet=sheet,
+        url=url,
+        year=year,
+        density=density,
+        crs=crs,
+        min_x=min_x,
+        min_y=min_y,
+        max_x=max_x,
+        max_y=max_y,
+        footprint=feature_footprint(elem),
+        date=time_position(elem, "akt_data"),
+        full_sheet=full_sheet,
+    )
+
+
 class GugikLazProvider(BaseProvider):
     """
     Provider for downloading LAZ point-cloud data from GUGiK via WFS.
@@ -772,7 +834,7 @@ class GugikLazProvider(BaseProvider):
         layer = f"{index.layer_prefix}{year}"
         returned = kept = 0
         for feature in index.features(bbox, [f"gugik:{layer}"]):
-            tile = self._feature_to_tile(feature)
+            tile = laz_tile(feature)
             if tile is None:
                 continue
             returned += 1
@@ -785,65 +847,6 @@ class GugikLazProvider(BaseProvider):
                 "przecina zadanego bboxa - niezgodnosc kolejnosci osi "
                 "(zglos blad)"
             )
-
-    def _feature_to_tile(self, elem: ET.Element) -> LazTile | None:
-        """Convert one WFS feature element into a LazTile (None if no URL)."""
-        url = feature_text(elem, "url_do_pobrania")
-        sheet = feature_text(elem, "godlo")
-        if not url or not sheet:
-            return None
-        crs = feature_text(elem, "uklad_xy")
-        if parse_pl_system(crs) is None:
-            # D3: the same parser as the index and the sidecar — a tile without
-            # a recognized CRS is skipped (like an index record) rather than
-            # guessed from the sheet (pl_2000 segment + EPSG:2180 sidecar)
-            logger.warning(f"Kafel {sheet}: nierozpoznany uklad_xy {crs!r} - pominiety")
-            return None
-
-        year_text = feature_text(elem, "akt_rok")
-        year = int(year_text) if year_text and year_text.isdigit() else None
-
-        density = None
-        density_text = feature_text(elem, "char_przestrz")
-        if density_text:
-            match = re.search(r"(\d+)", density_text)
-            if match:
-                density = int(match.group(1))
-
-        lower = upper = None
-        for env in elem.iter(f"{{{GML_NS}}}Envelope"):
-            srs_name = env.get("srsName")
-            lc = env.find(f"{{{GML_NS}}}lowerCorner")
-            uc = env.find(f"{{{GML_NS}}}upperCorner")
-            if lc is not None and lc.text:
-                lower = corner_xy(lc.text, srs_name)
-            if uc is not None and uc.text:
-                upper = corner_xy(uc.text, srs_name)
-            break
-
-        if lower is not None and upper is not None:
-            min_x, min_y = lower
-            max_x, max_y = upper
-        else:
-            min_x = min_y = max_x = max_y = math.nan
-
-        full_text = feature_text(elem, "czy_ark_wypelniony")
-        full_sheet = {"TAK": True, "NIE": False}.get((full_text or "").upper())
-
-        return LazTile(
-            sheet=sheet,
-            url=url,
-            year=year,
-            density=density,
-            crs=crs,
-            min_x=min_x,
-            min_y=min_y,
-            max_x=max_x,
-            max_y=max_y,
-            footprint=feature_footprint(elem),
-            date=time_position(elem, "akt_data"),
-            full_sheet=full_sheet,
-        )
 
     @staticmethod
     def _intersects(tile: LazTile, bbox: BBox) -> bool:

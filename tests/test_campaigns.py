@@ -3,12 +3,16 @@
 Fixture ``72675_858113_N-33-69-A-d-3-2.head.xyz``: a real GUGiK file 72675
 (.xyz, in fact an AAIGrid, 34.8 MB) truncated to the header + 40 values of
 the 7th row (448 B, CRLF); GDAL opens it as a 2131x2399 AAIGrid.
+``tests/fixtures/gugik_archives/``: the first 512 B of real GUGiK archives
+(TTN, GRD, DGN v7, DXF) for the archive signatures (ADR-041, README there).
 """
 
 import dataclasses
 import hashlib
+import io
 import logging
 import re
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -212,6 +216,103 @@ def test_verify_file_format_unsupported_extension(tmp_path):
     f.write_bytes(b"ncols 1")
     with pytest.raises(DownloadError):
         verify_file_format(f, ".laz")
+
+
+# --- archives downloaded as source files (ADR-041, plan A decision 13) ---
+ARCHIVE_HEADS = Path(__file__).parent / "fixtures" / "gugik_archives"
+TTN_HEAD = ARCHIVE_HEADS / "4543_360776_N-34-58-D-c-3.head.ttn"
+GRD_HEAD = ARCHIVE_HEADS / "4641_410597_M-34-10-B-a-1.head.grd"
+DGN_HEAD = ARCHIVE_HEADS / "4512_376571_N-33-103-B-b-4.head.dgn"
+DXF_HEAD = ARCHIVE_HEADS / "4506_363954_M-33-24-B-b-1.head.dxf"
+HTML_ERROR = b"<html><head><title>502 Bad Gateway</title></head></html>"
+OLE_HEAD = b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1" + b"\x00" * 56  # DGN v8 container
+
+
+def _zip_archive() -> bytes:
+    """A complete small ZIP shaped like a GUGiK TBD archive (text members)."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        archive.writestr("N-34-58-D-c-3_GR.txt", "725300.00 743480.00 101.20\r\n" * 40)
+        archive.writestr("N-34-58-D-c-3_C.txt", "")
+    return buffer.getvalue()
+
+
+@pytest.mark.parametrize(
+    ("head", "ext"),
+    [(TTN_HEAD, ".ttn"), (GRD_HEAD, ".grd"), (DGN_HEAD, ".dgn"), (DXF_HEAD, ".dxf")],
+)
+def test_verify_file_format_accepts_real_archive_heads(head, ext):
+    """Real GUGiK files: TTN signature, Intergraph IGDS header (GRD, DGN v7),
+    DXF group codes."""
+    verify_file_format(head, ext)
+
+
+def test_verify_file_format_accepts_complete_zip(tmp_path):
+    path = tmp_path / "N-34-58-D-c-3.zip"
+    path.write_bytes(_zip_archive())
+    verify_file_format(path, ".zip")
+
+
+def test_verify_file_format_rejects_zip_without_central_directory(tmp_path):
+    """A transfer cut before the central directory is not a complete ZIP."""
+    data = _zip_archive()
+    path = tmp_path / "N-34-58-D-c-3.zip"
+    path.write_bytes(data[: data.index(b"PK\x01\x02")])
+    with pytest.raises(DownloadError, match="tresc nie jest archiwum ZIP"):
+        verify_file_format(path, ".zip")
+
+
+@pytest.mark.parametrize(
+    ("ext", "name"),
+    [
+        (".zip", "archiwum ZIP"),
+        (".ttn", "Intergraph TTN"),
+        (".grd", "Intergraph GRD"),
+        (".dgn", "DGN"),
+        (".dxf", "DXF"),
+    ],
+)
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param(HTML_ERROR, id="html"),
+        pytest.param(b"", id="empty"),
+        pytest.param(None, id="other-format"),
+    ],
+)
+def test_verify_file_format_rejects_other_content_naming_format(
+    tmp_path, ext, name, content
+):
+    """An error page, an empty body or a real file of ANOTHER archive format
+    under the extension of the record is rejected, naming the expected format."""
+    other = {
+        ".zip": TTN_HEAD.read_bytes(),
+        ".ttn": _zip_archive(),
+        ".grd": DXF_HEAD.read_bytes(),
+        ".dgn": TTN_HEAD.read_bytes(),
+        ".dxf": DGN_HEAD.read_bytes(),
+    }
+    path = tmp_path / f"N-34-58-D-c-3{ext}"
+    path.write_bytes(other[ext] if content is None else content)
+    with pytest.raises(
+        DownloadError, match=f"^{re.escape(path.name)}: tresc nie jest {name} "
+    ):
+        verify_file_format(path, ext)
+
+
+def test_verify_file_format_accepts_dgn_v8_ole_container(tmp_path):
+    """DGN v8 is an OLE compound file (no IGDS header)."""
+    path = tmp_path / "x.dgn"
+    path.write_bytes(OLE_HEAD)
+    verify_file_format(path, ".dgn")
+
+
+def test_verify_file_format_rejects_ole_container_as_grd(tmp_path):
+    """An Intergraph GRD is never an OLE compound file."""
+    path = tmp_path / "x.grd"
+    path.write_bytes(OLE_HEAD)
+    with pytest.raises(DownloadError, match="tresc nie jest Intergraph GRD"):
+        verify_file_format(path, ".grd")
 
 
 def test_coverage_of_asc_counts_nodata(tmp_path, monkeypatch):
@@ -536,6 +637,50 @@ class TestVerifyRecordUrl:
     def test_url_with_other_sheet_raises(self):
         with pytest.raises(DownloadError, match="nie zawiera godla"):
             verify_record_url("https://x/1_2_N-34-130-D-d-2-3.asc", "N-34-130-D-d-2-4")
+
+    # Archive file names of the full WFS inventory 2026-10-15 (ADR-041)
+    @pytest.mark.parametrize(
+        ("name", "sheet"),
+        [
+            ("72956_881048_M-34-1-B-c-2-4.zip.zip", "M-34-1-B-c-2-4"),  # XYZ 1m
+            ("73843_1036985_N-33-58-A-c-1-4.xyz.zip", "N-33-58-A-c-1-4"),  # XYZ 5m
+            # `NMT-` prefix, the code also without separators
+            ("72957_880258_NMT-N34121Cb33.xyz.zip", "N-34-121-C-b-3-3"),
+            ("72760_858156_NMT-N-33-77-B-c-3-3.zip", "N-33-77-B-c-3-3"),
+            ("73123_943003_M-34-29-A-b-4-2.zip", "M-34-29-A-b-4-2"),  # ASCII NMT
+            ("5143_316733_N-34-58-D-c-3_asc.zip", "N-34-58-D-c-3"),  # TBD 25m
+            ("73727_1018241_6.163.35.16.4.zip", "6.163.35.16.4"),  # TBD PL-2000
+            ("4542_360777_N-34-58-D-c-3_tin.zip", "N-34-58-D-c-3"),
+            ("4543_360776_N-34-58-D-c-3.ttn", "N-34-58-D-c-3"),
+            ("4641_410597_M-34-10-B-a-1.grd", "M-34-10-B-a-1"),
+            ("4506_363954_M-33-24-B-b-1.dxf", "M-33-24-B-b-1"),
+            ("4512_376571_N-33-103-B-b-4.dgn", "N-33-103-B-b-4"),
+        ],
+    )
+    def test_archive_name_of_its_sheet_passes(self, name, sheet):
+        campaign = name.split("_", 1)[0]
+        verify_record_url(
+            f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/{campaign}/{name}", sheet
+        )
+
+    @pytest.mark.parametrize(
+        ("name", "sheet"),
+        [
+            # the 2 archive records of the inventory naming another sheet
+            ("67488_795265_N-34-101-A-a-4_asc.zip", "N-34-101-C-d-3"),
+            ("66674_767942_N-33-77-A-d-2-1.xyz.zip", "N-33-77-A-d-1-2"),
+            # a code without separators names exactly one sheet
+            ("72957_880258_NMT-N34121Cb33.xyz.zip", "N-34-121-C-b-3-4"),
+        ],
+    )
+    def test_archive_name_of_another_sheet_raises(self, name, sheet):
+        campaign = name.split("_", 1)[0]
+        url = f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/{campaign}/{name}"
+        with pytest.raises(DownloadError) as caught:
+            verify_record_url(url, sheet)
+        assert str(caught.value) == (
+            f"URL rekordu skorowidza nie zawiera godla {sheet}: {url}"
+        )
 
 
 class TestVerifySheetExtent:

@@ -13,6 +13,7 @@ from pathlib import Path
 from unittest.mock import ANY, Mock, patch
 
 import pytest  # noqa: F401 - required for fixtures
+import requests
 import shapefile
 from pyproj import CRS
 
@@ -26,12 +27,18 @@ from kartograf.cli.commands import (
     main,
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
+from kartograf.download.data import download_data
 from kartograf.download.fetch import VersionedFile
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.manager import DownloadProgress, DownloadResult
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import Notice
-from tests.conftest import write_gpkg_layers
+from kartograf.providers.pl.gugik import GugikProvider
+from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
+from kartograf.providers.pl.prg import LandMask
+from kartograf.sources.registry import sources_for
+from kartograf.sources.variants import ProductVariant, variants
+from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
 
 
 @pytest.fixture(autouse=True)
@@ -1747,8 +1754,9 @@ class TestCmdDownloadProduct:
 
         assert result == 1
         err = capsys.readouterr().err
-        assert "nmpt" in err
-        assert "1m" in err
+        assert err.startswith(
+            "Error: PL nie ma rozdzielczosci 5m dla NMPT - dostepne: "
+        )
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
@@ -1821,8 +1829,9 @@ class TestCmdDownloadProduct:
 
         assert result == 1
         err = capsys.readouterr().err
-        assert "nmpt" in err
-        assert "1m" in err
+        assert err.startswith(
+            "Error: PL nie ma rozdzielczosci 5m dla NMPT - dostepne: "
+        )
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
@@ -1887,8 +1896,8 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmt/pl_{system}_1m_kron86"
 
     def test_nmt_5m_needs_datum_resolved_by_sentinels(self, tmp_path):
-        """0.7.1: ``_resolve_pl_sentinels`` rejects 5m + KRON86 before this
-        helper; should the pair reach it, the library factory rejects it."""
+        """The registry has no NMT 5m in KRON86: the request validation rejects
+        the pair before this helper; should it reach it, the provider does."""
         from kartograf.download.data import _create_provider_and_storage
 
         provider, storage = _create_provider_and_storage(
@@ -1907,9 +1916,40 @@ class TestCreateProviderAndStorage:
         assert storage._subdir == "nmpt/pl_{system}_1m_kron86"
 
 
+def _grid_labels(product: str, vertical_crs: str | None = None) -> list[str]:
+    """Labels of the product's PL ASC grids in the variant registry, ascending."""
+    by_value = {
+        v.resolution_m: v.label
+        for v in variants(
+            product=product, country="PL", vertical_crs=vertical_crs, format="ASC"
+        )
+        if v.resolution_m is not None and v.label is not None
+    }
+    return [by_value[value] for value in sorted(by_value)]
+
+
+def _registry_grids(product: str) -> set[tuple[str, str]]:
+    """``{(vertical CRS, label)}`` of the product's PL ASC grids (registry)."""
+    return {
+        (v.vertical_crs, v.label)
+        for v in variants(product=product, country="PL", format="ASC")
+        if v.label is not None
+    }
+
+
+def _labels_by_system(text: str) -> set[tuple[str, str]]:
+    """``{(vertical CRS, label)}`` of a ``EVRF2007: 0.5m, 1m; KRON86: 1m`` text."""
+    found = set()
+    for group in text.split("; "):
+        system, labels = group.split(": ", 1)
+        found |= {(system, label) for label in labels.split(", ")}
+    return found
+
+
+# NMT 5m exists only in EVRF2007; the text names the KRON86 grids of the registry
 _5M_KRON86_ERROR = (
     "Error: NMT 5m (PL) jest dostepny tylko w EVRF2007 - podano --vertical-crs "
-    "KRON86; uzyj --vertical-crs EVRF2007 albo --resolution 1m dla KRON86"
+    f"KRON86; dostepne w KRON86: {', '.join(_grid_labels('nmt', 'KRON86'))}"
 )
 
 
@@ -1937,10 +1977,10 @@ def _write_pl_shp_2180(directory):
 
 
 class TestNmt5mKron86Rejected:
-    """0.7.1: an explicit ``--resolution 5m --vertical-crs KRON86`` is a CLI
-    error (code 1) before any provider or network call - like the library
-    (``require_nmt_vertical_crs``); without ``--vertical-crs`` 5m still works
-    (default EVRF2007)."""
+    """An explicit ``--resolution 5m --vertical-crs KRON86`` (NMT PL) is an
+    error (code 1) before any provider or network call, without a silent swap
+    to EVRF2007; the text comes from the variant registry (5m only in
+    EVRF2007, the KRON86 grid labels)."""
 
     @pytest.mark.parametrize(
         "task",
@@ -1965,7 +2005,7 @@ class TestNmt5mKron86Rejected:
     @patch("kartograf.download.data.find_sheets_for_bbox")
     @patch("kartograf.download.data._create_provider_and_storage")
     @patch("kartograf.download.data.DownloadManager")
-    def test_explicit_kron86_with_5m_is_error(
+    def test_kron86_5m_message_from_registry(
         self,
         mock_manager_cls,
         mock_create,
@@ -2003,7 +2043,7 @@ class TestNmt5mKron86Rejected:
 
         assert result == 1
         err = capsys.readouterr().err
-        assert _5M_KRON86_ERROR in err
+        assert err.splitlines()[-1] == _5M_KRON86_ERROR
         assert "zamieniony" not in err
         mock_manager_cls.assert_not_called()
         mock_create.assert_not_called()
@@ -2098,6 +2138,249 @@ class TestNmt5mKron86Rejected:
             resolve_pl_options(task, code_system="1992")
         assert f"Error: {kron.value}" == _5M_KRON86_ERROR
         assert task.vertical_crs == "KRON86"  # no silent swap
+
+
+# PL NMT/NMPT variants of the registry (grids and archives): every one is a
+# valid choice of `elevation download` (ADR-041)
+_PL_SHEET_VARIANTS = tuple(
+    v for v in variants(country="PL") if v.product in ("nmt", "nmpt")
+)
+
+
+def _variant_id(variant: ProductVariant) -> str:
+    return f"{variant.source}-{variant.vertical_crs}"
+
+
+def _variant_flags(variant: ProductVariant) -> list[str]:
+    """``elevation download`` flags of ``variant`` (no ``--format`` = ASC grid)."""
+    flags = ["--product", variant.product, "--vertical-crs", variant.vertical_crs]
+    if variant.label is not None:
+        flags += ["--resolution", variant.label]
+    if variant.source_file:
+        flags += ["--format", variant.format]
+    return flags
+
+
+class TestRegistryVariantsCli:
+    """ADR-041: the variant registry is the only list of NMT/NMPT choices.
+
+    Validation, ``--help`` and ``list-sources`` are compared with
+    ``kartograf.sources.variants.variants()``, never with a list in the test.
+    """
+
+    SHEET = "N-34-130-D-d-2-4"
+
+    @pytest.mark.parametrize("variant", _PL_SHEET_VARIANTS, ids=_variant_id)
+    @patch("kartograf.download.data.DownloadManager")
+    def test_every_registry_variant_validates(
+        self, mock_manager_cls, variant, tmp_path, capsys
+    ):
+        """Every PL NMT/NMPT variant (grids and archives) passes the CLI and the
+        API validation and reaches the real provider as exactly that variant;
+        the manager is a fake (one sheet of the index, one file, no network)."""
+        manager = mock_manager_cls.return_value
+        manager.provider.index_sheets.return_value = [self.SHEET]
+        manager.download_sheet.return_value = DownloadResult(
+            succeeded=[tmp_path / "sheet"]
+        )
+        manager.download_sheets.return_value = manager.download_sheet.return_value
+
+        rc = main(
+            ["elevation", "download", "--sheet", self.SHEET, *_variant_flags(variant)]
+            + ["-o", str(tmp_path / "cli"), "-q"]
+        )
+
+        assert rc == 0, capsys.readouterr().err
+        assert mock_manager_cls.call_args.kwargs["provider"].variant == variant
+
+        report = download_data(
+            product=variant.product,
+            output_dir=tmp_path / "api",
+            sheet=self.SHEET,
+            vertical_crs=variant.vertical_crs,
+            resolution=variant.label,
+            format=variant.format if variant.source_file else None,
+            cache=False,
+        )
+
+        assert report.ok, report.failed
+        assert mock_manager_cls.call_args.kwargs["provider"].variant == variant
+
+    @pytest.mark.parametrize("label", ["2m", "0,5m", "50cm", "0.50m"])
+    @patch("kartograf.download.data.DownloadManager")
+    def test_unknown_label_lists_registry(
+        self, mock_manager_cls, label, tmp_path, capsys
+    ):
+        """A label outside the registry - also another spelling of an existing
+        one (K2) - is an error listing the registry grids of every height
+        system; nothing is downloaded."""
+        rc = main(
+            ["elevation", "download", "--product", "nmt", "--sheet", self.SHEET]
+            + ["--vertical-crs", "EVRF2007", "--resolution", label]
+            + ["-o", str(tmp_path), "-q"]
+        )
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        prefix = f"Error: PL nie ma rozdzielczosci {label} dla NMT - dostepne: "
+        assert err.startswith(prefix)
+        listed = _labels_by_system(err.removeprefix(prefix).rstrip("\n"))
+        assert listed == _registry_grids("nmt")
+        mock_manager_cls.assert_not_called()
+
+    @patch("kartograf.download.data.DownloadManager")
+    def test_nmpt_requires_resolution(self, mock_manager_cls, tmp_path, capsys):
+        """NMPT has several grids, so no default (STANDARDS 11.2): the CLI and
+        the API reject a missing resolution with the same text naming the
+        registry grids."""
+        rc = main(
+            ["elevation", "download", "--product", "nmpt", "--sheet", self.SHEET]
+            + ["--vertical-crs", "EVRF2007", "-o", str(tmp_path), "-q"]
+        )
+        assert rc == 1
+        err = capsys.readouterr().err
+
+        with pytest.raises(ValidationError) as exc:
+            download_data(
+                product="nmpt",
+                output_dir=tmp_path,
+                sheet=self.SHEET,
+                vertical_crs="EVRF2007",
+                cache=False,
+            )
+
+        message = str(exc.value)
+        assert err == f"Error: {message}\n"
+        prefix = "--resolution wymagane dla NMPT PL: "
+        assert message.startswith(prefix)
+        listed = _labels_by_system(message.removeprefix(prefix))
+        assert listed == _registry_grids("nmpt")
+        mock_manager_cls.assert_not_called()
+
+    def test_help_lists_registry_labels(self, capsys):
+        """``elevation download --help`` lists every PL grid of the registry per
+        product and height system - and no other label."""
+        with pytest.raises(SystemExit) as exc:
+            main(["elevation", "download", "--help"])
+        assert exc.value.code == 0
+        out = capsys.readouterr().out
+        block = out.split("--resolution, -r RES", 1)[1].split("--vertical-crs VCRS")[0]
+        text = " ".join(block.split())
+
+        listed = {
+            (product.lower(), system, label)
+            for product, groups in re.findall(r"\b(NMT|NMPT) \(([^()]*)\)", text)
+            for system, label in _labels_by_system(groups)
+        }
+
+        assert listed == {
+            (product, system, label)
+            for product in ("nmt", "nmpt")
+            for system, label in _registry_grids(product)
+        }
+
+    def test_list_sources_has_every_variant_source(self, capsys):
+        """``elevation list-sources`` has one row per PL source of the registry
+        (grids, archives, LAZ) and its WYBOR flags select that source."""
+        assert main(["elevation", "list-sources"]) == 0
+        lines = capsys.readouterr().out.splitlines()
+        header = lines[1]
+        choice, country, key, name = (
+            header.index(column) for column in ("WYBOR", "KRAJ", "KLUCZ", "NAZWA")
+        )
+        rows = {}
+        for line in lines[2:]:
+            if not line.strip():
+                break
+            rows[line[key:name].strip()] = line[choice:country].strip()
+        pl_variants = [
+            v for v in variants(country="PL") if v.product in ("nmt", "nmpt", "laz")
+        ]
+
+        assert {k for k in rows if k.startswith("pl.")} == {
+            v.source for v in pl_variants
+        }
+        assert rows["pl.gugik.nmpt_0_5m"] == "--product nmpt --resolution 0.5m"
+        parser = create_parser()
+        for variant in pl_variants:
+            flags = rows[variant.source]
+            args = parser.parse_args(["elevation", "download", *flags.split()])
+            assert args.product == variant.product, flags
+            if variant.product == "laz":
+                continue
+            assert args.vertical_crs in (None, variant.vertical_crs), flags
+            cls = GugikProvider if variant.product == "nmt" else GugikNmptProvider
+            provider = cls(
+                vertical_crs=variant.vertical_crs,
+                resolution=args.resolution,
+                format=args.format or "ASC",
+            )
+            assert provider.descriptor_key == variant.source, flags
+
+
+class TestPlCutoutOnly1m:
+    """A PL cutout comes from the WCS channel, which only the 1 m grid variant
+    has: another label is an error before any network, no ``--resolution``
+    means 1 m.
+
+    WCS answers: the recorded 20 x 20 m windows of ``tests/fixtures/gugik_wcs/
+    real_2026_10_11/`` (the bbox lies inside them); PRG mask: all land.
+    """
+
+    BBOX = ["--bbox", "567580.6,243664.7,567600.4,243684.3", "--country", "pl"]
+    RECORDINGS = {
+        "nmt": "nmt_evrf2007_20x20.mime",
+        "nmpt": "nmpt_evrf2007_20x20_sf05.mime",
+    }
+    ALL_LAND = LandMask(
+        (
+            {
+                "type": "Polygon",
+                "coordinates": [[[0, 0], [1e6, 0], [1e6, 1e6], [0, 1e6], [0, 0]]],
+            },
+        ),
+        (),
+    )
+
+    def _run(self, tmp_path, product, *extra):
+        recording = WCS_FIXTURES / self.RECORDINGS[product]
+        session = Mock(spec=requests.Session)
+        session.get = Mock(side_effect=lambda url, **kw: recorded_response(recording))
+        with (
+            patch("kartograf.transport.http.make_gugik_session", return_value=session),
+            patch(
+                "kartograf.providers.pl.prg.fetch_land_mask",
+                return_value=self.ALL_LAND,
+            ) as mask,
+        ):
+            rc = main(
+                ["elevation", "download", "--product", product, *self.BBOX]
+                + ["--cutout", "--horizontal-crs", "EPSG:2180"]
+                + ["--vertical-crs", "EVRF2007", *extra]
+                + ["-o", str(tmp_path / "out"), "-q"]
+            )
+        return rc, session, mask
+
+    @pytest.mark.parametrize("product", ["nmt", "nmpt"])
+    def test_cutout_only_1m(self, tmp_path, capsys, product):
+        rc, session, mask = self._run(tmp_path, product, "--resolution", "0.5m")
+
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error: wycinki PL (--cutout) sa tylko 1 m")
+        assert "arkusze bez --cutout" in err
+        session.get.assert_not_called()
+        mask.assert_not_called()
+        assert not (tmp_path / "out").exists()
+
+        rc, session, _ = self._run(tmp_path, product)
+
+        assert rc == 0, capsys.readouterr().err
+        bbox_dir = tmp_path / "out" / product / "pl_1992_1m_evrf2007" / "bbox"
+        assert [p.name for p in bbox_dir.glob("*.tif")] == [
+            "567580.6_243664.7_567600.4_243684.3.tif"
+        ]
+        session.get.assert_called_once()
 
 
 class TestCmdDownloadBBox:
@@ -4529,8 +4812,6 @@ class TestCmdDownloadLaz:
 
     @pytest.mark.parametrize("year_args", [[], ["--year", "2024"]])
     def test_laz_wfs_failure_reports_network_error(self, year_args, capsys, tmp_path):
-        import requests
-
         with (
             patch(
                 "requests.Session.get",
@@ -6818,6 +7099,15 @@ class TestCountryDispatch:
 # Auto-split of bbox/geometry per country + extra.parent_request (Task 17)
 # ===========================================================================
 
+# Choices the registry has only for PL decide `--country auto` (ADR-023
+# point 5): NMT grid labels without a CZ source (CZ: DMR 5G 2m, DMR 4G 5m)
+# and NMPT (no CZ source at all).
+_CZ_NMT_LABELS = {d.resolution for d in sources_for(country="CZ", product="nmt")}
+_PL_ONLY_CHOICES = [
+    *(("nmt", label) for label in _grid_labels("nmt") if label not in _CZ_NMT_LABELS),
+    ("nmpt", "0.5m"),
+]
+
 
 class TestAutoSplitBBox:
     """--country auto: a cross-border bbox split into countries, parent_request."""
@@ -7529,22 +7819,30 @@ class TestAutoSplitBBox:
         mock_manager_class.return_value = mock_manager
         return mock_manager
 
+    @pytest.mark.parametrize(("product", "label"), _PL_ONLY_CHOICES)
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data.find_sheets_for_bbox")
     @patch("kartograf.download.data.DownloadManager")
-    def test_auto_with_resolution_1m_resolves_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
+    def test_pl_only_flags_from_registry(
+        self, mock_manager_class, mock_find, mock_cz, product, label, tmp_path, capsys
     ):
-        """1m does not exist in CZ (2m/5m): auto resolves the country to PL."""
+        """A label or product without a CZ source in the registry resolves
+        ``auto`` to PL with one Info line; CZ never runs and PL downloads that
+        variant."""
         self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
 
-        result = main(self._BORDER + ["--resolution", "1m", "-o", str(tmp_path)])
+        result = main(
+            self._BORDER
+            + ["--product", product, "--resolution", label, "-o", str(tmp_path)]
+        )
 
         assert result == 0
         mock_cz.assert_not_called()
+        flag = f"--resolution {label}" if product == "nmt" else f"--product {product}"
         err = capsys.readouterr().err
-        assert "--country auto -> pl" in err
-        assert "--resolution 1m" in err
+        assert f"Info: --country auto -> pl ({flag} dotyczy tylko PL)\n" in err
+        variant = mock_manager_class.call_args.kwargs["provider"].variant
+        assert (variant.product, variant.label) == (product, label)
 
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data.find_sheets_for_bbox")
@@ -7658,23 +7956,6 @@ class TestAutoSplitBBox:
         assert parent == mock_pl.call_args.args[3]
         # the CZ part goes in the RESULT CRS (cz_crs = target), not in Krovak
         assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:2180"
-
-    @patch("kartograf.download.data._download_cz")
-    @patch("kartograf.download.data.find_sheets_for_bbox")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_auto_with_product_nmpt_resolves_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        """NMPT for CZ is stage 2: auto resolves the country to PL."""
-        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
-
-        result = main(self._BORDER + ["--product", "nmpt", "-o", str(tmp_path)])
-
-        assert result == 0
-        mock_cz.assert_not_called()
-        err = capsys.readouterr().err
-        assert "--country auto -> pl" in err
-        assert "--product nmpt" in err
 
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data.find_sheets_for_bbox")
@@ -8298,7 +8579,7 @@ class _PartialSheetProvider(_SheetProvider):
     def source_info(self, sheet):
         return {
             "url": f"https://opendata.geoportal.gov.pl/NMT/1/1_{sheet}.asc",
-            "layer": "SkorowidzeNMT2025",
+            "layer": "SkorowidzNMT2025",
             "acquisition_date": "2025-10-21",
             "full_sheet": not sheet.endswith(self.partial),
         }
@@ -8742,16 +9023,14 @@ class TestSheetCrsMismatchWarning:
     )
 
     def _run(self, tmp_path, argv, raw=None):
-        import requests
+        from tests.conftest import render_wfs_body, wfs_record
 
-        from tests.conftest import gfi_record, render_gfi_body
-
-        body = render_gfi_body(
+        body = render_wfs_body(
             [
-                gfi_record(
+                wfs_record(
                     self.SHEET,
                     system="PL-2000:S7",
-                    aktualnosc="2023-03-17",
+                    akt_data="2023-03-17",
                     url=self.URL,
                 )
             ]
@@ -10593,7 +10872,9 @@ class TestCampaignOptions:
         ):
             assert main(argv) == 0
             fake.resolve_error = DownloadError(
-                "GetFeatureInfo: pobranie nieudane po 3 probach", status_code=503
+                "WFS GetFeature 9 typow SkorowidzNMT (strona 1): pobranie "
+                "nieudane po 3 probach - wynik bylby niepelny",
+                status_code=503,
             )
             capsys.readouterr()
             assert main(argv) == 0
