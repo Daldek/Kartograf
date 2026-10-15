@@ -806,18 +806,34 @@ def _capability(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
     )
 
 
-def _probe(job: UnitJob):
+def _http(session: requests.Session | None) -> requests.Session:
+    """The caller's session, else the current thread's session of this module."""
+    return session if session is not None else _session()
+
+
+def _probe(job: UnitJob, session: requests.Session | None):
     """``HEAD`` of the file for a channel with the ``http`` signal."""
     if job.signal != "http" or job.url is None:
         return None
     url = job.url
-    return lambda: head_signal(_session(), url, timeout=PROBE_TIMEOUT)
+    return lambda: head_signal(_http(session), url, timeout=PROBE_TIMEOUT)
 
 
-def inspect_job(job: UnitJob, *, track: Track = _TRACK) -> PlanItem:
-    """Plan position of a unit job WITHOUT downloading its data."""
+def inspect_job(
+    job: UnitJob, *, track: Track = _TRACK, session: requests.Session | None = None
+) -> PlanItem:
+    """Plan position of a unit job WITHOUT downloading its data.
+
+    ``track``: the plan track of the calling command (``landcover`` for the
+    BDOT10k archive); ``session``: HTTP session of a ``HEAD`` (``None``: one
+    per thread of this module).
+    """
     return inspect_version(
-        job.slot, track=track, unit=job.unit, signal=job.signal, probe=_probe(job)
+        job.slot,
+        track=track,
+        unit=job.unit,
+        signal=job.signal,
+        probe=_probe(job, session),
     )
 
 
@@ -844,12 +860,15 @@ class _Source:
 
 
 def _fetch_package(
-    job: UnitJob, staged: Path, source: _Source, sink: NoticeSink
+    job: UnitJob,
+    staged: Path,
+    source: _Source,
+    sink: NoticeSink,
+    session: requests.Session,
 ) -> dict:
     assert job.url is not None and job.variant is not None
     params = job.channel.params
     assert isinstance(params, UnitPackageParams)
-    session = _session()
     if job.whole_country:
         try:
             length = head_signal(session, job.url, timeout=PROBE_TIMEOUT)[
@@ -881,7 +900,9 @@ def _fetch_package(
     return package.http
 
 
-def _fetch_features(job: UnitJob, staged: Path, source: _Source) -> None:
+def _fetch_features(
+    job: UnitJob, staged: Path, source: _Source, session: requests.Session
+) -> None:
     # lazy: GDAL vector (pyogrio) only for area results
     from kartograf.transform.gpkg import write_gpkg
     from kartograf.transport.feature_bbox import fetch_features
@@ -891,7 +912,7 @@ def _fetch_features(job: UnitJob, staged: Path, source: _Source) -> None:
     work = Path(tempfile.mkdtemp(prefix="kartograf-features-"))
     try:
         pages = fetch_features(
-            _session(),
+            session,
             job.channel.endpoint,
             params,
             job.layers,
@@ -930,6 +951,7 @@ def run_job(
     *,
     sink: NoticeSink,
     planned: set[_SLOT_KEY] | None = None,
+    session: requests.Session | None = None,
 ) -> VersionedFile | None:
     """Local version or download of one unit job (spec 4.2, ADR-042 D6).
 
@@ -939,7 +961,9 @@ def run_job(
     result by the download date; the sidecar names the channel by its
     capability and carries ``extra.source`` (``url``/``edition``/``member``
     or ``service``/``layers``/``dropped_fields``), ``extra.http`` of a
-    package and ``extra.parent_request``.
+    package and ``extra.parent_request``. ``session``: HTTP session of the
+    requests (``LandCoverManager``: its provider's; ``None``: one per thread
+    of this module).
 
     Raises
     ------
@@ -954,9 +978,9 @@ def run_job(
 
     def fetch(staged: Path) -> dict | None:
         if job.layers:
-            _fetch_features(job, staged, source)
+            _fetch_features(job, staged, source, _http(session))
             return None
-        return _fetch_package(job, staged, source, sink)
+        return _fetch_package(job, staged, source, sink, _http(session))
 
     def write(
         data: Path, ref: VersionRef, digest: ContentDigest, http: dict | None
@@ -994,7 +1018,7 @@ def run_job(
         fetch=fetch,
         write_sidecar=write,
         version=version,
-        probe=_probe(job),
+        probe=_probe(job, session),
     )
 
 
