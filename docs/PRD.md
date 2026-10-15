@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.4
-**Data:** 2026-10-13
+**Wersja:** 4.5
+**Data:** 2026-10-15
 **Product Owner:** Piotr
 **Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu)
 
@@ -31,7 +31,7 @@ Pobieranie danych przestrzennych z różnych źródeł (GUGiK, CUZK, Copernicus,
 
 Kartograf to narzędzie CLI + biblioteka Python oferujące:
 1. **Unified API** - jednolity interfejs dla NMT, NMPT, Ortofoto, LAZ, Land Cover, SoilGrids
-2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/LAZ/BDOT10k), CUZK (DMR 5G/4G, Czechy — etap 1), CORINE, SoilGrids
+2. **Multiple Providers** - GUGiK (NMT/NMPT/Orto/LAZ/BDOT10k, granice PRG, EGiB, modele 3D budynków), CUZK (DMR 5G/4G, Czechy — etap 1), CORINE, SoilGrids
 3. **Intelligent Selection** - godło (PL-1992/PL-2000, CZ TM33/SM5), TERYT, bbox, plik geometrii; wybór kraju `--country {pl,cz,auto}`
 4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--cutout --horizontal-crs`)
 5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla pobrań do magazynu, jawny wybór zakresu kampanii GUGiK
@@ -745,6 +745,174 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt
 
 ---
 
+### 3.13 Feature: Granice administracyjne PRG (`boundaries`, ADR-042)
+
+**Priority:** P1 (High)
+**Status:** Production (0.8.0)
+
+#### Description
+Granice jednostek administracyjnych i ewidencyjnych z Państwowego Rejestru
+Granic GUGiK (źródło `pl.gugik.prg`) w magazynie wersji: paczka
+województwa, plik krajowy albo jednostki jednego poziomu przecinające
+obszar zadania jako jeden GeoPackage z WFS.
+
+#### Requirements
+- `--teryt <2 cyfry>`: paczka województwa (GML wszystkich poziomów), ZIP 1:1
+  w `boundaries/pl_prg_gml/teryt/<woj>.zip`; `--teryt <4 cyfry>` = błąd
+  (obszar powiatu: `--bbox`/`--geometry`).
+- `--whole-country --country pl`: plik krajowy SHP (ok. 377 MB), rozmiar
+  w `Warning:` przed transferem (`Notice` `whole_country_size`),
+  `boundaries/pl_prg_shp/country/pl.zip`.
+- Obszar (`--bbox`/`--sheet`/`--geometry` + `--country pl`) z wymaganym
+  `--level wojewodztwo|powiat|gmina|jednostka-ewidencyjna|obreb`: pełne
+  geometrie jednostek przecinających obszar (bez przycinania), EPSG:2180,
+  `boundaries/pl_prg_<poziom>/bbox/<coords>.gpkg`; kompletność z liczby
+  obiektów usługi, bajty GPKG powtarzalne w obrębie jednej wersji GDAL.
+- Sygnał aktualności `none`: `--check-updates` raportuje „nie da się
+  sprawdzić bez pobrania”, nowa treść tylko przez `--force` (ta sama
+  treść = bez zmian, inna = nowa wersja); etykieta wersji = data pobrania.
+
+#### Capabilities
+```python
+from kartograf import BBox, download_collection
+
+# = kartograf boundaries download ... (ADR-037)
+report = download_collection(
+    product="admin",
+    output_dir="./data",
+    country="pl",
+    bbox=BBox(550000, 220000, 590000, 270000, "EPSG:2180"),
+    level="gmina",
+)  # CollectionReport: files (UnitFile), failed (UnitFailure), stale, notices, ok
+download_collection(product="admin", output_dir="./data", teryt="12")
+```
+
+#### CLI Commands
+```bash
+kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
+kartograf boundaries download --product admin --teryt 12 -o ./data
+kartograf boundaries download --product admin --country pl --whole-country -o ./data
+kartograf boundaries list-sources
+```
+
+---
+
+### 3.14 Feature: EGiB — mapa ewidencyjna (`cadastre`, ADR-042)
+
+**Priority:** P1 (High)
+**Status:** Production (0.8.0)
+
+#### Description
+Działki i budynki z Ewidencji Gruntów i Budynków (źródło `pl.gugik.egib`)
+w magazynie wersji: eksport powiatu albo obiekty obszaru z usługi zbiorczej
+WFS GUGiK.
+
+#### Requirements
+- `--teryt <4 cyfry>`: eksport powiatu (GeoPackage z warstwami `dzialki`,
+  `budynki`, `transakcje`; odświeżany co dobę), GPKG rozpakowany z ZIP do
+  `cadastre/pl_egib_gpkg/teryt/<T>.gpkg`; `--teryt <2 cyfry>` (paczka
+  wojewódzka ok. 1,4 GB) = błąd z podpowiedzią `--teryt <4 cyfry>`.
+- Obszar (`--bbox`/`--sheet`/`--geometry` + `--country pl`): działki
+  i budynki przecinające obszar w jednym GPKG EPSG:2180,
+  `cadastre/pl_egib/bbox/<coords>.gpkg`; powiaty bez integracji z usługą
+  zbiorczą = luki, atrybuty zastrzeżone = `brak_uprawnien`; pole `DATA`
+  poza plikiem, wartości w sidecarze `extra.source.dropped_fields`.
+- Sygnał aktualności `none`, etykieta wersji = data pobrania (jak 3.13).
+
+#### Capabilities
+```python
+from kartograf import check_collection, download_collection
+
+report = download_collection(product="map", output_dir="./data", teryt="1261")
+print([item.file.path for item in report.files], report.ok)
+plan = check_collection(product="map", output_dir="./data", teryt="1261")  # UpdatePlan
+```
+
+#### CLI Commands
+```bash
+kartograf cadastre download --product map --teryt 1261 -o ./data
+kartograf cadastre download --product map --country pl --bbox 566000,244000,566400,244400 -o ./data
+kartograf cadastre list-sources
+```
+
+---
+
+### 3.15 Feature: Modele 3D budynków (`models3d`, ADR-042)
+
+**Priority:** P1 (High)
+**Status:** Production (0.8.0)
+
+#### Description
+Modele 3D budynków CityGML GUGiK (źródło `pl.gugik.buildings_3d`): paczka
+powiatu ZIP zapisywana 1:1 w magazynie wersji, wydanie wybierane jawnie
+(LoD i rok).
+
+#### Requirements
+- Wybór: `--teryt <4 cyfry>` albo obszar (+ `--country pl`; paczki każdego
+  powiatu obszaru wg PRG, `Notice` `unit_list`); `--whole-country` = błąd
+  (pliki krajowe 3,5-4,1 GB poza zakresem).
+- Wydanie: `--lod 1 --year 2019|2021|2022|2024` albo `--lod 2` (jedyne
+  wydanie 2017, `--year` można pominąć); bez wartości domyślnych.
+- Plik `models3d/pl_buildings_lod<N>_<rok>/teryt/<T>.zip`; etykieta wersji
+  = rok wydania; sygnał `none`.
+- Układ wysokości w sidecarze z danych: LoD1 2019 i LoD2 2017 = EPSG:9650
+  (PL-KRON86-NH), LoD1 2021/2022/2024 = EPSG:9651 (PL-EVRF2007-NH).
+- LoD2 nie pokrywa kraju: brak paczki powiatu = błąd tego powiatu.
+
+#### Capabilities
+```python
+from kartograf import download_collection
+
+download_collection(product="buildings", output_dir="./data", teryt="1261", lod=1, year=2024)
+download_collection(product="buildings", output_dir="./data", teryt="1261", lod=2)
+```
+
+#### CLI Commands
+```bash
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
+kartograf models3d download --product buildings --lod 2 --country pl --bbox 566000,244000,566400,244400 -o ./data
+kartograf models3d list-sources
+```
+
+---
+
+### 3.16 Feature: Archiwum roczników BDOT10k (ADR-042 D11)
+
+**Priority:** P2 (Medium)
+**Status:** Production (0.8.0)
+
+#### Description
+Roczniki BDOT10k 2014-2025 (stan z początku roku) z archiwum GUGiK: oryginalna
+paczka powiatu ZIP zapisywana 1:1 w magazynie wersji, obok bieżących
+paczek z sekcji 3.5.
+
+#### Requirements
+- `--year 2014..2025` wymaga `--format GML` albo `SHP`; GPKG, `--layers`
+  i `--keep-raw` z `--year` = błąd; `--format GML` bez `--year` = błąd
+  z podpowiedzią; bez `--year` bieżące paczki jak dotąd (GPKG/SHP).
+- Plik `landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip`; obszar =
+  paczki każdego powiatu (PRG); etykieta wersji = rocznik, sygnał `none`.
+- Identyczny rocznik (ten sam SHA-256 w innym wydaniu tego samego powiatu)
+  nie zajmuje miejsca drugi raz: dowiązanie twarde, status `relabeled`.
+- Brak paczki powiatu (404) = `NoCoverageError` tego powiatu.
+
+#### Capabilities
+```python
+from kartograf import LandCoverManager
+
+lc = LandCoverManager("./data", "bdot10k")
+result = lc.download(teryt="1261", year=2024, format="SHP")  # LandCoverAreaResult
+# -> landcover/pl_bdot10k_shp_2024/teryt/1261.zip
+```
+
+#### CLI Commands
+```bash
+kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
+kartograf landcover download --source bdot10k --sheet N-34-130-D --year 2018 --format GML -o ./data
+```
+
+---
+
 ## 4. Architecture
 
 ### 4.1 Component Diagram
@@ -842,6 +1010,11 @@ from kartograf import (
     UnitFile,
     UnitFailure,
 
+    # Download (collections: `boundaries`/`cadastre`/`models3d download`, ADR-042)
+    download_collection,
+    check_collection,
+    CollectionReport,
+
     # Download (NMT)
     DownloadManager,
     DownloadProgress,
@@ -913,6 +1086,23 @@ from kartograf import (
     HsgResult,
     hsg_from_rasters,
 
+    # Project manifest (kartograf-project.json, ADR-040)
+    init_project,
+    open_project,
+    add_project_task,
+    remove_project_task,
+    download_project,
+    check_project,
+    project_status,
+    verify_project,
+    Project,
+    ProjectTask,
+    PinnedFile,
+    ProjectReport,
+    TaskResult,
+    ProjectCheck,
+    FileCheck,
+
     # Transport and mosaic (stable since 0.7.1)
     get_with_retry,
     make_gugik_session,
@@ -947,6 +1137,7 @@ PyJWT[crypto] >= 2.8.0 # OAuth2 JWT (CLMS)
 rasterio >= 1.3.0      # GeoTIFF processing
 numpy >= 1.24.0        # Array operations
 pyshp >= 2.3.0         # Shapefile reading
+pyogrio >= 0.10        # GDAL vector: GPKG of collection area results (ADR-042)
 ```
 
 ### 6.2 Development Dependencies
@@ -1031,7 +1222,9 @@ opisują wynik, nie rozwiązanie.
       są nowsze dane. Dane już obecne w magazynie nie są pobierane ponownie.
 - [ ] **Komplet publicznych danych GUGiK:** wszystkie produkty dostępne
       publicznie i bez logowania, o ile pozwalają na to usługi
-      (inwentaryzacja w specu podprojektu).
+      (inwentaryzacja w specu podprojektu). Zrobione w 0.8.0 (plan C,
+      ADR-042): granice PRG, EGiB, modele 3D budynków, archiwum roczników
+      BDOT10k.
 - [ ] **Gotowe dane:** dla każdego produktu wynik dopasowany do obszaru
       zadania (wycinek, scalenie, reprojekcja tam, gdzie mają sens)
       z sidecarem pochodzenia.
@@ -1071,6 +1264,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 4.3
-**Data ostatniej aktualizacji:** 2026-10-11
+**Wersja dokumentu:** 4.5
+**Data ostatniej aktualizacji:** 2026-10-15
 **Status:** Wydanie v0.7.2 (2026-10-11)
