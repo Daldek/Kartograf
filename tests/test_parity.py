@@ -357,12 +357,8 @@ def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     [
         ("10,10,5,5", BBox(10, 10, 5, 5, "EPSG:2180")),
         ("nan,1,2,3", BBox(float("nan"), 1, 2, 3, "EPSG:2180")),
-        (
-            "750000,5500000,750100,5500100",
-            BBox(750000, 5500000, 750100, 5500100, "EPSG:2177"),
-        ),
     ],
-    ids=["inverted", "nan", "unsupported-sheet-crs"],
+    ids=["inverted", "nan"],
 )
 def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
     options = {

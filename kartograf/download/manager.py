@@ -82,17 +82,26 @@ class DownloadProgress:
     Attributes
     ----------
     current : int
-        Number of sheets processed so far
+        Number of units (sheets, powiats, tiles) processed so far
     total : int
-        Total number of sheets to process
+        Total number of units to process
     sheet : str
-        Current sheet being processed
+        Current unit: sheet code, TERYT of a BDOT10k powiat
     status : str
         Status of current operation ("downloading", "skipped", "completed",
         "failed", "no_coverage"). ``no_coverage`` is a sheet the source has
         no data for (``NoCoverageError``: sea, area beyond the border) — an
         expected outcome, not a transport failure; it is still listed in
-        ``DownloadResult.failed`` (and ``no_coverage``).
+        ``DownloadResult.failed`` (and ``no_coverage``). Campaign events of
+        one sheet with several selected flights (``all_campaigns``,
+        ``full_sheet``), right before the first transfer of that sheet:
+        ``campaigns`` (``current`` flights to download of ``total``
+        selected, ``message`` = ``<label> lokalna|do pobrania`` per flight,
+        newest first) and then ``campaign`` before each flight download
+        (``current``/``total`` among the flights to download, ``message`` =
+        its label). With ``workers > 1`` campaign events come from worker
+        threads. ``download_data`` adds ``start`` (a transfer of a sheet or
+        hierarchy begins) and ``tiles`` (LAZ tiles done/total).
     message : str
         Optional message with additional details
     """
@@ -318,6 +327,17 @@ class _Pick:
     local_ref: CampaignRef | None
     newer: bool
     previous: LocalVersion | None = None
+
+
+def _campaign_list(picks: list[_Pick]) -> str:
+    """``<label> lokalna, <label> do pobrania, ...`` of a sheet's flights
+    (message of the ``campaigns`` progress event)."""
+    return ", ".join(
+        f"{pick.local.label} lokalna"
+        if pick.local is not None and pick.local_ref is not None
+        else f"{pick.ref.dirname} do pobrania"
+        for pick in picks
+    )
 
 
 @dataclass(frozen=True)
@@ -781,7 +801,9 @@ class DownloadManager:
         A direct leaf failure raises ``DownloadError``. A hierarchy collects
         per-sheet failures in the result. With ``plan``, only matching positions
         are executed and changed source signals are reported in ``stale``.
-        ``on_download`` runs before the first actual leaf download.
+        ``on_download`` runs before the first actual leaf download;
+        ``on_progress`` gets the list events and, for a sheet with several
+        selected flights, ``campaigns``/``campaign`` (``DownloadProgress``).
         """
         validate_update(update)
         if plan is not None and update != "upgrade":
@@ -812,6 +834,7 @@ class DownloadManager:
                 on_download,
                 records=check.selected[parser.sheet] if check is not None else None,
                 available=check.available[parser.sheet] if check is not None else None,
+                on_progress=on_progress,
             )
         result = DownloadResult()
         self._record(
@@ -1043,6 +1066,7 @@ class DownloadManager:
                     records=tuple(chosen),
                     available=available[sheet],
                     exact=True,
+                    on_progress=on_progress,
                 )
             except DownloadError as error:
                 result.failed.append(sheet)
@@ -1063,18 +1087,25 @@ class DownloadManager:
         on_download: Callable[[], None] | None = None,
         records: tuple[SkorowidzRecord, ...] | None = None,
         available: tuple[int, ...] | None = None,
+        on_progress: ProgressCallback | None = None,
     ) -> SheetFetch:
         """
         Download one sheet — the single "download a sheet" implementation (D10).
 
         A provider with campaigns (``supports_campaigns is True``) takes the
-        campaign flow (``_fetch_campaigns``), any other — today's flow
+        campaign flow (``_fetch_campaigns``, which reports ``campaigns``/
+        ``campaign`` progress to ``on_progress``), any other — today's flow
         (``_fetch_sheet_plain``). ``on_download`` is called right before the
         first download (sequential mode reports ``"downloading"``).
         """
         if self._campaign_aware:
             return self._fetch_campaigns(
-                sheet, update, on_download, records=records, available=available
+                sheet,
+                update,
+                on_download,
+                records=records,
+                available=available,
+                on_progress=on_progress,
             )
         return self._fetch_sheet_plain(sheet, update, on_download)
 
@@ -1294,6 +1325,7 @@ class DownloadManager:
         available: tuple[int, ...] | None = None,
         *,
         exact: bool = False,
+        on_progress: ProgressCallback | None = None,
     ) -> SheetFetch:
         """
         Campaign flow (ADR-030) on the version store (spec 3).
@@ -1385,6 +1417,14 @@ class DownloadManager:
         started = False
         newer: str | None = None
         files: list[VersionedFile] = []
+        todo = [p for p in picks if p.local is None or p.local_ref is None]
+        step = 0
+
+        def emit(current: int, total: int, status: str, message: str) -> None:
+            # campaign events only for a sheet with several selected flights
+            if on_progress is not None and len(picks) > 1:
+                on_progress(DownloadProgress(current, total, sheet, status, message))
+
         for pick in picks:
             if pick.local is not None and pick.local_ref is not None:
                 logger.info(f"{sheet} {pick.local.label}: lokalna wersja")
@@ -1403,9 +1443,13 @@ class DownloadManager:
                 )
                 local.append((pick.local_ref, pick.local.path))
                 continue
-            if on_download is not None and not started:
-                on_download()
+            if not started:
                 started = True
+                if on_download is not None:
+                    on_download()
+                emit(len(todo), len(picks), "campaigns", _campaign_list(picks))
+            step += 1
+            emit(step, len(todo), "campaign", pick.ref.dirname)
             logger.info(f"Downloading {sheet} {pick.ref.dirname}...")
             try:
                 commit = self._download_version(
@@ -1606,6 +1650,7 @@ class DownloadManager:
         update: UpdateMode | None,
         on_download: Callable[[], None] | None = None,
         check: YearRangeCheck | None = None,
+        on_progress: ProgressCallback | None = None,
     ) -> tuple[str, SheetFetch | None, str, str, tuple[str, ...]]:
         """
         Download a list sheet: ``DownloadError`` -> a status instead of an
@@ -1633,6 +1678,7 @@ class DownloadManager:
                     on_download,
                     records=check.selected[sheet] if check is not None else None,
                     available=check.available[sheet] if check is not None else None,
+                    on_progress=on_progress,
                 )
         except NoCoverageError as e:
             logger.debug("No data for %s: %s", sheet, e)
@@ -1775,7 +1821,11 @@ class DownloadManager:
                     self._emit(on_progress, i, total, sheet, "downloading")
 
                 _, fetch, status, message, hints = self._download_single_sheet_task(
-                    sheet, update, on_download=started, check=check
+                    sheet,
+                    update,
+                    on_download=started,
+                    check=check,
+                    on_progress=on_progress,
                 )
                 self._record(result, sheet, fetch, status, hints, message)
                 self._emit(on_progress, i, total, sheet, status, message)
@@ -1789,6 +1839,7 @@ class DownloadManager:
                         sheet,
                         update,
                         check=check,
+                        on_progress=on_progress,
                     ): sheet
                     for sheet in sheets
                 }

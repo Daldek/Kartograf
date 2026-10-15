@@ -589,6 +589,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `find_sheets_for_bbox(..., sheet_system="1992")` przyjmuje teraz te same
   polskie uklady co PL-2000 (EPSG:2180, EPSG:4326, EPSG:2176-2179); uklady
   CZ zamienia wczesniej `download_data` operacja przypieta.
+- Postep pobierania arkusza z kilkoma kampaniami (`--all-campaigns`,
+  `--full-sheet`): dotad linie `nowa wersja`/`lokalna wersja` pojawialy sie
+  dopiero po calym zadaniu. Biblioteka zglasza zdarzenia `DownloadProgress`
+  `campaigns` (lista lotow arkusza: `lokalna`/`do pobrania`) i `campaign`
+  (przed pobraniem kazdego lotu, `k/n`); CLI drukuje `  Kampanie <arkusz>
+  (do pobrania k z n): ...` i `  Pobieranie <arkusz> <etykieta> (k/n)...`.
+  `--upgrade --plan` arkuszy PL raportuje postep jak zwykle pobieranie.
 
 ## [0.7.2] - 2026-10-11
 

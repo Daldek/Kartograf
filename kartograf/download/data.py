@@ -663,7 +663,9 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
         return 0
     if run.update != "upgrade" or run.loaded is None:
         return None
-    report = manager.download_sheets(sheets, update="upgrade", plan=run.loaded)
+    report = manager.download_sheets(
+        sheets, update="upgrade", plan=run.loaded, on_progress=run.on_progress
+    )
     reported = any(n.code == UNVERIFIED_LOCAL for n in report.notices)
     for sheet, files in report.files.items():
         for file in files:
