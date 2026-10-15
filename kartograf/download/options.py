@@ -394,6 +394,46 @@ def validate_request_bbox(bbox: BBox) -> None:
         raise ValidationError(f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}") from e
 
 
+def validate_area_choice(
+    sheet: str | None, bbox: BBox | None, geometry: object | None
+) -> None:
+    """Exactly one area choice and a valid bbox (texts shared by every
+    command taking ``--sheet/--bbox/--geometry``; no network)."""
+    # the CLI parses --bbox before anything else: the same first error
+    if bbox is not None:
+        validate_request_bbox(bbox)
+    provided = sum(v is not None for v in (sheet, bbox, geometry))
+    if provided > 1:
+        raise ValidationError(
+            "Podaj dokladnie jeden wybor obszaru: --sheet, --bbox albo --geometry"
+        )
+    if provided == 0:
+        raise ValidationError("Podaj wybor obszaru: --sheet, --bbox albo --geometry")
+
+
+def year_bounds(
+    year: int | None, min_year: int | None, max_year: int | None
+) -> tuple[int | None, int | None]:
+    """``(min_year, max_year)`` of the year flags (``year`` = both bounds);
+    ``ValidationError`` naming the flags for a contradictory choice."""
+    if year is not None and (min_year is not None or max_year is not None):
+        raise ValidationError(
+            "--year wyklucza sie z --min-year/--max-year "
+            "(--year Y to skrot --min-year Y --max-year Y)"
+        )
+    if year is not None:
+        min_year = max_year = year
+    try:
+        validate_year_bounds(min_year, max_year)
+    except ValidationError as e:
+        raise ValidationError(
+            str(e)
+            .replace("min_year", "--year" if year is not None else "--min-year")
+            .replace("max_year", "--max-year")
+        ) from None
+    return min_year, max_year
+
+
 def validate_request(task: SimpleNamespace) -> None:
     """Checks of the whole request before anything else (no network).
 
@@ -401,16 +441,7 @@ def validate_request(task: SimpleNamespace) -> None:
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
     LAZ-only and non-LAZ options. Narrows ``task.min_year``/``max_year``.
     """
-    # the CLI parses --bbox before anything else: the same first error
-    if task.bbox is not None:
-        validate_request_bbox(task.bbox)
-    provided = sum(v is not None for v in (task.sheet, task.bbox, task.geometry))
-    if provided > 1:
-        raise ValidationError(
-            "Podaj dokladnie jeden wybor obszaru: --sheet, --bbox albo --geometry"
-        )
-    if provided == 0:
-        raise ValidationError("Podaj wybor obszaru: --sheet, --bbox albo --geometry")
+    validate_area_choice(task.sheet, task.bbox, task.geometry)
     if task.product is None:
         raise ValidationError(f"--product wymagane: {PRODUCT_CHOICES}")
     if task.product not in _PRODUCTS:
@@ -444,22 +475,7 @@ def validate_request(task: SimpleNamespace) -> None:
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
-    year = task.year
-    if year is not None and (task.min_year is not None or task.max_year is not None):
-        raise ValidationError(
-            "--year wyklucza sie z --min-year/--max-year "
-            "(--year Y to skrot --min-year Y --max-year Y)"
-        )
-    if year is not None:
-        task.min_year = task.max_year = year
-    try:
-        validate_year_bounds(task.min_year, task.max_year)
-    except ValidationError as e:
-        raise ValidationError(
-            str(e)
-            .replace("min_year", "--year" if year is not None else "--min-year")
-            .replace("max_year", "--max-year")
-        ) from None
+    task.min_year, task.max_year = year_bounds(task.year, task.min_year, task.max_year)
     if task.product != "laz" and task.min_density is not None:
         raise ValidationError(
             f"--min-density dziala tylko z --product laz (podano "
