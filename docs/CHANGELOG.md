@@ -715,6 +715,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `skipped`/`failed` w kolejnosci ukonczenia); CLI i `project download`
   rysuja ten sam pasek co dla arkuszy. Jeden `--teryt`, CORINE i SoilGrids
   bez zmian (jeden plik).
+- Pasek postepu listy arkuszy (i powiatow BDOT10k), ktorego ostatnia
+  jednostka byla `o` (lokalna wersja), nie konczyl linii: pierwsza linia
+  statusu doklejala sie do paska (weryfikacja na zywo 2026-10-15). Linia
+  paska jest teraz zamykana przed liniami statusu i `Error:`.
 - Sidecar dowiazania (`<plik>.meta.json` sciezki standardowej) po awarii
   zapisu zostawal stary i opisywal poprzednia wersje (ADR-030 M-8). Teraz
   jest usuwany (ostrzezenie w logu), a nastepne uruchomienie odtwarza

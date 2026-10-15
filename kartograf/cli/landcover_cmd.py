@@ -12,7 +12,7 @@ from typing import Any
 
 from kartograf.cli._args import parse_bbox_arg
 from kartograf.cli.download_cmd import (
-    _error_lead,
+    _end_progress,
     _plan_context,
     _print_notice,
     _print_version_summary,
@@ -152,16 +152,15 @@ def _landcover_task(
         **options,
     )
     out = manager.output_dir
+    _end_progress(on_progress)
     statuses = []
     for item in result.files:
         for file in (item.file, item.raw):
             if file is not None:
                 _report_file(args, _unit_of(file.path, out), file, update)
                 statuses.append(file.status)
-    lead = _error_lead(on_progress)
     for failure in result.failed:
-        print(f"{lead}Error: {failure.unit}: {failure.error}", file=sys.stderr)
-        lead = ""
+        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(result.stale)
     # several files (BDOT10k area): one summary line, as for sheet lists
     if source == "bdot10k" and selection["teryt"] is None and not args.quiet:

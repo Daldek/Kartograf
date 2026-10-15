@@ -131,9 +131,12 @@ def create_progress_callback(quiet: bool = False, workers: int = 1):
     return _ProgressPrinter(workers)
 
 
-def _error_lead(on_progress) -> str:
-    """``"\\n"`` only if the progress bar left a line unterminated."""
-    return "\n" if getattr(on_progress, "pending", False) is True else ""
+def _end_progress(on_progress) -> None:
+    """End a bar line left unterminated (the last unit ``skipped``, a LAZ
+    tile counter) before the status lines and errors."""
+    if getattr(on_progress, "pending", False) is True:
+        print()
+        on_progress.pending = False
 
 
 # Cache warnings already printed by the current command (several tracks may
@@ -485,9 +488,10 @@ def _cmd_download(args: argparse.Namespace) -> int:
 def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> None:
     """Status lines, summary, failures and stale positions of a report."""
     update = _update_mode(args)
+    _end_progress(on_progress)
     if not args.quiet:
         if getattr(on_progress, "used", False):
-            print()  # the progress bar ends without a newline
+            print()  # campaign lines: a blank line before the status lines
         for unit_file in report.files:
             print(_status_line(unit_file.unit, unit_file.file, update))
         several = (
@@ -502,8 +506,6 @@ def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> 
                 sum(1 for f in report.failed if f.kind == "download"),
                 Path(args.output) / ("laz" if args.product == "laz" else ""),
             )
-    lead = _error_lead(on_progress)
     for failure in report.failed:
-        print(f"{lead}Error: {failure.error}", file=sys.stderr)
-        lead = ""
+        print(f"Error: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)

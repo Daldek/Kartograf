@@ -11202,16 +11202,19 @@ class TestErrorWithoutBlankLine:
         err = capsys.readouterr().err
         assert err.startswith("Error: brak kampanii od 2024")
 
-    def test_error_lead_only_after_unfinished_progress_line(self, capsys):
-        from kartograf.cli.download_cmd import _error_lead, create_progress_callback
+    def test_unfinished_progress_line_ends_before_status_lines(self, capsys):
+        """A bar line left open (last unit ``skipped``: live 2026-10-15 the
+        first status line was glued to it) gets its line end exactly once."""
+        from kartograf.cli.download_cmd import _end_progress, create_progress_callback
 
         cb = create_progress_callback(False)
-        assert _error_lead(cb) == ""
-        cb(DownloadProgress(0, 1, "N-1", "downloading", ""))
-        assert _error_lead(cb) == "\n"
-        cb(DownloadProgress(1, 1, "N-1", "failed", ""))
-        assert _error_lead(cb) == ""
-        assert _error_lead(None) == ""
+        cb(DownloadProgress(1, 2, "N-1", "completed", ""))
+        cb(DownloadProgress(2, 2, "N-2", "skipped", ""))
+        _end_progress(cb)
+        _end_progress(cb)
+        _end_progress(None)
+        last = capsys.readouterr().out.split("\r")[-1]
+        assert "o N-2" in last and last.endswith("\n") and last.count("\n") == 1
 
 
 class TestSoilgridsHsgNoEarlyMkdir:
