@@ -5,7 +5,7 @@ opisuje zachowanie widoczne dla użytkownika; szczegóły techniczne i
 kontrakty leżą w dokumentach kanonicznych, do których sekcje odsyłają:
 zakres i ograniczenia — [SCOPE.md](SCOPE.md), architektura, układ `data/`
 i schemat sidecara — [ARCHITECTURE.md](ARCHITECTURE.md), uzasadnienia —
-[DECISIONS.md](DECISIONS.md). Pełna lista opcji CLI: `kartograf <komenda> --help`;
+[DECISIONS.md](DECISIONS.md). Pełna lista opcji CLI: `kartograf <grupa> <komenda> --help`;
 lista publicznego API: `kartograf/__init__.py` (`__all__`).
 
 ## Spis treści
@@ -24,14 +24,29 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
 6. [Konfiguracja CLMS API (CORINE GeoTIFF)](#6-konfiguracja-clms-api-corine-geotiff)
 7. [Znane problemy i ograniczenia](#7-znane-problemy-i-ograniczenia)
 
+Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
+
+| Grupa | Komendy | Dane |
+|---|---|---|
+| `elevation` | `download`, `list-sources` | NMT, NMPT (PL, CZ), LAZ (PL) |
+| `imagery` | `download`, `list-sources` | ortofotomapa (PL) |
+| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k, CORINE (`--source`) |
+| `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
+
+Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
+--help` wypisuje komendy grupy, `list-sources` — źródła grupy z rejestru (bez
+sieci). Dawne `kartograf download`, `kartograf soilgrids` i
+`landcover --source soilgrids` nie działają: kończą się błędem (kod 2)
+z nazwą nowej komendy (tabela: CHANGELOG 0.8.0).
+
 Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
-`--output` (także `landcover download` i `soilgrids hsg`), `--country`
+`--output` (także `landcover download`, `soil download` i `soil hsg`), `--country`
 (z `--bbox`/`--geometry`), `--vertical-crs` (NMT, NMPT, LAZ),
 `--resolution` (NMT, gdy jest wybór), `--sheet-system` (PL `--bbox`/`--geometry`
 bez `--cutout`), `--horizontal-crs` (z `--cutout`) i `--scale` (PL-2000)
 podaje się jawnie. Brak wartości to `Error:` z listą
 dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
-podaje też `kartograf <komenda> --help`. Domyślne zostały tylko format,
+podaje też `kartograf <grupa> <komenda> --help`. Domyślne zostały tylko format,
 układ `--bbox-crs EPSG:2180`, przełączniki i parametry techniczne
 (`--workers`).
 
@@ -48,44 +63,44 @@ kartograf parse N-34-130-D --hierarchy
 
 # NMT: pojedynczy arkusz albo hierarchia, opcjonalnie 5m; godło PL-1992 grubsze
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
-kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --sheet N-34-130-D --resolution 5m --workers 8 --output ./data --product nmt --vertical-crs EVRF2007
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D --resolution 5m --workers 8 --output ./data --product nmt --vertical-crs EVRF2007
 # NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z --vertical-crs KRON86
 # kończy się Error: (kod 1, przed siecią) — użyj --vertical-crs EVRF2007
 # albo --resolution 1m dla KRON86
 
 # Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
-kartograf download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
-kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
-kartograf download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
-kartograf download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
+kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl -o ./data
 
 # PL-2000: godło albo bbox w CRS strefy; godło grubsze i bbox wymagają --scale
 # zgodnej z arkuszami GUGiK (sekcja 1.6)
 kartograf parse 6.179.12.20
-kartograf download --sheet 6.179.12.20 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet 6.179.12.20 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
 
 # Kampanie GUGiK (sekcja 4): domyślnie najnowsza; `--all-campaigns`
 # pobiera wszystkie kampanie arkusza
-kartograf download --sheet N-34-130-D-d-2-4 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
-kartograf download --sheet N-34-130-D-d-2-4 --product laz --all-campaigns --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # + najnowszy pełny lot w full_sheet/ (sekcja 4.2)
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --all-campaigns --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data
 
 # Wybór roku danych (NMT, NMPT, orto, LAZ; sekcja 4.1)
-kartograf download --sheet N-34-130-D-d-2-4 --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot z 2025
-kartograf download --sheet N-34-130-D-d-2-4 --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z 2025
-kartograf download --sheet N-34-130-D-d-2-4 --product orto --year 2024 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowsza, nie starsza niż 2024
-kartograf download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --year 2025 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot z 2025
+kartograf elevation download --sheet N-34-130-D-d-2-4 --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z 2025
+kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto --year 2024 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowsza, nie starsza niż 2024
+kartograf elevation download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
 
-Pełna lista komend i opcji: `kartograf --help`, `kartograf <komenda> --help`.
+Pełna lista komend i opcji: `kartograf --help`, `kartograf <grupa> <komenda> --help`.
 
 LAZ: domyślnie pobierany jest najnowszy kafel dla każdego fragmentu obszaru;
 starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
@@ -106,10 +121,10 @@ i `--max-year` działają dla NMT, NMPT, orto i LAZ (od 0.7.2; wcześniej
 ### 1.2 Selekcja obszaru i wybór kraju (`--country`)
 
 ```bash
-kartograf download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
-kartograf download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
+kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
 
 - Domyślne `--bbox-crs` to `EPSG:2180`; plik geometrii: SHP albo GPKG.
@@ -117,7 +132,7 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
   używa pierwszej; biblioteka emituje jeden `Notice`
   `geometry_layer_default` z wybraną warstwą, listą pozostałych
   i podpowiedzią `--layer NAZWA` (CLI: `Info:`, również przy `-q`).
-  Dotyczy też `landcover download` i `soilgrids hsg` (`LandCoverManager`,
+  Dotyczy też `landcover download`, `soil download` i `soil hsg` (`LandCoverManager`,
   `HSGCalculator`). Niskopoziomowe funkcje `kartograf.core.geometry`
   (np. `find_sheets_for_geometry`) wywołane bez `layer=` logują
   ostrzeżenie (`logger.warning`) — podaj `layer=`, aby wskazać warstwę jawnie.
@@ -161,15 +176,15 @@ GeoTIFF obszaru; układ wyniku podaje wymagane `--horizontal-crs`
 
 ```bash
 # NMT 1 m, wycinek WCS w układzie źródłowym lub po lokalnej reprojekcji
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
 # NMPT 1 m, oba układy wysokościowe (tu KRON86)
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmpt --vertical-crs KRON86 --cutout --horizontal-crs EPSG:2180 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmpt --vertical-crs KRON86 --cutout --horizontal-crs EPSG:2180 -o ./data
 # pogranicze: osobne wycinki PL + CZ, ten sam układ i parent_request
 # (wycinek PL ma tylko 1 m, część CZ wymaga 2m albo 5m — wartości per kraj)
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:2180 --product nmt --resolution pl=1m,cz=2m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:2180 --product nmt --resolution pl=1m,cz=2m --vertical-crs EVRF2007 -o ./data
 # NMT 5 m: arkusze OpenData, bez --cutout
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 5m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 5m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
 
 - PL: WCS GUGiK daje wysokości NMT/NMPT 1 m w jednym GeoTIFF
@@ -209,22 +224,22 @@ kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt
 
 ```bash
 # DMR 5G (2 m), godło TM33 (ten kafel leży w większości w Niemczech — głównie nodata)
-kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
-kartograf download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (5 m), godło SM5, kraj z godła
-kartograf download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
+kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
+kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (5 m), godło SM5, kraj z godła
+kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
 # obszar CZ = jeden wycinek (--cutout); reprojekcja (tylko --bbox/--geometry,
 # nie godło) lokalnie przypiętą operacją
-kartograf download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
+kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 # pogranicze pod auto: osobne wycinki PL (WCS 1 m) i CZ, wspólny
 # extra.parent_request; różne wartości dla krajów w postaci pl=...,cz=...
-kartograf download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
+kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
 # bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
 # inaczej argparse odczyta wartość jako nieznaną flagę
-kartograf download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
+kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
 ```
 
 `kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
-(TM33, SM5) przyjmuje `kartograf download`.
+(TM33, SM5) przyjmuje `kartograf elevation download`.
 
 **Wartości per kraj.** `--resolution` i `--vertical-crs` przyjmują jedną
 wartość dla każdego kraju zadania (`--resolution 5m`) albo pary
@@ -280,7 +295,7 @@ kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o .
 #   z CLMS_CREDENTIALS: landcover/eu_corine_2018/N-34/130/D/N-34-130-D.tif: nowa wersja V2020_20u1_<sha8>
 #   bez: Info: CORINE 2018: podglad WMS ...
 #        landcover/eu_corine_2018_preview/N-34/130/D/N-34-130-D.png: nowa wersja 2026-10-12_<sha8>
-kartograf landcover download --source soilgrids --bbox 626000,480000,628000,482000 --property clay --depth 0-5cm --stat mean -o ./data
+kartograf soil download --bbox 626000,480000,628000,482000 --property clay --depth 0-5cm --stat mean -o ./data
 #   soil/global_soilgrids_clay_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_717f0989
 # Segment niesie każdy parametr treści (lowercase), więc --property sand
 # dla tego samego obszaru to osobny plik; parametry są też w sidecarze
@@ -294,21 +309,21 @@ kartograf landcover download --source bdot10k --bbox 16.70,50.45,16.80,50.55 \
 #      i landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip
 
 # Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
-kartograf soilgrids hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
+kartograf soil hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
 #   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
 #   hsg/global_soilgrids_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_470ef3d9
 # Ponownie (także z --force, gdy treść wejść się nie zmieniła): ... uzyta ponownie 2.0
 
 # Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
-kartograf landcover list-layers --source soilgrids
+kartograf soil list-layers
 kartograf cache stats
 kartograf cache clear
 kartograf cache path
 ```
 
 `--output` to katalog magazynu (wersje w `versions/`, ścieżka standardowa
-= hardlink; ARCHITECTURE 3.3 reguła 8); `soilgrids hsg -o plik.tif` to
+= hardlink; ARCHITECTURE 3.3 reguła 8); `soil hsg -o plik.tif` to
 `Error:` (plik poza magazynem: `hsg_from_rasters`). `--teryt` dotyczy tylko
 BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`, `--geometry`). BDOT10k
 z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
@@ -359,8 +374,8 @@ i 1:5000; arkusza PL-2000 1:10000 nie było w nich wcale. Zwykle więc
 `--scale 1:2000`:
 
 ```bash
-kartograf download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
 ```
 
 **Co się dzieje przy niedopasowaniu.** Brak arkusza o zamówionym godle to
@@ -404,9 +419,9 @@ z podpowiedzianą skalą.
 
 Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 (nazwy parametrów = nazwy flag w `snake_case`) i tym samym wynikiem
-(ADR-037): `kartograf download` = `download_data`/`check_data`,
-`landcover download` = `LandCoverManager.download`/`.check`,
-`soilgrids hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`. Błąd wejścia
+(ADR-037): `kartograf elevation download` i `kartograf imagery download` =
+`download_data`/`check_data`, `landcover download` i `soil download` =
+`LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`. Błąd wejścia
 to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 (CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
 `on_notice`.
@@ -414,7 +429,7 @@ to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 ```python
 from kartograf import BBox, check_data, download_data
 
-# = kartograf download --product nmt --bbox 18.60,49.73,18.66,49.76
+# = kartograf elevation download --product nmt --bbox 18.60,49.73,18.66,49.76
 #   --bbox-crs EPSG:4326 --country auto --resolution pl=1m,cz=2m
 #   --vertical-crs pl=EVRF2007,cz=Bpv --cutout --horizontal-crs EPSG:3045 -o ./data
 selection = dict(
@@ -621,7 +636,7 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
 - `LazDownloadResult` (`download_laz_area`): `tiles` (wybrane kafle),
   `files` (`VersionedFile` na kafel), `failed`, `superseded` (kafle
   pominięte jako pokryte przez nowsze), `stale`, `notices`.
-- `DataReport` (`download_data`, komenda `kartograf download`): `files`
+- `DataReport` (`download_data`, komendy `kartograf elevation download` i `kartograf imagery download`): `files`
   (`UnitFile(unit, country, file)`), `failed` (`UnitFailure(unit, country,
   error, kind)`), `stale`, `superseded`, `notices`, `ok` (kod wyjścia CLI:
   `True` = 0).
@@ -793,10 +808,10 @@ data/nmt/pl_1992_1m_evrf2007/full_sheet/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc  #
 
 ```bash
 # arkusz z niepełnym najnowszym lotem: pobiera najnowszy i najnowszy pełny
-kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 #   -> N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_<sha8> (i druga: najnowszy pełny lot)
-kartograf download --sheet M-34-90-C-b-4-4 --product orto --full-sheet -o ./data
-kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pełny z zakresu lat
+kartograf imagery download --sheet M-34-90-C-b-4-4 --product orto --full-sheet -o ./data
+kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pełny z zakresu lat
 ```
 
 - **Bez flagi** `full_sheet/` powstaje tylko z lotów, które zadanie i tak
@@ -830,9 +845,9 @@ kartograf download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 2024 --produ
 
 ### 4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)
 
-Dotyczy każdego toru `kartograf download`: arkuszy PL NMT/NMPT/orto,
+Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery download`: arkuszy PL NMT/NMPT/orto,
 kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
-`--cutout`, a także `landcover download` i `soilgrids hsg`. Flagi
+`--cutout`, a także `landcover download`, `soil download` i `soil hsg`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
 skorowidz); pozostałe tory różnią się sygnałem:
 
@@ -844,7 +859,7 @@ skorowidz); pozostałe tory różnią się sygnałem:
 | kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
 | SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
 | BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
-| HSG (`soilgrids hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
+| HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
 z pozycjami PL i CZ (pole `track`), a `--upgrade --plan PLIK` wykonuje
@@ -864,11 +879,11 @@ ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
 `bez zmian`, inna = nowa wersja.
 
 ```bash
-kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 #   N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_4de1eac7
-kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --check-updates --plan plan.json
+kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --check-updates --plan plan.json
 #   N-34-139-C-a-3-1: aktualne (2025-10-21_84183)
-kartograf download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --upgrade --plan plan.json
+kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --upgrade --plan plan.json
 ```
 
 Wynik: jedna linia na plik — `nowa wersja <etykieta>_<sha8>`, `nowa
@@ -912,8 +927,8 @@ print(report.stale, report.files.get(godlo, ()))
 
 - SoilGrids (ISRIC): 11 parametrów, 6 głębokości, 5 statystyk,
   rozdzielczość 250 m — tabela parametrów i jednostek: PRD 3.7;
-  `kartograf landcover list-layers --source soilgrids`.
-- HSG (`kartograf soilgrids hsg`, `HSGCalculator(output_dir)`) bierze
+  `kartograf soil list-layers`.
+- HSG (`kartograf soil hsg`, `HSGCalculator(output_dir)`) bierze
   `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
   (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)
   i mapuje ją na grupy A–D; wynik to wersja GeoTIFF 1–4 (0 = nodata)
