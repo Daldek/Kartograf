@@ -155,6 +155,26 @@ def test_teryt_hint_names_available_selections(tmp_path):
     assert "--whole-country" in str(error.value)
 
 
+def test_selection_hint_names_what_an_area_downloads(tmp_path):
+    """An area of EGiB is the WFS result, of 3D models the powiat packages:
+    the hint never offers the same flags with two meanings (live 2026-10-15:
+    ``cadastre download --teryt 12`` listed both)."""
+    with pytest.raises(ValidationError) as egib:
+        validate_collection_request(product="map", output_dir=tmp_path, teryt="12")
+    assert "--bbox/--sheet/--geometry (obiekty obszaru)" in str(egib.value)
+    assert "paczki powiatow obszaru" not in str(egib.value)
+    with pytest.raises(ValidationError) as buildings:
+        validate_collection_request(
+            product="buildings",
+            output_dir=tmp_path,
+            country="pl",
+            whole_country=True,
+            lod=2,
+        )
+    assert "--bbox/--sheet/--geometry (paczki powiatow obszaru)" in str(buildings.value)
+    assert "obiekty obszaru" not in str(buildings.value)
+
+
 def test_choices_of_other_products_rejected(tmp_path):
     with pytest.raises(ValidationError):
         validate_collection_request(

@@ -317,7 +317,13 @@ def _descriptors(product: str | None) -> dict[str, SourceDescriptor]:
 
 
 def _available(descriptor: SourceDescriptor) -> str:
-    """Selections a product offers (hint of a selection it does not have)."""
+    """Selections a product offers (hint of a selection it does not have).
+
+    An area names the channel ``_channel_for`` gives it: the objects of the
+    area when the product has a ``feature_bbox`` channel, otherwise the
+    packages of its powiats.
+    """
+    area_objects = _feature_channel(descriptor) is not None
     options: list[str] = []
     for channel in descriptor.channels:
         params = channel.params
@@ -329,7 +335,7 @@ def _available(descriptor: SourceDescriptor) -> str:
                     "country": "--whole-country (plik krajowy)",
                 }[params.unit]
             )
-            if params.unit == "powiat":
+            if params.unit == "powiat" and not area_objects:
                 options.append("--bbox/--sheet/--geometry (paczki powiatow obszaru)")
         elif isinstance(params, FeatureBBoxParams):
             options.append("--bbox/--sheet/--geometry (obiekty obszaru)")
