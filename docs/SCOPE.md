@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.23
-**Data:** 2026-10-13
+**Wersja:** 3.24
+**Data:** 2026-10-15
 **Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu; ostatnie wydanie v0.7.2, 2026-10-11)
 
 ---
@@ -51,7 +51,9 @@ Kartograf automatyzuje ten proces oferując:
 - Reverse lookup: bbox → godła (find_sheets_for_bbox, find_sheets_2000_for_bbox)
 - Reverse lookup: geometry file → godła (find_sheets_for_geometry)
 - Selekcja obszaru: godło, bbox, plik geometrii (SHP/GPKG)
-- Pobieranie przez godło → ASC (OpenData)
+- Pobieranie przez godło → ASC (OpenData); rekord arkusza ze skorowidza
+  WFS GUGiK (od 0.8.0; typy roczne z GetCapabilities, twardy filtr godła,
+  układu, rozdzielczości i formatu — ADR-041)
 - `provider.download_bbox` (poza magazynem wersji): NMT 1 m KRON86
   (TIFF float32), EVRF2007 i NMPT (ASC multipart -> jednopasmowy GeoTIFF
   float32 z wysokosciami), bbox wyrownany do siatki 1 m EPSG:2180;
@@ -68,17 +70,30 @@ Kartograf automatyzuje ten proces oferując:
   jest decymacja. Od 0.8.0 `bbox/<coords>.tif` bez daty jest
   dowiazaniem do wersji; domyslnie lokalna wersja bez zapytan PRG/WCS,
   `--force` pobiera ponownie (ta sama tresc = bez zmian).
-  Brak wyboru kampanii/roku, 5 m z `--cutout` = `Error:`;
-  5 m pozostaje dostepne jako arkusze bez tej flagi.
-- Rozdzielczości: 1m (GRID1), 5m (GRID5)
-- Układy wysokościowe: KRON86, EVRF2007
+  Brak wyboru kampanii/roku; inna rozdzielczość niż 1m i archiwa
+  (`--format`) z `--cutout` = `Error:` — pozostają dostępne jako arkusze
+  bez tej flagi.
+- Rozdzielczości (rejestr wariantów `kartograf.sources.variants`, ADR-041;
+  lista: `kartograf elevation list-sources`): siatki ASC EVRF2007 0.15m,
+  0.5m, 0.6m, 1m, 5m, 10m; KRON86 0.5m, 1m. `--resolution` jest wymagane,
+  gdy format i układ wysokości dają więcej niż jedną etykietę
+- Archiwa GUGiK jako pliki źródłowe 1:1 (`--format XYZ|ASCII-NMT|TBD|TIN|
+  TTN|GRD|DXF|DGN`, m.in. TBD 1–50 m): bez konwersji, wycinka i mozaiki,
+  wersje w magazynie (segment z tokenem formatu, np.
+  `nmt/pl_1992_tbd_25m_kron86`); arkusze (różne skale) ze skorowidza
+- Układy wysokościowe: KRON86, EVRF2007 (dostępność per wariant z rejestru)
+- Raport dostępności (`kartograf elevation availability` /
+  `check_availability`, ADR-041): dla obszaru PL kombinacje rok × układ
+  arkuszy × rozdzielczość × układ wysokości × format z kompletnością
+  pełnych arkuszy (TAK) na lądzie PRG, bez pobierania danych (także NMPT
+  i LAZ; USAGE 1.7, ARCHITECTURE 4.9)
 - Godło PL-2000 1:10000: w CLI i `download_data` `--scale` jest wymagane
   (błąd przed siecią, lista skal); provider/`DownloadManager` wywołany
   bez skali, gdy GUGiK ma wyłącznie arkusze potomne, daje `NoCoverageError`
   z podpowiedzią `--scale 1:2000` (bez cichego pobrania zastępczego PL-1992)
 
 # Źródło: GUGiK (Główny Urząd Geodezji i Kartografii)
-# API: WCS, WMS GetFeatureInfo, OpenData
+# API: WFS (skorowidz), WCS (wycinek 1 m), OpenData
 ```
 
 **Etykiety skal (PL-1992).** Etykiety skal Kartografu są o jeden poziom
@@ -146,12 +161,15 @@ patrz sekcja 3.2, znane ograniczenie.
   float32 z wysokosciami WCS (ASC multipart);
   CLI `--bbox` bez `--cutout` pobiera arkusze OpenData,
   z `--cutout --horizontal-crs` wycinek WCS z maska ladu
-- Rozdzielczość: tylko 1m
+- Rozdzielczości (rejestr wariantów): siatki ASC EVRF2007 0.5m, 0.6m, 1m;
+  KRON86 0.5m, 1m; archiwa XYZ 0.5m i 1m (KRON86). `--resolution`
+  wymagane od 0.8.0 (BREAKING; wcześniej tylko 1m); wycinek `--cutout`
+  tylko 1m
 - Układy wysokościowe: KRON86, EVRF2007
 - Dziedziczenie z GugikProvider (wspólna logika pobierania)
 
 # Źródło: GUGiK
-# API: WCS, WMS GetFeatureInfo, OpenData
+# API: WFS (skorowidz), WCS (wycinek 1 m), OpenData
 ```
 
 ### 2.4 Ortofotomapa - IN SCOPE
@@ -276,7 +294,7 @@ patrz sekcja 3.2, znane ograniczenie.
 kartograf parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
 kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
 kartograf elevation download --sheet <godlo> --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMT
-kartograf elevation download --sheet <godlo> --product nmpt --vertical-crs EVRF2007 -o ./data # pobierz NMPT
+kartograf elevation download --sheet <godlo> --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMPT (--resolution wymagane od 0.8.0)
 kartograf imagery download --sheet <godlo> --product orto -o ./data # pobierz ortofoto
 kartograf elevation download --sheet <godlo> --product laz --vertical-crs EVRF2007 -o ./data # pobierz chmury punktów LAZ (wiele kafli)
 kartograf elevation download --bbox ... --product laz --year 2024 --min-density 12 --country pl --vertical-crs EVRF2007 -o ./data
@@ -286,6 +304,11 @@ kartograf imagery download --bbox ... --product orto --country pl --sheet-system
 kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT z pliku geometrii
 kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf elevation download --sheet <godlo> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
+kartograf elevation download --sheet <godlo> --resolution 0.5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 0.5m (etykiety z rejestru wariantow; elevation list-sources)
+kartograf elevation download --bbox ... --country pl --sheet-system 1992 --product nmt --format TBD --resolution 25m --vertical-crs KRON86 -o ./data # archiwum GUGiK jako plik zrodlowy (ADR-041)
+kartograf elevation list-sources                   # warianty NMT/NMPT/LAZ z rejestru (gotowe flagi), bez sieci
+kartograf elevation availability --product nmt --country pl --bbox ... # raport dostepnosci: komplet pelnych arkuszy per rok/uklad/rozdzielczosc/format, bez pobierania
+kartograf elevation availability --product nmpt --sheet <godlo> --details # godla arkuszy niepelnych i polecenia pobrania; --json = check_availability
 kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data # DMR 5G (CZ), godlo TM33
 kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (CZ, 5m), godlo SM5, kraj z godla
 kartograf elevation download --bbox ... --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data # bbox transgraniczny -> wycinek per kraj
@@ -329,6 +352,9 @@ from kartograf import (
     transform_bbox, parent_request_for,
     # Download (command level: `kartograf elevation download` / `imagery download`, spec 4.1)
     download_data, check_data, DataReport, UnitFile, UnitFailure,
+    # Availability report (`kartograf elevation availability`, ADR-041)
+    check_availability, AvailabilityReport, AvailabilityCombination,
+    AvailabilityArea,
     # Download (NMT)
     DownloadManager, DownloadProgress, DownloadResult, CampaignRef, FileStorage,
     # Download (versioned store, update plan)
@@ -367,6 +393,8 @@ from kartograf import (
     # Version
     __version__,
 )
+# Rejestr wariantow NMT/NMPT/LAZ (ADR-041) — modul danych poza __all__:
+# from kartograf.sources.variants import variants, ProductVariant, IndexRef
 ```
 
 ### 2.11 Układ danych na dysku - IN SCOPE
@@ -432,8 +460,9 @@ from kartograf import (
 - CZ nie ma kampanii ani wyboru roku: zadanie bez części PL z --all-campaigns,
   flagą roku albo --full-sheet = Error: przed siecią; obszar PL+CZ pod auto
   wymaga --cutout (ADR-038), który odrzuca te flagi - arkusze PL: --country pl
-- Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF),
-  format z pola `format` rekordu; sidecar kampanii obowiązkowy
+- Weryfikacja treści pliku kampanii (nagłówek AAIGrid / sygnatura TIFF;
+  archiwa ADR-041: kompletny ZIP, sygnatura TTN, nagłówek Intergraph,
+  DXF), format z pola `format` rekordu; sidecar kampanii obowiązkowy
 - Skorowidz GUGiK niedostępny (błąd transportu) w trybie domyślnym (bez
   --upgrade/--force): arkusz z lokalnej wersji + Warning:, kod bez zmian —
   bez flag roku dla każdej strategii (także --all-campaigns), gdy ścieżka
@@ -496,13 +525,15 @@ from kartograf import (
 ```
 - Brak weryfikacji integralności sumami kontrolnymi (checksums); pliki
   kampanii NMT/NMPT/orto PL mają tylko kontrolę formatu treści
-  (verify_file_format: nagłówek AAIGrid / sygnatura TIFF, ADR-030)
+  (verify_file_format: nagłówek AAIGrid / sygnatura TIFF, ADR-030; archiwa
+  GUGiK: ZIP/TTN/Intergraph/DXF, ADR-041)
 - Timeouty domyślne: 30 s dla NMT/NMPT (GUGiK) i dla discovery WFS w LAZ,
   60 s dla Ortofoto, pobierania kafli LAZ, CORINE (bbox/godło), CUZK oraz
   SoilGrids przez godło, 120 s dla BDOT10k (wszystkie tryby) oraz SoilGrids
   przez bbox i HSG (CORINE/SoilGrids przez TERYT: NotImplementedError);
   GetCapabilities skorowidza GUGiK dziedziczy timeout providera (30 s
-  NMT/NMPT, 60 s orto). Źródło prawdy — stałe w kodzie:
+  NMT/NMPT, 60 s orto); raport dostępności: 30 s na zapytanie skorowidza
+  WFS i PRG. Źródło prawdy — stałe w kodzie:
   GugikProvider.DEFAULT_TIMEOUT (NMT; NMPT dziedziczy),
   GugikOrtoProvider.DEFAULT_TIMEOUT, GugikLazProvider.DEFAULT_TIMEOUT (kafle)
   i .WFS_TIMEOUT (discovery), CorineProvider.DEFAULT_TIMEOUT,
@@ -519,11 +550,25 @@ from kartograf import (
 - Synchroniczne pobieranie w obrębie jednego pliku (równoległość tylko
   między plikami, przez ThreadPoolExecutor/--workers; domyślnie 4 workery
   w CLI i download_data(workers=4), 1 w DownloadManager(workers=1))
-- NMT 5m (PL) wymaga EVRF2007
+- Warianty NMT/NMPT PL (rozdzielczość × układ wysokości × format) tylko
+  z rejestru wariantów (ADR-041), m.in. NMT 0.15m, 0.6m, 5m i 10m tylko
+  EVRF2007; inna kombinacja = Error: przed siecią z listą dostępnych
 - WCS (`provider.download_bbox`) NMT i NMPT daje wysokosci 1 m float32
-  w obu ukladach wysokosciowych; NMT 5 m tylko z OpenData
-- Wycinki PL WCS `--cutout` tylko 1 m, bez wyboru kampanii/roku;
+  w obu ukladach wysokosciowych; pozostałe rozdzielczości i archiwa
+  tylko z OpenData (arkusze)
+- Wycinki PL WCS `--cutout` tylko 1 m (siatka ASC; `--resolution` inna
+  niż 1m albo `--format` = Error:), bez wyboru kampanii/roku;
   serwer decyduje o locie, ktory moze roznic sie od lotu arkusza
+- Godła 8-członowe PL-1992 (wszystkie arkusze ASCII NMT 10 m i część
+  arkuszy ASC 1 m w skorowidzu GUGiK) są poza układem godeł SheetParser:
+  nie są pobierane; raport dostępności wymienia je w Info: (index_unsupported)
+- Archiwa GUGiK (`--format`) są plikami źródłowymi bez konwersji, wycinka,
+  mozaiki i pomiaru pokrycia; `--scale` i `--cutout` z archiwum = Error:
+- Raport dostępności (`elevation availability`): tylko PL; ufa deklaracji
+  skorowidza calyArkuszWypelnionyTrescia (nie mierzy treści arkuszy NIE);
+  maska lądu rasteryzowana na siatce 1 m w pasach 4 Mpx — dla dużych
+  obszarów wolny (pomiar 2026-10-15: 16 km2 ok. 5–7 s z siecią, 0,6–1,5 s
+  z cache metadanych)
 - SoilGrids: tylko WGS84 bbox (transformacja automatyczna)
 - SoilGrids: brak selekcji po TERYT — `--teryt` dotyczy wyłącznie bdot10k,
   a `SoilGridsProvider.download_by_teryt` rzuca NotImplementedError (wcześniej
@@ -533,9 +578,13 @@ from kartograf import (
   zwraca tylko jego arkusze (w EPSG:2180 także fragmenty sąsiadów), a bbox
   zdegenerowany do punktu → dokładnie jeden arkusz
 - Skorowidz GUGiK: retry (do 3 prób: sieć, 429, 5xx), sesja per wątek; awaria warstwy /
-  szablonu przerywa z DownloadError, bez degradacji kampanii. Rekord musi
-  mieć całe godło, zgodny układ i rozdzielczość; w pierwszej warstwie
-  z pasującymi rekordami wygrywa najnowsza data. Brak rekordu daje
+  szablonu przerywa z DownloadError, bez degradacji kampanii. NMT/NMPT:
+  skorowidz WFS (od 0.8.0); serwer ignoruje FILTER, stronicowanie tylko po
+  `next`, odpowiedź kilku typów z `next` odrzucana i odpytywana per typ
+  (serwer stronicuje kilka typów niespójnie); niespójna strona = DownloadError
+  („wynik bylby niepelny”), nigdy pusty wynik. Orto: WMS GetFeatureInfo.
+  Rekord musi mieć całe godło, zgodny układ, rozdzielczość i (NMT/NMPT)
+  format zgodny z URL; najnowsza data wygrywa. Brak rekordu daje
   NoCoverageError; extra.source zachowuje pochodzenie.
   Cache PL zapisuje pełen rekord albo brak pokrycia (TTL 7 dni); --force pomija
   odczyt i zapisuje świeży wpis (w CZ tak samo dla indeksu arkuszy SM5)
@@ -550,7 +599,7 @@ from kartograf import (
 - --cutout działa tylko z --bbox/--geometry; z godłem CZ = ValidationError;
   obszar CZ bez --cutout = ValidationError (ADR-038)
 - `--cutout` dla PL: NMT/NMPT 1 m z WCS, segment PL-1992
-  (`--sheet-system 2000` = blad); orto/LAZ i NMT 5 m z `--cutout`
+  (`--sheet-system 2000` = blad); orto/LAZ, NMT/NMPT poza 1 m i archiwa z `--cutout`
   = blad. Obszar poza maska ladu PRG `A00 - W02 - W03` = nodata
   -9999; wysokosc 0,0 na ladzie zostaje. Caly wycinek nodata =
   Warning: i kod 0. WCS wybiera lot na serwerze, inny niz
@@ -584,7 +633,8 @@ from kartograf import (
   GUGiK — naprawa (wielokąt granicy) planowana w etapie 2 (patrz ADR-023)
 - --country (wymagane z --bbox/--geometry od 0.8.0; wcześniej domyślnie
   auto): pod auto na obszarze spornym wartości bez odpowiednika czeskiego
-  (--product nmpt|orto, --vertical-crs KRON86, --resolution 1m w zwykłej
+  (--product nmpt|orto, --vertical-crs KRON86, rozdzielczość bez
+  odpowiednika CZ, np. --resolution 1m albo 0.5m, oraz --format, w zwykłej
   postaci) ROZSTRZYGAJĄ kraj do pl z komunikatem Info: na
   stderr, zamiast przewracać zadanie; wyjątkiem jest --product laz, który ma
   własny przepływ i na obszarze sięgającym CZ nadal kończy się błędem
@@ -663,15 +713,15 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 |---|------------|--------|-----------|
 | 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`); stan 2026-10-12: plany 1/3 (arkusze PL), 2/3 (LAZ, CZ, wycinki) i 3/3 (land cover, HSG) wykonane i scalone do `develop` (E2E na żywo: `docs/research/2026-10-12-store-e2e/raport.md`); do wydania 0.8.0: CLMS z credentials niesprawdzony na żywo | — |
 | 2 | Manifest projektu | zrobione (0.8.0): plik `kartograf-project.json` (`kartograf-project/1`) w katalogu projektu — zadania (komendy danych grup ADR-039 z opcjami) i przypięte wersje plików z magazynu z sumami SHA-256; grupa CLI `project`: `init`, `add`, `remove`, `download` (także `--check-updates`, `--upgrade`, `--force`), `status`, `verify`; odtworzenie danych na nowym magazynie tylko przy identycznych sumach. E2E: `docs/research/2026-10-15-project-e2e/raport.md`. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; grupy komend CLI (ADR-039) |
-| 3 | Katalog GUGiK i gotowe dane | wchodzi do 0.8.0 w całości (plany A-E, decyzja użytkownika 2026-10-15): produkty GUGiK i ČÚZK z katalogu; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13 (rewizja 2026-10-15): `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — rejestr wariantów, siatki NMT/NMPT we wszystkich rozdzielczościach GUGiK i raport dostępności pełnych arkuszy, `docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md`; B: `elevation` CZ — DMP OK, DMP 1G, kafle TM33 ETRS89, LAZ ČÚZK, raport CZ, `docs/superpowers/plans/2026-10-15-plan-b-elevation-cz.md`; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
+| 3 | Katalog GUGiK i gotowe dane | wchodzi do 0.8.0 w całości (plany A-E, decyzja użytkownika 2026-10-15): produkty GUGiK i ČÚZK z katalogu; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13 (rewizja 2026-10-15): `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — zrobione (0.8.0, ADR-041): rejestr wariantów, siatki NMT/NMPT we wszystkich rozdzielczościach GUGiK, archiwa GUGiK jako pliki źródłowe (`--format`), skorowidz WFS i raport dostępności pełnych arkuszy (`kartograf elevation availability`, `check_availability`), `docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md`; B: `elevation` CZ — DMP OK, DMP 1G, kafle TM33 ETRS89, LAZ ČÚZK, raport CZ, `docs/superpowers/plans/2026-10-15-plan-b-elevation-cz.md`; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
 | 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |
 | — | ADR-031 (angielskie identyfikatory) | API i CLI po angielsku w 0.8.0 bez aliasów (errata 1) | zrobione (0.8.0) |
 | — | Publikacja nakładek | po przetestowaniu 4 i 5 lokalnie | 4, 5 |
 
 Podprojekt 3 wchodzi do 0.8.0 w całości (plany A-E), razem z podprojektem 2;
-produkty spoza planów A-E (np. archiwalne formaty NMT GUGiK, jeśli
-użytkownik je zamówi) trafią do kolejnych wydań i mogą iść równolegle z 4 i 5.
+produkty spoza planów A-E trafią do kolejnych wydań i mogą iść równolegle
+z 4 i 5 (archiwalne formaty NMT/NMPT GUGiK weszły do planu A, ADR-041).
 
 ---
 
@@ -698,8 +748,9 @@ kartograf/
 │   ├── geometry.py          # SHP/GPKG reading, find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py          # Wypukłe wielokąty (przecięcie/różnica/bufor) — wybór kafli LAZ (ADR-029)
 ├── sources/               # Deskryptory źródeł jako dane (zero IO przy imporcie)
-│   ├── descriptor.py        # SourceDescriptor, AccessChannel (+endpoint), TransportKind, LicenseInfo, CountryProfile
-│   ├── registry.py          # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs
+│   ├── descriptor.py        # SourceDescriptor (+variants), AccessChannel (+endpoint), TransportKind, LicenseInfo, CountryProfile
+│   ├── registry.py          # Rejestr PL/CZ/EU/GLOBAL — get_source, sources_for, get_country, all_countries, vertical_crs_code, resolve_vertical_crs; deskryptory NMT/NMPT per (produkt, format, rozdzielczość)
+│   ├── variants.py          # Rejestr wariantów (ADR-041): ProductVariant, IndexRef, FORMATS, variants(), etykiety K2, source_format
 │   ├── edition.py           # Edition — wydanie źródła (sygnał metadata: SoilGrids, CORINE CLMS)
 │   └── sidecar.py           # ResultMetadata, build_metadata (capability=, nodata=), write_sidecar (<plik>.meta.json)
 ├── transform/             # Transformacje CRS i rastrów
@@ -717,11 +768,12 @@ kartograf/
 │   │   ├── gugik.py             # GugikProvider (NMT)
 │   │   ├── gugik_nmpt.py        # GugikNmptProvider (NMPT/DSM)
 │   │   ├── gugik_orto.py        # GugikOrtoProvider (Ortofotomapa)
-│   │   ├── gugik_laz.py         # GugikLazProvider (chmury punktów LAZ, WFS; select_tiles)
-│   │   ├── skorowidz.py         # Skorowidz GUGiK: rekordy GetFeatureInfo, wybór kampanii (ADR-028/030)
+│   │   ├── gugik_laz.py         # GugikLazProvider (chmury punktów LAZ, WFS przez WfsIndex; select_tiles)
+│   │   ├── skorowidz.py         # Skorowidz GUGiK: rekordy, twardy filtr, wybór kampanii (ADR-028/030); WMS GetFeatureInfo dla orto
+│   │   ├── skorowidz_wfs.py     # Skorowidz WFS NMT/NMPT/LAZ (ADR-041): WfsIndex, parse_index_feature, obrysy arkuszy
 │   │   ├── wcs.py               # GugikWcsMixin — wspólny URL WCS GetCoverage (NMT/NMPT 1m, orto)
 │   │   ├── bdot10k.py           # Bdot10kProvider
-│   │   ├── prg.py               # WFS PRG: maska lądu (wycinek PL), TERYT dla obszaru/punktu
+│   │   ├── prg.py               # WFS PRG: maska lądu (wycinek PL, raport dostępności), TERYT dla obszaru/punktu
 │   │   └── __init__.py          # create_nmt_provider() — fabryka providera NMT (vertical_crs, resolution wymagane)
 │   ├── cuzk/                  # Providery czeskie (CUZK, etap 1)
 │   │   ├── client.py            # CuzkClient — silnik sterowany deskryptorem (ArcGIS REST + openzu)
@@ -732,10 +784,11 @@ kartograf/
 │   └── soilgrids.py          # SoilGridsProvider
 ├── cache/                 # Cache metadanych
 │   ├── defaults.py           # open_cache — wspólny cache CLI i biblioteki (<cwd>/.kartograf_cache.db)
-│   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache (TTL 7d), sheet_cache (TTL 30d)
+│   └── metadata.py           # MetadataCache — SQLite WAL: record_cache, campaigns_cache, teryt_cache, index_area_cache (TTL 7d), sheet_cache (TTL 30d)
 ├── download/              # Pobieranie: komenda download w bibliotece (data.py) i tory
 │   ├── data.py               # download_data/check_data = `kartograf elevation download` / `imagery download` (ADR-037)
-│   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help)
+│   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help; warianty z rejestru)
+│   ├── availability.py       # Raport dostępności: check_availability, AvailabilityReport (ADR-041)
 │   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── countries.py          # Podział obszaru na kraje (countries_for_bbox, split_bbox_by_country)
@@ -765,6 +818,7 @@ kartograf/
     │                          #   (jeden moduł = jedna grupa z register(); wykrywane automatycznie)
     ├── parse_cmd.py           # `kartograf parse`
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
+    ├── availability_cmd.py    # `elevation availability` -> check_availability (tabela, --details, --json)
     ├── landcover_cmd.py       # `landcover download` -> LandCoverManager
     ├── soil_cmd.py            # `soil download`, `soil hsg`
     ├── cache_cmd.py           # `kartograf cache`
@@ -804,7 +858,11 @@ pyshp >= 2.3.0         # Shapefile reading
 
 ```
 - Parser poprawnie parsuje godła 1:1M - 1:10k (PL-1992), PL-2000, TM33/SM5 (CZ)
-- NMT pobiera się w rozdzielczościach 1m i 5m (PL), 2m i 5m (CZ)
+- NMT pobiera się we wszystkich rozdzielczościach siatek GUGiK z rejestru
+  wariantów (PL: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; NMPT 0.5m, 0.6m, 1m)
+  i jako archiwa GUGiK (pliki źródłowe), 2m i 5m (CZ)
+- Raport dostępności (elevation availability / check_availability) podaje
+  dla obszaru PL kombinacje z kompletem pełnych arkuszy bez pobierania danych
 - BDOT10k pobiera się przez TERYT, godło, bbox i geometrię (każdy powiat obszaru)
 - CORINE pobiera się przez godło (GeoTIFF lub PNG fallback)
 - SoilGrids pobiera dane glebowe
@@ -868,9 +926,10 @@ pyshp >= 2.3.0         # Shapefile reading
 | 2026-10-13 | 3.21 | Pełna weryfikacja z kodem 0.8.0-dev (ADR-037): status i nagłówki 0.8.0, `--scale` dla PL-2000, BDOT10k/CORINE/SoilGrids przez geometrię i filtr warstw, fallback przy niedostępnym skorowidzu (D14), API kampanii, drzewo modułów (brakujące moduły, wyjątki), kryteria 6.1 |
 | 2026-10-13 | 3.22 | Jawny tryb wycinka (ADR-038): `--cutout` + `--horizontal-crs` zamiast `--target-crs`, `--sheet-system` zamiast `--system`; obszar CZ wymaga `--cutout` |
 | 2026-10-13 | 3.23 | Podprojekt 3: odwołanie do inwentaryzacji GUGiK/ČÚZK i zaakceptowanego specu (kolejność planów A–E) |
+| 2026-10-15 | 3.24 | Plan A (ADR-041): rejestr wariantów NMT/NMPT (siatki 0.15–10 m, NMPT z `--resolution`), archiwa GUGiK jako pliki źródłowe (`--format`), skorowidz WFS, raport dostępności `elevation availability`/`check_availability` (2.1, 2.3, 2.9, 2.10, 3.2, 3.3, 4.1, 6.1) |
 
 ---
 
-**Wersja dokumentu:** 3.23
-**Data ostatniej aktualizacji:** 2026-10-13
+**Wersja dokumentu:** 3.24
+**Data ostatniej aktualizacji:** 2026-10-15
 **Status:** Kod v0.8.0-dev (ostatnie wydanie v0.7.2, 2026-10-11)
