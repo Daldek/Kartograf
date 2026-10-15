@@ -20,6 +20,7 @@ import requests
 
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.campaigns import (
+    RASTER_EXTENSIONS,
     CampaignRef,
     campaign_extension,
     in_year_range,
@@ -1155,7 +1156,9 @@ class DownloadManager:
             self._campaign_provider.download_record(record, staged)
             verify_file_format(staged, ext)
             verify_sheet_extent(staged, sheet, ext)
-            digest = read_content(staged, ext=ext, coverage=ref.full_sheet is not True)
+            # coverage only for rasters: archives are source files (ADR-041)
+            measure = ref.full_sheet is not True and ext in RASTER_EXTENSIONS
+            digest = read_content(staged, ext=ext, coverage=measure)
             return commit_version(
                 staged,
                 root,

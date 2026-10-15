@@ -16,24 +16,33 @@ from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
     COUNTRY_CHOICES,
     ELEVATION_PRODUCTS,
-    RESOLUTION_PL,
     SCALE_2000_CHOICES,
     SHEET_SYSTEM_CHOICES,
     VERTICAL_CRS_CZ,
-    VERTICAL_CRS_PL,
+    format_text,
     product_choices,
+    resolution_text,
+    vertical_crs_text,
 )
 from kartograf.sources.descriptor import SourceDescriptor
 
 
 def _source_choice(source: SourceDescriptor) -> str:
-    """Flags selecting ``source`` in ``elevation download``."""
+    """Flags selecting ``source`` in ``elevation download`` (variant registry);
+    ``--vertical-crs`` only when the source has one height system."""
     flags = f"--product {source.product}"
-    if source.product != "nmt":
-        return flags
     if source.country == "CZ":
-        flags += " --country cz"
-    return f"{flags} --resolution {source.resolution}"
+        return f"{flags} --country cz --resolution {source.resolution}"
+    if not source.variants or source.product == "laz":
+        return flags
+    variant = source.variants[0]
+    if variant.source_file:
+        flags += f" --format {variant.format}"
+    if variant.label is not None:
+        flags += f" --resolution {variant.label}"
+    if len(source.variants) == 1:
+        flags += f" --vertical-crs {variant.vertical_crs}"
+    return flags
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -95,21 +104,32 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "-r",
         metavar="RES",
         default=None,
-        help="Rozdzielczosc siatki NMT - wymagana tam, gdzie jest wybor. PL: "
-        f"{RESOLUTION_PL}; wycinek --cutout tylko 1m. CZ: "
-        f"{RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna pominac). NMPT tylko "
-        "1m (mozna pominac); LAZ bez rozdzielczosci. Jedna wartosc dotyczy "
-        "kazdego kraju zadania; zadanie PL+CZ z roznymi: pl=WARTOSC,cz=WARTOSC "
+        help="Rozdzielczosc siatki - wymagana tam, gdzie jest wybor. PL "
+        f"(siatki ASC): {resolution_text()}; wycinek --cutout tylko 1m (mozna "
+        "pominac); archiwa (--format): rozdzielczosci w kartograf elevation "
+        f"list-sources. CZ: {RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna "
+        "pominac). LAZ bez rozdzielczosci. Jedna wartosc dotyczy kazdego kraju "
+        "zadania; zadanie PL+CZ z roznymi: pl=WARTOSC,cz=WARTOSC "
         "(np. pl=1m,cz=2m)",
     )
     product.add_argument(
         "--vertical-crs",
         metavar="VCRS",
         default=None,
-        help=f"Uklad wysokosci (wymagany). PL: {VERTICAL_CRS_PL}. CZ: "
+        help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}. CZ: "
         f"{VERTICAL_CRS_CZ}. Jedna wartosc dotyczy kazdego kraju zadania i musi "
         "byc dla niego dostepna; zadanie PL+CZ z roznymi ukladami: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=EVRF2007,cz=Bpv)",
+    )
+    product.add_argument(
+        "--format",
+        metavar="FORMAT",
+        default=None,
+        help="Format pliku NMT/NMPT PL. Bez flagi: siatka ASC (format "
+        "produktu). Archiwa GUGiK - pliki zrodlowe jak w skorowidzu (bez "
+        "konwersji, bez --cutout; arkusze roznych skal wynikaja ze "
+        f"skorowidza, bez --scale): {format_text()}. Warianty archiwow: "
+        "kartograf elevation list-sources",
     )
     sheets = download.add_argument_group("Arkusze obszaru")
     sheets.add_argument(

@@ -376,6 +376,7 @@ def download_task_arguments(args: argparse.Namespace) -> dict:
             getattr(args, "vertical_crs", None), "--vertical-crs"
         ),
         "resolution": _per_country(getattr(args, "resolution", None), "--resolution"),
+        "format": getattr(args, "format", None),
         "sheet_system": getattr(args, "sheet_system", None),
         "scale": getattr(args, "scale", None),
         "cutout": getattr(args, "cutout", False),

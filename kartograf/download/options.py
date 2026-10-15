@@ -16,12 +16,18 @@ from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
 from kartograf.exceptions import ValidationError
-from kartograf.providers.pl import require_nmt_vertical_crs
+from kartograf.sources.variants import (
+    FORMATS,
+    find_variant,
+    labels_by_vertical_crs,
+    variant_error,
+    variants,
+)
 
 # Admissible values named in messages (also the CLI --help texts).
 _PRODUCT_TEXT = {
     "nmt": "Numeryczny Model Terenu; PL i CZ",
-    "nmpt": "Numeryczny Model Pokrycia Terenu; PL, tylko 1m",
+    "nmpt": "Numeryczny Model Pokrycia Terenu; PL",
     "orto": "ortofotomapa RGB; PL",
     "laz": "chmura punktow LIDAR; PL",
 }
@@ -62,11 +68,50 @@ COUNTRY_CHOICES = (
     "pl (GUGiK), cz (CUZK), auto (kraje wg prostokatnych obwiedni PL i CZ; "
     "obszar w obu krajach daje osobne pliki per kraj)"
 )
-RESOLUTION_PL = "1m (NMT 1 m), 5m (NMT 5 m, tylko --vertical-crs EVRF2007)"
-VERTICAL_CRS_PL = (
-    "EVRF2007 (PL-EVRF2007-NH, uklad obowiazujacy), KRON86 (PL-KRON86-NH, "
-    "uklad historyczny; nie dla NMT 5m)"
-)
+_VERTICAL_CRS_TEXT = {
+    "EVRF2007": "PL-EVRF2007-NH, uklad obowiazujacy",
+    "KRON86": "PL-KRON86-NH, uklad historyczny",
+}
+# Products with sheet variants of the registry (resolution and --format).
+_SHEET_PRODUCTS = ("nmt", "nmpt")
+
+
+def resolution_text(country: str = "PL") -> str:
+    """Grid resolutions (``--resolution``) of every sheet product, from the
+    variant registry: ``NMT (EVRF2007: 0.15m, ...; KRON86: 0.5m, 1m), NMPT (...)``."""
+    parts = []
+    for product in _SHEET_PRODUCTS:
+        grids = tuple(
+            v for v in variants(product=product, country=country) if not v.source_file
+        )
+        if grids:
+            parts.append(f"{product.upper()} ({labels_by_vertical_crs(grids)})")
+    return ", ".join(parts)
+
+
+def vertical_crs_text(country: str = "PL") -> str:
+    """Height systems of the country's variants (``--vertical-crs``)."""
+    names = sorted({v.vertical_crs for v in variants(country=country)})
+    return ", ".join(
+        f"{name} ({_VERTICAL_CRS_TEXT[name]})" if name in _VERTICAL_CRS_TEXT else name
+        for name in names
+    )
+
+
+def format_text(country: str = "PL") -> str:
+    """File formats of the sheet products (``--format``), registry order."""
+    present = {
+        v.format
+        for product in _SHEET_PRODUCTS
+        for v in variants(product=product, country=country)
+    }
+    return ", ".join(
+        f"{f.token} ({f.description})" for f in FORMATS if f.token in present
+    )
+
+
+# Height systems of CZ requests (CUZK native Bpv, EVRF2007 by transformation).
+CZ_VERTICAL_CRS = ("Bpv", "EVRF2007")
 VERTICAL_CRS_CZ = (
     "Bpv (natywny uklad CUZK), EVRF2007 (transformacja z Bpv, "
     "ok. +0,11..+0,15 m, rosnaco S->N)"
@@ -145,6 +190,11 @@ def _per_country_hint(raw: PerCountry, flag: str, countries: tuple[str, ...]) ->
     return f" (zadanie PL+CZ: wartosci per kraj, np. {flag} pl=...,cz=...)"
 
 
+def _format_of(task: SimpleNamespace) -> str | None:
+    """``task.format`` (``None`` = the product format, ASC grids)."""
+    return getattr(task, "format", None)
+
+
 def pl_option_error(
     task: SimpleNamespace,
     *,
@@ -155,34 +205,46 @@ def pl_option_error(
     """Error text for the PL data choices of the request (``None`` = valid).
 
     ``code_system``/``code_scale`` describe a sheet request (sheet system and
-    scale of the code); ``None`` = area request (bbox/geometry).
+    scale of the code); ``None`` = area request (bbox/geometry). NMT/NMPT
+    choices are checked against the variant registry
+    (``kartograf.sources.variants``): format, resolution, height system.
     """
     product = task.product
     resolution = country_value(task.resolution, "PL")
     vertical_crs = country_value(task.vertical_crs, "PL")
+    fmt = _format_of(task)
     cutout = task.cutout
     res_hint = _per_country_hint(task.resolution, "--resolution", countries)
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
+    source_file = fmt is not None and fmt != "ASC"
 
-    if product == "nmt":
+    if product in _SHEET_PRODUCTS:
         if cutout:
+            if source_file:
+                return (
+                    f"--cutout dziala tylko z siatka ASC 1m (wycinek z WCS GUGiK); "
+                    f"--format {fmt} to pliki zrodlowe arkuszy - pomin --cutout"
+                )
             if resolution not in (None, "1m"):
                 return (
-                    "wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK); arkusze 5 m: "
-                    "pomin --cutout; wycinek: --resolution 1m albo pomin "
-                    "--resolution"
+                    f"wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK); arkusze "
+                    f"{resolution}: pomin --cutout (arkusze bez --cutout); "
+                    "wycinek: --resolution 1m albo pomin --resolution"
                 )
-        elif resolution is None:
-            return f"--resolution wymagane dla NMT PL: {RESOLUTION_PL}{res_hint}"
-        elif resolution not in ("1m", "5m"):
-            return (
-                f"PL nie ma rozdzielczosci {resolution} - dostepne: "
-                f"{RESOLUTION_PL}{res_hint}"
+        else:
+            error = variant_error(
+                product=product,
+                country="PL",
+                resolution=resolution,
+                vertical_crs=None,
+                format=fmt,
             )
-    elif product == "nmpt" and resolution not in (None, "1m"):
+            if error is not None:
+                return f"{error}{res_hint}"
+    elif fmt is not None:
         return (
-            f"--product nmpt jest dostepny tylko w rozdzielczosci 1m (podano "
-            f"{resolution}); pomin --resolution albo podaj 1m"
+            f"--format dotyczy tylko --product nmt i nmpt (PL), podano "
+            f"--product {product} - pomin --format"
         )
 
     if product == "orto":
@@ -194,23 +256,23 @@ def pl_option_error(
     elif vertical_crs is None:
         return (
             f"--vertical-crs wymagane dla --product {product} (PL): "
-            f"{VERTICAL_CRS_PL}{vcrs_hint}"
+            f"{vertical_crs_text()}{vcrs_hint}"
         )
-    elif vertical_crs not in ("KRON86", "EVRF2007"):
+    elif vertical_crs not in {v.vertical_crs for v in variants(country="PL")}:
         return (
             f"{vertical_crs} nie jest ukladem wysokosci PL - dostepne: "
-            f"{VERTICAL_CRS_PL}{vcrs_hint}"
+            f"{vertical_crs_text()}{vcrs_hint}"
         )
-    elif product == "nmt":
-        # the library rule (`require_nmt_vertical_crs`): 5m only in EVRF2007
-        try:
-            require_nmt_vertical_crs(resolution or "1m", vertical_crs)
-        except ValidationError:
-            return (
-                f"NMT {resolution} (PL) jest dostepny tylko w EVRF2007 - podano "
-                f"--vertical-crs {vertical_crs}; uzyj --vertical-crs EVRF2007 "
-                f"albo --resolution 1m dla {vertical_crs}"
-            )
+    elif product in _SHEET_PRODUCTS:
+        error = variant_error(
+            product=product,
+            country="PL",
+            resolution="1m" if cutout and resolution is None else resolution,
+            vertical_crs=vertical_crs,
+            format=fmt,
+        )
+        if error is not None:
+            return f"{error}{vcrs_hint}"
 
     if product == "laz":
         return None  # LAZ: per-tile system from WFS, no sheet scale
@@ -224,6 +286,11 @@ def pl_option_error(
                 "1992 albo pomin --sheet-system"
             )
         return None
+    if source_file and scale is not None:
+        return (
+            f"--scale nie dotyczy --format {fmt}: arkusze archiwum (rozne skale) "
+            "wynikaja ze skorowidza GUGiK - pomin --scale"
+        )
     if code_system is None:
         if sheet_system is None:
             return (
@@ -233,6 +300,8 @@ def pl_option_error(
         effective = sheet_system
     else:
         effective = code_system
+    if source_file:
+        return None  # archive sheets come from the index (any scale)
     if effective == "1992":
         if scale is not None:
             return (
@@ -259,6 +328,11 @@ def cz_option_error(
     vertical_crs = country_value(task.vertical_crs, "CZ")
     res_hint = _per_country_hint(task.resolution, "--resolution", countries)
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
+    if _format_of(task) is not None:
+        return (
+            "--format dotyczy tylko PL (siatki ASC i archiwa GUGiK) - dla CZ "
+            "pomin --format"
+        )
     if is_sm5:
         try:
             cz_sheet_resolution(task.sheet, resolution)
@@ -273,7 +347,7 @@ def cz_option_error(
         )
     if vertical_crs is None:
         return f"--vertical-crs wymagane dla NMT CZ: {VERTICAL_CRS_CZ}{vcrs_hint}"
-    if vertical_crs not in ("Bpv", "EVRF2007"):
+    if vertical_crs not in CZ_VERTICAL_CRS:
         return (
             f"{vertical_crs} nie jest dostepny dla CZ - dostepne: "
             f"{VERTICAL_CRS_CZ}{vcrs_hint}"
@@ -476,22 +550,39 @@ def resolve_pl_options(
     """Validate the PL choices and narrow ``task`` to the plain PL values.
 
     Called on the PL branch only, on a COPY of the request (the CZ branch
-    keeps its own values). Single-valued choices are filled in: NMPT and the
-    cutout are 1m only, the cutout is PL-1992 only, a sheet request takes
-    its sheet system from the code.
+    keeps its own values). Single-valued choices are filled in: the cutout
+    is 1m only and PL-1992 only, a variant with one label in the registry
+    (archive ``GRD``: 5m) takes it, a sheet request takes its sheet system
+    from the code.
     """
     error = pl_option_error(task, code_system=code_system, code_scale=code_scale)
     if error is not None:
         raise ValidationError(error)
     resolution = country_value(task.resolution, "PL")
-    if resolution is None and (task.product == "nmpt" or task.cutout):
-        resolution = "1m"
+    vertical_crs = country_value(task.vertical_crs, "PL")
+    if task.product in _SHEET_PRODUCTS and resolution is None:
+        if task.cutout:
+            resolution = "1m"
+        elif vertical_crs is not None:
+            resolution = find_variant(
+                product=task.product,
+                country="PL",
+                resolution=None,
+                vertical_crs=vertical_crs,
+                format=_format_of(task),
+            ).label
     task.resolution = resolution
-    task.vertical_crs = country_value(task.vertical_crs, "PL")
+    task.vertical_crs = vertical_crs
     if code_system is not None:
         task.sheet_system = code_system
     elif task.cutout:
         task.sheet_system = "1992"
+
+
+def is_source_file_request(task: SimpleNamespace) -> bool:
+    """An archive format (``--format`` other than ASC): sheets from the index."""
+    fmt = _format_of(task)
+    return fmt is not None and fmt != "ASC"
 
 
 def pl_target_scale(task: SimpleNamespace) -> str:
