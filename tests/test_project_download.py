@@ -14,6 +14,7 @@ from kartograf import (
     download_project,
     open_project,
     remove_project_task,
+    verify_project,
 )
 from kartograf._version import build_version
 from kartograf.download.versions import read_version
@@ -277,6 +278,7 @@ def test_second_project_newer_version_keeps_first_pins(tmp_path):
     store = tmp_path / "projekt" / "data"
     assert os.path.samefile(store / old.path, store / new.version)
     assert file_digest(store / old.version)[0] == old.sha256
+    assert verify_project(first).ok  # standard path moved, the pinned version did not
     with pl_sheets(fake):
         assert download_project(first).tasks[0].outcome == "unchanged"
 
