@@ -405,7 +405,7 @@ def task_to_json(task: ProjectTask) -> dict
 - Modify: `kartograf/project/operations.py`
 - Create: `tests/test_project_download.py`
 
-- [ ] **Step 1: Testy przypiecia** - `test_first_download_pins_every_file`
+- [x] **Step 1: Testy przypiecia** - `test_first_download_pins_every_file`
   (parametryzacja: arkusz PL, `--country auto` PL+CZ, LAZ z kilkoma
   kaflami, BDOT10k obszar z `keep_raw`, SoilGrids, CORINE, HSG: kazdy
   `VersionedFile` wyniku = jeden `PinnedFile`, role, `size_bytes`
@@ -416,24 +416,24 @@ def task_to_json(task: ProjectTask) -> dict
   wywolan fake'a); `test_auto_partial_success_not_pinned`;
   `test_written_after_each_task` (drugie zadanie rzuca: pierwsze zostaje
   przypiete w pliku); `test_no_metadata_cache_in_project_dir`.
-- [ ] **Step 2: Testy stanu przypietego** - `test_pinned_task_is_offline_noop`
+- [x] **Step 2: Testy stanu przypietego** - `test_pinned_task_is_offline_noop`
   (fake zrodla rzuca przy kazdym uzyciu, wynik `unchanged`);
   `test_second_project_newer_version_keeps_first_pins` (projekt B pobiera
   nowsza kampanie do tego samego magazynu: przypiecia A bez zmian,
   `verify_project(A)` OK po Task 7, sciezka standardowa wskazuje nowsza).
-- [ ] **Step 3: Testy odtwarzania** - `test_restore_on_empty_store_same_content`
+- [x] **Step 3: Testy odtwarzania** - `test_restore_on_empty_store_same_content`
   (manifest skopiowany do projektu z pustym magazynem: `restored`, te same
   `sha256`; dla toru bez sygnalu `version`/`label` moga sie zmienic);
   `test_restore_conflict_keeps_pin` (zrodlo zwraca inna tresc: `failed`,
   przypiecie bez zmian, nowy plik w magazynie nieprzypiety);
   `test_restore_partial_saves_restored_pins`; `test_restore_needs_same_geometry`.
-- [ ] **Step 4: Implementacja** - per zadanie wg specu 4.6: wybor
+- [x] **Step 4: Implementacja** - per zadanie wg specu 4.6: wybor
   przypadku po stanie przypiec i `stat` wersji (plik + sidecar,
   `size_bytes`); wywolanie `TaskCommand.download(update=None)`;
   `TaskCommand.files`; budowa `PinnedFile` (decyzja 6); zapis
   `commit_tasks` po kazdym zadaniu; konflikt scalania = blad zadania;
   wyjatki `KartografError` biblioteki konczace tylko zadanie.
-- [ ] **Step 5: Brama i commit** - `feat(project): download - przypiecie zadan i odtwarzanie po SHA-256`
+- [x] **Step 5: Brama i commit** - Task 5 i 6 razem w `4bd9fff` (`feat(project): download - przypiecie zadan, odtwarzanie po SHA-256 i --upgrade/--force`).
 
 ---
 
@@ -442,7 +442,7 @@ def task_to_json(task: ProjectTask) -> dict
 **Files:**
 - Modify: `kartograf/project/operations.py`, `tests/test_project_download.py`
 
-- [ ] **Step 1: Testy** - `test_upgrade_repins_whole_task` (nowsza
+- [x] **Step 1: Testy** - `test_upgrade_repins_whole_task` (nowsza
   kampania w fake'u skorowidza: nowe przypiecie, stare w `unpinned`, nowe
   `pinned_at`); `test_upgrade_failure_keeps_all_pins` (jedna jednostka
   zawodzi: przypiecia zadania identyczne bajtowo);
@@ -455,10 +455,10 @@ def task_to_json(task: ProjectTask) -> dict
   dopisany, kafel spoza wyniku odpiety, plik zostaje w magazynie);
   `test_upgrade_only_named_task`; `test_upgrade_accepts_changed_geometry`
   (nowe `geometry_sha256`).
-- [ ] **Step 2: Implementacja** - wspolna sciezka z Task 5 z
+- [x] **Step 2: Implementacja** - wspolna sciezka z Task 5 z
   `update=...`; przy pelnym sukcesie przypiecia = wynik w calosci,
   `unchanged` gdy identyczne (bez zapisu pliku).
-- [ ] **Step 3: Brama i commit** - `feat(project): download --upgrade/--force przepina cale zadanie`
+- [x] **Step 3: Brama i commit** - wspolny commit z Task 5: `4bd9fff`.
 
 ---
 
@@ -469,7 +469,7 @@ def task_to_json(task: ProjectTask) -> dict
   `kartograf/__init__.py`
 - Create: `tests/test_project_check.py`
 
-- [ ] **Step 1: Testy status/verify** - `test_status_detects_missing_and_size_without_reading`
+- [x] **Step 1: Testy status/verify** - `test_status_detects_missing_and_size_without_reading`
   (`file_digest` i odczyt danych zablokowane atrapa rzucajaca:
   `missing`, `corrupt` przy innym rozmiarze, `ok`);
   `test_status_not_downloaded_not_ok`; `test_verify_detects_corruption`
@@ -478,7 +478,7 @@ def task_to_json(task: ProjectTask) -> dict
   `corrupt`/`missing`, `ok=False`, manifest i magazyn bez zmian);
   `test_verify_after_store_copy` (kopia magazynu z dowiazaniami twardymi,
   nowy `output_dir`: `ok`).
-- [ ] **Step 2: Testy check** - `test_check_statuses_against_pin`
+- [x] **Step 2: Testy check** - `test_check_statuses_against_pin`
   (prawdziwe `check_*` na fixturach: `current`, `newer` u zrodla,
   `newer` gdy magazyn ma nowsza wersje, a plan daje `current`, `added`
   (nowy kafel LAZ), `removed`, `unverifiable` (wycinek, BDOT10k),
@@ -487,14 +487,12 @@ def task_to_json(task: ProjectTask) -> dict
   `test_check_downloads_nothing_and_keeps_manifest_bytes`;
   `test_check_not_downloaded_task_skipped_offline`;
   `test_check_geometry_changed_warns` (`PROJECT_GEOMETRY_CHANGED`);
-  `test_slot_std_path_invariant` (dla kazdego konstruktora slotu z
-  decyzji 10: `slot.std == slot.output_dir / slot.segment / slot.hierarchy / slot.name`;
-  konstruktory: `download/storage.py::bbox_slot`,
-  `landcover/store.py::selection_slot`, slot arkusza w
-  `download/manager.py`, `download/laz.py::laz_slot`,
-  `download/cz_sheets.py::_sheet_slot`).
-- [ ] **Step 3: Implementacja** wg specu 4.8-4.9 i decyzji 10-11.
-- [ ] **Step 4: Brama i commit** - `feat(project): status, verify i check-updates wzgledem przypiec`
+  Inwariant sciezki standardowej i pozycji planu sprawdzaja testy
+  rzeczywistych `check_*` dla arkusza PL, CZ SM5, kafli LAZ, wycinkow,
+  BDOT10k i HSG (paring z przypieciami bez `added`/`removed`).
+  Po scaleniu planu C dopisz test `unit_slot` dla nowych kolekcji.
+- [x] **Step 3: Implementacja** wg specu 4.8-4.9 i decyzji 10-11.
+- [x] **Step 4: Brama i commit** - `feat(project): status, verify i check-updates wzgledem przypiec`
 
 ---
 
@@ -524,21 +522,21 @@ def register(subparsers: argparse._SubParsersAction) -> None
     # status/verify (--project, ZADANIA*, -q)
 ```
 
-- [ ] **Step 1: Testy tlumaczenia** - `test_task_hook_equals_handler_arguments`
+- [x] **Step 1: Testy tlumaczenia** - `test_task_hook_equals_handler_arguments`
   (dla kazdej komendy danych i kilku zestawow flag: `_task(ns)` rowne
   argumentom, ktore `_handler` przekazuje funkcji biblioteki - wzorem
   `tests/test_cli_translation.py`); `test_task_options_equal_parser_data_flags`
   (zbior `dest` akcji parsera komendy bez `help`, `output`, trybow,
   `plan`, `workers`, `quiet` i `stats` rowny `TaskCommand.options`;
   chroni przed rozjazdem przy nowych flagach).
-- [ ] **Step 2: Testy `project add`** - `test_add_rejects_modes_and_foreign_output`
+- [x] **Step 2: Testy `project add`** - `test_add_rejects_modes_and_foreign_output`
   (`--upgrade`, `--force`, `--check-updates`, `--plan`, `-o` innego
   katalogu -> kod 1 i `Error:`, manifest bez zmian); `test_add_accepts_output_equal_to_store`;
   `test_add_rejects_non_data_commands` (`elevation list-sources`,
   `soil list-layers`, `parse`, `cache`); `test_add_project_flag_after_name_hint`;
   `test_add_removed_command_error` (`removed_command_error` dla
   zagniezdzonej komendy, np. `download`); `test_add_double_dash_allowed`.
-- [ ] **Step 3: Testy CLI = API** - `test_project_cli_equals_api`
+- [x] **Step 3: Testy CLI = API** - `test_project_cli_equals_api`
   (harness wzorem `tests/parity.py::run_both`: ta sama sekwencja `init`,
   `add` x2, `download`, `status`, `verify`, `download --check-updates`,
   `download --upgrade` przez CLI i przez API w osobnych katalogach -
@@ -546,17 +544,17 @@ def register(subparsers: argparse._SubParsersAction) -> None
   `assert_same_store`, kody wyjscia = `ok`, `Notice` wypisane jako
   `Info:`/`Warning:`, bledy jako `Error:` z tekstem wyjatku);
   `test_quiet_keeps_warnings`.
-- [ ] **Step 4: Implementacja** - `project add`: `create_parser()`
+- [x] **Step 4: Implementacja** - `project add`: `create_parser()`
   zagniezdzony, `removed_command_error`, `_task`, nazwa komendy
   z `ns.command` i `getattr(ns, f"{ns.command}_command")`, kontrola
   `output`/trybow (spec 4.5), wywolanie `add_project_task`. Pozostale
   komendy: jedna funkcja API kazda, wydruk wg specu 4.2 (slownictwo
   USAGE 4.3), kody wyjscia wg specu 4.8-4.11, pasek postepu
   `create_progress_callback` dla `download` bez `-q`.
-- [ ] **Step 5: Smoke** - z korzenia worktree: `python -m
+- [x] **Step 5: Smoke** - z korzenia worktree: `python -m
   kartograf.cli.commands project --help`, `... project add --help`,
   `... project add t elevation download --help` (pomoc komendy grupy).
-- [ ] **Step 6: Brama i commit** - `feat(cli): grupa project (init, add, remove, download, status, verify)`
+- [x] **Step 6: Brama i commit** - `feat(cli): grupa project (init, add, remove, download, status, verify)`
 
 ---
 
@@ -566,25 +564,25 @@ def register(subparsers: argparse._SubParsersAction) -> None
 `docs/DEVELOPMENT_STANDARDS.md`, `docs/CHANGELOG.md`, `docs/PROGRESS.md`,
 `docs/SCOPE.md`
 
-- [ ] ARCHITECTURE: sekcja 2 (pakiet `kartograf/project/`, zaleznosci:
+- [x] ARCHITECTURE: sekcja 2 (pakiet `kartograf/project/`, zaleznosci:
   `project` -> `download`, `landcover`, `hydrology`; CLI -> `project`),
   nowa 3.5 "Manifest projektu `kartograf-project/1`" (format, sciezki,
   zapis, scalanie - streszczenie specu 3 i 4.12), sekcja 5 (nowa grupa
   danych: pozycja w `kartograf/project/commands.py` + `_task` + test).
-- [ ] USAGE: nowa sekcja "Projekt" (spis tresci): przyklady ze specu 4.2,
+- [x] USAGE: nowa sekcja "Projekt" (spis tresci): przyklady ze specu 4.2,
   tabela przenoszenia (spec 3.2), zalecenie jawnego wariantu (`--year`)
   dla odtwarzalnosci (spec 4.6), relacja z `availability` (spec 4.10),
   biblioteka (`init_project`, `add_project_task`, `download_project`,
   `check_project`, `verify_project`).
-- [ ] README: krotki przyklad projektu i link do USAGE.
-- [ ] DEVELOPMENT_STANDARDS 17: punkt listy kontrolnej nowej grupy/komendy
+- [x] README: krotki przyklad projektu i link do USAGE.
+- [x] DEVELOPMENT_STANDARDS 17: punkt listy kontrolnej nowej grupy/komendy
   danych - pozycja tabeli projektu, `_task`, test zadania projektu.
-- [ ] CHANGELOG `[0.8.0] - Unreleased`, "Dodane": grupa `kartograf
+- [x] CHANGELOG `[0.8.0] - Unreleased`, "Dodane": grupa `kartograf
   project` i API projektu (bez "Co zrobic" - zmiana nielamiaca);
   "Zmienione": listy produktow grup w bibliotece (wewnetrzne).
-- [ ] SCOPE 3.3 wiersz 2: stan "zrobione (0.8.0)" po E2E; PROGRESS:
-  koniec sesji z wynikami bramy i E2E.
-- [ ] Commit - `docs: manifest projektu w ARCHITECTURE, USAGE, README i CHANGELOG`
+- [ ] SCOPE 3.3 wiersz 2: stan "zrobione (0.8.0)" po E2E (Task 10);
+  PROGRESS aktualizuje koordynator po scaleniu galezi (decyzja z ctx).
+- [x] Commit - `docs: manifest projektu w ARCHITECTURE, USAGE, README i CHANGELOG`
 
 ---
 

@@ -123,9 +123,11 @@ co najmniej jeden import na poziomie modulu (takze pod `if TYPE_CHECKING:`).
 
 ```
 kartograf ──> core, download, providers, landcover, hydrology, cache,
-        sources, transport, notices       # re-eksport Public API
+        sources, transport, notices, project       # re-eksport Public API
 cli ──> _version, download, landcover, core, hydrology, cache,
-        notices, transform
+        notices, transform, project
+project ──> download, landcover, hydrology, core, sources, cache,
+        notices, _version, kartograf (_clock)
 download ──> providers, sources, transform, core, cache, notices,
         _version, kartograf (_clock), transport
 landcover ──> providers, download, core, cache, sources, notices
@@ -142,7 +144,7 @@ _clock, notices, auth ──> (nic wewnetrznego)
 core ──> (nic poza exceptions)
 exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
         kartograf, cli, core, sources, transform, transport, providers, download,
-        landcover, hydrology, cache)
+        landcover, hydrology, cache, project)
 ```
 
 **Jak odtworzyc graf.** Kod uzywa wylacznie bezwzglednych importow
@@ -185,6 +187,10 @@ Uwagi, ktore latwo przeoczyc:
   `_version` i `cache`; z `transform` bierze tylko `TransformError`.
   Nie importuje `providers`, `transport` ani doboru arkuszy
   (`tests/test_cli_translation.py::test_cli_imports_no_data_logic`).
+- `project` (`model`, `commands`, `manifest`, `operations`) mapuje komendy danych
+  na funkcje biblioteki `download`/`landcover`/`hydrology`; nie implementuje
+  logiki per produkt. `cli/groups/project.py` i `cli/project_cmd.py` tylko
+  tlumacza argumenty i wypisuja wyniki API projektu (ADR-037, ADR-040).
 - `transport ──> transform`: `transport/mosaic.py` owija zrodla mozaiki
   w VRT przez `transform.raster` (`vrt_xml`, `VRT_TYPES`; import na poziomie
   modulu). `transform` nie importuje `transport` — cyklu nie ma.
@@ -353,14 +359,24 @@ kartograf/
 ├── hydrology/hsg.py     # HSGCalculator — calculate_hsg/check_hsg (sheet|bbox|geometry) z wersji
 │                        # wejsc SoilGrids (D33, reused), klasyfikacja USDA -> HSG (ADR-025),
 │                        # hsg_from_rasters
+├── project/             # Manifest projektu (ADR-040):
+│   ├── model.py         # Project, ProjectTask, PinnedFile, ProjectReport,
+│   │                    # ProjectCheck i wyniki zadan oraz plikow
+│   ├── commands.py      # COMMANDS: opcje JSON, walidacja bez sieci, pobranie,
+│   │                    # check_* i przypiecia na komende danych (bez logiki per produkt)
+│   ├── manifest.py      # kartograf-project/1: walidacja, blokada mkdir, atomowy
+│   │                    # zapis i scalanie zmian per zadanie
+│   └── operations.py    # Publiczne API: init, add, remove, download,
+│                        # check, status, verify i open_project
 ├── auth/                # proxy.py (subprocess izolujacy credentials CLMS), client.py
 │                        # (AuthProxyClient — singleton, sam uruchamia proxy)
 └── cli/                 # Tylko tlumaczenie flag i wypisanie wyniku (Z1, ADR-037):
                          # _parser.py (parser glowny), _args.py (wspolne flagi),
                          # groups/ (grupy komend wg typu danych, ADR-039: elevation,
-                         # imagery, landcover, soil — jeden modul = jedna grupa),
+                         # imagery, landcover, soil, project — jeden modul = jedna grupa),
                          # download_cmd.py (download_data/check_data),
-                         # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG), parse_cmd.py,
+                         # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG),
+                         # project_cmd.py (API projektu), parse_cmd.py,
                          # cache_cmd.py, commands.py (entry point main)
 ```
 
@@ -741,6 +757,41 @@ pliki jednego zadania, takze te lezace po obu stronach granicy, ktore
 Kartograf swiadomie zostawia rozdzielone (sekcja 1). Slownik jest wspoldzielony
 przez referencje miedzy sidecarami zadania i **nie moze byc mutowany** po
 utworzeniu.
+
+### 3.5 Manifest projektu `kartograf-project/1`
+
+`kartograf project init --output KATALOG` tworzy w katalogu projektu
+`kartograf-project.json` (UTF-8, JSON z wcieciem 2 spacje). Manifest
+przechowuje `schema: "kartograf-project/1"`, `output_dir` (jeden magazyn
+wersjonowany) i `tasks` w kolejnosci dodania. Zadanie ma unikalne `name`,
+`command` (np. `elevation download`), `options` wyboru danych, `pinned_at`,
+`kartograf_version` i `files`; przy przypietej geometrii takze
+`geometry_sha256`. `pinned_at` i `kartograf_version` sa `null`, a `files`
+puste przed pierwszym pobraniem. Kazdy wpis pliku podaje `role` (`output`,
+`raw`, `input`), `unit`, standardowa sciezke `path`, sciezke niezmiennej
+wersji `version`, `label`, pelny `sha256` i `size_bytes`. Manifest wybiera
+wersje danych; sidecar `kartograf-meta/1` niezmiennie opisuje pochodzenie
+pliku. Raport aktualizacji `kartograf-plan/1` nie jest czescia manifestu.
+
+Wzgledny `output_dir` i wzgledny `options.geometry` sa zapisane i
+rozstrzygane wzgledem katalogu projektu, a bezwzgledne pozostaja
+bezwzgledne. `path` i `version` sa zawsze wzgledne do magazynu, z
+separatorem `/`; `version` wskazuje plik pod `versions/`, nigdy
+`.incoming/`. Przenoszenie katalogu projektu razem z magazynem zachowuje
+powiazania, jezeli ich wzajemne polozenie pozostaje takie samo.
+
+`kartograf/project/manifest.py` scisle sprawdza strukture i typy przy
+kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki). Zapisuje
+plik tymczasowy obok manifestu, synchronizuje go (`fsync`) i podmienia
+atomowo (`os.replace`); synchronizuje rowniez katalog, gdy system plikow
+na to pozwala. Krotka blokada katalogowa `.kartograf-project.lock`
+(`mkdir`) obejmuje tylko odczyt-scalenie-zapis, a nie pobieranie. Przy
+rownoleglych operacjach zmiany roznych zadan sa scalane, zmiana tego
+samego zadania zglasza konflikt bez nadpisania cudzych przypiec. Zapis
+nastepuje po kazdym zakonczonym zadaniu; nie ma SQLite ani blokad
+zakresow bajtow na udziale. Szczegoly formatu i trybow:
+[`USAGE.md`, sekcja 8](USAGE.md#8-projekt) oraz spec
+`docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`.
 
 ---
 
@@ -1674,6 +1725,16 @@ pin kroku datum (`DATUM_STEP_PINS` EPSG:1622/1623), nie tylko
 nominalna dokladnosc `KNOWN_PATHS`: slowacka operacja ma mylace
 0,5 m i moze przejsc filtr AOI w Czechach. Wlasna siatka wynikowa
 powinna zachowac dokladny piksel i przypieta operacje w sidecarze.
+
+Nowa **komenda zapisujaca dane** (w tym `download` nowej grupy) musi
+otrzymac pozycje w `kartograf/project/commands.py::COMMANDS`: dozwolone
+opcje zadania, wspolna z pobraniem walidacja bez sieci, funkcja pobrania
+i `check_*`, adapter wyniku na komplet przypinanych `VersionedFile`.
+Parser komendy ustawia `_task` korzystajace z tego samego tlumaczenia
+flag co `_handler`, bez `output_dir` i opcji pojedynczego uruchomienia.
+Dodaj test zadania projektu dla tej komendy (przypiecie, sprawdzenie
+i odtworzenie); nowy produkt istniejacej komendy nie wymaga nowej
+pozycji w tabeli (ADR-040, spec manifestu sekcja 5).
 
 ---
 

@@ -463,7 +463,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `CLMS_RASTER_DOWNLOAD_IDS` 2012/2006/2000 zmienione na identyfikatory
     z katalogu CLMS.
 
+### Zmienione
+
+- Listy produktow `elevation`/`imagery` i zrodel `landcover`
+  przeniesiono z parserow CLI do biblioteki (`download/options.py`,
+  `landcover/manager.py`): grupy CLI i manifest projektu korzystaja
+  z tych samych wyborow (zmiana wewnetrzna).
+
 ### Dodane
+
+- Projekt (ADR-040): grupa `kartograf project` (`init`, `add`, `remove`,
+  `download`, `status`, `verify`) zapisuje zadania i przypiete wersje
+  w `kartograf-project.json` (`kartograf-project/1`). `download` odtwarza
+  brakujace wersje tylko przy zgodnej sumie SHA-256; `--check-updates`
+  odpytuje zrodlo bez pobierania, `--upgrade`/`--force` jawnie przepinaja
+  zadania. Publiczne API: `init_project`, `open_project`,
+  `add_project_task`, `remove_project_task`, `download_project`,
+  `check_project`, `project_status`, `verify_project` oraz typy
+  `Project`, `ProjectTask`, `PinnedFile`, `ProjectReport`, `TaskResult`,
+  `ProjectCheck`, `FileCheck`. Opis uzycia: `docs/USAGE.md` sekcja 8.
 
 - Biblioteka (ADR-037): `download_data`/`check_data` = komenda
   `kartograf download` (wynik `DataReport`, `UnitFile`, `UnitFailure`),
