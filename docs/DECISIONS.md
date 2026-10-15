@@ -2823,7 +2823,10 @@ aliasow starych nazw:
 - D6. Brak `--product` (albo `--source` w `landcover`) daje komunikat
   wymieniajacy tylko wybory grupy (`options.product_choices()`); wartosc
   dalej waliduje argparse i biblioteka. `soil download` nie ma `--source`
-  (jedno zrodlo). `list-sources` wypisuje tabele z rejestru deskryptorow
+  (jedno zrodlo). `imagery download` zachowuje wymagane `--product orto`
+  mimo jednego produktu: grupa dostanie kolejne produkty w planie E (true
+  orto, orto ukosna, obrazy intensywnosci), wiec flaga nie zmieni sie
+  przy ich dodaniu. `list-sources` wypisuje tabele z rejestru deskryptorow
   (WYBOR, KRAJ, DOSTAWCA, KLUCZ = `dataset` sidecara, NAZWA) bez sieci.
 - D7. Usuniete komendy koncza sie bledem parsera (kod 2) z nazwa nowej
   komendy, bez dzialajacego aliasu: `download`, `soilgrids`,

@@ -783,7 +783,7 @@ class TestCLICacheCommands:
         result = main(["cache"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "Uzycie" in captured.out
+        assert "stats" in captured.out and "clear" in captured.out
 
 
 # =========================================================================

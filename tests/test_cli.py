@@ -3219,9 +3219,7 @@ class TestCmdSoil:
         """The library text (same as ``calculate_hsg(depth=None)``), no network."""
         rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "-o", str(tmp_path)])
         assert rc == 1
-        assert capsys.readouterr().err.startswith(
-            "Error: --depth wymagane dla soilgrids: 0-5cm"
-        )
+        assert capsys.readouterr().err.startswith("Error: --depth wymagane: 0-5cm")
 
     def test_soilgrids_hsg_no_selection(self, capsys):
         """soil hsg without --sheet or --bbox -> exit 1."""
