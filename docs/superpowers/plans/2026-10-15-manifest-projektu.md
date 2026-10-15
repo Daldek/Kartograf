@@ -170,15 +170,20 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
    `os.replace`. Kolejnosc zadan: istniejace na swoich miejscach, nowe na
    koncu. Ta sama funkcja obsluguje `add`, `remove` i zapisy po kazdym
    zadaniu `download`.
-9. **Walidacja odczytu** (`manifest.py::read_manifest`): JSON, `schema`,
+9. **Walidacja odczytu** (`manifest.py::read_manifest`): JSON (bez
+   powtorzonych kluczy i `NaN`), `schema`,
    komplet i typy kluczy, nazwy zadan (`^[a-z0-9][a-z0-9_-]{0,63}$`,
    unikalne), `command` w `COMMANDS`, klucze `options` w
-   `TaskCommand.options`, `pinned_at` i `kartograf_version` razem `null`
-   albo razem napisy, `geometry_sha256` dokladnie gdy `options.geometry`
+   `TaskCommand.options` z typem ich rodzaju (bez `null`/`false`),
+   `pinned_at` (ISO 8601) i `kartograf_version` razem `null`
+   albo razem napisy, zadanie przypiete = niepusta lista `files`
+   (niepobrane = pusta), `geometry_sha256` dokladnie gdy `options.geometry`
    i zadanie przypiete, przypiecia: `path`/`version` wzgledne, bez `.`
    i `..`, `version` z segmentem `versions` i bez `.incoming`, `path` bez
-   `versions`, `sha256` = 64 male znaki hex, `size_bytes` >= 0, `role`
+   `versions`, ta sama `version` najwyzej raz, `sha256` = 64 male znaki
+   hex, `size_bytes` >= 0, `role`
    ze slownika. Komunikat wskazuje miejsce (`zadanie teren: files[2].version: ...`).
+   Zapis zawsze w postaci kanonicznej (`task_to_json` kazdego zadania).
 10. **Mapowanie planu na przypiecia** (`operations.py`, spec 4.8): klucz
     pozycji `PurePosixPath(item.segment, item.hierarchy, item.name).as_posix()`
     porownany z `PinnedFile.path`. W obrebie klucza najpierw pary
@@ -342,7 +347,7 @@ def commit_tasks(project_dir: Path,
 def task_to_json(task: ProjectTask) -> dict
 ```
 
-- [ ] **Step 1: Testy formatu** - `test_manifest_bytes_stable` (zloty plik
+- [x] **Step 1: Testy formatu** - `test_manifest_bytes_stable` (zloty plik
   z przykladu specu 3.3: odczyt -> zapis daje identyczne bajty; kolejnosc
   kluczy, wciecie, nowa linia na koncu); `test_read_rejects_invalid`
   (parametryzacja wg decyzji 9: zly JSON, `kartograf-project/2`, nieznany
@@ -351,7 +356,7 @@ def task_to_json(task: ProjectTask) -> dict
   `path` z `versions`, `sha256` nie-hex, `pinned_at` bez
   `kartograf_version`, `geometry_sha256` bez `geometry`) - zawsze
   `ValidationError`, nic nie zapisane.
-- [ ] **Step 2: Testy zapisu** - `test_commit_merges_other_tasks` (dwa
+- [x] **Step 2: Testy zapisu** - `test_commit_merges_other_tasks` (dwa
   odczyty, dwa `commit_tasks` z roznymi zadaniami: oba w pliku);
   `test_commit_conflict_same_task` (drugi zapis tego samego zadania
   zwraca konflikt, plik bez jego zmiany); `test_lock_busy_times_out_without_takeover`
@@ -360,8 +365,8 @@ def task_to_json(task: ProjectTask) -> dict
   (`os.replace` rzuca: stare bajty, brak pliku tymczasowego, brak
   blokady); `test_project_dir_has_no_extra_files` (po serii operacji
   w katalogu projektu tylko `kartograf-project.json`).
-- [ ] **Step 3: Implementacja** wg decyzji 1, 7-9.
-- [ ] **Step 4: Brama i commit** - `feat(project): manifest kartograf-project/1 - format, walidacja, zapis atomowy`
+- [x] **Step 3: Implementacja** wg decyzji 1, 7-9.
+- [x] **Step 4: Brama i commit** - `feat(project): manifest kartograf-project/1 - format, walidacja, zapis atomowy`
 
 ---
 
