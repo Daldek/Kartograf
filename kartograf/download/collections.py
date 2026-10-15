@@ -865,6 +865,7 @@ def _fetch_package(
     source: _Source,
     sink: NoticeSink,
     session: requests.Session,
+    timeout: int,
 ) -> dict:
     assert job.url is not None and job.variant is not None
     params = job.channel.params
@@ -889,7 +890,7 @@ def _fetch_package(
         staged,
         params=params,
         variant=job.variant,
-        timeout=PACKAGE_TIMEOUT,
+        timeout=timeout,
     )
     value: dict = {"url": job.url}
     if job.variant.edition is not None:
@@ -901,7 +902,11 @@ def _fetch_package(
 
 
 def _fetch_features(
-    job: UnitJob, staged: Path, source: _Source, session: requests.Session
+    job: UnitJob,
+    staged: Path,
+    source: _Source,
+    session: requests.Session,
+    timeout: int,
 ) -> None:
     # lazy: GDAL vector (pyogrio) only for area results
     from kartograf.transform.gpkg import write_gpkg
@@ -918,7 +923,7 @@ def _fetch_features(
             job.layers,
             job.bbox,
             work,
-            timeout=SERVICE_TIMEOUT,
+            timeout=timeout,
         )
         result = work / "result.gpkg"
         summary = write_gpkg(result, pages, params=params)
@@ -952,6 +957,7 @@ def run_job(
     sink: NoticeSink,
     planned: set[_SLOT_KEY] | None = None,
     session: requests.Session | None = None,
+    timeout: int | None = None,
 ) -> VersionedFile | None:
     """Local version or download of one unit job (spec 4.2, ADR-042 D6).
 
@@ -963,7 +969,8 @@ def run_job(
     or ``service``/``layers``/``dropped_fields``), ``extra.http`` of a
     package and ``extra.parent_request``. ``session``: HTTP session of the
     requests (``LandCoverManager``: its provider's; ``None``: one per thread
-    of this module).
+    of this module); ``timeout``: seconds of one request (``None``:
+    ``PACKAGE_TIMEOUT`` for a package, ``SERVICE_TIMEOUT`` for a page).
 
     Raises
     ------
@@ -978,9 +985,13 @@ def run_job(
 
     def fetch(staged: Path) -> dict | None:
         if job.layers:
-            _fetch_features(job, staged, source, _http(session))
+            _fetch_features(
+                job, staged, source, _http(session), timeout or SERVICE_TIMEOUT
+            )
             return None
-        return _fetch_package(job, staged, source, sink, _http(session))
+        return _fetch_package(
+            job, staged, source, sink, _http(session), timeout or PACKAGE_TIMEOUT
+        )
 
     def write(
         data: Path, ref: VersionRef, digest: ContentDigest, http: dict | None

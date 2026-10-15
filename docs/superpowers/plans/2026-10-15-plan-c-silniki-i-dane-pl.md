@@ -743,6 +743,17 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
 - [ ] **Step 3: Brama i commit** - `feat(landcover): archiwum BDOT10k
   (--year, GML/SHP) oraz modele 3D, PRG i EGiB na silnikach kolekcji`
 
+Korekta przy implementacji (2026-10-15): archiwum idzie przez publiczne
+zadania jednostek orkiestratora (`package_job`, `run_job`, `inspect_job`
+z `track="landcover"`) z sesja HTTP dostawcy BDOT10k
+(`Bdot10kProvider.session()`, `session=`) i jego opcja `timeout`, a nie
+przez osobna funkcje pliku. `--format GML` bez `--year` = blad z
+podpowiedzia, a `--year` innego zrodla niz `bdot10k`/`corine` wymienia
+oba zrodla. Testy PRG i EGiB obszaru w `tests/test_collections_products.py`
+uzywaja nagranych fixtur PRG A06 (`--level obreb`) i EGiB powiatu 1415
+(warstwa A03 nie ma fixtury); paczki EGiB, odrzucenie `--teryt <powiat>`
+dla PRG i LoD1 2024 = EPSG:9651 sprawdza `tests/test_collections.py`.
+
 ### Task 7: CLI - grupy `boundaries`, `cadastre`, `models3d`, `landcover --year`, `_task` i projekt
 
 **Files:**
