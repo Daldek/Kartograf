@@ -6,7 +6,9 @@ Every CLI command has one library function with the same choices and the same
 result (ADR-037): ``elevation download`` and ``imagery download`` =
 ``download_data``/``check_data``, ``landcover download`` and ``soil download`` =
 ``LandCoverManager.download``/``.check``,
-``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``, ``project`` =
+``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``,
+``boundaries download``, ``cadastre download`` and ``models3d download`` =
+``download_collection``/``check_collection`` (ADR-042), ``project`` =
 ``init_project``, ``add_project_task``, ``remove_project_task``,
 ``download_project``, ``check_project``, ``project_status``,
 ``verify_project`` (``open_project`` reads a project, ADR-040).
@@ -77,6 +79,11 @@ from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.area import parent_request_for
 from kartograf.download.campaigns import CampaignRef
+from kartograf.download.collections import (
+    CollectionReport,
+    check_collection,
+    download_collection,
+)
 from kartograf.download.countries import (
     CountryPart,
     countries_for_bbox,
@@ -192,6 +199,10 @@ __all__ = [
     "DataReport",
     "UnitFile",
     "UnitFailure",
+    # Download (collections: `boundaries`/`cadastre`/`models3d download`, ADR-042)
+    "download_collection",
+    "check_collection",
+    "CollectionReport",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",

@@ -26,6 +26,11 @@ LAZ_SUPERSEDED = "laz_superseded"
 CORINE_PREVIEW = "corine_preview"
 CACHE_DISABLED = "cache_disabled"
 PROJECT_GEOMETRY_CHANGED = "project_geometry_changed"
+# Collections (ADR-042): units of an area, size of a national file before
+# its transfer, ``--country auto`` narrowed to the countries with the product.
+UNIT_LIST = "unit_list"
+WHOLE_COUNTRY_SIZE = "whole_country_size"
+AUTO_NARROWED_TO_CZ = "auto_narrowed_to_cz"
 
 
 @dataclass(frozen=True)
