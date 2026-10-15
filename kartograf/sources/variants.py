@@ -67,7 +67,10 @@ FORMATS: tuple[FileFormat, ...] = (
         "ASC",
         "ARC/INFO ASCII GRID",
         ".asc",
-        (".asc",),
+        # `.xyz`: the 42 grids of NMT 2019 campaign 72675 (N-33-69) are
+        # published under a `.xyz` name; every one is an AAIGrid (header
+        # read live 2026-10-15), checked again after download
+        (".asc", ".xyz"),
         "ARC/INFO ASCII GRID",
         source_file=False,
     ),
@@ -213,8 +216,9 @@ def file_format(token: str) -> FileFormat:
 def source_format(record_format: str | None, url: str) -> str | None:
     """Token of an index record's file: its ``format`` AND its URL agree.
 
-    ``("ARC/INFO ASCII GRID", ".../x.asc")`` -> ``"ASC"``; the same format
-    with a ``.xyz`` URL (42 NMT 2019 records) -> ``None``: an inconsistent
+    ``("ARC/INFO ASCII GRID", ".../x.asc")`` -> ``"ASC"`` (also the ``.xyz``
+    names of the 72675 grids, ``FORMATS``); a grid format with a ``.zip`` URL
+    or an archive format with a ``.asc`` URL -> ``None``: an inconsistent
     record is never downloaded. Unknown formats -> ``None``.
     """
     known = _BY_INDEX_NAME.get((record_format or "").strip())

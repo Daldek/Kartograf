@@ -39,14 +39,19 @@ Arkusze (`sheet_*`), przypadki testowe planu A:
   1m 2022; 5m; XYZ 5m 2020), `N-33-58-A-c-1-3` (wylacznie 0.5m: 2021, 2022,
   2025), `M-34-64-D-d-2-1` (1m/5m `.asc`, XYZ 5m i TBD 25m 2018, ASCII NMT
   5m 2019; PL-2000 `7.125.11.04` 1m w punkcie), `N-33-69-A-d-1-3` (rekord
-  `ARC/INFO ASCII GRID` z URL `.xyz` 2019 - niespojny; ASCII NMT 0.5m;
-  `NMT-N3369Ad13.xyz.zip`), `N-33-77-B-c-3-3` (0.5m, 0.6m, 1m, 5m, XYZ 5m,
+  `ARC/INFO ASCII GRID` 1m 2019 z URL `.xyz` - kampania 72675 publikuje
+  siatki AAIGrid pod nazwa `.xyz`, sprawdzone naglowkiem pliku na zywo dla
+  wszystkich 42 rekordow; ASCII NMT 0.5m; `NMT-N3369Ad13.xyz.zip`),
+  `N-33-77-B-c-3-3` (0.5m, 0.6m, 1m, 5m, XYZ 5m,
   ASCII NMT 1m `NMT-N-33-77-B-c-3-3.zip`), `N-33-77-D-a-1-2` (podobnie),
   `7.159.25.12.2` (0.15m 2023), `6.125.25` (5m i 10m PL-2000 2021 NIE),
   `M-34-1-B-c-2-4` (XYZ 1m `.zip.zip`), `N-34-121-C-b-3-3` (XYZ 5m
   `NMT-N34121Cb33.xyz.zip`, TBD 15m), `M-34-29-A-b-4-2` (TBD 25m, XYZ 5m,
   ASCII NMT 5m), `N-33-46-C-c-3-2` (morze: `numberReturned="0"`,
-  `numberMatched="unknown"`).
+  `numberMatched="unknown"`), `N-33-142-B-b-4-1` (nagrany pozniej tego
+  samego dnia: rekordy 2019 ASC 1m i ASCII NMT 10m na godlach 8-czlonowych
+  `N-33-142-B-b-4-1-{1..4}` - spoza `SheetParser`; 1m 2024/2025, 5m, XYZ 1m
+  2019, PL-2000 `6.174.12.01` 0.5m 2021).
 - NMT KRON86: `6.130.26.07.1.2` (0.5m PL-2000 2018 `70042_814868_...asc`;
   TIN/TTN/TBD 2009 arkusza 1:25000 `M-34-62-A-a-2`), `M-34-64-D-d-2-1` (1m
   2012 i 2017 `.asc` + XYZ; TBD 15m, TIN, TTN 2009 arkusza `M-34-64-D-d-2`;

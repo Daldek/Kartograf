@@ -38,9 +38,9 @@ EMPTY = (
     Path(__file__).parent / "fixtures" / "gugik_skorowidz" / "empty.body"
 ).read_text(encoding="utf-8")
 
-# NMT 1 m EVRF2007 grids of the recorded answers. G: 2021, 2022 and two
-# flights of 2024, beside a 2019 record whose URL (.xyz) contradicts its
-# format (ARC/INFO ASCII GRID); H: 2019 and 2022-2025.
+# NMT 1 m EVRF2007 grids of the recorded answers. G: 2021, 2022, two flights
+# of 2024 and the 2019 grid of campaign 72675 published under a `.xyz` name;
+# H: 2019 and 2022-2025.
 G = "N-33-69-A-d-1-3"
 H = "M-34-64-D-d-2-1"
 NMT_EVRF2007 = wfs_endpoint("nmt_evrf2007")
@@ -121,7 +121,7 @@ def test_newest_min_year_after_newest_campaign_is_year_range_error():
         GugikProvider(
             session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(G, min_year=2025)
-    assert exc.value.sheets == {G: (2021, 2022, 2024)}
+    assert exc.value.sheets == {G: (2019, 2021, 2022, 2024)}
     assert "--min-year 2024" in exc.value.hints[0]
 
 
@@ -164,8 +164,8 @@ def test_all_lists_every_matching_campaign_from_one_query():
     recs = GugikProvider(
         session=s, vertical_crs="EVRF2007", resolution="1m"
     ).resolve_campaigns(G, all_campaigns=True)
-    # 72675 (2019) is in the answer, but its .xyz file is not an ASC grid
-    assert ids(recs) == ["81025", "81616", "75506", "74160"]
+    # 72675 (2019): an ASC grid under a `.xyz` name (record format decides)
+    assert ids(recs) == ["81025", "81616", "75506", "74160", "72675"]
     assert len(wfs_requests(s)) == 1
 
 
@@ -223,8 +223,7 @@ def test_resolve_campaigns_year_2023_conflict_lists_years():
         GugikProvider(
             session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(G, min_year=2023, max_year=2023)
-    # no 2019: the record of that year is not an ASC grid
-    assert exc.value.sheets == {G: (2021, 2022, 2024)}
+    assert exc.value.sheets == {G: (2019, 2021, 2022, 2024)}
 
 
 @pytest.mark.parametrize(
@@ -310,7 +309,7 @@ def test_all_min_year_filters_by_acquisition_year_not_pzgik_date(tmp_path):
         GugikProvider(
             session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(G, all_campaigns=True, min_year=2025)
-    assert exc.value.sheets == {G: (2021, 2022, 2024)}
+    assert exc.value.sheets == {G: (2019, 2021, 2022, 2024)}
     assert s2.get.call_count == 0
 
 
@@ -368,7 +367,7 @@ def test_all_cache_hit_no_network(tmp_path):
     recs = GugikProvider(
         session=s2, cache=cache, vertical_crs="EVRF2007", resolution="1m"
     ).resolve_campaigns(G, all_campaigns=True)
-    assert s2.get.call_count == 0 and len(recs) == 4
+    assert s2.get.call_count == 0 and len(recs) == 5
 
 
 def test_all_from_cache_keeps_format(tmp_path):
@@ -513,12 +512,12 @@ def test_all_record_without_year_is_dropped_by_min_year():
         GugikProvider(
             session=s, vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(G, all_campaigns=True, min_year=2025)
-    assert exc.value.sheets == {G: (2021, 2022, 2024)}
+    assert exc.value.sheets == {G: (2019, 2021, 2022, 2024)}
 
 
 def test_records_without_any_year_are_no_coverage_not_conflict():
     """Spec 4.2 BRAK: no year to compare with = no data, as in the manager."""
-    s = _blank_years({"81025", "81616", "75506", "74160"})
+    s = _blank_years({"81025", "81616", "75506", "74160", "72675"})
     with pytest.raises(NoCoverageError, match=f"Brak kampanii {G}"):
         GugikProvider(
             session=s, vertical_crs="EVRF2007", resolution="1m"
@@ -531,7 +530,7 @@ def test_newest_record_without_year_fails_min_year():
         GugikProvider(
             session=s, vertical_crs="EVRF2007", resolution="1m"
         ).resolve_campaigns(G, min_year=2024)
-    assert exc.value.sheets == {G: (2021, 2022)}
+    assert exc.value.sheets == {G: (2019, 2021, 2022)}
 
 
 # =============================================================================
@@ -591,5 +590,5 @@ def test_pre_adr031_campaigns_cache_entry_is_a_miss_and_is_overwritten(tmp_path)
     ).resolve_campaigns(G, all_campaigns=True)
 
     assert len(wfs_requests(session)) == 1
-    assert ids(recs) == ["81025", "81616", "75506", "74160"]
+    assert ids(recs) == ["81025", "81616", "75506", "74160", "72675"]
     assert cache.get_campaigns(*_key(G))["sources"] == fresh
