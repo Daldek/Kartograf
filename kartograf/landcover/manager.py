@@ -126,7 +126,7 @@ _TRACK: Track = "landcover"
 _SlotKey = tuple[str, str, str]
 
 
-def require_landcover_source(source: str | None) -> None:
+def require_landcover_source(source: object) -> str:
     """``source`` of ``landcover download``: one of ``LANDCOVER_SOURCES``.
 
     Raises
@@ -136,11 +136,12 @@ def require_landcover_source(source: str | None) -> None:
     """
     if source is None:
         raise ValidationError(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
-    if source not in LANDCOVER_SOURCES:
+    if not isinstance(source, str) or source not in LANDCOVER_SOURCES:
         raise ValidationError(
             f"--source {source!r}: nieznana wartosc - dostepne: "
             f"{LANDCOVER_SOURCE_CHOICES}"
         )
+    return source
 
 
 def _read_geotiff_nodata(path: Path) -> float | None:

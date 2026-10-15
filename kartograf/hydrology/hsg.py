@@ -371,7 +371,8 @@ def _write_hsg_geotiff(output_path: Path, hsg: np.ndarray, profile: dict) -> Non
         )
 
 
-_INPUTS = ("clay", "sand", "silt")
+# SoilGrids inputs of HSG, in the order of ``HsgResult.inputs``.
+HSG_INPUTS = ("clay", "sand", "silt")
 _HSG_CLASSES = "1=A, 2=B, 3=C, 4=D"
 _HSG_TRACK: "Track" = "hsg"
 # HSG always classifies the mean texture estimate (R3): the store segments
@@ -578,7 +579,7 @@ class HSGCalculator:
         """The selection, then the depth by the input manager's own checks."""
         selection = self._selection(sheet, bbox, geometry, layer, sink)
         self._manager().validate_request(
-            **_where(selection), property=_INPUTS[0], depth=depth, stat=_HSG_STAT
+            **_where(selection), property=HSG_INPUTS[0], depth=depth, stat=_HSG_STAT
         )
         return selection
 
@@ -645,7 +646,7 @@ class HSGCalculator:
         where = _where(selection)
         return [
             item
-            for prop in _INPUTS
+            for prop in HSG_INPUTS
             for item in manager.check(
                 **where,
                 property=prop,
@@ -747,7 +748,7 @@ class HSGCalculator:
                 timeout=timeout,
                 on_notice=sink.add,
             )
-            for prop in _INPUTS
+            for prop in HSG_INPUTS
         ]
         # one raster per input; a plan may leave it without a file
         inputs = tuple(
@@ -819,7 +820,7 @@ class HSGCalculator:
             "depth": depth,
             "stat": stat,
             "classes": _HSG_CLASSES,
-            "source_layers": list(_INPUTS),
+            "source_layers": list(HSG_INPUTS),
             "source_files": [
                 {
                     "name": name,
@@ -827,7 +828,7 @@ class HSGCalculator:
                     "sha256": f.sha256,
                     "label": f.label,
                 }
-                for name, f in zip(_INPUTS, files, strict=True)
+                for name, f in zip(HSG_INPUTS, files, strict=True)
             ],
         }
 
