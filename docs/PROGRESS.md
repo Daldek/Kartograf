@@ -20,7 +20,7 @@
 | Pokrycie testami | ✅ Gotowy | liczba testow: `.venv/bin/python -m pytest tests/ --collect-only -q -m "not live"`; prog pokrycia `fail_under` w `pyproject.toml`; brama: patrz "START NASTEPNEJ SESJI" |
 | Migracja na ruff | ✅ Gotowy | config + auto-fix, sesja 2026-02-03 |
 | Pobieranie rownolegle | ✅ Gotowy | ThreadPoolExecutor, --workers, v0.6.0 |
-| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; cache rekordow skorowidza PL i TERYT; od 0.8.0 domyslny cache CLI i API = `<cwd>/.kartograf_cache.db`, `--force`/`update="force"` pomija odczyt cache metadanych Kartografa (cache wlasny providera: backlog "Do 0.8.0") |
+| Cache metadanych (SQLite) | ✅ Gotowy | MetadataCache, WAL, TTL 7d, v0.6.0; cache rekordow skorowidza PL i TERYT; od 0.8.0 domyslny cache CLI i API = `<cwd>/.kartograf_cache.db`, `--force`/`update="force"` pomija odczyt cache otwieranego przez funkcje (instancja providera zachowuje wlasny cache; pelne odswiezenie: `MetadataCache(refresh=True)`, USAGE) |
 | Weryfikacja BBox PL-2000 | ✅ Gotowy | 67 testow, reference values + 16 testow `live` z realnymi asercjami na skorowidzu (N5) |
 | Walidacja warstw WMS | ✅ Gotowy | wylacznie GetCapabilities (lock, retry), `LAYER_PATTERN` per produkt, bez zaszytych list (S4, errata ADR-020) |
 | Etap 0 — zrodla wielokrajowe (sources/transform/transport/providers-pl/CLI split/sidecar) | ✅ Gotowy | zmergowane do develop 2026-08-11; E2E 12/12 na realnych danych |
@@ -2379,11 +2379,16 @@ w tym samym wydaniu (decyzja uzytkownika).
   **ZROBIONE 2026-10-15:** linie planu land cover, gleb i HSG = sciezka
   pod `--output` jak linie statusu (`store_path_label`); test
   `test_landcover_check_keep_raw_lines_name_each_file`.
-- [ ] **`DownloadManager(update="force")` i cache providera:** `force`
+- [x] **`DownloadManager(update="force")` i cache providera:** `force`
   pomija cache metadanych kontrolowany przez tor komendy, ale manager
   nie musi omijac cache nalezacego do przekazanej instancji providera.
   Doprecyzowac umowe w API/dokumentacji (bez obietnicy odswiezenia
   cudzego cache).
+  **ZROBIONE 2026-10-15 (dokumentacja, bez zmiany zachowania):** `force`
+  odswieza tylko cache otwierany przez funkcje; instancja providera
+  zachowuje wlasny cache (pelne odswiezenie: `MetadataCache(...,
+  refresh=True)`) - docstringi `DownloadManager`/`LandCoverManager`,
+  ARCHITECTURE 4.1, USAGE "Cache metadanych w bibliotece".
 - [ ] **`--bbox-crs EPSG:2176-2179` z `--sheet-system 1992`:** CRS jest na
   liscie `--bbox-crs`, ale wybieranie arkuszy PL-1992 moze odrzucic
   taki bbox; zbadac ograniczenie ukladu arkuszy i zapewnic spojnosc

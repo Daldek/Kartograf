@@ -246,7 +246,9 @@ class LandCoverManager:
         Metadata cache of a provider created BY NAME (BDOT10k: PRG TERYT
         answers; SoilGrids; CORINE has none): ``True`` = default cache in the
         current directory, a ``MetadataCache`` = that cache, ``False`` = none.
-        A provider instance keeps its own cache.
+        A provider instance keeps its own cache: ``update="force"`` skips
+        reads only of the cache opened here, so an instance's cache is not
+        refreshed (build it with ``MetadataCache(path, refresh=True)``).
 
     Examples
     --------

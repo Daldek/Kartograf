@@ -825,7 +825,13 @@ CLI i biblioteka uzywaja tego samego cache (Z6, ADR-037): parametr
 `<cwd>/.kartograf_cache.db` przez `cache/defaults.py::open_cache`, `False` =
 bez cache); `update="force"` (CLI `--force`) otwiera go w trybie
 `MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
-(E14); `kartograf cache stats` pokazuje `Wpisy rekordow`.
+(E14); `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa: `force`
+odswieza tylko cache otwierany przez funkcje (parametr `cache`, provider
+tworzony przez nia albo po nazwie); provider przekazany jako instancja
+(`DownloadManager`, `LandCoverManager`, `download_laz_area(provider=)`)
+zachowuje wlasny cache, ktorego `force` nie omija — pelne odswiezenie:
+provider z `MetadataCache(..., refresh=True)` (USAGE "Cache metadanych
+w bibliotece").
 Baza jest otwierana leniwie: plik `.kartograf_cache.db` powstaje dopiero przy
 pierwszym zapisie (`set_*`); konstrukcja, odczyty (`get_*` = chybienie),
 `stats()` (zera, `db_exists: false`), `clear()` i `close()` na braku pliku
