@@ -264,7 +264,7 @@ kartograf elevation availability --product nmpt --sheet M-34-64-D-d-2-1
 **Status:** Production
 
 #### Description
-Pobieranie ortofotomapy (zdjęcia lotnicze) z GUGiK w rozdzielczości 25cm.
+Pobieranie ortofotomapy (zdjęcia lotnicze) z GUGiK w rozdzielczości wg kampanii (np. 25 cm, 10 cm).
 Wariant koloru wymagany w API (`GugikOrtoProvider(color="RGB")`; CLI pobiera RGB); `GugikOrtoProvider(color="CIR")`
 wybiera podczerwień (osobny segment `orto/pl_<układ>_cir/`). Kampanie jak dla
 NMT (sekcja 3.11).

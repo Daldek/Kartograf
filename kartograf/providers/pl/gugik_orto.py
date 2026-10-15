@@ -4,8 +4,9 @@ GUGiK provider for downloading Orthophotomap data.
 This module provides the GugikOrtoProvider class for downloading
 orthophoto (aerial imagery) data from the Polish GUGiK services.
 
-Standard Resolution orthophotos (25cm) are available as GeoTIFF
-via WMS indexes (skorowidze) → OpenData and WCS.
+Standard Resolution orthophotos (resolution per campaign, e.g. 25 cm,
+10 cm) are available as GeoTIFF via WMS indexes (skorowidze) → OpenData
+and WCS.
 
 Unlike NMT/NMPT, orthophotos:
 - Have no vertical CRS (2D RGB imagery)
