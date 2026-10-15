@@ -65,6 +65,23 @@ Pełna lista opcji: `kartograf <grupa> <komenda> --help`. Więcej przykładów, 
 kraju (`--country`), jeden wycinek (`--cutout --horizontal-crs`) i kampanie GUGiK:
 [docs/USAGE.md](docs/USAGE.md).
 
+### Projekt i przypięte wersje
+
+```bash
+mkdir -p ~/projekty/wisla
+cd ~/projekty/wisla
+kartograf project init --output ~/dane/kartograf
+kartograf project add teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --year 2022
+kartograf project download
+kartograf project verify
+```
+
+Projekt zapisuje w `kartograf-project.json` zadania i sumy SHA-256
+przypiętych wersji ze wspólnego magazynu; zwykłe `project download`
+odtwarza brakujące wersje tylko przy identycznej treści. Więcej przykładów,
+aktualizacje i przenoszenie magazynu:
+[docs/USAGE.md — Projekt](docs/USAGE.md#8-projekt).
+
 ### Biblioteka Python
 
 ```python

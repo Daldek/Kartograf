@@ -304,6 +304,11 @@ kartograf soil download --property <param> -o ./data --depth 0-5cm --stat mean #
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
 kartograf soil hsg --sheet <arkusz> -o ./data --depth 0-5cm # oblicz HSG z wersji SoilGrids
+kartograf project init --output ~/dane/kartograf # manifest projektu ze wspolnym magazynem
+kartograf project add teren elevation download --product nmt --sheet <godlo> --resolution 1m --vertical-crs EVRF2007
+kartograf project download                 # przypnij wersje zadan; --check-updates/--upgrade/--force
+kartograf project status                   # istnienie i rozmiar, bez czytania danych
+kartograf project verify                   # SHA-256 plikow i sidecarow
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
 # Pełna lista opcji: kartograf <grupa> <komenda> --help
 ```
@@ -349,6 +354,11 @@ from kartograf import (
     discover_teryts_for_bbox, teryt_for_point,
     # Hydrology
     HSGCalculator, HsgResult, hsg_from_rasters,
+    # Project manifest (kartograf-project/1, ADR-040)
+    init_project, open_project, add_project_task, remove_project_task,
+    download_project, check_project, project_status, verify_project,
+    Project, ProjectTask, PinnedFile, ProjectReport, TaskResult,
+    ProjectCheck, FileCheck,
     # Transport and mosaic (stable since 0.7.1)
     get_with_retry, make_gugik_session, mosaic_and_crop, check_source_grid,
     # Exceptions

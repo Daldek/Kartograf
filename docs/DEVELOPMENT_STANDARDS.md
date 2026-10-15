@@ -1062,7 +1062,24 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,
 sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 
-### 17.2 Rozszerzenie parsera godel
+### 17.2 Nowa grupa lub komenda zapisujaca dane
+
+Kazda nowa komenda danych (w tym `download` nowej grupy) musi miec
+pozycje w `kartograf/project/commands.py::COMMANDS`: klucze i typy
+opcji manifestu, walidacje bez sieci wspolna z funkcja pobrania,
+wywolania biblioteki do pobrania i `check_*` oraz adapter kompletnego
+wyniku do przypiec (`VersionedFile`, wraz z plikami wejsciowymi i
+surowymi, jesli dotyczy). W parserze komendy ustaw `_task`, ktore
+korzysta z tego samego tlumaczenia flag co `_handler`, ale zwraca
+tylko opcje wyboru danych, bez `output_dir`, trybu aktualizacji
+i opcji uruchomienia. Dopisz test zadania projektu dla nowej komendy:
+przypiecie wyniku, sprawdzenie wzgledem przypiec i odtworzenie przy
+zgodnym SHA-256. Nowy produkt w istniejacej komendzie nie wymaga
+nowej pozycji `COMMANDS`; zgodnosc jej opcji z parserem nadal sprawdz
+testem. Kontrakt: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj)
+i spec manifestu, sekcja 5.
+
+### 17.3 Rozszerzenie parsera godel
 
 ```python
 # 1. PL-1992: kartograf/core/sheet_parser.py — wzorzec w PATTERNS, logika
@@ -1075,7 +1092,7 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 # 4. Przetestuj hierarchie (get_parent, get_children, get_all_descendants)
 ```
 
-### 17.3 Naprawa bledu w pobieraniu
+### 17.4 Naprawa bledu w pobieraniu
 
 ```python
 # 1. Zidentyfikuj provider (kartograf/providers/: pl/, cuzk/, corine.py,
