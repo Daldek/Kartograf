@@ -62,6 +62,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
 | [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
 | [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta; uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
+| [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta |
 
 ---
 
@@ -2920,6 +2921,161 @@ i `rename`; magazyn nadal wymaga dowiazan twardych (ADR-036). Kazda
 nowa komenda danych wymaga pozycji w tabeli projektu i `_task` (test
 zgodnosci). Implementacja:
 `docs/superpowers/plans/2026-10-15-manifest-projektu.md`.
+
+---
+
+## ADR-041: Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci
+
+**Data:** 2026-10-15
+**Status:** Przyjeta
+
+**Kontekst:** Skorowidze GUGiK 2025 maja NMT wylacznie w 0,5 m i 5 m,
+a NMPT w 73% w 0,5 m; Kartograf znal tylko NMT 1 m i 5 m oraz NMPT 1 m,
+wiec nowe loty byly niewidoczne (luka 0,5 m, spec 1). Rozdzielczosci
+i uklady wysokosci byly zaszyte w 7 miejscach (stale `("1m", "5m")`
+w `options.py`, providerach NMT/NMPT, `FileStorage`, wycinku, `area.py`
+i CLI; regula "5m tylko EVRF2007" trzykrotnie - backlog A5-4). Pelna
+inwentaryzacja skorowidzy WFS 2026-10-15 pokazala siatki `.asc` w 0,15;
+0,5; 0,6; 1; 5 i 10 m oraz archiwa (XYZ, ASCII NMT, TBD, TIN, TTN, GRD,
+DXF, DGN); skorowidz WMS nie ma 10 m, a WFS jest nadzbiorem WMS dla
+siatek. Ten sam arkusz ma w WFS pliki w dwoch formatach (18 003 par
+warstwa-arkusz NMT EVRF2007, 87 100 NMT KRON86). Raport dostepnosci
+(spec 4, K3/K4) potrzebuje jednego indeksu i jednej listy wariantow,
+wspolnych z pobieraniem.
+
+**Opcje:**
+- A) Rejestr `ProductVariant` w deskryptorach zrodel jako jedyne zrodlo
+  wariantow; skorowidz NMT/NMPT z WFS dla pobierania i raportu.
+- B) Listy stalych per modul (stan zastany) rozszerzone o nowe
+  rozdzielczosci.
+- C) Pobieranie arkuszy przez skorowidz WMS (jak dotad), raport z WFS.
+
+**Decyzja:** A. Szczegoly: spec
+`docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (K1-K4,
+sekcje 3-4), pomiary `docs/research/2026-10-15-plan-a-b/raport.md`, plan
+`docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md` (decyzje
+implementacyjne 1-13).
+- R1. Rejestr `kartograf/sources/variants.py`: `ProductVariant` (zrodlo
+  = klucz deskryptora i `dataset` sidecara, produkt, kraj, rozdzielczosc
+  jako `Decimal`, uklad wysokosci, format, uklady poziome, kanal,
+  `IndexRef` uslugi WFS), warianty w `SourceDescriptor.variants`, jeden
+  deskryptor na (produkt, format, rozdzielczosc). Rejestr jest jedynym
+  zrodlem rozdzielczosci, ukladow wysokosci i formatow dla walidacji
+  CLI/API, `--help`, `list-sources`, segmentu magazynu i filtra rekordow
+  skorowidza; zaden inny modul nie trzyma takiej listy. Nowa
+  rozdzielczosc albo format = wpis rejestru.
+- R2. Etykiety K2: `0.15m`, `0.5m`, `0.6m`, `1m`, `5m`, `10m` (archiwa
+  takze `15m`-`50m`) z jednej funkcji `resolution_label`; flaga przyjmuje
+  wylacznie dokladne etykiety rejestru (`0,5m`, `50cm`, `0.50m` = blad
+  z lista etykiet). Etykieta jest czlonem segmentu
+  (`nmt/pl_{system}_0.5m_{vcrs}`); klucze i segmenty istniejacych danych
+  (`pl.gugik.nmt_1m`, `pl.gugik.nmt_5m`, `pl.gugik.nmpt` = NMPT 1 m) bez
+  zmian.
+- R3. Siatki ASC we wszystkich rozdzielczosciach inwentaryzacji WFS: NMT
+  EVRF2007 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; NMT KRON86 0.5m, 1m; NMPT
+  EVRF2007 0.5m, 0.6m, 1m; NMPT KRON86 0.5m, 1m.
+- R4. Archiwa GUGiK (`--format` XYZ, ASCII-NMT, TBD, TIN, TTN, GRD, DXF,
+  DGN) SA wariantami rejestru i sa pobierane jako pliki zrodlowe:
+  oryginalny plik + sidecar, wersje w magazynie (ADR-036), bez konwersji,
+  wycinka i mozaiki; segment z tokenem formatu
+  (`nmt/pl_{system}_tbd_25m_{vcrs}`), rozszerzenie z pola `format`
+  rekordu. `--format` wybiera format pliku; bez flagi = siatka ASC - to
+  wybor produktu jawnie opisany w `--help` i dokumentacji, nie ukryta
+  wartosc domyslna danych. Archiwa leza na arkuszach roznych skal, wiec
+  arkusze archiwum dla obszaru wyznacza skorowidz (rekordy wariantu
+  przecinajace obszar, rama zwezona o 1 m, w zakresie lat); `--scale`
+  i `--cutout` z archiwum = `Error:`.
+- R5. Skorowidz arkuszy NMT/NMPT z WFS
+  (`kartograf/providers/pl/skorowidz_wfs.py`): kanal arkuszy
+  `TransportKind.WFS` (`update_signal="index"`) zamiast
+  `WMS_SHEET_INDEX`; jedno `GetFeature` na arkusz z `TYPENAMES`
+  wszystkich typow rocznych uslugi, kolejne strony wylacznie po `next`,
+  kazda awaria = `DownloadError` ("wynik bylby niepelny"), nigdy pusty
+  wynik. Pobieranie i raport czytaja ten sam indeks tym samym parserem;
+  LAZ uzywa tego samego transportu; ortofotomapa zostaje na WMS.
+- R6. Twardy filtr rekordu (rozszerzenie ADR-028): format rekordu
+  I koncowka sciezki URL musza wskazywac format wariantu
+  (`source_format`); rekord niespojny (np. format siatki z URL `.xyz`,
+  42 rekordy NMT 2019) nie jest pobierany.
+- R7. Wycinek WCS (`--cutout`) tylko 1 m (`pl.gugik.nmt_1m`,
+  `pl.gugik.nmpt`): WCS GUGiK daje kompozycje lotow, nie arkusz wg roku
+  (ADR-035); `--cutout` z inna rozdzielczoscia = `Error:` przed siecia.
+- R8. Raport dostepnosci (`check_availability`, `kartograf elevation
+  availability`): kombinacja = (rok, uklad poziomy, etykieta, uklad
+  wysokosci, format) wariantu rejestru, LAZ = (rok, uklad poziomy, uklad
+  wysokosci); kombinacja jest kompletna, gdy obrysy pelnych arkuszy
+  (`TAK`) wg skorowidza pokrywaja obszar przeciety z ladem PRG (siatka
+  1 m); archiwa sa kombinacjami do pobrania (format w raporcie,
+  podpowiedz z `--format`); `Info:` tylko dla rekordow spoza rejestru
+  (niespojnych, z godlem 8-czlonowym). Raport nie pobiera danych.
+- R9. Podpowiedz pobrania w raporcie: komenda do wklejenia po
+  `kartograf ` albo po `kartograf project add NAZWA ` - bez `--output`
+  (ADR-040, spec manifestu 4.10).
+
+**Ograniczenia:** Godla 8-czlonowe ukladu PL-1992 (ASCII NMT 10 m - 215
+arkuszy, 1678 rekordow ASC 1 m) sa poza `SheetParser`: nie sa pobierane,
+raport pokazuje je jako `Info:`; do zamkniecia w planie E (E1 rozszerza
+`SheetParser`). Sygnatury plikow archiwow (ZIP, TTN, Intergraph GRD/DGN,
+DXF) sprawdzono na jednej probce na format.
+
+**Konsekwencje:** Zmiany lamiace 0.8.0 (decyzja 12 planu, "Co zrobic"
+w CHANGELOG): `--product nmpt` wymaga `--resolution`;
+`GugikNmptProvider(..., resolution=)` bez wartosci domyslnej;
+`GugikProvider` i `GugikNmptProvider` przyjmuja etykiety i `format`
+z rejestru; usuniete bez aliasow: `kartograf.providers.pl.nmt_vertical_crs`,
+`require_nmt_vertical_crs`, `NMT_5M_VERTICAL_CRS`,
+`GugikProvider.SUPPORTED_RESOLUTIONS`/`SUPPORTED_VERTICAL_CRS`/
+`SUPPORTED_VERTICAL_CRS_5M`/`WMS_INDEX_ENDPOINTS`/
+`get_supported_resolutions`/`get_supported_vertical_crs_for_resolution`,
+`GugikNmptProvider.SUPPORTED_RESOLUTIONS`/`WMS_INDEX_ENDPOINTS`,
+`FileStorage.SUPPORTED_RESOLUTIONS`, `GugikLazProvider.WFS_ENDPOINTS`
+(zastepstwo: `kartograf.sources.variants.variants(...)`). Sidecary
+nowych arkuszy NMT/NMPT: `extra.source.index_url` = adres uslugi WFS,
+`extra.source.layer` = typ WFS (`SkorowidzNMT2025`); pliki i segmenty
+istniejacych danych bez zmian, sygnal swiezosci arkuszy nadal `index`.
+Nowe API raportu: `check_availability`, `AvailabilityReport`,
+`AvailabilityCombination`, `AvailabilityArea`. Plan B dopisuje warianty
+CZ (uzupelnienie ADR-041).
+
+**Odrzucone:**
+- listy stalych per modul (opcja B): kazda nowa rozdzielczosc zmienia
+  kilka modulow, a reguly rozjezdzaja sie;
+- etykiety `50cm` i `0_5m` (dwie jednostki w jednym parametrze; spec K2);
+- archiwa poza pobieraniem (rekomendacja planu przed rewizja) - odrzucone
+  decyzja uzytkownika 2026-10-15: archiwa sa jedynym zrodlem 15-50 m
+  i czesci rocznikow (np. Krakow 2018);
+- WMS dla pobierania i WFS dla raportu (opcja C): dwa indeksy moga dac
+  rozne odpowiedzi, a WMS nie ma 10 m ani archiwow;
+- prog pokrycia w raporcie: kompletnosc jest binarna wg obrysow arkuszy
+  `TAK`, niepokryty lad raport podaje w m2.
+
+**Uzupelnienie (2026-10-15, zakonczenie planu A):**
+- R5 doprecyzowane: serwer stronicuje odpowiedz kilku typow niespojnie
+  (powtorzenia i braki, nagranie 2026-10-15), jeden typ spojnie;
+  odpowiedz kilku typow z atrybutem `next` jest odrzucana i kazdy typ jest
+  odpytywany osobno; obiekt powtorzony na kolejnej stronie = `DownloadError`.
+- R6 poprawione: 42 rekordy NMT EVRF2007 2019 (kampania 72675, arkusze
+  N-33-69) maja format siatki i nazwe pliku `.xyz`, a w srodku AAIGrid
+  (naglowki wszystkich 42 plikow sprawdzone na zywo 2026-10-15; 0.7.x je
+  pobieralo) - sa siatkami ASC: `FORMATS` przyjmuje dla ASC URL `.asc`
+  i `.xyz`, tresc po pobraniu sprawdza `verify_file_format`. Niespojny
+  zostaje m.in. format siatki z URL archiwum i archiwum z URL `.asc`.
+- R8 doprecyzowane: `Info:` raportu ma kod `index_unsupported` (rekordy
+  spoza rejestru: godla 8-czlonowe, format niezgodny z plikiem); z `--sheet`
+  pomiar pomija pas 1 m przy ramie arkusza (rama z godla rozni sie od ramy
+  GUGiK o centymetry), `--bbox`/`--geometry` mierzone dokladnie; LAZ ma
+  obwiednie jak pobieranie LAZ; `--country` wymagane tylko z `--bbox`/
+  `--geometry`; cache metadanych trzyma typy WFS, rekordy obszaru
+  z obrysami i maske ladu (ponowny raport bez sieci, `--force` pomija cache).
+- Manifest (ADR-040): `elevation availability` nie ustawia `_task`
+  (`project add` ja odrzuca); `COMMANDS["elevation download"]` ma opcje
+  `format`; kazda podpowiedz raportu przechodzi `project add` bez sieci.
+- E2E na zywo 2026-10-15 (`docs/research/2026-10-15-plan-a-e2e/raport.md`):
+  siatki 0.15m, 0.5m (NMT i NMPT, EVRF2007 i KRON86) i 0.6m pobrane
+  z pikselem rownym etykiecie; raporty Krakowa i Pomorza zgodne z pomiarami
+  planu; JSON CLI = API; pobrane godla = `sheets_full` kombinacji; raport
+  LAZ pyta tylko WFS i PRG; wycinek 1 m bajtowo rowny wycinkowi z `develop`;
+  archiwum TBD 25 m pobrane, ZIP kompletny, ponowne uruchomienie lokalne.
 
 ---
 

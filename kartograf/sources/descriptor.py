@@ -9,10 +9,14 @@ in the sidecar (``build_metadata(capability=)``) and are not enforced in manager
 
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ValidationError
+
+if TYPE_CHECKING:
+    # variants.py imports TransportKind from here; the field only needs the type
+    from kartograf.sources.variants import ProductVariant
 
 
 class TransportKind(StrEnum):
@@ -93,6 +97,9 @@ class SourceDescriptor:
     license: LicenseInfo
     resolution: str | None = None
     auth: str = "none"  # "none" | "clms_oauth"
+    # Variants stored by this descriptor (ADR-041, kartograf.sources.variants):
+    # PL NMT/NMPT one per height system of the (product, format, resolution).
+    variants: tuple["ProductVariant", ...] = ()
 
     def resolve_subdir(
         self, *, system: str | None = None, vertical_crs: str | None = None

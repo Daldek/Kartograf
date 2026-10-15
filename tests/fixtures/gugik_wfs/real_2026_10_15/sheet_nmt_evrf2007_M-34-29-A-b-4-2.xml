@@ -1,0 +1,356 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:gugik="http://www.gugik.gov.pl"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://www.gugik.gov.pl https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelTerenuEVRF2007/WFS/Skorowidze?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=gugik:SkorowidzNMT2026,gugik:SkorowidzNMT2025,gugik:SkorowidzNMT2024,gugik:SkorowidzNMT2023,gugik:SkorowidzNMT2022,gugik:SkorowidzNMT2021,gugik:SkorowidzNMT2020,gugik:SkorowidzNMT2019,gugik:SkorowidzNMT2018&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-15T20:39:14" numberMatched="8" numberReturned="8">
+  <wfs:boundedBy>
+  	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+  		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+  		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+  	</gml:Envelope>
+  </wfs:boundedBy>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:14" numberMatched="2" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+      		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMT2018 gml:id="SkorowidzNMT2018.826606">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2018.826606.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2018</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ASCII TBD</gugik:format>
+        <gugik:char_przestrz>25.0 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.90</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.025.2018</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2018.826606.akt_data"><gml:timePosition>2018-06-07</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/70188/70188_826606_M-34-29-A-b-4-2_asc.zip</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2018.826606.dt_pzgik"><gml:timePosition>2018-12-27</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.75</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2018>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzNMT2018 gml:id="SkorowidzNMT2018.827070">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2018.827070.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2018</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ASCII XYZ GRID</gugik:format>
+        <gugik:char_przestrz>5.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.90</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.025.2018</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2018.827070.akt_data"><gml:timePosition>2018-06-07</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/70189/70189_827070_M-34-29-A-b-4-2.xyz.zip</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2018.827070.dt_pzgik"><gml:timePosition>2018-12-27</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.75</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2018>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:14" numberMatched="2" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+      		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMT2019 gml:id="SkorowidzNMT2019.943003">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2019.943003.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2019</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ASCII NMT</gugik:format>
+        <gugik:char_przestrz>5.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.50</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.003.2019</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2019.943003.akt_data"><gml:timePosition>2019-04-02</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/73123/73123_943003_M-34-29-A-b-4-2.zip</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2019.943003.dt_pzgik"><gml:timePosition>2019-12-12</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.40</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2019>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzNMT2019 gml:id="SkorowidzNMT2019.947181">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2019.947181.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2019</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>5.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.50</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.003.2019</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2019.947181.akt_data"><gml:timePosition>2019-04-02</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/73122/73122_947181_M-34-29-A-b-4-2.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2019.947181.dt_pzgik"><gml:timePosition>2019-12-12</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.40</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2019>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:14" numberMatched="1" numberReturned="1">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+      		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMT2021 gml:id="SkorowidzNMT2021.1089120">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2021.1089120.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2021</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>5.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.50</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.006.2021</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2021.1089120.akt_data"><gml:timePosition>2021-06-21</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/74996/74996_1089120_M-34-29-A-b-4-2.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2021.1089120.dt_pzgik"><gml:timePosition>2021-12-27</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.50</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2021>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:14" numberMatched="1" numberReturned="1">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+      		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMT2022 gml:id="SkorowidzNMT2022.1225225">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2022.1225225.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2022</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>1.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.15</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>GI-FOTO.6202.12.2022</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2022.1225225.akt_data"><gml:timePosition>2022-04-13</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/76551/76551_1225225_M-34-29-A-b-4-2.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Skaning laserowy</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2022.1225225.dt_pzgik"><gml:timePosition>2022-11-28</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.30</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2022>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:14" numberMatched="1" numberReturned="1">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+      		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMT2023 gml:id="SkorowidzNMT2023.1491739">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2023.1491739.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2023</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>5.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.50</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.003.2023</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2023.1491739.akt_data"><gml:timePosition>2023-06-12</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/79043/79043_1491739_M-34-29-A-b-4-2.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2023.1491739.dt_pzgik"><gml:timePosition>2024-03-25</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.50</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2023>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+  <wfs:member>
+   <wfs:FeatureCollection timeStamp="2026-10-15T20:39:14" numberMatched="1" numberReturned="1">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+      		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzNMT2025 gml:id="SkorowidzNMT2025.1826359">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>378943.920000 584955.020000</gml:lowerCorner>
+        		<gml:upperCorner>381296.450000 587172.710000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzNMT2025.1826359.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">380680.960000 584964.630000 381259.830000 584955.020000 381268.900000 585499.590000 381278.020000 586044.150000 381287.210000 586588.720000 381296.450000 587133.280000 380717.580000 587143.140000 380138.500000 587153.000000 379559.420000 587162.850000 378980.550000 587172.710000 378971.310000 586627.900000 378962.120000 586083.090000 378952.990000 585538.270000 378943.920000 584993.460000 379522.790000 584983.850000 380101.870000 584974.240000 380680.960000 584964.630000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:godlo>M-34-29-A-b-4-2</gugik:godlo>
+        <gugik:akt_rok>2025</gugik:akt_rok>
+        <gugik:asortyment>NMT</gugik:asortyment>
+        <gugik:format>ARC/INFO ASCII GRID</gugik:format>
+        <gugik:char_przestrz>1.00 m</gugik:char_przestrz>
+        <gugik:blad_sr_wys>0.50</gugik:blad_sr_wys>
+        <gugik:uklad_xy>PL-1992</gugik:uklad_xy>
+        <gugik:modul_archiwizacji>1:5000</gugik:modul_archiwizacji>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:nr_zglosz>DFT.7201.002.2025</gugik:nr_zglosz>
+        <gugik:akt_data gml:id="SkorowidzNMT2025.1826359.akt_data"><gml:timePosition>2025-07-02</gml:timePosition></gugik:akt_data>
+        <gugik:czy_ark_wypelniony>TAK</gugik:czy_ark_wypelniony>
+        <gugik:url_do_pobrania>https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83852/83852_1826359_M-34-29-A-b-4-2.asc</gugik:url_do_pobrania>
+        <gugik:zrodlo_danych>Zdj. lotnicze</gugik:zrodlo_danych>
+        <gugik:dt_pzgik gml:id="SkorowidzNMT2025.1826359.dt_pzgik"><gml:timePosition>2026-03-23</gml:timePosition></gugik:dt_pzgik>
+        <gugik:blad_sr_syt>0.50</gugik:blad_sr_syt>
+      </gugik:SkorowidzNMT2025>
+    </wfs:member>
+   </wfs:FeatureCollection>
+  </wfs:member>
+</wfs:FeatureCollection>
+

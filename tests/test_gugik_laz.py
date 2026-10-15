@@ -7,6 +7,8 @@ as GML/XML fixtures through mocked sessions. Network is never touched.
 
 import math
 from unittest.mock import MagicMock, patch
+from urllib.parse import parse_qs, urlparse
+from xml.sax.saxutils import quoteattr
 
 import pytest
 import requests
@@ -14,6 +16,7 @@ import requests
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
+from kartograf.sources.variants import variants
 
 # Patch the shared GUGiK session factory at provider construction.
 _LAZ_SESSION_PATCH = "kartograf.transport.http.make_gugik_session"
@@ -89,17 +92,29 @@ def _feature(
   </wfs:member>"""
 
 
-def _collection(members, number_returned=None):
+def _collection(members, number_returned=None, next_url=None):
     n = len(members) if number_returned is None else number_returned
+    following = f" next={quoteattr(next_url)}" if next_url else ""
     return f"""\
 <?xml version='1.0' encoding="UTF-8" ?>
 <wfs:FeatureCollection
    xmlns:gugik="http://www.gugik.gov.pl"
    xmlns:gml="http://www.opengis.net/gml/3.2"
    xmlns:wfs="http://www.opengis.net/wfs/2.0"
-   numberMatched="{n}" numberReturned="{n}">
+   numberMatched="{n}" numberReturned="{n}"{following}>
 {chr(10).join(members)}
 </wfs:FeatureCollection>"""
+
+
+def _next_page(start: int) -> str:
+    """A ``next`` URL of the LAZ EVRF2007 index like the server sends it."""
+    (variant,) = variants(product="laz", country="PL", vertical_crs="EVRF2007")
+    assert variant.index_ref is not None
+    return (
+        f"{variant.index_ref.endpoint}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature"
+        f"&TYPENAMES=gugik%3A{variant.index_ref.layer_prefix}2024&COUNT=1000"
+        f"&STARTINDEX={start}"
+    )
 
 
 # Three tiles: two inside the query bbox, one far outside (for the
@@ -196,11 +211,20 @@ class TestInitAndProperties:
         with pytest.raises(ValidationError, match="Nieobslugiwany uklad wysokosci"):
             GugikLazProvider(vertical_crs="NONSENSE")
 
-    def test_endpoints_present(self):
-        p = GugikLazProvider(vertical_crs="EVRF2007")
-        assert "EVRF2007" in p.WFS_ENDPOINTS
-        assert "KRON86" in p.WFS_ENDPOINTS
-        assert "DanePomiaroweLidarEVRF2007" in p.WFS_ENDPOINTS["EVRF2007"]
+    @pytest.mark.parametrize(
+        "variant", variants(product="laz", country="PL"), ids=lambda v: v.vertical_crs
+    )
+    def test_index_service_from_registry(self, variant):
+        # Every LAZ height system of the registry is accepted and queried at
+        # the WFS index of its variant, types named <layer_prefix><year>.
+        assert variant.index_ref is not None
+        p, session = _provider_with_getfeature(COLLECTION_2024)
+        p._available_years[variant.vertical_crs] = [2024]
+        p.discover_tiles(QUERY_BBOX, year=2024, vertical_crs=variant.vertical_crs)
+        url = session.get.call_args.args[0]
+        assert url.startswith(f"{variant.index_ref.endpoint}?")
+        params = parse_qs(urlparse(url).query)
+        assert params["TYPENAMES"] == [f"gugik:{variant.index_ref.layer_prefix}2024"]
 
 
 class TestLazTile:
@@ -534,7 +558,8 @@ class TestDiscoverTiles:
             [
                 _feature("P1", 2024, (530500, 382500), (531000, 383000), seq="1"),
                 _feature("P2", 2024, (531000, 383000), (531500, 383500), seq="2"),
-            ]
+            ],
+            next_url=_next_page(2),
         )
         page2 = _collection(
             [_feature("P3", 2024, (531500, 383500), (532000, 384000), seq="3")]
@@ -543,10 +568,10 @@ class TestDiscoverTiles:
         session.get.side_effect = [_make_response(page1), _make_response(page2)]
         p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
-        with patch.object(GugikLazProvider, "PAGE_SIZE", 2):
-            tiles = p.discover_tiles(QUERY_BBOX, year=2024)
+        tiles = p.discover_tiles(QUERY_BBOX, year=2024)
         assert {t.sheet for t in tiles} == {"P1", "P2", "P3"}
         assert session.get.call_count == 2
+        assert session.get.call_args_list[1].args[0] == _next_page(2)
 
     def test_unknown_year_reports_available_years_without_retry(self):
         session = MagicMock()
@@ -602,13 +627,12 @@ class TestDiscoverTiles:
     def test_page_failure_raises_instead_of_partial_result(self):
         session = MagicMock()
         session.get.side_effect = [
-            _make_response(_collection([_TILE_A])),
+            _make_response(_collection([_TILE_A], next_url=_next_page(1))),
             *(requests.ConnectionError("reset") for _ in range(3)),
         ]
         p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
         with (
-            patch.object(p, "PAGE_SIZE", 1),
             patch("kartograf.transport.http.time.sleep"),
             pytest.raises(DownloadError, match="2024.*wynik bylby niepelny"),
         ):
@@ -618,23 +642,23 @@ class TestDiscoverTiles:
     def test_page_retry_keeps_all_tiles(self):
         session = MagicMock()
         session.get.side_effect = [
-            _make_response(_collection([_TILE_A])),
+            _make_response(_collection([_TILE_A], next_url=_next_page(1))),
             requests.ConnectionError("reset"),
             _make_response(_collection([_TILE_B])),
-            _make_response(_collection([])),
         ]
         p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         p._available_years["EVRF2007"] = [2024]
-        with (
-            patch.object(p, "PAGE_SIZE", 1),
-            patch("kartograf.transport.http.time.sleep"),
-        ):
+        with patch("kartograf.transport.http.time.sleep"):
             tiles = p.discover_tiles(QUERY_BBOX, year=2024)
         assert [tile.sheet for tile in tiles] == [
             "N-33-131-B-a-1-1-4",
             "N-33-131-B-a-1-2-3",
         ]
-        assert session.get.call_count == 4
+        # the retried page is the same `next` page, not a restart
+        assert [call.args[0] for call in session.get.call_args_list[1:]] == [
+            _next_page(1),
+            _next_page(1),
+        ]
 
 
 # ===========================================================================
