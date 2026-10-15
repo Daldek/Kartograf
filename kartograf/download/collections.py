@@ -133,8 +133,12 @@ def _session() -> requests.Session:
 
 
 def _is_collection(descriptor: SourceDescriptor) -> bool:
+    """A product of ``download_collection``: a channel of a collection engine
+    (unit packages, features of an area) outside ``landcover``; the ATOM and
+    WCS cutout channels of ``imagery`` products are not collections."""
     return descriptor.storage_subdir.split("/", 1)[0] != _LANDCOVER_GROUP and any(
-        channel.params is not None for channel in descriptor.channels
+        isinstance(channel.params, UnitPackageParams | FeatureBBoxParams)
+        for channel in descriptor.channels
     )
 
 
