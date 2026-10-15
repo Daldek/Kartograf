@@ -707,6 +707,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (przed pobraniem kazdego lotu, `k/n`); CLI drukuje `  Kampanie <arkusz>
   (do pobrania k z n): ...` i `  Pobieranie <arkusz> <etykieta> (k/n)...`.
   `--upgrade --plan` arkuszy PL raportuje postep jak zwykle pobieranie.
+- Postep pobierania powiatow BDOT10k obszaru (`landcover download --bbox/
+  --sheet/--geometry`, takze archiwum `--year`): dotad brak jakiegokolwiek
+  postepu do konca zadania. `LandCoverManager.download(on_progress=)`
+  zglasza `DownloadProgress` per powiat jak lista arkuszy (`sheet` = TERYT:
+  `downloading` tuz przed transferem przy `--workers 1`, potem `completed`/
+  `skipped`/`failed` w kolejnosci ukonczenia); CLI i `project download`
+  rysuja ten sam pasek co dla arkuszy. Jeden `--teryt`, CORINE i SoilGrids
+  bez zmian (jeden plik).
 
 ## [0.7.2] - 2026-10-11
 

@@ -58,6 +58,7 @@ from kartograf.download.fetch import (
     use_local,
     validate_update,
 )
+from kartograf.download.manager import DownloadProgress
 from kartograf.download.options import validate_request_bbox
 from kartograf.download.plan import (
     PlanItem,
@@ -286,6 +287,57 @@ class _Job:
         return VersionRef.downloaded()
 
 
+_PowiatOutcome = LandCoverResult | LandCoverFailure
+
+
+def _each_powiat(
+    teryts: Sequence[str],
+    one: Callable[[str, Callable[[], None] | None], _PowiatOutcome],
+    workers: int,
+    on_progress: Callable[[DownloadProgress], None] | None,
+) -> list[_PowiatOutcome]:
+    """Run ``one`` for each powiat of a BDOT10k request, results in TERYT
+    order (``workers`` in parallel), with progress as for a sheet list
+    (``DownloadManager.download_sheets``).
+
+    ``one(teryt, started)`` calls ``started`` right before a transfer
+    (sequential mode: ``downloading``; ``None`` in a pool). After each
+    powiat, in completion order: ``completed``, ``skipped`` (no transfer:
+    local version or out of the plan) or ``failed``.
+    """
+    total = len(teryts)
+
+    def emit(current: int, teryt: str, status: str) -> None:
+        if on_progress is not None:
+            on_progress(DownloadProgress(current, total, teryt, status))
+
+    def status(outcome: _PowiatOutcome) -> str:
+        if isinstance(outcome, LandCoverFailure):
+            return "failed"
+        file = outcome.file
+        return "skipped" if file is None or file.status == "local" else "completed"
+
+    if workers <= 1 or total <= 1:
+        outcomes = []
+        for i, teryt in enumerate(teryts, 1):
+
+            def started(i: int = i, teryt: str = teryt) -> None:
+                emit(i, teryt, "downloading")
+
+            outcome = one(teryt, started)
+            outcomes.append(outcome)
+            emit(i, teryt, status(outcome))
+        return outcomes
+    done: dict[str, _PowiatOutcome] = {}
+    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+        futures = {pool.submit(one, teryt, None): teryt for teryt in teryts}
+        for future in concurrent.futures.as_completed(futures):
+            teryt = futures[future]
+            done[teryt] = future.result()
+            emit(len(done), teryt, status(done[teryt]))
+    return [done[teryt] for teryt in teryts]
+
+
 # Providers created by name that accept a metadata cache (CORINE has none).
 _CACHED_PROVIDERS = ("bdot10k", "soilgrids")
 
@@ -464,6 +516,7 @@ class LandCoverManager:
         plan: UpdatePlan | None = None,
         workers: int = 1,
         on_notice: Callable[[Notice], None] | None = None,
+        on_progress: Callable[[DownloadProgress], None] | None = None,
         **options,
     ) -> LandCoverAreaResult:
         """
@@ -497,6 +550,13 @@ class LandCoverManager:
         on_notice : callable, optional
             Receives each data notice when emitted (``CORINE_PREVIEW``
             before a CORINE preview download, ``GEOMETRY_LAYER_DEFAULT``).
+        on_progress : callable, optional
+            BDOT10k by an area (current packages and the archive): one
+            ``DownloadProgress`` per powiat as for a sheet list (``sheet`` =
+            TERYT, ``total`` = powiats of the area): ``downloading`` right
+            before its transfer (``workers=1`` only), then ``completed``,
+            ``skipped`` (local version) or ``failed`` in completion order.
+            Not called for one ``teryt`` nor for CORINE/SoilGrids.
         **options
             CORINE: required ``year`` 2018/2012/2006/2000 (CLMS with
             credentials, else WMS preview), 1990 (WMS preview only).
@@ -545,11 +605,19 @@ class LandCoverManager:
         with self._session(force=update == "force", sink=sink):
             if self._archive(options):
                 files, failed, stale = self._download_archive(
-                    teryt, bbox, sheet, options, update, plan, workers, sink
+                    teryt,
+                    bbox,
+                    sheet,
+                    options,
+                    update,
+                    plan,
+                    workers,
+                    sink,
+                    on_progress,
                 )
             elif teryt is None and isinstance(self._provider, Bdot10kProvider):
                 files, failed, stale = self._download_counties(
-                    bbox, sheet, options, update, plan, workers
+                    bbox, sheet, options, update, plan, workers, on_progress
                 )
             else:
                 if teryt is not None:
@@ -664,6 +732,7 @@ class LandCoverManager:
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int,
+        on_progress: Callable[[DownloadProgress], None] | None,
     ) -> tuple[
         tuple[LandCoverResult, ...],
         tuple[LandCoverFailure, ...],
@@ -678,18 +747,23 @@ class LandCoverManager:
             plan,
         )
 
-        def one(teryt: str) -> LandCoverResult | LandCoverFailure:
+        def one(
+            teryt: str, started: Callable[[], None] | None
+        ) -> LandCoverResult | LandCoverFailure:
             try:
-                return self._run(jobs[teryt], options, update, planned, parent=parent)
+                return self._run(
+                    jobs[teryt],
+                    options,
+                    update,
+                    planned,
+                    parent=parent,
+                    on_download=started,
+                )
             except DownloadError as e:
                 logger.debug("BDOT10k %s: %s", teryt, e)
                 return LandCoverFailure(teryt, str(e))
 
-        if workers > 1 and len(teryts) > 1:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-                outcomes = list(pool.map(one, teryts))
-        else:
-            outcomes = [one(teryt) for teryt in teryts]
+        outcomes = _each_powiat(teryts, one, workers, on_progress)
         files = tuple(
             o for o in outcomes if isinstance(o, LandCoverResult) and o.file is not None
         )
@@ -706,6 +780,7 @@ class LandCoverManager:
         plan: UpdatePlan | None,
         workers: int,
         sink: NoticeSink,
+        on_progress: Callable[[DownloadProgress], None] | None,
     ) -> tuple[
         tuple[LandCoverResult, ...],
         tuple[LandCoverFailure, ...],
@@ -716,7 +791,8 @@ class LandCoverManager:
         (ADR-042 D10-D11): the original ZIP 1:1, labelled by its year.
 
         A failing powiat of an area lands in ``failed``; the package of a
-        ``teryt`` raises (as the current BDOT10k packages).
+        ``teryt`` raises (as the current BDOT10k packages). Progress per
+        powiat of an area only (``_each_powiat``).
         """
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)
@@ -729,8 +805,12 @@ class LandCoverManager:
             lambda: [self._inspect_archive(job) for job in jobs], update, plan
         )
         timeout = options.get("timeout")
+        by_unit = {job.unit: job for job in jobs}
 
-        def one(job: UnitJob) -> LandCoverResult | LandCoverFailure:
+        def one(
+            unit: str, started: Callable[[], None] | None
+        ) -> LandCoverResult | LandCoverFailure:
+            job = by_unit[unit]
             try:
                 file = run_job(
                     job,
@@ -739,6 +819,7 @@ class LandCoverManager:
                     planned=planned,
                     session=provider.session(),
                     timeout=timeout,
+                    on_download=started,
                 )
             except DownloadError as e:
                 if teryt is not None:
@@ -747,11 +828,9 @@ class LandCoverManager:
                 return LandCoverFailure(job.unit, str(e))
             return LandCoverResult(job.unit, file)
 
-        if workers > 1 and len(jobs) > 1:
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-                outcomes = list(pool.map(one, jobs))
-        else:
-            outcomes = [one(job) for job in jobs]
+        outcomes = _each_powiat(
+            list(by_unit), one, workers, on_progress if teryt is None else None
+        )
         files = tuple(
             o for o in outcomes if isinstance(o, LandCoverResult) and o.file is not None
         )
@@ -1156,13 +1235,15 @@ class LandCoverManager:
         planned: set[_SlotKey] | None,
         *,
         parent: dict | None,
+        on_download: Callable[[], None] | None = None,
     ) -> LandCoverResult:
         """Local versions or one download for the jobs of one unit (spec 4.2).
 
         A job out of the plan keeps its local version; the others go through
         ``use_local``. When any job needs a download, the content is
         downloaded once and every job in scope is stored (``store_file``;
-        same content = ``unchanged``, decision 9).
+        same content = ``unchanged``, decision 9). ``on_download`` is called
+        right before that download.
         """
         outcome: list[VersionedFile | None] = []
         in_scope: list[bool] = []
@@ -1176,6 +1257,8 @@ class LandCoverManager:
                 )
                 in_scope.append(True)
         if any(s and f is None for s, f in zip(in_scope, outcome, strict=True)):
+            if on_download is not None:
+                on_download()
             if isinstance(self._provider, Bdot10kProvider):
                 outcome = self._fetch_bdot(jobs, in_scope, outcome, kwargs, parent)
             else:

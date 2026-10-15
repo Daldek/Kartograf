@@ -1040,6 +1040,7 @@ def run_job(
     planned: set[_SLOT_KEY] | None = None,
     session: requests.Session | None = None,
     timeout: int | None = None,
+    on_download: Callable[[], None] | None = None,
 ) -> VersionedFile | None:
     """Local version or download of one unit job (spec 4.2, ADR-042 D6).
 
@@ -1052,7 +1053,9 @@ def run_job(
     package and ``extra.parent_request``. ``session``: HTTP session of the
     requests (``LandCoverManager``: its provider's; ``None``: one per thread
     of this module); ``timeout``: seconds of one request (``None``:
-    ``PACKAGE_TIMEOUT`` for a package, ``SERVICE_TIMEOUT`` for a page).
+    ``PACKAGE_TIMEOUT`` for a package, ``SERVICE_TIMEOUT`` for a page);
+    ``on_download`` is called right before the transfer starts (never for
+    a local version).
 
     Raises
     ------
@@ -1066,6 +1069,8 @@ def run_job(
     source = _Source()
 
     def fetch(staged: Path) -> dict | None:
+        if on_download is not None:
+            on_download()
         if job.layers:
             _fetch_features(
                 job, staged, source, _http(session), timeout or SERVICE_TIMEOUT

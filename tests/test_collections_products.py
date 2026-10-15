@@ -323,11 +323,23 @@ def test_bdot10k_year_area_powiats(tmp_path, frozen_clock):
         (_archive_url(2018, "GML", "0224"), missing),
     )
 
-    result = manager.download(bbox=TWO_POWIATS, year=2018, format="GML")
+    events: list[tuple] = []
+    result = manager.download(
+        bbox=TWO_POWIATS,
+        year=2018,
+        format="GML",
+        on_progress=lambda p: events.append((p.current, p.total, p.sheet, p.status)),
+    )
 
     assert not result.ok
     assert [item.unit for item in result.files] == ["0208"]
     assert [failure.unit for failure in result.failed] == ["0224"]
+    assert events == [  # powiat progress, as the current packages of an area
+        (1, 2, "0208", "downloading"),
+        (1, 2, "0208", "completed"),
+        (2, 2, "0224", "downloading"),
+        (2, 2, "0224", "failed"),
+    ]
     stored = result.files[0].file
     assert stored is not None
     assert stored.path == tmp_path / "landcover/pl_bdot10k_gml_2018/teryt/0208.zip"
