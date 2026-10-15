@@ -104,7 +104,7 @@ Przypiecia (`path`, `version`) sa zawsze wzgledne do magazynu.
 | Przenosze sam projekt, magazyn zostaje (bezwzgledny `output_dir`) | nic |
 | Przenosze sam projekt przy wzglednym `output_dir` | popraw `output_dir` w `kartograf-project.json` |
 | Przenosze albo kopiuje magazyn | kopiuj z sidecarami i dowiazaniami twardymi (`rsync -aH`), popraw `output_dir`, potwierdz `kartograf project verify` |
-| Kolega otwiera projekt z pustym magazynem | `kartograf project download` odtwarza pliki z zadan (tylko identyczne sumy SHA-256) |
+| Kolega otwiera projekt z pustym magazynem | utworz katalog magazynu (albo popraw `output_dir` na wlasny magazyn), potem `kartograf project download` odtwarza pliki z zadan (tylko identyczne sumy SHA-256) |
 
 Zalecenie: plik geometrii obszaru trzymaj w katalogu projektu (sciezka
 wzgledna) - przenosi sie razem z projektem.
@@ -217,7 +217,7 @@ z manifestu.
 | `init --output KATALOG` | `init_project` | tworzy manifest (i katalog magazynu) | nie | tworzy |
 | `add NAZWA <grupa> <komenda> [opcje]` | `add_project_task` | dodaje zadanie po walidacji bez sieci | nie | dopisuje |
 | `remove NAZWA` | `remove_project_task` | usuwa zadanie; pliki zostaja w magazynie | nie | usuwa |
-| `download [NAZWA...]` | `download_project` | pobiera i przypina niepobrane zadania; odtwarza brakujace przypiete pliki | tylko gdy trzeba | przypina tylko niepobrane zadania |
+| `download [NAZWA...]` | `download_project` | pobiera i przypina niepobrane zadania; odtwarza brakujace przypiete pliki | tylko gdy trzeba | przypina niepobrane zadania; przy odtwarzaniu aktualizuje `version`/`label` (ta sama suma) |
 | `download --check-updates [NAZWA...]` | `check_project` | porownuje przypiecia ze zrodlem, niczego nie pobiera | tak | nie |
 | `download --upgrade [NAZWA...]` | `download_project(update="upgrade")` | pobiera nowsze dane wskazane sygnalem zrodla i przepina zadania | tak | przepina |
 | `download --force [NAZWA...]` | `download_project(update="force")` | pobiera wszystko ponownie; inna tresc = nowe przypiecie | tak | przepina |
@@ -251,8 +251,9 @@ kartograf project download --check-updates
 kartograf project download --upgrade teren
 ```
 
-Kolega odtwarza projekt na swoim komputerze (manifest z repozytorium
-projektu, wlasny magazyn):
+Kolega odtwarza projekt na swoim komputerze: manifest z repozytorium
+projektu, wlasny magazyn wpisany w `output_dir` (reczna edycja jednej
+linii; katalog magazynu musi istniec):
 
 ```bash
 cd ~/projekty/wisla
@@ -375,7 +376,7 @@ Zasady API:
   recznie, wiec blad wejscia, nie programu).
 - `ok` w `ProjectCheck`: `project_status`/`verify_project` - kazde wybrane
   zadanie przypiete i kazdy plik `ok`; `check_project` - zaden plik
-  `check_failed` i zadne zadanie bez bledu.
+  `check_failed` i zadne zadanie nie zakonczylo sie bledem.
 - Nieznana nazwa zadania w `tasks` = `ValidationError` przed jakimkolwiek
   dostepem do sieci.
 - `cache=False` domyslnie (M12); `True` tworzy cache w biezacym
@@ -629,8 +630,10 @@ Nowe kody `Notice` projektu (np. zmieniona geometria przy
 
 ## 5. Integracja z komendami danych (istniejace i plany A-E)
 
-Projekt nie zna produktow, tylko komendy danych i rodziny wyniku. Jedna
-pozycja na komende danych CLI w `kartograf/project/commands.py`:
+Projekt nie ma logiki per produkt: zna komendy danych i rodziny wyniku
+(listy produktow i zrodel komend bierze z biblioteki - te same, z ktorych
+korzysta CLI). Jedna pozycja na komende danych CLI w
+`kartograf/project/commands.py`:
 
 | `command` | Funkcja biblioteki | Sonda | Rodzina wyniku -> przypiecia |
 |---|---|---|---|
