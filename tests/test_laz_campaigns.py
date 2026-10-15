@@ -221,7 +221,7 @@ def test_laz_sidecar_acquisition_date_and_max_year(tmp_path):
 
 def test_download_laz_area_all_writes_campaigns_to_sidecars(tmp_path):
     provider = GugikLazProvider(session=laz_session(), vertical_crs="EVRF2007")
-    provider.download = MagicMock(  # type: ignore[method-assign]
+    provider.download_tile = MagicMock(  # type: ignore[method-assign]
         side_effect=lambda url, target, **kw: (
             target.parent.mkdir(parents=True, exist_ok=True),
             target.write_bytes(b"LASF"),

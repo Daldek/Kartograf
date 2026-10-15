@@ -281,7 +281,7 @@ def _run_laz_download(
         slot = laz_slot(storage, tile)
 
         def download(staged: Path) -> None:
-            provider.download(tile.url, staged)
+            provider.download_tile(tile.url, staged)
 
         try:
             file = fetch_version(

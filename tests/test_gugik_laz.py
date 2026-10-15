@@ -702,21 +702,23 @@ class TestDownload:
         resp.iter_content = MagicMock(return_value=[content])
         return resp
 
-    def test_download_success(self, tmp_path):
+    def test_laz_tile_rename(self, tmp_path):
+        """A5-7: a tile is fetched by URL; no sheet-code ``download`` (LSP)."""
         session = MagicMock()
         session.get.return_value = self._stream_response()
         p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         out = tmp_path / "tile.laz"
-        result = p.download("https://opendata.geoportal.gov.pl/x.laz", out)
+        result = p.download_tile("https://opendata.geoportal.gov.pl/x.laz", out)
         assert result == out
         assert out.read_bytes() == b"LASF-fake-laz-bytes"
+        assert not hasattr(p, "download")
 
     def test_download_creates_parent_dir(self, tmp_path):
         session = MagicMock()
         session.get.return_value = self._stream_response()
         p = GugikLazProvider(session=session, vertical_crs="EVRF2007")
         out = tmp_path / "laz" / "N-33" / "131" / "tile.laz"
-        p.download("https://opendata.geoportal.gov.pl/x.laz", out)
+        p.download_tile("https://opendata.geoportal.gov.pl/x.laz", out)
         assert out.exists()
 
     def test_download_retries_then_fails(self, tmp_path):
@@ -727,5 +729,7 @@ class TestDownload:
             patch("kartograf.transport.http.time.sleep"),
             pytest.raises(DownloadError),
         ):
-            p.download("https://opendata.geoportal.gov.pl/x.laz", tmp_path / "t.laz")
+            p.download_tile(
+                "https://opendata.geoportal.gov.pl/x.laz", tmp_path / "t.laz"
+            )
         assert session.get.call_count == GugikLazProvider.MAX_RETRIES

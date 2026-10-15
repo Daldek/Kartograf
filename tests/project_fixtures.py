@@ -137,7 +137,7 @@ def pl_sheets(
 
 class LazTiles(FakeProvider):
     """LAZ provider selecting ``sheets`` (mutable: a new flight adds a tile);
-    ``download`` writes ``content`` (``b"LASF"`` by default)."""
+    ``download_tile`` writes ``content`` (``b"LASF"`` by default)."""
 
     def __init__(self, *sheets: str, failing=()) -> None:
         super().__init__(failing=failing)
@@ -147,8 +147,8 @@ class LazTiles(FakeProvider):
     def select_tiles(self, bbox, **kwargs):
         return _selection(*(_tile(sheet) for sheet in self.sheets))
 
-    def download(self, url, target, **kwargs):
-        path = super().download(url, target, **kwargs)
+    def download_tile(self, url, target, **kwargs):
+        path = super().download_tile(url, target, **kwargs)
         path.write_bytes(self.content)
         return path
 

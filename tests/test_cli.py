@@ -4564,11 +4564,11 @@ class TestCmdDownloadLaz:
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_sheet_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
-        """sheet code → discover tiles → download each via provider.download."""
+        """sheet code → discover tiles → download each via provider.download_tile."""
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.side_effect = _write_laz_tile
+        instance.download_tile.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4598,7 +4598,7 @@ class TestCmdDownloadLaz:
         assert result == 0
         # discovery happened once, download once per tile
         instance.select_tiles.assert_called_once()
-        assert instance.download.call_count == 2
+        assert instance.download_tile.call_count == 2
         # bbox passed to select_tiles is in EPSG:2180
         bbox_arg = instance.select_tiles.call_args[0][0]
         assert bbox_arg.crs == "EPSG:2180"
@@ -4608,7 +4608,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.side_effect = _write_laz_tile
+        instance.download_tile.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4637,7 +4637,7 @@ class TestCmdDownloadLaz:
             ]
         )
         assert result == 0
-        assert instance.download.call_count == 2
+        assert instance.download_tile.call_count == 2
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_tile_failures_are_error_with_full_list(
@@ -4668,7 +4668,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(tiles)
-        instance.download.side_effect = _download
+        instance.download_tile.side_effect = _download
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4708,7 +4708,7 @@ class TestCmdDownloadLaz:
         instance = Mock()
         instance.vertical_crs = "EVRF2007"
         instance.select_tiles.return_value = _selection(self._fake_tiles())
-        instance.download.side_effect = _write_laz_tile
+        instance.download_tile.side_effect = _write_laz_tile
         mock_provider_cls.return_value = instance
 
         main(
@@ -4853,7 +4853,7 @@ class TestCmdDownloadLaz:
             target.write_bytes(b"LASF")
             return target
 
-        instance.download.side_effect = fake_download
+        instance.download_tile.side_effect = fake_download
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4936,7 +4936,7 @@ class TestCmdDownloadLaz:
             target.write_bytes(b"LASF")
             return target
 
-        instance.download.side_effect = fake_download
+        instance.download_tile.side_effect = fake_download
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -4995,7 +4995,7 @@ class TestCmdDownloadLaz:
             target.write_bytes(b"LASF")
             return target
 
-        instance.download.side_effect = fake_download
+        instance.download_tile.side_effect = fake_download
         mock_provider_cls.return_value = instance
 
         result = main(
@@ -8952,7 +8952,7 @@ class TestLazSidecarRequestFilters:
             target.write_bytes(b"LASF")
             return target
 
-        instance.download.side_effect = fake_download
+        instance.download_tile.side_effect = fake_download
         with patch(
             "kartograf.providers.pl.gugik_laz.GugikLazProvider", return_value=instance
         ):

@@ -896,7 +896,7 @@ class TestLazDiscoveryOnRealWfs:
     def test_laz_year_2024_w2_conflict_lists_years(self, tmp_path):
         session = laz_session()
         provider = GugikLazProvider(session=session, vertical_crs="EVRF2007")
-        provider.download = MagicMock()  # type: ignore[method-assign]
+        provider.download_tile = MagicMock()  # type: ignore[method-assign]
         with pytest.raises(YearRangeError) as caught:
             download_laz_area(
                 W2_BBOX,
@@ -912,7 +912,7 @@ class TestLazDiscoveryOnRealWfs:
         assert "--min-year 2024" in str(err)
         assert "--max-year 2024" in str(err)
         assert feature_years(session) == [str(y) for y in range(2026, 2017, -1)]
-        provider.download.assert_not_called()
+        provider.download_tile.assert_not_called()
         assert list(tmp_path.iterdir()) == []
 
     @pytest.mark.parametrize(
