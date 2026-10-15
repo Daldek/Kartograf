@@ -491,7 +491,7 @@ class TestCommandGroups:
     _CHOICES = {
         "elevation": ("--product", {"nmt", "nmpt", "laz"}),
         "imagery": ("--product", {"orto"}),
-        "landcover": ("--source", {"bdot10k", "corine"}),
+        "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
         "boundaries": ("--product", {"admin"}),
         "cadastre": ("--product", {"map"}),
         "models3d": ("--product", {"buildings"}),

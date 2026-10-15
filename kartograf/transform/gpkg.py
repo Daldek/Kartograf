@@ -10,8 +10,11 @@ Reading. WFS GML pages: open options ``XSD=<DescribeFeatureType>`` (the same
 field types on every page, no guessing from the data), ``WRITE_GFS=NO`` (no
 ``.gfs`` files next to the pages) and ``DOWNLOAD_SCHEMA=NO``: the MapServer
 XSDs of PRG and EGiB only import GML, which GDAL does not read, so reading
-needs no network (an ``xsd:include`` of a remote schema - GeoServer HY-NET,
-INSPIRE - is still fetched by GDAL when online). GDAL swaps
+needs no network. An XSD that declares no type itself (GeoServer HY-NET: one
+``xsd:include`` of the remote INSPIRE schema) is not given to GDAL: GDAL
+would fetch the remote schema for every page and still learn the fields
+from the document (measured 2026-10-15: the same fields, 0.3-0.4 s per
+page). GDAL swaps
 ``urn:ogc:def:crs:EPSG::2180`` (N,E) coordinates to x = easting. Config
 ``GML_FETCH_ALL_GEOMETRIES=YES``: MapServer writes a
 multi-part EGiB parcel or building as repeated ``<ms:geom>`` elements and
@@ -29,7 +32,9 @@ with other content is a ``DownloadError``; a number of unique features other
 than ``matched`` (N) is a ``DownloadError``.
 
 Writing: ``pyogrio.raw.write`` (driver GPKG, ``promote_to_multi=True``, CRS
-``native_crs``, layer ``FeatureLayer.name`` with ``DESCRIPTION`` = source),
+``native_crs``, layer ``FeatureLayer.name`` with ``DESCRIPTION`` = the WFS
+type name or the ArcGIS layer name with its id, e.g. ``Vodni tok (93)`` in
+the service's spelling),
 features in id order, the layer geometry type from the geometries (one
 family -> its Multi type, else ``Unknown``) or, for an empty layer, from the
 schema; ``OGR_CURRENT_DATE`` is fixed while writing, so the same pages give
@@ -41,6 +46,7 @@ import json
 import math
 import struct
 import threading
+import xml.etree.ElementTree as ET
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -139,9 +145,9 @@ def write_gpkg(
     Raises
     ------
     DownloadError
-        A page GDAL cannot read, pages with different schemas, a feature
-        without an id, the same id with other content, or unique features
-        != ``matched`` (incomplete answer).
+        A page GDAL cannot read, one field with two types on different pages,
+        a feature without an id, the same id with other content, or unique
+        features != ``matched`` (incomplete answer).
     ValueError
         ``path`` exists, no layers, or a WFS layer without schema/pages
         (programmer error).
@@ -196,46 +202,119 @@ def _read_page(page: Path, context: str, **kwargs: Any) -> tuple:
 def _read_wfs(
     layer_pages: "LayerPages", params: "FeatureBBoxParams", dropped: dict[str, set[str]]
 ) -> _Table:
-    """Unique features of the GML pages read with the layer XSD."""
+    """Unique features of the GML pages read with the layer XSD.
+
+    GDAL types every page on its own. With a full XSD (MapServer PRG, EGiB)
+    all pages have one schema; an XSD that only includes a remote schema
+    (GeoServer HY-NET: ``xsd:include`` of INSPIRE) leaves GDAL to learn the
+    fields from each document, so a page may lack an optional field other
+    pages have (HY-NET ``hydroNodeCategory``): the layer gets the union of
+    the page fields in first-seen order, a missing value is null, one field
+    with two types is a ``DownloadError``. An empty layer whose type GDAL
+    cannot build at all (no XSD schema, no feature to learn from) is written
+    with the id field only (``Unknown`` geometry).
+    """
     layer = layer_pages.layer
     context = f"WFS {layer.source}"
     if layer_pages.schema is None or not layer_pages.pages:
         raise ValueError(f"Warstwa WFS {layer.source} wymaga schematu i stron")
-    options = {
-        "layer": layer.source.rsplit(":", 1)[-1],
-        "XSD": str(layer_pages.schema),
-        **_GML_OPEN_OPTIONS,
-    }
+    options = {"layer": layer.source.rsplit(":", 1)[-1], **_GML_OPEN_OPTIONS}
+    if _declares_types(layer_pages.schema):
+        options["XSD"] = str(layer_pages.schema)
     table: _Table | None = None
     with _gdal_config({"GML_FETCH_ALL_GEOMETRIES": "YES"}):
         for page in layer_pages.pages:
-            meta, _, geometries, values = _read_page(page, context, **options)
+            try:
+                meta, _, geometries, values = pyogrio.raw.read(page, **options)
+            except DataLayerError as e:
+                if layer_pages.matched:
+                    raise DownloadError(
+                        f"{context}: GDAL nie odczytal strony {page.name}: {e}"
+                    ) from e
+                return _new_table(
+                    [layer.id_field],
+                    [np.dtype(object)],
+                    set(),
+                    "Unknown",
+                    layer.id_field,
+                    params,
+                    context,
+                )
+            except DataSourceError as e:
+                raise DownloadError(
+                    f"{context}: GDAL nie odczytal strony {page.name}: {e}"
+                ) from e
             names = [str(name) for name in meta["fields"]]
+            dtypes = [np.dtype(dtype) for dtype in meta["dtypes"]]
             if table is None:
                 table = _new_table(
                     names,
-                    [np.dtype(dtype) for dtype in meta["dtypes"]],
+                    dtypes,
                     set(),
                     str(meta["geometry_type"]),
                     layer.id_field,
                     params,
                     context,
                 )
-            elif names != table.names:
-                raise DownloadError(
-                    f"{context}: strona {page.name} ma inne pola niz pierwsza strona"
-                )
+            positions = _merge_fields(table, names, dtypes, params, page, context)
             if geometries is not None:
                 count = len(geometries)
             else:
                 count = len(values[0]) if values else 0
             for index in range(count):
-                row = tuple(column[index] for column in values)
+                row = tuple(
+                    None if position is None else values[position][index]
+                    for position in positions
+                )
                 wkb = geometries[index] if geometries is not None else None
                 _add(table, row, wkb, dropped, context)
     assert table is not None
     _check_complete(table, layer_pages, context)
     return table
+
+
+_XSD = "{http://www.w3.org/2001/XMLSchema}"
+
+
+def _declares_types(schema: Path) -> bool:
+    """Whether a ``DescribeFeatureType`` XSD declares the types itself
+    (MapServer) rather than only including a remote schema (GeoServer
+    INSPIRE, module docstring)."""
+    try:
+        root = ET.parse(schema).getroot()
+    except ET.ParseError:
+        return False
+    return any(child.tag in (f"{_XSD}element", f"{_XSD}complexType") for child in root)
+
+
+def _merge_fields(
+    table: _Table,
+    names: list[str],
+    dtypes: list[np.dtype],
+    params: "FeatureBBoxParams",
+    page: Path,
+    context: str,
+) -> list[int | None]:
+    """Fields of a page into the layer schema: new fields appended (null in
+    the rows read so far); the page column of every layer field (``None``:
+    the page has no such field)."""
+    for name, dtype in zip(names, dtypes, strict=True):
+        if name in table.names:
+            known = table.dtypes[table.names.index(name)]
+            if known != dtype:
+                raise DownloadError(
+                    f"{context}: pole {name} ma na stronie {page.name} typ {dtype}, "
+                    f"a na wczesniejszych {known}"
+                )
+            continue
+        table.names.append(name)
+        table.dtypes.append(dtype)
+        if name not in params.drop_fields:
+            table.compared.append(len(table.names) - 1)
+        table.rows = {
+            key: ((*row, None), wkb) for key, (row, wkb) in table.rows.items()
+        }
+    return [names.index(name) if name in names else None for name in table.names]
 
 
 def _read_arcgis(
@@ -475,9 +554,21 @@ def _write_layer(
             geometry_type=_geometry_type(list(geometry), table.declared),
             crs=params.native_crs,
             promote_to_multi=True,
-            layer_options={"DESCRIPTION": layer.source},
+            layer_options={"DESCRIPTION": _description(layer_pages, params)},
             gdal_tz_offsets=tz_offsets or None,
         )
+
+
+def _description(layer_pages: "LayerPages", params: "FeatureBBoxParams") -> str:
+    """``gpkg_contents.description`` of a layer: the WFS type name, or the
+    ArcGIS layer name of the service with its id (``Vodni tok (93)``, the
+    name as the service spells it)."""
+    layer = layer_pages.layer
+    if params.protocol == "arcgis" and layer_pages.schema is not None:
+        name = json.loads(layer_pages.schema.read_bytes()).get("name")
+        if isinstance(name, str) and name.strip():
+            return f"{name.strip()} ({layer.source})"
+    return layer.source
 
 
 def _remove(path: Path) -> None:
