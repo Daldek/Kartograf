@@ -79,6 +79,13 @@ PROVIDERS = {
     "corine": CorineProvider,
     "soilgrids": SoilGridsProvider,
 }
+# Sources of ``landcover download`` (ADR-039; SoilGrids is ``soil download``)
+# and their description in messages and --help texts.
+LANDCOVER_SOURCES: tuple[str, ...] = ("bdot10k", "corine")
+LANDCOVER_SOURCE_CHOICES = (
+    "bdot10k (wektorowa baza topograficzna GUGiK), corine (CORINE Land Cover, "
+    "Copernicus)"
+)
 
 # Options belonging to a different source are input errors; options not
 # belonging to any source are programming errors (e.g. removed output_path).
@@ -117,6 +124,23 @@ _PREVIEW_NOTE = {"fallback": "wms_png", "note": "podglad WMS, nie dane"}
 _TRACK: Track = "landcover"
 # Plan position key of a slot (segment, hierarchy, name).
 _SlotKey = tuple[str, str, str]
+
+
+def require_landcover_source(source: str | None) -> None:
+    """``source`` of ``landcover download``: one of ``LANDCOVER_SOURCES``.
+
+    Raises
+    ------
+    ValidationError
+        Missing source or a source of another command (SoilGrids).
+    """
+    if source is None:
+        raise ValidationError(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
+    if source not in LANDCOVER_SOURCES:
+        raise ValidationError(
+            f"--source {source!r}: nieznana wartosc - dostepne: "
+            f"{LANDCOVER_SOURCE_CHOICES}"
+        )
 
 
 def _read_geotiff_nodata(path: Path) -> float | None:
@@ -450,10 +474,9 @@ class LandCoverManager:
         """
         sink = NoticeSink(on_notice)
         validate_update(update)
-        if bbox is not None:  # the CLI parses --bbox first: the same first error
-            validate_request_bbox(bbox)
-        self._check_options(options)
-        teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
+        teryt, sheet, bbox = self._validated(
+            teryt, sheet, bbox, geometry, layer, options, sink
+        )
         failed: tuple[LandCoverFailure, ...] = ()
         with self._session(force=update == "force", sink=sink):
             if teryt is None and isinstance(self._provider, Bdot10kProvider):
@@ -497,10 +520,9 @@ class LandCoverManager:
         position). ``keep_raw`` adds the raw ZIP position of the same unit.
         """
         sink = NoticeSink(on_notice)
-        if bbox is not None:
-            validate_request_bbox(bbox)
-        self._check_options(options)
-        teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
+        teryt, sheet, bbox = self._validated(
+            teryt, sheet, bbox, geometry, layer, options, sink
+        )
         with self._session(force=False, sink=sink):
             if teryt is not None:
                 jobs = self._jobs(teryt=teryt, kwargs=options)
@@ -510,6 +532,48 @@ class LandCoverManager:
             else:
                 jobs, _ = self._area_jobs(bbox=bbox, sheet=sheet, kwargs=options)
             return new_plan(self._output_dir, [self._inspect(job) for job in jobs])
+
+    def validate_request(
+        self,
+        *,
+        teryt: str | None = None,
+        sheet: str | None = None,
+        bbox: BBox | None = None,
+        geometry: str | Path | None = None,
+        layer: str | None = None,
+        **options,
+    ) -> None:
+        """Every check of ``download``/``check`` before the first request.
+
+        No network and nothing written (a ``geometry`` file is read for its
+        envelope): the same exception type and text as ``download`` with the
+        same selection and options (``project add``, ADR-040).
+
+        Raises
+        ------
+        ValidationError
+            Not exactly one selection, invalid TERYT or sheet code, invalid
+            or missing source options.
+        TypeError
+            An option that belongs to no source.
+        """
+        self._validated(teryt, sheet, bbox, geometry, layer, options, NoticeSink(None))
+
+    def _validated(
+        self,
+        teryt: str | None,
+        sheet: str | None,
+        bbox: BBox | None,
+        geometry: str | Path | None,
+        layer: str | None,
+        options: dict,
+        sink: NoticeSink,
+    ) -> tuple[str | None, str | None, BBox | None]:
+        """The prologue of ``download``/``check``: options, then the selection."""
+        if bbox is not None:  # the CLI parses --bbox first: the same first error
+            validate_request_bbox(bbox)
+        self._check_options(options)
+        return self._selection(teryt, sheet, bbox, geometry, layer, sink)
 
     def _download_counties(
         self,
@@ -572,12 +636,16 @@ class LandCoverManager:
             raise ValidationError(
                 "Podaj dokladnie jeden wybor: teryt, sheet, bbox albo geometry"
             )
-        if (
-            teryt is not None
-            and isinstance(self._provider, Bdot10kProvider)
-            and not self._provider.validate_admin_unit(teryt)
-        ):
-            raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
+        if teryt is not None:
+            if not isinstance(self._provider, Bdot10kProvider):
+                raise ValidationError(
+                    f"{self._provider.name}: wybor teryt dziala tylko dla BDOT10k "
+                    "- podaj bbox, sheet albo geometry"
+                )
+            if not self._provider.validate_admin_unit(teryt):
+                raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
+        if sheet is not None:
+            SheetParser(sheet)  # a malformed code: ParseError before any request
         if geometry is not None:
             bbox = geometry_envelope_2180(geometry, layer, sink)
         elif bbox is not None:
@@ -747,11 +815,6 @@ class LandCoverManager:
                 raw_slot = selection_slot(out, raw, ".zip", teryt=teryt)
                 jobs.append(_Job(raw_slot, teryt, signal, selection))
             return jobs
-        if teryt is not None:
-            raise ValidationError(
-                f"{provider.name}: wybor teryt dziala tylko dla BDOT10k - podaj "
-                "bbox, sheet albo geometry"
-            )
         unit = selection_unit(bbox=bbox, sheet=sheet)
         if bbox is not None:
             request: dict = {

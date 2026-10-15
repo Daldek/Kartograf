@@ -23,19 +23,13 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
 )
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.landcover.manager import LandCoverManager
-
-# The --source values of the landcover group (help and the missing-flag error).
-SOURCE_CHOICES = (
-    "bdot10k (wektorowa baza topograficzna GUGiK), corine (CORINE Land Cover, "
-    "Copernicus)"
-)
+from kartograf.landcover.manager import LANDCOVER_SOURCE_CHOICES, LandCoverManager
 
 
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     """``landcover list-layers``: BDOT10k layers or CORINE years."""
     if args.source is None:
-        print(f"Error: --source wymagane: {SOURCE_CHOICES}", file=sys.stderr)
+        print(f"Error: --source wymagane: {LANDCOVER_SOURCE_CHOICES}", file=sys.stderr)
         return 1
     # the catalogue of the source (no network, nothing written)
     provider: Any = LandCoverManager(".", args.source, cache=False).provider
@@ -59,7 +53,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     """``landcover download``: flags -> ``LandCoverManager.download``/``.check``."""
     missing = []
     if args.source is None:
-        missing.append(f"--source wymagane: {SOURCE_CHOICES}")
+        missing.append(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
     if args.output is None:
         missing.append(
             "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/...)"
