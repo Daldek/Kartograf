@@ -715,6 +715,11 @@ Szczegóły trybów: sekcja 4.3.
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
   zbiorach warto włączyć kompresję systemu plików.
+  Na udziale SMB/cifs klient może przejściowo raportować błędną liczbę
+  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki.
+  `project verify` potwierdza treść kopii, ale nie oszczędność miejsca:
+  sprawdź jej zajętość; w razie potrzeby kopiuj po stronie serwera lub
+  z hosta z lokalnym dostępem do systemu plików.
 - **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
   udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
 - **Migracja z 0.7.x:** brak; katalog `kampanie/` nie jest czytany (CLI
@@ -1134,6 +1139,9 @@ i `version` sa zawsze wzgledne do magazynu.
 | Przenosisz sam projekt, a `output_dir` jest wzgledny | Zmien `output_dir` w `kartograf-project.json`. |
 | Przenosisz lub kopiujesz magazyn | Kopiuj razem z sidecarami i dowiazaniami twardymi (`rsync -aH`), popraw `output_dir`, uruchom `kartograf project verify`. |
 | Otwierasz projekt z pustym magazynem | Utworz katalog magazynu (albo wskaz w `output_dir` istniejacy), uruchom `kartograf project download`, potem `kartograf project verify`; odtworzenie wymaga zgodnosci SHA-256. |
+
+Na udziale SMB/cifs `rsync -aH` może nie zachować wszystkich dowiązań
+twardych (sekcja 4); `verify` nie wykrywa nadmiarowych kopii.
 
 Plik geometrii obszaru warto trzymac przy manifeście i podawac wzglednie:
 przenosi sie z projektem. Zmiana jego bajtow od chwili przypiecia
