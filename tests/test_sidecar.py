@@ -350,14 +350,14 @@ class TestPl2000SheetPublishedIn2180:
 
         from kartograf.download.manager import DownloadManager
         from kartograf.providers.pl.gugik import GugikProvider
-        from tests.conftest import gfi_record, render_gfi_body
+        from tests.conftest import render_wfs_body, wfs_record
 
-        body = render_gfi_body(
+        body = render_wfs_body(
             [
-                gfi_record(
+                wfs_record(
                     self.SHEET,
                     system="PL-2000:S7",
-                    aktualnosc="2023-03-17",
+                    akt_data="2023-03-17",
                     url=self.URL,
                 )
             ]
@@ -398,6 +398,84 @@ class TestPl2000SheetPublishedIn2180:
         assert warning.levelno == logging.WARNING
         assert "EPSG:2178" in warning.getMessage()
         assert "zapisano uklad pliku" in warning.getMessage()
+
+
+class TestPlCutoutDescriptor:
+    """ADR-041: a PL cutout comes from the WCS channel of the product's 1 m
+    grid variant, so its sidecar names that variant's descriptor (the variant
+    registry, no key of its own); a cutout without ``resolution`` is 1 m.
+
+    WCS answers: the recorded 20 x 20 m windows of ``tests/fixtures/gugik_wcs/
+    real_2026_10_11/`` (the request lies inside them), PRG mask: all land.
+    """
+
+    BBOX = (567580.6, 243664.7, 567600.4, 243684.3)
+
+    @pytest.mark.parametrize(
+        ("product", "recording"),
+        [
+            ("nmt", "nmt_evrf2007_20x20.mime"),
+            ("nmpt", "nmpt_evrf2007_20x20_sf05.mime"),
+        ],
+    )
+    def test_cutout_descriptor_from_registry(self, tmp_path, product, recording):
+        from unittest.mock import Mock, patch
+
+        import requests
+
+        from kartograf.core.sheet_parser import BBox
+        from kartograf.download.data import download_data
+        from kartograf.providers.pl.prg import LandMask
+        from kartograf.sources.variants import variants
+        from tests.conftest import WCS_FIXTURES, recorded_response
+
+        session = Mock(spec=requests.Session)
+        session.get = Mock(
+            side_effect=lambda url, **kwargs: recorded_response(
+                WCS_FIXTURES / recording
+            )
+        )
+        land = LandMask(
+            (
+                {
+                    "type": "Polygon",
+                    "coordinates": [[[0, 0], [1e6, 0], [1e6, 1e6], [0, 1e6], [0, 0]]],
+                },
+            ),
+            (),
+        )
+        with (
+            patch("kartograf.transport.http.make_gugik_session", return_value=session),
+            patch("kartograf.providers.pl.prg.fetch_land_mask", return_value=land),
+        ):
+            report = download_data(
+                product=product,
+                output_dir=tmp_path,
+                bbox=BBox(*self.BBOX, "EPSG:2180"),
+                country="pl",
+                vertical_crs="EVRF2007",
+                cutout=True,
+                horizontal_crs="EPSG:2180",
+                cache=False,
+            )
+
+        assert report.ok, report.failed
+        (unit,) = report.files
+        path = unit.file.path
+        meta = json.loads(path.with_name(path.name + ".meta.json").read_text("utf-8"))
+        (grid_1m,) = variants(
+            product=product,
+            country="PL",
+            vertical_crs="EVRF2007",
+            resolution="1m",
+            format="ASC",
+        )
+        assert meta["dataset"] == grid_1m.source
+        assert meta["resolution"] == "1m"
+        assert TransportKind.WCS in {
+            channel.transport for channel in get_source(grid_1m.source).channels
+        }
+        session.get.assert_called_once()
 
 
 class TestEmitSidecar:

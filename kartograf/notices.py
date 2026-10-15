@@ -31,6 +31,10 @@ PROJECT_GEOMETRY_CHANGED = "project_geometry_changed"
 UNIT_LIST = "unit_list"
 WHOLE_COUNTRY_SIZE = "whole_country_size"
 AUTO_NARROWED_TO_CZ = "auto_narrowed_to_cz"
+# Availability report: index records Kartograf does not download (outside the
+# variant registry, format inconsistent with the file, sheet code outside
+# SheetParser).
+INDEX_UNSUPPORTED = "index_unsupported"
 
 
 @dataclass(frozen=True)

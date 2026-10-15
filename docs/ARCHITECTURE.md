@@ -33,7 +33,7 @@ w `registry.py`). Logika wykonawcza zostaje w providerach —
 deskryptor mowi CO zrodlo potrafi i gdzie ma wyladowac wynik, nie JAK je pobrac.
 Wyjatkiem sa kanaly kolekcji (ADR-042): typowane parametry kanalu
 (`AccessChannel.params`) konfiguruja generyczne silniki paczek jednostek
-i obiektow obszaru, wiec taki produkt nie ma providera (sekcja 4.9).
+i obiektow obszaru, wiec taki produkt nie ma providera (sekcja 4.10).
 
 **Sidecar przy kazdym udanym pobraniu.** Obok kazdego pliku danych powstaje
 `<pelna_nazwa_pliku>.meta.json` ze schema `kartograf-meta/1`: uklad poziomy
@@ -44,7 +44,7 @@ wykonanych transformacji. Sidecary pisza **warstwy zarzadzajace** —
 (`download/laz.py::write_laz_sidecar`, ADR-029), wynik HSG
 (`HSGCalculator._reuse_or_compute`, sekcja 4.8), wynik CZ
 (`download/cz_cutout.py::write_cz_sidecar`, takze z `download/cz_sheets.py`)
-i pliki kolekcji (`download/collections.py::run_job`, sekcja 4.9)
+i pliki kolekcji (`download/collections.py::run_job`, sekcja 4.10)
 — nigdy providery; provider zwraca `Path`, metadane skladane sa pietro wyzej,
 gdzie znany jest kontekst zadania.
 kontekst zadania. Wynika z tego, ze bezposrednie wywolanie
@@ -130,7 +130,7 @@ co najmniej jeden import na poziomie modulu (takze pod `if TYPE_CHECKING:`).
 kartograf ──> core, download, providers, landcover, hydrology, cache,
         sources, transport, notices, project       # re-eksport Public API
 cli ──> _version, download, landcover, core, hydrology, cache,
-        notices, transform, project
+        notices, transform, project, sources, kartograf
 project ──> download, landcover, hydrology, core, sources, cache,
         notices, _version, kartograf (_clock)
 download ──> providers, sources, transform, core, cache, notices,
@@ -176,7 +176,7 @@ Uwagi, ktore latwo przeoczyc:
   przez duck typing (`transformer=`), bez importu `transform`.
 - `download` siega po `transform` w `download/cutout.py` (wycinek PL,
   sekcja 4.3) i leniwie w `download/collections.py` (zapis GPKG wyniku
-  obszaru, sekcja 4.9). Po `transport` siega leniwie w
+  obszaru, sekcja 4.10). Po `transport` siega leniwie w
   `download/cutout.py` i `download/cz_cutout.py` oraz na poziomie modulu
   w `download/cz_sheets.py` (`response_signal`). `cutout.py` importuje na
   poziomie modulu `transform.crs` (`PinnedTransform`, `CONTENT_POLICY`,
@@ -186,7 +186,7 @@ Uwagi, ktore latwo przeoczyc:
   ostatnia funkcje (kontrola `all_nodata`).
   `manager.py` i `storage.py` nie importuja zadnego z nich —
   `DownloadManager` pozostaje warstwa koordynacji arkuszy.
-- `download/collections.py` (kolekcje, ADR-042, sekcja 4.9) importuje na
+- `download/collections.py` (kolekcje, ADR-042, sekcja 4.10) importuje na
   poziomie modulu `transport.http` (`SessionPerThread`, `head_signal`)
   i `transport.unit_package` (paczki jednostek), a leniwie - dopiero dla
   wyniku obszaru - `transport.feature_bbox.fetch_features`
@@ -196,13 +196,29 @@ Uwagi, ktore latwo przeoczyc:
   i `WOJEWODZTWO_NAMES`, leniwie `providers.cuzk.dmr.bbox_to_crs`.
 - `cli` tylko tlumaczy flagi na argumenty funkcji poziomu komendy
   i wypisuje wynik (Z1, ADR-037): importuje `download.data`
-  (`download_data`/`check_data`), `download.collections`
+  (`download_data`/`check_data`), `download.availability`
+  (`check_availability`, ADR-041), `download.collections`
   (`download_collection`/`check_collection` i teksty wyborow `--help`
   grup kolekcji), `landcover.manager`, `hydrology`,
   `download.plan`/`fetch` (plik planu, linie statusu), `notices`,
-  `_version` i `cache`; z `transform` bierze tylko `TransformError`.
+  `_version` i `cache`; z `transform` bierze tylko `TransformError`,
+  z `sources` deskryptory (`sources_for`; tabela `list-sources` z
+  `SourceDescriptor.variants`), z pakietu glownego API projektu
+  (`cli/project_cmd.py`); teksty `--help` z wariantow buduje `download/options.py`.
   Nie importuje `providers`, `transport` ani doboru arkuszy
   (`tests/test_cli_translation.py::test_cli_imports_no_data_logic`).
+- Rejestr wariantow `sources/variants.py` (ADR-041) to czyste dane:
+  importuje tylko `exceptions` i `sources.descriptor`, a `sources.registry`
+  leniwie (rejestr buduje deskryptory z typow tego modulu). Czytaja go
+  `download/options.py` (walidacja), `download/area.py` (`pl_only_flags`),
+  `download/storage.py`, `download/cutout.py` (wariant z kanalem WCS),
+  `download/availability.py`, providery PL (wariant, `IndexRef`) i `cli`.
+- `download/availability.py` (raport, sekcja 4.9) importuje na poziomie
+  modulu `providers.pl.skorowidz_wfs` (ten sam klient i parser rekordow
+  co pobieranie arkuszy), `providers.pl.prg` (maska ladu),
+  `providers.pl.gugik_laz.laz_tile` (parser kafla LAZ) i
+  `transport.http` (`SessionPerThread`); nie importuje `DownloadManager`
+  ani magazynu.
 - `project` (`model`, `commands`, `manifest`, `operations`) mapuje komendy danych
   na funkcje biblioteki `download`/`landcover`/`hydrology`; nie implementuje
   logiki per produkt. `cli/groups/project.py` i `cli/project_cmd.py` tylko
@@ -238,7 +254,7 @@ Uwagi, ktore latwo przeoczyc:
   `download.plan`, `download.storage.content_segment`/`unit_slot`,
   `download.versions`), a archiwum rocznikow BDOT10k pobiera zadaniami
   jednostek orkiestratora kolekcji (`download.collections.package_job`/
-  `run_job`/`inspect_job`, sekcja 4.9); `download` nie importuje
+  `run_job`/`inspect_job`, sekcja 4.10); `download` nie importuje
   `landcover` (cyklu nie ma).
 - `landcover ──> transport`: `LandCoverManager` wybiera wariant archiwum
   BDOT10k (`--year`, `--format`) przez
@@ -295,13 +311,17 @@ kartograf/
 │   │                       # find_sheets_for_geometry, get_overall_bbox
 │   └── coverage.py         # Wypukle wielokaty: przeciecie, roznica, bufor (wybor kafli LAZ)
 ├── sources/             # Deskryptory zrodel jako dane (zero IO przy imporcie)
-│   ├── descriptor.py    # SourceDescriptor (+ resolve_subdir), AccessChannel,
+│   ├── descriptor.py    # SourceDescriptor (+ resolve_subdir, variants), AccessChannel,
 │   │                    # TransportKind, TileScheme, LicenseInfo, CountryProfile;
 │   │                    # parametry kanalow kolekcji (AccessChannel.params, ADR-042):
 │   │                    # UnitPackageParams/PackageVariant, FeatureBBoxParams/FeatureLayer
 │   ├── registry.py      # Rejestr PL/CZ/EU/GLOBAL: get_source, sources_for, get_country,
 │   │                    # all_countries, vertical_crs_code, resolve_vertical_crs (rodzina ->
-│   │                    # realizacja), parse_pl_system, horizontal_crs_for_sheet/_for_system
+│   │                    # realizacja), parse_pl_system, horizontal_crs_for_sheet/_for_system;
+│   │                    # deskryptory NMT/NMPT per (produkt, format, rozdzielczosc) z wariantami
+│   ├── variants.py      # Rejestr wariantow (ADR-041): IndexRef, FileFormat/FORMATS, ProductVariant,
+│   │                    # variants(), resolution_label/parse_resolution (etykiety K2),
+│   │                    # source_format (twardy filtr formatu), variant_error/find_variant
 │   ├── edition.py       # Edition (wydanie zrodla, sygnal metadata D29), edition_label
 │   └── sidecar.py       # ResultMetadata, build_metadata, write_sidecar, emit_sidecar
 │                        # (jedyna polityka zapisu), pl_sheet_horizontal_crs, read_asc_nodata
@@ -316,7 +336,7 @@ kartograf/
 │                        # dedupe i sort po id, drop_fields do sidecara; ADR-042 D5), GpkgSummary
 ├── transport/           # Wspolny transport
 │   ├── http.py          # download_to (pliki WSZYSTKICH providerow; zapis atomowy os.replace)
-│   │                    # i get_with_retry (zapytania: skorowidz, WFS LAZ, WFS PRG,
+│   │                    # i get_with_retry (zapytania: skorowidz WMS/WFS, WFS LAZ, WFS PRG,
 │   │                    # CuzkClient.query) — jedyne miejsce retry (siec, 429, 5xx;
 │   │                    # Retry-After): is_retryable, retry_wait, backoff_delay;
 │   │                    # make_gugik_session, SessionPerThread (sesja per watek)
@@ -335,17 +355,22 @@ kartograf/
 │                        # count_features, fetch_features -> FeaturePages (strony na dysku)
 ├── providers/           # Providery danych
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider, LandCoverProvider
-│   ├── pl/              # GUGiK: gugik.py (NMT), gugik_nmpt.py, gugik_orto.py,
-│   │                    # gugik_laz.py (select_tiles, select_all_intersecting), bdot10k.py,
-│   │                    # skorowidz.py (rekordy GetFeatureInfo, wybor ADR-028,
-│   │                    # SkorowidzLayersMixin: resolve_campaigns/download_record/
+│   ├── pl/              # GUGiK: gugik.py (NMT; jeden wariant rejestru na provider, P10,
+│   │                    # index_sheets — arkusze archiwum ze skorowidza), gugik_nmpt.py,
+│   │                    # gugik_orto.py, gugik_laz.py (select_tiles, select_all_intersecting;
+│   │                    # transport WfsIndex), bdot10k.py,
+│   │                    # skorowidz.py (SkorowidzRecord, wybor ADR-028,
+│   │                    # SkorowidzLayersMixin: warstwy WMS GetCapabilities/GetFeatureInfo
+│   │                    # dla orto, resolve_campaigns/download_record/
 │   │                    # record_source/available_years; select_campaign_records,
 │   │                    # coverage_hints/no_coverage_error),
-│   │                    # wcs.py (GugikWcsMixin — kawalki GetCoverage NMT/NMPT/orto),
-│   │                    # prg.py (WFS PRG: maska ladu A00 - W02 - W03 dla wycinka,
-│   │                    # discover_teryts_for_bbox, teryt_for_point),
-│   │                    # __init__.py (create_nmt_provider, nmt_vertical_crs,
-│   │                    # require_nmt_vertical_crs)
+│   │                    # skorowidz_wfs.py (WfsIndex — GetCapabilities/GetFeature skorowidzy
+│   │                    # WFS NMT/NMPT/LAZ, parse_index_feature, feature_footprint,
+│   │                    # overlaps_area, sheet_frame_2180, WfsSkorowidzLayersMixin),
+│   │                    # wcs.py (GugikWcsMixin — kawalki GetCoverage NMT/NMPT 1 m, orto),
+│   │                    # prg.py (WFS PRG: maska ladu A00 - W02 - W03 dla wycinka i raportu
+│   │                    # dostepnosci, LandMask.burn, discover_teryts_for_bbox,
+│   │                    # teryt_for_point), __init__.py (create_nmt_provider)
 │   ├── cuzk/            # CUZK: client.py (CuzkClient — silnik sterowany deskryptorem: ArcGIS
 │   │                    # REST query/export_image + pliki openzu), sheets.py (SheetIndex/
 │   │                    # SheetInfo — indeks SM5/TM33 z KladyMapovychListu, odsiewa
@@ -358,8 +383,8 @@ kartograf/
 │                        # plan); testy zgodnosci je zamrazaja (frozen_clock)
 ├── notices.py           # Notice(level, code, text), NoticeSink, kody komunikatow (Z3, ADR-037)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
-│                        # campaigns_cache, teryt_cache, teryt_bbox_cache (TTL 7 d,
-│                        # DEFAULT_TTL_SECONDS)
+│                        # campaigns_cache, teryt_cache, teryt_bbox_cache, index_area_cache
+│                        # (raport dostepnosci; TTL 7 d, DEFAULT_TTL_SECONDS)
 │                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
 │                        # otwierany leniwie, powstaje przy pierwszym zapisie
 ├── cache/defaults.py    # open_cache(cache: MetadataCache | bool, force) — wspolny cache
@@ -369,8 +394,11 @@ kartograf/
 │   │                    # (ADR-037): kraj i `auto`, rozwiniecie obszaru PL, wybor toru,
 │   │                    # parent_request, DataReport/UnitFile/UnitFailure, Notice
 │   ├── options.py       # validate_request / validate_request_bbox (takze bbox CRS),
-│   │                    # walidacja wyborow: produkt, kraj, rozdzielczosc, uklad,
-│   │                    # system, skala, lata, opcje LAZ; teksty jak w --help
+│   │                    # walidacja wyborow: produkt, kraj, format, rozdzielczosc i uklad
+│   │                    # (z rejestru wariantow), system, skala, lata, opcje LAZ;
+│   │                    # teksty jak w --help
+│   ├── availability.py  # Raport dostepnosci (ADR-041, sekcja 4.9): check_availability,
+│   │                    # AvailabilityReport/AvailabilityCombination/AvailabilityArea
 │   ├── area.py          # Obszar zadania: bbox_to_2180, obwiednie geometrii,
 │   │                    # parent_request_for, przyciecie `auto` (Notice)
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu,
@@ -426,6 +454,7 @@ kartograf/
                          # project — jeden modul = jedna grupa; groups/_collection.py
                          # to wspolny ksztalt komend kolekcji, nie grupa),
                          # download_cmd.py (download_data/check_data),
+                         # availability_cmd.py (check_availability: tabela, --details, --json),
                          # collection_cmd.py (download_collection/check_collection),
                          # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG),
                          # project_cmd.py (API projektu), parse_cmd.py,
@@ -441,7 +470,8 @@ kartograf/
 `SourceDescriptor` (`kartograf/sources/descriptor.py`) niesie: `key`,
 `country`, `product`, `name`, `provider_name`, krotke `channels`
 (`AccessChannel`), `tile_scheme`, `storage_subdir`, `default_extension`,
-`license`, `resolution`, `auth`.
+`license`, `resolution`, `auth` i (od 0.8.0, ADR-041) krotke `variants`
+(`ProductVariant`, rejestr wariantow — nizej).
 
 Od 0.7.0 (ADR-026) `storage_subdir` jest **szablonem** z placeholderami
 `{system}` i `{vcrs}`, a nie literalna nazwa katalogu. Konsument zewnetrzny
@@ -450,9 +480,9 @@ to `resolve_subdir()`.
 
 | Klucz deskryptora | `storage_subdir` | `default_extension` |
 |---|---|---|
-| `pl.gugik.nmt_1m` | `nmt/pl_{system}_1m_{vcrs}` | `.asc` |
-| `pl.gugik.nmt_5m` | `nmt/pl_{system}_5m_{vcrs}` | `.asc` |
-| `pl.gugik.nmpt` | `nmpt/pl_{system}_1m_{vcrs}` | `.asc` |
+| `pl.gugik.nmt_0_15m`, `pl.gugik.nmt_0_5m`, `pl.gugik.nmt_0_6m`, `pl.gugik.nmt_1m`, `pl.gugik.nmt_5m`, `pl.gugik.nmt_10m` | `nmt/pl_{system}_<etykieta>_{vcrs}`, np. `nmt/pl_{system}_0.5m_{vcrs}` | `.asc` |
+| `pl.gugik.nmpt_0_5m`, `pl.gugik.nmpt_0_6m`, `pl.gugik.nmpt` (1 m) | `nmpt/pl_{system}_<etykieta>_{vcrs}`, np. `nmpt/pl_{system}_1m_{vcrs}` | `.asc` |
+| archiwa `pl.gugik.<produkt>_<format>[_<etykieta>]`, np. `pl.gugik.nmt_tbd_25m`, `pl.gugik.nmt_ascii_nmt_1m`, `pl.gugik.nmt_tin`, `pl.gugik.nmpt_xyz_0_5m` | `<produkt>/pl_{system}_<format>[_<etykieta>]_{vcrs}`, np. `nmt/pl_{system}_tbd_25m_{vcrs}`, `nmt/pl_{system}_ascii-nmt_1m_{vcrs}`, `nmt/pl_{system}_tin_{vcrs}` | wg formatu: `.zip` (XYZ, ASCII-NMT, TBD, TIN), `.ttn`, `.grd`, `.dxf`, `.dgn` |
 | `pl.gugik.orto` | `orto/pl_{system}` (+ `_<wariant>` dla CIR/B-W, regula 5) | `.tif` |
 | `pl.gugik.laz` | `laz/pl_{system}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
@@ -464,13 +494,59 @@ to `resolve_subdir()`.
 | `pl.gugik.egib` | `cadastre/pl_egib` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `pl.gugik.buildings_3d` | `models3d/pl_buildings` (prefiks + tokeny, regula 9) | `.zip` |
 
-NMT 1 m i NMPT maja kanal WCS `bbox_raster` dla obu ukladow pionowych
-(`EPSG:9650` KRON86, `EPSG:9651` EVRF2007); kanal `sheet_files` sluzy
-osobno arkuszom OpenData. NMT 5 m nie ma kanalu WCS.
+Kanal arkuszy kazdego deskryptora NMT/NMPT PL to `WFS` (`sheet_files`,
+sygnal `index`; skorowidz WFS GUGiK, od 0.8.0 zamiast `WMS_SHEET_INDEX`,
+ktory zostaje tylko dla orto). Kanal WCS `bbox_raster` dla obu ukladow
+pionowych (`EPSG:9650` KRON86, `EPSG:9651` EVRF2007) maja wylacznie
+`pl.gugik.nmt_1m` i `pl.gugik.nmpt` (1 m); pozostale rozdzielczosci
+i archiwa go nie maja (stad wycinek tylko 1 m, sekcja 4.3).
+
+**Rejestr wariantow (ADR-041, `sources/variants.py`).** Jeden
+deskryptor PL na (produkt, format, rozdzielczosc), budowany w
+`registry.py::_pl_sheet_source` z listy `_PL_SHEET_SOURCES`; klucz,
+szablon segmentu, rozszerzenie i nazwe wyznaczaja format i etykieta.
+Istniejace klucze zostaja (`pl.gugik.nmpt` = NMPT 1 m, `pl.gugik.nmt_1m`,
+`pl.gugik.nmt_5m`). `SourceDescriptor.variants` ma po jednym
+`ProductVariant` na uklad wysokosci: `source` (= klucz deskryptora =
+`dataset` sidecara), `product`, `country`, `resolution_m` (`Decimal`;
+`None` dla LAZ, TIN i TTN), `vertical_crs` (nazwa CLI: `EVRF2007`/`KRON86`),
+`format` (token `FileFormat`: `ASC`, `XYZ`, `ASCII-NMT`, `TBD`, `TIN`,
+`TTN`, `GRD`, `DXF`, `DGN`; LAZ: `LAZ`), `systems` (`("1992", "2000")`
+— to, w jakim ukladzie arkusz istnieje, jest faktem skorowidza, nie
+rejestru), `channel` i `index_ref` (`IndexRef(endpoint, layer_prefix)`:
+usluga WFS skorowidza i prefiks typow rocznych, np.
+`.../NumerycznyModelTerenuEVRF2007/WFS/Skorowidze` + `SkorowidzNMT`;
+NMPT: `NumerycznyModelPokryciaTerenu{EVRF2007,KRON86}` + `SkorowidzNMPT`;
+LAZ: `DanePomiaroweLidar{EVRF2007,KRON86}` +
+`SkorowidzDanychPomiarowychLIDAR`). Wlasciwosci: `label` (etykieta K2)
+i `source_file` (archiwum = plik zrodlowy bez konwersji, wycinka
+i mozaiki). `FORMATS` (`FileFormat`: token, nazwa pola `format`
+w skorowidzu, rozszerzenie, akceptowane koncowki sciezki URL, opis,
+`source_file`) opisuje formaty skorowidza; rozszerzenie wynika z pola
+`format` rekordu, nigdy z URL.
+
+Funkcje (bez IO): `variants(*, product, country, vertical_crs,
+resolution, system, format)` — warianty w kolejnosci rejestru;
+`resolution_label(Decimal)` -> `0.15m`/`0.5m`/`10m` (`format(value.normalize(),
+"f") + "m"`) i odwrotne `parse_resolution(label)` (tylko dokladna
+etykieta; `0,5m`, `50cm`, `0.50m` = `None`); `source_format(format, url)`
+— token, gdy pole `format` rekordu i koncowka URL wskazuja ten sam
+format, inaczej `None` (twardy filtr, sekcja 4.1); `variant_error`/
+`find_variant` — tekst bledu wyboru (lista etykiet per uklad wysokosci)
+i jedyny wariant wyboru (`resolution=None` wybiera jedyna etykiete:
+`GRD` 5m, TIN/TTN bez rozdzielczosci); `labels_by_vertical_crs`,
+`format_tokens`. Rejestr czytaja: walidacja CLI/API
+(`download/options.py`), teksty `--help` i `list-sources`,
+`download/area.py::pl_only_flags`, `FileStorage` (deskryptor wariantu),
+wycinek (`download/cutout.py::wcs_variant` — wariant z kanalem WCS),
+providery PL (wariant, uslugi skorowidza) i raport dostepnosci
+(4.9). Zaden inny modul nie trzyma listy rozdzielczosci, ukladow
+wysokosci ani formatow. Pozostale deskryptory (orto, CZ, land cover)
+maja pusta krotke `variants`.
 
 `storage_subdir` jest zawsze napisem (od 0.8.0). Zrodla land cover i kolekcji
 maja prefiks bez placeholderow, ktory `download/storage.py::content_segment`
-uzupelnia tokenami tresci (sekcja 3.3 reguly 8 i 9, sekcje 4.8 i 4.9).
+uzupelnia tokenami tresci (sekcja 3.3 reguly 8 i 9, sekcje 4.8 i 4.10).
 CORINE ma dwa kanaly: `CLMS_API` (dane, sygnal `metadata`) i `WMS`
 (podglad PNG, `none`, `EPSG:3857`).
 
@@ -544,7 +620,7 @@ Bezposrednie wywolanie providera sidecara nie pisze (np.
 | `horizontal_crs` | faktyczny uklad poziomy pliku: arkusz PL-1992 `EPSG:2180`, arkusz PL-2000 `EPSG:2176`–`EPSG:2179` wedlug strefy godla, CZ natywnie `EPSG:5514`, kafel TM33 `EPSG:3045`; wycinek po `--target-crs` w ukladzie docelowym. Dla arkusza PL uklad z godla jest SPRAWDZANY wspolrzednymi pliku (`sources/sidecar.py::pl_sheet_horizontal_crs`): plik opublikowany przez GUGiK w innym ukladzie niz wskazuje godlo (E17, np. arkusze PL-2000 strefy 7 jak `7.125.11.19` w EPSG:2180) dostaje uklad PLIKU, deklaracja rekordu skorowidza zostaje w `extra.source.declared_crs`, logger `kartograf.sources.sidecar` ostrzega, a CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym ukladzie niz wskazuje godlo: ...` (kod bez zmian; segment katalogu nadal wg godla, ADR-026) |
 | `vertical_crs` | kod realizacji ukladu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` gdy produkt nie ma pionu (orto) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
-| `resolution` | rozdzielczosc z deskryptora (`1m`/`5m`/`2m`) albo `null` |
+| `resolution` | rozdzielczosc z deskryptora: etykieta K2 rejestru (`0.15m`, `0.5m`, `1m`, `10m`, archiwa do `50m`; CZ `2m`/`5m`) albo `null` (orto, LAZ, archiwa TIN/TTN) |
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ z tagu GeoTIFF (`download/cz_cutout.py::read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
 | `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla kampanii PL `campaigns` (rozwiazane `newest`/`all`, zawsze), `min_year`/`max_year` (gdy podane) i `year` (gdy granice rowne); LAZ: `year`/`min_year`/`max_year`/`min_density` gdy podane, `campaigns` tylko dla `all`; land cover: parametry tresci z domyslnymi wartosciami — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8). `request` opisuje pierwotne POBRANIE pliku, nie ostatnie wykorzystanie; `extra.parent_request(s)` nie niesie flag roku (3.4) |
 | `license` | `{id, attribution, url}` z deskryptora |
@@ -563,23 +639,29 @@ informacji (sekcja "Stare sidecary" nizej).
 
 `extra.source` — pochodzenie arkusza PL z rekordu skorowidza GUGiK
 (`SkorowidzRecord.to_source`; ten sam slownik trafia do `record_cache`
-i `campaigns_cache`):
+i `campaigns_cache`). Rekordy NMT/NMPT pochodza od 0.8.0 ze skorowidza
+WFS: `parse_index_feature` (`providers/pl/skorowidz_wfs.py`) mapuje pola
+WFS (`url_do_pobrania`, `godlo`, `akt_data`, `akt_rok`, `dt_pzgik`,
+`uklad_xy`, `uklad_h`, `char_przestrz`, `czy_ark_wypelniony`,
+`nr_zglosz`, `zrodlo_danych`, `format`, `blad_sr_wys`, `blad_sr_syt`,
+`modul_archiwizacji`) na te same klucze surowego rekordu co dawny
+GetFeatureInfo, wiec kolumna nizej podaje nazwy pol rekordu WMS:
 
 | Klucz | Zawartosc (pole rekordu GUGiK) |
 |---|---|
 | `url` | URL pliku OpenData (`url`) |
-| `index_url` | endpoint WMS skorowidza, z ktorego pochodzi rekord |
-| `layer` | warstwa skorowidza (np. `SkorowidzeNMT2025`) |
+| `index_url` | adres uslugi skorowidza, z ktorej pochodzi rekord: NMT/NMPT (od 0.8.0) — usluga WFS wariantu (`IndexRef.endpoint`, np. `https://mapy.geoportal.gov.pl/wss/service/PZGIK/NumerycznyModelTerenuEVRF2007/WFS/Skorowidze`); orto (i sidecary NMT/NMPT sprzed 0.8.0) — endpoint WMS |
+| `layer` | NMT/NMPT: typ obiektu WFS bez prefiksu przestrzeni nazw (np. `SkorowidzNMT2025`); orto: warstwa WMS skorowidza |
 | `sheet` | godlo arkusza po normalizacji (`godlo`) |
 | `acquisition_date` | data aktualnosci danych `RRRR-MM-DD` (`aktualnosc`) |
 | `acquisition_year` | rok aktualnosci (`aktualnoscRok`, inaczej z `aktualnosc`) |
 | `pzgik_date` | data przyjecia do PZGiK (`dt_pzgik`) albo `null` |
-| `resolution_m` | rozdzielczosc w metrach (`charakterystykaPrzestrzenna`/`wielkoscPiksela`) |
+| `resolution_m` | rozdzielczosc w metrach (`charakterystykaPrzestrzenna`/`wielkoscPiksela`; WFS: `char_przestrz`) |
 | `declared_crs` | uklad zadeklarowany w rekordzie, np. `PL-2000:S7` (`ukladWspolrzednychPoziomych`) — moze sie roznic od `horizontal_crs` pliku (E17) |
 | `full_sheet` | `true`/`false` = pelny/niepelny arkusz (`calyArkuszWypelnionyTrescia`), `null` gdy brak |
 | `survey_work_id` | numer zgloszenia pracy geodezyjnej (`numerZgloszeniaPracy`) |
 | `data_source` | zrodlo danych (`zrDanych`/`zrodloDanych`) |
-| `format` | format pliku z rekordu (`format`), np. `ARC/INFO ASCII GRID` |
+| `format` | format pliku z rekordu (`format`), np. `ARC/INFO ASCII GRID`, `ASCII TBD` |
 | `height_rmse_m` | od 0.7.1: blad sredni wysokosci w metrach (`bladSredniWysokosci`); `null`, gdy brak albo wartosc nieliczbowa |
 | `position_rmse_m` | od 0.7.1: blad sredni polozenia w metrach (`bladSredniPolozenia`); `null` jak wyzej |
 | `archive_module` | od 0.7.1: modul archiwizacji, np. `1:5000` (`modulArchiwizacji`), albo `null` |
@@ -656,7 +738,8 @@ przez uzytkownika; best-effort). To JEDYNE zrodlo celu dowiazania
 roku sidecar kazdej wersji NMT/NMPT/orto i jego kopia w sciezce
 standardowej zawieraja `extra.available_years` (posortowane wszystkie lata
 arkusza z pelnego skorowidza); bez granic brak pola. `extra.coverage` (0..1,
-cztery miejsca po przecinku) ma sidecar wersji KAZDEGO lotu bez
+cztery miejsca po przecinku) ma sidecar wersji KAZDEGO lotu rastrowego
+(`.asc`/`.tif`; archiwa ADR-041 bez pomiaru) bez
 `full_sheet=true` — liczone z tego samego odczytu co sha256 przy zapisie
 (ASC bez `NODATA_value` = -9999, orto wg nodata/alfa; blad pomiaru = brak
 pola + ostrzezenie), nigdy dopisywane pozniej. Przy przedziale i `all`
@@ -682,7 +765,9 @@ data/
 │   ├── pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e/N-34-130-D-d-2-4.asc   # wersja (prawdziwy plik)
 │   ├── pl_1992_1m_evrf2007/versions/.incoming/<host>_<pid>_<token>/   # zapis w toku (sprzatany po 24 h)
 │   ├── pl_1992_1m_kron86/...
-│   ├── pl_1992_5m_evrf2007/...              # 5m tylko EVRF2007 (regula istniejaca)
+│   ├── pl_1992_5m_evrf2007/...              # 5m, 0.15m, 0.6m, 10m tylko EVRF2007 (rejestr wariantow, 3.1)
+│   ├── pl_1992_0.5m_evrf2007/...            # etykieta K2 w segmencie (0.15m, 0.5m, 0.6m, 1m, 5m, 10m)
+│   ├── pl_1992_tbd_25m_kron86/<hier>/<godlo>.zip   # archiwum GUGiK: plik zrodlowy 1:1 (ADR-041), arkusze roznych skal
 │   ├── pl_1992_1m_evrf2007/bbox/<coords>.tif         # DOWIAZANIE: wycinek PL WCS (4.3)
 │   ├── pl_1992_1m_evrf2007/versions/bbox/2026-10-12_<sha8>/<coords>.tif   # wersja wycinka
 │   ├── pl_2000_1m_evrf2007/6/179/12/20/6.179.12.20.asc
@@ -691,7 +776,7 @@ data/
 │   ├── cz_dmr5g_evrf2007/...
 │   └── cz_dmr4g_bpv/CTES/96/CTES96.tif      # DOWIAZANIE; sidecar wersji z extra.http (ETag)
 ├── nmpt/
-│   ├── pl_1992_1m_evrf2007/...              # (+ _kron86, + pl_2000_...)
+│   ├── pl_1992_1m_evrf2007/...              # (+ _kron86, + pl_2000_..., + 0.5m, 0.6m, xyz_0.5m/xyz_1m KRON86)
 │   └── pl_1992_1m_evrf2007/bbox/<coords>.tif # DOWIAZANIE: wycinek NMPT WCS
 ├── orto/pl_1992/...                         # bez ukladu pionowego
 ├── orto/pl_1992_cir/...                     # wariant CIR (B/W: pl_<uklad>_bw), E12
@@ -724,6 +809,12 @@ data/
    lowercase. Uklad PL: `1992` / `2000`. Uklad pionowy: `kron86` /
    `evrf2007` / `bpv`. CZ nie niesie ukladu poziomego, bo nazwa datasetu
    (`dmr5g`/`dmr4g`) wyznacza go 1:1 (natywnie zawsze EPSG:5514).
+   Czlon NMT/NMPT PL miedzy ukladem a `<vcrs>` pochodzi z szablonu
+   deskryptora (`registry.py::_pl_sheet_source`, sekcja 3.1; to nie
+   `<wariant>` z reguly 5): siatka ASC — sama etykieta
+   (`pl_1992_0.5m_evrf2007`), archiwum — token formatu przed etykieta
+   (`pl_1992_tbd_25m_kron86`, `pl_1992_ascii-nmt_1m_evrf2007`), format
+   bez rozdzielczosci — sam token (`pl_1992_tin_kron86`).
 2. Hierarchia wewnatrz segmentu jest bez zmian — `parser_registry.path_parts`:
    PL-1992 `N-34-130-D-d-2-4` -> `N-34/130/D/d/2/4`, PL-2000 `6.179.12.20` ->
    `6/179/12/20`, TM33 `302_5550` -> `302/5550`, SM5 `CTES96` -> `CTES/96`.
@@ -738,8 +829,10 @@ data/
    pikseli od NW, wiec E/S moze odbiegac o do 0,5 px (sekcja 4.3). PL bez
    `--cutout` zapisuje arkusze w hierarchii godel (sekcja 4.2).
 4. Rozdzielczosc wchodzi do segmentu tylko tam, gdzie jest parametrem API
-   (NMT/NMPT). Nie ma jej dla CZ (`dmr5g` to z definicji 2 m, `dmr4g` 5 m)
-   ani dla orto/LAZ (brak takiego parametru).
+   (NMT/NMPT): etykieta K2 z rejestru (`0.15m`, `0.5m`, `0.6m`, `1m`, `5m`,
+   `10m`; archiwa takze `15m`..`50m`), ta sama co `--resolution`
+   i `resolution` sidecara. Nie ma jej dla CZ (`dmr5g` to z definicji 2 m,
+   `dmr4g` 5 m) ani dla orto/LAZ (brak takiego parametru).
 5. `<wariant>` rozroznia pliki tego samego godla i ukladu, ktore nie sa tym
    samym produktem (E12, 2026-10-06). Wariant deklaruje tylko orto
    (`storage_variant`; w `BaseProvider` domyslnie `None`): RGB
@@ -969,7 +1062,7 @@ wewnetrzne nie.
 `cadastre download` i `models3d download` (grupy ADR-039, ADR-042 D9)
 to `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`) - jeden orkiestrator dla paczek jednostek
-i obiektow obszaru, sterowany parametrami kanalu deskryptora (sekcja 4.9).
+i obiektow obszaru, sterowany parametrami kanalu deskryptora (sekcja 4.10).
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
@@ -979,13 +1072,45 @@ wielkosc liter i liczby PL-1992 bez zer wiodacych (od 0.7.1, A7:
 cyfry tylko ASCII `0-9` we wszystkich ukladach godel (PL-1992, PL-2000, CZ;
 od 0.7.2 — cyfry pelnej szerokosci itp. to `ParseError`); godlo
 PL-1992 grubsze niz 1:10000 rozwija sie do arkuszy 1:10000
-(`download_hierarchy`), godlo PL-2000 pobierane jest bezposrednio. Dla
-kazdego arkusza pyta WMS skorowidz (`GetFeatureInfo`, warstwy wykryte lazy
-przez `GetCapabilities` — ADR-020). `providers/pl/skorowidz.py` parsuje
-pelne rekordy; filtruje cale godlo, zgodny uklad i rozdzielczosc
-(dla orto wariant koloru z `color`), wybiera (strategia `newest`) rekord z najnowsza data w pierwszej
-warstwie z dopasowaniem; remis rozstrzyga `dt_pzgik`, URL. Uklad wysokosci
-wybiera wylacznie endpoint (osobny WMS skorowidza na uklad); przed pobraniem
+(`download_hierarchy`), godlo PL-2000 pobierane jest bezposrednio (archiwa
+ADR-041: arkusze ze skorowidza, sekcja 4.2).
+
+**Skorowidz NMT/NMPT: WFS (od 0.8.0, ADR-041).** Provider NMT/NMPT
+obsluguje JEDEN wariant rejestru (sekcja 3.1: produkt, format,
+rozdzielczosc, uklad wysokosci) i czyta rekordy ze skorowidza WFS tego
+wariantu (`IndexRef`; `providers/pl/skorowidz_wfs.py`,
+`WfsSkorowidzLayersMixin`): typy roczne uslugi z GetCapabilities
+(`WfsIndex.feature_types`: wzorzec `^(?:gugik:)?<prefiks><rok>$`,
+najnowsze pierwsze, typ rodziny spoza wzorca = `logger.warning`, brak
+typow = `DownloadError`) i JEDEN `GetFeature` ze wszystkimi typami
+(`TYPENAMES`), `SRSNAME` i `BBOX` w URN `EPSG::2180` z osiami (N,E),
+kwadrat 20 m w srodku arkusza (`sheet_query_bbox`), `COUNT=1000`.
+Serwer ignoruje `FILTER`, wiec kazdy filtr jest po stronie klienta;
+kolejne strony wylacznie po atrybucie `next` (z tej samej uslugi).
+Odpowiedz kilku typow, ktora ma `next` (nie miesci sie na stronie), jest
+odrzucana i kazdy typ jest odpytywany osobno — serwer stronicuje kilka
+typow niespojnie (powtorzenia i pominiecia, pomiar 2026-10-15), jeden typ
+spojnie. `numberReturned` rozny od liczby obiektow, obiekt powtorzony na
+kolejnej stronie, `next` spoza uslugi, petla stron, `ExceptionReport` albo
+nie-XML przy HTTP 200 = `DownloadError` z dopiskiem `wynik bylby
+niepelny` — nigdy pusty wynik (pusta, poprawna kolekcja = brak rekordow,
+np. morze); blad transportu zachowuje `status_code` (I-1 nizej).
+`parse_index_feature` mapuje pola WFS na klucze rekordu skorowidza
+(sekcja 3.2), `layer` = typ obiektu (`SkorowidzNMT2025`); obiekt bez URL
+`https` albo z godlem spoza `SheetParser` (np. godla 8-czlonowe PL-1992)
+nie jest rekordem. Ortofotomapa zostaje na WMS (`SkorowidzLayersMixin`:
+`GetFeatureInfo`, warstwy wykryte lazy przez `GetCapabilities` — ADR-020).
+
+`providers/pl/skorowidz.py` filtruje rekordy (twardy filtr ADR-028,
+`SkorowidzQuery`): cale godlo, zgodny uklad i rozdzielczosc, dla
+NMT/NMPT takze **format** wariantu (`source_format`: pole `format`
+rekordu i koncowka sciezki URL musza wskazywac ten sam format — ten sam
+arkusz bywa w skorowidzu jako siatka `.asc` i archiwum `.xyz.zip`; siatki
+kampanii 72675 (NMT 2019, 42 rekordy) maja nazwe `.xyz` i sa siatkami ASC), dla orto wariant
+koloru z `color`; wybiera (strategia `newest`) rekord z najnowsza data
+w pierwszej grupie warstw z dopasowaniem (NMT/NMPT: jedna grupa = wszystkie
+typy roczne uslugi); remis rozstrzyga `dt_pzgik`, URL. Uklad wysokosci
+wybiera wylacznie usluga (osobny skorowidz na uklad); przed pobraniem
 `verify_record_vertical_crs` (`download/campaigns.py`; wywolania w
 `DownloadManager._fetch_campaigns` dla `newest` i `all` oraz w
 `GugikProvider.download`) porownuje pole rekordu `ukladWspolrzednychPionowych`
@@ -997,16 +1122,21 @@ pobierane, arkusz konczy sie porazka); brak pola = rekord przyjety (log
 zapisuje `extra.source.declared_vertical_crs`, takze w cache rekordow —
 niezgodny rekord z cache daje ten sam blad, odswiezenie: `--force`. Brak zgodnego rekordu
 po poprawnych odpowiedziach warstw = `NoCoverageError`, np. dla PL-2000
-1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. NMT/NMPT (od 0.7.2,
-`GugikProvider._variant_hints`): przy braku pokrycia provider pyta pozostale
-warianty produktu z `WMS_INDEX_ENDPOINTS` (rozdzielczosc, uklad
-wysokosci; jedno GetFeatureInfo ze wszystkimi warstwami wariantu, ten sam
-punkt i twardy filtr, timeout `DEFAULT_TIMEOUT`) i dopisuje podpowiedz
-`Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 — uzyj --resolution 1m`
-(bez godla: jedna linia `Info:` dla wielu arkuszy). Blad zapytania
-o wariant (jedna proba, bez ponowien) = brak tej podpowiedzi, `logger.warning`
-i pominiecie tego wariantu do konca zycia providera, nigdy zmiana wyniku;
-trafienie w cache braku pokrycia nie odpytuje sieci. Awaria warstwy,
+1:10000 z samymi potomkami podpowiedz `--scale 1:2000`. NMT/NMPT (P10
+od 0.7.2, po WFS od 0.8.0; `GugikProvider._no_coverage`): rekordy
+arkusza innych wariantow rejestru przychodza w tej samej odpowiedzi
+WFS (wszystkie formaty i rozdzielczosci punktu) i daja podpowiedz bez
+sieci, np. `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 - uzyj
+--resolution 1m` — najpierw warianty tego samego formatu, inne formaty
+(`--format XYZ`) tylko gdy takich nie ma; rekordy spoza rejestru daja
+jedna linie `... tylko rekordy, ktorych Kartograf nie pobiera: ...`.
+Drugi uklad wysokosci (`_variant_hints`): jedno `GetFeature` do uslugi
+drugiego ukladu (wszystkie typy, ten sam kwadrat i twardy filtr, jedna
+proba bez ponowien, timeout `DEFAULT_TIMEOUT`). Tekst podpowiedzi jest
+bez godla (jedna linia `Info:` dla wielu arkuszy). Blad zapytania
+o drugi uklad = brak tej podpowiedzi, `logger.warning`
+i pominiecie tej uslugi do konca zycia providera, nigdy zmiana wyniku;
+trafienie w cache braku pokrycia (z podpowiedziami) nie odpytuje sieci. Awaria warstwy,
 raport OGC albo nieoczekiwany szablon = `DownloadError`, nie cichy fallback
 do starszej kampanii. Zapytania i pobrania maja do 3 prob z backoffem
 (ponawiane: siec, 429, 5xx; inne 4xx koncza przy pierwszej probie)
@@ -1126,12 +1256,20 @@ przy kampaniach: `provider.source_info()` wypelnia przeplyw jednego rekordu
 wersje, na ktora wskazuje dowiazanie, a ta moze byc starsza niz najnowszy
 rekord (D5 albo nieudane pobranie, A12). Przed siecia
 `verify_record_url` (B4): nazwa pliku w URL rekordu musi konczyc sie godlem
-arkusza (`<id>_<numer>_<godlo>.<ext>`, porownanie w postaci kanonicznej);
+arkusza (`<id>_<numer>_<godlo>.<ext>`, porownanie w postaci kanonicznej;
+nazwy archiwow ADR-041 takze z koncowkami `.xyz.zip`, `.zip.zip`,
+`_asc.zip`, `_tin.zip`, prefiksem `NMT-` i godlem bez separatorow);
 URL bez godla albo z innym godlem = `DownloadError` kampanii bez pobierania.
 Plik: format z pola `format` rekordu (nie z URL; brak pola — format
-domyslny produktu), rozszerzenie zawsze kanoniczne (`.asc`/`.tif`; rekord
-72675 z URL `.xyz` to AAIGrid, zwykla kampania `.asc`), po pobraniu `verify_file_format`
-(naglowek AAIGrid / sygnatura TIFF), potem `verify_sheet_extent` (B4,
+domyslny produktu), rozszerzenie zawsze kanoniczne z `FORMATS` rejestru
+(`.asc`/`.tif`; archiwa `.zip`, `.ttn`, `.grd`, `.dxf`, `.dgn`); rekord
+NMT/NMPT, ktorego URL nie zgadza sie z polem `format` (np. siatka z URL
+`.zip`), nie przechodzi twardego filtru formatu i nie jest pobierany
+(nazwa `.xyz` siatek kampanii 72675 jest akceptowana: AAIGrid sprawdzony
+na zywo i ponownie po pobraniu). Po pobraniu `verify_file_format`
+(naglowek AAIGrid / sygnatura TIFF; archiwa: kompletny ZIP z czytelnym
+katalogiem centralnym, sygnatura TTN, naglowek Intergraph GRD/DGN,
+`SECTION` DXF), potem `verify_sheet_extent` (B4,
 tylko `.asc`): zasieg z naglowka ASC (`xllcorner`/`xllcenter`,
 `yllcorner`/`yllcenter`, `ncols`, `nrows`, `cellsize`; wariant `*center`
 przesuniety o pol piksela) musi co najmniej w 50 % powierzchni
@@ -1241,7 +1379,9 @@ przekazanie cache providerowi ogranicza to do raz na 7 dni.
 
 Wynik: `data/nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/<data>_<id>_<sha8>/N-34-130-D-d-2-4.asc`
 (+ `.meta.json`) i dowiazanie `data/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc`;
-dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla orto
+dla NMPT `data/nmpt/pl_1992_1m_evrf2007/...`, dla innych rozdzielczosci
+i archiwow segment wariantu (np. `data/nmt/pl_1992_0.5m_evrf2007/...`,
+`data/nmt/pl_1992_tbd_25m_kron86/.../<godlo>.zip`), dla orto
 `data/orto/pl_1992/...`.
 
 ### 4.2 Bbox / geometria PL bez `--cutout`
@@ -1281,15 +1421,38 @@ nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 `YearRangeError` i przerwanie CALEJ listy przed pobraniem, rowniez przy
 samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
 
+**Archiwa GUGiK (`format` inny niz `ASC`, ADR-041).** Arkusze archiwum
+maja rozne skale (godla 6-czlonowe 1:25000 i 7-czlonowe jednego wariantu,
+arkusze PL-2000), wiec nie wyznacza ich siatka godel, tylko skorowidz:
+`download_data` -> `_download_pl_archive` (`download/data.py`) z obszarem
+jako wypukle wielokaty EPSG:2180 (`--sheet` = rama godla
+`sheet_frame_2180`, `--bbox` = obwiednia `bbox_to_2180`, `--geometry` =
+obwiednie obiektow) wola `GugikProvider.index_sheets(areas, system=,
+min_year=, max_year=)`: rekordy wariantu (twardy filtr formatu,
+rozdzielczosci i ukladu) z typow rocznych w zakresie lat, ktorych rama
+(`msGeometry`, inaczej rama godla) przecina obszar o wiecej niz pasek
+krawedzi (`overlaps_area`: rama zwezona o `EDGE_TOLERANCE_M` = 1 m — sasiad
+stykajacy sie krawedzia nie liczy sie). Dalej zwykly tor arkuszy
+(`DownloadManager.download_sheets`: kampanie, wersje, sidecary,
+`full_sheet/`), ale godla ze skorowidza nie sa rozwijane do 1:10000
+(`DownloadManager` rozpoznaje wariant `source_file`). Pusta lista =
+porazka `no_coverage` z tekstem `Skorowidz GUGiK nie ma plikow ... -
+dostepne dane obszaru: kartograf elevation availability`. `--scale`
+i `--cutout` z archiwum = `ValidationError` przed siecia; `--sheet-system`
+wymagane jak dla siatek. Weryfikacja tresci: `verify_file_format`
+(4.1), bez `verify_sheet_extent` i pomiaru pokrycia.
+
 **WCS (`provider.download_bbox`) w bibliotece: NMT/NMPT 1 m i orto.**
 CLI PL uzywa WCS tylko z `--cutout` (sekcja 4.3); bez tej flagi
 pobiera arkusze OpenData. `GugikProvider.download_bbox` dla NMT 1 m i
-`GugikNmptProvider.download_bbox` dla NMPT daja jednopasmowy GeoTIFF
+`GugikNmptProvider.download_bbox` dla NMPT 1 m daja jednopasmowy GeoTIFF
 float32 z wysokosciami na siatce 1 m EPSG:2180 (bez nodata, maski PRG,
 sidecara i wersji — plik poza magazynem). `DownloadManager.download_bbox`
 usuniete w 0.8.0 (D27, errata 2 ADR-003): wycinek w magazynie to
 `download_pl_cutout`.
-Dla NMT 5 m WCS nie istnieje. NMT KRON86: endpoint
+WCS ma tylko wariant 1 m (kanal `bbox_raster` w rejestrze,
+`is_wcs_available()`); provider innej rozdzielczosci albo archiwum
+daje `ValidationError`. NMT KRON86: endpoint
 `DigitalTerrainModelFormatTIFF`, coverage `DTM_PL-KRON86-NH_TIFF`,
 `image/tiff` float32; NMT EVRF2007: `DigitalTerrainModel`,
 `DTM_PL-EVRF2007-NH`, `image/x-aaigrid`; NMPT KRON86/EVRF2007:
@@ -1340,8 +1503,13 @@ parent_request, cache, on_notice)` -> `PlCutoutResult`;
 Przygotowanie (walidacja bez sieci) i wykonanie sa krokami wewnetrznymi
 (`_prepare_pl_cutout`, `_run_pl_wcs_cutout`), poza API od 0.8.0.
 
-1. `download_pl_cutout` odrzuca rozdzielczosc inna niz 1 m
-   (`ValidationError`; CLI `Error:`), nieobslugiwany pion/CRS docelowy
+1. Wycinek ma tylko wariant 1 m: `download_pl_cutout` nie ma parametru
+   rozdzielczosci (wariant z kanalem WCS z rejestru,
+   `download/cutout.py::wcs_variant`: `pl.gugik.nmt_1m` / `pl.gugik.nmpt`),
+   a `download_data(cutout=True)` przed siecia odrzuca inna rozdzielczosc
+   niz `1m` i archiwum `format` (`ValidationError`; CLI `Error:`, teksty
+   w USAGE 1.3; brak `resolution` = `1m`). `download_pl_cutout` odrzuca
+   nieobslugiwany pion/CRS docelowy
    (`EPSG:2180`, `EPSG:5514`, `EPSG:3045`) i brak bezpiecznej
    przypietej operacji transformacji. Bbox docelowy wyznacza bbox
    zrodla EPSG:2180; dla warpu ma on zapas 4 px na interpolacje.
@@ -1483,7 +1651,9 @@ kraju — osobne pliki i sidecary, wspolny `parent_request`; wymaga to
 wtedy wycinkiem WCS; bez `--cutout` `ValidationError` z podpowiedzia
 `--country pl` (arkusze PL); (2) na obszarze
 spornym flaga bez odpowiednika czeskiego (`--product nmpt|orto`,
-`--vertical-crs KRON86`, `--resolution 1m`) ROZSTRZYGA kraj do `pl`
+`--vertical-crs KRON86`, rozdzielczosc spoza rejestru CZ, np.
+`--resolution 1m` albo `0.5m`, i kazde `--format`;
+`download/area.py::pl_only_flags` czyta rejestry) ROZSTRZYGA kraj do `pl`
 z komunikatem `Info:` zamiast przewracac zadanie; (3) porazka jednego kraju
 przy sukcesie drugiego daje kod 0 i `Warning:` — kod 1 zostaje dla jawnego
 `--country` i dla porazki wszystkich krajow. `Info:`/`Warning:` ida na stderr,
@@ -1550,11 +1720,18 @@ ukladzie (przeliczenie do EPSG:2180 w bibliotece, `area.bbox_to_2180`),
 `check_laz_area(...)` daje plan. Godlo (do 1:10000) i `--geometry`
 sprowadza do bboxa `download_data`; CLI tylko wypisuje wynik.
 Discovery idzie przez
-**WFS** `GetFeature` (WMS skorowidzy LAZ zwraca 401 — ADR-021), a kafle
+**WFS** `GetFeature` (WMS skorowidzy LAZ zwraca 401 — ADR-021) na wspolnym
+transporcie `WfsIndex` (`providers/pl/skorowidz_wfs.py`, od 0.8.0 — ten
+sam klient co skorowidz NMT/NMPT i raport dostepnosci: stronicowanie po
+`next`, kontrola `numberReturned`, blad = `DownloadError` "wynik bylby
+niepelny", sekcja 4.1); uslugi i prefiks typow (`DanePomiaroweLidar
+{EVRF2007,KRON86}`, `SkorowidzDanychPomiarowychLIDAR`) pochodza z rejestru
+wariantow (`variants(product="laz")` -> `IndexRef`;
+`GugikLazProvider.WFS_ENDPOINTS` usuniete w 0.8.0), a kafle
 pobierane sa rownolegle. WFS `urn:ogc:def:crs:EPSG::2180` oczekuje
 osi (N,E): bbox jest wysylany, a `gml:Envelope` i rama `msGeometry`
 czytane w tym porzadku, potem kafle sa filtrowane rzeczywistym przecieciem.
-GetCapabilities ustala roczniki (bez zaszytej listy); jawny `--year`
+GetCapabilities (`WfsIndex.feature_types`) ustala roczniki (bez zaszytej listy); jawny `--year`
 nieobecny w usludze wysokosciowej = `DownloadError` z lista
 dostepnych rocznikow, przed GetFeature;
 przedzial bez rocznika uslugi rowniez daje `DownloadError`. Przy fladze
@@ -1766,7 +1943,7 @@ i `validate_request`): wariant przez `transport.unit_package.select_variant`
 spoza listy = lista lat), `layers`/`keep_raw` z `year` = blad, a `GML`
 bez `year` = blad z podpowiedzia. Pobranie idzie zadaniami jednostek
 orkiestratora kolekcji (`package_job`/`run_job`/`inspect_job`, sekcja
-4.9) z sesja HTTP i opcja `timeout` dostawcy BDOT10k
+4.10) z sesja HTTP i opcja `timeout` dostawcy BDOT10k
 (`Bdot10kProvider.session()`), na torze planu `landcover`. Obszar =
 powiaty z PRG jak dla biezacych paczek (`extra.parent_request`, blad
 powiatu w `failed`); `teryt` bez paczki w roczniku (HTTP 404, np. po
@@ -1838,7 +2015,124 @@ Odpowiedzi trafiaja do `MetadataCache`: obszar (EPSG:2180) -> lista kodow
 w `teryt_bbox_cache` (TTL jak pozostale tabele, takze pusta lista), punkt
 -> kod w `teryt_cache`; `kartograf cache stats` liczy oba w `Wpisy TERYT`.
 
-### 4.9 Kolekcje: paczki jednostek i obiekty obszaru (ADR-042)
+### 4.9 Raport dostepnosci (`elevation availability`, ADR-041)
+
+`check_availability(*, product, country=None, sheet=None, bbox=None,
+geometry=None, layer=None, year=None, min_year=None, max_year=None,
+cache=True, force=False, on_notice=None) -> AvailabilityReport`
+(`download/availability.py`) odpowiada, dla jakich lat, ukladow arkuszy,
+rozdzielczosci, ukladow wysokosci i formatow obszar ma komplet PELNYCH
+arkuszy NMT/NMPT (LAZ: kafli) wg skorowidza GUGiK — bez pobierania
+danych. CLI `kartograf elevation availability` (`cli/availability_cmd.py`)
+tylko tlumaczy flagi (`--bbox` -> `BBox`, `--force`) i drukuje wynik:
+tabela (kombinacje od najnowszego roku), `--details` (godla arkuszy
+niepelnych, lad bez arkuszy, polecenia kazdej kombinacji), stopka
+z najnowsza kompletna kombinacja, `--json` = dokladnie
+`AvailabilityReport.to_json()`. Raport nie jest komenda danych projektu
+(brak `_task`; `project add` go odrzuca). Przyklady i wydruki na zywo:
+USAGE 1.7.
+
+**Walidacja przed siecia** (teksty jak `download_data`): jeden wybor
+obszaru; `product` z `AVAILABILITY_PRODUCTS` (`nmt`, `nmpt`, `laz`);
+`sheet` tylko godlo PL (PL-1992/PL-2000, kraj z godla); `bbox`/`geometry`
+wymagaja `country`; `country` z `AVAILABILITY_COUNTRIES` (dzis `pl`;
+plan B dopisze `cz` i `auto` bez zmiany ksztaltu raportu); granice lat
+jak w pobieraniu (`year` = `min_year` = `max_year`).
+
+**Algorytm:**
+
+1. **Obszar** -> wypukle wielokaty (E, N) w EPSG:2180 — ten sam obszar,
+   ktory pokrywa pobranie tego wyboru: NMT/NMPT `sheet` = rama godla
+   (`sheet_frame_2180`: narozniki w ukladzie godla, krawedzie zageszczone;
+   rama PL-2000 nie jest prostokatem w EPSG:2180), `bbox` = obwiednia
+   `bbox_to_2180`, `geometry` = obwiednie obiektow warstwy
+   (`read_feature_bboxes`, jak arkusze `download_data`); LAZ = obwiednia
+   ramy arkusza albo calej geometrii (jak `download_laz_area`).
+2. **Uslugi i typy:** uslugi WFS produktu z rejestru (`variants(product=)`
+   -> `IndexRef`, jedna na uklad wysokosci), ich typy roczne
+   (`WfsIndex.feature_types`) i wybor typow z zakresu lat; zaden typ
+   w zakresie = `ValidationError` z rocznikami per uklad.
+3. **Rekordy:** jeden `WfsIndex.features(obwiednia, typy)` na usluge
+   (wszystkie strony; reguly i bledy jak w 4.1) — ten sam klient i ten
+   sam parser (`parse_index_feature`; LAZ: `laz_tile`) co pobieranie,
+   plus obrys `msGeometry` (`feature_footprint`).
+4. **Lad:** maska PRG obwiedni (`fetch_land_mask`: `A00` minus `W02`
+   i `W03`, jak wycinek 4.3).
+5. **Kombinacje** (`_group`): rekord nalezy do obszaru, gdy jego rama
+   przecina obszar o wiecej niz pasek krawedzi (`overlaps_area`, regula
+   arkuszy archiwow z 4.2). Wariant rekordu = `source_format` (format i
+   URL) + etykieta `char_przestrz` + uklad wysokosci uslugi ->
+   `ProductVariant` rejestru; klucz kombinacji NMT/NMPT: (rok typu,
+   uklad PL-1992/PL-2000, deskryptor wariantu = format i etykieta, uklad
+   wysokosci); LAZ: (rok, uklad, uklad wysokosci). Archiwa z rejestru sa
+   kombinacjami jak siatki. Rekordy bez wariantu (format niezgodny z URL,
+   format lub wariant spoza rejestru, godlo spoza `SheetParser` — np.
+   8-czlonowe godla ASCII NMT 10 m i czesci ASC 1 m — brak URL `https`
+   albo ukladu) nie sa kombinacja: jedna `Notice("info",
+   INDEX_UNSUPPORTED, ...)` (`index_unsupported`) z formatem,
+   rozdzielczoscia, ukladem wysokosci, latami, liczba arkuszy i powodem.
+6. **Pomiar** (`_measure`): siatka 1 m wyrownana do pelnych metrow
+   obwiedni, srodki pikseli (`rasterize`, `all_touched=False`), pasy
+   wierszy po 4 Mpx (`_STRIP_PX`, jak `LandMask.apply`); w kazdym pasie
+   klasy maski z `LandMask.burn`. `area_m2` = piksele obszaru w kraju,
+   `land_m2` = piksele ladu (1 px = 1 m2). `target` = obszar & lad; dla
+   `sheet` NMT/NMPT bez pasa `EDGE_TOLERANCE_M` = 1 m przy ramie
+   (`_inner`: rama liczona z godla rozni sie od ramy GUGiK o centymetry),
+   `bbox`/`geometry` mierzone dokladnie. Per kombinacja: piksele
+   `target` poza suma obrysow arkuszy z rekordem TAK (`missing`) i poza
+   obrysami wszystkich arkuszy kombinacji (`uncovered`). `complete` <=>
+   `missing == 0`; `uncovered_m2` = `uncovered`; bez progu.
+7. **Wynik:** `AvailabilityCombination` z `source` (klucz deskryptora),
+   `year`, `acquisition_dates`/`published` (min/max `akt_data`/
+   `dt_pzgik`), `campaigns` (`nr_zglosz`), `horizontal`, `resolution`
+   (etykieta albo `None`), `vertical_crs`, `format`, `densities`
+   (gestosci nominalne LAZ), `complete`, `sheets_full` (arkusz z co
+   najmniej jednym rekordem TAK kombinacji), `sheets_partial` (tylko NIE),
+   `uncovered`, `uncovered_m2`, `download_hint`; `sheets_missing`
+   i `size_bytes` to pola CZ (plan B; PL puste/`None`). Kolejnosc: rok
+   malejaco, uklad, rozdzielczosc, uklad wysokosci, format (kolejnosc
+   `FORMATS`). `AvailabilityReport(request, checked_at, areas, combinations,
+   notices, ok, schema="kartograf-availability/1")`; `areas` =
+   `AvailabilityArea(country, crs, bounds, area_m2, land_m2)`;
+   `checked_at` z `kartograf._clock`; `ok` = `False` tylko, gdy czesci
+   zadania nie dalo sie sprawdzic (plan B, `auto`) — w PL zawsze `True`.
+   `to_json()` = `json.dumps(asdict(...), ensure_ascii=False, indent=2) + "\n"`
+   (jak `UpdatePlan.to_json`).
+
+**Podpowiedz pobrania** (`_download_hint`): krotka polecen do wklejenia po
+`kartograf ` albo po `kartograf project add NAZWA ` — bez `--output`
+(magazyn pochodzi z `--output` uzytkownika albo z projektu, ADR-040).
+Obszar jak w zadaniu (`--country pl --bbox ... [--bbox-crs]` albo
+`--geometry PLIK [--layer]` + `--sheet-system`; `--sheet` — samo godlo,
+gdy jego pobranie siega arkuszy kombinacji, inaczej po poleceniu na
+arkusz), dla siatek PL-2000 po jednym poleceniu na skale arkuszy
+(`--scale`), wariant (`--format` dla archiwow, `--resolution`, gdy
+wariant ma etykiete, `--vertical-crs`), `--year`, a `--full-sheet`, gdy
+w ktoryms arkuszu najnowszy rekord roku jest NIE, a pelny rekord tego
+roku istnieje. LAZ: obszar + `--vertical-crs` + `--year`. Polecenie
+wybiera dokladnie arkusze kombinacji (test
+`test_report_sheets_equal_download_selection`).
+
+**Cache:** tabela `index_area_cache` w `MetadataCache`
+(`get_index_area`/`set_index_area`, payload JSON, TTL jak rekordy —
+`DEFAULT_TTL_SECONDS`, 7 dni): klucze `wfs-types|<endpoint>` (typy roczne
+uslugi), `wfs|<endpoint>|<typy>|<obwiednia w mm>` (rekordy obwiedni
+z obrysami) i `prg|<obwiednia w mm>` (maska ladu). Cache otwiera
+`open_cache(cache, force=force)`; `force=True` (CLI `--force`) pomija
+odczyt i nadpisuje wpisy. Ponowny raport tego samego obszaru nie pyta
+sieci (pomiar 2026-10-15, 16 km2: ok. 5–7 s z siecia, 0,6–1,5 s
+z cache); `kartograf cache stats` liczy wpisy w `Wpisy obszarow
+skorowidza`.
+
+**Bledy:** awaria uslugi skorowidza albo PRG = `DownloadError` (CLI
+`Error:`, kod 1), nigdy pusty raport; pusta, poprawna odpowiedz = raport
+bez kombinacji (CLI: `Brak arkuszy ... dla obszaru w skorowidzu GUGiK`,
+kod 0). Raport nie prosi o zaden plik danych
+(`test_availability_never_downloads`: atrapa sesji odrzuca kazdy URL
+spoza skorowidza i PRG). Zgodnosc CLI = API: `--json` daje ten sam tekst
+co `check_availability(...).to_json()` z tym samym cache.
+
+### 4.10 Kolekcje: paczki jednostek i obiekty obszaru (ADR-042)
 
 **Komenda w bibliotece.** `kartograf boundaries|cadastre|models3d download`
 = `download_collection(...)`/`check_collection(...)`
@@ -2025,6 +2319,18 @@ nominalna dokladnosc `KNOWN_PATHS`: slowacka operacja ma mylace
 0,5 m i moze przejsc filtr AOI w Czechach. Wlasna siatka wynikowa
 powinna zachowac dokladny piksel i przypieta operacje w sidecarze.
 
+**Nowa rozdzielczosc albo format istniejacego produktu PL (NMT/NMPT)** to
+wpis rejestru, nie kod: jedna linia `_pl_sheet_source(produkt, etykieta,
+uklady_wysokosci, format=...)` w `registry.py::_PL_SHEET_SOURCES` (ADR-041,
+sekcja 3.1). Klucz deskryptora, segment, rozszerzenie, walidacja
+`--resolution`/`--vertical-crs`/`--format`, teksty `--help`,
+`list-sources`, twardy filtr rekordu skorowidza, podpowiedzi P10
+i kombinacje raportu dostepnosci czytaja rejestr. Nowy format archiwum
+wymaga dodatkowo wpisu `FileFormat` w `sources/variants.py::FORMATS`
+(token, nazwa pola `format`, rozszerzenie, koncowki URL) i weryfikacji
+tresci w `download/campaigns.py::verify_file_format`. Nowy kanal WCS
+(wycinek) to osobna decyzja — dzis tylko warianty 1 m.
+
 Nowa **komenda zapisujaca dane** (w tym `download` nowej grupy) musi
 otrzymac pozycje w `kartograf/project/commands.py::COMMANDS`: dozwolone
 opcje zadania, wspolna z pobraniem walidacja bez sieci, funkcja pobrania
@@ -2040,7 +2346,7 @@ wojewodztwo, plik krajowy) albo obiekty obszaru z WFS 2.0 / ArcGIS REST to
 wpis deskryptora z `AccessChannel.params` (`UnitPackageParams` albo
 `FeatureBBoxParams`, sekcja 3.1) - bez providera i bez kodu silnika:
 segment = `storage_subdir` + tokeny wariantu (sekcja 3.3 regula 9), kanal
-wynika z rodzaju wyboru (sekcja 4.9), sidecar, wersje i plan sa wspolne.
+wynika z rodzaju wyboru (sekcja 4.10), sidecar, wersje i plan sa wspolne.
 Kolejnosc osi BBOX (`axis_order`) potwierdz testem na prawdziwej
 odpowiedzi uslugi (zamiana osi daje pusty wynik bez bledu), kanal dopisz
 do inwentarza sygnalow testow rejestru, fixtury nagraj z prawdziwych

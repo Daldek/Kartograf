@@ -4,7 +4,8 @@ DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
 Every CLI command has one library function with the same choices and the same
 result (ADR-037): ``elevation download`` and ``imagery download`` =
-``download_data``/``check_data``, ``landcover download`` and ``soil download`` =
+``download_data``/``check_data``, ``elevation availability`` =
+``check_availability``, ``landcover download`` and ``soil download`` =
 ``LandCoverManager.download``/``.check``,
 ``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``,
 ``boundaries download``, ``cadastre download`` and ``models3d download`` =
@@ -39,6 +40,17 @@ Example usage::
         vertical_crs="EVRF2007",
     )
     print([item.file.path for item in report.files], report.ok)
+
+    # Which years/resolutions an area has as a complete set of full sheets
+    # (`elevation availability`): index and PRG only, nothing is downloaded
+    from kartograf import check_availability
+    availability = check_availability(
+        product="nmt",
+        country="pl",
+        bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
+    )
+    newest = next(c for c in availability.combinations if c.complete)
+    print(newest.year, newest.resolution, newest.download_hint[0])
 
     # Download NMT data (one sheet from GUGiK OpenData); every data choice
     # (product, resolution, vertical CRS, output) is explicit
@@ -78,6 +90,12 @@ from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.area import parent_request_for
+from kartograf.download.availability import (
+    AvailabilityArea,
+    AvailabilityCombination,
+    AvailabilityReport,
+    check_availability,
+)
 from kartograf.download.campaigns import CampaignRef
 from kartograf.download.collections import (
     CollectionReport,
@@ -203,6 +221,11 @@ __all__ = [
     "download_collection",
     "check_collection",
     "CollectionReport",
+    # Availability report (`elevation availability`, ADR-041)
+    "check_availability",
+    "AvailabilityReport",
+    "AvailabilityCombination",
+    "AvailabilityArea",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",

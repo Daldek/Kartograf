@@ -23,6 +23,8 @@ BBOX_PL = BBox(500000, 300000, 501000, 301000, "EPSG:2180")
 # Cieszyn: a bbox crossing the PL-CZ border
 BORDER = BBox(18.60, 49.73, 18.66, 49.76, "EPSG:4326")
 PL_1M = {"resolution": "1m", "vertical_crs": "EVRF2007"}
+# An archive variant (ADR-041): sheets of any scale come from the WFS index
+TBD_25M = {"format": "TBD", "resolution": "25m", "vertical_crs": "EVRF2007"}
 AUTO = {
     "country": "auto",
     "resolution": {"pl": "1m", "cz": "2m"},
@@ -84,6 +86,14 @@ INVALID_DATA = {
         "country": "pl",
         "sheet_system": "1992",
         **PL_1M,
+    },
+    "archive-cutout": {
+        "product": "nmt",
+        "bbox": BBOX_PL,
+        "country": "pl",
+        "cutout": True,
+        "horizontal_crs": "EPSG:2180",
+        **TBD_25M,
     },
 }
 
@@ -151,6 +161,21 @@ VALID_DATA = {
         "product": "laz",
         "sheet": "N-34-130-D-d-2-4",
         "vertical_crs": "EVRF2007",
+    },
+    "pl-archive-sheet": {"product": "nmt", "sheet": G, **TBD_25M},
+    "pl-archive-bbox": {
+        "product": "nmt",
+        "bbox": BBOX_PL,
+        "country": "pl",
+        "sheet_system": "1992",
+        **TBD_25M,
+    },
+    "pl-archive-geometry": {
+        "product": "nmt",
+        "geometry": "area.shp",
+        "country": "pl",
+        "sheet_system": "1992",
+        **TBD_25M,
     },
 }
 

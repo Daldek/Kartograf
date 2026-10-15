@@ -413,6 +413,7 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                     "country": "str",
                     "resolution": "per_country",
                     "vertical_crs": "per_country",
+                    "format": "str",
                     "sheet_system": "str",
                     "scale": "str",
                     "cutout": "flag",

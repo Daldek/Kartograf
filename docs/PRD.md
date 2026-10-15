@@ -85,9 +85,13 @@ Docelowo (v1.0.0, sekcja 8) dochodzą:
 **Status:** Production
 
 #### Description
-Pobieranie danych wysokościowych NMT z GUGiK w rozdzielczościach 1m i 5m
-(5m tylko EVRF2007), w układach wysokościowych EVRF2007 i KRON86 (wybór
-wymagany od 0.8.0, bez wartości domyślnej).
+Pobieranie danych wysokościowych NMT z GUGiK we wszystkich rozdzielczościach
+siatek ASC publikowanych przez GUGiK — rejestr wariantów (ADR-041,
+`kartograf.sources.variants`): EVRF2007 0.15m, 0.5m, 0.6m, 1m, 5m, 10m;
+KRON86 0.5m, 1m — oraz archiwów GUGiK jako plików źródłowych, w układach
+wysokościowych EVRF2007 i KRON86 (wybór wymagany od 0.8.0, bez wartości
+domyślnej). Przed pobraniem raport dostępności mówi, jakie kombinacje ma
+obszar.
 
 #### Requirements
 - Godło PL-1992 (`SheetParser`, skale 1:1M–1:10k) i PL-2000 (`Parser2000`,
@@ -98,12 +102,33 @@ wymagany od 0.8.0, bez wartości domyślnej).
 - `--bbox` / `--geometry` (SHP/GPKG) bez `--cutout` rozwija obszar na
   listę arkuszy OpenData (`--sheet-system {1992,2000}`); stykające się krawędzie
   nie są przecięciem.
-- Wybór pliku arkusza ze skorowidza GUGiK (ADR-028): warstwy wyłącznie
-  z GetCapabilities, twardy filtr (całe godło, układ, rozdzielczość),
-  najnowsza `aktualnosc`; brak zgodnego rekordu = `NoCoverageError`
-  z podpowiedzią, bez cichego fallbacku na inny układ albo rozdzielczość.
+- Wybór pliku arkusza ze skorowidza WFS GUGiK (ADR-028, ADR-041): typy
+  roczne wyłącznie z GetCapabilities, twardy filtr (całe godło, układ,
+  rozdzielczość, format zgodny z URL pliku), najnowsza `aktualnosc`; brak
+  zgodnego rekordu = `NoCoverageError` z podpowiedzią innego wariantu
+  z rejestru, bez cichego fallbacku na inny układ, rozdzielczość albo
+  format. Niepełna strona WFS = `DownloadError`, nigdy pusty wynik.
   Rekordy i brak pokrycia są cache'owane w `MetadataCache` (TTL 7 dni,
   `--force` omija odczyt).
+- Warianty (rozdzielczość, układ wysokości, format) wyłącznie z rejestru:
+  walidacja CLI/API, `--help`, `kartograf elevation list-sources`, segment
+  magazynu (`nmt/pl_1992_0.5m_evrf2007/`) i filtr rekordu czytają jedną
+  definicję; kombinacja spoza rejestru = `ValidationError` przed siecią
+  z listą dostępnych etykiet.
+- Archiwa GUGiK (`--format XYZ|ASCII-NMT|TBD|TIN|TTN|GRD|DXF|DGN`): plik
+  źródłowy 1:1 z sidecarem jako wersja w magazynie (segment z tokenem
+  formatu, np. `nmt/pl_1992_tbd_25m_kron86/`), bez konwersji, wycinka
+  i mozaiki; arkusze (różne skale) wyznacza skorowidz; `--scale`
+  i `--cutout` z archiwum = błąd. Godła 8-członowe (ASCII NMT 10 m, część
+  ASC 1 m) są poza zakresem.
+- Raport dostępności (`kartograf elevation availability` =
+  `check_availability`): dla obszaru PL (godło, bbox, geometria) i zakresu
+  lat kombinacje rok × układ arkuszy × rozdzielczość × układ wysokości ×
+  format (także NMPT i kafle LAZ) z liczbą arkuszy pełnych/niepełnych
+  i kompletnością na lądzie PRG (siatka 1 m), podpowiedź polecenia
+  pobrania (bez `--output`, także dla `project add`), `--details`,
+  `--json` (`kartograf-availability/1`); bez pobierania danych, cache
+  metadanych (`--force`). USAGE 1.7.
 - Lista arkuszy toleruje brak pokrycia (R5): arkusz bez danych = `Warning:`
   i status `no_coverage`, kod 0 przy co najmniej jednym pliku; twarda
   awaria pobrania = kod 1 z pełną listą porażek.
@@ -152,9 +177,19 @@ kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
 bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
 path = kron.download_bbox(bbox, Path("area.tif"))
 
-# Rozdzielczość 5m (tylko EVRF2007)
-manager_5m = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="5m"))
-result_5m = manager_5m.download_sheet("N-34-130-D-d-2-4")  # DownloadResult
+# Inne rozdzielczości z rejestru (np. 0.5m; 5m, 0.15m, 0.6m, 10m tylko EVRF2007)
+manager_05 = DownloadManager("./data", GugikProvider(vertical_crs="EVRF2007", resolution="0.5m"))
+result_05 = manager_05.download_sheet("N-33-58-A-c-1-3")  # DownloadResult
+
+# Archiwum GUGiK jako plik źródłowy (format=; segment nmt/pl_<układ>_tbd_25m_kron86)
+tbd = GugikProvider(vertical_crs="KRON86", resolution="25m", format="TBD")
+
+# Raport dostępności (bez pobierania) = kartograf elevation availability
+from kartograf import check_availability
+availability = check_availability(product="nmt", country="pl",
+                                  bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"))
+complete = [c for c in availability.combinations if c.complete]
+print(complete[0].download_hint if complete else availability.to_json())
 ```
 
 #### CLI Commands
@@ -167,7 +202,11 @@ kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --res
 kartograf elevation download --bbox 771000,509000,772000,510000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf elevation download --bbox 19.93,50.05,19.95,50.07 --bbox-crs EPSG:4326 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf elevation download --sheet N-34-130-D --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-33-58-A-c-1-3 --product nmt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010 -o ./data
+kartograf elevation list-sources
+kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
 kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
@@ -185,7 +224,11 @@ kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs E
 
 #### Description
 Pobieranie danych NMPT (Digital Surface Model) z GUGiK — teren + obiekty powierzchniowe (drzewa, budynki).
-Tylko 1m; układy wysokościowe KRON86 i EVRF2007. Wybór rekordu skorowidza
+Rozdzielczości z rejestru wariantów: siatki ASC EVRF2007 0.5m, 0.6m, 1m,
+KRON86 0.5m, 1m; archiwa XYZ 0.5m i 1m (KRON86). `--resolution` wymagane
+od 0.8.0 (BREAKING: do 0.7.x tylko 1m bez flagi; `GugikNmptProvider(...,
+resolution=)` wymagane); wycinek `--cutout` i WCS tylko 1m. Raport
+dostępności: `--product nmpt` (sekcja 3.1). Wybór rekordu skorowidza
 i kampanie jak dla NMT (sekcje 3.1, 3.11). CLI `--bbox` bez
 `--cutout` pobiera arkusze OpenData; z `--cutout` wycinek WCS
 (sekcja 3.10). `GugikNmptProvider.download_bbox` zwraca wysokosci
@@ -196,8 +239,8 @@ float32 z WCS, nie kolorowy TIFF.
 from pathlib import Path
 from kartograf import BBox, GugikNmptProvider
 
-# NMPT provider (tylko 1m, KRON86 lub EVRF2007)
-provider = GugikNmptProvider(vertical_crs="EVRF2007")
+# NMPT provider (resolution wymagane od 0.8.0; WCS/download_bbox tylko 1m)
+provider = GugikNmptProvider(vertical_crs="EVRF2007", resolution="1m")
 provider.download("N-34-130-D-d-2-4", Path("./sheet.asc"))
 
 # Przez bbox (WCS)
@@ -207,8 +250,10 @@ provider.download_bbox(bbox, Path("./area.tif"))
 
 #### CLI Commands
 ```bash
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --bbox 771000,509000,772000,510000 --product nmpt --country pl --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 771000,509000,772000,510000 --product nmpt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation availability --product nmpt --sheet M-34-64-D-d-2-1
 ```
 
 ---
@@ -552,7 +597,8 @@ DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
   scalania PL+CZ — R6, etap 2). Kod 0 = sukces co najmniej jednego kraju;
   przy porażce drugiego `Warning:`.
 - Opcje bez odpowiednika czeskiego (`--product nmpt|orto`, `--vertical-crs
-  KRON86`, `--resolution 1m`) rozstrzygają obszar sporny do PL z `Info:`.
+  KRON86`, rozdzielczość, której CUZK nie ma, np. `--resolution 1m` albo
+  `0.5m`, oraz `--format`) rozstrzygają obszar sporny do PL z `Info:`.
 - Żądania do CUZK wyłącznie w natywnym EPSG:5514; obszar CZ to zawsze
   jeden wycinek i wymaga `--cutout --horizontal-crs {EPSG:2180,EPSG:5514,
   EPSG:3045}` (ADR-038; tylko `--bbox`/`--geometry`); reprojekcja pozioma
@@ -608,7 +654,8 @@ Wynik: `<segment>/bbox/<coords>.tif` (dowiazanie do wersji w
 pod `auto` PL i CZ to dwa pliki ze wspolnym `extra.parent_request`.
 
 #### Requirements
-- Tylko 1 m, oba uklady wysokosciowe. WCS NMT KRON86 zwraca
+- Tylko 1 m (inna rozdzielczość z rejestru albo archiwum `--format`
+  z `--cutout` = `Error:` przed siecią), oba uklady wysokosciowe. WCS NMT KRON86 zwraca
   TIFF float32, EVRF2007 i NMPT — ASC multipart konwertowany
   do float32 GeoTIFF. Zadanie wyrownane na zewnatrz do siatki
   arkusza 1 m (`k + 0,5`), zapytania o parzystych rozmiarach (pomiar
@@ -944,12 +991,14 @@ kartograf landcover download --source bdot10k --sheet N-34-130-D --year 2018 --f
     v         v          v          v          v          v         v         v
 ┌───────────────────────┐ ┌─────────┐ ┌────────────┐ ┌────────┐ ┌───────────┐ ┌─────┐
 │ GUGiK WCS / OpenData  │ │GUGiK WFS│ │ CUZK       │ │ GUGiK  │ │ CLMS API  │ │ISRIC│
-│ + skorowidz (WMS GFI) │ │+OpenData│ │ ArcGIS REST│ │OpenData│ │(AuthProxy)│ │ WCS │
+│ + skorowidz WFS/WMS   │ │+OpenData│ │ ArcGIS REST│ │OpenData│ │(AuthProxy)│ │ WCS │
 │ (NMT, NMPT, Ortofoto) │ │ (LAZ)   │ │ + openzu   │ │(BDOT10k│ │ + WMS PNG │ │     │
 └───────────────────────┘ └─────────┘ └────────────┘ └────────┘ └───────────┘ └─────┘
 
-Wspólne warstwy: sources/ (deskryptory, sidecary), transport/ (HTTP, mozaika),
+Wspólne warstwy: sources/ (deskryptory, rejestr wariantów, sidecary), transport/ (HTTP, mozaika),
 transform/ (przypięte transformacje CRS), cache/ (MetadataCache, SQLite).
+Skorowidz: WFS dla NMT/NMPT i LAZ (ADR-041), WMS GetFeatureInfo dla ortofotomapy;
+raport dostępności (check_availability) czyta ten sam WFS i maskę PRG.
 ```
 
 ### 4.2 Hydrology Module
@@ -1014,6 +1063,12 @@ from kartograf import (
     download_collection,
     check_collection,
     CollectionReport,
+
+    # Availability report (`kartograf elevation availability`, ADR-041)
+    check_availability,
+    AvailabilityReport,
+    AvailabilityCombination,
+    AvailabilityArea,
 
     # Download (NMT)
     DownloadManager,
@@ -1086,7 +1141,7 @@ from kartograf import (
     HsgResult,
     hsg_from_rasters,
 
-    # Project manifest (kartograf-project.json, ADR-040)
+    # Project manifest (kartograf-project/1, ADR-040)
     init_project,
     open_project,
     add_project_task,
@@ -1122,6 +1177,23 @@ from kartograf import (
     __version__,
 )
 ```
+
+Rejestr wariantów NMT/NMPT/LAZ (ADR-041) jest modułem danych poza
+`__all__`: `from kartograf.sources.variants import variants` (także
+`ProductVariant`, `IndexRef`, `resolution_label`, `parse_resolution`).
+Zastępuje symbole usunięte w 0.8.0 (BREAKING, bez aliasów):
+`kartograf.providers.pl.nmt_vertical_crs`, `require_nmt_vertical_crs`,
+`NMT_5M_VERTICAL_CRS`, `GugikProvider.SUPPORTED_RESOLUTIONS`,
+`SUPPORTED_VERTICAL_CRS_5M`, `WMS_INDEX_ENDPOINTS`,
+`get_supported_resolutions()`, `get_supported_vertical_crs_for_resolution()`,
+`GugikNmptProvider.SUPPORTED_RESOLUTIONS`, `FileStorage.SUPPORTED_RESOLUTIONS`
+i `GugikLazProvider.WFS_ENDPOINTS` — co zrobić: `variants(product=...,
+vertical_crs=..., format=...)` (etykiety: `v.label`, usługi skorowidza:
+`v.index_ref`). `GugikNmptProvider(session=None, *, vertical_crs,
+resolution, format="ASC", cache=None)` wymaga `resolution`;
+`GugikProvider(..., resolution=, format=)` przyjmuje etykiety i formaty
+z rejestru; `GugikProvider.is_wcs_available()` zostaje (kanał WCS
+z rejestru, tylko 1 m).
 
 ---
 
@@ -1266,4 +1338,4 @@ HYDROGRAF (główna aplikacja)
 
 **Wersja dokumentu:** 4.5
 **Data ostatniej aktualizacji:** 2026-10-15
-**Status:** Wydanie v0.7.2 (2026-10-11)
+**Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu)
