@@ -8,7 +8,7 @@ plain (one value for every country of the request) or per country
 Nothing here touches the network.
 """
 
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from types import SimpleNamespace
 
 from kartograf.core.bbox import BBox, validate_bbox
@@ -34,6 +34,30 @@ def product_choices(products: Iterable[str] = tuple(_PRODUCT_TEXT)) -> str:
 
 
 PRODUCT_CHOICES = product_choices()
+# Products of the CLI groups (ADR-039): ``elevation download`` and ``imagery
+# download`` offer only these; a new product of a group is added here.
+ELEVATION_PRODUCTS: tuple[str, ...] = ("nmt", "nmpt", "laz")
+IMAGERY_PRODUCTS: tuple[str, ...] = ("orto",)
+
+
+def require_product(product: str | None, products: Sequence[str]) -> None:
+    """``product`` of a group command: one of the group's ``products``.
+
+    Raises
+    ------
+    ValidationError
+        Missing product (the message names only the group's products) or a
+        product of another group.
+    """
+    if product is None:
+        raise ValidationError(f"--product wymagane: {product_choices(products)}")
+    if product not in products:
+        raise ValidationError(
+            f"--product {product!r}: nieznana wartosc - dostepne: "
+            f"{product_choices(products)}"
+        )
+
+
 COUNTRY_CHOICES = (
     "pl (GUGiK), cz (CUZK), auto (kraje wg prostokatnych obwiedni PL i CZ; "
     "obszar w obu krajach daje osobne pliki per kraj)"

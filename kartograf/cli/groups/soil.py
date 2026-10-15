@@ -10,7 +10,13 @@ from kartograf.cli._args import (
     add_update_flags,
 )
 from kartograf.cli.groups import add_group, add_list_sources
-from kartograf.cli.soil_cmd import cmd_soil_download, cmd_soil_hsg, cmd_soil_list_layers
+from kartograf.cli.soil_cmd import (
+    cmd_soil_download,
+    cmd_soil_hsg,
+    cmd_soil_list_layers,
+    soil_download_task_arguments,
+    soil_hsg_task_arguments,
+)
 
 _DEPTHS = (
     "0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm (przedzial glebokosci "
@@ -76,7 +82,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
     add_quiet(output)
-    download.set_defaults(_handler=cmd_soil_download)
+    download.set_defaults(
+        _handler=cmd_soil_download, _task=soil_download_task_arguments
+    )
 
     hsg = commands.add_parser(
         "hsg",
@@ -118,7 +126,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
     add_quiet(output)
-    hsg.set_defaults(_handler=cmd_soil_hsg)
+    hsg.set_defaults(_handler=cmd_soil_hsg, _task=soil_hsg_task_arguments)
 
     add_list_sources(commands, "soil", ("soil",))
 

@@ -304,6 +304,11 @@ kartograf soil download --property <param> -o ./data --depth 0-5cm --stat mean #
 kartograf landcover list-sources
 kartograf landcover list-layers --source <source>
 kartograf soil hsg --sheet <arkusz> -o ./data --depth 0-5cm # oblicz HSG z wersji SoilGrids
+kartograf project init --output ~/dane/kartograf # manifest projektu ze wspolnym magazynem
+kartograf project add teren elevation download --product nmt --sheet <godlo> --resolution 1m --vertical-crs EVRF2007
+kartograf project download                 # przypnij wersje zadan; --check-updates/--upgrade/--force
+kartograf project status                   # istnienie i rozmiar, bez czytania danych
+kartograf project verify                   # SHA-256 plikow i sidecarow
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
 # Pełna lista opcji: kartograf <grupa> <komenda> --help
 ```
@@ -349,6 +354,11 @@ from kartograf import (
     discover_teryts_for_bbox, teryt_for_point,
     # Hydrology
     HSGCalculator, HsgResult, hsg_from_rasters,
+    # Project manifest (kartograf-project/1, ADR-040)
+    init_project, open_project, add_project_task, remove_project_task,
+    download_project, check_project, project_status, verify_project,
+    Project, ProjectTask, PinnedFile, ProjectReport, TaskResult,
+    ProjectCheck, FileCheck,
     # Transport and mosaic (stable since 0.7.1)
     get_with_retry, make_gugik_session, mosaic_and_crop, check_source_grid,
     # Exceptions
@@ -652,7 +662,7 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 | # | Podprojekt | Zakres | Zależy od |
 |---|------------|--------|-----------|
 | 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`); stan 2026-10-12: plany 1/3 (arkusze PL), 2/3 (LAZ, CZ, wycinki) i 3/3 (land cover, HSG) wykonane i scalone do `develop` (E2E na żywo: `docs/research/2026-10-12-store-e2e/raport.md`); do wydania 0.8.0: CLMS z credentials niesprawdzony na żywo | — |
-| 2 | Manifest projektu | wchodzi do 0.8.0: plik `kartograf-project.json` (`kartograf-project/1`) w katalogu projektu — zadania (komendy danych grup ADR-039 z opcjami) i przypięte wersje plików z magazynu z sumami SHA-256; grupa CLI `project`: `init`, `add`, `remove`, `download` (także `--check-updates`, `--upgrade`, `--force`), `status`, `verify`; odtworzenie danych na nowym magazynie tylko przy identycznych sumach. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; grupy komend CLI (ADR-039) |
+| 2 | Manifest projektu | zrobione (0.8.0): plik `kartograf-project.json` (`kartograf-project/1`) w katalogu projektu — zadania (komendy danych grup ADR-039 z opcjami) i przypięte wersje plików z magazynu z sumami SHA-256; grupa CLI `project`: `init`, `add`, `remove`, `download` (także `--check-updates`, `--upgrade`, `--force`), `status`, `verify`; odtworzenie danych na nowym magazynie tylko przy identycznych sumach. E2E: `docs/research/2026-10-15-project-e2e/raport.md`. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; grupy komend CLI (ADR-039) |
 | 3 | Katalog GUGiK i gotowe dane | wchodzi do 0.8.0 w całości (plany A-E, decyzja użytkownika 2026-10-15): produkty GUGiK i ČÚZK z katalogu; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13 (rewizja 2026-10-15): `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — rejestr wariantów, siatki NMT/NMPT we wszystkich rozdzielczościach GUGiK i raport dostępności pełnych arkuszy, `docs/superpowers/plans/2026-10-15-plan-a-elevation-pl.md`; B: `elevation` CZ — DMP OK, DMP 1G, kafle TM33 ETRS89, LAZ ČÚZK, raport CZ, `docs/superpowers/plans/2026-10-15-plan-b-elevation-cz.md`; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
 | 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |

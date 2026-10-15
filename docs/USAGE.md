@@ -23,6 +23,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
 5. [Gleby i HSG](#5-gleby-i-hsg)
 6. [Konfiguracja CLMS API (CORINE GeoTIFF)](#6-konfiguracja-clms-api-corine-geotiff)
 7. [Znane problemy i ograniczenia](#7-znane-problemy-i-ograniczenia)
+8. [Projekt](#8-projekt)
 
 Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 
@@ -32,6 +33,7 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `imagery` | `download`, `list-sources` | ortofotomapa (PL) |
 | `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k, CORINE (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
+| `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
 --help` wypisuje komendy grupy, `list-sources` — źródła grupy z rejestru (bez
@@ -713,6 +715,11 @@ Szczegóły trybów: sekcja 4.3.
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
   zbiorach warto włączyć kompresję systemu plików.
+  Na udziale SMB/cifs klient może przejściowo raportować błędną liczbę
+  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki.
+  `project verify` potwierdza treść kopii, ale nie oszczędność miejsca:
+  sprawdź jej zajętość; w razie potrzeby kopiuj po stronie serwera lub
+  z hosta z lokalnym dostępem do systemu plików.
 - **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
   udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
 - **Migracja z 0.7.x:** brak; katalog `kampanie/` nie jest czytany (CLI
@@ -1034,3 +1041,152 @@ proxy).
 
 Pełna lista ograniczeń technicznych (timeouty, ponowienia, CZ, `auto`):
 SCOPE 3.2; plany: SCOPE 3.1.
+
+---
+
+## 8. Projekt
+
+Projekt zapisuje w `kartograf-project.json` **zadania** (komendy danych
+z opcjami) i **przypiete wersje plikow** (pelne sumy SHA-256). Jeden
+projekt wskazuje jeden magazyn `--output`; wiele projektow moze korzystac
+z tego samego magazynu, bez kopiowania danych do katalogow projektow.
+Sciezka standardowa w magazynie moze wskazywac nowsza wersje, ale
+przypiecie pozostaje przy konkretnych bajtach. Plik manifestu mozna
+przechowywac razem ze skryptami projektu w systemie kontroli wersji.
+
+### Pierwsze pobranie i sprawdzenie
+
+```bash
+mkdir -p ~/projekty/wisla
+cd ~/projekty/wisla
+kartograf project init --output ~/dane/kartograf
+kartograf project add teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --year 2022
+kartograf project add pokrycie landcover download --source bdot10k --teryt 1465
+kartograf project add gleby soil hsg --sheet N-34-130-D --depth 0-5cm
+kartograf project download
+kartograf project status
+kartograf project verify
+```
+
+`init` wymaga jawnego `--output`; tworzy manifest i katalog magazynu,
+jesli ich nie ma. `add` przyjmuje po nazwie zadania te same komendy
+i flagi wyboru danych co zwykle `kartograf elevation download`,
+`imagery download`, `landcover download`, `soil download` i `soil hsg`;
+sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
+`--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
+a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa
+zadanie i przypiecia z manifestu, **nie usuwa plikow** z magazynu.
+Nazwy zadan mozna podac pozycyjnie w `download`, `status` i `verify`;
+bez nazw polecenie obejmuje wszystkie zadania. `--project KATALOG`
+pozwala pracowac bez `cd` (domyslnie projekt jest w biezacym katalogu):
+
+```bash
+kartograf project verify --project ~/projekty/wisla
+```
+
+Pierwsze `download` przypina komplet plikow zadania dopiero po pelnym
+sukcesie; wynik HSG przypina rowniez trzy pliki wejsciowe SoilGrids.
+Ponowne `download` **nie zmienia przypiec** ani nie odpytuje zrodla,
+gdy przypiete pliki sa obecne. Gdy ich brakuje, probuje odtworzyc
+zadanie: akceptuje tylko te same sumy SHA-256. Inna tresc u zrodla
+oznacza blad, nigdy cicha zamiane; odzyskaj kopie magazynu lub jawnie
+wybierz `--upgrade`. `status` bez sieci szybko sprawdza istnienie
+wersji i rozmiary; `verify` bez sieci czyta cale pliki i porownuje
+SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu.
+
+### Swiezosc i wariant danych
+
+```bash
+kartograf project download --check-updates
+kartograf project download --upgrade teren
+kartograf project download --force pokrycie
+```
+
+`--check-updates` odpytuje zrodlo bez pobierania i porownuje stan
+**z przypieciem**, nie z najnowsza lokalna wersja magazynu; nie zmienia
+manifestu. `--upgrade` jawnie przepina cale zadanie na nowsza wersje,
+jesli jest sygnal zmiany, rowniez gdy nowa wersja juz jest w magazynie.
+`--force` ponawia pobranie nawet bez taniego sygnalu; przepiecie
+nastepuje po pelnym sukcesie zadania. Inne projekty zachowuja swoje
+przypiecia, stare wersje nadal sa w magazynie.
+
+**Zalecenie dla odtwarzalnosci:** wybieraj jawny wariant w zadaniu
+(np. `--year`, odpowiednie `--resolution` i `--vertical-crs`), gdy
+produkt to umozliwia. Bez `--year` wybierasz najnowszy lot w chwili
+pobrania; po opublikowaniu nowego lotu odtworzenie na pustym
+magazynie moze zwrocic inna sume i zakonczyc sie bledem. Nawet
+jawny rok nie zastepuje kopii magazynu, jesli zrodlo wycofa albo
+podmieni plik. Nie ma `project availability`: przed `project add`
+uzyj `kartograf elevation availability ...`, aby poznac dostepne
+kompletne warianty obszaru (lata, uklady, rozdzielczosci), i podaj
+wybrane flagi zadania. `availability` odpowiada na pytanie *jakie
+warianty sa dostepne*, a `project download --check-updates` — *czy
+przypiete pliki sa aktualne dla wybranego wariantu*. Wybor
+`--year` pozostaje aktualny dla danego roku nawet po wydaniu
+nowszego rocznika.
+
+### Przenoszenie projektu i magazynu
+
+Sciezki `output_dir` i `options.geometry` podane wzglednie sa zapisane
+wzgledem katalogu projektu (nie biezacego katalogu odczytu).
+Sciezki podane bezwzglednie pozostaja bezwzgledne. Przypiete `path`
+i `version` sa zawsze wzgledne do magazynu.
+
+| Sytuacja | Co zrobic |
+|---|---|
+| Przenosisz projekt z magazynem, zachowujac ich wzajemne polozenie (`output_dir` wzgledny) | Nic; `kartograf project verify` potwierdzi stan. |
+| Przenosisz sam projekt, magazyn pozostaje pod ta sama sciezka bezwzgledna | Nic. |
+| Przenosisz sam projekt, a `output_dir` jest wzgledny | Zmien `output_dir` w `kartograf-project.json`. |
+| Przenosisz lub kopiujesz magazyn | Kopiuj razem z sidecarami i dowiazaniami twardymi (`rsync -aH`), popraw `output_dir`, uruchom `kartograf project verify`. |
+| Otwierasz projekt z pustym magazynem | Utworz katalog magazynu (albo wskaz w `output_dir` istniejacy), uruchom `kartograf project download`, potem `kartograf project verify`; odtworzenie wymaga zgodnosci SHA-256. |
+
+Na udziale SMB/cifs `rsync -aH` może nie zachować wszystkich dowiązań
+twardych (sekcja 4); `verify` nie wykrywa nadmiarowych kopii.
+
+Plik geometrii obszaru warto trzymac przy manifeście i podawac wzglednie:
+przenosi sie z projektem. Zmiana jego bajtow od chwili przypiecia
+blokuje zwykle odtworzenie; jawne `--upgrade`/`--force` moze przyjac
+zmieniony obszar. Pozostale komendy wymagaja istniejacego katalogu
+magazynu (brak zamontowanego udzialu nie spowoduje pobrania do
+pustego katalogu).
+
+### Biblioteka Python
+
+```python
+from pathlib import Path
+from kartograf import (
+    add_project_task, check_project, download_project, init_project,
+    project_status, verify_project,
+)
+
+project_dir = Path.home() / "projekty" / "wisla"
+init_project(project_dir, output_dir=Path.home() / "dane" / "kartograf")
+add_project_task(
+    project_dir,
+    name="teren",
+    command="elevation download",
+    options={
+        "product": "nmt",
+        "sheet": "N-34-130-D-d-2-4",
+        "resolution": "1m",
+        "vertical_crs": "EVRF2007",
+        "year": 2022,
+    },
+)
+report = download_project(project_dir)
+print(report.ok, [(task.name, task.outcome) for task in report.tasks])
+print(project_status(project_dir).ok, verify_project(project_dir).ok)
+check = check_project(project_dir)  # sonda zrodla; bez pobierania i zapisu
+print([(item.task, item.status) for item in check.files])
+download_project(project_dir, tasks=["teren"], update="upgrade")
+```
+
+`init_project` i `add_project_task` zwracaja `Project`,
+`download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`),
+a `check_project`, `project_status` i `verify_project` zwracaja
+`ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
+`open_project(project_dir)` czyta i waliduje manifest; API udostepnia
+takze `remove_project_task`. Operacje projektu domyslnie dzialaja bez
+cache SQLite (`cache=False`); `cache=True` tworzy cache w biezacym
+katalogu, wiec uzywaj go tylko lokalnie. Kontrakt formatu i zapisu:
+[ARCHITECTURE.md, sekcja 3.5](ARCHITECTURE.md#35-manifest-projektu-kartograf-project1).

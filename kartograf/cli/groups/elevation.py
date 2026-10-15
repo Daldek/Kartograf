@@ -9,12 +9,13 @@ from kartograf.cli._args import (
     add_quiet,
     add_update_flags,
 )
-from kartograf.cli.download_cmd import cmd_download
+from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
     COUNTRY_CHOICES,
+    ELEVATION_PRODUCTS,
     RESOLUTION_PL,
     SCALE_2000_CHOICES,
     SHEET_SYSTEM_CHOICES,
@@ -23,8 +24,6 @@ from kartograf.download.options import (
     product_choices,
 )
 from kartograf.sources.descriptor import SourceDescriptor
-
-PRODUCTS = ("nmt", "nmpt", "laz")
 
 
 def _source_choice(source: SourceDescriptor) -> str:
@@ -65,9 +64,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     selection = download.add_argument_group("Produkt i obszar")
     selection.add_argument(
         "--product",
-        choices=PRODUCTS,
+        choices=ELEVATION_PRODUCTS,
         default=None,
-        help=f"Produkt (wymagany): {product_choices(PRODUCTS)}",
+        help=f"Produkt (wymagany): {product_choices(ELEVATION_PRODUCTS)}",
     )
     add_area_flags(
         selection,
@@ -242,6 +241,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Liczba rownoleglych pobran (domyslnie 4; 1 = po kolei)",
     )
     add_quiet(output)
-    download.set_defaults(_handler=partial(cmd_download, products=PRODUCTS))
+    download.set_defaults(
+        _handler=partial(cmd_download, products=ELEVATION_PRODUCTS),
+        _task=download_task_arguments,
+    )
 
-    add_list_sources(commands, "elevation", PRODUCTS, _source_choice)
+    add_list_sources(commands, "elevation", ELEVATION_PRODUCTS, _source_choice)
