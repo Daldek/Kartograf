@@ -420,10 +420,12 @@ class TestMetadataCacheManagement:
         cache.set_record("nmt", "1m", "EVRF2007", "A", {"no_coverage": True})
         cache.set_teryt(1.0, 2.0, "1234")
         cache.set_sheet("cz_sm5", "CTES96", {"podil": 0.5})
+        cache.set_atom_entries("feed|pattern", '"e1"', {"CTES96": {}})
         cache.clear()
         assert cache.get_record("nmt", "1m", "EVRF2007", "A") is None
         assert cache.get_teryt(1.0, 2.0) is None
         assert cache.get_sheet("cz_sm5", "CTES96") is None
+        assert cache.get_atom_entries("feed|pattern") is None
 
     def test_stats(self, cache):
         """Test that stats returns correct counts."""
@@ -1283,6 +1285,7 @@ class TestLazyOpen:
             "teryt_count": 0,
             "sheet_count": 0,
             "index_area_count": 0,
+            "atom_feed_count": 0,
             "db_size_bytes": 0,
             "db_path": str(cache_path),
             "db_exists": False,

@@ -117,7 +117,7 @@ def package_url(variant: PackageVariant, *, teryt: str | None) -> str:
     return variant.url_template.format(teryt=code, woj=code[:2])
 
 
-def _reject_documents(url: str):
+def reject_documents(url: str):
     """``download_to`` validator: an HTML/XML document instead of a package."""
 
     def validate(response: requests.Response) -> None:
@@ -163,7 +163,7 @@ def fetch_package(
             archive_path,
             timeout=timeout,
             description=url,
-            validate=_reject_documents(url),
+            validate=reject_documents(url),
             on_response=lambda response: signal.update(response_signal(response)),
         )
     except DownloadError as e:
@@ -220,7 +220,7 @@ def _check_archive(
                     f"{url}: oczekiwano dokladnie jednego pliku {params.unpack} "
                     f"w paczce, jest {len(chosen)}"
                 )
-            _unpack(archive, chosen[0], staged)
+            unpack_member(archive, chosen[0], staged)
             return chosen[0].filename
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
         # BadZipFile: directory or CRC; zlib.error/EOFError: corrupt or cut
@@ -230,7 +230,9 @@ def _check_archive(
         raise DownloadError(f"{url}: nie udalo sie odczytac paczki: {e}") from e
 
 
-def _unpack(archive: zipfile.ZipFile, info: zipfile.ZipInfo, target: Path) -> None:
+def unpack_member(
+    archive: zipfile.ZipFile, info: zipfile.ZipInfo, target: Path
+) -> None:
     """Stream one member to ``target`` atomically (``zipfile`` checks the CRC)."""
     tmp = target.with_name(f"{target.name}.{os.getpid()}_{threading.get_ident()}.tmp")
     try:
