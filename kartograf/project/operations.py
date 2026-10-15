@@ -14,16 +14,17 @@ an unmounted share must not receive gigabytes in an empty mount point
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
+from kartograf.download.plan import PlanItem
 from kartograf.download.versions import read_version
 from kartograf.exceptions import KartografError, ValidationError
-from kartograf.notices import Notice, NoticeSink
+from kartograf.notices import PROJECT_GEOMETRY_CHANGED, Notice, NoticeSink
 from kartograf.project.commands import (
     TaskFiles,
     options_from_json,
@@ -43,10 +44,12 @@ from kartograf.project.manifest import (
     task_to_json,
 )
 from kartograf.project.model import (
+    FileCheck,
     PinnedFile,
     PinRole,
     PinStatus,
     Project,
+    ProjectCheck,
     ProjectReport,
     ProjectTask,
     TaskResult,
@@ -537,3 +540,299 @@ def _restore(
         errors = [*problems, *files.errors, *pin_errors]
         return TaskResult(task.name, "failed", back, replaced, tuple(errors))
     return TaskResult(task.name, "restored", back, replaced, ())
+
+
+def _file_check(
+    task: ProjectTask,
+    pin: PinnedFile,
+    status: PinStatus,
+    *,
+    detail: str | None = None,
+    available: str | None = None,
+) -> FileCheck:
+    return FileCheck(
+        task.name, pin.unit, pin.path, status, pin.label, available, detail
+    )
+
+
+def _store_check(
+    project: Project, task: ProjectTask, pin: PinnedFile, *, verify: bool
+) -> FileCheck:
+    """Inspect a pinned version. Status only stats; verify hashes its data."""
+    state = pin_state(project.output_dir, pin)
+    if state == "missing":
+        return _file_check(
+            task,
+            pin,
+            "missing",
+            detail=f"brak przypietej wersji; przywroc kopie magazynu albo "
+            f"uruchom kartograf project download {task.name}",
+        )
+    if state == "corrupt":
+        return _file_check(task, pin, "corrupt", detail=_corrupt_text(task.name, pin))
+    if not verify:
+        return _file_check(task, pin, "ok")
+    data = project.output_dir / pin.version
+    sidecar = data.with_name(data.name + ".meta.json")
+    try:
+        root = project.output_dir.resolve(strict=True)
+        # A valid manifest path is lexical; a symlink in any of its parents
+        # must still not lead outside the store, even for a correct digest.
+        if not data.resolve(strict=True).is_relative_to(root) or not sidecar.resolve(
+            strict=True
+        ).is_relative_to(root):
+            raise ValueError("sciezka przypietej wersji wykracza poza magazyn")
+        standard = project.output_dir / pin.path
+        if (standard.exists() or standard.is_symlink()) and not standard.resolve(
+            strict=False
+        ).is_relative_to(root):
+            raise ValueError("sciezka standardowa wykracza poza magazyn")
+        problem = pin_problem(pin)
+        if problem is not None:
+            raise ValueError(problem)
+        local = read_version(data.parent, data.name)
+        if local is None:
+            raise ValueError(
+                "sidecar wersji jest nieczytelny lub niezgodny z nazwa wersji"
+            )
+        meta = local.meta
+        if (
+            meta.get("sha256") != pin.sha256
+            or type(meta.get("size_bytes")) is not int
+            or meta["size_bytes"] != pin.size_bytes
+            or meta.get("extra", {}).get("version", {}).get("label") != pin.label
+        ):
+            raise ValueError("sidecar wersji nie zgadza sie z przypieciem")
+        if file_digest(data) != (pin.sha256, pin.size_bytes):
+            raise ValueError("suma SHA-256 danych jest inna niz przypieta")
+    except (OSError, ValueError, AttributeError, TypeError) as error:
+        return _file_check(
+            task,
+            pin,
+            "corrupt",
+            detail=f"{error}; przywroc katalog wersji z kopii magazynu",
+        )
+    return _file_check(task, pin, "ok")
+
+
+def _inspect_project(
+    project_dir: str | Path,
+    tasks: Sequence[str] | None,
+    *,
+    verify: bool,
+) -> ProjectCheck:
+    project = open_project(project_dir)
+    _require_store(project)
+    selected = _select(project, tasks)
+    missing_tasks = tuple(task.name for task in selected if not task.files)
+    files = tuple(
+        _store_check(project, task, pin, verify=verify)
+        for task in selected
+        for pin in task.files
+    )
+    return ProjectCheck(
+        project,
+        files,
+        missing_tasks,
+        (),
+        not missing_tasks and all(item.status == "ok" for item in files),
+    )
+
+
+def project_status(
+    project_dir: str | Path, *, tasks: Sequence[str] | None = None
+) -> ProjectCheck:
+    """Check pinned version and sidecar existence and data size, without hashing
+    or network access. ``ok`` requires every selected task to have intact pins."""
+    return _inspect_project(project_dir, tasks, verify=False)
+
+
+def verify_project(
+    project_dir: str | Path, *, tasks: Sequence[str] | None = None
+) -> ProjectCheck:
+    """Verify full SHA-256, size, version sidecars, and symlink containment of
+    every pinned file. Neither the store nor the manifest is modified."""
+    return _inspect_project(project_dir, tasks, verify=True)
+
+
+def _plan_key(item: PlanItem) -> str:
+    """The same standard store path as ``PinnedFile.path``."""
+    return PurePosixPath(item.segment, item.hierarchy, item.name).as_posix()
+
+
+def _matched(
+    items: tuple[PlanItem, ...], pins: tuple[PinnedFile, ...]
+) -> tuple[dict[int, PinnedFile], tuple[PinnedFile, ...]]:
+    """Within a standard path pair equal labels first, then only a unique
+    remaining item and pin (multiple campaigns must not be guessed)."""
+    by_path: dict[str, list[int]] = {}
+    pins_by_path: dict[str, list[PinnedFile]] = {}
+    for index, item in enumerate(items):
+        by_path.setdefault(_plan_key(item), []).append(index)
+    for pin in pins:
+        pins_by_path.setdefault(pin.path, []).append(pin)
+    paired: dict[int, PinnedFile] = {}
+    unpaired: list[PinnedFile] = []
+    for path, local_pins in pins_by_path.items():
+        positions = by_path.get(path, [])
+        remaining = list(local_pins)
+        for label_field in ("available_label", "local_label"):
+            for index in positions:
+                if index in paired:
+                    continue
+                label = getattr(items[index], label_field)
+                match = next(
+                    (
+                        pin
+                        for pin in remaining
+                        if label is not None and pin.label == label
+                    ),
+                    None,
+                )
+                if match is not None:
+                    paired[index] = match
+                    remaining.remove(match)
+        unmatched = [index for index in positions if index not in paired]
+        if len(unmatched) == len(remaining) == 1:
+            paired[unmatched[0]] = remaining.pop()
+        unpaired.extend(remaining)
+    return paired, tuple(unpaired)
+
+
+def _checked_item(
+    task: ProjectTask, item: PlanItem, pin: PinnedFile | None, store: Path
+) -> FileCheck:
+    path = _plan_key(item)
+    if pin is None:
+        if item.status == "check_failed":
+            return FileCheck(
+                task.name,
+                item.unit,
+                path,
+                "check_failed",
+                None,
+                item.available_label,
+                item.error,
+            )
+        return FileCheck(
+            task.name,
+            item.unit,
+            path,
+            "added",
+            None,
+            item.available_label,
+            "nowy plik w wyniku zadania",
+        )
+    if pin_state(store, pin) != "ok":
+        return _file_check(
+            task,
+            pin,
+            "missing",
+            detail=f"brak przypietego pliku w magazynie; przywroc kopie "
+            f"albo uruchom kartograf project download {task.name}",
+        )
+    if item.status == "check_failed":
+        return _file_check(
+            task,
+            pin,
+            "check_failed",
+            available=item.available_label,
+            detail=item.error,
+        )
+    if item.local_sha256 == pin.sha256 and item.status == "current":
+        return _file_check(
+            task, pin, "current", available=item.available_label or item.local_label
+        )
+    if item.local_sha256 == pin.sha256 and item.status == "unverifiable":
+        return _file_check(
+            task,
+            pin,
+            "unverifiable",
+            available=item.available_label,
+            detail="nie da sie sprawdzic bez pobrania (--force)",
+        )
+    return _file_check(
+        task,
+        pin,
+        "newer",
+        available=item.available_label if item.status == "newer" else item.local_label,
+        detail="nowsza wersja w magazynie albo u zrodla; uruchom "
+        f"kartograf project download --upgrade {task.name}",
+    )
+
+
+def check_project(
+    project_dir: str | Path,
+    *,
+    tasks: Sequence[str] | None = None,
+    cache: MetadataCache | bool = False,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> ProjectCheck:
+    """Check source freshness relative to the task's pins, not the store's
+    latest files. Unpinned tasks are skipped; nothing is downloaded or written."""
+    project = open_project(project_dir)
+    _require_store(project)
+    selected = _select(project, tasks)
+    sink = NoticeSink(on_notice)
+    checked: list[FileCheck] = []
+    missing_tasks: list[str] = []
+    for task in selected:
+        if not task.files:
+            missing_tasks.append(task.name)
+            continue
+        command = task_command(task.command)
+        options = options_from_json(
+            command, task.options, project_dir=project.directory
+        )
+        if task.geometry_sha256 is not None and geometry_digest(options) != dict(
+            task.geometry_sha256
+        ):
+            sink.emit(
+                "warning",
+                PROJECT_GEOMETRY_CHANGED,
+                f"{task.name}: plik geometrii zmienil sie od przypiecia; "
+                "plan aktualizacji dotyczy obecnej geometrii",
+            )
+        try:
+            plan = command.check(
+                project.output_dir,
+                options,
+                cache=cache,
+                on_notice=_prefixed(sink, task.name),
+            )
+        except KartografError as error:
+            checked.extend(
+                _file_check(task, pin, "check_failed", detail=_error_text(error))
+                for pin in task.files
+            )
+            continue
+        paired, unpaired = _matched(plan.items, task.files)
+        checked.extend(
+            _checked_item(task, item, paired.get(index), project.output_dir)
+            for index, item in enumerate(plan.items)
+        )
+        for pin in unpaired:
+            if pin_state(project.output_dir, pin) != "ok":
+                checked.append(
+                    _file_check(
+                        task,
+                        pin,
+                        "missing",
+                        detail=f"brak przypietego pliku w magazynie; przywroc kopie "
+                        f"albo uruchom kartograf project download {task.name}",
+                    )
+                )
+            else:
+                checked.append(
+                    _file_check(
+                        task, pin, "removed", detail="plik poza wynikiem zadania"
+                    )
+                )
+    files = tuple(checked)
+    return ProjectCheck(
+        project,
+        files,
+        tuple(missing_tasks),
+        sink.notices,
+        all(item.status != "check_failed" for item in files),
+    )

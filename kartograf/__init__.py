@@ -141,10 +141,13 @@ from kartograf.project import (
     ProjectTask,
     TaskResult,
     add_project_task,
+    check_project,
     download_project,
     init_project,
     open_project,
+    project_status,
     remove_project_task,
+    verify_project,
 )
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
@@ -256,6 +259,9 @@ __all__ = [
     "add_project_task",
     "remove_project_task",
     "download_project",
+    "check_project",
+    "project_status",
+    "verify_project",
     "Project",
     "ProjectTask",
     "PinnedFile",
