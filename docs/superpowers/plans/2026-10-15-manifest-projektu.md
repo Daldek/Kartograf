@@ -580,7 +580,7 @@ def register(subparsers: argparse._SubParsersAction) -> None
 - [x] CHANGELOG `[0.8.0] - Unreleased`, "Dodane": grupa `kartograf
   project` i API projektu (bez "Co zrobic" - zmiana nielamiaca);
   "Zmienione": listy produktow grup w bibliotece (wewnetrzne).
-- [ ] SCOPE 3.3 wiersz 2: stan "zrobione (0.8.0)" po E2E (Task 10);
+- [x] SCOPE 3.3 wiersz 2: stan "zrobione (0.8.0)" po E2E (Task 10);
   PROGRESS aktualizuje koordynator po scaleniu galezi (decyzja z ctx).
 - [x] Commit - `docs: manifest projektu w ARCHITECTURE, USAGE, README i CHANGELOG`
 
@@ -588,12 +588,12 @@ def register(subparsers: argparse._SubParsersAction) -> None
 
 ### Task 10: Smoke CLI i weryfikacja na zywo
 
-- [ ] **Smoke offline:** prawdziwe CLI na malym magazynie z fixtur (albo
+- [x] **Smoke offline:** prawdziwe CLI na malym magazynie z fixtur (albo
   przez `python -m kartograf.cli.commands` z fake'ami w skrypcie
   tymczasowym poza repo): `init`, `add`, `download`, `status`, `verify`,
   `download --check-updates`, podmiana wersji w magazynie (drugi projekt),
   `download --upgrade`; obejrzyj JSON na dysku. Skrypt usun po smoke.
-- [ ] **E2E na zywo** (spec 7; dane w `<katalog-danych>`, nigdy w repo
+- [x] **E2E na zywo** (spec 7; dane w `<katalog-danych>`, nigdy w repo
   ani `/tmp`): projekt A (NMT PL arkusz, BDOT10k powiat, SoilGrids + HSG
   maly arkusz, arkusz SM5 CZ), `download`, `status`, `verify`; projekt B
   na tym samym magazynie (te same przypiecia bez pobierania);
@@ -601,7 +601,7 @@ def register(subparsers: argparse._SubParsersAction) -> None
   `none`; brak pobran - rozmiar magazynu bez zmian); kopia magazynu
   `rsync -aH`, nowy `output_dir`, `verify`; projekt z pustym magazynem:
   `download` -> `restored`. CLMS bez credentials pomijamy.
-- [ ] Raport `docs/research/2026-10-XX-project-e2e/raport.md` (polecenia
+- [x] Raport `docs/research/2026-10-15-project-e2e/raport.md` (polecenia
   z `<katalog-danych>`, statusy, liczby plikow, ograniczenia sygnalow);
   commit - `docs(research): E2E manifestu projektu na zywo`.
 
