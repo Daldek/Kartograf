@@ -1,13 +1,22 @@
 """
-CuzkDmrProvider — DMR 5G (2 m, exportImage) and DMR 4G (5 m, openzu + exportImage).
+CuzkRasterProvider - CUZK rasters: NMT (DMR 5G 2 m, DMR 4G 5 m) and NMPT (DMP 1G
+2 m, DMP OK 0.5 m).
+
+The route of a request is a row of the variant registry (ADR-041 supplement,
+plan B decision 2): an SM5 sheet = the S-JTSK file (openzu, EPSG:5514, Bpv),
+a TM33 tile in EVRF2007 of a model with files = the ETRS89 file (EPSG:3045,
+EVRF2007 natively), every other TM33 tile = the ImageServer warped onto the
+tile grid (ADR-024), a bbox = the ImageServer. Heights outside the native
+system of the channel go through the pinned Bpv->EVRF2007 operation.
 
 Nativeness rule: the exportImage result is a server derivative (GeoTIFF); the
 openzu files are CUZK bytes 1:1 — only the CRS tag is modified, in a GeoTIFF
-without a CRS (metadata repair). Vertical transformation only on an explicit
-request (vertical_crs="EVRF2007").
+without a CRS (metadata repair, the CRS of the channel). Vertical
+transformation only when the requested heights are not native to the channel.
 
-Endpoints come ONLY from descriptors (`get_source(...).channels[..].endpoint`)
-— the provider knows no URL. Sidecars are written by the CLI/manager layer.
+Endpoints come ONLY from descriptors (``channel_for``) — the provider knows no
+URL. Sidecars are written by the download tracks (``download/cz_sheets.py``,
+``download/cz_cutout.py``) from ``CzRasterRoute``.
 """
 
 import dataclasses
@@ -27,14 +36,24 @@ from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox, transform_bbox
-from kartograf.core.parser_registry import detect_system
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.cuzk.client import CuzkClient, wkid
 from kartograf.providers.cuzk.sheets import SheetIndex
 from kartograf.sources.descriptor import AccessChannel, TransportKind
-from kartograf.sources.registry import get_source
+from kartograf.sources.registry import (
+    CZ_SYSTEM_CRS,
+    channel_for,
+    resolve_vertical_crs,
+)
+from kartograf.sources.variants import (
+    CZ_MODELS,
+    cz_sheet_system,
+    cz_variant_error,
+    find_cz_variant,
+    variants,
+)
 from kartograf.transform.crs import (
     CONTENT_POLICY,
     REMEDIES,
@@ -58,10 +77,13 @@ CUZK_NODATA = -9999.0
 # not from a server error (errata).
 NATIVE_CRS = "EPSG:5514"
 
-_RESOLUTION_KEYS = {"2m": "cz.cuzk.dmr5g", "5m": "cz.cuzk.dmr4g"}
-_PIXEL_SIZES = {"2m": 2.0, "5m": 5.0}
-_SUPPORTED_VERTICAL = ("Bpv", "EVRF2007")
 _DEFAULT_TIMEOUT = 60
+# A missing openzu file (404) is a sheet the index knows but CUZK does not
+# publish for the model (spec section 7).
+_FILE_HINT = (
+    "zweryfikuj godlo w indeksie KladyMapovychListu (arkusz moze byc znany "
+    "indeksowi, ale plik openzu niedostepny)"
+)
 
 # Control point for HORIZONTAL operations whose source is the native CRS
 # — roughly the centre of Czechia (15.5E / 49.8N) in Krovak. A grid that does
@@ -94,11 +116,42 @@ _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=2.0, allow_network_grids=False
 _CHUNK_PIXELS = 4_000_000
 
 
-class CuzkDmrProvider(BaseProvider):
-    """CZ DMR: 2m DMR 5G or 5m DMR 4G (SM5 sheet), Bpv or EVRF2007 heights."""
+@dataclasses.dataclass(frozen=True)
+class CzRasterRoute:
+    """How one CZ raster request is served: a row of the route table (plan B,
+    decision 2) with the operations it performs.
+
+    ``channel``: the CUZK file of the sheet system (``DIRECT_FILES``) or the
+    ImageServer (``ARCGIS_IMAGE``); ``horizontal_crs``: the CRS of the result
+    file; ``horizontal``: the pinned operation of the local warp (``None``:
+    the result is in the CRS of the channel); ``vertical``: the pinned
+    Bpv->EVRF2007 operation when the requested heights are not native to the
+    channel. The sidecar of the result describes exactly these operations.
+    """
+
+    channel: AccessChannel
+    horizontal_crs: str
+    horizontal: PinnedTransform | None
+    vertical: PinnedTransform | None
+
+    @property
+    def files(self) -> bool:
+        """The result is the CUZK file (signal ``http``), not an export."""
+        return self.channel.transport == TransportKind.DIRECT_FILES
+
+    @property
+    def capability(self) -> str:
+        """Capability of the channel in the sidecar (``build_metadata``)."""
+        return "sheet_files" if self.files else "bbox_raster"
+
+
+class CuzkRasterProvider(BaseProvider):
+    """CZ raster of one product and resolution: ``nmt`` 2m (DMR 5G) / 5m (DMR
+    4G), ``nmpt`` 0.5m (DMP OK) / 2m (DMP 1G); Bpv or EVRF2007 heights."""
 
     def __init__(
         self,
+        product: str,
         resolution: str,
         session: requests.Session | None = None,
         cache: MetadataCache | None = None,
@@ -106,33 +159,42 @@ class CuzkDmrProvider(BaseProvider):
         *,
         vertical_crs: str,
     ):
-        """Choose the CZ model and vertical reference explicitly.
+        """Choose the CZ product, resolution and vertical reference explicitly.
 
-        ``resolution`` is "2m" for DMR 5G raster export or "5m" for
-        DMR 4G and SM5 sheets. ``vertical_crs`` is "Bpv" (native Baltic
-        heights) or "EVRF2007" (transformed European heights); KRON86 has
-        no available transformation. ``horizontal_crs=None`` keeps native
-        EPSG:5514, ``session=None`` creates a session and ``cache=None``
+        ``product``/``resolution`` select the CUZK model from the variant
+        registry (``nmt``: ``2m`` DMR 5G, ``5m`` DMR 4G; ``nmpt``: ``0.5m``
+        DMP OK, ``2m`` DMP 1G). ``vertical_crs`` is ``"Bpv"`` or
+        ``"EVRF2007"`` (native for the ETRS89 files, otherwise the pinned
+        Bpv->EVRF2007 operation); KRON86 has no available transformation.
+        ``horizontal_crs`` is the CRS of a cutout (``None`` keeps the native
+        EPSG:5514); ``session=None`` creates a session and ``cache=None``
         disables the sheet index cache.
+
+        Raises
+        ------
+        TransformUnavailableError
+            KRON86, or no safe operation to ``horizontal_crs``.
+        ValidationError
+            A product, resolution or height system outside the registry.
         """
-        if resolution not in _RESOLUTION_KEYS:
-            raise ValidationError(
-                f"Nieobslugiwana rozdzielczosc CZ: '{resolution}' (dostepne: 2m, 5m)"
-            )
         if vertical_crs == "KRON86":
             raise TransformUnavailableError(
                 "Brak transformacji Bpv (EPSG:8357) -> KRON86 (EPSG:9650) "
                 "- siatki GUGiK nie sa publiczne",
                 remedy=REMEDIES["EPSG:9650"],
             )
-        if vertical_crs not in _SUPPORTED_VERTICAL:
-            raise ValidationError(
-                f"Nieobslugiwany uklad pionowy dla CZ: '{vertical_crs}' "
-                f"(dostepne: {', '.join(_SUPPORTED_VERTICAL)})"
-            )
-        self.descriptor_key = _RESOLUTION_KEYS[resolution]
+        error = cz_variant_error(
+            product=product, resolution=resolution, vertical_crs=vertical_crs
+        )
+        if error is not None:
+            raise ValidationError(error)
+        variant = variants(product=product, country="CZ", resolution=resolution)[0]
+        assert variant.resolution_m is not None  # a label of the registry
+        self.descriptor_key = variant.source
+        self._product = product
+        self._model = CZ_MODELS[variant.model or ""][0]
         self._resolution = resolution
-        self._pixel_size = _PIXEL_SIZES[resolution]
+        self._pixel_size = float(variant.resolution_m)
         self._target_crs = horizontal_crs
         self._vertical_crs = vertical_crs
         self._session = session or requests.Session()
@@ -140,45 +202,28 @@ class CuzkDmrProvider(BaseProvider):
         self._client_timeout = _DEFAULT_TIMEOUT
         self._sheet_index = SheetIndex(session=self._session, cache=cache)
         self._transforms: dict[tuple[str, str], PinnedTransform] = {}
-        # Fail-fast as with KRON86: the lack of a safe 8357->5621 operation must
-        # abort BEFORE any download, so the user does not pay for the transfer
-        # and does not get a Bpv file under the name ordered as EVRF2007.
-        self._vertical_transform: PinnedTransform | None = (
-            self._pinned("EPSG:8357", "EPSG:5621", _VERTICAL_POLICY)
-            if vertical_crs == "EVRF2007"
-            else None
-        )
-        # The same rule for the horizontal part: when the user requested a CRS other
-        # than native, the lack of a safe operation must abort before the transfer.
+        self._image = channel_for(self.descriptor_key, TransportKind.ARCGIS_IMAGE)
+        # Fail-fast: when the user requested a CRS other than native, the lack
+        # of a safe operation must abort before the transfer.
         if horizontal_crs is not None:
             self.horizontal_transform(horizontal_crs)
 
-        descriptor = get_source(self.descriptor_key)
-        image_endpoint = _endpoint_for(descriptor.channels, TransportKind.ARCGIS_IMAGE)
-        if image_endpoint is None:
-            raise ValidationError(
-                f"Deskryptor '{self.descriptor_key}' nie ma kanalu "
-                f"{TransportKind.ARCGIS_IMAGE.name} z endpointem - "
-                f"pobieranie rastrow CUZK niemozliwe"
-            )
-        self._image_endpoint: str = image_endpoint
-        # The file channel exists only for DMR 4G (SM5 sheets from openzu);
-        # None is a valid state here, not a configuration error.
-        self._files_endpoint: str | None = _endpoint_for(
-            descriptor.channels, TransportKind.DIRECT_FILES
-        )
-
     @property
     def name(self) -> str:
-        return f"CUZK DMR ({self._resolution})"
+        return f"CUZK {self._model} ({self._resolution})"
 
     @property
     def base_url(self) -> str:
-        return self._image_endpoint
+        return self._image.endpoint
 
     @property
     def default_extension(self) -> str:
         return ".tif"
+
+    @property
+    def product(self) -> str:
+        """``nmt`` or ``nmpt``."""
+        return self._product
 
     @property
     def resolution(self) -> str:
@@ -208,13 +253,67 @@ class CuzkDmrProvider(BaseProvider):
             NATIVE_CRS, target_crs, CONTENT_POLICY, probe=CZ_PROBE_NATIVE
         )
 
-    @property
-    def vertical_transform(self) -> PinnedTransform | None:
-        """Pinned 8357->5621 operation (None for a native Bpv download).
+    def route(self, sheet: str | None = None) -> CzRasterRoute:
+        """The route of a sheet code (``None``: a bbox cutout), decision 2 of
+        plan B: the channel, the CRS of the result and its pinned operations.
 
-        Built in the constructor — see the fail-fast note there.
+        A sheet is validated (CZ system, the variant of the product and
+        resolution, the TM33 grid) and every operation of the route is built
+        here - a missing safe operation raises before any request (the user
+        does not pay for a transfer, nor gets a Bpv file under the name
+        ordered as EVRF2007).
+
+        Raises
+        ------
+        ValidationError
+            A code outside CZ or a sheet without a variant (SM5 for 2m).
+        ParseError
+            A malformed TM33 code.
+        TransformError
+            No safe pinned operation of the route.
         """
-        return self._vertical_transform
+        if sheet is None:
+            target = self._target_crs or NATIVE_CRS
+            return CzRasterRoute(
+                self._image,
+                target,
+                self.horizontal_transform(target),
+                self._vertical_for(self._image),
+            )
+        sheet = sheet.strip()
+        system = cz_sheet_system(sheet)
+        if system == "tm33":
+            # full validation of the grid (even kilometres), not only the regex
+            ParserTM33(sheet)
+        variant = find_cz_variant(
+            product=self._product,
+            resolution=self._resolution,
+            vertical_crs=self._vertical_crs,
+            system=system,
+        )
+        if variant.channel == TransportKind.DIRECT_FILES:
+            channel = channel_for(
+                variant.source, TransportKind.DIRECT_FILES, CZ_SYSTEM_CRS[system]
+            )
+            return CzRasterRoute(
+                channel, channel.horizontal_crs, None, self._vertical_for(channel)
+            )
+        tile_crs = CZ_SYSTEM_CRS["tm33"]
+        return CzRasterRoute(
+            self._image,
+            tile_crs,
+            self.horizontal_transform(tile_crs),
+            self._vertical_for(self._image),
+        )
+
+    def _vertical_for(self, channel: AccessChannel) -> PinnedTransform | None:
+        """Pinned operation from the native heights of ``channel`` to the
+        requested ones; ``None`` when the channel serves them natively."""
+        options = channel.vertical_crs_options
+        requested = resolve_vertical_crs(self._vertical_crs, options)
+        if requested in options:
+            return None
+        return self._pinned(options[0], requested, _VERTICAL_POLICY)
 
     def download(
         self,
@@ -225,40 +324,36 @@ class CuzkDmrProvider(BaseProvider):
         on_download: Callable[[], None] | None = None,
         on_response: Callable[[requests.Response], None] | None = None,
     ) -> Path:
-        """Download a TM33 tile (grid in 3045) or an SM5 sheet (openzu, 5514).
+        """Download an SM5 sheet or a TM33 tile along its route (:meth:`route`).
 
-        `target_crs` applies only to bbox mode — the sheet code defines the
-        extent in a specific CRS, so reprojection would diverge it from the
-        grid. The TM33 tile lies in EPSG:3045 and the CUZK data in EPSG:5514:
-        `exportImage` gets a native request, and a local warp carries it onto
-        the tile grid (ADR-024). The SM5 sheet arrives as a file already in
-        5514 — no warp.
+        A CUZK file (SM5 in EPSG:5514, TM33 ETRS89 in EPSG:3045) arrives 1:1
+        with the CRS of its channel written into the GeoTIFF; a TM33 tile
+        without a file of the variant is an ``exportImage`` request in the
+        native EPSG:5514 warped locally onto the tile grid (ADR-024).
+        `horizontal_crs` applies only to bbox mode — the sheet code defines
+        the extent in a specific CRS. ``on_response`` receives the HTTP
+        response of a file (its signal); an export has none.
 
         ``on_download`` is called exactly once, after every validation
-        (CZ system, SM5 resolution and sheet-index lookup, TM33 grid parse)
-        and right before the data transfer starts; it is never called when
-        the request is rejected (same contract as
-        ``DownloadManager.download_sheet(on_download=)`` in the PL flow).
+        (route, sheet-index lookup of SM5, TM33 grid parse) and right before
+        the data transfer starts; it is never called when the request is
+        rejected (same contract as ``DownloadManager.download_sheet(
+        on_download=)`` in the PL flow).
         """
         output_path = Path(output_path)
         # like the system registry: whitespace is not part of the sheet code
         # (openzu URL, SM5 index and ParserTM33 get the same stripped code)
         sheet = sheet.strip()
-        system = detect_system(sheet)
-        if system.country != "CZ":
-            raise ValidationError(
-                f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ "
-                f"(TM33: 302_5550, SM5: CTES96)"
+        route = self.route(sheet)
+        if route.files:
+            self._download_file(
+                sheet, route.channel, output_path, timeout, on_download, on_response
             )
-        if system.id == "cz_sm5":
-            self._download_sm5(sheet, output_path, timeout, on_download, on_response)
-        else:  # cz_tm33
-            # Parsing through ParserTM33 (full validation: even kilometres),
-            # not through the system registry regex alone.
+        else:
             bbox = ParserTM33(sheet).get_bbox()
             self._export_raster(bbox, output_path, timeout, on_download)
-        if self.vertical_transform is not None:
-            self._apply_vertical_shift(output_path)
+        if route.vertical is not None:
+            self._apply_vertical_shift(output_path, route.vertical)
         return output_path
 
     def download_bbox(
@@ -277,16 +372,16 @@ class CuzkDmrProvider(BaseProvider):
         """
         if format != "GTiff":
             raise ValidationError(
-                f"CuzkDmrProvider.download_bbox obsluguje tylko GTiff "
+                f"CuzkRasterProvider.download_bbox obsluguje tylko GTiff "
                 f"(zadano: {format})"
             )
         output_path = Path(output_path)
-        image_sr = self._target_crs or NATIVE_CRS
-        if wkid(bbox.crs) != wkid(image_sr):
-            bbox = self._bbox_to_crs(bbox, image_sr)
+        route = self.route()
+        if wkid(bbox.crs) != wkid(route.horizontal_crs):
+            bbox = self._bbox_to_crs(bbox, route.horizontal_crs)
         self._export_raster(bbox, output_path, timeout, on_download)
-        if self.vertical_transform is not None:
-            self._apply_vertical_shift(output_path)
+        if route.vertical is not None:
+            self._apply_vertical_shift(output_path, route.vertical)
         return output_path
 
     def _export_raster(
@@ -324,7 +419,7 @@ class CuzkDmrProvider(BaseProvider):
             if on_download is not None:
                 on_download()
             client.export_image(
-                self._image_endpoint,
+                self._image.endpoint,
                 bbox,
                 pixel_size=self._pixel_size,
                 image_sr=NATIVE_CRS,
@@ -341,7 +436,7 @@ class CuzkDmrProvider(BaseProvider):
             on_download()
         try:
             client.export_image(
-                self._image_endpoint,
+                self._image.endpoint,
                 native_bbox,
                 pixel_size=self._pixel_size,
                 image_sr=NATIVE_CRS,
@@ -374,40 +469,43 @@ class CuzkDmrProvider(BaseProvider):
             NATIVE_CRS,
         )
 
-    def sm5_signal(self, sheet: str, timeout: int = _DEFAULT_TIMEOUT) -> dict:
-        """Current HTTP signal of the SM5 openzu ZIP, without downloading it."""
+    def file_url(self, sheet: str) -> str:
+        """openzu URL of the CUZK file of a sheet (its route is a file).
+
+        Raises
+        ------
+        ValidationError
+            The route of the sheet is an ImageServer export (no file of the
+            variant: TM33 in Bpv, DMR 5G, DMP 1G) or no route at all.
+        """
         sheet = sheet.strip()
-        if detect_system(sheet).id != "cz_sm5":
-            raise ValidationError(f"Godlo '{sheet}' nie jest arkuszem SM5")
-        url = self._sm5_url(sheet)
-        return head_signal(self._session, url, timeout=timeout)
-
-    def _sm5_url(self, sheet: str) -> str:
-        if self._resolution != "5m":
+        route = self.route(sheet)
+        if not route.files:
             raise ValidationError(
-                f"Arkusze SM5 sa dostepne tylko dla --resolution 5m "
-                f"(DMR 4G); dla 2m uzyj godla TM33 albo --bbox "
-                f"[godlo: {sheet}]"
+                f"{sheet} ({self._model}, {self._vertical_crs}) nie ma pliku CUZK "
+                "- kafel z ImageServer bez taniego sygnalu zrodla"
             )
-        if self._files_endpoint is None:
-            raise ValidationError(
-                f"Deskryptor '{self.descriptor_key}' nie ma kanalu "
-                f"{TransportKind.DIRECT_FILES.name} z endpointem - "
-                f"pobieranie arkuszy SM5 niemozliwe"
-            )
-        return self._files_endpoint.format(sheet=sheet)
+        return route.channel.endpoint.format(sheet=sheet)
 
-    def _download_sm5(
+    def file_signal(self, sheet: str, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+        """Current HTTP signal of the CUZK file of a sheet (``HEAD``), without
+        downloading it."""
+        return head_signal(self._session, self.file_url(sheet), timeout=timeout)
+
+    def _download_file(
         self,
         sheet: str,
+        channel: AccessChannel,
         output_path: Path,
         timeout: int,
         on_download: Callable[[], None] | None = None,
         on_response: Callable[[requests.Response], None] | None = None,
     ) -> None:
-        """SM5 sheet (DMR 4G) from openzu + CRS metadata repair."""
-        url = self._sm5_url(sheet)
-        self._sheet_index.sm5_sheet(sheet)  # validation before download
+        """A CUZK sheet file from openzu (ZIP: ``.tif`` + ``.tfw``) + the CRS
+        of its channel written into the GeoTIFF (metadata repair)."""
+        url = channel.endpoint.format(sheet=sheet)
+        if channel.horizontal_crs == CZ_SYSTEM_CRS["sm5"]:
+            self._sheet_index.sm5_sheet(sheet)  # validation before download
         if on_download is not None:
             on_download()
         try:
@@ -417,11 +515,9 @@ class CuzkDmrProvider(BaseProvider):
         except DownloadError as e:
             # spec section 7: 404 from openzu -> hint to verify the sheet code
             raise DownloadError(
-                f"{e} - zweryfikuj godlo w indeksie KladyMapovychListu "
-                f"(arkusz moze byc znany indeksowi, ale plik openzu "
-                f"niedostepny)"
+                f"{e} - {_FILE_HINT}", sheet=sheet, status_code=e.status_code
             ) from e
-        _assign_crs(output_path, "EPSG:5514")
+        _assign_crs(output_path, channel.horizontal_crs)
 
     def _client_for(self, timeout: int) -> CuzkClient:
         """Client for the given timeout (the HTTP session is always shared)."""
@@ -467,7 +563,7 @@ class CuzkDmrProvider(BaseProvider):
             ),
         )
 
-    def _apply_vertical_shift(self, path: Path) -> None:
+    def _apply_vertical_shift(self, path: Path, pinned: PinnedTransform) -> None:
         """Convert raster values with the pinned 8357->5621 operation (per pixel).
 
         The vertical operation requires horizontal coordinates in the order
@@ -484,9 +580,6 @@ class CuzkDmrProvider(BaseProvider):
         permanent. On error both the copy and the source file (with the
         accompanying `.tfw`) disappear.
         """
-        pinned = self._vertical_transform
-        if pinned is None:  # pragma: no cover — called only for EVRF2007
-            return
         temp_path = path.with_name(
             f"{path.name}.{os.getpid()}_{threading.get_ident()}.vshift.tif"
         )
@@ -585,18 +678,9 @@ def _center_of(bbox: BBox) -> tuple[float, float]:
     return ((bbox.min_x + bbox.max_x) / 2, (bbox.min_y + bbox.max_y) / 2)
 
 
-def _endpoint_for(
-    channels: tuple[AccessChannel, ...], transport: TransportKind
-) -> str | None:
-    """Endpoint of the first channel of the given transport (None if none)."""
-    return next(
-        (ch.endpoint for ch in channels if ch.transport == transport and ch.endpoint),
-        None,
-    )
-
-
 def _assign_crs(path: Path, crs: str) -> None:
-    """Repair DMR4G-TIFF metadata: write the CRS (georeferencing is in .tfw).
+    """Repair the metadata of a CUZK TIFF file: write the CRS of its channel
+    (georeferencing is in .tfw; SM5 EPSG:5514, ETRS89 tiles EPSG:3045).
 
     Mirror of `_overwrite_crs` in client.py: the whole body in try/except,
     because a corrupt TIFF from a correctly extracted ZIP can make rasterio

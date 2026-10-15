@@ -13,6 +13,7 @@ from kartograf.download.cutout import (
     download_pl_cutout,
 )
 from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
+from kartograf.download.cz_laz import check_cz_laz, download_cz_laz
 from kartograf.download.data import UnitFile, check_data, download_data
 from kartograf.download.laz import (
     LazDownloadResult,
@@ -39,7 +40,7 @@ AUTO = {
     "resolution": {"pl": "1m", "cz": "2m"},
     "vertical_crs": {"pl": "EVRF2007", "cz": "Bpv"},
 }
-CZ_FACTORY = "kartograf.providers.cuzk.create_dmr_provider"
+CZ_FACTORY = "kartograf.providers.cuzk.create_cz_raster_provider"
 
 
 def _pl_sheets(fake):
@@ -435,14 +436,26 @@ _BBOX_TRACKS = (
     ),
     (
         check_cz_cutout,
-        {"horizontal_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
+        {
+            "product": "nmpt",
+            "horizontal_crs": "EPSG:5514",
+            "vertical_crs": "Bpv",
+            "resolution": "2m",
+        },
     ),
     (
         download_cz_cutout,
-        {"horizontal_crs": "EPSG:5514", "vertical_crs": "Bpv", "resolution": "2m"},
+        {
+            "product": "nmpt",
+            "horizontal_crs": "EPSG:5514",
+            "vertical_crs": "Bpv",
+            "resolution": "2m",
+        },
     ),
     (check_laz_area, {"vertical_crs": "EVRF2007"}),
     (download_laz_area, {"vertical_crs": "EVRF2007"}),
+    (check_cz_laz, {"model": "dmr4g", "vertical_crs": "Bpv"}),
+    (download_cz_laz, {"model": "dmr4g", "vertical_crs": "Bpv"}),
 )
 
 
@@ -478,6 +491,7 @@ def test_cz_cutout_unknown_horizontal_crs_is_validation_error(tmp_path, operatio
         operation(
             BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
             output_dir=tmp_path,
+            product="nmt",
             horizontal_crs="EPSG:9999",
             vertical_crs="Bpv",
             resolution="2m",

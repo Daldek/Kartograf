@@ -1,4 +1,4 @@
-"""Versioned CZ (CUZK) DMR bbox cutouts shared by the CLI and library.
+"""Versioned CZ (CUZK) raster bbox cutouts (NMT, NMPT) shared by the CLI and library.
 
 The result grid starts at the bbox normalized to the requested image CRS.
 The standard ``bbox/<coords>.tif`` path is a hardlink to an immutable
@@ -65,7 +65,7 @@ def emit_cz_all_nodata(
         sink.emit(
             "warning",
             ALL_NODATA,
-            f"{file.path} jest w calosci nodata - obszar poza pokryciem DMR CUZK "
+            f"{file.path} jest w calosci nodata - obszar poza pokryciem rastra CUZK "
             "(poza granica CZ?)",
         )
 
@@ -98,11 +98,10 @@ def _all_nodata(path: Path, nodata: float | None) -> bool:
 
 def write_cz_sidecar(
     provider,
+    route,
     target: Path,
     *,
     request: dict,
-    capability: str,
-    horizontal_crs: str,
     nodata: float | None,
     extra: dict | None,
     version: VersionRef,
@@ -111,11 +110,10 @@ def write_cz_sidecar(
 ) -> None:
     """Write the mandatory, exclusive sidecar of a versioned CZ cutout.
 
-    `horizontal_crs` is the CRS of the ACTUAL result (TM33 tile: EPSG:3045,
-    --horizontal-crs: the CRS requested by the user), not the channel's default CRS.
-
-    Both `transform` entries describe PINNED operations performed locally -
-    horizontal and vertical alike (ADR-024). Previously the horizontal field carried
+    ``route`` (``CzRasterRoute`` of the cutout, ``provider.route()``) gives
+    the CRS of the ACTUAL result (``--horizontal-crs``, not the channel's
+    default CRS) and both operations performed locally - horizontal and
+    vertical alike, pinned (ADR-024). Previously the horizontal field carried
     `"server:EPSG:<code>"` without an accuracy, which hid the server-side
     reprojection error (135 m) from the sidecar consumer.
     """
@@ -129,12 +127,12 @@ def write_cz_sidecar(
         target,
         request=request,
         vertical_crs=provider.vertical_crs,
-        horizontal_crs=horizontal_crs,
+        horizontal_crs=route.horizontal_crs,
         pinned_transforms={
-            "horizontal": provider.horizontal_transform(horizontal_crs),
-            "vertical": provider.vertical_transform,
+            "horizontal": route.horizontal,
+            "vertical": route.vertical,
         },
-        capability=capability,
+        capability=route.capability,
         nodata=nodata,
         extra=metadata_extra,
         version=version.to_extra(),
@@ -213,6 +211,8 @@ def _run_cz_cutout(
         if update != "upgrade":
             raise ValidationError("Plan wycinka CZ wymaga update='upgrade'")
         require_store(plan, store_id(output_dir))
+    # the route (pinned operations) before any request
+    route = provider.route()
     bbox, image_sr, slot = _cutout_slot(provider, bbox, output_dir, image_crs)
     stale: tuple[PlanItem, ...] = ()
     if plan is not None:
@@ -247,13 +247,12 @@ def _run_cz_cutout(
             extra["parent_request"] = parent_request
         write_cz_sidecar(
             provider,
+            route,
             data,
             request={
                 "bbox": bbox_coords(bbox),
                 "bbox_crs": bbox.crs,
             },
-            capability="bbox_raster",
-            horizontal_crs=image_sr,
             nodata=nodata if nodata is not None else CUZK_NODATA,
             extra=extra,
             version=ref,
@@ -279,32 +278,37 @@ def _image_crs(target_crs: str) -> str | None:
 
 def _cz_provider(
     *,
+    product: str,
     horizontal_crs: str,
     vertical_crs: str,
     resolution: str,
     cache: MetadataCache | None,
 ):
-    """CZ DMR provider of a cutout (``TransformError`` before any network)."""
+    """CZ raster provider of a cutout (``TransformError`` before any network)."""
     from kartograf.download.cutout import CUTOUT_CRS
-    from kartograf.providers.cuzk import create_dmr_provider
+    from kartograf.providers.cuzk import create_cz_raster_provider
 
     if horizontal_crs not in CUTOUT_CRS:
         raise ValidationError(
             f"Nieobslugiwany uklad docelowy wycinka CZ: {horizontal_crs!r} "
             f"(dostepne: {', '.join(CUTOUT_CRS)})"
         )
-    return create_dmr_provider(
+    provider = create_cz_raster_provider(
+        product=product,
         resolution=resolution,
         cache=cache,
         horizontal_crs=_image_crs(horizontal_crs),
         vertical_crs=vertical_crs,
     )
+    provider.route()  # every pinned operation of the cutout before any network
+    return provider
 
 
 def check_cz_cutout(
     bbox: BBox,
     *,
     output_dir: str | Path,
+    product: str,
     horizontal_crs: str,
     vertical_crs: str,
     resolution: str,
@@ -323,6 +327,7 @@ def check_cz_cutout(
     validate_request_bbox(bbox)
     del cache, on_notice  # same signature as the download (Z2); unused here
     provider = _cz_provider(
+        product=product,
         horizontal_crs=horizontal_crs,
         vertical_crs=vertical_crs,
         resolution=resolution,
@@ -337,6 +342,7 @@ def download_cz_cutout(
     bbox: BBox,
     *,
     output_dir: str | Path,
+    product: str,
     horizontal_crs: str,
     vertical_crs: str,
     resolution: str,
@@ -347,21 +353,24 @@ def download_cz_cutout(
     on_notice: Callable[[Notice], None] | None = None,
     on_download: Callable[[], None] | None = None,
 ) -> CzCutoutResult:
-    """CZ DMR cutout in ``horizontal_crs`` (e.g. EPSG:2180 + EVRF2007, A6).
+    """CZ cutout of the ImageServer in ``horizontal_crs`` (e.g. EPSG:2180 +
+    EVRF2007, A6).
 
-    No configuration defaults (A8): output directory, CRSs and resolution
-    (``"2m"`` DMR 5G / ``"5m"`` DMR 4G) are explicit. The grid starts at
-    ``bbox`` converted to ``horizontal_crs``. ``plan`` (from ``check_cz_cutout``
-    with ``update="upgrade"``) downloads only its missing position; a changed
-    position lands in ``stale``. ``cache``: ``True`` = default metadata cache
-    in the current directory, a ``MetadataCache`` = that cache, ``False`` =
-    none. ``on_notice`` receives each data notice when emitted;
-    ``on_download`` is called right before the first service request.
+    No configuration defaults (A8): output directory, product, CRSs and
+    resolution are explicit (``product="nmt"``: ``"2m"`` DMR 5G / ``"5m"``
+    DMR 4G; ``"nmpt"``: ``"0.5m"`` DMP OK / ``"2m"`` DMP 1G). The grid
+    starts at ``bbox`` converted to ``horizontal_crs``. ``plan`` (from
+    ``check_cz_cutout`` with ``update="upgrade"``) downloads only its missing
+    position; a changed position lands in ``stale``. ``cache``: ``True`` =
+    default metadata cache in the current directory, a ``MetadataCache`` =
+    that cache, ``False`` = none. ``on_notice`` receives each data notice
+    when emitted; ``on_download`` is called right before the first service
+    request.
 
     Raises
     ------
     ValidationError
-        Bad resolution, CRS, vertical CRS or plan/update combination.
+        Bad product, resolution, CRS, vertical CRS or plan/update combination.
     TransformError
         No safe pinned operation to ``horizontal_crs``.
     DownloadError
@@ -374,6 +383,7 @@ def download_cz_cutout(
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
         provider = _cz_provider(
+            product=product,
             horizontal_crs=horizontal_crs,
             vertical_crs=vertical_crs,
             resolution=resolution,

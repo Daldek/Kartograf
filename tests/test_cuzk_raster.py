@@ -1,4 +1,4 @@
-"""Tests of CuzkDmrProvider - SM5/TM33/bbox dispatch, CRS, vertical transformation.
+"""Tests of CuzkRasterProvider - SM5/TM33/bbox routes, CRS, vertical transformation.
 
 The values of the CTES96 sheet (MAPNAME, PODIL, bbox) come from the
 reconnaissance fixture `tests/fixtures/cuzk/klady_sm5_where_ctes96.json` -
@@ -22,12 +22,16 @@ from rasterio.transform import Affine, from_bounds, from_origin
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.providers.cuzk import create_dmr_provider
+from kartograf.providers.cuzk import create_cz_raster_provider
 from kartograf.providers.cuzk.client import wkid
-from kartograf.providers.cuzk.raster import CUZK_NODATA, CuzkDmrProvider, bbox_to_crs
+from kartograf.providers.cuzk.raster import (
+    CUZK_NODATA,
+    CuzkRasterProvider,
+    bbox_to_crs,
+)
 from kartograf.providers.cuzk.sheets import SheetInfo
 from kartograf.sources.descriptor import TransportKind
-from kartograf.sources.registry import get_source
+from kartograf.sources.registry import _SOURCES, get_source
 from kartograf.transform.crs import (
     TransformError,
     TransformUnavailableError,
@@ -38,7 +42,7 @@ _CLIENT_PATCH = "kartograf.providers.cuzk.raster.CuzkClient"
 _INDEX_PATCH = "kartograf.providers.cuzk.raster.SheetIndex"
 _PINNED_PATCH = "kartograf.providers.cuzk.raster.build_pinned_transform"
 _GROUP_PATCH = "kartograf.transform.crs.TransformerGroup"
-_SOURCE_PATCH = "kartograf.providers.cuzk.raster.get_source"
+_FIXTURES = Path("tests/fixtures/cuzk/real_2026_10_15")
 
 
 def _write_tif(
@@ -111,41 +115,52 @@ def _ctes96_info():
 
 
 class TestConstruction:
-    def test_resolution_selects_descriptor(self):
-        assert (
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").descriptor_key
-            == "cz.cuzk.dmr5g"
-        )
-        assert (
-            CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").descriptor_key
-            == "cz.cuzk.dmr4g"
-        )
+    @pytest.mark.parametrize(
+        ("product", "resolution", "key", "name"),
+        [
+            ("nmt", "2m", "cz.cuzk.dmr5g", "CUZK DMR 5G (2m)"),
+            ("nmt", "5m", "cz.cuzk.dmr4g", "CUZK DMR 4G (5m)"),
+            ("nmpt", "2m", "cz.cuzk.dmp1g", "CUZK DMP 1G (2m)"),
+            ("nmpt", "0.5m", "cz.cuzk.dmpok", "CUZK DMP OK (0.5m)"),
+        ],
+    )
+    def test_product_and_resolution_select_the_model(
+        self, product, resolution, key, name
+    ):
+        provider = CuzkRasterProvider(product, resolution, vertical_crs="Bpv")
+        assert provider.descriptor_key == key
+        assert provider.name == name
+        assert provider.product == product and provider.resolution == resolution
 
     def test_default_extension(self):
         assert (
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").default_extension
+            CuzkRasterProvider("nmt", "2m", vertical_crs="Bpv").default_extension
             == ".tif"
         )
 
     def test_invalid_resolution_rejected_by_factory(self):
-        with pytest.raises(ValidationError, match="2m, 5m"):
-            create_dmr_provider(resolution="1m", vertical_crs="Bpv")
+        with pytest.raises(ValidationError, match=r"0\.5m \(DMP OK\), 2m \(DMP 1G\)"):
+            create_cz_raster_provider("nmpt", "1m", vertical_crs="Bpv")
 
     def test_invalid_resolution_rejected_by_constructor(self):
-        with pytest.raises(ValidationError, match="2m, 5m"):
-            CuzkDmrProvider(resolution="1m", vertical_crs="Bpv")
+        with pytest.raises(ValidationError, match=r"2m \(DMR 5G\), 5m \(DMR 4G\)"):
+            CuzkRasterProvider("nmt", "1m", vertical_crs="Bpv")
+
+    def test_point_clouds_are_not_a_raster(self):
+        with pytest.raises(ValidationError, match="rastrowych"):
+            CuzkRasterProvider("laz", "2m", vertical_crs="Bpv")
 
     def test_kron86_raises_with_remedy(self):
         with pytest.raises(TransformUnavailableError) as exc:
-            CuzkDmrProvider(vertical_crs="KRON86", resolution="2m")
+            CuzkRasterProvider("nmt", vertical_crs="KRON86", resolution="2m")
         assert exc.value.remedy  # remedy from REMEDIES (non-public grids)
 
     def test_unknown_vertical_rejected(self):
         with pytest.raises(ValidationError):
-            CuzkDmrProvider(vertical_crs="NAP", resolution="2m")
+            CuzkRasterProvider("nmt", vertical_crs="NAP", resolution="2m")
 
     def test_endpoints_come_from_descriptor(self):
-        provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+        provider = CuzkRasterProvider("nmt", "2m", vertical_crs="Bpv")
         channel = get_source("cz.cuzk.dmr5g").channels[0]
         assert provider.base_url == channel.endpoint
 
@@ -153,16 +168,14 @@ class TestConstruction:
         descriptor = get_source("cz.cuzk.dmr5g")
         without_image = replace(descriptor, channels=())
         with (
-            patch(_SOURCE_PATCH, return_value=without_image),
-            pytest.raises(ValidationError, match="ARCGIS_IMAGE"),
+            patch.dict(_SOURCES, {descriptor.key: without_image}),
+            pytest.raises(ValidationError, match="arcgis_image"),
         ):
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+            CuzkRasterProvider("nmt", "2m", vertical_crs="Bpv")
 
     def test_metadata_properties(self):
-        """The CLI layer (Task 15) reads these properties when building the sidecar."""
-        provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
-        assert provider.name == "CUZK DMR (5m)"
-        assert provider.resolution == "5m"
+        """The download tracks read these properties when building the sidecar."""
+        provider = CuzkRasterProvider("nmt", "5m", vertical_crs="Bpv")
         assert provider.vertical_crs == "Bpv"
         assert provider.sheet_index is provider.sheet_index  # a single index
 
@@ -175,7 +188,7 @@ class TestDownloadDispatch:
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
             client.export_image.side_effect = _server_emulator()
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+            provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
             result = provider.download("302_5550", target)
 
         assert result == target
@@ -209,7 +222,7 @@ class TestDownloadDispatch:
                 return Path(output_path)
 
             client.fetch_file.side_effect = fake_fetch
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
+            provider = CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv")
             provider.download("CTES96", target)
 
         index_cls.return_value.sm5_sheet.assert_called_once_with("CTES96")
@@ -232,7 +245,7 @@ class TestDownloadDispatch:
                 return Path(output_path)
 
             client_cls.return_value.fetch_file.side_effect = fake_fetch
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
+            provider = CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv")
             provider.download(
                 "CTES96", tmp_path / "CTES96.tif", on_response=received.append
             )
@@ -242,23 +255,25 @@ class TestDownloadDispatch:
 
     def test_tm33_never_calls_response_callback(self, tmp_path):
         received = []
-        with patch.object(CuzkDmrProvider, "_export_raster") as export:
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+        with patch.object(CuzkRasterProvider, "_export_raster") as export:
+            provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
             provider.download(
                 "302_5550", tmp_path / "302_5550.tif", on_response=received.append
             )
         export.assert_called_once()
         assert received == []
 
-    def test_sm5_signal_heads_openzu_url_with_timeout(self):
+    def test_file_signal_heads_openzu_url_with_timeout(self):
         session = MagicMock()
         session.head.return_value.headers = {
             "ETag": '"d19f2c604d89dc1:0"',
             "Last-Modified": "Mon, 19 Jan 2026 14:10:33 GMT",
             "Content-Length": "752795",
         }
-        provider = CuzkDmrProvider(resolution="5m", session=session, vertical_crs="Bpv")
-        signal = provider.sm5_signal(" CTES96 ", timeout=12)
+        provider = CuzkRasterProvider(
+            "nmt", resolution="5m", session=session, vertical_crs="Bpv"
+        )
+        signal = provider.file_signal(" CTES96 ", timeout=12)
         assert signal == {
             "etag": '"d19f2c604d89dc1:0"',
             "last_modified": "Mon, 19 Jan 2026 14:10:33 GMT",
@@ -286,7 +301,9 @@ class TestDownloadDispatch:
                 return Path(output_path)
 
             client.fetch_file.side_effect = fake_fetch
-            CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").download(sheet, target)
+            CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv").download(
+                sheet, target
+            )
 
         index_cls.return_value.sm5_sheet.assert_called_once_with("CTES96")
         assert client.fetch_file.call_args.args[0] == (
@@ -295,8 +312,8 @@ class TestDownloadDispatch:
 
     def test_tm33_sheet_with_whitespace_is_parsed(self, tmp_path):
         """TM33 tile with whitespace: ParserTM33 gets the stripped sheet code."""
-        with patch.object(CuzkDmrProvider, "_export_raster") as export:
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+        with patch.object(CuzkRasterProvider, "_export_raster") as export:
+            CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                 " 302_5550 ", tmp_path / "t.tif"
             )
         bbox = export.call_args.args[0]
@@ -313,7 +330,7 @@ class TestDownloadDispatch:
                 return Path(output_path)
 
             client_cls.return_value.fetch_file.side_effect = fake_fetch
-            CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").download(
+            CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv").download(
                 "CTES96", target
             )
 
@@ -343,7 +360,7 @@ class TestDownloadDispatch:
                 return output_path
 
             client_cls.return_value.fetch_file.side_effect = fake_fetch
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
+            provider = CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv")
             with pytest.raises(DownloadError):
                 provider.download("CTES96", target)
 
@@ -351,12 +368,12 @@ class TestDownloadDispatch:
         assert not target.with_suffix(".tfw").exists()
 
     def test_sm5_with_2m_resolution_rejected(self, tmp_path):
-        provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+        provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
         with pytest.raises(ValidationError, match="5m"):
             provider.download("CTES96", tmp_path / "CTES96.tif")
 
     def test_non_cz_sheet_rejected(self, tmp_path):
-        provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+        provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
         with pytest.raises(ValidationError, match="CZ"):
             provider.download("N-34-130-D-d-2-4", tmp_path / "x.tif")
 
@@ -367,7 +384,7 @@ class TestDownloadDispatch:
             client_cls.return_value.fetch_file.side_effect = DownloadError(
                 "Pobieranie nieudane po 3 probach: 404 Client Error"
             )
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
+            provider = CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv")
             with pytest.raises(DownloadError) as exc:
                 provider.download("CTES96", tmp_path / "CTES96.tif")
         assert "404" in str(exc.value)  # original message preserved
@@ -384,15 +401,15 @@ class TestDownloadDispatch:
                 if ch.transport != TransportKind.DIRECT_FILES
             ),
         )
-        with patch(_SOURCE_PATCH, return_value=without_files), patch(_INDEX_PATCH):
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
-            with pytest.raises(ValidationError, match="DIRECT_FILES"):
+        with patch.dict(_SOURCES, {descriptor.key: without_files}), patch(_INDEX_PATCH):
+            provider = CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv")
+            with pytest.raises(ValidationError, match="direct_files"):
                 provider.download("CTES96", tmp_path / "CTES96.tif")
 
     def test_timeout_reaches_client(self, tmp_path):
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = _exporting("EPSG:3045")
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+            provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
             provider.download("302_5550", tmp_path / "302_5550.tif", timeout=15)
         assert any(
             call.kwargs.get("timeout") == 15 for call in client_cls.call_args_list
@@ -498,8 +515,8 @@ class TestHorizontalReprojection:
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -514,8 +531,8 @@ class TestHorizontalReprojection:
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, tmp_path / "area.tif")
 
@@ -529,7 +546,7 @@ class TestHorizontalReprojection:
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+            CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                 "302_5550", target
             )
 
@@ -545,8 +562,8 @@ class TestHorizontalReprojection:
         calls: list = []
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server(calls)
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, tmp_path / "area.tif")
 
@@ -561,8 +578,8 @@ class TestHorizontalReprojection:
     def test_native_request_has_warp_margin_of_four_pixels(self):
         """Native request margin = 4 px (8 m at 2 m) on each side."""
         bbox = BBox(530000, 382000, 532000, 384000, "EPSG:2180")
-        provider = CuzkDmrProvider(
-            resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+        provider = CuzkRasterProvider(
+            "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
         )
         native = provider._bbox_to_crs(bbox, "EPSG:5514")
         sent = provider._native_request_bbox(bbox)
@@ -584,8 +601,8 @@ class TestHorizontalReprojection:
             client_cls.return_value.export_image.side_effect = self._fake_server(
                 [], nodata_west_of=-449000.0, flat=300.0
             )
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -602,8 +619,8 @@ class TestHorizontalReprojection:
         bbox = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = self._fake_server([])
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -621,8 +638,8 @@ class TestHorizontalReprojection:
             pytest.raises(RuntimeError),
         ):
             client_cls.return_value.export_image.side_effect = self._fake_server([])
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -649,12 +666,15 @@ class TestHorizontalReprojection:
         with patch(_CLIENT_PATCH) as client_cls, pytest.raises(RasterioIOError):
             client_cls.return_value.export_image.side_effect = _garbage
             if kind == "bbox":
-                provider = CuzkDmrProvider(
-                    resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+                provider = CuzkRasterProvider(
+                    "nmt",
+                    resolution="2m",
+                    horizontal_crs="EPSG:2180",
+                    vertical_crs="Bpv",
                 )
                 provider.download_bbox(_NATIVE_BBOX, target)
             else:
-                CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+                CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                     "302_5550", target
                 )
 
@@ -685,12 +705,15 @@ class TestHorizontalReprojection:
         ):
             client_cls.return_value.export_image.side_effect = _server_emulator()
             if kind == "bbox":
-                provider = CuzkDmrProvider(
-                    resolution="2m", horizontal_crs=target_crs, vertical_crs="Bpv"
+                provider = CuzkRasterProvider(
+                    "nmt",
+                    resolution="2m",
+                    horizontal_crs=target_crs,
+                    vertical_crs="Bpv",
                 )
                 provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
             else:
-                CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+                CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                     "302_5550", tmp_path / "302_5550.tif"
                 )
 
@@ -705,8 +728,8 @@ class TestHorizontalReprojection:
         target = tmp_path / "302_5550.tif"
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = _server_emulator()
-            provider = CuzkDmrProvider(
-                resolution="2m", session=MagicMock(), vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", session=MagicMock(), vertical_crs="Bpv"
             )
             provider.download("302_5550", target)
         pinned = provider.horizontal_transform("EPSG:3045")
@@ -719,7 +742,7 @@ class TestHorizontalReprojection:
             assert src.bounds == (302000, 5550000, 304000, 5552000)
 
     def test_horizontal_transform_is_none_for_native(self):
-        provider = CuzkDmrProvider(resolution="2m", vertical_crs="Bpv")
+        provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
         assert provider.horizontal_transform("EPSG:5514") is None
         pinned = provider.horizontal_transform("EPSG:2180")
         assert pinned is not None
@@ -735,8 +758,8 @@ class TestHorizontalReprojection:
             ),
             pytest.raises(TransformUnavailableError),
         ):
-            CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
         client_cls.return_value.export_image.assert_not_called()
 
@@ -774,7 +797,8 @@ class TestProbePoint:
         t_bad = _fake_operation(0.051, "sk_gku fake", (float("inf"), float("inf")))
         t_good = _fake_operation(0.5, "Krovak good", (472887.5, 208337.5))
         with patch(_GROUP_PATCH, return_value=_group_of(t_bad, t_good)):
-            provider = CuzkDmrProvider(
+            provider = CuzkRasterProvider(
+                "nmt",
                 resolution="2m",
                 horizontal_crs="EPSG:2180",
                 session=MagicMock(),
@@ -790,8 +814,8 @@ class TestProbePoint:
         (in the SOURCE CRS, so with no extra transformation)."""
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
-            provider = CuzkDmrProvider(
-                resolution="2m", session=MagicMock(), vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", session=MagicMock(), vertical_crs="Bpv"
             )
             provider._bbox_to_crs(bbox, "EPSG:4326")
         assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:4326")
@@ -812,8 +836,8 @@ class TestProbePoint:
         from kartograf.providers.cuzk.raster import CZ_PROBE_NATIVE
 
         with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
-            provider = CuzkDmrProvider(
-                resolution="2m", session=MagicMock(), vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", session=MagicMock(), vertical_crs="Bpv"
             )
             provider.horizontal_transform("EPSG:2180")
         assert pinned_mock.call_args.args[:2] == ("EPSG:5514", "EPSG:2180")
@@ -842,8 +866,11 @@ class TestProbePoint:
             client_cls.return_value.export_image.side_effect = _server_emulator(
                 flat=300.0
             )
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="EVRF2007"
+            provider = CuzkRasterProvider(
+                "nmt",
+                resolution="2m",
+                horizontal_crs="EPSG:2180",
+                vertical_crs="EVRF2007",
             )
             provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
 
@@ -863,9 +890,9 @@ class TestDownloadBbox:
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
             client.export_image.side_effect = _exporting("EPSG:5514")
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download_bbox(
-                bbox, target
-            )
+            CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="Bpv"
+            ).download_bbox(bbox, target)
         assert client.export_image.call_args.kwargs["image_sr"] == "EPSG:5514"
         assert client.export_image.call_args.args[1] == bbox
 
@@ -875,9 +902,9 @@ class TestDownloadBbox:
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
             client.export_image.side_effect = _exporting("EPSG:5514")
-            CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").download_bbox(
-                bbox, tmp_path / "a.tif"
-            )
+            CuzkRasterProvider(
+                "nmt", resolution="5m", vertical_crs="Bpv"
+            ).download_bbox(bbox, tmp_path / "a.tif")
         assert client.export_image.call_args.kwargs["pixel_size"] == 5.0
         assert client.export_image.call_args.args[0] == (
             "https://ags.cuzk.gov.cz/arcgis2/rest/services/dmr4g/ImageServer"
@@ -890,8 +917,8 @@ class TestDownloadBbox:
         with patch(_CLIENT_PATCH) as client_cls:
             client = client_cls.return_value
             client.export_image.side_effect = _server_emulator()
-            provider = CuzkDmrProvider(
-                resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs="EPSG:2180", vertical_crs="Bpv"
             )
             provider.download_bbox(bbox, target)
 
@@ -911,9 +938,9 @@ class TestDownloadBbox:
     def test_non_gtiff_format_rejected(self, tmp_path):
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with pytest.raises(ValidationError, match="GTiff"):
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download_bbox(
-                bbox, tmp_path / "a.png", format="PNG"
-            )
+            CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="Bpv"
+            ).download_bbox(bbox, tmp_path / "a.png", format="PNG")
 
 
 class TestOnDownloadCallback:
@@ -943,7 +970,7 @@ class TestOnDownloadCallback:
 
             index_cls.return_value.sm5_sheet.side_effect = fake_index
             client_cls.return_value.fetch_file.side_effect = fake_fetch
-            CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").download(
+            CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv").download(
                 "CTES96", tmp_path / "CTES96.tif", on_download=announce
             )
 
@@ -956,7 +983,7 @@ class TestOnDownloadCallback:
                 "Arkusz SM5 'ABCD12' nie istnieje w indeksie KladyMapovychListu"
             )
             with pytest.raises(ValidationError, match="nie istnieje"):
-                CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").download(
+                CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv").download(
                     "ABCD12", tmp_path / "ABCD12.tif", on_download=announce
                 )
             client_cls.return_value.fetch_file.assert_not_called()
@@ -967,7 +994,7 @@ class TestOnDownloadCallback:
         with patch(_CLIENT_PATCH), patch(_INDEX_PATCH) as index_cls:
             index_cls.return_value.sm5_sheet.side_effect = DownloadError("timeout")
             with pytest.raises(DownloadError):
-                CuzkDmrProvider(resolution="5m", vertical_crs="Bpv").download(
+                CuzkRasterProvider("nmt", resolution="5m", vertical_crs="Bpv").download(
                     "CTES96", tmp_path / "CTES96.tif", on_download=announce
                 )
         assert events == []
@@ -975,7 +1002,7 @@ class TestOnDownloadCallback:
     def test_sm5_with_2m_does_not_announce(self, tmp_path):
         events, announce = self._recorder()
         with pytest.raises(ValidationError, match="5m"):
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+            CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                 "CTES96", tmp_path / "CTES96.tif", on_download=announce
             )
         assert events == []
@@ -983,7 +1010,7 @@ class TestOnDownloadCallback:
     def test_non_cz_sheet_does_not_announce(self, tmp_path):
         events, announce = self._recorder()
         with pytest.raises(ValidationError, match="CZ"):
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+            CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                 "N-34-130-D-d-2-4", tmp_path / "x.tif", on_download=announce
             )
         assert events == []
@@ -992,7 +1019,7 @@ class TestOnDownloadCallback:
         events, announce = self._recorder()
         with patch(_CLIENT_PATCH) as client_cls:
             with pytest.raises(ParseError, match="parzyste"):
-                CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+                CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                     "301_5550", tmp_path / "t.tif", on_download=announce
                 )
             client_cls.return_value.export_image.assert_not_called()
@@ -1008,7 +1035,7 @@ class TestOnDownloadCallback:
 
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = fake_export
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download(
+            CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv").download(
                 "302_5550", tmp_path / "t.tif", on_download=announce
             )
         assert events == ["announce", "export"]
@@ -1025,8 +1052,8 @@ class TestOnDownloadCallback:
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with patch(_CLIENT_PATCH) as client_cls:
             client_cls.return_value.export_image.side_effect = fake_export
-            CuzkDmrProvider(
-                resolution="2m", horizontal_crs=target_crs, vertical_crs="Bpv"
+            CuzkRasterProvider(
+                "nmt", resolution="2m", horizontal_crs=target_crs, vertical_crs="Bpv"
             ).download_bbox(bbox, tmp_path / "a.tif", on_download=announce)
         assert events == ["announce", "export"]
 
@@ -1034,7 +1061,9 @@ class TestOnDownloadCallback:
         events, announce = self._recorder()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
         with pytest.raises(ValidationError, match="GTiff"):
-            CuzkDmrProvider(resolution="2m", vertical_crs="Bpv").download_bbox(
+            CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="Bpv"
+            ).download_bbox(
                 bbox, tmp_path / "a.png", format="PNG", on_download=announce
             )
         assert events == []
@@ -1072,16 +1101,17 @@ class TestVerticalTransform:
         return factory, vertical
 
     def test_bpv_native_no_transform(self):
-        provider = CuzkDmrProvider(
-            resolution="2m", vertical_crs="Bpv"
-        )  # vertical_crs="Bpv"
-        assert provider.vertical_transform is None
+        provider = CuzkRasterProvider("nmt", resolution="2m", vertical_crs="Bpv")
+        assert provider.route().vertical is None
+        assert provider.route("302_5550").vertical is None
 
     def test_evrf2007_builds_8357_to_5621(self):
         factory, _ = self._pinned_fakes()
         with patch(_PINNED_PATCH, side_effect=factory) as pinned_mock:
-            provider = CuzkDmrProvider(vertical_crs="EVRF2007", resolution="2m")
-            assert provider.vertical_transform is not None
+            provider = CuzkRasterProvider(
+                "nmt", vertical_crs="EVRF2007", resolution="2m"
+            )
+            assert provider.route().vertical is not None
         assert pinned_mock.call_args.args[:2] == ("EPSG:8357", "EPSG:5621")
 
     def test_evrf2007_shifts_values_and_keeps_nodata(self, tmp_path):
@@ -1093,7 +1123,9 @@ class TestVerticalTransform:
         ):
             client = client_cls.return_value
             client.export_image.side_effect = _exporting("EPSG:5514")
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             provider.download_bbox(_NATIVE_BBOX, target)
 
         with rasterio.open(target) as src:
@@ -1114,7 +1146,9 @@ class TestVerticalTransform:
             client_cls.return_value.export_image.side_effect = _server_emulator(
                 flat=300.0
             )
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             provider.download("302_5550", target)
 
         with rasterio.open(target) as src:
@@ -1134,7 +1168,9 @@ class TestVerticalTransform:
             patch(_PINNED_PATCH, side_effect=factory),
         ):
             client_cls.return_value.export_image.side_effect = _exporting("EPSG:5514")
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             provider.download_bbox(bbox, target)
 
         with rasterio.open(target) as src:
@@ -1155,7 +1191,9 @@ class TestVerticalTransform:
                 _write_tif(Path(kw["output_path"]), crs="EPSG:5514", value=CUZK_NODATA)
                 or Path(kw["output_path"])
             )
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             provider.download_bbox(_NATIVE_BBOX, target)
 
         with rasterio.open(target) as src:
@@ -1165,7 +1203,8 @@ class TestVerticalTransform:
     def test_unavailable_operation_fails_before_any_download(self, tmp_path):
         """Fail-fast as with KRON86: no safe 8357->5621 operation.
 
-        The constructor aborts before anything is downloaded.
+        The route of the request (built before any transfer) aborts: neither
+        the cutout nor the TM33 tile of the ImageServer reaches the server.
         """
         with (
             patch(_CLIENT_PATCH) as client_cls,
@@ -1174,8 +1213,11 @@ class TestVerticalTransform:
                 side_effect=TransformUnavailableError("brak bezpiecznej operacji"),
             ),
         ):
+            provider = CuzkRasterProvider("nmt", "2m", vertical_crs="EVRF2007")
             with pytest.raises(TransformUnavailableError):
-                CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+                provider.download_bbox(_NATIVE_BBOX, tmp_path / "area.tif")
+            with pytest.raises(TransformUnavailableError):
+                provider.download("302_5550", tmp_path / "302_5550.tif")
             client_cls.return_value.export_image.assert_not_called()
             client_cls.return_value.fetch_file.assert_not_called()
         assert not list(tmp_path.iterdir())
@@ -1201,7 +1243,9 @@ class TestVerticalTransform:
             patch("kartograf.providers.cuzk.raster._CHUNK_PIXELS", 20),  # 5 strips
         ):
             client_cls.return_value.export_image.side_effect = _exporting("EPSG:5514")
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             with pytest.raises(TransformError):
                 provider.download_bbox(_NATIVE_BBOX, target)
 
@@ -1226,7 +1270,9 @@ class TestVerticalTransform:
                     _write_dmr4g_pair(Path(output_path)) or Path(output_path)
                 )
             )
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="5m", vertical_crs="EVRF2007"
+            )
             with pytest.raises(TransformError):
                 provider.download("CTES96", target)
 
@@ -1240,7 +1286,9 @@ class TestVerticalTransform:
             patch(_PINNED_PATCH, side_effect=factory),
         ):
             client_cls.return_value.export_image.side_effect = _exporting(None)
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             with pytest.raises(ValidationError, match="CRS"):
                 provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
 
@@ -1268,9 +1316,13 @@ class TestVerticalTransform:
 
         factory, vertical = self._pinned_fakes()
         with patch(_PINNED_PATCH, side_effect=factory):
-            provider = CuzkDmrProvider(resolution="5m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="5m", vertical_crs="EVRF2007"
+            )
+            pinned = provider.route("CTES96").vertical
+            assert pinned is vertical
             with pytest.raises(ValidationError, match="geotransformacj"):
-                provider._apply_vertical_shift(path)
+                provider._apply_vertical_shift(path, pinned)
 
         assert not vertical.transform.called  # nothing was converted
         assert not path.exists()
@@ -1290,7 +1342,9 @@ class TestVerticalTransform:
                 _write_tif(Path(kw["output_path"]), crs="EPSG:5514", size=(10, 10))
                 or Path(kw["output_path"])
             )
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             provider.download_bbox(_NATIVE_BBOX, target)
 
         with rasterio.open(target) as src:
@@ -1316,7 +1370,9 @@ class TestVerticalTransform:
                 )
                 or Path(kw["output_path"])
             )
-            provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
+            provider = CuzkRasterProvider(
+                "nmt", resolution="2m", vertical_crs="EVRF2007"
+            )
             provider.download_bbox(_NATIVE_BBOX, tmp_path / "t.tif")
 
         # helper transformation built from the raster CRS to WGS84
@@ -1338,7 +1394,7 @@ class TestDescriptorProviderConsistency:
         from kartograf.download.storage import FileStorage
 
         d = get_source("cz.cuzk.dmr5g")
-        provider = create_dmr_provider(resolution="2m", vertical_crs="Bpv")
+        provider = create_cz_raster_provider("nmt", resolution="2m", vertical_crs="Bpv")
         assert provider.descriptor_key == d.key
         assert provider.default_extension == d.default_extension
         storage = FileStorage(
@@ -1354,7 +1410,7 @@ class TestDescriptorProviderConsistency:
 
     def test_dmr4g(self, tmp_path):
         d = get_source("cz.cuzk.dmr4g")
-        provider = create_dmr_provider(resolution="5m", vertical_crs="Bpv")
+        provider = create_cz_raster_provider("nmt", resolution="5m", vertical_crs="Bpv")
         assert provider.descriptor_key == d.key
         capabilities = [set(ch.capabilities) for ch in d.channels]
         assert {"sheet_files"} in capabilities

@@ -28,6 +28,8 @@ KLADY = "https://ags.cuzk.gov.cz/arcgis/rest/services/KladyMapovychListu/MapServ
 CTES96_URL = f"{OPENZU}/DMR4G/epsg-5514/CTES96.zip"
 CTES86_URL = f"{OPENZU}/DMR4G/epsg-5514/CTES86.zip"
 TM33_URL = f"{OPENZU}/DMR4G/epsg-3045/760_5518.zip"
+# DMR 4G raster tile of the ETRS89 files (EPSG:3045, EVRF2007 natively).
+TM33_TIFF_URL = f"{OPENZU}/DMR4G-TIFF/epsg-3045/760_5518.zip"
 
 # Recorded area on the PL/CZ border and its EPSG:3045 envelope (``bbox_to_crs``)
 # sent with the layer 26 query (fixture README).
@@ -37,6 +39,7 @@ CIESZYN_3045 = (760922.38, 5516225.51, 762043.52, 5517346.64)
 _ZIPS = {
     CTES96_URL: RECORDED / "openzu_DMR4G_5514_CTES96.zip",
     TM33_URL: RECORDED / "openzu_DMR4G_3045_760_5518.zip",
+    TM33_TIFF_URL: RECORDED / "openzu_DMR4G-TIFF_3045_760_5518.zip",
 }
 _HEADER_NAMES = ("ETag", "Last-Modified", "Content-Length", "Content-Type")
 # A 404 of openzu (fixture README): text/html, 1245 B, no ETag/Last-Modified.

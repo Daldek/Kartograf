@@ -5,7 +5,8 @@ This module re-exports a historical subset of the provider classes
 (dating from before the ``providers.pl``/``providers.cuzk`` package split).
 It does NOT re-export every provider that ships in this release (e.g.
 ``GugikNmptProvider``, ``GugikOrtoProvider``, or the ``providers.cuzk``
-package with ``CuzkDmrProvider``/``create_dmr_provider`` are missing here).
+package with ``CuzkRasterProvider``/``create_cz_raster_provider`` and
+``CuzkLazProvider`` are missing here).
 
 For the complete, currently maintained provider list, use the top-level
 package API: ``from kartograf import ...`` (see ``kartograf/__init__.py``).

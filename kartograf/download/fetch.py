@@ -295,13 +295,16 @@ def emit_file_notices(
     update: UpdateMode | None,
     *,
     check_failure: bool = True,
+    unverified_local: bool = True,
 ) -> None:
     """Notices of one store file of a request result (one text for every track).
 
     ``CHECK_FAILED`` (warning): the local version was used because the
     source check failed (skipped with ``check_failure=False`` when the
     caller already reported it); ``UNVERIFIED_LOCAL`` (info): ``"upgrade"``
-    kept a local version of a source without a cheap signal.
+    kept a local version of a source without a cheap signal (skipped with
+    ``unverified_local=False`` when the track already reported the file,
+    e.g. a CZ sheet file whose local version has no HTTP signal).
     """
     unverified = file.unverified or ""
     if unverified.startswith("check_failed") and check_failure:
@@ -312,7 +315,12 @@ def emit_file_notices(
             f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
             f"lokalnej wersji {file.label}",
         )
-    if file.status == "local" and unverified == "none" and update == "upgrade":
+    if (
+        unverified_local
+        and file.status == "local"
+        and unverified == "none"
+        and update == "upgrade"
+    ):
         sink.emit(
             "info",
             UNVERIFIED_LOCAL,

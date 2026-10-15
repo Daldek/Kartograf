@@ -56,7 +56,7 @@ class TransformPolicy:
 
 
 # Policy for operations that reproject raster CONTENT (the CZ path
-# ``CuzkDmrProvider`` and the PL cutout ``download/cutout.py``) - the only one
+# ``CuzkRasterProvider`` and the PL cutout ``download/cutout.py``) - the only one
 # that moves pixels, so the accuracy limit is stricter than for envelopes. The
 # datum step to the 2180/3045 CRSs is pinned to the Czech EPSG:1622 (1.0 m,
 # KNOWN_PATHS);

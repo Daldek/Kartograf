@@ -14,19 +14,19 @@ from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.download.availability import AVAILABILITY_COUNTRIES
 from kartograf.download.cutout import CUTOUT_CRS
-from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
     COUNTRY_CHOICES,
     ELEVATION_PRODUCTS,
     SCALE_2000_CHOICES,
     SHEET_SYSTEM_CHOICES,
-    VERTICAL_CRS_CZ,
+    cz_resolution_help,
     format_text,
     product_choices,
     resolution_text,
     vertical_crs_text,
 )
 from kartograf.sources.descriptor import SourceDescriptor
+from kartograf.sources.variants import CZ_VERTICAL_TEXT
 
 
 def _source_choice(source: SourceDescriptor) -> str:
@@ -109,17 +109,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Rozdzielczosc siatki - wymagana tam, gdzie jest wybor. PL "
         f"(siatki ASC): {resolution_text()}; wycinek --cutout tylko 1m (mozna "
         "pominac); archiwa (--format): rozdzielczosci w kartograf elevation "
-        f"list-sources. CZ: {RESOLUTION_CZ}; arkusz SM5 tylko 5m (mozna "
-        "pominac). LAZ bez rozdzielczosci. Jedna wartosc dotyczy kazdego kraju "
-        "zadania; zadanie PL+CZ z roznymi: pl=WARTOSC,cz=WARTOSC "
-        "(np. pl=1m,cz=2m)",
+        f"list-sources. CZ: {cz_resolution_help()}. LAZ bez rozdzielczosci. "
+        "Jedna wartosc dotyczy kazdego kraju zadania; zadanie PL+CZ z roznymi: "
+        "pl=WARTOSC,cz=WARTOSC (np. pl=1m,cz=2m)",
     )
     product.add_argument(
         "--vertical-crs",
         metavar="VCRS",
         default=None,
         help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}. CZ: "
-        f"{VERTICAL_CRS_CZ}. Jedna wartosc dotyczy kazdego kraju zadania i musi "
+        f"{CZ_VERTICAL_TEXT}. Jedna wartosc dotyczy kazdego kraju zadania i musi "
         "byc dla niego dostepna; zadanie PL+CZ z roznymi ukladami: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=EVRF2007,cz=Bpv)",
     )

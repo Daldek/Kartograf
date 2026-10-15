@@ -81,7 +81,7 @@ LAZ_AREA = {
 }
 BDOT_BBOX = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
 HSG_SHEET = "N-34-130-D"
-CZ_FACTORY = "kartograf.providers.cuzk.create_dmr_provider"
+CZ_FACTORY = "kartograf.providers.cuzk.create_cz_raster_provider"
 # A tiny area inside the rectangular envelopes of PL and CZ (Cieszyn):
 # ``country="auto"`` gives one cutout per country.
 AUTO_CUTOUT = {

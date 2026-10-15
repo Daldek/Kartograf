@@ -167,6 +167,14 @@ tlumaczy). Dodatkowo:
    zadany spoza nich = przypieta transformacja (jak dzis). `download(sheet, ...)` wybiera trase z decyzji 2;
    wysokosc pliku TM33 EVRF2007 bez `_apply_vertical_shift`, sidecar bez
    przypietej operacji pionowej, `vertical_crs="EPSG:5621"`.
+   **Realizacja (2026-10-16):** trase opisuje `CuzkRasterProvider.route(sheet=None)
+   -> CzRasterRoute(channel, horizontal_crs, horizontal, vertical)` (kanal,
+   uklad wyniku i przypiete operacje; `None` = wycinek); tory arkusza i wycinka
+   pisza sidecar z trasy. Operacja pionowa powstaje w `route()` (przed siecia),
+   nie w konstruktorze - kafel TM33 EVRF2007 z pliku jej nie ma. Sygnal pliku:
+   `file_signal(sheet)` (dawne `sm5_signal`). Wariant CZ wybiera
+   `find_cz_variant`/`cz_variant_error` (`sources/variants.py`), nie
+   `find_variant` planu A.
 5. **Tor arkusza CZ:** `download_cz_sheet(sheet, *, output_dir, product,
    vertical_crs, resolution=None, update=None, plan=None, cache=True,
    on_notice=None, on_download=None)` i `check_cz_sheet` - nowe wymagane
