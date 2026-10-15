@@ -1,10 +1,10 @@
 """
-Collections on the versioned store (ADR-042 D2, D6-D10).
+Collections on the versioned store (ADR-042 D2, D6-D10, D12).
 
 One orchestrator for every channel with typed engine parameters
 (``AccessChannel.params``): ``download_collection``/``check_collection`` are
-the ``download`` commands of the ``boundaries``, ``cadastre`` and
-``models3d`` groups (plan D: ``hydro``). ``validate_collection_request``
+the ``download`` commands of the ``boundaries``, ``cadastre``, ``models3d``
+and ``hydro`` groups. ``validate_collection_request``
 checks the whole choice WITHOUT network (exactly one selection, product,
 country, unit, variant, level, CRS) and is the only place of these rules.
 The kind of selection picks the channel: ``teryt`` -> the package of that
@@ -12,15 +12,19 @@ unit (``unit_package``); an area (``bbox``/``sheet``/``geometry``) -> one
 GeoPackage of the area in the native CRS of the service (``feature_bbox``),
 or - for a product without an area channel - the package of every powiat
 of the area (PRG, ``UNIT_LIST``); ``whole_country`` -> the national file
-after a ``WHOLE_COUNTRY_SIZE`` notice (K7). Every file goes through
+(``unit_package`` of the country or a file of a CUZK ATOM feed,
+``atom_files``: edition = signal ``metadata``) after a
+``WHOLE_COUNTRY_SIZE`` notice (K7). Every file goes through
 ``fetch_version``/``inspect_version`` of its slot (plan track
 ``collection``); a failing unit lands in ``failed``, the others still run.
 
 ``LandCoverManager`` runs the BDOT10k archive through the same unit jobs
-(``package_job``, ``run_job``, ``inspect_job``) on its own plan track.
+(``package_job``, ``run_job``, ``inspect_job``) and ZABAGED through
+``landcover_request``/``run_request``/``plan_request`` on its own plan track.
 """
 
 import concurrent.futures
+import functools
 import logging
 import re
 import shutil
@@ -86,6 +90,7 @@ from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
 from kartograf.sources.descriptor import (
     AccessChannel,
+    AtomFilesParams,
     FeatureBBoxParams,
     FeatureLayer,
     PackageVariant,
@@ -93,8 +98,16 @@ from kartograf.sources.descriptor import (
     SourceDescriptor,
     UnitPackageParams,
 )
-from kartograf.sources.registry import sources_for
+from kartograf.sources.edition import Edition
+from kartograf.sources.registry import get_source, sources_for
 from kartograf.sources.sidecar import emit_sidecar
+from kartograf.transport.atom import (
+    AtomFile,
+    atom_segment_tokens,
+    check_atom_crs,
+    fetch_atom_file,
+    resolve_atom_file,
+)
 from kartograf.transport.http import SessionPerThread, head_signal
 from kartograf.transport.unit_package import (
     choice_keys,
@@ -181,6 +194,15 @@ def collection_levels(product: str) -> dict[str, tuple[str, ...]]:
                     layer.code for layer in params.layers
                 )
     return levels
+
+
+def collection_layers(descriptor_key: str) -> tuple[FeatureLayer, ...]:
+    """Layers of the area channel of a source (``()``: no area channel)."""
+    channel = _feature_channel(get_source(descriptor_key))
+    if channel is None:
+        return ()
+    assert isinstance(channel.params, FeatureBBoxParams)
+    return channel.params.layers
 
 
 def require_collection_product(product: str | None, group: str) -> None:
@@ -362,18 +384,33 @@ def _feature_channel(descriptor: SourceDescriptor) -> AccessChannel | None:
     return None
 
 
+def _atom_channel(descriptor: SourceDescriptor) -> AccessChannel | None:
+    for channel in descriptor.channels:
+        if isinstance(channel.params, AtomFilesParams):
+            return channel
+    return None
+
+
+def subject(descriptor: SourceDescriptor) -> str:
+    """How messages name a source: the product of a collection group
+    (``admin``), the ``--source`` of a land cover source (``zabaged``)."""
+    if descriptor.storage_subdir.split("/", 1)[0] == _LANDCOVER_GROUP:
+        return descriptor.key.rsplit(".", 1)[-1]
+    return descriptor.product
+
+
 def _channel_for(
     descriptor: SourceDescriptor, kind: str, teryt: str | None
 ) -> AccessChannel:
     """The channel of a kind of selection (ADR-042 D2)."""
-    product = descriptor.product
+    product = subject(descriptor)
     if kind == "teryt":
         assert teryt is not None
         unit = "woj" if len(teryt) == 2 else "powiat"
         channel = _package_channel(descriptor, unit)
         missing = f"--teryt {teryt}: {product} nie ma paczek {_UNIT_TEXT[unit]}"
     elif kind == "whole_country":
-        channel = _package_channel(descriptor, "country")
+        channel = _package_channel(descriptor, "country") or _atom_channel(descriptor)
         missing = (
             f"--whole-country: {product} ({descriptor.country}) nie ma pliku krajowego"
         )
@@ -385,6 +422,18 @@ def _channel_for(
     return channel
 
 
+def _level_hint(level: str | Mapping[str, str] | None, product: str) -> str:
+    """Hint of the per-country ``--level`` syntax for a request in PL and CZ
+    given one plain value (the levels of the countries differ)."""
+    if not isinstance(level, str):
+        return ""
+    levels = collection_levels(product)
+    if len(levels) < 2:
+        return ""
+    example = ",".join(f"{code.lower()}=<poziom>" for code in levels)
+    return f" (zadanie PL+CZ: poziom per kraj, np. --level {example})"
+
+
 def _content(
     code: str,
     descriptor: SourceDescriptor,
@@ -394,9 +443,12 @@ def _content(
     lod: int | None,
     year: int | None,
     horizontal_crs: str | None,
+    countries: tuple[str, ...] = (),
 ) -> CollectionPart:
-    """Content of one country part: variant or layers, segment, request values."""
-    product = descriptor.product
+    """Content of one country part: variant, layers or ATOM file, segment and
+    request values. ``countries``: the countries of an area request (hint
+    of the per-country ``--level`` syntax)."""
+    product = subject(descriptor)
     params = channel.params
     level_value = country_value(level, code)
     variant: PackageVariant | None = None
@@ -413,6 +465,20 @@ def _content(
         ext = params.unpack or ".zip"
         choice = {k: v for k, v in (("lod", lod), ("year", year)) if v is not None}
         crs = channel.horizontal_crs
+    elif isinstance(params, AtomFilesParams):
+        for name, value in (("level", level_value), ("lod", lod), ("year", year)):
+            if value is not None:
+                raise ValidationError(
+                    f"--{name} nie dotyczy pliku krajowego {product} "
+                    f"({descriptor.country}: biezace wydanie z feedu ATOM)"
+                )
+        check_atom_crs(params, horizontal_crs)
+        segment = content_segment(
+            descriptor.key, atom_segment_tokens(params, horizontal_crs)
+        )
+        ext = ".zip"
+        choice = {}
+        crs = horizontal_crs or channel.horizontal_crs
     else:
         assert isinstance(params, FeatureBBoxParams)
         for name, value in (("lod", lod), ("year", year)):
@@ -423,15 +489,16 @@ def _content(
                 )
         codes = [layer.code for layer in params.layers]
         if params.selection == "level":
+            hint = _level_hint(level, descriptor.product) if len(countries) > 1 else ""
             if level_value is None:
                 raise ValidationError(
                     f"--level wymagane dla obszaru {product} ({descriptor.country}): "
-                    f"{', '.join(codes)}"
+                    f"{', '.join(codes)}{hint}"
                 )
             if level_value not in codes:
                 raise ValidationError(
                     f"--level {level_value}: nieznany poziom {product} "
-                    f"({descriptor.country}); dostepne: {', '.join(codes)}"
+                    f"({descriptor.country}); dostepne: {', '.join(codes)}{hint}"
                 )
             layers = tuple(lay for lay in params.layers if lay.code == level_value)
             tokens: tuple[str, ...] = (level_value,)
@@ -446,6 +513,11 @@ def _content(
         segment = content_segment(descriptor.key, tokens)
         ext = ".gpkg"
         crs = params.native_crs
+        if horizontal_crs is not None and horizontal_crs != crs:
+            raise ValidationError(
+                f"--horizontal-crs {horizontal_crs}: obiekty obszaru {product} "
+                f"({descriptor.country}) sa zawsze w ukladzie uslugi {crs}"
+            )
     if horizontal_crs is not None and horizontal_crs != crs:
         raise ValidationError(
             f"--horizontal-crs {horizontal_crs}: {product} ({descriptor.country}) "
@@ -523,8 +595,14 @@ def validate_collection_request(
     return _resolve(dict(locals()), NoticeSink(None))
 
 
-def _resolve(args: dict, sink: NoticeSink) -> CollectionRequest:
-    """``validate_collection_request`` with the notices of the area choice."""
+def _resolve(
+    args: dict,
+    sink: NoticeSink,
+    descriptors: dict[str, SourceDescriptor] | None = None,
+) -> CollectionRequest:
+    """``validate_collection_request`` with the notices of the area choice;
+    ``descriptors``: the sources by country (default: the collection
+    descriptors of ``product``; a land cover source passes its own)."""
     if args["bbox"] is not None:  # the CLI parses --bbox first: the same first error
         validate_request_bbox(args["bbox"])
     # library calls only: the CLI parses its flags (STANDARDS 11.2)
@@ -533,7 +611,8 @@ def _resolve(args: dict, sink: NoticeSink) -> CollectionRequest:
         if args[name] is not None:
             require_int(args[name], f"--{name}")
     product = args["product"]
-    descriptors = _descriptors(product)
+    if descriptors is None:
+        descriptors = _descriptors(product)
     if args["output_dir"] is None:
         raise ValidationError(
             "--output wymagane: katalog magazynu (pliki w <KATALOG>/<grupa>/...)"
@@ -552,7 +631,9 @@ def _resolve(args: dict, sink: NoticeSink) -> CollectionRequest:
     teryt = args["teryt"]
     output_dir = Path(args["output_dir"])
 
-    def part(code: str, area_kind: str) -> CollectionPart:
+    def part(
+        code: str, area_kind: str, countries: tuple[str, ...] = ()
+    ) -> CollectionPart:
         descriptor = descriptors.get(code)
         if descriptor is None:
             raise ValidationError(
@@ -560,7 +641,7 @@ def _resolve(args: dict, sink: NoticeSink) -> CollectionRequest:
                 f"{', '.join(sorted(descriptors))}"
             )
         channel = _channel_for(descriptor, area_kind, teryt)
-        return _content(code, descriptor, channel, **content)
+        return _content(code, descriptor, channel, countries=countries, **content)
 
     if kind == "teryt":
         assert teryt is not None
@@ -597,9 +678,7 @@ def _resolve(args: dict, sink: NoticeSink) -> CollectionRequest:
     )
 
 
-def _sheet_part(
-    args: dict, part: Callable[[str, str], CollectionPart]
-) -> CollectionPart:
+def _sheet_part(args: dict, part: Callable[..., CollectionPart]) -> CollectionPart:
     """Area of a sheet code: its extent (PL sheet codes, EPSG:2180)."""
     from kartograf.core.parser_registry import detect_system
 
@@ -632,7 +711,7 @@ def _part_area(base: CollectionPart, area: BBox) -> BBox:
 def _area_parts(
     args: dict,
     descriptors: dict[str, SourceDescriptor],
-    part: Callable[[str, str], CollectionPart],
+    part: Callable[..., CollectionPart],
     sink: NoticeSink,
 ) -> tuple[CollectionPart, ...]:
     """Country parts of a bbox/geometry area (``auto``: clipped, narrowed)."""
@@ -667,7 +746,7 @@ def _area_parts(
             )
     else:
         countries = (country.upper(),)
-    bases = {code: part(code, "area") for code in countries}
+    bases = {code: part(code, "area", countries) for code in countries}
     cz = bases.get("CZ")
     cz_params = cz.channel.params if cz is not None else None
     cz_crs = (
@@ -704,8 +783,10 @@ class UnitJob:
 
     ``url`` + ``variant``: a package (``whole_country`` = a national file,
     its size announced before the transfer); ``layers`` + ``bbox``: the
-    objects of an area. ``request`` is the sidecar ``request`` (the user's
-    choice in this unit), ``parent`` its ``extra.parent_request``.
+    objects of an area; ``atom`` = the national file of a CUZK ATOM feed in
+    the CRS ``atom_crs`` (its URL and edition come from the feed at run
+    time). ``request`` is the sidecar ``request`` (the user's choice in this
+    unit), ``parent`` its ``extra.parent_request``.
     """
 
     descriptor: SourceDescriptor
@@ -720,6 +801,8 @@ class UnitJob:
     layers: tuple[FeatureLayer, ...] = ()
     bbox: BBox | None = None
     whole_country: bool = False
+    atom: bool = False
+    atom_crs: str | None = None
 
     @property
     def key(self) -> _SLOT_KEY:
@@ -823,6 +906,23 @@ def _feature_job(output_dir: Path, part: CollectionPart) -> UnitJob:
     )
 
 
+def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
+    """The national file of an ATOM channel (``whole_country``)."""
+    code = part.country.lower()
+    crs = part.choice.get("horizontal_crs")
+    return UnitJob(
+        descriptor=part.descriptor,
+        channel=part.channel,
+        country=part.country,
+        unit=code,
+        slot=unit_slot(output_dir, part.segment, part.ext, country=code),
+        request={"whole_country": True, **part.choice},
+        whole_country=True,
+        atom=True,
+        atom_crs=crs if isinstance(crs, str) else None,
+    )
+
+
 def _jobs(
     request: CollectionRequest, sink: NoticeSink, metadata: MetadataCache | None
 ) -> list[UnitJob]:
@@ -832,6 +932,9 @@ def _jobs(
     for part in request.parts:
         if part.layers:
             jobs.append(_feature_job(out, part))
+            continue
+        if isinstance(part.channel.params, AtomFilesParams):
+            jobs.append(_atom_job(out, part))
             continue
         assert part.variant is not None
         if request.teryt is not None or request.whole_country:
@@ -905,21 +1008,63 @@ def _probe(job: UnitJob, session: requests.Session | None):
     return lambda: head_signal(_http(session), url, timeout=PROBE_TIMEOUT)
 
 
+def _atom_file(
+    job: UnitJob,
+    session: requests.Session | None,
+    cache: MetadataCache | None,
+    refresh: bool,
+) -> Callable[[], AtomFile]:
+    """The file of an ATOM job from its feeds, asked at most once (the
+    edition and the URL of one run come from the same answer)."""
+    params = job.channel.params
+    assert isinstance(params, AtomFilesParams)
+    return functools.cache(
+        lambda: resolve_atom_file(
+            _http(session),
+            params,
+            key="",
+            crs=job.atom_crs,
+            cache=cache,
+            refresh=refresh,
+        )
+    )
+
+
+def _atom_edition(file: Callable[[], AtomFile]) -> Callable[[], Edition]:
+    def edition() -> Edition:
+        found = file()
+        return Edition(id=found.edition, url=found.dataset_feed)
+
+    return edition
+
+
 def inspect_job(
-    job: UnitJob, *, track: Track = _TRACK, session: requests.Session | None = None
+    job: UnitJob,
+    *,
+    track: Track = _TRACK,
+    session: requests.Session | None = None,
+    cache: MetadataCache | None = None,
 ) -> PlanItem:
     """Plan position of a unit job WITHOUT downloading its data.
 
     ``track``: the plan track of the calling command (``landcover`` for the
-    BDOT10k archive); ``session``: HTTP session of a ``HEAD`` (``None``: one
-    per thread of this module).
+    BDOT10k archive and ZABAGED); ``session``: HTTP session of a ``HEAD`` or
+    of the ATOM feeds (``None``: one per thread of this module); ``cache``:
+    the metadata cache of the ATOM feed index (revalidated: a check must see
+    a new edition).
     """
+    edition = (
+        _atom_edition(_atom_file(job, session, cache, refresh=True))
+        if job.atom
+        else None
+    )
     return inspect_version(
         job.slot,
         track=track,
         unit=job.unit,
         signal=job.signal,
         probe=_probe(job, session),
+        edition=edition,
     )
 
 
@@ -967,7 +1112,7 @@ def _fetch_package(
         sink.emit(
             "warning",
             WHOLE_COUNTRY_SIZE,
-            f"{job.descriptor.product} {job.country}: plik krajowy {job.url} - "
+            f"{subject(job.descriptor)} {job.country}: plik krajowy {job.url} - "
             f"{_size_text(length)}",
         )
     package = fetch_package(
@@ -985,6 +1130,33 @@ def _fetch_package(
         value["member"] = package.member
     source.value = value
     return package.http
+
+
+def _fetch_atom(
+    job: UnitJob,
+    staged: Path,
+    source: _Source,
+    sink: NoticeSink,
+    file: AtomFile,
+    session: requests.Session,
+    timeout: int,
+) -> dict:
+    """The national file of an ATOM feed: its size from the feed before the
+    transfer (K7), the ZIP 1:1."""
+    sink.emit(
+        "warning",
+        WHOLE_COUNTRY_SIZE,
+        f"{subject(job.descriptor)} {job.country}: plik krajowy {file.url} - "
+        f"{_size_text(file.length)}",
+    )
+    http = fetch_atom_file(session, file, staged, timeout=timeout)
+    source.value = {
+        "url": file.url,
+        "dataset_feed": file.dataset_feed,
+        "edition": file.edition,
+        "updated": file.updated,
+    }
+    return http
 
 
 def _fetch_features(
@@ -1045,32 +1217,37 @@ def run_job(
     session: requests.Session | None = None,
     timeout: int | None = None,
     on_download: Callable[[], None] | None = None,
+    cache: MetadataCache | None = None,
 ) -> VersionedFile | None:
     """Local version or download of one unit job (spec 4.2, ADR-042 D6).
 
     Out of the plan (``planned`` given, the job not in it): the local
     version or ``None``. Otherwise ``fetch_version``: a package labelled by
-    its edition (``label_source="edition"``) or the download date, an area
+    its edition (``label_source="edition"``) or the download date, a file of
+    an ATOM feed by the edition of the feed (signal ``metadata``), an area
     result by the download date; the sidecar names the channel by its
-    capability and carries ``extra.source`` (``url``/``edition``/``member``
-    or ``service``/``layers``/``dropped_fields``), ``extra.http`` of a
-    package and ``extra.parent_request``. ``session``: HTTP session of the
-    requests (``LandCoverManager``: its provider's; ``None``: one per thread
-    of this module); ``timeout``: seconds of one request (``None``:
-    ``PACKAGE_TIMEOUT`` for a package, ``SERVICE_TIMEOUT`` for a page);
+    capability and carries ``extra.source`` (``url``/``edition``/``member``,
+    ``url``/``dataset_feed``/``edition``/``updated`` or
+    ``service``/``layers``/``dropped_fields``), ``extra.http`` of a file and
+    ``extra.parent_request``. ``session``: HTTP session of the requests
+    (``LandCoverManager``: its provider's; ``None``: one per thread of this
+    module); ``timeout``: seconds of one request (``None``:
+    ``PACKAGE_TIMEOUT`` for a file, ``SERVICE_TIMEOUT`` for a page);
     ``on_download`` is called right before the transfer starts (never for
-    a local version).
+    a local version); ``cache``: the metadata cache of the ATOM feed index
+    (revalidated with ``update="upgrade"``).
 
     Raises
     ------
     NoCoverageError
         No data of the unit at the source.
     DownloadError
-        Download, response, version or link failure.
+        Download, response, edition, version or link failure.
     """
     if planned is not None and job.key not in planned:
         return _local_only(job.slot)
     source = _Source()
+    atom = _atom_file(job, session, cache, update == "upgrade") if job.atom else None
 
     def fetch(staged: Path) -> dict | None:
         if on_download is not None:
@@ -1080,6 +1257,16 @@ def run_job(
                 job, staged, source, _http(session), timeout or SERVICE_TIMEOUT
             )
             return None
+        if atom is not None:
+            return _fetch_atom(
+                job,
+                staged,
+                source,
+                sink,
+                atom(),
+                _http(session),
+                timeout or PACKAGE_TIMEOUT,
+            )
         return _fetch_package(
             job, staged, source, sink, _http(session), timeout or PACKAGE_TIMEOUT
         )
@@ -1093,11 +1280,10 @@ def run_job(
         if job.parent:
             extra["parent_request"] = job.parent
         params = job.channel.params
-        crs = (
-            params.native_crs
-            if isinstance(params, FeatureBBoxParams)
-            else job.channel.horizontal_crs
-        )
+        if isinstance(params, FeatureBBoxParams):
+            crs = params.native_crs
+        else:
+            crs = job.atom_crs or job.channel.horizontal_crs
         emit_sidecar(
             job.descriptor.key,
             data,
@@ -1111,6 +1297,15 @@ def run_job(
             exclusive=True,
         )
 
+    if atom is not None:
+        return fetch_version(
+            job.slot,
+            update,
+            signal=job.signal,
+            fetch=fetch,
+            write_sidecar=write,
+            edition=_atom_edition(atom),
+        )
     edition = job.variant.edition if job.variant is not None else None
     version = VersionRef(edition, "edition") if edition else VersionRef.downloaded()
     return fetch_version(
@@ -1171,25 +1366,28 @@ def download_collection(
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CollectionReport:
-    """Download a collection product (``boundaries``/``cadastre``/``models3d``
-    ``download``) into the version store of ``output_dir``.
+    """Download a collection product (``boundaries``/``cadastre``/``models3d``/
+    ``hydro`` ``download``) into the version store of ``output_dir``.
 
     Choices as in ``validate_collection_request`` (called first, no network):
-    ``product`` (``admin`` PRG, ``map`` EGiB, ``buildings`` 3D models), one
-    selection (``teryt``, ``sheet``, ``bbox``, ``geometry`` or
-    ``whole_country``), ``country`` (``pl``/``cz``/``auto``), ``level``
-    (``admin`` of an area: ``wojewodztwo``, ``powiat``, ``gmina``,
-    ``jednostka-ewidencyjna``, ``obreb``; per country with ``auto``), ``lod``
-    and ``year`` (``buildings``: LoD1 2019, 2021, 2022, 2024; LoD2 2017),
+    ``product`` (``admin`` PRG and RUIAN, ``map`` EGiB, ``buildings`` 3D
+    models, ``network`` HY-NET), one selection (``teryt``, ``sheet``,
+    ``bbox``, ``geometry`` or ``whole_country``), ``country``
+    (``pl``/``cz``/``auto``), ``level`` (``admin`` of an area: PL
+    ``wojewodztwo``, ``powiat``, ``gmina``, ``jednostka-ewidencyjna``,
+    ``obreb``; CZ ``kraj``, ``okres``, ``obec``, ``katastralni-uzemi``; per
+    country with ``auto``: ``{"pl": "gmina", "cz": "obec"}``), ``lod`` and
+    ``year`` (``buildings``: LoD1 2019, 2021, 2022, 2024; LoD2 2017),
     ``horizontal_crs`` (a national file published in several CRSs). Files:
     ``<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}``
     with versions in ``versions/`` (ADR-042 D8). ``update``/``plan`` as in
     every store command (``plan`` from ``check_collection`` with
     ``update="upgrade"``); ``workers`` = units downloaded in parallel;
-    ``cache`` = metadata cache of the PRG powiat query (``True``: default
-    file in the current directory, ``False``: none); ``on_notice`` receives
-    each notice when emitted (``UNIT_LIST``, ``WHOLE_COUNTRY_SIZE`` before a
-    national transfer, clipping notices of ``auto``).
+    ``cache`` = metadata cache of the PRG powiat query and of the ATOM feed
+    index (``True``: default file in the current directory, ``False``:
+    none); ``on_notice`` receives each notice when emitted (``UNIT_LIST``,
+    ``WHOLE_COUNTRY_SIZE`` before a national transfer, clipping notices of
+    ``auto``).
 
     Raises
     ------
@@ -1204,6 +1402,82 @@ def download_collection(
     sink = NoticeSink(on_notice)
     validate_update(update)
     request = _resolve(_choices(locals()), sink)
+    files, failed, stale = run_request(
+        request,
+        update=update,
+        plan=plan,
+        workers=workers,
+        cache=cache,
+        sink=sink,
+    )
+    return CollectionReport(
+        files=files,
+        failed=failed,
+        stale=stale,
+        notices=sink.notices,
+        ok=not failed and not stale,
+    )
+
+
+def landcover_request(
+    descriptor_key: str,
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None,
+    bbox: BBox | None,
+    geometry: str | Path | None,
+    layer: str | None,
+    whole_country: bool,
+    horizontal_crs: str | None,
+    sink: NoticeSink,
+) -> CollectionRequest:
+    """The request of a land cover source on the collection engines
+    (``LandCoverManager``: ZABAGED, ADR-042 D10/D15): its one country, an
+    area or ``whole_country``; the same rules as ``validate_collection_request``
+    (no network)."""
+    descriptor = get_source(descriptor_key)
+    args = {
+        "product": descriptor.product,
+        "output_dir": output_dir,
+        "country": descriptor.country.lower(),
+        "teryt": None,
+        "sheet": sheet,
+        "bbox": bbox,
+        "geometry": geometry,
+        "layer": layer,
+        "whole_country": whole_country,
+        "level": None,
+        "lod": None,
+        "year": None,
+        "horizontal_crs": horizontal_crs,
+    }
+    return _resolve(args, sink, {descriptor.country: descriptor})
+
+
+def run_request(
+    request: CollectionRequest,
+    *,
+    update: UpdateMode | None,
+    plan: UpdatePlan | None,
+    workers: int,
+    cache: MetadataCache | bool,
+    sink: NoticeSink,
+    track: Track = _TRACK,
+    timeout: int | None = None,
+) -> tuple[tuple[UnitFile, ...], tuple[UnitFailure, ...], tuple[PlanItem, ...]]:
+    """Files, unit failures and stale plan positions of a validated request
+    (``download_collection``; ``LandCoverManager`` on the track ``landcover``).
+
+    Raises
+    ------
+    ValidationError
+        A plan of another store or without ``update="upgrade"``, bad workers.
+    NoCoverageError
+        An area of a package product without any powiat (PRG).
+    DownloadError
+        The PRG powiat query failed (unit failures land in the result).
+    """
+    validate_update(update)
     if plan is not None:
         if update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
@@ -1213,27 +1487,35 @@ def download_collection(
         raise ValidationError(f"workers musi byc >= 1, podano {workers}")
     with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
         jobs = _jobs(request, sink, metadata)
-    planned: set[_SLOT_KEY] | None = None
-    stale: tuple[PlanItem, ...] = ()
-    if plan is not None:
-        todo, stale_items = select_planned(plan, [inspect_job(j) for j in jobs], _TRACK)
-        planned = {(i.segment, i.hierarchy, i.name) for i in todo}
-        stale = tuple(stale_items)
+        planned: set[_SLOT_KEY] | None = None
+        stale: tuple[PlanItem, ...] = ()
+        if plan is not None:
+            current = [inspect_job(j, track=track, cache=metadata) for j in jobs]
+            todo, stale_items = select_planned(plan, current, track)
+            planned = {(i.segment, i.hierarchy, i.name) for i in todo}
+            stale = tuple(stale_items)
 
-    def one(job: UnitJob) -> VersionedFile | UnitFailure | None:
-        try:
-            return run_job(job, update, sink=sink, planned=planned)
-        except NoCoverageError as e:
-            return UnitFailure(job.unit, job.country, str(e), "no_coverage")
-        except DownloadError as e:
-            logger.debug("%s %s: %s", request.product, job.unit, e)
-            return UnitFailure(job.unit, job.country, str(e), "download")
+        def one(job: UnitJob) -> VersionedFile | UnitFailure | None:
+            try:
+                return run_job(
+                    job,
+                    update,
+                    sink=sink,
+                    planned=planned,
+                    timeout=timeout,
+                    cache=metadata,
+                )
+            except NoCoverageError as e:
+                return UnitFailure(job.unit, job.country, str(e), "no_coverage")
+            except DownloadError as e:
+                logger.debug("%s %s: %s", request.product, job.unit, e)
+                return UnitFailure(job.unit, job.country, str(e), "download")
 
-    if workers > 1 and len(jobs) > 1:
-        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-            outcomes = list(pool.map(one, jobs))
-    else:
-        outcomes = [one(job) for job in jobs]
+        if workers > 1 and len(jobs) > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                outcomes = list(pool.map(one, jobs))
+        else:
+            outcomes = [one(job) for job in jobs]
     files: list[UnitFile] = []
     failed: list[UnitFailure] = []
     for job, outcome in zip(jobs, outcomes, strict=True):
@@ -1243,13 +1525,21 @@ def download_collection(
             files.append(UnitFile(job.unit, job.country, outcome))
             unit = outcome.path.relative_to(request.output_dir).as_posix()
             emit_file_notices(sink, unit, outcome, update)
-    return CollectionReport(
-        files=tuple(files),
-        failed=tuple(failed),
-        stale=stale,
-        notices=sink.notices,
-        ok=not failed and not stale,
-    )
+    return tuple(files), tuple(failed), stale
+
+
+def plan_request(
+    request: CollectionRequest,
+    *,
+    cache: MetadataCache | bool,
+    sink: NoticeSink,
+    track: Track = _TRACK,
+) -> UpdatePlan:
+    """Update plan of a validated request (no data downloaded)."""
+    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
+        jobs = _jobs(request, sink, metadata)
+        items = [inspect_job(job, track=track, cache=metadata) for job in jobs]
+    return new_plan(request.output_dir, items)
 
 
 def check_collection(
@@ -1275,11 +1565,10 @@ def check_collection(
 
     Packages and area results of GUGiK have no cheap freshness signal: a
     local version is ``unverifiable``, a missing one ``missing``; files
-    with ``ETag`` (``http``) are compared by ``HEAD``. An area of a package
-    product asks PRG for its powiats.
+    with ``ETag`` (``http``) are compared by ``HEAD``, files of an ATOM feed
+    by the edition of the feed. An area of a package product asks PRG for
+    its powiats.
     """
     sink = NoticeSink(on_notice)
     request = _resolve(_choices(locals()), sink)
-    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
-        jobs = _jobs(request, sink, metadata)
-    return new_plan(request.output_dir, [inspect_job(job) for job in jobs])
+    return plan_request(request, cache=cache, sink=sink)

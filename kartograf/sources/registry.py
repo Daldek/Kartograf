@@ -14,6 +14,7 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
+    AtomFilesParams,
     CountryProfile,
     FeatureBBoxParams,
     FeatureLayer,
@@ -324,6 +325,219 @@ _PL_SHEET_SOURCES = (
     _pl_sheet_source("nmt", "25m", _KRON, format="DGN"),
     _pl_sheet_source("nmpt", "0.5m", _KRON, format="XYZ"),
     _pl_sheet_source("nmpt", "1m", _KRON, format="XYZ"),
+)
+
+# CZ collections (plan D, ADR-042 D15-D17). Area results come from the
+# services in their DefaultCRS (EPSG:5514); national files from CUZK in the
+# CRS of the file (ATOM category / file name).
+_CUZK_ARCGIS = "https://ags.cuzk.gov.cz/arcgis/rest/services"
+_CUZK_OPENZU = "https://openzu.cuzk.gov.cz/opendata"
+_CUZK_ATOM = "https://atom.cuzk.gov.cz"
+
+# ZABAGED land cover and hydrography layers (ADR-042 D15): the ArcGIS REST
+# layer id and its code = the layer name without diacritics, lower case,
+# runs outside [a-z0-9] as "_" (ZABAGED_POLOHOPIS/MapServer?f=pjson,
+# 2026-10-15). The codes are the GPKG layer names; no translation of the
+# classes to BDOT10k codes. Lines: 93, 112; the rest polygons.
+_ZABAGED_LAYERS = (
+    ("93", "vodni_tok"),
+    ("99", "budova_jednotliva_nebo_blok_budov_plocha"),
+    ("112", "brehova_cara"),
+    ("114", "areal_ucelove_zastavby"),
+    ("115", "ostatni_plocha_v_sidlech"),
+    ("116", "hrbitov"),
+    ("117", "skladka"),
+    ("118", "povrchova_tezba_lom"),
+    ("129", "sesuv_pudy_sut"),
+    ("130", "skalni_utvary"),
+    ("131", "bazina_mocal"),
+    ("132", "vodni_plocha"),
+    ("134", "udrzovana_zelen"),
+    ("135", "ovocny_sad_zahrada"),
+    ("136", "vinice"),
+    ("137", "chmelnice"),
+    ("138", "orna_puda_a_ostatni_dale_nespecifikovane_plochy"),
+    ("139", "trvaly_travni_porost"),
+    ("140", "lesni_puda_s_krovinatym_porostem"),
+    ("141", "lesni_puda_s_kosodrevinou"),
+    ("142", "lesni_puda_se_stromy"),
+    ("144", "lesni_puda_se_stromy_kategorizovana_plocha"),
+)
+
+_CZ_ZABAGED = SourceDescriptor(
+    key="cz.cuzk.zabaged",
+    country="CZ",
+    product="landcover",
+    name="ZABAGED - Zakladni baze geografickych dat CR (pokrycie terenu i wody)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/ZABAGED_POLOHOPIS/MapServer",
+            notes=(
+                "22 warstwy pokrycia terenu i hydrografii (nazwy zrodla); pelne "
+                "geometrie obiektow przecinajacych obszar"
+            ),
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=2000,
+                layers=tuple(
+                    FeatureLayer(code=code, source=layer, name=code, id_field="fid_zbg")
+                    for layer, code in _ZABAGED_LAYERS
+                ),
+                selection="all",
+                order_field="OBJECTID",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_CUZK_ATOM}/ZABAGED-GPKG/ZABAGED-GPKG.xml",
+            notes=(
+                "plik krajowy GPKG (5,8 GB EPSG:5514, 6,7 GB EPSG:3045; warstwy "
+                "pelnej bazy pod nazwami CUZK), tylko z --whole-country"
+            ),
+            params=AtomFilesParams(
+                service_feed=f"{_CUZK_ATOM}/ZABAGED-GPKG/ZABAGED-GPKG.xml",
+                entry_pattern=r"CUZK_ZABAGED-GPKG_[0-9]+\.xml$",
+                crs=("EPSG:5514", "EPSG:3045"),
+                segment_tokens=("gpkg",),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="landcover/cz_zabaged",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+# RUIAN levels (ADR-042 D17): --level code -> layer of RUIAN/MapServer.
+_RUIAN_LEVELS = (
+    ("kraj", "17", "VyssiUzemneSamospravnyCelek"),
+    ("okres", "15", "Okres"),
+    ("obec", "12", "Obec"),
+    ("katastralni-uzemi", "7", "KatastralniUzemi"),
+)
+
+_CZ_RUIAN = SourceDescriptor(
+    key="cz.cuzk.ruian",
+    country="CZ",
+    product="admin",
+    name="RUIAN - granice jednostek terytorialnych (kraje, okresy, obce, k.u.)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/RUIAN/MapServer",
+            notes="pelne geometrie jednostek przecinajacych obszar",
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                layers=tuple(
+                    FeatureLayer(code=code, source=layer, name=name, id_field="kod")
+                    for code, layer, name in _RUIAN_LEVELS
+                ),
+                selection="level",
+                order_field="objectid",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="http",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"country_files"}),
+            endpoint="https://services.cuzk.gov.cz/shp/stat/epsg-5514/",
+            notes="plik krajowy SHP (ok. 253 MB), tylko z --whole-country",
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template="https://services.cuzk.gov.cz/shp/stat/epsg-5514/1.zip",
+                        segment_tokens=("shp",),
+                        members=(".shp",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="boundaries/cz_ruian",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+_CZ_HY_NET = SourceDescriptor(
+    key="cz.cuzk.hy_net",
+    country="CZ",
+    product="network",
+    name="HY-NET - siec hydrograficzna (INSPIRE Hydrography - Network)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WFS,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint="https://geoportal.cuzk.gov.cz/geoserver/hy-n/wfs",
+            notes="odcinki ciekow, wezly i skrzyzowania przecinajace obszar",
+            params=FeatureBBoxParams(
+                protocol="wfs",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                layers=tuple(
+                    FeatureLayer(
+                        code=name, source=f"hy-n:{name}", name=name, id_field="gml_id"
+                    )
+                    for name in (
+                        "WatercourseLink",
+                        "HydroNode",
+                        "WatercourseSeparatedCrossing",
+                    )
+                ),
+                selection="all",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="http",
+            horizontal_crs="EPSG:3045",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_CUZK_OPENZU}/HY-NET/",
+            notes=(
+                "plik krajowy GPKG (ok. 194 MB) w EPSG:3045 (kategoria feedu ATOM), "
+                "tylko z --whole-country"
+            ),
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=f"{_CUZK_OPENZU}/HY-NET/HY-NET.zip",
+                        segment_tokens=("gpkg",),
+                        members=(".gpkg",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="hydro/cz_hynet",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
 )
 
 _SOURCES: dict[str, SourceDescriptor] = {
@@ -733,6 +947,9 @@ _SOURCES: dict[str, SourceDescriptor] = {
             license=_CUZK_LICENSE,
             resolution="5m",
         ),
+        _CZ_ZABAGED,
+        _CZ_RUIAN,
+        _CZ_HY_NET,
     )
 }
 
@@ -747,7 +964,7 @@ _COUNTRIES: dict[str, CountryProfile] = {
         code="CZ",
         name="Czechy",
         extent_wgs84=BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326"),
-        dataset_keys=("cz.cuzk.dmr4g", "cz.cuzk.dmr5g"),
+        dataset_keys=tuple(sorted(k for k in _SOURCES if k.startswith("cz."))),
     ),
 }
 
