@@ -651,16 +651,15 @@ publikacja (repozytorium wtyczek QGIS, publiczna instancja GUI webowego).
 | # | Podprojekt | Zakres | Zależy od |
 |---|------------|--------|-----------|
 | 1 | Magazyn wersjonowany | niezmienne wersje dla wszystkich produktów, które dziś ich nie mają (wszystko poza kampaniami NMT/NMPT/orto PL: m.in. BDOT10k, LAZ, CORINE, SoilGrids, HSG, CZ, wycinki `bbox/`); stan 2026-10-12: plany 1/3 (arkusze PL), 2/3 (LAZ, CZ, wycinki) i 3/3 (land cover, HSG) wykonane i scalone do `develop` (E2E na żywo: `docs/research/2026-10-12-store-e2e/raport.md`); do wydania 0.8.0: CLMS z credentials niesprawdzony na żywo | — |
-| 2 | Manifest projektu | od 0.8.0: `kartograf-project/1` w katalogu projektu; zadania pobrania i przypiete konkretne pliki wersji z sumami SHA-256; `project download/verify/status/check-updates/update` oraz `availability` tam, gdzie grupa oferuje raport. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; grupy komend CLI (ADR-039) |
+| 2 | Manifest projektu | wchodzi do 0.8.0: plik `kartograf-project.json` (`kartograf-project/1`) w katalogu projektu — zadania (komendy danych grup ADR-039 z opcjami) i przypięte wersje plików z magazynu z sumami SHA-256; grupa CLI `project`: `init`, `add`, `remove`, `download` (także `--check-updates`, `--upgrade`, `--force`), `status`, `verify`; odtworzenie danych na nowym magazynie tylko przy identycznych sumach. Spec: `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`; plan: `docs/superpowers/plans/2026-10-15-manifest-projektu.md`; ADR-040 | 1; grupy komend CLI (ADR-039) |
 | 3 | Katalog GUGiK i gotowe dane | strumień kolejnych produktów GUGiK i ČÚZK; każdy nowy produkt od razu wersjonowany, z wycinkiem i sidecarem; obróbka także dla produktów istniejących. Inwentaryzacja z próbkami: `docs/research/2026-10-13-katalog-produktow/raport.md`; spec zaakceptowany 2026-10-13: `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md` (plany A: `elevation` PL — NMT/NMPT 0,5 m i raport dostępności pełnych arkuszy; B: `elevation` CZ; C: dane jednostkowe i obszarowe PL — archiwum BDOT10k, PRG, EGiB, modele 3D; D: ČÚZK obszarowe i obrazy; E: niski priorytet) | 1; grupy komend CLI (0.8.0) |
 | 4 | Wtyczka QGIS | pobieranie z poziomu QGIS dla obszaru z mapy albo warstwy; repozytorium: to albo osobne, do decyzji w specu | 2, częściowo 3 |
 | 5 | GUI webowe | lokalny manager danych: przeglądarka magazynu i manifestów projektów, informacja o nowszych danych | 2 |
 | — | ADR-031 (angielskie identyfikatory) | API i CLI po angielsku w 0.8.0 bez aliasów (errata 1) | zrobione (0.8.0) |
 | — | Publikacja nakładek | po przetestowaniu 4 i 5 lokalnie | 4, 5 |
 
-Podprojekt 3 to strumien planow A-E realizowanych w calosci w 0.8.0;
-moze isc rownolegle z manifestem projektu (2). Pozniejsze nakladki (4, 5)
-korzystaja z publicznego API obu podprojektow.
+Podprojekt 3 to strumień, nie jeden blok: produkty dochodzą w kolejnych
+wydaniach i mogą iść równolegle z 2, 4 i 5.
 
 ---
 
