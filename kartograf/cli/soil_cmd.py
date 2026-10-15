@@ -20,9 +20,9 @@ from kartograf.cli.download_cmd import (
     _unit_of,
     _update_mode,
     run_with_plan_file,
+    store_path_label,
 )
 from kartograf.cli.landcover_cmd import run_land_cover
-from kartograf.download.plan import PlanItem
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 
@@ -112,20 +112,12 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
         return 1
 
 
-def _plan_label(item: PlanItem) -> str:
-    """``clay <unit>`` / ``hsg <unit>``: the layer of a position in its line."""
-    if item.track == "hsg":
-        return f"hsg {item.unit}"
-    # soil/global_soilgrids_<property>_<depth>_<stat>
-    return f"{item.segment.rsplit('/', 1)[-1].split('_')[2]} {item.unit}"
-
-
 def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) -> int:
     """One ``soil hsg`` request: a plan (``--check-updates``) or the inputs
     and the HSG with one status line each (spec 4.5)."""
     if args.check_updates:
         plan = calc.check_hsg(**selection, depth=args.depth, on_notice=_print_notice)
-        return _report_plan(args, plan, _plan_label)
+        return _report_plan(args, plan, store_path_label)
     update = _update_mode(args)
     result = calc.calculate_hsg(
         **selection,

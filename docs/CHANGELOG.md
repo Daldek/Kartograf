@@ -576,6 +576,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `kartograf download --sheet N-34-130-D --resolution 5m ...` z cache
   z 0.7.x). Taki wpis jest teraz traktowany jak brak wpisu i skorowidz jest
   odpytywany ponownie. Co zrobic: nic (opcjonalnie `kartograf cache clear`).
+- `landcover download --check-updates --keep-raw` drukowal dwie
+  jednakowe linie planu (`0208: do pobrania`) dla GPKG i surowego ZIP tego
+  samego TERYT. Linie planu `landcover download`, `soil download` i `soil
+  hsg` oznaczaja teraz pozycje sciezka pod `--output`, jak linie statusu
+  (`landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: do pobrania`, `soil hsg`:
+  zamiast `clay <wsp>` / `hsg <wsp>`). Co zrobic: skrypty parsujace linie
+  planu tych komend czytaja sciezke (plik planu JSON bez zmian).
 
 ## [0.7.2] - 2026-10-11
 

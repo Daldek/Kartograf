@@ -2372,10 +2372,13 @@ w tym samym wydaniu (decyzja uzytkownika).
   (`kartograf/download/arguments.py`; `download_data`/`check_data`,
   `LandCoverManager`, `HSGCalculator`, `DownloadManager`, LAZ); testy
   `tests/test_argument_types.py`; CHANGELOG [0.8.0] BREAKING.
-- [ ] **Dwie jednakowe linie planu BDOT10k:** `landcover download
+- [x] **Dwie jednakowe linie planu BDOT10k:** `landcover download
   --check-updates --keep-raw` moze wypisac dwie linie dla GPKG i ZIP z
   identycznym oznaczeniem TERYT; `_report_plan` nie dostaje callbacku
   etykietujacego osobno plik pochodny i surowy.
+  **ZROBIONE 2026-10-15:** linie planu land cover, gleb i HSG = sciezka
+  pod `--output` jak linie statusu (`store_path_label`); test
+  `test_landcover_check_keep_raw_lines_name_each_file`.
 - [ ] **`DownloadManager(update="force")` i cache providera:** `force`
   pomija cache metadanych kontrolowany przez tor komendy, ale manager
   nie musi omijac cache nalezacego do przekazanej instancji providera.

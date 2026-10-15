@@ -1022,7 +1022,9 @@ i kafle LAZ; jednostka LAZ = nazwa pliku, wycinka = sciezka pod
 sprawdzania; --check-updates)`, przy `--upgrade` `Info:` o `--force`;
 nieudane sprawdzenie sygnalu: `Warning:`. Raport `--check-updates` to
 jedna linia na pozycje (`aktualne`, `nowsza: ...`, `do pobrania`, `nie da
-sie sprawdzic bez pobrania`, `nie udalo sie sprawdzic: ...`), kod 1 przy
+sie sprawdzic bez pobrania`, `nie udalo sie sprawdzic: ...`); land cover,
+gleby i HSG oznaczaja pozycje sciezka pod `--output` jak linia statusu
+(GPKG i surowy ZIP `--keep-raw` tego samego TERYT = dwie rozne linie), kod 1 przy
 pozycji niesprawdzonej; z `--plan` CLI zapisuje JEDEN plan wszystkich
 torow zadania (`--country auto`: PL i CZ, `UpdatePlan.merge`), a
 `--upgrade --plan` czyta go raz przed praca. Katalog `kampanie/` z 0.7.x:

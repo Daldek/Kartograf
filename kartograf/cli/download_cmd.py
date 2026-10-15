@@ -240,6 +240,13 @@ def _plan_line(item: PlanItem) -> str:
     return f"{item.unit}: {text}"
 
 
+def store_path_label(item: PlanItem) -> str:
+    """Plan line unit of a land cover/HSG position: its path below ``--output``
+    (as in the status lines), so a derived file and its raw ZIP of the same
+    TERYT (``keep_raw``) get different lines."""
+    return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
+
+
 def _report_plan(
     args: argparse.Namespace,
     plan: UpdatePlan,
