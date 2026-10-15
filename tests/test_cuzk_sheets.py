@@ -136,6 +136,14 @@ class TestSm5Sheet:
             index.sm5_sheet("ctes96")  # lower case - does not pass the pattern
         session.get.assert_not_called()
 
+    def test_two_letter_mapnom_queries_index(self):
+        """As sheets (AS22 ... AS94) are SM5 sheets, not malformed codes."""
+        feature = _sm5_feature("AS91", -870000, -1040000, -867500, -1038000)
+        session = _session_returning(_collection(feature))
+        info = SheetIndex(session=session).sm5_sheet("AS91")
+        assert info.sheet == "AS91"
+        assert session.get.call_args.kwargs["params"]["where"] == "MAPNOM='AS91'"
+
     def test_feature_without_geometry_raises_parse_error(self):
         session = _session_returning(_collection({"attributes": {"MAPNOM": "CTES96"}}))
         with pytest.raises(ParseError, match="CTES96"):

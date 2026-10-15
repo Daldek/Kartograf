@@ -113,6 +113,14 @@ class TestCzechSystems:
         assert detect_system("CTES9").id == "pl1992"  # too short for SM5
         assert detect_system("CTES961").id == "pl1992"  # too long for SM5
 
+    def test_sm5_two_letter_codes(self):
+        """As (AS22 ... AS94): 99 SM5 sheets have a 2-letter town code."""
+        assert detect_system("AS91").id == "cz_sm5"
+        assert path_parts("AS91") == ["AS", "91"]
+        assert path_parts("CTES96") == ["CTES", "96"]
+        for not_sm5 in ("A91", "ABC91", "ABCDE91", "CTES9", "as91"):
+            assert detect_system(not_sm5).id == "pl1992", not_sm5
+
 
 class TestWhitespace:
     """K5: detect_system and path_parts strip whitespace (like the parsers)."""

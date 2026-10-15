@@ -20,8 +20,9 @@ from dataclasses import dataclass
 # Sheet code patterns use [0-9], not \d: \d also matches non-ASCII digits (P5).
 # TM33 tile sheet code `{E_km}_{N_km}` (groups: E and N kilometres of the SW corner).
 CZ_TM33_PATTERN = re.compile(r"^([0-9]{3})_([0-9]{4})$")
-# SM5 sheet code (MAPNOM): 4 uppercase letters + 2 digits, e.g. CTES96.
-CZ_SM5_PATTERN = re.compile(r"^[A-Z]{4}[0-9]{2}$")
+# SM5 sheet code (MAPNOM): 4 uppercase letters (2 for As - the 99 sheets AS22
+# ... AS94 of the 16 299 in the SM5 index) + 2 digits, e.g. CTES96, AS91.
+CZ_SM5_PATTERN = re.compile(r"^[A-Z]{2}(?:[A-Z]{2})?[0-9]{2}$")
 _PL2000_PATTERN = re.compile(r"^[5-8]\.[0-9]")
 
 
@@ -70,7 +71,7 @@ SYSTEMS: tuple[SheetSystem, ...] = (
         id="cz_sm5",
         country="CZ",
         detect=lambda sheet: bool(CZ_SM5_PATTERN.match(sheet)),
-        path_parts=lambda sheet: [sheet[:4], sheet[4:]],
+        path_parts=lambda sheet: [sheet[:-2], sheet[-2:]],
     ),
     SheetSystem(
         id="pl1992",
