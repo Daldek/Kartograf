@@ -115,7 +115,9 @@ i odsylacze w statusach ADR-015, ADR-036, ADR-039, ADR-040 (np. ADR-036:
 "uzupelniona przez ADR-042 (D23 miedzy wydaniami; wycinek orto
 w magazynie - czesciowo zastepuje D27)"). Decyzje D12-D17 dotycza planu
 D; zapisz je teraz (jedna decyzja dla calego podprojektu), a plan D
-tylko weryfikuje zgodnosc i dopisuje errate przy odstepstwie.
+tylko weryfikuje zgodnosc i dopisuje errate przy odstepstwie. Tekst
+obowiazujacy: `docs/DECISIONS.md` (kontekst, D1, D3 i D5 poprawione przy
+implementacji wg pomiarow na zywo 2026-10-15; ponizej ta sama tresc).
 
 ```markdown
 ## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
@@ -129,9 +131,12 @@ wnosza paczki per jednostka administracyjna (archiwum BDOT10k, modele 3D,
 PRG, EGiB), obiekty dla obszaru z WFS i ArcGIS REST (PRG, EGiB, RUIAN,
 HY-NET, ZABAGED) i pliki wskazywane feedem ATOM CUZK (ortofoto, ZABAGED
 kraj). Rekonesans 2026-10-15 wykazal: bledne linki `next` w obu
-serwerach WFS, duplikat obiektu na koncu stron MapServer, kolejnosc osi
-zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA`, GML
-z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
+serwerach WFS, duplikat obiektu na granicy stron MapServer, kolejnosc osi
+zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA` (data
+stanu danych powiatu), obiekty wieloczesciowe EGiB jako powtorzone
+geometrie, URL-e z rokiem/data w nazwie (tylko z feedu). Krzywe
+(`CurvePolygon`) z probki EGiB 2026-10-13 nie wystapily w danych
+(pomiar 2026-10-15: same wielokaty liniowe).
 
 **Opcje:**
 - A) Provider per produkt (wzorzec `providers/pl/*.py`).
@@ -142,11 +147,13 @@ z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
 **Decyzja:** B.
 - D1. `AccessChannel.params: UnitPackageParams | FeatureBBoxParams |
   AtomFilesParams | WcsCutoutParams | None` (dane bez IO, niemutowalne;
-  dwa ostatnie w planie D). Silniki:
-  `transport/unit_package.py`, `transport/feature_bbox.py`,
+  dwa ostatnie w planie D). Wymagane czlony ZIP sa cecha wariantu
+  (`PackageVariant.members`: paczki GML i SHP jednego kanalu roznia sie).
+  Silniki: `transport/unit_package.py`, `transport/feature_bbox.py`,
   `transport/atom.py` (plan D), zapis GPKG `transform/gpkg.py`,
   orkiestracja `download/collections.py`. Nowy produkt = deskryptor
-  z parametrami kanalu (+ wybor w CLI).
+  z parametrami kanalu (+ wybor w CLI). Kanal kolekcji ma capability
+  unikalna w swoim deskryptorze (wybor kanalu sidecara).
 - D2. Rodzaj wyboru wyznacza kanal: `teryt` (2 cyfry = woj., 4 = powiat)
   -> `unit_package` tej jednostki; obszar (`bbox`/`sheet`/`geometry`) ->
   `feature_bbox`, a gdy produkt go nie ma - powiaty z PRG i paczka na
@@ -160,24 +167,43 @@ z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
   CUZK 5514/3045); wynik obszaru jest zawsze w ukladzie natywnym uslugi.
 - D3. Kompletnosc `feature_bbox` z liczby, nie z linkow: WFS
   `RESULTTYPE=hits`, ArcGIS `returnCountOnly` -> N; strony
-  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`); `next`
-  ignorowany; dedupe po polu identyfikatora kanalu (identyczny duplikat
-  pominiety, rozny = `DownloadError`); unikalnych != N albo
-  `numberMatched="unknown"` = `DownloadError`; HTML, `ExceptionReport`,
-  JSON `error` przy HTTP 200 = `DownloadError`. N = 0 we wszystkich
-  warstwach = `NoCoverageError` (bez pliku); pusta warstwa obok
-  niepustych = warstwa ze schematem bez obiektow.
+  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`) od 0 co
+  `page_size`; `next` ignorowany (MapServer gubi go na stronach
+  srodkowych, GeoServer daje go na ostatniej). Petla stron: koniec, gdy
+  unikalnych identyfikatorow jest N; za N zaplanowanych pozycji tylko
+  dopoki poprzednia strona byla pelna i dodala nowe identyfikatory
+  (MapServer powtarza obiekt na granicy stron, wiec ostatni unikalny
+  obiekt moze lezec za pozycja N-1: PRG A03, `hits` 39, `COUNT=13` -
+  39. obiekt na `STARTINDEX=39`); krotka strona przy mniej niz N
+  unikalnych, strona za N bez nowych identyfikatorow albo wiecej niz N
+  unikalnych = `DownloadError`. Dedupe po polu identyfikatora kanalu
+  (identyczny duplikat pominiety, rozny = `DownloadError`);
+  `numberMatched="unknown"` w odpowiedzi `hits` = `DownloadError`; HTML,
+  `ExceptionReport`, JSON `error` przy HTTP 200 = `DownloadError`. N = 0
+  we wszystkich warstwach = `NoCoverageError` (bez pliku); pusta warstwa
+  obok niepustych = warstwa ze schematem bez obiektow. Metadane uslugi
+  (`GetCapabilities`, `DescribeFeatureType`, pola warstwy ArcGIS) sa
+  pobierane swiezo raz na pobranie, bez cache metadanych: kontrola typu
+  i DefaultCRS dotyczy stanu uslugi z chwili pobrania, a uzycie lokalnej
+  wersji nie wysyla zadnego zapytania.
 - D4. Kolejnosc osi BBOX jest parametrem kanalu z testem na prawdziwej
   odpowiedzi: GUGiK `urn:...:EPSG::2180` = N,E, CUZK EPSG:5514 = X,Y
   (obie zgodne z EPSG); zamiana daje pusty wynik bez bledu.
 - D5. Wynik `feature_bbox`: jeden GPKG w ukladzie natywnym uslugi
   (DefaultCRS), pelne geometrie obiektow przecinajacych obszar (bez
-  przycinania), warstwa na warstwe zrodla; bajty deterministyczne
-  (obiekty po identyfikatorze, schemat z metadanych uslugi, staly
-  `OGR_CURRENT_DATE`); pola zalezne od chwili odpowiedzi (`drop_fields`,
-  EGiB `DATA`) poza GPKG, w sidecarze `extra.source.response_date`;
-  skladanie na dysku lokalnym, potem staging magazynu. Nowa zaleznosc
-  `pyogrio` (GDAL wektorowy).
+  przycinania; obiekt wieloczesciowy - powtorzone `<ms:geom>` EGiB -
+  w calosci dzieki `GML_FETCH_ALL_GEOMETRIES=YES`), warstwa na warstwe
+  zrodla; bajty deterministyczne w obrebie jednej wersji GDAL (obiekty po
+  identyfikatorze, schemat z metadanych uslugi - GML czytany z `XSD=`
+  odpowiedzi `DescribeFeatureType`, `WRITE_GFS=NO`, `DOWNLOAD_SCHEMA=NO`
+  - i staly `OGR_CURRENT_DATE`). Pola zmienne w czasie niezaleznie od
+  obiektow (`drop_fields`; EGiB `DATA` = data stanu danych powiatu
+  w usludze zbiorczej, rozna miedzy powiatami i odswiezana nawet co dobe)
+  sa poza GPKG - inaczej kazde pobranie bylo nowa wersja - a ich wartosci
+  w sidecarze `extra.source.dropped_fields` (pole -> wartosci). GPKG
+  skladany na dysku lokalnym (SQLite nie zapisuje na wolumenie
+  sieciowym), potem staging magazynu. Nowa zaleznosc `pyogrio` (GDAL
+  wektorowy).
 - D6. Magazyn i sygnaly: kazdy plik przez `FileSlot` i
   `use_local`/`store_file`/`fetch_version`/`inspect_version`; sygnal =
   `update_signal` kanalu: paczki GUGiK i wszystkie wyniki WFS/REST
@@ -279,13 +305,13 @@ class PackageVariant:
     url_template: str                    # tokens: {teryt}, {woj} only
     edition: str | None = None           # version label (label_source "edition")
     segment_tokens: tuple[str, ...] = () # ("shp", "2024") | ("lod1", "2024") | ("gml",)
+    members: tuple[str, ...] = ()        # required member suffixes (".shp")
     vertical_crs: str | None = None      # declared in the data (3D CityGML)
 
 @dataclass(frozen=True)
 class UnitPackageParams:
     unit: Literal["powiat", "woj", "country"]
     variants: tuple[PackageVariant, ...]
-    members: tuple[str, ...] = ()        # required member suffixes (".shp")
     unpack: str | None = None            # exactly one member with suffix -> file
 
 @dataclass(frozen=True)
@@ -315,6 +341,13 @@ i `segment_tokens` pasuja do `[a-z0-9.-]+`; `FeatureBBoxParams.protocol`
 zgodny z `transport` (`WFS` -> `wfs`, `ARCGIS_QUERY` -> `arcgis`);
 `page_size > 0`.
 
+Korekta przy implementacji (2026-10-15): `members` jest polem
+`PackageVariant`, nie `UnitPackageParams` - paczki GML (`.xml`) i SHP
+(`.shp`) archiwum BDOT10k leza w jednym kanale, wiec wymagane czlony
+zaleza od wariantu. Kazdy kanal kolekcji ma capability unikalna
+w deskryptorze (`archive_unit_files`, `country_files`, `bbox_vector`,
+`admin_unit_files`) - sidecar wybiera po niej kanal pliku.
+
 ### Silniki
 
 - `kartograf/transport/unit_package.py`:
@@ -340,21 +373,22 @@ zgodny z `transport` (`WFS` -> `wfs`, `ARCGIS_QUERY` -> `arcgis`);
   `geometryType=esriGeometryEnvelope`, `inSR`/`outSR` = kod natywny,
   `spatialRel=esriSpatialRelIntersects`, `f=geojson`, `outFields=*`,
   `orderByFields`, `resultOffset`, `resultRecordCount`. Przed
-  pierwszym `GetFeature`: `GetCapabilities` (cache metadanych; DefaultCRS
-  porownywany po kodzie EPSG - `urn:ogc:def:crs:EPSG::2180` i
+  pierwszym `GetFeature`: `GetCapabilities` (swiezo, bez cache - D3;
+  DefaultCRS porownywany po kodzie EPSG - `urn:ogc:def:crs:EPSG::2180` i
   `http://www.opengis.net/def/crs/EPSG/0/5514` to rozne zapisy) - typ
   istnieje i DefaultCRS = `native_crs`, inaczej `DownloadError`
-  (bez podmiany); schemat pol: WFS `DescribeFeatureType` (XSD, cache),
+  (bez podmiany); schemat pol: WFS `DescribeFeatureType` (XSD, swiezo),
   ArcGIS `/<id>?f=json` `fields`.
-- `kartograf/transform/gpkg.py`: `write_gpkg(path: Path, layers:
-  Sequence[LayerFeatures], *, crs: str) -> dict[str, int]` (liczba
-  obiektow na warstwe) - `pyogrio.raw.read` stron (GML z
-  `XSD=<plik>`, GeoJSON), dedupe po `id_field`, sort po `id_field`,
-  usuniecie `drop_fields` (wartosci zwracane do sidecara),
-  `pyogrio.raw.write(..., driver="GPKG", promote_to_multi=True)` przy
-  `OGR_CURRENT_DATE="2000-01-01T00:00:00.000Z"` ustawionym przez
-  `pyogrio.set_gdal_config_options` na czas zapisu; plik powstaje
-  w `tempfile.mkdtemp()` (dysk lokalny), potem przeniesienie do
+- `kartograf/transform/gpkg.py`: `write_gpkg(path: Path, pages:
+  FeaturePages, *, params: FeatureBBoxParams) -> GpkgSummary` (`features`:
+  liczba obiektow na warstwe, `dropped`: wartosci `drop_fields` do
+  sidecara) - `pyogrio.raw.read` stron (GML z `XSD=<plik>`,
+  `WRITE_GFS=NO`, `DOWNLOAD_SCHEMA=NO` i `GML_FETCH_ALL_GEOMETRIES=YES`,
+  GeoJSON), dedupe po `id_field`, sort po `id_field`, usuniecie
+  `drop_fields`, `pyogrio.raw.write(..., driver="GPKG",
+  promote_to_multi=True)` przy `OGR_CURRENT_DATE="2000-01-01T00:00:00.000Z"`
+  ustawionym przez `pyogrio.set_gdal_config_options` na czas zapisu; plik
+  powstaje w `tempfile.mkdtemp()` (dysk lokalny), potem przeniesienie do
   stagingu slotu.
 
 ### Orkiestrator (`kartograf/download/collections.py`)
@@ -438,7 +472,7 @@ class CollectionReport:
   `request` = wybor uzytkownika w jednostce (`teryt`/`bbox`+`bbox_crs`,
   `year`, `format`, `lod`, `level`) i `extra.source` = `url` albo
   `service`, `layers` (kod, zrodlo, liczba obiektow), `edition`,
-  `response_date`; `extra.parent_request` dla obszaru rozlozonego na
+  `dropped_fields`; `extra.parent_request` dla obszaru rozlozonego na
   jednostki albo przeliczonego z innego ukladu/arkusza/geometrii
   (`parent_request_for`).
 - Bledy per jednostka -> `UnitFailure(unit, country, error, kind)`
@@ -483,7 +517,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
 - Modify: `kartograf/sources/descriptor.py`, `kartograf/sources/registry.py`,
   `tests/test_sources_registry.py`, `docs/DECISIONS.md` (CRLF)
 
-- [ ] **Step 1: Testy (RED)** - `tests/test_sources_registry.py`:
+- [x] **Step 1: Testy (RED)** - `tests/test_sources_registry.py`:
   `test_collection_channels_are_typed` (kazdy kanal z `params`:
   `UnitPackageParams` przy `DIRECT_FILES`, `FeatureBBoxParams` przy
   `WFS`/`ARCGIS_QUERY` z protokolem zgodnym z transportem);
@@ -498,7 +532,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   `pl.gugik.bdot10k`, dwa kanaly `DIRECT_FILES`, `sources_for(product=
   "landcover")` nie ma klucza archiwum). Rozszerz `CHANNEL_SIGNALS`
   o wszystkie nowe kanaly z ich sygnalem (`none`).
-- [ ] **Step 2: Implementacja** - dataclassy z sekcji "Kontrakt";
+- [x] **Step 2: Implementacja** - dataclassy z sekcji "Kontrakt";
   `AccessChannel.params` (domyslnie `None`, istniejace kanaly bez
   zmian); wpisy rejestru z matrycy (warianty generowane wyrazeniem
   listowym z jawnych krotek lat/formatow - bez petli z IO);
@@ -507,11 +541,11 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   archiwum). `vertical_crs` wariantow 3D: tylko zmierzone (LoD1 2024,
   LoD2 2017); pozostale lata `None` do Task 6 (Step 0 mierzy i uzupelnia,
   test kompletnosci dochodzi tam - brama kazdego Taska zostaje zielona).
-- [ ] **Step 3: ADR-042** - tekst z sekcji "ADR-042" do
+- [x] **Step 3: ADR-042** - tekst z sekcji "ADR-042" do
   `docs/DECISIONS.md` (CRLF: edytuj narzedziem zachowujacym konce linii
   i sprawdz `file docs/DECISIONS.md` -> "with CRLF line terminators"),
   wiersz indeksu, statusy ADR-015/036/039/040.
-- [ ] **Step 4: Brama i commit** - `feat(sources): parametry kanalow
+- [x] **Step 4: Brama i commit** - `feat(sources): parametry kanalow
   unit_package i feature_bbox, deskryptory PRG, EGiB, modeli 3D
   i archiwum BDOT10k (ADR-042)`
 
@@ -528,7 +562,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   `commit_version`), `tests/test_landcover_store.py` (istniejacy plik
   testow `selection_slot`; nazwy sprawdz `grep -rn selection_slot tests`)
 
-- [ ] **Step 1: Testy (RED)** -
+- [x] **Step 1: Testy (RED)** -
   `test_commit_identical_in_related_slot_is_relabeled` (wersja `2022`
   w slocie A, ten sam sha256 zapisywany jako `2023` w slocie B z
   `related_roots=(A,)`: status `relabeled`, `same_as == "2022"`,
@@ -540,7 +574,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   `versions/country/`; bbox EPSG:5514 -> `bbox/<coords .10g>.gpkg`);
   dotychczasowe testy `selection_slot`/`landcover_segment` przeniesione
   na nowe nazwy bez zmiany asercji sciezek.
-- [ ] **Step 2: Implementacja** - `FileSlot.related_roots:
+- [x] **Step 2: Implementacja** - `FileSlot.related_roots:
   tuple[Path, ...] = ()`; `store_file` przekazuje do `commit_version`;
   w `commit_version` gdy `same` puste: kandydaci z `list_versions(r,
   name)` dla `r in related_roots` o tym samym sha256 -> `source =
@@ -549,7 +583,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   `unit_slot`/`content_segment` w `download/storage.py`; usun
   `selection_slot`/`landcover_segment` i popraw wszystkich wolajacych
   (`grep -rn "selection_slot\|landcover_segment" kartograf tests`).
-- [ ] **Step 3: Brama i commit** - `feat(versions): sloty jednostek
+- [x] **Step 3: Brama i commit** - `feat(versions): sloty jednostek
   (teryt, bbox, country) i D23 miedzy wydaniami w slotach pokrewnych`
 
 ### Task 3: Silnik `unit_package`
@@ -563,7 +597,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   jako najmniejszy poprawny GPKG zapisany przez `transform/gpkg.py`
   albo `tests/conftest.py::write_gpkg_layers`)
 
-- [ ] **Step 1: Testy (RED)** - `test_select_variant_requires_each_key`
+- [x] **Step 1: Testy (RED)** - `test_select_variant_requires_each_key`
   (brak `year` -> `ValidationError` z lista 2014-2025, bez sieci; zly
   format -> lista `GML, SHP`; `GPKG` -> blad);
   `test_package_url_from_template` (2024/SHP/1261 ->
@@ -575,12 +609,12 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   `test_unpack_single_member` (dokladnie jeden `.gpkg` rozpakowany,
   dwa albo zero = `DownloadError`, uszkodzony CRC = `DownloadError`,
   brak pliku wyniku po bledzie). Sesja-atrapa liczy wywolania.
-- [ ] **Step 2: Implementacja** - funkcje z kontraktu na
+- [x] **Step 2: Implementacja** - funkcje z kontraktu na
   `download_to` (`validate=` odrzuca `text/html`/`<?xml` gdy
   oczekiwany ZIP), `zipfile.ZipFile` do kontroli katalogu i
   rozpakowania strumieniowego (`shutil.copyfileobj`), timeout jak
   BDOT10k (`Bdot10kProvider.DEFAULT_TIMEOUT = 120`).
-- [ ] **Step 3: Brama i commit** - `feat(transport): silnik unit_package
+- [x] **Step 3: Brama i commit** - `feat(transport): silnik unit_package
   (paczki per jednostka z szablonu URL)`
 
 ### Task 4: Silnik `feature_bbox` i zapis GPKG
@@ -593,13 +627,14 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   PRG `GetCapabilities` (fragment z A01-A06), `DescribeFeatureType`
   A03, `hits` i strony `COUNT=2` dla malego bboxa z 3-4 gminami, w tym
   strona za koncem z duplikatem; EGiB `hits` + 2 strony `COUNT=2`
-  z krzywymi; odpowiedz HTML RCN (`UslugaZbiorcza` bez `SERVICE`)
+  (bez krzywych - patrz D5; obiekt wieloczesciowy); odpowiedz HTML RCN
+  (`UslugaZbiorcza` bez `SERVICE`)
   i `ExceptionReport`)
 
-- [ ] **Step 0: Zaleznosc** - dopisz `pyogrio` do `pyproject.toml`
+- [x] **Step 0: Zaleznosc** - dopisz `pyogrio` do `pyproject.toml`
   i zainstaluj w `.venv` (`.venv/bin/python -m pip install -e .`);
   sprawdz `python -c "import pyogrio, rasterio"` w jednym procesie.
-- [ ] **Step 1: Testy (RED)** - `test_wfs_axis_order_in_bbox` (PRG
+- [x] **Step 1: Testy (RED)** - `test_wfs_axis_order_in_bbox` (PRG
   `yx`: parametr `BBOX=<N_min>,<E_min>,<N_max>,<E_max>,urn:...:2180`);
   `test_completeness_uses_hits_not_next` (fixtura PRG: strona bez
   `next` w srodku, duplikat na koncu -> komplet N unikalnych);
@@ -612,15 +647,19 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   same bajty; obiekty posortowane po id; `DATA` nieobecne w GPKG
   i zwrocone do sidecara); `test_gpkg_axes_and_crs` (EPSG:2180,
   pierwsza wspolrzedna = wschod; `ogr`-owy odczyt przez `pyogrio.read_info`);
-  `test_curves_preserved_or_linearized_consistently` (EGiB
-  CurvePolygon: GPKG czytelny, liczba obiektow zgodna).
-- [ ] **Step 2: Implementacja** - silnik wg D3/D4 i kontraktu; GML
+  `test_curves_preserved_or_linearized_consistently` (warstwy EGiB
+  jednego typu liniowego, liczba obiektow zgodna; krzywych w danych
+  2026-10-15 nie bylo) i `test_multipart_feature_keeps_every_part`.
+- [x] **Step 2: Implementacja** - silnik wg D3/D4 i kontraktu; GML
   czytany przez GDAL z `XSD` z `DescribeFeatureType` (spojne typy pol
-  miedzy stronami), `GML_SKIP_RESOLVE_ELEMS=NONE`, bez pobierania
-  schematow z sieci przez GDAL (`DOWNLOAD_SCHEMA=NO`); ArcGIS GeoJSON
-  z typami z `fields`. Limity czasu jak skorowidze GUGiK (30-60 s na
-  strone), ponowienia z `get_with_retry`.
-- [ ] **Step 3: Brama i commit** - `feat(transport): silnik feature_bbox
+  miedzy stronami), bez pobierania schematow z sieci przez GDAL
+  (`DOWNLOAD_SCHEMA=NO`), z `GML_FETCH_ALL_GEOMETRIES=YES` (obiekt
+  wieloczesciowy MapServera = powtorzone `<ms:geom>`; bez tej opcji GDAL
+  zostawia ostatnia czesc); `GML_SKIP_RESOLVE_ELEMS` nieuzywane (plan
+  zakladal `NONE`, czyli rozwiazywanie `xlink:href` - zbedne: strony PRG
+  i EGiB nie maja `xlink:href`); ArcGIS GeoJSON z typami z `fields`. Limity czasu jak
+  skorowidze GUGiK (30-60 s na strone), ponowienia z `get_with_retry`.
+- [x] **Step 3: Brama i commit** - `feat(transport): silnik feature_bbox
   (WFS/ArcGIS, kompletnosc z liczby obiektow) i deterministyczny zapis GPKG`
 
 ### Task 5: Orkiestrator kolekcji
@@ -632,7 +671,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   warning), `kartograf/__init__.py` (`download_collection`,
   `check_collection`, `CollectionReport` w `__all__`)
 
-- [ ] **Step 1: Testy (RED)** na deskryptorach testowych
+- [x] **Step 1: Testy (RED)** na deskryptorach testowych
   (`monkeypatch` rejestru) i sesjach-atrapach z fixtur Task 3/4:
   `test_exactly_one_selection` (zero/dwa wybory - `ValidationError`
   przed jakimkolwiek zapytaniem); `test_variant_required_when_many`
@@ -651,13 +690,13 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   (pozycja zmieniona od planu = `stale`, bez pobrania);
   `test_editions_relabeled_across_slots` (identyczny ZIP 2022/2023 ->
   `relabeled`, jeden i-wezel).
-- [ ] **Step 2: Implementacja** - kontrakt "Orkiestrator";
+- [x] **Step 2: Implementacja** - kontrakt "Orkiestrator";
   `validate_collection_request` jako jedyne miejsce regul wyboru
   (wolane na poczatku `download_collection` i `check_collection`);
   `related_roots` = slot tej samej jednostki w segmentach pozostalych
   wydan tego produktu i formatu (`content_segment` z innym tokenem
   wydania; tylko istniejace katalogi).
-- [ ] **Step 3: Brama i commit** - `feat(download): download_collection
+- [x] **Step 3: Brama i commit** - `feat(download): download_collection
   i check_collection (kolekcje na magazynie wersji, tor collection)`
 
 ### Task 6: Produkty PL - archiwum BDOT10k, modele 3D, PRG, EGiB
@@ -669,12 +708,12 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
 - Test: `tests/test_landcover_manager.py` (istniejacy plik testow
   menedzera; sprawdz nazwe), `tests/test_collections_products.py`
 
-- [ ] **Step 0: Pomiar (live, jednorazowo)** - dla LoD1 2019, 2021,
+- [x] **Step 0: Pomiar (live, jednorazowo)** - dla LoD1 2019, 2021,
   2022 pobierz paczke jednego malego powiatu (np. 0401) do
   `<katalog-danych>` i odczytaj `srsName` pierwszego GML z obiektami;
   wpisz `vertical_crs` wariantu (2024 = EPSG:9651, 2017 = EPSG:9650
   zmierzone 2026-10-15). Wynik dopisz do raportu rekonesansu.
-- [ ] **Step 1: Testy (RED)** - BDOT10k:
+- [x] **Step 1: Testy (RED)** - BDOT10k:
   `test_bdot10k_year_requires_archive_format` (`year` bez `format`
   albo z `GPKG` -> `ValidationError` z lista `GML, SHP`; `layers`/
   `keep_raw` z `year` -> blad); `test_bdot10k_year_teryt_slot_and_sidecar`
@@ -690,7 +729,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   w GPKG, pola TERYT `JPT_KOD_JE` zachowane), `test_prg_teryt_powiat_rejected`.
   EGiB: `test_egib_export_unpacked_gpkg` (`.gpkg` z trzema warstwami
   fixtury), `test_egib_bbox_two_layers_without_data_field`.
-- [ ] **Step 2: Implementacja** - `_SOURCE_OPTIONS["bdot10k"]` +=
+- [x] **Step 2: Implementacja** - `_SOURCE_OPTIONS["bdot10k"]` +=
   `year`; w `_check_options` reguly D11 (bez sieci; gdy manifest jest
   scalony, `LandCoverManager.validate_request` obejmuje je przez
   `_check_options` - jedno miejsce); `LandCoverManager.download/check`
@@ -701,8 +740,19 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   (bez zmiany toru). Pozostale produkty - wylacznie wpisy rejestru
   (Task 1) i testy; zero kodu per produkt w orkiestratorze poza
   parametrami.
-- [ ] **Step 3: Brama i commit** - `feat(landcover): archiwum BDOT10k
+- [x] **Step 3: Brama i commit** - `feat(landcover): archiwum BDOT10k
   (--year, GML/SHP) oraz modele 3D, PRG i EGiB na silnikach kolekcji`
+
+Korekta przy implementacji (2026-10-15): archiwum idzie przez publiczne
+zadania jednostek orkiestratora (`package_job`, `run_job`, `inspect_job`
+z `track="landcover"`) z sesja HTTP dostawcy BDOT10k
+(`Bdot10kProvider.session()`, `session=`) i jego opcja `timeout`, a nie
+przez osobna funkcje pliku. `--format GML` bez `--year` = blad z
+podpowiedzia, a `--year` innego zrodla niz `bdot10k`/`corine` wymienia
+oba zrodla. Testy PRG i EGiB obszaru w `tests/test_collections_products.py`
+uzywaja nagranych fixtur PRG A06 (`--level obreb`) i EGiB powiatu 1415
+(warstwa A03 nie ma fixtury); paczki EGiB, odrzucenie `--teryt <powiat>`
+dla PRG i LoD1 2024 = EPSG:9651 sprawdza `tests/test_collections.py`.
 
 ### Task 7: CLI - grupy `boundaries`, `cadastre`, `models3d`, `landcover --year`, `_task` i projekt
 
@@ -716,7 +766,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
 - Warunkowo (manifest scalony - istnieje `kartograf/project/commands.py`):
   `kartograf/project/commands.py`, `tests/test_project_commands.py`
 
-- [ ] **Step 1: Testy (RED)** - `test_new_groups_registered`
+- [x] **Step 1: Testy (RED)** - `test_new_groups_registered`
   (`kartograf boundaries|cadastre|models3d --help` = kod 0, komendy
   `download`, `list-sources`); `test_group_flags_only_own`
   (`cadastre download --level gmina` -> blad argparse, kod 2;
@@ -731,7 +781,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   korzystaja z jednej funkcji tlumaczenia (bez osobnego testu
   okablowania; zgodnosc komend z tabela projektu sprawdza test
   manifestu, ADR-040).
-- [ ] **Step 2: Implementacja** - moduly grup wg ADR-039 (`add_group`,
+- [x] **Step 2: Implementacja** - moduly grup wg ADR-039 (`add_group`,
   `add_area_flags`, `add_update_flags`, `add_quiet`,
   `add_list_sources`); flagi tylko swoje: `boundaries` (`--product`,
   `--country`, obszar, `--teryt`, `--whole-country`, `--level`),
@@ -749,7 +799,7 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   _task=collection_task)`. `landcover download`: `--year` w opisie
   takze dla BDOT10k (archiwum), `--format` choices `GPKG|SHP|GML`
   (walidacja zgodnosci w bibliotece).
-- [ ] **Step 3: Projekt (ADR-040, warunkowo)** - jesli
+- [x] **Step 3: Projekt (ADR-040, warunkowo)** - jesli
   `kartograf/project/commands.py` istnieje: dodaj `TaskCommand` dla
   `boundaries download`, `cadastre download`, `models3d download`
   (`validate` = `validate_collection_request`, `download` =
@@ -763,12 +813,26 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   ustaw (Step 2), a w `docs/PROGRESS.md` (sekcja integracji) dopisz
   liste pozycji do dodania przez galaz manifestu ("kto scala sie
   pozniej, dopisuje pozycje" - spec manifestu sekcja 5).
-- [ ] **Step 4: Smoke offline** - `.venv/bin/python -m kartograf.cli.commands
+- [x] **Step 4: Smoke offline** - `.venv/bin/python -m kartograf.cli.commands
   boundaries download --help`, `cadastre download --help`, `models3d
   download --help`, `landcover download --help` z korzenia worktree;
   porownaj wybory z `list-sources`.
-- [ ] **Step 5: Brama i commit** - `feat(cli): grupy boundaries,
+- [x] **Step 5: Brama i commit** - `feat(cli): grupy boundaries,
   cadastre, models3d i landcover --year dla archiwum BDOT10k`
+
+Korekta przy implementacji (2026-10-15): wspolny ksztalt komend trzech grup
+w module pomocniczym `kartograf/cli/groups/_collection.py`
+(`add_collection_commands`; moduly z `_` nie sa grupami), grupa dodaje
+tylko swoje flagi tresci; teksty `--help` z biblioteki
+(`collection_product_choices`, `collection_level_choices`,
+`collection_variant_choices`, `bdot10k_archive_choices`), brak `--product`
+= `require_collection_product` (blad wymienia tylko produkty grupy, ten sam
+w pozycji projektu). `--horizontal-crs` nie wchodzi do grup planu C (zaden
+plik krajowy PL nie ma kilku ukladow; dochodzi z planem D). Testy:
+`tests/test_cli_collections.py` (tlumaczenie, flagi tylko swoje, bledy),
+`tests/test_cli.py::TestCommandGroups` (nowe grupy, `list-sources`),
+parytet w `tests/test_parity_collections.py` i (archiwum BDOT10k)
+`tests/test_parity_landcover.py`.
 
 ### Task 8: Dokumentacja, live E2E i brama koncowa
 
@@ -792,9 +856,9 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   spec katalogu sekcja 5 - errata osi 5514 (odsylacz do ADR-042 D4),
   `docs/research/2026-10-15-plan-c-live/raport.md` (NOWY, wyniki E2E).
 
-- [ ] **Step 1: Dokumentacja** wg listy wyzej (teksty po polsku, ASCII
+- [x] **Step 1: Dokumentacja** wg listy wyzej (teksty po polsku, ASCII
   w nowych dokumentach jak w specu katalogu).
-- [ ] **Step 2: Live E2E** (swiadomie, dane do `<katalog-danych>`,
+- [x] **Step 2: Live E2E** (swiadomie, dane do `<katalog-danych>`,
   rzeczywistej sciezki nie zapisuj):
   ```text
   kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o <katalog-danych>
@@ -819,12 +883,25 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   `extra.source`, `extra.parent_request`, `extra.version`) i dowiazania
   (`stat -c %h`). PRG `--whole-country` (377 MB) uruchom osobno, swiadomie.
   Wyniki do `docs/research/2026-10-15-plan-c-live/raport.md` (bez sciezki).
-- [ ] **Step 3: Brama koncowa** - `python -m pytest tests/ -m "not
+- [x] **Step 3: Brama koncowa** - `python -m pytest tests/ -m "not
   live" -q`, `python -m ruff check .`, `python -m ruff format --check .`,
   `python -m mypy kartograf/ tests/`; smoke rzeczywistego CLI i API
   (nie tylko testy).
-- [ ] **Step 4: Commit** - `docs: plan C - silniki kolekcji, archiwum
+- [x] **Step 4: Commit** - `docs: plan C - silniki kolekcji, archiwum
   BDOT10k, modele 3D, PRG i EGiB (ADR-042, USAGE, ARCHITECTURE)`
+
+Korekta przy implementacji (2026-10-15): pomiary na zywo zgodne
+z oczekiwaniami (raport `docs/research/2026-10-15-plan-c-live/raport.md`,
+takze PRG `--whole-country`, obszar dwoch powiatow z `--workers 2`,
+luki LoD2 i bledy wyboru). Jedna poprawka kodu z testem regresji:
+podpowiedz bledu wyboru (`_available`) wymieniala dla EGiB obszar dwa
+razy - jako paczki powiatow i jako obiekty obszaru - choc obszar produktu
+z kanalem `feature_bbox` zawsze idzie do uslugi. `models3d download
+--whole-country` konczy sie bledem parsera (kod 2), bo grupa nie ma tej
+flagi (flagi tylko swoje, Task 7); w API `whole_country=True` daje
+`ValidationError` z lista dostepnych wyborow. Dokumentacja: dodatkowo
+ARCHITECTURE 1 i 3.2 (sidecar kolekcji), USAGE 4.3 i 8 (tryby, zadania
+projektu); SCOPE, PRD, README i STANDARDS 17.5 wg listy.
 
 ## Kryteria akceptacji
 

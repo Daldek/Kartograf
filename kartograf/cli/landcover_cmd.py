@@ -24,19 +24,13 @@ from kartograf.cli.download_cmd import (
     store_path_label,
 )
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.landcover.manager import LandCoverManager
-
-# The --source values of the landcover group (help and the missing-flag error).
-SOURCE_CHOICES = (
-    "bdot10k (wektorowa baza topograficzna GUGiK), corine (CORINE Land Cover, "
-    "Copernicus)"
-)
+from kartograf.landcover.manager import LANDCOVER_SOURCE_CHOICES, LandCoverManager
 
 
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     """``landcover list-layers``: BDOT10k layers or CORINE years."""
     if args.source is None:
-        print(f"Error: --source wymagane: {SOURCE_CHOICES}", file=sys.stderr)
+        print(f"Error: --source wymagane: {LANDCOVER_SOURCE_CHOICES}", file=sys.stderr)
         return 1
     # the catalogue of the source (no network, nothing written)
     provider: Any = LandCoverManager(".", args.source, cache=False).provider
@@ -56,19 +50,17 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     return 0
 
 
-def cmd_landcover_download(args: argparse.Namespace) -> int:
-    """``landcover download``: flags -> ``LandCoverManager.download``/``.check``."""
-    missing = []
-    if args.source is None:
-        missing.append(f"--source wymagane: {SOURCE_CHOICES}")
-    if args.output is None:
-        missing.append(
-            "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/...)"
-        )
-    if missing:
-        for error in missing:
-            print(f"Error: {error}", file=sys.stderr)
-        return 1
+def area_task_arguments(args: argparse.Namespace) -> dict:
+    """Shared area selection for land cover, SoilGrids and HSG tasks."""
+    return {
+        "sheet": args.sheet,
+        "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
+        "geometry": Path(args.geometry) if args.geometry is not None else None,
+        "layer": args.layer,
+    }
+
+
+def _landcover_options(args: argparse.Namespace) -> dict:
     options: dict = {}
     if args.year is not None:
         options["year"] = args.year
@@ -78,6 +70,33 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         options["layers"] = args.layers
     if args.keep_raw:
         options["keep_raw"] = True
+    return options
+
+
+def landcover_task_arguments(args: argparse.Namespace) -> dict:
+    """Data options shared by ``landcover download`` and ``project add``."""
+    return {
+        "source": args.source,
+        "teryt": args.teryt,
+        **area_task_arguments(args),
+        **_landcover_options(args),
+    }
+
+
+def cmd_landcover_download(args: argparse.Namespace) -> int:
+    """``landcover download``: flags -> ``LandCoverManager.download``/``.check``."""
+    missing = []
+    if args.source is None:
+        missing.append(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
+    if args.output is None:
+        missing.append(
+            "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/...)"
+        )
+    if missing:
+        for error in missing:
+            print(f"Error: {error}", file=sys.stderr)
+        return 1
+    options = _landcover_options(args)
     return run_land_cover(
         args, args.source, options, teryt=args.teryt, workers=args.workers
     )
@@ -92,15 +111,8 @@ def run_land_cover(
     workers: int = 1,
 ) -> int:
     """One store request of ``source`` for the area flags of ``args``."""
-    # one area choice: checked by the library (ValidationError -> Error:)
-    bbox = parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None
-    selection: dict = {
-        "teryt": teryt,
-        "sheet": args.sheet,
-        "bbox": bbox,
-        "geometry": Path(args.geometry) if args.geometry is not None else None,
-        "layer": args.layer,
-    }
+    selection = area_task_arguments(args)
+    selection["teryt"] = teryt
     manager = LandCoverManager(output_dir=Path(args.output), provider=source)
     try:
         return run_with_plan_file(

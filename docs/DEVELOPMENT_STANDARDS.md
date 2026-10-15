@@ -604,8 +604,8 @@ class SheetParser:
 # 1:500k to 1:200k division produces 36 sheets (not 4!)
 children = self._get_children_from_500k()
 
-# NMT 5m exists only in EVRF2007; reject KRON86 before looking up a sheet
-require_nmt_vertical_crs(resolution or "1m", vertical_crs)
+# local import: the registry builds its descriptors from this module
+from kartograf.sources.registry import all_sources
 
 # BAD — states the obvious
 # Set timeout to 30
@@ -733,14 +733,33 @@ def test_parse_valid_sheet(sample_sheet):
 **Izolacja sieci:** `tests/conftest.py` blokuje kazde polaczenie spoza
 loopback (`_block_network`, autouse) — testy jednostkowe MUSZA byc offline;
 siec realna wymaga jawnego markera `@pytest.mark.live` (domyslnie
-odfiltrowanego przez `-m "not live"`), a GetCapabilities WMS jest domyslnie
-serwowane offline przez stub (`_offline_wms_layers`, autouse), ktory testy
-cwiczace sam `_fetch_wms_layers` jawnie wylaczaja markerem
-`@pytest.mark.real_wms_layers`.
+odfiltrowanego przez `-m "not live"`). Dwa autouse stuby serwuja odkrywanie
+warstw skorowidzy bez sieci:
+
+- `_offline_wms_layers` — GetCapabilities WMS skorowidza **ortofotomapy**
+  (NMT/NMPT nie uzywaja juz WMS); testy cwiczace sam `_fetch_wms_layers`
+  wylaczaja go markerem `@pytest.mark.real_wms_layers`.
+- `_offline_wfs_types` — typy roczne uslug WFS skorowidzy NMT i NMPT
+  (EVRF2007, KRON86) z nagranych GetCapabilities
+  `tests/fixtures/gugik_wfs/real_2026_10_15/caps_*.xml` (stub
+  `WfsIndex._fetch_types`; uslugi LAZ nie sa podmieniane); testy, ktore
+  sprawdzaja samo `WfsIndex.feature_types`, wylaczaja go markerem
+  `@pytest.mark.real_wfs_types`.
+
+`RecordedIndex` (`tests/conftest.py`) to atrapa `requests.Session` dla
+skorowidzy WFS NMT/NMPT/LAZ i maski ladu PRG, odpowiadajaca z nagranych
+odpowiedzi (`area_<produkt>_<uklad>_<obszar>.xml.gz`, `caps_*.xml`, PRG
+A00/W02/W03): `GetFeature` dostaje nagrane obiekty typow z `TYPENAMES`,
+ktorych obwiednia przecina `BBOX`, jako jedna strona; parametr `fail`
+podstawia blad albo odpowiedz dla prefiksu URL, `urls` zapisuje kazde
+zapytanie. Kazdy inny URL (w tym plik danych OpenData) to
+`AssertionError` — tak testy raportu dostepnosci dowodza, ze niczego nie
+pobiera.
 
 **Fixtury z realnych odpowiedzi:** odpowiedzi serwerow w testach offline
 buduj z SUROWYCH odpowiedzi zapisanych z prawdziwych uslug (wzor:
-`tests/fixtures/cuzk/`, `tests/fixtures/gugik_skorowidz/`), nie
+`tests/fixtures/cuzk/`, `tests/fixtures/gugik_skorowidz/`,
+`tests/fixtures/gugik_wfs/real_2026_10_15/`), nie
 z wyobrazenia o formacie.
 
 ---
@@ -1076,7 +1095,24 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,
 sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 
-### 17.2 Rozszerzenie parsera godel
+### 17.2 Nowa grupa lub komenda zapisujaca dane
+
+Kazda nowa komenda danych (w tym `download` nowej grupy) musi miec
+pozycje w `kartograf/project/commands.py::COMMANDS`: klucze i typy
+opcji manifestu, walidacje bez sieci wspolna z funkcja pobrania,
+wywolania biblioteki do pobrania i `check_*` oraz adapter kompletnego
+wyniku do przypiec (`VersionedFile`, wraz z plikami wejsciowymi i
+surowymi, jesli dotyczy). W parserze komendy ustaw `_task`, ktore
+korzysta z tego samego tlumaczenia flag co `_handler`, ale zwraca
+tylko opcje wyboru danych, bez `output_dir`, trybu aktualizacji
+i opcji uruchomienia. Dopisz test zadania projektu dla nowej komendy:
+przypiecie wyniku, sprawdzenie wzgledem przypiec i odtworzenie przy
+zgodnym SHA-256. Nowy produkt w istniejacej komendzie nie wymaga
+nowej pozycji `COMMANDS`; zgodnosc jej opcji z parserem nadal sprawdz
+testem. Kontrakt: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj)
+i spec manifestu, sekcja 5.
+
+### 17.3 Rozszerzenie parsera godel
 
 ```python
 # 1. PL-1992: kartograf/core/sheet_parser.py — wzorzec w PATTERNS, logika
@@ -1089,7 +1125,7 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 # 4. Przetestuj hierarchie (get_parent, get_children, get_all_descendants)
 ```
 
-### 17.3 Naprawa bledu w pobieraniu
+### 17.4 Naprawa bledu w pobieraniu
 
 ```python
 # 1. Zidentyfikuj provider (kartograf/providers/: pl/, cuzk/, corine.py,
@@ -1101,6 +1137,54 @@ sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 # 4. Napraw i potwierdz testem
 # 5. Uruchom caly zestaw testow offline — nic innego nie moze sie zepsuc
 ```
+
+### 17.5 Nowy produkt kolekcji (deskryptor z parametrami kanalu, ADR-042)
+
+Paczki jednostek (powiat, wojewodztwo, plik krajowy) i obiekty obszaru
+z WFS/ArcGIS REST nie dostaja providera ani nowego kodu silnika: produkt
+to wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
+`transport/feature_bbox.py`, `transform/gpkg.py`) i orkiestrator
+`download/collections.py`.
+
+```python
+# 1. Wpis SourceDescriptor w kartograf/sources/registry.py (albo nowy kanal
+#    istniejacego deskryptora, jak archiwum BDOT10k) z AccessChannel.params:
+#    - UnitPackageParams(unit="powiat"|"woj"|"country", variants, unpack):
+#      PackageVariant(choice, url_template, edition, segment_tokens,
+#      members, vertical_crs); w url_template tylko tokeny {teryt} i {woj};
+#      wszystkie warianty kanalu maja te same klucze choice (np. ("lod",
+#      "year")) i rozne wartosci; segment_tokens i edition pasuja do
+#      [a-z0-9.-]+; members = sufiksy wymaganych czlonow ZIP.
+#    - FeatureBBoxParams(protocol="wfs"|"arcgis", native_crs, axis_order
+#      "xy"|"yx", page_size > 0, layers: FeatureLayer(code, source, name,
+#      id_field) z unikalnymi code/source/name (przy selection "level" code
+#      pasuje do [a-z0-9.-]+), selection "level"|"all",
+#      order_field (wymagane dla arcgis), drop_fields); page_size nie wiekszy
+#      niz limit strony uslugi (CountDefault / maxRecordCount - sprawdzane
+#      przy pobraniu).
+#    Protokol zgodny z transportem kanalu (WFS -> "wfs", ARCGIS_QUERY ->
+#    "arcgis"; DIRECT_FILES -> UnitPackageParams); url_template i endpoint
+#    kanalu obiektow zaczynaja sie od https://.
+#    Capability kanalu kolekcji unikalna w deskryptorze (sidecar wybiera
+#    po niej kanal pliku); update_signal kanalu wg sygnalu zrodla
+#    (paczki i wyniki WFS GUGiK: "none").
+# 2. Kolejnosc osi (axis_order) potwierdz testem na prawdziwej odpowiedzi
+#    uslugi: zamiana osi daje pusty wynik BEZ bledu (tests/test_feature_bbox.py).
+# 3. Inwentarz sygnalow w tests/test_sources_registry.py: CHANNEL_SIGNALS
+#    (klucz, transport, sygnal) i COLLECTION_CHANNEL_SIGNALS (klucz,
+#    capability, sygnal); EXPECTED_KEYS dla nowego klucza.
+# 4. Fixtury z prawdziwych odpowiedzi (male; tests/fixtures/pl/feature_bbox/
+#    z naglowkami *.headers.json, tests/fixtures/pl/unit_package/).
+# 5. CLI: nowa grupa = modul kartograf/cli/groups/<grupa>.py z register(),
+#    ktory wola add_collection_commands (kartograf/cli/groups/_collection.py;
+#    download + list-sources, wybory w --help z rejestru); nowy produkt
+#    w istniejacej grupie = tylko wpis deskryptora (nowy wybor --product).
+# 6. Nowa grupa = pozycja projektu w kartograf/project/commands.py::COMMANDS
+#    (sekcja 17.2).
+```
+
+Kontrakt i checklista zrodla: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj);
+decyzje: ADR-042 w `docs/DECISIONS.md`.
 
 ---
 

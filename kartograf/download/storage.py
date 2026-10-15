@@ -8,6 +8,7 @@ and storage operations for downloaded data.
 import os
 import re
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 from typing import BinaryIO
 
@@ -17,7 +18,8 @@ from kartograf.download.campaigns import FULL_SHEET_DIR
 from kartograf.download.fetch import FileSlot
 from kartograf.download.versions import INCOMING_DIR, VERSIONS_DIR
 from kartograf.exceptions import ValidationError
-from kartograf.sources.registry import get_source
+from kartograf.sources.registry import get_source, sources_for
+from kartograf.sources.variants import variants
 
 # 0.7.x campaign directory, unused since the versioned store (spec 9).
 _LEGACY_CAMPAIGNS_DIR = "kampanie"
@@ -46,9 +48,10 @@ class FileStorage:
     output_dir : Path
         Base directory for storing downloaded files
     resolution : str
-        Resolution dimension of the segment template ("1m" or "5m"); empty
-        only when the segment comes from `product` (an explicit `subdir`
-        alone leaves the constructor's `resolution` value untouched)
+        Resolution dimension of the segment template (a label of the variant
+        registry, e.g. "0.5m", "1m"); empty only when the segment comes from
+        a product without resolutions (an explicit `subdir` alone leaves the
+        constructor's `resolution` value untouched)
 
     Examples
     --------
@@ -63,8 +66,6 @@ class FileStorage:
     partial files in case of errors.
     """
 
-    SUPPORTED_RESOLUTIONS = ["1m", "5m"]
-
     def __init__(
         self,
         output_dir: str | Path,
@@ -74,6 +75,7 @@ class FileStorage:
         product: str | None = None,
         subdir: str | None = None,
         variant: str | None = None,
+        format: str | None = None,
     ):
         """
         Initialize file storage.
@@ -84,18 +86,21 @@ class FileStorage:
             Base directory for storing downloaded files.
             Will be created if it doesn't exist.
         resolution : str or None
-            "1m" for high-resolution NMT/NMPT or "5m" for NMT 5m.
+            Label of a PL NMT/NMPT variant of the registry
+            (``kartograf.sources.variants``: "0.15m", "0.5m", "1m", "5m"...).
             Set None only if the selected product/descriptor segment has no
-            resolution dimension (e.g. orthophotos or LAZ). Without a product
-            or descriptor, a resolution is required to choose the NMT segment.
+            resolution dimension (e.g. orthophotos, LAZ, TIN/TTN archives).
+            Without a product or descriptor, a resolution is required to
+            choose the NMT segment.
         vertical_crs : str or None
             "EVRF2007" (modern PL heights), "KRON86" (legacy PL heights) or
             "Bpv" (native CZ heights). Set None only when the selected
             product/descriptor segment has no vertical dimension (orthophoto).
             A segment needing ``{vcrs}`` rejects None on path resolution.
         product : str or None, optional
-            "nmpt" (surface model, 1m), "orto" (orthophoto) or "laz"
-            (point cloud); None (default) selects NMT from ``resolution``.
+            "nmpt" (surface model), "orto" (orthophoto) or "laz" (point
+            cloud); None (default) selects NMT. NMT/NMPT segments come from
+            the variant of ``resolution`` and ``format``.
         subdir : str or None, optional
             Explicit descriptor segment template, e.g. "nmt/cz_dmr5g_{vcrs}";
             None (default) selects by product or resolution.
@@ -104,6 +109,9 @@ class FileStorage:
             distinguish orthophoto from its RGB segment; None (default)
             leaves the segment unsuffixed. Take it from
             ``provider.storage_variant``.
+        format : str or None, optional
+            NMT/NMPT file format token ("ASC" grids when None, archives
+            "XYZ", "TBD", ...).
         """
         if variant is not None and not re.fullmatch(r"[a-z0-9]+", variant):
             raise ValidationError(
@@ -112,34 +120,40 @@ class FileStorage:
             )
         self._variant = variant
         self._subdir_override = subdir
-        if product is not None or subdir is not None:
-            self._product = product
-            self._resolution = resolution or ""
-        else:
-            if resolution not in self.SUPPORTED_RESOLUTIONS:
-                raise ValidationError(
-                    f"Nieobslugiwana rozdzielczosc: '{resolution}'. "
-                    f"Obslugiwane: {self.SUPPORTED_RESOLUTIONS}"
-                )
-            self._product = None
-            self._resolution = resolution
+        self._product = product
+        self._resolution = resolution or ""
+        self._source_key: str | None = None
+        if subdir is None:
+            self._source_key = self._registered_source(product, resolution, format)
         self._output_dir = Path(output_dir)
         self._vertical_crs = vertical_crs
 
-    # Segment templates come from the source descriptors (ADR-026: a new
-    # source is a new descriptor entry, no path code) — resolution/product
-    # map to the descriptor KEY, not to a copy of its template.
-    _RESOLUTION_SOURCES = {"1m": "pl.gugik.nmt_1m", "5m": "pl.gugik.nmt_5m"}
-    _PRODUCT_SOURCES = {
-        "nmpt": "pl.gugik.nmpt",
-        "orto": "pl.gugik.orto",
-        "laz": "pl.gugik.laz",
-    }
-
     @staticmethod
-    def _descriptor_template(key: str) -> str:
-        """Segment template of a registered source."""
-        return get_source(key).storage_subdir
+    def _registered_source(
+        product: str | None, resolution: str | None, format: str | None
+    ) -> str | None:
+        """Descriptor key of the segment (ADR-026: a new source is a new
+        descriptor entry, no path code); ``None`` = the product name itself
+        is the segment (a product outside the registry)."""
+        name = product or "nmt"
+        sheet_variants = variants(product=name, country="PL")
+        if sheet_variants and any(v.resolution_m is not None for v in sheet_variants):
+            fmt = format or "ASC"
+            found = [
+                v for v in sheet_variants if v.format == fmt and v.label == resolution
+            ]
+            if not found:
+                labels = sorted(
+                    {v.label for v in sheet_variants if v.format == fmt and v.label},
+                    key=lambda label: float(label[:-1]),
+                )
+                raise ValidationError(
+                    f"Nieobslugiwana rozdzielczosc: '{resolution}'. "
+                    f"Obslugiwane ({name} {fmt}): {labels}"
+                )
+            return found[0].source
+        sources = sources_for(country="PL", product=name)
+        return sources[0].key if len(sources) == 1 else None
 
     @property
     def output_dir(self) -> Path:
@@ -150,26 +164,24 @@ class FileStorage:
     def resolution(self) -> str:
         """Return the resolution dimension of the segment.
 
-        "" only when the segment comes from `product` — an explicit `subdir`
-        alone leaves the constructor's `resolution` value untouched.
+        "" for a segment without resolution (orto, LAZ) — an explicit
+        `subdir` alone leaves the constructor's `resolution` value untouched.
         """
         return self._resolution
 
     @property
     def _subdir(self) -> str:
-        """Return the segment template (override, product or resolution).
+        """Return the segment template (override, registered source, product).
 
         ``{vcrs}`` is already filled from ``vertical_crs``; ``{system}`` may
         remain — path methods resolve it per identifier.
         """
         if self._subdir_override:
             template = self._subdir_override
-        elif self._product:
-            key = self._PRODUCT_SOURCES.get(self._product)
-            template = self._descriptor_template(key) if key else self._product
+        elif self._source_key is not None:
+            template = get_source(self._source_key).storage_subdir
         else:
-            key = self._RESOLUTION_SOURCES.get(self._resolution)
-            template = self._descriptor_template(key) if key else self._resolution
+            template = self._product or ""
         if self._variant:
             template = f"{template}_{self._variant}"
         # Falsy, not `is not None`: an empty string carries no dimension, so it
@@ -700,4 +712,111 @@ def bbox_slot(
         versions_base=base,
         versions_root=base / "bbox",
         ext=extension,
+    )
+
+
+# Content token of a segment (spec 3.4, ADR-042 D8): lowercase, no separators.
+_SEGMENT_TOKEN = re.compile(r"[a-z0-9.-]+")
+_TERYT = re.compile(r"[0-9]{2,7}")
+_COUNTRY = re.compile(r"[a-z]{2}")
+
+
+def token_segment(prefix: str, tokens: Sequence[str]) -> str:
+    """``<prefix>_<token>_...`` with lowercase tokens; no tokens = ``prefix``.
+
+    Raises
+    ------
+    ValidationError
+        A token outside ``[a-z0-9.-]`` (after lowercasing).
+    """
+    lowered = [str(t).lower() for t in tokens]
+    for token in lowered:
+        if not _SEGMENT_TOKEN.fullmatch(token):
+            raise ValidationError(
+                f"Niedozwolony element segmentu {token!r} (dozwolone [a-z0-9.-])"
+            )
+    return "_".join([prefix, *lowered])
+
+
+def content_segment(descriptor_key: str, tokens: Sequence[str]) -> str:
+    """Segment of a source whose ``storage_subdir`` is a prefix completed by
+    content tokens (land cover, collections: layers, format, year, level).
+
+    ``content_segment("pl.gugik.bdot10k", ("shp", "2024"))`` =
+    ``landcover/pl_bdot10k_shp_2024``; no tokens = the prefix itself.
+
+    Raises
+    ------
+    ValidationError
+        A token outside ``[a-z0-9.-]`` (after lowercasing).
+    """
+    return token_segment(get_source(descriptor_key).storage_subdir, tokens)
+
+
+def unit_slot(
+    output_dir: str | Path,
+    segment: str,
+    ext: str,
+    *,
+    teryt: str | None = None,
+    bbox: BBox | None = None,
+    sheet: str | None = None,
+    country: str | None = None,
+    related_roots: Sequence[Path] = (),
+) -> FileSlot:
+    """Version slot of one file of a unit (exactly one selection, ADR-042 D8).
+
+    ``teryt`` -> ``<segment>/teryt/<TERYT><ext>``; ``bbox`` ->
+    ``<segment>/bbox/<coords><ext>`` in the bbox's own CRS (``bbox_slot``;
+    the caller passes the CRS of the result); ``sheet`` ->
+    ``<segment>/<path_parts>/<canonical sheet><ext>``; ``country`` ->
+    ``<segment>/country/<code><ext>`` (lowercase ``pl``/``cz``). Versions
+    live in ``<segment>/versions/<same hierarchy>/``; ``related_roots`` as
+    in ``FileSlot``.
+
+    Raises
+    ------
+    ValidationError
+        Not exactly one selection, a TERYT code that is not 2-7 digits, a
+        country code that is not two letters, or an invalid sheet code.
+    """
+    given = [v for v in (teryt, bbox, sheet, country) if v is not None]
+    if len(given) != 1:
+        raise ValidationError(
+            "Podaj dokladnie jeden wybor: teryt, bbox, sheet albo country"
+        )
+    output_dir = Path(output_dir)
+    related = tuple(Path(r) for r in related_roots)
+    if bbox is not None:
+        slot = bbox_slot(output_dir, segment, bbox, ext)
+        return FileSlot(
+            output_dir=slot.output_dir,
+            std=slot.std,
+            versions_base=slot.versions_base,
+            versions_root=slot.versions_root,
+            ext=ext,
+            related_roots=related,
+        )
+    parts: list[str]
+    if teryt is not None:
+        if not _TERYT.fullmatch(teryt):
+            raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt!r}")
+        parts, name = ["teryt"], teryt
+    elif country is not None:
+        name = country.lower()
+        if not _COUNTRY.fullmatch(name):
+            raise ValidationError(f"Nieprawidlowy kod kraju: {country!r}")
+        parts = ["country"]
+    else:
+        assert sheet is not None
+        name = SheetParser(sheet).sheet
+        parts = parser_registry.path_parts(name)
+    base = output_dir / segment / VERSIONS_DIR
+    return FileSlot(
+        output_dir=output_dir,
+        std=output_dir.joinpath(segment, *parts, f"{name}{ext}"),
+        versions_base=base,
+        versions_root=base.joinpath(*parts),
+        ext=ext,
+        related_roots=related,
     )

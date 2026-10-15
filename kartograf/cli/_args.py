@@ -40,16 +40,15 @@ def add_update_flags(
     check_help: str,
     upgrade_help: str,
     force_help: str,
-    plan_help: str,
+    plan_help: str | None = None,
 ) -> None:
-    """Update modes of a store command (spec 4.2, 4.4): ``--check-updates``,
-    ``--upgrade``, ``--force`` (mutually exclusive) and ``--plan PLIK``
-    (with a mode only — checked in ``commands._dispatch``)."""
+    """Update modes of a store command; omit ``--plan`` when not supported."""
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument("--check-updates", action="store_true", help=check_help)
     modes.add_argument("--upgrade", action="store_true", help=upgrade_help)
     modes.add_argument("--force", action="store_true", help=force_help)
-    parser.add_argument("--plan", metavar="PLIK", default=None, help=plan_help)
+    if plan_help is not None:
+        parser.add_argument("--plan", metavar="PLIK", default=None, help=plan_help)
 
 
 def add_bbox_crs(parser: Container) -> None:

@@ -256,6 +256,19 @@ Wymagania wspolne (z pulapek raportu):
 - Timeouty i ponowienia jak dzis (STANDARDS 13.4); ATOM GUGiK z dluzszym
   timeoutem (zmierzony timeout 120 s).
 
+**Errata 1 (2026-10-15, rekonesans planow C/D, ADR-042 D1/D4):**
+(1) EPSG:5514 ma osie X = wschod, Y = polnoc (pyproj `axis_info`), wiec
+kolejnosc X,Y w BBOX uslug CUZK jest ZGODNA z EPSG, a nie wyjatkiem
+("X,Y mimo osi EPSG:5514" wyzej jest bledne); GUGiK
+`urn:ogc:def:crs:EPSG::2180` = N,E - tez wg EPSG. Zamiana osi daje pusty
+wynik BEZ bledu, dlatego kolejnosc jest parametrem kanalu
+(`FeatureBBoxParams.axis_order`: `yx` GUGiK, `xy` CUZK) z testem na
+prawdziwej odpowiedzi (ADR-042 D4; pomiary:
+`docs/research/2026-10-15-plan-c-d/raport.md`). (2) Szablon URL paczki
+jednostki ma tylko tokeny `{teryt}` i `{woj}`; rok, format i LoD sa
+wartosciami wariantu (`PackageVariant.choice`, ADR-042 D1), a nie tokenem
+`{rok}` z tabeli wyzej.
+
 ## 6. Produkty - fale (plany A-E, rewizja kolejnosci 2026-10-13)
 
 Plany A-E wchodza razem do 0.8.0; kazdy rozszerza jedna grupe CLI (6.1).

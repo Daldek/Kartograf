@@ -94,18 +94,27 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
    data, *, project_dir) -> dict` (argumenty biblioteki, sciezki
    wzgledne rozstrzygniete wzgledem `project_dir`).
 3. **Tabela komend** (`commands.py`): `TaskCommand(name: str, options:
-   frozenset[str], validate, download, check, files)`;
+   Mapping[str, OptionKind], validate, download, check, files)` - KOREKTA:
+   `options` to klucze JSON (flagi danych komendy, z `bbox_crs`) z rodzajem
+   wartosci (`str`, `int`, `flag`, `bbox`, `bbox_crs`, `path`,
+   `per_country`, `str_list`), wiec pozycja sama opisuje typy do walidacji
+   odczytu (`check_options_json`) i konwersji; pozycje buduja fabryki
+   `_data_command`, `_landcover_command`, `_hsg_command`;
    `COMMANDS: Mapping[str, TaskCommand]` z pozycjami `elevation download`,
    `imagery download`, `landcover download`, `soil download`, `soil hsg`
    (spec 5). Sygnatury:
    `validate(output_dir: Path, options: dict) -> None` (bez sieci,
-   `ValidationError`), `download(output_dir, options, *, update, cache,
-   on_progress, on_notice) -> object`, `check(output_dir, options, *, cache,
-   on_notice) -> UpdatePlan`, `files(result) -> TaskFiles`, gdzie
+   `ValidationError`), `download(output_dir, options, /, *, update, cache,
+   on_progress, on_notice) -> object`, `check(output_dir, options, /, *, cache,
+   on_notice) -> UpdatePlan` (protokoly `TaskDownload`/`TaskCheck`),
+   `files(result) -> TaskFiles`, gdzie
    `TaskFiles(complete: bool, files: tuple[tuple[PinRole, str,
    VersionedFile], ...], errors: tuple[str, ...])` realizuje regule
-   pelnego sukcesu specu 4.6. `on_progress` przekazywany tylko funkcjom,
-   ktore go przyjmuja (dzis `download_data`).
+   pelnego sukcesu specu 4.6; `unit_report_files` (protokol `UnitReport`:
+   `files[].unit/file`, `failed[].error`, `ok`) obsluguje `DataReport`
+   i raporty kolekcji planu C bez zmian. `on_progress` przekazywany tylko
+   funkcjom, ktore go przyjmuja (dzis `download_data`). `model.py`
+   (decyzja 1) powstaje w Task 2, bo tabela uzywa `PinRole`.
 4. **Produkty i zrodla grup w bibliotece:** `ELEVATION_PRODUCTS = ("nmt",
    "nmpt", "laz")` i `IMAGERY_PRODUCTS = ("orto",)` w
    `kartograf/download/options.py`, `LANDCOVER_SOURCES = ("bdot10k",
@@ -113,17 +122,28 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
    `cli/groups/elevation.py::PRODUCTS`, `cli/groups/imagery.py::PRODUCTS`
    i `cli/groups/landcover.py::SOURCES` importuja je (jedna lista; plany
    A/E dopisuja produkty wylacznie tam). Pozycja tabeli odrzuca produkt
-   albo zrodlo spoza swojej komendy.
+   albo zrodlo spoza swojej komendy tymi samymi funkcjami co CLI:
+   `options.py::require_product(product, products)` (tekst "--product
+   wymagane: ..." grupy) i `manager.py::require_landcover_source(source)`
+   (opis zrodel `LANDCOVER_SOURCE_CHOICES` przeniesiony z CLI).
 5. **Walidacja bez sieci** wydzielona z prologow funkcji pobrania
-   (wywolywana takze przez nie - jedno miejsce, bez zmiany tekstow
-   i kolejnosci bledow): `kartograf/download/data.py::validate_data_request(**selection)`
-   (= `validate_request(_task(**selection))`, `_execute` wola ja jak dzis
-   `validate_request`), `LandCoverManager.validate_request(*, teryt=None,
+   (jedno miejsce, bez zmiany tekstow i kolejnosci bledow):
+   `kartograf/download/data.py::validate_data_request(**selection)` -
+   KOREKTA wzgledem pierwszej wersji planu (`validate_request(_task(...))`
+   nie lapie m.in. braku `vertical_crs` arkusza ani CZ bez rozdzielczosci:
+   te reguly sa w galeziach `_execute`): ten sam `_execute` z `_Run(dry=True)`,
+   w ktorym kazdy tor konczy sie tuz przed pierwszym zapytaniem do zrodla
+   (`_download_pl_sheet`, `_download_pl_sheet_list`, `_download_pl_cutout`,
+   `_download_cz`, `_download_laz`); czytany jest tylko plik geometrii.
+   `LandCoverManager.validate_request(*, teryt=None,
    sheet=None, bbox=None, geometry=None, layer=None, **options)` (=
-   `validate_request_bbox` + `_check_options` + `_selection` z prologu
-   `download`/`check`), `HSGCalculator.validate_request(*, sheet=None,
-   bbox=None, geometry=None, layer=None, depth)` (= `_selection` + kontrola
-   `depth` przez `_check_options` menedzera SoilGrids). Metody nie
+   `_validated`: `validate_request_bbox` + `_check_options` + `_selection`
+   z prologu `download`/`check`; do `_selection` przeniesione z `_jobs`
+   "teryt tylko dla BDOT10k" i dodane parsowanie godla - ten sam blad co
+   wczesniej, tylko przed otwarciem cache), `HSGCalculator.validate_request(*,
+   sheet=None, bbox=None, geometry=None, layer=None, depth)` (= `_validated`:
+   `_selection` + `validate_request` menedzera SoilGrids dla wejscia, uzywane
+   tez przez `calculate_hsg`/`check_hsg`). Metody nie
    wchodza do `__all__` jako nowe nazwy (sa metodami klas juz
    eksportowanych); `validate_data_request` zostaje wewnetrzna.
 6. **PinnedFile z wyniku:** `path = VersionedFile.path.relative_to(store)`,
@@ -150,15 +170,20 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
    `os.replace`. Kolejnosc zadan: istniejace na swoich miejscach, nowe na
    koncu. Ta sama funkcja obsluguje `add`, `remove` i zapisy po kazdym
    zadaniu `download`.
-9. **Walidacja odczytu** (`manifest.py::read_manifest`): JSON, `schema`,
+9. **Walidacja odczytu** (`manifest.py::read_manifest`): JSON (bez
+   powtorzonych kluczy i `NaN`), `schema`,
    komplet i typy kluczy, nazwy zadan (`^[a-z0-9][a-z0-9_-]{0,63}$`,
    unikalne), `command` w `COMMANDS`, klucze `options` w
-   `TaskCommand.options`, `pinned_at` i `kartograf_version` razem `null`
-   albo razem napisy, `geometry_sha256` dokladnie gdy `options.geometry`
+   `TaskCommand.options` z typem ich rodzaju (bez `null`/`false`),
+   `pinned_at` (ISO 8601) i `kartograf_version` razem `null`
+   albo razem napisy, zadanie przypiete = niepusta lista `files`
+   (niepobrane = pusta), `geometry_sha256` dokladnie gdy `options.geometry`
    i zadanie przypiete, przypiecia: `path`/`version` wzgledne, bez `.`
    i `..`, `version` z segmentem `versions` i bez `.incoming`, `path` bez
-   `versions`, `sha256` = 64 male znaki hex, `size_bytes` >= 0, `role`
+   `versions`, ta sama `version` najwyzej raz, `sha256` = 64 male znaki
+   hex, `size_bytes` >= 0, `role`
    ze slownika. Komunikat wskazuje miejsce (`zadanie teren: files[2].version: ...`).
+   Zapis zawsze w postaci kanonicznej (`task_to_json` kazdego zadania).
 10. **Mapowanie planu na przypiecia** (`operations.py`, spec 4.8): klucz
     pozycji `PurePosixPath(item.segment, item.hierarchy, item.name).as_posix()`
     porownany z `PinnedFile.path`. W obrebie klucza najpierw pary
@@ -245,21 +270,21 @@ class HSGCalculator:
                          layer=None, depth: str) -> None: ...
 ```
 
-- [ ] **Step 1: Testy** - `test_validate_data_request_equals_download_error`
+- [x] **Step 1: Testy** - `test_validate_data_request_equals_download_error`
   (parametryzacja: brak `vertical_crs`, dwa wybory obszaru, `bbox` bez
   `country`, `resolution` spoza listy: ten sam typ i tekst wyjatku co
   `download_data` z tymi samymi argumentami, zero zapytan);
   `test_landcover_validate_request_equals_download_error` (CORINE bez
   `year`, `layers` z SHP, zly TERYT, dwa wybory, opcja innego zrodla);
   `test_hsg_validate_request_rejects_depth_and_selection`.
-- [ ] **Step 2: Implementacja** - wydziel funkcje/metody z prologow
+- [x] **Step 2: Implementacja** - wydziel funkcje/metody z prologow
   `_execute`, `LandCoverManager.download`/`check`,
   `HSGCalculator.calculate_hsg`/`check_hsg` i wywolaj je w tych
   prologach. Przenies krotki produktow i zrodel; grupy CLI importuja je
   z biblioteki. Istniejace testy (`tests/test_parity*.py`,
   `tests/test_input_errors.py`, `tests/test_cli*.py`) bez zmian
   i zielone.
-- [ ] **Step 3: Brama i commit** - `refactor(api): walidacja wyboru bez sieci i listy produktow grup w bibliotece`
+- [x] **Step 3: Brama i commit** - `refactor(api): walidacja wyboru bez sieci i listy produktow grup w bibliotece`
 
 ---
 
@@ -272,23 +297,23 @@ class HSGCalculator:
 **Interfaces:** decyzje 2-3 i 6 (bez `PinnedFile` - tabela zwraca
 `VersionedFile`, przypiecia buduje `operations.py`).
 
-- [ ] **Step 1: Testy opcji** - `test_options_json_roundtrip`
+- [x] **Step 1: Testy opcji** - `test_options_json_roundtrip`
   (`BBox` z `EPSG:5514`, `Path` wzgledna i bezwzgledna, `{"pl": "1m",
   "cz": "2m"}`, `layers`, `keep_raw=True`: `options_to_json` i
   `options_from_json` sa odwrotne, `None`/`False` pomijane);
   `test_options_reject_unknown_and_foreign` (`vertical_crs` w `landcover
   download`, `source="soilgrids"` w `landcover download`, `product="nmt"`
   w `imagery download`, `timeout`, `output_dir`, `update` -> `ValidationError`).
-- [ ] **Step 2: Testy walidacji** - `test_validate_matches_library`
+- [x] **Step 2: Testy walidacji** - `test_validate_matches_library`
   (dla kazdej pozycji: przypadek poprawny bez wyjatku i bez sieci,
   przypadek bledny = ten sam typ i tekst co Task 1).
-- [ ] **Step 3: Testy rodzin wyniku** (prawdziwe wywolania z fixtur
+- [x] **Step 3: Testy rodzin wyniku** (prawdziwe wywolania z fixtur
   offline): `test_files_pl_sheet_and_laz_tiles` (wszystkie `VersionedFile`,
   role `output`), `test_files_auto_partial_success_incomplete`
   (`DataReport.ok` i jeden kraj w `failed` -> `complete=False`),
   `test_files_bdot_area_failed_powiat_incomplete`,
   `test_files_bdot_keep_raw_has_raw_role`, `test_files_hsg_output_and_three_inputs`.
-- [ ] **Step 4: Implementacja** - pozycje tabeli wolaja: `download_data`/
+- [x] **Step 4: Implementacja** - pozycje tabeli wolaja: `download_data`/
   `check_data` (`elevation download`, `imagery download`, produkt z
   `ELEVATION_PRODUCTS`/`IMAGERY_PRODUCTS`), `LandCoverManager(output_dir,
   source, cache=cache).download/check` (`landcover download`, `source`
@@ -297,7 +322,7 @@ class HSGCalculator:
   cache=cache).calculate_hsg/check_hsg` (`soil hsg`). Walidacja = Task 1.
   Zbior `options` kazdej pozycji = flagi danych komendy (test zgodnosci
   z parserem w Task 8).
-- [ ] **Step 5: Brama i commit** - `feat(project): tabela komend danych projektu`
+- [x] **Step 5: Brama i commit** - `feat(project): tabela komend danych projektu`
 
 ---
 
@@ -322,7 +347,7 @@ def commit_tasks(project_dir: Path,
 def task_to_json(task: ProjectTask) -> dict
 ```
 
-- [ ] **Step 1: Testy formatu** - `test_manifest_bytes_stable` (zloty plik
+- [x] **Step 1: Testy formatu** - `test_manifest_bytes_stable` (zloty plik
   z przykladu specu 3.3: odczyt -> zapis daje identyczne bajty; kolejnosc
   kluczy, wciecie, nowa linia na koncu); `test_read_rejects_invalid`
   (parametryzacja wg decyzji 9: zly JSON, `kartograf-project/2`, nieznany
@@ -331,7 +356,7 @@ def task_to_json(task: ProjectTask) -> dict
   `path` z `versions`, `sha256` nie-hex, `pinned_at` bez
   `kartograf_version`, `geometry_sha256` bez `geometry`) - zawsze
   `ValidationError`, nic nie zapisane.
-- [ ] **Step 2: Testy zapisu** - `test_commit_merges_other_tasks` (dwa
+- [x] **Step 2: Testy zapisu** - `test_commit_merges_other_tasks` (dwa
   odczyty, dwa `commit_tasks` z roznymi zadaniami: oba w pliku);
   `test_commit_conflict_same_task` (drugi zapis tego samego zadania
   zwraca konflikt, plik bez jego zmiany); `test_lock_busy_times_out_without_takeover`
@@ -340,8 +365,8 @@ def task_to_json(task: ProjectTask) -> dict
   (`os.replace` rzuca: stare bajty, brak pliku tymczasowego, brak
   blokady); `test_project_dir_has_no_extra_files` (po serii operacji
   w katalogu projektu tylko `kartograf-project.json`).
-- [ ] **Step 3: Implementacja** wg decyzji 1, 7-9.
-- [ ] **Step 4: Brama i commit** - `feat(project): manifest kartograf-project/1 - format, walidacja, zapis atomowy`
+- [x] **Step 3: Implementacja** wg decyzji 1, 7-9.
+- [x] **Step 4: Brama i commit** - `feat(project): manifest kartograf-project/1 - format, walidacja, zapis atomowy`
 
 ---
 
@@ -355,20 +380,22 @@ def task_to_json(task: ProjectTask) -> dict
 
 **Interfaces:** sygnatury z specu 4.3.
 
-- [ ] **Step 1: Testy** - `test_init_creates_store_and_refuses_existing`
+- [x] **Step 1: Testy** - `test_init_creates_store_and_refuses_existing`
   (drugi `init` = `ValidationError`, bajty bez zmian);
   `test_paths_saved_relative_to_project` (cwd inny niz projekt: wzgledne
   `output_dir` i `geometry` zapisane wzgledem projektu, bezwzgledne bez
   zmian, separator `/`); `test_moved_project_with_store_resolves`
   (przeniesienie obu katalogow, `open_project` wskazuje nowe miejsca);
-  `test_missing_store_dir_is_error` (operacje poza `init`);
+  `test_missing_store_dir_is_error` (operacje poza `init` i `open_project`
+  - odczyt manifestu dla nakladek nie wymaga magazynu);
   `test_add_validates_without_network` (bledny wybor: wyjatek Task 1,
   manifest bez zmian); `test_add_duplicate_and_bad_name`;
-  `test_add_missing_geometry_file`; `test_remove_keeps_store_files`.
-- [ ] **Step 2: Implementacja** - `add_project_task` waliduje nazwe,
+  `test_add_missing_geometry_file`; `test_remove_keeps_store_files`
+  (w Task 5 - wymaga przypietego zadania).
+- [x] **Step 2: Implementacja** - `add_project_task` waliduje nazwe,
   komende, opcje (`options_to_json` + `TaskCommand.validate`), plik
   geometrii; zapis przez `commit_tasks` ze stanem `None` (nowe zadanie).
-- [ ] **Step 3: Brama i commit** - `feat(project): init, add, remove i odczyt projektu w API`
+- [x] **Step 3: Brama i commit** - `feat(project): init, add, remove i odczyt projektu w API`
 
 ---
 
@@ -378,7 +405,7 @@ def task_to_json(task: ProjectTask) -> dict
 - Modify: `kartograf/project/operations.py`
 - Create: `tests/test_project_download.py`
 
-- [ ] **Step 1: Testy przypiecia** - `test_first_download_pins_every_file`
+- [x] **Step 1: Testy przypiecia** - `test_first_download_pins_every_file`
   (parametryzacja: arkusz PL, `--country auto` PL+CZ, LAZ z kilkoma
   kaflami, BDOT10k obszar z `keep_raw`, SoilGrids, CORINE, HSG: kazdy
   `VersionedFile` wyniku = jeden `PinnedFile`, role, `size_bytes`
@@ -389,24 +416,24 @@ def task_to_json(task: ProjectTask) -> dict
   wywolan fake'a); `test_auto_partial_success_not_pinned`;
   `test_written_after_each_task` (drugie zadanie rzuca: pierwsze zostaje
   przypiete w pliku); `test_no_metadata_cache_in_project_dir`.
-- [ ] **Step 2: Testy stanu przypietego** - `test_pinned_task_is_offline_noop`
+- [x] **Step 2: Testy stanu przypietego** - `test_pinned_task_is_offline_noop`
   (fake zrodla rzuca przy kazdym uzyciu, wynik `unchanged`);
   `test_second_project_newer_version_keeps_first_pins` (projekt B pobiera
   nowsza kampanie do tego samego magazynu: przypiecia A bez zmian,
   `verify_project(A)` OK po Task 7, sciezka standardowa wskazuje nowsza).
-- [ ] **Step 3: Testy odtwarzania** - `test_restore_on_empty_store_same_content`
+- [x] **Step 3: Testy odtwarzania** - `test_restore_on_empty_store_same_content`
   (manifest skopiowany do projektu z pustym magazynem: `restored`, te same
   `sha256`; dla toru bez sygnalu `version`/`label` moga sie zmienic);
   `test_restore_conflict_keeps_pin` (zrodlo zwraca inna tresc: `failed`,
   przypiecie bez zmian, nowy plik w magazynie nieprzypiety);
   `test_restore_partial_saves_restored_pins`; `test_restore_needs_same_geometry`.
-- [ ] **Step 4: Implementacja** - per zadanie wg specu 4.6: wybor
+- [x] **Step 4: Implementacja** - per zadanie wg specu 4.6: wybor
   przypadku po stanie przypiec i `stat` wersji (plik + sidecar,
   `size_bytes`); wywolanie `TaskCommand.download(update=None)`;
   `TaskCommand.files`; budowa `PinnedFile` (decyzja 6); zapis
   `commit_tasks` po kazdym zadaniu; konflikt scalania = blad zadania;
   wyjatki `KartografError` biblioteki konczace tylko zadanie.
-- [ ] **Step 5: Brama i commit** - `feat(project): download - przypiecie zadan i odtwarzanie po SHA-256`
+- [x] **Step 5: Brama i commit** - Task 5 i 6 razem w `4bd9fff` (`feat(project): download - przypiecie zadan, odtwarzanie po SHA-256 i --upgrade/--force`).
 
 ---
 
@@ -415,7 +442,7 @@ def task_to_json(task: ProjectTask) -> dict
 **Files:**
 - Modify: `kartograf/project/operations.py`, `tests/test_project_download.py`
 
-- [ ] **Step 1: Testy** - `test_upgrade_repins_whole_task` (nowsza
+- [x] **Step 1: Testy** - `test_upgrade_repins_whole_task` (nowsza
   kampania w fake'u skorowidza: nowe przypiecie, stare w `unpinned`, nowe
   `pinned_at`); `test_upgrade_failure_keeps_all_pins` (jedna jednostka
   zawodzi: przypiecia zadania identyczne bajtowo);
@@ -428,10 +455,10 @@ def task_to_json(task: ProjectTask) -> dict
   dopisany, kafel spoza wyniku odpiety, plik zostaje w magazynie);
   `test_upgrade_only_named_task`; `test_upgrade_accepts_changed_geometry`
   (nowe `geometry_sha256`).
-- [ ] **Step 2: Implementacja** - wspolna sciezka z Task 5 z
+- [x] **Step 2: Implementacja** - wspolna sciezka z Task 5 z
   `update=...`; przy pelnym sukcesie przypiecia = wynik w calosci,
   `unchanged` gdy identyczne (bez zapisu pliku).
-- [ ] **Step 3: Brama i commit** - `feat(project): download --upgrade/--force przepina cale zadanie`
+- [x] **Step 3: Brama i commit** - wspolny commit z Task 5: `4bd9fff`.
 
 ---
 
@@ -442,7 +469,7 @@ def task_to_json(task: ProjectTask) -> dict
   `kartograf/__init__.py`
 - Create: `tests/test_project_check.py`
 
-- [ ] **Step 1: Testy status/verify** - `test_status_detects_missing_and_size_without_reading`
+- [x] **Step 1: Testy status/verify** - `test_status_detects_missing_and_size_without_reading`
   (`file_digest` i odczyt danych zablokowane atrapa rzucajaca:
   `missing`, `corrupt` przy innym rozmiarze, `ok`);
   `test_status_not_downloaded_not_ok`; `test_verify_detects_corruption`
@@ -451,7 +478,7 @@ def task_to_json(task: ProjectTask) -> dict
   `corrupt`/`missing`, `ok=False`, manifest i magazyn bez zmian);
   `test_verify_after_store_copy` (kopia magazynu z dowiazaniami twardymi,
   nowy `output_dir`: `ok`).
-- [ ] **Step 2: Testy check** - `test_check_statuses_against_pin`
+- [x] **Step 2: Testy check** - `test_check_statuses_against_pin`
   (prawdziwe `check_*` na fixturach: `current`, `newer` u zrodla,
   `newer` gdy magazyn ma nowsza wersje, a plan daje `current`, `added`
   (nowy kafel LAZ), `removed`, `unverifiable` (wycinek, BDOT10k),
@@ -460,14 +487,12 @@ def task_to_json(task: ProjectTask) -> dict
   `test_check_downloads_nothing_and_keeps_manifest_bytes`;
   `test_check_not_downloaded_task_skipped_offline`;
   `test_check_geometry_changed_warns` (`PROJECT_GEOMETRY_CHANGED`);
-  `test_slot_std_path_invariant` (dla kazdego konstruktora slotu z
-  decyzji 10: `slot.std == slot.output_dir / slot.segment / slot.hierarchy / slot.name`;
-  konstruktory: `download/storage.py::bbox_slot`,
-  `landcover/store.py::selection_slot`, slot arkusza w
-  `download/manager.py`, `download/laz.py::laz_slot`,
-  `download/cz_sheets.py::_sheet_slot`).
-- [ ] **Step 3: Implementacja** wg specu 4.8-4.9 i decyzji 10-11.
-- [ ] **Step 4: Brama i commit** - `feat(project): status, verify i check-updates wzgledem przypiec`
+  Inwariant sciezki standardowej i pozycji planu sprawdzaja testy
+  rzeczywistych `check_*` dla arkusza PL, CZ SM5, kafli LAZ, wycinkow,
+  BDOT10k i HSG (paring z przypieciami bez `added`/`removed`).
+  Po scaleniu planu C dopisz test `unit_slot` dla nowych kolekcji.
+- [x] **Step 3: Implementacja** wg specu 4.8-4.9 i decyzji 10-11.
+- [x] **Step 4: Brama i commit** - `feat(project): status, verify i check-updates wzgledem przypiec`
 
 ---
 
@@ -497,21 +522,21 @@ def register(subparsers: argparse._SubParsersAction) -> None
     # status/verify (--project, ZADANIA*, -q)
 ```
 
-- [ ] **Step 1: Testy tlumaczenia** - `test_task_hook_equals_handler_arguments`
+- [x] **Step 1: Testy tlumaczenia** - `test_task_hook_equals_handler_arguments`
   (dla kazdej komendy danych i kilku zestawow flag: `_task(ns)` rowne
   argumentom, ktore `_handler` przekazuje funkcji biblioteki - wzorem
   `tests/test_cli_translation.py`); `test_task_options_equal_parser_data_flags`
   (zbior `dest` akcji parsera komendy bez `help`, `output`, trybow,
   `plan`, `workers`, `quiet` i `stats` rowny `TaskCommand.options`;
   chroni przed rozjazdem przy nowych flagach).
-- [ ] **Step 2: Testy `project add`** - `test_add_rejects_modes_and_foreign_output`
+- [x] **Step 2: Testy `project add`** - `test_add_rejects_modes_and_foreign_output`
   (`--upgrade`, `--force`, `--check-updates`, `--plan`, `-o` innego
   katalogu -> kod 1 i `Error:`, manifest bez zmian); `test_add_accepts_output_equal_to_store`;
   `test_add_rejects_non_data_commands` (`elevation list-sources`,
   `soil list-layers`, `parse`, `cache`); `test_add_project_flag_after_name_hint`;
   `test_add_removed_command_error` (`removed_command_error` dla
   zagniezdzonej komendy, np. `download`); `test_add_double_dash_allowed`.
-- [ ] **Step 3: Testy CLI = API** - `test_project_cli_equals_api`
+- [x] **Step 3: Testy CLI = API** - `test_project_cli_equals_api`
   (harness wzorem `tests/parity.py::run_both`: ta sama sekwencja `init`,
   `add` x2, `download`, `status`, `verify`, `download --check-updates`,
   `download --upgrade` przez CLI i przez API w osobnych katalogach -
@@ -519,17 +544,17 @@ def register(subparsers: argparse._SubParsersAction) -> None
   `assert_same_store`, kody wyjscia = `ok`, `Notice` wypisane jako
   `Info:`/`Warning:`, bledy jako `Error:` z tekstem wyjatku);
   `test_quiet_keeps_warnings`.
-- [ ] **Step 4: Implementacja** - `project add`: `create_parser()`
+- [x] **Step 4: Implementacja** - `project add`: `create_parser()`
   zagniezdzony, `removed_command_error`, `_task`, nazwa komendy
   z `ns.command` i `getattr(ns, f"{ns.command}_command")`, kontrola
   `output`/trybow (spec 4.5), wywolanie `add_project_task`. Pozostale
   komendy: jedna funkcja API kazda, wydruk wg specu 4.2 (slownictwo
   USAGE 4.3), kody wyjscia wg specu 4.8-4.11, pasek postepu
   `create_progress_callback` dla `download` bez `-q`.
-- [ ] **Step 5: Smoke** - z korzenia worktree: `python -m
+- [x] **Step 5: Smoke** - z korzenia worktree: `python -m
   kartograf.cli.commands project --help`, `... project add --help`,
   `... project add t elevation download --help` (pomoc komendy grupy).
-- [ ] **Step 6: Brama i commit** - `feat(cli): grupa project (init, add, remove, download, status, verify)`
+- [x] **Step 6: Brama i commit** - `feat(cli): grupa project (init, add, remove, download, status, verify)`
 
 ---
 
@@ -539,36 +564,36 @@ def register(subparsers: argparse._SubParsersAction) -> None
 `docs/DEVELOPMENT_STANDARDS.md`, `docs/CHANGELOG.md`, `docs/PROGRESS.md`,
 `docs/SCOPE.md`
 
-- [ ] ARCHITECTURE: sekcja 2 (pakiet `kartograf/project/`, zaleznosci:
+- [x] ARCHITECTURE: sekcja 2 (pakiet `kartograf/project/`, zaleznosci:
   `project` -> `download`, `landcover`, `hydrology`; CLI -> `project`),
   nowa 3.5 "Manifest projektu `kartograf-project/1`" (format, sciezki,
   zapis, scalanie - streszczenie specu 3 i 4.12), sekcja 5 (nowa grupa
   danych: pozycja w `kartograf/project/commands.py` + `_task` + test).
-- [ ] USAGE: nowa sekcja "Projekt" (spis tresci): przyklady ze specu 4.2,
+- [x] USAGE: nowa sekcja "Projekt" (spis tresci): przyklady ze specu 4.2,
   tabela przenoszenia (spec 3.2), zalecenie jawnego wariantu (`--year`)
   dla odtwarzalnosci (spec 4.6), relacja z `availability` (spec 4.10),
   biblioteka (`init_project`, `add_project_task`, `download_project`,
   `check_project`, `verify_project`).
-- [ ] README: krotki przyklad projektu i link do USAGE.
-- [ ] DEVELOPMENT_STANDARDS 17: punkt listy kontrolnej nowej grupy/komendy
+- [x] README: krotki przyklad projektu i link do USAGE.
+- [x] DEVELOPMENT_STANDARDS 17: punkt listy kontrolnej nowej grupy/komendy
   danych - pozycja tabeli projektu, `_task`, test zadania projektu.
-- [ ] CHANGELOG `[0.8.0] - Unreleased`, "Dodane": grupa `kartograf
+- [x] CHANGELOG `[0.8.0] - Unreleased`, "Dodane": grupa `kartograf
   project` i API projektu (bez "Co zrobic" - zmiana nielamiaca);
   "Zmienione": listy produktow grup w bibliotece (wewnetrzne).
-- [ ] SCOPE 3.3 wiersz 2: stan "zrobione (0.8.0)" po E2E; PROGRESS:
-  koniec sesji z wynikami bramy i E2E.
-- [ ] Commit - `docs: manifest projektu w ARCHITECTURE, USAGE, README i CHANGELOG`
+- [x] SCOPE 3.3 wiersz 2: stan "zrobione (0.8.0)" po E2E (Task 10);
+  PROGRESS aktualizuje koordynator po scaleniu galezi (decyzja z ctx).
+- [x] Commit - `docs: manifest projektu w ARCHITECTURE, USAGE, README i CHANGELOG`
 
 ---
 
 ### Task 10: Smoke CLI i weryfikacja na zywo
 
-- [ ] **Smoke offline:** prawdziwe CLI na malym magazynie z fixtur (albo
+- [x] **Smoke offline:** prawdziwe CLI na malym magazynie z fixtur (albo
   przez `python -m kartograf.cli.commands` z fake'ami w skrypcie
   tymczasowym poza repo): `init`, `add`, `download`, `status`, `verify`,
   `download --check-updates`, podmiana wersji w magazynie (drugi projekt),
   `download --upgrade`; obejrzyj JSON na dysku. Skrypt usun po smoke.
-- [ ] **E2E na zywo** (spec 7; dane w `<katalog-danych>`, nigdy w repo
+- [x] **E2E na zywo** (spec 7; dane w `<katalog-danych>`, nigdy w repo
   ani `/tmp`): projekt A (NMT PL arkusz, BDOT10k powiat, SoilGrids + HSG
   maly arkusz, arkusz SM5 CZ), `download`, `status`, `verify`; projekt B
   na tym samym magazynie (te same przypiecia bez pobierania);
@@ -576,7 +601,7 @@ def register(subparsers: argparse._SubParsersAction) -> None
   `none`; brak pobran - rozmiar magazynu bez zmian); kopia magazynu
   `rsync -aH`, nowy `output_dir`, `verify`; projekt z pustym magazynem:
   `download` -> `restored`. CLMS bez credentials pomijamy.
-- [ ] Raport `docs/research/2026-10-XX-project-e2e/raport.md` (polecenia
+- [x] Raport `docs/research/2026-10-15-project-e2e/raport.md` (polecenia
   z `<katalog-danych>`, statusy, liczby plikow, ograniczenia sygnalow);
   commit - `docs(research): E2E manifestu projektu na zywo`.
 

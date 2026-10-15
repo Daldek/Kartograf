@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<!-- saved from url=(0045)https://mapy.geoportal.gov.pl/wss/service/rcn -->
+<html lang="pl"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noarchive">
+    <title>WFS - EGiB</title>
+    <style>
+        body {
+            font-family: "Encode Sans", sans-serif;
+            margin: 0;
+            padding: 10px;
+            color: #333;
+        }
+        a { text-decoration: none; }
+        a:hover { color: #4AFCD6; }
+
+        /* ── nagłówek ── */
+		header {
+			position: relative;
+			width: 100%;
+			min-height: 72px;
+			padding: 5px;
+			background-image: url(https://integracja.gugik.gov.pl/eziudp/button_gugik.jpg);
+			background-size: auto 72px;
+			background-repeat: no-repeat;
+			background-position: 1em center;
+			color: white;
+			background-color: #0052a5;
+			box-sizing: border-box;
+			overflow: hidden;
+		}
+		.logo {
+			position: absolute;
+			right: 1em;
+			top: 50%;
+			transform: translateY(-50%);
+			width: 72px;
+			height: 72px;
+			border-radius: 50%;
+			display: block;
+		}
+        .head1 {
+            padding-left: 150px;
+            padding-right: 150px;
+            text-align: center;
+            font-size: 32px;
+            font-weight: bold;
+            line-height: 1.2;
+            margin-bottom: 8px;
+        }
+        .head2 {
+            padding-left: 150px;
+            padding-right: 150px;
+            text-align: center;
+            font-size: 28px;
+            font-weight: normal;
+            line-height: 1.2;
+        }
+        @media screen and (max-width: 900px) {
+            .head1 { font-size: 24px; }
+            .head2 { font-size: 18px; font-weight: bold; }
+        }
+
+        /* ── sekcja główna ── */
+        .bar1 {
+            font-size: 16px;
+            font-weight: bold;
+            color: #444;
+            padding: 8px 12px;
+            margin: 20px 0 12px 0;
+            border-radius: 16px;
+            background: linear-gradient(to right, rgba(214,232,255,0.2), rgba(1,72,161,0.5));
+        }
+        .main-wrap {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin: 0 0 10px;
+            align-items: flex-start;
+        }
+        .intro {
+            flex: 0 0 400px;
+            font-size: 12px;
+            line-height: 1.7;
+        }
+        .intro p {
+            margin: 0 12px;
+            padding: 0;
+        }
+
+        /* ── tabela przykładów ── */
+        .wmsTable {
+            border-collapse: collapse;
+            border-left: 2px solid black;
+            border-top: 2px solid black;
+            font-family: "Encode Sans", sans-serif;
+            font-size: 11px;
+            table-layout: auto;
+            width: auto;
+        }
+        .wmsTable td {
+            padding: 6px 8px;
+            border-right: 2px solid black;
+            border-bottom: 2px solid black;
+            vertical-align: middle;
+            white-space: nowrap;
+        }
+        /* kolumna z opisem – jedyna która może się zawijać gdy brakuje miejsca */
+        .wmsTable td:nth-child(2) {
+            white-space: normal;
+            min-width: 120px;
+        }
+        .wmsTable td:first-child { text-align: center; }
+        .wmsTable td:nth-child(4),
+        .wmsTable td:nth-child(5) { text-align: center; }
+        .wmsTable a { color: #0052a5; }
+        .wmsTable a:hover { text-decoration: underline; color: #003366; }
+
+        /* ── sekcja opisowa ── */
+        .bar2 {
+            width: 100%;
+            font-size: 13px;
+            font-weight: bold;
+            padding: 16px 20px;
+            margin-top: 20px;
+            border-radius: 16px;
+            background: linear-gradient(to right, rgba(214,232,255,0.2), rgba(1,72,161,0.5));
+            line-height: 1.4;
+            box-sizing: border-box;
+        }
+        .bar2 strong { color: #444; }
+        .bar2 ul { margin: 8px 0 0 22px; font-weight: 400; }
+        .bar2 a { color: #0052a5; }
+
+        .pub-link {
+            margin: 12px 0;
+            font-size: 11px;
+        }
+        .pub-link a { color: #0052a5; }
+
+        /* ── stopka ── */
+        footer {
+            width: 100%;
+            margin-top: 150px;
+            min-height: 45px;
+            padding: 10px 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            background-color: #0052a5;
+            font-size: 12px;
+            text-align: center;
+            line-height: 1.5;
+            box-sizing: border-box;
+        }
+        footer a { color: #f5f5f5; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="head1">Główny Urząd Geodezji i Kartografii</div>
+    <div class="head2">Usługa pobierania danych ewidencji gruntów i budynków (WFS)</div>
+	<img class="logo" src="https://integracja.gugik.gov.pl/img/_wfs_egib.jpg" alt="">
+</header>
+
+<div class="bar1">Przykłady trzech podstawowych zapytań do usługi</div>
+
+<div class="main-wrap">
+
+    <div class="intro">
+        <p>
+            Niniejszy adres dotyczy usługi przeglądania WFS będącej <a href="http://www.opengeospatial.org/standards/wfs">standardem OGC</a>.
+        </p>
+    </div>
+
+    <div>
+        <table class="wmsTable" cellspacing="0">
+            <tbody><tr>
+                <td>1.</td>
+                <td>Pobranie informacji o usłudze</td>
+                <td>GetCapabilities</td>
+                <td><a target="_blank" href="https://pl.wikipedia.org/wiki/Web_Map_Service#GetCapabilities">Opis</a></td>
+                <td><a target="_blank" href="https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza?SERVICE=WFS&REQUEST=GetCapabilities">Przykład</a></td>
+            </tr>
+            <tr>
+                <td>2.</td>
+                <td>Informacje o typie obiektów</td>
+                <td>DescribeFeatureType</td>
+                <td><a target="_blank" href="https://pl.wikipedia.org/wiki/Web_Map_Service#GetMap">Opis</a></td>
+                <td><a target="_blank" href="https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza?service=WFS&version=2.0.0&request=DescribeFeatureType&typeName=ms:dzialki">Przykład</a></td>
+            </tr>
+            <tr>
+                <td>3.</td>
+                <td>Pobranie obiektu</td>
+                <td>GetFeature</td>
+                <td><a target="_blank" href="https://pl.wikipedia.org/wiki/Web_Map_Service#GetFeatureInfo">Opis</a></td>
+                <td><a target="_blank" href="https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza?service=WFS&request=GetFeature&VERSION=2.0.0&COUNT=10&TYPENAMES=dzialki,budynki">Przykład</a></td>
+            </tr>
+        </tbody></table>
+    </div>
+
+</div>
+
+<div style="margin-left: 12px; padding-top: 12px; font-size: 13px; font-weight: bold;">Więcej usług danych przestrzennych dostępnych jest w serwisie: <a href="http://geoportal.gov.pl/">geoportal.gov.pl</a></div>
+
+<div class="bar2">
+    <strong>O usłudze:</strong><br><br>
+    <span style="font-weight: normal;">Usługa pobierania danych ewidencji gruntów i budynków (WFS) integruje 385 usług pobierania (WFS) zgłoszonych dla zbioru pn. <a href="https://integracja.gugik.gov.pl/eziudp/index.php?idiip=&teryt=&rodzaj=&nazwa=&zbior=EGIB&temat=&usluga=&adres=">Ewidencja Gruntów i Budynków (EGiB)</a> do ewidencji zbiorów i usług danych przestrzennych. Usługa udostępnia dane dla działek i budynków z obszaru całego kraju. Więcej informacji na temat możliwości pozyskania danych dla działek i budynków w formie wektorowej i rastrowej z obszaru kraju jest zamieszczone w następującej publikacji: <a href="https://www.geoportal.gov.pl/pl/dane/ewidencja-gruntow-i-budynkow-egib/">Ewidencja gruntów i budynków (EGiB)</a>.</span>
+
+	</div>
+
+<footer>
+    <div>
+        <b>W przypadku pytań i wątpliwości co do funkcjonowania usługi prosimy o kontakt:</b><br>
+        Główny Urząd Geodezji i Kartografii<br>
+        <b>ul. Żurawia 6/12, 00-926 Warszawa</b><br>
+        <b>e-mail:</b> <a href="mailto:gugik@gugik.gov.pl">gugik@gugik.gov.pl</a>
+        &nbsp;<b>tel:</b> <a href="tel:+48225322531">+48 22 532-25-31</a>
+    </div>
+</footer>
+
+
+</body></html>

@@ -38,6 +38,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, NoticeSink
 from kartograf.sources.descriptor import SignalKind
 from kartograf.sources.edition import Edition
 
@@ -88,6 +89,9 @@ class FileSlot:
     ``std`` is the standard (link) path, ``versions_base`` the segment's
     ``versions/`` directory (staging ``.incoming/``), ``versions_root`` the
     hierarchy directory holding ``<label>_<sha8>/`` versions.
+    ``related_roots``: hierarchy directories of related slots (other
+    editions of the same product, format and unit, ADR-042 D7) - content
+    already stored there becomes a ``relabeled`` hardlink, not a copy.
     """
 
     output_dir: Path
@@ -95,6 +99,7 @@ class FileSlot:
     versions_base: Path
     versions_root: Path
     ext: str
+    related_roots: tuple[Path, ...] = ()
 
     @property
     def name(self) -> str:
@@ -283,6 +288,39 @@ def use_local(
     )
 
 
+def emit_file_notices(
+    sink: NoticeSink,
+    unit: str,
+    file: VersionedFile,
+    update: UpdateMode | None,
+    *,
+    check_failure: bool = True,
+) -> None:
+    """Notices of one store file of a request result (one text for every track).
+
+    ``CHECK_FAILED`` (warning): the local version was used because the
+    source check failed (skipped with ``check_failure=False`` when the
+    caller already reported it); ``UNVERIFIED_LOCAL`` (info): ``"upgrade"``
+    kept a local version of a source without a cheap signal.
+    """
+    unverified = file.unverified or ""
+    if unverified.startswith("check_failed") and check_failure:
+        error = unverified.split(":", 1)[1].strip()
+        sink.emit(
+            "warning",
+            CHECK_FAILED,
+            f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
+            f"lokalnej wersji {file.label}",
+        )
+    if file.status == "local" and unverified == "none" and update == "upgrade":
+        sink.emit(
+            "info",
+            UNVERIFIED_LOCAL,
+            f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
+            "bez taniego sygnalu; pobierz ponownie: --force",
+        )
+
+
 def store_file(
     slot: FileSlot,
     staged: Path,
@@ -317,6 +355,7 @@ def store_file(
             digest,
             lambda data, ref, dg: write_sidecar(data, ref, dg, http),
             signal=http if signal == "http" else None,
+            related_roots=slot.related_roots,
         )
     except BaseException:
         discard_staging(staged, slot)

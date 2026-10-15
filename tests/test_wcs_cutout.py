@@ -225,6 +225,7 @@ def test_pl_cutout_undated_link_and_version(tmp_path):
             provider=GugikNmptProvider(
                 session=_recorded_session("nmpt_kron86_20x20_sf05"),
                 vertical_crs="KRON86",
+                resolution="1m",
             ),
             now=NOW,
         )
@@ -779,7 +780,9 @@ def test_all_nodata_notice(tmp_path):
         ),
         (
             {"product": "nmt"},
-            lambda s: GugikNmptProvider(session=s, vertical_crs="EVRF2007"),
+            lambda s: GugikNmptProvider(
+                session=s, vertical_crs="EVRF2007", resolution="1m"
+            ),
         ),
         (
             {"vertical_crs": "EVRF2007"},
@@ -844,7 +847,9 @@ class TestCli:
         session = _recorded_session("nmpt_evrf2007_20x20_sf05")
         rc = self._main(
             tmp_path,
-            GugikNmptProvider(session=session, vertical_crs="EVRF2007"),
+            GugikNmptProvider(
+                session=session, vertical_crs="EVRF2007", resolution="1m"
+            ),
             "--product",
             "nmpt",
         )

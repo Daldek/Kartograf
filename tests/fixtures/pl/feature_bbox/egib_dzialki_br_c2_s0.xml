@@ -1,0 +1,74 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/EGIB/WFS/UslugaZbiorcza?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:dzialki&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-15T21:05:49" numberMatched="unknown" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>588398.118000 654464.065000</gml:lowerCorner>
+      		<gml:upperCorner>589502.615000 655422.993000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <ms:dzialki gml:id="dzialki.141501_2.0035.2012/2">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>588398.118000 654464.065000</gml:lowerCorner>
+        		<gml:upperCorner>589291.483000 655080.649000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:geom>
+          <gml:Polygon gml:id="dzialki.141501_2.0035.2012/2.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">588643.120000 655080.649000 588755.903000 655018.264000 588780.177000 655007.605000 588867.839000 654969.553000 588961.029000 654928.927000 589031.794000 654843.085000 589085.199000 654784.829000 589126.159000 654742.493000 589157.467000 654711.256000 589182.109000 654692.656000 589209.760000 654668.642000 589220.659000 654660.727000 589266.276000 654629.021000 589278.090000 654624.161000 589291.483000 654614.196000 589160.209000 654491.207000 589136.713000 654483.163000 589088.188000 654467.358000 588983.675000 654472.099000 588949.197000 654469.712000 588893.666000 654465.164000 588872.502000 654464.345000 588854.244000 654464.065000 588795.885000 654464.596000 588782.340000 654464.794000 588615.510000 654589.303000 588398.118000 654745.715000 588399.376000 654747.430000 588535.581000 654934.165000 588643.120000 655080.649000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:geom>
+        <ms:ID_DZIALKI>141501_2.0035.2012/2</ms:ID_DZIALKI>
+        <ms:NUMER_DZIALKI>2012/2</ms:NUMER_DZIALKI>
+        <ms:NUMER_OBREBU>35</ms:NUMER_OBREBU>
+        <ms:NUMER_JEDNOSTKI>141501_2</ms:NUMER_JEDNOSTKI>
+        <ms:NAZWA_OBREBU>ZIMNA WODA I OLKOWA KĘPA</ms:NAZWA_OBREBU>
+        <ms:NAZWA_GMINY>BARANOWO</ms:NAZWA_GMINY>
+        <ms:POLE_EWIDENYJNE>31.01</ms:POLE_EWIDENYJNE>
+        <ms:KLASOUZYTKI_EGIB>Ls</ms:KLASOUZYTKI_EGIB>
+        <ms:GRUPA_REJESTROWA>1</ms:GRUPA_REJESTROWA>
+        <ms:DATA>2026-10-15</ms:DATA>
+      </ms:dzialki>
+    </wfs:member>
+    <wfs:member>
+      <ms:dzialki gml:id="dzialki.141501_2.0035.2011">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>588643.120000 654614.196000</gml:lowerCorner>
+        		<gml:upperCorner>589502.615000 655422.993000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:geom>
+          <gml:Polygon gml:id="dzialki.141501_2.0035.2011.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">588890.980000 655422.993000 588990.341000 655355.552000 589075.632000 655291.686000 589128.515000 655253.046000 589158.644000 655230.402000 589205.347000 655195.685000 589295.255000 655128.519000 589370.502000 655073.153000 589400.700000 655000.716000 589427.877000 654946.533000 589448.356000 654863.416000 589474.750000 654827.727000 589502.615000 654807.817000 589450.985000 654759.957000 589384.234000 654698.169000 589293.013000 654615.633000 589291.483000 654614.196000 589278.090000 654624.161000 589266.276000 654629.021000 589220.659000 654660.727000 589209.760000 654668.642000 589182.109000 654692.656000 589157.467000 654711.256000 589126.159000 654742.493000 589085.199000 654784.829000 589031.794000 654843.085000 588961.029000 654928.927000 588867.839000 654969.553000 588780.177000 655007.605000 588755.903000 655018.264000 588643.120000 655080.649000 588644.492000 655082.500000 588778.813000 655268.378000 588855.469000 655372.922000 588890.980000 655422.993000 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </ms:geom>
+        <ms:ID_DZIALKI>141501_2.0035.2011</ms:ID_DZIALKI>
+        <ms:NUMER_DZIALKI>2011</ms:NUMER_DZIALKI>
+        <ms:NUMER_OBREBU>35</ms:NUMER_OBREBU>
+        <ms:NUMER_JEDNOSTKI>141501_2</ms:NUMER_JEDNOSTKI>
+        <ms:NAZWA_OBREBU>ZIMNA WODA I OLKOWA KĘPA</ms:NAZWA_OBREBU>
+        <ms:NAZWA_GMINY>BARANOWO</ms:NAZWA_GMINY>
+        <ms:POLE_EWIDENYJNE>31.59</ms:POLE_EWIDENYJNE>
+        <ms:KLASOUZYTKI_EGIB>Ls</ms:KLASOUZYTKI_EGIB>
+        <ms:GRUPA_REJESTROWA>1</ms:GRUPA_REJESTROWA>
+        <ms:DATA>2026-10-15</ms:DATA>
+      </ms:dzialki>
+    </wfs:member>
+</wfs:FeatureCollection>
+

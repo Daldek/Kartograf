@@ -31,6 +31,7 @@ dependencies = [
     "rasterio>=1.3.0",
     "numpy>=1.24.0",
     "pyshp>=2.3.0",
+    "pyogrio>=0.10",
 ]
 
 [project.scripts]
@@ -68,7 +69,7 @@ quote-style = "double"
 exclude = ['^\.claude/']
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "rasterio.*", "shapefile.*", "affine.*"]
+module = ["requests.*", "rasterio.*", "shapefile.*", "affine.*", "pyogrio.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -79,6 +80,7 @@ addopts = "-v --tb=short"
 markers = [
     "live: marks tests that require network access to GUGiK WMS (deselect with '-m \"not live\"')",
     "real_wms_layers: opt out of the offline GetCapabilities stub (tests that exercise _fetch_wms_layers itself)",
+    "real_wfs_types: opt out of the offline WFS feature-type stub of the NMT/NMPT index services (tests that exercise WfsIndex.feature_types itself)",
 ]
 
 [tool.coverage.run]

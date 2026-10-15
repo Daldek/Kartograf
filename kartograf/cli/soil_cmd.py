@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from kartograf.cli._args import parse_bbox_arg
 from kartograf.cli.download_cmd import (
     _plan_context,
     _print_notice,
@@ -22,12 +21,31 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
     store_path_label,
 )
-from kartograf.cli.landcover_cmd import run_land_cover
+from kartograf.cli.landcover_cmd import area_task_arguments, run_land_cover
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 
 if TYPE_CHECKING:
     from kartograf.hydrology import HSGCalculator
+
+
+def _soil_download_options(args: argparse.Namespace) -> dict:
+    options: dict = {}
+    for name in ("property", "depth", "stat"):
+        value = getattr(args, name)
+        if value is not None:
+            options[name] = value
+    return options
+
+
+def soil_download_task_arguments(args: argparse.Namespace) -> dict:
+    """Data options shared by ``soil download`` and a project task."""
+    return {**area_task_arguments(args), **_soil_download_options(args)}
+
+
+def soil_hsg_task_arguments(args: argparse.Namespace) -> dict:
+    """Data options shared by ``soil hsg`` and a project task."""
+    return {**area_task_arguments(args), "depth": args.depth}
 
 
 def cmd_soil_download(args: argparse.Namespace) -> int:
@@ -38,13 +56,7 @@ def cmd_soil_download(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    options: dict = {}
-    if args.property is not None:
-        options["property"] = args.property
-    if args.depth is not None:
-        options["depth"] = args.depth
-    if args.stat is not None:
-        options["stat"] = args.stat
+    options = _soil_download_options(args)
     return run_land_cover(args, "soilgrids", options)
 
 
@@ -94,15 +106,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
 
     from kartograf.hydrology import HSGCalculator
 
-    # one area choice: checked by the library (ValidationError -> Error:)
-    bbox = parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None
-    geometry = Path(args.geometry) if args.geometry is not None else None
-    selection: dict = {
-        "sheet": args.sheet,
-        "bbox": bbox,
-        "geometry": geometry,
-        "layer": args.layer,
-    }
+    selection = soil_hsg_task_arguments(args)
     calc = HSGCalculator(Path(args.output))
 
     try:
@@ -116,12 +120,11 @@ def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) 
     """One ``soil hsg`` request: a plan (``--check-updates``) or the inputs
     and the HSG with one status line each (spec 4.5)."""
     if args.check_updates:
-        plan = calc.check_hsg(**selection, depth=args.depth, on_notice=_print_notice)
+        plan = calc.check_hsg(**selection, on_notice=_print_notice)
         return _report_plan(args, plan, store_path_label)
     update = _update_mode(args)
     result = calc.calculate_hsg(
         **selection,
-        depth=args.depth,
         update=update,
         plan=_plan_context(args).loaded,
         on_notice=_print_notice,

@@ -37,13 +37,14 @@ _OGC_TEXT = re.compile(
 )
 
 
-def _horizontal_crs(value: str | None) -> tuple[str | None, int | None]:
+def horizontal_crs_of(value: str | None) -> tuple[str | None, int | None]:
     """``(system, zone)`` of a record; ``(None, None)`` = record without a CRS
-    (rejected in ``select_sheet_record``). Parser: ``parse_pl_system`` (D3)."""
+    (rejected in ``select_sheet_record``). Parser: ``parse_pl_system`` (D3).
+    Shared by the WMS (orto) and WFS (NMT/NMPT) record parsers."""
     return parse_pl_system(value) or (None, None)
 
 
-def _metres(value: str | None) -> float | None:
+def metres(value: str | None) -> float | None:
     """'0.15' / '0,15' / '0.15 m' -> 0.15; None when missing or unparseable."""
     if value is None:
         return None
@@ -90,8 +91,8 @@ class SkorowidzRecord:
             "survey_work_id": self.raw.get("numerZgloszeniaPracy"),
             "data_source": self.raw.get("zrDanych") or self.raw.get("zrodloDanych"),
             "format": self.raw.get("format"),
-            "height_rmse_m": _metres(self.raw.get("bladSredniWysokosci")),
-            "position_rmse_m": _metres(self.raw.get("bladSredniPolozenia")),
+            "height_rmse_m": metres(self.raw.get("bladSredniWysokosci")),
+            "position_rmse_m": metres(self.raw.get("bladSredniPolozenia")),
             "archive_module": self.raw.get("modulArchiwizacji"),
             "declared_vertical_crs": self.raw.get("ukladWspolrzednychPionowych"),
         }
@@ -109,7 +110,7 @@ class SkorowidzRecord:
         if "archive_module" not in source:
             # 0.7.1 key: older cache entries are a miss (cached_record)
             raise KeyError("archive_module")
-        system, zone = _horizontal_crs(source.get("declared_crs") or "")
+        system, zone = horizontal_crs_of(source.get("declared_crs") or "")
         raw = {
             key: str(source[field])
             for key, field in (
@@ -182,13 +183,13 @@ def parse_skorowidz_records(text: str, layer: str) -> list[SkorowidzRecord]:
                 "Warstwa %s: nieprawidlowe godlo %r", layer, raw.get("godlo")
             )
             continue
-        system, zone = _horizontal_crs(
+        system, zone = horizontal_crs_of(
             raw.get("ukladWspolrzednychPoziomych") or raw.get("ukladWspolrzednych", "")
         )
         resolution_text = raw.get("charakterystykaPrzestrzenna") or raw.get(
             "wielkoscPiksela", ""
         )
-        resolution = _metres(resolution_text)
+        resolution = metres(resolution_text)
         full_sheet = raw.get("calyArkuszWypelnionyTrescia") or raw.get(
             "calyArkuszWyeplnionyTrescia"
         )
@@ -229,26 +230,37 @@ def _matches(
     zone: int | None,
     resolution_m: float | None,
     predicate: Callable[[SkorowidzRecord], bool] | None,
+    require_resolution: bool = True,
 ) -> bool:
     """ADR-028 hard filter shared by single-record selection and campaign lists.
 
-    ``sheet`` must already be normalized; called once per record (the warning
-    about a missing CRS/resolution is not duplicated).
+    ``sheet`` must already be normalized. Order: sheet code, the product
+    predicate (file format, orto colour), then CRS and resolution - a WFS
+    answer holds every format of the queried point, so records of another
+    sheet or format are skipped silently. A record of the sheet and product
+    without a CRS, or without a resolution where the product has one
+    (``require_resolution``; TIN/TTN archives have none), is rejected with a
+    warning (P6); called once per record, the warning is not duplicated.
     """
-    if record.system is None or record.resolution_m is None:
+    if record.sheet != sheet:
+        return False
+    if predicate is not None and not predicate(record):
+        return False
+    if record.system is None or (require_resolution and record.resolution_m is None):
         logger.warning(
             "Warstwa %s: rekord %s bez ukladu lub rozdzielczosci - pominieto",
             record.layer,
             record.sheet,
         )
         return False
-    if record.sheet != sheet or record.system != system:
+    if record.system != system:
         return False
     if system == "2000" and record.zone != zone:
         return False
-    if resolution_m is not None and abs(record.resolution_m - resolution_m) >= 1e-6:
-        return False
-    return predicate is None or predicate(record)
+    return resolution_m is None or (
+        record.resolution_m is not None
+        and abs(record.resolution_m - resolution_m) < 1e-6
+    )
 
 
 def _campaign_key(record: SkorowidzRecord) -> tuple[str, str, str]:
@@ -263,6 +275,7 @@ def select_sheet_record(
     zone: int | None = None,
     resolution_m: float | None = None,
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
+    require_resolution: bool = True,
 ) -> SkorowidzRecord | None:
     """Pick the newest campaign meeting ALL requirements of the request."""
     sheet = SheetParser(sheet).sheet
@@ -276,6 +289,7 @@ def select_sheet_record(
             zone=zone,
             resolution_m=resolution_m,
             predicate=predicate,
+            require_resolution=require_resolution,
         )
     ]
     return max(matching, key=_campaign_key, default=None)
@@ -289,6 +303,7 @@ def select_campaign_records(
     zone: int | None = None,
     resolution_m: float | None = None,
     predicate: Callable[[SkorowidzRecord], bool] | None = None,
+    require_resolution: bool = True,
 ) -> list[SkorowidzRecord]:
     """All records passing the ``select_sheet_record`` filter, without
     duplicate URLs, descending by ``(aktualnosc, dt_pzgik, url)``."""
@@ -302,6 +317,7 @@ def select_campaign_records(
             zone=zone,
             resolution_m=resolution_m,
             predicate=predicate,
+            require_resolution=require_resolution,
         ):
             unique.setdefault(record.url, record)
     return sorted(unique.values(), key=_campaign_key, reverse=True)
@@ -371,6 +387,8 @@ class SkorowidzQuery:
     resolution_m: float | None = None
     predicate: Callable[[SkorowidzRecord], bool] | None = None
     source_extra: dict | None = None
+    # False only for products without a resolution in the index (TIN/TTN)
+    require_resolution: bool = True
 
 
 def _zone(parser: SheetParser) -> int | None:
@@ -497,7 +515,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     @staticmethod
     def _missing_endpoint(query: SkorowidzQuery, sheet: str) -> DownloadError:
         return DownloadError(
-            f"Brak endpointu WMS dla {query.cache_key[1]}, {query.cache_key[2]}",
+            f"Brak endpointu skorowidza dla {query.cache_key[1]}, {query.cache_key[2]}",
             sheet=sheet,
         )
 
@@ -538,6 +556,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 zone=_zone(parser),
                 resolution_m=query.resolution_m,
                 predicate=query.predicate,
+                require_resolution=query.require_resolution,
             )
             if chosen is not None:
                 source = self.record_source(chosen)
@@ -603,6 +622,7 @@ class SkorowidzLayersMixin(SourceInfoMixin):
                 zone=_zone(parser),
                 resolution_m=query.resolution_m,
                 predicate=query.predicate,
+                require_resolution=query.require_resolution,
             )
             found.extend(matched)
             # rejected serves only the hints when found is empty, i.e. when no

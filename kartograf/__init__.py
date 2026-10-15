@@ -4,9 +4,15 @@ DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
 Every CLI command has one library function with the same choices and the same
 result (ADR-037): ``elevation download`` and ``imagery download`` =
-``download_data``/``check_data``, ``landcover download`` and ``soil download`` =
+``download_data``/``check_data``, ``elevation availability`` =
+``check_availability``, ``landcover download`` and ``soil download`` =
 ``LandCoverManager.download``/``.check``,
-``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``.
+``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``,
+``boundaries download``, ``cadastre download`` and ``models3d download`` =
+``download_collection``/``check_collection`` (ADR-042), ``project`` =
+``init_project``, ``add_project_task``, ``remove_project_task``,
+``download_project``, ``check_project``, ``project_status``,
+``verify_project`` (``open_project`` reads a project, ADR-040).
 
 Example usage::
 
@@ -34,6 +40,17 @@ Example usage::
         vertical_crs="EVRF2007",
     )
     print([item.file.path for item in report.files], report.ok)
+
+    # Which years/resolutions an area has as a complete set of full sheets
+    # (`elevation availability`): index and PRG only, nothing is downloaded
+    from kartograf import check_availability
+    availability = check_availability(
+        product="nmt",
+        country="pl",
+        bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
+    )
+    newest = next(c for c in availability.combinations if c.complete)
+    print(newest.year, newest.resolution, newest.download_hint[0])
 
     # Download NMT data (one sheet from GUGiK OpenData); every data choice
     # (product, resolution, vertical CRS, output) is explicit
@@ -73,7 +90,18 @@ from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
 from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.area import parent_request_for
+from kartograf.download.availability import (
+    AvailabilityArea,
+    AvailabilityCombination,
+    AvailabilityReport,
+    check_availability,
+)
 from kartograf.download.campaigns import CampaignRef
+from kartograf.download.collections import (
+    CollectionReport,
+    check_collection,
+    download_collection,
+)
 from kartograf.download.countries import (
     CountryPart,
     countries_for_bbox,
@@ -129,6 +157,23 @@ from kartograf.landcover.manager import (
     LandCoverResult,
 )
 from kartograf.notices import Notice
+from kartograf.project import (
+    FileCheck,
+    PinnedFile,
+    Project,
+    ProjectCheck,
+    ProjectReport,
+    ProjectTask,
+    TaskResult,
+    add_project_task,
+    check_project,
+    download_project,
+    init_project,
+    open_project,
+    project_status,
+    remove_project_task,
+    verify_project,
+)
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
@@ -172,6 +217,15 @@ __all__ = [
     "DataReport",
     "UnitFile",
     "UnitFailure",
+    # Download (collections: `boundaries`/`cadastre`/`models3d download`, ADR-042)
+    "download_collection",
+    "check_collection",
+    "CollectionReport",
+    # Availability report (`elevation availability`, ADR-041)
+    "check_availability",
+    "AvailabilityReport",
+    "AvailabilityCombination",
+    "AvailabilityArea",
     # Download (NMT)
     "DownloadManager",
     "DownloadProgress",
@@ -233,6 +287,22 @@ __all__ = [
     "HSGCalculator",
     "HsgResult",
     "hsg_from_rasters",
+    # Project manifest (kartograf-project.json, ADR-040)
+    "init_project",
+    "open_project",
+    "add_project_task",
+    "remove_project_task",
+    "download_project",
+    "check_project",
+    "project_status",
+    "verify_project",
+    "Project",
+    "ProjectTask",
+    "PinnedFile",
+    "ProjectReport",
+    "TaskResult",
+    "ProjectCheck",
+    "FileCheck",
     # Transport and mosaic (stable since 0.7.1)
     "get_with_retry",
     "make_gugik_session",
