@@ -24,7 +24,7 @@ from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.providers.cuzk import create_dmr_provider
 from kartograf.providers.cuzk.client import wkid
-from kartograf.providers.cuzk.dmr import CUZK_NODATA, CuzkDmrProvider, bbox_to_crs
+from kartograf.providers.cuzk.raster import CUZK_NODATA, CuzkDmrProvider, bbox_to_crs
 from kartograf.providers.cuzk.sheets import SheetInfo
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import get_source
@@ -34,11 +34,11 @@ from kartograf.transform.crs import (
     build_pinned_transform,
 )
 
-_CLIENT_PATCH = "kartograf.providers.cuzk.dmr.CuzkClient"
-_INDEX_PATCH = "kartograf.providers.cuzk.dmr.SheetIndex"
-_PINNED_PATCH = "kartograf.providers.cuzk.dmr.build_pinned_transform"
+_CLIENT_PATCH = "kartograf.providers.cuzk.raster.CuzkClient"
+_INDEX_PATCH = "kartograf.providers.cuzk.raster.SheetIndex"
+_PINNED_PATCH = "kartograf.providers.cuzk.raster.build_pinned_transform"
 _GROUP_PATCH = "kartograf.transform.crs.TransformerGroup"
-_SOURCE_PATCH = "kartograf.providers.cuzk.dmr.get_source"
+_SOURCE_PATCH = "kartograf.providers.cuzk.raster.get_source"
 
 
 def _write_tif(
@@ -409,7 +409,7 @@ _NATIVE_BBOX = BBox(-450000, -1114000, -448000, -1112000, "EPSG:5514")
 
 
 def _pinned_5514_to(target_crs):
-    from kartograf.providers.cuzk.dmr import NATIVE_CRS
+    from kartograf.providers.cuzk.raster import NATIVE_CRS
     from kartograf.transform.crs import CONTENT_POLICY
 
     return build_pinned_transform(NATIVE_CRS, target_crs, CONTENT_POLICY)
@@ -809,7 +809,7 @@ class TestProbePoint:
         assert pinned_mock.call_args.args[2].probe_point == (-446500.0, -1113500.0)
 
     def test_horizontal_policy_probe_is_cz_native_center(self):
-        from kartograf.providers.cuzk.dmr import CZ_PROBE_NATIVE
+        from kartograf.providers.cuzk.raster import CZ_PROBE_NATIVE
 
         with patch(_PINNED_PATCH, wraps=build_pinned_transform) as pinned_mock:
             provider = CuzkDmrProvider(
@@ -1198,7 +1198,7 @@ class TestVerticalTransform:
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(_PINNED_PATCH, side_effect=factory),
-            patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),  # 5 strips
+            patch("kartograf.providers.cuzk.raster._CHUNK_PIXELS", 20),  # 5 strips
         ):
             client_cls.return_value.export_image.side_effect = _exporting("EPSG:5514")
             provider = CuzkDmrProvider(resolution="2m", vertical_crs="EVRF2007")
@@ -1284,7 +1284,7 @@ class TestVerticalTransform:
         with (
             patch(_CLIENT_PATCH) as client_cls,
             patch(_PINNED_PATCH, side_effect=factory),
-            patch("kartograf.providers.cuzk.dmr._CHUNK_PIXELS", 20),
+            patch("kartograf.providers.cuzk.raster._CHUNK_PIXELS", 20),
         ):
             client_cls.return_value.export_image.side_effect = lambda e, b, **kw: (
                 _write_tif(Path(kw["output_path"]), crs="EPSG:5514", size=(10, 10))

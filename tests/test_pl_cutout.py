@@ -64,7 +64,7 @@ class TestPreparePlCutout:
         Measured around the target envelope mapped to EPSG:2180 — the same
         constant as on the CZ path.
         """
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
+        from kartograf.providers.cuzk.raster import bbox_to_crs
 
         bbox = BBox(530010, 382010, 530190, 382090, "EPSG:2180")
         cut = _prepare_pl_cutout(

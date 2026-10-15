@@ -300,7 +300,7 @@ def test_sm5_worldfile_georeference_survives_staging_cleanup(tmp_path):
     """Openzu often carries coordinates only in a .tfw outside its TIFF."""
     import warnings
 
-    from kartograf.providers.cuzk.dmr import CuzkDmrProvider
+    from kartograf.providers.cuzk.raster import CuzkDmrProvider
 
     def fetch_zip(url, output_path, *, unzip_single, on_response):
         with warnings.catch_warnings():
@@ -323,8 +323,8 @@ def test_sm5_worldfile_georeference_survives_staging_cleanup(tmp_path):
         return output_path
 
     with (
-        patch("kartograf.providers.cuzk.dmr.CuzkClient") as client,
-        patch("kartograf.providers.cuzk.dmr.SheetIndex") as sheet_index,
+        patch("kartograf.providers.cuzk.raster.CuzkClient") as client,
+        patch("kartograf.providers.cuzk.raster.SheetIndex") as sheet_index,
     ):
         sheet_index.return_value.sm5_sheet.return_value = SimpleNamespace(
             name=None, podil=None

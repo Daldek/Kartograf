@@ -186,7 +186,7 @@ def _prepare_pl_cutout(
             f"(podano {vertical_crs})"
         )
 
-    from kartograf.providers.cuzk.dmr import bbox_to_crs
+    from kartograf.providers.cuzk.raster import bbox_to_crs
     from kartograf.sources.registry import get_source
 
     # local import: tests replace the operation in the transform.crs module

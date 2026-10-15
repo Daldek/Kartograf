@@ -474,7 +474,7 @@ def _to_crs(bbox: BBox, crs: str) -> BBox:
     if crs == "EPSG:2180":
         return bbox_to_2180(bbox)
     if is_czech_crs(crs) or is_czech_crs(bbox.crs):
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
+        from kartograf.providers.cuzk.raster import bbox_to_crs
 
         return bbox_to_crs(bbox, crs)
     return transform_bbox(bbox, crs)

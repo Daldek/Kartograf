@@ -661,10 +661,10 @@ class TestDownloadLazArea:
         from unittest.mock import patch
 
         from kartograf.core import bbox as core_bbox
-        from kartograf.providers.cuzk import dmr
+        from kartograf.providers.cuzk import raster
 
         with (
-            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
+            patch.object(raster, "bbox_to_crs", wraps=raster.bbox_to_crs) as pinned,
             patch.object(
                 core_bbox, "_transformer", wraps=core_bbox._transformer
             ) as plain,
@@ -679,7 +679,7 @@ class TestDownloadLazArea:
 
         krovak = BBox(-500000, -1100000, -499950, -1099950, "EPSG:5514")
         with patch(
-            "kartograf.providers.cuzk.dmr.bbox_to_crs", return_value=W2_AREA
+            "kartograf.providers.cuzk.raster.bbox_to_crs", return_value=W2_AREA
         ) as pinned:
             plan = check_laz_area(
                 krovak,
