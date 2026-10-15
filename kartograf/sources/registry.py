@@ -15,11 +15,21 @@ from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
     CountryProfile,
+    FeatureBBoxParams,
+    FeatureLayer,
     LicenseInfo,
+    PackageVariant,
     SignalKind,
     SourceDescriptor,
     TileScheme,
     TransportKind,
+    UnitPackageParams,
+)
+from kartograf.sources.variants import (
+    IndexRef,
+    ProductVariant,
+    file_format,
+    parse_resolution,
 )
 
 # Mapping of vertical CRS names used in the CLI to EPSG codes.
@@ -73,95 +83,253 @@ _CUZK_LICENSE = LicenseInfo(
 
 _PL_VERTICAL_BOTH = ("EPSG:9650", "EPSG:9651")
 
+# --- Collection channels of GUGiK (ADR-042, plan C) ---------------------------
+_OPENDATA = "https://opendata.geoportal.gov.pl"
+
+# BDOT10k archive: yearly snapshots 2014-2025 (state at the start of the year)
+# in GML and SHP, one ZIP per powiat (reconnaissance 2026-10-15: GPKG, 2013 and
+# 2026 = 404). A GML package holds ``.xml`` files, a SHP package ``.shp``.
+_BDOT10K_ARCHIVE = f"{_OPENDATA}/Archiwum/bdot10k"
+_BDOT10K_ARCHIVE_YEARS = tuple(range(2014, 2026))
+_BDOT10K_ARCHIVE_FORMATS = (("GML", ".xml"), ("SHP", ".shp"))
+
+
+def _bdot10k_archive_variants() -> tuple[PackageVariant, ...]:
+    return tuple(
+        PackageVariant(
+            choice=(("format", fmt), ("year", str(year))),
+            url_template=(
+                f"{_BDOT10K_ARCHIVE}/{year}/{fmt}/{{woj}}/{{teryt}}_{fmt}_{year}.zip"
+            ),
+            edition=str(year),
+            segment_tokens=(fmt.lower(), str(year)),
+            members=(member,),
+        )
+        for year in _BDOT10K_ARCHIVE_YEARS
+        for fmt, member in _BDOT10K_ARCHIVE_FORMATS
+    )
+
+
+# 3D building models (CityGML, one ZIP per powiat): LoD1 yearly releases (2019
+# with the ``_gml`` file name suffix) and the only LoD2 release, 2017. The
+# vertical CRS is the one declared by ``srsName`` of the GML files (measured
+# 2026-10-15 on powiat 0401: 2019 PL-KRON86-NH, 2021/2022 PL-EVRF2007-NH,
+# 2024 EPSG::9651; LoD2 2017 PL-KRON86-NH).
+_BUILDINGS_3D = f"{_OPENDATA}/InneDane/Budynki3D"
+_BUILDINGS_3D_RELEASES = (
+    ("1", "2019", f"{_BUILDINGS_3D}/LOD1/2019/{{woj}}/{{teryt}}_gml.zip", "EPSG:9650"),
+    ("1", "2021", f"{_BUILDINGS_3D}/LOD1/2021/{{woj}}/{{teryt}}.zip", "EPSG:9651"),
+    ("1", "2022", f"{_BUILDINGS_3D}/LOD1/2022/{{woj}}/{{teryt}}.zip", "EPSG:9651"),
+    ("1", "2024", f"{_BUILDINGS_3D}/LOD1/2024/{{woj}}/{{teryt}}.zip", "EPSG:9651"),
+    ("2", "2017", f"{_BUILDINGS_3D}/LOD2/{{teryt}}_gml.zip", "EPSG:9650"),
+)
+
+
+def _buildings_3d_variants() -> tuple[PackageVariant, ...]:
+    return tuple(
+        PackageVariant(
+            choice=(("lod", lod), ("year", year)),
+            url_template=url,
+            edition=year,
+            segment_tokens=(f"lod{lod}", year),
+            members=(".gml",),
+            vertical_crs=vertical,
+        )
+        for lod, year, url, vertical in _BUILDINGS_3D_RELEASES
+    )
+
+
+# PRG WFS levels (--level -> type of AdministrativeBoundaries); the stable
+# feature key is IIP_IDENTY (gml:id is a page position, reconnaissance 2026-10-15).
+_PRG_LEVELS = (
+    ("wojewodztwo", "A01_Granice_wojewodztw"),
+    ("powiat", "A02_Granice_powiatow"),
+    ("gmina", "A03_Granice_gmin"),
+    ("jednostka-ewidencyjna", "A05_Granice_jednostek_ewidencyjnych"),
+    ("obreb", "A06_Granice_obrebow_ewidencyjnych"),
+)
+
+# EPSG code of the PL vertical CRS names in the channel options (sidecar).
+_PL_VERTICAL_OPTION = {"KRON86": "EPSG:9650", "EVRF2007": "EPSG:9651"}
+
+_PZGIK = "https://mapy.geoportal.gov.pl/wss/service/PZGIK"
+
+
+def _wfs_index(service: str, prefix: str) -> dict[str, IndexRef]:
+    """WFS sheet index per height system: ``<service><VCRS>/WFS/Skorowidze``."""
+    return {
+        vertical_crs: IndexRef(
+            f"{_PZGIK}/{service}{vertical_crs}/WFS/Skorowidze", prefix
+        )
+        for vertical_crs in ("EVRF2007", "KRON86")
+    }
+
+
+# Sheet indexes of the PL elevation products (inventory 2026-10-15,
+# docs/research/2026-10-15-plan-a-b/raport.md 1): one service per height system.
+_PL_INDEX = {
+    "nmt": _wfs_index("NumerycznyModelTerenu", "SkorowidzNMT"),
+    "nmpt": _wfs_index("NumerycznyModelPokryciaTerenu", "SkorowidzNMPT"),
+    "laz": _wfs_index("DanePomiaroweLidar", "SkorowidzDanychPomiarowychLIDAR"),
+}
+
+_PRODUCT_NAMES = {
+    "nmt": "Numeryczny Model Terenu",
+    "nmpt": "Numeryczny Model Pokrycia Terenu",
+}
+
+_NMT_WCS = AccessChannel(
+    transport=TransportKind.WCS,
+    update_signal="none",
+    horizontal_crs="EPSG:2180",
+    vertical_crs_options=_PL_VERTICAL_BOTH,
+    capabilities=frozenset({"bbox_raster"}),
+    notes=(
+        "KRON86 GeoTIFF float32, EVRF2007 tylko image/x-aaigrid "
+        "(zapisywany jako GeoTIFF float32); siatka arkuszy 1 m"
+    ),
+)
+_NMPT_WCS = AccessChannel(
+    transport=TransportKind.WCS,
+    update_signal="none",
+    horizontal_crs="EPSG:2180",
+    vertical_crs_options=_PL_VERTICAL_BOTH,
+    capabilities=frozenset({"bbox_raster"}),
+    notes=(
+        "wysokosci tylko image/x-aaigrid (zapisywany jako GeoTIFF "
+        "float32); 1 m przez SCALEFACTOR=0.5 na siatce arkuszy 1 m"
+    ),
+)
+
+
+def _pl_sheet_source(
+    product: str,
+    resolution: str | None,
+    vertical_crs: tuple[str, ...],
+    *,
+    format: str = "ASC",
+    key: str | None = None,
+    wcs: AccessChannel | None = None,
+) -> SourceDescriptor:
+    """Descriptor of one PL sheet variant set: (product, format, resolution).
+
+    One variant per height system in ``vertical_crs`` (ADR-041), records
+    from the WFS index of the product (``_PL_INDEX``). The key, the segment
+    template and the extension follow from the format and the label:
+    grids ``pl.gugik.nmt_0_5m`` / ``nmt/pl_{system}_0.5m_{vcrs}``, archives
+    ``pl.gugik.nmt_tbd_25m`` / ``nmt/pl_{system}_tbd_25m_{vcrs}`` (format
+    token before the resolution, ARCHITECTURE 3.3 rule 1). ``key`` keeps
+    the keys of existing sidecars (``pl.gugik.nmpt`` = NMPT 1 m).
+    """
+    fmt = file_format(format)
+    value = parse_resolution(resolution) if resolution is not None else None
+    if resolution is not None and value is None:
+        raise ValueError(f"etykieta rozdzielczosci spoza K2: {resolution!r}")
+    tokens = [format.lower()] if fmt.source_file else []
+    if resolution is not None:
+        tokens.append(resolution)
+    if key is None:
+        key_tokens = [t.replace("-", "_").replace(".", "_") for t in tokens]
+        key = f"pl.gugik.{product}_{'_'.join(key_tokens)}"
+    shown = f"{resolution.replace('.', ',')[:-1]} m" if resolution else None
+    if fmt.source_file:
+        name = (
+            f"{_PRODUCT_NAMES[product]} - archiwum {format}"
+            + (f" {shown}" if shown else "")
+            + f" ({fmt.description}; plik zrodlowy)"
+        )
+    else:
+        name = f"{_PRODUCT_NAMES[product]} {shown} (siatka ASC)"
+    sheets = AccessChannel(
+        transport=TransportKind.WFS,
+        update_signal="index",
+        horizontal_crs=PL_1992_CRS,  # PL-2000: zone from sheet code (N8)
+        vertical_crs_options=tuple(
+            code
+            for code in _PL_VERTICAL_BOTH
+            if code in {_PL_VERTICAL_OPTION[v] for v in vertical_crs}
+        ),
+        capabilities=frozenset({"sheet_files"}),
+        notes=(
+            "skorowidz WFS GUGiK; plik jak w zrodle (bez konwersji)"
+            if fmt.source_file
+            else "skorowidz WFS GUGiK; arkusze OpenData"
+        ),
+    )
+    return SourceDescriptor(
+        key=key,
+        country="PL",
+        product=product,
+        name=name,
+        provider_name="GUGiK",
+        channels=(sheets,) if wcs is None else (sheets, wcs),
+        tile_scheme=None,
+        storage_subdir=f"{product}/pl_{{system}}_{'_'.join(tokens)}_{{vcrs}}",
+        default_extension=fmt.extension,
+        license=_GUGIK_LICENSE,
+        resolution=resolution,
+        variants=tuple(
+            ProductVariant(
+                source=key,
+                product=product,
+                country="PL",
+                resolution_m=value,
+                vertical_crs=name_vcrs,
+                format=format,
+                systems=("1992", "2000"),
+                channel=TransportKind.WFS,
+                index_ref=_PL_INDEX[product][name_vcrs],
+            )
+            for name_vcrs in vertical_crs
+        ),
+    )
+
+
+_EVRF = ("EVRF2007",)
+_KRON = ("KRON86",)
+_BOTH = ("EVRF2007", "KRON86")
+
+# PL sheet variants: every ASC grid of the WFS inventory 2026-10-15 and the
+# archive formats downloaded as source files (decision 2026-10-15, ADR-041).
+# ASCII NMT 10 m is absent: all its 215 sheets have 8-part codes outside the
+# PL-1992 sheet system of SheetParser (reported by `availability` as Info).
+_PL_SHEET_SOURCES = (
+    _pl_sheet_source("nmt", "0.15m", _EVRF),
+    _pl_sheet_source("nmt", "0.5m", _BOTH),
+    _pl_sheet_source("nmt", "0.6m", _EVRF),
+    _pl_sheet_source("nmt", "1m", _BOTH, wcs=_NMT_WCS),
+    _pl_sheet_source("nmt", "5m", _EVRF),
+    _pl_sheet_source("nmt", "10m", _EVRF),
+    _pl_sheet_source("nmpt", "0.5m", _BOTH),
+    _pl_sheet_source("nmpt", "0.6m", _EVRF),
+    _pl_sheet_source("nmpt", "1m", _BOTH, key="pl.gugik.nmpt", wcs=_NMPT_WCS),
+    _pl_sheet_source("nmt", "1m", _BOTH, format="XYZ"),
+    _pl_sheet_source("nmt", "5m", _EVRF, format="XYZ"),
+    _pl_sheet_source("nmt", "0.5m", _EVRF, format="ASCII-NMT"),
+    _pl_sheet_source("nmt", "1m", _EVRF, format="ASCII-NMT"),
+    _pl_sheet_source("nmt", "5m", _BOTH, format="ASCII-NMT"),
+    _pl_sheet_source("nmt", "1m", _BOTH, format="TBD"),
+    _pl_sheet_source("nmt", "5m", _BOTH, format="TBD"),
+    _pl_sheet_source("nmt", "10m", _BOTH, format="TBD"),
+    _pl_sheet_source("nmt", "15m", _BOTH, format="TBD"),
+    _pl_sheet_source("nmt", "20m", _BOTH, format="TBD"),
+    _pl_sheet_source("nmt", "25m", _BOTH, format="TBD"),
+    _pl_sheet_source("nmt", "30m", _KRON, format="TBD"),
+    _pl_sheet_source("nmt", "40m", _KRON, format="TBD"),
+    _pl_sheet_source("nmt", "50m", _KRON, format="TBD"),
+    _pl_sheet_source("nmt", None, _KRON, format="TIN"),
+    _pl_sheet_source("nmt", None, _KRON, format="TTN"),
+    _pl_sheet_source("nmt", "5m", _KRON, format="GRD"),
+    _pl_sheet_source("nmt", "25m", _KRON, format="DXF"),
+    _pl_sheet_source("nmt", "25m", _KRON, format="DGN"),
+    _pl_sheet_source("nmpt", "0.5m", _KRON, format="XYZ"),
+    _pl_sheet_source("nmpt", "1m", _KRON, format="XYZ"),
+)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
-        SourceDescriptor(
-            key="pl.gugik.nmt_1m",
-            country="PL",
-            product="nmt",
-            name="Numeryczny Model Terenu 1 m (GRID1)",
-            provider_name="GUGiK",
-            channels=(
-                AccessChannel(
-                    transport=TransportKind.WMS_SHEET_INDEX,
-                    update_signal="index",
-                    horizontal_crs=PL_1992_CRS,  # PL-2000: zone from sheet code (N8)
-                    vertical_crs_options=_PL_VERTICAL_BOTH,
-                    capabilities=frozenset({"sheet_files"}),
-                ),
-                AccessChannel(
-                    transport=TransportKind.WCS,
-                    update_signal="none",
-                    horizontal_crs="EPSG:2180",
-                    vertical_crs_options=_PL_VERTICAL_BOTH,
-                    capabilities=frozenset({"bbox_raster"}),
-                    notes=(
-                        "KRON86 GeoTIFF float32, EVRF2007 tylko image/x-aaigrid "
-                        "(zapisywany jako GeoTIFF float32); siatka arkuszy 1 m"
-                    ),
-                ),
-            ),
-            tile_scheme=None,
-            storage_subdir="nmt/pl_{system}_1m_{vcrs}",
-            default_extension=".asc",
-            license=_GUGIK_LICENSE,
-            resolution="1m",
-        ),
-        SourceDescriptor(
-            key="pl.gugik.nmt_5m",
-            country="PL",
-            product="nmt",
-            name="Numeryczny Model Terenu 5 m",
-            provider_name="GUGiK",
-            channels=(
-                AccessChannel(
-                    transport=TransportKind.WMS_SHEET_INDEX,
-                    update_signal="index",
-                    horizontal_crs="EPSG:2180",
-                    vertical_crs_options=("EPSG:9651",),
-                    capabilities=frozenset({"sheet_files"}),
-                    notes="WCS niedostepne dla 5m - tylko arkusze OpenData",
-                ),
-            ),
-            tile_scheme=None,
-            storage_subdir="nmt/pl_{system}_5m_{vcrs}",
-            default_extension=".asc",
-            license=_GUGIK_LICENSE,
-            resolution="5m",
-        ),
-        SourceDescriptor(
-            key="pl.gugik.nmpt",
-            country="PL",
-            product="nmpt",
-            name="Numeryczny Model Pokrycia Terenu 1 m (DSM)",
-            provider_name="GUGiK",
-            channels=(
-                AccessChannel(
-                    transport=TransportKind.WMS_SHEET_INDEX,
-                    update_signal="index",
-                    horizontal_crs="EPSG:2180",
-                    vertical_crs_options=_PL_VERTICAL_BOTH,
-                    capabilities=frozenset({"sheet_files"}),
-                ),
-                AccessChannel(
-                    transport=TransportKind.WCS,
-                    update_signal="none",
-                    horizontal_crs="EPSG:2180",
-                    vertical_crs_options=_PL_VERTICAL_BOTH,
-                    capabilities=frozenset({"bbox_raster"}),
-                    notes=(
-                        "wysokosci tylko image/x-aaigrid (zapisywany jako GeoTIFF "
-                        "float32); 1 m przez SCALEFACTOR=0.5 na siatce arkuszy 1 m"
-                    ),
-                ),
-            ),
-            tile_scheme=None,
-            storage_subdir="nmpt/pl_{system}_1m_{vcrs}",
-            default_extension=".asc",
-            license=_GUGIK_LICENSE,
-            resolution="1m",
-        ),
+        *_PL_SHEET_SOURCES,
         SourceDescriptor(
             key="pl.gugik.orto",
             country="PL",
@@ -201,6 +369,20 @@ _SOURCES: dict[str, SourceDescriptor] = {
             storage_subdir="laz/pl_{system}_{vcrs}",
             default_extension=".laz",
             license=_GUGIK_LICENSE,
+            variants=tuple(
+                ProductVariant(
+                    source="pl.gugik.laz",
+                    product="laz",
+                    country="PL",
+                    resolution_m=None,
+                    vertical_crs=vertical_crs,
+                    format="LAZ",
+                    systems=("1992", "2000"),
+                    channel=TransportKind.WFS,
+                    index_ref=_PL_INDEX["laz"][vertical_crs],
+                )
+                for vertical_crs in _BOTH
+            ),
         ),
         SourceDescriptor(
             key="pl.gugik.bdot10k",
@@ -215,10 +397,204 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"admin_unit_files"}),
                 ),
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"archive_unit_files"}),
+                    endpoint=f"{_BDOT10K_ARCHIVE}/",
+                    notes=(
+                        "archiwum rocznikow 2014-2025 (stan z poczatku roku), "
+                        "GML albo SHP; paczka powiatu zapisywana 1:1"
+                    ),
+                    params=UnitPackageParams(
+                        unit="powiat", variants=_bdot10k_archive_variants()
+                    ),
+                ),
             ),
             tile_scheme=None,
             storage_subdir="landcover/pl_bdot10k",
             default_extension=".gpkg",
+            license=_GUGIK_LICENSE,
+        ),
+        SourceDescriptor(
+            key="pl.gugik.prg",
+            country="PL",
+            product="admin",
+            name="PRG - granice jednostek administracyjnych i ewidencyjnych",
+            provider_name="GUGiK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.WFS,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"bbox_vector"}),
+                    endpoint=f"{_PZGIK}/PRG/WFS/AdministrativeBoundaries",
+                    notes="pelne geometrie jednostek przecinajacych obszar",
+                    params=FeatureBBoxParams(
+                        protocol="wfs",
+                        native_crs="EPSG:2180",
+                        axis_order="yx",
+                        page_size=1000,
+                        layers=tuple(
+                            FeatureLayer(
+                                code=code,
+                                source=f"ms:{name}",
+                                name=name,
+                                id_field="IIP_IDENTY",
+                            )
+                            for code, name in _PRG_LEVELS
+                        ),
+                        selection="level",
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"admin_unit_files"}),
+                    endpoint=f"{_OPENDATA}/prg/granice/",
+                    notes="paczka wojewodztwa: GML poziomow A01, A02, A03, A05, A06",
+                    params=UnitPackageParams(
+                        unit="woj",
+                        variants=(
+                            PackageVariant(
+                                choice=(),
+                                url_template=(
+                                    f"{_OPENDATA}/prg/granice/"
+                                    "{woj}_GraniceAdministracyjne.zip"
+                                ),
+                                segment_tokens=("gml",),
+                                members=(".gml",),
+                            ),
+                        ),
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"country_files"}),
+                    endpoint=f"{_OPENDATA}/prg/granice/",
+                    notes="plik krajowy SHP (ok. 377 MB), tylko z --whole-country",
+                    params=UnitPackageParams(
+                        unit="country",
+                        variants=(
+                            PackageVariant(
+                                choice=(),
+                                url_template=(
+                                    f"{_OPENDATA}/prg/granice/"
+                                    "00_jednostki_administracyjne.zip"
+                                ),
+                                segment_tokens=("shp",),
+                                members=(".shp",),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            tile_scheme=None,
+            storage_subdir="boundaries/pl_prg",
+            default_extension=".gpkg",
+            license=_GUGIK_LICENSE,
+        ),
+        SourceDescriptor(
+            key="pl.gugik.egib",
+            country="PL",
+            product="map",
+            name="EGiB - mapa ewidencyjna (dzialki i budynki)",
+            provider_name="GUGiK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"admin_unit_files"}),
+                    endpoint=f"{_OPENDATA}/InneDane/latest_exports/eziudp_wfs/GPKG/",
+                    notes=(
+                        "eksport powiatu odswiezany co dobe: warstwy dzialki, "
+                        "budynki i transakcje (RCN)"
+                    ),
+                    params=UnitPackageParams(
+                        unit="powiat",
+                        variants=(
+                            PackageVariant(
+                                choice=(),
+                                url_template=(
+                                    f"{_OPENDATA}/InneDane/latest_exports/"
+                                    "eziudp_wfs/GPKG/{teryt}.gpkg.zip"
+                                ),
+                                segment_tokens=("gpkg",),
+                            ),
+                        ),
+                        unpack=".gpkg",
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.WFS,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"bbox_vector"}),
+                    endpoint=f"{_PZGIK}/EGIB/WFS/UslugaZbiorcza",
+                    notes=(
+                        "usluga zbiorcza powiatowych WFS: luki w powiatach bez "
+                        "integracji, atrybuty zastrzezone = brak_uprawnien"
+                    ),
+                    params=FeatureBBoxParams(
+                        protocol="wfs",
+                        native_crs="EPSG:2180",
+                        axis_order="yx",
+                        page_size=1000,
+                        layers=(
+                            FeatureLayer(
+                                code="dzialki",
+                                source="ms:dzialki",
+                                name="dzialki",
+                                id_field="gml_id",
+                            ),
+                            FeatureLayer(
+                                code="budynki",
+                                source="ms:budynki",
+                                name="budynki",
+                                id_field="gml_id",
+                            ),
+                        ),
+                        selection="all",
+                        drop_fields=("DATA",),
+                    ),
+                ),
+            ),
+            tile_scheme=None,
+            storage_subdir="cadastre/pl_egib",
+            default_extension=".gpkg",
+            license=_GUGIK_LICENSE,
+        ),
+        SourceDescriptor(
+            key="pl.gugik.buildings_3d",
+            country="PL",
+            product="buildings",
+            name="Modele 3D budynkow (CityGML LoD1, LoD2)",
+            provider_name="GUGiK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    vertical_crs_options=_PL_VERTICAL_BOTH,
+                    capabilities=frozenset({"admin_unit_files"}),
+                    endpoint=f"{_BUILDINGS_3D}/",
+                    notes=(
+                        "LoD2 nie pokrywa calego kraju (brak paczki powiatu = "
+                        "brak danych); pliki krajowe (3,5-4,1 GB) poza zakresem"
+                    ),
+                    params=UnitPackageParams(
+                        unit="powiat", variants=_buildings_3d_variants()
+                    ),
+                ),
+            ),
+            tile_scheme=None,
+            storage_subdir="models3d/pl_buildings",
+            default_extension=".zip",
             license=_GUGIK_LICENSE,
         ),
         SourceDescriptor(
@@ -416,6 +792,11 @@ def sources_for(
         if (country is None or d.country == country)
         and (product is None or d.product == product)
     ]
+
+
+def all_sources() -> list[SourceDescriptor]:
+    """Every registered descriptor in registry order (variants, tests)."""
+    return list(_SOURCES.values())
 
 
 def get_country(code: str) -> CountryProfile:

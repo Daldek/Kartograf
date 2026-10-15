@@ -8,6 +8,7 @@ Scenarios (spec 6) and their tests:
 scenario                                   test
 =========================================  ==========================================
 PL-1992 sheet 1:10000                      test_pl_sheet
+PL-1992 sheet NMT 0.5m (WFS index)         test_pl_sheet_0_5m
 orthophoto sheet (``imagery download``)    test_orto_sheet_through_imagery
 coarser sheet code (expansion)             test_coarser_sheet_expands_with_no_cov...
 PL-2000 with ``scale``                     test_pl2000_sheet_with_scale
@@ -24,13 +25,17 @@ check + plan + upgrade with plan           test_check_plan_upgrade
 upgrade with a stale plan                  test_upgrade_with_stale_plan
 input errors (missing / bad / outside)     test_input_errors_same_type_and_text
 BDOT10k, CORINE, SoilGrids, HSG            tests/test_parity_landcover.py
+availability report ``--json``            test_availability_json
 =========================================  ==========================================
 """
 
+import contextlib
+import io
 from dataclasses import replace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
@@ -39,6 +44,7 @@ from kartograf.download.data import check_data, download_data
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED
 from kartograf.providers.pl.gugik import GugikProvider
+from tests.conftest import RecordedIndex, wfs_endpoint, wfs_fixture, wfs_response
 from tests.parity import assert_notices_printed, assert_same_store, run_both
 from tests.test_cli import _cz_provider_mock
 from tests.test_cli_update_modes import LazCliProvider
@@ -88,6 +94,121 @@ def test_pl_sheet(tmp_path):
             tmp_path,
         )
     _same(run, run.api_result, statuses=["new"])
+
+
+def _sheet_0_5m_session(sheet: str):
+    """WFS answers of the sheet (recorded 2026-10-15) and a small ASC inside
+    its frame for the 0.5m record of 2025."""
+    url = f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/84020/84020_1844081_{sheet}.asc"
+    frame = SheetParser(sheet).get_bbox(crs="EPSG:2180")
+    body = (
+        f"ncols 2\nnrows 2\nxllcorner {frame.min_x + 10}\nyllcorner "
+        f"{frame.min_y + 10}\ncellsize 0.5\nNODATA_value -9999\n1 2\n3 4\n"
+    ).encode("ascii")
+    index = wfs_fixture(f"sheet_nmt_evrf2007_{sheet}.xml")
+    endpoint = wfs_endpoint("nmt_evrf2007")
+
+    def get(requested, **kwargs):
+        if requested.startswith(f"{endpoint}?"):
+            return wfs_response(index)
+        assert requested == url, requested
+        response = Mock(spec=requests.Response)
+        response.status_code = 200
+        response.raise_for_status = Mock()
+        response.headers = {}
+        response.iter_content = Mock(return_value=[body])
+        return response
+
+    session = Mock(spec=requests.Session)
+    session.get = Mock(side_effect=get)
+    return session
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_pl_sheet_0_5m(tmp_path):
+    """A grid variant of the registry through the real provider and the WFS
+    index: the same store, sidecar (``pl.gugik.nmt_0_5m``) and statuses."""
+    sheet = "N-33-58-A-c-1-4"
+    with patch(
+        "kartograf.transport.http.make_gugik_session",
+        return_value=_sheet_0_5m_session(sheet),
+    ):
+        run = run_both(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmt",
+                "--sheet",
+                sheet,
+                "--resolution",
+                "0.5m",
+                "--vertical-crs",
+                "EVRF2007",
+                "-q",
+            ],
+            lambda out: download_data(
+                product="nmt",
+                output_dir=out,
+                sheet=sheet,
+                resolution="0.5m",
+                vertical_crs="EVRF2007",
+            ),
+            tmp_path,
+        )
+    _same(run, run.api_result, statuses=["new"])
+    assert (run.api_store / "nmt" / "pl_1992_0.5m_evrf2007").is_dir()
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_availability_json(tmp_path, monkeypatch):
+    """``elevation availability --json`` prints exactly the JSON of
+    ``check_availability`` and its notices on stderr (Pomorze, coast)."""
+    from kartograf.cli import main
+    from kartograf.download.availability import check_availability
+
+    monkeypatch.chdir(tmp_path)
+    areas = {
+        f"nmt_{vcrs}": [f"area_nmt_{vcrs}_pomorze.xml.gz"]
+        for vcrs in ("evrf2007", "kron86")
+    }
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with (
+        patch(
+            "kartograf.transport.http.make_gugik_session",
+            return_value=RecordedIndex(areas, coast=True),
+        ),
+        contextlib.redirect_stdout(stdout),
+        contextlib.redirect_stderr(stderr),
+    ):
+        code = main(
+            [
+                "elevation",
+                "availability",
+                "--product",
+                "nmt",
+                "--country",
+                "pl",
+                "--bbox",
+                "339000,744800,343000,747000",
+                "--json",
+                "--force",
+            ]
+        )
+    with patch(
+        "kartograf.transport.http.make_gugik_session",
+        return_value=RecordedIndex(areas, coast=True),
+    ):
+        report = check_availability(
+            product="nmt",
+            country="pl",
+            bbox=BBox(339000, 744800, 343000, 747000, "EPSG:2180"),
+            force=True,
+        )
+
+    assert code == 0
+    assert stdout.getvalue() == report.to_json()
+    assert_notices_printed(stderr.getvalue(), report.notices)
 
 
 @pytest.mark.usefixtures("frozen_clock")

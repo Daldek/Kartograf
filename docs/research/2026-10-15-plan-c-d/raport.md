@@ -37,6 +37,35 @@ Przyklady BBOX GUGiK WFS w kolejnosci osi EPSG (**N,E**).
 | Indeks SM5 | `KladyMapovychListu/MapServer/24` (16 299 arkuszy): 99 godel ma **2 litery** (`AS22` ... `AS94`, As). | `core/parser_registry.py::CZ_SM5_PATTERN = ^[A-Z]{4}[0-9]{2}$` ich nie rozpoznaje: `detect_system("AS91")` zwraca `pl1992` (fallback), wiec arkusz konczy sie bledem godla PL (blad istniejacy, dotyczy tez DMR) - poprawka w planie D. |
 | Ortofoto PL WCS | `DescribeCoverage` 2.0.1: `Orthoimagery_StandardResolution` i `Orthoimagery_High_Resolution` - ta sama siatka krajowa, krok **0,1 m**. Abstrakty: Standard = "najnowsze dostepne ortofotomapy", High = "ortofotomapy o pikselu 10 cm i mniejszym". `GetCoverage` 2.0.1 `SUBSET` 100x100 m (1000x1000 px): Standard 16,9 s, High 29,0 s, identyczne bajty (Krakow, sha `8f2a42855cf9`); 200x200 m (4 Mpx) Standard 64 s; 500x500 m z `SCALEFACTOR=0.4` (2000x2000 px, piksel 0,25 m) 176 s. Rano tego dnia Standard dawal timeouty 60 s (3 proby), High odpowiadal. | Wariant (`standard`/`high`) i piksel wyniku jawne; limit kawalka liczony w pikselach natywnych (4 Mpx = 200x200 m), timeout odczytu kawalka 300 s; Standard = ryzyko przejsciowe, nie zmiana zakresu (koordynator 2026-10-15). |
 
+**Uklad wysokosci modeli 3D (pomiar planu C, Task 6 Step 0, 2026-10-15).**
+Paczki powiatu 0401 (6,1-12,5 MB, `Content-Type: application/octet-stream`,
+bez `ETag`/`Last-Modified`) pobrane w calosci do `<katalog-danych>`;
+`srsName` wszystkich plikow GML z obiektami: LoD1 2019 -
+`urn:ogc:def:crs,crs:EPSG::2180,crs:PL-KRON86-NH` (EPSG:9650), LoD1 2021
+i 2022 - `...,crs:PL-EVRF2007-NH` (EPSG:9651), LoD1 2024 -
+`...,crs:EPSG::9651`, LoD2 2017 - `...,crs:PL-KRON86-NH` (EPSG:9650; 16
+plikow paczki bez obiektow, bez `srsName`). W kazdej paczce jeden uklad
+dla wszystkich plikow; paczki LoD1 2019 i LoD2 maja katalog `Modele_3D/`,
+LoD1 2021-2024 - pliki w korzeniu ZIP.
+
+**Korekty z pomiarow silnika `feature_bbox` (plan C, 2026-10-15).**
+Fakty i zapytania: `tests/fixtures/pl/feature_bbox/README.md`.
+(1) Pole EGiB `DATA` zalezy od powiatu (Warszawa 1465: 2026-10-14, Krakow
+1261 i powiat 1415: 2026-10-15; pobrane tego samego dnia), wiec to data
+stanu danych powiatu w usludze zbiorczej, nie data odpowiedzi (tabela
+wyzej); nadal poza GPKG (zmienia sie przy odswiezeniu bez zmiany
+obiektow), wartosci w sidecarze `extra.source.dropped_fields`.
+(2) EGiB nie ma krzywych: 80 stron z 40 losowych bboxow 400 x 400 m,
+8 miast i 1000 dzialek Krakowa - tylko `gml:Polygon`; `CurvePolygon`
+z probki 2026-10-13 sie nie potwierdzil (wniosek 3 nizej nieaktualny
+w czesci "krzywe"). Obiekt wieloczesciowy to powtorzone `<ms:geom>` -
+GDAL czyta wszystkie czesci tylko z `GML_FETCH_ALL_GEOMETRIES=YES`.
+(3) Duplikat MapServera lezy na granicy stron, nie tylko za koncem
+wyniku: ostatni unikalny obiekt moze byc za pozycja N-1 (PRG A03, `hits`
+39, `COUNT=13`: 39. obiekt na `STARTINDEX=39`) - petla stron ADR-042 D3.
+(4) GPKG (SQLite) nie zapisuje sie na sieciowym wolumenie danych
+(`Failed to start transaction`) - skladanie na dysku lokalnym (D5).
+
 **Prototyp konwersji GML -> GPKG.** `pyogrio` 0.13.0 (GDAL 3.12.4, wheel
 manylinux dla Python 3.13, ok. 100 MB na dysku) instaluje sie obok
 `rasterio` 1.5.0 (GDAL 3.12.1) i oba dzialaja w jednym procesie. GDAL czyta

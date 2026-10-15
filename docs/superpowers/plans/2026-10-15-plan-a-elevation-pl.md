@@ -74,8 +74,10 @@ opisz roznice koordynatorowi).
    (`.asc` + `.xyz.zip` tego samego zgloszenia, tez dwa rozne archiwa).
    Dzis WMS pokazuje tylko siatki; po przejsciu na WFS format musi byc twardym
    filtrem jak rozdzielczosc (ADR-028): `format == "ARC/INFO ASCII GRID"`
-   I sciezka URL konczaca sie `.asc` (42 rekordy NMT 2019 maja format siatki
-   i URL `.xyz` - odrzucane, nie pobierane).
+   I sciezka URL konczaca sie `.asc` albo `.xyz` (errata 2026-10-15, Task 9:
+   42 rekordy NMT 2019 kampanii 72675 z URL `.xyz` maja w srodku AAIGrid -
+   naglowki wszystkich sprawdzone na zywo - wiec sa siatkami, jak w 0.7.x;
+   ADR-041 uzupelnienie R6).
 5. **Serwer ignoruje `FILTER`** (raport 1, `RESULTTYPE=hits`) - filtry po
    stronie klienta; stronicowanie wylacznie po atrybucie `next`,
    `numberReturned` musi zgadzac sie z liczba obiektow (jak PRG P6).
@@ -328,6 +330,37 @@ opisz roznice koordynatorowi).
     `AvailabilityReport`, `AvailabilityCombination`, `AvailabilityArea`.
     Sidecary nowych arkuszy NMT/NMPT: `extra.source.index_url` = adres WFS,
     `extra.source.layer` = typ WFS (`SkorowidzNMT2025`); reszta pol bez zmian.
+13. **Archiwa GUGiK pobierane jako pliki zrodlowe (decyzja uzytkownika
+    2026-10-15, zastepuje punkt 2 "Weryfikacji" i "archiwa poza zakresem"
+    w decyzjach 5, 7 i ADR-041):** formaty skorowidza inne niz siatka ASC sa
+    wariantami rejestru i sa pobierane 1:1 (oryginalny plik + sidecar,
+    wersje w magazynie, bez konwersji, wycinka i mozaiki). Pelny skan
+    skorowidzy 2026-10-15 (wszystkie rekordy, `<katalog-danych>`):
+    tokeny `--format`: `ASC` (siatka, bez flagi), `XYZ` (ASCII XYZ GRID),
+    `ASCII-NMT`, `TBD`, `TIN`, `TTN`, `GRD`, `DXF`, `DGN`
+    (`kartograf/sources/variants.py::FORMATS`: rozszerzenie z pola `format`
+    rekordu, akceptowane konce URL). Deskryptory per (produkt, format,
+    rozdzielczosc), np. `pl.gugik.nmt_tbd_25m`, segment
+    `nmt/pl_{system}_tbd_25m_{vcrs}`, plik `<godlo>.zip|.ttn|.grd|.dxf|.dgn`.
+    Rejestr archiwow: NMT XYZ 1m (E,K), 5m (E); ASCII-NMT 0.5m, 1m (E), 5m
+    (E,K); TBD 1, 5, 10, 15, 20, 25m (E,K), 30, 40, 50m (K); TIN, TTN (K,
+    bez rozdzielczosci); GRD 5m, DXF 25m, DGN 25m (K); NMPT XYZ 0.5m, 1m (K).
+    ASCII NMT 10 m (215 rekordow) i 1678 rekordow ASC 1 m maja godla
+    8-czlonowe spoza `SheetParser` - nie sa pobierane (Info w raporcie).
+    Archiwa leza na arkuszach roznych skal (6-czlonowe 1:25000 i
+    7-czlonowe, PL-2000), wiec arkusze zadania archiwum (`--sheet` = rama
+    godla, `--bbox`, obwiednie obiektow `--geometry`) wyznacza skorowidz:
+    rekordy wariantu z WFS przecinajace obszar (rama zwezona o 1 m -
+    sasiad stykajacy sie krawedzia nie liczy sie), w zakresie lat; dalej
+    zwykly tor arkuszy (kampanie, wersje, `full_sheet/`). `--scale` i
+    `--cutout` z archiwum = `Error:`; `--sheet-system` jak dla siatek.
+    B4 (`verify_record_url`) akceptuje nazwy archiwow (`.xyz.zip`,
+    `.zip.zip`, `_asc.zip`, `_tin.zip`, prefiks `NMT-`, godlo bez
+    separatorow); weryfikacja tresci: ZIP (kompletny katalog), sygnatury
+    TTN, Intergraph (GRD/DGN), DXF; bez pomiaru pokrycia. `availability`
+    pokazuje archiwa jako kombinacje do pobrania (kolumna FORMAT, podpowiedz
+    z `--format`); `Info:` tylko dla rekordow spoza rejestru (niespojne,
+    godla 8-czlonowe).
 
 ## Review Focus
 
@@ -942,8 +975,9 @@ Dane wylacznie do `<katalog-danych>/kartograf/e2e/2026-10-xx-plan-a/`
 - Wszystkie siatki z rejestru pobieralne z CLI i API; zadna lista
   rozdzielczosci/ukladow poza rejestrem; `--help`, `list-sources`, walidacja
   i komunikaty z rejestru.
-- Pobieranie i raport na jednym skorowidzu WFS; archiwa nigdy nie pobierane
-  ani nie liczone jako kombinacje, widoczne w `Info:`.
+- Pobieranie i raport na jednym skorowidzu WFS; archiwa pobierane jako
+  pliki zrodlowe i liczone jako kombinacje z formatem (decyzja 13); `Info:`
+  tylko dla rekordow spoza rejestru.
 - Raport: kryteria specu 4.4 (wartosci z punktu 9 albo udokumentowane nowe
   fakty), bez pobran, JSON CLI = API, podpowiedz bez `--output`.
 - Wycinek 1m bez zmian zachowania; LAZ bez zmian zachowania na wspolnym

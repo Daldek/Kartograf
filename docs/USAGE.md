@@ -17,21 +17,28 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.4 Czechy (CUZK)](#14-czechy-cuzk)
    - [1.5 Pokrycie terenu, gleby, HSG, cache](#15-pokrycie-terenu-gleby-hsg-cache)
    - [1.6 Kiedy `--scale` jest wymagane](#16-kiedy---scale-jest-wymagane)
+   - [1.7 Raport dostępności (`elevation availability`)](#17-raport-dostępności-elevation-availability)
+   - [1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k](#18-granice-ewidencja-modele-3d-budynków-i-archiwum-bdot10k)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
 5. [Gleby i HSG](#5-gleby-i-hsg)
 6. [Konfiguracja CLMS API (CORINE GeoTIFF)](#6-konfiguracja-clms-api-corine-geotiff)
 7. [Znane problemy i ograniczenia](#7-znane-problemy-i-ograniczenia)
+8. [Projekt](#8-projekt)
 
 Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 
 | Grupa | Komendy | Dane |
 |---|---|---|
-| `elevation` | `download`, `list-sources` | NMT, NMPT (PL, CZ), LAZ (PL) |
+| `elevation` | `download`, `list-sources`, `availability` | NMT, NMPT (PL, CZ), LAZ (PL); raport dostępności PL |
 | `imagery` | `download`, `list-sources` | ortofotomapa (PL) |
-| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k, CORINE (`--source`) |
+| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), CORINE (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
+| `boundaries` | `download`, `list-sources` | granice jednostek administracyjnych i ewidencyjnych PRG (PL) |
+| `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
+| `models3d` | `download`, `list-sources` | modele 3D budynków CityGML LoD1/LoD2 (PL) |
+| `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
 --help` wypisuje komendy grupy, `list-sources` — źródła grupy z rejestru (bez
@@ -42,8 +49,10 @@ z nazwą nowej komendy (tabela: CHANGELOG 0.8.0).
 Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
 `--output` (także `landcover download`, `soil download` i `soil hsg`), `--country`
 (z `--bbox`/`--geometry`), `--vertical-crs` (NMT, NMPT, LAZ),
-`--resolution` (NMT, gdy jest wybór), `--sheet-system` (PL `--bbox`/`--geometry`
-bez `--cutout`), `--horizontal-crs` (z `--cutout`) i `--scale` (PL-2000)
+`--resolution` (NMT i NMPT, gdy jest wybór), `--sheet-system` (PL `--bbox`/`--geometry`
+bez `--cutout`), `--horizontal-crs` (z `--cutout`), `--scale` (PL-2000),
+`--level` (obszar `boundaries`), `--lod` i `--year` (`models3d`, gdy wydań
+jest kilka) oraz `--format` z `--year` (archiwum BDOT10k)
 podaje się jawnie. Brak wartości to `Error:` z listą
 dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
 podaje też `kartograf <grupa> <komenda> --help`. Domyślne zostały tylko format,
@@ -61,16 +70,23 @@ układ `--bbox-crs EPSG:2180`, przełączniki i parametry techniczne
 kartograf parse N-34-130-D-d-2-4
 kartograf parse N-34-130-D --hierarchy
 
-# NMT: pojedynczy arkusz albo hierarchia, opcjonalnie 5m; godło PL-1992 grubsze
+# NMT: pojedynczy arkusz albo hierarchia; godło PL-1992 grubsze
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet N-34-130-D --resolution 5m --workers 8 --output ./data --product nmt --vertical-crs EVRF2007
-# NMT 5 m istnieje tylko w EVRF2007: --resolution 5m z --vertical-crs KRON86
-# kończy się Error: (kod 1, przed siecią) — użyj --vertical-crs EVRF2007
-# albo --resolution 1m dla KRON86
+kartograf elevation download --sheet N-33-58-A-c-1-3 --product nmt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
+# Rozdzielczości i układy wysokości pochodzą z rejestru wariantów (niżej);
+# kombinacja spoza rejestru, np. --resolution 5m z --vertical-crs KRON86,
+# kończy się Error: (kod 1, przed siecią) z listą dostępnych wartości
 
-# Inne produkty GUGiK: NMPT (DSM), ortofotomapa, chmury punktów LAZ
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --vertical-crs EVRF2007 -o ./data
+# NMPT (DSM) — --resolution wymagane (od 0.8.0)
+kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data
+
+# Archiwum GUGiK jako plik źródłowy (--format; bez konwersji): NMT TBD 25 m KRON86
+kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010 -o ./data
+
+# Inne produkty GUGiK: ortofotomapa, chmury punktów LAZ
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
@@ -101,6 +117,64 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --all-campaigns 
 ```
 
 Pełna lista komend i opcji: `kartograf --help`, `kartograf <grupa> <komenda> --help`.
+Jakie lata, rozdzielczości i formaty ma obszar: `kartograf elevation
+availability` (sekcja 1.7).
+
+**Warianty NMT i NMPT (rejestr, od 0.8.0).** Rozdzielczość, układ
+wysokości i format arkusza PL wybiera jeden rejestr wariantów — ten sam
+dla walidacji CLI i biblioteki, `--help`, `kartograf elevation
+list-sources` (kolumna `WYBOR` podaje gotowe flagi każdego wariantu),
+segmentu magazynu i wyboru rekordu skorowidza
+([ADR-041](DECISIONS.md); biblioteka: `kartograf.sources.variants.variants()`).
+Siatki ASC (bez `--format`; format produktu):
+
+| Produkt | EVRF2007 | KRON86 |
+|---|---|---|
+| NMT | `0.15m`, `0.5m`, `0.6m`, `1m`, `5m`, `10m` | `0.5m`, `1m` |
+| NMPT | `0.5m`, `0.6m`, `1m` | `0.5m`, `1m` |
+
+- `--resolution` przyjmuje tylko dokładne etykiety z rejestru: `0,5m`
+  albo `50cm` to `Error: PL nie ma rozdzielczosci 0,5m dla NMT - dostepne:
+  EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m`. Etykieta
+  jest członem segmentu: `nmt/pl_1992_0.5m_evrf2007/`.
+- `--product nmpt` wymaga `--resolution` (do 0.7.x NMPT było tylko
+  1 m): bez flagi `Error: --resolution wymagane dla NMPT PL: EVRF2007:
+  0.5m, 0.6m, 1m; KRON86: 0.5m, 1m` (kod 1, przed siecią) — dotychczasowe
+  wywołania uzupełnij o `--resolution 1m`. Wyjątek: wycinek `--cutout`
+  (tylko 1 m, sekcja 1.3) przyjmuje brak `--resolution`.
+- Skorowidz GUGiK publikuje ten sam arkusz także jako archiwum (np.
+  `.asc` i `.xyz.zip` tego samego zgłoszenia); bez `--format` Kartograf
+  bierze wyłącznie rekord siatki ASC (format rekordu i końcówka URL
+  `.asc`; wyjątek: 42 siatki NMT 2019 kampanii 72675 mają nazwę `.xyz`,
+  w środku AAIGrid — zapisywane jako `.asc`), nigdy archiwum.
+
+**Archiwa GUGiK (`--format`).** Pozostałe formaty skorowidza NMT/NMPT
+(publikowane do 2020) są wariantami rejestru pobieranymi jako **pliki
+źródłowe 1:1**: `XYZ` (ASCII XYZ GRID, ZIP), `ASCII-NMT` (punkty X Y Z,
+ZIP), `TBD` (punkty i linie struktury, ZIP), `TIN` (ESRI TIN, ZIP),
+`TTN` (Intergraph TTN), `GRD` (Intergraph GRD), `DXF` i `DGN`
+(warstwice); NMPT ma archiwa `XYZ` 0.5m i 1m w KRON86. Rozdzielczości
+i układy wysokości archiwów (np. TBD 1–25 m w obu układach, 30–50 m
+tylko KRON86): `kartograf elevation list-sources`.
+
+- Plik trafia do magazynu jak arkusz siatki (wersje w `versions/`,
+  sidecar, kampanie, `full_sheet/`), bez konwersji, wycinka i mozaiki;
+  segment niesie token formatu: `nmt/pl_1992_tbd_25m_kron86/`. Pliku
+  nie otwiera Kartograf — to zadanie programu, który obsługuje format
+  (sekcja 7).
+- Arkusze archiwum mają różne skale (m.in. 1:25000 i 1:10000, PL-2000),
+  więc wyznacza je skorowidz: rekordy wariantu z zakresu lat, których
+  rama przecina obszar zadania (`--sheet` = rama godła, `--bbox`,
+  obwiednie obiektów `--geometry`); arkusz stykający się z obszarem
+  tylko krawędzią się nie liczy. Brak takich rekordów to `Error:
+  Skorowidz GUGiK nie ma plikow ... - dostepne dane obszaru: kartograf
+  elevation availability`.
+- `--scale` i `--cutout` z archiwum kończą się `Error:` przed siecią;
+  `--sheet-system` jest wymagane jak dla siatek. Wariant z jedną
+  wartością nie wymaga `--resolution` (`TIN`, `TTN` — bez rozdzielczości;
+  `GRD` — tylko `5m`).
+- Treść jest sprawdzana tylko co do formatu (kompletny ZIP, sygnatura
+  TTN, nagłówek Intergraph, sekcje DXF); pokrycie archiwów nie jest mierzone.
 
 LAZ: domyślnie pobierany jest najnowszy kafel dla każdego fragmentu obszaru;
 starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
@@ -147,7 +221,8 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   49,00–54,90°N) obejmuje większość Czech. Dla czystej Polski użyj
   `--country pl`.
 - Wartości bez odpowiednika czeskiego (`--product nmpt|orto`,
-  `--vertical-crs KRON86`, `--resolution 1m` — w zwykłej, nie per-krajowej
+  `--vertical-crs KRON86`, rozdzielczość, której CUZK nie ma, np.
+  `--resolution 1m` albo `0.5m`, oraz `--format` — w zwykłej, nie per-krajowej
   postaci) na obszarze objętym obwiedniami obu krajów same przełączają
   `auto` na PL (komunikat `Info:`). W Pradze czy Brnie taka flaga kieruje
   więc zadanie do GUGiK, który nie ma tam danych (błąd pobrania); błąd
@@ -178,12 +253,12 @@ GeoTIFF obszaru; układ wyniku podaje wymagane `--horizontal-crs`
 # NMT 1 m, wycinek WCS w układzie źródłowym lub po lokalnej reprojekcji
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:2180 --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --cutout --horizontal-crs EPSG:5514 --vertical-crs EVRF2007 -o ./data
-# NMPT 1 m, oba układy wysokościowe (tu KRON86)
+# NMPT 1 m, oba układy wysokościowe (tu KRON86); --resolution można pominąć (wycinek jest tylko 1 m)
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmpt --vertical-crs KRON86 --cutout --horizontal-crs EPSG:2180 -o ./data
 # pogranicze: osobne wycinki PL + CZ, ten sam układ i parent_request
 # (wycinek PL ma tylko 1 m, część CZ wymaga 2m albo 5m — wartości per kraj)
 kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:2180 --product nmt --resolution pl=1m,cz=2m --vertical-crs EVRF2007 -o ./data
-# NMT 5 m: arkusze OpenData, bez --cutout
+# NMT 5 m (i każda rozdzielczość poza 1 m): arkusze OpenData, bez --cutout
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 5m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
 
@@ -214,10 +289,17 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   je ręcznie). `--workers` i `--scale` nie zmieniają wycinka WCS.
   `Info:` podaje liczbę żądań przy więcej niż jednym kawałku lub wyniku
   >= 1 GiB (tylko gdy wycinek będzie pobierany).
-- Wycinki 5 m, wybór roku (`--year`, `--min-year`, `--max-year`),
+- Wycinek jest **tylko 1 m** z siatki ASC: `--resolution 1m` albo bez
+  `--resolution`. Inna rozdzielczość kończy się przed siecią (kod 1)
+  komunikatem `Error: wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK);
+  arkusze 0.5m: pomin --cutout (arkusze bez --cutout); wycinek:
+  --resolution 1m albo pomin --resolution`, a archiwum (`--format`, sekcja
+  1.1) — `Error: --cutout dziala tylko z siatka ASC 1m (wycinek z WCS
+  GUGiK); --format TBD to pliki zrodlowe arkuszy - pomin --cutout`.
+- Wybór roku (`--year`, `--min-year`, `--max-year`),
   `--all-campaigns` i `--full-sheet` z `--cutout` są
   odrzucane (`Error:`). Podobnie `--cutout` dla orto/LAZ;
-  arkusze 5 m pobieraj bez `--cutout`. Szczegóły:
+  arkusze innych rozdzielczości pobieraj bez `--cutout`. Szczegóły:
   [ADR-035](DECISIONS.md), [ADR-038](DECISIONS.md), ARCHITECTURE 4.3.
 
 ### 1.4 Czechy (CUZK)
@@ -394,16 +476,22 @@ dane tam są:
   podpowiedzi `Info: Dostepny potomek <godło> - uzyj --scale <skala>`;
 - gdy skorowidz ma ten obszar w drugim układzie, podpowiedź wskazuje jego
   godło albo `--sheet-system <układ> --scale <skala>`;
-- NMT i NMPT (od 0.7.2): gdy arkusza nie ma w wybranej rozdzielczości albo
-  układzie wysokości, a skorowidz GUGiK ma go w innym wariancie, podpowiedź
-  to np. `Skorowidz GUGiK ma ten arkusz w NMT 1m EVRF2007 - uzyj
-  --resolution 1m` (albo `--vertical-crs KRON86`) — przy pojedynczym
-  godle w treści `Error:` (kod 1), przy liście arkuszy jako `Info:`.
-  GUGiK ma duże braki pokrycia EVRF2007, także NMT 5 m (np.
+- NMT i NMPT (od 0.7.2; od 0.8.0 ze skorowidza WFS): gdy arkusza nie ma
+  w wybranym wariancie, a skorowidz GUGiK ma go w innym wariancie
+  z rejestru (sekcja 1.1), podpowiedź to np. `Skorowidz GUGiK ma ten
+  arkusz w NMT 1m EVRF2007 - uzyj --resolution 1m` (albo `--vertical-crs
+  KRON86`, `--format XYZ`) — przy pojedynczym godle w treści `Error:`
+  (kod 1), przy liście arkuszy jako `Info:`. Najpierw podpowiadane są
+  inne warianty tego samego formatu (np. inna rozdzielczość siatki),
+  inne formaty (archiwa) tylko wtedy, gdy takich nie ma. GUGiK ma duże
+  braki pokrycia EVRF2007, także NMT 5 m (np.
   `N-34-130-D-d --resolution 5m`: 6 z 16 arkuszy tylko w 1 m).
-  Sprawdzenie kosztuje jedno zapytanie
-  skorowidza na wariant i brakujący arkusz; wynik trafia do cache
-  metadanych razem z brakiem pokrycia.
+  Inne rozdzielczości i formaty arkusza przychodzą w tej samej odpowiedzi
+  WFS (bez dodatkowych zapytań); drugi układ wysokości kosztuje jedno
+  zapytanie WFS do jego usługi (usługa z błędem jest pomijana do końca
+  zadania); podpowiedzi trafiają do cache metadanych razem z brakiem
+  pokrycia. Pełny obraz wariantów obszaru daje `kartograf elevation
+  availability` (sekcja 1.7).
 
 **Jak ustalić właściwą skalę.** Najprościej z podpowiedzi CLI: skala
 w `uzyj --scale ...` to skala arkusza, który GUGiK faktycznie opublikował
@@ -413,6 +501,331 @@ obszaru mają arkusze w różnych skalach, jedno wywołanie z jedną `--scale`
 pobierze tylko część — pozostałe arkusze dociągnij kolejnym wywołaniem
 z podpowiedzianą skalą.
 
+### 1.7 Raport dostępności (`elevation availability`)
+
+`kartograf elevation availability` odpowiada **przed pobraniem**, dla
+jakich lat, układów arkuszy, rozdzielczości, układów wysokości i formatów
+obszar ma komplet pełnych arkuszy NMT/NMPT (LAZ: kafli) według skorowidza
+GUGiK. Czyta wyłącznie skorowidz WFS (ten sam, z którego pobiera
+`elevation download`) i maskę lądu PRG; żadnego pliku danych nie pobiera.
+Obszar wybiera się jak w `elevation download`: `--sheet` (godło PL-1992
+albo PL-2000; kraj z godła), `--bbox` (`--bbox-crs`) albo `--geometry`
+(`--layer`) — dwa ostatnie z `--country pl` (dziś jedyny kraj raportu;
+bez flagi `Error: --country wymagane z --bbox/--geometry: pl (GUGiK)`).
+`--year`/`--min-year`/`--max-year` zawężają roczniki skorowidza.
+
+```bash
+kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
+kartograf elevation availability --product nmpt --sheet M-34-64-D-d-2-1
+kartograf elevation availability --product laz --country pl --geometry zlewnia.gpkg --layer catchments --min-year 2020
+kartograf elevation availability --product nmt --country pl --bbox 339000,744800,343000,747000 --details
+kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000 --json > krakow.json
+```
+
+Kraków (NMT, bbox 4 x 4 km; wydruk na żywo 2026-10-15):
+
+```
+Dostepnosc NMT PL wg skorowidza GUGiK: obszar 16,00 km2, w tym lad 16,00 km2
+
+  ROK   NALOT                   UKLAD    ROZDZ.  WYSOKOSCI  FORMAT     ARKUSZE TAK/NIE  KOMPLET
+  2025  2025-04-28              PL-1992  1m      EVRF2007   ASC        6/0              tak
+  2024  2024-06-21..2024-07-30  PL-1992  1m      EVRF2007   ASC        6/0              tak
+  2023  2023-09-08              PL-1992  1m      EVRF2007   ASC        6/0              tak
+  2023  2023-03-17              PL-2000  1m      EVRF2007   ASC        15/0             tak
+  2022  2022-06-03              PL-1992  1m      EVRF2007   ASC        6/0              tak
+  2021  2021-10-04..2021-10-05  PL-2000  1m      EVRF2007   ASC        15/0             tak
+  2019  2019-10-17              PL-1992  1m      EVRF2007   ASC        6/0              tak
+  2019  2019-08-26              PL-1992  5m      EVRF2007   ASC        6/0              tak
+  2019  2019-08-26              PL-1992  5m      EVRF2007   ASCII-NMT  6/0              tak
+  2018  2018-04-21              PL-1992  1m      EVRF2007   XYZ        4/0              nie: brak arkuszy dla 6,66 km2
+  2018  2018-04-22              PL-1992  5m      EVRF2007   XYZ        2/0              nie: brak arkuszy dla 9,34 km2
+  2018  2018-04-22              PL-1992  25m     EVRF2007   TBD        2/0              nie: brak arkuszy dla 9,34 km2
+  2017  2017-10-21..2017-11-05  PL-1992  1m      KRON86     ASC        6/0              tak
+  2017  2017-10-21..2017-11-05  PL-1992  1m      KRON86     XYZ        6/0              tak
+  2015  2015-05-29              PL-1992  1m      KRON86     XYZ        4/0              tak
+  2012  2012-07-06..2012-07-07  PL-1992  1m      KRON86     ASC        6/0              tak
+  2012  2012-07-06..2012-07-07  PL-1992  1m      KRON86     XYZ        6/0              tak
+  2009  2009-01-01              PL-1992  15m     KRON86     TBD        4/0              tak
+  2009  2009-01-01              PL-1992  -       KRON86     TIN        4/0              tak
+  2009  2009-01-01              PL-1992  -       KRON86     TTN        4/0              tak
+
+Najnowsza kompletna kombinacja: 2025 PL-1992 1m EVRF2007 ASC
+  Pobranie (dodaj --output KATALOG): kartograf elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025
+  W projekcie: kartograf project add NAZWA elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025
+```
+
+Pomorze (NMT, bbox 4 x 2,2 km na wybrzeżu — większość obszaru to morze):
+
+```
+Dostepnosc NMT PL wg skorowidza GUGiK: obszar 8,80 km2, w tym lad 86,38 ha
+
+  ROK   NALOT                   UKLAD    ROZDZ.  WYSOKOSCI  FORMAT  ARKUSZE TAK/NIE  KOMPLET
+  2025  2025-01-30              PL-1992  0.5m    EVRF2007   ASC     0/4              nie: 4 niepelne
+  2025  2025-04-21              PL-1992  5m      EVRF2007   ASC     3/0              nie: brak arkuszy dla 0,88 ha
+  2023  2023-04-06..2023-09-06  PL-1992  5m      EVRF2007   ASC     3/0              nie: brak arkuszy dla 0,88 ha
+  2022  2022-09-04              PL-1992  0.5m    EVRF2007   ASC     1/3              nie: 3 niepelne
+  2022  2022-06-17              PL-1992  1m      EVRF2007   ASC     3/0              nie: brak arkuszy dla 0,88 ha
+  2021  2021-10-09              PL-1992  0.5m    EVRF2007   ASC     1/3              nie: 3 niepelne
+  2020  2020-06-01              PL-1992  5m      EVRF2007   XYZ     3/0              nie: brak arkuszy dla 0,88 ha
+  2017  2017-05-27              PL-1992  1m      KRON86     XYZ     3/0              nie: brak arkuszy dla 0,88 ha
+  2011  2011-04-27              PL-1992  1m      KRON86     ASC     3/0              nie: brak arkuszy dla 0,88 ha
+  2011  2011-04-27              PL-1992  1m      KRON86     XYZ     3/0              nie: brak arkuszy dla 0,88 ha
+  2010  2010-07-04              PL-1992  25m     KRON86     TBD     3/0              tak
+  2005  2005-01-01              PL-1992  25m     KRON86     TBD     3/0              tak
+  2005  2005-01-01              PL-1992  25m     KRON86     DXF     3/0              tak
+  2005  2005-01-01              PL-1992  -       KRON86     TIN     3/0              tak
+  2005  2005-01-01              PL-1992  -       KRON86     TTN     3/0              tak
+
+Najnowsza kompletna kombinacja: 2010 PL-1992 25m KRON86 TBD
+  Pobranie (dodaj --output KATALOG): kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010
+  W projekcie: kartograf project add NAZWA elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TBD --resolution 25m --vertical-crs KRON86 --year 2010
+```
+
+Jak czytać tabelę:
+
+- **Kombinacja** = rok warstwy rocznej skorowidza, układ arkuszy
+  (PL-1992/PL-2000), rozdzielczość, układ wysokości i format wariantu
+  z rejestru (sekcja 1.1); archiwa (`XYZ`, `TBD`, `TIN`...) są
+  kombinacjami do pobrania jak siatki ASC. `NALOT` to zakres dat
+  pozyskania rekordów, `-` w `ROZDZ.` — format bez rozdzielczości
+  (TIN, TTN). LAZ: kombinacja = rok, układ i układ wysokości kafli,
+  `ROZDZ.` = gęstość nominalna z WFS (np. `5 pkt/m2`), `FORMAT` = `LAZ`.
+- **TAK/NIE** to deklaracja skorowidza `calyArkuszWypelnionyTrescia`
+  (LAZ: `czy_ark_wypelniony`): `6/0` = 6 arkuszy z pełnym rekordem
+  kombinacji, 0 arkuszy wyłącznie z rekordami niepełnymi. NIE mówi tylko,
+  że arkusz nie jest wypełniony w całości — brak może wynosić od 1 % do
+  99 %; raport **nie mierzy treści** plików (pokrycie arkusza mierzy
+  dopiero pobranie, sekcja 4.1).
+- **KOMPLET** `tak` = cały ląd obszaru leży w ramach pełnych (TAK)
+  arkuszy kombinacji. Ląd to granica państwa PRG (`A00`) bez morza
+  terytorialnego i morskich wód wewnętrznych (`W02`, `W03`) — na
+  Pomorzu 86,38 ha z 8,80 km2; morze nie wymaga arkuszy. Pomiar na
+  siatce 1 m (środki pikseli), bez progu tolerancji. `nie: N niepelne`
+  = N arkuszy obszaru ma w tej kombinacji tylko rekordy NIE; `nie: brak
+  arkuszy dla X` = X lądu nie leży w żadnym arkuszu kombinacji (np.
+  2018 w Krakowie: archiwa XYZ/TBD tylko dla części obszaru).
+- Obszar jest ten sam, który pokrywa pobranie: `--sheet` = rama godła
+  (pomiar pomija pas 1 m przy ramie — rama liczona z godła różni się od
+  ramy GUGiK o centymetry), `--bbox` i `--geometry` (obwiednie obiektów,
+  jak arkusze `elevation download`) mierzone dokładnie; LAZ — obwiednia
+  arkusza albo całej geometrii, jak przy pobieraniu kafli. Arkusz
+  stykający się z obszarem tylko krawędzią nie należy do kombinacji.
+- Kolejność: rok malejąco, potem układ arkuszy, rozdzielczość, układ
+  wysokości i format.
+
+**Podpowiedź pobrania.** Stopka podaje najnowszą kompletną kombinację
+i polecenie jej pobrania — **bez `--output`**: linię `Pobranie` wklej po
+dopisaniu `--output KATALOG`, linię `W projekcie` po nazwie zadania
+(manifest, sekcja 8; magazyn pochodzi z projektu). Polecenie powtarza
+obszar zadania, dopisuje `--sheet-system`, wariant (`--format` dla
+archiwów, `--resolution`, `--vertical-crs`) i `--year`; dla PL-2000 —
+po jednym poleceniu na skalę arkuszy kombinacji (`--scale`), a gdy
+w którymś arkuszu najnowszy rekord roku jest NIE, a pełny rekord tego
+roku istnieje — `--full-sheet`. Bez kompletnej kombinacji stopka mówi
+`Zadna kombinacja nie pokrywa calego ladu obszaru pelnymi arkuszami
+(arkusze niepelne i brakujace: --details)`.
+
+`--details` dopisuje dla każdej kombinacji godła arkuszy niepełnych, ląd
+bez arkuszy i polecenie pobrania (fragment, Pomorze):
+
+```
+Szczegoly kombinacji:
+  2025 PL-1992 0.5m EVRF2007 ASC: nie: 4 niepelne
+    arkusze niepelne (4): N-33-58-A-c-1-3, N-33-58-A-c-1-4, N-33-58-A-c-2-3, N-33-58-A-c-3-1
+    kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
+  2023 PL-1992 5m EVRF2007 ASC: nie: brak arkuszy dla 0,88 ha
+    lad bez zadnego arkusza kombinacji: 0,88 ha
+    kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
+  2005 PL-1992 KRON86 TIN: tak
+    kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TIN --vertical-crs KRON86 --year 2005
+```
+
+`--json` drukuje raport jako JSON (schemat `kartograf-availability/1`) —
+dokładnie ten tekst, który zwraca `check_availability(...).to_json()`
+w bibliotece (sekcja 2); pola: `request`, `checked_at`, `areas`
+(`area_m2`, `land_m2`), `combinations` (m.in. `source` = klucz
+deskryptora, `year`, `acquisition_dates`, `published`, `campaigns`,
+`horizontal`, `resolution`, `vertical_crs`, `format`, `densities`,
+`complete`, `sheets_full`, `sheets_partial`, `uncovered_m2`,
+`download_hint` — polecenia bez przedrostka `kartograf `), `notices`,
+`ok`, `schema`. Pola `sheets_missing` i `size_bytes` są dziś puste
+(`[]`/`null`). Początek (Kraków):
+
+```json
+{
+  "request": {
+    "product": "nmt",
+    "country": "pl",
+    "bbox": [565000.0, 242000.0, 569000.0, 246000.0],
+    "bbox_crs": "EPSG:2180",
+    "min_year": null,
+    "max_year": null
+  },
+  "checked_at": "2026-10-15T20:50:50+00:00",
+  "areas": [
+    {"country": "PL", "crs": "EPSG:2180", "bounds": [565000.0, 242000.0, 569000.0, 246000.0],
+     "area_m2": 16000000.0, "land_m2": 16000000.0}
+  ],
+  "combinations": [
+    {
+      "country": "PL", "product": "nmt", "source": "pl.gugik.nmt_1m", "year": 2025,
+      "acquisition_dates": ["2025-04-28", "2025-04-28"],
+      "horizontal": "PL-1992", "resolution": "1m", "vertical_crs": "EVRF2007", "format": "ASC",
+      "complete": true,
+      "sheets_full": ["M-34-64-D-d-1-2", "M-34-64-D-d-1-4", "M-34-64-D-d-2-1", "..."],
+      "sheets_partial": [], "uncovered": false, "uncovered_m2": 0.0,
+      "download_hint": ["elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025"]
+    }
+  ]
+}
+```
+
+(Fragment skrócony ręcznie; prawdziwy wydruk ma wcięcie 2 spacje,
+każdą wartość listy w osobnej linii i wszystkie pola.)
+
+- **Bez danych to odpowiedź, nie błąd:** obszar bez arkuszy w skorowidzu
+  daje `Brak arkuszy NMT dla obszaru w skorowidzu GUGiK` (LAZ: `kafli`)
+  i kod 0. Awaria skorowidza albo PRG (sieć, strona WFS niespójna,
+  raport OGC) to `Error:` i kod 1 — nigdy pusty raport. Zakres lat bez
+  żadnego rocznika usługi: `Error: --year 2030: skorowidz GUGiK NMT nie
+  ma rocznika ... - dostepne roczniki: ...`.
+- **`Info:`** (kod `index_unsupported` w bibliotece) wymienia rekordy
+  obszaru, których Kartograf nie pobiera: format rekordu niezgodny
+  z plikiem, wariant spoza rejestru albo godło spoza układów PL-1992/PL-2000
+  (np. 8-członowe godła ASCII NMT 10 m i części ASC 1 m, sekcja 7).
+  Archiwa z rejestru nie trafiają do `Info:` — są kombinacjami.
+- **Cache:** typy warstw WFS, rekordy obszaru z obrysami arkuszy i maska
+  lądu PRG trafiają do cache metadanych (`.kartograf_cache.db`, TTL
+  7 dni; `kartograf cache stats`: `Wpisy obszarow skorowidza`), więc
+  ponowny raport dla tego samego obszaru nie pyta sieci (pomiar
+  2026-10-15: 0,6–1,5 s zamiast ok. 5–7 s dla 16 km2). `--force`
+  pomija odczyt cache, odpytuje skorowidz i PRG ponownie i nadpisuje
+  wpisy.
+- **Czas:** maska lądu jest rasteryzowana na siatce 1 m w pasach po
+  4 Mpx, więc raport dla dużego obszaru (np. całej zlewni) liczy się
+  odpowiednio dłużej (sekcja 7).
+- **Projekt:** `availability` nie jest komendą danych projektu
+  (`kartograf project add NAZWA elevation availability ...` = `Error:`);
+  do manifestu dodaj polecenie z linii `W projekcie` (sekcja 8).
+
+### 1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k
+
+Grupy `boundaries` (granice PRG, `--product admin`), `cadastre` (EGiB,
+`--product map`) i `models3d` (modele 3D budynków, `--product buildings`)
+mają wspólny kształt (ADR-042): dokładnie jeden wybór — `--teryt` (paczka
+jednostki), obszar `--bbox`/`--sheet`/`--geometry` (z `--country`) albo
+`--whole-country` (plik krajowy; tylko `boundaries`) — oraz tryby
+`--check-updates`/`--upgrade`/`--force`/`--plan`, `--workers` i `-q` jak
+w pozostałych grupach. Każda grupa ma tylko swoje flagi treści (`--level`
+w `boundaries`, `--lod`/`--year` w `models3d`; obca flaga to błąd parsera,
+kod 2). Dziś wyłącznie Polska (`--country pl`; dane CZ dla tych grup dojdą
+w kolejnym planie katalogu). Archiwum roczników BDOT10k jest w grupie
+`landcover` (`--year`).
+
+```bash
+# Archiwum roczników BDOT10k: oryginalna paczka powiatu ZIP (GML albo SHP)
+kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp_2024/teryt/1261.zip: nowa wersja 2024_5dbd678a
+kartograf landcover download --source bdot10k --teryt 1261 --year 2022 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp_2022/teryt/1261.zip: nowa wersja 2022_6c64b1d3
+kartograf landcover download --source bdot10k --teryt 1261 --year 2023 --format SHP -o ./data
+#   landcover/pl_bdot10k_shp_2023/teryt/1261.zip: nowa etykieta 2023 (plik identyczny z 2022)
+# Obszar = paczka każdego powiatu (PRG); --workers pobiera powiaty równolegle
+kartograf landcover download --source bdot10k --year 2018 --format GML --bbox 557000,244000,559000,246000 --workers 2 -o ./data
+#   landcover/pl_bdot10k_gml_2018/teryt/1206.zip: nowa wersja 2018_b8b23714
+#   landcover/pl_bdot10k_gml_2018/teryt/1261.zip: nowa wersja 2018_f8f5ead1
+#   Nowe: 2, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 0 (./data)
+
+# Modele 3D budynków (CityGML): wydanie wybierają --lod i --year
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
+#   models3d/pl_buildings_lod1_2024/teryt/1261.zip: nowa wersja 2024_dff392bb
+kartograf models3d download --product buildings --lod 2 --country pl --bbox 566000,243000,566500,243500 -o ./data
+#   Info: buildings: powiaty obszaru wg PRG (1): 1261
+#   models3d/pl_buildings_lod2_2017/teryt/1261.zip: nowa wersja 2017_de14ed18
+
+# Granice PRG: jednostki poziomu --level przecinające obszar (jeden GPKG),
+# paczka województwa (GML wszystkich poziomów) albo plik krajowy (SHP)
+kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
+#   boundaries/pl_prg_gmina/bbox/550000_220000_590000_270000.gpkg: nowa wersja 2026-10-15_d8fd43e6
+kartograf boundaries download --product admin --teryt 12 -o ./data
+#   boundaries/pl_prg_gml/teryt/12.zip: nowa wersja 2026-10-15_919fce9d
+kartograf boundaries download --product admin --country pl --whole-country -o ./data
+#   Warning: admin PL: plik krajowy https://opendata.geoportal.gov.pl/prg/granice/00_jednostki_administracyjne.zip - 377419459 B (ok. 377 MB)
+#   boundaries/pl_prg_shp/country/pl.zip: nowa wersja 2026-10-15_40b93870
+
+# EGiB: eksport powiatu albo działki i budynki obszaru z usługi zbiorczej WFS
+kartograf cadastre download --product map --teryt 1261 -o ./data
+#   cadastre/pl_egib_gpkg/teryt/1261.gpkg: nowa wersja 2026-10-15_fd23bd6e
+kartograf cadastre download --product map --country pl --bbox 565000,243000,567000,245000 -o ./data
+#   cadastre/pl_egib/bbox/565000_243000_567000_245000.gpkg: nowa wersja 2026-10-15_14c95c95
+
+# Ponownie: lokalna wersja bez zapytań; --check-updates: brak taniego sygnału
+kartograf boundaries download --product admin --teryt 12 -o ./data
+#   boundaries/pl_prg_gml/teryt/12.zip: lokalna wersja 2026-10-15 (bez sprawdzania; --check-updates)
+kartograf boundaries download --product admin --teryt 12 --check-updates -o ./data
+#   12: nie da sie sprawdzic bez pobrania (2026-10-15)
+
+# Źródła grup (z rejestru, bez sieci)
+kartograf boundaries list-sources
+kartograf cadastre list-sources
+kartograf models3d list-sources
+```
+
+**Archiwum BDOT10k.** `--year R` (2014–2025) to rocznik archiwum GUGiK —
+stan bazy z początku roku R — a nie rok aktualności obiektów. Paczka
+powiatu jest zapisywana 1:1 (bez scalania w GPKG, więc bez `--layers`
+i `--keep-raw`) i wymaga `--format GML` albo `SHP` (GPKG archiwum nie ma).
+Bez `--year` `landcover download` pobiera bieżące paczki jak dotąd;
+`--format GML` bez `--year` to `Error:` z podpowiedzią. Kody TERYT
+zmieniają się w czasie (podział i łączenie powiatów): powiat bez paczki
+w danym roczniku to `Error: <TERYT>: Zrodlo nie publikuje paczki ...
+(HTTP 404)`, a pozostałe powiaty obszaru się pobierają. Kolejne roczniki
+bywają identyczne (GUGiK nie zmienił danych powiatu): drugi dostaje status
+`nowa etykieta <rok> (plik identyczny z <rok>)` i nie zajmuje miejsca —
+to dowiązanie twarde do tych samych danych.
+
+**Modele 3D.** `--lod 1` ma wydania 2019, 2021, 2022 i 2024 (`--year`
+wymagany), `--lod 2` jedno wydanie 2017 (`--year` można pominąć, inny rok
+to `Error:`); wydania wymieniają `--help` i komunikat błędu. Paczka
+CityGML (ZIP) jest zapisywana 1:1, a układ wysokości z danych trafia do
+sidecara (`vertical_crs`): LoD1 2019 i LoD2 2017 — EPSG:9650 (KRON86),
+LoD1 2021, 2022, 2024 — EPSG:9651 (EVRF2007). LoD2 nie pokrywa całego
+kraju (np. Szczecin i sąsiednie powiaty): brak paczki powiatu to
+`Error: <TERYT>: ... (HTTP 404)` i kod 1, pozostałe powiaty się pobierają.
+Pliki krajowe modeli (3,5–4,1 GB) nie są obsługiwane.
+
+**Granice PRG.** Obszar wymaga `--level` (`wojewodztwo`, `powiat`,
+`gmina`, `jednostka-ewidencyjna`, `obreb`): wynik to jeden GeoPackage
+z pełnymi geometriami jednostek tego poziomu, które przecinają obszar (bez
+przycinania), w EPSG:2180, z warstwą PRG (np. `A03_Granice_gmin`) i jej
+polami (m.in. `JPT_KOD_JE`). `--teryt` przyjmuje tylko województwo
+(2 cyfry: paczka GML poziomów A01, A02, A03, A05, A06); granice powiatu
+pobierz obszarem (`--bbox`/`--geometry`). `--whole-country --country pl`
+to plik krajowy SHP (ok. 377 MB) — jego rozmiar pojawia się jako
+`Warning:` przed transferem.
+
+**EGiB.** `--teryt` (4 cyfry) to eksport powiatu GUGiK: GeoPackage
+z warstwami `dzialki`, `budynki` i `transakcje` (rejestr cen
+nieruchomości), odświeżany co dobę — `--force` następnego dnia zwykle daje
+nową wersję. Paczka województwa (ok. 1,4 GB) nie jest obsługiwana. Obszar
+to działki i budynki z usługi zbiorczej WFS GUGiK w jednym GPKG
+(EPSG:2180, warstwy `dzialki` i `budynki`): powiaty, które nie
+zintegrowały swojej usługi, są lukami, a atrybuty zastrzeżone mają
+wartość `brak_uprawnien`. Pole `DATA` (data stanu danych powiatu) nie
+trafia do pliku — jego wartości są w sidecarze
+(`extra.source.dropped_fields`), więc ta sama treść pobrana innego dnia
+to ta sama wersja.
+
+**Aktualność i wersje.** Paczki i obiekty usług GUGiK nie mają taniego
+sygnału zmian: kolejne uruchomienie używa lokalnej wersji bez zapytań,
+`--check-updates` raportuje `nie da sie sprawdzic bez pobrania`, a nową
+treść daje `--force` (ta sama treść = `bez zmian`, inna = nowa wersja obok
+starej). Etykieta wersji to rocznik archiwum albo rok modeli 3D, a dla PRG
+i EGiB — data pobrania. Sidecar wersji niesie wybór (`request`), źródło
+(`extra.source`: URL paczki albo usługa i liczba obiektów każdej
+warstwy) i obszar zadania (`extra.parent_request`) — ARCHITECTURE 3.2
+i 4.10.
+
 ---
 
 ## 2. Biblioteka Python
@@ -421,7 +834,10 @@ Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 (nazwy parametrów = nazwy flag w `snake_case`) i tym samym wynikiem
 (ADR-037): `kartograf elevation download` i `kartograf imagery download` =
 `download_data`/`check_data`, `landcover download` i `soil download` =
-`LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`. Błąd wejścia
+`LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`,
+`elevation availability` = `check_availability`,
+`boundaries download`, `cadastre download` i `models3d download` =
+`download_collection`/`check_collection`. Błąd wejścia
 to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 (CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
 `on_notice`.
@@ -453,6 +869,91 @@ plan = check_data(**selection)               # = --check-updates, bez pobierania
 report = download_data(**selection, update="upgrade", plan=plan)  # = --upgrade --plan
 ```
 
+Raport dostępności (sekcja 1.7) — skorowidz i maska PRG, bez pobierania
+danych; wynik `AvailabilityReport` (`request`, `checked_at`, `areas`:
+`AvailabilityArea`, `combinations`: `AvailabilityCombination`, `notices`,
+`ok`), `to_json()` = wydruk `--json`:
+
+```python
+from kartograf import BBox, check_availability, download_data
+
+# = kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
+report = check_availability(
+    product="nmt",                                   # "nmt" | "nmpt" | "laz"
+    country="pl",                                    # wymagane z bbox=/geometry=
+    bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
+    min_year=2020,                                   # opcjonalnie; także year=, max_year=
+)                                                    # cache=True, force=False, on_notice=
+print(report.areas[0].land_m2)
+for c in report.combinations:                        # rok malejąco
+    print(c.year, c.horizontal, c.resolution, c.vertical_crs, c.format,
+          c.complete, len(c.sheets_full), len(c.sheets_partial), c.uncovered_m2)
+newest = next((c for c in report.combinations if c.complete), None)
+if newest is not None:
+    print(newest.source, newest.download_hint)     # np. "pl.gugik.nmt_1m", ("elevation download ...",)
+    # kombinacja jako argumenty download_data (PL-2000: także scale=,
+    # skale podaje download_hint)
+    download_data(product="nmt", output_dir="./data", country="pl",
+                  bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
+                  sheet_system=newest.horizontal.removeprefix("PL-"),
+                  format=newest.format, resolution=newest.resolution,
+                  vertical_crs=newest.vertical_crs, year=newest.year)
+text = report.to_json()                              # kartograf-availability/1
+```
+
+Rejestr wariantów NMT/NMPT/LAZ (ADR-041; dane bez IO) zastępuje usunięte
+w 0.8.0 stałe providerów (`SUPPORTED_RESOLUTIONS`, `WFS_ENDPOINTS`,
+`nmt_vertical_crs()` itd.):
+
+```python
+from kartograf.sources.variants import variants
+
+for v in variants(product="nmpt", country="PL"):
+    print(v.source, v.label, v.vertical_crs, v.format, v.source_file)
+# pl.gugik.nmpt_0_5m 0.5m EVRF2007 ASC False ... pl.gugik.nmpt_xyz_1m 1m KRON86 XYZ True
+print([v.label for v in variants(product="nmt", vertical_crs="KRON86", format="ASC")])
+# ['0.5m', '1m']
+```
+
+Kolekcje (`boundaries`, `cadastre`, `models3d`; sekcja 1.8) — wynik
+`CollectionReport(files, failed, stale, notices, ok)`, elementy `files`
+i `failed` jak w `DataReport`:
+
+```python
+from kartograf import BBox, LandCoverManager, check_collection, download_collection
+
+out = "./data"
+show = lambda notice: print(notice.level, notice.text)  # = Info:/Warning: w CLI
+# = boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000
+gminy = download_collection(
+    product="admin", output_dir=out, country="pl", level="gmina",
+    bbox=BBox(550000, 220000, 590000, 270000, "EPSG:2180"),
+)
+print(gminy.files[0].file.path)  # data/boundaries/pl_prg_gmina/bbox/550000_220000_590000_270000.gpkg
+download_collection(product="admin", output_dir=out, teryt="12")  # paczka województwa
+download_collection(product="admin", output_dir=out, country="pl", whole_country=True,
+                    on_notice=show)  # Notice whole_country_size przed transferem
+# = cadastre download --product map --teryt 1261 / --country pl --bbox ...
+download_collection(product="map", output_dir=out, teryt="1261")
+download_collection(product="map", output_dir=out, country="pl",
+                    bbox=BBox(565000, 243000, 567000, 245000, "EPSG:2180"))
+# = models3d download --product buildings --lod 1 --year 2024 --teryt 1261
+download_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
+lod2 = download_collection(product="buildings", output_dir=out, lod=2, country="pl",
+                           bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
+                           on_notice=show)  # Notice unit_list: powiaty obszaru
+for failure in lod2.failed:  # kind "no_coverage" = brak paczki powiatu (HTTP 404)
+    print(failure.unit, failure.kind, failure.error)
+plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
+print([(i.track, i.unit, i.status) for i in plan.items])  # [("collection", "1261", "unverifiable")]
+# = landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP
+LandCoverManager(out, "bdot10k").download(teryt="1261", year=2024, format="SHP")
+```
+
+Walidacja bez sieci (np. przed zapisaniem zadania):
+`kartograf.download.collections.validate_collection_request(...)` z tymi
+samymi wyborami (bez `update`, `plan`, `workers`, `cache`, `on_notice`).
+
 Niższy poziom (tory) — te same pliki i sidecary co `download_data`:
 
 ```python
@@ -471,10 +972,12 @@ provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
 manager = DownloadManager("./data", provider)
 result = manager.download_sheet("N-34-130-D-d-2-4")
 path = result.files["N-34-130-D-d-2-4"][0].version_path
-# NMT 5 m tylko w EVRF2007: GugikProvider(resolution="5m", vertical_crs="KRON86")
-# -> ValidationError
+# Warianty z rejestru (kartograf.sources.variants.variants()); kombinacja
+# spoza rejestru, np. GugikProvider(resolution="5m", vertical_crs="KRON86"),
+# -> ValidationError z listą dostępnych etykiet. Archiwum: format="TBD" (sekcja 1.1)
 
-# Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF):
+# Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF;
+# NMT/NMPT tylko wariant 1 m — provider.is_wcs_available()):
 # provider.download_bbox(bbox, path) — jednopasmowy float32 GeoTIFF na
 # siatce 1 m EPSG:2180, bez maski PRG i bez wersji. Wycinek NMT/NMPT
 # w magazynie wersji: download_pl_cutout (niżej).
@@ -615,8 +1118,9 @@ Pełne odświeżenie: utwórz provider z `MetadataCache(".kartograf_cache.db",
 refresh=True)` albo wywołaj `download_data(..., update="force")`, które
 tworzy provider samo.
 
-Pozostałe elementy publicznego API (m.in. `GugikNmptProvider`,
-`GugikOrtoProvider`, `GugikLazProvider`/`download_laz_area` dla LAZ,
+Pozostałe elementy publicznego API (m.in. `GugikNmptProvider` —
+od 0.8.0 z wymaganym `resolution=`, np. `GugikNmptProvider(vertical_crs="EVRF2007",
+resolution="0.5m")`, `GugikOrtoProvider`, `GugikLazProvider`/`download_laz_area` dla LAZ,
 `CuzkDmrProvider`/`create_dmr_provider` dla Czech, `Parser2000`,
 `ParserTM33`, `FileStorage`) — eksporty w `kartograf/__init__.py`, opis
 w SCOPE 2.10 i PRD 5.
@@ -725,6 +1229,11 @@ Szczegóły trybów: sekcja 4.3.
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
   zbiorach warto włączyć kompresję systemu plików.
+  Na udziale SMB/cifs klient może przejściowo raportować błędną liczbę
+  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki.
+  `project verify` potwierdza treść kopii, ale nie oszczędność miejsca:
+  sprawdź jej zajętość; w razie potrzeby kopiuj po stronie serwera lub
+  z hosta z lokalnym dostępem do systemu plików.
 - **Windows:** hardlink działa bez dodatkowych uprawnień (NTFS), a dane
   udostępnione przez SMB klient Windows widzi jako zwykłe pliki.
 - **Migracja z 0.7.x:** brak; katalog `kampanie/` nie jest czytany (CLI
@@ -859,7 +1368,8 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 20
 
 Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery download`: arkuszy PL NMT/NMPT/orto,
 kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
-`--cutout`, a także `landcover download`, `soil download` i `soil hsg`. Flagi
+`--cutout`, a także `landcover download`, `soil download`, `soil hsg`
+oraz `boundaries download`, `cadastre download` i `models3d download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
 skorowidz); pozostałe tory różnią się sygnałem:
 
@@ -871,6 +1381,7 @@ skorowidz); pozostałe tory różnią się sygnałem:
 | kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
 | SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
 | BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
+| kolekcje (`boundaries`, `cadastre`, `models3d`; tor planu `collection`) i archiwum BDOT10k (`--year`) | brak (`none`) | jak TM33; etykieta = rocznik/rok wydania albo data pobrania (sekcja 1.8) |
 | HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
@@ -930,7 +1441,8 @@ print(report.stale, report.files.get(godlo, ()))
 # download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
 # check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
 # update=, plan=) + check (te same argumenty); HSG: calculate_hsg(...,
-# update=, plan=) + check_hsg; pozycje planu: item.track, item.unit
+# update=, plan=) + check_hsg; kolekcje: download_collection(..., update=,
+# plan=) + check_collection; pozycje planu: item.track, item.unit
 ```
 
 ---
@@ -1028,8 +1540,24 @@ proxy).
 - Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
-- NMT 5 m nie obsługuje `--cutout`: pobieraj arkusze
-  bez tej flagi.
+- Wycinek `--cutout` jest tylko 1 m: NMT/NMPT w innych
+  rozdzielczościach (np. 0.5m, 5m) i archiwa pobieraj jako arkusze bez
+  tej flagi (sekcja 1.3).
+- Archiwa GUGiK (`--format XYZ|ASCII-NMT|TBD|TIN|TTN|GRD|DXF|DGN`) są
+  pobierane jako pliki źródłowe bez konwersji (ZIP, `.ttn`, `.grd`,
+  `.dxf`, `.dgn`): Kartograf nie rozpakowuje ich, nie przelicza na
+  siatkę, nie wycina i nie mierzy pokrycia — plik otwierasz programem,
+  który obsługuje dany format (sekcja 1.1).
+- Raport `elevation availability` ufa deklaracji skorowidza
+  `calyArkuszWypelnionyTrescia`: arkusz NIE może mieć od 1 % do 99 %
+  danych, a raport nie mierzy treści plików (sekcja 1.7). Raport jest
+  dziś tylko dla PL (`--country pl`).
+- Godła 8-członowe PL-1992 (wszystkie arkusze ASCII NMT 10 m i część
+  arkuszy ASC 1 m w skorowidzu GUGiK) są poza układem godeł Kartografu:
+  nie są pobierane, a raport dostępności wymienia je w `Info:`.
+- Raport dostępności rasteryzuje ląd obszaru na siatce 1 m (pasy po
+  4 Mpx): dla dużych obszarów liczy się długo, ponowny raport tego
+  samego obszaru korzysta z cache metadanych (sekcja 1.7).
 - `provider.download_bbox` (WCS: NMT KRON86 TIFF, NMT EVRF2007
   i NMPT ASC multipart) daje wysokości float32 w rozdzielczości
   1 m poza magazynem wersji, bez maski lądu PRG i bez sidecara;
@@ -1038,6 +1566,20 @@ proxy).
   od wyboru kampanii arkusza.
 - Wycinki (PL, CZ) i kafle TM33 nie mają taniego sygnału świeżości:
   zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
+- Granice PRG, EGiB, modele 3D i archiwum BDOT10k (sekcja 1.8) nie mają
+  taniego sygnału świeżości: nowszą treść przynosi tylko `--force`.
+- Strony WFS GUGiK (obiekty obszaru PRG i EGiB) przychodzą po kilka
+  sekund na stronę 1000 obiektów (na żywo 2026-10-15: 2–4 s; limit jednego
+  zapytania 60 s), więc duży obszar EGiB to minuty. Wynik obszaru jest
+  składany w pamięci (cała warstwa naraz) — dla całego powiatu wygodniej
+  pobrać eksport (`cadastre download --teryt`), a granice województwa —
+  paczkę (`boundaries download --teryt <2 cyfry>`).
+- GeoPackage wyniku obszaru ma te same bajty dla tej samej treści tylko
+  w obrębie jednej wersji GDAL (`pyogrio`): po aktualizacji GDAL `--force`
+  może zapisać nową wersję tej samej treści.
+- EGiB obszaru pochodzi z usługi zbiorczej powiatowych WFS: powiat bez
+  integracji to luka w wyniku (bez błędu), atrybuty zastrzeżone mają
+  wartość `brak_uprawnien`. LoD2 modeli 3D nie pokrywa całego kraju.
 - Uszkodzony albo nieczytelny cache metadanych (`.kartograf_cache.db`
   w bieżącym katalogu) nie przerywa pobierania: CLI drukuje jedno
   `Warning: cache metadanych nieczytelny (<plik>): ...` i pracuje bez cache.
@@ -1046,3 +1588,156 @@ proxy).
 
 Pełna lista ograniczeń technicznych (timeouty, ponowienia, CZ, `auto`):
 SCOPE 3.2; plany: SCOPE 3.1.
+
+---
+
+## 8. Projekt
+
+Projekt zapisuje w `kartograf-project.json` **zadania** (komendy danych
+z opcjami) i **przypiete wersje plikow** (pelne sumy SHA-256). Jeden
+projekt wskazuje jeden magazyn `--output`; wiele projektow moze korzystac
+z tego samego magazynu, bez kopiowania danych do katalogow projektow.
+Sciezka standardowa w magazynie moze wskazywac nowsza wersje, ale
+przypiecie pozostaje przy konkretnych bajtach. Plik manifestu mozna
+przechowywac razem ze skryptami projektu w systemie kontroli wersji.
+
+### Pierwsze pobranie i sprawdzenie
+
+```bash
+mkdir -p ~/projekty/wisla
+cd ~/projekty/wisla
+kartograf project init --output ~/dane/kartograf
+kartograf project add teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --year 2022
+kartograf project add pokrycie landcover download --source bdot10k --teryt 1465
+kartograf project add gleby soil hsg --sheet N-34-130-D --depth 0-5cm
+kartograf project download
+kartograf project status
+kartograf project verify
+```
+
+`init` wymaga jawnego `--output`; tworzy manifest i katalog magazynu,
+jesli ich nie ma. `add` przyjmuje po nazwie zadania te same komendy
+i flagi wyboru danych co zwykle `kartograf elevation download`,
+`imagery download`, `landcover download`, `soil download`, `soil hsg`,
+`boundaries download`, `cadastre download` i `models3d download`;
+sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
+`--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
+a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa
+zadanie i przypiecia z manifestu, **nie usuwa plikow** z magazynu.
+Nazwy zadan mozna podac pozycyjnie w `download`, `status` i `verify`;
+bez nazw polecenie obejmuje wszystkie zadania. `--project KATALOG`
+pozwala pracowac bez `cd` (domyslnie projekt jest w biezacym katalogu):
+
+```bash
+kartograf project verify --project ~/projekty/wisla
+```
+
+Pierwsze `download` przypina komplet plikow zadania dopiero po pelnym
+sukcesie; wynik HSG przypina rowniez trzy pliki wejsciowe SoilGrids.
+Ponowne `download` **nie zmienia przypiec** ani nie odpytuje zrodla,
+gdy przypiete pliki sa obecne. Gdy ich brakuje, probuje odtworzyc
+zadanie: akceptuje tylko te same sumy SHA-256. Inna tresc u zrodla
+oznacza blad, nigdy cicha zamiane; odzyskaj kopie magazynu lub jawnie
+wybierz `--upgrade`. `status` bez sieci szybko sprawdza istnienie
+wersji i rozmiary; `verify` bez sieci czyta cale pliki i porownuje
+SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu.
+
+### Swiezosc i wariant danych
+
+```bash
+kartograf project download --check-updates
+kartograf project download --upgrade teren
+kartograf project download --force pokrycie
+```
+
+`--check-updates` odpytuje zrodlo bez pobierania i porownuje stan
+**z przypieciem**, nie z najnowsza lokalna wersja magazynu; nie zmienia
+manifestu. `--upgrade` jawnie przepina cale zadanie na nowsza wersje,
+jesli jest sygnal zmiany, rowniez gdy nowa wersja juz jest w magazynie.
+`--force` ponawia pobranie nawet bez taniego sygnalu; przepiecie
+nastepuje po pelnym sukcesie zadania. Inne projekty zachowuja swoje
+przypiecia, stare wersje nadal sa w magazynie.
+
+**Zalecenie dla odtwarzalnosci:** wybieraj jawny wariant w zadaniu
+(np. `--year`, odpowiednie `--resolution` i `--vertical-crs`), gdy
+produkt to umozliwia. Bez `--year` wybierasz najnowszy lot w chwili
+pobrania; po opublikowaniu nowego lotu odtworzenie na pustym
+magazynie moze zwrocic inna sume i zakonczyc sie bledem. Nawet
+jawny rok nie zastepuje kopii magazynu, jesli zrodlo wycofa albo
+podmieni plik. Nie ma `project availability`: przed `project add`
+uzyj `kartograf elevation availability ...`, aby poznac dostepne
+kompletne warianty obszaru (lata, uklady, rozdzielczosci, formaty), i podaj
+wybrane flagi zadania — raport drukuje gotowa linie `W projekcie:
+kartograf project add NAZWA elevation download ...` bez `--output`
+(sekcja 1.7; archiwum z `--format`, w manifescie opcja `format`).
+`availability` odpowiada na pytanie *jakie
+warianty sa dostepne*, a `project download --check-updates` — *czy
+przypiete pliki sa aktualne dla wybranego wariantu*. Wybor
+`--year` pozostaje aktualny dla danego roku nawet po wydaniu
+nowszego rocznika.
+
+### Przenoszenie projektu i magazynu
+
+Sciezki `output_dir` i `options.geometry` podane wzglednie sa zapisane
+wzgledem katalogu projektu (nie biezacego katalogu odczytu).
+Sciezki podane bezwzglednie pozostaja bezwzgledne. Przypiete `path`
+i `version` sa zawsze wzgledne do magazynu.
+
+| Sytuacja | Co zrobic |
+|---|---|
+| Przenosisz projekt z magazynem, zachowujac ich wzajemne polozenie (`output_dir` wzgledny) | Nic; `kartograf project verify` potwierdzi stan. |
+| Przenosisz sam projekt, magazyn pozostaje pod ta sama sciezka bezwzgledna | Nic. |
+| Przenosisz sam projekt, a `output_dir` jest wzgledny | Zmien `output_dir` w `kartograf-project.json`. |
+| Przenosisz lub kopiujesz magazyn | Kopiuj razem z sidecarami i dowiazaniami twardymi (`rsync -aH`), popraw `output_dir`, uruchom `kartograf project verify`. |
+| Otwierasz projekt z pustym magazynem | Utworz katalog magazynu (albo wskaz w `output_dir` istniejacy), uruchom `kartograf project download`, potem `kartograf project verify`; odtworzenie wymaga zgodnosci SHA-256. |
+
+Na udziale SMB/cifs `rsync -aH` może nie zachować wszystkich dowiązań
+twardych (sekcja 4); `verify` nie wykrywa nadmiarowych kopii.
+
+Plik geometrii obszaru warto trzymac przy manifeście i podawac wzglednie:
+przenosi sie z projektem. Zmiana jego bajtow od chwili przypiecia
+blokuje zwykle odtworzenie; jawne `--upgrade`/`--force` moze przyjac
+zmieniony obszar. Pozostale komendy wymagaja istniejacego katalogu
+magazynu (brak zamontowanego udzialu nie spowoduje pobrania do
+pustego katalogu).
+
+### Biblioteka Python
+
+```python
+from pathlib import Path
+from kartograf import (
+    add_project_task, check_project, download_project, init_project,
+    project_status, verify_project,
+)
+
+project_dir = Path.home() / "projekty" / "wisla"
+init_project(project_dir, output_dir=Path.home() / "dane" / "kartograf")
+add_project_task(
+    project_dir,
+    name="teren",
+    command="elevation download",
+    options={
+        "product": "nmt",
+        "sheet": "N-34-130-D-d-2-4",
+        "resolution": "1m",
+        "vertical_crs": "EVRF2007",
+        "year": 2022,
+    },
+)
+report = download_project(project_dir)
+print(report.ok, [(task.name, task.outcome) for task in report.tasks])
+print(project_status(project_dir).ok, verify_project(project_dir).ok)
+check = check_project(project_dir)  # sonda zrodla; bez pobierania i zapisu
+print([(item.task, item.status) for item in check.files])
+download_project(project_dir, tasks=["teren"], update="upgrade")
+```
+
+`init_project` i `add_project_task` zwracaja `Project`,
+`download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`),
+a `check_project`, `project_status` i `verify_project` zwracaja
+`ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
+`open_project(project_dir)` czyta i waliduje manifest; API udostepnia
+takze `remove_project_task`. Operacje projektu domyslnie dzialaja bez
+cache SQLite (`cache=False`); `cache=True` tworzy cache w biezacym
+katalogu, wiec uzywaj go tylko lokalnie. Kontrakt formatu i zapisu:
+[ARCHITECTURE.md, sekcja 3.5](ARCHITECTURE.md#35-manifest-projektu-kartograf-project1).

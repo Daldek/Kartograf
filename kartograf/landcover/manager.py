@@ -6,18 +6,21 @@ Land Cover download manager on the versioned store (spec 3.4, D29-D32).
 every file is an immutable version with a hardlink at the standard path.
 SoilGrids and CORINE (CLMS) versions are labelled by the source edition
 (signal ``metadata``), the CORINE WMS preview and BDOT10k by the download
-date (signal ``none``). Files outside the store: ``provider.download_by_*``.
+date (signal ``none``), the BDOT10k yearly archive (``year``) by its year
+(ADR-042 D11). Files outside the store: ``provider.download_by_*``.
 
 ``download``/``check`` are command-level functions (S3, the CLI
 ``landcover download`` is one call): BDOT10k by an area covers every powiat
 of it (in parallel with ``workers``), the result is always a
-``LandCoverAreaResult`` with data ``notices``.
+``LandCoverAreaResult`` with data ``notices``. The BDOT10k archive runs on
+the unit jobs of the collection orchestrator (``download.collections``) on
+the plan track ``landcover``.
 """
 
 import concurrent.futures
 import logging
 import os
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,12 +36,19 @@ from kartograf.download.arguments import (
     require_int,
     require_timeout,
 )
+from kartograf.download.collections import (
+    UnitJob,
+    inspect_job,
+    package_job,
+    run_job,
+)
 from kartograf.download.fetch import (
     EditionLookup,
     FileSlot,
     UpdateMode,
     VersionedFile,
     discard_staging,
+    emit_file_notices,
     inspect_version,
     link_version,
     local_version,
@@ -58,23 +68,25 @@ from kartograf.download.plan import (
     select_planned,
     store_id,
 )
+from kartograf.download.storage import content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.landcover.store import landcover_segment, selection_slot, selection_unit
-from kartograf.notices import (
-    CHECK_FAILED,
-    CORINE_PREVIEW,
-    UNVERIFIED_LOCAL,
-    Notice,
-    NoticeSink,
-)
+from kartograf.landcover.store import selection_unit
+from kartograf.notices import CORINE_PREVIEW, Notice, NoticeSink
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider, normalize_layers
 from kartograf.providers.soilgrids import SoilGridsProvider
-from kartograf.sources.descriptor import SignalKind, TransportKind
-from kartograf.sources.registry import channel_signal
+from kartograf.sources.descriptor import (
+    AccessChannel,
+    PackageVariant,
+    SignalKind,
+    TransportKind,
+    UnitPackageParams,
+)
+from kartograf.sources.registry import channel_signal, get_source
 from kartograf.sources.sidecar import emit_sidecar
+from kartograf.transport.unit_package import select_variant
 
 logger = logging.getLogger(__name__)
 
@@ -85,11 +97,20 @@ PROVIDERS = {
     "corine": CorineProvider,
     "soilgrids": SoilGridsProvider,
 }
+# Sources of ``landcover download`` (ADR-039; SoilGrids is ``soil download``)
+# and their description in messages and --help texts.
+LANDCOVER_SOURCES: tuple[str, ...] = ("bdot10k", "corine")
+LANDCOVER_SOURCE_CHOICES = (
+    "bdot10k (wektorowa baza topograficzna GUGiK), corine (CORINE Land Cover, "
+    "Copernicus)"
+)
 
 # Options belonging to a different source are input errors; options not
 # belonging to any source are programming errors (e.g. removed output_path).
+# BDOT10k ``year`` = the yearly archive (ADR-042 D11), CORINE ``year`` = the
+# CORINE edition.
 _SOURCE_OPTIONS: dict[str, frozenset[str]] = {
-    "bdot10k": frozenset({"format", "layers", "keep_raw"}),
+    "bdot10k": frozenset({"format", "layers", "keep_raw", "year"}),
     "corine": frozenset({"year"}),
     "soilgrids": frozenset({"property", "depth", "stat"}),
 }
@@ -123,6 +144,56 @@ _PREVIEW_NOTE = {"fallback": "wms_png", "note": "podglad WMS, nie dane"}
 _TRACK: Track = "landcover"
 # Plan position key of a slot (segment, hierarchy, name).
 _SlotKey = tuple[str, str, str]
+
+
+def require_landcover_source(source: object) -> str:
+    """``source`` of ``landcover download``: one of ``LANDCOVER_SOURCES``.
+
+    Raises
+    ------
+    ValidationError
+        Missing source or a source of another command (SoilGrids).
+    """
+    if source is None:
+        raise ValidationError(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
+    if not isinstance(source, str) or source not in LANDCOVER_SOURCES:
+        raise ValidationError(
+            f"--source {source!r}: nieznana wartosc - dostepne: "
+            f"{LANDCOVER_SOURCE_CHOICES}"
+        )
+    return source
+
+
+def _archive_channel(key: str) -> AccessChannel:
+    """The BDOT10k archive channel: powiat packages of the yearly releases
+    (the unit package channel of the descriptor, ADR-042 D11)."""
+    return next(
+        channel
+        for channel in get_source(key).channels
+        if isinstance(channel.params, UnitPackageParams)
+    )
+
+
+def _spans(years: Iterable[int]) -> str:
+    """``2014-2025`` / ``2014-2016, 2018``: sorted years as runs."""
+    runs: list[list[int]] = []
+    for year in sorted(years):
+        if runs and year == runs[-1][-1] + 1:
+            runs[-1].append(year)
+        else:
+            runs.append([year])
+    return ", ".join(f"{r[0]}-{r[-1]}" if len(r) > 1 else str(r[0]) for r in runs)
+
+
+def bdot10k_archive_choices() -> str:
+    """``2014-2025 (--format GML albo SHP)``: the yearly releases of the
+    BDOT10k archive from the registry (``--help`` and messages)."""
+    params = _archive_channel("pl.gugik.bdot10k").params
+    assert isinstance(params, UnitPackageParams)
+    choices = [dict(variant.choice) for variant in params.variants]
+    formats = " albo ".join(dict.fromkeys(choice["format"] for choice in choices))
+    years = _spans({int(choice["year"]) for choice in choices})
+    return f"{years} (--format {formats})"
 
 
 def _read_geotiff_nodata(path: Path) -> float | None:
@@ -226,7 +297,8 @@ class LandCoverManager:
     Every file lands in a segment of ``output_dir`` that carries its
     content parameters (spec 3.4): ``landcover/pl_bdot10k_gpkg[_<layers>]``,
     ``landcover/pl_bdot10k_shp``, ``landcover/pl_bdot10k_gpkg_zip``
-    (``keep_raw``), ``landcover/eu_corine_<year>[_preview]``,
+    (``keep_raw``), ``landcover/pl_bdot10k_<gml|shp>_<year>`` (the yearly
+    archive, ADR-042 D11), ``landcover/eu_corine_<year>[_preview]``,
     ``soil/global_soilgrids_<property>_<depth>_<stat>``; below it
     ``teryt/<TERYT>``, ``bbox/<coords>`` or the sheet hierarchy. ``update``
     selects the mode (spec 4.2): ``None`` uses local versions and only
@@ -435,7 +507,11 @@ class LandCoverManager:
             30-60cm, 60-100cm, 100-200cm below surface), ``stat`` (mean
             average, Q0.05 5th percentile, Q0.5 median, Q0.95 95th
             percentile, uncertainty). BDOT10k: ``format`` GPKG (default) or
-            SHP (ZIP), optional ``layers`` and ``keep_raw``. All: ``timeout``.
+            SHP (ZIP), optional ``layers`` and ``keep_raw``; with ``year``
+            2014-2025 the yearly archive (state at the start of the year):
+            the original powiat package (ZIP) with a required ``format`` GML
+            or SHP, labelled by its year, identical years stored once
+            (``relabeled``, ADR-042 D7, D11). All: ``timeout``.
 
         Returns
         -------
@@ -453,7 +529,8 @@ class LandCoverManager:
         TypeError
             An option that belongs to no source (e.g. ``output_path``).
         NoCoverageError
-            A BDOT10k area intersecting no powiat.
+            A BDOT10k area intersecting no powiat; a powiat without an
+            archive package (``teryt`` with ``year``; in an area: ``failed``).
         DownloadError
             Download, edition, PRG or store failure (BDOT10k areas: PRG only;
             powiat failures land in ``failed``).
@@ -461,13 +538,16 @@ class LandCoverManager:
         sink = NoticeSink(on_notice)
         validate_update(update)
         require_int(workers, "--workers")
-        if bbox is not None:  # the CLI parses --bbox first: the same first error
-            validate_request_bbox(bbox)
-        self._check_options(options)
-        teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
+        teryt, sheet, bbox = self._validated(
+            teryt, sheet, bbox, geometry, layer, options, sink
+        )
         failed: tuple[LandCoverFailure, ...] = ()
         with self._session(force=update == "force", sink=sink):
-            if teryt is None and isinstance(self._provider, Bdot10kProvider):
+            if self._archive(options):
+                files, failed, stale = self._download_archive(
+                    teryt, bbox, sheet, options, update, plan, workers, sink
+                )
+            elif teryt is None and isinstance(self._provider, Bdot10kProvider):
                 files, failed, stale = self._download_counties(
                     bbox, sheet, options, update, plan, workers
                 )
@@ -478,7 +558,9 @@ class LandCoverManager:
                     jobs, parent = self._area_jobs(
                         bbox=bbox, sheet=sheet, kwargs=options
                     )
-                planned, stale = self._planned(jobs, update, plan)
+                planned, stale = self._planned(
+                    lambda: [self._inspect(job) for job in jobs], update, plan
+                )
                 self._corine_preview(options, sink)
                 result = self._run(jobs, options, update, planned, parent=parent)
                 files = (result,) if result.file is not None else ()
@@ -502,17 +584,27 @@ class LandCoverManager:
         """Plan of ``download`` with the same selection WITHOUT downloading data.
 
         SoilGrids and CORINE (CLMS) compare the local version with the
-        source edition (GetCapabilities / CLMS catalogue); BDOT10k and the
-        CORINE preview have no cheap signal (``unverifiable``/``missing``).
-        BDOT10k by an area asks PRG for its powiats (every powiat is a
-        position). ``keep_raw`` adds the raw ZIP position of the same unit.
+        source edition (GetCapabilities / CLMS catalogue); BDOT10k (also the
+        archive of ``year``) and the CORINE preview have no cheap signal
+        (``unverifiable``/``missing``). BDOT10k by an area asks PRG for its
+        powiats (every powiat is a position). ``keep_raw`` adds the raw ZIP
+        position of the same unit.
         """
         sink = NoticeSink(on_notice)
-        if bbox is not None:
-            validate_request_bbox(bbox)
-        self._check_options(options)
-        teryt, sheet, bbox = self._selection(teryt, sheet, bbox, geometry, layer, sink)
+        teryt, sheet, bbox = self._validated(
+            teryt, sheet, bbox, geometry, layer, options, sink
+        )
         with self._session(force=False, sink=sink):
+            if self._archive(options):
+                teryts = (
+                    [teryt]
+                    if teryt is not None
+                    else self._area_teryts(bbox, sheet, options)[0]
+                )
+                archive = self._archive_jobs(teryts, options, parent=None)
+                return new_plan(
+                    self._output_dir, [self._inspect_archive(job) for job in archive]
+                )
             if teryt is not None:
                 jobs = self._jobs(teryt=teryt, kwargs=options)
             elif isinstance(self._provider, Bdot10kProvider):
@@ -521,6 +613,48 @@ class LandCoverManager:
             else:
                 jobs, _ = self._area_jobs(bbox=bbox, sheet=sheet, kwargs=options)
             return new_plan(self._output_dir, [self._inspect(job) for job in jobs])
+
+    def validate_request(
+        self,
+        *,
+        teryt: str | None = None,
+        sheet: str | None = None,
+        bbox: BBox | None = None,
+        geometry: str | Path | None = None,
+        layer: str | None = None,
+        **options,
+    ) -> None:
+        """Every check of ``download``/``check`` before the first request.
+
+        No network and nothing written (a ``geometry`` file is read for its
+        envelope): the same exception type and text as ``download`` with the
+        same selection and options (``project add``, ADR-040).
+
+        Raises
+        ------
+        ValidationError
+            Not exactly one selection, invalid TERYT or sheet code, invalid
+            or missing source options.
+        TypeError
+            An option that belongs to no source.
+        """
+        self._validated(teryt, sheet, bbox, geometry, layer, options, NoticeSink(None))
+
+    def _validated(
+        self,
+        teryt: str | None,
+        sheet: str | None,
+        bbox: BBox | None,
+        geometry: str | Path | None,
+        layer: str | None,
+        options: dict,
+        sink: NoticeSink,
+    ) -> tuple[str | None, str | None, BBox | None]:
+        """The prologue of ``download``/``check``: options, then the selection."""
+        if bbox is not None:  # the CLI parses --bbox first: the same first error
+            validate_request_bbox(bbox)
+        self._check_options(options)
+        return self._selection(teryt, sheet, bbox, geometry, layer, sink)
 
     def _download_counties(
         self,
@@ -539,7 +673,9 @@ class LandCoverManager:
         teryts, parent = self._area_teryts(bbox, sheet, options)
         jobs = {t: self._jobs(teryt=t, kwargs=options) for t in teryts}
         planned, stale = self._planned(
-            [job for group in jobs.values() for job in group], update, plan
+            lambda: [self._inspect(job) for group in jobs.values() for job in group],
+            update,
+            plan,
         )
 
         def one(teryt: str) -> LandCoverResult | LandCoverFailure:
@@ -559,6 +695,103 @@ class LandCoverManager:
         )
         failed = tuple(o for o in outcomes if isinstance(o, LandCoverFailure))
         return files, failed, stale
+
+    def _download_archive(
+        self,
+        teryt: str | None,
+        bbox: BBox | None,
+        sheet: str | None,
+        options: dict,
+        update: UpdateMode | None,
+        plan: UpdatePlan | None,
+        workers: int,
+        sink: NoticeSink,
+    ) -> tuple[
+        tuple[LandCoverResult, ...],
+        tuple[LandCoverFailure, ...],
+        tuple[PlanItem, ...],
+    ]:
+        """BDOT10k archive packages (``year``) of one powiat or of every
+        powiat of an area (PRG, TERYT order) through the collection unit jobs
+        (ADR-042 D10-D11): the original ZIP 1:1, labelled by its year.
+
+        A failing powiat of an area lands in ``failed``; the package of a
+        ``teryt`` raises (as the current BDOT10k packages).
+        """
+        provider = self._provider
+        assert isinstance(provider, Bdot10kProvider)
+        if teryt is not None:
+            teryts, parent = [teryt], None
+        else:
+            teryts, parent = self._area_teryts(bbox, sheet, options)
+        jobs = self._archive_jobs(teryts, options, parent=parent)
+        planned, stale = self._planned(
+            lambda: [self._inspect_archive(job) for job in jobs], update, plan
+        )
+        timeout = options.get("timeout")
+
+        def one(job: UnitJob) -> LandCoverResult | LandCoverFailure:
+            try:
+                file = run_job(
+                    job,
+                    update,
+                    sink=sink,
+                    planned=planned,
+                    session=provider.session(),
+                    timeout=timeout,
+                )
+            except DownloadError as e:
+                if teryt is not None:
+                    raise
+                logger.debug("BDOT10k %s %s: %s", options["year"], job.unit, e)
+                return LandCoverFailure(job.unit, str(e))
+            return LandCoverResult(job.unit, file)
+
+        if workers > 1 and len(jobs) > 1:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+                outcomes = list(pool.map(one, jobs))
+        else:
+            outcomes = [one(job) for job in jobs]
+        files = tuple(
+            o for o in outcomes if isinstance(o, LandCoverResult) and o.file is not None
+        )
+        failed = tuple(o for o in outcomes if isinstance(o, LandCoverFailure))
+        return files, failed, stale
+
+    def _archive(self, kwargs: dict) -> bool:
+        """BDOT10k with ``year``: the yearly archive (ADR-042 D11)."""
+        return (
+            isinstance(self._provider, Bdot10kProvider)
+            and kwargs.get("year") is not None
+        )
+
+    def _archive_jobs(
+        self, teryts: Sequence[str], kwargs: dict, *, parent: dict | None
+    ) -> list[UnitJob]:
+        """Unit jobs of the archive packages of ``teryts`` (sidecar ``request``
+        = the powiat, ``format`` and ``year``)."""
+        key = self._descriptor_key()
+        variant = self._archive_variant(kwargs)
+        descriptor, channel = get_source(key), _archive_channel(key)
+        fmt, year = kwargs["format"], kwargs["year"]
+        return [
+            package_job(
+                self._output_dir,
+                descriptor,
+                channel,
+                variant,
+                country="PL",
+                teryt=teryt,
+                request={"teryt": teryt, "format": fmt, "year": year},
+                parent=parent,
+            )
+            for teryt in teryts
+        ]
+
+    def _inspect_archive(self, job: UnitJob) -> PlanItem:
+        provider = self._provider
+        assert isinstance(provider, Bdot10kProvider)
+        return inspect_job(job, track=_TRACK, session=provider.session())
 
     # =========================================================================
     # Request -> jobs
@@ -583,12 +816,16 @@ class LandCoverManager:
             raise ValidationError(
                 "Podaj dokladnie jeden wybor: teryt, sheet, bbox albo geometry"
             )
-        if (
-            teryt is not None
-            and isinstance(self._provider, Bdot10kProvider)
-            and not self._provider.validate_admin_unit(teryt)
-        ):
-            raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
+        if teryt is not None:
+            if not isinstance(self._provider, Bdot10kProvider):
+                raise ValidationError(
+                    f"{self._provider.name}: wybor teryt dziala tylko dla BDOT10k "
+                    "- podaj bbox, sheet albo geometry"
+                )
+            if not self._provider.validate_admin_unit(teryt):
+                raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
+        if sheet is not None:
+            SheetParser(sheet)  # a malformed code: ParseError before any request
         if geometry is not None:
             bbox = geometry_envelope_2180(geometry, layer, sink)
         elif bbox is not None:
@@ -637,13 +874,14 @@ class LandCoverManager:
             if name not in _OPTIONS[kind] and kwargs[name] is not None:
                 if name == "keep_raw" and not kwargs[name]:
                     continue
-                source = next(
+                sources = [
                     source
                     for source, options in _SOURCE_OPTIONS.items()
                     if name in options
-                )
+                ]
                 raise ValidationError(
-                    f"--{name.replace('_', '-')} dziala tylko z --source {source}"
+                    f"--{name.replace('_', '-')} dziala tylko z --source "
+                    f"{' albo '.join(sources)}"
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
         if kwargs.get("timeout") is not None:
@@ -673,41 +911,56 @@ class LandCoverManager:
                     f"Dostepne lata: {provider.AVAILABLE_YEARS}"
                 )
         else:
-            fmt = kwargs.get("format", "GPKG")
-            if fmt not in ("GPKG", "SHP"):
-                raise ValidationError(
-                    f"Nieobslugiwany format: {fmt}. Uzyj 'GPKG' albo 'SHP'"
-                )
-            if kwargs.get("layers") is not None:
-                normalize_layers(kwargs["layers"])
-                if fmt != "GPKG":
-                    raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
-            if kwargs.get("keep_raw") and fmt != "GPKG":
-                raise ValidationError(
-                    "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
-                )
+            self._check_bdot10k(kwargs)
+
+    def _check_bdot10k(self, kwargs: dict) -> None:
+        """BDOT10k: current packages (``format`` GPKG/SHP, ``layers`` and
+        ``keep_raw`` of GPKG) or, with ``year``, the yearly archive (ADR-042
+        D11: ``format`` GML or SHP required, the package 1:1)."""
+        if kwargs.get("year") is not None:
+            for name in ("layers", "keep_raw"):
+                if kwargs.get(name) not in (None, False):
+                    raise ValidationError(
+                        f"--{name.replace('_', '-')} nie dotyczy archiwum BDOT10k "
+                        "(--year: paczka powiatu GML albo SHP zapisywana 1:1)"
+                    )
+            self._archive_variant(kwargs)
+            return
+        fmt = kwargs.get("format", "GPKG")
+        if fmt not in ("GPKG", "SHP"):
+            raise ValidationError(
+                f"--format {fmt}: biezace paczki BDOT10k to GPKG albo SHP; GML "
+                "tylko z --year (archiwum rocznikow)"
+            )
+        if kwargs.get("layers") is not None:
+            normalize_layers(kwargs["layers"])
+            if fmt != "GPKG":
+                raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
+        if kwargs.get("keep_raw") and fmt != "GPKG":
+            raise ValidationError(
+                "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
+            )
+
+    def _archive_variant(self, kwargs: dict) -> PackageVariant:
+        """The archive package of ``format`` and ``year`` (no network).
+
+        Raises
+        ------
+        ValidationError
+            Missing or unpublished format (GML, SHP) or year (2014-2025).
+        """
+        params = _archive_channel(self._descriptor_key()).params
+        assert isinstance(params, UnitPackageParams)
+        return select_variant(
+            params, format=kwargs.get("format"), year=str(kwargs["year"])
+        )
 
     def _emit_file_notices(
         self, file: VersionedFile, update: UpdateMode | None, sink: NoticeSink
     ) -> None:
         """Report signal failures and unchecked local versions of a store file."""
         unit = file.path.relative_to(self._output_dir).as_posix()
-        unverified = file.unverified or ""
-        if unverified.startswith("check_failed"):
-            error = unverified.split(":", 1)[1].strip()
-            sink.emit(
-                "warning",
-                CHECK_FAILED,
-                f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
-                f"lokalnej wersji {file.label}",
-            )
-        if file.status == "local" and unverified == "none" and update == "upgrade":
-            sink.emit(
-                "info",
-                UNVERIFIED_LOCAL,
-                f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
-                "bez taniego sygnalu; pobierz ponownie: --force",
-            )
+        emit_file_notices(sink, unit, file, update)
 
     def _content_params(self, kwargs: dict) -> dict[str, object]:
         """Provider options that change the CONTENT of the result.
@@ -752,26 +1005,21 @@ class LandCoverManager:
                 tokens, ext = ("gpkg", "-".join(layers)), ".gpkg"
             else:
                 tokens, ext = ("gpkg",), ".gpkg"
-            segment = landcover_segment(key, tokens)
+            segment = content_segment(key, tokens)
             selection = {"teryt": teryt}
             jobs = [
                 _Job(
-                    selection_slot(out, segment, ext, teryt=teryt),
+                    unit_slot(out, segment, ext, teryt=teryt),
                     teryt,
                     signal,
                     selection,
                 )
             ]
             if kwargs.get("keep_raw"):
-                raw = landcover_segment(key, ("gpkg", "zip"))
-                raw_slot = selection_slot(out, raw, ".zip", teryt=teryt)
+                raw = content_segment(key, ("gpkg", "zip"))
+                raw_slot = unit_slot(out, raw, ".zip", teryt=teryt)
                 jobs.append(_Job(raw_slot, teryt, signal, selection))
             return jobs
-        if teryt is not None:
-            raise ValidationError(
-                f"{provider.name}: wybor teryt dziala tylko dla BDOT10k - podaj "
-                "bbox, sheet albo geometry"
-            )
         unit = selection_unit(bbox=bbox, sheet=sheet)
         if bbox is not None:
             request: dict = {
@@ -802,9 +1050,7 @@ class LandCoverManager:
                 tokens, ext = (str(year), "preview"), ".png"
                 transport, edition = TransportKind.WMS, None
         signal = channel_signal(key, transport)
-        slot = selection_slot(
-            out, landcover_segment(key, tokens), ext, bbox=bbox, sheet=sheet
-        )
+        slot = unit_slot(out, content_segment(key, tokens), ext, bbox=bbox, sheet=sheet)
         return [
             _Job(
                 slot,
@@ -877,16 +1123,20 @@ class LandCoverManager:
         )
 
     def _planned(
-        self, jobs: list[_Job], update: UpdateMode | None, plan: UpdatePlan | None
+        self,
+        inspect: Callable[[], list[PlanItem]],
+        update: UpdateMode | None,
+        plan: UpdatePlan | None,
     ) -> tuple[set[_SlotKey] | None, tuple[PlanItem, ...]]:
-        """Planned slots to execute now (``None`` = no plan) and stale positions."""
+        """Planned slots to execute now (``None`` = no plan) and stale positions;
+        ``inspect`` gives the current plan positions of the request's files."""
         validate_update(update)
         if plan is None:
             return None, ()
         if update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         require_store(plan, store_id(self._output_dir))
-        todo, stale = select_planned(plan, [self._inspect(j) for j in jobs], _TRACK)
+        todo, stale = select_planned(plan, inspect(), _TRACK)
         return {(i.segment, i.hierarchy, i.name) for i in todo}, tuple(stale)
 
     @staticmethod

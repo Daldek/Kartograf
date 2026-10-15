@@ -2,8 +2,8 @@
 and ``soil hsg``: same store bytes, statuses, plan and notices, frozen clock.
 
 Scenarios: BDOT10k ``teryt``, BDOT10k area of several powiats (one failing),
-CORINE CLMS and WMS preview, SoilGrids, HSG ``bbox`` and ``geometry``,
-``--check-updates --plan`` + ``--upgrade --plan``.
+BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, HSG
+``bbox`` and ``geometry``, ``--check-updates --plan`` + ``--upgrade --plan``.
 """
 
 from unittest.mock import patch
@@ -20,6 +20,7 @@ from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
 from tests.conftest import FakeCorine, FakeSoilGrids, tiny_geotiff, write_gpkg_layers
+from tests.fake_packages import FakePackageSession, package_route
 from tests.parity import assert_notices_printed, assert_same_store, run_both
 from tests.test_hsg import RasterSoilGrids
 from tests.test_landcover_output_params import FakePackages
@@ -93,6 +94,26 @@ def test_bdot_area_of_powiats_one_failing(tmp_path):
     _same(run, result.notices, result.ok)
     assert not result.ok and [f.unit for f in result.failed] == ["0224"]
     assert f"Error: 0224: {result.failed[0].error}" in run.cli_stderr
+
+
+def test_bdot_year_archive(tmp_path):
+    """``--year 2024 --format SHP`` = ``download(year=2024, format="SHP")``:
+    the archive package of the powiat 1:1, labelled by its year."""
+    url, response = package_route("bdot10k_2024_shp_1261")
+    session = FakePackageSession({url: response})
+    with _providers(bdot10k=lambda: Bdot10kProvider(session=session)):
+        run = _landcover(
+            tmp_path,
+            "bdot10k",
+            ["--teryt", "1261", "--year", "2024", "--format", "SHP"],
+            teryt="1261",
+            year=2024,
+            format="SHP",
+        )
+    _same(run, run.api_result.notices, run.api_result.ok)
+    assert [(r.file.status, r.file.label) for r in run.api_result.files] == [
+        ("new", "2024")
+    ]
 
 
 def _clms_tiff(bbox, out, year, timeout):
@@ -175,7 +196,13 @@ def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
             ["--year", "2018", "--format", "GPKG"],
             {"year": 2018, "format": "GPKG"},
         ),
-        ("bdot10k", ["--year", "2018"], {"year": 2018}),
+        ("bdot10k", ["--year", "2018"], {"year": 2018}),  # archive needs GML/SHP
+        (
+            "bdot10k",
+            ["--year", "2018", "--format", "GPKG"],
+            {"year": 2018, "format": "GPKG"},
+        ),
+        ("bdot10k", ["--format", "GML"], {"format": "GML"}),  # GML only with --year
     ],
 )
 def test_invalid_landcover_options_match_cli_and_api(tmp_path, source, flags, options):

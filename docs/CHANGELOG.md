@@ -32,6 +32,35 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`--product orto` -> `imagery download`, pozostale produkty ->
   `elevation download`, SoilGrids -> `soil`); kod Python uzywajacy
   funkcji biblioteki nie wymaga zmian.
+- NMT i NMPT PL z rejestru wariantow (ADR-041, plan A): rozdzielczosci,
+  uklady wysokosci i formaty zna jeden rejestr `kartograf.sources.variants`
+  (walidacja CLI i API, `--help`, `list-sources`, segment magazynu, wybor
+  rekordu skorowidza); NMPT ma siatki 0.5m, 0.6m i 1m.
+  - `elevation download --product nmpt` wymaga `--resolution`;
+    `GugikNmptProvider(session=None, *, vertical_crs, resolution,
+    format="ASC", cache=None)` - `resolution` bez wartosci domyslnej. Co
+    zrobic: dopisz `--resolution 1m` / `resolution="1m"`; dotychczasowe dane
+    NMPT 1 m zostaja w segmencie `nmpt/pl_<uklad>_1m_<vcrs>` (klucz
+    `pl.gugik.nmpt`).
+  - Usuniete bez aliasow: `kartograf.providers.pl.nmt_vertical_crs`,
+    `require_nmt_vertical_crs`, `NMT_5M_VERTICAL_CRS`,
+    `GugikProvider.SUPPORTED_RESOLUTIONS`, `SUPPORTED_VERTICAL_CRS`,
+    `SUPPORTED_VERTICAL_CRS_5M`, `WMS_INDEX_ENDPOINTS`,
+    `get_supported_resolutions()`, `get_supported_vertical_crs_for_resolution()`,
+    `GugikNmptProvider.SUPPORTED_RESOLUTIONS`, `WMS_INDEX_ENDPOINTS`,
+    `FileStorage.SUPPORTED_RESOLUTIONS`, `GugikLazProvider.WFS_ENDPOINTS`.
+    Co zrobic: warianty z `kartograf.sources.variants.variants(product=,
+    country=, vertical_crs=, resolution=, system=, format=)` (pola `label`,
+    `vertical_crs`, `format`, `source`, `index_ref.endpoint`);
+    `GugikProvider.is_wcs_available()` zostaje.
+  - Skorowidz arkuszy NMT/NMPT czytany z WFS GUGiK (ten sam indeks co raport
+    dostepnosci i LAZ) zamiast WMS GetFeatureInfo; rekord musi miec format
+    wariantu w polu `format` i w koncowce URL. Sidecar nowych arkuszy:
+    `extra.source.index_url` = adres uslugi WFS, `extra.source.layer` = typ
+    WFS (`SkorowidzNMT2025` zamiast warstwy WMS `SkorowidzeNMT2025`); pliki,
+    segmenty i sygnal swiezosci (`index`) istniejacych danych bez zmian.
+    Co zrobic: nic; skrypty porownujace `extra.source.layer` z nazwa warstwy
+    WMS - nowa nazwa.
 - Tryb wycinka jest jawny, a nazwy ukladow opisuja ich role (ADR-038,
   bez aliasow). CLI: `--target-crs X` -> `--cutout --horizontal-crs X`
   (`--cutout` wlacza jeden wycinek zamiast arkuszy, `--horizontal-crs` jest
@@ -266,8 +295,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - CLI `download`: wymagane `--product` (nmt|nmpt|orto|laz), `--output`,
     `--country` z `--bbox`/`--geometry` (pl|cz|auto; z `--sheet` kraj
     z godla), `--vertical-crs` dla nmt/nmpt/laz (PL EVRF2007|KRON86, CZ
-    Bpv|EVRF2007), `--resolution` dla NMT tam, gdzie jest wybor (PL 1m|5m,
-    CZ TM33 i obszar 2m|5m; NMPT, wycinek `--cutout` i arkusz SM5 maja
+    Bpv|EVRF2007), `--resolution` dla NMT i NMPT tam, gdzie jest wybor (PL:
+    etykiety rejestru wariantow, np. 0.5m|1m|5m - wpis o rejestrze wyzej;
+    CZ TM33 i obszar 2m|5m; wycinek `--cutout` i arkusz SM5 maja
     jedna wartosc i moga ja pominac), `--sheet-system` dla PL
     `--bbox`/`--geometry` bez `--cutout` (1992|2000), `--horizontal-crs`
     z `--cutout`. `--resolution` i `--vertical-crs`
@@ -290,7 +320,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `get_path/exists/delete/get_full_sheet_path/get_campaign_path/get_size/
     write_atomic` z wymaganym `ext`, `list_files(pattern, *, versions=False)`;
     `MetadataCache(db_path, ...)`; `GugikProvider(*, vertical_crs, resolution)`,
-    `GugikNmptProvider(*, vertical_crs)`, `GugikLazProvider(*, vertical_crs)`,
+    `GugikNmptProvider(*, vertical_crs, resolution)`, `GugikLazProvider(*, vertical_crs)`,
     `GugikOrtoProvider(*, color)`, `create_nmt_provider(vertical_crs,
     resolution)`, `CuzkDmrProvider(resolution, ..., *, vertical_crs)`,
     `create_dmr_provider(resolution, ..., *, vertical_crs)`;
@@ -477,7 +507,86 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zmian. Co zrobic: przekazuj `int` (`timeout` takze `float`), `True`/
   `False` i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
 
+### Zmienione
+
+- Listy produktow `elevation`/`imagery` i zrodel `landcover`
+  przeniesiono z parserow CLI do biblioteki (`download/options.py`,
+  `landcover/manager.py`): grupy CLI i manifest projektu korzystaja
+  z tych samych wyborow (zmiana wewnetrzna).
+- Nowa zaleznosc wykonawcza `pyogrio>=0.10` (GDAL wektorowy; kolo z wlasnym
+  GDAL, ok. 100 MB obok GDAL `rasterio`): zapis GeoPackage wyniku obszaru
+  `boundaries`/`cadastre download` (ADR-042 D5). Co zrobic: zaktualizuj
+  instalacje (`pip install -U kartograf` albo `pip install -e .` w repo) -
+  `pyogrio` instaluje sie razem z pakietem; bez niego pobranie obiektow
+  obszaru konczy sie bledem importu (paczki i pozostale komendy dzialaja).
+- `landcover download --format` przyjmuje takze `GML`, wylacznie z `--year`
+  (archiwum rocznikow BDOT10k); `--year` przy `--source bdot10k` oznacza
+  rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
+  (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
+  z podpowiedzia. Co zrobic: nic.
+
 ### Dodane
+
+- NMT/NMPT PL (ADR-041, plan A): siatki NMT 0.15m, 0.5m, 0.6m i 10m oraz
+  NMPT 0.5m i 0.6m (pelna lista: `kartograf elevation list-sources`);
+  archiwa GUGiK (`--format` XYZ, ASCII-NMT, TBD, TIN, TTN, GRD, DXF, DGN)
+  pobierane 1:1 jako pliki zrodlowe z sidecarem i wersjami (bez konwersji,
+  wycinka i mozaiki; arkusze archiwum dla obszaru wyznacza skorowidz).
+  Raport dostepnosci `kartograf elevation availability` /
+  `check_availability` (`AvailabilityReport`, `AvailabilityCombination`,
+  `AvailabilityArea`, JSON `kartograf-availability/1`): dla jakich lat,
+  ukladow, rozdzielczosci, ukladow wysokosci i formatow obszar ma komplet
+  pelnych arkuszy NMT/NMPT albo kafli LAZ wg skorowidza WFS i maski ladu PRG,
+  bez pobierania danych; podpowiedz pobrania bez `--output` (tez po
+  `kartograf project add NAZWA`). Opis: `docs/USAGE.md` 1.1 i 1.7.
+  Zadanie projektu `elevation download` zapisuje opcje `format`.
+- Granice, ewidencja i modele 3D budynkow GUGiK (plan C katalogu, ADR-042):
+  grupy CLI `boundaries` (`--product admin`, PRG: obiekty obszaru z WFS
+  z wymaganym `--level wojewodztwo|powiat|gmina|jednostka-ewidencyjna|obreb`,
+  paczka wojewodztwa `--teryt <2 cyfry>`, plik krajowy `--whole-country`),
+  `cadastre` (`--product map`, EGiB: eksport powiatu `--teryt <4 cyfry>`
+  albo dzialki i budynki obszaru z uslugi zbiorczej WFS) i `models3d`
+  (`--product buildings`, CityGML: `--lod 1 --year 2019|2021|2022|2024`
+  albo `--lod 2`, paczka powiatu albo paczki powiatow obszaru z PRG), kazda
+  z `download` i `list-sources`, trybami `--check-updates`/`--upgrade`/
+  `--force`/`--plan`, `--workers` i `-q`. Pliki w magazynie wersji:
+  `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}`
+  (np. `boundaries/pl_prg_gmina/bbox/<coords>.gpkg`,
+  `cadastre/pl_egib_gpkg/teryt/1261.gpkg`,
+  `models3d/pl_buildings_lod1_2024/teryt/1261.zip`); wynik obszaru to jeden
+  GeoPackage w ukladzie uslugi (EPSG:2180) z pelnymi geometriami,
+  kompletnosc sprawdzana liczba obiektow uslugi; sygnal swiezosci `none`
+  (nowa tresc: `--force`). Opis: `docs/USAGE.md` 1.8, ARCHITECTURE 4.10.
+- Archiwum rocznikow BDOT10k: `landcover download --source bdot10k --year
+  2014..2025 --format GML|SHP` (stan z poczatku roku) zapisuje oryginalna
+  paczke powiatu ZIP 1:1 w `landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip`
+  z etykieta = rok; identyczne roczniki tego samego powiatu zajmuja miejsce
+  raz (status `relabeled`, dowiazanie twarde, ADR-042 D7).
+- Biblioteka (ADR-042 D10): `download_collection`/`check_collection`
+  i `CollectionReport(files, failed, stale, notices, ok)` w `__all__` (=
+  `boundaries`/`cadastre`/`models3d download`, tor planu `collection`),
+  walidacja bez sieci `kartograf.download.collections.validate_collection_request`,
+  `LandCoverManager.download/check(year=, format="GML"|"SHP")` dla archiwum
+  BDOT10k; kody `Notice` `unit_list` (powiaty obszaru wg PRG),
+  `whole_country_size` (rozmiar pliku krajowego przed transferem)
+  i `auto_narrowed_to_cz`; parametry kanalow `AccessChannel.params`
+  (`UnitPackageParams`, `PackageVariant`, `FeatureBBoxParams`,
+  `FeatureLayer` w `kartograf.sources.descriptor`) i deskryptory
+  `pl.gugik.prg`, `pl.gugik.egib`, `pl.gugik.buildings_3d` oraz kanal
+  `archive_unit_files` w `pl.gugik.bdot10k`. Projekt (ADR-040): zadania
+  `boundaries download`, `cadastre download` i `models3d download`.
+  Weryfikacja na zywo: `docs/research/2026-10-15-plan-c-live/raport.md`.
+
+- Projekt (ADR-040): grupa `kartograf project` (`init`, `add`, `remove`,
+  `download`, `status`, `verify`) zapisuje zadania i przypiete wersje
+  w `kartograf-project.json` (`kartograf-project/1`). `download` odtwarza
+  brakujace wersje tylko przy zgodnej sumie SHA-256; `--check-updates`
+  odpytuje zrodlo bez pobierania, `--upgrade`/`--force` jawnie przepinaja
+  zadania. Publiczne API: `init_project`, `open_project`,
+  `add_project_task`, `remove_project_task`, `download_project`,
+  `check_project`, `project_status`, `verify_project` oraz typy
+  `Project`, `ProjectTask`, `PinnedFile`, `ProjectReport`, `TaskResult`,
+  `ProjectCheck`, `FileCheck`. Opis uzycia: `docs/USAGE.md` sekcja 8.
 
 - Biblioteka (ADR-037): `download_data`/`check_data` = komenda
   `kartograf download` (wynik `DataReport`, `UnitFile`, `UnitFailure`),

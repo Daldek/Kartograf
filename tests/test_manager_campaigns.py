@@ -6,7 +6,9 @@ version sidecar, returned ``DownloadResult`` and ``VersionedFile`` outcomes.
 Records: real ``SkorowidzRecord`` objects from raw index (skorowidz) responses
 (``tests/fixtures/gugik_skorowidz/real_2026_10_06/nmt``): C14
 (N-34-139-C-a-3-1..4) and N-33-69-A-d-3-2 (campaign 72675 with a ``.xyz`` URL).
-The provider is a mock with no network (``FakeCampaignProvider``).
+The provider is a mock with no network (``FakeCampaignProvider``); the record
+cache tests run a real ``GugikProvider`` on a recorded WFS index answer
+(``test_campaigns_flow.recorded_session``).
 """
 
 import dataclasses
@@ -985,16 +987,21 @@ def test_manager_check_reads_full_list_once_per_sheet(tmp_path):
 
 
 def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
-    from tests.test_campaigns_flow import c14_session
+    from tests.test_campaigns_flow import G as W
+    from tests.test_campaigns_flow import recorded_session
 
+    key = ("pl.gugik.nmt_1m", "1m", "EVRF2007", W)
     cache = MetadataCache(tmp_path / "cache.db")
     provider = GugikProvider(
-        session=c14_session(G), cache=cache, vertical_crs="EVRF2007", resolution="1m"
+        session=recorded_session(W),
+        cache=cache,
+        vertical_crs="EVRF2007",
+        resolution="1m",
     )
     manager = DownloadManager(tmp_path, provider=provider)
-    manager.download_sheet(G)
-    assert cache.get_record("nmt", "1m", "EVRF2007", G) is not None
-    assert cache.get_campaigns("nmt", "1m", "EVRF2007", G) is None
+    manager.download_sheet(W)
+    assert cache.get_record(*key) is not None
+    assert cache.get_campaigns(*key) is None
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("brak indeksu"))
     refresh = MetadataCache(tmp_path / "cache.db", refresh=True)
@@ -1005,26 +1012,27 @@ def test_manager_without_range_unchanged_uses_record_cache(tmp_path):
         ),
     )
     with patch("kartograf.transport.http.time.sleep"):
-        result = manager.download_sheet(G)
-    assert G in result.unverified
-    assert "84183" in linked(std_path(tmp_path))
+        result = manager.download_sheet(W)
+    assert W in result.unverified
+    assert "80196" in linked(std_path(tmp_path, W))
 
 
 def test_range_index_down_all_local_uses_local(tmp_path, caplog):
     """D14: every sheet has a local version from the range -> local versions
     with a warning, no download."""
-    from tests.test_campaigns_flow import c14_session
+    from tests.test_campaigns_flow import G as W
+    from tests.test_campaigns_flow import recorded_session
 
     cache = MetadataCache(tmp_path / "cache.db")
     DownloadManager(
         tmp_path,
         provider=GugikProvider(
-            session=c14_session(G),
+            session=recorded_session(W),
             cache=cache,
             vertical_crs="EVRF2007",
             resolution="1m",
         ),
-    ).download_sheet(G)
+    ).download_sheet(W)
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("brak indeksu"))
     refresh = MetadataCache(tmp_path / "cache.db", refresh=True)
@@ -1039,13 +1047,13 @@ def test_range_index_down_all_local_uses_local(tmp_path, caplog):
         patch("kartograf.transport.http.time.sleep"),
         caplog.at_level(logging.WARNING, logger="kartograf.download.manager"),
     ):
-        result = manager.download_sheet(G)
-    assert result.files[G][0].path == std_path(tmp_path)
-    assert result.local == [G]
-    assert result.files[G][0].label == "2025-10-21_84183"
-    assert result.files[G][0].unverified
-    assert result.unverified.keys() == {G}
-    assert "84183" in linked(std_path(tmp_path))
+        result = manager.download_sheet(W)
+    assert result.files[W][0].path == std_path(tmp_path, W)
+    assert result.local == [W]
+    assert result.files[W][0].label == "2024-09-21_80196"
+    assert result.files[W][0].unverified
+    assert result.unverified.keys() == {W}
+    assert "80196" in linked(std_path(tmp_path, W))
     assert len(result.notices) == 1
     assert result.notices[0].code == UNVERIFIED_LOCAL
     assert not any(

@@ -3,7 +3,8 @@
 Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
 (Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
 geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT PL
-(`--cutout --horizontal-crs`) i zapisuje je w uporządkowanym katalogu `data/`
+(`--cutout --horizontal-crs`) — także granice, ewidencję i modele 3D
+budynków GUGiK — i zapisuje je w uporządkowanym katalogu `data/`
 razem z metadanymi każdego pliku. Działa
 jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
@@ -14,12 +15,16 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 
 ## Obsługiwane dane
 
-- **NMT (PL)** — Numeryczny Model Terenu z GUGiK (1 m / 5 m)
+- **NMT (PL)** — Numeryczny Model Terenu z GUGiK: siatki 0,15–10 m (np. 0,5 m, 1 m, 5 m) i archiwa GUGiK jako pliki źródłowe
 - **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
-- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK
+- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK (0,5 m, 0,6 m, 1 m)
 - **Ortofotomapa** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm)
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
+- **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu
+- **Granice administracyjne (PRG)** — granice jednostek administracyjnych i ewidencyjnych z GUGiK
+- **EGiB** — mapa ewidencyjna z GUGiK (działki i budynki)
+- **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
 - **SoilGrids** — globalne dane glebowe (ISRIC)
 - **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
@@ -44,7 +49,11 @@ kartograf parse N-34-130-D-d-2-4
 
 # NMT dla arkusza, inne produkty GUGiK
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+
+# Jakie lata, rozdzielczości i formaty mają komplet arkuszy dla obszaru (bez pobierania)
+kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
 
 # NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
@@ -59,11 +68,34 @@ kartograf elevation download --sheet 302_5550 --country cz --product nmt --resol
 # Pokrycie terenu i grupy hydrologiczne gleb
 kartograf landcover download --source bdot10k --teryt 1465 -o ./data
 kartograf soil hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
+
+# Granice, ewidencja, modele 3D budynków i archiwum BDOT10k (GUGiK)
+kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
+kartograf cadastre download --product map --teryt 1261 -o ./data
+kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
+kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
 ```
 
 Pełna lista opcji: `kartograf <grupa> <komenda> --help`. Więcej przykładów, wybór
 kraju (`--country`), jeden wycinek (`--cutout --horizontal-crs`) i kampanie GUGiK:
 [docs/USAGE.md](docs/USAGE.md).
+
+### Projekt i przypięte wersje
+
+```bash
+mkdir -p ~/projekty/wisla
+cd ~/projekty/wisla
+kartograf project init --output ~/dane/kartograf
+kartograf project add teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --year 2022
+kartograf project download
+kartograf project verify
+```
+
+Projekt zapisuje w `kartograf-project.json` zadania i sumy SHA-256
+przypiętych wersji ze wspólnego magazynu; zwykłe `project download`
+odtwarza brakujące wersje tylko przy identycznej treści. Więcej przykładów,
+aktualizacje i przenoszenie magazynu:
+[docs/USAGE.md — Projekt](docs/USAGE.md#8-projekt).
 
 ### Biblioteka Python
 
