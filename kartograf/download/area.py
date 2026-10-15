@@ -135,6 +135,7 @@ def pl_only_flags(
     vertical_crs: object,
     resolution: object,
     format: object = None,
+    coverage: object = None,
 ) -> list[str]:
     """Choices with no CZ counterpart: they resolve ``country="auto"`` to PL.
 
@@ -142,8 +143,10 @@ def pl_only_flags(
     values name both countries, ``sheet_system`` is required for every PL
     sheet area, ``cutout`` and campaign options work with both countries.
     PL-only is read from the registries: a product, height system or
-    resolution without a CZ source of the product, and ``--format`` (PL
-    files only).
+    resolution without a CZ source of the product, ``--format`` (PL files
+    only) and the orthophotomap cutout - ``--coverage`` and its pixel
+    (``--resolution`` of orto: the WCS cutout of GUGiK; whether CZ has an
+    orthophotomap does not matter, its sheets have no pixel choice).
     """
     # local import: options imports cutout, which imports this module
     from kartograf.download.options import CZ_VERTICAL_CRS
@@ -159,10 +162,14 @@ def pl_only_flags(
         flags.append(f"--product {product}")
     if isinstance(vertical_crs, str) and vertical_crs not in cz_vertical:
         flags.append(f"--vertical-crs {vertical_crs}")
-    if isinstance(resolution, str) and cz and resolution not in cz_labels:
+    if isinstance(resolution, str) and (
+        product == "orto" or (cz and resolution not in cz_labels)
+    ):
         flags.append(f"--resolution {resolution}")
     if isinstance(format, str):
         flags.append(f"--format {format}")
+    if isinstance(coverage, str):
+        flags.append(f"--coverage {coverage}")
     return flags
 
 

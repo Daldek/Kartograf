@@ -255,7 +255,7 @@ class TestSelectChannelByCapability:
     def test_unknown_capability_raises_keyerror(self):
         d = get_source("pl.gugik.orto")
         with pytest.raises(KeyError):
-            _select_channel_by_capability(d, "bbox_raster")
+            _select_channel_by_capability(d, "area_files")
 
 
 class TestBuildMetadataCapabilityAndNodata:
@@ -279,7 +279,7 @@ class TestBuildMetadataCapabilityAndNodata:
     def test_capability_unknown_raises_keyerror(self):
         d = get_source("pl.gugik.orto")
         with pytest.raises(KeyError):
-            build_metadata(d, request={"sheet": "X"}, capability="bbox_raster")
+            build_metadata(d, request={"sheet": "X"}, capability="area_files")
 
     def test_nodata_param_takes_precedence_over_asc_sniff(self, tmp_path):
         asc = tmp_path / "x.asc"

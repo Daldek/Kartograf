@@ -143,8 +143,12 @@ def test_area_outside_countries_is_validation_error(tmp_path):
             "--horizontal-crs dziala tylko z --cutout",
         ),
         (
+            {"product": "laz", "cutout": True},
+            "--cutout dziala tylko z --product nmt, nmpt albo orto",
+        ),
+        (
             {"product": "orto", "vertical_crs": None, "cutout": True},
-            "--cutout dziala tylko z --product nmt albo nmpt",
+            "--coverage wymagane z --cutout --product orto",
         ),
         (
             {
