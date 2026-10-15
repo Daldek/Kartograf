@@ -52,9 +52,10 @@ from kartograf.download.plan import (
     select_planned,
     store_id,
 )
+from kartograf.download.storage import content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.landcover.store import landcover_segment, selection_slot, selection_unit
+from kartograf.landcover.store import selection_unit
 from kartograf.notices import (
     CHECK_FAILED,
     CORINE_PREVIEW,
@@ -801,19 +802,19 @@ class LandCoverManager:
                 tokens, ext = ("gpkg", "-".join(layers)), ".gpkg"
             else:
                 tokens, ext = ("gpkg",), ".gpkg"
-            segment = landcover_segment(key, tokens)
+            segment = content_segment(key, tokens)
             selection = {"teryt": teryt}
             jobs = [
                 _Job(
-                    selection_slot(out, segment, ext, teryt=teryt),
+                    unit_slot(out, segment, ext, teryt=teryt),
                     teryt,
                     signal,
                     selection,
                 )
             ]
             if kwargs.get("keep_raw"):
-                raw = landcover_segment(key, ("gpkg", "zip"))
-                raw_slot = selection_slot(out, raw, ".zip", teryt=teryt)
+                raw = content_segment(key, ("gpkg", "zip"))
+                raw_slot = unit_slot(out, raw, ".zip", teryt=teryt)
                 jobs.append(_Job(raw_slot, teryt, signal, selection))
             return jobs
         unit = selection_unit(bbox=bbox, sheet=sheet)
@@ -846,9 +847,7 @@ class LandCoverManager:
                 tokens, ext = (str(year), "preview"), ".png"
                 transport, edition = TransportKind.WMS, None
         signal = channel_signal(key, transport)
-        slot = selection_slot(
-            out, landcover_segment(key, tokens), ext, bbox=bbox, sheet=sheet
-        )
+        slot = unit_slot(out, content_segment(key, tokens), ext, bbox=bbox, sheet=sheet)
         return [
             _Job(
                 slot,

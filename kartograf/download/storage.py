@@ -8,6 +8,7 @@ and storage operations for downloaded data.
 import os
 import re
 import threading
+from collections.abc import Sequence
 from pathlib import Path
 from typing import BinaryIO
 
@@ -700,4 +701,111 @@ def bbox_slot(
         versions_base=base,
         versions_root=base / "bbox",
         ext=extension,
+    )
+
+
+# Content token of a segment (spec 3.4, ADR-042 D8): lowercase, no separators.
+_SEGMENT_TOKEN = re.compile(r"[a-z0-9.-]+")
+_TERYT = re.compile(r"[0-9]{2,7}")
+_COUNTRY = re.compile(r"[a-z]{2}")
+
+
+def token_segment(prefix: str, tokens: Sequence[str]) -> str:
+    """``<prefix>_<token>_...`` with lowercase tokens; no tokens = ``prefix``.
+
+    Raises
+    ------
+    ValidationError
+        A token outside ``[a-z0-9.-]`` (after lowercasing).
+    """
+    lowered = [str(t).lower() for t in tokens]
+    for token in lowered:
+        if not _SEGMENT_TOKEN.fullmatch(token):
+            raise ValidationError(
+                f"Niedozwolony element segmentu {token!r} (dozwolone [a-z0-9.-])"
+            )
+    return "_".join([prefix, *lowered])
+
+
+def content_segment(descriptor_key: str, tokens: Sequence[str]) -> str:
+    """Segment of a source whose ``storage_subdir`` is a prefix completed by
+    content tokens (land cover, collections: layers, format, year, level).
+
+    ``content_segment("pl.gugik.bdot10k", ("shp", "2024"))`` =
+    ``landcover/pl_bdot10k_shp_2024``; no tokens = the prefix itself.
+
+    Raises
+    ------
+    ValidationError
+        A token outside ``[a-z0-9.-]`` (after lowercasing).
+    """
+    return token_segment(get_source(descriptor_key).storage_subdir, tokens)
+
+
+def unit_slot(
+    output_dir: str | Path,
+    segment: str,
+    ext: str,
+    *,
+    teryt: str | None = None,
+    bbox: BBox | None = None,
+    sheet: str | None = None,
+    country: str | None = None,
+    related_roots: Sequence[Path] = (),
+) -> FileSlot:
+    """Version slot of one file of a unit (exactly one selection, ADR-042 D8).
+
+    ``teryt`` -> ``<segment>/teryt/<TERYT><ext>``; ``bbox`` ->
+    ``<segment>/bbox/<coords><ext>`` in the bbox's own CRS (``bbox_slot``;
+    the caller passes the CRS of the result); ``sheet`` ->
+    ``<segment>/<path_parts>/<canonical sheet><ext>``; ``country`` ->
+    ``<segment>/country/<code><ext>`` (lowercase ``pl``/``cz``). Versions
+    live in ``<segment>/versions/<same hierarchy>/``; ``related_roots`` as
+    in ``FileSlot``.
+
+    Raises
+    ------
+    ValidationError
+        Not exactly one selection, a TERYT code that is not 2-7 digits, a
+        country code that is not two letters, or an invalid sheet code.
+    """
+    given = [v for v in (teryt, bbox, sheet, country) if v is not None]
+    if len(given) != 1:
+        raise ValidationError(
+            "Podaj dokladnie jeden wybor: teryt, bbox, sheet albo country"
+        )
+    output_dir = Path(output_dir)
+    related = tuple(Path(r) for r in related_roots)
+    if bbox is not None:
+        slot = bbox_slot(output_dir, segment, bbox, ext)
+        return FileSlot(
+            output_dir=slot.output_dir,
+            std=slot.std,
+            versions_base=slot.versions_base,
+            versions_root=slot.versions_root,
+            ext=ext,
+            related_roots=related,
+        )
+    parts: list[str]
+    if teryt is not None:
+        if not _TERYT.fullmatch(teryt):
+            raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt!r}")
+        parts, name = ["teryt"], teryt
+    elif country is not None:
+        name = country.lower()
+        if not _COUNTRY.fullmatch(name):
+            raise ValidationError(f"Nieprawidlowy kod kraju: {country!r}")
+        parts = ["country"]
+    else:
+        assert sheet is not None
+        name = SheetParser(sheet).sheet
+        parts = parser_registry.path_parts(name)
+    base = output_dir / segment / VERSIONS_DIR
+    return FileSlot(
+        output_dir=output_dir,
+        std=output_dir.joinpath(segment, *parts, f"{name}{ext}"),
+        versions_base=base,
+        versions_root=base.joinpath(*parts),
+        ext=ext,
+        related_roots=related,
     )

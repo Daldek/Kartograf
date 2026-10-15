@@ -376,6 +376,7 @@ def commit_version(
     write_sidecar: Callable[[Path, VersionRef, ContentDigest], None],
     *,
     signal: dict | None = None,
+    related_roots: Iterable[Path] = (),
 ) -> VersionCommit:
     """Publish a staged file as a version of ``name`` (spec 3.1).
 
@@ -385,8 +386,12 @@ def commit_version(
     a version with that sha256 (``same_http_signal``). Otherwise — a new
     campaign/edition label or the same content under a new HTTP signal —
     the version gets its own directory hardlinked to the existing data,
-    ``relabeled`` (D23; ``same_as`` = label of the newest such version). New
-    content: ``os.link`` publishes the data
+    ``relabeled`` (D23; ``same_as`` = label of the newest such version).
+    Without such a version in ``versions_root``, the hierarchy directories
+    of related slots (``related_roots``: other editions of the same
+    product, format and unit, ADR-042 D7) are searched the same way: a
+    version of ``name`` with this sha256 there is linked, ``relabeled``
+    with ``same_as`` = its label. New content: ``os.link`` publishes the data
     exclusively (D18); an existing target is compared by sha256:
     different = ``DownloadError``, equal with a sidecar = ``unchanged``
     (e.g. a second download on the same day), equal without = repair.
@@ -428,7 +433,17 @@ def commit_version(
         identical = max(same, key=version_key)
         source, status, same_as = identical.path, "relabeled", identical.label
     else:
-        _fsync(staged)
+        related = [
+            v
+            for other in related_roots
+            for v in list_versions(Path(other), name)
+            if v.sha256 == digest.sha256
+        ]
+        if related:
+            identical = max(related, key=version_key)
+            source, status, same_as = identical.path, "relabeled", identical.label
+        else:
+            _fsync(staged)
 
     vdir = root / f"{version.label}_{digest.sha256[:8]}"
     target = vdir / name
