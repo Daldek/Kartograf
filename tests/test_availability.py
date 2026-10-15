@@ -381,7 +381,10 @@ def _validated(hint: str, output) -> None:
         download_data(**_download_arguments(args))
 
 
-def test_hint_runs_validation(tmp_path):
+@functools.cache
+def _hints() -> tuple[str, ...]:
+    """Hints of every shape: bbox (PL-1992, PL-2000 with ``--scale``,
+    ``--full-sheet``, archives with ``--format``), NMPT, LAZ and a sheet."""
     reports = [
         _report("nmt", "krakow"),
         _report("nmt", "pomorze"),
@@ -395,11 +398,31 @@ def test_hint_runs_validation(tmp_path):
         }
     )
     reports.append(_check(session, product="nmt", sheet="M-34-64-D-d-2-1"))
+    return tuple(h for r in reports for c in r.combinations for h in c.download_hint)
 
-    hints = [h for r in reports for c in r.combinations for h in c.download_hint]
+
+def test_hint_runs_validation(tmp_path):
+    hints = _hints()
     assert len(hints) > 50
     for hint in hints:
         _validated(hint, tmp_path)
+
+
+def test_hint_accepted_by_project_add(tmp_path, monkeypatch):
+    """Every hint pasted after ``kartograf project add NAZWA`` is a project
+    task (manifest spec 4.10): the project validation, without network."""
+    from kartograf import init_project, open_project
+    from kartograf.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    hints = _hints()
+    for number, hint in enumerate(hints):
+        add = ["project", "add", "--project", str(project), f"zadanie{number}"]
+        assert main([*add, *shlex.split(hint)]) == 0, hint
+    assert len(open_project(project).tasks) == len(hints)
+    assert list((project / "data").iterdir()) == []
 
 
 @pytest.mark.usefixtures("frozen_clock")
