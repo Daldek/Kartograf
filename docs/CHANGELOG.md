@@ -462,6 +462,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     prefiks segmentu); `CorineProvider.CLMS_DATASET_UIDS`/
     `CLMS_RASTER_DOWNLOAD_IDS` 2012/2006/2000 zmienione na identyfikatory
     z katalogu CLMS.
+- Typy argumentow biblioteki sprawdzane na wejsciu, bez konwersji
+  (STANDARDS 11.2, `kartograf/download/arguments.py`): `download_data`/
+  `check_data`, `LandCoverManager.download`/`check`,
+  `HSGCalculator.calculate_hsg`/`check_hsg`, `DownloadManager` i
+  `download_laz_area`/`check_laz_area` daja `ValidationError` przed siecia
+  dla liczby podanej jako napis (`year="2018"`, `timeout="120"`,
+  `workers="4"`, `min_density="10"`), liczby niecalkowitej lub `bool` tam,
+  gdzie oczekiwano `int` (`year=2018.0`), przelacznika innego niz
+  `True`/`False` (`cutout`, `all_campaigns`, `full_sheet`, `keep_raw`),
+  `timeout <= 0` i `layers` podanego jako napis (`"SWRS,PTWP"` byl czytany
+  znak po znaku). Dotad czesc z nich dzialala przypadkiem, czesc konczyla
+  sie poznym `ValueError` z `urllib3` albo `TypeError`. Flagi CLI bez
+  zmian. Co zrobic: przekazuj `int` (`timeout` takze `float`), `True`/
+  `False` i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
 
 ### Dodane
 

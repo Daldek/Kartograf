@@ -38,6 +38,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import bbox_coords
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.area import bbox_to_2180
+from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -367,8 +368,18 @@ def _selected(
     """Provider, WFS tile selection and EPSG:2180 area of one LAZ request.
 
     The ``LAZ_SUPERSEDED`` notice is emitted right after the selection; an
-    empty selection raises ``NoCoverageError`` after that notice.
+    empty selection raises ``NoCoverageError`` after that notice. Library
+    argument types are checked first (STANDARDS 11.2).
     """
+    for name, value in (
+        ("year", year),
+        ("min_year", min_year),
+        ("max_year", max_year),
+        ("min_density", min_density),
+    ):
+        if value is not None:
+            require_int(value, name)
+    require_bool(all_campaigns, "all_campaigns")
     area = bbox_to_2180(bbox)
     with open_cache(cache, force=force, on_notice=sink.add) as metadata:
         if provider is None:
@@ -551,6 +562,7 @@ def download_laz_area(
     """
     validate_request_bbox(bbox)
     validate_update(update)
+    require_int(workers, "workers")
     sink = NoticeSink(on_notice)
     with _selected(
         bbox,

@@ -2362,11 +2362,16 @@ w tym samym wydaniu (decyzja uzytkownika).
   Raport wejsciowy R1-R13:
   `docs/research/2026-10-12-cli-api-consistency/raport.md`.
 
-- [ ] **Typy danych argumentow API:** `layers="SWRS,PTWP"` moze byc
+- [x] **Typy danych argumentow API:** `layers="SWRS,PTWP"` moze byc
   iterowane znak po znaku zamiast odrzucone jako bledny typ; `year="2018"`
   i `timeout="120"` moga trafic do providera bez wczesnej walidacji
   (m.in. `urllib3` z `ValueError`). Rozstrzygnac zasady walidacji typow
   dla wywolan biblioteki, bez zmiany zachowania flag CLI.
+  **ZROBIONE 2026-10-15 (galaz `fix/backlog-0.8.0`):** zasada w STANDARDS
+  11.2 - zly typ = `ValidationError` przed siecia, bez konwersji
+  (`kartograf/download/arguments.py`; `download_data`/`check_data`,
+  `LandCoverManager`, `HSGCalculator`, `DownloadManager`, LAZ); testy
+  `tests/test_argument_types.py`; CHANGELOG [0.8.0] BREAKING.
 - [ ] **Dwie jednakowe linie planu BDOT10k:** `landcover download
   --check-updates --keep-raw` moze wypisac dwie linie dla GPKG i ZIP z
   identycznym oznaczeniem TERYT; `_report_plan` nie dostaje callbacku

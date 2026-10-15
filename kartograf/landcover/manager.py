@@ -27,6 +27,12 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import bbox_coords
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
+from kartograf.download.arguments import (
+    require_bool,
+    require_codes,
+    require_int,
+    require_timeout,
+)
 from kartograf.download.fetch import (
     EditionLookup,
     FileSlot,
@@ -438,8 +444,10 @@ class LandCoverManager:
         Raises
         ------
         ValidationError
-            Not exactly one selection, invalid source options, a plan of
-            another store or without ``update="upgrade"``.
+            Not exactly one selection, invalid source options, an option of
+            a wrong type (``year="2018"``, ``layers="SWRS,PTWP"``,
+            ``timeout="120"``; never converted), a plan of another store or
+            without ``update="upgrade"``.
         TypeError
             An option that belongs to no source (e.g. ``output_path``).
         NoCoverageError
@@ -450,6 +458,7 @@ class LandCoverManager:
         """
         sink = NoticeSink(on_notice)
         validate_update(update)
+        require_int(workers, "--workers")
         if bbox is not None:  # the CLI parses --bbox first: the same first error
             validate_request_bbox(bbox)
         self._check_options(options)
@@ -634,6 +643,15 @@ class LandCoverManager:
                 raise ValidationError(
                     f"--{name.replace('_', '-')} dziala tylko z --source {source}"
                 )
+        # library calls only: the CLI parses its flags (STANDARDS 11.2)
+        if kwargs.get("timeout") is not None:
+            require_timeout(kwargs["timeout"])
+        if kwargs.get("year") is not None:
+            require_int(kwargs["year"], "--year")
+        if kwargs.get("layers") is not None:
+            require_codes(kwargs["layers"], "--layers", "['PTWP', 'SWRS']")
+        if kwargs.get("keep_raw") is not None:
+            require_bool(kwargs["keep_raw"], "--keep-raw")
         provider = self._provider
         if isinstance(provider, SoilGridsProvider):
             for name, label, allowed in (
