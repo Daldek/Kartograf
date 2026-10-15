@@ -4,12 +4,13 @@ Verification tests for the parser_2000 module.
 This module contains verification tests for the PL-2000 BBox:
 - BBox reference values for all 4 zones
 - Hierarchy consistency (children tiling)
-- Live tests of the GUGiK index (skorowidz) (``live`` marker - only
-  deliberately, ``-m live``)
+- Live tests of the GUGiK index (skorowidz: NMT/NMPT WFS, orthophoto WMS)
+  (``live`` marker - only deliberately, ``-m live``)
 - Edge cases: multi-zone, round-trip, drill-down
 """
 
 import datetime
+import re
 
 import pytest
 
@@ -24,7 +25,8 @@ from kartograf.exceptions import DownloadError, NoCoverageError
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
-from kartograf.providers.pl.skorowidz import query_skorowidz_layer
+from kartograf.providers.pl.skorowidz_wfs import index_records, sheet_query_bbox
+from kartograf.sources.variants import ProductVariant, source_format, variants
 
 # =========================================================================
 # 1. TestPL2000BBoxReferenceValues
@@ -410,7 +412,7 @@ class TestPL2000HierarchyConsistency:
 
 # PL-2000 1:10000 sheet codes (interior PL, 1 m NMT coverage): a query in the
 # middle of a sheet checks the Parser2000 geometry against the GUGiK index polygons.
-LIVE_WMS_SHEETS = [
+LIVE_PL2000_SHEETS = [
     # Zone 5 — western Poland
     ("5.176.14", 5),  # near Szczecin area
     ("5.180.10", 5),  # further west
@@ -427,97 +429,141 @@ LIVE_WMS_SHEETS = [
 
 LIVE_TIMEOUT = 15
 
-# (provider, endpoint, yearly rotation) - every public PL index; KRON86
-# is a frozen product (2019..2017iStarsze), with no new yearly layers
+
+def _grid(product: str, vertical_crs: str, resolution: str) -> ProductVariant:
+    """The registry variant of an ASC grid (one per product, system, label)."""
+    return variants(
+        product=product,
+        country="PL",
+        vertical_crs=vertical_crs,
+        resolution=resolution,
+        format="ASC",
+    )[0]
+
+
+def _endpoint(variant: ProductVariant) -> str:
+    assert variant.index_ref is not None
+    return variant.index_ref.endpoint
+
+
+# (provider, WFS index endpoint of the variant, yearly rotation) - KRON86 is a
+# frozen product (types up to 2019), with no new yearly types
 LIVE_INDEX_ENDPOINTS = [
     pytest.param(
         GugikProvider(resolution="1m", vertical_crs="EVRF2007"),
-        GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"],
+        _endpoint(_grid("nmt", "EVRF2007", "1m")),
         True,
         id="nmt-1m-evrf2007",
     ),
     pytest.param(
         GugikProvider(resolution="1m", vertical_crs="KRON86"),
-        GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["KRON86"],
+        _endpoint(_grid("nmt", "KRON86", "1m")),
         False,
         id="nmt-1m-kron86",
     ),
     pytest.param(
         GugikProvider(resolution="5m", vertical_crs="EVRF2007"),
-        GugikProvider.WMS_INDEX_ENDPOINTS["5m"]["EVRF2007"],
+        _endpoint(_grid("nmt", "EVRF2007", "5m")),
         True,
         id="nmt-5m-evrf2007",
     ),
     pytest.param(
-        GugikNmptProvider(vertical_crs="EVRF2007"),
-        GugikNmptProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"],
+        GugikNmptProvider(resolution="1m", vertical_crs="EVRF2007"),
+        _endpoint(_grid("nmpt", "EVRF2007", "1m")),
         True,
         id="nmpt-1m-evrf2007",
-    ),
-    pytest.param(
-        GugikOrtoProvider(color="RGB"),
-        GugikOrtoProvider.WMS_INDEX_ENDPOINT,
-        True,
-        id="orto",
     ),
 ]
 
 
-def _center_query_bbox(sheet: str) -> tuple[float, float, str]:
-    """A mid-sheet point (EPSG:2180) and a GetFeatureInfo BBOX as in providers."""
+def _sheet_centre(sheet: str) -> tuple[float, float]:
+    """Middle of a sheet frame in EPSG:2180 (the point the providers query)."""
     bbox = SheetParser(sheet).get_bbox(crs="EPSG:2180")
-    x = (bbox.min_x + bbox.max_x) / 2
-    y = (bbox.min_y + bbox.max_y) / 2
-    return x, y, f"{y - 10},{x - 10},{y + 10},{x + 10}"
+    return (bbox.min_x + bbox.max_x) / 2, (bbox.min_y + bbox.max_y) / 2
+
+
+def _live_records(provider: GugikProvider, endpoint: str, sheet: str) -> list:
+    """Every record of the WFS index around the sheet centre (all types)."""
+    return index_records(
+        provider._wfs_index(endpoint),
+        sheet_query_bbox(SheetParser(sheet)),
+        provider._layers(endpoint)[0].split(","),
+    )
 
 
 @pytest.mark.live
+@pytest.mark.real_wfs_types
 @pytest.mark.real_wms_layers
 class TestLiveGugikIndex:
-    """The live GUGiK index: layers, sheet selection, no coverage, geometry.
+    """The live GUGiK index: types, sheet selection, no coverage, geometry.
 
     No ``skip`` on errors: a service failure after 3 tries = a test failure
     (it is the only signal that S1/S4/K3 are back). Run: ``pytest -m live``.
     """
 
     @pytest.mark.parametrize(("provider", "endpoint", "rotates"), LIVE_INDEX_ENDPOINTS)
-    def test_getcapabilities_layers_match_pattern_and_rotate(
-        self, provider, endpoint, rotates
-    ):
-        """Layers from LAYER_PATTERN: yearly descending, ONE aggregate layer at
-        the end, an updated product has a current/last-year layer - the yearly
-        rotation and renames (S4) are visible only here."""
+    def test_wfs_types_are_one_group_of_yearly_types(self, provider, endpoint, rotates):
+        """``_layers`` = ONE query group: every yearly type
+        ``gugik:<prefix><year>`` of the service, newest first, no duplicates;
+        an updated product has a current/last-year type - the yearly rotation
+        and renames (S4) are visible only here."""
         layers = provider._layers(endpoint)
 
-        assert layers, endpoint
+        assert len(layers) == 1, layers
+        types = layers[0].split(",")
+        prefix = provider.variant.index_ref.layer_prefix
+        matches = [re.fullmatch(rf"gugik:{prefix}(\d{{4}})", name) for name in types]
+        assert all(matches), types
+        years = [int(m[1]) for m in matches if m]
+        assert years == sorted(years, reverse=True), types
+        assert len(set(years)) == len(years), types
+        if rotates:
+            assert years[0] >= datetime.date.today().year - 1, types
+
+    def test_orto_wms_layers_match_pattern_and_rotate(self):
+        """Orthophoto stays on WMS: layers from LAYER_PATTERN, yearly
+        descending, ONE aggregate layer at the end, a current/last-year layer."""
+        provider = GugikOrtoProvider(color="RGB")
+        layers = provider._layers(GugikOrtoProvider.WMS_INDEX_ENDPOINT)
+
+        assert layers
         matches = [provider.LAYER_PATTERN.fullmatch(name) for name in layers]
         assert all(matches), layers
-        years = [int(m.group(1)) for m in matches if m.group(1)]
-        cumulative = [n for n, m in zip(layers, matches, strict=True) if m.group(2)]
+        years = [int(m.group(1)) for m in matches if m and m.group(1)]
+        cumulative = [n for n, m in zip(layers, matches, strict=True) if m and m[2]]
         assert years == sorted(years, reverse=True), layers
         assert len(set(years)) == len(years), layers
         assert len(cumulative) == 1 and layers[-1] == cumulative[0], layers
-        if rotates:
-            assert years[0] >= datetime.date.today().year - 1, layers
+        assert years[0] >= datetime.date.today().year - 1, layers
 
     def test_land_sheet_resolves_to_matching_asc(self):
-        """D4 live: a URL with the sheet code as a WHOLE token and 5 m resolution."""
+        """D4 live: the selected record is a 5 m ASC record of the sheet from
+        the live answer (URL with the sheet code as a WHOLE token)."""
+        sheet = "N-33-48-C-a-3-4"
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
+        endpoint = _endpoint(provider.variant)
 
-        url = provider._get_opendata_url("N-33-48-C-a-3-4", timeout=LIVE_TIMEOUT)
+        url = provider._get_opendata_url(sheet, timeout=LIVE_TIMEOUT)
 
         assert url.startswith("https://opendata.geoportal.gov.pl/")
         assert url.lower().endswith("_n-33-48-c-a-3-4.asc"), url
-        source = provider.source_info("N-33-48-C-a-3-4")
+        candidates = {
+            r.url
+            for r in _live_records(provider, endpoint, sheet)
+            if r.sheet == sheet
+            and r.resolution_m == 5.0
+            and source_format(r.file_format, r.url) == "ASC"
+        }
+        assert url in candidates
+        source = provider.source_info(sheet)
         assert source is not None
         assert source["resolution_m"] == 5.0
-        assert source["uklad"] == "PL-1992"
-        assert source["layer"] in provider._layers(
-            GugikProvider.WMS_INDEX_ENDPOINTS["5m"]["EVRF2007"]
-        )
+        assert source["declared_crs"] == "PL-1992"
+        assert source["index_url"] == endpoint
+        assert f"gugik:{source['layer']}" in provider._layers(endpoint)[0].split(",")
 
     def test_sea_sheet_is_no_coverage(self):
-        """Sea (N-33-48-C-a-1-3): all layers empty = NoCoverageError (R5)."""
+        """Sea (N-33-48-C-a-1-3): a valid empty answer = NoCoverageError (R5)."""
         provider = GugikProvider(resolution="5m", vertical_crs="EVRF2007")
 
         with pytest.raises(NoCoverageError) as exc:
@@ -525,48 +571,35 @@ class TestLiveGugikIndex:
 
         assert exc.value.sheet == "N-33-48-C-a-1-3"
 
-    def test_unknown_layer_is_service_exception_not_no_coverage(self):
-        """Nonexistent layer: an OGC report = DownloadError, never no coverage."""
+    def test_unknown_type_is_service_exception_not_no_coverage(self):
+        """Nonexistent feature type: an OGC report = DownloadError, never no
+        coverage."""
         provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")
-        _, _, query_bbox = _center_query_bbox("N-33-48-C-a-3-4")
+        index = provider._wfs_index(_endpoint(provider.variant))
+        query = sheet_query_bbox(SheetParser("N-33-48-C-a-3-4"))
 
-        with pytest.raises(DownloadError, match="OGC") as exc:
-            query_skorowidz_layer(
-                provider._sessions.get(),
-                GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"],
-                "SkorowidzeNMT1999NieIstnieje",
-                query_bbox=query_bbox,
-                sheet="N-33-48-C-a-3-4",
-                timeout=LIVE_TIMEOUT,
-            )
+        with pytest.raises(DownloadError, match="wynik bylby niepelny") as exc:
+            list(index.features(query, ["gugik:SkorowidzNMT1900"]))
 
         assert not isinstance(exc.value, NoCoverageError)
 
     @pytest.mark.parametrize(
-        ("sheet", "zone"), LIVE_WMS_SHEETS, ids=[s[0] for s in LIVE_WMS_SHEETS]
+        ("sheet", "zone"),
+        LIVE_PL2000_SHEETS,
+        ids=[s[0] for s in LIVE_PL2000_SHEETS],
     )
     def test_pl2000_center_query_returns_sheets_containing_the_point(self, sheet, zone):
-        """PL-2000 geometry vs the GUGiK index: the sheet centre hits the 1 m NMT
-        records, and the bbox of EVERY returned sheet code (PL-1992 or the proper
-        PL-2000 zone) contains the query point."""
+        """PL-2000 geometry vs the GUGiK index: the sheet centre hits 1 m NMT
+        records, and the frame of EVERY returned sheet code (PL-1992 or the
+        proper PL-2000 zone) contains the query point."""
         provider = GugikProvider(resolution="1m", vertical_crs="EVRF2007")
-        endpoint = GugikProvider.WMS_INDEX_ENDPOINTS["1m"]["EVRF2007"]
-        x, y, query_bbox = _center_query_bbox(sheet)
+        x, y = _sheet_centre(sheet)
 
-        records = []
-        for layer in provider._layers(endpoint):
-            records.extend(
-                query_skorowidz_layer(
-                    provider._sessions.get(),
-                    endpoint,
-                    layer,
-                    query_bbox=query_bbox,
-                    sheet=sheet,
-                    timeout=LIVE_TIMEOUT,
-                )
-            )
+        records = _live_records(provider, _endpoint(provider.variant), sheet)
 
-        assert records, f"{sheet}: zaden rekord NMT 1 m w srodku arkusza"
+        assert any(r.resolution_m == 1.0 for r in records), (
+            f"{sheet}: zaden rekord NMT 1 m w srodku arkusza"
+        )
         for record in records:
             frame = SheetParser(record.sheet).get_bbox(crs="EPSG:2180")
             assert frame.min_x - 1 <= x <= frame.max_x + 1, (sheet, record.sheet)

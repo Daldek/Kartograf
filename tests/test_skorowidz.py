@@ -8,6 +8,10 @@ responses from the 2026-09-29 live tests
 upper-case ``.ASC`` record (Slubice), two Szczecin records (0.50 m before
 1.00 m), four Warsaw records in a collective layer (ascending by date,
 PL-1992 and PL-2000 sheet codes), orto CIR+RGB and an OGC exception report.
+
+Since 0.8.0 (ADR-041) NMT/NMPT sheet records come from the WFS index
+(``tests/test_skorowidz_wfs.py``); the GetFeatureInfo query and parser tested
+here serve the orthophoto index, the recorded NMT answers still exercise them.
 """
 
 import threading
@@ -27,7 +31,13 @@ from kartograf.providers.pl.skorowidz import (
     query_skorowidz_layer,
     select_sheet_record,
 )
-from tests.conftest import gfi_record, make_provider, render_gfi_body
+from tests.conftest import (
+    gfi_record,
+    make_provider,
+    render_gfi_body,
+    render_wfs_body,
+    wfs_response,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures" / "gugik_skorowidz"
 ENDPOINT = (
@@ -586,7 +596,8 @@ def _hint_record(sheet, system, zone=None, resolution_m=1.0):
         zone=zone,
         resolution_m=resolution_m,
         full_sheet=True,
-        raw={"kolor": "RGB"},
+        # orto filters by colour, NMT/NMPT by the record format (ASC grid)
+        raw={"kolor": "RGB", "format": "ARC/INFO ASCII GRID"},
     )
 
 
@@ -620,8 +631,13 @@ class TestCoverageHints:
         from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 
         cls = GugikProvider if product == "nmt" else GugikOrtoProvider
-        # empty answers: the NMT variant check (P10) finds nothing to add
-        empty = Mock(status_code=200, text=sample("empty.body"))
+        # empty answers: the NMT check of the other height system (P10, WFS)
+        # finds nothing to add; orto asks nothing
+        empty = (
+            wfs_response(render_wfs_body([]))
+            if product == "nmt"
+            else Mock(status_code=200, text=sample("empty.body"))
+        )
         provider = make_provider(cls, session=Mock(get=Mock(return_value=empty)))
         error = provider._no_coverage(SheetParser(self._PL2000), list(self._RECORDS))
         message = str(error)

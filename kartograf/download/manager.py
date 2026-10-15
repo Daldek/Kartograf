@@ -529,6 +529,12 @@ class DownloadManager:
         self._campaign_aware = (
             getattr(self._provider, "supports_campaigns", False) is True
         )
+        # Archive variants (source files, ADR-041) are published on sheets of
+        # several scales: their index sheet codes are never expanded to 1:10000.
+        self._source_files = (
+            getattr(getattr(self._provider, "variant", None), "source_file", False)
+            is True
+        )
         if not self._campaign_aware and (
             all_campaigns or min_year is not None or max_year is not None or full_sheet
         ):
@@ -765,7 +771,7 @@ class DownloadManager:
         on_progress: ProgressCallback | None = None,
         on_download: Callable[[], None] | None = None,
     ) -> DownloadResult:
-        """Download one PL sheet (expand coarser PL-1992 codes).
+        """Download one PL sheet (expand coarser PL-1992 codes of grid variants).
 
         A direct leaf failure raises ``DownloadError``. A hierarchy collects
         per-sheet failures in the result. With ``plan``, only matching positions
@@ -776,7 +782,11 @@ class DownloadManager:
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         parser = SheetParser(sheet)
-        if parser.sheet_system != "2000" and parser.scale != "1:10000":
+        if (
+            not self._source_files
+            and parser.sheet_system != "2000"
+            and parser.scale != "1:10000"
+        ):
             return self.download_hierarchy(
                 sheet, "1:10000", update=update, plan=plan, on_progress=on_progress
             )
@@ -861,6 +871,14 @@ class DownloadManager:
                     leaves.append(leaf)
         return leaves
 
+    def _leaves(self, sheets: list[str]) -> list[str]:
+        """Sheets requested from the provider: ``expand_sheets`` for grids; an
+        archive variant keeps the index codes of any scale (normalized,
+        duplicates dropped, first-seen order kept)."""
+        if not self._source_files:
+            return self.expand_sheets(sheets)
+        return list(dict.fromkeys(SheetParser(sheet).sheet for sheet in sheets))
+
     def download_sheets(
         self,
         sheets: list[str],
@@ -879,7 +897,7 @@ class DownloadManager:
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         if plan is not None:
             require_store(plan, store_id(self._storage.output_dir))
-        leaves = self.expand_sheets(sheets)
+        leaves = self._leaves(sheets)
         if plan is not None:
             return self._download_planned(leaves, plan, on_progress)
         logger.info(
@@ -899,7 +917,7 @@ class DownloadManager:
         sheet's ``error``. Providers without campaigns have no cheap signal:
         only their local versions are listed.
         """
-        leaves = self.expand_sheets(sheets)
+        leaves = self._leaves(sheets)
         if not self._campaign_aware:
             result = []
             for sheet in leaves:

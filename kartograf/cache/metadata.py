@@ -9,6 +9,9 @@ no coverage)
   discovery; also an empty list = sea/abroad)
 - Sheet index lookups (system + sheet code -> payload) for CUZK sheet providers
   (sheet_cache, fixed TTL of 30 days)
+- Index areas of the availability report (``index_area_cache``: key built by
+  the caller -> JSON payload: WFS index records with footprints, feature
+  types, PRG land masks)
 
 The cache uses SQLite with WAL mode for concurrent access support and
 supports time-based TTL for cache expiration. All reads and writes on the
@@ -73,8 +76,9 @@ class MetadataCache:
     Caches lookup results to avoid repeated network requests for the same
     data. Tables: ``record_cache`` (skorowidz records), ``campaigns_cache``
     (campaign lists), ``teryt_cache`` (point -> powiat TERYT),
-    ``teryt_bbox_cache`` (EPSG:2180 area -> powiat TERYT codes, PRG WFS) -
-    all with the TTL (default 7 days) - and ``sheet_cache`` (CZ sheet index,
+    ``teryt_bbox_cache`` (EPSG:2180 area -> powiat TERYT codes, PRG WFS),
+    ``index_area_cache`` (availability report) - all with the TTL (default
+    7 days) - and ``sheet_cache`` (CZ sheet index,
     SM5, fixed TTL of 30 days). ``refresh=True`` turns
     every read into a miss while writes still happen (CLI ``--force``).
 
@@ -307,6 +311,15 @@ class MetadataCache:
                 payload   TEXT NOT NULL,
                 cached_at REAL NOT NULL,
                 PRIMARY KEY (system, godlo)
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS index_area_cache (
+                key       TEXT NOT NULL PRIMARY KEY,
+                payload   TEXT NOT NULL,
+                cached_at REAL NOT NULL
             )
             """
         )
@@ -673,6 +686,52 @@ class MetadataCache:
         logger.debug(f"Cached sheet {system}/{sheet}")
 
     # =========================================================================
+    # Index area cache (availability report, ADR-041)
+    # =========================================================================
+
+    def get_index_area(self, key: str) -> object | None:
+        """Return the cached payload of ``key`` or None (missing/expired/refresh).
+
+        The caller builds the key (``"wfs|<endpoint>|<types>|<bbox in mm>"``
+        -> index records with footprints, ``"wfs-types|<endpoint>"``,
+        ``"prg|<bbox in mm>"``); TTL as the records (``ttl_seconds``).
+        """
+        if self._refresh:
+            return None
+        # Lock guards the read too - see comment in get_record().
+        with self._write_lock, self._db_errors():
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            row = conn.execute(
+                "SELECT payload, cached_at FROM index_area_cache WHERE key=?", (key,)
+            ).fetchone()
+            if row is None:
+                return None
+            payload, cached_at = row
+            if time.time() - cached_at >= self._ttl_seconds:
+                # Same critical section - threading.Lock is not reentrant.
+                conn.execute("DELETE FROM index_area_cache WHERE key=?", (key,))
+                conn.commit()
+                return None
+            return json.loads(payload)
+        return None  # disabled by an SQLite error (_db_errors)
+
+    def set_index_area(self, key: str, payload: object) -> None:
+        """Store a JSON payload under ``key`` (replacing an older one)."""
+        with self._write_lock, self._db_errors():
+            conn = self._connection()
+            if conn is None:
+                return
+            conn.execute(
+                "INSERT OR REPLACE INTO index_area_cache (key, payload, cached_at) "
+                "VALUES (?, ?, ?)",
+                (key, json.dumps(payload, ensure_ascii=False), time.time()),
+            )
+            conn.commit()
+        logger.debug(f"Cached index area {key[:80]}")
+
+    # =========================================================================
     # Management methods
     # =========================================================================
 
@@ -687,6 +746,7 @@ class MetadataCache:
             conn.execute("DELETE FROM teryt_cache")
             conn.execute("DELETE FROM teryt_bbox_cache")
             conn.execute("DELETE FROM sheet_cache")
+            conn.execute("DELETE FROM index_area_cache")
             conn.commit()
             logger.info("Cache cleared")
 
@@ -712,6 +772,8 @@ class MetadataCache:
             - teryt_count: number of cached TERYT entries: points
               (``teryt_cache``) and areas (``teryt_bbox_cache``)
             - sheet_count: number of cached sheet entries
+            - index_area_count: number of cached index areas (availability
+              report: index records, feature types, land masks)
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
             - db_exists: whether the database file exists (it is created
@@ -721,13 +783,13 @@ class MetadataCache:
               ``strict`` only - in strict mode the call raises
               ``CacheError`` instead
         """
-        counts: tuple[int, ...] = (0, 0, 0, 0, 0)
+        counts: tuple[int, ...] = (0, 0, 0, 0, 0, 0)
         # Lock guards these reads too - see comment in get_record().
         with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 # Nothing cached yet - report zeros without creating the file.
-                counts = (0, 0, 0, 0, 0)
+                counts = (0, 0, 0, 0, 0, 0)
             else:
                 counts = tuple(
                     conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -737,9 +799,17 @@ class MetadataCache:
                         "teryt_cache",
                         "teryt_bbox_cache",
                         "sheet_cache",
+                        "index_area_cache",
                     )
                 )
-        record_count, campaign_count, teryt_points, teryt_areas, sheet_count = counts
+        (
+            record_count,
+            campaign_count,
+            teryt_points,
+            teryt_areas,
+            sheet_count,
+            index_area_count,
+        ) = counts
         teryt_count = teryt_points + teryt_areas
 
         db_exists = self._db_path.exists()
@@ -750,6 +820,7 @@ class MetadataCache:
             "campaign_count": campaign_count,
             "teryt_count": teryt_count,
             "sheet_count": sheet_count,
+            "index_area_count": index_area_count,
             "db_size_bytes": db_size,
             "db_path": str(self._db_path),
             "db_exists": db_exists,
@@ -782,13 +853,21 @@ class MetadataCache:
             sheet_cutoff = now - SHEET_TTL_SECONDS
             conn.execute("DELETE FROM sheet_cache WHERE cached_at < ?", (sheet_cutoff,))
             sheet_deleted = conn.execute("SELECT changes()").fetchone()[0]
+            conn.execute("DELETE FROM index_area_cache WHERE cached_at < ?", (cutoff,))
+            area_deleted = conn.execute("SELECT changes()").fetchone()[0]
             conn.commit()
-            total = record_deleted + campaign_deleted + teryt_deleted + sheet_deleted
+            total = (
+                record_deleted
+                + campaign_deleted
+                + teryt_deleted
+                + sheet_deleted
+                + area_deleted
+            )
             if total > 0:
                 logger.debug(
                     f"Pruned {total} expired entries ({record_deleted} Record, "
                     f"{campaign_deleted} Campaigns, {teryt_deleted} TERYT, "
-                    f"{sheet_deleted} Sheet)"
+                    f"{sheet_deleted} Sheet, {area_deleted} Index area)"
                 )
             return total
         return 0  # disabled by an SQLite error (_db_errors)

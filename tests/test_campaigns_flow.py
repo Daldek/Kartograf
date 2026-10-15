@@ -1,8 +1,8 @@
 """
-ADR-030 campaign flow end-to-end: a REAL ``GugikProvider`` on raw
-GetFeatureInfo responses (``tests/fixtures/gugik_skorowidz/real_2026_10_06``)
-+ a download session returning a small ASC with the sheet frame (EPSG:2180)
-for opendata URLs.
+ADR-030 campaign flow end-to-end: a REAL ``GugikProvider`` on recorded WFS
+GetFeature answers of the NMT index (``tests/fixtures/gugik_wfs/
+real_2026_10_15``, ``sheet_nmt_evrf2007_<sheet>.xml``) + a download session
+returning a small ASC with the sheet frame (EPSG:2180) for opendata URLs.
 """
 
 import json
@@ -10,7 +10,6 @@ import os
 import re
 from pathlib import Path
 from unittest.mock import Mock
-from urllib.parse import parse_qs, urlparse
 
 import rasterio
 import requests
@@ -19,17 +18,17 @@ from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.links import linked_version
 from kartograf.download.manager import DownloadManager
 from kartograf.providers.pl.gugik import GugikProvider
+from tests.conftest import render_wfs_body, wfs_endpoint, wfs_fixture, wfs_response
 
-FIXTURES = Path(__file__).parent / "fixtures"
-REAL = FIXTURES / "gugik_skorowidz" / "real_2026_10_06"
-EMPTY = (FIXTURES / "gugik_skorowidz" / "empty.body").read_text(encoding="utf-8")
-XYZ_HEAD = (
-    FIXTURES / "gugik_asc" / "72675_858113_N-33-69-A-d-3-2.head.xyz"
-).read_bytes()
-
-G = "N-34-139-C-a-3-1"
-G2 = "N-33-69-A-d-3-2"
+# Recorded sheet: 1m ASC flights 2019, 2021, 2022, 2024 and an ASCII NMT 1m
+# archive (.zip) of the 2019 delivery, plus 0.5m/0.6m/5m/XYZ records
+G = "N-33-77-B-c-3-3"
+# Recorded sheet: 1m ASC flights 2021, 2022, 2024 (two) and a 2019 record
+# declaring ARC/INFO ASCII GRID with an .xyz file (inconsistent)
+G2 = "N-33-69-A-d-1-3"
 SEGMENT = Path("nmt/pl_1992_1m_evrf2007")
+NMT_EVRF2007 = wfs_endpoint("nmt_evrf2007")
+OPENDATA = "https://opendata.geoportal.gov.pl/"
 
 
 def _response(body: str) -> Mock:
@@ -51,44 +50,35 @@ def asc_bytes(sheet: str, value: int) -> bytes:
     return (header + rows + "\n").encode("ascii")
 
 
-def routed_session(path_for_layer, downloads=None) -> Mock:
-    """GetFeatureInfo -> raw layer body; opendata file -> ASC (or
-    ``downloads[url]``); ASC value = first numeric segment of the file name."""
+def recorded_session(sheet: str) -> Mock:
+    """NMT EVRF2007 WFS -> the recorded answer of the sheet; any other index
+    service -> an empty collection; opendata file -> ASC whose value is the
+    first numeric segment of the file name."""
+    answer = wfs_fixture(f"sheet_nmt_evrf2007_{sheet}.xml")
     session = Mock(spec=requests.Session)
 
-    def get(url, **kwargs):
-        if url.startswith("https://opendata.geoportal.gov.pl/"):
-            if downloads and url in downloads:
-                content = downloads[url]
-            else:
-                name = url.rsplit("/", 1)[-1]
-                sheet = re.sub(r"^\d+_\d+_", "", name).rsplit(".", 1)[0]
-                content = asc_bytes(sheet, int(name.split("_")[0]))
+    def get(url, *args, **kwargs):
+        if url.startswith(OPENDATA):
+            name = url.rsplit("/", 1)[-1]
+            file_sheet = re.sub(r"^\d+_\d+_", "", name).rsplit(".", 1)[0]
             response = _response("")
-            response.iter_content = Mock(return_value=[content])
+            response.iter_content = Mock(
+                return_value=[asc_bytes(file_sheet, int(name.split("_")[0]))]
+            )
             return response
-        layer = parse_qs(urlparse(url).query)["LAYERS"][0]
-        path = path_for_layer(layer)
-        return _response(path.read_text(encoding="utf-8") if path else EMPTY)
+        if url.startswith(f"{NMT_EVRF2007}?"):
+            return wfs_response(answer)
+        return wfs_response(render_wfs_body([]))
 
     session.get = Mock(side_effect=get)
     return session
 
 
-def c14_session(sheet: str) -> Mock:
-    def path_for_layer(layer):
-        path = REAL / "nmt" / "c14" / f"{sheet}_EVRF2007_{layer}.html"
-        return path if path.exists() else None
-
-    return routed_session(path_for_layer)
-
-
-def nmt_session(sheet: str, prefix: str, downloads=None) -> Mock:
-    def path_for_layer(layer):
-        path = REAL / "nmt" / sheet / f"{prefix}__{layer}.body"
-        return path if path.exists() else None
-
-    return routed_session(path_for_layer, downloads)
+def file_requests(session: Mock) -> list[str]:
+    """Opendata file URLs the session was asked for."""
+    return [
+        c.args[0] for c in session.get.call_args_list if c.args[0].startswith(OPENDATA)
+    ]
 
 
 def std_path(tmp_path: Path, sheet: str) -> Path:
@@ -100,11 +90,14 @@ def sidecar(path: Path) -> Path:
     return path.parent / f"{path.name}.meta.json"
 
 
-def test_end_to_end_all_on_real_c14_bodies(tmp_path):
+def test_end_to_end_all_on_recorded_wfs_answer(tmp_path):
+    """Every 1m ASC flight of the sheet; the ASCII NMT archive of the 2019
+    delivery and the other resolutions/formats are never downloaded."""
+    session = recorded_session(G)
     m = DownloadManager(
         tmp_path,
         provider=GugikProvider(
-            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+            session=session, vertical_crs="EVRF2007", resolution="1m"
         ),
         all_campaigns=True,
     )
@@ -112,22 +105,26 @@ def test_end_to_end_all_on_real_c14_bodies(tmp_path):
 
     files = m.storage.list_files("**/*.asc", versions=True)
     assert sorted(p.parent.name.rsplit("_", 1)[0] for p in files) == [
-        "2019-04-18_73021",
-        "2023-09-05_78047",
-        "2025-04-27_83233",
-        "2025-10-21_84183",
+        "2019-04-02_72759",
+        "2021-03-30_74601",
+        "2022-03-22_76001",
+        "2024-09-21_80196",
     ]
+    assert all(url.endswith(".asc") for url in file_requests(session))
+    assert len(file_requests(session)) == 4
     meta = json.loads(sidecar(std_path(tmp_path, G)).read_text(encoding="utf-8"))
-    assert meta["extra"]["source"]["full_sheet"] is False
-    assert meta["extra"]["campaign"]["survey_work_id"] == "DFT.7201.053.2025"
-    assert "2025-10-21_84183" in str(linked_version(std_path(tmp_path, G)))
+    assert meta["extra"]["source"]["full_sheet"] is True
+    assert meta["extra"]["source"]["index_url"] == NMT_EVRF2007
+    assert meta["extra"]["source"]["layer"] == "SkorowidzNMT2024"
+    assert meta["extra"]["campaign"]["survey_work_id"] == "GK-FOTO.6201.26.2024"
+    assert "2024-09-21_80196" in str(linked_version(std_path(tmp_path, G)))
 
 
 def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
     m = DownloadManager(
         tmp_path,
         provider=GugikProvider(
-            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+            session=recorded_session(G), vertical_crs="EVRF2007", resolution="1m"
         ),
     )
     result = m.download_sheet(G)
@@ -140,7 +137,7 @@ def test_download_sheet_returns_standard_path_readable_by_rasterio(tmp_path):
     assert meta["extra"]["link"] == "hardlink"
     with rasterio.open(path) as src, rasterio.open(campaign_file) as direct:
         assert src.read(1).tolist() == direct.read(1).tolist()
-        assert src.read(1)[0, 0] == 84183  # newest campaign
+        assert src.read(1)[0, 0] == 80196  # newest campaign
         assert src.shape == (5, 5)
 
 
@@ -151,12 +148,11 @@ def test_exports():
     assert CampaignRef is Original
 
 
-def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
-    url = (
-        "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/72675/"
-        "72675_858113_N-33-69-A-d-3-2.xyz"
-    )
-    session = nmt_session(G2, "nmt1_evr", downloads={url: XYZ_HEAD})
+def test_end_to_end_all_skips_record_whose_file_is_not_a_grid(tmp_path):
+    """The 2019 record declares ARC/INFO ASCII GRID but links an ``.xyz``
+    file: format and file disagree, so it is no grid campaign - only the
+    four ``.asc`` flights are downloaded and the newest is linked."""
+    session = recorded_session(G2)
     m = DownloadManager(
         tmp_path,
         provider=GugikProvider(
@@ -167,15 +163,14 @@ def test_end_to_end_all_with_real_xyz_campaign(tmp_path):
     m.download_sheet(G2)
 
     asc = m.storage.list_files("**/*.asc", versions=True)
-    assert len(asc) == 5
-    assert any(
-        p.parent.name.startswith("2019-04-29_72675_") and p.name == f"{G2}.asc"
-        for p in asc
-    )
+    assert sorted(p.parent.name.rsplit("_", 1)[0] for p in asc) == [
+        "2021-05-31_74160",
+        "2022-03-20_75506",
+        "2024-07-21_81616",
+        "2024-09-23_81025",
+    ]
+    assert not any("72675" in url for url in file_requests(session))
     assert list(tmp_path.rglob("*.xyz")) == []
-    [old] = [p for p in asc if "2019-04-29_72675" in p.as_posix()]
-    meta = json.loads(sidecar(old).read_text(encoding="utf-8"))
-    assert meta["extra"]["source"]["url"].endswith(".xyz")
     assert "2024-09-23_81025" in str(linked_version(std_path(tmp_path, G2)))
 
 
@@ -188,12 +183,12 @@ def test_newest_uses_local_campaign_when_skorowidz_unreachable(tmp_path):
     m = DownloadManager(
         tmp_path,
         provider=GugikProvider(
-            session=c14_session(G), vertical_crs="EVRF2007", resolution="1m"
+            session=recorded_session(G), vertical_crs="EVRF2007", resolution="1m"
         ),
     )
     std = m.download_sheet(G).succeeded[0]
     before = str(linked_version(std))
-    assert "2025-10-21_84183" in before
+    assert "2024-09-21_80196" in before
 
     offline = Mock(spec=requests.Session)
     offline.get = Mock(side_effect=requests.ConnectionError("GUGiK lezy"))

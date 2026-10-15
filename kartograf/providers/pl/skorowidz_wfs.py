@@ -7,11 +7,14 @@ yearly types from GetCapabilities and the features of an area with ONE
 answered as nested collections), ``BBOX`` and ``SRSNAME`` in the URN of
 EPSG:2180 with N,E axes, pages followed ONLY by the ``next`` attribute
 (the server ignores ``FILTER`` - every filter is on the client side,
-docs/research/2026-10-15-plan-a-b/raport.md 1). A failure is never an
-empty answer: transport errors, an ``ExceptionReport`` or non-XML at 200,
-a page whose ``numberReturned`` differs from its features - all raise
-``DownloadError`` ("wynik bylby niepelny"); a valid empty collection (sea)
-yields nothing.
+docs/research/2026-10-15-plan-a-b/raport.md 1). The server pages an answer
+of several types inconsistently (repeats and omissions, recorded
+2026-10-15) and one type consistently, so an answer of several types that
+does not fit one page is dropped and every type is queried on its own.
+A failure is never an empty answer: transport errors, an ``ExceptionReport``
+or non-XML at 200, a page whose ``numberReturned`` differs from its
+features, a feature repeated on a later page - all raise ``DownloadError``
+("wynik bylby niepelny"); a valid empty collection (sea) yields nothing.
 
 ``parse_index_feature`` maps the WFS fields of NMT/NMPT records on the keys
 of ``SkorowidzRecord.raw`` used by ``to_source`` and ``CampaignRef``, so the
@@ -54,7 +57,8 @@ logger = logging.getLogger(__name__)
 GUGIK_NS = "http://www.gugik.gov.pl"
 GML_NS = "http://www.opengis.net/gml/3.2"
 URN_2180 = "urn:ogc:def:crs:EPSG::2180"
-# Features per GetFeature page (COUNT); further pages only through `next`.
+# Features per GetFeature page (COUNT); further pages only through `next`
+# (one type per query when an answer of several types needs more pages).
 PAGE_SIZE = 1000
 INCOMPLETE = "wynik bylby niepelny, ponow pobranie"
 # Half side (m) of the query square around a sheet centre (sheet lookup).
@@ -151,6 +155,36 @@ def type_year(name: str) -> int:
     return int(match[1])
 
 
+def parse_feature_types(root: ET.Element, layer_prefix: str) -> list[str]:
+    """Yearly feature types ``<prefix><year>`` of a GetCapabilities document.
+
+    Newest first, names as published (``gugik:SkorowidzNMT2025``); a type of
+    the product family outside the pattern is logged and left out (it is
+    never queried). ``[]`` when the document has no yearly type.
+    """
+    pattern = re.compile(rf"(?:\w+:)?{re.escape(layer_prefix)}(\d{{4}})")
+    family = re.compile(rf"(?:\w+:)?{re.escape(layer_prefix)}")
+    found: dict[str, int] = {}
+    for elem in root.iter():
+        if localname(elem.tag) != "FeatureType":
+            continue
+        for name in elem:
+            if localname(name.tag) != "Name" or not name.text:
+                continue
+            text = name.text.strip()
+            match = pattern.fullmatch(text)
+            if match is not None:
+                found[text] = int(match[1])
+            elif family.match(text):
+                logger.warning(
+                    "Typ obiektu %s z rodziny %s nie pasuje do wzorca "
+                    "<prefiks><rok> - NIE odpytywany",
+                    text,
+                    layer_prefix,
+                )
+    return sorted(found, key=lambda t: -found[t])
+
+
 class WfsIndex:
     """One WFS index service (``endpoint``) with yearly types ``<prefix><year>``.
 
@@ -198,7 +232,11 @@ class WfsIndex:
                 description=description,
             )
         except DownloadError as e:
-            raise DownloadError(f"{e} - {INCOMPLETE}") from e
+            # keep the transport classification (status code, requests
+            # cause) - an index outage lets the manager use a local version
+            raise DownloadError(
+                f"{e} - {INCOMPLETE}", status_code=e.status_code
+            ) from e.__cause__
         try:
             root = ET.fromstring(response.text)
         except ET.ParseError as e:
@@ -231,42 +269,50 @@ class WfsIndex:
         params = {"SERVICE": "WFS", "VERSION": "2.0.0", "REQUEST": "GetCapabilities"}
         description = f"WFS GetCapabilities {self._endpoint}"
         root = self._xml(f"{self._endpoint}?{urlencode(params)}", description)
-        pattern = re.compile(rf"(?:\w+:)?{re.escape(self._prefix)}(\d{{4}})")
-        family = re.compile(rf"(?:\w+:)?{re.escape(self._prefix)}")
-        found: dict[str, int] = {}
-        for elem in root.iter():
-            if localname(elem.tag) != "FeatureType":
-                continue
-            for name in elem:
-                if localname(name.tag) != "Name" or not name.text:
-                    continue
-                text = name.text.strip()
-                match = pattern.fullmatch(text)
-                if match is not None:
-                    found[text] = int(match[1])
-                elif family.match(text):
-                    logger.warning(
-                        "Typ obiektu %s z rodziny %s nie pasuje do wzorca "
-                        "<prefiks><rok> - NIE odpytywany",
-                        text,
-                        self._prefix,
-                    )
+        found = parse_feature_types(root, self._prefix)
         if not found:
             raise DownloadError(
                 f"{description}: brak typow obiektow {self._prefix}<rok> - {INCOMPLETE}"
             )
-        return sorted(found, key=lambda t: -found[t])
+        return found
 
     def features(self, bbox: BBox, types: Sequence[str]) -> Iterator[ET.Element]:
         """Features of ``types`` intersecting an EPSG:2180 ``bbox`` (all pages).
 
         One ``GetFeature`` with every type; further pages only through the
         ``next`` attribute of the answer (it must point at this service).
+        The server pages several types inconsistently (repeats AND
+        omissions, recorded 2026-10-15), one type consistently: when the
+        answer of several types has a ``next`` page, it is dropped and each
+        type is queried (and paged) on its own. A feature repeated on a
+        later page is a ``DownloadError``, never a silently incomplete result.
         """
         if bbox.crs != "EPSG:2180":
             raise ValidationError(f"obszar musi byc w EPSG:2180, podano {bbox.crs}")
         if not types:
             return
+        pages = self._pages(bbox, types)
+        found, following = next(pages)
+        if following is not None and len(types) > 1:
+            logger.info(
+                "WFS %s: ponad %s obiektow %s typow - zapytania per typ "
+                "(stronicowanie wielu typow serwera niespojne)",
+                self._endpoint,
+                PAGE_SIZE,
+                len(types),
+            )
+            for name in types:
+                for page_features, _ in self._pages(bbox, [name]):
+                    yield from page_features
+            return
+        yield from found
+        for page_features, _ in pages:
+            yield from page_features
+
+    def _pages(
+        self, bbox: BBox, types: Sequence[str]
+    ) -> Iterator[tuple[list[ET.Element], str | None]]:
+        """Checked pages of one ``GetFeature`` as (features, ``next`` URL)."""
         params = {
             "SERVICE": "WFS",
             "VERSION": "2.0.0",
@@ -279,6 +325,8 @@ class WfsIndex:
         shown = types[0] if len(types) == 1 else f"{len(types)} typow {self._prefix}"
         url: str | None = f"{self._endpoint}?{urlencode(params)}"
         seen: set[str] = set()
+        # (type, gml:id, URL) of every feature already returned
+        yielded: set[tuple[str, str | None, str | None]] = set()
         page = 0
         while url is not None:
             if url in seen:
@@ -301,14 +349,26 @@ class WfsIndex:
                     f"{description}: numberReturned={returned!r}, obiektow "
                     f"{len(found)} - {INCOMPLETE}"
                 )
-            yield from found
-            following = root.get("next")
+            for elem in found:
+                key = (
+                    elem.tag,
+                    elem.get(f"{{{GML_NS}}}id"),
+                    feature_text(elem, "url_do_pobrania"),
+                )
+                if key in yielded:
+                    raise DownloadError(
+                        f"{description}: obiekt {key[1]} powtorzony z poprzedniej "
+                        f"strony - stronicowanie serwera niespojne - {INCOMPLETE}"
+                    )
+                yielded.add(key)
+            following = root.get("next") or None
             if following and not following.startswith(f"{self._endpoint}?"):
                 raise DownloadError(
                     f"{description}: strona next spoza uslugi ({following}) - "
                     f"{INCOMPLETE}"
                 )
-            url = following or None
+            yield found, following
+            url = following
 
     def _is_feature(self, elem: ET.Element) -> bool:
         tag = elem.tag
@@ -431,10 +491,17 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
         self._wfs_lock = threading.Lock()
         self._wfs: dict[str, WfsIndex] = {}
 
-    def _wfs_index(self, endpoint: str, retries: int | None = None) -> WfsIndex:
-        """``WfsIndex`` of a known service (one per endpoint and retry policy)."""
+    def _wfs_index(
+        self,
+        endpoint: str,
+        retries: int | None = None,
+        timeout: float | None = None,
+    ) -> WfsIndex:
+        """``WfsIndex`` of a known service, one per endpoint, retry policy and
+        timeout (``None``: the provider's ``MAX_RETRIES``/``DEFAULT_TIMEOUT``)."""
         attempts = self.MAX_RETRIES if retries is None else retries
-        key = f"{endpoint}|{attempts}"
+        seconds = self.DEFAULT_TIMEOUT if timeout is None else timeout
+        key = f"{endpoint}|{attempts}|{seconds}"
         with self._wfs_lock:
             index = self._wfs.get(key)
             if index is None:
@@ -443,17 +510,18 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
                     self._sessions.get,
                     ref.endpoint,
                     ref.layer_prefix,
-                    timeout=self.DEFAULT_TIMEOUT,
+                    timeout=seconds,
                     retries=attempts,
                 )
                 self._wfs[key] = index
             return index
 
     def _layers(self, endpoint: str, timeout: float | None = None) -> list[str]:
-        """One query group: every yearly type of the service (newest first)."""
+        """One query group: every yearly type of the service (newest first);
+        ``timeout`` (default ``DEFAULT_TIMEOUT``) goes to GetCapabilities."""
         with self._layers_lock:
             if endpoint not in self._validated_layers:
-                types = self._wfs_index(endpoint).feature_types()
+                types = self._wfs_index(endpoint, timeout=timeout).feature_types()
                 self._validated_layers[endpoint] = [",".join(types)]
             return self._validated_layers[endpoint]
 
@@ -465,9 +533,15 @@ class WfsSkorowidzLayersMixin(SkorowidzLayersMixin):
         timeout: int,
         query_bbox: str,
     ) -> list[SkorowidzRecord]:
-        """Records of every type of ``layer`` around the sheet centre."""
-        index = self._wfs_index(endpoint)
-        return index_records(index, sheet_query_bbox(parser), layer.split(","))
+        """Records of every type of ``layer`` around the sheet centre; a failed
+        query is a ``DownloadError`` naming the sheet (transport class kept)."""
+        index = self._wfs_index(endpoint, timeout=timeout)
+        try:
+            return index_records(index, sheet_query_bbox(parser), layer.split(","))
+        except DownloadError as e:
+            raise DownloadError(
+                f"{parser.sheet}: {e}", sheet=parser.sheet, status_code=e.status_code
+            ) from e.__cause__
 
 
 def index_records(
