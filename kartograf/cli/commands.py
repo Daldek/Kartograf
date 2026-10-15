@@ -44,7 +44,7 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     """Dispatch the parsed arguments to the right command."""
     if parsed_args.command == "parse":
         return cmd_parse(parsed_args)
-    if parsed_args.command == "cache":
+    if parsed_args.command == "cache" and parsed_args.cache_command is not None:
         return cmd_cache(parsed_args)
 
     handler = getattr(parsed_args, "_handler", None)

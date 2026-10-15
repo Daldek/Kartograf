@@ -152,9 +152,11 @@ def create_parser() -> argparse.ArgumentParser:
             "arkuszy CUZK)"
         ),
     )
+    cache_parser.set_defaults(_group_parser=cache_parser)
     cache_subparsers = cache_parser.add_subparsers(
         dest="cache_command",
-        help="Komendy cache",
+        title="komendy",
+        metavar="KOMENDA",
     )
 
     cache_subparsers.add_parser(

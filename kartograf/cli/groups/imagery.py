@@ -84,7 +84,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "grubsze godlo rozwija sie do 1:10000 samo. Szczegoly: docs/USAGE.md 1.6",
     )
 
-    campaigns = download.add_argument_group("Rok danych i loty")
+    campaigns = download.add_argument_group("Rok danych i loty (tylko PL)")
     campaigns.add_argument(
         "--year",
         type=int,

@@ -54,12 +54,6 @@ def cmd_cache(args: argparse.Namespace) -> int:
     """
     from kartograf.cache.metadata import is_lock_error
 
-    if args.cache_command is None:
-        print("Uzycie: kartograf cache <komenda>")
-        print("Komendy: stats, clear, path")
-        print("Szczegoly: kartograf cache <komenda> --help")
-        return 0
-
     # Reads and management calls never create a missing database. Ignore the
     # disabled-cache notice here: these commands report cache.error themselves.
     with open_cache(True, force=False, on_notice=lambda _notice: None) as cache:

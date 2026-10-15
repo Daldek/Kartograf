@@ -22,8 +22,19 @@ from kartograf.download.options import (
     VERTICAL_CRS_PL,
     product_choices,
 )
+from kartograf.sources.descriptor import SourceDescriptor
 
 PRODUCTS = ("nmt", "nmpt", "laz")
+
+
+def _source_choice(source: SourceDescriptor) -> str:
+    """Flags selecting ``source`` in ``elevation download``."""
+    flags = f"--product {source.product}"
+    if source.product != "nmt":
+        return flags
+    if source.country == "CZ":
+        flags += " --country cz"
+    return f"{flags} --resolution {source.resolution}"
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -101,7 +112,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "byc dla niego dostepna; zadanie PL+CZ z roznymi ukladami: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=EVRF2007,cz=Bpv)",
     )
-    product.add_argument(
+    sheets = download.add_argument_group("Arkusze obszaru")
+    sheets.add_argument(
         "--sheet-system",
         choices=["1992", "2000"],
         default=None,
@@ -110,7 +122,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "1992 (mozna pominac). Nie dotyczy --sheet (uklad z godla), LAZ "
         "(uklad kazdego kafla z WFS) ani CZ",
     )
-    product.add_argument(
+    sheets.add_argument(
         "--scale",
         metavar="SKALA",
         help="Skala arkuszy PL-2000 do pobrania - wymagana z --bbox/--geometry "
@@ -232,6 +244,4 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     add_quiet(output)
     download.set_defaults(_handler=partial(cmd_download, products=PRODUCTS))
 
-    add_list_sources(
-        commands, "elevation", PRODUCTS, lambda source: f"--product {source.product}"
-    )
+    add_list_sources(commands, "elevation", PRODUCTS, _source_choice)
