@@ -394,6 +394,7 @@ def validate_data_request(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
     cutout: bool = False,
@@ -976,6 +977,8 @@ def _download_pl_archive(
     frame, the bbox, the feature envelopes of a geometry), within the year
     bounds - then the usual sheet flow (campaigns, versions, sidecars).
     """
+    if run.dry:
+        return 0
     with open_cache(
         run.cache, force=run.update == "force", on_notice=run.sink.add
     ) as metadata:
