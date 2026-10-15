@@ -291,6 +291,15 @@ def _validate_file(entry: object, where: str) -> None:
         _fail(f"{where}.size_bytes", "oczekiwano liczby calkowitej >= 0")
 
 
+def pin_problem(pin: PinnedFile) -> str | None:
+    """Why ``pin`` cannot be written in a manifest (``None`` = it can)."""
+    try:
+        _validate_file({key: getattr(pin, key) for key in _FILE_KEYS}, "plik")
+    except _Invalid as e:
+        return str(e)
+    return None
+
+
 def _project(directory: Path, doc: dict) -> Project:
     return Project(
         directory=directory,

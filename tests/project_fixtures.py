@@ -7,18 +7,23 @@ CZ (``_cz_provider_mock``), BDOT10k packages (``FakePackages``), SoilGrids
 (``RasterSoilGrids``, ``FakeSoilGrids``) and CORINE (``FakeCorine``).
 """
 
+import os
 import shutil
 from collections.abc import Iterator
 from contextlib import ExitStack, contextmanager
 from pathlib import Path
 from unittest.mock import patch
 
+from kartograf import init_project
 from kartograf.core.bbox import BBox
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
+from kartograf.providers.pl.gugik import GugikProvider
+from tests.test_cli import _cz_provider_mock
 from tests.test_landcover_output_params import FakePackages
 from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, FakeCampaignProvider
+from tests.test_wcs_cutout import ALL_LAND, MASK, _synthetic_session
 
 G = "N-34-139-C-a-3-1"
 PL_SHEET = {
@@ -37,6 +42,44 @@ LAZ_AREA = {
 BDOT_BBOX = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
 HSG_SHEET = "N-34-130-D"
 CZ_FACTORY = "kartograf.providers.cuzk.create_dmr_provider"
+# A tiny area inside the rectangular envelopes of PL and CZ (Cieszyn):
+# ``country="auto"`` gives one cutout per country.
+AUTO_CUTOUT = {
+    "product": "nmt",
+    "bbox": BBox(18.6300, 49.7450, 18.6303, 49.7452, "EPSG:4326"),
+    "country": "auto",
+    "resolution": {"pl": "1m", "cz": "2m"},
+    "vertical_crs": {"pl": "EVRF2007", "cz": "Bpv"},
+    "cutout": True,
+    "horizontal_crs": "EPSG:5514",
+}
+
+
+def new_project(root: Path, name: str = "projekt", store: str = "data") -> Path:
+    """A project ``root/name`` with the store ``<store>`` relative to it (the
+    manifest copied elsewhere points at the store next to the copy)."""
+    directory = root / name
+    init_project(directory, output_dir=os.path.relpath(directory / store))
+    return directory
+
+
+@contextmanager
+def auto_pl_cz(cz=None) -> Iterator[None]:
+    """PL cutout from a synthetic WCS (all land) and CZ from a provider mock."""
+
+    def pl_provider(*_args, **_kwargs):
+        return GugikProvider(
+            session=_synthetic_session(lambda xs, ys: xs + ys),
+            vertical_crs="EVRF2007",
+            resolution="1m",
+        )
+
+    with (
+        patch(MASK, return_value=ALL_LAND),
+        patch("kartograf.providers.pl.create_nmt_provider", side_effect=pl_provider),
+        patch(CZ_FACTORY, return_value=cz if cz is not None else _cz_provider_mock()),
+    ):
+        yield
 
 
 @contextmanager
