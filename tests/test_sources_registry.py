@@ -1,18 +1,22 @@
 """Tests of source descriptors and the registry (kartograf.sources)."""
 
 import dataclasses
+import re
 
 import pytest
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
+    PACKAGE_URL_TOKENS,
     AccessChannel,
     CountryProfile,
+    FeatureBBoxParams,
     LicenseInfo,
     SourceDescriptor,
     TileScheme,
     TransportKind,
+    UnitPackageParams,
 )
 from kartograf.sources.registry import (
     all_countries,
@@ -37,6 +41,9 @@ EXPECTED_KEYS = {
     "global.isric.soilgrids",
     "cz.cuzk.dmr5g",
     "cz.cuzk.dmr4g",
+    "pl.gugik.prg",
+    "pl.gugik.egib",
+    "pl.gugik.buildings_3d",
 }
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md).
@@ -55,6 +62,23 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.dmr5g", TransportKind.ARCGIS_IMAGE, "none"),
     ("cz.cuzk.dmr4g", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.dmr4g", TransportKind.ARCGIS_IMAGE, "none"),
+    ("pl.gugik.prg", TransportKind.WFS, "none"),
+    ("pl.gugik.prg", TransportKind.DIRECT_FILES, "none"),
+    ("pl.gugik.egib", TransportKind.DIRECT_FILES, "none"),
+    ("pl.gugik.egib", TransportKind.WFS, "none"),
+    ("pl.gugik.buildings_3d", TransportKind.DIRECT_FILES, "none"),
+]
+
+# Collection channels (ADR-042 D6) by their capability - a descriptor may have
+# several channels of one transport (BDOT10k: current packages + archive).
+COLLECTION_CHANNEL_SIGNALS = [
+    ("pl.gugik.bdot10k", "archive_unit_files", "none"),
+    ("pl.gugik.prg", "bbox_vector", "none"),
+    ("pl.gugik.prg", "admin_unit_files", "none"),
+    ("pl.gugik.prg", "country_files", "none"),
+    ("pl.gugik.egib", "admin_unit_files", "none"),
+    ("pl.gugik.egib", "bbox_vector", "none"),
+    ("pl.gugik.buildings_3d", "admin_unit_files", "none"),
 ]
 
 
@@ -67,6 +91,21 @@ def test_every_channel_has_an_inventoried_signal():
     inventoried = {(key, transport) for key, transport, _ in CHANNEL_SIGNALS}
     channels = {(d.key, c.transport) for d in sources_for() for c in d.channels}
     assert channels == inventoried
+
+
+def _collection_channels():
+    return [
+        (d, ch) for d in sources_for() for ch in d.channels if ch.params is not None
+    ]
+
+
+def test_collection_channel_signals_match_inventory():
+    found = {
+        (d.key, capability, ch.update_signal)
+        for d, ch in _collection_channels()
+        for capability in ch.capabilities
+    }
+    assert found == set(COLLECTION_CHANNEL_SIGNALS)
 
 
 @pytest.mark.parametrize(
@@ -151,7 +190,7 @@ class TestRegistry:
 
     def test_sources_for_filters(self):
         pl = sources_for(country="PL")
-        assert len(pl) == 6
+        assert len(pl) == 9
         nmt = sources_for(country="PL", product="nmt")
         assert {d.key for d in nmt} == {"pl.gugik.nmt_1m", "pl.gugik.nmt_5m"}
         cz = sources_for(country="CZ")
@@ -530,3 +569,114 @@ class TestResolveSubdir:
         d = self._descriptor("nmt/pl_{system}_1m_{vcrs}")
         with pytest.raises(ValidationError, match="Pusty wymiar"):
             d.resolve_subdir(**kwargs)
+
+
+_SEGMENT_TOKEN = re.compile(r"[a-z0-9.-]+")
+
+
+class TestCollectionChannels:
+    """ADR-042 D1: collection channels carry typed engine parameters."""
+
+    def test_collection_channels_are_typed(self):
+        channels = _collection_channels()
+        assert channels
+        for d, ch in channels:
+            if ch.transport == TransportKind.DIRECT_FILES:
+                assert isinstance(ch.params, UnitPackageParams), d.key
+            else:
+                assert isinstance(ch.params, FeatureBBoxParams), d.key
+                expected = {
+                    TransportKind.WFS: "wfs",
+                    TransportKind.ARCGIS_QUERY: "arcgis",
+                }
+                assert ch.params.protocol == expected[ch.transport], d.key
+                assert ch.endpoint.startswith("https://"), d.key
+
+    def test_collection_capability_unique_in_descriptor(self):
+        """The sidecar picks the channel of a file by its capability."""
+        for d, ch in _collection_channels():
+            others = [c for c in d.channels if c is not ch]
+            own = [
+                cap
+                for cap in ch.capabilities
+                if all(cap not in c.capabilities for c in others)
+            ]
+            assert own, (d.key, ch.capabilities)
+
+    def test_url_templates_use_known_tokens(self):
+        for d, ch in _collection_channels():
+            if not isinstance(ch.params, UnitPackageParams):
+                continue
+            keys = {tuple(k for k, _ in v.choice) for v in ch.params.variants}
+            assert len(keys) == 1, d.key  # one set of choice keys per channel
+            choices = [v.choice for v in ch.params.variants]
+            assert len(set(choices)) == len(choices), d.key
+            for v in ch.params.variants:
+                tokens = set(re.findall(r"{([^}]*)}", v.url_template))
+                assert tokens <= set(PACKAGE_URL_TOKENS), (d.key, v.url_template)
+                assert v.url_template.startswith("https://"), d.key
+                for token in (*v.segment_tokens, *([v.edition] if v.edition else [])):
+                    assert _SEGMENT_TOKEN.fullmatch(token), (d.key, token)
+
+    def test_feature_layers_unique(self):
+        for d, ch in _collection_channels():
+            if not isinstance(ch.params, FeatureBBoxParams):
+                continue
+            layers = ch.params.layers
+            assert layers, d.key
+            assert ch.params.page_size > 0, d.key
+            for attribute in ("code", "name", "source"):
+                values = [getattr(layer, attribute) for layer in layers]
+                assert len(set(values)) == len(values), (d.key, attribute)
+            if ch.params.selection == "level":
+                for layer in layers:
+                    assert _SEGMENT_TOKEN.fullmatch(layer.code), (d.key, layer.code)
+
+    def test_new_sources_registered(self):
+        pl = {d.key: d for d in sources_for(country="PL")}
+        expected = {
+            "pl.gugik.prg": ("admin", "boundaries/pl_prg"),
+            "pl.gugik.egib": ("map", "cadastre/pl_egib"),
+            "pl.gugik.buildings_3d": ("buildings", "models3d/pl_buildings"),
+        }
+        for key, (product, subdir) in expected.items():
+            d = pl[key]
+            assert (d.product, d.storage_subdir) == (product, subdir)
+            assert d.license == pl["pl.gugik.bdot10k"].license
+            assert all(ch.horizontal_crs == "EPSG:2180" for ch in d.channels)
+
+    def test_bdot10k_archive_is_channel_of_bdot10k(self):
+        d = get_source("pl.gugik.bdot10k")
+        files = [ch for ch in d.channels if ch.transport == TransportKind.DIRECT_FILES]
+        assert len(files) == 2
+        current, archive = files
+        assert current.params is None  # current packages: Bdot10kProvider
+        assert isinstance(archive.params, UnitPackageParams)
+        assert archive.params.unit == "powiat"
+        assert {d.key for d in sources_for(product="landcover")} == {
+            "pl.gugik.bdot10k",
+            "eu.clms.corine",
+        }
+        published = {dict(v.choice)["year"] for v in archive.params.variants}
+        assert published == {str(year) for year in range(2014, 2026)}
+        for v in archive.params.variants:
+            choice = dict(v.choice)
+            assert v.edition == choice["year"]
+            assert v.members == ({"GML": ".xml", "SHP": ".shp"}[choice["format"]],)
+
+    def test_buildings_variants_declare_vertical_crs(self):
+        """Every release declares the vertical CRS measured in its GML (srsName)."""
+        (channel,) = get_source("pl.gugik.buildings_3d").channels
+        assert isinstance(channel.params, UnitPackageParams)
+        measured = {
+            (dict(v.choice)["lod"], dict(v.choice)["year"]): v.vertical_crs
+            for v in channel.params.variants
+        }
+        assert measured == {
+            ("1", "2019"): "EPSG:9650",
+            ("1", "2021"): "EPSG:9651",
+            ("1", "2022"): "EPSG:9651",
+            ("1", "2024"): "EPSG:9651",
+            ("2", "2017"): "EPSG:9650",
+        }
+        assert set(measured.values()) <= set(channel.vertical_crs_options)

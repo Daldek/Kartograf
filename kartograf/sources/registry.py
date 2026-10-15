@@ -15,11 +15,15 @@ from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
     CountryProfile,
+    FeatureBBoxParams,
+    FeatureLayer,
     LicenseInfo,
+    PackageVariant,
     SignalKind,
     SourceDescriptor,
     TileScheme,
     TransportKind,
+    UnitPackageParams,
 )
 
 # Mapping of vertical CRS names used in the CLI to EPSG codes.
@@ -72,6 +76,73 @@ _CUZK_LICENSE = LicenseInfo(
 )
 
 _PL_VERTICAL_BOTH = ("EPSG:9650", "EPSG:9651")
+
+# --- Collection channels of GUGiK (ADR-042, plan C) ---------------------------
+_OPENDATA = "https://opendata.geoportal.gov.pl"
+_GUGIK_WFS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK"
+
+# BDOT10k archive: yearly snapshots 2014-2025 (state at the start of the year)
+# in GML and SHP, one ZIP per powiat (reconnaissance 2026-10-15: GPKG, 2013 and
+# 2026 = 404). A GML package holds ``.xml`` files, a SHP package ``.shp``.
+_BDOT10K_ARCHIVE = f"{_OPENDATA}/Archiwum/bdot10k"
+_BDOT10K_ARCHIVE_YEARS = tuple(range(2014, 2026))
+_BDOT10K_ARCHIVE_FORMATS = (("GML", ".xml"), ("SHP", ".shp"))
+
+
+def _bdot10k_archive_variants() -> tuple[PackageVariant, ...]:
+    return tuple(
+        PackageVariant(
+            choice=(("format", fmt), ("year", str(year))),
+            url_template=(
+                f"{_BDOT10K_ARCHIVE}/{year}/{fmt}/{{woj}}/{{teryt}}_{fmt}_{year}.zip"
+            ),
+            edition=str(year),
+            segment_tokens=(fmt.lower(), str(year)),
+            members=(member,),
+        )
+        for year in _BDOT10K_ARCHIVE_YEARS
+        for fmt, member in _BDOT10K_ARCHIVE_FORMATS
+    )
+
+
+# 3D building models (CityGML, one ZIP per powiat): LoD1 yearly releases (2019
+# with the ``_gml`` file name suffix) and the only LoD2 release, 2017. The
+# vertical CRS is the one declared by ``srsName`` of the GML files (measured
+# 2026-10-15 on powiat 0401: 2019 PL-KRON86-NH, 2021/2022 PL-EVRF2007-NH,
+# 2024 EPSG::9651; LoD2 2017 PL-KRON86-NH).
+_BUILDINGS_3D = f"{_OPENDATA}/InneDane/Budynki3D"
+_BUILDINGS_3D_RELEASES = (
+    ("1", "2019", f"{_BUILDINGS_3D}/LOD1/2019/{{woj}}/{{teryt}}_gml.zip", "EPSG:9650"),
+    ("1", "2021", f"{_BUILDINGS_3D}/LOD1/2021/{{woj}}/{{teryt}}.zip", "EPSG:9651"),
+    ("1", "2022", f"{_BUILDINGS_3D}/LOD1/2022/{{woj}}/{{teryt}}.zip", "EPSG:9651"),
+    ("1", "2024", f"{_BUILDINGS_3D}/LOD1/2024/{{woj}}/{{teryt}}.zip", "EPSG:9651"),
+    ("2", "2017", f"{_BUILDINGS_3D}/LOD2/{{teryt}}_gml.zip", "EPSG:9650"),
+)
+
+
+def _buildings_3d_variants() -> tuple[PackageVariant, ...]:
+    return tuple(
+        PackageVariant(
+            choice=(("lod", lod), ("year", year)),
+            url_template=url,
+            edition=year,
+            segment_tokens=(f"lod{lod}", year),
+            members=(".gml",),
+            vertical_crs=vertical,
+        )
+        for lod, year, url, vertical in _BUILDINGS_3D_RELEASES
+    )
+
+
+# PRG WFS levels (--level -> type of AdministrativeBoundaries); the stable
+# feature key is IIP_IDENTY (gml:id is a page position, reconnaissance 2026-10-15).
+_PRG_LEVELS = (
+    ("wojewodztwo", "A01_Granice_wojewodztw"),
+    ("powiat", "A02_Granice_powiatow"),
+    ("gmina", "A03_Granice_gmin"),
+    ("jednostka-ewidencyjna", "A05_Granice_jednostek_ewidencyjnych"),
+    ("obreb", "A06_Granice_obrebow_ewidencyjnych"),
+)
 
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
@@ -215,10 +286,204 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"admin_unit_files"}),
                 ),
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"archive_unit_files"}),
+                    endpoint=f"{_BDOT10K_ARCHIVE}/",
+                    notes=(
+                        "archiwum rocznikow 2014-2025 (stan z poczatku roku), "
+                        "GML albo SHP; paczka powiatu zapisywana 1:1"
+                    ),
+                    params=UnitPackageParams(
+                        unit="powiat", variants=_bdot10k_archive_variants()
+                    ),
+                ),
             ),
             tile_scheme=None,
             storage_subdir="landcover/pl_bdot10k",
             default_extension=".gpkg",
+            license=_GUGIK_LICENSE,
+        ),
+        SourceDescriptor(
+            key="pl.gugik.prg",
+            country="PL",
+            product="admin",
+            name="PRG - granice jednostek administracyjnych i ewidencyjnych",
+            provider_name="GUGiK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.WFS,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"bbox_vector"}),
+                    endpoint=f"{_GUGIK_WFS}/PRG/WFS/AdministrativeBoundaries",
+                    notes="pelne geometrie jednostek przecinajacych obszar",
+                    params=FeatureBBoxParams(
+                        protocol="wfs",
+                        native_crs="EPSG:2180",
+                        axis_order="yx",
+                        page_size=1000,
+                        layers=tuple(
+                            FeatureLayer(
+                                code=code,
+                                source=f"ms:{name}",
+                                name=name,
+                                id_field="IIP_IDENTY",
+                            )
+                            for code, name in _PRG_LEVELS
+                        ),
+                        selection="level",
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"admin_unit_files"}),
+                    endpoint=f"{_OPENDATA}/prg/granice/",
+                    notes="paczka wojewodztwa: GML poziomow A01, A02, A03, A05, A06",
+                    params=UnitPackageParams(
+                        unit="woj",
+                        variants=(
+                            PackageVariant(
+                                choice=(),
+                                url_template=(
+                                    f"{_OPENDATA}/prg/granice/"
+                                    "{woj}_GraniceAdministracyjne.zip"
+                                ),
+                                segment_tokens=("gml",),
+                                members=(".gml",),
+                            ),
+                        ),
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"country_files"}),
+                    endpoint=f"{_OPENDATA}/prg/granice/",
+                    notes="plik krajowy SHP (ok. 377 MB), tylko z --whole-country",
+                    params=UnitPackageParams(
+                        unit="country",
+                        variants=(
+                            PackageVariant(
+                                choice=(),
+                                url_template=(
+                                    f"{_OPENDATA}/prg/granice/"
+                                    "00_jednostki_administracyjne.zip"
+                                ),
+                                segment_tokens=("shp",),
+                                members=(".shp",),
+                            ),
+                        ),
+                    ),
+                ),
+            ),
+            tile_scheme=None,
+            storage_subdir="boundaries/pl_prg",
+            default_extension=".gpkg",
+            license=_GUGIK_LICENSE,
+        ),
+        SourceDescriptor(
+            key="pl.gugik.egib",
+            country="PL",
+            product="map",
+            name="EGiB - mapa ewidencyjna (dzialki i budynki)",
+            provider_name="GUGiK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"admin_unit_files"}),
+                    endpoint=f"{_OPENDATA}/InneDane/latest_exports/eziudp_wfs/GPKG/",
+                    notes=(
+                        "eksport powiatu odswiezany co dobe: warstwy dzialki, "
+                        "budynki i transakcje (RCN)"
+                    ),
+                    params=UnitPackageParams(
+                        unit="powiat",
+                        variants=(
+                            PackageVariant(
+                                choice=(),
+                                url_template=(
+                                    f"{_OPENDATA}/InneDane/latest_exports/"
+                                    "eziudp_wfs/GPKG/{teryt}.gpkg.zip"
+                                ),
+                                segment_tokens=("gpkg",),
+                            ),
+                        ),
+                        unpack=".gpkg",
+                    ),
+                ),
+                AccessChannel(
+                    transport=TransportKind.WFS,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    capabilities=frozenset({"bbox_vector"}),
+                    endpoint=f"{_GUGIK_WFS}/EGIB/WFS/UslugaZbiorcza",
+                    notes=(
+                        "usluga zbiorcza powiatowych WFS: luki w powiatach bez "
+                        "integracji, atrybuty zastrzezone = brak_uprawnien"
+                    ),
+                    params=FeatureBBoxParams(
+                        protocol="wfs",
+                        native_crs="EPSG:2180",
+                        axis_order="yx",
+                        page_size=1000,
+                        layers=(
+                            FeatureLayer(
+                                code="dzialki",
+                                source="ms:dzialki",
+                                name="dzialki",
+                                id_field="gml_id",
+                            ),
+                            FeatureLayer(
+                                code="budynki",
+                                source="ms:budynki",
+                                name="budynki",
+                                id_field="gml_id",
+                            ),
+                        ),
+                        selection="all",
+                        drop_fields=("DATA",),
+                    ),
+                ),
+            ),
+            tile_scheme=None,
+            storage_subdir="cadastre/pl_egib",
+            default_extension=".gpkg",
+            license=_GUGIK_LICENSE,
+        ),
+        SourceDescriptor(
+            key="pl.gugik.buildings_3d",
+            country="PL",
+            product="buildings",
+            name="Modele 3D budynkow (CityGML LoD1, LoD2)",
+            provider_name="GUGiK",
+            channels=(
+                AccessChannel(
+                    transport=TransportKind.DIRECT_FILES,
+                    update_signal="none",
+                    horizontal_crs="EPSG:2180",
+                    vertical_crs_options=_PL_VERTICAL_BOTH,
+                    capabilities=frozenset({"admin_unit_files"}),
+                    endpoint=f"{_BUILDINGS_3D}/",
+                    notes=(
+                        "LoD2 nie pokrywa calego kraju (brak paczki powiatu = "
+                        "brak danych); pliki krajowe (3,5-4,1 GB) poza zakresem"
+                    ),
+                    params=UnitPackageParams(
+                        unit="powiat", variants=_buildings_3d_variants()
+                    ),
+                ),
+            ),
+            tile_scheme=None,
+            storage_subdir="models3d/pl_buildings",
+            default_extension=".zip",
             license=_GUGIK_LICENSE,
         ),
         SourceDescriptor(

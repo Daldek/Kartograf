@@ -279,13 +279,13 @@ class PackageVariant:
     url_template: str                    # tokens: {teryt}, {woj} only
     edition: str | None = None           # version label (label_source "edition")
     segment_tokens: tuple[str, ...] = () # ("shp", "2024") | ("lod1", "2024") | ("gml",)
+    members: tuple[str, ...] = ()        # required member suffixes (".shp")
     vertical_crs: str | None = None      # declared in the data (3D CityGML)
 
 @dataclass(frozen=True)
 class UnitPackageParams:
     unit: Literal["powiat", "woj", "country"]
     variants: tuple[PackageVariant, ...]
-    members: tuple[str, ...] = ()        # required member suffixes (".shp")
     unpack: str | None = None            # exactly one member with suffix -> file
 
 @dataclass(frozen=True)
@@ -314,6 +314,13 @@ rejestru: dozwolone tokeny szablonu wylacznie `{teryt}`, `{woj}`; kazdy
 i `segment_tokens` pasuja do `[a-z0-9.-]+`; `FeatureBBoxParams.protocol`
 zgodny z `transport` (`WFS` -> `wfs`, `ARCGIS_QUERY` -> `arcgis`);
 `page_size > 0`.
+
+Korekta przy implementacji (2026-10-15): `members` jest polem
+`PackageVariant`, nie `UnitPackageParams` - paczki GML (`.xml`) i SHP
+(`.shp`) archiwum BDOT10k leza w jednym kanale, wiec wymagane czlony
+zaleza od wariantu. Kazdy kanal kolekcji ma capability unikalna
+w deskryptorze (`archive_unit_files`, `country_files`, `bbox_vector`,
+`admin_unit_files`) - sidecar wybiera po niej kanal pliku.
 
 ### Silniki
 

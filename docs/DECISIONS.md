@@ -36,7 +36,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-012](#adr-012-gugikortoprovider-jako-osobna-klasa-nie-dziedziczy-z-gugikprovider) | GugikOrtoProvider jako osobna klasa (nie dziedziczy z GugikProvider) | 2026-02-07 | Przyjeta |
 | [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) | Zmiana nazw podkatalogow storage z 1m/5m na nmt_1m/nmt_5m | 2026-02-07 | Zastapiona przez [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach); czesciowo zastepuje [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci) (nazwy katalogow) |
 | [ADR-014](#adr-014-bdot10k-category-based-extraction-pt-vs-hydro) | BDOT10k category-based extraction (pt vs hydro) | 2026-02-08 | Zastapiona przez [ADR-016](#adr-016-bdot10k--usunięcie-filtrowania-po-kategorii-pobieranie-całego-pliku) |
-| [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) | pyshp + sqlite3 zamiast fiona dla czytania geometrii | 2026-02-08 | Przyjeta |
+| [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) | pyshp + sqlite3 zamiast fiona dla czytania geometrii | 2026-02-08 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian) |
 | [ADR-016](#adr-016-bdot10k--usunięcie-filtrowania-po-kategorii-pobieranie-całego-pliku) | BDOT10k — usunięcie filtrowania po kategorii, pobieranie całego pliku | 2026-03-02 | Przyjeta; zastepuje [ADR-014](#adr-014-bdot10k-category-based-extraction-pt-vs-hydro) |
 | [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) | PL-2000 sheet naming — composition pattern with auto-detection | 2026-02-24 | Przyjeta — uzupelniona przez [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (wlasne segmenty PL-2000; errata 1) |
 | [ADR-018](#adr-018-threadpoolexecutor-dla-rownoleglego-pobierania) | ThreadPoolExecutor dla rownoleglego pobierania | 2026-03-03 | Przyjeta |
@@ -57,11 +57,12 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta — czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (F-U5: `kampanie/`; errata 1); uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie; errata 8) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`; errata 1) |
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, plan 2/3) |
-| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
+| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D23 miedzy wydaniami, sloty jednostek; D27 czesciowo zastapione - wycinek orto w magazynie); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
 | [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
-| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
-| [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta; uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
+| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
+| [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
+| [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta; uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami; czesciowo zastepuje D27 - wycinek orto w magazynie), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu) |
 
 ---
 
@@ -370,7 +371,7 @@ dodatniego pola z (a) i szersza obwiednia bboxa EPSG:2180 bez zmian.
 ## ADR-015: pyshp + sqlite3 zamiast fiona dla czytania geometrii
 
 **Data:** 2026-02-08
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-042 (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian)
 
 **Kontekst:** Uzytkownik potrzebuje pobierania danych dla obszarow zdefiniowanych plikami SHP/GPKG. Do odczytu geometrii potrzebna jest biblioteka.
 
@@ -2498,7 +2499,7 @@ pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane (D10).
 ## ADR-036: Magazyn wersjonowany
 
 **Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizje 2026-10-12, D26-D28 i D29-D33)
-**Status:** Przyjeta — uzupelniona przez ADR-037 (arkusz CZ w publicznym API; errata 1); czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
+**Status:** Przyjeta — uzupelniona przez ADR-037 (arkusz CZ w publicznym API; errata 1) i ADR-042 (D23 miedzy wydaniami, sloty jednostek; D27 czesciowo zastapione - wycinek orto w magazynie); czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
 
 **Kontekst:** Do 0.7.x magazyn mogl po cichu nadpisac dane: `--force`
 nadpisywal plik kampanii, `newest` automatycznie przestawial sciezke na
@@ -2774,7 +2775,7 @@ wymaga `--cutout` takze dla natywnego ukladu.
 ## ADR-039: Grupy komend CLI wg typu danych
 
 **Data:** 2026-10-15
-**Status:** Przyjeta — uzupelniona przez ADR-040 (komenda danych ustawia `_task` dla `project add`); uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag)
+**Status:** Przyjeta — uzupelniona przez ADR-040 (komenda danych ustawia `_task` dla `project add`) i ADR-042 (grupy `boundaries`, `cadastre`, `models3d`, `hydro`); uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag)
 
 **Kontekst:** CLI 0.8.0-dev mialo jedna komende `download` dla NMT, NMPT,
 ortofotomapy i LAZ (z flagami dotyczacymi tylko czesci produktow:
@@ -2853,7 +2854,7 @@ Hydrograf/Hydrolog) trzeba zaktualizowac.
 ## ADR-040: Manifest projektu i przypiete wersje
 
 **Data:** 2026-10-15
-**Status:** Przyjeta; uzupelnia ADR-039 (komenda danych ustawia `_task` dla `project add`)
+**Status:** Przyjeta — uzupelniona przez ADR-042 (pozycje komend kolekcji); uzupelnia ADR-039 (komenda danych ustawia `_task` dla `project add`)
 
 **Kontekst:** Magazyn wersjonowany (ADR-036) jest wspolny dla wielu
 projektow, a sciezka standardowa wskazuje najnowsza lokalna wersje, wiec
@@ -2920,6 +2921,162 @@ i `rename`; magazyn nadal wymaga dowiazan twardych (ADR-036). Kazda
 nowa komenda danych wymaga pozycji w tabeli projektu i `_task` (test
 zgodnosci). Implementacja:
 `docs/superpowers/plans/2026-10-15-manifest-projektu.md`.
+
+---
+
+## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
+
+**Data:** 2026-10-15
+**Status:** Przyjeta; uzupelnia ADR-015 (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), ADR-036 (D23 miedzy wydaniami; czesciowo zastepuje D27 - wycinek orto w magazynie), ADR-039 (grupy boundaries, cadastre, models3d, hydro) i ADR-040 (pozycje komend projektu)
+
+**Kontekst:** Spec katalogu (K5-K7) wymaga, by produkt z raportu byl
+wpisem deskryptora i konfiguracja kanalu, nie providerem. Plany C i D
+wnosza paczki per jednostka administracyjna (archiwum BDOT10k, modele 3D,
+PRG, EGiB), obiekty dla obszaru z WFS i ArcGIS REST (PRG, EGiB, RUIAN,
+HY-NET, ZABAGED) i pliki wskazywane feedem ATOM CUZK (ortofoto, ZABAGED
+kraj). Rekonesans 2026-10-15 wykazal: bledne linki `next` w obu
+serwerach WFS, duplikat obiektu na koncu stron MapServer, kolejnosc osi
+zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA`, GML
+z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
+
+**Opcje:**
+- A) Provider per produkt (wzorzec `providers/pl/*.py`).
+- B) Generyczne silniki sterowane typowanymi parametrami kanalu
+  w deskryptorze + jeden orkiestrator kolekcji na magazynie wersji.
+- C) Jeden ogolny "pobierz URL" bez typowanych parametrow.
+
+**Decyzja:** B.
+- D1. `AccessChannel.params: UnitPackageParams | FeatureBBoxParams |
+  AtomFilesParams | WcsCutoutParams | None` (dane bez IO, niemutowalne;
+  dwa ostatnie w planie D). Wymagane czlony ZIP sa cecha wariantu
+  (`PackageVariant.members`: paczki GML i SHP jednego kanalu roznia sie).
+  Silniki: `transport/unit_package.py`, `transport/feature_bbox.py`,
+  `transport/atom.py` (plan D), zapis GPKG `transform/gpkg.py`,
+  orkiestracja `download/collections.py`. Nowy produkt = deskryptor
+  z parametrami kanalu (+ wybor w CLI). Kanal kolekcji ma capability
+  unikalna w swoim deskryptorze (wybor kanalu sidecara).
+- D2. Rodzaj wyboru wyznacza kanal: `teryt` (2 cyfry = woj., 4 = powiat)
+  -> `unit_package` tej jednostki; obszar (`bbox`/`sheet`/`geometry`) ->
+  `feature_bbox`, a gdy produkt go nie ma - powiaty z PRG i paczka na
+  powiat; `whole_country` -> plik krajowy (`unit_package` jednostki
+  `country` albo `atom_files`) wylacznie jawnie, z rozmiarem z `HEAD`/
+  feedu w `Notice` przed transferem (K7). Dokladnie jeden wybor; wariant
+  (rok, format, LoD, poziom, uklad pliku krajowego) wymagany, gdy zrodlo
+  publikuje wiecej niz jeden (K8), a przy jednym przyjmowany tylko rowny
+  opublikowanemu. Uklad pliku wybiera `--horizontal-crs` (ADR-038; API
+  `horizontal_crs`): wymagany, gdy kanal ma kilka ukladow (pliki krajowe
+  CUZK 5514/3045); wynik obszaru jest zawsze w ukladzie natywnym uslugi.
+- D3. Kompletnosc `feature_bbox` z liczby, nie z linkow: WFS
+  `RESULTTYPE=hits`, ArcGIS `returnCountOnly` -> N; strony
+  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`); `next`
+  ignorowany; dedupe po polu identyfikatora kanalu (identyczny duplikat
+  pominiety, rozny = `DownloadError`); unikalnych != N albo
+  `numberMatched="unknown"` = `DownloadError`; HTML, `ExceptionReport`,
+  JSON `error` przy HTTP 200 = `DownloadError`. N = 0 we wszystkich
+  warstwach = `NoCoverageError` (bez pliku); pusta warstwa obok
+  niepustych = warstwa ze schematem bez obiektow. Metadane uslugi
+  (`GetCapabilities`, `DescribeFeatureType`, pola warstwy ArcGIS) sa
+  pobierane swiezo raz na pobranie, bez cache metadanych: kontrola typu
+  i DefaultCRS dotyczy stanu uslugi z chwili pobrania, a uzycie lokalnej
+  wersji nie wysyla zadnego zapytania.
+- D4. Kolejnosc osi BBOX jest parametrem kanalu z testem na prawdziwej
+  odpowiedzi: GUGiK `urn:...:EPSG::2180` = N,E, CUZK EPSG:5514 = X,Y
+  (obie zgodne z EPSG); zamiana daje pusty wynik bez bledu.
+- D5. Wynik `feature_bbox`: jeden GPKG w ukladzie natywnym uslugi
+  (DefaultCRS), pelne geometrie obiektow przecinajacych obszar (bez
+  przycinania), warstwa na warstwe zrodla; bajty deterministyczne
+  (obiekty po identyfikatorze, schemat z metadanych uslugi, staly
+  `OGR_CURRENT_DATE`); pola zalezne od chwili odpowiedzi (`drop_fields`,
+  EGiB `DATA`) poza GPKG, w sidecarze `extra.source.response_date`
+  (pole -> wartosci); skladanie na dysku lokalnym, potem staging
+  magazynu. Nowa zaleznosc `pyogrio` (GDAL wektorowy).
+- D6. Magazyn i sygnaly: kazdy plik przez `FileSlot` i
+  `use_local`/`store_file`/`fetch_version`/`inspect_version`; sygnal =
+  `update_signal` kanalu: paczki GUGiK i wszystkie wyniki WFS/REST
+  `none`, pliki CUZK `http`, pliki z feedu ATOM `metadata`. Etykieta:
+  produkty z wydaniem w segmencie (rocznik BDOT10k, rok modeli 3D) -
+  wydanie (`label_source="edition"`), pozostale `downloaded`.
+- D7. D23 miedzy wydaniami: `FileSlot.related_roots` - gdy w slocie nie
+  ma wersji o tym sha256, szukana jest w slotach pokrewnych (inne wydania
+  tego produktu, formatu i jednostki); trafienie = dowiazanie twarde do
+  istniejacych danych, status `relabeled`, `same_as` = etykieta
+  znalezionej wersji (spec 9.3: identyczne roczniki bez duplikatu).
+- D8. Uklad `data/` (rozszerzenie reguly 8): `<grupa>/<kraj>_<zrodlo>
+  [_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}<ext>`; `coords`
+  w ukladzie natywnym (`.10g`), tokeny `[a-z0-9.-]`, plik krajowy
+  `country/pl` albo `country/cz`; wersje w `<segment>/versions/<ta sama
+  hierarchia>/`. Tokeny = wariant tresci (poziom, LoD, rocznik): wynik
+  obszaru (zawsze GPKG w ukladzie natywnym) bez tokenu formatu; paczka
+  i plik krajowy z tokenem formatu zrodla, gdy produkt ma kilka formatow
+  albo takze wynik obszaru, a gdy zrodlo publikuje plik w kilku
+  ukladach - takze z kodem EPSG (doprecyzowanie przykladow specu 7:
+  `boundaries/pl_prg_<poziom>/bbox/`, `landcover/cz_zabaged/bbox/`,
+  `landcover/cz_zabaged_gpkg_5514/country/cz.zip`,
+  `models3d/pl_buildings_lod1_<rok>/teryt/` bez formatu - jeden format,
+  brak wyniku obszaru). Rozne tresci nigdy nie dziela slotu.
+- D9. CLI (uzupelnienie ADR-039): grupy `boundaries`, `cadastre`,
+  `models3d` (plan C) i `hydro` (plan D), modul na grupe z `download`
+  i `list-sources`; wybor `--product` + `--country pl|cz|auto` (jak
+  `elevation`/`imagery`; `landcover` zostaje z `--source`); `--teryt`,
+  `--whole-country`, `--level` (granice dla obszaru; nazwy krajowe:
+  PL `wojewodztwo|powiat|gmina|jednostka-ewidencyjna|obreb`, CZ
+  `kraj|okres|obec|katastralni-uzemi`; z `--country auto` w skladni per
+  kraj `pl=gmina,cz=obec` jak `--resolution`), `--lod 1|2`, `--year`,
+  `--horizontal-crs` (tylko gdzie plik krajowy ma kilka ukladow; plan D:
+  `landcover --source zabaged`). Produkty: `admin` (PRG, RUIAN), `map`
+  (EGiB - mapa ewidencyjna), `buildings` (modele 3D), `network`
+  (HY-NET). Nowe produkty bez `--layers` (stala zawartosc). Parser
+  kazdej komendy `download` ustawia `_handler` i `_task` (ADR-040).
+- D10. Biblioteka: `download_collection`/`check_collection`
+  (`CollectionReport`: `files` z `UnitFile`, `failed` z `UnitFailure`,
+  `stale`, `notices`, `ok`), walidacja bez sieci
+  `validate_collection_request`, tor planu `collection`. `landcover
+  download` zostaje `LandCoverManager` (ADR-039 D8) i deleguje archiwum
+  BDOT10k oraz ZABAGED do silnikow kolekcji.
+- D11. Archiwum BDOT10k: `--year 2014..2025` z wymaganym `--format
+  GML|SHP` (brak GPKG; z `--year` odrzucone `GPKG`, `--layers`,
+  `--keep-raw`), ZIP 1:1, `landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip`,
+  etykieta = rok, `none`, D7 dla identycznych rocznikow; 404 powiatu
+  (zmiana TERYT, brak paczki) = `NoCoverageError` tego powiatu.
+- D12 (plan D). `atom_files`: feed uslugi ATOM -> feed zbioru -> link
+  `alternate` z `length`; wpis wybierany wyrazeniem regularnym na id
+  zbioru (grupy nazwane) albo jedyny zbior + kategoria CRS; wydanie
+  (`metadata`) z `<updated>` wpisu; indeks feedu uslugi w MetadataCache
+  odswiezany warunkowym GET (ETag).
+- D13 (plan D). Ortofoto CZ: `imagery download --product orto
+  --country cz` (arkusz albo obszar -> arkusze SM5 z indeksu), czlony
+  ZIP bez konwersji pikseli jako `<godlo>.jpg`, `<godlo>.jgw` (S-JTSK),
+  `<godlo>.TM33N.jgw`, `<godlo>.TM34N.jgw`, kazdy plik wersjonowany
+  w `orto/cz_sjtsk/<hierarchia SM5>/`; etykieta `<rok>_<updated>`,
+  sygnal `metadata`. Wzorzec godla SM5 przyjmuje 2 litery (As).
+- D14 (plan D). Wycinek ortofotomapy PL z WCS w magazynie (czesciowo
+  zastepuje ADR-036 D27): `imagery download --product orto --cutout
+  --horizontal-crs EPSG:2180 --coverage standard|high --resolution
+  0.1m|0.25m|0.5m|1m`, `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif`,
+  `none`, bez maski ladu, kawalki do 4 Mpx natywnych, konfiguracja
+  w `WcsCutoutParams` kanalu WCS; `GugikOrtoProvider.download_bbox`
+  zostaje surowym API poza magazynem.
+- D15 (plan D). ZABAGED: `landcover download --source zabaged`; obszar
+  -> GPKG EPSG:5514 z 22 warstw pokrycia i hydrografii REST (nazwy =
+  kody ASCII nazw warstw), `--whole-country --horizontal-crs
+  EPSG:5514|EPSG:3045` -> krajowy `ZABAGED-<kod>-gpkg-<data>.zip`
+  z feedu (`metadata`); bez mapowania klas na kody BDOT10k.
+- D16 (plan D). Grupa `hydro`, `--product network` (HY-NET): obszar ->
+  GPKG EPSG:5514 (3 typy WFS), `--whole-country` -> `HY-NET.zip`
+  (EPSG:3045 wg feedu, `http`).
+- D17 (plan D). RUIAN: `boundaries --product admin --country cz`; obszar
+  -> REST warstwy 17/15/12/7, `--whole-country` -> `shp/stat/epsg-5514/1.zip`
+  (`http`).
+
+**Konsekwencje:** Kolejne produkty planu E wchodza jako deskryptory
+z parametrami (nowy protokol, np. OGC API Features, rozszerza
+`FeatureBBoxParams.protocol` razem z pierwszym produktem). `pyogrio`
+dochodzi do zaleznosci (ok. 100 MB kola z GDAL obok GDAL `rasterio`).
+Wynik WFS/REST jest migawka bez sygnalu: `--check-updates` raportuje
+`unverifiable`, nowa tresc daje dopiero `--force`. Pliki krajowe moga
+miec inny uklad niz wynik obszaru (HY-NET 3045 vs 5514) - sidecar podaje
+faktyczny. Szczegoly i pomiary: `docs/research/2026-10-15-plan-c-d/raport.md`,
+plany `docs/superpowers/plans/2026-10-15-plan-c-*.md`, `...-plan-d-*.md`.
 
 ---
 
