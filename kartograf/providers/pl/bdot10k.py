@@ -183,6 +183,11 @@ class Bdot10kProvider(LandCoverProvider):
         """Return source URL."""
         return "https://www.geoportal.gov.pl/dane/bdot10k"
 
+    def session(self) -> requests.Session:
+        """HTTP session of the current thread: the injected one (``session=``)
+        or one per thread (e.g. the BDOT10k archive of ``LandCoverManager``)."""
+        return self._sessions.get()
+
     # =========================================================================
     # Download by TERYT → OpenData packages
     # =========================================================================
