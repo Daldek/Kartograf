@@ -149,11 +149,11 @@ _OPENDATA = "https://opendata.geoportal.gov.pl/NumDaneWys"
             f"{_OPENDATA}/NMT/73843/73843_1036985_N-33-58-A-c-1-4.asc",
             "ASC",
         ),
-        # the same format with an XYZ file (42 NMT 2019 records): inconsistent
+        # the 42 grids of campaign 72675 have a `.xyz` name (AAIGrid inside)
         (
             "ARC/INFO ASCII GRID",
-            f"{_OPENDATA}/NMT/73843/73843_1036985_N-33-58-A-c-1-4.xyz",
-            None,
+            f"{_OPENDATA}/NMT/72675/72675_858106_N-33-69-A-d-1-3.xyz",
+            "ASC",
         ),
         (
             "ASCII XYZ GRID",
@@ -183,15 +183,17 @@ _OPENDATA = "https://opendata.geoportal.gov.pl/NumDaneWys"
         ),
         ("Warstwice DXF", f"{_OPENDATA}/NMT/4513/4513_372870_N-33-58-A-c-1.dxf", "DXF"),
         ("Warstwice DGN", f"{_OPENDATA}/NMT/4514/4514_372871_N-33-58-A-c-1.dgn", "DGN"),
-        # archive format with a grid URL and a grid format with an archive URL
+        # archive format with a grid URL, an unzipped XYZ archive and a grid
+        # format with an archive URL
         ("ASCII XYZ GRID", f"{_OPENDATA}/NMT/1/1_2_N-33-58-A-c-1-4.asc", None),
+        ("ASCII XYZ GRID", f"{_OPENDATA}/NMT/1/1_2_N-33-58-A-c-1-4.xyz", None),
         ("ARC/INFO ASCII GRID", f"{_OPENDATA}/NMT/1/1_2_N-33-58-A-c-1-4_asc.zip", None),
         # formats outside the registry and a record without a format
         ("LAS", f"{_OPENDATA}/NMT/1/1_2_N-33-58-A-c-1-4.asc", None),
         (None, f"{_OPENDATA}/NMT/1/1_2_N-33-58-A-c-1-4.asc", None),
     ],
 )
-def test_source_format_requires_asc_url(record_format, url, token):
+def test_source_format_requires_url_of_the_format(record_format, url, token):
     assert source_format(record_format, url) == token
 
 

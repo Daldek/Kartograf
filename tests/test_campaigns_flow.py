@@ -23,8 +23,8 @@ from tests.conftest import render_wfs_body, wfs_endpoint, wfs_fixture, wfs_respo
 # Recorded sheet: 1m ASC flights 2019, 2021, 2022, 2024 and an ASCII NMT 1m
 # archive (.zip) of the 2019 delivery, plus 0.5m/0.6m/5m/XYZ records
 G = "N-33-77-B-c-3-3"
-# Recorded sheet: 1m ASC flights 2021, 2022, 2024 (two) and a 2019 record
-# declaring ARC/INFO ASCII GRID with an .xyz file (inconsistent)
+# Recorded sheet: 1m ASC flights 2021, 2022, 2024 (two) and the 2019 grid of
+# campaign 72675 published under a `.xyz` name (an AAIGrid inside)
 G2 = "N-33-69-A-d-1-3"
 SEGMENT = Path("nmt/pl_1992_1m_evrf2007")
 NMT_EVRF2007 = wfs_endpoint("nmt_evrf2007")
@@ -148,10 +148,10 @@ def test_exports():
     assert CampaignRef is Original
 
 
-def test_end_to_end_all_skips_record_whose_file_is_not_a_grid(tmp_path):
-    """The 2019 record declares ARC/INFO ASCII GRID but links an ``.xyz``
-    file: format and file disagree, so it is no grid campaign - only the
-    four ``.asc`` flights are downloaded and the newest is linked."""
+def test_end_to_end_all_keeps_grid_published_under_xyz_name(tmp_path):
+    """The 2019 record declares ARC/INFO ASCII GRID and links a ``.xyz`` file
+    (campaign 72675: an AAIGrid under that name) - a grid campaign stored as
+    ``.asc`` beside the four ``.asc`` flights; the newest is linked."""
     session = recorded_session(G2)
     m = DownloadManager(
         tmp_path,
@@ -164,12 +164,15 @@ def test_end_to_end_all_skips_record_whose_file_is_not_a_grid(tmp_path):
 
     asc = m.storage.list_files("**/*.asc", versions=True)
     assert sorted(p.parent.name.rsplit("_", 1)[0] for p in asc) == [
+        "2019-04-29_72675",
         "2021-05-31_74160",
         "2022-03-20_75506",
         "2024-07-21_81616",
         "2024-09-23_81025",
     ]
-    assert not any("72675" in url for url in file_requests(session))
+    assert [url for url in file_requests(session) if "72675" in url] == [
+        f"{OPENDATA}NumDaneWys/NMT/72675/72675_858106_{G2}.xyz"
+    ]
     assert list(tmp_path.rglob("*.xyz")) == []
     assert "2024-09-23_81025" in str(linked_version(std_path(tmp_path, G2)))
 

@@ -487,20 +487,29 @@ def test_sheet_request_counts_its_own_frame():
 
 
 def test_records_outside_the_registry_are_one_info():
-    report = _sheet_report("N-33-69-A-d-1-3", "E")
+    """Records on 8-part sheet codes (outside ``SheetParser``) are named in
+    one Info and are no combination."""
+    report = _sheet_report("N-33-142-B-b-4-1", "E")
 
     (notice,) = report.notices
     assert notice.level == "info" and notice.code == INDEX_UNSUPPORTED
-    assert "ARC/INFO ASCII GRID, plik .xyz 1m EVRF2007 (2019; arkusze: 1)" in (
-        notice.text
-    )
-    assert "format rekordu niezgodny z plikiem" in notice.text
-    # the inconsistent 2019 record is no combination
-    assert not [
-        c
-        for c in report.combinations
-        if (c.year, c.resolution, c.format) == (2019, "1m", "ASC")
-    ]
+    assert (
+        "ARC/INFO ASCII GRID 1m EVRF2007 (2019; arkusze: 4) - godla spoza ukladow "
+        "arkuszy PL-1992/PL-2000 (np. 8-czlonowe); ASCII NMT 10m EVRF2007 (2019; "
+        "arkusze: 4)"
+    ) in notice.text
+    # the sheet's own 2019 XYZ archive is a combination, the 8-part records not
+    assert {c.format for c in report.combinations if c.year == 2019} == {"XYZ"}
+
+
+def test_grid_published_under_xyz_name_is_a_combination():
+    """Campaign 72675 publishes its 2019 grids under a ``.xyz`` name (an
+    AAIGrid inside): a grid of the sheet, no Info."""
+    report = _sheet_report("N-33-69-A-d-1-3", "E")
+
+    assert report.notices == ()
+    grid = _combo(report, 2019, "PL-1992", "1m")
+    assert grid.complete and grid.sheets_full == ("N-33-69-A-d-1-3",)
 
 
 def test_every_combination_is_a_registered_variant():

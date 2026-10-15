@@ -140,14 +140,14 @@ def test_exit_codes(capsys):
 
 def test_notices_on_stderr(capsys):
     session = RecordedIndex(
-        {"nmt_evrf2007": ["sheet_nmt_evrf2007_N-33-69-A-d-1-3.xml"]}
+        {"nmt_evrf2007": ["sheet_nmt_evrf2007_N-33-142-B-b-4-1.xml"]}
     )
-    code, out, err = _run(capsys, ["--sheet", "N-33-69-A-d-1-3"], session)
+    code, out, err = _run(capsys, ["--sheet", "N-33-142-B-b-4-1"], session)
 
     assert code == 0
     assert err.startswith(
         "Info: Skorowidz GUGiK ma dla obszaru tez rekordy, ktorych Kartograf nie "
-        "pobiera: ARC/INFO ASCII GRID, plik .xyz 1m EVRF2007"
+        "pobiera: ARC/INFO ASCII GRID 1m EVRF2007 (2019; arkusze: 4)"
     )
     assert "Info:" not in out
 

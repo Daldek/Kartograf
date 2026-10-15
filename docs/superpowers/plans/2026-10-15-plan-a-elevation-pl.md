@@ -74,8 +74,10 @@ opisz roznice koordynatorowi).
    (`.asc` + `.xyz.zip` tego samego zgloszenia, tez dwa rozne archiwa).
    Dzis WMS pokazuje tylko siatki; po przejsciu na WFS format musi byc twardym
    filtrem jak rozdzielczosc (ADR-028): `format == "ARC/INFO ASCII GRID"`
-   I sciezka URL konczaca sie `.asc` (42 rekordy NMT 2019 maja format siatki
-   i URL `.xyz` - odrzucane, nie pobierane).
+   I sciezka URL konczaca sie `.asc` albo `.xyz` (errata 2026-10-15, Task 9:
+   42 rekordy NMT 2019 kampanii 72675 z URL `.xyz` maja w srodku AAIGrid -
+   naglowki wszystkich sprawdzone na zywo - wiec sa siatkami, jak w 0.7.x;
+   ADR-041 uzupelnienie R6).
 5. **Serwer ignoruje `FILTER`** (raport 1, `RESULTTYPE=hits`) - filtry po
    stronie klienta; stronicowanie wylacznie po atrybucie `next`,
    `numberReturned` musi zgadzac sie z liczba obiektow (jak PRG P6).
@@ -973,8 +975,9 @@ Dane wylacznie do `<katalog-danych>/kartograf/e2e/2026-10-xx-plan-a/`
 - Wszystkie siatki z rejestru pobieralne z CLI i API; zadna lista
   rozdzielczosci/ukladow poza rejestrem; `--help`, `list-sources`, walidacja
   i komunikaty z rejestru.
-- Pobieranie i raport na jednym skorowidzu WFS; archiwa nigdy nie pobierane
-  ani nie liczone jako kombinacje, widoczne w `Info:`.
+- Pobieranie i raport na jednym skorowidzu WFS; archiwa pobierane jako
+  pliki zrodlowe i liczone jako kombinacje z formatem (decyzja 13); `Info:`
+  tylko dla rekordow spoza rejestru.
 - Raport: kryteria specu 4.4 (wartosci z punktu 9 albo udokumentowane nowe
   fakty), bez pobran, JSON CLI = API, podpowiedz bez `--output`.
 - Wycinek 1m bez zmian zachowania; LAZ bez zmian zachowania na wspolnym

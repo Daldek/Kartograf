@@ -288,10 +288,9 @@ class TestVariantRecordOnRealWfs:
             ("2000", 6, False)
         }
 
-    def test_format_filter_rejects_archives_and_inconsistent_url(self):
+    def test_format_filter_rejects_archives(self):
         """Review Focus 2: an archive of the same delivery never takes the
-        grid's place; a record whose URL contradicts its format is never
-        selected."""
+        grid's place; a grid published under a ``.xyz`` name stays a grid."""
         sheet = "M-34-64-D-d-2-1"
         records = {file_id(r.url): r for r in sheet_records("nmt_evrf2007", sheet)}
         grid, archive = records["73122_944493"], records["73123_940315"]
@@ -316,22 +315,17 @@ class TestVariantRecordOnRealWfs:
             "XYZ": ["70950_853179"],
             "ASCII-NMT": ["73123_940315"],
         }
-        # N-33-69-A-d-1-3: the only 1 m record of 2019 says ARC/INFO ASCII GRID
-        # and points at a .xyz file
+        # N-33-69-A-d-1-3: the only 1 m grid of 2019 (campaign 72675) is an
+        # AAIGrid published under a `.xyz` name
         sheet = "N-33-69-A-d-1-3"
-        [mixed] = [
-            r for r in sheet_records("nmt_evrf2007", sheet) if r.url.endswith(".xyz")
-        ]
-        assert (file_id(mixed.url), mixed.file_format, mixed.resolution_m) == (
+        (old,) = GugikProvider(
+            session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
+        ).resolve_campaigns(sheet, max_year=2019)
+        assert (file_id(old.url), old.url[-4:], old.aktualnosc) == (
             "72675_858106",
-            "ARC/INFO ASCII GRID",
-            1.0,
+            ".xyz",
+            "2019-04-29",
         )
-        with pytest.raises(YearRangeError) as exc:
-            GugikProvider(
-                session=recorded_wfs(), vertical_crs="EVRF2007", resolution="1m"
-            ).resolve_campaigns(sheet, max_year=2019)
-        assert exc.value.sheets == {sheet: (2021, 2022, 2024)}
 
     def test_campaigns_and_year_range_from_wfs(self):
         """KRON86 M-34-64-D-d-2-1: 1 m grids of 2012 and 2017, each beside an
@@ -1177,11 +1171,10 @@ class TestCampaignListsOnRealBodies:
 
     def test_record_format_survives_cache_roundtrip(self):
         """The record ``format`` decides the variant of a cached record too:
-        an XYZ archive stays XYZ, the ``.xyz`` URL of an ASC record stays
-        inconsistent."""
+        an XYZ archive stays XYZ, the ``.xyz`` name of a 72675 grid stays ASC."""
         sheet = "N-33-69-A-d-1-3"
         records = {file_id(r.url): r for r in sheet_records("nmt_evrf2007", sheet)}
-        for key, token in (("73843_1035648", "XYZ"), ("72675_858106", None)):
+        for key, token in (("73843_1035648", "XYZ"), ("72675_858106", "ASC")):
             back = SkorowidzRecord.from_source(records[key].to_source(NMT_EVRF2007))
             assert back.file_format == records[key].file_format
             assert source_format(back.file_format, back.url) == token
