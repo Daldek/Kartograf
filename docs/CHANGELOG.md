@@ -526,6 +526,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
   (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
   z podpowiedzia. Co zrobic: nic.
+- Dokumentacja umowy `update="force"` wobec cache providera (USAGE 2,
+  ARCHITECTURE, docstringi `DownloadManager`/`LandCoverManager`):
+  `force` odswieza cache otwierany przez sama funkcje; provider przekazany
+  jako gotowa instancja zachowuje swoj cache (pelne odswiezenie:
+  `MetadataCache(refresh=True)`). Zachowanie bez zmian. Co zrobic: nic.
 
 ### Dodane
 
