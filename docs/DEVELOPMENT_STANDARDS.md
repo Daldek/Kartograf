@@ -813,8 +813,10 @@ lub brak wymaganego argumentu funkcji pozostaje pythonowym `TypeError`.
 
 **Typy argumentow biblioteki (od 0.8.0).** Funkcje poziomu komendy
 (`download_data`/`check_data`, `LandCoverManager.download`/`check`,
-`HSGCalculator.calculate_hsg`/`check_hsg`), `DownloadManager` i
-`download_laz_area`/`check_laz_area` (oraz kazda nowa funkcja publiczna)
+`HSGCalculator.calculate_hsg`/`check_hsg`, `download_collection`/
+`check_collection`/`validate_collection_request`, `check_availability`),
+`DownloadManager` i `download_laz_area`/`check_laz_area` (oraz kazda nowa
+funkcja publiczna)
 sprawdzaja typ argumentow liczbowych, przelacznikow i list kodow na wejsciu,
 przed siecia i zapisem (`kartograf/download/arguments.py`: `require_int`,
 `require_timeout`, `require_bool`, `require_codes`). Wartosc zlego typu to

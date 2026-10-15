@@ -42,6 +42,7 @@ from kartograf.download.area import (
     parent_request_for,
     resolve_geometry_layer,
 )
+from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.countries import countries_for_bbox, country_bbox
 from kartograf.download.data import UnitFailure, UnitFile
 from kartograf.download.fetch import (
@@ -522,6 +523,11 @@ def _resolve(args: dict, sink: NoticeSink) -> CollectionRequest:
     """``validate_collection_request`` with the notices of the area choice."""
     if args["bbox"] is not None:  # the CLI parses --bbox first: the same first error
         validate_request_bbox(args["bbox"])
+    # library calls only: the CLI parses its flags (STANDARDS 11.2)
+    require_bool(args["whole_country"], "--whole-country")
+    for name in ("lod", "year"):
+        if args[name] is not None:
+            require_int(args[name], f"--{name}")
     product = args["product"]
     descriptors = _descriptors(product)
     if args["output_dir"] is None:
@@ -1193,6 +1199,7 @@ def download_collection(
         if update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         require_store(plan, store_id(request.output_dir))
+    require_int(workers, "--workers")
     if workers < 1:
         raise ValidationError(f"workers musi byc >= 1, podano {workers}")
     with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
