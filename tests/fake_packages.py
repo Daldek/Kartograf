@@ -20,14 +20,20 @@ Route = tuple[int, dict, bytes]
 
 
 def zip_bytes(members: list[str], *, content: bytes = b"kartograf") -> bytes:
-    """A ZIP with ``members`` (names ending in ``/`` are directories)."""
+    """A ZIP with ``members`` (names ending in ``/`` are directories).
+
+    Fixed member timestamps: the same members and content give the same
+    bytes (identical yearly releases of a package).
+    """
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name in members:
+            info = zipfile.ZipInfo(name, date_time=(2026, 10, 15, 12, 0, 0))
             if name.endswith("/"):
-                archive.writestr(zipfile.ZipInfo(name), b"")
+                archive.writestr(info, b"")
             else:
-                archive.writestr(name, content + name.encode())
+                info.compress_type = zipfile.ZIP_DEFLATED
+                archive.writestr(info, content + name.encode())
     return buffer.getvalue()
 
 

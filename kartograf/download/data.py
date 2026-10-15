@@ -62,7 +62,7 @@ from kartograf.download.area import (
     resolve_geometry_layer,
 )
 from kartograf.download.countries import countries_for_bbox, country_bbox
-from kartograf.download.fetch import UpdateMode, VersionedFile
+from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
     CZ_ONLY_NMT,
@@ -181,22 +181,13 @@ class _Run:
         if file is None:
             return
         self.files.append(UnitFile(unit, country, file))
-        unverified = file.unverified or ""
-        if unverified.startswith("check_failed") and not reported_check_failure:
-            error = unverified.split(":", 1)[1].strip()
-            self.sink.emit(
-                "warning",
-                CHECK_FAILED,
-                f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
-                f"lokalnej wersji {file.label}",
-            )
-        if file.status == "local" and unverified == "none" and self.update == "upgrade":
-            self.sink.emit(
-                "info",
-                UNVERIFIED_LOCAL,
-                f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
-                "bez taniego sygnalu; pobierz ponownie: --force",
-            )
+        emit_file_notices(
+            self.sink,
+            unit,
+            file,
+            self.update,
+            check_failure=not reported_check_failure,
+        )
 
     def add_stale(self, stale) -> int:
         self.stale.extend(stale)

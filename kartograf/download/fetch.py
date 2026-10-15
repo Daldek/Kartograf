@@ -38,6 +38,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, NoticeSink
 from kartograf.sources.descriptor import SignalKind
 from kartograf.sources.edition import Edition
 
@@ -285,6 +286,39 @@ def use_local(
         newer=newer,
         unverified=unverified,
     )
+
+
+def emit_file_notices(
+    sink: NoticeSink,
+    unit: str,
+    file: VersionedFile,
+    update: UpdateMode | None,
+    *,
+    check_failure: bool = True,
+) -> None:
+    """Notices of one store file of a request result (one text for every track).
+
+    ``CHECK_FAILED`` (warning): the local version was used because the
+    source check failed (skipped with ``check_failure=False`` when the
+    caller already reported it); ``UNVERIFIED_LOCAL`` (info): ``"upgrade"``
+    kept a local version of a source without a cheap signal.
+    """
+    unverified = file.unverified or ""
+    if unverified.startswith("check_failed") and check_failure:
+        error = unverified.split(":", 1)[1].strip()
+        sink.emit(
+            "warning",
+            CHECK_FAILED,
+            f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
+            f"lokalnej wersji {file.label}",
+        )
+    if file.status == "local" and unverified == "none" and update == "upgrade":
+        sink.emit(
+            "info",
+            UNVERIFIED_LOCAL,
+            f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
+            "bez taniego sygnalu; pobierz ponownie: --force",
+        )
 
 
 def store_file(

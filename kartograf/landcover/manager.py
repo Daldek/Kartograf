@@ -33,6 +33,7 @@ from kartograf.download.fetch import (
     UpdateMode,
     VersionedFile,
     discard_staging,
+    emit_file_notices,
     inspect_version,
     link_version,
     local_version,
@@ -56,13 +57,7 @@ from kartograf.download.storage import content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.landcover.store import selection_unit
-from kartograf.notices import (
-    CHECK_FAILED,
-    CORINE_PREVIEW,
-    UNVERIFIED_LOCAL,
-    Notice,
-    NoticeSink,
-)
+from kartograf.notices import CORINE_PREVIEW, Notice, NoticeSink
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider, normalize_layers
@@ -742,22 +737,7 @@ class LandCoverManager:
     ) -> None:
         """Report signal failures and unchecked local versions of a store file."""
         unit = file.path.relative_to(self._output_dir).as_posix()
-        unverified = file.unverified or ""
-        if unverified.startswith("check_failed"):
-            error = unverified.split(":", 1)[1].strip()
-            sink.emit(
-                "warning",
-                CHECK_FAILED,
-                f"{unit}: nie udalo sie sprawdzic zrodla ({error}) - uzyto "
-                f"lokalnej wersji {file.label}",
-            )
-        if file.status == "local" and unverified == "none" and update == "upgrade":
-            sink.emit(
-                "info",
-                UNVERIFIED_LOCAL,
-                f"{unit}: lokalna wersja {file.label} niesprawdzona - zrodlo "
-                "bez taniego sygnalu; pobierz ponownie: --force",
-            )
+        emit_file_notices(sink, unit, file, update)
 
     def _content_params(self, kwargs: dict) -> dict[str, object]:
         """Provider options that change the CONTENT of the result.
