@@ -6,7 +6,10 @@ Every CLI command has one library function with the same choices and the same
 result (ADR-037): ``elevation download`` and ``imagery download`` =
 ``download_data``/``check_data``, ``landcover download`` and ``soil download`` =
 ``LandCoverManager.download``/``.check``,
-``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``.
+``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``, ``project`` =
+``init_project``, ``add_project_task``, ``remove_project_task``,
+``download_project``, ``check_project``, ``project_status``,
+``verify_project`` (``open_project`` reads a project, ADR-040).
 
 Example usage::
 
@@ -129,6 +132,19 @@ from kartograf.landcover.manager import (
     LandCoverResult,
 )
 from kartograf.notices import Notice
+from kartograf.project import (
+    FileCheck,
+    PinnedFile,
+    Project,
+    ProjectCheck,
+    ProjectReport,
+    ProjectTask,
+    TaskResult,
+    add_project_task,
+    init_project,
+    open_project,
+    remove_project_task,
+)
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import CuzkDmrProvider, create_dmr_provider
@@ -233,6 +249,18 @@ __all__ = [
     "HSGCalculator",
     "HsgResult",
     "hsg_from_rasters",
+    # Project manifest (kartograf-project.json, ADR-040)
+    "init_project",
+    "open_project",
+    "add_project_task",
+    "remove_project_task",
+    "Project",
+    "ProjectTask",
+    "PinnedFile",
+    "ProjectReport",
+    "TaskResult",
+    "ProjectCheck",
+    "FileCheck",
     # Transport and mosaic (stable since 0.7.1)
     "get_with_retry",
     "make_gugik_session",

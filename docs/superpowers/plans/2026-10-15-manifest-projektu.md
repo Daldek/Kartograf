@@ -380,20 +380,22 @@ def task_to_json(task: ProjectTask) -> dict
 
 **Interfaces:** sygnatury z specu 4.3.
 
-- [ ] **Step 1: Testy** - `test_init_creates_store_and_refuses_existing`
+- [x] **Step 1: Testy** - `test_init_creates_store_and_refuses_existing`
   (drugi `init` = `ValidationError`, bajty bez zmian);
   `test_paths_saved_relative_to_project` (cwd inny niz projekt: wzgledne
   `output_dir` i `geometry` zapisane wzgledem projektu, bezwzgledne bez
   zmian, separator `/`); `test_moved_project_with_store_resolves`
   (przeniesienie obu katalogow, `open_project` wskazuje nowe miejsca);
-  `test_missing_store_dir_is_error` (operacje poza `init`);
+  `test_missing_store_dir_is_error` (operacje poza `init` i `open_project`
+  - odczyt manifestu dla nakladek nie wymaga magazynu);
   `test_add_validates_without_network` (bledny wybor: wyjatek Task 1,
   manifest bez zmian); `test_add_duplicate_and_bad_name`;
-  `test_add_missing_geometry_file`; `test_remove_keeps_store_files`.
-- [ ] **Step 2: Implementacja** - `add_project_task` waliduje nazwe,
+  `test_add_missing_geometry_file`; `test_remove_keeps_store_files`
+  (w Task 5 - wymaga przypietego zadania).
+- [x] **Step 2: Implementacja** - `add_project_task` waliduje nazwe,
   komende, opcje (`options_to_json` + `TaskCommand.validate`), plik
   geometrii; zapis przez `commit_tasks` ze stanem `None` (nowe zadanie).
-- [ ] **Step 3: Brama i commit** - `feat(project): init, add, remove i odczyt projektu w API`
+- [x] **Step 3: Brama i commit** - `feat(project): init, add, remove i odczyt projektu w API`
 
 ---
 
