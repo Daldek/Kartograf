@@ -290,7 +290,9 @@ def _landcover_command(
         on_notice: Callable[[Notice], None] | None,
     ) -> object:
         lc, rest = manager(output_dir, opts, cache)
-        return lc.download(**rest, update=update, on_notice=on_notice)
+        return lc.download(
+            **rest, update=update, on_notice=on_notice, on_progress=on_progress
+        )
 
     def check(
         output_dir: Path,

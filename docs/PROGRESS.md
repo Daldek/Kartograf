@@ -2432,7 +2432,7 @@ w tym samym wydaniu (decyzja uzytkownika).
   X (plik identyczny z Y)`; (3) `same_as` = najnowsza identyczna wersja
   (`version_key`), nie pierwszy katalog (test
   `test_relabeled_names_newest_identical_version`).
-- [ ] **Postep pobierania z `--all-campaigns` (zgloszenie uzytkownika
+- [x] **ZROBIONE 2026-10-15 (galaz `fix/backlog-0.8.0`): Postep pobierania z `--all-campaigns` (zgloszenie uzytkownika
   2026-10-13):** linie `nowa wersja` / `nowa etykieta` / `lokalna wersja`
   pojawiaja sie dopiero PO pobraniu calego zadania, wiec w trakcie nie
   wiadomo, ktore kampanie zostana pobrane ani ktora jest pobierana teraz
@@ -2445,12 +2445,17 @@ w tym samym wydaniu (decyzja uzytkownika).
   (k/n)`) z biblioteki (`on_progress`, ADR-037: decyzja w bibliotece, CLI
   tylko drukuje); linie statusu najlepiej od razu po zapisie wersji.
   Sprawdzic tez inne tory wieloplikowe (LAZ, lista arkuszy, BDOT10k).
-  **CZESCIOWO 2026-10-15 (galaz `fix/backlog-0.8.0`):** zdarzenia
+  **2026-10-15 (galaz `fix/backlog-0.8.0`):** zdarzenia
   `campaigns`/`campaign` z biblioteki i linie CLI (test
   `test_all_campaigns_reports_each_flight_before_download`); LAZ (`k/n
-  kafli`) i lista arkuszy (pasek) juz mialy postep. ZOSTAJE: postep
-  powiatow BDOT10k obszaru (`LandCoverManager.download` bez `on_progress`);
-  linie statusu nadal drukowane po zadaniu (z raportu).
+  kafli`) i lista arkuszy (pasek) juz mialy postep; powiaty BDOT10k
+  obszaru (biezace paczki i archiwum `--year`):
+  `LandCoverManager.download(on_progress=)` z paskiem jak lista arkuszy
+  (testy `test_sequential_progress_per_powiat`,
+  `test_bdot10k_year_area_powiats`). Decyzja: linie statusu zostaja po
+  zadaniu (z raportu, jak w `elevation download`) - wynik kazdej jednostki
+  widac od razu w pasku (`+`/`o`/`x`), a jeden blok linii statusu po
+  zadaniu jest spojny we wszystkich komendach.
 - [x] **ZROBIONE 2026-10-15 (ADR-039, galaz `feat/cli-groups`): grupy komend CLI wg typu danych (decyzja uzytkownika
   2026-10-13, wchodzi do 0.8.0, BREAKING, bez aliasow - jak errata
   ADR-031):** kazda grupa ma podkomendy `download` (+ `list-sources`,

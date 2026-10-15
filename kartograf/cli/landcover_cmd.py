@@ -12,6 +12,7 @@ from typing import Any
 
 from kartograf.cli._args import parse_bbox_arg
 from kartograf.cli.download_cmd import (
+    _error_lead,
     _plan_context,
     _print_notice,
     _print_version_summary,
@@ -20,6 +21,7 @@ from kartograf.cli.download_cmd import (
     _report_stale,
     _unit_of,
     _update_mode,
+    create_progress_callback,
     run_with_plan_file,
     store_path_label,
 )
@@ -133,17 +135,20 @@ def _landcover_task(
     workers: int,
 ) -> int:
     """One request: a plan (``--check-updates``) or the files with one status
-    line each (spec 4.5)."""
+    line each (spec 4.5); BDOT10k by an area draws the powiat progress bar
+    first."""
     if args.check_updates:
         plan = manager.check(**selection, on_notice=_print_notice, **options)
         return _report_plan(args, plan, store_path_label)
     update = _update_mode(args)
+    on_progress = create_progress_callback(args.quiet, workers)
     result = manager.download(
         **selection,
         update=update,
         plan=_plan_context(args).loaded,
         workers=workers,
         on_notice=_print_notice,
+        on_progress=on_progress,
         **options,
     )
     out = manager.output_dir
@@ -153,8 +158,10 @@ def _landcover_task(
             if file is not None:
                 _report_file(args, _unit_of(file.path, out), file, update)
                 statuses.append(file.status)
+    lead = _error_lead(on_progress)
     for failure in result.failed:
-        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        print(f"{lead}Error: {failure.unit}: {failure.error}", file=sys.stderr)
+        lead = ""
     _report_stale(result.stale)
     # several files (BDOT10k area): one summary line, as for sheet lists
     if source == "bdot10k" and selection["teryt"] is None and not args.quiet:

@@ -467,6 +467,56 @@ class TestLandCoverParallelDownload:
         assert [f.unit for f in area.failed] == ["1261"]
         assert not area.ok
 
+    def test_sequential_progress_per_powiat(self, tmp_path):
+        """Backlog "Postep pobierania": each powiat of an area reports
+        ``downloading`` right before its transfer and its outcome after it;
+        a repeated run transfers nothing (``skipped`` only)."""
+        manager, _, _, (pkg, prg) = self._bdot(tmp_path, fail={"1261"})
+        events: list[tuple] = []
+
+        def record(p) -> None:
+            events.append((p.current, p.total, p.sheet, p.status))
+
+        with pkg, prg:
+            manager.download(bbox=self.BBOX, workers=1, on_progress=record)
+            assert events == [
+                (1, 3, "0616", "downloading"),
+                (1, 3, "0616", "completed"),
+                (2, 3, "1261", "downloading"),
+                (2, 3, "1261", "failed"),
+                (3, 3, "1465", "downloading"),
+                (3, 3, "1465", "completed"),
+            ]
+            events.clear()
+            manager.download(bbox=self.BBOX, workers=1, on_progress=record)
+        assert [e for e in events if e[2] != "1261"] == [
+            (1, 3, "0616", "skipped"),
+            (3, 3, "1465", "skipped"),
+        ]
+
+    def test_parallel_progress_in_completion_order(self, tmp_path):
+        manager, _, _, (pkg, prg) = self._bdot(tmp_path, fail={"1261"})
+        events: list[tuple] = []
+        with pkg, prg:
+            manager.download(
+                bbox=self.BBOX,
+                workers=2,
+                on_progress=lambda p: events.append((p.current, p.sheet, p.status)),
+            )
+        assert [e[0] for e in events] == [1, 2, 3]
+        assert sorted((e[1], e[2]) for e in events) == [
+            ("0616", "completed"),
+            ("1261", "failed"),
+            ("1465", "completed"),
+        ]
+
+    def test_one_teryt_has_no_progress(self, tmp_path):
+        manager, _, _, (pkg, prg) = self._bdot(tmp_path)
+        events: list = []
+        with pkg, prg:
+            manager.download(teryt="1465", on_progress=events.append)
+        assert events == []
+
 
 class TestCLIWorkersFlag:
     """Tests for CLI --workers / -w flag."""
