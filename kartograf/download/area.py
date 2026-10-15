@@ -145,15 +145,13 @@ def pl_only_flags(
     resolution without a CZ source of the product, and ``--format`` (PL
     files only).
     """
-    # local import: options imports cutout, which imports this module
-    from kartograf.download.options import CZ_VERTICAL_CRS
     from kartograf.sources.registry import sources_for
     from kartograf.sources.variants import variants
 
     cz = sources_for(country="CZ", product=product)
     cz_variants = variants(country="CZ", product=product)
     cz_labels = {d.resolution for d in cz} | {v.label for v in cz_variants}
-    cz_vertical = {v.vertical_crs for v in cz_variants} | set(CZ_VERTICAL_CRS)
+    cz_vertical = {v.vertical_crs for v in cz_variants}
     flags: list[str] = []
     if product in ("nmt", "nmpt", "orto") and not cz:
         flags.append(f"--product {product}")

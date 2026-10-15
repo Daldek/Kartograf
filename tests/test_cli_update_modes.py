@@ -310,7 +310,7 @@ def test_sm5_check_failed_warning_exit_code(tmp_path, capsys):
     sm5 = ("--sheet", "CTES96", "--vertical-crs", "Bpv")
     with patch(_CZ_FACTORY_PATCH, return_value=cz):
         assert _download(tmp_path, *sm5, "-q") == 0
-        cz.sm5_signal.side_effect = DownloadError("HEAD 503")
+        cz.file_signal.side_effect = DownloadError("HEAD 503")
         capsys.readouterr()
         assert _download(tmp_path, *sm5, "--check-updates") == 1
         assert "CTES96: nie udalo sie sprawdzic: HEAD 503" in capsys.readouterr().out

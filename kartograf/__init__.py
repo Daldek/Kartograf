@@ -183,9 +183,9 @@ from kartograf.project import (
 from kartograf.providers.base import BaseProvider, LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.cuzk import (
-    CuzkDmrProvider,
     CuzkLazProvider,
-    create_dmr_provider,
+    CuzkRasterProvider,
+    create_cz_raster_provider,
 )
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
@@ -293,9 +293,9 @@ __all__ = [
     "Bdot10kPackage",
     "CorineProvider",
     "SoilGridsProvider",
-    "CuzkDmrProvider",
+    "CuzkRasterProvider",
     "CuzkLazProvider",
-    "create_dmr_provider",
+    "create_cz_raster_provider",
     # TERYT (PRG)
     "discover_teryts_for_bbox",
     "teryt_for_point",

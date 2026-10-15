@@ -218,7 +218,9 @@ def test_check_cz_sm5_sheet_uses_http_signal(tmp_path):
         podil=0.99,
         in_cz=None,
     )
-    with patch("kartograf.providers.cuzk.create_dmr_provider", return_value=provider):
+    with patch(
+        "kartograf.providers.cuzk.create_cz_raster_provider", return_value=provider
+    ):
         assert download_project(project).ok
         before = (project / MANIFEST_NAME).read_bytes()
         report = check_project(project)

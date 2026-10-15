@@ -20,6 +20,7 @@ from kartograf.download.cz_cutout import (
     download_cz_cutout,
 )
 from kartograf.notices import ALL_NODATA, Notice
+from tests.cz_fakes import route_of
 
 
 def _write_tif(path: Path, bbox: BBox, value: float, nodata: float = -9999.0):
@@ -41,13 +42,15 @@ def _write_tif(path: Path, bbox: BBox, value: float, nodata: float = -9999.0):
         dst.write(np.full((height, width), value, dtype="float32"), 1)
 
 
-def _provider(value: float):
+def _provider(value: float, target_crs: str | None = "EPSG:2180"):
+    """NMT 2m (DMR 5G) fake of a cutout in ``target_crs`` (``None``: native)."""
     provider = Mock()
     provider.descriptor_key = "cz.cuzk.dmr5g"
     provider.vertical_crs = "EVRF2007"
     provider.resolution = "2m"
-    provider.horizontal_transform.return_value = None
-    provider.vertical_transform = None
+    provider.route.side_effect = lambda sheet=None: route_of(
+        provider.descriptor_key, provider.vertical_crs, sheet, target_crs=target_crs
+    )
 
     def download_bbox(bbox, target, on_download=None):
         _write_tif(target, bbox, value)
@@ -171,15 +174,17 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
         return _provider(1.0)
 
     # looked up lazily inside download_cz_cutout - patch it at the source
-    monkeypatch.setattr("kartograf.providers.cuzk.create_dmr_provider", factory)
+    monkeypatch.setattr("kartograf.providers.cuzk.create_cz_raster_provider", factory)
     result = cz_cutout.download_cz_cutout(
         B,
         output_dir=tmp_path,
+        product="nmt",
         horizontal_crs="EPSG:2180",
         vertical_crs="EVRF2007",
         resolution="2m",
     )
     assert seen["horizontal_crs"] == "EPSG:2180" and seen["vertical_crs"] == "EVRF2007"
+    assert seen["product"] == "nmt" and seen["resolution"] == "2m"
     assert result.file is not None
     meta = json.loads(
         result.file.path.with_name(result.file.path.name + ".meta.json").read_text()
@@ -196,13 +201,14 @@ def test_native_horizontal_crs_gives_native_provider(tmp_path, monkeypatch):
 
     def factory(**kw):
         seen.update(kw)
-        return _provider(-9999.0)
+        return _provider(-9999.0, target_crs=None)
 
-    monkeypatch.setattr("kartograf.providers.cuzk.create_dmr_provider", factory)
+    monkeypatch.setattr("kartograf.providers.cuzk.create_cz_raster_provider", factory)
     native = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
     result = cz_cutout.download_cz_cutout(
         native,
         output_dir=tmp_path,
+        product="nmt",
         horizontal_crs="EPSG:5514",
         vertical_crs="EVRF2007",
         resolution="2m",
@@ -219,13 +225,14 @@ def test_native_horizontal_crs_gives_native_provider(tmp_path, monkeypatch):
             "warning",
             ALL_NODATA,
             f"{result.file.path} jest w calosci nodata - obszar poza pokryciem "
-            "DMR CUZK (poza granica CZ?)",
+            "rastra CUZK (poza granica CZ?)",
         ),
     )
 
 
 # Selection shared by ``download_cz_cutout`` and ``check_cz_cutout``.
 SELECTION = {
+    "product": "nmt",
     "horizontal_crs": "EPSG:2180",
     "vertical_crs": "EVRF2007",
     "resolution": "2m",
@@ -236,7 +243,7 @@ def test_check_cz_cutout_same_args_as_download(tmp_path, monkeypatch):
     """No provider and no image CRS: the check takes the download's arguments."""
     provider = _provider(5.0)
     monkeypatch.setattr(
-        "kartograf.providers.cuzk.create_dmr_provider", lambda **_kw: provider
+        "kartograf.providers.cuzk.create_cz_raster_provider", lambda **_kw: provider
     )
     selection = {"output_dir": tmp_path, "cache": False, **SELECTION}
     before = check_cz_cutout(B, **selection)
@@ -251,7 +258,7 @@ def test_check_cz_cutout_same_args_as_download(tmp_path, monkeypatch):
 def test_download_cz_cutout_plan(tmp_path, monkeypatch):
     provider = _provider(5.0)
     monkeypatch.setattr(
-        "kartograf.providers.cuzk.create_dmr_provider", lambda **_kw: provider
+        "kartograf.providers.cuzk.create_cz_raster_provider", lambda **_kw: provider
     )
     selection = {"output_dir": tmp_path, "cache": False, **SELECTION}
     plan = check_cz_cutout(B, **selection)

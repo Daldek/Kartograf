@@ -39,6 +39,7 @@ from kartograf.providers.pl.prg import LandMask
 from kartograf.sources.registry import sources_for
 from kartograf.sources.variants import ProductVariant, variants
 from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
+from tests.cz_fakes import cz_factory, route_of
 
 
 @pytest.fixture(autouse=True)
@@ -5145,20 +5146,28 @@ def _cmd_download_cz(args, bbox=None):
 
 
 def _cz_provider_mock(resolution="2m"):
-    """CuzkDmrProvider mock for the CLI flow."""
+    """``CuzkRasterProvider`` mock (NMT) for the CLI flow.
+
+    The route of a sheet or cutout is the row of the real variant registry
+    (``route_of``): ``target_crs`` = the CRS of a cutout (``None`` = native
+    EPSG:5514; ``cz_factory`` sets it from the factory call),
+    ``vertical_pinned`` = the Bpv->EVRF2007 operation of a non-native route.
+    """
     provider = Mock()
     provider.descriptor_key = "cz.cuzk.dmr5g" if resolution == "2m" else "cz.cuzk.dmr4g"
+    provider.product = "nmt"
     provider.resolution = resolution
     provider.vertical_crs = "Bpv"
-    provider.vertical_transform = None
-    provider.sm5_signal.return_value = {
+    provider.target_crs = None
+    provider.vertical_pinned = None
+    provider.file_signal.return_value = {
         "etag": '"d19f2c604d89dc1:0"',
         "last_modified": "Mon, 19 Jan 2026 14:10:33 GMT",
         "content_length": 752795,
     }
 
     def fake_horizontal(target_crs):
-        """CuzkDmrProvider.horizontal_transform contract: None for native."""
+        """CuzkRasterProvider.horizontal_transform contract: None for native."""
         if target_crs.endswith("5514"):
             return None
         pinned = Mock()
@@ -5167,6 +5176,14 @@ def _cz_provider_mock(resolution="2m"):
         return pinned
 
     provider.horizontal_transform.side_effect = fake_horizontal
+    provider.route.side_effect = lambda sheet=None: route_of(
+        provider.descriptor_key,
+        provider.vertical_crs,
+        sheet,
+        target_crs=provider.target_crs,
+        horizontal=fake_horizontal,
+        vertical=provider.vertical_pinned,
+    )
 
     def fake_download(sheet, target, timeout=60, *, on_download=None, on_response=None):
         # provider contract: announce after validation, before the transfer
@@ -5193,7 +5210,7 @@ def _cz_provider_mock(resolution="2m"):
     return provider
 
 
-_CZ_FACTORY_PATCH = "kartograf.providers.cuzk.create_dmr_provider"
+_CZ_FACTORY_PATCH = "kartograf.providers.cuzk.create_cz_raster_provider"
 
 
 class TestCzDownloadingAfterValidation:
@@ -5691,7 +5708,7 @@ class TestCmdDownloadCz:
 
         provider = _cz_provider_mock()
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
+        with patch(_CZ_FACTORY_PATCH, side_effect=cz_factory(provider)) as factory:
             result = _cmd_download_cz(
                 _cz_args(tmp_path, sheet=None, horizontal_crs="EPSG:3045"), bbox=bbox
             )
@@ -5894,7 +5911,7 @@ class TestCmdDownloadCz:
         pinned = Mock()
         pinned.description = "Baltic 1957 height to EVRF2007 height (1)"
         pinned.accuracy_m = 0.1
-        provider.vertical_transform = pinned
+        provider.vertical_pinned = pinned
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             _cmd_download_cz(_cz_args(tmp_path, vertical_crs="EVRF2007"))
 
@@ -8542,11 +8559,12 @@ class TestPublicApiCz:
     """Public API exports for the CZ modules (task 18)."""
 
     def test_cz_exports_available(self):
-        from kartograf import CuzkDmrProvider, ParserTM33, create_dmr_provider
+        from kartograf import CuzkRasterProvider, ParserTM33, create_cz_raster_provider
 
         assert ParserTM33("302_5550").get_bbox().crs == "EPSG:3045"
-        assert callable(create_dmr_provider)
-        assert CuzkDmrProvider.__name__ == "CuzkDmrProvider"
+        provider = create_cz_raster_provider("nmpt", "0.5m", vertical_crs="Bpv")
+        assert isinstance(provider, CuzkRasterProvider)
+        assert provider.descriptor_key == "cz.cuzk.dmpok"
 
     def test_version_bumped(self):
         from kartograf import __version__

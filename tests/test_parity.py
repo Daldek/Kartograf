@@ -52,7 +52,7 @@ from tests.test_geometry import _write_prj
 from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
 
 G = "N-34-139-C-a-3-1"
-CZ_FACTORY = "kartograf.providers.cuzk.create_dmr_provider"
+CZ_FACTORY = "kartograf.providers.cuzk.create_cz_raster_provider"
 
 
 def _same(run, report, *, statuses: list[str] | None = None) -> None:

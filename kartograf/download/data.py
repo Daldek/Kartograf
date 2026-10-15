@@ -102,6 +102,7 @@ from kartograf.notices import (
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.sources.registry import horizontal_crs_for_sheet
+from kartograf.sources.variants import cz_sheet_system
 
 FailureKind = Literal["no_coverage", "download", "country"]
 MAX_HINT_LINES = 5
@@ -178,8 +179,9 @@ class _Run:
         file: VersionedFile | None,
         *,
         reported_check_failure: bool = False,
+        reported_unverified: bool = False,
     ) -> None:
-        """Record a file and signal notices not already emitted by its manager."""
+        """Record a file and signal notices not already emitted by its track."""
         if file is None:
             return
         self.files.append(UnitFile(unit, country, file))
@@ -189,6 +191,7 @@ class _Run:
             file,
             self.update,
             check_failure=not reported_check_failure,
+            unverified_local=not reported_unverified,
         )
 
     def add_stale(self, stale) -> int:
@@ -1353,24 +1356,28 @@ def _download_cz(
     parent_request: dict | None = None,
 ) -> int:
     """CZ request: a sheet code (TM33 tile / SM5 sheet) or an area cutout."""
-    from kartograf.core.parser_registry import detect_system
     from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
-    from kartograf.download.cz_sheets import check_cz_sheet, download_cz_sheet
+    from kartograf.download.cz_sheets import (
+        check_cz_sheet,
+        cz_sheet_variant,
+        download_cz_sheet,
+    )
 
     has_sheet = bbox is None
-    is_sm5 = has_sheet and detect_system(task.sheet).id == "cz_sm5"
+    system = cz_sheet_system(task.sheet) if has_sheet else None
     # an `auto` area request was validated for all its countries already
     countries = ("CZ",) if has_sheet or task.country == "cz" else ("CZ", "PL")
-    error = cz_option_error(task, is_sm5=is_sm5, countries=countries)
+    error = cz_option_error(task, system=system, countries=countries)
     if error is not None:
         raise ValidationError(error)
-    resolution = country_value(task.resolution, "CZ") or "5m"  # only SM5 omits it
+    resolution = country_value(task.resolution, "CZ")  # only SM5 may omit it
     vertical_crs = country_value(task.vertical_crs, "CZ")
     assert vertical_crs is not None  # required: checked by cz_option_error
     if run.dry:
         return 0
     common = {
         "output_dir": task.output_dir,
+        "product": task.product,
         "vertical_crs": vertical_crs,
         "resolution": resolution,
         "cache": run.cache,
@@ -1381,16 +1388,24 @@ def _download_cz(
             if run.check:
                 run.plans.append(check_cz_sheet(task.sheet, **common))
                 return 0
+            label = cz_sheet_variant(
+                task.sheet, task.product, resolution, vertical_crs
+            ).label
             sheet = download_cz_sheet(
                 task.sheet,
                 update=run.update,
                 plan=run.loaded,
-                on_download=_announcer(
-                    run, task.sheet, f"CZ, resolution: {resolution}"
-                ),
+                on_download=_announcer(run, task.sheet, f"CZ, resolution: {label}"),
                 **common,
             )
-            run.add(task.sheet, "CZ", sheet.file)
+            run.add(
+                task.sheet,
+                "CZ",
+                sheet.file,
+                reported_unverified=any(
+                    notice.code == UNVERIFIED_LOCAL for notice in sheet.notices
+                ),
+            )
             return run.add_stale(sheet.stale)
         assert bbox is not None
         target = task.horizontal_crs

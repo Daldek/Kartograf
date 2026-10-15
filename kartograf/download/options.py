@@ -14,10 +14,12 @@ from types import SimpleNamespace
 from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
-from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
 from kartograf.exceptions import ValidationError
 from kartograf.sources.variants import (
+    CZ_VERTICAL_TEXT,
     FORMATS,
+    cz_resolution_text,
+    cz_variant_error,
     find_variant,
     labels_by_vertical_crs,
     variant_error,
@@ -110,12 +112,25 @@ def format_text(country: str = "PL") -> str:
     )
 
 
-# Height systems of CZ requests (CUZK native Bpv, EVRF2007 by transformation).
-CZ_VERTICAL_CRS = ("Bpv", "EVRF2007")
-VERTICAL_CRS_CZ = (
-    "Bpv (natywny uklad CUZK), EVRF2007 (transformacja z Bpv, "
-    "ok. +0,11..+0,15 m, rosnaco S->N)"
-)
+def cz_resolution_help() -> str:
+    """CZ grid labels per product with their CUZK model and the labels of the
+    SM5 sheets (variant registry): ``NMT: 2m (DMR 5G), 5m (DMR 4G); ...``."""
+    parts = []
+    sm5 = []
+    for product in _SHEET_PRODUCTS:
+        text = cz_resolution_text(product)
+        if text:
+            parts.append(f"{product.upper()}: {text}")
+        labels = dict.fromkeys(
+            v.label
+            for v in variants(product=product, country="CZ", system="sm5")
+            if v.label is not None
+        )
+        if labels:
+            sm5.append(f"{product.upper()} {', '.join(labels)}")
+    return f"{'; '.join(parts)}; arkusz SM5 tylko {', '.join(sm5)} (mozna pominac)"
+
+
 SHEET_SYSTEM_CHOICES = (
     "1992 (godla PL-1992, arkusze 1:10000), 2000 (godla PL-2000, strefy "
     "EPSG:2176-2179; wymaga --scale)"
@@ -320,10 +335,15 @@ def pl_option_error(
 def cz_option_error(
     task: SimpleNamespace,
     *,
-    is_sm5: bool = False,
+    system: str | None = None,
     countries: tuple[str, ...] = ("CZ",),
 ) -> str | None:
-    """Error text for the CZ data choices (``is_sm5``: an SM5 sheet code)."""
+    """Error text for the CZ data choices (``None`` = valid), from the variant
+    registry (``cz_variant_error``).
+
+    ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` = an area (a
+    cutout of the ImageServer, any label of the product).
+    """
     resolution = country_value(task.resolution, "CZ")
     vertical_crs = country_value(task.vertical_crs, "CZ")
     res_hint = _per_country_hint(task.resolution, "--resolution", countries)
@@ -333,25 +353,24 @@ def cz_option_error(
             "--format dotyczy tylko PL (siatki ASC i archiwa GUGiK) - dla CZ "
             "pomin --format"
         )
-    if is_sm5:
-        try:
-            cz_sheet_resolution(task.sheet, resolution)
-        except ValidationError as e:
-            return str(e)
-    elif resolution is None:
-        return f"--resolution wymagane dla NMT CZ: {RESOLUTION_CZ}{res_hint}"
-    elif resolution not in ("2m", "5m"):
-        return (
-            f"CZ nie ma rozdzielczosci {resolution} - dostepne: "
-            f"{RESOLUTION_CZ}{res_hint}"
-        )
+    error = cz_variant_error(
+        product=task.product, resolution=resolution, vertical_crs=None, system=system
+    )
+    if error is not None:
+        return f"{error}{res_hint}"
     if vertical_crs is None:
-        return f"--vertical-crs wymagane dla NMT CZ: {VERTICAL_CRS_CZ}{vcrs_hint}"
-    if vertical_crs not in CZ_VERTICAL_CRS:
         return (
-            f"{vertical_crs} nie jest dostepny dla CZ - dostepne: "
-            f"{VERTICAL_CRS_CZ}{vcrs_hint}"
+            f"--vertical-crs wymagane dla {task.product.upper()} CZ: "
+            f"{CZ_VERTICAL_TEXT}{vcrs_hint}"
         )
+    error = cz_variant_error(
+        product=task.product,
+        resolution=resolution,
+        vertical_crs=vertical_crs,
+        system=system,
+    )
+    if error is not None:
+        return f"{error}{vcrs_hint}"
     if "PL" not in countries and task.sheet_system is not None:
         return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
     return None

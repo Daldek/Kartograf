@@ -2,15 +2,20 @@
 
 import json
 import os
+import warnings
+import zipfile
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 import rasterio
+from rasterio.io import MemoryFile
 from rasterio.transform import from_origin
 
+from kartograf.core.sheet_parser import BBox
+from kartograf.download.cz_cutout import download_cz_cutout
 from kartograf.download.cz_sheets import (
     _check_sheet,
     _run_cz_sheet,
@@ -18,7 +23,13 @@ from kartograf.download.cz_sheets import (
     download_cz_sheet,
 )
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.notices import ALL_NODATA, Notice
+from kartograf.notices import ALL_NODATA, UNVERIFIED_LOCAL, Notice
+from kartograf.providers.cuzk.raster import CzRasterRoute
+from kartograf.sources.descriptor import TransportKind
+from kartograf.sources.registry import channel_for
+from kartograf.transform.crs import build_pinned_transform
+from tests.cz_fakes import route_of
+from tests.test_cuzk_laz import KLADY, RECORDED, TM33_TIFF_URL, CuzkSession
 
 _FIXTURE = Path("tests/fixtures/signals/real_2026_10_12/cuzk_sm5_ctes96_get.json")
 _GET_HEADERS = json.loads(_FIXTURE.read_text(encoding="utf-8"))["headers"]
@@ -53,11 +64,13 @@ def _write_raster(path: Path, *, value: float = 120.0, nodata: float = -9999.0) 
 
 
 class SheetProvider:
+    """``CuzkRasterProvider`` fake: NMT 5m (DMR 4G, SM5 file) or 2m (DMR 5G,
+    TM33 tile warped from the ImageServer), Bpv."""
+
     def __init__(self, *, sm5: bool = True, value: float = 120.0):
         self.descriptor_key = "cz.cuzk.dmr4g" if sm5 else "cz.cuzk.dmr5g"
         self.resolution = "5m" if sm5 else "2m"
         self.vertical_crs = "Bpv"
-        self.vertical_transform = None
         self.sm5 = sm5
         self.value = value
         self.http = _HTTP.copy()
@@ -67,10 +80,10 @@ class SheetProvider:
             sm5_sheet=lambda sheet: SimpleNamespace(name="Cesky Tesin 9-6", podil=0.99)
         )
 
-    def horizontal_transform(self, crs: str):
-        return None
+    def route(self, sheet: str | None = None):
+        return route_of(self.descriptor_key, self.vertical_crs, sheet)
 
-    def sm5_signal(self, sheet: str) -> dict:
+    def file_signal(self, sheet: str) -> dict:
         self.heads += 1
         return self.http.copy()
 
@@ -158,7 +171,7 @@ def test_sm5_upgrade_head_failure_is_error(tmp_path):
     provider = SheetProvider()
     before = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     with (
-        patch.object(provider, "sm5_signal", side_effect=DownloadError("brak HEAD")),
+        patch.object(provider, "file_signal", side_effect=DownloadError("brak HEAD")),
         pytest.raises(DownloadError, match="brak HEAD"),
     ):
         _run_cz_sheet(provider, _SHEET, output_dir=tmp_path, update="upgrade")
@@ -169,7 +182,7 @@ def test_sm5_upgrade_head_failure_is_error(tmp_path):
 def test_sm5_default_head_failure_is_local_unverified(tmp_path):
     provider = SheetProvider()
     _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    with patch.object(provider, "sm5_signal", side_effect=DownloadError("brak HEAD")):
+    with patch.object(provider, "file_signal", side_effect=DownloadError("brak HEAD")):
         result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     assert result.file is not None
     assert result.file.status == "local"
@@ -207,7 +220,7 @@ def test_check_cz_sheet_never_downloads(tmp_path):
     assert _check_sheet(sm5, _SHEET, output_dir=tmp_path).items[0].status == "current"
     sm5.http["etag"] = '"changed"'
     assert _check_sheet(sm5, _SHEET, output_dir=tmp_path).items[0].status == "newer"
-    with patch.object(sm5, "sm5_signal", side_effect=DownloadError("brak HEAD")):
+    with patch.object(sm5, "file_signal", side_effect=DownloadError("brak HEAD")):
         failure = _check_sheet(sm5, _SHEET, output_dir=tmp_path).items[0]
     assert failure.status == "check_failed" and failure.error == "brak HEAD"
     assert sm5.fetches == 1
@@ -249,7 +262,7 @@ def test_cz_sm5_upgrade_plan_head_failure_is_error(tmp_path):
     provider = SheetProvider()
     plan = _check_sheet(provider, _SHEET, output_dir=tmp_path)
     with (
-        patch.object(provider, "sm5_signal", side_effect=DownloadError("brak HEAD")),
+        patch.object(provider, "file_signal", side_effect=DownloadError("brak HEAD")),
         pytest.raises(DownloadError, match="brak HEAD"),
     ):
         _run_cz_sheet(
@@ -273,7 +286,8 @@ def test_cz_sheet_plan_omitted_item_keeps_local_without_probe(tmp_path):
     provider = SheetProvider()
     first = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
     current = _check_sheet(provider, _SHEET, output_dir=tmp_path)
-    with patch.object(provider, "sm5_signal", side_effect=AssertionError("extra HEAD")):
+    extra_head = AssertionError("extra HEAD")
+    with patch.object(provider, "file_signal", side_effect=extra_head):
         result = _run_cz_sheet(
             provider, _SHEET, output_dir=tmp_path, update="upgrade", plan=current
         )
@@ -300,7 +314,7 @@ def test_sm5_worldfile_georeference_survives_staging_cleanup(tmp_path):
     """Openzu often carries coordinates only in a .tfw outside its TIFF."""
     import warnings
 
-    from kartograf.providers.cuzk.raster import CuzkDmrProvider
+    from kartograf.providers.cuzk.raster import CuzkRasterProvider
 
     def fetch_zip(url, output_path, *, unzip_single, on_response):
         with warnings.catch_warnings():
@@ -330,7 +344,7 @@ def test_sm5_worldfile_georeference_survives_staging_cleanup(tmp_path):
             name=None, podil=None
         )
         client.return_value.fetch_file.side_effect = fetch_zip
-        provider = CuzkDmrProvider(resolution="5m", vertical_crs="Bpv")
+        provider = CuzkRasterProvider("nmt", "5m", vertical_crs="Bpv")
         result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
 
     assert result.file is not None
@@ -399,14 +413,16 @@ def _factory(provider: SheetProvider, seen: dict | None = None):
             seen.update(kwargs)
         return provider
 
-    return patch("kartograf.providers.cuzk.create_dmr_provider", side_effect=create)
+    return patch(
+        "kartograf.providers.cuzk.create_cz_raster_provider", side_effect=create
+    )
 
 
 def test_download_cz_sheet_sm5_without_resolution(tmp_path):
     seen: dict = {}
     with _factory(SheetProvider(), seen):
         result = download_cz_sheet(
-            _SHEET, output_dir=tmp_path, vertical_crs="Bpv", cache=False
+            _SHEET, output_dir=tmp_path, product="nmt", vertical_crs="Bpv", cache=False
         )
     assert seen["resolution"] == "5m" and seen["vertical_crs"] == "Bpv"
     assert result.file is not None and result.file.status == "new"
@@ -419,13 +435,14 @@ def test_download_cz_sheet_sm5_2m_is_validation_error(tmp_path):
         download_cz_sheet(
             _SHEET,
             output_dir=tmp_path,
+            product="nmt",
             vertical_crs="Bpv",
             resolution="2m",
             cache=False,
         )
     assert str(error.value) == (
-        "Arkusze SM5 sa dostepne tylko w 5m (DMR 4G) - pomin --resolution albo "
-        "podaj 5m; dla 2m uzyj godla TM33 albo --bbox [arkusz: CTES96]"
+        "Arkusze SM5 NMT CZ sa tylko w 5m (DMR 4G) - pomin --resolution albo "
+        "podaj 5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout"
     )
     assert provider.fetches == 0
 
@@ -433,13 +450,16 @@ def test_download_cz_sheet_sm5_2m_is_validation_error(tmp_path):
 def test_download_cz_sheet_tm33_requires_resolution(tmp_path):
     provider = SheetProvider(sm5=False)
     with _factory(provider), pytest.raises(ValidationError, match="wymagane"):
-        download_cz_sheet(_TM33, output_dir=tmp_path, vertical_crs="Bpv", cache=False)
+        download_cz_sheet(
+            _TM33, output_dir=tmp_path, product="nmt", vertical_crs="Bpv", cache=False
+        )
     assert provider.fetches == 0
     seen: dict = {}
     with _factory(provider, seen):
         result = download_cz_sheet(
             _TM33,
             output_dir=tmp_path,
+            product="nmt",
             vertical_crs="Bpv",
             resolution="2m",
             cache=False,
@@ -451,7 +471,12 @@ def test_download_cz_sheet_tm33_requires_resolution(tmp_path):
 def test_check_cz_sheet_plan_items(tmp_path):
     """The check takes the download's arguments; its plan drives the upgrade."""
     provider = SheetProvider()
-    selection = {"output_dir": tmp_path, "vertical_crs": "Bpv", "cache": False}
+    selection = {
+        "output_dir": tmp_path,
+        "product": "nmt",
+        "vertical_crs": "Bpv",
+        "cache": False,
+    }
     with _factory(provider):
         missing = check_cz_sheet(_SHEET, **selection)
         assert [(i.track, i.unit, i.status) for i in missing.items] == [
@@ -468,6 +493,7 @@ def test_cz_all_nodata_notice(tmp_path):
     seen: list[Notice] = []
     selection = {
         "output_dir": tmp_path,
+        "product": "nmt",
         "vertical_crs": "Bpv",
         "resolution": "2m",
         "cache": False,
@@ -479,10 +505,386 @@ def test_cz_all_nodata_notice(tmp_path):
     expected = Notice(
         "warning",
         ALL_NODATA,
-        f"{result.file.path} jest w calosci nodata - obszar poza pokryciem DMR "
+        f"{result.file.path} jest w calosci nodata - obszar poza pokryciem rastra "
         "CUZK (poza granica CZ?)",
     )
     assert result.notices == (expected,)
     assert seen == [expected]
     assert local.file is not None and local.file.status == "local"
     assert local.all_nodata and local.notices == ()
+
+
+# --- the route table (plan B, decision 2) through the public functions ---------
+
+_OPENZU = "https://openzu.cuzk.gov.cz/opendata"
+_AGS = "https://ags.cuzk.gov.cz/arcgis2/rest/services"
+_RAW_TM33 = "760_5518"
+
+
+class _FirstRequest(Exception):
+    """The first request for data reached the session (the route is known)."""
+
+
+class _StopSession(CuzkSession):
+    """The recorded sheet index answers; the first file or ``exportImage``
+    request is recorded and stops the download."""
+
+    def get(self, url, timeout=None, params=None, stream=False, **kwargs):
+        if url.startswith(KLADY):
+            return super().get(url, timeout=timeout, params=params, stream=stream)
+        self._record("GET", url.split("?")[0])
+        raise _FirstRequest(url)
+
+    def head(self, url, timeout=None, allow_redirects=True, **kwargs):
+        self._record("HEAD", url)
+        raise _FirstRequest(url)
+
+
+def _pinned(src_crs, dst_crs, policy):
+    """The vertical Bpv->EVRF2007 operation as a stand-in (no PROJ grid, no
+    network); horizontal operations are the real pinned ones."""
+    if src_crs != "EPSG:8357":
+        return build_pinned_transform(src_crs, dst_crs, policy)
+    pinned = MagicMock()
+    pinned.description = f"{src_crs} -> {dst_crs}"
+    pinned.accuracy_m = 0.1
+    return pinned
+
+
+def _real_provider(session):
+    """Real ``CuzkRasterProvider`` of the public functions on ``session``."""
+    from kartograf.providers.cuzk import CuzkRasterProvider
+
+    return patch(
+        "kartograf.providers.cuzk.create_cz_raster_provider",
+        side_effect=lambda **kwargs: CuzkRasterProvider(session=session, **kwargs),
+    )
+
+
+_PINNED = "kartograf.providers.cuzk.raster.build_pinned_transform"
+_DMR4G_SM5 = f"{_OPENZU}/DMR4G-TIFF/epsg-5514/CTES96.zip"
+_DMPOK_SM5 = f"{_OPENZU}/DMPOK-TIFF/epsg-5514/CTES96.zip"
+
+
+@pytest.mark.parametrize(
+    ("product", "resolution", "vertical_crs", "sheet", "request_url"),
+    [
+        # SM5 sheet: the S-JTSK file (EVRF2007 through the pinned operation)
+        ("nmt", "5m", "Bpv", "CTES96", _DMR4G_SM5),
+        ("nmt", None, "EVRF2007", "CTES96", _DMR4G_SM5),
+        ("nmpt", "0.5m", "Bpv", "CTES96", _DMPOK_SM5),
+        ("nmpt", None, "EVRF2007", "CTES96", _DMPOK_SM5),
+        # TM33 tile in EVRF2007 of a model with files: the ETRS89 file
+        ("nmt", "5m", "EVRF2007", _RAW_TM33, TM33_TIFF_URL),
+        (
+            "nmpt",
+            "0.5m",
+            "EVRF2007",
+            _RAW_TM33,
+            f"{_OPENZU}/DMPOK-TIFF/epsg-3045/760_5518.zip",
+        ),
+        # every other TM33 tile: the ImageServer warped onto the tile grid
+        ("nmt", "5m", "Bpv", _RAW_TM33, f"{_AGS}/dmr4g/ImageServer/exportImage"),
+        (
+            "nmpt",
+            "0.5m",
+            "Bpv",
+            _RAW_TM33,
+            f"{_AGS}/dmp_obrazova_korelace/ImageServer/exportImage",
+        ),
+        ("nmt", "2m", "Bpv", _RAW_TM33, f"{_AGS}/dmr5g/ImageServer/exportImage"),
+        ("nmt", "2m", "EVRF2007", _RAW_TM33, f"{_AGS}/dmr5g/ImageServer/exportImage"),
+        ("nmpt", "2m", "Bpv", _RAW_TM33, f"{_AGS}/dmp1g/ImageServer/exportImage"),
+        ("nmpt", "2m", "EVRF2007", _RAW_TM33, f"{_AGS}/dmp1g/ImageServer/exportImage"),
+    ],
+)
+def test_route_table(product, resolution, vertical_crs, sheet, request_url, tmp_path):
+    """Every raster row of decision 2: the first data request of the sheet."""
+    session = _StopSession()
+    with (
+        _real_provider(session),
+        patch(_PINNED, side_effect=_pinned),
+        pytest.raises(_FirstRequest),
+    ):
+        download_cz_sheet(
+            sheet,
+            output_dir=tmp_path,
+            product=product,
+            resolution=resolution,
+            vertical_crs=vertical_crs,
+            cache=False,
+        )
+    assert session.of("GET") == [request_url]
+    assert session.of("HEAD") == []
+    assert "/dmp/" not in request_url  # DMP OK: only dmp_obrazova_korelace
+
+
+@pytest.mark.parametrize(
+    ("product", "resolution", "vertical_crs", "sheet", "error"),
+    [
+        (
+            "nmt",
+            "2m",
+            "Bpv",
+            "CTES96",
+            "Arkusze SM5 NMT CZ sa tylko w 5m (DMR 4G) - pomin --resolution albo "
+            "podaj 5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+        ),
+        (
+            "nmpt",
+            "2m",
+            "EVRF2007",
+            "CTES96",
+            "Arkusze SM5 NMPT CZ sa tylko w 0.5m (DMP OK) - pomin --resolution albo "
+            "podaj 0.5m; 2m: kafel TM33 (np. 302_5550) albo --bbox z --cutout",
+        ),
+        (
+            "nmpt",
+            None,
+            "Bpv",
+            _RAW_TM33,
+            "--resolution wymagane dla NMPT CZ: 0.5m (DMP OK), 2m (DMP 1G)",
+        ),
+        (
+            "nmpt",
+            "1m",
+            "Bpv",
+            _RAW_TM33,
+            "CZ nie ma rozdzielczosci 1m dla NMPT - dostepne: 0.5m (DMP OK), "
+            "2m (DMP 1G)",
+        ),
+    ],
+)
+def test_route_table_rejected_before_network(
+    product, resolution, vertical_crs, sheet, error, tmp_path
+):
+    """A choice without a row of the route table: the error, no request."""
+    session = _StopSession()
+    for call in (download_cz_sheet, check_cz_sheet):
+        with (
+            _real_provider(session),
+            pytest.raises(ValidationError) as caught,
+        ):
+            call(
+                sheet,
+                output_dir=tmp_path,
+                product=product,
+                resolution=resolution,
+                vertical_crs=vertical_crs,
+                cache=False,
+            )
+        assert str(caught.value) == error
+    assert session.calls == []
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("product", "resolution", "service"),
+    [
+        ("nmt", "2m", "dmr5g"),
+        ("nmt", "5m", "dmr4g"),
+        ("nmpt", "2m", "dmp1g"),
+        ("nmpt", "0.5m", "dmp_obrazova_korelace"),
+    ],
+)
+def test_route_table_cutout_is_the_image_server(product, resolution, service, tmp_path):
+    """A cutout of every label: the ImageServer of the model (native 5514)."""
+    session = _StopSession()
+    with _real_provider(session), pytest.raises(_FirstRequest):
+        download_cz_cutout(
+            BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
+            output_dir=tmp_path,
+            product=product,
+            horizontal_crs="EPSG:5514",
+            vertical_crs="Bpv",
+            resolution=resolution,
+            cache=False,
+        )
+    assert session.of("GET") == [f"{_AGS}/{service}/ImageServer/exportImage"]
+
+
+def _zip_raster(path: Path) -> tuple[np.ndarray, tuple]:
+    """Values and georeference (``.tfw``) of the ``.tif`` member of a CUZK ZIP
+    (the member has no geotransform of its own: georeference only in ``.tfw``)."""
+    with zipfile.ZipFile(path) as archive:
+        names = archive.namelist()
+        (tif,) = [n for n in names if n.endswith(".tif")]
+        (tfw,) = [n for n in names if n.endswith(".tfw")]
+        world = [float(v) for v in archive.read(tfw).decode().split()]
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", rasterio.errors.NotGeoreferencedWarning)
+            with MemoryFile(archive.read(tif)) as memory, memory.open() as raster:
+                return raster.read(1), tuple(world)
+
+
+def test_tm33_file_is_native_evrf2007(tmp_path):
+    """DMR 4G 760_5518 in EVRF2007: the ETRS89 file 1:1, no pinned operation."""
+    session = CuzkSession()
+    with (
+        _real_provider(session),
+        patch(_PINNED, side_effect=AssertionError("no operation on a native file")),
+    ):
+        result = download_cz_sheet(
+            _RAW_TM33,
+            output_dir=tmp_path,
+            product="nmt",
+            resolution="5m",
+            vertical_crs="EVRF2007",
+            cache=False,
+        )
+    assert session.of("GET") == [TM33_TIFF_URL]
+    file = result.file
+    assert file is not None and file.status == "new"
+    assert file.path == tmp_path / "nmt/cz_dmr4g_evrf2007/760/5518/760_5518.tif"
+    values, world = _zip_raster(RECORDED / "openzu_DMR4G-TIFF_3045_760_5518.zip")
+    with rasterio.open(file.path) as raster:
+        assert raster.crs.to_epsg() == 3045
+        np.testing.assert_array_equal(raster.read(1), values)
+        transform = raster.transform
+    # the .tfw gives the pixel CENTRE of the upper-left pixel
+    assert (transform.a, transform.e) == (world[0], world[3])
+    assert transform.c == pytest.approx(world[4] - world[0] / 2)
+    assert transform.f == pytest.approx(world[5] - world[3] / 2)
+    meta = _metadata(file.version_path)
+    assert meta["dataset"] == "cz.cuzk.dmr4g"
+    assert meta["horizontal_crs"] == "EPSG:3045"
+    assert meta["vertical_crs"] == "EPSG:5621"
+    assert meta["transform"] is None  # neither horizontal nor vertical operation
+    assert meta["extra"]["http"]["etag"] == '"c38fbfc1e789dc1:0"'
+
+
+def test_tm33_file_route_signal_and_capability():
+    """Native file rows compare the HTTP signal; warps have no cheap signal."""
+    from kartograf.providers.cuzk import CuzkRasterProvider
+
+    with patch(_PINNED, side_effect=_pinned):
+        native = CuzkRasterProvider("nmt", "5m", vertical_crs="EVRF2007")
+        warped = CuzkRasterProvider("nmt", "5m", vertical_crs="Bpv")
+        file_route = native.route(_RAW_TM33)
+        warp_route = warped.route(_RAW_TM33)
+    assert file_route.files and file_route.capability == "sheet_files"
+    assert file_route.channel.update_signal == "http"
+    assert (file_route.horizontal, file_route.vertical) == (None, None)
+    assert not warp_route.files and warp_route.capability == "bbox_raster"
+    assert warp_route.channel.update_signal == "none"
+    assert warp_route.horizontal_crs == "EPSG:3045"
+    assert warp_route.horizontal is not None and warp_route.vertical is None
+
+
+def test_sm5_evrf2007_still_transformed(tmp_path):
+    """SM5 + EVRF2007: the S-JTSK file and the pinned Bpv->EVRF2007 operation
+    (values shifted, the operation in the sidecar)."""
+    from kartograf.providers.cuzk import CuzkRasterProvider
+
+    vertical = MagicMock()
+    vertical.description = "Baltic 1957 height to EVRF2007 height (1)"
+    vertical.accuracy_m = 0.1
+    vertical.transform.side_effect = lambda x, y, z: (x, y, np.asarray(z) + 0.13)
+    lonlat = MagicMock()
+    lonlat.transform.side_effect = lambda x, y: (x, y)
+
+    def pinned(src_crs, dst_crs, policy):
+        return vertical if src_crs == "EPSG:8357" else lonlat
+
+    def fetch_zip(url, output_path, *, unzip_single, on_response):
+        _write_raster(output_path, value=120.0)
+        on_response(SimpleNamespace(headers=_GET_HEADERS))
+        return output_path
+
+    with (
+        patch("kartograf.providers.cuzk.raster.CuzkClient") as client,
+        patch("kartograf.providers.cuzk.raster.SheetIndex") as sheet_index,
+        patch(_PINNED, side_effect=pinned),
+    ):
+        sheet_index.return_value.sm5_sheet.return_value = SimpleNamespace(
+            name="Cesky Tesin 9-6", podil=0.99
+        )
+        client.return_value.fetch_file.side_effect = fetch_zip
+        provider = CuzkRasterProvider("nmt", "5m", vertical_crs="EVRF2007")
+        result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+
+    assert client.return_value.fetch_file.call_args.args[0] == (
+        f"{_OPENZU}/DMR4G-TIFF/epsg-5514/CTES96.zip"
+    )
+    assert result.file is not None
+    with rasterio.open(result.file.path) as raster:
+        assert raster.crs.to_epsg() == 5514
+        assert raster.read(1)[0, 0] == pytest.approx(120.13, abs=1e-4)
+    meta = _metadata(result.file.version_path)
+    assert meta["horizontal_crs"] == "EPSG:5514"
+    assert meta["vertical_crs"] == "EPSG:5621"
+    assert meta["transform"] == {
+        "vertical": "pinned: Baltic 1957 height to EVRF2007 height (1) (0.1 m)"
+    }
+
+
+class _WarpedTile(SheetProvider):
+    """A DMR 4G TM33 tile in EVRF2007 as Kartograf 0.7 stored it: the
+    ImageServer warped onto the tile grid (signal ``none``, no ``extra.http``)."""
+
+    def __init__(self) -> None:
+        super().__init__(sm5=True, value=300.0)
+        self.vertical_crs = "EVRF2007"
+
+    def route(self, sheet: str | None = None):
+        image = channel_for(self.descriptor_key, TransportKind.ARCGIS_IMAGE)
+        return CzRasterRoute(image, "EPSG:3045", None, None)
+
+
+def test_existing_tm33_warp_kept_locally(tmp_path):
+    """Decision 12: the warped version stays in the default mode and with
+    ``upgrade`` (one Info, no download); ``force`` stores the CUZK file as a
+    new version and moves the standard path to it."""
+    warped = _run_cz_sheet(_WarpedTile(), _RAW_TM33, output_dir=tmp_path).file
+    assert warped is not None
+    assert "http" not in _metadata(warped.version_path)["extra"]
+    selection = {
+        "output_dir": tmp_path,
+        "product": "nmt",
+        "resolution": "5m",
+        "vertical_crs": "EVRF2007",
+        "cache": False,
+    }
+    session = CuzkSession()
+    with _real_provider(session):
+        kept = download_cz_sheet(_RAW_TM33, **selection)
+        upgraded = download_cz_sheet(_RAW_TM33, update="upgrade", **selection)
+        assert session.of("GET") == []
+        forced = download_cz_sheet(_RAW_TM33, update="force", **selection)
+
+    for result in (kept, upgraded):
+        assert result.file is not None and result.file.status == "local"
+        assert result.file.version_path == warped.version_path
+        assert result.file.unverified == "none"
+        assert [n.code for n in result.notices] == [UNVERIFIED_LOCAL]
+        assert result.notices[0].level == "info"
+        assert "--force" in result.notices[0].text
+    assert session.of("GET") == [TM33_TIFF_URL]
+    assert forced.file is not None and forced.file.status == "new"
+    assert forced.file.version_path != warped.version_path
+    assert warped.version_path.exists()
+    assert os.path.samefile(forced.file.path, forced.file.version_path)
+    assert _metadata(forced.file.version_path)["extra"]["http"]["etag"] == (
+        '"c38fbfc1e789dc1:0"'
+    )
+
+
+def test_existing_tm33_warp_upgrade_reported_once(tmp_path):
+    """``download_data`` with ``upgrade``: one Info of the track (decision 12),
+    not a second generic one of the request."""
+    from kartograf.download.data import download_data
+
+    _run_cz_sheet(_WarpedTile(), _RAW_TM33, output_dir=tmp_path)
+    with _real_provider(CuzkSession()):
+        report = download_data(
+            product="nmt",
+            output_dir=tmp_path,
+            sheet=_RAW_TM33,
+            resolution="5m",
+            vertical_crs="EVRF2007",
+            update="upgrade",
+            cache=False,
+        )
+    assert report.ok
+    assert [notice.code for notice in report.notices] == [UNVERIFIED_LOCAL]
+    assert "bez sygnalu HTTP pliku CUZK" in report.notices[0].text

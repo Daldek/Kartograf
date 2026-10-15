@@ -33,6 +33,7 @@ from tests.conftest import (
     recorded_response,
     write_gpkg_layers,
 )
+from tests.cz_fakes import cz_factory, route_of
 
 NOW = datetime(2026, 10, 11, tzinfo=UTC)
 # Request inside the recorded 20 x 20 m window (fixture README), off the grid.
@@ -1095,12 +1096,13 @@ class TestCli:
         assert _meta(tif)["extra"]["parent_request"]["countries"] == ["PL"]
 
     def _cz_provider(self, *, fail=False):
-        """CuzkDmrProvider stub: writes a file and pretends to be a pinned operation."""
+        """CuzkRasterProvider stub: writes a file and pretends to be a pinned
+        operation (``target_crs`` from the factory call, ``cz_factory``)."""
         provider = Mock()
         provider.descriptor_key = "cz.cuzk.dmr5g"
         provider.resolution = "2m"
         provider.vertical_crs = "EVRF2007"
-        provider.vertical_transform = None
+        provider.target_crs = None
 
         def fake_horizontal(target_crs):
             pinned = Mock()
@@ -1109,6 +1111,13 @@ class TestCli:
             return pinned
 
         provider.horizontal_transform.side_effect = fake_horizontal
+        provider.route.side_effect = lambda sheet=None: route_of(
+            provider.descriptor_key,
+            provider.vertical_crs,
+            sheet,
+            target_crs=provider.target_crs,
+            horizontal=fake_horizontal,
+        )
 
         def fake_bbox(bbox, target, **kw):
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -1122,8 +1131,8 @@ class TestCli:
         """``--country auto`` over a small PL+CZ rectangle (18.80E, 49.70N)."""
         with (
             patch(
-                "kartograf.providers.cuzk.create_dmr_provider",
-                return_value=self._cz_provider(),
+                "kartograf.providers.cuzk.create_cz_raster_provider",
+                side_effect=cz_factory(self._cz_provider()),
             ),
             patch(
                 self._FACTORY,
