@@ -160,16 +160,16 @@ class TestCreateParser:
 
 
 class TestParseBboxArg:
-    """K7a: cli._parser.parse_bbox_arg — a single --bbox parser."""
+    """K7a: cli._args.parse_bbox_arg — a single --bbox parser."""
 
     def test_valid_with_spaces(self):
-        from kartograf.cli._parser import parse_bbox_arg
+        from kartograf.cli._args import parse_bbox_arg
 
         bbox = parse_bbox_arg(" 1, 2 ,3,4", "EPSG:2180")
         assert tuple(bbox) == (1.0, 2.0, 3.0, 4.0, "EPSG:2180")
 
     def test_point_allowed(self):
-        from kartograf.cli._parser import parse_bbox_arg
+        from kartograf.cli._args import parse_bbox_arg
 
         assert parse_bbox_arg("5,5,5,5", "EPSG:4326").crs == "EPSG:4326"
 
@@ -187,7 +187,7 @@ class TestParseBboxArg:
         ],
     )
     def test_invalid(self, text, reason):
-        from kartograf.cli._parser import parse_bbox_arg
+        from kartograf.cli._args import parse_bbox_arg
 
         with pytest.raises(ValidationError) as exc:
             parse_bbox_arg(text, "EPSG:2180")
@@ -205,14 +205,17 @@ class TestCreateParserSheetStrip:
     @pytest.mark.parametrize("raw", [" 302_5550", "302_5550 ", "\t302_5550\n"])
     def test_download_sheet_stripped(self, raw):
         assert (
-            create_parser().parse_args(["download", "--sheet", raw]).sheet == "302_5550"
+            create_parser().parse_args(["elevation", "download", "--sheet", raw]).sheet
+            == "302_5550"
         )
 
     def test_parse_sheet_stripped(self):
         assert create_parser().parse_args(["parse", " N-34 "]).sheet == "N-34"
 
     def test_download_without_sheet_still_none(self):
-        args = create_parser().parse_args(["download", "--bbox", "1,2,3,4"])
+        args = create_parser().parse_args(
+            ["elevation", "download", "--bbox", "1,2,3,4"]
+        )
         assert args.sheet is None
 
 
@@ -464,22 +467,110 @@ class TestMain:
         with pytest.raises(ValidationError, match="zly godlo"):
             main(["parse", "N-34"])
 
-    def test_top_level_help_mentions_cuzk_and_soilgrids(self, capsys):
-        """--help texts describe CZ/CUZK, SoilGrids and the hydrography layers."""
-        with pytest.raises(SystemExit):
-            main(["--help"])
-        captured = capsys.readouterr()
-        assert "CUZK" in captured.out
 
-        with pytest.raises(SystemExit):
-            main(["landcover", "download", "--help"])
-        captured = capsys.readouterr()
-        assert "SoilGrids" in captured.out
+class TestCommandGroups:
+    """ADR-039: data commands in groups by data type, each with its own flags."""
 
-        result = main(["landcover", "list-sources"])
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "SW" in captured.out
+    _GROUPS = ("elevation", "imagery", "landcover", "soil")
+    # the selection flag of each group's download and its values
+    _CHOICES = {
+        "elevation": ("--product", {"nmt", "nmpt", "laz"}),
+        "imagery": ("--product", {"orto"}),
+        "landcover": ("--source", {"bdot10k", "corine"}),
+    }
+
+    @pytest.mark.parametrize("group", _GROUPS)
+    def test_group_without_command_prints_its_commands(self, group, capsys):
+        assert main([group]) == 0
+        out = capsys.readouterr().out
+        assert out.startswith(f"usage: kartograf {group}")
+        assert "download" in out and "list-sources" in out
+
+    @pytest.mark.parametrize(
+        ("argv", "replacement"),
+        [
+            (
+                ["download", "--product", "nmt", "--sheet", "N-34-130-D-d-2-4"],
+                "kartograf elevation download",
+            ),
+            (
+                ["download", "--product", "orto", "--sheet", "N-34-130-D-d-2-4"],
+                "kartograf imagery download",
+            ),
+            (["soilgrids", "hsg", "--sheet", "N-34-130-D"], "kartograf soil hsg"),
+            (
+                [
+                    "landcover",
+                    "download",
+                    "--source",
+                    "soilgrids",
+                    "--sheet",
+                    "N-34-130-D",
+                ],
+                "kartograf soil download",
+            ),
+            (
+                ["landcover", "list-layers", "--source=soilgrids"],
+                "kartograf soil list-layers",
+            ),
+        ],
+        ids=[
+            "download-nmt",
+            "download-orto",
+            "soilgrids-hsg",
+            "landcover-soilgrids",
+            "list-layers-soilgrids",
+        ],
+    )
+    def test_removed_command_names_its_replacement(self, argv, replacement, capsys):
+        """0.8.0 removed the old commands without aliases: an input error
+        (exit 2, like any unknown command) naming the new one; nothing runs."""
+        with (
+            patch("kartograf.cli.download_cmd.download_data") as download,
+            patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager,
+            patch("kartograf.hydrology.HSGCalculator") as calculator,
+            pytest.raises(SystemExit) as exc,
+        ):
+            main([*argv, "-o", "out"])
+        assert exc.value.code == 2
+        assert replacement in capsys.readouterr().err
+        for mock in (download, manager, calculator):
+            mock.assert_not_called()
+
+    @pytest.mark.parametrize(
+        ("group", "listed", "absent"),
+        [("elevation", ("nmt", "nmpt", "laz"), "orto"), ("imagery", ("orto",), "nmt")],
+    )
+    def test_missing_product_names_only_the_group_products(
+        self, group, listed, absent, capsys, tmp_path
+    ):
+        with patch("kartograf.cli.download_cmd.download_data") as download:
+            rc = main(
+                [group, "download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]
+            )
+        assert rc == 1
+        err = capsys.readouterr().err
+        assert err.startswith("Error: --product wymagane: ")
+        assert all(f" {product} (" in err for product in listed)
+        assert f" {absent} (" not in err
+        download.assert_not_called()
+
+    @pytest.mark.parametrize("group", _GROUPS)
+    def test_list_sources_shows_what_the_group_downloads(self, group, capsys):
+        """Every source of ``<group> list-sources`` is selectable in ``<group>
+        download`` and every selection value has a registered source."""
+        assert main([group, "list-sources"]) == 0
+        rows = capsys.readouterr().out.splitlines()[2:]
+        if group == "soil":  # one source, no selection flag
+            assert "global.isric.soilgrids" in rows[0]
+            return
+        flag, values = self._CHOICES[group]
+        shown = {row.split()[1] for row in rows if row.startswith(f"  {flag} ")}
+        assert shown == values
+        parser = create_parser()
+        for value in shown:
+            args = parser.parse_args([group, "download", flag, value])
+            assert getattr(args, flag.removeprefix("--")) == value
 
 
 class TestCLIIntegration:
@@ -523,15 +614,15 @@ class TestCreateParserDownload:
     def test_has_download_subcommand(self):
         """Test that download subcommand exists."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
-        assert args.command == "download"
+        args = parser.parse_args(["elevation", "download", "--sheet", "N-34-130-D"])
+        assert args.command == "elevation"
         assert args.sheet == "N-34-130-D"
 
     def test_download_scale_option(self):
         """Test --scale option."""
         parser = create_parser()
         args = parser.parse_args(
-            ["download", "--sheet", "N-34-130-D", "--scale", "1:10000"]
+            ["elevation", "download", "--sheet", "N-34-130-D", "--scale", "1:10000"]
         )
         assert args.scale == "1:10000"
 
@@ -539,26 +630,30 @@ class TestCreateParserDownload:
         """Test --output option."""
         parser = create_parser()
         args = parser.parse_args(
-            ["download", "--sheet", "N-34-130-D", "-o", "/custom/path"]
+            ["elevation", "download", "--sheet", "N-34-130-D", "-o", "/custom/path"]
         )
         assert args.output == "/custom/path"
 
     def test_download_force_flag(self):
         """Test --force flag."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D", "--force"])
+        args = parser.parse_args(
+            ["elevation", "download", "--sheet", "N-34-130-D", "--force"]
+        )
         assert args.force is True
 
     def test_download_quiet_flag(self):
         """Test --quiet flag."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D", "-q"])
+        args = parser.parse_args(
+            ["elevation", "download", "--sheet", "N-34-130-D", "-q"]
+        )
         assert args.quiet is True
 
     def test_download_switch_defaults(self):
         """Switches stay off unless given (the only download defaults left)."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D"])
+        args = parser.parse_args(["elevation", "download", "--sheet", "N-34-130-D"])
         assert args.force is False
         assert args.quiet is False
         assert args.all_campaigns is False
@@ -570,25 +665,36 @@ class TestCreateParserCountry:
     def test_country_choices(self):
         for value in ("pl", "cz", "auto"):
             args = create_parser().parse_args(
-                ["download", "--sheet", "X", "--country", value]
+                ["elevation", "download", "--sheet", "X", "--country", value]
             )
             assert args.country == value
 
     def test_country_invalid_rejected(self):
         with pytest.raises(SystemExit):
-            create_parser().parse_args(["download", "--sheet", "X", "--country", "de"])
+            create_parser().parse_args(
+                ["elevation", "download", "--sheet", "X", "--country", "de"]
+            )
 
     def test_cutout_and_horizontal_crs_defaults_and_choices(self):
-        args = create_parser().parse_args(["download", "--sheet", "X"])
+        args = create_parser().parse_args(["elevation", "download", "--sheet", "X"])
         assert args.cutout is False and args.horizontal_crs is None
         for value in ("EPSG:2180", "EPSG:5514", "EPSG:3045"):
             args = create_parser().parse_args(
-                ["download", "--sheet", "X", "--cutout", "--horizontal-crs", value]
+                [
+                    "elevation",
+                    "download",
+                    "--sheet",
+                    "X",
+                    "--cutout",
+                    "--horizontal-crs",
+                    value,
+                ]
             )
             assert args.cutout is True and args.horizontal_crs == value
         with pytest.raises(SystemExit):
             create_parser().parse_args(
                 [
+                    "elevation",
                     "download",
                     "--sheet",
                     "X",
@@ -600,19 +706,28 @@ class TestCreateParserCountry:
         for removed in ("--target-crs", "--system"):
             with pytest.raises(SystemExit):
                 create_parser().parse_args(
-                    ["download", "--sheet", "X", removed, "1992"]
+                    ["elevation", "download", "--sheet", "X", removed, "1992"]
                 )
 
     def test_sentinel_defaults(self):
         """--resolution/--vertical-crs/--sheet-system default to None (per country)."""
-        args = create_parser().parse_args(["download", "--sheet", "X"])
+        args = create_parser().parse_args(["elevation", "download", "--sheet", "X"])
         assert args.resolution is None
         assert args.vertical_crs is None
         assert args.sheet_system is None
 
     def test_new_choices_accepted(self):
         args = create_parser().parse_args(
-            ["download", "--sheet", "X", "--resolution", "2m", "--vertical-crs", "Bpv"]
+            [
+                "elevation",
+                "download",
+                "--sheet",
+                "X",
+                "--resolution",
+                "2m",
+                "--vertical-crs",
+                "Bpv",
+            ]
         )
         assert args.resolution == "2m"
         assert args.vertical_crs == "Bpv"
@@ -620,7 +735,7 @@ class TestCreateParserCountry:
     def test_bbox_crs_extended_with_cz(self):
         for value in ("EPSG:5514", "EPSG:3045"):
             args = create_parser().parse_args(
-                ["download", "--bbox", "1,2,3,4", "--bbox-crs", value]
+                ["elevation", "download", "--bbox", "1,2,3,4", "--bbox-crs", value]
             )
             assert args.bbox_crs == value
 
@@ -688,6 +803,7 @@ class TestCmdDownload:
         """Test downloading with invalid sheet."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -720,6 +836,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -755,6 +872,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -790,6 +908,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -826,6 +945,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -861,6 +981,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -897,6 +1018,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -945,6 +1067,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -983,6 +1106,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1021,6 +1145,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1058,6 +1183,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1102,6 +1228,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1143,6 +1270,7 @@ class TestCmdDownload:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1175,6 +1303,7 @@ class TestDownloadCLIIntegration:
         with pytest.raises(SystemExit) as exc_info:
             main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -1196,13 +1325,14 @@ class TestDownloadCLIIntegration:
         assert "--scale" in captured.out
         assert "--product" in captured.out  # Should show product option
 
-    def test_main_includes_download(self, capsys):
-        """Test that main help includes download command."""
-        result = main([])
-
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "download" in captured.out
+    def test_main_lists_data_groups(self, capsys):
+        """Top-level help directs people to the grouped commands."""
+        assert main([]) == 0
+        text = capsys.readouterr().out
+        assert all(
+            group in text for group in ("elevation", "imagery", "landcover", "soil")
+        )
+        assert "  download " not in text
 
 
 class TestCmdDownloadProduct:
@@ -1212,7 +1342,7 @@ class TestCmdDownloadProduct:
         """Test that download parser has --product option."""
         parser = create_parser()
         args = parser.parse_args(
-            ["download", "--sheet", "N-34-130-D", "--product", "nmpt"]
+            ["elevation", "download", "--sheet", "N-34-130-D", "--product", "nmpt"]
         )
         assert args.product == "nmpt"
 
@@ -1235,6 +1365,7 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1280,15 +1411,8 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "imagery",
                 "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--sheet",
                 "N-34-130-D-d-2-4",
                 "--product",
@@ -1323,6 +1447,7 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1363,6 +1488,7 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -1407,19 +1533,14 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "imagery",
                 "download",
-                "--sheet-system",
-                "1992",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--bbox",
                 "630000,480000,637000,487000",
+                "--sheet-system",
+                "1992",
+                "--country",
+                "pl",
                 "--product",
                 "orto",
                 "-o",
@@ -1445,23 +1566,8 @@ class TestCmdDownloadProduct:
         mock_manager_cls.return_value = manager
 
         result = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--product",
-                "orto",
-                "-o",
-                str(tmp_path),
-            ]
+            ["imagery", "download", "--product", "orto"]
+            + ["--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]
         )
 
         assert result == 0
@@ -1499,6 +1605,7 @@ class TestCmdDownloadProduct:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1529,6 +1636,7 @@ class TestCmdDownloadProduct:
         "argv",
         [
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1544,6 +1652,7 @@ class TestCmdDownloadProduct:
                 "N-34-130-D-d-2-4",
             ],
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1612,6 +1721,7 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -1642,75 +1752,33 @@ class TestCmdDownloadProduct:
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
+    @pytest.mark.parametrize(
+        "flag",
+        [
+            ["--vertical-crs", "KRON86"],
+            ["--resolution", "1m"],
+            ["--cutout"],
+            ["--horizontal-crs", "EPSG:2180"],
+            ["--min-density", "4"],
+        ],
+        ids=lambda flag: flag[0],
+    )
     @patch("kartograf.download.data._create_provider_and_storage")
     @patch("kartograf.download.data.DownloadManager")
-    def test_orto_with_vertical_crs_rejected(
-        self, mock_manager_cls, mock_create, capsys, tmp_path
+    def test_imagery_rejects_elevation_only_flags(
+        self, mock_manager_cls, mock_create, flag, capsys, tmp_path
     ):
-        """Orthophoto has no vertical CRS - the flag is an error, not a no-op."""
-        mock_create.return_value = _mock_provider_and_storage(".tif")
-        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.tif")
+        """Orthophoto has no vertical CRS, resolution, cutout or point density:
+        an elevation flag in ``imagery download`` is an input error, not a no-op."""
+        argv = ["imagery", "download", "--product", "orto"]
+        argv += ["--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), *flag]
+        with pytest.raises(SystemExit) as exc:
+            main(argv)
 
-        result = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=5m",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--product",
-                "orto",
-                "--vertical-crs",
-                "KRON86",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-
-        assert result == 1
-        err = capsys.readouterr().err
-        assert "orto" in err
+        assert exc.value.code == 2
+        assert f"unrecognized arguments: {flag[0]}" in capsys.readouterr().err
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
-
-    @patch("kartograf.download.data._create_provider_and_storage")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_orto_without_vertical_crs_still_works(
-        self, mock_manager_cls, mock_create, tmp_path
-    ):
-        """Regression: ortho without --vertical-crs works as before."""
-        mock_create.return_value = _mock_provider_and_storage(".tif")
-        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.tif")
-
-        result = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--sheet",
-                "N-34-130-D-d-2-4",
-                "--product",
-                "orto",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-
-        assert result == 0
 
     @patch("kartograf.download.data._create_provider_and_storage")
     @patch("kartograf.download.data.DownloadManager")
@@ -1723,6 +1791,7 @@ class TestCmdDownloadProduct:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -1754,48 +1823,6 @@ class TestCmdDownloadProduct:
         err = capsys.readouterr().err
         assert "nmpt" in err
         assert "1m" in err
-        mock_create.assert_not_called()
-        mock_manager_cls.assert_not_called()
-
-    @patch("kartograf.download.data._create_provider_and_storage")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_bbox_orto_with_vertical_crs_rejected(
-        self, mock_manager_cls, mock_create, capsys, tmp_path
-    ):
-        """The same validation applies in --bbox mode (PL sentinels)."""
-        mock_create.return_value = _mock_provider_and_storage(".asc")
-        mock_manager_cls.return_value = _mock_manager(tmp_path / "test.asc")
-
-        result = main(
-            [
-                "download",
-                "--sheet-system",
-                "1992",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=5m",
-                "--bbox",
-                "530000,382000,533000,386000",
-                "--country",
-                "pl",
-                "--product",
-                "orto",
-                "--vertical-crs",
-                "KRON86",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
-        )
-
-        assert result == 1
-        err = capsys.readouterr().err
-        assert "orto" in err
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
@@ -1951,6 +1978,7 @@ class TestNmt5mKron86Rejected:
     ):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -2005,6 +2033,7 @@ class TestNmt5mKron86Rejected:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2082,6 +2111,7 @@ class TestCmdDownloadBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2116,6 +2146,7 @@ class TestCmdDownloadBBox:
         mock_find.return_value = [f"N-{i}" for i in range(1, 13)]
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2150,6 +2181,7 @@ class TestCmdDownloadBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2180,6 +2212,7 @@ class TestCmdDownloadBBox:
         """Test oba sheet i --bbox → exit 1."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2209,6 +2242,7 @@ class TestCmdDownloadBBox:
         """Test no sheet code and no --bbox → exit 1."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -2232,6 +2266,7 @@ class TestCmdDownloadBBox:
         """Test of a bad bbox format → exit 1."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2277,6 +2312,7 @@ class TestCmdDownloadBBox:
         ):
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -2308,6 +2344,7 @@ class TestCmdDownloadBBox:
         """Test of too few values in the bbox → exit 1."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2339,6 +2376,7 @@ class TestCmdDownloadBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2374,6 +2412,7 @@ class TestCmdDownloadBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2406,6 +2445,7 @@ class TestCmdDownloadBBox:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "419000,230000,426000,237000",
@@ -2421,6 +2461,7 @@ class TestCmdDownloadBBox:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "419000,230000,426000,237000",
@@ -2433,6 +2474,7 @@ class TestCmdDownloadBBox:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "419000,230000,426000,237000",
@@ -2455,6 +2497,7 @@ class TestCmdDownloadBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -2552,6 +2595,7 @@ class TestSheetListExitCode:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--sheet-system",
                     "1992",
@@ -2678,6 +2722,7 @@ class TestSheetListExitCode:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--sheet-system",
                     "1992",
@@ -2770,29 +2815,18 @@ class TestCmdLandcoverDownload:
         call_kwargs = mock_mgr.download.call_args
         assert call_kwargs.kwargs.get("teryt") == "1465"
 
-    def test_landcover_download_soilgrids_teryt_unsupported(self, capsys, tmp_path):
-        """--source soilgrids --teryt -> exit 1, no data for a guessed area."""
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--source",
-                "soilgrids",
-                "--teryt",
-                "1465",
-                "--property",
-                "soc",
-                "--depth",
-                "0-5cm",
-                "--stat",
-                "mean",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Error: SoilGrids: wybor teryt dziala tylko dla BDOT10k" in captured.err
+    def test_soil_download_has_no_teryt(self, capsys, tmp_path):
+        """SoilGrids has no powiat selection: ``soil download --teryt`` is an
+        input error of the group, no data for a guessed area."""
+        out = tmp_path / "out"
+        with pytest.raises(SystemExit) as exc:
+            main(
+                ["soil", "download", "--teryt", "1465", "--property", "soc"]
+                + ["--depth", "0-5cm", "--stat", "mean", "-o", str(out)]
+            )
+        assert exc.value.code == 2
+        assert "unrecognized arguments: --teryt 1465" in capsys.readouterr().err
+        assert not out.exists()
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
     def test_landcover_download_by_sheet(self, mock_mgr_cls, capsys, tmp_path):
@@ -2946,16 +2980,7 @@ class TestCmdLandcoverDownload:
         assert rc == 1
         err = capsys.readouterr().err
         assert err.startswith("Error: --source")
-        assert all(source in err for source in ("bdot10k", "corine", "soilgrids"))
-
-    def test_landcover_list_layers_soilgrids(self, capsys):
-        """list-layers --source soilgrids shows soil properties."""
-        result = main(["landcover", "list-layers", "--source", "soilgrids"])
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "clay" in captured.out
-        assert "sand" in captured.out
-        assert "silt" in captured.out
+        assert all(source in err for source in ("bdot10k", "corine"))
 
     def test_landcover_format_gml_rejected_by_argparse(self, capsys):
         """--format GML is not an implemented format; argparse rejects it."""
@@ -2985,7 +3010,7 @@ class TestCmdLandcoverDownload:
 
 
 # ===========================================================================
-# Soilgrids CLI tests
+# Soil CLI tests
 # ===========================================================================
 
 
@@ -2997,26 +3022,26 @@ def _hsg_result(path: Path):
     return HsgResult("u", VersionedFile(path, "new", "2.0", "0" * 64, path), ())
 
 
-class TestCmdSoilgrids:
-    """Tests for soilgrids CLI commands."""
+class TestCmdSoil:
+    """Tests for soil HSG CLI behavior."""
 
-    def test_soilgrids_help(self, capsys):
-        """soilgrids with no subcommand shows help."""
-        result = main(["soilgrids"])
+    def test_soil_help(self, capsys):
+        """The soil group exposes download, HSG and source discovery."""
+        result = main(["soil"])
         assert result == 0
         captured = capsys.readouterr()
-        assert "hsg" in captured.out
+        assert all(name in captured.out for name in ("download", "hsg", "list-sources"))
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
-        """soilgrids hsg --sheet -> success output."""
+        """soil hsg --sheet -> success output."""
         mock_calc = Mock()
         mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
@@ -3033,7 +3058,7 @@ class TestCmdSoilgrids:
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
-        """soilgrids hsg --stats prints statistics."""
+        """soil hsg --stats prints statistics."""
         mock_calc = Mock()
         mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc.get_hsg_statistics.return_value = {
@@ -3070,7 +3095,7 @@ class TestCmdSoilgrids:
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
@@ -3089,14 +3114,14 @@ class TestCmdSoilgrids:
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
-        """soilgrids hsg raises DownloadError -> exit 1."""
+        """soil hsg raises DownloadError -> exit 1."""
         mock_calc = Mock()
         mock_calc.calculate_hsg.side_effect = DownloadError("Network error")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
@@ -3119,7 +3144,7 @@ class TestCmdSoilgrids:
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "M-33-036-A",
@@ -3142,7 +3167,7 @@ class TestCmdSoilgrids:
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "N-34-999-D",
@@ -3167,7 +3192,7 @@ class TestCmdSoilgrids:
         with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
             result = main(
                 [
-                    "soilgrids",
+                    "soil",
                     "hsg",
                     f"--bbox={bbox}",
                     "-o",
@@ -3185,36 +3210,36 @@ class TestCmdSoilgrids:
 
     def test_hsg_missing_output_fails_before_calculation(self, capsys):
         with patch("kartograf.hydrology.HSGCalculator") as calculator:
-            rc = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
+            rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
         assert rc == 1
         calculator.assert_not_called()
         assert "Error: --output" in capsys.readouterr().err
 
     def test_hsg_missing_depth_is_library_error(self, tmp_path, capsys):
         """The library text (same as ``calculate_hsg(depth=None)``), no network."""
-        rc = main(["soilgrids", "hsg", "--sheet", "N-34-130-D", "-o", str(tmp_path)])
+        rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "-o", str(tmp_path)])
         assert rc == 1
         assert capsys.readouterr().err.startswith(
             "Error: --depth wymagane dla soilgrids: 0-5cm"
         )
 
     def test_soilgrids_hsg_no_selection(self, capsys):
-        """soilgrids hsg without --sheet or --bbox -> exit 1."""
-        result = main(["soilgrids", "hsg", "--output", "unused", "--depth", "0-5cm"])
+        """soil hsg without --sheet or --bbox -> exit 1."""
+        result = main(["soil", "hsg", "--output", "unused", "--depth", "0-5cm"])
         assert result == 1
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
-        """soilgrids hsg --bbox -> calculate_hsg_by_bbox called."""
+        """soil hsg --bbox -> calculate_hsg_by_bbox called."""
         mock_calc = Mock()
         mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc_cls.return_value = mock_calc
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--bbox",
                 "450000,550000,460000,560000",
@@ -3265,6 +3290,7 @@ class TestCmdDownloadGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3309,6 +3335,7 @@ class TestCmdDownloadGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3355,6 +3382,7 @@ class TestCmdDownloadGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3416,6 +3444,7 @@ class TestCmdDownloadGeometry:
         assert (
             main(
                 [
+                    "elevation",
                     "download",
                     "--sheet-system",
                     "1992",
@@ -3443,6 +3472,7 @@ class TestCmdDownloadGeometry:
         gpkg_file = write_gpkg_layers(tmp_path / "area.gpkg", ["layer_a", "layer_b"])
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3475,6 +3505,7 @@ class TestCmdDownloadGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3507,6 +3538,7 @@ class TestCmdDownloadGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3536,6 +3568,7 @@ class TestCmdDownloadGeometry:
         """--geometry with nonexistent file -> error."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3563,6 +3596,7 @@ class TestCmdDownloadGeometry:
         """No input at all shows updated error message."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -3604,6 +3638,7 @@ class TestCmdDownloadGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -3722,12 +3757,12 @@ class TestCmdLandcoverDownloadGeometry:
 
 
 # ===========================================================================
-# Geometry CLI tests — soilgrids hsg command
+# Geometry CLI tests — soil hsg command
 # ===========================================================================
 
 
 class TestCmdSoilgridsHsgGeometry:
-    """Tests for soilgrids hsg command with --geometry option."""
+    """Tests for soil hsg command with --geometry option."""
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_geometry(self, mock_calc_cls, capsys, tmp_path):
@@ -3741,7 +3776,7 @@ class TestCmdSoilgridsHsgGeometry:
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--depth",
                 "0-5cm",
@@ -3764,7 +3799,7 @@ class TestCmdSoilgridsHsgGeometry:
 
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--depth",
                 "0-5cm",
@@ -3887,7 +3922,9 @@ class TestCreateParserDownloadSystem:
     def test_sheet_system_default_is_none(self):
         """--sheet-system defaults to None (sentinel; resolved per country later)."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--bbox", "419000,230000,426000,237000"])
+        args = parser.parse_args(
+            ["elevation", "download", "--bbox", "419000,230000,426000,237000"]
+        )
         assert args.sheet_system is None
 
     def test_sheet_system_2000_accepted(self):
@@ -3895,6 +3932,7 @@ class TestCreateParserDownloadSystem:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "419000,230000,426000,237000",
@@ -3909,6 +3947,7 @@ class TestCreateParserDownloadSystem:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "419000,230000,426000,237000",
@@ -3924,6 +3963,7 @@ class TestCreateParserDownloadSystem:
         with pytest.raises(SystemExit):
             parser.parse_args(
                 [
+                    "elevation",
                     "download",
                     "--bbox",
                     "419000,230000,426000,237000",
@@ -3941,6 +3981,7 @@ class TestCreateParserBBoxCrsExtended:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "6500000,5800000,6510000,5810000",
@@ -3955,6 +3996,7 @@ class TestCreateParserBBoxCrsExtended:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "5500000,5800000,5510000,5810000",
@@ -3969,6 +4011,7 @@ class TestCreateParserBBoxCrsExtended:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "7500000,5800000,7510000,5810000",
@@ -3983,6 +4026,7 @@ class TestCreateParserBBoxCrsExtended:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--bbox",
                 "8500000,5800000,8510000,5810000",
@@ -4008,6 +4052,7 @@ class TestDownloadBBoxSystem:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4050,6 +4095,7 @@ class TestDownloadBBoxSystem:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -4102,6 +4148,7 @@ class TestDownloadGeometrySystem:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4150,6 +4197,7 @@ class TestDownloadGeometrySystem:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -4225,6 +4273,7 @@ class TestCmdDownloadLaz:
         parser = create_parser()
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--sheet",
                 "M-34-27-B-b-2-1",
@@ -4243,7 +4292,9 @@ class TestCmdDownloadLaz:
     def test_laz_invalid_product_choice_rejected(self):
         parser = create_parser()
         with pytest.raises(SystemExit):
-            parser.parse_args(["download", "--sheet", "X", "--product", "nope"])
+            parser.parse_args(
+                ["elevation", "download", "--sheet", "X", "--product", "nope"]
+            )
 
     @patch("kartograf.providers.pl.gugik_laz.GugikLazProvider")
     def test_laz_sheet_mode_downloads_all_tiles(self, mock_provider_cls, tmp_path):
@@ -4256,6 +4307,7 @@ class TestCmdDownloadLaz:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4295,6 +4347,7 @@ class TestCmdDownloadLaz:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -4354,6 +4407,7 @@ class TestCmdDownloadLaz:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4393,6 +4447,7 @@ class TestCmdDownloadLaz:
 
         main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4446,6 +4501,7 @@ class TestCmdDownloadLaz:
         ) as get:
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -4486,6 +4542,7 @@ class TestCmdDownloadLaz:
         ):
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -4537,6 +4594,7 @@ class TestCmdDownloadLaz:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4619,6 +4677,7 @@ class TestCmdDownloadLaz:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4677,6 +4736,7 @@ class TestCmdDownloadLaz:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4708,6 +4768,7 @@ class TestCmdDownloadLaz:
     def test_laz_invalid_sheet_errors(self, capsys, tmp_path):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -4733,6 +4794,7 @@ class TestCmdDownloadLaz:
     def test_laz_missing_geometry_file_errors(self, capsys, tmp_path):
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -4791,7 +4853,14 @@ def _cmd_download_cz(args, bbox=None):
     """The CZ request described by ``_cz_args`` run through ``main`` (a sheet
     code, or ``bbox`` with its CRS as ``--bbox-crs``; an area is a cutout,
     by default in the native EPSG:5514)."""
-    argv = ["download", "--product", args.product, "--country", args.country]
+    argv = [
+        "elevation",
+        "download",
+        "--product",
+        args.product,
+        "--country",
+        args.country,
+    ]
     argv += ["-o", str(args.output), "--vertical-crs", args.vertical_crs]
     if args.resolution:
         argv += ["--resolution", args.resolution]
@@ -4914,6 +4983,7 @@ class TestCzDownloadingAfterValidation:
             )
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -4946,6 +5016,7 @@ class TestCzDownloadingAfterValidation:
         with patch(self._CLIENT) as client_cls, patch(self._INDEX):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5134,6 +5205,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5170,6 +5242,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH) as factory:
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5203,6 +5276,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5231,6 +5305,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider) as factory:
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5307,6 +5382,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, return_value=provider):
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5396,6 +5472,7 @@ class TestCmdDownloadCz:
         ):
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5436,6 +5513,7 @@ class TestCmdDownloadCz:
         with patch(_CZ_FACTORY_PATCH, side_effect=boom):
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -5905,6 +5983,7 @@ class TestCountryDispatch:
         mock_cz.return_value = 0
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -5931,6 +6010,7 @@ class TestCountryDispatch:
         mock_cz.return_value = 0
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -5960,6 +6040,7 @@ class TestCountryDispatch:
         mock_cz.return_value = 0
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -5989,6 +6070,7 @@ class TestCountryDispatch:
         mock_cz.return_value = 0
         main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6015,6 +6097,7 @@ class TestCountryDispatch:
     def test_cz_sheet_with_country_pl_conflicts(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6040,6 +6123,7 @@ class TestCountryDispatch:
     def test_pl_sheet_with_country_cz_conflicts(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6076,6 +6160,7 @@ class TestCountryDispatch:
         mock_manager_class.return_value = mock_manager
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6108,6 +6193,7 @@ class TestCountryDispatch:
         mock_manager_class.return_value = mock_manager
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6152,6 +6238,7 @@ class TestCountryDispatch:
     def test_pl_sheet_with_2m_rejected(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6177,6 +6264,7 @@ class TestCountryDispatch:
     def test_pl_sheet_with_bpv_rejected(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6202,6 +6290,7 @@ class TestCountryDispatch:
     def test_pl_sheet_with_cutout_rejected(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6234,6 +6323,7 @@ class TestCountryDispatch:
         """TM33 pattern with odd km: a CLI error (ParseError), not a traceback."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6261,6 +6351,7 @@ class TestCountryDispatch:
         """R9: --cutout + CZ sheet code = a CLI error (main catches nothing)."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6291,6 +6382,7 @@ class TestCountryDispatch:
         mock_cz.side_effect = ValidationError("cos nie gra")
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6322,6 +6414,7 @@ class TestCountryDispatch:
     def test_laz_with_country_cz_rejected(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6347,6 +6440,7 @@ class TestCountryDispatch:
     def test_laz_bbox_with_country_cz_rejected(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6374,30 +6468,21 @@ class TestCountryDispatch:
 
     @patch("kartograf.download.data._download_cz")
     def test_orto_bbox_with_country_cz_rejected(self, mock_cz, tmp_path, capsys):
-        result = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--bbox=-447000,-1114000,-446000,-1113000",
-                "--bbox-crs",
-                "EPSG:5514",
-                "--country",
-                "cz",
-                "--product",
-                "orto",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 1
-        assert "etapie 2" in capsys.readouterr().err
+        """No CZ orthophoto: the library rejects it before the CZ flow, and
+        ``imagery download`` does not offer ``--country cz`` at all."""
+        from kartograf.download.data import download_data
+
+        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+        with pytest.raises(ValidationError, match="etapie 2"):
+            download_data(product="orto", output_dir=tmp_path, bbox=bbox, country="cz")
+        with pytest.raises(SystemExit) as exc:
+            main(
+                ["imagery", "download", "--product", "orto", "--country", "cz"]
+                + ["--bbox=-447000,-1114000,-446000,-1113000", "--bbox-crs"]
+                + ["EPSG:5514", "-o", str(tmp_path)]
+            )
+        assert exc.value.code == 2
+        assert "invalid choice: 'cz'" in capsys.readouterr().err
         mock_cz.assert_not_called()
 
     # --- area modes: explicit --country cz ---
@@ -6407,6 +6492,7 @@ class TestCountryDispatch:
         mock_cz.return_value = 0
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6448,6 +6534,7 @@ class TestCountryDispatch:
         ) as spy_bbox:
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -6489,6 +6576,7 @@ class TestCountryDispatch:
         ) as spy:
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -6535,6 +6623,7 @@ class TestCountryDispatch:
         ) as mock_transformer:
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -6570,6 +6659,7 @@ class TestCountryDispatch:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6603,6 +6693,7 @@ class TestCountryDispatch:
     def test_geometry_with_country_cz_missing_file(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6640,6 +6731,7 @@ class TestCountryDispatch:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -6689,6 +6781,7 @@ class TestCountryDispatch:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--sheet-system",
                     "1992",
@@ -6734,6 +6827,7 @@ class TestAutoSplitBBox:
     # 18.4-18.8E / 49.55-49.75N — PL/CZ border strip (both country envelopes
     # contain this rectangle: CZ up to 18.86E/51.06N, PL from 14.07E/49.0N)
     _BORDER = [
+        "elevation",
         "download",
         "--sheet-system",
         "1992",
@@ -6755,6 +6849,7 @@ class TestAutoSplitBBox:
     ]
     # 21.0-21.2E / 52.0-52.2N — Warsaw, east of the CZ envelope (18.86E)
     _PL_ONLY = [
+        "elevation",
         "download",
         "--sheet-system",
         "1992",
@@ -6776,6 +6871,7 @@ class TestAutoSplitBBox:
     ]
     # 13.3-13.5E / 49.7-49.8N — Plzen, west of the PL envelope (14.07E)
     _CZ_ONLY = [
+        "elevation",
         "download",
         "--product",
         "nmt",
@@ -6795,6 +6891,18 @@ class TestAutoSplitBBox:
     ]
     # an area reaching CZ is a cutout (ADR-038): CZ native, PL from WCS
     _CUTOUT = ["--cutout", "--horizontal-crs", "EPSG:5514"]
+
+    @staticmethod
+    def _orto(bbox: str, *extra: str) -> list[str]:
+        """``imagery download`` of a WGS84 bbox with ``--country auto``."""
+        return ["imagery", "download", "--product", "orto", "--country", "auto"] + [
+            "--bbox",
+            bbox,
+            "--bbox-crs",
+            "EPSG:4326",
+            "-q",
+            *extra,
+        ]
 
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data._download_pl_cutout")
@@ -6893,7 +7001,7 @@ class TestAutoSplitBBox:
 
     def test_cz_only_bbox_with_orto_rejected_as_stage_2(self, tmp_path, capsys):
         """Country decided by the area - a stage 2 message, not about the choice."""
-        result = main(self._CZ_ONLY + ["--product", "orto", "-o", str(tmp_path)])
+        result = main(self._orto("13.3,49.7,13.5,49.8", "-o", str(tmp_path)))
         assert result == 1
         assert "etapie 2" in capsys.readouterr().err
 
@@ -6912,6 +7020,7 @@ class TestAutoSplitBBox:
         mock_cz.return_value = 0
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -6979,6 +7088,7 @@ class TestAutoSplitBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7019,6 +7129,7 @@ class TestAutoSplitBBox:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.asc")
         return main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7230,6 +7341,7 @@ class TestAutoSplitBBox:
         ):
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -7306,6 +7418,7 @@ class TestAutoSplitBBox:
     # 14.40-14.45E / 50.05-50.10N - Prague, deep in CZ, but inside the PL
     # rectangle (from 14.07E): auto also queries GUGiK, which has no data there
     _PRAGUE = [
+        "elevation",
         "download",
         "--product",
         "nmt",
@@ -7386,6 +7499,7 @@ class TestAutoSplitBBox:
         mock_manager_class.return_value = mock_manager
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -7477,6 +7591,7 @@ class TestAutoSplitBBox:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -7572,10 +7687,11 @@ class TestAutoSplitBBox:
         """Orthophoto for CZ is stage 2: auto resolves the country to PL."""
         self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
 
-        argv = self._BORDER + ["--product", "orto", "-o", str(tmp_path)]
-        at = argv.index("--vertical-crs")  # orthophoto has no vertical CRS
-        del argv[at : at + 2]
-        result = main(argv)
+        result = main(
+            self._orto(
+                "18.4,49.55,18.8,49.75", "--sheet-system", "1992", "-o", str(tmp_path)
+            )
+        )
 
         assert result == 0
         mock_cz.assert_not_called()
@@ -7597,6 +7713,7 @@ class TestAutoSplitBBox:
     def test_bbox_outside_known_countries(self, tmp_path, capsys):
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7628,6 +7745,7 @@ class TestAutoSplitBBox:
         skipping of a country)."""
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7668,6 +7786,7 @@ class TestAutoSplitBBox:
             provider_cls.return_value.select_tiles.return_value = _selection([])
             result = main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -7705,6 +7824,7 @@ class TestAutoSplitBBox:
         )
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -7744,6 +7864,7 @@ class TestAutoSplitBBox:
         )
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7802,6 +7923,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -7857,6 +7979,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7909,6 +8032,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -7950,6 +8074,7 @@ class TestAutoSplitGeometry:
         assert (
             main(
                 [
+                    "elevation",
                     "download",
                     "--cutout",
                     "--horizontal-crs",
@@ -7987,6 +8112,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8030,6 +8156,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8078,6 +8205,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8117,6 +8245,7 @@ class TestAutoSplitGeometry:
 
         result = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -8207,6 +8336,7 @@ class TestPartialSheetWarning:
             tmp_path,
             ("-1",),
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8239,6 +8369,7 @@ class TestPartialSheetWarning:
             tmp_path,
             ("-9",),
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8263,6 +8394,7 @@ class TestPartialSheetWarning:
             tmp_path,
             ("-2", "-4"),
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8294,6 +8426,7 @@ class TestPartialSheetWarning:
             tmp_path,
             ("-3",),
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8329,6 +8462,7 @@ class TestSingleSheetSkipMessage:
         ):
             return main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -8442,6 +8576,7 @@ class TestUnreadableMetadataCache:
     ):
         db = self._broken_cache()
         argv = [
+            "elevation",
             "download",
             "--sheet-system",
             "1992",
@@ -8482,6 +8617,7 @@ class TestUnreadableMetadataCache:
         rc, providers, files = self._run(
             tmp_path,
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8511,6 +8647,7 @@ class TestUnreadableMetadataCache:
         """Every command reports the broken cache again (dedup reset)."""
         self._broken_cache()
         argv = [
+            "elevation",
             "download",
             "--product",
             "nmt",
@@ -8554,6 +8691,7 @@ class TestLazSidecarRequestFilters:
         ):
             rc = main(
                 [
+                    "elevation",
                     "download",
                     "--sheet",
                     "M-34-27-B-b-2-1",
@@ -8657,6 +8795,7 @@ class TestSheetCrsMismatchWarning:
         rc = self._run(
             tmp_path,
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8682,6 +8821,7 @@ class TestSheetCrsMismatchWarning:
             self._run(
                 tmp_path,
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -8705,6 +8845,7 @@ class TestSheetCrsMismatchWarning:
             self._run(
                 tmp_path,
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -8730,6 +8871,7 @@ class TestSheetCrsMismatchWarning:
         rc = self._run(
             tmp_path,
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8770,6 +8912,7 @@ class TestSheetCrsMismatchWarning:
         rc = self._run(
             tmp_path,
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8823,7 +8966,9 @@ class TestCampaignOptions:
 
     def test_parser_max_year_and_year_for_nmt(self):
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4"])
+        args = parser.parse_args(
+            ["elevation", "download", "--sheet", "N-34-130-D-d-2-4"]
+        )
         assert args.all_campaigns is False
         assert args.min_year is None
         assert args.max_year is None
@@ -8831,6 +8976,7 @@ class TestCampaignOptions:
 
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--sheet",
                 "N-34-130-D-d-2-4",
@@ -8845,6 +8991,7 @@ class TestCampaignOptions:
 
         args = parser.parse_args(
             [
+                "elevation",
                 "download",
                 "--sheet",
                 "N-34-130-D-d-2-4",
@@ -8867,6 +9014,7 @@ class TestCampaignOptions:
         assert (
             main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -8895,6 +9043,7 @@ class TestCampaignOptions:
         assert (
             main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -8922,6 +9071,7 @@ class TestCampaignOptions:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8954,6 +9104,7 @@ class TestCampaignOptions:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -8997,6 +9148,7 @@ class TestCampaignOptions:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9033,31 +9185,19 @@ class TestCampaignOptions:
             _mock_manager(path) if mode == "sheet" else _sheet_list_manager(path)
         )
         location = ["--sheet", "N-34-130-D-d-2-4"] if mode == "sheet" else _PL_BBOX_2180
-        rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
+        if product == "orto":
+            group = ["imagery", "download", "--country", "auto"]
+        else:
+            group = ["elevation", "download", "--country", "auto"]
+            group += [
                 "--resolution",
                 "pl=1m,cz=2m",
-                *(
-                    []
-                    if product == "orto"
-                    else ["--vertical-crs", "pl=EVRF2007,cz=Bpv"]
-                ),
-                *location,
-                "--product",
-                product,
-                "--year",
-                "2025",
-                "-o",
-                str(tmp_path),
-                "-q",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
             ]
+        rc = main(
+            [*group, *location, "--product", product, "--year", "2025"]
+            + ["-o", str(tmp_path), "-q"]
         )
         assert rc == 0
         kwargs = mock_manager_class.call_args.kwargs
@@ -9084,6 +9224,7 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9123,6 +9264,7 @@ class TestCampaignOptions:
         mock_manager_class.return_value = manager
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9170,6 +9312,7 @@ class TestCampaignOptions:
         )
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9244,6 +9387,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9301,6 +9445,7 @@ class TestCampaignOptions:
         )
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9334,6 +9479,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9369,6 +9515,7 @@ class TestCampaignOptions:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9407,6 +9554,7 @@ class TestCampaignOptions:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9445,6 +9593,7 @@ class TestCampaignOptions:
         mock_run_cz.return_value = 0
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9476,6 +9625,7 @@ class TestCampaignOptions:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9506,6 +9656,7 @@ class TestCampaignOptions:
     def test_cz_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9532,6 +9683,7 @@ class TestCampaignOptions:
     def test_cz_sheet_auto_with_min_year_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9559,6 +9711,7 @@ class TestCampaignOptions:
     def test_cz_sm5_sheet_auto_with_all_is_error(self, mock_run_cz, capsys, tmp_path):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9586,6 +9739,7 @@ class TestCampaignOptions:
     def test_cli_year_cz_sheet_rejected(self, mock_run_cz, sheet, capsys, tmp_path):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9615,6 +9769,7 @@ class TestCampaignOptions:
         mock_run_cz.return_value = 0
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9654,6 +9809,7 @@ class TestCampaignOptions:
         mock_run_cz.return_value = 0
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9686,6 +9842,7 @@ class TestCampaignOptions:
         mock_run_cz.return_value = 0
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9716,6 +9873,7 @@ class TestCampaignOptions:
         mock_run_cz.return_value = 0
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9755,6 +9913,7 @@ class TestCampaignOptions:
         download."""
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9789,24 +9948,8 @@ class TestCampaignOptions:
         mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.tif")
 
         rc = main(
-            [
-                "download",
-                "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                *_BORDER_BBOX,
-                "--product",
-                "orto",
-                "--all-campaigns",
-                "-o",
-                str(tmp_path),
-                "-q",
-            ]
+            ["imagery", "download", "--product", "orto", "--country", "auto"]
+            + [*_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"]
         )
 
         assert rc == 0
@@ -9818,6 +9961,7 @@ class TestCampaignOptions:
     def _single(tmp_path):
         return main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9924,6 +10068,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9962,6 +10107,7 @@ class TestCampaignOptions:
         """Fix 2: the --cutout guard comes before the campaign Info."""
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -9994,6 +10140,7 @@ class TestCampaignOptions:
         """Fix 3: the more general sheet code guard (--cutout with a code) wins."""
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10026,6 +10173,7 @@ class TestCampaignOptions:
         """Fix 4: the CLI says --min-year, not min_year (a library parameter)."""
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10062,6 +10210,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10108,6 +10257,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--sheet-system",
                 "1992",
@@ -10154,6 +10304,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10190,6 +10341,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10277,6 +10429,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10320,6 +10473,7 @@ class TestCampaignOptions:
         assert (
             main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -10380,6 +10534,7 @@ class TestCampaignOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10416,6 +10571,7 @@ class TestCampaignOptions:
         sheet = "N-34-139-C-a-3-1"
         out = tmp_path / "out"
         argv = [
+            "elevation",
             "download",
             "--product",
             "nmt",
@@ -10478,6 +10634,7 @@ class TestListMessagesUx:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10512,6 +10669,7 @@ class TestListMessagesUx:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10569,6 +10727,7 @@ class TestListMessagesUx:
         )
 
     _BBOX_ARGS = (
+        "elevation",
         "download",
         "--product",
         "nmt",
@@ -10718,6 +10877,7 @@ class TestListMessagesUx:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10755,6 +10915,7 @@ class TestErrorWithoutBlankLine:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10790,13 +10951,13 @@ class TestErrorWithoutBlankLine:
 
 
 class TestSoilgridsHsgNoEarlyMkdir:
-    """soilgrids hsg does not leave an empty output directory after an error."""
+    """soil hsg does not leave an empty output directory after an error."""
 
     def test_missing_geometry_leaves_no_output_dir(self, capsys, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--geometry",
                 "nieistniejacy.shp",
@@ -10819,7 +10980,7 @@ class TestSoilgridsHsgNoEarlyMkdir:
         out = tmp_path / "out" / "hsg"
         result = main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "N-34-130-D",
@@ -10850,7 +11011,9 @@ _LAZ_ONLY_PATHS = {
     "cz_sheet": ["--sheet", "302_5550"],
     "cz_forced": [*_CZ_ONLY_BBOX, "--country", "cz"],
 }
-_LAZ_ONLY_PRODUCTS = ["nmt", "nmpt", "orto"]
+# elevation products other than LAZ (imagery has no --min-density at all:
+# TestCmdDownloadProduct.test_imagery_rejects_elevation_only_flags)
+_LAZ_ONLY_PRODUCTS = ["nmt", "nmpt"]
 
 
 class TestLazOnlyOptions:
@@ -10877,6 +11040,7 @@ class TestLazOnlyOptions:
         out = tmp_path / "out"
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10925,6 +11089,7 @@ class TestLazOnlyOptions:
 
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -10973,6 +11138,7 @@ class TestFullSheetOption:
         ):
             return main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",
@@ -10996,9 +11162,14 @@ class TestFullSheetOption:
 
     def test_parser_flag_default_off(self):
         assert (
-            create_parser().parse_args(["download", "--sheet", "X"]).full_sheet is False
+            create_parser()
+            .parse_args(["elevation", "download", "--sheet", "X"])
+            .full_sheet
+            is False
         )
-        args = create_parser().parse_args(["download", "--sheet", "X", "--full-sheet"])
+        args = create_parser().parse_args(
+            ["elevation", "download", "--sheet", "X", "--full-sheet"]
+        )
         assert args.full_sheet is True
 
     @patch("kartograf.download.laz._run_laz_download")
@@ -11007,6 +11178,7 @@ class TestFullSheetOption:
         out = tmp_path / "out"
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -11042,6 +11214,7 @@ class TestFullSheetOption:
     ):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -11072,6 +11245,7 @@ class TestFullSheetOption:
     def test_cz_only_is_error(self, run_cz, capsys, tmp_path):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",

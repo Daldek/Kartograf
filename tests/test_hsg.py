@@ -350,55 +350,6 @@ class TestHSGCalculator:
         assert HSGCalculator.CONVERSION_FACTOR == 10.0
 
 
-class TestHSGCLI:
-    """Test CLI integration."""
-
-    def test_soilgrids_command_exists(self):
-        """Test that soilgrids command is registered."""
-        from kartograf.cli.commands import create_parser
-
-        parser = create_parser()
-        # Parse with soilgrids command
-        args = parser.parse_args(["soilgrids"])
-        assert args.command == "soilgrids"
-
-    def test_soilgrids_hsg_command_exists(self):
-        """Test that soilgrids hsg command is registered."""
-        from kartograf.cli.commands import create_parser
-
-        parser = create_parser()
-        args = parser.parse_args(["soilgrids", "hsg", "--sheet", "N-34-130-D"])
-        assert args.command == "soilgrids"
-        assert args.soilgrids_command == "hsg"
-        assert args.sheet == "N-34-130-D"
-
-    def test_soilgrids_hsg_custom_options(self):
-        """Test custom options for soilgrids hsg command."""
-        from kartograf.cli.commands import create_parser
-
-        parser = create_parser()
-        args = parser.parse_args(
-            [
-                "soilgrids",
-                "hsg",
-                "--sheet",
-                "N-34-130-D",
-                "--depth",
-                "15-30cm",
-                "--output",
-                "store",
-                "--force",
-                "--stats",
-            ]
-        )
-
-        assert args.depth == "15-30cm"
-        assert args.output == "store"
-        assert args.force is True
-        assert not hasattr(args, "keep_intermediate")
-        assert args.stats is True
-
-
 def _create_test_raster(path, data, transform=None, crs="EPSG:2180", nodata=0):
     """Helper to create a minimal GeoTIFF for testing."""
     import rasterio

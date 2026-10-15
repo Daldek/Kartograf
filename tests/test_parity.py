@@ -8,6 +8,7 @@ Scenarios (spec 6) and their tests:
 scenario                                   test
 =========================================  ==========================================
 PL-1992 sheet 1:10000                      test_pl_sheet
+orthophoto sheet (``imagery download``)    test_orto_sheet_through_imagery
 coarser sheet code (expansion)             test_coarser_sheet_expands_with_no_cov...
 PL-2000 with ``scale``                     test_pl2000_sheet_with_scale
 PL area ``sheet_system=1992`` / ``2000``   test_pl_area_sheet_system
@@ -65,6 +66,7 @@ def test_pl_sheet(tmp_path):
     ):
         run = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -89,11 +91,29 @@ def test_pl_sheet(tmp_path):
 
 
 @pytest.mark.usefixtures("frozen_clock")
+def test_orto_sheet_through_imagery(tmp_path):
+    """``imagery download`` = ``download_data(product="orto")`` (ADR-039):
+    the group passes no resolution or vertical CRS."""
+    fake = FakeCampaignProvider(C14)
+    with patch(
+        "kartograf.download.data._create_provider_and_storage",
+        return_value=(fake, None),
+    ):
+        run = run_both(
+            ["imagery", "download", "--product", "orto", "--sheet", G, "-q"],
+            lambda out: download_data(product="orto", output_dir=out, sheet=G),
+            tmp_path,
+        )
+    _same(run, run.api_result, statuses=["new"])
+
+
+@pytest.mark.usefixtures("frozen_clock")
 @pytest.mark.parametrize(("sheet", "resolution"), [("302_5550", "2m")])
 def test_cz_sheet(tmp_path, sheet, resolution):
     with patch(CZ_FACTORY, return_value=_cz_provider_mock(resolution)):
         run = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -123,6 +143,7 @@ def test_cz_cutout(tmp_path):
     with patch(CZ_FACTORY, return_value=_cz_provider_mock()):
         run = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -172,6 +193,7 @@ def test_auto_partial_success(tmp_path):
     ):
         run = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -216,6 +238,7 @@ def test_laz_sheet(tmp_path):
     ):
         run = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "laz",
@@ -255,6 +278,7 @@ def test_check_plan_upgrade(tmp_path):
     ):
         checked = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -273,6 +297,7 @@ def test_check_plan_upgrade(tmp_path):
         assert cli_plan.items == api_plan.items
         upgraded = run_both(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",
@@ -316,7 +341,7 @@ def test_check_plan_upgrade(tmp_path):
 )
 def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
     run = run_both(
-        ["download", "--product", "nmt", *argv],
+        ["elevation", "download", "--product", "nmt", *argv],
         lambda out: download_data(product="nmt", output_dir=out, **kwargs),
         tmp_path,
     )
@@ -350,6 +375,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
         "cache": False,
     }
     argv = [
+        "elevation",
         "download",
         "--product",
         "nmt",
@@ -400,10 +426,10 @@ def _pl_store(fake):
 
 
 def _pl(tmp_path, fake, cli: list[str], **api):
-    """``download`` of PL sheets through CLI and ``download_data``."""
+    """``elevation download`` of PL sheets through CLI and ``download_data``."""
     with _pl_store(fake):
         return run_both(
-            ["download", "--product", "nmt", *cli, "-q"],
+            ["elevation", "download", "--product", "nmt", *cli, "-q"],
             lambda out: download_data(product="nmt", output_dir=out, **api),
             tmp_path,
         )
@@ -531,7 +557,15 @@ def test_pl_cutout(tmp_path):
         patch("kartograf.providers.pl.create_nmt_provider", side_effect=provider),
     ):
         run = run_both(
-            ["download", "--product", "nmt", _bbox_arg(BBOX), "--country", "pl"]
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmt",
+                _bbox_arg(BBOX),
+                "--country",
+                "pl",
+            ]
             + ["--cutout", "--horizontal-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
             lambda out: download_data(
                 product="nmt",
@@ -561,7 +595,7 @@ def test_cz_sm5_sheet(tmp_path):
     )
     with patch(CZ_FACTORY, return_value=provider):
         run = run_both(
-            ["download", "--product", "nmt", "--sheet", "CTES96"]
+            ["elevation", "download", "--product", "nmt", "--sheet", "CTES96"]
             + ["--vertical-crs", "Bpv", "-q"],
             lambda out: download_data(
                 product="nmt", output_dir=out, sheet="CTES96", vertical_crs="Bpv"
@@ -580,7 +614,15 @@ def test_auto_narrowed_to_pl(tmp_path):
         return_value=PlCutoutResult(None),
     ):
         run = run_both(
-            ["download", "--product", "nmt", _bbox_arg(bbox), "--country", "auto"]
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmt",
+                _bbox_arg(bbox),
+                "--country",
+                "auto",
+            ]
             + ["--cutout", "--horizontal-crs", "EPSG:2180", *PL_SHEET_ARGS, "-q"],
             lambda out: download_data(
                 product="nmt",
@@ -605,7 +647,14 @@ def test_laz_bbox_4326_min_density(tmp_path):
         side_effect=lambda **_kw: LazCliProvider(),
     ):
         run = run_both(
-            ["download", "--product", "laz", "--bbox", "18.60,49.73,18.66,49.76"]
+            [
+                "elevation",
+                "download",
+                "--product",
+                "laz",
+                "--bbox",
+                "18.60,49.73,18.66,49.76",
+            ]
             + ["--bbox-crs", "EPSG:4326", "--country", "pl"]
             + ["--vertical-crs", "EVRF2007", "--min-density", "4", "-q"],
             lambda out: download_data(
@@ -629,7 +678,7 @@ def test_upgrade_with_stale_plan(tmp_path):
     sheet = ["--sheet", G, *PL_SHEET_ARGS]
     with _pl_store(fake):
         checked = run_both(
-            ["download", "--product", "nmt", *sheet, "--check-updates"]
+            ["elevation", "download", "--product", "nmt", *sheet, "--check-updates"]
             + ["--plan", str(plan_file)],
             lambda out: check_data(
                 product="nmt", output_dir=out, sheet=G, **PL_SHEET_KW
@@ -638,7 +687,7 @@ def test_upgrade_with_stale_plan(tmp_path):
         )
         fake.records = C14
         upgraded = run_both(
-            ["download", "--product", "nmt", *sheet, "--upgrade"]
+            ["elevation", "download", "--product", "nmt", *sheet, "--upgrade"]
             + ["--plan", str(plan_file), "-q"],
             lambda out: download_data(
                 product="nmt",

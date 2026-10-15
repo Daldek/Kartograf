@@ -292,21 +292,21 @@ class TestSoilGridsDownload:
 class TestSoilGridsCLI:
     """Test CLI integration."""
 
-    def test_landcover_list_sources_includes_soilgrids(self, capsys):
-        """Test that list-sources shows soilgrids."""
+    def test_soil_list_sources_includes_soilgrids(self, capsys):
+        """The soil group exposes its registered descriptor."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "list-sources"])
+        result = main(["soil", "list-sources"])
         assert result == 0
         captured = capsys.readouterr()
         assert "soilgrids" in captured.out
         assert "SoilGrids" in captured.out
 
-    def test_landcover_list_layers_soilgrids(self, capsys):
-        """Test list-layers for soilgrids."""
+    def test_soil_list_layers(self, capsys):
+        """Properties remain discoverable under the soil group."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "list-layers", "--source", "soilgrids"])
+        result = main(["soil", "list-layers"])
         assert result == 0
         captured = capsys.readouterr()
         assert "soc" in captured.out
