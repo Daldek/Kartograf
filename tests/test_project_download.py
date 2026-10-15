@@ -44,6 +44,7 @@ from tests.test_cli import _cz_provider_mock
 from tests.test_hsg import RasterSoilGrids
 from tests.test_landcover_output_params import FakePackages
 from tests.test_manager_campaigns import REC, FakeCampaignProvider
+from tests.test_parity import _sheet_0_5m_session
 from tests.test_validate_request import _shapefile
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
@@ -127,6 +128,33 @@ def test_first_download_pins_every_file(tmp_path, frozen_clock, case):
         assert version is not None and version.meta["size_bytes"] == pin.size_bytes
         assert version.label == pin.label and (store / pin.path).is_file()
     assert open_project(project) == report.project
+
+
+def test_registry_variant_task_pins_file_of_its_segment(tmp_path):
+    """A grid variant of the registry (NMT 0.5m, WFS index, ADR-041) is an
+    ordinary task: its pin is the sheet in the segment of that variant."""
+    sheet = "N-33-58-A-c-1-4"
+    project = new_project(tmp_path)
+    add_project_task(
+        project,
+        name="teren",
+        command="elevation download",
+        options={
+            "product": "nmt",
+            "sheet": sheet,
+            "resolution": "0.5m",
+            "vertical_crs": "EVRF2007",
+        },
+    )
+    with patch(
+        "kartograf.transport.http.make_gugik_session",
+        return_value=_sheet_0_5m_session(sheet),
+    ):
+        report = download_project(project)
+    assert report.ok
+    (pin,) = report.project.tasks[0].files
+    assert pin.path == f"nmt/pl_1992_0.5m_evrf2007/N-33/58/A/c/1/4/{sheet}.asc"
+    assert pin.label == "2025-01-30_84020"
 
 
 def test_incomplete_task_pins_nothing_and_retry_reuses_store(tmp_path):
