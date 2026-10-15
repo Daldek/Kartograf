@@ -31,6 +31,7 @@ dependencies = [
     "rasterio>=1.3.0",
     "numpy>=1.24.0",
     "pyshp>=2.3.0",
+    "pyogrio>=0.10",
 ]
 
 [project.scripts]
@@ -68,7 +69,7 @@ quote-style = "double"
 exclude = ['^\.claude/']
 
 [[tool.mypy.overrides]]
-module = ["requests.*", "rasterio.*", "shapefile.*", "affine.*"]
+module = ["requests.*", "rasterio.*", "shapefile.*", "affine.*", "pyogrio.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
