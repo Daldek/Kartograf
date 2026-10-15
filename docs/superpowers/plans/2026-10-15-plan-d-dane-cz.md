@@ -193,23 +193,30 @@ class AtomFilesParams:
   `test_html_feed_is_download_error`.
 - [ ] **Step 2: Implementacja** - `kartograf/transport/atom.py`:
   `AtomEntry(key: str, dataset_feed: str, updated: str, groups:
-  Mapping[str, str], crs: str | None)`, `AtomFile(url, length,
-  updated, edition: str, crs: str | None)`;
+  Mapping[str, str], crs: tuple[str, ...])` (wszystkie kategorie ukladu
+  wpisu; ZABAGED ma dwie), `AtomFile(url, length, updated, edition: str,
+  crs: str | None, dataset_feed)`;
   `atom_index(session, params, *, cache, refresh) -> dict[str,
   AtomEntry]` (strumieniowy `xml.etree.ElementTree.iterparse` po
   `{http://www.w3.org/2005/Atom}entry`, czyszczenie elementow -
   23,7 MB bez trzymania drzewa; zapis wpisow do `atom_cache` z ETag
   feedu); `resolve_atom_file(session, params, *, key, crs, cache,
-  refresh) -> AtomFile` (feed zbioru pobierany zawsze swiezo - maly).
+  refresh) -> AtomFile` (feed zbioru pobierany zawsze swiezo - maly;
+  klucz brakujacy w indeksie z cache albo 404 feedu zbioru = jedno
+  odswiezenie indeksu, zeby nieaktualny cache nie ukryl nowego
+  rocznika); `check_atom_crs` (wybor ukladu bez sieci),
+  `atom_segment_tokens`, `fetch_atom_file` (rozmiar = `length` feedu
+  i `Content-Length`), `unpack_members` (najdluzszy sufiks najpierw).
   Timeout feedu uslugi 120 s (rekonesans: 3,2 s, ale GUGiK ATOM mial
   timeouty 120 s - STANDARDS 13.4), ponowienia `get_with_retry`.
   Dlaczego feed, skoro plan B dla DMR go nie uzywa (szablon `openzu`
   + `HEAD`): nazwa pliku ortofoto i ZABAGED kraj zawiera rok/date
   wydania (`WRTO24.<rok>.<godlo>`, `ZABAGED-5514-gpkg-<data>`), wiec
   URL istnieje tylko w feedzie - szablon zgadywalby rok.
-  `MetadataCache`: `get_atom_entries(feed_url) / set_atom_entries(
-  feed_url, etag, entries)` wg wzorca `get_sheet`/`set_sheet`
-  (TTL domyslny 7 dni, `refresh` omija).
+  `MetadataCache`: `get_atom_entries(feed) -> (etag, entries, fresh)` /
+  `set_atom_entries(feed, etag, entries)` (klucz: feed + wzorzec; TTL
+  domyslny 7 dni; starszy indeks zwracany z `fresh=False` do
+  warunkowego GET, tryb `refresh` cache = brak odczytu).
 - [ ] **Step 3: Brama i commit** - `feat(transport): silnik atom_files
   (feed ATOM CUZK -> plik, wydanie z updated)`
 

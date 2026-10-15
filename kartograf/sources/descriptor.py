@@ -8,9 +8,10 @@ in the sidecar (``build_metadata(capability=)``) and are not enforced in manager
 
 Collection channels (ADR-042) carry typed engine configuration in
 ``AccessChannel.params``: ``UnitPackageParams`` (one package per TERYT unit or
-the country, from a URL template) and ``FeatureBBoxParams`` (features of an
-area from WFS / ArcGIS REST into one GeoPackage). A new product of such a
-channel is a descriptor entry, not a provider.
+the country, from a URL template), ``FeatureBBoxParams`` (features of an
+area from WFS / ArcGIS REST into one GeoPackage) and ``AtomFilesParams``
+(files listed by a CUZK ATOM feed). A new product of such a channel is a
+descriptor entry, not a provider.
 """
 
 from dataclasses import dataclass
@@ -125,7 +126,31 @@ class FeatureBBoxParams:
     drop_fields: tuple[str, ...] = ()
 
 
-ChannelParams = UnitPackageParams | FeatureBBoxParams
+@dataclass(frozen=True)
+class AtomFilesParams:
+    """Engine ``atom_files`` (ADR-042 D12): files listed by a CUZK ATOM feed.
+
+    ``service_feed`` lists one entry per dataset, each linking its dataset
+    feed, whose entries link the files. ``entry_pattern`` is searched in the
+    dataset feed id of a service entry: its named group ``sheet`` keys the
+    index (one dataset per SM5 sheet), ``year`` is the release in the file
+    name; without ``sheet`` the feed has exactly one dataset. ``crs``: EPSG
+    codes of the CRS categories of the files of one dataset (a national file
+    in several CRSs); ``()`` = one file per dataset. ``members``: pairs (ZIP
+    member suffix, stored suffix), the longest suffix matching first; ``()``
+    = the ZIP is stored 1:1. ``segment_tokens``: content tokens of the
+    storage segment; the EPSG number of the chosen file is appended when the
+    dataset has several CRSs.
+    """
+
+    service_feed: str
+    entry_pattern: str
+    crs: tuple[str, ...] = ()
+    members: tuple[tuple[str, str], ...] = ()
+    segment_tokens: tuple[str, ...] = ()
+
+
+ChannelParams = UnitPackageParams | FeatureBBoxParams | AtomFilesParams
 
 
 @dataclass(frozen=True)

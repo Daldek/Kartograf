@@ -1,0 +1,36 @@
+﻿<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss" xmlns:inspire_dls="http://inspire.ec.europa.eu/schemas/inspire_dls/1.0" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xml:lang="cs">
+   <id>https://atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml</id>
+   <title>Stahovací služba Atom pro ZABAGED® - GPKG</title>
+   <subtitle>Stahovací služba poskytuje data Základní báze geografických dat České republiky (ZABAGED®) v souřadnicových systémech S-JTSK a ETRS89-TM33N a formátu Geopackage (GPKG). Data jsou dostupná prostřednictvím technologie Atom. Služba je veřejně dostupná, bezúplatná, pokrývá celé území České republiky a umožňuje stahování předpřipravených dat v jednom souboru pro celý stát. Pro stažení je datová sada komprimována (ZIP).</subtitle>
+   <updated>2026-10-04T21:33:41+02:00</updated>
+   <author>
+      <name>Český úřad zeměměřický a katastrální</name>
+      <uri>https://geoportal.cuzk.gov.cz</uri>
+      <email>cuzk.helpdesk@cuzk.gov.cz</email>
+   </author>
+   <rights>žádné podmínky neplatí</rights>
+   <link href="https://geoportal.cuzk.gov.cz/SDIProCSW/service.svc/get?REQUEST=GetRecordById&amp;SERVICE=CSW&amp;VERSION=2.0.2&amp;OUTPUTSCHEMA=http://www.isotc211.org/2005/gmd&amp;ELEMENTSETNAME=full&amp;Id=CZ-00025712-CUZK_ATOM-MD_ZABAGED-GPKG" rel="describedby" title="metadata stahovací služby" type="application/xml" />
+   <link href="https://atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml" hreflang="cs" rel="self" type="application/atom+xml" />
+   <link href="https://atom.cuzk.gov.cz/ZABAGED-GPKG/OSD-ZABAGED-GPKG.xml" hreflang="cs" rel="search" title="ČÚZK-ATOM-ZABAGED-GPKG" type="application/opensearchdescription+xml" />
+   <!--<link href="https://services.cuzk.cz/atom-index/ZABAGED-GPKG/3045" rel="next" title="ETRS89/TM33" type="text/xml" />
+   <link href="https://services.cuzk.cz/atom-index/ZABAGED-GPKG/5514" rel="next" title="S-JTSK" type="text/xml" />-->
+   <entry>
+      <id>https://atom.cuzk.gov.cz/ZABAGED-GPKG/datasetFeeds/CZ-00025712-CUZK_ZABAGED-GPKG_1.xml</id>
+      <title>ZABAGED® - GPKG</title>
+      <updated>2026-10-04T21:33:41+02:00</updated>
+      <author>
+         <name>Český úřad zeměměřický a katastrální</name>
+         <uri>https://geoportal.cuzk.gov.cz</uri>
+         <email>cuzk.helpdesk@cuzk.gov.cz</email>
+      </author>
+      <rights>žádné podmínky neplatí</rights>
+      <link href="https://geoportal.cuzk.gov.cz/SDIProCSW/service.svc/get?REQUEST=GetRecordById&amp;SERVICE=CSW&amp;VERSION=2.0.2&amp;OUTPUTSCHEMA=http://www.isotc211.org/2005/gmd&amp;ELEMENTSETNAME=full&amp;Id=CZ-00025712-CUZK_ZABAGED-GPKG_1" rel="describedby" title="metadata datasetu" type="application/xml" />
+      <link href="https://atom.cuzk.gov.cz/ZABAGED-GPKG/datasetFeeds/CZ-00025712-CUZK_ZABAGED-GPKG_1.xml" rel="alternate" title="dataset feed" type="application/atom+xml" />
+      <category label="ETRS89/TM33" term="http://www.opengis.net/def/crs/EPSG/0/3045" />
+      <category label="S-JTSK" term="http://www.opengis.net/def/crs/EPSG/0/5514" />
+      <inspire_dls:spatial_dataset_identifier_code>CZ-00025712-CUZK_ZABAGED-GPKG_1</inspire_dls:spatial_dataset_identifier_code>
+      <inspire_dls:spatial_dataset_identifier_namespace>ČÚZK</inspire_dls:spatial_dataset_identifier_namespace>
+      <georss:polygon>51.354 18.6346 50.8229 11.9377 48.2331 12.6024 48.737 18.9554 51.354 18.6346</georss:polygon>
+   </entry>
+</feed>
