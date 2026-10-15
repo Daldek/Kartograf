@@ -17,6 +17,7 @@ from kartograf.project.model import (
 )
 from kartograf.project.operations import (
     add_project_task,
+    download_project,
     init_project,
     open_project,
     remove_project_task,
@@ -31,6 +32,7 @@ __all__ = [
     "ProjectTask",
     "TaskResult",
     "add_project_task",
+    "download_project",
     "init_project",
     "open_project",
     "remove_project_task",

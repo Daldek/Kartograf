@@ -2,17 +2,34 @@
 
 Every operation reads ``kartograf-project.json`` (strict validation) and
 writes it only through ``manifest.commit_tasks`` (atomic, per-task merge
-under a short lock). All operations except ``init_project`` and
-``open_project`` require the store directory to exist: an unmounted share
-must not receive gigabytes in an empty mount point (spec 3.1).
+under a short lock), after each task. All operations except
+``init_project`` and ``open_project`` require the store directory to exist:
+an unmounted share must not receive gigabytes in an empty mount point
+(spec 3.1). The data logic stays in the library functions of the commands
+(``commands.COMMANDS``); here only the pins: what a full success pins, what
+``download`` without a mode restores (identical SHA-256 only) and what
+``upgrade``/``force`` re-pin (the whole task).
 """
 
 import os
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import replace
 from pathlib import Path
 
-from kartograf.exceptions import ValidationError
-from kartograf.project.commands import options_from_json, options_to_json, task_command
+from kartograf import _clock
+from kartograf._version import build_version
+from kartograf.cache.metadata import MetadataCache
+from kartograf.download.fetch import UpdateMode, VersionedFile
+from kartograf.download.manager import DownloadProgress
+from kartograf.download.versions import read_version
+from kartograf.exceptions import KartografError, ValidationError
+from kartograf.notices import Notice, NoticeSink
+from kartograf.project.commands import (
+    TaskFiles,
+    options_from_json,
+    options_to_json,
+    task_command,
+)
 from kartograf.project.manifest import (
     MANIFEST_NAME,
     TASK_NAME,
@@ -20,11 +37,24 @@ from kartograf.project.manifest import (
     absolute,
     commit_tasks,
     create_manifest,
+    pin_problem,
     read_manifest,
     resolve_path,
     task_to_json,
 )
-from kartograf.project.model import Project, ProjectTask
+from kartograf.project.model import (
+    PinnedFile,
+    PinRole,
+    PinStatus,
+    Project,
+    ProjectReport,
+    ProjectTask,
+    TaskResult,
+)
+from kartograf.sources.sidecar import file_digest
+
+_UPDATE_MODES = (None, "upgrade", "force")
+_GEOMETRY_PARTS = (".shp", ".shx", ".dbf", ".prj")
 
 
 def _saved_path(path: str | Path, project_dir: Path) -> str:
@@ -188,3 +218,322 @@ def remove_project_task(project_dir: str | Path, *, name: str) -> Project:
     if commit_tasks(project.directory, {name: (state[name], None)}):
         raise ValidationError(_concurrent(name))
     return open_project(project.directory)
+
+
+# =============================================================================
+# download_project
+# =============================================================================
+
+
+class _NotPinnable(Exception):
+    """A result file that cannot be pinned (no readable version sidecar)."""
+
+
+def _error_text(error: Exception) -> str:
+    """The text of a library error with the remedy of a ``TransformError``."""
+    remedy = getattr(error, "remedy", None)
+    return f"{error}" + (f" Remedium: {remedy}" if remedy else "")
+
+
+def _prefixed(sink: NoticeSink, task: str) -> Callable[[Notice], None]:
+    """Notices of the library call of a task: same code, ``<task>: `` text."""
+
+    def forward(notice: Notice) -> None:
+        sink.add(Notice(notice.level, notice.code, f"{task}: {notice.text}"))
+
+    return forward
+
+
+def pin_state(store: Path, pin: PinnedFile) -> PinStatus:
+    """``ok``, ``missing`` (no version file or sidecar) or ``corrupt`` (another
+    size) of a pinned version - ``stat`` only, no data read (spec 4.9)."""
+    data = store / pin.version
+    try:
+        size = data.stat().st_size
+    except OSError:
+        return "missing"
+    if not data.with_name(f"{data.name}.meta.json").is_file():
+        return "missing"
+    return "ok" if size == pin.size_bytes else "corrupt"
+
+
+def _geometry_files(path: Path) -> list[Path]:
+    """The files of a geometry: a GPKG, or the present parts of a shapefile."""
+    if path.suffix.lower() == ".shp":
+        return sorted(
+            part
+            for part in path.parent.glob(f"{path.stem}.*")
+            if part.stem == path.stem
+            and part.suffix.lower() in _GEOMETRY_PARTS
+            and part.is_file()
+        )
+    return [path] if path.is_file() else []
+
+
+def geometry_digest(options: Mapping[str, object]) -> dict[str, str] | None:
+    """``{file name: sha256}`` of the task's geometry files; ``None`` without
+    ``geometry`` in the (library) options or when the file is missing."""
+    geometry = options.get("geometry")
+    if not isinstance(geometry, Path):
+        return None
+    files = _geometry_files(geometry)
+    return {part.name: file_digest(part)[0] for part in files} or None
+
+
+def _pin(store: Path, role: PinRole, unit: str, file: VersionedFile) -> PinnedFile:
+    """The pin of one result file (decision 6 of the plan)."""
+    try:
+        path = file.path.relative_to(store).as_posix()
+        version = file.version_path.relative_to(store).as_posix()
+    except ValueError:
+        raise _NotPinnable(
+            f"{unit}: plik poza magazynem {store}: {file.version_path}"
+        ) from None
+    local = read_version(file.version_path.parent, file.version_path.name)
+    size = local.meta.get("size_bytes") if local is not None else None
+    if (
+        local is None
+        or local.sha256 != file.sha256
+        or not isinstance(size, int)
+        or isinstance(size, bool)
+        or size < 0
+    ):
+        raise _NotPinnable(
+            f"{unit}: wersja {version} bez czytelnego sidecara (sha256, "
+            "size_bytes) - nie moze byc przypieta"
+        )
+    pin = PinnedFile(role, unit, path, version, file.label, file.sha256, size)
+    problem = pin_problem(pin)
+    if problem is not None:
+        raise _NotPinnable(f"{unit}: {problem}")
+    return pin
+
+
+def _pins(store: Path, files: TaskFiles) -> tuple[list[PinnedFile], list[str]]:
+    """Pins of a result in result order without repeated versions, and the
+    files that cannot be pinned."""
+    pins: list[PinnedFile] = []
+    errors: list[str] = []
+    seen: set[str] = set()
+    for role, unit, file in files.files:
+        try:
+            pin = _pin(store, role, unit, file)
+        except _NotPinnable as e:
+            errors.append(str(e))
+            continue
+        if pin.version not in seen:
+            seen.add(pin.version)
+            pins.append(pin)
+    return pins, errors
+
+
+def _failed(task: ProjectTask, errors: Sequence[str]) -> TaskResult:
+    return TaskResult(task.name, "failed", (), (), tuple(errors))
+
+
+def _commit(project: Project, before: dict, task: ProjectTask) -> str | None:
+    """Write one task; the error text when it could not be written."""
+    try:
+        conflicts = commit_tasks(
+            project.directory, {task.name: (before, task_to_json(task))}
+        )
+    except ValidationError as e:
+        return str(e)
+    return _concurrent(task.name) if conflicts else None
+
+
+def download_project(
+    project_dir: str | Path,
+    *,
+    tasks: Sequence[str] | None = None,
+    update: UpdateMode | None = None,
+    cache: MetadataCache | bool = False,
+    on_progress: Callable[[DownloadProgress], None] | None = None,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> ProjectReport:
+    """Download, pin and restore the tasks (``tasks``: names; ``None`` = all).
+
+    Without ``update`` (spec 4.6): a task not downloaded yet is downloaded
+    with its command's library function and pinned as a whole after a full
+    success (``pinned``); a pinned task whose pinned versions are in the
+    store is left without network (``unchanged``); missing pinned versions
+    are restored only with the same SHA-256 (``restored``; ``version`` and
+    ``label`` may change, the content never does). ``update="upgrade"``/
+    ``"force"`` (spec 4.7): the library function in that mode; after a full
+    success the pins of the task are replaced by the result as a whole
+    (``updated``, or ``unchanged`` when identical). A failure of a task
+    (``failed``, library errors in ``TaskResult.errors``) leaves its pins
+    as they were and the other tasks run. The manifest is written after
+    each task. ``cache=False`` by default: no SQLite in the project
+    directory (``True`` = the default cache in the current directory).
+
+    Raises
+    ------
+    ValidationError
+        Invalid manifest, unknown task name, unknown mode or a missing store
+        directory (before any network access).
+    """
+    if update not in _UPDATE_MODES:
+        raise ValidationError(
+            f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', "
+            "'force'); sprawdzenie bez pobierania: check_project"
+        )
+    project, state = read_manifest(project_dir)
+    _require_store(project)
+    selected = _select(project, tasks)
+    sink = NoticeSink(on_notice)
+    results = tuple(
+        _download_task(
+            project, task, state[task.name], update, cache, on_progress, sink
+        )
+        for task in selected
+    )
+    return ProjectReport(
+        project=open_project(project.directory),
+        tasks=results,
+        notices=sink.notices,
+        ok=all(result.outcome != "failed" for result in results),
+    )
+
+
+def _download_task(
+    project: Project,
+    task: ProjectTask,
+    before: dict,
+    update: UpdateMode | None,
+    cache: MetadataCache | bool,
+    on_progress: Callable[[DownloadProgress], None] | None,
+    sink: NoticeSink,
+) -> TaskResult:
+    """One task of ``download_project``."""
+    command = task_command(task.command)
+    store = project.output_dir
+    options = options_from_json(command, task.options, project_dir=project.directory)
+    restore: tuple[PinnedFile, ...] = ()
+    if task.files and update is None:
+        states = {pin.version: pin_state(store, pin) for pin in task.files}
+        corrupt = [pin for pin in task.files if states[pin.version] == "corrupt"]
+        if corrupt:
+            return _failed(task, [_corrupt_text(task.name, pin) for pin in corrupt])
+        restore = tuple(pin for pin in task.files if states[pin.version] == "missing")
+        if not restore:
+            return TaskResult(task.name, "unchanged", (), (), ())
+    geometry = geometry_digest(options)
+    pinned_geometry = (
+        dict(task.geometry_sha256) if task.geometry_sha256 is not None else None
+    )
+    if (
+        restore
+        and None not in (pinned_geometry, geometry)
+        and geometry != pinned_geometry
+    ):
+        return _failed(
+            task,
+            [
+                f"plik geometrii {task.options['geometry']} zmienil sie od "
+                "przypiecia; przywroc go albo przyjmij nowy obszar: kartograf "
+                f"project download --upgrade {task.name}"
+            ],
+        )
+    try:
+        result = command.download(
+            store,
+            options,
+            update=update,
+            cache=cache,
+            on_progress=on_progress,
+            on_notice=_prefixed(sink, task.name),
+        )
+    except KartografError as e:
+        return _failed(task, [_error_text(e)])
+    files = command.files(result)
+    pins, pin_errors = _pins(store, files)
+    if restore:
+        return _restore(project, task, before, restore, files, pins, pin_errors)
+    errors = [*files.errors, *pin_errors]
+    if not files.complete or errors or not pins:
+        return _failed(
+            task, errors or ["zadanie nie dalo pelnego wyniku - nic nie przypieto"]
+        )
+    if task.files:
+        # The same bytes keep their pin (a relabeled version of identical
+        # content, e.g. --force of a source without a signal, changes nothing).
+        present = {
+            (pin.path, pin.sha256): pin
+            for pin in task.files
+            if pin_state(store, pin) == "ok"
+        }
+        pins = [present.get((pin.path, pin.sha256), pin) for pin in pins]
+    if task.files and set(pins) == set(task.files) and geometry == pinned_geometry:
+        return TaskResult(task.name, "unchanged", (), (), ())
+    pinned = replace(
+        task,
+        pinned_at=_clock.now().isoformat(timespec="seconds"),
+        kartograf_version=build_version(),
+        geometry_sha256=geometry,
+        files=tuple(pins),
+    )
+    error = _commit(project, before, pinned)
+    if error is not None:
+        return _failed(task, [error])
+    old, new = set(task.files), set(pins)
+    return TaskResult(
+        task.name,
+        "updated" if task.files else "pinned",
+        tuple(pin for pin in pins if pin not in old),
+        tuple(pin for pin in task.files if pin not in new),
+        (),
+    )
+
+
+def _corrupt_text(task: str, pin: PinnedFile) -> str:
+    return (
+        f"{pin.unit}: przypieta wersja {pin.version} ma inny rozmiar niz "
+        "przypiety - przywroc katalog wersji z kopii magazynu albo usun "
+        f"uszkodzony katalog wersji i uruchom kartograf project download {task}"
+    )
+
+
+def _restore(
+    project: Project,
+    task: ProjectTask,
+    before: dict,
+    missing: tuple[PinnedFile, ...],
+    files: TaskFiles,
+    pins: list[PinnedFile],
+    pin_errors: list[str],
+) -> TaskResult:
+    """Missing pinned versions back from the result - identical SHA-256 only
+    (spec 4.6 point 3); restored pins are written even if others failed."""
+    restored: dict[str, PinnedFile] = {}
+    problems: list[str] = []
+    for pin in missing:
+        candidates = [new for new in pins if new.path == pin.path]
+        same = next((new for new in candidates if new.sha256 == pin.sha256), None)
+        if same is not None:
+            restored[pin.version] = replace(pin, version=same.version, label=same.label)
+        elif candidates:
+            problems.append(
+                f"{pin.unit}: zrodlo ma inna tresc niz przypieta (przypieta "
+                f"{pin.label}, pobrana {candidates[0].label}); przypiecie bez "
+                "zmian - przywroc magazyn z kopii albo przyjmij nowa wersje: "
+                f"kartograf project download --upgrade {task.name}"
+            )
+        else:
+            problems.append(
+                f"{pin.unit}: przypietego pliku {pin.path} nie ma w wyniku "
+                "zadania; przypiecie bez zmian - przywroc magazyn z kopii albo "
+                f"przyjmij nowy wynik: kartograf project download --upgrade "
+                f"{task.name}"
+            )
+    files_after = tuple(restored.get(pin.version, pin) for pin in task.files)
+    if files_after != task.files:
+        error = _commit(project, before, replace(task, files=files_after))
+        if error is not None:
+            return _failed(task, [error])
+    back = tuple(restored.values())
+    replaced = tuple(pin for pin in missing if restored.get(pin.version, pin) != pin)
+    if problems:
+        errors = [*problems, *files.errors, *pin_errors]
+        return TaskResult(task.name, "failed", back, replaced, tuple(errors))
+    return TaskResult(task.name, "restored", back, replaced, ())
