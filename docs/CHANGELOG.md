@@ -715,6 +715,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `skipped`/`failed` w kolejnosci ukonczenia); CLI i `project download`
   rysuja ten sam pasek co dla arkuszy. Jeden `--teryt`, CORINE i SoilGrids
   bez zmian (jeden plik).
+- Sidecar dowiazania (`<plik>.meta.json` sciezki standardowej) po awarii
+  zapisu zostawal stary i opisywal poprzednia wersje (ADR-030 M-8). Teraz
+  jest usuwany (ostrzezenie w logu), a nastepne uruchomienie odtwarza
+  dowiazanie i sidecar (ADR-030 errata 10).
+- Dokumentacja ortofotomapy (SCOPE, PRD, docstring `gugik_orto.py`):
+  rozdzielczosc "wg kampanii (np. 25 cm, 10 cm)" zamiast stalego 25 cm
+  (U6; README poprawione wczesniej).
 
 ## [0.7.2] - 2026-10-11
 

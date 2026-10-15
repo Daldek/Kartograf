@@ -732,7 +732,9 @@ wersji z dopisanym `extra.link` (`hardlink`) i `extra.link_target`
 (zapis `tmp` + `os.replace`, nigdy "przez" symlink sidecara pozostawiony
 przez uzytkownika; best-effort). To JEDYNE zrodlo celu dowiazania
 (hardlink nie niesie wskazania): brak sidecara standardowego albo
-`extra.link = "copy"` z 0.7.x = sciezka nieznana.
+`extra.link = "copy"` z 0.7.x = sciezka nieznana. Nieudany zapis usuwa
+stary sidecar dowiazania (opisywalby poprzednia wersje), wiec nastepne
+uruchomienie odtwarza dowiazanie i sidecar (ADR-030 errata 10).
 
 **Przedzial lat i pokrycie (ADR-032, ADR-036 D13).** Przy zadaniu z granica
 roku sidecar kazdej wersji NMT/NMPT/orto i jego kopia w sciezce

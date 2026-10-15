@@ -2694,12 +2694,12 @@ liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
 Raport: `docs/research/2026-10-08-test-przed-0.7.0/raport.md` (decyzja
 uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
 
-- [ ] **U6 — rozdzielczosc ortofotomapy w dokumentacji:** README, SCOPE, PRD
+- [x] **ZROBIONE 2026-10-15 (galaz `fix/backlog-0.8.0`): U6 — rozdzielczosc ortofotomapy w dokumentacji:** README, SCOPE, PRD
   i docstring `providers/pl/gugik_orto.py` podaja 25 cm, a pobrany arkusz ma
   0,1 m (`extra.source.resolution_m`); rozdzielczosc zalezy od kampanii —
   opisac jako "wg kampanii (np. 25 cm, 10 cm)". README poprawione
-  lokalnie (`56dd7f2`, niewypchniete); zostaja SCOPE, PRD, docstring -
-  potem push calosci (decyzja uzytkownika 2026-10-13).
+  lokalnie (`56dd7f2`); SCOPE 2.4, PRD 3.3 i docstring poprawione
+  2026-10-15.
 - [ ] **U2 — podpowiedzi braku pokrycia w liscie PL-2000 bez `--scale`:**
   drukowane dwa razy (linia `No data for ...` bez prefiksu + `Info:`), a
   podpowiedz wymienia jednego potomka zamiast wszystkich z obszaru.
