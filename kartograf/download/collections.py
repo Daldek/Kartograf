@@ -918,7 +918,7 @@ def _fetch_features(job: UnitJob, staged: Path, source: _Source) -> None:
         ],
     }
     if summary.dropped:
-        value["response_date"] = {
+        value["dropped_fields"] = {
             name: list(values) for name, values in sorted(summary.dropped.items())
         }
     source.value = value
@@ -938,7 +938,7 @@ def run_job(
     its edition (``label_source="edition"``) or the download date, an area
     result by the download date; the sidecar names the channel by its
     capability and carries ``extra.source`` (``url``/``edition``/``member``
-    or ``service``/``layers``/``response_date``), ``extra.http`` of a
+    or ``service``/``layers``/``dropped_fields``), ``extra.http`` of a
     package and ``extra.parent_request``.
 
     Raises

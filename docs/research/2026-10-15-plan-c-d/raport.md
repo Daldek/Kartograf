@@ -48,6 +48,24 @@ plikow paczki bez obiektow, bez `srsName`). W kazdej paczce jeden uklad
 dla wszystkich plikow; paczki LoD1 2019 i LoD2 maja katalog `Modele_3D/`,
 LoD1 2021-2024 - pliki w korzeniu ZIP.
 
+**Korekty z pomiarow silnika `feature_bbox` (plan C, 2026-10-15).**
+Fakty i zapytania: `tests/fixtures/pl/feature_bbox/README.md`.
+(1) Pole EGiB `DATA` zalezy od powiatu (Warszawa 1465: 2026-10-14, Krakow
+1261 i powiat 1415: 2026-10-15; pobrane tego samego dnia), wiec to data
+stanu danych powiatu w usludze zbiorczej, nie data odpowiedzi (tabela
+wyzej); nadal poza GPKG (zmienia sie przy odswiezeniu bez zmiany
+obiektow), wartosci w sidecarze `extra.source.dropped_fields`.
+(2) EGiB nie ma krzywych: 80 stron z 40 losowych bboxow 400 x 400 m,
+8 miast i 1000 dzialek Krakowa - tylko `gml:Polygon`; `CurvePolygon`
+z probki 2026-10-13 sie nie potwierdzil (wniosek 3 nizej nieaktualny
+w czesci "krzywe"). Obiekt wieloczesciowy to powtorzone `<ms:geom>` -
+GDAL czyta wszystkie czesci tylko z `GML_FETCH_ALL_GEOMETRIES=YES`.
+(3) Duplikat MapServera lezy na granicy stron, nie tylko za koncem
+wyniku: ostatni unikalny obiekt moze byc za pozycja N-1 (PRG A03, `hits`
+39, `COUNT=13`: 39. obiekt na `STARTINDEX=39`) - petla stron ADR-042 D3.
+(4) GPKG (SQLite) nie zapisuje sie na sieciowym wolumenie danych
+(`Failed to start transaction`) - skladanie na dysku lokalnym (D5).
+
 **Prototyp konwersji GML -> GPKG.** `pyogrio` 0.13.0 (GDAL 3.12.4, wheel
 manylinux dla Python 3.13, ok. 100 MB na dysku) instaluje sie obok
 `rasterio` 1.5.0 (GDAL 3.12.1) i oba dzialaja w jednym procesie. GDAL czyta
