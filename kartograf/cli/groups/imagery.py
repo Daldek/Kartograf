@@ -9,15 +9,14 @@ from kartograf.cli._args import (
     add_quiet,
     add_update_flags,
 )
-from kartograf.cli.download_cmd import cmd_download
+from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.download.options import (
+    IMAGERY_PRODUCTS,
     SCALE_2000_CHOICES,
     SHEET_SYSTEM_CHOICES,
     product_choices,
 )
-
-PRODUCTS = ("orto",)
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -42,9 +41,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     selection = download.add_argument_group("Produkt i obszar")
     selection.add_argument(
         "--product",
-        choices=PRODUCTS,
+        choices=IMAGERY_PRODUCTS,
         default=None,
-        help=f"Produkt (wymagany): {product_choices(PRODUCTS)}",
+        help=f"Produkt (wymagany): {product_choices(IMAGERY_PRODUCTS)}",
     )
     add_area_flags(
         selection,
@@ -156,8 +155,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Liczba rownoleglych pobran (domyslnie 4; 1 = po kolei)",
     )
     add_quiet(output)
-    download.set_defaults(_handler=partial(cmd_download, products=PRODUCTS))
+    download.set_defaults(
+        _handler=partial(cmd_download, products=IMAGERY_PRODUCTS),
+        _task=download_task_arguments,
+    )
 
     add_list_sources(
-        commands, "imagery", PRODUCTS, lambda source: f"--product {source.product}"
+        commands,
+        "imagery",
+        IMAGERY_PRODUCTS,
+        lambda source: f"--product {source.product}",
     )

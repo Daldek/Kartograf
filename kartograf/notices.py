@@ -25,6 +25,7 @@ ALL_NODATA = "all_nodata"
 LAZ_SUPERSEDED = "laz_superseded"
 CORINE_PREVIEW = "corine_preview"
 CACHE_DISABLED = "cache_disabled"
+PROJECT_GEOMETRY_CHANGED = "project_geometry_changed"
 
 
 @dataclass(frozen=True)

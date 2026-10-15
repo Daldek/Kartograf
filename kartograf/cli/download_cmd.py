@@ -22,7 +22,7 @@ from kartograf.cli._args import parse_bbox_arg
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
-from kartograf.download.options import product_choices
+from kartograf.download.options import require_product
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
@@ -363,13 +363,10 @@ def _per_country(raw: str | None, flag: str) -> str | dict[str, str] | None:
     return values
 
 
-def _download_arguments(args: argparse.Namespace) -> dict:
-    """``download_data``/``check_data`` arguments of the parsed flags (a group
-    without a flag, e.g. ``imagery`` without ``--vertical-crs``, passes the
-    library default)."""
+def download_task_arguments(args: argparse.Namespace) -> dict:
+    """Data options shared by a group download and a project task."""
     return {
         "product": args.product,
-        "output_dir": args.output,
         "sheet": args.sheet,
         "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
         "geometry": Path(args.geometry) if getattr(args, "geometry", None) else None,
@@ -392,6 +389,11 @@ def _download_arguments(args: argparse.Namespace) -> dict:
     }
 
 
+def _download_arguments(args: argparse.Namespace) -> dict:
+    """Library request, including the store, from the same task translation."""
+    return {**download_task_arguments(args), "output_dir": args.output}
+
+
 def cmd_download(
     args: argparse.Namespace, products: Sequence[str] | None = None
 ) -> int:
@@ -404,8 +406,8 @@ def cmd_download(
     checked by argparse ``choices`` and by the library). ``None``: the
     library message naming every product of ``download_data``.
     """
-    if args.product is None and products is not None:
-        raise ValidationError(f"--product wymagane: {product_choices(products)}")
+    if products is not None:
+        require_product(args.product, products)
     return run_with_plan_file(args, _cmd_download)
 
 
