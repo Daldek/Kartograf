@@ -38,7 +38,7 @@ from kartograf.download.versions import ContentDigest, VersionRef, read_version
 from kartograf.exceptions import ValidationError
 from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.providers.cuzk.client import wkid
-from kartograf.providers.cuzk.dmr import CUZK_NODATA, NATIVE_CRS
+from kartograf.providers.cuzk.raster import CUZK_NODATA, NATIVE_CRS
 from kartograf.sources.registry import get_source
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ def _cutout_slot(
     provider, bbox: BBox, output_dir: str | Path, image_crs: str | None
 ) -> tuple[BBox, str, FileSlot]:
     """Normalize to the result CRS before choosing the stable bbox file name."""
-    from kartograf.providers.cuzk.dmr import bbox_to_crs  # CLI patch point
+    from kartograf.providers.cuzk.raster import bbox_to_crs  # CLI patch point
 
     image_sr = image_crs or NATIVE_CRS
     if wkid(bbox.crs) != wkid(image_sr):

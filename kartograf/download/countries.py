@@ -104,7 +104,7 @@ def country_bbox(
     """
     from kartograf.core.bbox import is_czech_crs, transform_bbox
     from kartograf.providers.cuzk.client import wkid
-    from kartograf.providers.cuzk.dmr import bbox_to_crs
+    from kartograf.providers.cuzk.raster import bbox_to_crs
     from kartograf.sources.registry import get_country
 
     if code != "CZ" and is_czech_crs(bbox.crs):

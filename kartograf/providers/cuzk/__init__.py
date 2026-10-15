@@ -5,7 +5,7 @@ import requests
 from kartograf.cache.metadata import MetadataCache
 from kartograf.exceptions import ValidationError
 from kartograf.providers.cuzk.client import CuzkClient
-from kartograf.providers.cuzk.dmr import CuzkDmrProvider
+from kartograf.providers.cuzk.raster import CuzkDmrProvider
 from kartograf.providers.cuzk.sheets import SheetIndex, SheetInfo
 
 __all__ = [

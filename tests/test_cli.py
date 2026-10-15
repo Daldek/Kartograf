@@ -5203,8 +5203,8 @@ class TestCzDownloadingAfterValidation:
     ``SheetIndex`` mocked), so validations inside the provider run for real.
     """
 
-    _CLIENT = "kartograf.providers.cuzk.dmr.CuzkClient"
-    _INDEX = "kartograf.providers.cuzk.dmr.SheetIndex"
+    _CLIENT = "kartograf.providers.cuzk.raster.CuzkClient"
+    _INDEX = "kartograf.providers.cuzk.raster.SheetIndex"
 
     @staticmethod
     def _sm5_info():
@@ -5732,7 +5732,7 @@ class TestCmdDownloadCz:
             )
 
         with patch(
-            "kartograf.providers.cuzk.dmr.build_pinned_transform", side_effect=_boom
+            "kartograf.providers.cuzk.raster.build_pinned_transform", side_effect=_boom
         ):
             result = main(
                 [
@@ -6831,12 +6831,12 @@ class TestCountryDispatch:
     @patch("kartograf.download.data._download_cz")
     def test_geometry_cz_bbox_goes_through_pinned_transform(self, mock_cz, tmp_path):
         """The hop to Krovak uses the pinned operation with edge sampling."""
-        from kartograf.providers.cuzk import dmr
+        from kartograf.providers.cuzk import raster
 
         shp = _write_prague_shp(tmp_path)
         mock_cz.return_value = 0
         with patch.object(
-            dmr, "build_pinned_transform", wraps=dmr.build_pinned_transform
+            raster, "build_pinned_transform", wraps=raster.build_pinned_transform
         ) as spy:
             result = main(
                 [
@@ -7030,7 +7030,7 @@ class TestCountryDispatch:
         CRS), not by the default transformer from core/geometry (~1.2 m
         difference).
         """
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
+        from kartograf.providers.cuzk.raster import bbox_to_crs
 
         shp = _write_krovak_shp(tmp_path)
         captured = {}
@@ -7355,7 +7355,7 @@ class TestAutoSplitBBox:
     @patch("kartograf.download.data._download_pl_cutout")
     def test_auto_clips_cz_part_to_country_extent(self, mock_pl, mock_cz, tmp_path):
         """Auto mode clips the CZ part to the country envelope (18.86E)."""
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
+        from kartograf.providers.cuzk.raster import bbox_to_crs
 
         mock_pl.return_value = 0
         mock_cz.return_value = 0
@@ -7602,13 +7602,13 @@ class TestAutoSplitBBox:
         from kartograf.core import bbox as core_bbox
         from kartograf.core.bbox import is_czech_crs
         from kartograf.download.countries import bbox_to_wgs84 as _bbox_to_wgs84
-        from kartograf.providers.cuzk import dmr
+        from kartograf.providers.cuzk import raster
 
         mock_pl.return_value = 0
         mock_cz.return_value = 0
 
         with (
-            patch.object(dmr, "bbox_to_crs", wraps=dmr.bbox_to_crs) as pinned,
+            patch.object(raster, "bbox_to_crs", wraps=raster.bbox_to_crs) as pinned,
             patch.object(
                 core_bbox, "_transformer", wraps=core_bbox._transformer
             ) as plain,
@@ -8079,7 +8079,7 @@ class TestAutoSplitBBox:
         assert "--country pl" not in err
         assert "Brak kafli LAZ" in err
 
-    @patch("kartograf.providers.cuzk.dmr.bbox_to_crs")
+    @patch("kartograf.providers.cuzk.raster.bbox_to_crs")
     def test_cz_bbox_transform_error_returns_1_with_remedy(
         self, mock_to_crs, tmp_path, capsys
     ):

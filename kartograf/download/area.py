@@ -33,7 +33,7 @@ def bbox_to_2180(bbox: BBox) -> BBox:
     (``is_czech_crs``).
     """
     if is_czech_crs(bbox.crs):
-        from kartograf.providers.cuzk.dmr import bbox_to_crs
+        from kartograf.providers.cuzk.raster import bbox_to_crs
 
         return bbox_to_crs(bbox, "EPSG:2180")
     return transform_bbox(bbox, "EPSG:2180")
@@ -121,7 +121,7 @@ def cz_geometry_bbox(path: Path, layer: str | None, image_crs: str) -> BBox:
     from pyproj import CRS
 
     from kartograf.core.geometry import get_overall_bbox, read_source_crs
-    from kartograf.providers.cuzk.dmr import bbox_to_crs
+    from kartograf.providers.cuzk.raster import bbox_to_crs
 
     source_crs = read_source_crs(path, layer=layer)
     bbox = get_overall_bbox(path, layer=layer, target_crs=source_crs.to_wkt())
