@@ -9,6 +9,29 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- CLI w grupach komend wg typu danych (ADR-039, bez aliasow): kazda grupa
+  ma wlasne flagi i `--help`, a `list-sources` wypisuje jej zrodla z rejestru
+  (bez sieci). Stare komendy koncza sie bledem parsera (kod 2) z nazwa nowej.
+
+  | Dotad | Teraz |
+  |---|---|
+  | `kartograf download --product nmt\|nmpt\|laz ...` | `kartograf elevation download --product nmt\|nmpt\|laz ...` |
+  | `kartograf download --product orto ...` | `kartograf imagery download --product orto ...` (bez `--vertical-crs`, `--resolution`, `--cutout`, `--horizontal-crs`, `--min-density`; `--country` tylko `pl\|auto`) |
+  | `kartograf landcover download --source bdot10k\|corine ...` | bez zmian |
+  | `kartograf landcover download --source soilgrids ...` | `kartograf soil download ...` (bez `--source`) |
+  | `kartograf landcover list-layers --source soilgrids` | `kartograf soil list-layers` |
+  | `kartograf soilgrids hsg ...` | `kartograf soil hsg ...` |
+  | `kartograf parse`, `kartograf cache` | bez zmian |
+
+  Nowe: `kartograf <grupa> list-sources` w kazdej grupie; brak `--product`
+  daje komunikat z produktami tylko tej grupy; `--sheet` i `--year` maja
+  w kazdej grupie jedna definicje (ADR-039 D4, D5). Biblioteka, sidecar
+  i uklad `data/` bez zmian. Python: `kartograf.cli.commands` nie ma
+  `cmd_landcover` ani `cmd_soilgrids`, `parse_bbox_arg` jest w
+  `kartograf.cli._args`. Co zrobic: w skryptach zamien komendy wg tabeli
+  (`--product orto` -> `imagery download`, pozostale produkty ->
+  `elevation download`, SoilGrids -> `soil`); kod Python uzywajacy
+  funkcji biblioteki nie wymaga zmian.
 - Tryb wycinka jest jawny, a nazwy ukladow opisuja ich role (ADR-038,
   bez aliasow). CLI: `--target-crs X` -> `--cutout --horizontal-crs X`
   (`--cutout` wlacza jeden wycinek zamiast arkuszy, `--horizontal-crs` jest

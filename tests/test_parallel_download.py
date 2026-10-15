@@ -475,20 +475,24 @@ class TestCLIWorkersFlag:
         """Test that download parser accepts --workers."""
         parser = create_parser()
         args = parser.parse_args(
-            ["download", "--sheet", "N-34-130-D-d-2-4", "--workers", "8"]
+            ["elevation", "download", "--sheet", "N-34-130-D-d-2-4", "--workers", "8"]
         )
         assert args.workers == 8
 
     def test_download_parser_workers_short_flag(self):
         """Test that download parser accepts -w shorthand."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4", "-w", "2"])
+        args = parser.parse_args(
+            ["elevation", "download", "--sheet", "N-34-130-D-d-2-4", "-w", "2"]
+        )
         assert args.workers == 2
 
     def test_download_parser_workers_default(self):
         """Test that --workers defaults to 4."""
         parser = create_parser()
-        args = parser.parse_args(["download", "--sheet", "N-34-130-D-d-2-4"])
+        args = parser.parse_args(
+            ["elevation", "download", "--sheet", "N-34-130-D-d-2-4"]
+        )
         assert args.workers == 4
 
     def test_workers_passed_to_download_manager(self, tmp_path):
@@ -512,6 +516,7 @@ class TestCLIWorkersFlag:
 
             main(
                 [
+                    "elevation",
                     "download",
                     "--product",
                     "nmt",

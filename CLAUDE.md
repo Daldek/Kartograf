@@ -58,4 +58,4 @@ Glowne zrodlo konwencji i procesu: `docs/DEVELOPMENT_STANDARDS.md`.
 | Przyklady CLI i biblioteki, wynik pobrania, kampanie, CLMS, znane problemy | `docs/USAGE.md` 1-7 |
 | Decyzje i ich erraty (indeks na poczatku pliku) | `docs/DECISIONS.md` |
 | Historia zmian per wydanie | `docs/CHANGELOG.md` |
-| Pelna lista opcji CLI / publiczne API | `kartograf <komenda> --help` / `kartograf/__init__.py` (`__all__`) |
+| Pelna lista opcji CLI / publiczne API | `kartograf <grupa> <komenda> --help` / `kartograf/__init__.py` (`__all__`) |

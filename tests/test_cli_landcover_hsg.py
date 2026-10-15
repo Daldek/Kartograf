@@ -1,4 +1,5 @@
-"""``landcover download`` and ``soilgrids hsg`` on the version store (CLI).
+"""``landcover download``, ``soil download`` and ``soil hsg`` on the version
+store (CLI).
 
 Update modes, plan files and status lines (spec 4.2, 4.4, 4.5) through
 ``main`` with fake sources (no network).
@@ -28,8 +29,8 @@ from tests.conftest import FakeCorine, FakeSoilGrids
 
 BBOX_ARG = "770000,509000,772000,511000"
 COORDS = "770000_509000_772000_511000"
-SOIL = ["--source", "soilgrids", "--property", "clay", "--depth", "0-5cm"]
-SOIL += ["--stat", "mean", "--bbox", BBOX_ARG]
+SOIL = ["--property", "clay", "--depth", "0-5cm", "--stat", "mean"]
+SOIL += ["--bbox", BBOX_ARG]
 CLAY = f"soil/global_soilgrids_clay_0-5cm_mean/bbox/{COORDS}.tif"
 
 
@@ -45,17 +46,23 @@ def _session(fake):
 
 
 def _lc(tmp_path, *argv):
+    """``landcover download`` (``argv`` with ``--source``) into ``<tmp>/out``."""
     return main(["landcover", "download", *argv, "-o", str(tmp_path / "out")])
+
+
+def _soil(tmp_path, *argv):
+    """``soil download`` (SoilGrids) into ``<tmp>/out``."""
+    return main(["soil", "download", *argv, "-o", str(tmp_path / "out")])
 
 
 def _hsg(tmp_path, *argv):
     return main(
-        ["soilgrids", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
+        ["soil", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
         + ["-o", str(tmp_path / "out"), *argv]
     )
 
 
-# --- landcover download -------------------------------------------------------
+# --- landcover download and soil download ---------------------------------------
 
 
 @pytest.mark.parametrize(
@@ -63,12 +70,12 @@ def _hsg(tmp_path, *argv):
 )
 def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
     with pytest.raises(SystemExit) as exc:
-        _lc(tmp_path, *SOIL, *flags)
+        _soil(tmp_path, *SOIL, *flags)
     assert exc.value.code == 2
     assert "not allowed with" in capsys.readouterr().err
 
 
-@pytest.mark.parametrize("command", [["landcover", "download"], ["soilgrids", "hsg"]])
+@pytest.mark.parametrize("command", [["landcover", "download"], ["soil", "hsg"]])
 def test_plan_without_mode_is_error(tmp_path, command, capsys):
     with pytest.raises(SystemExit) as exc:
         main([*command, "--plan", str(tmp_path / "p.json"), "-o", str(tmp_path)])
@@ -80,7 +87,7 @@ def test_landcover_check_writes_plan(tmp_path, capsys):
     fake = FakeSoilGrids("2.0")
     plan_file = tmp_path / "plan.json"
     with _session(fake):
-        rc = _lc(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
+        rc = _soil(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
     assert rc == 0
     assert fake.coverages == 0
     assert f"{COORDS}: do pobrania (2.0)" in capsys.readouterr().out
@@ -91,12 +98,12 @@ def test_landcover_check_writes_plan(tmp_path, capsys):
 
 def test_landcover_soilgrids_status_and_newer_edition_info(tmp_path, capsys):
     with _session(FakeSoilGrids("2.0")):
-        assert _lc(tmp_path, *SOIL) == 0
+        assert _soil(tmp_path, *SOIL) == 0
     first = capsys.readouterr().out
     assert f"{CLAY}: nowa wersja 2.0_" in first
     assert "Downloaded to:" not in first
     with _session(FakeSoilGrids("2.1")):
-        assert _lc(tmp_path, *SOIL) == 0
+        assert _soil(tmp_path, *SOIL) == 0
     out = capsys.readouterr().out
     assert f"{CLAY}: lokalna wersja 2.0; dostepna nowsza 2.1 (--upgrade)" in out
 
@@ -104,13 +111,13 @@ def test_landcover_soilgrids_status_and_newer_edition_info(tmp_path, capsys):
 def test_landcover_upgrade_plan_stale_exit_1(tmp_path, capsys):
     plan_file = tmp_path / "plan.json"
     with _session(FakeSoilGrids("2.0")):
-        _lc(tmp_path, *SOIL)
+        _soil(tmp_path, *SOIL)
     with _session(FakeSoilGrids("2.1")):
-        _lc(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
+        _soil(tmp_path, *SOIL, "--check-updates", "--plan", str(plan_file))
     capsys.readouterr()
     fake = FakeSoilGrids("2.2")
     with _session(fake):
-        rc = _lc(tmp_path, *SOIL, "--upgrade", "--plan", str(plan_file))
+        rc = _soil(tmp_path, *SOIL, "--upgrade", "--plan", str(plan_file))
     assert rc == 1
     assert fake.coverages == 0
     assert f"Error: {COORDS}: zrodlo zmienilo sie od planu (2.1)" in (
@@ -211,7 +218,7 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
     assert (
         main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--sheet",
                 "XYZ",
@@ -279,7 +286,7 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
     assert (
         main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--bbox",
                 coordinates,
@@ -313,14 +320,14 @@ def test_hsg_unsupported_bbox_crs_rejected_before_transform(tmp_path, mode):
     assert "EPSG:999999" in str(exc.value)
 
 
-# --- soilgrids hsg ------------------------------------------------------------
+# --- soil hsg -----------------------------------------------------------------
 
 
 def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
     fake = FakeSoilGrids()
     with _session(fake):
         rc = main(
-            ["soilgrids", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
+            ["soil", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
             + ["-o", str(tmp_path / "hsg.tif")]
         )
     assert rc == 1
@@ -473,7 +480,7 @@ def test_bbox_crs_landcover_and_hsg(tmp_path):
         )
         main(
             [
-                "soilgrids",
+                "soil",
                 "hsg",
                 "--bbox",
                 "18.6,49.7,18.7,49.8",
@@ -522,6 +529,6 @@ def test_quiet_hsg_prints_nothing_on_stdout(tmp_path, capsys):
         calc.return_value.calculate_hsg.return_value = MagicMock(
             inputs=(), file=None, stale=(), ok=True
         )
-        argv = ["soilgrids", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"]
+        argv = ["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"]
         assert main([*argv, "-o", str(tmp_path), "-q"]) == 0
     assert capsys.readouterr().out == ""

@@ -786,7 +786,7 @@ class TestDownloadLazArea:
 
 
 # =============================================================================
-# CLI: a thin layer (`kartograf download --product laz`)
+# CLI: a thin layer (`kartograf elevation download --product laz`)
 # =============================================================================
 
 
@@ -799,6 +799,7 @@ def _cli(tmp_path, *args, area: str = "w2"):
     with patch("kartograf.transport.http.make_gugik_session", return_value=session):
         rc = main(
             [
+                "elevation",
                 "download",
                 "--product",
                 "nmt",

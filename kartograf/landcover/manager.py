@@ -101,15 +101,15 @@ _REQUIRED: dict[type, tuple[str, ...]] = {
 _REQUIRED_MESSAGES = {
     "year": "--year wymagane dla corine: 2018, 2012, 2006, 2000 "
     "(edycje pokrycia terenu CLMS/WMS), 1990 (tylko podglad WMS)",
-    "property": "--property wymagane dla soilgrids: bdod (gestosc objetosciowa), "
+    "property": "--property wymagane: bdod (gestosc objetosciowa), "
     "cec (pojemnosc sorpcyjna), cfvo (frakcja szkieletowa), clay (il), "
     "nitrogen (azot), ocd (gestosc wegla organicznego), "
     "ocs (zasob wegla organicznego), phh2o (pH), sand (piasek), "
     "silt (pyl), soc (wegiel organiczny)",
-    "depth": "--depth wymagane dla soilgrids: 0-5cm, 5-15cm, 15-30cm, "
+    "depth": "--depth wymagane: 0-5cm, 5-15cm, 15-30cm, "
     "30-60cm, 60-100cm, 100-200cm "
     "(przedzial glebokosci ponizej powierzchni)",
-    "stat": "--stat wymagane dla soilgrids: mean (srednia), "
+    "stat": "--stat wymagane: mean (srednia), "
     "Q0.05 (5. percentyl), Q0.5 (mediana), "
     "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)",
 }

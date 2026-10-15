@@ -1,4 +1,5 @@
-"""``download_data`` / ``check_data``: the ``kartograf download`` command (R1, R11).
+"""``download_data`` / ``check_data``: the ``elevation download`` and
+``imagery download`` commands (R1, R11).
 
 The whole data logic of the command lives here (Z1): recognizing the sheet
 code and the country, ``country="auto"`` with narrowing to PL and partial
@@ -271,8 +272,8 @@ def download_data(
 ) -> DataReport:
     """Download NMT/NMPT/orto/LAZ for a sheet, bbox or geometry (spec 4.1).
 
-    Parameter names and values are the ``kartograf download`` flags in
-    ``snake_case``. Every data choice is explicit (no defaults): ``product``,
+    Parameter names and values are the ``elevation download`` / ``imagery download``
+    flags in ``snake_case``. Every data choice is explicit (no defaults): ``product``,
     ``output_dir``, ``vertical_crs``/``resolution`` (plain or per country,
     ``{"pl": "1m", "cz": "2m"}``), ``country`` (``pl``/``cz``/``auto``,
     required with ``bbox``/``geometry``), ``sheet_system``/``scale`` for PL

@@ -43,25 +43,25 @@ pip install -e .
 kartograf parse N-34-130-D-d-2-4
 
 # NMT dla arkusza, inne produkty GUGiK
-kartograf download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-kartograf download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 
 # NMT dla obszaru: bbox (domyślnie EPSG:2180) albo plik SHP/GPKG
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --geometry zlewnia.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 
 # Jeden wycinek obszaru zamiast arkuszy (PL: WCS GUGiK 1 m, CZ: CUZK)
-kartograf download --bbox 530000,382000,533000,386000 --country pl --product nmt --vertical-crs EVRF2007 --cutout --horizontal-crs EPSG:2180 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --vertical-crs EVRF2007 --cutout --horizontal-crs EPSG:2180 -o ./data
 
 # NMT Czech
-kartograf download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
+kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 
 # Pokrycie terenu i grupy hydrologiczne gleb
 kartograf landcover download --source bdot10k --teryt 1465 -o ./data
-kartograf soilgrids hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
+kartograf soil hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
 ```
 
-Pełna lista opcji: `kartograf <komenda> --help`. Więcej przykładów, wybór
+Pełna lista opcji: `kartograf <grupa> <komenda> --help`. Więcej przykładów, wybór
 kraju (`--country`), jeden wycinek (`--cutout --horizontal-crs`) i kampanie GUGiK:
 [docs/USAGE.md](docs/USAGE.md).
 
@@ -70,7 +70,7 @@ kraju (`--country`), jeden wycinek (`--cutout --horizontal-crs`) i kampanie GUGi
 ```python
 from kartograf import BBox, DownloadManager, GugikProvider, download_data
 
-# To samo co `kartograf download ...` — te same pliki, sidecary, komunikaty
+# To samo co `kartograf elevation download ...` — te same pliki, sidecary, komunikaty
 # i błędy (każdy wybór danych jawny; od 0.8.0 bez wartości domyślnych)
 report = download_data(
     product="nmt",

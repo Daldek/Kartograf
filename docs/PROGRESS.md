@@ -14,7 +14,7 @@
 | HSG | ✅ Gotowy | v0.3.0+ |
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
-| CLI | ✅ Gotowy | pelna lista komend i flag: `kartograf --help`, `kartograf download --help` (zrodlo prawdy: `kartograf/cli/_parser.py`) |
+| CLI | ✅ Gotowy | pelna lista komend i flag: `kartograf --help`, `kartograf <grupa> download --help` (zrodlo prawdy: `kartograf/cli/groups/`) |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
 | Pokrycie testami | ✅ Gotowy | liczba testow: `.venv/bin/python -m pytest tests/ --collect-only -q -m "not live"`; prog pokrycia `fail_under` w `pyproject.toml`; brama: patrz "START NASTEPNEJ SESJI" |
@@ -2426,7 +2426,7 @@ w tym samym wydaniu (decyzja uzytkownika).
   (k/n)`) z biblioteki (`on_progress`, ADR-037: decyzja w bibliotece, CLI
   tylko drukuje); linie statusu najlepiej od razu po zapisie wersji.
   Sprawdzic tez inne tory wieloplikowe (LAZ, lista arkuszy, BDOT10k).
-- [ ] **Grupy komend CLI wg typu danych (decyzja uzytkownika
+- [x] **ZROBIONE 2026-10-15 (ADR-039, galaz `feat/cli-groups`): grupy komend CLI wg typu danych (decyzja uzytkownika
   2026-10-13, wchodzi do 0.8.0, BREAKING, bez aliasow - jak errata
   ADR-031):** kazda grupa ma podkomendy `download` (+ `list-sources`,
   pozniej `availability`) i wylacznie swoje flagi. Przebudowa
@@ -2442,11 +2442,11 @@ w tym samym wydaniu (decyzja uzytkownika).
   powstaja razem z produktami (spec podprojektu 3, sekcja 6.1):
   `boundaries`, `cadastre`, `models3d`, `names`, `maps`. Biblioteka bez
   zmian (CLI tylko tlumaczy na `download_data`, `LandCoverManager`,
-  `HSGCalculator`, ADR-037); segmenty `data/` bez zmian. Do zrobienia:
-  `cli/_parser.py` i komendy, testy CLI i zgodnosci, przyklady (USAGE,
-  SCOPE, PRD, README, ARCHITECTURE, STANDARDS 6.4), CHANGELOG [0.8.0]
-  BREAKING z "Co zrobic", nowy ADR (struktura CLI) w `docs/DECISIONS.md`
-  (CRLF). Rozwiazuje kolizje znaczen `--year` (filtr lotow vs wydanie)
+  `HSGCalculator`, ADR-037); segmenty `data/` bez zmian. Zrobione:
+  grupy `elevation`, `imagery`, `landcover`, `soil` (`cli/groups/`),
+  testy CLI i zgodnosci, przyklady, CHANGELOG [0.8.0] BREAKING, ADR-039.
+  Zostaje: grupy dla nowych produktow razem z produktami i sprawdzenie
+  wywolan CLI w Hydrografie/Hydrologu przed wydaniem. Rozwiazuje kolizje znaczen `--year` (filtr lotow vs wydanie)
   i `--sheet` (plik vs obszar) miedzy komendami. Hydrograf/Hydrolog:
   sprawdzic wywolania CLI przed wydaniem.
 

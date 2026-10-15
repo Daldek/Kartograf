@@ -1,12 +1,14 @@
 """
-``kartograf download`` command: flags -> ``download_data``/``check_data`` (Z1).
+``elevation download`` and ``imagery download``: flags -> ``download_data``/
+``check_data`` (Z1).
 
 The CLI only translates flags into the library arguments (``--bbox`` text,
 ``pl=..,cz=..`` per-country values), reads and writes the plan file, prints
 the ``DataReport`` (status lines, summary, ``Error:`` of failed parts),
 prints data notices (``Info:``/``Warning:``) when the library emits them and
 draws the progress bar. Every data decision is in ``kartograf.download``.
-The helpers below are shared by ``landcover download`` and ``soilgrids hsg``.
+The helpers below are shared by ``landcover download``, ``soil download``
+and ``soil hsg``.
 """
 
 import argparse
@@ -16,10 +18,11 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kartograf.cli._parser import parse_bbox_arg
+from kartograf.cli._args import parse_bbox_arg
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
+from kartograf.download.options import product_choices
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
@@ -142,7 +145,7 @@ def _print_transform_error(error: Exception) -> int:
 
 
 # =============================================================================
-# Plan file and status lines (shared by download, landcover, soilgrids)
+# Plan file and status lines (shared by every store command)
 # =============================================================================
 
 
@@ -361,7 +364,9 @@ def _per_country(raw: str | None, flag: str) -> str | dict[str, str] | None:
 
 
 def _download_arguments(args: argparse.Namespace) -> dict:
-    """``download_data``/``check_data`` arguments of the parsed flags."""
+    """``download_data``/``check_data`` arguments of the parsed flags (a group
+    without a flag, e.g. ``imagery`` without ``--vertical-crs``, passes the
+    library default)."""
     return {
         "product": args.product,
         "output_dir": args.output,
@@ -370,8 +375,10 @@ def _download_arguments(args: argparse.Namespace) -> dict:
         "geometry": Path(args.geometry) if getattr(args, "geometry", None) else None,
         "layer": getattr(args, "layer", None),
         "country": args.country,
-        "vertical_crs": _per_country(args.vertical_crs, "--vertical-crs"),
-        "resolution": _per_country(args.resolution, "--resolution"),
+        "vertical_crs": _per_country(
+            getattr(args, "vertical_crs", None), "--vertical-crs"
+        ),
+        "resolution": _per_country(getattr(args, "resolution", None), "--resolution"),
         "sheet_system": getattr(args, "sheet_system", None),
         "scale": getattr(args, "scale", None),
         "cutout": getattr(args, "cutout", False),
@@ -385,13 +392,25 @@ def _download_arguments(args: argparse.Namespace) -> dict:
     }
 
 
-def cmd_download(args: argparse.Namespace) -> int:
-    """Execute the download command (plan file cycle around ``_cmd_download``)."""
+def cmd_download(
+    args: argparse.Namespace, products: Sequence[str] | None = None
+) -> int:
+    """``<grupa> download`` of sheet products (plan file cycle around
+    ``_cmd_download``).
+
+    ``products``: the ``--product`` values of the group; a missing
+    ``--product`` names only them (ADR-039: the group checks the presence of
+    its choice flag, like ``--source`` of ``landcover download``; the value is
+    checked by argparse ``choices`` and by the library). ``None``: the
+    library message naming every product of ``download_data``.
+    """
+    if args.product is None and products is not None:
+        raise ValidationError(f"--product wymagane: {product_choices(products)}")
     return run_with_plan_file(args, _cmd_download)
 
 
 def _cmd_download(args: argparse.Namespace) -> int:
-    """``download`` after the plan file is read: one library call + output."""
+    """One ``download_data``/``check_data`` call after the plan file is read."""
     _cache_warnings_shown.clear()
     arguments = _download_arguments(args)
     quiet = args.quiet

@@ -339,17 +339,17 @@ def test_no_dir_created_on_init(tmp_path):
         (
             "soilgrids",
             {"depth": "0-5cm", "stat": "mean"},
-            "--property wymagane dla soilgrids:",
+            "--property wymagane:",
         ),
         (
             "soilgrids",
             {"property": "clay", "stat": "mean"},
-            "--depth wymagane dla soilgrids:",
+            "--depth wymagane:",
         ),
         (
             "soilgrids",
             {"property": "clay", "depth": "0-5cm"},
-            "--stat wymagane dla soilgrids:",
+            "--stat wymagane:",
         ),
     ],
 )

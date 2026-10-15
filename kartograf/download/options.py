@@ -8,7 +8,7 @@ plain (one value for every country of the request) or per country
 Nothing here touches the network.
 """
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from types import SimpleNamespace
 
 from kartograf.core.bbox import BBox, validate_bbox
@@ -19,11 +19,21 @@ from kartograf.exceptions import ValidationError
 from kartograf.providers.pl import require_nmt_vertical_crs
 
 # Admissible values named in messages (also the CLI --help texts).
-PRODUCT_CHOICES = (
-    "nmt (Numeryczny Model Terenu; PL i CZ), nmpt (Numeryczny Model Pokrycia "
-    "Terenu; PL, tylko 1m), orto (ortofotomapa RGB; PL), laz (chmura punktow "
-    "LIDAR; PL)"
-)
+_PRODUCT_TEXT = {
+    "nmt": "Numeryczny Model Terenu; PL i CZ",
+    "nmpt": "Numeryczny Model Pokrycia Terenu; PL, tylko 1m",
+    "orto": "ortofotomapa RGB; PL",
+    "laz": "chmura punktow LIDAR; PL",
+}
+
+
+def product_choices(products: Iterable[str] = tuple(_PRODUCT_TEXT)) -> str:
+    """``nmt (...), nmpt (...)``: products named in messages and --help texts
+    (a CLI group names only its own products, ADR-039)."""
+    return ", ".join(f"{product} ({_PRODUCT_TEXT[product]})" for product in products)
+
+
+PRODUCT_CHOICES = product_choices()
 COUNTRY_CHOICES = (
     "pl (GUGiK), cz (CUZK), auto (kraje wg prostokatnych obwiedni PL i CZ; "
     "obszar w obu krajach daje osobne pliki per kraj)"
@@ -61,7 +71,7 @@ BBOX_CRS_CHOICES = (
 
 CZ_ONLY_NMT = "--product {product} dla CZ bedzie dostepny w etapie 2 - teraz tylko nmt"
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
-_PRODUCTS = ("nmt", "nmpt", "orto", "laz")
+_PRODUCTS = tuple(_PRODUCT_TEXT)
 _COUNTRIES = ("pl", "cz", "auto")
 _SHEET_SYSTEMS = ("1992", "2000")
 
