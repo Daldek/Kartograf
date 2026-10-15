@@ -2935,9 +2935,12 @@ wnosza paczki per jednostka administracyjna (archiwum BDOT10k, modele 3D,
 PRG, EGiB), obiekty dla obszaru z WFS i ArcGIS REST (PRG, EGiB, RUIAN,
 HY-NET, ZABAGED) i pliki wskazywane feedem ATOM CUZK (ortofoto, ZABAGED
 kraj). Rekonesans 2026-10-15 wykazal: bledne linki `next` w obu
-serwerach WFS, duplikat obiektu na koncu stron MapServer, kolejnosc osi
-zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA`, GML
-z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
+serwerach WFS, duplikat obiektu na granicy stron MapServer, kolejnosc osi
+zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA` (data
+stanu danych powiatu), obiekty wieloczesciowe EGiB jako powtorzone
+geometrie, URL-e z rokiem/data w nazwie (tylko z feedu). Krzywe
+(`CurvePolygon`) z probki EGiB 2026-10-13 nie wystapily w danych
+(pomiar 2026-10-15: same wielokaty liniowe).
 
 **Opcje:**
 - A) Provider per produkt (wzorzec `providers/pl/*.py`).
@@ -2968,13 +2971,21 @@ z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
   CUZK 5514/3045); wynik obszaru jest zawsze w ukladzie natywnym uslugi.
 - D3. Kompletnosc `feature_bbox` z liczby, nie z linkow: WFS
   `RESULTTYPE=hits`, ArcGIS `returnCountOnly` -> N; strony
-  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`); `next`
-  ignorowany; dedupe po polu identyfikatora kanalu (identyczny duplikat
-  pominiety, rozny = `DownloadError`); unikalnych != N albo
-  `numberMatched="unknown"` = `DownloadError`; HTML, `ExceptionReport`,
-  JSON `error` przy HTTP 200 = `DownloadError`. N = 0 we wszystkich
-  warstwach = `NoCoverageError` (bez pliku); pusta warstwa obok
-  niepustych = warstwa ze schematem bez obiektow. Metadane uslugi
+  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`) od 0 co
+  `page_size`; `next` ignorowany (MapServer gubi go na stronach
+  srodkowych, GeoServer daje go na ostatniej). Petla stron: koniec, gdy
+  unikalnych identyfikatorow jest N; za N zaplanowanych pozycji tylko
+  dopoki poprzednia strona byla pelna i dodala nowe identyfikatory
+  (MapServer powtarza obiekt na granicy stron, wiec ostatni unikalny
+  obiekt moze lezec za pozycja N-1: PRG A03, `hits` 39, `COUNT=13` -
+  39. obiekt na `STARTINDEX=39`); krotka strona przy mniej niz N
+  unikalnych, strona za N bez nowych identyfikatorow albo wiecej niz N
+  unikalnych = `DownloadError`. Dedupe po polu identyfikatora kanalu
+  (identyczny duplikat pominiety, rozny = `DownloadError`);
+  `numberMatched="unknown"` w odpowiedzi `hits` = `DownloadError`; HTML,
+  `ExceptionReport`, JSON `error` przy HTTP 200 = `DownloadError`. N = 0
+  we wszystkich warstwach = `NoCoverageError` (bez pliku); pusta warstwa
+  obok niepustych = warstwa ze schematem bez obiektow. Metadane uslugi
   (`GetCapabilities`, `DescribeFeatureType`, pola warstwy ArcGIS) sa
   pobierane swiezo raz na pobranie, bez cache metadanych: kontrola typu
   i DefaultCRS dotyczy stanu uslugi z chwili pobrania, a uzycie lokalnej
@@ -2984,12 +2995,19 @@ z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
   (obie zgodne z EPSG); zamiana daje pusty wynik bez bledu.
 - D5. Wynik `feature_bbox`: jeden GPKG w ukladzie natywnym uslugi
   (DefaultCRS), pelne geometrie obiektow przecinajacych obszar (bez
-  przycinania), warstwa na warstwe zrodla; bajty deterministyczne
-  (obiekty po identyfikatorze, schemat z metadanych uslugi, staly
-  `OGR_CURRENT_DATE`); pola zalezne od chwili odpowiedzi (`drop_fields`,
-  EGiB `DATA`) poza GPKG, w sidecarze `extra.source.response_date`
-  (pole -> wartosci); skladanie na dysku lokalnym, potem staging
-  magazynu. Nowa zaleznosc `pyogrio` (GDAL wektorowy).
+  przycinania; obiekt wieloczesciowy - powtorzone `<ms:geom>` EGiB -
+  w calosci dzieki `GML_FETCH_ALL_GEOMETRIES=YES`), warstwa na warstwe
+  zrodla; bajty deterministyczne w obrebie jednej wersji GDAL (obiekty po
+  identyfikatorze, schemat z metadanych uslugi - GML czytany z `XSD=`
+  odpowiedzi `DescribeFeatureType`, `WRITE_GFS=NO`, `DOWNLOAD_SCHEMA=NO`
+  - i staly `OGR_CURRENT_DATE`). Pola zmienne w czasie niezaleznie od
+  obiektow (`drop_fields`; EGiB `DATA` = data stanu danych powiatu
+  w usludze zbiorczej, rozna miedzy powiatami i odswiezana nawet co dobe)
+  sa poza GPKG - inaczej kazde pobranie bylo nowa wersja - a ich wartosci
+  w sidecarze `extra.source.dropped_fields` (pole -> wartosci). GPKG
+  skladany na dysku lokalnym (SQLite nie zapisuje na wolumenie
+  sieciowym), potem staging magazynu. Nowa zaleznosc `pyogrio` (GDAL
+  wektorowy).
 - D6. Magazyn i sygnaly: kazdy plik przez `FileSlot` i
   `use_local`/`store_file`/`fetch_version`/`inspect_version`; sygnal =
   `update_signal` kanalu: paczki GUGiK i wszystkie wyniki WFS/REST

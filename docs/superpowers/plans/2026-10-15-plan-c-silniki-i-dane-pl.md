@@ -115,7 +115,9 @@ i odsylacze w statusach ADR-015, ADR-036, ADR-039, ADR-040 (np. ADR-036:
 "uzupelniona przez ADR-042 (D23 miedzy wydaniami; wycinek orto
 w magazynie - czesciowo zastepuje D27)"). Decyzje D12-D17 dotycza planu
 D; zapisz je teraz (jedna decyzja dla calego podprojektu), a plan D
-tylko weryfikuje zgodnosc i dopisuje errate przy odstepstwie.
+tylko weryfikuje zgodnosc i dopisuje errate przy odstepstwie. Tekst
+obowiazujacy: `docs/DECISIONS.md` (kontekst, D1, D3 i D5 poprawione przy
+implementacji wg pomiarow na zywo 2026-10-15; ponizej ta sama tresc).
 
 ```markdown
 ## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
@@ -129,9 +131,12 @@ wnosza paczki per jednostka administracyjna (archiwum BDOT10k, modele 3D,
 PRG, EGiB), obiekty dla obszaru z WFS i ArcGIS REST (PRG, EGiB, RUIAN,
 HY-NET, ZABAGED) i pliki wskazywane feedem ATOM CUZK (ortofoto, ZABAGED
 kraj). Rekonesans 2026-10-15 wykazal: bledne linki `next` w obu
-serwerach WFS, duplikat obiektu na koncu stron MapServer, kolejnosc osi
-zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA`, GML
-z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
+serwerach WFS, duplikat obiektu na granicy stron MapServer, kolejnosc osi
+zgodna z EPSG u obu dostawcow, zmienne w czasie pole EGiB `DATA` (data
+stanu danych powiatu), obiekty wieloczesciowe EGiB jako powtorzone
+geometrie, URL-e z rokiem/data w nazwie (tylko z feedu). Krzywe
+(`CurvePolygon`) z probki EGiB 2026-10-13 nie wystapily w danych
+(pomiar 2026-10-15: same wielokaty liniowe).
 
 **Opcje:**
 - A) Provider per produkt (wzorzec `providers/pl/*.py`).
@@ -142,11 +147,13 @@ z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
 **Decyzja:** B.
 - D1. `AccessChannel.params: UnitPackageParams | FeatureBBoxParams |
   AtomFilesParams | WcsCutoutParams | None` (dane bez IO, niemutowalne;
-  dwa ostatnie w planie D). Silniki:
-  `transport/unit_package.py`, `transport/feature_bbox.py`,
+  dwa ostatnie w planie D). Wymagane czlony ZIP sa cecha wariantu
+  (`PackageVariant.members`: paczki GML i SHP jednego kanalu roznia sie).
+  Silniki: `transport/unit_package.py`, `transport/feature_bbox.py`,
   `transport/atom.py` (plan D), zapis GPKG `transform/gpkg.py`,
   orkiestracja `download/collections.py`. Nowy produkt = deskryptor
-  z parametrami kanalu (+ wybor w CLI).
+  z parametrami kanalu (+ wybor w CLI). Kanal kolekcji ma capability
+  unikalna w swoim deskryptorze (wybor kanalu sidecara).
 - D2. Rodzaj wyboru wyznacza kanal: `teryt` (2 cyfry = woj., 4 = powiat)
   -> `unit_package` tej jednostki; obszar (`bbox`/`sheet`/`geometry`) ->
   `feature_bbox`, a gdy produkt go nie ma - powiaty z PRG i paczka na
@@ -160,24 +167,43 @@ z krzywymi, URL-e z rokiem/data w nazwie (tylko z feedu).
   CUZK 5514/3045); wynik obszaru jest zawsze w ukladzie natywnym uslugi.
 - D3. Kompletnosc `feature_bbox` z liczby, nie z linkow: WFS
   `RESULTTYPE=hits`, ArcGIS `returnCountOnly` -> N; strony
-  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`); `next`
-  ignorowany; dedupe po polu identyfikatora kanalu (identyczny duplikat
-  pominiety, rozny = `DownloadError`); unikalnych != N albo
-  `numberMatched="unknown"` = `DownloadError`; HTML, `ExceptionReport`,
-  JSON `error` przy HTTP 200 = `DownloadError`. N = 0 we wszystkich
-  warstwach = `NoCoverageError` (bez pliku); pusta warstwa obok
-  niepustych = warstwa ze schematem bez obiektow.
+  `STARTINDEX`/`resultOffset` (ArcGIS z `orderByFields`) od 0 co
+  `page_size`; `next` ignorowany (MapServer gubi go na stronach
+  srodkowych, GeoServer daje go na ostatniej). Petla stron: koniec, gdy
+  unikalnych identyfikatorow jest N; za N zaplanowanych pozycji tylko
+  dopoki poprzednia strona byla pelna i dodala nowe identyfikatory
+  (MapServer powtarza obiekt na granicy stron, wiec ostatni unikalny
+  obiekt moze lezec za pozycja N-1: PRG A03, `hits` 39, `COUNT=13` -
+  39. obiekt na `STARTINDEX=39`); krotka strona przy mniej niz N
+  unikalnych, strona za N bez nowych identyfikatorow albo wiecej niz N
+  unikalnych = `DownloadError`. Dedupe po polu identyfikatora kanalu
+  (identyczny duplikat pominiety, rozny = `DownloadError`);
+  `numberMatched="unknown"` w odpowiedzi `hits` = `DownloadError`; HTML,
+  `ExceptionReport`, JSON `error` przy HTTP 200 = `DownloadError`. N = 0
+  we wszystkich warstwach = `NoCoverageError` (bez pliku); pusta warstwa
+  obok niepustych = warstwa ze schematem bez obiektow. Metadane uslugi
+  (`GetCapabilities`, `DescribeFeatureType`, pola warstwy ArcGIS) sa
+  pobierane swiezo raz na pobranie, bez cache metadanych: kontrola typu
+  i DefaultCRS dotyczy stanu uslugi z chwili pobrania, a uzycie lokalnej
+  wersji nie wysyla zadnego zapytania.
 - D4. Kolejnosc osi BBOX jest parametrem kanalu z testem na prawdziwej
   odpowiedzi: GUGiK `urn:...:EPSG::2180` = N,E, CUZK EPSG:5514 = X,Y
   (obie zgodne z EPSG); zamiana daje pusty wynik bez bledu.
 - D5. Wynik `feature_bbox`: jeden GPKG w ukladzie natywnym uslugi
   (DefaultCRS), pelne geometrie obiektow przecinajacych obszar (bez
-  przycinania), warstwa na warstwe zrodla; bajty deterministyczne
-  (obiekty po identyfikatorze, schemat z metadanych uslugi, staly
-  `OGR_CURRENT_DATE`); pola zalezne od chwili odpowiedzi (`drop_fields`,
-  EGiB `DATA`) poza GPKG, w sidecarze `extra.source.response_date`;
-  skladanie na dysku lokalnym, potem staging magazynu. Nowa zaleznosc
-  `pyogrio` (GDAL wektorowy).
+  przycinania; obiekt wieloczesciowy - powtorzone `<ms:geom>` EGiB -
+  w calosci dzieki `GML_FETCH_ALL_GEOMETRIES=YES`), warstwa na warstwe
+  zrodla; bajty deterministyczne w obrebie jednej wersji GDAL (obiekty po
+  identyfikatorze, schemat z metadanych uslugi - GML czytany z `XSD=`
+  odpowiedzi `DescribeFeatureType`, `WRITE_GFS=NO`, `DOWNLOAD_SCHEMA=NO`
+  - i staly `OGR_CURRENT_DATE`). Pola zmienne w czasie niezaleznie od
+  obiektow (`drop_fields`; EGiB `DATA` = data stanu danych powiatu
+  w usludze zbiorczej, rozna miedzy powiatami i odswiezana nawet co dobe)
+  sa poza GPKG - inaczej kazde pobranie bylo nowa wersja - a ich wartosci
+  w sidecarze `extra.source.dropped_fields` (pole -> wartosci). GPKG
+  skladany na dysku lokalnym (SQLite nie zapisuje na wolumenie
+  sieciowym), potem staging magazynu. Nowa zaleznosc `pyogrio` (GDAL
+  wektorowy).
 - D6. Magazyn i sygnaly: kazdy plik przez `FileSlot` i
   `use_local`/`store_file`/`fetch_version`/`inspect_version`; sygnal =
   `update_signal` kanalu: paczki GUGiK i wszystkie wyniki WFS/REST
@@ -347,21 +373,22 @@ w deskryptorze (`archive_unit_files`, `country_files`, `bbox_vector`,
   `geometryType=esriGeometryEnvelope`, `inSR`/`outSR` = kod natywny,
   `spatialRel=esriSpatialRelIntersects`, `f=geojson`, `outFields=*`,
   `orderByFields`, `resultOffset`, `resultRecordCount`. Przed
-  pierwszym `GetFeature`: `GetCapabilities` (cache metadanych; DefaultCRS
-  porownywany po kodzie EPSG - `urn:ogc:def:crs:EPSG::2180` i
+  pierwszym `GetFeature`: `GetCapabilities` (swiezo, bez cache - D3;
+  DefaultCRS porownywany po kodzie EPSG - `urn:ogc:def:crs:EPSG::2180` i
   `http://www.opengis.net/def/crs/EPSG/0/5514` to rozne zapisy) - typ
   istnieje i DefaultCRS = `native_crs`, inaczej `DownloadError`
-  (bez podmiany); schemat pol: WFS `DescribeFeatureType` (XSD, cache),
+  (bez podmiany); schemat pol: WFS `DescribeFeatureType` (XSD, swiezo),
   ArcGIS `/<id>?f=json` `fields`.
-- `kartograf/transform/gpkg.py`: `write_gpkg(path: Path, layers:
-  Sequence[LayerFeatures], *, crs: str) -> dict[str, int]` (liczba
-  obiektow na warstwe) - `pyogrio.raw.read` stron (GML z
-  `XSD=<plik>`, GeoJSON), dedupe po `id_field`, sort po `id_field`,
-  usuniecie `drop_fields` (wartosci zwracane do sidecara),
-  `pyogrio.raw.write(..., driver="GPKG", promote_to_multi=True)` przy
-  `OGR_CURRENT_DATE="2000-01-01T00:00:00.000Z"` ustawionym przez
-  `pyogrio.set_gdal_config_options` na czas zapisu; plik powstaje
-  w `tempfile.mkdtemp()` (dysk lokalny), potem przeniesienie do
+- `kartograf/transform/gpkg.py`: `write_gpkg(path: Path, pages:
+  FeaturePages, *, params: FeatureBBoxParams) -> GpkgSummary` (`features`:
+  liczba obiektow na warstwe, `dropped`: wartosci `drop_fields` do
+  sidecara) - `pyogrio.raw.read` stron (GML z `XSD=<plik>`,
+  `WRITE_GFS=NO`, `DOWNLOAD_SCHEMA=NO` i `GML_FETCH_ALL_GEOMETRIES=YES`,
+  GeoJSON), dedupe po `id_field`, sort po `id_field`, usuniecie
+  `drop_fields`, `pyogrio.raw.write(..., driver="GPKG",
+  promote_to_multi=True)` przy `OGR_CURRENT_DATE="2000-01-01T00:00:00.000Z"`
+  ustawionym przez `pyogrio.set_gdal_config_options` na czas zapisu; plik
+  powstaje w `tempfile.mkdtemp()` (dysk lokalny), potem przeniesienie do
   stagingu slotu.
 
 ### Orkiestrator (`kartograf/download/collections.py`)
@@ -445,7 +472,7 @@ class CollectionReport:
   `request` = wybor uzytkownika w jednostce (`teryt`/`bbox`+`bbox_crs`,
   `year`, `format`, `lod`, `level`) i `extra.source` = `url` albo
   `service`, `layers` (kod, zrodlo, liczba obiektow), `edition`,
-  `response_date`; `extra.parent_request` dla obszaru rozlozonego na
+  `dropped_fields`; `extra.parent_request` dla obszaru rozlozonego na
   jednostki albo przeliczonego z innego ukladu/arkusza/geometrii
   (`parent_request_for`).
 - Bledy per jednostka -> `UnitFailure(unit, country, error, kind)`
@@ -600,7 +627,8 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   PRG `GetCapabilities` (fragment z A01-A06), `DescribeFeatureType`
   A03, `hits` i strony `COUNT=2` dla malego bboxa z 3-4 gminami, w tym
   strona za koncem z duplikatem; EGiB `hits` + 2 strony `COUNT=2`
-  z krzywymi; odpowiedz HTML RCN (`UslugaZbiorcza` bez `SERVICE`)
+  (bez krzywych - patrz D5; obiekt wieloczesciowy); odpowiedz HTML RCN
+  (`UslugaZbiorcza` bez `SERVICE`)
   i `ExceptionReport`)
 
 - [ ] **Step 0: Zaleznosc** - dopisz `pyogrio` do `pyproject.toml`
@@ -619,14 +647,18 @@ Task 6 (pierwszy plik GML paczki z obiektami) i wpisz do wariantu.
   same bajty; obiekty posortowane po id; `DATA` nieobecne w GPKG
   i zwrocone do sidecara); `test_gpkg_axes_and_crs` (EPSG:2180,
   pierwsza wspolrzedna = wschod; `ogr`-owy odczyt przez `pyogrio.read_info`);
-  `test_curves_preserved_or_linearized_consistently` (EGiB
-  CurvePolygon: GPKG czytelny, liczba obiektow zgodna).
+  `test_curves_preserved_or_linearized_consistently` (warstwy EGiB
+  jednego typu liniowego, liczba obiektow zgodna; krzywych w danych
+  2026-10-15 nie bylo) i `test_multipart_feature_keeps_every_part`.
 - [ ] **Step 2: Implementacja** - silnik wg D3/D4 i kontraktu; GML
   czytany przez GDAL z `XSD` z `DescribeFeatureType` (spojne typy pol
-  miedzy stronami), `GML_SKIP_RESOLVE_ELEMS=NONE`, bez pobierania
-  schematow z sieci przez GDAL (`DOWNLOAD_SCHEMA=NO`); ArcGIS GeoJSON
-  z typami z `fields`. Limity czasu jak skorowidze GUGiK (30-60 s na
-  strone), ponowienia z `get_with_retry`.
+  miedzy stronami), bez pobierania schematow z sieci przez GDAL
+  (`DOWNLOAD_SCHEMA=NO`), z `GML_FETCH_ALL_GEOMETRIES=YES` (obiekt
+  wieloczesciowy MapServera = powtorzone `<ms:geom>`; bez tej opcji GDAL
+  zostawia ostatnia czesc); `GML_SKIP_RESOLVE_ELEMS` nieuzywane (plan
+  zakladal `NONE`, czyli rozwiazywanie `xlink:href` - zbedne: strony PRG
+  i EGiB nie maja `xlink:href`); ArcGIS GeoJSON z typami z `fields`. Limity czasu jak
+  skorowidze GUGiK (30-60 s na strone), ponowienia z `get_with_retry`.
 - [ ] **Step 3: Brama i commit** - `feat(transport): silnik feature_bbox
   (WFS/ArcGIS, kompletnosc z liczby obiektow) i deterministyczny zapis GPKG`
 
