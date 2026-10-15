@@ -209,7 +209,7 @@ pomocniczy jak `tests/parity.py`), nie kopiuj ich miedzy plikami testow.
 | `kartograf/notices.py` | `PROJECT_GEOMETRY_CHANGED` (Task 7) |
 | `kartograf/__init__.py` | eksport API i typow projektu (Task 4, 7) |
 | `kartograf/cli/download_cmd.py`, `kartograf/cli/landcover_cmd.py`, `kartograf/cli/soil_cmd.py`, `kartograf/cli/groups/{elevation,imagery,landcover,soil}.py` | `_task` (Task 8) |
-| `kartograf/cli/_args.py` | `add_update_flags(..., plan_help: str | None)` (Task 8) |
+| `kartograf/cli/_args.py` | `add_update_flags` z opcjonalnym `plan_help` (Task 8) |
 | `kartograf/cli/groups/project.py`, `kartograf/cli/project_cmd.py` | NOWE (Task 8) |
 | `tests/project_fixtures.py`, `tests/test_project_commands.py`, `tests/test_project_manifest.py`, `tests/test_project_api.py`, `tests/test_project_download.py`, `tests/test_project_check.py`, `tests/test_project_cli.py` | NOWE |
 | `docs/ARCHITECTURE.md`, `docs/USAGE.md`, `README.md`, `docs/DEVELOPMENT_STANDARDS.md`, `docs/CHANGELOG.md`, `docs/PROGRESS.md`, `docs/SCOPE.md` | Task 9 |
@@ -501,9 +501,9 @@ def register(subparsers: argparse._SubParsersAction) -> None
   (dla kazdej komendy danych i kilku zestawow flag: `_task(ns)` rowne
   argumentom, ktore `_handler` przekazuje funkcji biblioteki - wzorem
   `tests/test_cli_translation.py`); `test_task_options_equal_parser_data_flags`
-  (zbior `dest` akcji parsera komendy minus `output`, tryby, `plan`,
-  `workers`, `quiet`, `stats`, `bbox_crs` -> rowny `TaskCommand.options`
-  minus `bbox_crs`; chroni przed rozjazdem przy nowych flagach).
+  (zbior `dest` akcji parsera komendy bez `help`, `output`, trybow,
+  `plan`, `workers`, `quiet` i `stats` rowny `TaskCommand.options`;
+  chroni przed rozjazdem przy nowych flagach).
 - [ ] **Step 2: Testy `project add`** - `test_add_rejects_modes_and_foreign_output`
   (`--upgrade`, `--force`, `--check-updates`, `--plan`, `-o` innego
   katalogu -> kod 1 i `Error:`, manifest bez zmian); `test_add_accepts_output_equal_to_store`;
