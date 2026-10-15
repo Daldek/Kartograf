@@ -49,7 +49,7 @@ def _sheet(cls):
 
 
 def _laz(provider, out):
-    return provider.download(_URL, out)
+    return provider.download_tile(_URL, out)
 
 
 def _bdot10k(provider, out):

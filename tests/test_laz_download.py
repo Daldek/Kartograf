@@ -117,7 +117,7 @@ def _tile(sheet: str, crs: str = "PL-2000:S6", year: int = 2024) -> LazTile:
 
 
 class FakeProvider:
-    """Provider whose ``download`` writes bytes; selected sheet codes fail."""
+    """Provider whose ``download_tile`` writes bytes; selected sheet codes fail."""
 
     descriptor_key = "pl.gugik.laz"
 
@@ -128,7 +128,7 @@ class FakeProvider:
         self.threads: set[int | None] = set()
         self._lock = threading.Lock()
 
-    def download(self, url, target, **kwargs):
+    def download_tile(self, url, target, **kwargs):
         with self._lock:
             self.calls.append(url)
             self.threads.add(threading.current_thread().ident)
@@ -312,7 +312,7 @@ class TestRunLazDownload:
             target.write_bytes(b"LASF updated")
             return target
 
-        provider.download = revised
+        provider.download_tile = revised
         changed = _run_laz_download(
             _selection(tile),
             provider=provider,
@@ -767,7 +767,7 @@ class TestDownloadLazArea:
                 provider=provider,
             )
         assert str(caught.value) == NO_TILES_MESSAGE
-        provider.download.assert_not_called()
+        provider.download_tile.assert_not_called()
 
     def test_workers_param_name(self, tmp_path):
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]

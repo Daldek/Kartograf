@@ -29,7 +29,7 @@ Examples
 >>> bbox = BBox(530469, 382961, 532660, 385291, "EPSG:2180")
 >>> tiles = provider.discover_tiles(bbox)
 >>> for tile in tiles:
-...     provider.download(tile.url, Path("./laz") / f"{tile.sheet}.laz")
+...     provider.download_tile(tile.url, Path("./laz") / f"{tile.sheet}.laz")
 """
 
 import logging
@@ -54,7 +54,7 @@ from kartograf.core.coverage import (
 )
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.base import BaseProvider
+from kartograf.providers.base import DataSourceProvider
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
     WfsIndex,
@@ -521,14 +521,15 @@ def laz_tile(elem: ET.Element) -> LazTile | None:
     )
 
 
-class GugikLazProvider(BaseProvider):
+class GugikLazProvider(DataSourceProvider):
     """
     Provider for downloading LAZ point-cloud data from GUGiK via WFS.
 
     Discovery is area-based: :meth:`discover_tiles` queries the WFS index
-    (skorowidze) for every tile intersecting a bbox; :meth:`download` fetches
-    a single tile by its URL. The fine tile sheet is treated as an opaque label
-    and is never
+    (skorowidze) for every tile intersecting a bbox; :meth:`download_tile`
+    fetches a single tile by its URL. Not a ``BaseProvider``: there is no
+    download by sheet code (A5-7) - the fine tile sheet is treated as an
+    opaque label and is never
     passed to ``SheetParser``. The index services and their yearly types come
     from the variant registry (``variants(product="laz")``) and the shared
     WFS client (``providers/pl/skorowidz_wfs.py::WfsIndex``).
@@ -868,7 +869,7 @@ class GugikLazProvider(BaseProvider):
     # Download a single tile (by URL)
     # =========================================================================
 
-    def download(
+    def download_tile(
         self,
         url: str,
         output_path: Path,
@@ -879,9 +880,9 @@ class GugikLazProvider(BaseProvider):
 
         Note
         ----
-        Unlike the other providers, the first argument is the tile's download
-        URL (obtained from :meth:`discover_tiles`), not a sheet — LAZ tiles are
-        identified by opaque finer-than-1:10000 ids that are not parseable.
+        The argument is the tile's download URL (obtained from
+        :meth:`discover_tiles`), not a sheet — LAZ tiles are identified by
+        opaque finer-than-1:10000 ids that are not parseable.
 
         Parameters
         ----------
