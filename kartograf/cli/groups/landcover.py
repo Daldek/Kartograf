@@ -16,7 +16,11 @@ from kartograf.cli.landcover_cmd import (
     cmd_landcover_list_layers,
     landcover_task_arguments,
 )
-from kartograf.landcover.manager import LANDCOVER_SOURCE_CHOICES, LANDCOVER_SOURCES
+from kartograf.landcover.manager import (
+    LANDCOVER_SOURCE_CHOICES,
+    LANDCOVER_SOURCES,
+    bdot10k_archive_choices,
+)
 from kartograf.sources.descriptor import SourceDescriptor
 
 
@@ -39,7 +43,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Pobierz dane wybranego zrodla (--source)",
         description="Pobierz dane wybranego zrodla (--source) dla jednego "
         "obszaru: --teryt, --sheet, --bbox albo --geometry. BDOT10k obszaru "
-        "= paczki kazdego powiatu, ktory obszar przecina (PRG).",
+        "= paczki kazdego powiatu, ktory obszar przecina (PRG); z --year "
+        "paczki z archiwum rocznikow BDOT10k (GML albo SHP, zapis 1:1).",
     )
 
     selection = download.add_argument_group("Zrodlo i obszar")
@@ -66,31 +71,35 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         metavar="ROK",
         default=None,
-        help="Rok danych = wydanie (rok referencyjny) CORINE, wymagane dla "
-        "corine: 2018, 2012, 2006, 2000 (edycje pokrycia terenu CLMS/WMS), 1990 "
-        "(tylko podglad WMS)",
+        help="Rok danych. CORINE (wymagany): wydanie (rok referencyjny) 2018, "
+        "2012, 2006, 2000 (edycje pokrycia terenu CLMS/WMS), 1990 (tylko "
+        "podglad WMS). BDOT10k: rocznik archiwum (stan z poczatku roku) "
+        f"{bdot10k_archive_choices()} - oryginalna paczka powiatu ZIP; bez "
+        "--year biezace paczki",
     )
     options.add_argument(
         "--format",
         "-f",
-        choices=["GPKG", "SHP"],
+        choices=["GPKG", "SHP", "GML"],
         default=None,
-        help="Tylko BDOT10k: GPKG (GeoPackage, domyslnie) lub SHP "
-        "(archiwum ZIP z plikami Shapefile)",
+        help="Tylko BDOT10k: biezace paczki GPKG (GeoPackage, domyslnie) lub SHP "
+        "(archiwum ZIP z plikami Shapefile); z --year (archiwum rocznikow) "
+        "wymagany GML albo SHP",
     )
     options.add_argument(
         "--layers",
         metavar="KODY",
         type=layer_codes,
         default=None,
-        help="Tylko BDOT10k GPKG: zostaw wybrane warstwy, kody po przecinku "
-        "(np. SWRS,PTWP; lista: landcover list-layers); domyslnie wszystkie",
+        help="Tylko biezace BDOT10k GPKG: zostaw wybrane warstwy, kody po "
+        "przecinku (np. SWRS,PTWP; lista: landcover list-layers); domyslnie "
+        "wszystkie",
     )
     options.add_argument(
         "--keep-raw",
         action="store_true",
-        help="Tylko BDOT10k GPKG: zachowaj oryginalny ZIP GUGiK obok pliku "
-        "(wersja surowa w magazynie)",
+        help="Tylko biezace BDOT10k GPKG: zachowaj oryginalny ZIP GUGiK obok "
+        "pliku (wersja surowa w magazynie)",
     )
 
     output = download.add_argument_group(OUTPUT_TITLE)

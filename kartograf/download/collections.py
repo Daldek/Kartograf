@@ -95,7 +95,12 @@ from kartograf.sources.descriptor import (
 from kartograf.sources.registry import sources_for
 from kartograf.sources.sidecar import emit_sidecar
 from kartograf.transport.http import SessionPerThread, head_signal
-from kartograf.transport.unit_package import fetch_package, package_url, select_variant
+from kartograf.transport.unit_package import (
+    choice_keys,
+    fetch_package,
+    package_url,
+    select_variant,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -171,6 +176,71 @@ def collection_levels(product: str) -> dict[str, tuple[str, ...]]:
                     layer.code for layer in params.layers
                 )
     return levels
+
+
+def require_collection_product(product: str | None, group: str) -> None:
+    """``product`` of a collection group command (``boundaries download``,
+    ...): one of the group's products; a missing one names only them.
+
+    Raises
+    ------
+    ValidationError
+        Missing product or a product of another group.
+    """
+    products = collection_products(group)
+    if product is None:
+        raise ValidationError(
+            f"--product wymagane: {collection_product_choices(products)}"
+        )
+    if product not in products:
+        raise ValidationError(
+            f"--product {product!r}: nieznana wartosc - dostepne: "
+            f"{collection_product_choices(products)}"
+        )
+
+
+def collection_level_choices(products: Sequence[str]) -> str:
+    """``admin PL: wojewodztwo, powiat, ...``: ``--level`` values of
+    ``products`` per country (``--help``)."""
+    return "; ".join(
+        f"{product} {country}: {', '.join(codes)}"
+        for product in products
+        for country, codes in collection_levels(product).items()
+    )
+
+
+def collection_variant_choices(products: Sequence[str]) -> str:
+    """``buildings: --lod 1 (--year 2019, 2021), --lod 2 (--year 2017)``: the
+    published package variants of ``products`` (``--help`` of the variant
+    flags; a channel with one variant needs no choice)."""
+    texts = []
+    for product in products:
+        for descriptor in sources_for(product=product):
+            if not _is_collection(descriptor):
+                continue
+            for channel in descriptor.channels:
+                params = channel.params
+                if not isinstance(params, UnitPackageParams):
+                    continue
+                keys = choice_keys(params)
+                if not keys:
+                    continue
+                first, rest = keys[0], keys[1:]
+                groups: dict[str, list[dict[str, str]]] = {}
+                for variant in params.variants:
+                    choice = dict(variant.choice)
+                    groups.setdefault(choice[first], []).append(choice)
+                items = []
+                for value, choices in groups.items():
+                    others = "; ".join(
+                        f"--{key} {', '.join(dict.fromkeys(c[key] for c in choices))}"
+                        for key in rest
+                    )
+                    items.append(
+                        f"--{first} {value}" + (f" ({others})" if others else "")
+                    )
+                texts.append(f"{product}: {', '.join(items)}")
+    return "; ".join(texts)
 
 
 # =============================================================================

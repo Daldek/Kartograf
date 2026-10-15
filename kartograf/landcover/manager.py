@@ -20,7 +20,7 @@ the plan track ``landcover``.
 import concurrent.futures
 import logging
 import os
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
@@ -166,6 +166,28 @@ def _archive_channel(key: str) -> AccessChannel:
         for channel in get_source(key).channels
         if isinstance(channel.params, UnitPackageParams)
     )
+
+
+def _spans(years: Iterable[int]) -> str:
+    """``2014-2025`` / ``2014-2016, 2018``: sorted years as runs."""
+    runs: list[list[int]] = []
+    for year in sorted(years):
+        if runs and year == runs[-1][-1] + 1:
+            runs[-1].append(year)
+        else:
+            runs.append([year])
+    return ", ".join(f"{r[0]}-{r[-1]}" if len(r) > 1 else str(r[0]) for r in runs)
+
+
+def bdot10k_archive_choices() -> str:
+    """``2014-2025 (--format GML albo SHP)``: the yearly releases of the
+    BDOT10k archive from the registry (``--help`` and messages)."""
+    params = _archive_channel("pl.gugik.bdot10k").params
+    assert isinstance(params, UnitPackageParams)
+    choices = [dict(variant.choice) for variant in params.variants]
+    formats = " albo ".join(dict.fromkeys(choice["format"] for choice in choices))
+    years = _spans({int(choice["year"]) for choice in choices})
+    return f"{years} (--format {formats})"
 
 
 def _read_geotiff_nodata(path: Path) -> float | None:
