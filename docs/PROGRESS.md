@@ -1125,12 +1125,12 @@ i `file_digest` w sciezce HSG — zostaja otwarte.
 > kampanii. Brama **2684** offline.
 > **Nastepny krok (wtedy):** wydanie 0.7.0 TYLKO na polecenie uzytkownika
 > (aktualny stan: blok "START NASTEPNEJ SESJI" wyzej).
-> Otwarte drobne (decyzja uzytkownika): wycinek `--target-crs` przy fallbacku
-> I-1 bez `Warning:`/`PlCutoutResult.unverified` (tylko log managera);
-> podwojna linia ostrzezenia I-1 w CLI (log + `Warning:`); `MetadataCache.__del__`
-> `ImportError` przy zamykaniu interpretera (zaobserwowane przez `python -c`);
-> M-7 podwojny INFO liczby kampanii; M-8 nieaktualny sidecar standardowy po
-> awarii zapisu (samonaprawa).
+> Otwarte drobne - ZAMKNIETE 2026-10-15 (galaz `fix/backlog-0.8.0`, ADR-030
+> errata 10): wycinek `--target-crs` przy fallbacku I-1 - nieaktualne
+> (wycinek z WCS, ADR-035); podwojna linia I-1, `MetadataCache.__del__`
+> i M-7 - naprawione wczesniej; M-8 nieaktualny sidecar dowiazania po
+> awarii zapisu - stary sidecar usuwany, nastepne uruchomienie odtwarza
+> dowiazanie (test `test_failed_sidecar_write_drops_stale_sidecar_and_heals`).
 > Ledger SDD (rulingi, uwagi): `.superpowers/sdd/2026-10-07-plan-adr030/progress.md`
 > (gitignorowany; katalog `.superpowers/` usuniety 2026-10-08 — rulingi sa w tym bloku). Rulingi: T7 — zla `aktualnosc` rekordu w `all` = porazka tej
 > kampanii, link na najnowsza poprawna; wyscig `ensure_standard_link` bez

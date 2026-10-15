@@ -177,7 +177,7 @@ patrz sekcja 3.2, znane ograniczenie.
 
 ```python
 # Funkcjonalności:
-- Zdjęcia lotnicze Standard Resolution (25cm)
+- Zdjęcia lotnicze Standard Resolution (rozdzielczość wg kampanii, np. 25 cm, 10 cm)
 - Pobieranie przez godło → TIF (OpenData)
 - Pobieranie przez bbox → GeoTIFF (WCS) — z biblioteki (`provider.download_bbox`, poza magazynem);
   CLI `--bbox` pobiera arkusze OpenData
