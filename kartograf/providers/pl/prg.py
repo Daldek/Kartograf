@@ -183,6 +183,10 @@ def _land_geometries(root: ET.Element, layer: str) -> tuple[dict, ...]:
     return tuple(geometries)
 
 
+# Classes of ``LandMask.burn``: abroad, land, Polish sea water (W02/W03).
+ABROAD, LAND, SEA = 0, 1, 2
+
+
 @dataclass(frozen=True)
 class LandMask:
     """Polish country polygon minus territorial and internal sea water."""
@@ -190,11 +194,35 @@ class LandMask:
     country: tuple[dict, ...]
     water: tuple[dict, ...]
 
+    def burn(self, transform, shape: tuple[int, int]) -> np.ndarray:
+        """Classes of a grid window: ``LAND``, ``SEA`` (W02/W03) or ``ABROAD``.
+
+        Pixel membership is decided by its centre (``all_touched=False``): A00
+        burns ``LAND``, W02/W03 burn ``SEA`` over it. ``transform`` is the
+        affine transform of the window (EPSG:2180), ``shape`` its (rows,
+        columns); the caller keeps windows small (row strips).
+        """
+        classes = rasterize(
+            [(geometry, LAND) for geometry in self.country],
+            out_shape=shape,
+            transform=transform,
+            fill=ABROAD,
+            all_touched=False,
+            dtype=np.uint8,
+        )
+        if self.water:
+            rasterize(
+                [(geometry, SEA) for geometry in self.water],
+                out=classes,
+                transform=transform,
+                all_touched=False,
+            )
+        return classes
+
     def apply(self, path: Path, nodata: float) -> tuple[int, int]:
         """Mask a float32 EPSG:2180 GeoTIFF in place: pixels outside land -> nodata.
 
-        Pixel membership is decided by its centre (``all_touched=False``): A00
-        burns 1, W02/W03 burn 0 over it. Processed in row strips of about
+        Land per pixel centre (``burn``). Processed in row strips of about
         ``_MASK_STRIP_PX`` pixels, so memory does not grow with the cutout.
         Returns ``(masked, zero_on_land)``: pixels set to ``nodata`` and pixels
         kept on land whose value is 0.0 (data, not nodata - ADR-035).
@@ -204,24 +232,11 @@ class LandMask:
             rows = max(1, _MASK_STRIP_PX // dataset.width)
             for row in range(0, dataset.height, rows):
                 window = Window(0, row, dataset.width, min(rows, dataset.height - row))
-                transform = dataset.window_transform(window)
-                land = rasterize(
-                    [(geometry, 1) for geometry in self.country],
-                    out_shape=(window.height, window.width),
-                    transform=transform,
-                    fill=0,
-                    all_touched=False,
-                    dtype=np.uint8,
+                classes = self.burn(
+                    dataset.window_transform(window), (window.height, window.width)
                 )
-                if self.water:
-                    rasterize(
-                        [(geometry, 0) for geometry in self.water],
-                        out=land,
-                        transform=transform,
-                        all_touched=False,
-                    )
                 data = dataset.read(1, window=window)
-                off_land = land == 0
+                off_land = classes != LAND
                 masked += int(np.count_nonzero(off_land))
                 zero_on_land += int(np.count_nonzero(~off_land & (data == 0.0)))
                 data[off_land] = nodata
@@ -229,6 +244,20 @@ class LandMask:
             dataset.nodata = nodata
         logger.debug("PRG land mask: masked=%s zero_on_land=%s", masked, zero_on_land)
         return masked, zero_on_land
+
+    def to_payload(self) -> dict:
+        """JSON payload of the mask (metadata cache)."""
+        return {"country": list(self.country), "water": list(self.water)}
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "LandMask | None":
+        """Mask of a cached payload; ``None`` for an unreadable one (a miss)."""
+        if not isinstance(payload, dict):
+            return None
+        country, water = payload.get("country"), payload.get("water")
+        if not isinstance(country, list) or not isinstance(water, list) or not country:
+            return None
+        return cls(country=tuple(country), water=tuple(water))
 
 
 def fetch_land_mask(
