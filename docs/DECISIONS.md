@@ -61,7 +61,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
 | [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
-| [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta |
+| [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta; uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
 
 ---
 
@@ -2853,66 +2853,73 @@ Hydrograf/Hydrolog) trzeba zaktualizowac.
 ## ADR-040: Manifest projektu i przypiete wersje
 
 **Data:** 2026-10-15
-**Status:** Przyjeta
+**Status:** Przyjeta; uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`)
 
-**Kontekst:** Magazyn ADR-036 jest wspolny dla wielu projektow. Sidecar
-`kartograf-meta/1` jest niezmiennym opisem pochodzenia PLIKU, a nie
-informacja o wszystkich projektach, ktore go wykorzystaly. Zespol
-potrzebuje zapisac wybor danych i dokladne wersje plikow, sprawdzic ich
-integralnosc oraz dostrzec nowsze dane bez cichej zmiany przypiec.
-Magazyn moze lezec na udziale bez blokad zakresow bajtow; baza SQLite
-nie moze byc tam zrodlem prawdy.
+**Kontekst:** Magazyn wersjonowany (ADR-036) jest wspolny dla wielu
+projektow, a sciezka standardowa wskazuje najnowsza lokalna wersje, wiec
+po kolejnym pobraniu projekt traci informacje, ktorych bajtow uzyl.
+Sidecar `kartograf-meta/1` jest niezmiennym opisem pochodzenia pliku,
+nie lista projektow, ktore go uzyly (SCOPE 3.3). Podprojekt 2 roadmapy
+(manifest projektu) wchodzi do 0.8.0; uzytkownik dal wolna reke co do
+architektury (2026-10-15). Magazyn i katalog projektu moga lezec na
+udziale sieciowym bez blokad zakresow bajtow - baza SQLite tam odpada.
 
 **Opcje:**
-- A) Plik projektu: zadania z wyborami danych i przypiete wersje
-  (`VersionedFile.version_path`, pelny SHA-256 i sidecar), zapis atomowy;
-  lokalny cache opcjonalny.
-- B) Jedna baza SQLite w magazynie z tabela projektow/plikow: wymaga
-  blokad na udziale i wspolnego stanu niezaleznego od sidecarow.
-- C) Pliki kopiowane do projektu z lista komend pobrania: zbedne
-  duplikaty, brak dowodu tozsamosci wersji i powielona logika.
+- A) Plik JSON w katalogu projektu: zadania (komenda grupy + opcje danych)
+  i przypiete wersje plikow z SHA-256; grupa CLI `project`.
+- B) Baza SQLite projektow i plikow w magazynie: blokady na udziale,
+  drugie zrodlo prawdy obok sidecarow.
+- C) Kopia danych w katalogu projektu i lista polecen: duplikaty, brak
+  dowodu tozsamosci wersji.
+- D) Wpisy projektow w sidecarach wersji: narusza niezmiennosc sidecara.
 
-**Decyzja:** A. Szczegoly i odrzucone warianty dla osmiu wyborow M1-M8:
+**Decyzja:** A. Szczegoly i odrzucone warianty (M1-M12):
 `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`.
-Projekt trzyma czytelny `kartograf-project.json` ze schematem
-`kartograf-project/1`, `store.path` (sciezka wzgledna do projektu lub
-bezwzgledna), `tasks[]` z grupa/akcja/typowanym wyborem danych oraz
-`files[]` z wersyjnymi sciezkami wzglednymi do magazynu, pelnym SHA-256,
-rozmiarem, identyfikatorem zbioru, etykieta i suma sidecara. Klucze sa
-angielskie. Sidecar pozostaje niezmienny i przechowuje pierwotne
-`request` oraz `extra.parent_request`; zadanie manifestu okresla wybor
-konkretnego projektu, ktory mogl uzyc starszej lokalnej wersji.
+- D1. Plik `kartograf-project.json`, schema `kartograf-project/1`,
+  angielskie klucze, scisla walidacja: `output_dir` (jeden magazyn
+  z `init --output`; sciezka wzgledna zapisana wzgledem katalogu
+  projektu) i `tasks[]`: `name`, `command` (komenda danych grupy
+  ADR-039), `options` (argumenty funkcji biblioteki w postaci JSON),
+  `pinned_at`, `kartograf_version`, `geometry_sha256`, `files[]`
+  (`role`, `unit`, `path`, `version`, `label`, `sha256`, `size_bytes`).
+- D2. CLI `kartograf project init|add|remove|download|status|verify`,
+  `--project KATALOG` domyslnie biezacy katalog; `add NAZWA <grupa>
+  <komenda> [opcje]` przyjmuje komende grupy w jej gramatyce; tryby jak
+  w grupach: `download --check-updates|--upgrade|--force`. API:
+  `init_project`, `open_project`, `add_project_task`,
+  `remove_project_task`, `download_project`, `check_project`,
+  `project_status`, `verify_project`.
+- D3. Zadanie jest przypinane w calosci, tylko po pelnym sukcesie.
+  `download` bez trybu nie zmienia przypiec: pobiera zadania niepobrane,
+  a brakujace przypiete pliki odtwarza tylko przy identycznym SHA-256.
+  Przepiecie wylacznie `--upgrade`/`--force`, zawsze calego zadania.
+- D4. `check_project` porownuje przypiecie z planem `check_*` komendy
+  przez `PlanItem.local_sha256`; sygnaly zrodel interpretuje wylacznie
+  logika ADR-036.
+- D5. `verify` = pelny SHA-256 i zgodnosc z sidecarem wersji; `status`
+  = istnienie i rozmiar, bez sieci.
+- D6. Brak `project availability`: raport dostepnosci (plan A/B) sluzy
+  wyborowi wariantu przed `project add`; raport nie jest plikiem danych.
+- D7. Zapis atomowy (`os.replace`) pod krotka blokada katalogowa
+  (`mkdir`), scalanie per zadanie; bez SQLite i blokad zakresow bajtow;
+  operacje projektu domyslnie bez cache metadanych.
+- D8. Jedna pozycja na komende danych w `kartograf/project/commands.py`
+  i `_task` w parserze komendy (uzupelnienie ADR-039): nowy produkt
+  w istniejacej komendzie nie zmienia projektu, nowa grupa (plany C-E)
+  dodaje pozycje.
 
-`kartograf project init --output` ustala magazyn, `add` rejestruje
-zadanie wg grup CLI ADR-039, `download` przypina wersje tylko przy
-pierwszym pobraniu, `verify` liczy SHA-256 pliku i sidecara, `status`
-sprawdza lokalny stan bez haszowania, `check-updates` odpytuje zrodlo
-bez pobierania, `update` jawnie przestawia piny. `project availability`
-przekazuje zapisana selekcje do publicznej sondy grupy, nie przypina
-raportu dostepnosci jako pliku i nie nazywa go sygnalem swiezosci.
-CLI tlumaczy na publiczne API (ADR-037); jedna rodzina wynikow
-`VersionedFile` i obowiazkowy sidecar wystarcza dla istniejacych
-produktow oraz planow A-E katalogu GUGiK/CUZK w 0.8.0.
-
-Sygnal swiezosci jest porownywany z PRZYPIETA wersja, nie tylko z
-najnowsza lokalna: `index`/`metadata`/`http` wedlug ADR-036,
-`Content-Length` nie jest sygnalem, `none` = niesprawdzalne (do
-jawnego `update --force`), HSG = wersje wejsc. Piny nie zmieniaja
-sie przy `download`, `status`, `verify`, `check-updates` ani
-`availability`. Zakonczenie zapisu manifestu wymaga atomowego
-`os.replace` pod blokada katalogowa (`mkdir`, nie byte-range lock),
-sprawdzenia konkurencyjnej edycji i `fsync`; zadna SQLite na udziale.
-Projektowe API domyslnie nie otwiera SQLite cache (`cache=False`).
-
-**Konsekwencje:** Jeden plik na projekt jest zrodlem powiazan
-projekt-dane; indeks odwrotny mozna odtworzyc lokalnie, bez zmiany
-sidecarow. Przeniesienie projektu wymaga zachowania wzglednej relacji
-do magazynu lub korekty jednego `store.path`. Nie da sie zagwarantowac
-ponownego pobrania identycznej historycznej wersji, jesli zniknela
-ze zrodla i z magazynu; kopie magazynu zachowuja takze sidecary.
-Filesystem projektu musi wspierac atomowe tworzenie katalogu i
-podmiane pliku, magazyn nadal wymaga hardlinkow ADR-036. Implementacja
-wedlug `docs/superpowers/plans/2026-10-15-manifest-projektu.md`.
+**Konsekwencje:** Jeden plik na projekt jest zrodlem powiazania
+projekt -> dane; indeks "ktore projekty uzywaja pliku" mozna zbudowac
+lokalnie z manifestow, bez zmiany sidecarow. Przeniesienie projektu
+wymaga zachowania wzglednego polozenia magazynu albo korekty jednego
+`output_dir`. Odtworzenie bajtow, ktore zrodlo zmienilo albo wycofalo,
+wymaga kopii magazynu (z sidecarami); zadanie bez jawnego wariantu
+(np. bez `--year`) odtwarza sie bez kopii tylko do publikacji nowszych
+danych. System plikow projektu musi wspierac atomowe `mkdir`
+i `rename`; magazyn nadal wymaga dowiazan twardych (ADR-036). Kazda
+nowa komenda danych wymaga pozycji w tabeli projektu i `_task` (test
+zgodnosci). Implementacja:
+`docs/superpowers/plans/2026-10-15-manifest-projektu.md`.
 
 ---
 
