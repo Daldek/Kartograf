@@ -1,8 +1,9 @@
 """PRG special boundaries: recorded 2026-10-16 OGC API answers and ZIP HEADs.
 
-The area test limits the descriptor to one real collection (SadRejonowy), as
-querying all 45 collections would need 45 recorded item responses per area.
-The catalog test verifies the complete set independently of this small area.
+The area tests answer the real collection catalog, the recorded court
+polygon (SadRejonowy) and, for every other collection, the recorded answer
+of a collection without objects in the area (KomendaStolecznaPolicji) -
+one recorded item response per collection is 43 more responses per area.
 """
 
 import json
@@ -19,7 +20,7 @@ from kartograf.download.collections import (
     validate_collection_request,
 )
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.notices import WHOLE_COUNTRY_SIZE
+from kartograf.notices import AREA_OMITTED, WHOLE_COUNTRY_SIZE
 from kartograf.sources import registry
 from kartograf.sources.descriptor import FeatureBBoxParams
 from kartograf.transport.feature_bbox import fetch_features
@@ -33,11 +34,23 @@ FEATURE = SOURCE.channels[0]
 assert isinstance(FEATURE.params, FeatureBBoxParams)
 CATALOG = json.loads((FIXTURES / "collections.json").read_text(encoding="utf-8"))
 PACKAGES = json.loads((FIXTURES / "packages.json").read_text(encoding="utf-8"))
+# administrative boundaries (plan C, product admin) and the census districts
+# (the service answers an area in minutes; national file only)
+ADMIN = {
+    "GranicaPanstwa",
+    "GranicaWojewodztwa",
+    "GranicaPowiatu",
+    "GranicaGminy",
+    "GranicaJednostkiEwidencyjnej",
+    "GranicaObrebuEwidencyjnego",
+}
+CENSUS = "GranicaObwoduSpisowego"
 
 
 class SpecialService:
-    def __init__(self, catalog=CATALOG):
+    def __init__(self, catalog=CATALOG, *, empty_others: bool = False):
         self.catalog = catalog
+        self.empty_others = empty_others
         self.calls: list[str] = []
 
     def get(self, url, params=None, timeout=None):
@@ -45,30 +58,24 @@ class SpecialService:
         if url == f"{FEATURE.endpoint}/collections":
             body = json.dumps(self.catalog).encode()
             return recorded_response(FIXTURES / "collections.json", body=body)
+        items = {"f": "json", "bbox": "19.93,50.055,19.945,50.065", "limit": "10000"}
         if url == f"{FEATURE.endpoint}/collections/SadRejonowy/items":
-            assert params == {
-                "f": "json",
-                "bbox": "19.93,50.055,19.945,50.065",
-                "limit": "10000",
-            }
+            assert params == items
             return recorded_response(FIXTURES / "sad_rejonowy.json")
+        if self.empty_others and url.endswith("/items"):
+            assert params == items
+            return recorded_response(FIXTURES / "komenda_stoleczna_empty.json")
         raise AssertionError(f"Unexpected OGC API request: {url}")
 
 
 def test_special_collections_contract(tmp_path):
-    """No administrative collection is fetched; a missing special collection
-    fails with its name before asking for any item."""
+    """No administrative collection and no census district collection is
+    fetched; a missing special collection fails with its name before asking
+    for any item."""
     layers = FEATURE.params.layers
     published = {entry["id"] for entry in CATALOG["collections"]}
-    assert len(layers) == 45
-    assert {layer.source for layer in layers} == published - {
-        "GranicaPanstwa",
-        "GranicaWojewodztwa",
-        "GranicaPowiatu",
-        "GranicaGminy",
-        "GranicaJednostkiEwidencyjnej",
-        "GranicaObrebuEwidencyjnego",
-    }
+    assert len(layers) == 44
+    assert {layer.source for layer in layers} == published - ADMIN - {CENSUS}
     omitted = next(layer for layer in layers if layer.source == "UrzadSkarbowy")
     service = SpecialService(
         {
@@ -135,6 +142,39 @@ def test_special_area_creates_versioned_gpkg(tmp_path, monkeypatch, frozen_clock
     assert len(service.calls) == 2
 
 
+def test_special_area_leaves_out_census_districts(tmp_path, monkeypatch, frozen_clock):
+    """The area result has the 44 collections of the descriptor: the census
+    districts (the service answered a small area in 158 s to over 400 s on
+    2026-10-16) are never asked, and the result says so with an ``Info``
+    naming the national file that has them."""
+    service = SpecialService(empty_others=True)
+    monkeypatch.setattr(col, "_session", lambda: service)
+    notices = []
+
+    report = download_collection(
+        product="special",
+        output_dir=tmp_path,
+        country="pl",
+        bbox=BBOX,
+        cache=False,
+        on_notice=notices.append,
+    )
+
+    assert report.ok, report.failed
+    asked = {url.split("/")[-2] for url in service.calls if url.endswith("/items")}
+    assert asked == {layer.source for layer in FEATURE.params.layers}
+    assert CENSUS not in asked
+    path = report.files[0].file.path
+    layers = [name for name, _ in pyogrio.list_layers(path)]
+    assert len(layers) == 44 and CENSUS not in layers
+    assert pyogrio.read_info(path, layer="SadRejonowy")["features"] == 1
+    (omitted,) = [n for n in report.notices if n.code == AREA_OMITTED]
+    assert omitted.level == "info"
+    assert omitted.text.startswith("special: wynik obszaru bez obwodow spisowych")
+    assert CENSUS in omitted.text and "--whole-country" in omitted.text
+    assert notices == list(report.notices)
+
+
 def test_special_requires_selection_and_explicit_country_format(tmp_path):
     with pytest.raises(ValidationError, match="--bbox"):
         validate_collection_request(product="special", output_dir=tmp_path)
@@ -155,21 +195,14 @@ def test_special_requires_selection_and_explicit_country_format(tmp_path):
         )
 
 
-@pytest.mark.parametrize(
-    "format,suffix,member",
-    [
-        ("SHP", "shp", "SadRejonowy.shp"),
-        ("GML", "xml", "SadRejonowy.gml"),
-    ],
-)
-def test_special_country_package(
-    tmp_path, monkeypatch, frozen_clock, format, suffix, member
-):
-    """Published national ZIP and sidecar follow the selected source format;
+@pytest.mark.parametrize(("format", "suffix"), [("SHP", "shp"), ("GML", "xml")])
+def test_special_country_package(tmp_path, monkeypatch, frozen_clock, format, suffix):
+    """Published national ZIP (its real member names: 45 kinds incl. the
+    census districts R02) and sidecar follow the selected source format;
     the recorded >100 MiB HEAD is announced before any GET."""
     source = PACKAGES[suffix]
     url = source["url"]
-    body = zip_bytes([member])
+    body = zip_bytes(source["members"])
     fake = FakePackageSession(
         {
             url: (

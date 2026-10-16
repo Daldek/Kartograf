@@ -33,7 +33,28 @@
     "headers": {
       "Content-Type": "application/octet-stream",
       "Content-Length": "563815148"
-    }
+    },
+    "members": [
+      "PRG_Miejscowosci_POLSKA.cpg",
+      "PRG_Miejscowosci_POLSKA.dbf",
+      "PRG_Miejscowosci_POLSKA.prj",
+      "PRG_Miejscowosci_POLSKA.shp",
+      "PRG_Miejscowosci_POLSKA.shx",
+      "PRG_Place_POLSKA.cpg",
+      "PRG_Place_POLSKA.dbf",
+      "PRG_Place_POLSKA.prj",
+      "PRG_Place_POLSKA.shp",
+      "PRG_Place_POLSKA.shx",
+      "PRG_Ulice_POLSKA.cpg",
+      "PRG_Ulice_POLSKA.dbf",
+      "PRG_Ulice_POLSKA.prj",
+      "PRG_Ulice_POLSKA.shp",
+      "PRG_Ulice_POLSKA.shx",
+      "PRG_PunktyAdresowe_POLSKA.dbf",
+      "PRG_PunktyAdresowe_POLSKA.prj",
+      "PRG_PunktyAdresowe_POLSKA.shp",
+      "PRG_PunktyAdresowe_POLSKA.shx"
+    ]
   },
   "country_gml": {
     "url": "https://opendata.geoportal.gov.pl/prg/adresy/PRG-punkty_adresowe.zip",

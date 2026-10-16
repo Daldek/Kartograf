@@ -2605,6 +2605,14 @@ zatwierdzeniu specu i planu.
 
 Funkcje na przyszlosc (bez przypisanego wydania):
 
+- [ ] **Mapa katastralna CZ w formacie VKM (poza 0.8.0, decyzja
+  uzytkownika P2 2026-10-15, utrzymana 2026-10-16):** feed ATOM
+  `KM-KU-VKM` to pilotaz 10 KU (`services.cuzk.gov.cz/vkm/ku/aktualni/<KU>.zip`).
+  2026-10-15 pliki pilota odpowiadaly 404; 2026-10-16 (HEAD 14:33 i 15:22
+  UTC) odpowiadaja 200 dla KU 737950 (55 193 B), 692450 (168 101 B)
+  i 619116 (942 517 B), z `ETag` i `Last-Modified` 2026-10-15; KU spoza
+  pilota (623164) - 404. Do dodania jako piaty format `cadastre download
+  --product map --country cz --format VKM`, gdy CUZK rozszerzy publikacje.
 - [ ] **NMT 0,5 m i wszystkie rozdzielczosci GUGiK (prosba uzytkownika
   2026-10-13):** dodac pobieranie NMT 0,5 m (skorowidz GUGiK ma takie
   rekordy - `resolution_m=0.5`, fixtury w `tests/test_real_gugik_responses.py`;

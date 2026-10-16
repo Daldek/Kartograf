@@ -259,7 +259,10 @@ class FeatureBBoxParams:
     ``(("network", "gravity"),)``). ``timeout``: seconds of one request of
     a service slower than the default of the orchestrator (OGC API Features
     of GUGiK PRNG: 78-95 s per page of items, measured 2026-10-16); ``None`` =
-    the default.
+    the default. ``area_omitted``: the source layers an area result leaves
+    out on purpose and where they are (PRG census districts: the service
+    answers an area in minutes, the national file has them) - the text of
+    the ``Info`` (``AREA_OMITTED``) of every area request of the channel.
     """
 
     protocol: Literal["wfs", "arcgis", "ogcapi"]
@@ -273,6 +276,7 @@ class FeatureBBoxParams:
     choice: tuple[tuple[str, str], ...] = ()
     selection_key: str = "level"
     timeout: int | None = None
+    area_omitted: str | None = None
 
 
 @dataclass(frozen=True)

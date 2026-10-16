@@ -89,6 +89,7 @@ from kartograf.download.storage import bbox_cutout_path, content_segment, unit_s
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import (
+    AREA_OMITTED,
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
     DOWNLOAD_SIZE,
@@ -428,7 +429,7 @@ _AREA_UNITS = ("sheet", "tile", "ku")
 _AREA_TEXT = {
     "sheet": "--bbox/--sheet/--geometry (arkusze obszaru)",
     "tile": "--bbox/--sheet/--geometry (kafle obszaru)",
-    "ku": "--bbox/--sheet/--geometry (katastralni uzemi obszaru)",
+    "ku": "--bbox/--geometry (katastralni uzemi obszaru)",
 }
 
 
@@ -1649,6 +1650,11 @@ def _jobs(
     for part in request.parts:
         if part.layers:
             jobs.append(_feature_job(out, part))
+            params = part.channel.params
+            if isinstance(params, FeatureBBoxParams) and params.area_omitted:
+                sink.emit(
+                    "info", AREA_OMITTED, f"{request.product}: {params.area_omitted}"
+                )
             continue
         params = part.channel.params
         if isinstance(params, AtomFilesParams):

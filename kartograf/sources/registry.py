@@ -1351,10 +1351,15 @@ _CZ_ZTM = SourceDescriptor(
 )
 
 # plan E - E3: special PRG boundaries, separate from administrative boundaries.
+# One OGC API request per collection (items of an area, CRS84). Measured
+# 2026-10-16 (Krakow, 0.015 x 0.01 deg): 42 collections answer in 0.4-11 s,
+# GranicaRejonuStatystycznego in 36-38 s (channel timeout 120 s) and
+# GranicaObwoduSpisowego (census districts) in 158-184 s, over 400 s in
+# Warsaw - it is not part of the area result (decision of 2026-10-16,
+# ADR-043 errata 1); the national files have it (R02_Granice_obwodow_spisowych).
 _PRG_SPECIAL_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRG/apiFeatures"
 _PRG_SPECIAL_COLLECTIONS = (
     "GranicaRejonuStatystycznego",
-    "GranicaObwoduSpisowego",
     "SadApelacyjny",
     "SadOkregowy",
     "SadRejonowy",
@@ -1423,6 +1428,12 @@ _PL_PRG_SPECIAL = SourceDescriptor(
                     for name in _PRG_SPECIAL_COLLECTIONS
                 ),
                 selection="all",
+                timeout=120,
+                area_omitted=(
+                    "wynik obszaru bez obwodow spisowych (kolekcja "
+                    "GranicaObwoduSpisowego: usluga odpowiada minutami) - sa "
+                    "w pliku krajowym: --whole-country --format SHP|GML"
+                ),
             ),
         ),
         AccessChannel(
