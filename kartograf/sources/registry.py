@@ -1644,7 +1644,9 @@ _CZ_GEOMORPHOLOGY = SourceDescriptor(
                 axis_order="xy",
                 page_size=1000,
                 layers=tuple(
-                    FeatureLayer(code=code, source=layer, name=code, id_field="OBJECTID")
+                    FeatureLayer(
+                        code=code, source=layer, name=code, id_field="OBJECTID"
+                    )
                     for code, layer in _GEOMORPHOLOGY_LEVELS
                 ),
                 selection="level",

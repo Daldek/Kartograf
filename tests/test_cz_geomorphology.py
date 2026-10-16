@@ -24,7 +24,9 @@ from tests.test_collections_units import Response, Router
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 FIXTURES = Path(__file__).parent / "fixtures/cz/geomorphology/real_2026_10_16"
-SERVICE = "https://ags.cuzk.gov.cz/arcgis/rest/services/GeomorfologickeJednotky/MapServer"
+SERVICE = (
+    "https://ags.cuzk.gov.cz/arcgis/rest/services/GeomorfologickeJednotky/MapServer"
+)
 TESIN = BBox(-452000, -1112000, -450000, -1110000, "EPSG:5514")
 LEVELS = "subprovincie, oblast, celek, podcelek, okrsek, podokrsek, cast"
 
@@ -38,7 +40,8 @@ def service(monkeypatch) -> Router:
 
 def _answer(name: str):
     path = FIXTURES / name
-    meta = json.loads(path.with_name(f"{name.removesuffix('.gz')}.headers.json").read_text())
+    recorded = path.with_name(f"{name.removesuffix('.gz')}.headers.json")
+    meta = json.loads(recorded.read_text())
     body = path.read_bytes()
     if path.suffix == ".gz":
         body = gzip.decompress(body)
@@ -143,18 +146,22 @@ def test_geomorphology_celek_asks_only_layer_39(tmp_path, service):
     (item,) = report.files
     assert item.file.path == (
         tmp_path
-        / "boundaries/cz_geomorphology_celek/bbox/-452000_-1112000_-450000_-1110000.gpkg"
+        / "boundaries/cz_geomorphology_celek/bbox"
+        / "-452000_-1112000_-450000_-1110000.gpkg"
     )
     info = pyogrio.read_info(item.file.path, layer="celek")
     assert info["features"] == 1
     assert CRS.from_user_input(info["crs"]).to_epsg() == 5514
-    frame = pyogrio.read_dataframe(item.file.path, layer="celek")
-    assert list(frame["CELEK_P"]) == ["Podbeskydská pahorkatina"]
-    meta = json.loads(Path(f"{item.file.version_path}.meta.json").read_text())
-    assert meta["dataset"] == "cz.cuzk.geomorphology"
+    meta, _, _, values = pyogrio.raw.read(
+        item.file.path, layer="celek", read_geometry=False
+    )
+    assert list(values[list(meta["fields"]).index("CELEK_P")]) == [
+        "Podbeskydská pahorkatina"
+    ]
+    sidecar = json.loads(Path(f"{item.file.version_path}.meta.json").read_text())
+    assert sidecar["dataset"] == "cz.cuzk.geomorphology"
     assert {url for _, url in service.calls} == {
         f"{SERVICE}/39",
         f"{SERVICE}/39/query",
     }
     assert service.gets() == 3
-    assert router.gets() == 3

@@ -474,9 +474,18 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
             _collection_command(
                 "boundaries download",
                 "boundaries",
-                {**_COLLECTION, "whole_country": "flag", "level": "per_country"},
+                {
+                    **_COLLECTION,
+                    "whole_country": "flag",
+                    "level": "per_country",
+                    "format": "str",
+                },
             ),
-            _collection_command("cadastre download", "cadastre", dict(_COLLECTION)),
+            _collection_command(
+                "cadastre download",
+                "cadastre",
+                {**_COLLECTION, "ku": "str", "format": "str"},
+            ),
             _collection_command(
                 "models3d download",
                 "models3d",
