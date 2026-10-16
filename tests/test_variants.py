@@ -63,6 +63,7 @@ _PL_INVENTORY_TABLE: list[tuple[str, str, str | None, tuple[str, ...]]] = [
     ("nmt", "ASCII-NMT", "0.5m", _E),
     ("nmt", "ASCII-NMT", "1m", _E),
     ("nmt", "ASCII-NMT", "5m", _EK),
+    ("nmt", "ASCII-NMT", "10m", _E),
     ("nmt", "TBD", "1m", _EK),
     ("nmt", "TBD", "5m", _EK),
     ("nmt", "TBD", "10m", _EK),

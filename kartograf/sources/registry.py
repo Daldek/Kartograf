@@ -294,8 +294,9 @@ _BOTH = ("EVRF2007", "KRON86")
 
 # PL sheet variants: every ASC grid of the WFS inventory 2026-10-15 and the
 # archive formats downloaded as source files (decision 2026-10-15, ADR-041).
-# ASCII NMT 10 m is absent: all its 215 sheets have 8-part codes outside the
-# PL-1992 sheet system of SheetParser (reported by `availability` as Info).
+# ASCII NMT 10 m lies on 215 8-part sheets (in SheetParser since plan E1; the
+# ZIP holds points every 0.5 m although the index declares 10 m - the record
+# label names the variant, as for every archive).
 _PL_SHEET_SOURCES = (
     _pl_sheet_source("nmt", "0.15m", _EVRF),
     _pl_sheet_source("nmt", "0.5m", _BOTH),
@@ -311,6 +312,7 @@ _PL_SHEET_SOURCES = (
     _pl_sheet_source("nmt", "0.5m", _EVRF, format="ASCII-NMT"),
     _pl_sheet_source("nmt", "1m", _EVRF, format="ASCII-NMT"),
     _pl_sheet_source("nmt", "5m", _BOTH, format="ASCII-NMT"),
+    _pl_sheet_source("nmt", "10m", _EVRF, format="ASCII-NMT"),
     _pl_sheet_source("nmt", "1m", _BOTH, format="TBD"),
     _pl_sheet_source("nmt", "5m", _BOTH, format="TBD"),
     _pl_sheet_source("nmt", "10m", _BOTH, format="TBD"),

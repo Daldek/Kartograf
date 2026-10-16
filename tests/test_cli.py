@@ -300,9 +300,9 @@ class TestFormatChildren:
         assert "N-34-130-D-c" in output
         assert "N-34-130-D-d" in output
 
-    def test_format_children_10k_no_children(self):
-        """Test formatting children of 1:10000 (nie ma arkuszy potomnych)."""
-        parser = SheetParser("N-34-130-D-d-2-4")
+    def test_format_children_8_part_no_children(self):
+        """The 8-part sheet is the lowest level (nie ma arkuszy potomnych)."""
+        parser = SheetParser("N-34-130-D-d-2-4-1")
         output = format_children(parser)
 
         assert "nie ma arkuszy potomnych" in output
@@ -645,8 +645,9 @@ class TestCLIIntegration:
         assert "1:10000" in captured.out
         # Should show hierarchy
         assert "Hierarchia" in captured.out
-        # Should show no children message
-        assert "nie ma arkuszy potomnych" in captured.out
+        # The 7-part sheet lists its four 8-part quarters
+        assert "Arkusze potomne N-34-130-D-d-2-4 (4)" in captured.out
+        assert "N-34-130-D-d-2-4-4 (1:5000)" in captured.out
 
     def test_all_scales(self, capsys):
         """Test parsing all scale levels."""

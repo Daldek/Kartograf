@@ -149,15 +149,22 @@ def test_exit_codes(capsys):
 
 
 def test_notices_on_stderr(capsys):
+    """The Info about records Kartograf does not download goes to stderr (the
+    recorded ASCII NMT records declaring 12 m - a variant outside the
+    registry)."""
     session = RecordedIndex(
         {"nmt_evrf2007": ["sheet_nmt_evrf2007_N-33-142-B-b-4-1.xml"]}
     )
+    for _, _, feature in session._features[wfs_endpoint("nmt_evrf2007")]:
+        fields = {element.tag.rsplit("}", 1)[-1]: element for element in feature}
+        if fields["format"].text == "ASCII NMT":
+            fields["char_przestrz"].text = "12.0 m"
     code, out, err = _run(capsys, ["--sheet", "N-33-142-B-b-4-1"], session)
 
     assert code == 0
     assert err.startswith(
         "Info: Skorowidz GUGiK ma dla obszaru tez rekordy, ktorych Kartograf nie "
-        "pobiera: ARC/INFO ASCII GRID 1m EVRF2007 (2019; arkusze: 4)"
+        "pobiera: ASCII NMT 12m EVRF2007 (2019; arkusze: 4)"
     )
     assert "Info:" not in out
 

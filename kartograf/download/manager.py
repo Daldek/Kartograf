@@ -74,6 +74,17 @@ SheetStatus = Literal["new", "unchanged", "relabeled", "local"]
 
 logger = logging.getLogger(__name__)
 
+# Sheet level of a provider that declares none (7-part PL-1992 codes).
+_DEFAULT_SHEET_SCALE = "1:10000"
+
+
+def _coarser(parser: SheetParser, scale: str) -> bool:
+    """A PL-1992 code coarser than the sheet level ``scale`` (expanded to it)."""
+    hierarchy = SheetParser.SCALE_HIERARCHY
+    return parser.sheet_system != "2000" and hierarchy.index(
+        parser.scale
+    ) < hierarchy.index(scale)
+
 
 @dataclass
 class DownloadProgress:
@@ -567,6 +578,12 @@ class DownloadManager:
             getattr(getattr(self._provider, "variant", None), "source_file", False)
             is True
         )
+        # PL-1992 sheet level of the provider (``BaseProvider.sheet_scale``;
+        # a test double without one: the 7-part sheets)
+        scale = getattr(self._provider, "sheet_scale", None)
+        self._sheet_scale = (
+            scale if scale in SheetParser.SCALE_HIERARCHY else _DEFAULT_SHEET_SCALE
+        )
         if not self._campaign_aware and (
             all_campaigns or min_year is not None or max_year is not None or full_sheet
         ):
@@ -816,13 +833,13 @@ class DownloadManager:
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         parser = SheetParser(sheet)
-        if (
-            not self._source_files
-            and parser.sheet_system != "2000"
-            and parser.scale != "1:10000"
-        ):
+        if not self._source_files and _coarser(parser, self._sheet_scale):
             return self.download_hierarchy(
-                sheet, "1:10000", update=update, plan=plan, on_progress=on_progress
+                sheet,
+                self._sheet_scale,
+                update=update,
+                plan=plan,
+                on_progress=on_progress,
             )
         if plan is not None:
             return self.download_sheets(
@@ -878,14 +895,16 @@ class DownloadManager:
         )
 
     @staticmethod
-    def expand_sheets(sheets: list[str]) -> list[str]:
+    def expand_sheets(sheets: list[str], scale: str = "1:10000") -> list[str]:
         """
         Leaf sheets actually requested from the provider for a list of sheets.
 
-        PL-1992 sheets coarser than 1:10000 expand to their 1:10000
-        descendants (like :meth:`download_sheet`); 1:10000 and PL-2000 sheets
-        stay as they are. Identifiers are normalized, duplicates dropped,
-        first-seen order kept.
+        PL-1992 sheets coarser than ``scale`` (the provider's sheet level:
+        ``1:10000`` = 7-part codes, ``1:5000`` = 8-part codes of the true
+        orthophoto) expand to their descendants of that level (like
+        :meth:`download_sheet`); sheets of that level or finer and PL-2000
+        sheets stay as they are. Identifiers are normalized, duplicates
+        dropped, first-seen order kept.
 
         Raises
         ------
@@ -896,8 +915,8 @@ class DownloadManager:
         seen: set[str] = set()
         for sheet in sheets:
             parser = SheetParser(sheet)
-            if parser.sheet_system != "2000" and parser.scale != "1:10000":
-                expanded = [d.sheet for d in parser.get_all_descendants("1:10000")]
+            if _coarser(parser, scale):
+                expanded = [d.sheet for d in parser.get_all_descendants(scale)]
             else:
                 expanded = [parser.sheet]
             for leaf in expanded:
@@ -907,11 +926,12 @@ class DownloadManager:
         return leaves
 
     def _leaves(self, sheets: list[str]) -> list[str]:
-        """Sheets requested from the provider: ``expand_sheets`` for grids; an
-        archive variant keeps the index codes of any scale (normalized,
-        duplicates dropped, first-seen order kept)."""
+        """Sheets requested from the provider: ``expand_sheets`` to the
+        provider's sheet level for grids and images; an archive variant keeps
+        the index codes of any scale (normalized, duplicates dropped,
+        first-seen order kept)."""
         if not self._source_files:
-            return self.expand_sheets(sheets)
+            return self.expand_sheets(sheets, self._sheet_scale)
         return list(dict.fromkeys(SheetParser(sheet).sheet for sheet in sheets))
 
     def download_sheets(
