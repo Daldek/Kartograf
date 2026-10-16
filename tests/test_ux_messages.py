@@ -192,10 +192,16 @@ def test_unknown_flag_is_reported_by_the_command_with_its_owners(capsys):
 
 
 def test_flag_prefixes_are_not_abbreviations(capsys):
-    # UX-09: --stat of soil hsg was read as its --stats
+    # UX-09: --stat of soil hsg was read as its --stats (now --summary)
     with pytest.raises(SystemExit):
         main(["soil", "hsg", "--depth", "0-5cm", "--stat", "mean", "--sheet", "X"])
     assert "nieznana opcja --stat (maja ja: soil download)" in capsys.readouterr().err
+    with pytest.raises(SystemExit):
+        main(["soil", "hsg", "--depth", "0-5cm", "--stats", "--sheet", "X"])
+    assert (
+        "nieznana opcja --stats (od 0.8.0 statystyki HSG wypisuje --summary)"
+        in capsys.readouterr().err
+    )
 
 
 def test_negative_bbox_after_a_space_is_the_bbox_value(tmp_path, capsys):

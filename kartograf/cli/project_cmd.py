@@ -96,10 +96,10 @@ def cmd_project_add(args: argparse.Namespace) -> int:
             "pobieranie: "
             f"{project_command(args.project, 'download', '--workers', 'N', args.name)}"
         )
-    if getattr(parsed, "stats", False):
+    if getattr(parsed, "summary", False):
         raise ValidationError(
-            "--stats nie jest czescia zadania (tylko wypisuje statystyki HSG po "
-            "obliczeniu); usun --stats"
+            "--summary nie jest czescia zadania (tylko wypisuje statystyki HSG "
+            "po obliczeniu); usun --summary"
         )
     output = getattr(parsed, "output", None)
     if output is not None:

@@ -101,9 +101,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--depth", "-d", metavar="GLEBOKOSC", default=None, help=f"Wymagane: {_DEPTHS}"
     )
     params.add_argument(
-        "--stats",
+        "--summary",
         action="store_true",
-        help="Wypisz statystyki HSG po obliczeniu",
+        help="Wypisz podsumowanie HSG po obliczeniu: udzial i powierzchnia "
+        "grup A-D oraz brak danych",
     )
     output = hsg.add_argument_group(OUTPUT_TITLE)
     output.add_argument(

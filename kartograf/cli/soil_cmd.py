@@ -137,7 +137,7 @@ def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) 
     _report_stale(result.stale)
     rc = 0 if result.ok else 1
 
-    if args.stats and result.file is not None:
+    if args.summary and result.file is not None:
         print()
         print("Statystyki HSG (procent grupy: z pikseli z danymi):")
         stats = calc.get_hsg_statistics(result.file.path)

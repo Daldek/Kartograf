@@ -3456,8 +3456,8 @@ class TestCmdSoil:
         mock_calc.calculate_hsg.assert_called_once()
 
     @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_with_stats(self, mock_calc_cls, capsys, tmp_path):
-        """soil hsg --stats prints statistics."""
+    def test_soilgrids_hsg_with_summary(self, mock_calc_cls, capsys, tmp_path):
+        """soil hsg --summary prints statistics."""
         mock_calc = Mock()
         mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
         mock_calc.get_hsg_statistics.return_value = {
@@ -3509,7 +3509,7 @@ class TestCmdSoil:
                 "0-5cm",
                 "-o",
                 str(tmp_path),
-                "--stats",
+                "--summary",
             ]
         )
         assert result == 0

@@ -576,7 +576,7 @@ wersji i sha256 wejść).
 #### CLI Commands
 ```bash
 kartograf soil hsg --sheet N-34-130-D -o ./data --depth 0-5cm
-kartograf soil hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
+kartograf soil hsg --sheet N-34-130-D --summary -o ./data --depth 0-5cm
 kartograf soil hsg --bbox 450000,550000,460000,560000 -o ./data --depth 0-5cm
 kartograf soil hsg --geometry area.gpkg --layer catchments -o ./data --depth 0-5cm
 kartograf soil hsg --sheet N-34-130-D -o ./data --depth 0-5cm --check-updates --plan plan.json

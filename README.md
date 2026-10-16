@@ -80,7 +80,7 @@ kartograf elevation download --sheet 302_5550 --country cz --product nmt --resol
 
 # Pokrycie terenu i grupy hydrologiczne gleb
 kartograf landcover download --product bdot10k --teryt 1465 -o ./data
-kartograf soil hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
+kartograf soil hsg --sheet N-34-130-D --summary -o ./data --depth 0-5cm
 
 # Granice, ewidencja, modele 3D budynków i archiwum BDOT10k (GUGiK)
 kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data

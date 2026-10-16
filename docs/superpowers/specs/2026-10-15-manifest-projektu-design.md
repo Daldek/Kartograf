@@ -418,7 +418,7 @@ Dopuszczalny, ale zbedny separator `--` po nazwie.
 - `--check-updates`, `--upgrade`, `--force`, `--plan` - blad: tryby
   dotycza uruchomienia, nie zadania (`kartograf project download
   --upgrade NAZWA`).
-- `--workers`, `--quiet`, `--stats` (`soil hsg`) - opcje jednego
+- `--workers`, `--quiet`, `--summary` (`soil hsg`) - opcje jednego
   uruchomienia; nie sa zapisywane.
 - Opcje podane po nazwie zadania naleza do komendy grupy; `--project`
   podane po nazwie = blad z podpowiedzia, by podac je przed nazwa.
