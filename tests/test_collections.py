@@ -340,6 +340,47 @@ def test_area_without_feature_channel_uses_powiats(tmp_path, session, frozen_clo
     }
 
 
+def test_area_progress_per_unit_as_sheet_list(tmp_path, session, frozen_clock):
+    """``on_progress``: per powiat ``downloading`` right before its transfer,
+    then ``completed``; a local version is ``skipped`` without a transfer."""
+    session.routes.update(
+        [
+            _prg_route(),
+            _zip_route(LOD1_2024.format(woj="02", teryt="0208")),
+            _zip_route(LOD1_2024.format(woj="02", teryt="0224")),
+        ]
+    )
+    choice = {
+        "product": "buildings",
+        "output_dir": tmp_path,
+        "country": "pl",
+        "bbox": AREA,
+        "lod": 1,
+        "year": 2024,
+        "cache": False,
+    }
+    events: list = []
+
+    def seen(p):
+        events.append((p.current, p.total, p.sheet, p.status))
+
+    assert download_collection(**choice, on_progress=seen).ok
+    assert events == [
+        (1, 2, "0208", "downloading"),
+        (1, 2, "0208", "completed"),
+        (2, 2, "0224", "downloading"),
+        (2, 2, "0224", "completed"),
+    ]
+    events.clear()
+    # in parallel: one event per finished unit, in completion order
+    assert download_collection(**choice, workers=2, on_progress=seen).ok
+    assert [(current, total, status) for current, total, _, status in events] == [
+        (1, 2, "skipped"),
+        (2, 2, "skipped"),
+    ]
+    assert sorted(unit for _, _, unit, _ in events) == ["0208", "0224"]
+
+
 def test_auto_narrows_to_countries_with_the_product(tmp_path, session, frozen_clock):
     session.routes.update(
         [
@@ -398,7 +439,8 @@ def test_area_without_powiats_is_no_coverage(tmp_path, session):
             product="buildings",
             output_dir=tmp_path,
             country="pl",
-            bbox=BBox(450000, 800000, 451000, 801000, "EPSG:2180"),
+            # Baltic Sea inside the PL envelope (a bbox outside it fails before PRG)
+            bbox=BBox(450000, 780000, 451000, 781000, "EPSG:2180"),
             lod=2,
             cache=False,
         )

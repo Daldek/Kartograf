@@ -1854,7 +1854,9 @@ class TestCmdDownloadProduct:
             main(argv)
 
         assert exc.value.code == 2
-        assert f"unrecognized arguments: {flag[0]}" in capsys.readouterr().err
+        assert f"nieznana opcja {flag[0]} (maja ja: elevation download)" in (
+            capsys.readouterr().err
+        )
         mock_create.assert_not_called()
         mock_manager_cls.assert_not_called()
 
@@ -3236,7 +3238,9 @@ class TestCmdLandcoverDownload:
                 + ["--depth", "0-5cm", "--stat", "mean", "-o", str(out)]
             )
         assert exc.value.code == 2
-        assert "unrecognized arguments: --teryt 1465" in capsys.readouterr().err
+        assert "nieznana opcja --teryt (maja ja: boundaries, cadastre" in (
+            capsys.readouterr().err
+        )
         assert not out.exists()
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
@@ -4706,8 +4710,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -4740,16 +4742,12 @@ class TestCmdDownloadLaz:
             [
                 "elevation",
                 "download",
-                "--sheet-system",
-                "1992",
                 "--product",
                 "nmt",
                 "-o",
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--bbox",
@@ -4806,8 +4804,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -4846,8 +4842,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -4900,8 +4894,6 @@ class TestCmdDownloadLaz:
                     "./data",
                     "--country",
                     "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
                     "--sheet",
@@ -4939,8 +4931,6 @@ class TestCmdDownloadLaz:
                     "./data",
                     "--country",
                     "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
                     "--sheet",
@@ -4991,8 +4981,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -5074,8 +5062,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=5m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -5133,8 +5119,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -5165,8 +5149,6 @@ class TestCmdDownloadLaz:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -5185,16 +5167,12 @@ class TestCmdDownloadLaz:
             [
                 "elevation",
                 "download",
-                "--sheet-system",
-                "1992",
                 "--product",
                 "nmt",
                 "-o",
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--geometry",
@@ -6521,7 +6499,7 @@ class TestCountryDispatch:
             ]
         )
         assert result == 1
-        assert "cz_sm5" in capsys.readouterr().err
+        assert "systemu SM5" in capsys.readouterr().err
 
     def test_pl_sheet_with_country_cz_conflicts(self, tmp_path, capsys):
         result = main(
@@ -6622,14 +6600,15 @@ class TestCountryDispatch:
         assert mock_manager_class.call_args.kwargs["provider"].vertical_crs == "KRON86"
 
     def test_5m_rule_only_for_nmt(self):
-        """LAZ also goes through the PL options - the NMT 5m rule does not apply."""
+        """LAZ also goes through the PL options - the NMT 5m rule does not apply
+        (and LAZ takes no resolution at all)."""
         from types import SimpleNamespace
 
         from kartograf.download.options import resolve_pl_options
 
         task = SimpleNamespace(
             product="laz",
-            resolution="5m",
+            resolution=None,
             vertical_crs="KRON86",
             cutout=False,
             sheet_system=None,
@@ -7044,8 +7023,11 @@ class TestCountryDispatch:
             )
 
         assert result == 0
-        spy.assert_called_once()
-        assert spy.call_args.args[1] == "EPSG:5514"
+        # the hop to Krovak, then the country check leaving Krovak (both pinned)
+        assert [call.args[1] for call in spy.call_args_list] == [
+            "EPSG:5514",
+            "EPSG:4326",
+        ]
         bbox = mock_cz.call_args.kwargs["bbox"]
         assert bbox.crs == "EPSG:5514"
         # Prague in Krovak: both coordinates negative, |X| ~ 743 km, |Y| ~ 1044 km
@@ -8194,8 +8176,6 @@ class TestAutoSplitBBox:
                     "./data",
                     "--country",
                     "auto",
-                    "--resolution",
-                    "pl=1m,cz=2m",
                     "--vertical-crs",
                     "pl=EVRF2007,cz=Bpv",
                     "--sheet",
@@ -9814,7 +9794,7 @@ class TestCampaignOptions:
         )
         assert rc == 0
         err = capsys.readouterr().err
-        assert "Info: dla 1 arkuszy starszy lot z przedzialu" in err
+        assert "Info: dla 1 arkusza starszy lot z przedzialu" in err
         assert f"{sheet}: dowiazanie 2025-10-21_84183" in err
         assert "niepelny, pokrycie 0,9 %" in err
         assert "wieksze pokrycie: 2025-04-27_83233 (pelny, pokrycie 99,8 %)" in err
@@ -9858,8 +9838,6 @@ class TestCampaignOptions:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -9892,8 +9870,6 @@ class TestCampaignOptions:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -10394,7 +10370,7 @@ class TestCampaignOptions:
             Notice(
                 "info",
                 "newer_available",
-                "dostepna nowsza kampania dla 1 arkuszy (N-34-130-D-d-2-4) - "
+                "dostepna nowsza kampania dla 1 arkusza (N-34-130-D-d-2-4) - "
                 "uzyto lokalnych wersji; pobierz: --upgrade",
             ),
         )
@@ -10406,7 +10382,7 @@ class TestCampaignOptions:
             "a.asc: lokalna wersja 2025-04-27_83233; dostepna nowsza "
             "2025-10-21_84183 (--upgrade)"
         ) in captured.out
-        assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
+        assert "Info: dostepna nowsza kampania dla 1 arkusza" in captured.err
 
     @patch("kartograf.download.data.DownloadManager")
     def test_single_sheet_new_version_line(self, mock_manager_class, capsys, tmp_path):
@@ -10805,7 +10781,7 @@ class TestCampaignOptions:
             manager.download_sheet.return_value,
             Notice(
                 "warning",
-                "unverified_local",
+                "check_failed",
                 "N-34-130-D-d-2-4: skorowidz GUGiK niedostepny - uzyto "
                 "lokalnej wersji bez sprawdzenia nowszej "
                 "(pobranie nieudane po 3 probach: HTTP 503)",
@@ -10910,7 +10886,7 @@ class TestCampaignOptions:
             manager.download_sheets.return_value,
             Notice(
                 "warning",
-                "unverified_local",
+                "check_failed",
                 "skorowidz GUGiK niedostepny - dla 2 arkuszy uzyto lokalnych "
                 "wersji bez sprawdzenia nowszej "
                 "(N-34-130-D-d-2-4, N-34-130-D-d-2-3) (HTTP 503)",
@@ -11233,7 +11209,7 @@ class TestListMessagesUx:
 
         assert rc == 1
         captured = capsys.readouterr()
-        assert "nie ma danych dla zadnego z 1 arkuszy" in captured.err
+        assert "nie ma danych dla zadnego z 1 arkusza" in captured.err
         assert "Info: Dostepny potomek 7.173.21.01" in captured.err
         assert "Downloaded" not in captured.out
 
@@ -11488,8 +11464,6 @@ class TestLazOnlyOptions:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
@@ -11577,8 +11551,6 @@ class TestFullSheetOption:
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",

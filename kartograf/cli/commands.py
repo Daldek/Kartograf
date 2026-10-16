@@ -15,7 +15,11 @@ import logging
 import os
 import sys
 
-from kartograf.cli._parser import create_parser, removed_command_error
+from kartograf.cli._parser import (
+    create_parser,
+    parse_command_line,
+    removed_command_error,
+)
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.download_cmd import cmd_download, create_progress_callback
 from kartograf.cli.parse_cmd import (
@@ -25,7 +29,7 @@ from kartograf.cli.parse_cmd import (
     format_hierarchy,
     format_sheet_info,
 )
-from kartograf.exceptions import KartografError
+from kartograf.exceptions import KartografError, ValidationError
 
 __all__ = [
     "create_parser",
@@ -59,7 +63,7 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     if getattr(parsed_args, "plan", None) is not None and not (
         parsed_args.check_updates or parsed_args.upgrade
     ):
-        parser.error("--plan wymaga --check-updates albo --upgrade")
+        raise ValidationError("--plan wymaga --check-updates albo --upgrade")
     return handler(parsed_args)
 
 
@@ -95,11 +99,12 @@ def main(args: list[str] | None = None) -> int:
     """
     _retry_lines()
     parser = create_parser()
-    removed = removed_command_error(sys.argv[1:] if args is None else args)
+    argv = sys.argv[1:] if args is None else args
+    removed = removed_command_error(argv)
     if removed is not None:
         parser.error(removed)  # exit 2, like any unknown command
     # argparse raises SystemExit for --help/--version - let it pass unchanged
-    parsed_args = parser.parse_args(args)
+    parsed_args = parse_command_line(parser, argv)
 
     try:
         return _dispatch(parser, parsed_args)

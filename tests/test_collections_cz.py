@@ -27,7 +27,7 @@ from kartograf.download.collections import (
 )
 from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.notices import WHOLE_COUNTRY_SIZE
+from kartograf.notices import AREA_OMITTED, WHOLE_COUNTRY_SIZE
 from kartograf.sources import registry
 from kartograf.sources.descriptor import FeatureBBoxParams, FeatureLayer
 from tests.conftest import recorded_response
@@ -284,7 +284,15 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
     fake = serve_zabaged(monkeypatch)
     manager = LandCoverManager(tmp_path, "zabaged", cache=False)
 
-    (item,) = manager.download(bbox=AREA).files
+    notices: list = []
+    area = manager.download(bbox=AREA, on_notice=notices.append)
+    (item,) = area.files
+    # the land cover source names the message, not the "landcover" group
+    (omitted,) = [n for n in area.notices if n.code == AREA_OMITTED]
+    assert omitted.level == "info"
+    assert omitted.text.startswith("zabaged: wynik obszaru ma 22 warstwy")
+    assert "--whole-country --horizontal-crs EPSG:5514|EPSG:3045" in omitted.text
+    assert notices == list(area.notices)
 
     path = item.file.path
     assert path == (
@@ -391,7 +399,8 @@ def test_national_file_http_signal(tmp_path, monkeypatch, name, product, stored,
 def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen_clock):
     """Completeness from ``hits``: the last WatercourseLink page (1 feature)
     carries a ``next`` link (http, STARTINDEX=4) that is never followed; the
-    area result is the geometric network (links and nodes)."""
+    area result is the geometric network (links and nodes) - the crossings
+    without geometry are in the national file only (``AREA_OMITTED``)."""
     _page_size(monkeypatch, "cz.cuzk.hy_net", 2)
     fake = FakeCuzk()
     monkeypatch.setattr(col, "_session", lambda: fake)
@@ -401,6 +410,11 @@ def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen
     )
 
     assert report.ok, report.failed
+    (omitted,) = [n for n in report.notices if n.code == AREA_OMITTED]
+    assert omitted.level == "info"
+    assert omitted.text.startswith("network: wynik obszaru bez skrzyzowan")
+    assert "WatercourseSeparatedCrossing" in omitted.text
+    assert "--whole-country --country cz" in omitted.text
     (item,) = report.files
     path = item.file.path
     assert (

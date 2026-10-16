@@ -111,7 +111,6 @@ def test_area_outside_countries_is_validation_error(tmp_path):
     [
         ({"product": "foo"}, "--product 'foo': nieznana wartosc - dostepne: nmt"),
         ({"country": "xx"}, "--country 'xx': nieznana wartosc - dostepne: pl"),
-        ({"country": "PL"}, "--country 'PL': nieznana wartosc - dostepne: pl"),
         (
             {"sheet_system": "1993"},
             "--sheet-system '1993': nieznana wartosc - dostepne: 1992",
@@ -281,7 +280,7 @@ def test_laz_start_progress_uses_resolved_pl_vertical_crs(tmp_path):
             cache=False,
         )
     assert report.ok
-    assert events == [DownloadProgress(0, 1, "kafle LAZ", "start", "WFS GUGiK, KRON86")]
+    assert events == [DownloadProgress(0, 1, "kafli LAZ", "start", "WFS GUGiK, KRON86")]
 
 
 def _border_tracks(order: list[str], *, cz_error: Exception | None = None):
@@ -492,7 +491,6 @@ _BBOX_TRACKS = (
     [
         (BBox(1, 2, 3, 4, "bogus"), "nieobslugiwany uklad 'bogus'"),
         (BBox(1, 2, 3, 4, "EPSG:9999"), "nieobslugiwany uklad 'EPSG:9999'"),
-        (BBox(1, 2, 3, 4, "epsg:2180"), "nieobslugiwany uklad 'epsg:2180'"),
         (BBox(10, 10, 5, 5, "EPSG:2180"), "bbox odwrocony"),
     ],
 )

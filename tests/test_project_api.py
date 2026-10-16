@@ -169,7 +169,7 @@ def test_add_bad_name(tmp_path, name):
     assert open_project(tmp_path / "p").tasks == ()
 
 
-def test_add_duplicate_name_keeps_first_task(tmp_path):
+def test_add_duplicate_name_keeps_first_task(tmp_path, monkeypatch):
     init_project(tmp_path / "p", output_dir=tmp_path / "data")
     add_project_task(
         tmp_path / "p", name="teren", command="elevation download", options=PL_SHEET
@@ -182,10 +182,15 @@ def test_add_duplicate_name_keeps_first_task(tmp_path):
             command="soil hsg",
             options={"sheet": "N-34-130-D", "depth": "0-5cm"},
         )
+    # the hint works where it is printed: --project unless that is the project
     assert str(caught.value) == (
-        "zadanie teren juz istnieje; usun je (kartograf project remove teren) "
-        "albo wybierz inna nazwe"
+        "zadanie teren juz istnieje; usun je (kartograf project remove --project "
+        f"{tmp_path / 'p'} teren) albo wybierz inna nazwe"
     )
+    monkeypatch.chdir(tmp_path / "p")
+    with pytest.raises(ValidationError) as here:
+        add_project_task(".", name="teren", command="elevation download", options={})
+    assert "(kartograf project remove teren)" in str(here.value)
     assert (tmp_path / "p" / MANIFEST_NAME).read_bytes() == before
 
 

@@ -24,6 +24,7 @@ BDOO, Data50, Data250) on its requests - both on the plan track
 import concurrent.futures
 import logging
 import os
+import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -51,6 +52,7 @@ from kartograf.download.collections import (
     plan_request,
     run_job,
     run_request,
+    selection_choices,
 )
 from kartograf.download.fetch import (
     EditionLookup,
@@ -70,7 +72,12 @@ from kartograf.download.fetch import (
     validate_update,
 )
 from kartograf.download.manager import DownloadProgress
-from kartograf.download.options import validate_request_bbox
+from kartograf.download.options import (
+    canonical_crs,
+    canonical_format,
+    check_layer,
+    validate_request_bbox,
+)
 from kartograf.download.plan import (
     PlanItem,
     Track,
@@ -128,7 +135,9 @@ LANDCOVER_SOURCE_CHOICES = ", ".join(
     f"{name} ({d.name}, {d.country})" for name, d in _LANDCOVER.items()
 )
 # How messages name the sources with TERYT units (``teryt``).
-_TERYT_SOURCES = "BDOT10k (powiat, 4 cyfry) i BDOO (wojewodztwo, 2 cyfry)"
+_TERYT_SOURCES = "--source bdot10k (powiat, 4 cyfry) albo bdoo (wojewodztwo, 2 cyfry)"
+# The area selections of a source without TERYT units (CORINE, SoilGrids).
+_AREA_CHOICES = "--sheet, --bbox albo --geometry"
 
 # Options belonging to a different source are input errors; options not
 # belonging to any source are programming errors (e.g. removed output_path).
@@ -323,6 +332,15 @@ class _Job:
         if self.edition is not None:
             return VersionRef(self.edition().id, "edition")
         return VersionRef.downloaded()
+
+
+def _canonical_options(options: dict) -> None:
+    """``format`` and ``horizontal_crs`` in any case: the registry spelling
+    (``shp`` = ``SHP``, ``epsg:5514`` = ``EPSG:5514``; UX-11)."""
+    if "format" in options:
+        options["format"] = canonical_format(options["format"])
+    if "horizontal_crs" in options:
+        options["horizontal_crs"] = canonical_crs(options["horizontal_crs"])
 
 
 _PowiatOutcome = LandCoverResult | LandCoverFailure
@@ -697,12 +715,13 @@ class LandCoverManager:
         sink = NoticeSink(on_notice)
         validate_update(update)
         require_int(workers, "--workers")
+        _canonical_options(options)
         if self._collection is not None:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
             )
             return self._download_collection(
-                request, options, update, plan, workers, sink
+                request, options, update, plan, workers, sink, on_progress
             )
         teryt, sheet, bbox = self._validated(
             teryt, sheet, bbox, geometry, layer, options, sink
@@ -769,6 +788,7 @@ class LandCoverManager:
         read (an instance ``MetadataCache`` too: its file, refreshing).
         """
         sink = NoticeSink(on_notice)
+        _canonical_options(options)
         if self._collection is not None:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
@@ -821,6 +841,7 @@ class LandCoverManager:
         TypeError
             An option that belongs to no source.
         """
+        _canonical_options(options)
         if self._collection is not None:
             self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, NoticeSink(None)
@@ -840,7 +861,7 @@ class LandCoverManager:
     ) -> tuple[str | None, str | None, BBox | None]:
         """The prologue of ``download``/``check``: options, then the selection."""
         if bbox is not None:  # the CLI parses --bbox first: the same first error
-            validate_request_bbox(bbox)
+            bbox = validate_request_bbox(bbox)
         self._check_options(options)
         return self._selection(teryt, sheet, bbox, geometry, layer, sink)
 
@@ -858,7 +879,7 @@ class LandCoverManager:
         Data250): bbox, options, the selection - the rules of
         ``download.collections`` (no network)."""
         if bbox is not None:  # the CLI parses --bbox first: the same first error
-            validate_request_bbox(bbox)
+            bbox = validate_request_bbox(bbox)
         source = self._provider_name
         assert source is not None and self._collection is not None
         allowed = _SOURCE_OPTIONS[source] | {"timeout"}
@@ -892,7 +913,7 @@ class LandCoverManager:
             )
         if teryt is not None and get_source(self._collection).country != "PL":
             raise ValidationError(
-                f"{source}: wybor --teryt dziala tylko dla {_TERYT_SOURCES} - "
+                f"--teryt dziala tylko z {_TERYT_SOURCES}; --source {source}: "
                 "podaj --bbox, --geometry albo --whole-country"
             )
         return landcover_request(
@@ -918,13 +939,15 @@ class LandCoverManager:
         plan: UpdatePlan | None,
         workers: int,
         sink: NoticeSink,
+        on_progress: Callable[[DownloadProgress], None] | None,
     ) -> LandCoverAreaResult:
         """The files of a collection source on the track ``landcover``.
 
         An area of unit packages (BDOO voivodeships) keeps going past a
         failing unit (``failed``, ``workers`` in parallel, as the BDOT10k
         powiats); one file (``teryt``, a national file, the objects of an
-        area) raises its failure, as CORINE and SoilGrids.
+        area) raises its failure, as CORINE and SoilGrids. Progress per unit
+        as ``download_collection``.
         """
         files, failed, stale = run_request(
             request,
@@ -935,6 +958,7 @@ class LandCoverManager:
             sink=sink,
             track=_TRACK,
             timeout=options.get("timeout"),
+            on_progress=on_progress,
         )
         units = (
             request.teryt is None
@@ -1117,24 +1141,44 @@ class LandCoverManager:
         stays in its CRS (PRG converts it, ``parent_request`` keeps it).
         """
         given = [v for v in (teryt, sheet, bbox, geometry) if v is not None]
+        provider = self._provider
+        bdot = isinstance(provider, Bdot10kProvider)
+        corine = isinstance(provider, CorineProvider)  # else SoilGrids (no --source)
         if len(given) != 1:
-            raise ValidationError(
-                "Podaj dokladnie jeden wybor: teryt, sheet, bbox albo geometry"
-            )
-        if teryt is not None:
-            if not isinstance(self._provider, Bdot10kProvider):
+            if bdot:
                 raise ValidationError(
-                    f"{self._provider.name}: wybor teryt dziala tylko dla "
-                    f"{_TERYT_SOURCES} - podaj bbox, sheet albo geometry"
+                    "Podaj dokladnie jeden wybor dla --source bdot10k: "
+                    f"{selection_choices(self._descriptor_key())}"
                 )
-            if not self._provider.validate_admin_unit(teryt):
-                raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
+            where = " dla --source corine" if corine else ""
+            raise ValidationError(
+                f"Podaj dokladnie jeden wybor{where}: {_AREA_CHOICES}"
+            )
+        check_layer(layer, geometry, landcover=bdot)
+        if teryt is not None:
+            if not bdot:
+                name = "--source corine" if corine else "SoilGrids"
+                raise ValidationError(
+                    f"--teryt dziala tylko z {_TERYT_SOURCES}; {name}: podaj "
+                    f"{_AREA_CHOICES}"
+                )
+            if not provider.validate_admin_unit(teryt):
+                if re.fullmatch(r"[0-9]{2}", teryt):
+                    raise ValidationError(
+                        f"--teryt {teryt}: BDOT10k jest publikowany per powiat - "
+                        "podaj --teryt <4 cyfry> (np. 1465); dostepne: "
+                        f"{selection_choices(self._descriptor_key())}"
+                    )
+                raise ValidationError(
+                    f"Nieprawidlowy kod TERYT {teryt!r}: powiat BDOT10k (4 cyfry, "
+                    "np. 1465)"
+                )
         if sheet is not None:
             SheetParser(sheet)  # a malformed code: ParseError before any request
         if geometry is not None:
             bbox = geometry_envelope_2180(geometry, layer, sink)
         elif bbox is not None:
-            validate_request_bbox(bbox)
+            bbox = validate_request_bbox(bbox)
             if not isinstance(self._provider, Bdot10kProvider):
                 bbox = bbox_to_2180(bbox)
         return teryt, sheet, bbox
@@ -1240,10 +1284,13 @@ class LandCoverManager:
         if kwargs.get("layers") is not None:
             normalize_layers(kwargs["layers"])
             if fmt != "GPKG":
-                raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
+                raise ValidationError(
+                    "--layers dotyczy tylko --format GPKG (SHP to oryginalny ZIP "
+                    "paczki)"
+                )
         if kwargs.get("keep_raw") and fmt != "GPKG":
             raise ValidationError(
-                "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
+                "--keep-raw dotyczy tylko --format GPKG (SHP to juz oryginalny ZIP)"
             )
 
     def _archive_variant(self, kwargs: dict) -> PackageVariant:

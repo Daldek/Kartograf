@@ -35,7 +35,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
-from kartograf.notices import NEWER_AVAILABLE, UNVERIFIED_LOCAL, Notice
+from kartograf.notices import CHECK_FAILED, NEWER_AVAILABLE, Notice
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.skorowidz import parse_skorowidz_records
@@ -372,7 +372,7 @@ def test_newer_and_unverified_become_notices(tmp_path):
         Notice(
             "info",
             NEWER_AVAILABLE,
-            f"dostepna nowsza kampania dla 1 arkuszy ({G}) - "
+            f"dostepna nowsza kampania dla 1 arkusza ({G}) - "
             "uzyto lokalnych wersji; pobierz: --upgrade",
         ),
     )
@@ -385,7 +385,7 @@ def test_newer_and_unverified_become_notices(tmp_path):
     assert unverified.notices == (
         Notice(
             "warning",
-            UNVERIFIED_LOCAL,
+            CHECK_FAILED,
             f"{G}: skorowidz GUGiK niedostepny - uzyto lokalnej "
             "wersji bez sprawdzenia nowszej "
             f"({unverified.unverified[G]})",
@@ -1055,7 +1055,7 @@ def test_range_index_down_all_local_uses_local(tmp_path, caplog):
     assert result.unverified.keys() == {W}
     assert "80196" in linked(std_path(tmp_path, W))
     assert len(result.notices) == 1
-    assert result.notices[0].code == UNVERIFIED_LOCAL
+    assert result.notices[0].code == CHECK_FAILED
     assert not any(
         "skorowidz GUGiK niedostepny" in r.getMessage() for r in caplog.records
     )
@@ -1539,7 +1539,7 @@ def test_newest_transport_failure_uses_local_campaign(tmp_path, failure, caplog)
     assert fetch.label == "2025-10-21_84183"
     assert fetch.unverified and str(fake.resolve_error) in fetch.unverified
     assert len(result.notices) == 1
-    assert result.notices[0].code == UNVERIFIED_LOCAL
+    assert result.notices[0].code == CHECK_FAILED
     assert not any(
         "skorowidz GUGiK niedostepny" in r.getMessage() for r in caplog.records
     )

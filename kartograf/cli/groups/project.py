@@ -39,7 +39,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--output",
         "-o",
         metavar="KATALOG",
-        required=True,
+        default=None,
         help="Katalog magazynu projektu (wymagany; bez domyslnej sciezki)",
     )
     init.set_defaults(_handler=cmd_project_init)
@@ -76,6 +76,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         force_help="Pobierz ponownie i przepnij cale zadania",
     )
     add_quiet(download)
+    download.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        metavar="N",
+        default=None,
+        help="Rownolegle pobieranie plikow w kazdym zadaniu (domyslnie jak "
+        "w komendzie danych: elevation i imagery 4, pozostale 1; soil hsg bez "
+        "rownoleglosci)",
+    )
     download.add_argument(
         "tasks",
         nargs="*",

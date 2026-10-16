@@ -341,7 +341,7 @@ def test_choices_of_the_report_are_validated_before_network():
     with pytest.raises(ValidationError, match="--country wymagane z --bbox"):
         _check(session, product="nmt", bbox=KRAKOW)
     with pytest.raises(
-        ValidationError, match=r"systemu cz_tm33 \(kraj CZ\), a podano --country pl"
+        ValidationError, match=r"systemu TM33 \(kraj CZ\), a podano --country pl"
     ):
         _check(session, product="nmt", country="pl", sheet="302_5550")
     with pytest.raises(ParseError):

@@ -3122,8 +3122,12 @@ PRG w CRS84 (44 kolekcje jawnie w deskryptorze) z limitem czasu kanalu
 o kazda kolekcje osobno) i plikiem krajowym SHP/GML. Kolekcja
 `GranicaObwoduSpisowego` nie wchodzi do wyniku obszaru (odpowiedz po
 158 do ponad 400 s): `FeatureBBoxParams.area_omitted` niesie tekst, ktory
-silnik kolekcji zamienia w `Info` `AREA_OMITTED` przy kazdym zadaniu
-obszaru kanalu (obwody sa w pliku krajowym). `pl.gugik.rcn` ma kanaly
+silnik kolekcji zamienia w `Info` `AREA_OMITTED` (`<produkt albo
+--source>: <tekst>`) przy kazdym zadaniu obszaru kanalu (obwody sa
+w pliku krajowym). Ten sam mechanizm maja `cz.cuzk.hy_net` (typ
+`WatercourseSeparatedCrossing` bez geometrii tylko w pliku krajowym)
+i `cz.cuzk.zabaged` (22 warstwy obszaru wobec pelnej bazy pliku
+krajowego). `pl.gugik.rcn` ma kanaly
 `unit="powiat"` i `unit="woj"`; paczka ZIP jest rozpakowywana do jednego
 GPKG (`UnitPackageParams.unpack=".gpkg"`), a `unpack_layers` (tylko
 z `unpack=".gpkg"`; niezmiennik rejestru) wymusza obecnosc warstw

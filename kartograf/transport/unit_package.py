@@ -47,6 +47,7 @@ from pathlib import Path
 import requests
 
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.notices import FILES, cli_flag, count_text
 from kartograf.sources.descriptor import FileKind, PackageVariant, UnitPackageParams
 from kartograf.transport.http import download_to, response_signal
 
@@ -102,14 +103,17 @@ def _values(variants: list[PackageVariant], key: str) -> list[str]:
     return seen
 
 
-def select_variant(params: UnitPackageParams, **choice: str | None) -> PackageVariant:
+def select_variant(
+    params: UnitPackageParams, *, subject: str = "tego produktu", **choice: str | None
+) -> PackageVariant:
     """The published variant of a choice (``None`` values = not chosen).
 
     Every key must belong to the channel; a chosen value must be published
     (together with the other chosen values); when several variants remain,
     the first key that still distinguishes them is required (K8: no data
     default). A channel with one variant needs no choice, and a chosen value
-    must then equal the published one.
+    must then equal the published one. ``subject``: how a message names the
+    product (``--product mesh (PL)``).
 
     Raises
     ------
@@ -123,8 +127,8 @@ def select_variant(params: UnitPackageParams, **choice: str | None) -> PackageVa
     foreign = sorted(set(given) - set(keys))
     if foreign:
         raise ValidationError(
-            f"--{foreign[0]} nie dotyczy tego produktu"
-            + (f" (wybory: {', '.join(f'--{k}' for k in keys)})" if keys else "")
+            f"{cli_flag(foreign[0])} nie dotyczy {subject}"
+            + (f" (wybory: {', '.join(cli_flag(k) for k in keys)})" if keys else "")
         )
     candidates = list(params.variants)
     context: list[str] = []
@@ -135,18 +139,20 @@ def select_variant(params: UnitPackageParams, **choice: str | None) -> PackageVa
         if given[key] not in allowed:
             where = f" dla {', '.join(context)}" if context else ""
             raise ValidationError(
-                f"--{key} {given[key]}: niedostepne{where}; dostepne: "
+                f"{cli_flag(key)} {given[key]}: niedostepne{where}; dostepne: "
                 f"{', '.join(allowed)}"
             )
         candidates = [v for v in candidates if dict(v.choice)[key] == given[key]]
-        context.append(f"--{key} {given[key]}")
+        context.append(f"{cli_flag(key)} {given[key]}")
     if len(candidates) == 1:
         return candidates[0]
     for key in keys:
         allowed = _values(candidates, key)
         if len(allowed) > 1:
             where = f" dla {', '.join(context)}" if context else ""
-            raise ValidationError(f"--{key} wymagane{where}: {', '.join(allowed)}")
+            raise ValidationError(
+                f"{cli_flag(key)} wymagane{where}: {', '.join(allowed)}"
+            )
     raise AssertionError(f"Warianty kanalu nie sa rozroznialne: {candidates}")
 
 
@@ -352,7 +358,7 @@ def _check_archive(
             if missing:
                 raise DownloadError(
                     f"{url}: paczka bez plikow {', '.join(missing)} "
-                    f"({len(files)} plikow) - to nie sa oczekiwane dane"
+                    f"({count_text(len(files), *FILES)}) - to nie sa oczekiwane dane"
                 )
             if params.class_pattern is not None:
                 kept = _class_members(
@@ -401,8 +407,8 @@ def _class_members(
             found.append((info, match.group("code")))
     if not found:
         raise DownloadError(
-            f"{url}: paczka bez plikow klas obiektow ({len(files)} plikow) - to "
-            "nie sa oczekiwane dane"
+            f"{url}: paczka bez plikow klas obiektow ({count_text(len(files), *FILES)})"
+            " - to nie sa oczekiwane dane"
         )
     if not classes:
         return ()

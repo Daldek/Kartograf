@@ -63,7 +63,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.notices import LAZ_SUPERSEDED, Notice, NoticeSink
+from kartograf.notices import LAZ_SUPERSEDED, TILES, Notice, NoticeSink, count_text
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
     GugikLazProvider,
@@ -354,16 +354,21 @@ def _run_laz_download(
     )
 
 
-def _validate_area(bbox: BBox | None, sheet: str | None) -> None:
-    """Exactly one of ``bbox``/``sheet``, valid - before any request."""
+def _validate_area(bbox: BBox | None, sheet: str | None) -> BBox | None:
+    """Exactly one of ``bbox``/``sheet``, valid - before any request.
+
+    Returns ``bbox`` with its CRS code in the registry spelling (``None`` for
+    a sheet) - callers go on with it.
+    """
     if (bbox is None) == (sheet is None):
         raise ValidationError(
             "LAZ PL: podaj dokladnie jedno z sheet (godlo) albo bbox (obszar)"
         )
     if sheet is not None:
         SheetParser(sheet)  # ParseError: an invalid sheet code
-    elif bbox is not None:
-        validate_request_bbox(bbox)
+    if bbox is not None:
+        return validate_request_bbox(bbox)
+    return None
 
 
 def _query_area(bbox: BBox | None, sheet: str | None) -> tuple[BBox, Polygon | None]:
@@ -455,7 +460,8 @@ def _emit_superseded(
     if not covered:
         return
     lines = [
-        f"pominieto {len(covered)} kafli LAZ - obszar pokrywaja nowsze kafle "
+        f"pominieto {count_text(len(covered), *TILES)} LAZ - obszar pokrywaja "
+        "nowsze kafle "
         "(domyslnie najnowszy rocznik per obszar; inny rocznik: "
         "--year/--min-year/--max-year)"
     ]
@@ -488,7 +494,7 @@ def check_laz_area(
     The source is always asked (``--check-updates``): the metadata cache is
     refreshed, never read.
     """
-    _validate_area(bbox, sheet)
+    bbox = _validate_area(bbox, sheet)
     sink = NoticeSink(on_notice)
     with _selected(
         bbox,
@@ -602,7 +608,7 @@ def download_laz_area(
     NoCoverageError
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
-    _validate_area(bbox, sheet)
+    bbox = _validate_area(bbox, sheet)
     validate_update(update)
     require_int(workers, "workers")
     sink = NoticeSink(on_notice)
