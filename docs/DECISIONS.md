@@ -60,10 +60,11 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — czesciowo zastapiona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D27: wycinek ortofotomapy w magazynie; errata 2); uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D23 miedzy wydaniami, sloty jednostek); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
 | [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
-| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
+| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (grupy `names`, `maps`, `geodesy`); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
 | [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
-| [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta |
-| [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta; czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto) |
+| [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci) |
+| [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto) |
+| [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci) |
 
 ---
 
@@ -2822,7 +2823,7 @@ wymaga `--cutout` takze dla natywnego ukladu.
 ## ADR-039: Grupy komend CLI wg typu danych
 
 **Data:** 2026-10-15
-**Status:** Przyjeta — uzupelniona przez ADR-040 (komenda danych ustawia `_task` dla `project add`) i ADR-042 (grupy `boundaries`, `cadastre`, `models3d`, `hydro`); uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag)
+**Status:** Przyjeta — uzupelniona przez ADR-040 (komenda danych ustawia `_task` dla `project add`), ADR-042 (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i ADR-043 (grupy `names`, `maps`, `geodesy`); uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag)
 
 **Kontekst:** CLI 0.8.0-dev mialo jedna komende `download` dla NMT, NMPT,
 ortofotomapy i LAZ (z flagami dotyczacymi tylko czesci produktow:
@@ -2974,7 +2975,7 @@ zgodnosci). Implementacja:
 ## ADR-041: Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci
 
 **Data:** 2026-10-15
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-043 (NMT 100 m w rejestrze wariantow bez ukladu wysokosci)
 
 **Kontekst:** Skorowidze GUGiK 2025 maja NMT wylacznie w 0,5 m i 5 m,
 a NMPT w 73% w 0,5 m; Kartograf znal tylko NMT 1 m i 5 m oraz NMPT 1 m,
@@ -3211,7 +3212,7 @@ CZ (uzupelnienie ADR-041).
 ## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
 
 **Data:** 2026-10-15
-**Status:** Przyjeta; czesciowo zastepuje ADR-036 (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia ADR-015 (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), ADR-034 (kawalki wycinka ortofotomapy; errata 1 ADR-034), ADR-036 (D23 miedzy wydaniami, sloty jednostek), ADR-039 (grupy boundaries, cadastre, models3d, hydro) i ADR-040 (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-043 (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez ADR-043 (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje ADR-036 (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia ADR-015 (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), ADR-034 (kawalki wycinka ortofotomapy; errata 1 ADR-034), ADR-036 (D23 miedzy wydaniami, sloty jednostek), ADR-039 (grupy boundaries, cadastre, models3d, hydro) i ADR-040 (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto)
 
 **Kontekst:** Spec katalogu (K5-K7) wymaga, by produkt z raportu byl
 wpisem deskryptora i konfiguracja kanalu, nie providerem. Plany C i D
@@ -3499,6 +3500,164 @@ WCS Standard i High)`. Pod `auto` `--coverage` i `--resolution` orto
 zawezaja zadanie do PL (`auto_narrowed_to_pl`); obszar tylko w CZ =
 blad. API: `download_orto_cutout`/`check_orto_cutout`
 (`OrtoCutoutResult`), tor planu `pl_cutout`.
+
+---
+
+## ADR-043: Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D
+
+**Data:** 2026-10-16
+**Status:** Przyjeta; czesciowo zastepuje ADR-042 (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelnia ADR-042 (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), ADR-039 (grupy `names`, `maps`, `geodesy`) i ADR-041 (NMT 100 m w rejestrze wariantow bez ukladu wysokosci)
+
+**Kontekst:** Plan E (spec katalogu 6, 24 pozycje) dodaje produkty GUGiK
+i CUZK, ktorych plik nie jest paczka jednostki TERYT ani wynikiem obszaru
+z planow C/D: arkusze map (wizualizacje BDOT10k: link pliku tylko
+w GetFeatureInfo WMS; ZTM CUZK: arkusze warstw indeksu
+`KladyMapovychListu`), kafle z rekordow WFS (mesh 3D: URL, data i numer
+zgloszenia w rekordzie), paczki katastralnich uzemi CZ (KU z RUIAN), pliki
+krajowe z kilku tematow (PRNG), pliki bez ZIP (TIFF, PDF, TXT
+PL-geoid2021), uslugi OGC API Features (PRNG, granice specjalne PRG) i
+produkty z osobna usluga na siec albo feedem na format. Pomiary
+2026-10-15/16 (`docs/research/2026-10-15-plan-e/raport.md`, fixtury
+`tests/fixtures/pl/{e0,index_records,feature_bbox}/`,
+`tests/fixtures/cuzk/real_2026_10_16/`): kazde zapytanie `items` OGC API
+PRNG trwa 78-95 s niezaleznie od `limit` (`/collections` ponizej 0,4 s;
+OGC API PRG odpowiada w 3,5 s); indeks mesh publikuje przestrzen nazw
+`https://www.gugik.gov.pl` (indeksy NMT/NMPT/LAZ `http://`), jeden rekord
+na kafel (Krakow: 3884 kafle po ok. 37 MB); GFI wizualizacji BDOT10k poza
+zasiegiem warstwy daje 0 B; WFS osnowy grawimetrycznej odpowiada pod
+`.../OsnowaGrawimetryczna/WFS` (bez `/WFS` nie), bez `gml:id`; serwery
+GUGiK sporadycznie zrywaja polaczenie (`RemoteDisconnected`), ponowienie
+odpowiada 200; GUGiK `opendata` nie wysyla `ETag` ani `Last-Modified`,
+a plik `latest_exports` RCN jest podmieniany (1261: 236 404 584 B
+2026-10-15, 301 623 607 B 2026-10-16).
+
+**Opcje:**
+- A) Provider per produkt (mapy, mesh, mapa katastralna CZ).
+- B) Rozszerzenie silnikow i orkiestratora planow C/D o jednostki, adres
+  z rekordu indeksu i nowe parametry kanalow; produkt = deskryptor.
+- C) WMS jako kanal danych (obraz mapy zamiast pliku arkusza).
+
+**Decyzja:** B (bez drugiego silnika i bez providera kopiujacego
+pobieranie). A powiela pobieranie, magazyn i sygnaly (zasada planu C);
+C daje obraz uslugi zamiast opublikowanego pliku - WMS jest tylko
+indeksem (GFI). Kod: Task E0 planu E
+(`docs/superpowers/plans/2026-10-15-plan-e-produkty.md`).
+- D1. Jednostki `unit_package`: `UnitPackageParams.unit` += `sheet`
+  (arkusze obszaru albo arkusz `--sheet`), `tile` (rekordy indeksu WFS
+  w obszarze), `ku` (katastralni uzemi CZ: `--ku` 6 cyfr albo KU obszaru
+  z warstwy RUIAN `ku_layer`, pole `kod`, `returnGeometry=false`);
+  `themes`: plik krajowy z kilku plikow, kazdy temat osobna jednostka
+  `country/<kraj>-<temat>` (malymi literami, `_` -> `-`). Tokeny szablonu
+  URL += `{sheet}`, `{ku}`, `{theme}`. Sloty (rozszerzenie ADR-042 D8):
+  arkusz PL `<segment>/<hierarchia godla>/<godlo>`, arkusz CUZK plasko
+  `<segment>/<MAPNOM>`, kafel `<segment>/<strefa>/<modul>` (strefa
+  z pola ukladu rekordu: `PL-2000:S7` -> `s7`; bez pola `tile/`), KU
+  `<segment>/ku/<kod>`, temat `<segment>/country/pl-<temat>`. `sheet=`
+  produktow C/D dalej znaczy obszar arkusza (ADR-039 D4); jednostka
+  arkusza powstaje tylko w kanale `unit="sheet"`.
+- D2. Siatka arkuszy jest cecha wariantu (`PackageVariant.sheet_grid`,
+  skala mapy ma swoja siatke): `SheetGrid(system="1992", parts=N)` -
+  seria PL-1992 o N czlonach godla liczona z obwiedni
+  (`find_sheets_for_bbox`; etykiety skal `SheetParser` sa o poziom
+  drobniejsze niz nomenklatura GUGiK, wiec seria jest nazwana liczba
+  czlonow, nigdy etykieta skali; obszar w ukladzie spoza PL-1992/PL-2000/
+  WGS84 przechodzi na EPSG:4326); `SheetGrid(system="cuzk", layer, crs)` -
+  `MAPNOM` warstwy `KladyMapovychListu` pytanej w jej ukladzie
+  (`SheetIndex.sheets_for_bbox(layer, bbox)`, `SheetIndex.sheet(layer,
+  mapnom, crs=)`; SM5 i TM33 bez zmian); istnienie `--sheet` CZ jest
+  sprawdzane w warstwie po zapytaniu (`ValidationError`). Siatki PL-2000
+  nie ma: zaden produkt kolekcji planu E jej nie potrzebuje.
+- D3. Rekord indeksu: `UnitPackageParams.index: IndexSource(kind, endpoint,
+  parser, unit_field, url_field, label_fields, year_field, zone_field)`,
+  warstwa w wariancie (`PackageVariant.index_layer`). `url_template=None`
+  = URL z rekordu: jedyny link albo link formatu z `choice`
+  (`index_url`). `transport/index_records.py`: `gfi_records` (WMS 1.3.0
+  GetFeatureInfo w srodku ramki arkusza, osie N,E; parser `map_links` -
+  tabela HTML wizualizacji BDOT10k: godlo, link na format z rozszerzenia,
+  data "Stan bazy"; 0 B = brak rekordu) i `wfs_records` (`WfsIndex`: strony
+  tylko po `next`, pola po nazwie lokalnej). Wyjatek OGC przy 200, HTML
+  bez tabeli, tabela bez daty albo link bez HTTPS = `DownloadError`
+  ("wynik bylby niepelny"); pojedynczy nieuzywalny obiekt WFS jest
+  pomijany z ostrzezeniem. Jednostka dostaje najnowszy rekord (rok, potem
+  etykieta); `year` produktu bez wariantow rocznych jest filtrem rekordow
+  (ADR-028), nie wyborem wariantu. Arkusz bez rekordu jest pomijany
+  i wypisany w `UNIT_LIST`; zaden arkusz z rekordem = `NoCoverageError`.
+- D4. Sygnal `index` w kolekcjach: etykieta rekordu (`label_fields`
+  laczone `_`, D29) jest wydaniem wersji (`label_source="edition"`),
+  porownywanym przez `fetch_version`/`inspect_version`; `check_collection`
+  pyta tylko indeks, nigdy pliku. Kanal kolekcji ma sygnal `index` wtedy
+  i tylko wtedy, gdy ma `IndexSource` (test rejestru). LAZ bez zmian.
+- D5. Wybor kanalu i wariantu po wartosciach opcji: `download_collection`/
+  `check_collection`/`validate_collection_request` dostaja `ku`, `format`,
+  `scale`, `sheet_system` i `network` (`str | None`; `teryt`, `ku`,
+  `sheet` i te opcje innego typu niz `str` = `ValidationError`, bo kod
+  z liczby traci zera wiodace). Dozwolone wartosci sa w deskryptorze
+  (K1): `PackageVariant.choice`, `FeatureBBoxParams.choice` (jedna usluga
+  WFS na siec), `AtomFilesParams.choice` (jeden feed na format). Z kilku
+  kanalow rodzaju wyboru wygrywa ten, ktorego wartosci przyjmuja podane;
+  brak wartosci rozrozniajacej = `ValidationError` z lista; jeden kandydat
+  jest brany wprost (jego kontrola tresci podaje dozwolone wartosci).
+  `FeatureBBoxParams.selection_key` nazywa opcje wyboru warstw przy
+  `selection="level"` (`--level`; `network` dla osnow CZ); jeden `code`
+  moze nazwac kilka warstw.
+- D6. Capability kanalu kolekcji nie musi byc unikalna (czesciowo
+  zastepuje ADR-042 D1): kanaly jednego rodzaju (usluga na siec) dziela
+  capability. Sidecar czyta uklady z pierwszego kanalu tej capability,
+  wiec kanaly, ktore ja dziela, deklaruja te same uklady (test rejestru).
+- D7. OGC API Features w `feature_bbox` (`protocol="ogcapi"`,
+  `TransportKind.OGC_API_FEATURES`): `/collections?f=json` raz na
+  pobranie (brak kolekcji deskryptora = `DownloadError`), pierwsza strona
+  `items?f=json&bbox=<CRS84 lon,lat>&limit=<page_size>`, kolejne tylko po
+  `rel="next"` z tym samym schematem i hostem. N = `numberMatched`
+  pierwszej strony - bez osobnego zapytania o liczbe, bo kazde `items`
+  PRNG trwa 78-95 s. Kazda strona: `numberReturned` rowne liczbie
+  obiektow i ten sam `numberMatched`; koniec przy N unikalnych `id`;
+  wiecej niz N, strona bez nowych `id` albo brak `next` przed N =
+  `DownloadError`. Wynik: GPKG w `OGC:CRS84` (jedyny uklad wyjscia uslug
+  GUGiK). Wolna usluga deklaruje `FeatureBBoxParams.timeout`;
+  pierwszenstwo: jawny `timeout` wywolania, kanal, `SERVICE_TIMEOUT`
+  (60 s).
+- D8. Pliki bez ZIP: `PackageVariant.file_kind` `zip|tiff|pdf|txt`
+  (rozszerzenie `.zip`, `.tif`, `.pdf`, `.txt`), sprawdzane po pierwszych
+  bajtach: magia TIFF (klasyczny i BigTIFF), `%PDF-`, tekst bez bajtow NUL
+  z pierwsza niepusta linia, ktora nie jest znacznikiem (kodowanie bez
+  znaczenia). Dokument HTML/XML zamiast pliku = `DownloadError`, bez
+  wersji.
+- D9. Rozmiar przed transferem (K9): przed `GET` kazdego pliku jednostki
+  `HEAD`; plik ponad 100 MiB dostaje `Notice` `DOWNLOAD_SIZE` (ostrzezenie
+  z URL i rozmiarem) w chwili swojego pobrania, takze w produktach C/D
+  (jedno `HEAD` wiecej na paczke); plik krajowy dalej
+  `WHOLE_COUNTRY_SIZE` (K7). Bez sumy rozmiarow wszystkich jednostek przed
+  pierwszym `GET`: liste jednostek podaje `UNIT_LIST`.
+- D10. Decyzje produktowe planu E (wykonanie w pakietach E1-E5): nowe grupy
+  `names`, `maps` i `geodesy` (ADR-039; `geodesy` = osnowy PL i CZ oraz
+  modele quasi-geoidy); nazwy produktow unikalne w kolekcjach; orto ukosna
+  `--direction` jako filtr czterech plikow arkusza; 8-czlonowe godla
+  PL-1992 w `SheetParser` (E1). NMT 100 m (decyzja uzytkownika
+  2026-10-15): uklad wysokosci NIEZNANY - sidecar `vertical_crs: null`
+  z adnotacja o zrodle, segment bez tokenu ukladu, `--vertical-crs` dla
+  tego wariantu = blad. Mapa katastralna CZ w formacie VKM poza 0.8.0
+  (pliki pilota 2026-10-15 odpowiadaly 404); SHP, DXF, DGN i VFK wchodza.
+
+**Odrzucone:** provider per produkt (A); WMS jako kanal danych (C); plik
+krajowy dla obszaru (obszar idzie zawsze kanalem obszarowym albo
+jednostkami, ADR-042 D2, K7); narzedzie transformacji wysokosci
+z quasi-geoida - Kartograf pobiera modele PL i CZ jako dane i nie stosuje
+ich do innych danych (PROJ ma oficjalna siatke GUGiK); kanal REST
+warstwic CZ (arkusze SM5 1:1 z `http`); GeoParquet RCN; pliku krajowego
+BDOO; zapytanie o liczbe obiektow OGC API przed stronami (D7).
+
+**Konsekwencje:** Produkty E1-E5 sa deskryptorami z parametrami (testy
+rejestru pilnuja: wariant bez szablonu URL ma indeks, sygnal `index` tylko
+z indeksem, tokeny szablonu z jednostki kanalu, siatka arkuszy i warstwa
+indeksu w kazdym wariancie, wspolna capability = te same uklady). Kazde
+pobranie paczki C/D wysyla jedno `HEAD` wiecej. Obszar duzego miasta daje
+tysiace kafli mesh (Krakow: ok. 3884 x 37 MB, ok. 143 GB) - `UNIT_LIST`
+pokazuje je przed transferem; ograniczenie nalezy do E5. Pobranie OGC API
+PRNG trwa ok. 1,5 min na strone - `page_size` i `timeout` kanalu ustawia
+deskryptor (E2). Arkusze CZ leza plasko w `<segment>/`, wiec tysiace
+arkuszy daja jeden duzy katalog. Plik `latest_exports` RCN jest
+podmieniany bez sygnalu (`none`): nowa tresc daje dopiero `--force`.
 
 ---
 

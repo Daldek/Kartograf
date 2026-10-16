@@ -29,9 +29,10 @@ w API kolekcji (E0); (4) protokol OGC API Features w `feature_bbox` (E0);
 (stan zrodel 2026-10-15; dalej "raport E"),
 `docs/research/2026-10-13-katalog-produktow/{raport,probki}.md`.
 
-**Wersja docelowa:** 0.8.0. **ADR:** ADR-0xx (numer nada koordynator przed
-Task E0). Tytul: "Plan E: produkty jednostkowe, arkuszowe i krajowe na
-silnikach C/D". Tekst powstaje w Task E0, wyniki E2E dochodza w Task EZ.
+**Wersja docelowa:** 0.8.0. **ADR:** ADR-043 "Plan E: produkty jednostkowe,
+arkuszowe i krajowe na silnikach C/D" (`docs/DECISIONS.md`). Tekst powstal
+w Task E0 (D1-D10); wyniki E2E i ostateczne nazwy symboli E1-E5 dochodza
+w Task EZ jako errata.
 
 **Kod wyjsciowy:** `develop` `1b8e358`. Sa na nim grupy CLI (ADR-039),
 spec i plan manifestu (ADR-040) oraz plany A i B. Plany C i D (ADR-042)
@@ -65,6 +66,41 @@ Przed Task E0 porownaj ten kontrakt z kodem C/D na `develop`.
 Inna nazwa w kodzie: zmien wywolania w planie E, bez drugiego silnika.
 Inny ksztalt interfejsu: zatrzymaj sie i opisz roznice koordynatorowi.
 
+**Korekta 2026-10-16 (po Task E0).** Interfejsy E0 w tym planie (sekcja
+"Decyzje" pkt 3-4 i 6, Task E0 "Interfaces", deskryptory E2-E5) opisuja
+kod E0, nie projekt z 2026-10-15. Roznice wobec pierwszej wersji:
+- `SheetGrid(system="1992"|"cuzk", parts, layer, crs)`: bez siatki PL-2000
+  i bez `scale` (zaden produkt kolekcji jej nie potrzebuje); warstwa CUZK
+  ma jawny uklad natywny `crs`.
+- `IndexSource` bez `layers`: warstwa WMS albo typ WFS indeksu jest
+  w wariancie (`PackageVariant.index_layer`, skala mapy = warstwa).
+  `parser` tylko `map_links` - parser `skorowidz` (GFI `skor.push`) jest
+  zbedny, bo intensywnosc, true orto i orto ukosna ida torem providera
+  orto (E1), nie kolekcja; `url_field=None` dla `map_links` (link na
+  format); dochodzi `zone_field` (uklad kafla -> katalog slotu i uklad
+  sidecara).
+- `AtomFilesParams.choice` (jeden feed na format, np. Geonames GPKG/FGDB)
+  i `FeatureBBoxParams.timeout` (wolna usluga; jawny `timeout` wywolania
+  ma pierwszenstwo, potem kanal, potem `SERVICE_TIMEOUT` 60 s).
+- `UnitPackageParams.ku_layer` to pelny adres warstwy RUIAN
+  (`.../RUIAN/MapServer/7`), nie numer.
+- Capability kanalu kolekcji nie musi byc unikalna: kanaly jednego rodzaju
+  (usluga WFS na siec) dziela ja i deklaruja te same uklady (ADR-043 D6,
+  test rejestru).
+- Sygnal `index`: etykieta rekordu = wydanie wersji (ADR-043 D4); kanal
+  ma `index` wtedy i tylko wtedy, gdy ma `IndexSource` (test rejestru).
+- `DOWNLOAD_SIZE`: `HEAD` przed kazdym plikiem jednostki (takze C/D),
+  `Notice` dla pliku ponad 100 MiB w chwili jego pobrania, bez sumy przed
+  pierwszym `GET` (pkt 6).
+- Pomiary 2026-10-16: OGC API PRNG 78-95 s na kazde `items` niezaleznie
+  od `limit`, OGC API PRG 3,5 s; PRG ma 51 kolekcji = 6 `Granica*` + 45
+  innych (nie 46); WFS osnowy grawimetrycznej odpowiada pod
+  `.../OsnowaGrawimetryczna/WFS` (bez `/WFS` nie), obiekty bez `gml:id`
+  (identyfikator `nr_punktu`); RCN 1261 ma 301 623 607 B (2026-10-15:
+  236 404 584 B - plik `latest_exports` jest podmieniany); mesh 3D: jeden
+  rekord na kafel, Krakow 3884 kafle po ok. 37 MB.
+- Wnioskowanie `--sheet-system` ZTM z godla nie jest w E0: robi je E2.
+
 ---
 
 ## Statusy produktow
@@ -75,7 +111,7 @@ plan kompletny. `pytanie Pn` znaczy: jedna decyzja uzytkownika (sekcja
 
 | # | Produkt (klucz deskryptora) | Komenda i wybor | Pakiet | Status |
 |---|---|---|---|---|
-| 1 | NMT 100 m (`pl.gugik.nmt_100m`) | `elevation download --product nmt --resolution 100m` | E1 | pytanie P1 (uklad wysokosci) |
+| 1 | NMT 100 m (`pl.gugik.nmt_100m`) | `elevation download --product nmt --resolution 100m` | E1 | do implementacji (P1: uklad wysokosci nieznany) |
 | 2 | Obrazy intensywnosci (`pl.gugik.intensity`) | `imagery download --product intensity` | E1 | do implementacji |
 | 3 | True orto (`pl.gugik.orto_true`) | `imagery download --product true-orto` (arkusze; `--cutout`) | E1 | do implementacji |
 | 4 | Orto ukosna (`pl.gugik.orto_oblique`) | `imagery download --product oblique-orto [--direction]` | E1 | do implementacji |
@@ -93,7 +129,7 @@ plan kompletny. `pytanie Pn` znaczy: jedna decyzja uzytkownika (sekcja
 | 16 | CZ warstwice (`cz.cuzk.zabaged_contours`) | `elevation download --product contours --country cz` | E1 | do implementacji |
 | 17 | CZ Data50 (`cz.cuzk.data50`) | `landcover download --source data50` | E4 | do implementacji |
 | 18 | CZ Data250 (`cz.cuzk.data250`) | `landcover download --source data250` | E4 | do implementacji |
-| 19 | CZ mapa katastralna (`cz.cuzk.cadastral_map`) | `cadastre download --product map --country cz --ku ...` | E3 | do implementacji (SHP, DXF, DGN, VFK); VKM: pytanie P2 |
+| 19 | CZ mapa katastralna (`cz.cuzk.cadastral_map`) | `cadastre download --product map --country cz --ku ...` | E3 | do implementacji (SHP, DXF, DGN, VFK); VKM poza 0.8.0 (P2) |
 | 20 | CZ Geonames (`cz.cuzk.geonames`) | `names download --product geographic --country cz` | E2 | do implementacji |
 | 21 | CZ ZTM (`cz.cuzk.ztm`) | `maps download --product topographic --country cz` | E2 | do implementacji |
 | 22 | CZ QGZU (`cz.cuzk.qgzu`) | `geodesy download --product geoid --country cz --whole-country` | E5 | do implementacji |
@@ -106,21 +142,20 @@ deskryptory i dwa wybory `--source`.
 
 ## Pytania do uzytkownika
 
+Obie rozstrzygniete przez uzytkownika 2026-10-15 (ADR-043 D10).
+
 - **P1 - uklad wysokosci NMT 100 m.** ATOM i CSW GUGiK go nie podaja.
   Model pochodzi z NMT LPIS, a GUGiK opisuje NMT z lat 2000-2019 jako
   PL-KRON86-NH. Inwentaryzacja z 2026-10-13 podala EVRF2007 bez zrodla.
-  **Rekomendacja:** KRON86. Wpis rejestru `vertical_crs="KRON86"`, segment
-  `nmt/pl_1992_100m_kron86`, w sidecarze `extra.vertical_crs_basis` z tekstem
-  "wywnioskowany z pochodzenia (LPIS); GUGiK nie deklaruje ukladu".
-  Alternatywa: wariant bez ukladu wysokosci, segment `nmt/pl_1992_100m`,
-  `--vertical-crs` dla 100 m = `ValidationError`. Od odpowiedzi zalezy tylko
-  krok "Wariant 100 m" w Task E1.
+  **Decyzja:** uklad wysokosci NIEZNANY. Wariant bez ukladu wysokosci,
+  segment `nmt/pl_1992_100m` (bez tokenu ukladu), sidecar
+  `vertical_crs: null` z adnotacja o zrodle ("GUGiK nie deklaruje ukladu
+  wysokosci"), `--vertical-crs` dla 100 m = `ValidationError`. Dotyczy
+  tylko kroku "Wariant 100 m" w Task E1.
 - **P2 - format VKM mapy katastralnej CZ.** To pilot: feed `KM-KU-VKM` ma
   10 KU, a pliki 2026-10-15 zwracaly 404 (raport E, wiersz 19).
-  **Rekomendacja:** VKM poza 0.8.0. SHP, DXF, DGN i VFK pokrywaja caly kraj.
-  Odpowiedz "tak": piaty kanal w Task E3, ale tylko gdy pliki odpowiadaja
-  200. Lista KU pochodzi wtedy z feedu, a KU spoza feedu daje
-  `ValidationError` z liczba KU, dla ktorych VKM istnieje.
+  **Decyzja:** VKM poza 0.8.0 (wpis w backlogu PROGRESS z dowodem 404).
+  SHP, DXF, DGN i VFK pokrywaja caly kraj i wchodza.
 
 ## Kolejnosc i zaleznosci
 
@@ -235,20 +270,24 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
      warianty do wyboru (STANDARDS 11.2: `None` = "nie podano").
    - `download_collection`/`check_collection`/`validate_collection_request`
      dostaja `ku`, `format`, `scale`, `sheet_system` i `network` (wszystkie
-     `str | None`). Wartosci sa kluczami `choice` w `PackageVariant` (C)
-     i w `FeatureBBoxParams` (E0, pkt 3). Bez nowych list w kodzie (K1).
+     `str | None`; inny typ, takze `teryt`/`sheet`, = `ValidationError`).
+     Wartosci sa kluczami `choice` w `PackageVariant` (C), w
+     `FeatureBBoxParams` i w `AtomFilesParams` (E0, pkt 3). Bez nowych list
+     w kodzie (K1).
    - `LandCoverManager` przyjmuje zrodla `bdoo`, `data50` i `data250`
      z opcjami w `OPTIONS`/`REQUIRED` (`kartograf/landcover/manager.py:77-115`).
    - Nowe eksporty w `kartograf/__init__.py` nie sa potrzebne.
-3. **Rozszerzenia silnikow C (E0), w slownictwie planu C.**
+3. **Rozszerzenia silnikow C (E0, ADR-043 D1-D9), w slownictwie planu C.**
    - `UnitPackageParams.unit` dostaje wartosci:
-     - `sheet`: arkusze obszaru z siatki PL-1992 albo PL-2000
-       (`find_sheets_for_bbox`) albo z warstwy indeksu CUZK
-       (`KladyMapovychListu`);
-     - `tile`: kafle z indeksu WFS (`WfsIndex.features` z planu A,
+     - `sheet`: arkusze obszaru z serii PL-1992 o `parts` czlonach
+       (`find_sheets_for_bbox`) albo z warstwy `layer` indeksu CUZK
+       `KladyMapovychListu` w jej ukladzie `crs`
+       (`SheetIndex.sheets_for_bbox`, `SheetIndex.sheet`); siatka jest cecha
+       wariantu (`PackageVariant.sheet_grid`);
+     - `tile`: kafle z rekordow indeksu WFS (`WfsIndex.features` z planu A,
        stronicowanie `next`);
-     - `ku`: katastralni uzemi z RUIAN (`ags/RUIAN/MapServer/7`, pole
-       `kod`).
+     - `ku`: katastralni uzemi z RUIAN (`ku_layer` =
+       `.../RUIAN/MapServer/7`, pole `kod`).
    - Jednostka `sheet` dziala tylko dla kanalu z `unit="sheet"`. Dla
      produktow C/D `sheet=` dalej oznacza obszar arkusza (ADR-039 D4).
    - `UnitPackageParams` dostaje `themes: tuple[str, ...] = ()`: plik
@@ -256,8 +295,9 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
      fizjograficzne); kazdy temat to osobna jednostka `country/pl-<temat>`.
    - `UnitPackageParams` dostaje `index: IndexSource | None`: rekord
      indeksu daje URL pliku i etykiete wersji.
-     - Zrodla rekordow: WMS GFI `skor.push` (`url`), tabela linkow
-       wizualizacji BDOT10k albo WFS `URL_do_pobrania`.
+     - Zrodla rekordow: WMS GFI z parserem `map_links` (tabela linkow
+       wizualizacji BDOT10k) albo WFS (`URL_do_pobrania` mesh); warstwa
+       w `PackageVariant.index_layer`.
      - `PackageVariant.url_template` moze byc `None`, gdy URL daje rekord.
        Wariant wskazuje wtedy link rekordu kluczem `format`.
    - Tokeny `url_template` poza `{teryt}`/`{woj}`: `{sheet}`, `{ku}`,
@@ -268,32 +308,41 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
      pliki bez ZIP (mapy, PDF ZTM, model PL-geoid2021) sprawdzane po
      zawartosci zamiast katalogu ZIP z planu C.
    - `FeatureBBoxParams.protocol` dostaje `"ogcapi"` (OGC API Features):
-     - `bbox` w CRS84 (lon,lat), `limit`, strony po linku `rel="next"`
-       z tego samego hosta;
-     - kontrola `numberReturned`, GeoJSON;
-     - `FeatureLayer.source` = id kolekcji, `id_field` = `id`.
-   - `FeatureBBoxParams` dostaje `choice: tuple[tuple[str, str], ...] = ()`
-     (np. `(("network", "gravity"),)`): wybor kanalu, gdy siec ma osobna
-     usluge.
+     - `/collections` raz (brak kolekcji = `DownloadError`); `bbox` w CRS84
+       (lon,lat), `limit` = `page_size`, kolejne strony tylko po linku
+       `rel="next"` z tego samego hosta;
+     - N = `numberMatched` pierwszej strony (bez osobnego zapytania
+       o liczbe: kazde `items` PRNG trwa 78-95 s); kontrola
+       `numberReturned` i `numberMatched` kazdej strony, GeoJSON;
+     - `FeatureLayer.source` = id kolekcji, `id_field` = `id`;
+     - `FeatureBBoxParams.timeout`: limit odczytu wolnej uslugi.
+   - `FeatureBBoxParams` i `AtomFilesParams` dostaja `choice:
+     tuple[tuple[str, str], ...] = ()` (np. `(("network", "gravity"),)`,
+     `(("format", "GPKG"),)`): wybor kanalu, gdy siec albo format ma osobna
+     usluge lub feed. Kanaly jednego rodzaju dziela capability i maja te
+     same uklady.
    - `FeatureBBoxParams` dostaje `selection_key: str = "level"`: nazwa
      flagi wybierajacej warstwy przy `selection="level"`. Ten sam `code`
      w kilku `FeatureLayer` = jeden wybor z kilku warstw (Bodove pole:
      `horizontal` = warstwy 18 i 20).
-4. **Sygnal `index` w kolekcjach (E0).** Jednostka z rekordu indeksu
-   z data lub numerem zgloszenia dostaje etykiete wersji z pol rekordu
-   wskazanych w `IndexSource`.
+4. **Sygnal `index` w kolekcjach (E0, ADR-043 D4).** Etykieta wersji
+   jednostki to pola rekordu `IndexSource.label_fields` laczone `_` (D29),
+   zapisana jako wydanie (`label_source="edition"`).
    - `check_collection` porownuje etykiete biezacego rekordu z lokalna
-     wersja przez `inspect_version(signal="index", available=...)`
-     (`download/fetch.py:399`), bez pobierania pliku.
-   - Semantyka `index`, `metadata`, `http` i `none` jest juz w kodzie
-     (`download/fetch.py:196-235`); plan E nie dodaje nowej polityki.
+     wersja przez `inspect_version`, bez pobierania pliku (pyta tylko
+     indeks).
+   - Kanal kolekcji ma sygnal `index` wtedy i tylko wtedy, gdy ma
+     `IndexSource`. `year` produktu bez wariantow rocznych filtruje
+     rekordy; bez niego brany jest najnowszy rekord jednostki.
+   - Arkusz bez rekordu jest pomijany i wypisany w `UNIT_LIST`; zaden
+     z rekordem = `NoCoverageError`.
 5. **Segmenty `data/`** (ARCHITECTURE 3.3, regula 8: `content_segment`
    z planu C = prefiks `storage_subdir` + tokeny `[a-z0-9.-]` laczone `_`;
    wariant = inny segment).
 
    | Produkt | Plik standardowy pod `--output` | Sygnal |
    |---|---|---|
-   | NMT 100 m | `nmt/pl_1992_100m_<vcrs P1>/teryt/12.zip` | `metadata` |
+   | NMT 100 m | `nmt/pl_1992_100m/teryt/12.zip` | `metadata` |
    | Warstwice CZ | `contours/cz_zabaged_shp/CTES/96/CTES96.zip` (`_dgn`) | `http` |
    | Intensywnosc | `intensity/pl_1992/M-34/64/D/d/1/4/M-34-64-D-d-1-4.tif` (`pl_2000`) | `index` |
    | True orto | arkusz `orto/pl_1992_true/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif`; wycinek `orto/pl_1992_true_0.05m/bbox/<wsp>.tif` (wzorzec wycinka orto D: `orto/pl_1992_<wariant>_<etykieta>`) | `index` / `none` |
@@ -329,13 +378,14 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
    z jawnym `--whole-country` i po `Notice` `WHOLE_COUNTRY_SIZE` (plan C)
    z rozmiarem z `HEAD`: PRG adresy, PRG specjalne, PRNG, Geonames,
    Data50/250, quasi-geoidy. Obszar zawsze idzie kanalem obszarowym
-   (`feature_bbox`) albo jednostkami, nigdy plikiem krajowym. Jednostki ponad
-   100 MiB (drzewa 3,4-8,6 GB, arkusze true orto i orto ukosnej ok.
-   0,3 GB, archiwum osnow 1942 ok. 1 GB, RCN wojewodztwa) dostaja `Notice`
-   z liczba plikow i suma rozmiarow przed pierwszym `GET`. To nowy kod
-   `DOWNLOAD_SIZE` w `kartograf/notices.py` (E0), uzywany tez przez
-   `download_data` (K9 dla arkuszy obrazow).
-7. **Czego plan E swiadomie nie robi** (zapis w ADR-0xx):
+   (`feature_bbox`) albo jednostkami, nigdy plikiem krajowym. Przed `GET`
+   kazdego pliku jednostki kolekcji jest `HEAD`; plik ponad 100 MiB (drzewa
+   3,4-8,6 GB, archiwum osnow 1942 ok. 1 GB, RCN wojewodztwa) dostaje
+   w chwili swojego pobrania `Notice` `DOWNLOAD_SIZE` (E0,
+   `kartograf/notices.py`) z URL i rozmiarem; liste jednostek podaje
+   wczesniej `UNIT_LIST`. Arkusze obrazow `download_data` (true orto
+   i orto ukosna ok. 0,3 GB) emituje ten sam kod w E1 (K9).
+7. **Czego plan E swiadomie nie robi** (zapis w ADR-043):
    - Narzedzia transformacji wysokosci z quasi-geoida. Zaden produkt
      Kartografa nie wymaga przejscia z wysokosci elipsoidalnych na normalne:
      dane PL i CZ sa w wysokosciach normalnych, a ETRS89 CZ ma EVRF2007
@@ -352,7 +402,7 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
      wojewodzkich jednego wydania.
    - Pliku krajowego BDOO (`bdoo/<rok>/` go nie zawiera; kraj = 16
      wojewodztw z `--bbox` obejmujacym kraj).
-   - Formatu VKM bez decyzji P2.
+   - Formatu VKM (P2).
 
 ## Fakty o obecnym kodzie (zweryfikowane 2026-10-15 na `1b8e358`)
 
@@ -409,10 +459,10 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
 
 | Plik | Wlasciciel | Zmiana |
 |---|---|---|
-| `kartograf/sources/descriptor.py` (parametry C/D) | E0 | `SheetGrid`, `IndexSource`; `UnitPackageParams.unit` += `sheet`/`tile`/`ku`, `themes`, `index`, `ku_layer`; `PackageVariant.url_template: str \| None`, `sheet_grid`, `index_layer`, `file_kind`; `FeatureBBoxParams.protocol` += `ogcapi`, `choice`, `selection_key` |
-| `kartograf/transport/unit_package.py`, `kartograf/transport/feature_bbox.py`, `kartograf/download/collections.py`, `kartograf/download/storage.py` (`unit_slot`) | E0 | odkrywanie jednostek `sheet`/`tile`/`ku`, tematy krajowe, tokeny `{sheet}`/`{ku}`/`{theme}`, OGC API Features, sygnal `index`, parametry `ku`/`format`/`scale`/`sheet_system`/`network`, sloty `sheet/<hierarchia godla>`, `ku/<kod>`, `<strefa>/<kafel>` |
-| `kartograf/providers/cuzk/sheets.py` | E0 | `SheetIndex.sheets_for_bbox(layer, bbox)` i `sheet(layer, mapnom)` dla dowolnej warstwy `KladyMapovychListu` (SM5 i TM33 bez zmian zachowania) |
-| `kartograf/transport/index_records.py` (NOWY) | E0 | `IndexRecord`, parsery GFI (`skor.push` przez `parse_skorowidz_records`; tabela linkow wizualizacji BDOT10k), rekordy WFS z `WfsIndex.features` |
+| `kartograf/sources/descriptor.py` (parametry C/D) | E0 | `SheetGrid`, `IndexSource`; `UnitPackageParams.unit` += `sheet`/`tile`/`ku`, `themes`, `index`, `ku_layer`; `PackageVariant.url_template: str \| None`, `sheet_grid`, `index_layer`, `file_kind`; `FeatureBBoxParams.protocol` += `ogcapi`, `choice`, `selection_key`, `timeout`; `AtomFilesParams.choice` |
+| `kartograf/transport/unit_package.py`, `kartograf/transport/feature_bbox.py`, `kartograf/download/collections.py`, `kartograf/download/storage.py` (`unit_slot`) | E0 | odkrywanie jednostek `sheet`/`tile`/`ku`, tematy krajowe, tokeny `{sheet}`/`{ku}`/`{theme}`, OGC API Features, sygnal `index`, parametry `ku`/`format`/`scale`/`sheet_system`/`network`, sloty `<hierarchia godla>/<godlo>`, `<MAPNOM>` (CUZK, plasko), `ku/<kod>`, `<strefa>/<kafel>`, `country/pl-<temat>` |
+| `kartograf/providers/cuzk/sheets.py`, `kartograf/providers/cuzk/ruian.py` (NOWY) | E0 | `SheetIndex.sheets_for_bbox(layer, bbox)` i `sheet(layer, mapnom, crs=)` dla dowolnej warstwy `KladyMapovychListu` (SM5 i TM33 bez zmian zachowania); `cadastral_areas_for_bbox` (KU z RUIAN) |
+| `kartograf/transport/index_records.py` (NOWY) | E0 | `IndexRecord`, `gfi_records`/`records_from_gfi` (parser `map_links`: tabela linkow wizualizacji BDOT10k), `wfs_records`/`records_from_wfs` (`WfsIndex.features`) |
 | `kartograf/notices.py` | E0 | `DOWNLOAD_SIZE` |
 | `kartograf/core/sheet_parser.py` | E1 | poziom 8-czlonowy PL-1992 |
 | `kartograf/sources/descriptor.py` (`AtomFilesParams`), `kartograf/transport/atom.py` (z D) | E1 | grupa selektora `woj`, pole `force_https` |
@@ -423,7 +473,7 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
 | `kartograf/cli/groups/models3d.py` (z C), `kartograf/cli/groups/geodesy.py` (NOWY) | E5 | mesh, drzewa, grupa `geodesy` |
 | `kartograf/sources/registry.py` | E1-E5 | **plik wspolny**: kazdy pakiet dopisuje jeden ciagly blok deskryptorow z komentarzem `# plan E - Ex`, PL po ostatnim deskryptorze PL, CZ po ostatnim CZ; bez zmian w cudzych blokach; konflikt scalania = oba bloki |
 | `kartograf/project/commands.py`, `tests/test_project_*.py` | E1-E5 (warunkowo) | **plik wspolny**: pozycje i opcje wlasnych komend |
-| `docs/DECISIONS.md` | E0 (szkic ADR), EZ (uzupelnienie) | ADR-0xx |
+| `docs/DECISIONS.md` | E0 (ADR-043), EZ (errata z E2E) | ADR-043 |
 | `docs/{USAGE,ARCHITECTURE,SCOPE,PRD,CHANGELOG}.md`, `docs/research/2026-10-xx-plan-e-e2e/raport.md` | EZ | dokumentacja i raport E2E |
 | `tests/fixtures/{pl,cz}/<produkt>/real_2026_10_xx/` | pakiet produktu | fixtury z prawdziwych odpowiedzi |
 
@@ -431,62 +481,85 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
 
 ### Task E0: Wspolny kontrakt kolekcji planu E
 
-**Zaleznosci:** A, C i D na `develop`; numer ADR od koordynatora.
+**Stan:** wykonany 2026-10-16 (galaz `feat/plan-e0-engines`, commit
+`feat(collections): jednostki arkuszy, kafli i KU oraz sygnal index (plan E,
+E0)`; ADR-043). Zaden produkt planu E nie ma jeszcze deskryptora, wiec
+CLI = API end-to-end sprawdzaja dopiero E1-E5; silniki sa sprawdzone
+testami na prawdziwych fixturach i na zywo (`fetch_features` +
+`write_gpkg` na OGC API PRNG: 9 obiektow w CRS84, 190,8 s).
+
+**Zaleznosci:** A, C i D na `develop`; numer ADR od koordynatora (043).
 
 **Files:**
 - Modify: `kartograf/sources/descriptor.py` (parametry C/D),
   `kartograf/transport/unit_package.py`, `kartograf/transport/feature_bbox.py`,
-  `kartograf/download/collections.py`, `kartograf/download/storage.py`
-  (`unit_slot`), `kartograf/providers/cuzk/sheets.py`, `kartograf/notices.py`,
+  `kartograf/transform/gpkg.py`, `kartograf/download/collections.py`,
+  `kartograf/download/storage.py` (`unit_slot`), `kartograf/download/fetch.py`,
+  `kartograf/download/arguments.py` (`require_str`),
+  `kartograf/providers/cuzk/sheets.py`, `kartograf/providers/cuzk/client.py`,
+  `kartograf/providers/pl/skorowidz_wfs.py` (nazwy lokalne), `kartograf/notices.py`,
   `tests/test_unit_package.py`, `tests/test_feature_bbox.py`,
-  `tests/test_collections.py` (pliki testow z C), `docs/DECISIONS.md`
-- Create: `kartograf/transport/index_records.py`, `tests/test_index_records.py`,
-  `tests/fixtures/{pl,cz}/e0/real_2026_10_xx/`
+  `tests/test_gpkg_writer.py`, `tests/test_sources_registry.py` (niezmienniki
+  rejestru), `docs/DECISIONS.md`
+- Create: `kartograf/transport/index_records.py`, `kartograf/providers/cuzk/ruian.py`,
+  `tests/test_index_records.py`, `tests/test_collections_units.py`,
+  `tests/test_cuzk_units.py`, fixtury `tests/fixtures/pl/e0/real_2026_10_16/`,
+  `tests/fixtures/pl/index_records/`, `tests/fixtures/cuzk/real_2026_10_16/`,
+  strony OGC API PRNG w `tests/fixtures/pl/feature_bbox/`
 
-**Interfaces** (rozszerzenia kontraktu C; nazwy pol dopasuj do kodu C, ksztalt obowiazuje):
+**Interfaces** (stan kodu E0; E1-E5 uzywaja tych nazw):
 ```python
 # kartograf/transport/index_records.py
 @dataclass(frozen=True)
 class IndexRecord:
-    unit: str                    # godlo / modul kafla - identyfikator jednostki
-    urls: Mapping[str, str]      # format -> URL pliku ("TIFF" -> ..., "PDF" -> ...); jeden wpis "" dla pojedynczego URL
-    label: str                   # etykieta wersji (D29) z pol daty/zgloszenia
-    year: int | None             # rok danych (D5) - filtr --year/--min-year/--max-year
-    raw: Mapping[str, str]       # pola zrodla do extra.source
-def records_from_gfi(text: str, *, layer: str, parser: Literal["skorowidz", "map_links"]) -> list[IndexRecord]
+    unit: str                    # godlo kanoniczne (GFI) / modul kafla (WFS)
+    urls: Mapping[str, str]      # format -> URL ("TIFF", "PDF"); {"": url} dla jednego URL
+    label: str                   # etykieta wersji (D29) z label_fields laczonych "_"
+    year: int | None             # rok danych - filtr year (najnowszy rekord bez niego)
+    zone: str | None             # katalog slotu kafla z zone_field ("PL-2000:S7" -> "s7")
+    raw: Mapping[str, str]       # pola zrodla do extra.source.record
+def gfi_records(session, source: IndexSource, layer: str, sheet: str, *, timeout: float) -> list[IndexRecord]
+def records_from_gfi(content: bytes, *, source: IndexSource, layer: str, context: str) -> list[IndexRecord]
+def wfs_records(session_factory, source: IndexSource, layer: str, bbox: BBox, *, timeout: float) -> list[IndexRecord]
 def records_from_wfs(features: Iterable[ET.Element], *, source: IndexSource) -> list[IndexRecord]
 
+# kartograf/providers/cuzk/ruian.py
+def cadastral_areas_for_bbox(client: CuzkClient, layer_url: str, bbox: BBox) -> list[CadastralArea]  # (code, name)
+
 # kartograf/sources/descriptor.py (E0)
+FileKind = Literal["zip", "tiff", "pdf", "txt"]
+PACKAGE_URL_TOKENS = ("teryt", "woj", "sheet", "ku", "theme")
 @dataclass(frozen=True)
-class SheetGrid:                 # jednostki "sheet" obszaru
-    system: Literal["1992", "2000", "cuzk"]
-    parts: int | None = None     # PL: liczba czlonow godla serii (seria 1:10000 GUGiK = 6)
-    scale: str | None = None     # PL-2000: "1:2000"
-    layer: int | None = None     # CUZK: warstwa KladyMapovychListu (ZTM10 S-JTSK = 2)
+class SheetGrid:                 # jednostki "sheet" obszaru (cecha wariantu)
+    system: Literal["1992", "cuzk"]
+    parts: int | None = None     # PL-1992: liczba czlonow godla serii (seria 1:10000 GUGiK = 6, 1:100000 = 3)
+    layer: int | None = None     # CUZK: warstwa KladyMapovychListu (ZTM10 S-JTSK = 2, ETRS89 = 14)
+    crs: str | None = None       # CUZK: uklad natywny warstwy (S-JTSK EPSG:5514, ETRS89 EPSG:3045)
 @dataclass(frozen=True)
 class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
     kind: Literal["wms_gfi", "wfs"]
     endpoint: str
-    layers: tuple[str, ...]      # warstwy WMS / typy WFS (sprawdzane w GetCapabilities)
-    parser: Literal["skorowidz", "map_links"] | None   # tylko wms_gfi
+    parser: Literal["map_links"] | None  # tylko wms_gfi
     unit_field: str              # "godlo" | "modul"
-    url_field: str               # "url" | "URL_do_pobrania"; map_links: link wg formatu
-    label_fields: tuple[str, ...]  # np. ("Aktualnosc", "Numer_zgloszenia_pracy")
-    year_field: str | None       # "aktualnoscRok" | "akt_rok"
-# UnitPackageParams: unit += "sheet" | "tile" | "ku"; index: IndexSource | None;
+    url_field: str | None        # "URL_do_pobrania"; None: map_links (link wg formatu)
+    label_fields: tuple[str, ...]  # ("stan_bazy",) | ("Aktualnosc", "Numer_zgloszenia_pracy")
+    year_field: str | None = None  # "akt_rok"
+    zone_field: str | None = None  # "uklad_xy"
+# UnitPackageParams: unit += "sheet" | "tile" | "ku"; index: IndexSource | None = None;
 #   themes: tuple[str, ...] = () (jednostki country/<kraj>-<temat malymi literami, "_" -> "-">);
-#   ku_layer: str | None (RUIAN KatastralniUzemi)
+#   ku_layer: str | None = None (pelny adres warstwy RUIAN .../RUIAN/MapServer/7)
 # PackageVariant: url_template: str | None (None = URL z rekordu indeksu, link wg choice "format");
-#   sheet_grid: SheetGrid | None i index_layer: str | None - siatka i warstwa indeksu zaleza
-#   od wariantu (skala mapy); tokeny += {sheet} {ku} {theme};
-#   choice moze miec klucze format/scale/sheet_system/network;
-#   file_kind: Literal["zip", "tiff", "pdf", "txt"] = "zip" - plik bez ZIP (mapy TIFF/PDF,
-#   ZTM PDF, model PL-geoid2021) sprawdzany po zawartosci: magia TIFF, "%PDF", naglowek tekstu
+#   sheet_grid: SheetGrid | None = None i index_layer: str | None = None (warstwa WMS / typ WFS
+#   indeksu wariantu); choice moze miec klucze format/scale/sheet_system/network;
+#   file_kind: FileKind = "zip" - plik bez ZIP sprawdzany po zawartosci (magia TIFF, "%PDF-",
+#   tekst bez NUL, ktorego pierwsza linia nie jest znacznikiem)
 # FeatureBBoxParams: protocol += "ogcapi"; choice: tuple[tuple[str, str], ...] = ();
-#   selection_key: str = "level"
+#   selection_key: str = "level"; timeout: int | None = None
+# AtomFilesParams: choice: tuple[tuple[str, str], ...] = ()
+# kartograf/notices.py: DOWNLOAD_SIZE = "download_size"
 ```
 
-- [ ] **Step 1: Fixtury (live, swiadomie).** Nagraj przyciete prawdziwe odpowiedzi:
+- [x] **Step 1: Fixtury (live, swiadomie).** Nagraj przyciete prawdziwe odpowiedzi:
   - RUIAN `ags/RUIAN/MapServer/7/query` (bbox z 2-3 KU, `returnGeometry=false`,
     `outFields=kod,nazev`);
   - `KladyMapovychListu/MapServer/2/query` (ZTM10 S-JTSK, bbox z 2 arkuszami)
@@ -495,13 +568,15 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
     przez `next` (raport E, wiersz 5);
   - GFI `Mapy10k` w srodku `M-34-064-D-d-1` (tabela z PDF i GeoTIFF oraz
     "Stan bazy") i GFI poza Polska (pusty szablon);
-  - GFI `SkorowidzeOI` z dwoma lotami jednego arkusza;
+  - (przeniesione do E1: GFI `SkorowidzeOI` nie jest indeksem kolekcji,
+    intensywnosc idzie torem providera orto);
   - dwie strony OGC API `NazwaGeograficznaRP` (bbox Krakowa, `limit=5`)
     i `/collections` PRNG;
   - `GetCapabilities` i strona WFS `OsnowaGrawimetryczna` (wybor kanalu
     po `network`).
-- [ ] **Step 2: Test RED** (`tests/test_unit_package.py`, `tests/test_feature_bbox.py`,
-  `tests/test_collections.py`, `tests/test_index_records.py`):
+- [x] **Step 2: Test RED** (`tests/test_unit_package.py`, `tests/test_feature_bbox.py`,
+  `tests/test_collections_units.py`, `tests/test_cuzk_units.py`,
+  `tests/test_index_records.py`):
   - `test_pl_sheet_series_by_parts`: bbox Krakowa. Seria 1:10000 GUGiK daje
     godla 6-czlonowe, seria 1:100000 godla 3-czlonowe (`M-34-64`). Zbior
     godel rowna sie wynikowi `find_sheets_for_bbox` z etykieta Kartografa
@@ -540,7 +615,7 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
   - `test_non_zip_files_checked_by_kind`: wariant `file_kind="tiff"`,
     `"pdf"` albo `"txt"` przyjmuje plik z poprawna magia albo naglowkiem.
     HTML przy 200 i plik obcego rodzaju = `DownloadError`, bez wersji.
-- [ ] **Step 3: Implementacja.**
+- [x] **Step 3: Implementacja.**
   - Rozszerz parametry kanalu, odkrywanie jednostek i adresowanie
     w `unit_package` (sekcja "Decyzje" pkt 3-4).
   - Dodaj `protocol="ogcapi"` w `feature_bbox`: zapis stron jak dla WFS
@@ -554,8 +629,8 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
     `validate_collection_request` do `select_variant` i wyboru kanalu
     `feature_bbox`. Dozwolone wartosci czytane z deskryptora, bez list
     w kodzie (K1).
-- [ ] **Step 4: ADR-0xx (szkic)** w `docs/DECISIONS.md` (CRLF, wiersz
-  indeksu i sekcja):
+- [x] **Step 4: ADR-043** w `docs/DECISIONS.md` (CRLF, wiersz indeksu
+  i sekcja; D1-D9 kod E0, D10 decyzje produktowe E1-E5):
   - kontekst: 24 produkty E na silnikach C/D;
   - decyzja: nowe grupy `names`, `maps`, `geodesy`; nazwy produktow;
     jednostki `sheet`/`tile`/`ku`; adres z rekordu indeksu; sygnal `index`
@@ -563,8 +638,18 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
     decyzji uzytkownika;
   - odrzucone: provider per produkt; WMS jako dane; plik krajowy dla
     obszaru; narzedzie transformacji z quasi-geoida (pkt 7).
-  Status "Przyjeta"; relacje: uzupelnia ADR-039, ADR-042, ADR-041.
-- [ ] **Step 5: Brama i commit** - `feat(collections): jednostki arkuszy, kafli i KU oraz sygnal index (plan E, E0)`.
+  Relacje: czesciowo zastepuje ADR-042 (D1: unikalna capability),
+  uzupelnia ADR-039, ADR-041 i ADR-042.
+- [x] **Step 5: Testy niezmiennikow rejestru**
+  (`tests/test_sources_registry.py`, chronia deskryptory E1-E5): wariant
+  bez szablonu URL ma `IndexSource`; tokeny szablonu pochodza z jednostki
+  kanalu (`{theme}` w kazdym szablonie produktu z tematami); kanal `sheet`
+  ma siatke w kazdym wariancie, `tile` indeks WFS, `ku` warstwe RUIAN,
+  kanal z indeksem `index_layer` w kazdym wariancie; sygnal `index` wtedy
+  i tylko wtedy, gdy kanal ma indeks; kanal z capability wspolna z innym
+  ma te same uklady co pierwszy kanal tej capability (sidecar).
+- [x] **Step 6: Brama i commit** - `feat(collections): jednostki arkuszy, kafli i KU oraz sygnal index (plan E, E0)`
+  oraz `docs(plan-e): ADR-043, korekta planu E po E0 i niezmienniki rejestru`.
 
 ### Task E1: `elevation` i `imagery` - NMT 100 m, warstwice CZ, intensywnosc, true orto, orto ukosna
 
@@ -586,7 +671,7 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 download_data(..., format: str | None = None,                          # contours: "SHP" | "DGN"
               direction: str | Sequence[str] | None = None) -> DataReport  # oblique-orto: subset of n,e,s,w; None = all
 # rejestr wariantow (A): ProductVariant(source="pl.gugik.nmt_100m", product="nmt", country="PL",
-#   resolution_m=Decimal("100"), vertical_crs=<P1>, format="XYZ", systems=("1992",),
+#   resolution_m=Decimal("100"), vertical_crs=None (P1), format="XYZ", systems=("1992",),
 #   channel=TransportKind.DIRECT_FILES, index_ref=None)
 # AtomFilesParams (D) + E1: service_feed=".../ATOM/httpauth/atom/GUGIK_NMT100",
 #   entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})" (id wpisu GUGiK to URL),
@@ -613,7 +698,7 @@ download_data(..., format: str | None = None,                          # contour
 
   Etykieta poziomu w schemacie Kartografa: `1:5000` (GUGiK: 1:2500).
   Docstring klasy dostaje to zdanie; backlog A1-8 bez zmian.
-- [ ] **Step 3: Wariant 100 m (P1) i tor jednostek.** Test RED w `tests/test_nmt_100m.py`:
+- [ ] **Step 3: Wariant 100 m (P1: uklad nieznany) i tor jednostek.** Test RED w `tests/test_nmt_100m.py`:
   - `test_area_selects_voivodeships`: bbox Krakowa daje tylko `12`;
     bbox na granicy wojewodztw daje dwa pliki; `--sheet` daje wojewodztwa
     przecinajace arkusz;
@@ -629,15 +714,15 @@ download_data(..., format: str | None = None,                          # contour
     pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka";
   - `test_zip_kept_with_txt`: ZIP z jednym TXT zostaje ZIP-em; sidecar
     ma `extra.source` (feed, id zbioru, URL, `length`), `extra.edition`,
-    `extra.parent_request` i (P1 = KRON86) `extra.vertical_crs_basis`.
+    `extra.parent_request`, `vertical_crs: null` i adnotacje, ze GUGiK nie
+    deklaruje ukladu wysokosci; segment `nmt/pl_1992_100m`.
 
   Implementacja:
-  - wpis rejestru wg P1, bez drugiej listy rozdzielczosci;
+  - wpis rejestru bez ukladu wysokosci (P1), bez drugiej listy rozdzielczosci;
   - wybor wpisu ATOM przez grupe `woj` w `AtomFilesParams`;
   - wojewodztwa obszaru z `discover_teryts_for_bbox` (dwie pierwsze cyfry);
   - pozycje planu na torze `collection` (bez nowego toru);
-  - `--vertical-crs` mozna pominac (jedna wartosc). Przy P1 = "bez ukladu"
-    `--vertical-crs` dla 100 m daje `Error:`.
+  - `--vertical-crs` dla 100 m = `Error:` (uklad nieznany, P1).
 - [ ] **Step 4: Intensywnosc, true orto, orto ukosna.** Test RED w `tests/test_imagery_products.py`:
   - `test_intensity_campaigns_like_orto`: arkusz PL-1992 ma loty 2023
     i 2025; bez `--year` pobiera 2025, `--year 2023` pobiera 2023;
@@ -669,7 +754,9 @@ download_data(..., format: str | None = None,                          # contour
     bez kopii providera (zasada planu C). Testy orto bez zmian.
   - Wycinek true orto to drugi kanal `WCS` z `WcsCutoutParams` na torze
     `orto_cutout.py` planu D.
-  - `DOWNLOAD_SIZE` (E0) dla arkuszy ponad 100 MiB (K9).
+  - `Notice` `DOWNLOAD_SIZE` (kod z E0) dla arkuszy ponad 100 MiB (K9):
+    E0 emituje go tylko w kolekcjach, `download_data` dostaje to w E1
+    (`HEAD` przed `GET` arkusza, tekst jak w `collections._announce_size`).
 - [ ] **Step 5: Warstwice CZ.** Test RED w `tests/test_cz_contours.py`:
   - `test_contours_sheet_zip_kept`: `--sheet CTES96 --format SHP` daje
     `contours/cz_zabaged_shp/CTES/96/CTES96.zip` (8 plikow, ZIP bez
@@ -726,8 +813,12 @@ download_data(..., format: str | None = None,                          # contour
 **Deskryptory** (endpointy i pola: raport E, wiersze 7, 11, 12, 20, 21):
 - `pl.gugik.prng`, product `geographic`, PL.
   - `OGC_API_FEATURES`: `FeatureBBoxParams(protocol="ogcapi",
-    native_crs="OGC:CRS84", selection="all")`, jedna `FeatureLayer`
-    (kolekcja `NazwaGeograficznaRP`, `id_field="id"`), strony `next`;
+    native_crs="OGC:CRS84", axis_order="xy", selection="all",
+    page_size=10000, timeout=<ponad 95 s, np. 180>)`, jedna `FeatureLayer`
+    (kolekcja `NazwaGeograficznaRP`, `id_field="id"`), strony `next`.
+    Kazde `items` trwa 78-95 s niezaleznie od `limit` (pomiar 2026-10-16;
+    `limit=10000` przyjety), wiec duza strona i limit odczytu kanalu
+    (`FeatureBBoxParams.timeout`) sa warunkiem dzialania;
   - `DIRECT_FILES`: `UnitPackageParams(unit="country",
     themes=("MIEJSCOWOSCI", "OBIEKTY_FIZJOGRAFICZNE"))`, trzy
     `PackageVariant` (`format` GML, SHP, XLSX; szablon
@@ -740,24 +831,29 @@ download_data(..., format: str | None = None,                          # contour
     native_crs="EPSG:5514", axis_order="xy", selection="all")`,
     `ags/GEONAMES/Geonames/MapServer`, 25 warstw obiektowych (0-24),
     `order_field="OBJECTID"`;
-  - `DIRECT_FILES` + `AtomFilesParams`: dwa kanaly wg `format`, feedy
-    `atom/GEONAMES-GPKG/GEONAMES-GPKG.xml` i `atom/GEONAMES-FGDB/...`,
-    `crs=("EPSG:5514", "EPSG:3045")`, `segment_tokens=("gpkg",)`
-    / `("fgdb",)`. URL z data w nazwie pochodzi z feedu.
+  - `DIRECT_FILES` + `AtomFilesParams`: dwa kanaly wg `format`
+    (`AtomFilesParams.choice=(("format", "GPKG"),)` / `(("format",
+    "FGDB"),)`, E0), feedy `atom/GEONAMES-GPKG/GEONAMES-GPKG.xml`
+    i `atom/GEONAMES-FGDB/...`, `crs=("EPSG:5514", "EPSG:3045")`,
+    `segment_tokens=("gpkg",)` / `("fgdb",)`. URL z data w nazwie pochodzi
+    z feedu. Oba kanaly dziela capability i maja te same uklady (ADR-043 D6).
 - `pl.gugik.bdot10k_maps`, product `topographic`, PL.
   - `UnitPackageParams(unit="sheet")` i `IndexSource(kind="wms_gfi",
     endpoint=mapy/PZGIK/BDOT/WMS/PobieranieArkuszeMapBDOT10k,
-    parser="map_links")`;
+    parser="map_links", unit_field="godlo", url_field=None,
+    label_fields=("stan_bazy",))`;
   - osiem `PackageVariant` (`scale` 1:10000/1:25000/1:50000/1:100000
     x `format` TIFF/PDF), `url_template=None`, `file_kind` `tiff`/`pdf`;
-  - `SheetGrid(system="1992", parts=6|5|4|3)` i warstwa `Mapy10k|Mapy25k|
-    Mapy50k|Mapy100k` wg skali;
-  - etykieta = data "Stan bazy"; sygnal `index`.
+  - `sheet_grid=SheetGrid(system="1992", parts=6|5|4|3)` i
+    `index_layer="Mapy10k"|"Mapy25k"|"Mapy50k"|"Mapy100k"` wg skali;
+  - etykieta = data "Stan bazy" (kazda skala ma swoja date); sygnal
+    `index`.
 - `cz.cuzk.ztm`, product `topographic`, CZ.
   - `UnitPackageParams(unit="sheet")`, 36 `PackageVariant`, po jednym na
     opublikowana usluge: `choice` (`scale`, `sheet_system`, `format`);
-  - `SheetGrid(system="cuzk", layer=...)`: S-JTSK 0/2/4/6/8/10, ETRS89
-    12/14/16/18/20/22;
+  - `sheet_grid=SheetGrid(system="cuzk", layer=..., crs=...)`: S-JTSK
+    0/2/4/6/8/10 (`EPSG:5514`), ETRS89 12/14/16/18/20/22 (`EPSG:3045`,
+    zmierzone dla warstwy 14); arkusze plasko `<segment>/<MAPNOM>`;
   - szablon `openzu/ZTM<k>-<SJTSK|ETRS89>-<FORMAT>/{sheet}.zip`; warianty PDF
     maja `.pdf` i `file_kind="pdf"`;
   - sygnal `http`.
@@ -782,8 +878,8 @@ download_data(..., format: str | None = None,                          # contour
     znaczy tu kraj zrodla, jak w ADR-039); `--country cz` = `Error:`;
     `--whole-country` daje `pl-swiat.zip`.
   - `test_geonames_rest_layers_to_gpkg`: kazda warstwa obiektowa to tabela
-    GPKG; warstwy spoza listy deskryptora = `Info:`; brak warstwy z listy
-    = `DownloadError`.
+    GPKG; warstwy spoza listy deskryptora nie sa pytane (silnik ich nie
+    raportuje); brak warstwy z listy = `DownloadError`.
   - `test_geonames_whole_country_crs_and_edition`: feed z dwoma ukladami
     wymaga `--horizontal-crs`; URL z data z feedu; etykieta = `<updated>`
     wpisu.
@@ -795,7 +891,9 @@ download_data(..., format: str | None = None,                          # contour
     daje S-JTSK, `NM-33-11-4-A-20` daje ETRS89, sprzeczne `--sheet-system`
     = `Error:`; ETRS89 z `DGN` lub `SHP` = `Error:` z lista `TIFF, PDF`;
     `--scale 1:2000` = `Error:` z lista skal CZ; PDF zapisany jako `.pdf`,
-    ZIP TIFF+TFW zachowany.
+    ZIP TIFF+TFW zachowany. Wnioskowanie `sheet_system` z godla dopisuje
+    E2 (E0 wybiera wariant tylko po podanych wartosciach; istnienie
+    `--sheet` sprawdza w warstwie wariantu).
   - `test_maps_requires_scale_and_format`: brak `--scale` lub `--format`
     = `Error:` z lista dla kraju.
 - [ ] **Step 3: Implementacja.**
@@ -851,8 +949,10 @@ GPKG), D (RUIAN w `boundaries`).
 - `pl.gugik.prg_special`, product `special`.
   - `OGC_API_FEATURES`: `FeatureBBoxParams(protocol="ogcapi",
     native_crs="OGC:CRS84", selection="all")`, `ogcapi/PRG/apiFeatures`;
-    46 `FeatureLayer` wypisanych jawnie (wszystkie kolekcje poza 6
-    `Granica*` planu C);
+    45 `FeatureLayer` wypisanych jawnie (wszystkie kolekcje poza 6
+    `Granica*` planu C; `/collections` 2026-10-16: 51 kolekcji, kazda
+    tylko CRS84; strona `items` ok. 3,5 s - domyslny limit odczytu
+    wystarcza);
   - `UnitPackageParams(unit="country")`: warianty SHP i GML
     (`opendata/prg/granice/00_granice_specjalne_{shp,xml}.zip`).
 - `cz.cuzk.geomorphology`, product `geomorphology`.
@@ -869,14 +969,16 @@ GPKG), D (RUIAN w `boundaries`).
   - kontrola warstw `transakcje_dzialki`, `transakcje_budynki`,
     `transakcje_lokale`.
 - `cz.cuzk.cadastral_map`, product `map`, CZ.
-  - `UnitPackageParams(unit="ku", ku_layer="7")`, cztery `PackageVariant`
+  - `UnitPackageParams(unit="ku", ku_layer="https://ags.cuzk.gov.cz/arcgis/rest/services/RUIAN/MapServer/7")`
+    (pelny adres warstwy, jak `RUIAN_7` w `tests/test_collections_units.py`),
+    cztery `PackageVariant`
     (`format`) z szablonami:
     - SHP `services.cuzk.gov.cz/shp/ku/epsg-5514/{ku}.zip`;
     - DXF `.../dxf/ku/{ku}.zip`;
     - DGN `.../dgn/ku/{ku}.zip`;
     - VFK `.../vfk/stavy/aktualni/{ku}.zip`;
   - KU obszaru z RUIAN; sygnal `http`;
-  - VKM wg P2.
+  - VKM poza 0.8.0 (P2).
 
 - [ ] **Step 1: Fixtury (live):**
   - WFS KIN: dwie strony A07 (bbox Krakowa, `COUNT=2`) i jedna A08;
@@ -892,9 +994,10 @@ GPKG), D (RUIAN w `boundaries`).
   - `test_addresses_units`: `--teryt 1261` daje ZIP SHP 1:1; `--teryt 12`
     = `Error:` "paczki punktow adresowych sa powiatowe"; `--whole-country
     --format SHP` daje `Notice` 563 803 725 B przed `GET`.
-  - `test_special_collections_contract`: 46 kolekcji z deskryptora jest
-    w `/collections`; brak jednej = `DownloadError` z nazwa; nowa kolekcja
-    = `Info:`; kolekcje `Granica*` nigdy nie sa pytane.
+  - `test_special_collections_contract`: 45 kolekcji z deskryptora jest
+    w `/collections`; brak jednej = `DownloadError` z nazwa; kolekcja spoza
+    deskryptora nie jest pytana (silnik E0 jej nie raportuje); kolekcje
+    `Granica*` nigdy nie sa pytane.
   - `test_special_needs_area_or_country`: bez obszaru i bez
     `--whole-country` = `Error:`.
   - `test_geomorphology_level_required`: brak `--level` = `Error:` z lista;
@@ -919,10 +1022,12 @@ GPKG), D (RUIAN w `boundaries`).
     (`format` i token) z testem na fixturze listy ZIP, potem powtorz brame;
   - granice specjalne: bbox i kraj SHP (734 MB);
   - geomorfologia: `--level celek`, bbox;
-  - RCN: 1201 (9,7 MB) i 1261 (236 MB; SHA-256 z raportu E, jesli GUGiK
-    nie podmienil pliku);
+  - RCN: 1201 (9,7 MB) i 1261 (301 623 607 B 2026-10-16, a 236 404 584 B
+    2026-10-15: plik `latest_exports` jest podmieniany, wiec bez
+    porownania SHA-256 z raportem E; `Notice` `DOWNLOAD_SIZE`);
   - mapa katastralna: 623164 w 4 formatach i bbox z kilkoma KU;
-  - VKM: ponowne sprawdzenie (wynik do P2).
+  - VKM: ponowne sprawdzenie odpowiedzi plikow (dowod do wpisu w backlogu
+    PROGRESS, P2).
 - [ ] **Step 6: Brama i commit** - `feat(boundaries,cadastre): PRG adresy i granice specjalne, geomorfologia CZ, RCN, mapa katastralna CZ (plan E, E3)`.
 
 ### Task E4: `landcover` - BDOO, Data50, Data250
@@ -1008,11 +1113,16 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
 **Deskryptory** (raport E, wiersze 5, 6, 13, 15, 22, 23):
 - `pl.gugik.mesh_3d`, product `mesh`.
   - `UnitPackageParams(unit="tile")` z `IndexSource(kind="wfs",
-    endpoint=mapy/PZGIK/NMT/WFS/ModeleSiatkowe3D,
-    layers=("gugik:SkorowidzModeleSiatkowe3D",))`;
-  - pola: `unit_field="modul"`, `url_field="URL_do_pobrania"`,
-    `label_fields=("Aktualnosc", "Numer_zgloszenia_pracy")`,
-    `year_field="akt_rok"`; strefa slotu z `uklad_xy`;
+    endpoint=mapy/PZGIK/NMT/WFS/ModeleSiatkowe3D, parser=None,
+    unit_field="modul", url_field="URL_do_pobrania",
+    label_fields=("Aktualnosc", "Numer_zgloszenia_pracy"),
+    year_field="akt_rok", zone_field="uklad_xy")`; jeden `PackageVariant`
+    z `url_template=None`, `index_layer="gugik:SkorowidzModeleSiatkowe3D"`
+    i `members=(".obj",)`; strefa slotu i uklad sidecara z `uklad_xy`;
+  - obszar duzego miasta to tysiace kafli (Krakow: 3884 po ok. 37 MB,
+    ok. 143 GB); E0 wypisuje je w `UNIT_LIST` i nie ogranicza. Limit
+    liczby kafli albo wymog potwierdzenia zmienia produkt: E5 zglasza
+    pytanie z rekomendacja zamiast zgadywac;
   - najnowszy rekord kafla, `--year` jako filtr (D5, ADR-028).
 - `pl.gugik.trees_3d`, product `trees`.
   - `UnitPackageParams(unit="powiat")`, jeden `PackageVariant`
@@ -1029,7 +1139,11 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
     `package`);
   - `vertical`: to samo dla `...Wysokosciowa`
     (`.../Wysokosciowa/{teryt}_PodstawowaOsnowaWysokosciowa.zip`);
-  - `gravity`: kanal WFS `OsnowaGrawimetryczna`; `magnetic`: kanal WFS
+  - `gravity`: kanal WFS `.../OsnowaGrawimetryczna/WFS` (adres bez `/WFS`
+    nie odpowiada; `choice=(("network", "gravity"),)`, warstwy
+    `ms:Fundamentalna_grawimetryczna` i `ms:Bazowa_grawimetryczna`,
+    `id_field="nr_punktu"` - obiekty bez `gml:id`); kanaly WFS sieci dziela
+    capability i uklad EPSG:2180 (ADR-043 D6); `magnetic`: kanal WFS
     `OsnowaMagnetyczna` z typami punktow i `ms:izogony`, bez
     `ms:izogony_etykiety`;
   - `archive-1942`, `archive-kronsztadt60`: `UnitPackageParams(unit="sheet")`,
@@ -1050,8 +1164,9 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
 - `pl.gugik.quasigeoid`, product `geoid`, PL.
   - `UnitPackageParams(unit="country")`, jeden wariant ze stalym URL
     `opendata/InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt`
-    i `file_kind="txt"` (E0): kontrola naglowka kolumn szerokosc, dlugosc,
-    zeta zamiast katalogu ZIP.
+    i `file_kind="txt"` (E0): plik sprawdzany jako tekst (bez bajtow NUL,
+    pierwsza linia nie jest znacznikiem HTML/XML; naglowek pliku 2026-10-16:
+    `Szerokosc Dlugosc Zeta`, wiersze CRLF) zamiast katalogu ZIP.
 - `cz.cuzk.qgzu`, product `geoid`, CZ.
   - `DIRECT_FILES` + `AtomFilesParams(service_feed=atom/QGZU/QGZU.xml,
     crs=())`: jeden zbior, kategoria EPSG:4258, ZIP zostaje.
@@ -1071,7 +1186,9 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
     `models3d/pl_mesh/s7/<modul>.zip`; ZIP z OBJ, MTL i JPG bez
     rozpakowania; `check` porownuje rekord bez `GET`.
   - `test_mesh_newest_and_year`: dwa rekordy kafla; bez `--year`
-    pobierany jest nowszy, z `--year` wskazany; brak roku = `NoCoverageError`.
+    pobierany jest nowszy, z `--year` wskazany; brak roku = `NoCoverageError`
+    (mechanizm E0; na zywo kilku lat jednego kafla nie zaobserwowano -
+    drugi rekord powstaje w tescie z prawdziwej strony WFS).
   - `test_trees_size_notice_and_stream`: `Notice` 3 408 621 873 B przed
     `GET`. Strumien do stagingu (atrapa duzego strumienia bez trzymania
     w pamieci). ZIP sprawdzany na pliku. `--lod 2` i `--year 2024` =
@@ -1137,7 +1254,7 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
   - CHANGELOG, sekcja Dodane: 24 produkty, grupy `names`, `maps`,
     `geodesy`, `--direction`, `--ku`, `--network`. Zmiana lamiaca tylko
     jesli ktorys pakiet zmienil istniejace zachowanie, z "Co zrobic";
-  - ADR-0xx: wyniki E2E i ostateczne nazwy symboli.
+  - ADR-043: errata z wynikami E2E i ostatecznymi nazwami symboli E1-E5.
 - [ ] **Step 3: E2E calego planu** (`-o <katalog-danych>/kartograf/e2e/<data>-plan-e/`,
   cache metadanych w korzeniu worktree):
   - powtorz scenariusze live E1-E5 na scalonym kodzie;
@@ -1151,7 +1268,7 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
     z rekomendacja.
 - [ ] **Step 4: Brama** (pelne `pytest -m "not live"`, `ruff check .`,
   `ruff format --check .`, `mypy kartograf/ tests/`) i commit
-  `docs: ADR-0xx, CHANGELOG i dokumentacja planu E; raport E2E`.
+  `docs: ADR-043, CHANGELOG i dokumentacja planu E; raport E2E`.
 
 ## Review Focus
 
@@ -1180,12 +1297,12 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
 - Kazdy z 24 wierszy tabeli statusow dziala z CLI i API. Ma deskryptor
   (NMT 100 m jako wariant rejestru), licencje, `list-sources`, jednoznaczny
   slot `data/`, sidecar wersji, sygnal zgodny z kanalem, test offline na
-  prawdziwej fixturze i przebieg live. P1 i P2 sa rozstrzygniete przez
-  uzytkownika i wykonane wg odpowiedzi.
+  prawdziwej fixturze i przebieg live. Decyzje P1 i P2 uzytkownika
+  (2026-10-15) sa wykonane.
 - Brak drugiego silnika, drugiej listy wariantow i providera kopiujacego
   pobieranie. Nowe mechanizmy ograniczaja sie do E0 i E1 (selektor `woj`,
   godla 8-czlonowe).
 - Manifest: kazda komenda danych planu E ma `_task` i pozycje w
   `kartograf/project/commands.py`, jesli manifest jest na `develop`.
-- Brama zielona. ADR-0xx, CHANGELOG, USAGE, ARCHITECTURE, SCOPE i PRD
+- Brama zielona. ADR-043, CHANGELOG, USAGE, ARCHITECTURE, SCOPE i PRD
   zaktualizowane; raport E2E w `docs/research/`.

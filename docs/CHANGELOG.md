@@ -537,10 +537,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`year=2018.0`), przelacznika innego niz `True`/`False` (`cutout`,
   `all_campaigns`, `full_sheet`, `keep_raw`, `whole_country`, `force`),
   `timeout <= 0` i `layers` podanego jako napis (`"SWRS,PTWP"` byl czytany
-  znak po znaku). Dotad czesc z nich dzialala przypadkiem, czesc konczyla
-  sie poznym `ValueError` z `urllib3` albo `TypeError`. Flagi CLI bez
-  zmian. Co zrobic: przekazuj `int` (`timeout` takze `float`), `True`/
-  `False` i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
+  znak po znaku); `download_collection`/`check_collection`/
+  `validate_collection_request` przyjmuja `teryt`, `sheet`, `ku`, `format`,
+  `scale`, `sheet_system` i `network` tylko jako `str` (plan E, E0: kod
+  podany liczba traci zera wiodace, np. `0208`). Dotad czesc z nich dzialala
+  przypadkiem, czesc konczyla sie poznym `ValueError` z `urllib3` albo
+  `TypeError`. Flagi CLI bez zmian. Co zrobic: przekazuj `int` (`timeout`
+  takze `float`), `True`/`False`, kody jako `str` (`teryt="1261"`)
+  i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
 
 ### Zmienione
 
@@ -574,12 +578,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
-- Plan E, Task E0: wspolny kontrakt kolekcji dla produktow planu E (silniki,
-  bez nowych produktow w rejestrze). Biblioteka
+- Plan E, Task E0 (ADR-043 D1-D9): wspolny kontrakt kolekcji dla produktow
+  planu E (silniki, bez nowych produktow w rejestrze). Biblioteka
   `download_collection`/`check_collection`/`validate_collection_request`
   dostaje `ku` (katastralni uzemi CZ, 6 cyfr; obszar = KU z RUIAN), `format`,
   `scale`, `sheet_system` i `network` (wartosci z deskryptorow: wybor kanalu,
-  np. jedna usluga WFS na siec, albo wariantu paczki). Nowe jednostki silnika
+  np. jedna usluga WFS na siec albo jeden feed ATOM na format:
+  `FeatureBBoxParams.choice`, `AtomFilesParams.choice`; albo wariantu
+  paczki). Nowe jednostki silnika
   `unit_package`: arkusze (seria PL-1992 po liczbie czlonow godla albo warstwa
   indeksu CUZK `KladyMapovychListu`, plik plasko `<segment>/<MAPNOM>`), kafle
   z rekordow WFS (najnowszy rekord, `year` jako filtr, katalog strefy
@@ -588,13 +594,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `{theme}`) albo z rekordu indeksu (GetFeatureInfo tabeli linkow,
   `transport/index_records.py`); pliki bez ZIP (`file_kind` TIFF, PDF, TXT)
   sprawdzane po zawartosci. Sygnal `index` porownuje etykiete rekordu
-  (np. data stanu bazy) z wersja lokalna bez pobierania. `feature_bbox`
+  (np. data stanu bazy) z wersja lokalna bez pobierania; ma go dokladnie
+  kanal z indeksem rekordow. Kanaly jednego rodzaju (usluga na siec) moga
+  dzielic capability, jesli deklaruja te same uklady (sidecar). `feature_bbox`
   obsluguje OGC API Features (CRS84, strony po `next`, kontrola
   `numberMatched`/`numberReturned`) z osobnym limitem czasu kanalu
-  (`FeatureBBoxParams.timeout`; OGC API GUGiK odpowiada 78-95 s na strone).
-  Plik jednostki ponad 100 MiB dostaje `Notice` `DOWNLOAD_SIZE` z rozmiarem
-  z `HEAD` przed pobraniem (K9; dlatego przed kazdym pobraniem paczki jest
-  jedno zapytanie `HEAD`).
+  (`FeatureBBoxParams.timeout`; OGC API PRNG GUGiK odpowiada 78-95 s na
+  strone). Plik jednostki ponad 100 MiB dostaje `Notice` `DOWNLOAD_SIZE`
+  z rozmiarem z `HEAD` przed swoim pobraniem (K9; dlatego przed kazdym
+  pobraniem paczki, takze produktow planow C/D, jest jedno zapytanie
+  `HEAD`).
 - Grupa `hydro` (plan D, ADR-042 D16): `kartograf hydro download --product
   network --country cz` - siec wod HY-NET CUZK. Obszar (`--bbox`/
   `--geometry`) = jeden GeoPackage w EPSG:5514
