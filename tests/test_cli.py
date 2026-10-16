@@ -486,6 +486,7 @@ class TestCommandGroups:
         "boundaries",
         "cadastre",
         "models3d",
+        "hydro",
     )
     # the selection flag of each group's download and its values
     _CHOICES = {
@@ -495,6 +496,7 @@ class TestCommandGroups:
         "boundaries": ("--product", {"admin"}),
         "cadastre": ("--product", {"map"}),
         "models3d": ("--product", {"buildings"}),
+        "hydro": ("--product", {"network"}),
     }
 
     @pytest.mark.parametrize("group", _GROUPS)
@@ -589,6 +591,44 @@ class TestCommandGroups:
         for value in shown:
             args = parser.parse_args([group, "download", flag, value])
             assert getattr(args, flag.removeprefix("--")) == value
+
+    def test_hydro_group_registered(self):
+        """``hydro download`` has only the flags of the group (ADR-039): the
+        CZ network has no PL selections (``--teryt``, ``--sheet``) and no
+        content flags; the area, the national file and the store flags."""
+        parser = create_parser()
+        group = next(
+            action
+            for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        ).choices["hydro"]
+        download = next(
+            action
+            for action in group._actions
+            if isinstance(action, argparse._SubParsersAction)
+        ).choices["download"]
+        flags = {flag for action in download._actions for flag in action.option_strings}
+        assert flags == {
+            "-h",
+            "--help",
+            "--product",
+            "--country",
+            "--bbox",
+            "--bbox-crs",
+            "--geometry",
+            "--layer",
+            "--whole-country",
+            "--output",
+            "-o",
+            "--check-updates",
+            "--upgrade",
+            "--force",
+            "--plan",
+            "--workers",
+            "-w",
+            "--quiet",
+            "-q",
+        }
 
 
 class TestCLIIntegration:
@@ -1773,13 +1813,7 @@ class TestCmdDownloadProduct:
 
     @pytest.mark.parametrize(
         "flag",
-        [
-            ["--vertical-crs", "KRON86"],
-            ["--resolution", "1m"],
-            ["--cutout"],
-            ["--horizontal-crs", "EPSG:2180"],
-            ["--min-density", "4"],
-        ],
+        [["--vertical-crs", "KRON86"], ["--min-density", "4"]],
         ids=lambda flag: flag[0],
     )
     @patch("kartograf.download.data._create_provider_and_storage")
@@ -1787,8 +1821,8 @@ class TestCmdDownloadProduct:
     def test_imagery_rejects_elevation_only_flags(
         self, mock_manager_cls, mock_create, flag, capsys, tmp_path
     ):
-        """Orthophoto has no vertical CRS, resolution, cutout or point density:
-        an elevation flag in ``imagery download`` is an input error, not a no-op."""
+        """Orthophoto has no vertical CRS or point density: an elevation flag
+        in ``imagery download`` is an input error, not a no-op."""
         argv = ["imagery", "download", "--product", "orto"]
         argv += ["--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), *flag]
         with pytest.raises(SystemExit) as exc:

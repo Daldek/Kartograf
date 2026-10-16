@@ -19,7 +19,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kartograf.cli._args import parse_bbox_arg
+from kartograf.cli._args import parse_bbox_arg, parse_per_country
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -28,8 +28,6 @@ from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
 from kartograf.transform.crs import TransformError
-
-_COUNTRY_KEYS = ("pl", "cz")
 
 
 class _ProgressPrinter:
@@ -383,24 +381,6 @@ def _print_version_summary(
 # =============================================================================
 
 
-def _per_country(raw: str | None, flag: str) -> str | dict[str, str] | None:
-    """``5m`` (every country) or ``pl=1m,cz=2m`` (per country) as library value."""
-    if raw is None or "=" not in raw:
-        return raw
-    values: dict[str, str] = {}
-    for item in raw.split(","):
-        key, sep, value = item.partition("=")
-        key = key.strip().lower()
-        if not sep or key not in _COUNTRY_KEYS or not value.strip() or key in values:
-            raise ValidationError(
-                f"{flag}: nieprawidlowa wartosc {raw!r} - podaj jedna wartosc dla "
-                f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
-                f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=..."
-            )
-        values[key] = value.strip()
-    return values
-
-
 def download_task_arguments(args: argparse.Namespace) -> dict:
     """Data options shared by a group download and a project task."""
     return {
@@ -410,15 +390,18 @@ def download_task_arguments(args: argparse.Namespace) -> dict:
         "geometry": Path(args.geometry) if getattr(args, "geometry", None) else None,
         "layer": getattr(args, "layer", None),
         "country": args.country,
-        "vertical_crs": _per_country(
+        "vertical_crs": parse_per_country(
             getattr(args, "vertical_crs", None), "--vertical-crs"
         ),
-        "resolution": _per_country(getattr(args, "resolution", None), "--resolution"),
+        "resolution": parse_per_country(
+            getattr(args, "resolution", None), "--resolution"
+        ),
         "format": getattr(args, "format", None),
         "sheet_system": getattr(args, "sheet_system", None),
         "scale": getattr(args, "scale", None),
         "cutout": getattr(args, "cutout", False),
         "horizontal_crs": getattr(args, "horizontal_crs", None),
+        "coverage": getattr(args, "coverage", None),
         "year": getattr(args, "year", None),
         "min_year": getattr(args, "min_year", None),
         "max_year": getattr(args, "max_year", None),

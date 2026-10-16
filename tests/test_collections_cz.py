@@ -139,6 +139,16 @@ def _page_size(
     )
 
 
+def serve_zabaged(monkeypatch) -> FakeCuzk:
+    """ZABAGED of ``AREA`` without network: the recorded layers only (93
+    lines, 132 without objects, 138 polygons in pages of 2) and ``FakeCuzk``
+    as the session of the collection engine."""
+    _page_size(monkeypatch, "cz.cuzk.zabaged", 2, sources={"93", "132", "138"})
+    fake = FakeCuzk()
+    monkeypatch.setattr(col, "_session", lambda: fake)
+    return fake
+
+
 def _meta(path: Path) -> dict:
     return json.loads(Path(f"{path}.meta.json").read_text(encoding="utf-8"))
 
@@ -271,9 +281,7 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
     two pages), an empty layer keeps its schema, the layer description names
     the service layer and its id; an area has no cheap update signal
     (``unverifiable`` without a request)."""
-    _page_size(monkeypatch, "cz.cuzk.zabaged", 2, sources={"93", "132", "138"})
-    fake = FakeCuzk()
-    monkeypatch.setattr(col, "_session", lambda: fake)
+    fake = serve_zabaged(monkeypatch)
     manager = LandCoverManager(tmp_path, "zabaged", cache=False)
 
     (item,) = manager.download(bbox=AREA).files
