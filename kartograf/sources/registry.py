@@ -2166,6 +2166,402 @@ _E4_CZ_SOURCES = (
     ),
 )
 
+# --- plan E - E5 -------------------------------------------------------------
+# Mesh 3D (raport E, wiersz 5; WFS pages, HEAD of tiles and ZIP members
+# recorded 2026-10-16, tests/fixtures/pl/mesh_3d): one record per file of the
+# index ModeleSiatkowe3D; the field ``modul`` repeats across works and towns,
+# so a tile is the file of its record (unit_field=None: the file name). OBJ,
+# MTL and JPG in one ZIP stored 1:1; PL-1992 or PL-2000 zone S5-S7 per record
+# (uklad_xy), heights PL-EVRF2007-NH in every record (uklad_h).
+_MESH_3D_INDEX = IndexSource(
+    kind="wfs",
+    endpoint=f"{_PZGIK}/NMT/WFS/ModeleSiatkowe3D",
+    parser=None,
+    unit_field=None,
+    url_field="URL_do_pobrania",
+    label_fields=("Aktualnosc", "Numer_zgloszenia_pracy"),
+    year_field="akt_rok",
+    zone_field="uklad_xy",
+)
+_PL_MESH_3D = SourceDescriptor(
+    key="pl.gugik.mesh_3d",
+    country="PL",
+    product="mesh",
+    name="Modele siatkowe 3D miast (mesh OBJ z teksturami)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="index",
+            horizontal_crs="EPSG:2180",
+            vertical_crs_options=("EPSG:9651",),
+            capabilities=frozenset({"area_files"}),
+            endpoint=_MESH_3D_INDEX.endpoint,
+            notes=(
+                "kafel = plik rekordu indeksu WFS (ZIP z OBJ, MTL i JPG zapisywany "
+                "1:1); uklad kafla z rekordu (PL-1992, PL-2000 S5-S7), wysokosci "
+                "PL-EVRF2007-NH"
+            ),
+            params=UnitPackageParams(
+                unit="tile",
+                index=_MESH_3D_INDEX,
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=None,
+                        members=(".obj",),
+                        vertical_crs="EPSG:9651",
+                        index_layer="gugik:SkorowidzModeleSiatkowe3D",
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="models3d/pl_mesh",
+    default_extension=".zip",
+    license=_GUGIK_LICENSE,
+)
+
+# 3D trees (raport E, wiersz 6; HEAD of packages recorded 2026-10-16,
+# tests/fixtures/pl/trees_3d): one CityGML LoD1 package of the 2023 release
+# per powiat (0.3-25 GB; some powiats have none: 404), the GML files of
+# 1:500 sheets in EPSG:2180 without a vertical CRS; no LoD2, no other year.
+_TREES_3D = f"{_OPENDATA}/InneDane/Drzewa3D"
+_PL_TREES_3D = SourceDescriptor(
+    key="pl.gugik.trees_3d",
+    country="PL",
+    product="trees",
+    name="Modele 3D drzew (CityGML LoD1)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=f"{_TREES_3D}/",
+            notes=(
+                "paczka powiatu (0,3-25 GB): pliki GML arkuszy 1:500, EPSG:2180 bez "
+                "ukladu wysokosci; nie kazdy powiat ma paczke"
+            ),
+            params=UnitPackageParams(
+                unit="powiat",
+                variants=(
+                    PackageVariant(
+                        choice=(("lod", "1"), ("year", "2023")),
+                        url_template=f"{_TREES_3D}/LOD1/2023/{{woj}}/{{teryt}}.zip",
+                        edition="2023",
+                        segment_tokens=("lod1", "2023"),
+                        members=(".gml",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="models3d/pl_trees",
+    default_extension=".zip",
+    license=_GUGIK_LICENSE,
+)
+
+# Basic survey control networks (raport E, wiersz 13; WFS of each network,
+# packages and archives recorded 2026-10-16, tests/fixtures/pl/prpog): one
+# WFS 2.0 service per network (MapServer, EPSG:2180 N,E, no gml:id - a point
+# is ``nr_punktu``, an isogonic zone ``zakres_wartosci_deklinacji``; the
+# labels of the isogons are not data), the packages of the horizontal and
+# vertical network per powiat (coordinate lists XLS and point descriptions
+# JPG) and the archive catalogues per 1:100 000 sheet (scans, PDF and TIFF).
+_BDPOG = f"{_OPENDATA}/bdpog"
+_PL_CONTROL_SERVICES = (
+    (
+        "horizontal",
+        "PodstawowaOsnowaGeodezyjnaPozioma",
+        ("Fundamentalna_pozioma", "Bazowa_pozioma"),
+    ),
+    (
+        "vertical",
+        "PodstawowaOsnowaGeodezyjnaWysokosciowa",
+        ("Fundamentalna_wysokosciowa", "Bazowa_wysokosciowa"),
+    ),
+    (
+        "gravity",
+        "OsnowaGrawimetryczna",
+        ("Fundamentalna_grawimetryczna", "Bazowa_grawimetryczna"),
+    ),
+    (
+        "magnetic",
+        "OsnowaMagnetyczna",
+        ("Fundamentalna_magnetyczna", "Bazowa_magnetyczna", "izogony"),
+    ),
+)
+
+
+def _pl_control_wfs(
+    network: str, service: str, layers: tuple[str, ...]
+) -> AccessChannel:
+    """The WFS of one PL control network (the address without ``/WFS`` does
+    not answer)."""
+    return AccessChannel(
+        transport=TransportKind.WFS,
+        update_signal="none",
+        horizontal_crs="EPSG:2180",
+        capabilities=frozenset({"bbox_vector"}),
+        endpoint=f"{_PZGIK}/{service}/WFS",
+        notes="punkty osnowy (i strefy izogon) przecinajace obszar, stan uslugi",
+        params=FeatureBBoxParams(
+            protocol="wfs",
+            native_crs="EPSG:2180",
+            axis_order="yx",
+            page_size=1000,
+            layers=tuple(
+                FeatureLayer(
+                    code=name.lower(),
+                    source=f"ms:{name}",
+                    name=name.lower(),
+                    id_field=(
+                        "zakres_wartosci_deklinacji"
+                        if name == "izogony"
+                        else "nr_punktu"
+                    ),
+                )
+                for name in layers
+            ),
+            selection="all",
+            choice=(("network", network),),
+        ),
+    )
+
+
+_PL_PRPOG = SourceDescriptor(
+    key="pl.gugik.prpog",
+    country="PL",
+    product="control",
+    name="Osnowy podstawowe: pozioma, wysokosciowa, grawimetryczna, magnetyczna "
+    "(z archiwami)",
+    provider_name="GUGiK",
+    channels=(
+        *(
+            _pl_control_wfs(network, service, layers)
+            for network, service, layers in _PL_CONTROL_SERVICES
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=f"{_BDPOG}/",
+            notes=(
+                "paczka powiatu sieci poziomej albo wysokosciowej: wykazy "
+                "wspolrzednych (XLS) i opisy topograficzne (JPG), ZIP 1:1"
+            ),
+            params=UnitPackageParams(
+                unit="powiat",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("network", network),),
+                        url_template=(
+                            f"{_BDPOG}/{folder}/{{teryt}}_PodstawowaOsnowa{folder}.zip"
+                        ),
+                        segment_tokens=(network, "package"),
+                        members=(".xls",),
+                    )
+                    for network, folder in (
+                        ("horizontal", "Pozioma"),
+                        ("vertical", "Wysokosciowa"),
+                    )
+                ),
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_BDPOG}/MaterialyArchiwalne/",
+            notes=(
+                "archiwalne katalogi i kartoteki punktow arkusza 1:100 000 (skany "
+                "PDF i TIFF w ukladach historycznych), ZIP 1:1"
+            ),
+            params=UnitPackageParams(
+                unit="sheet",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("network", network),),
+                        url_template=(
+                            f"{_BDPOG}/MaterialyArchiwalne/Katalogi_{folder}/{{sheet}}.zip"
+                        ),
+                        segment_tokens=(network,),
+                        members=(".pdf",),
+                        sheet_grid=SheetGrid(system="1992", parts=3),
+                    )
+                    for network, folder in (
+                        ("archive-1942", "Kartoteki1942"),
+                        ("archive-kronsztadt60", "Kronsztadt60"),
+                    )
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="geodesy/pl_control",
+    default_extension=".gpkg",
+    license=_GUGIK_LICENSE,
+)
+
+# PL-geoid2021 (raport E, wiersz 15; head and tail of the file recorded
+# 2026-10-16, tests/fixtures/pl/quasigeoid): one text file (latitude,
+# longitude, zeta on a 0.01 deg grid in ETRF2000-PL, 42 MB) of the quasi-geoid
+# of PL-EVRF2007-NH; the KRON86 variant is not published (404).
+_QUASIGEOID = f"{_OPENDATA}/InneDane/ModeleQuasiGeoidy"
+_PL_QUASIGEOID = SourceDescriptor(
+    key="pl.gugik.quasigeoid",
+    country="PL",
+    product="geoid",
+    name="Model quasi-geoidy PL-geoid2021 (PL-EVRF2007-NH)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs="EPSG:9702",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_QUASIGEOID}/",
+            notes=(
+                "jeden plik krajowy TXT (szerokosc, dlugosc, zeta; siatka 0,01 st., "
+                "42 MB) zapisywany 1:1, tylko z --whole-country"
+            ),
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=(
+                            f"{_QUASIGEOID}/PL-geoid2021/"
+                            "Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt"
+                        ),
+                        segment_tokens=("evrf2007",),
+                        file_kind="txt",
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="geodesy/pl_geoid2021",
+    default_extension=".txt",
+    license=_GUGIK_LICENSE,
+)
+_E5_PL_SOURCES = (_PL_MESH_3D, _PL_TREES_3D, _PL_PRPOG, _PL_QUASIGEOID)
+
+# Survey control of CR (raport E, wiersz 23; service and layers recorded
+# 2026-10-16, tests/fixtures/cz/survey_control): --network -> the point layers
+# of BodovaPole/MapServer, layer names without diacritics. The points
+# determined in ETRS89 (layers 2-8, 22-28) are not subsets of the main
+# layers (18/20, 38/40: no common point in the whole country), so a network
+# is the union of its layers; abolished points (10-17, 30-37) and the number
+# labels (odd layers) are not data.
+_BODOVA_POLE_NETWORKS = (
+    ("gnss", (("0", "czepos"),)),
+    (
+        "horizontal",
+        (
+            ("18", "bod_zpbp"),
+            ("20", "pridruzeny_bod_k_bodu_zpbp"),
+            ("2", "bod_zpbp_urceny_v_etrs89"),
+            ("4", "bod_zpbp_urceny_v_etrs89_metodou_rtk"),
+            ("6", "pridruzeny_bod_k_bodu_zpbp_urceny_v_etrs89"),
+            ("8", "pridruzeny_bod_k_bodu_zpbp_urceny_v_etrs89_metodou_rtk"),
+        ),
+    ),
+    (
+        "densification",
+        (
+            ("38", "zhb"),
+            ("40", "pridruzeny_bod_k_zhb"),
+            ("22", "zhb_urceny_v_etrs89"),
+            ("24", "zhb_urceny_v_etrs89_metodou_rtk"),
+            ("26", "pridruzeny_bod_k_zhb_urceny_v_etrs89"),
+            ("28", "pridruzeny_bod_k_zhb_urceny_v_etrs89_metodou_rtk"),
+        ),
+    ),
+    ("horizontal-detailed", (("42", "bod_ppbp"),)),
+    ("vertical", (("44", "bod_zvbp"),)),
+    ("vertical-detailed", (("46", "bod_pvbp"),)),
+    ("gravity", (("48", "bod_ztbp"),)),
+)
+_CZ_SURVEY_CONTROL = SourceDescriptor(
+    key="cz.cuzk.survey_control",
+    country="CZ",
+    product="control",
+    name="Bodove pole - osnowy geodezyjne Czech (polohove, vyskove, tihove, CZEPOS)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/BodovaPole/MapServer",
+            notes="punkty sieci --network przecinajace obszar (suma jej warstw)",
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                layers=tuple(
+                    FeatureLayer(
+                        code=network, source=layer, name=name, id_field="OBJECTID"
+                    )
+                    for network, layers in _BODOVA_POLE_NETWORKS
+                    for layer, name in layers
+                ),
+                selection="level",
+                order_field="OBJECTID",
+                selection_key="network",
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="geodesy/cz_control",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+# QGZU-2013 (raport E, wiersz 22; feeds recorded 2026-10-16,
+# tests/fixtures/cz/qgzu): one dataset of the ATOM feed QGZU, one ZIP of 17
+# text grids (ETRS89, EPSG:4258; the quasi-geoid of Bpv heights) stored 1:1.
+_QGZU_FEED = f"{_CUZK_ATOM}/QGZU/QGZU.xml"
+_CZ_QGZU = SourceDescriptor(
+    key="cz.cuzk.qgzu",
+    country="CZ",
+    product="geoid",
+    name="Kvazigeoid QGZU-2013 (siatki TXT, Bpv)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs="EPSG:4258",
+            capabilities=frozenset({"country_files"}),
+            endpoint=_QGZU_FEED,
+            notes=(
+                "jeden plik krajowy: ZIP 17 siatek TXT (58 MB) zapisywany 1:1, "
+                "tylko z --whole-country; wydanie z feedu ATOM"
+            ),
+            params=AtomFilesParams(
+                service_feed=_QGZU_FEED,
+                entry_pattern=r"CUZK_QGZU_KVAZIGEOID\.xml$",
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="geodesy/cz_qgzu2013",
+    default_extension=".zip",
+    license=_CUZK_LICENSE,
+)
+_E5_CZ_SOURCES = (_CZ_SURVEY_CONTROL, _CZ_QGZU)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -2470,6 +2866,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         *_E3_PL_SOURCES,
         # plan E - E4: BDOO.
         *_E4_PL_SOURCES,
+        # plan E - E5: mesh 3D, 3D trees, survey control networks, PL-geoid2021.
+        *_E5_PL_SOURCES,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",
@@ -2535,6 +2933,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         *_E3_CZ_SOURCES,
         # plan E - E4: CZ Data50 and Data250.
         *_E4_CZ_SOURCES,
+        # plan E - E5: CZ survey control and QGZU.
+        *_E5_CZ_SOURCES,
     )
 }
 

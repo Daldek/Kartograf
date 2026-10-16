@@ -868,16 +868,22 @@ class TestCollectionChannels:
             assert (ch.update_signal == "index") == indexed, (d.key, ch.endpoint)
 
     def test_feature_layers_unique(self):
+        """Every source layer once, under its own GeoPackage name; a code is
+        unique unless it is a choice of ``selection_key`` - one choice may name
+        several layers (ADR-043: CZ survey control network = its layers)."""
         for d, ch in _collection_channels():
             if not isinstance(ch.params, FeatureBBoxParams):
                 continue
             layers = ch.params.layers
             assert layers, d.key
             assert ch.params.page_size > 0, d.key
-            for attribute in ("code", "name", "source"):
+            level = ch.params.selection == "level"
+            for attribute in (
+                ("name", "source") if level else ("code", "name", "source")
+            ):
                 values = [getattr(layer, attribute) for layer in layers]
                 assert len(set(values)) == len(values), (d.key, attribute)
-            if ch.params.selection == "level":
+            if level:
                 for layer in layers:
                     assert _SEGMENT_TOKEN.fullmatch(layer.code), (d.key, layer.code)
 

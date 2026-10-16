@@ -139,6 +139,7 @@ from kartograf.transport.atom import (
     check_atom_crs,
     fetch_atom_file,
     resolve_atom_file,
+    single_dataset,
 )
 from kartograf.transport.http import SessionPerThread, head_signal
 from kartograf.transport.index_records import IndexRecord, gfi_records, wfs_records
@@ -214,10 +215,16 @@ def _session() -> requests.Session:
 
 def _is_collection(descriptor: SourceDescriptor) -> bool:
     """A product of ``download_collection``: a channel of a collection engine
-    (unit packages, features of an area) outside ``landcover``; the ATOM and
-    WCS cutout channels of ``imagery`` products are not collections."""
+    outside ``landcover`` - unit packages, features of an area or the
+    national file of an ATOM feed of one dataset (QGZU); the ATOM feeds of
+    sheets or voivodeships (CZ orthophoto, NMT 100 m) and the WCS cutout
+    channels belong to products of ``download_data``."""
     return descriptor.storage_subdir.split("/", 1)[0] != _LANDCOVER_GROUP and any(
         isinstance(channel.params, UnitPackageParams | FeatureBBoxParams)
+        or (
+            isinstance(channel.params, AtomFilesParams)
+            and single_dataset(channel.params)
+        )
         for channel in descriptor.channels
     )
 
@@ -474,40 +481,50 @@ _AREA_TEXT = {
 }
 
 
-def _available(descriptor: SourceDescriptor) -> str:
-    """Selections a product offers (hint of a selection it does not have).
+def _selections(descriptor: SourceDescriptor, channel: AccessChannel) -> list[str]:
+    """The selections reaching ``channel`` of ``descriptor`` (CLI flags).
 
-    An area names the channels ``_channel_for`` gives it: the objects of the
-    area (``feature_bbox``), its sheets, tiles or cadastral areas, and only
-    without those the packages of its powiats (or of its voivodeships for a
-    product without powiat packages).
+    An area reaches the channels ``_channel_for`` gives it: the objects of
+    the area (``feature_bbox``), its sheets, tiles or cadastral areas, and
+    only without those the packages of its powiats (or of its voivodeships
+    for a product without powiat packages).
     """
-    area_units = bool(_area_channels(descriptor))
-    by_area = _area_package_channels(descriptor)
-    options: list[str] = []
-    for channel in descriptor.channels:
-        params = channel.params
-        if isinstance(params, UnitPackageParams):
-            if params.unit in _AREA_UNITS:
-                if params.unit == "ku":
-                    options.append("--ku <6 cyfr> (paczka katastralniho uzemi)")
-                options.append(_AREA_TEXT[params.unit])
-                continue
-            options.append(
-                {
-                    "powiat": "--teryt <4 cyfry> (paczka powiatu)",
-                    "woj": "--teryt <2 cyfry> (paczka wojewodztwa)",
-                    "country": "--whole-country (plik krajowy)",
-                }[params.unit]
-            )
-            if not area_units and channel in by_area:
-                units = "powiatow" if params.unit == "powiat" else "wojewodztw"
-                options.append(f"--bbox/--sheet/--geometry (paczki {units} obszaru)")
-        elif isinstance(params, FeatureBBoxParams):
-            options.append("--bbox/--sheet/--geometry (obiekty obszaru)")
-        elif isinstance(params, AtomFilesParams):
-            options.append("--whole-country (plik krajowy)")
-    return ", ".join(dict.fromkeys(options))
+    params = channel.params
+    if isinstance(params, FeatureBBoxParams):
+        return ["--bbox/--sheet/--geometry (obiekty obszaru)"]
+    if isinstance(params, AtomFilesParams):
+        return ["--whole-country (plik krajowy)"]
+    if not isinstance(params, UnitPackageParams):
+        return []
+    if params.unit in _AREA_UNITS:
+        own = (
+            ["--ku <6 cyfr> (paczka katastralniho uzemi)"]
+            if params.unit == "ku"
+            else []
+        )
+        return [*own, _AREA_TEXT[params.unit]]
+    texts = [
+        {
+            "powiat": "--teryt <4 cyfry> (paczka powiatu)",
+            "woj": "--teryt <2 cyfry> (paczka wojewodztwa)",
+            "country": "--whole-country (plik krajowy)",
+        }[params.unit]
+    ]
+    if not _area_channels(descriptor) and channel in _area_package_channels(descriptor):
+        units = "powiatow" if params.unit == "powiat" else "wojewodztw"
+        texts.append(f"--bbox/--sheet/--geometry (paczki {units} obszaru)")
+    return texts
+
+
+def _available(descriptor: SourceDescriptor) -> str:
+    """Selections a product offers (hint of a selection it does not have)."""
+    return ", ".join(
+        dict.fromkeys(
+            text
+            for channel in descriptor.channels
+            for text in _selections(descriptor, channel)
+        )
+    )
 
 
 def _package_channels(descriptor: SourceDescriptor, unit: str) -> list[AccessChannel]:
@@ -617,6 +634,39 @@ def _selecting_options(params: ChannelParams | None) -> dict[str, tuple[str, ...
     return options
 
 
+def _check_other_selection(
+    descriptor: SourceDescriptor,
+    candidates: list[AccessChannel],
+    kind: str,
+    options: Mapping[str, str | None],
+) -> None:
+    """A given option value no channel of the selection offers, while another
+    channel of the product does, belongs to another selection (ADR-043:
+    ``--network gravity`` is a service of the objects of an area, not a
+    package of ``--teryt``): the error names the selections of that value
+    and the values of this selection."""
+    others = [channel for channel in descriptor.channels if channel not in candidates]
+    for key, value in options.items():
+        if value is None:
+            continue
+        values = _distinct(
+            v
+            for channel in candidates
+            for v in _channel_options(channel.params).get(key, ())
+        )
+        hosts = [c for c in others if value in _channel_options(c.params).get(key, ())]
+        if value in values or not hosts:
+            continue
+        elsewhere = ", ".join(
+            dict.fromkeys(text for c in hosts for text in _selections(descriptor, c))
+        )
+        here = f"; dla {_SELECTION_TEXT[kind]}: {', '.join(values)}" if values else ""
+        raise ValidationError(
+            f"--{key} {value}: {subject(descriptor)} ({descriptor.country}) - "
+            f"dostepne tylko dla {elsewhere}{here}"
+        )
+
+
 def _channel_for(
     descriptor: SourceDescriptor,
     kind: str,
@@ -625,12 +675,14 @@ def _channel_for(
 ) -> AccessChannel:
     """The channel of a kind of selection (ADR-042 D2); of several, the one
     whose option values (``network``, ``format``, ...) admit the given ones
-    (ADR-043: one WFS service per network, one ATOM feed per format). A
-    single candidate is returned as it is - its content checks name the
-    allowed values (``_content``)."""
+    (ADR-043: one WFS service per network, one ATOM feed per format); a value
+    only another selection offers names that selection. A single candidate
+    is returned as it is - its content checks name the allowed values
+    (``_content``)."""
     candidates, missing = _candidates(descriptor, kind, teryt)
     if not candidates:
         raise ValidationError(f"{missing}; dostepne: {_available(descriptor)}")
+    _check_other_selection(descriptor, candidates, kind, options)
     if len(candidates) == 1:
         return candidates[0]
     offered = [_selecting_options(channel.params) for channel in candidates]
