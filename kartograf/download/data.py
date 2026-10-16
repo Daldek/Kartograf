@@ -788,9 +788,11 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
 
 def _product_label(product: str, resolution: str | None, fmt: str | None = None) -> str:
     """Request label in messages: images have no resolution (K5), archives
-    name their format."""
+    name their format, the CZ contours only their format."""
     if image_source(product) is not None:
         return f"product: {product}"
+    if product == CONTOURS:
+        return f"format: {fmt}"
     if fmt is not None and fmt != "ASC":
         return f"format: {fmt}, resolution: {resolution or '-'}"
     return f"resolution: {resolution}"

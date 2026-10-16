@@ -658,8 +658,8 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 **Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-4 wykonane (fixtury
 w `tests/fixtures/pl/{nmt_100m,intensity,orto_true,orto_oblique}/`
 i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe; NMT 100 m,
-commit `85b53af`; obrazy - krok 4, ponizej). Kroki 5-9 otwarte (warstwice
-CZ, reszta CLI i list-sources, parity, E2E, dokumenty). Krok 4 w kodzie:
+commit `85b53af`; obrazy - krok 4, ponizej). Kroki 5-9 wykonane 2026-10-16
+(warstwice CZ, CLI, parity, manifest, E2E, dokumenty). Krok 4 w kodzie:
 `SheetIndexParams` (descriptor) w kanale `WMS_SHEET_INDEX` orto,
 intensywnosci, true orto i orto ukosnej; `GugikImageProvider` (jeden kod;
 `GugikOrtoProvider` = orto z barwami); `FileStorage(suffix=)` i
@@ -891,7 +891,7 @@ download_data(..., format: str | None = None,                          # contour
     `test_task_options_equal_parser_data_flags` zielony;
   - test zadania projektu z NMT 100 m (jednostka wojewodztwa) -
     `tests/test_project_e1.py` (z zadaniem warstwic `format`).
-- [ ] **Step 8: Live (swiadomie, `-o <katalog-danych>/kartograf/e2e/<data>-plan-e1/`).**
+- [x] **Step 8: Live (swiadomie, `-o <katalog-danych>/kartograf/e2e/<data>-plan-e1/`).**
   - NMT 100 m woj. 12 (7,6 MB): drugi przebieg lokalny,
     `--check-updates` = aktualne;
   - warstwice CTES96 SHP i DGN;
@@ -901,8 +901,10 @@ download_data(..., format: str | None = None,                          # contour
   - bledy przed siecia (pusty katalog wyniku).
 
   Sprawdz `gdalinfo` (pasma, piksel, EPSG), liste ZIP i sidecary. Wyniki
-  do raportu E2E (EZ).
-- [ ] **Step 9: Brama i commit** - `feat(elevation,imagery): NMT 100 m, warstwice CZ, intensywnosc, true orto i orto ukosna (plan E, E1)`.
+  do raportu E2E (EZ). **Wykonane:** `docs/research/2026-10-16-plan-e1-e2e/raport.md`
+  (wszystko kod 0; do wyjasnienia w EZ: plik orto ukosnej `7.125.11.08_N.tif`
+  GDAL rozpoznaje jako EPSG:32634, sidecar i godlo - EPSG:2178, bez E17).
+- [x] **Step 9: Brama i commit** - `feat(elevation,imagery): NMT 100 m, warstwice CZ, intensywnosc, true orto i orto ukosna (plan E, E1)`.
 
 ### Task E2: grupy `names` i `maps` - PRNG, nazwy swiata, Geonames, wizualizacje BDOT10k, ZTM
 
