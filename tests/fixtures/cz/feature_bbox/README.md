@@ -32,6 +32,12 @@ Obszar wszystkich zapytan (EPSG:5514, X,Y): `BB = -451000,-1112000,-450500,-1111
   `hydroNodeCategory`, strony po 1000 wezlow - maja. Na obszarze 30 x 30 km
   (`-470000,-1130000,-440000,-1100000`) wszystkie 4 strony WatercourseLink
   i HydroNode mialy te same pola.
+- `WatercourseSeparatedCrossing` nie ma geometrii w GML (relacja dwoch
+  odcinkow, `net:element`); GeoServer na `RESULTTYPE=hits` z `BBOX`
+  odpowiada 0, choc strony z tym samym `BBOX` daja obiekty (2026-10-16:
+  30 x 30 km 0 wobec 4, 100 x 100 km 0 wobec 24; caly kraj bez `BBOX` 532).
+  Wynik obszaru HY-NET nie ma wiec tego typu (ma go plik krajowy); nagrane
+  odpowiedzi tego typu (0 obiektow w `BB`) sluza testowi pustej warstwy WFS.
 - RUIAN warstwy 17/15/12/7 (`VyssiUzemneSamospravnyCelek`, `Okres`, `Obec`,
   `KatastralniUzemi`): pola `objectid` i `kod`; obszar 30 x 30 km: 1 / 3 / 68
   / 126 obiektow.
