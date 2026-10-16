@@ -37,9 +37,10 @@ HEIGHT_AAIGRID = "AAIGrid"
 class GugikWcsMixin:
     """Format -> GetCoverage URL; the derived class supplies endpoint and coverage.
 
-    NMT/NMPT choose the endpoint and coverage by vertical CRS, orto has a
-    single fixed one — the rest of the request (version, SUBSET in
-    EPSG:2180, formats, chunking) is shared.
+    NMT/NMPT choose the endpoint and coverage by vertical CRS, orto by its
+    WCS cutout channel (Standard or High; the raw ``download_bbox`` without
+    one: Standard) - the rest of the request (version, SUBSET in EPSG:2180,
+    formats, chunking) is shared.
     """
 
     WCS_FORMATS = {
@@ -62,7 +63,9 @@ class GugikWcsMixin:
 
     # A reliability budget, not a server limit: no limit up to 100 Mpx and 40000 px
     # per side was measured, at ~3 s/Mpx and 4 MB/Mpx; the host drops connections,
-    # so a 16 Mpx chunk (~50 s, 64 MB) keeps a retry cheap (report point 2).
+    # so a 16 Mpx chunk (~50 s, 64 MB) keeps a retry cheap (report point 2). Like
+    # the ASC budget below it counts COVERAGE pixels (equal steps for NMT; the
+    # orthophotomap cutout sets its own from ``WcsCutoutParams``).
     WCS_CHUNK_LIMITS = ChunkLimits(
         max_width=40_000, max_height=40_000, max_pixels=16_000_000
     )
@@ -133,12 +136,16 @@ class GugikWcsMixin:
 
         The bbox aligned OUTWARD to ``WCS_GRID``, widened by at most 1 px east
         and south to an even size and cut into even-sized chunks within the
-        limits of the height format (ASC: ``WCS_CHUNK_LIMITS_AAIGRID``): when the
-        server resamples (NMPT ``SCALEFACTOR``, NMT 1 m over a 0.5 m flight), an
-        odd-sized request takes its middle row and column from the neighbouring
-        source pixel (live 2026-10-11, ``docs/research/2026-10-11-wcs-cutouts-live``);
-        even sizes give the sheet content bit for bit. The extra pixels are
-        cropped after stitching (``fetch_chunks``).
+        limits of the height format (ASC: ``WCS_CHUNK_LIMITS_AAIGRID``), counted
+        in coverage pixels: when the server resamples (NMPT ``SCALEFACTOR``,
+        NMT 1 m over a 0.5 m flight), an odd-sized request takes its middle row
+        and column from the neighbouring source pixel (live 2026-10-11,
+        ``docs/research/2026-10-11-wcs-cutouts-live``); even sizes give the
+        sheet content bit for bit. The orthophotomap at 0.25 m needs them too:
+        an even number of 0.25 m pixels is a whole number of 0.1 m coverage
+        pixels, and a fractional one gives a wrong grid or HTTP 400 (live
+        2026-10-16, ``tests/fixtures/pl/orto_wcs/README.md``). The extra pixels
+        are cropped after stitching (``fetch_chunks``).
         """
         grid = self.WCS_GRID
         if grid is None:
@@ -154,12 +161,13 @@ class GugikWcsMixin:
         )
         if self._wcs_height_format() == HEIGHT_AAIGRID:
             limits = self.WCS_CHUNK_LIMITS_AAIGRID
-            native = self.WCS_NATIVE_STEP or grid.step
-            # the budget counts coverage pixels (NMPT: 4 per 1 m result pixel)
-            per_pixel = max(1.0, (grid.step / native) ** 2)
-            limits = replace(limits, max_pixels=int(limits.max_pixels / per_pixel))
         else:
             limits = self.WCS_CHUNK_LIMITS
+        native = self.WCS_NATIVE_STEP or grid.step
+        # the budget counts coverage pixels (NMPT: 4 per 1 m result pixel,
+        # orthophotomap 0.25 m: 6.25 per result pixel of the 0.1 m coverage)
+        per_pixel = max(1.0, (grid.step / native) ** 2)
+        limits = replace(limits, max_pixels=int(limits.max_pixels / per_pixel))
         return plan_chunks(request, even_w, even_h, grid.step, limits, multiple=2)
 
     def _download_wcs(
