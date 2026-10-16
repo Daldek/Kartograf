@@ -35,6 +35,9 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **Mapa katastralna (CZ)** — paczki katastrálního území CUZK (SHP, DXF, DGN, VFK)
 - **Jednostki geomorfologiczne (CZ)** — poziomy od subprovincie do části (obszar; CUZK)
 - **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
+- **Modele 3D drzew i mesh miast (PL)** — drzewa CityGML LoD1 (paczki powiatów) i modele siatkowe miast OBJ z teksturami (kafle indeksu GUGiK)
+- **Osnowy geodezyjne** — punkty osnowy poziomej, wysokościowej, grawimetrycznej i magnetycznej GUGiK (obszar, paczki powiatów, archiwa arkuszy) oraz Bodove pole CUZK
+- **Quasi-geoidy** — modele PL-geoid2021 (GUGiK) i QGZU-2013 (CUZK) jako pliki krajowe
 - **ZABAGED (CZ)** — 22 warstwy pokrycia terenu i wód CUZK (obszar) albo plik krajowy GPKG
 - **Data50 i Data250 (CZ)** — cyfrowe modele geograficzne CUZK 1:50 000 i 1:250 000: wszystkie warstwy obiektowe obszaru (GeoPackage) albo plik krajowy SHP
 - **Granice RUIAN (CZ)** — kraje, okresy, obce i katastralni uzemi z CUZK

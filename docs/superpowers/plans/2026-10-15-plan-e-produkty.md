@@ -347,7 +347,7 @@ D (atom.py, horizontal_crs, wycinek orto) --+         +--> E2 names, maps       
    | Intensywnosc | `intensity/pl_1992/M-34/64/D/d/1/4/M-34-64-D-d-1-4.tif` (`pl_2000`) | `index` |
    | True orto | arkusz `orto/pl_1992_true/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif`; wycinek `orto/pl_1992_true_0.05m/bbox/<wsp>.tif` (wzorzec wycinka orto D: `orto/pl_1992_<wariant>_<etykieta>`) | `index` / `none` |
    | Orto ukosna | `orto/pl_2000_oblique/7/125/11/08/7.125.11.08_n.tif` (`_e`, `_s`, `_w`) | `index` |
-   | Mesh 3D | `models3d/pl_mesh/s7/74238_55474.zip` (strefa z `uklad_xy`) | `index` |
+   | Mesh 3D | `models3d/pl_mesh/s7/78944_6777_74230_55482.zip` (strefa z `uklad_xy`, nazwa = plik rekordu; E5) | `index` |
    | Drzewa 3D | `models3d/pl_trees_lod1_2023/teryt/1261.zip` | `none` |
    | Wizualizacje BDOT10k | `maps/pl_bdot10k_10000_tiff/M-34/64/D/d/1/M-34-64-D-d-1.tif` (`_pdf`, inne skale) | `index` |
    | BDOO | `landcover/pl_bdoo_2023/teryt/12.zip` (`_<klasy>` przy `--layers`, jak C) | `none` |
@@ -1278,6 +1278,24 @@ krajowego.
 
 ### Task E5: `models3d` i `geodesy` - mesh 3D, drzewa, osnowy PL i CZ, quasi-geoidy
 
+**Stan:** wykonany 2026-10-16 (galaz `feat/plan-e5`; ADR-043 errata 3;
+E2E `docs/research/2026-10-16-plan-e5-e2e/raport.md`). Korekty wzgledem
+tego opisu (kod i uslugi): (1) limit obszaru 100 plikow / 10 GB (decyzja
+2026-10-15) w `collections.run_request` dla kazdej kolekcji, przed
+pierwszym transferem; `--teryt`/`--ku`/`--whole-country` bez limitu;
+(2) mesh: `unit_field=None` - kafel = plik rekordu (pole `modul` powtarza
+sie w kilku pracach), segment `models3d/pl_mesh/<strefa>/<plik>.zip`,
+`--year` filtruje rekordy, regula "najnowszy rekord kafla" nie dotyczy
+mesh; (3) Bodove pole: warstwy ETRS89 2-8 i 22-28 nie sa podzbiorami
+18/20 i 38/40 - siec = suma warstw; (4) QGZU: produkt kolekcji z samym
+kanalem ATOM jednego zbioru (`atom.single_dataset`); (5) testy:
+`test_mesh_newest_and_year` -> `test_mesh_tile_of_two_works_and_year`,
+dodane `test_mesh_city_area_over_the_file_limit`,
+`test_trees_powiat_choice_has_no_volume_limit`,
+`test_network_required_with_the_values_of_each_country`; (6) live: drzewa
+3063 (325 MB) zamiast 2261, archiwum 1942 N-33-58 zamiast M-34-64
+(1,07 GB, tylko `HEAD`).
+
 **Zaleznosci:** E0, A (`WfsIndex`), C (grupa `models3d`, `unit_package`,
 `feature_bbox`), D (`AtomFilesParams` dla QGZU).
 
@@ -1349,7 +1367,7 @@ krajowego.
   - `DIRECT_FILES` + `AtomFilesParams(service_feed=atom/QGZU/QGZU.xml,
     crs=())`: jeden zbior, kategoria EPSG:4258, ZIP zostaje.
 
-- [ ] **Step 1: Fixtury (live):**
+- [x] **Step 1: Fixtury (live):**
   - dwie strony WFS mesh;
   - przyciety prawdziwy ZIP kafla (OBJ, MTL i JPG zmniejszone, te same
     nazwy i katalog);
@@ -1359,7 +1377,7 @@ krajowego.
   - metadane i warstwa 44 `BodovaPole`;
   - feedy `QGZU`;
   - naglowek i dwie ostatnie linie modelu PL-geoid2021.
-- [ ] **Step 2: Test RED:**
+- [x] **Step 2: Test RED:**
   - `test_mesh_tiles_from_bbox`: kafle z dwoch stron WFS; zapis
     `models3d/pl_mesh/s7/<modul>.zip`; ZIP z OBJ, MTL i JPG bez
     rozpakowania; `check` porownuje rekord bez `GET`.
@@ -1386,16 +1404,16 @@ krajowego.
   - `test_geoid_whole_country_only`: `--bbox` = `Error:` "model
     quasi-geoidy to jeden plik krajowy: --whole-country"; PL zapisuje TXT
     1:1; CZ etykieta `2021-02-22` z ATOM; `check` bez `GET`.
-- [ ] **Step 3: Implementacja.**
+- [x] **Step 3: Implementacja.**
   - Deskryptory i walidacja;
   - grupa `geodesy` jako modul ADR-039 (`download`, `list-sources`; flagi
     obszaru, `--teryt`, `--network`, `--whole-country`, aktualizacji
     i wyniku);
   - `models3d` dostaje produkty `mesh` i `trees`;
   - handler kolekcji z C; parity po jednym scenariuszu na produkt.
-- [ ] **Step 4: Manifest (warunkowo).** Pozycja `geodesy download`, `_task`,
+- [x] **Step 4: Manifest (warunkowo).** Pozycja `geodesy download`, `_task`,
   test zadania projektu; `models3d download` bez nowych flag.
-- [ ] **Step 5: Live:**
+- [x] **Step 5: Live:**
   - mesh: 1 kafel w Krakowie (38 MB);
   - drzewa 2261: 3,4 GB, pelne pobranie i `unzip -t`;
   - osnowy PL: bbox Krakowa w 4 sieciach, paczki 1201 (2,9 MB i 14,2 MB),
@@ -1404,7 +1422,7 @@ krajowego.
   - quasi-geoidy: PL-geoid2021 i QGZU (SHA-256 z raportu E, jesli zrodlo
     nie zmienilo pliku);
   - drugi przebieg.
-- [ ] **Step 6: Brama i commit** - `feat(models3d,geodesy): mesh 3D, drzewa, osnowy PL i CZ, quasi-geoidy (plan E, E5)`.
+- [x] **Step 6: Brama i commit** - `feat(models3d,geodesy): mesh 3D, drzewa, osnowy PL i CZ, quasi-geoidy (plan E, E5)`.
 
 ### Task EZ: Integracja, dokumentacja, ADR i E2E calego planu
 

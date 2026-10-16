@@ -21,6 +21,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k](#18-granice-ewidencja-modele-3d-budynków-i-archiwum-bdot10k)
    - [1.9 Dane CZ: ZABAGED, Data50, Data250, RUIAN i HY-NET](#19-dane-cz-zabaged-data50-data250-ruian-i-hy-net)
    - [1.10 Nazwy geograficzne i mapy topograficzne](#110-nazwy-geograficzne-i-mapy-topograficzne)
+   - [1.11 Mesh 3D, drzewa, osnowy geodezyjne i quasi-geoidy](#111-mesh-3d-drzewa-osnowy-geodezyjne-i-quasi-geoidy)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
@@ -39,10 +40,11 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
 | `boundaries` | `download`, `list-sources` | granice jednostek: PRG (PL), RUIAN (CZ) |
 | `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
-| `models3d` | `download`, `list-sources` | modele 3D budynków CityGML LoD1/LoD2 (PL) |
+| `models3d` | `download`, `list-sources` | modele 3D (PL): budynki CityGML LoD1/LoD2, drzewa CityGML, mesh miast (OBJ) |
 | `hydro` | `download`, `list-sources` | sieć wód HY-NET (CZ) |
 | `names` | `download`, `list-sources` | PRNG RP, polskie nazwy świata (PL), Geonames (CZ) |
 | `maps` | `download`, `list-sources` | wizualizacje map BDOT10k (PL), ZTM (CZ) |
+| `geodesy` | `download`, `list-sources` | osnowy geodezyjne PL (GUGiK) i CZ (Bodove pole), quasi-geoidy PL-geoid2021 i QGZU-2013 |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
@@ -59,7 +61,8 @@ Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
 bez `--cutout`), `--horizontal-crs` (z `--cutout`; plik krajowy ZABAGED,
 Data50, Data250), `--coverage` (wycinek ortofotomapy), `--scale` (PL-2000),
 `--level` (obszar `boundaries`; pod `auto` per kraj), `--lod` i `--year`
-(`models3d`, gdy wydań jest kilka; rocznik BDOO) oraz `--format` z `--year`
+(`models3d`, gdy wydań jest kilka; rocznik BDOO), `--network`
+(`geodesy --product control`) oraz `--format` z `--year`
 (archiwum BDOT10k)
 podaje się jawnie. Brak wartości to `Error:` z listą
 dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
@@ -1108,7 +1111,8 @@ i `--format` w `boundaries`, `--format` i `--ku` w `cadastre`,
 granice CZ (RUIAN) i jednostki geomorfologiczne CZ, `cadastre` — mapę
 katastralną CZ, a sieć wód CZ — grupa `hydro` (sekcja 1.9; przykłady CZ
 tego rozdziału także tam). Archiwum roczników BDOT10k jest w grupie
-`landcover` (`--year`).
+`landcover` (`--year`). Mesh 3D i modele drzew (`models3d`) oraz osnowy
+i quasi-geoidy (grupa `geodesy`) opisuje sekcja 1.11.
 
 ```bash
 # Archiwum roczników BDOT10k: oryginalna paczka powiatu ZIP (GML albo SHP)
@@ -1269,6 +1273,25 @@ i EGiB — data pobrania. Sidecar wersji niesie wybór (`request`), źródło
 (`extra.source`: URL paczki albo usługa i liczba obiektów każdej
 warstwy) i obszar zadania (`extra.parent_request`) — ARCHITECTURE 3.2
 i 4.10.
+
+**Limit obszaru (od 0.8.0).** Obszar (`--bbox`, `--sheet`, `--geometry`),
+który pobrałby więcej niż **100 plików** albo więcej niż **10 GB**, kończy
+się `Error:` (kod 1) jeszcze przed pobraniem: komunikat podaje liczbę
+plików, ich rozmiar (suma z `HEAD` albo z feedu ATOM; ponad 100 plików —
+szacunek z 5 plików) i co zrobić — zawęzić obszar, wybrać jednostkę
+(`--teryt`, `--ku`) albo wykonać plan z częścią pozycji (`--check-updates
+--plan PLIK`, edycja pliku, potem `--upgrade --plan PLIK`). Liczą się
+tylko pliki do pobrania: wersje już lokalne nie (z `--force` — wszystkie).
+Wybór jednostki (`--teryt`, `--ku`) i `--whole-country` nie mają limitu —
+rozmiar dużego pliku pojawia się jako `Warning:` przed transferem. Limit
+dotyczy wszystkich kolekcji, także ZABAGED, BDOO, Data50 i Data250
+w `landcover` oraz NMT 100 m (pliki województw obszaru).
+
+```bash
+kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 -o <katalog-danych>
+#   Info: trees: powiaty obszaru wg PRG (2): 1206, 1261
+#   Error: trees: obszar daje 2 plikow do pobrania, razem ok. 13,7 GB wg HEAD - limit jednego zadania to 100 plikow i 10 GB. Zawez obszar (--bbox, --sheet, --geometry), wybierz jednostke (--teryt <4 cyfry>) albo wykonaj plan z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan PLIK)
+```
 
 ### 1.9 Dane CZ: ZABAGED, Data50, Data250, RUIAN i HY-NET
 
@@ -1491,6 +1514,93 @@ CLI i API mają tę samą walidację, `Notice`, statusy i układ magazynu
 `kartograf project add <nazwa> maps download ...`); katalog danych
 pochodzi wtedy z projektu.
 
+### 1.11 Mesh 3D, drzewa, osnowy geodezyjne i quasi-geoidy
+
+`models3d download` ma obok budynków (sekcja 1.8) dwa produkty GUGiK
+(tylko PL). `--product mesh` to modele siatkowe miast: kafle indeksu GUGiK
+przecinające obszar (`--bbox`/`--sheet`/`--geometry`), każdy jako
+oryginalny ZIP (OBJ, MTL i tekstury JPG, ok. 40–60 MB). Kafel to plik
+jednego rekordu indeksu — ten sam moduł bywa w kilku pracach (np. mesh
+ze zdjęć i ze skaningu), więc obie wersje dostajesz jako osobne pliki;
+`--year R` zostawia kafle z danych roku R. Plik leży w katalogu układu
+rekordu (`s5`–`s7` = PL-2000 strefy 5–7, `pl1992`): OBJ ma współrzędne tej
+strefy (E z prefiksem strefy) i wysokości PL-EVRF2007-NH (sidecar
+`horizontal_crs`, `vertical_crs` EPSG:9651). Etykieta wersji to data
+i numer zgłoszenia pracy z rekordu, więc `--check-updates` porównuje kafel
+z indeksem bez pobierania. Obszar dużego miasta to setki kafli — powyżej
+100 kafli zadanie kończy się `Error:` z liczbą i szacowanym rozmiarem
+(limit obszaru, sekcja 1.8). `--product trees` to modele drzew CityGML
+LoD1 (wydanie 2023, pliki GML arkuszy 1:500 w EPSG:2180 bez układu
+wysokości): paczka powiatu (`--teryt`) albo paczki powiatów obszaru,
+0,3–25 GB każda; `--lod 1` i `--year 2023` można pominąć (inna wartość to
+`Error:`), nie każdy powiat ma paczkę (`Error: <TERYT>: ... (HTTP 404)`).
+
+```bash
+kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 -o <katalog-danych>
+#   Info: mesh: kafle obszaru (1): s7/78944_6777_74230_55482
+#   models3d/pl_mesh/s7/78944_6777_74230_55482.zip: nowa wersja 2021-10-03_DFT.7201.043.2023_7950f585
+kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check-updates -o <katalog-danych>
+#   s7/78944_6777_74230_55482: aktualne (2021-10-03_DFT.7201.043.2023)
+kartograf models3d download --product trees --teryt 3063 -o <katalog-danych>
+#   Warning: trees PL 3063: duzy plik https://opendata.geoportal.gov.pl/InneDane/Drzewa3D/LOD1/2023/30/3063.zip - 324674789 B (ok. 325 MB)
+#   models3d/pl_trees_lod1_2023/teryt/3063.zip: nowa wersja 2023_25a77518
+```
+
+`geodesy download --product control` pobiera punkty osnów geodezyjnych.
+`--network` jest wymagane: PL `horizontal`, `vertical`, `gravity`,
+`magnetic` (osnowa pozioma, wysokościowa, grawimetryczna i magnetyczna
+GUGiK; magnetyczna także strefy izogon), `archive-1942`,
+`archive-kronsztadt60` (archiwalne katalogi punktów); CZ `gnss` (stacje
+CZEPOS), `horizontal`, `densification` (ZhB), `horizontal-detailed`,
+`vertical`, `vertical-detailed`, `gravity` (Bodove pole CUZK). Obszar daje
+jeden GeoPackage punktów sieci (PL: warstwy `fundamentalna_*`
+i `bazowa_*` w EPSG:2180; CZ: warstwy sieci, np. `bod_zvbp`, w EPSG:5514 —
+sieć CZ to suma jej warstw, także punktów wyznaczonych w ETRS89).
+`--teryt` (powiat) daje paczkę sieci `horizontal` albo `vertical`: wykazy
+współrzędnych (XLS) i opisy topograficzne (JPG). Archiwa to skany (PDF,
+TIFF) arkuszy 1:100 000: `--sheet` dowolnej skali albo obszar wybiera
+arkusze 1:100 000 jego zasięgu (archiwum 1942 bywa ponad 1 GB — rozmiar
+w `Warning:` przed transferem). Sieć bez paczek powiatu z `--teryt` to
+`Error:` ze wskazaniem obszaru. Pod `--country auto` jedna wartość
+`--network` dotyczy obu krajów (wspólne: `horizontal`, `vertical`,
+`gravity`); błąd podaje wartości każdego kraju.
+
+`geodesy download --product geoid` to model quasi-geoidy jako jeden plik
+krajowy, tylko z `--whole-country`: `--country pl` — PL-geoid2021 dla
+PL-EVRF2007-NH (TXT: szerokość, długość, zeta w ETRF2000-PL, siatka
+0,01°, 42 MB), `--country cz` — QGZU-2013 (ZIP 17 siatek TXT dla wysokości
+Bpv, 58 MB; data wydania z feedu ATOM jest etykietą i sygnałem
+`--check-updates`). Obszar to `Error:`. Kartograf pobiera modele jako dane
+i nie stosuje ich do innych danych.
+
+```bash
+kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 -o <katalog-danych>
+#   geodesy/pl_control_vertical/bbox/560000_240000_575000_250000.gpkg: nowa wersja 2026-10-16_1272d195
+kartograf geodesy download --product control --network horizontal --teryt 1201 -o <katalog-danych>
+#   geodesy/pl_control_horizontal_package/teryt/1201.zip: nowa wersja 2026-10-16_fa3dc40c
+kartograf geodesy download --product control --network gravity --teryt 1201 -o <katalog-danych>
+#   Error: --network gravity: control (PL) - dostepne tylko dla --bbox/--sheet/--geometry (obiekty obszaru); dla --teryt: horizontal, vertical
+kartograf geodesy download --product control --network archive-kronsztadt60 --sheet M-34-064-D -o <katalog-danych>
+#   Info: control: arkusze (1): M-34-64
+#   geodesy/pl_control_archive-kronsztadt60/M-34/64/M-34-64.zip: nowa wersja 2026-10-16_8211a8dc
+kartograf geodesy download --product control --country cz --network vertical "--bbox=-452000,-1113000,-449000,-1110000" --bbox-crs EPSG:5514 -o <katalog-danych>
+#   geodesy/cz_control_vertical/bbox/-452000_-1113000_-449000_-1110000.gpkg: nowa wersja 2026-10-16_b921641a
+kartograf geodesy download --product control --country auto --network vertical --bbox 18.55,49.70,18.70,49.78 --bbox-crs EPSG:4326 -o <katalog-danych>
+#   -> geodesy/cz_control_vertical/bbox/<EPSG:5514>.gpkg i geodesy/pl_control_vertical/bbox/<EPSG:2180>.gpkg
+kartograf geodesy download --product geoid --country pl --whole-country -o <katalog-danych>
+#   Warning: geoid PL: plik krajowy https://opendata.geoportal.gov.pl/InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt - 42328086 B (ok. 42 MB)
+#   geodesy/pl_geoid2021_evrf2007/country/pl.txt: nowa wersja 2026-10-16_d695cf81
+kartograf geodesy download --product geoid --country cz --whole-country -o <katalog-danych>
+#   geodesy/cz_qgzu2013/country/cz.zip: nowa wersja 2021-02-22_aacfba6b
+kartograf geodesy list-sources
+```
+
+Punkty osnów, paczki, archiwa i PL-geoid2021 nie mają taniego sygnału
+świeżości (`--check-updates`: `nie da sie sprawdzic bez pobrania`; nowa
+treść z `--force`). Komendy `models3d download` i `geodesy download`
+nadają się do manifestu (`kartograf project add <nazwa> geodesy download
+--product control --network horizontal --teryt 1201`).
+
 ---
 
 ## 2. Biblioteka Python
@@ -1581,9 +1691,9 @@ print([v.label for v in variants(product="nmt", vertical_crs="KRON86", format="A
 # ['0.5m', '1m']
 ```
 
-Kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`;
-sekcje 1.8–1.10) — wynik `CollectionReport(files, failed, stale, notices,
-ok)`, elementy `files` i `failed` jak w `DataReport`:
+Kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`,
+`geodesy`; sekcje 1.8–1.11) — wynik `CollectionReport(files, failed, stale,
+notices, ok)`, elementy `files` i `failed` jak w `DataReport`:
 
 ```python
 from kartograf import BBox, LandCoverManager, check_collection, download_collection
@@ -1633,6 +1743,22 @@ map_status = check_collection(
     product="topographic", country="cz", output_dir=out,
     sheet="0510-D-11", scale="1:10000", format="TIFF",
 )
+# = models3d download --product mesh --country pl --bbox 566200,244650,566250,244700
+mesh = download_collection(
+    product="mesh", country="pl", output_dir=out,
+    bbox=BBox(566200, 244650, 566250, 244700, "EPSG:2180"),
+)  # data/models3d/pl_mesh/s7/78944_6777_74230_55482.zip; year= filtruje kafle
+# = geodesy download --product control --network horizontal --teryt 1201
+download_collection(product="control", output_dir=out, teryt="1201",
+                    network="horizontal")
+# = geodesy download --product control --country cz --network vertical --bbox=...
+download_collection(product="control", output_dir=out, country="cz", network="vertical",
+                    bbox=BBox(-452000, -1113000, -449000, -1110000, "EPSG:5514"))
+# = geodesy download --product geoid --country cz --whole-country
+download_collection(product="geoid", output_dir=out, country="cz",
+                    whole_country=True, on_notice=show)  # QGZU, wydanie z feedu ATOM
+# obszar ponad 100 plikow albo 10 GB: ValidationError przed pobraniem
+# (liczba plikow, rozmiar i podpowiedz; sekcja 1.8)
 ```
 
 Walidacja bez sieci (np. przed zapisaniem zadania):
@@ -2359,9 +2485,15 @@ proxy).
   świeżości: zmiana treści u źródła albo maski PRG jest niewidoczna bez
   `--force` (pliki openzu — arkusz SM5, kafel TM33 DMR 4G/DMP OK
   w EVRF2007, LAZ CZ — mają sygnał HTTP, sekcja 4.3).
-- Granice PRG, EGiB, modele 3D, archiwum BDOT10k i obiekty obszaru CZ
-  (ZABAGED, RUIAN, HY-NET; sekcje 1.8 i 1.9) nie mają taniego sygnału
-  świeżości: nowszą treść przynosi tylko `--force`.
+- Granice PRG, EGiB, modele 3D budynków i drzew, archiwum BDOT10k, osnowy
+  i obiekty obszaru CZ (ZABAGED, RUIAN, HY-NET, Bodove pole; sekcje 1.8,
+  1.9 i 1.11) nie mają taniego sygnału świeżości: nowszą treść przynosi
+  tylko `--force` (kafle mesh 3D porównują etykietę rekordu indeksu).
+- Modele drzew 3D: paczka powiatu ma do 25 GB, a serwer GUGiK odpowiada
+  na `HEAD` rozmiaru po kilku–kilkudziesięciu sekundach (ok. 3,5 s na
+  GB), więc obszar kilku powiatów to około minuty pomiaru i prawie zawsze
+  `Error:` limitu 10 GB — pobieraj powiat (`--teryt`). Mesh 3D obszaru
+  miasta to setki kafli: powyżej 100 zawęź obszar (sekcje 1.8 i 1.11).
 - Strony WFS GUGiK (obiekty obszaru PRG i EGiB) przychodzą po kilka
   sekund na stronę 1000 obiektów (na żywo 2026-10-15: 2–4 s; limit jednego
   zapytania 60 s), więc duży obszar EGiB to minuty. Wynik obszaru jest
