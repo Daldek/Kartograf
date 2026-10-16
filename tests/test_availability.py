@@ -660,6 +660,28 @@ def test_report_sheets_equal_download_selection(tmp_path):
     assert not any("opendata" in url for url in session.urls)
 
 
+def test_check_asks_the_index_despite_cached_records(tmp_path):
+    """Live test 0.8.0 (P2-2): ``--check-updates`` always asks the source - a
+    sheet record in the metadata cache (TTL 7 days) is refreshed, not read,
+    so a flight published since the last query is found."""
+    report = _report("nmt", "krakow")
+    newest = next(c for c in report.combinations if c.complete)
+    (hint,) = newest.download_hint
+    args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
+    kwargs = {
+        **_download_arguments(args),
+        "cache": MetadataCache(tmp_path / "cache.db"),
+    }
+    asked = []
+    for _ in range(2):
+        session = RecordedIndex(_areas("nmt", "krakow"))
+        with patch(SESSION, return_value=session):
+            check_data(**kwargs)
+        asked.append([url for url in session.urls if "GetFeature" in url])
+
+    assert asked[0] and asked[1] == asked[0]
+
+
 # =============================================================================
 # CZ and ``auto`` (plan B, decisions 9-10)
 # =============================================================================

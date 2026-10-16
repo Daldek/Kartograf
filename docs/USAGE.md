@@ -1978,7 +1978,9 @@ clouds = download_cz_laz(**selection_cz, update="upgrade", plan=plan)
 `cache: MetadataCache | bool = True`: domyślnie ten sam plik co CLI
 (`<cwd>/.kartograf_cache.db`, TTL 7 dni), `False` = bez cache, własny
 `MetadataCache` = ten. `update="force"` pomija odczyty z cache w tym
-wywołaniu (jak `--force`). Katalog tylko do odczytu: cache wyłączony
+wywołaniu (jak `--force`), a funkcje sprawdzenia (`check_data`,
+`check_*`, `LandCoverManager.check`) pomijają je zawsze (jak
+`--check-updates`). Katalog tylko do odczytu: cache wyłączony
 z `Notice` `cache_disabled`, pobieranie idzie dalej. Provider tworzony
 ręcznie (niżej) bez `MetadataCache` pyta skorowidz GUGiK przy KAŻDYM
 `download_sheet`; przekaż mu cache, a zapytania o arkusz ograniczą się do
@@ -2303,6 +2305,12 @@ pozycja, której źródło zmieniło się od planu, kończy się `Error:` bez
 pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
 ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
 `bez zmian`, inna = nowa wersja.
+
+`--check-updates` zawsze pyta źródło: odczyt cache metadanych (rekordy
+skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest pomijany, a wpisy
+są odświeżane — nowy lot opublikowany po ostatnim zapytaniu jest widoczny
+od razu, a bez sieci sprawdzenie kończy się `Error:`. Domyślne pobieranie
+korzysta z cache jak dotąd.
 
 ```bash
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data

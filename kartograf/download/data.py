@@ -205,6 +205,12 @@ class _Run:
             unverified_local=not reported_unverified,
         )
 
+    @property
+    def refresh(self) -> bool:
+        """Metadata cache refreshed, not read: ``force`` and the check
+        (``--check-updates`` always asks the source)."""
+        return self.update == "force" or self.check
+
     def add_stale(self, stale) -> int:
         self.stale.extend(stale)
         return 1 if stale else 0
@@ -964,9 +970,7 @@ def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
     list; the view directions of an oblique sheet one after another."""
     if run.dry:
         return 0
-    with open_cache(
-        run.cache, force=run.update == "force", on_notice=run.sink.add
-    ) as metadata:
+    with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
         return max(
             _download_pl_code(task, run, manager)
             for manager in _managers(task, run, metadata)
@@ -1135,9 +1139,7 @@ def _download_pl_sheet_list(
     if run.dry:
         return 0
     _emit_sheet_list(run, task, sheets, f"w skali {target_scale}", what)
-    with open_cache(
-        run.cache, force=run.update == "force", on_notice=run.sink.add
-    ) as metadata:
+    with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
         try:
             managers = _managers(task, run, metadata, parent_request)
         except DownloadError as e:
@@ -1192,9 +1194,7 @@ def _download_pl_archive(
     """
     if run.dry:
         return 0
-    with open_cache(
-        run.cache, force=run.update == "force", on_notice=run.sink.add
-    ) as metadata:
+    with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
         try:
             (manager,) = _managers(task, run, metadata, parent_request)
             provider = cast(GugikProvider, manager.provider)
