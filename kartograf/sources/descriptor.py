@@ -11,12 +11,13 @@ A provider-driven channel may carry a typed configuration as well:
 (the orthophotomap Standard and High coverages of ``pl.gugik.orto``, ADR-042
 D14) - a cutout of the provider, not a collection product.
 
-Collection channels (ADR-042) carry typed engine configuration in
-``AccessChannel.params``: ``UnitPackageParams`` (one package per TERYT unit or
-the country, from a URL template), ``FeatureBBoxParams`` (features of an
-area from WFS / ArcGIS REST into one GeoPackage) and ``AtomFilesParams``
-(files listed by a CUZK ATOM feed). A new product of such a channel is a
-descriptor entry, not a provider.
+Collection channels (ADR-042, ADR-043) carry typed engine configuration in
+``AccessChannel.params``: ``UnitPackageParams`` (one file per unit - TERYT
+unit, country, map sheet, index tile or CZ cadastral area - from a URL
+template or from the record of an index), ``FeatureBBoxParams`` (features of
+an area from WFS / ArcGIS REST / OGC API Features into one GeoPackage) and
+``AtomFilesParams`` (files listed by a CUZK ATOM feed). A new product of such
+a channel is a descriptor entry, not a provider.
 """
 
 from dataclasses import dataclass
@@ -74,9 +75,61 @@ class WcsCutoutParams:
     max_native_pixels: int
 
 
-# URL template tokens of a unit package (ADR-042 D1): the TERYT code of the
-# unit and the voivodeship code (its first two digits).
-PACKAGE_URL_TOKENS = ("teryt", "woj")
+# URL template tokens of a unit package (ADR-042 D1, ADR-043): the TERYT code
+# of the unit, the voivodeship code (its first two digits), the sheet code,
+# the CZ cadastral area code and the theme of a national file.
+PACKAGE_URL_TOKENS = ("teryt", "woj", "sheet", "ku", "theme")
+
+# Kind of a file that is not a ZIP package, checked by its content (ADR-043).
+FileKind = Literal["zip", "tiff", "pdf", "txt"]
+
+
+@dataclass(frozen=True)
+class SheetGrid:
+    """Sheets of an area for a ``unit="sheet"`` channel (ADR-043).
+
+    ``system="1992"``: PL-1992 sheet codes with ``parts`` members computed
+    from the extent (the GUGiK 1:10000 series = 6 members, 1:100000 = 3;
+    ``SheetParser`` labels are one level finer than the GUGiK nomenclature,
+    so the series is named by its number of members, never by a scale
+    label). ``system="cuzk"``: the sheets (``MAPNOM``) of layer ``layer`` of
+    the CUZK index ``KladyMapovychListu``, queried and compared in the native
+    CRS of the layer ``crs`` (ZTM10 S-JTSK: layer 2, EPSG:5514).
+    """
+
+    system: Literal["1992", "cuzk"]
+    parts: int | None = None
+    layer: int | None = None
+    crs: str | None = None
+
+
+@dataclass(frozen=True)
+class IndexSource:
+    """Index whose records give the files of ``sheet``/``tile`` units (ADR-043).
+
+    ``kind="wms_gfi"``: one GetFeatureInfo at the centre of each sheet in the
+    layer of the variant (``PackageVariant.index_layer``); the answer is read
+    by ``parser`` (``map_links``: the HTML table of the BDOT10k map sheets -
+    sheet code ``godlo``, one link per format, base date ``stan_bazy``).
+    ``kind="wfs"``: the features of an area of the type
+    ``PackageVariant.index_layer`` (WFS 2.0, EPSG:2180 N,E, pages by
+    ``next``); every feature is a record of one unit (tile). ``unit_field``
+    names the unit, ``url_field`` the file URL (``None``: the parser gives one
+    link per format), ``label_fields`` the fields joined with ``_`` into the
+    version label (D29: date, request number), ``year_field`` the year of the
+    data (``year`` filter: the newest record of a unit unless a year is
+    chosen), ``zone_field`` the GUGiK CRS of a tile (``PL-2000:S7`` ->
+    slot directory ``s7``).
+    """
+
+    kind: Literal["wms_gfi", "wfs"]
+    endpoint: str
+    parser: Literal["map_links"] | None
+    unit_field: str
+    url_field: str | None
+    label_fields: tuple[str, ...]
+    year_field: str | None = None
+    zone_field: str | None = None
 
 
 @dataclass(frozen=True)
@@ -84,36 +137,56 @@ class PackageVariant:
     """One published package variant: choice values -> URL template.
 
     ``choice`` = the user's choice that selects this variant (keys are the
-    API/CLI option names: ``("format", "SHP"), ("year", "2024")``); ``()``
-    when the source publishes one variant. ``edition`` labels the version
-    (``label_source="edition"``) of a product with the release in its
-    segment (BDOT10k archive year, 3D models year). ``segment_tokens`` name
-    the content in the storage segment (ADR-042 D8). ``members``: suffixes
-    that must occur among the ZIP members of this variant (a package without
-    them is not data; the GML and SHP packages of one channel differ).
-    ``vertical_crs`` is the vertical CRS declared in the data (3D CityGML),
-    ``None`` for 2D data.
+    API/CLI option names: ``("format", "SHP"), ("year", "2024")``, also
+    ``scale``, ``sheet_system``, ``network``); ``()`` when the source
+    publishes one variant. ``url_template`` fills ``PACKAGE_URL_TOKENS``;
+    ``None`` = the URL of the unit's index record (``IndexSource``), the link
+    of the ``format`` of ``choice`` when the record has one per format.
+    ``edition`` labels the version (``label_source="edition"``) of a product
+    with the release in its segment (BDOT10k archive year, 3D models year).
+    ``segment_tokens`` name the content in the storage segment (ADR-042 D8).
+    ``members``: suffixes that must occur among the ZIP members of this
+    variant (a package without them is not data; the GML and SHP packages of
+    one channel differ). ``vertical_crs`` is the vertical CRS declared in
+    the data (3D CityGML), ``None`` for 2D data. ``sheet_grid`` and
+    ``index_layer``: the sheets of an area and the index layer of this
+    variant (a map scale has its own grid and layer). ``file_kind``: a file
+    other than a ZIP is stored as published and checked by its content (TIFF
+    magic, ``%PDF``, a text header) instead of a ZIP directory.
     """
 
     choice: tuple[tuple[str, str], ...]
-    url_template: str  # tokens: {teryt}, {woj} only
+    url_template: str | None
     edition: str | None = None
     segment_tokens: tuple[str, ...] = ()
     members: tuple[str, ...] = ()
     vertical_crs: str | None = None
+    sheet_grid: SheetGrid | None = None
+    index_layer: str | None = None
+    file_kind: FileKind = "zip"
 
 
 @dataclass(frozen=True)
 class UnitPackageParams:
-    """Engine ``unit_package``: one ZIP per unit (``powiat``, ``woj``, ``country``).
+    """Engine ``unit_package``: one file per unit.
 
+    ``unit``: ``powiat``/``woj`` (TERYT, PRG for an area), ``country`` (the
+    national file; ``themes`` = one file per theme, unit
+    ``<country>-<theme>``), ``sheet`` (the sheets of an area from the
+    variant's ``SheetGrid``), ``tile`` (the records of an ``index`` in an
+    area) or ``ku`` (CZ cadastral areas from ``ku_layer``, the ArcGIS REST
+    layer of RUIAN ``KatastralniUzemi``, field ``kod``). ``index``: the
+    records giving the URL and the version label of each sheet or tile.
     ``unpack``: the suffix of the ONE member stored instead of the ZIP
-    (``None`` = the ZIP is stored 1:1).
+    (``None`` = the file is stored 1:1).
     """
 
-    unit: Literal["powiat", "woj", "country"]
+    unit: Literal["powiat", "woj", "country", "sheet", "tile", "ku"]
     variants: tuple[PackageVariant, ...]
     unpack: str | None = None
+    themes: tuple[str, ...] = ()
+    index: IndexSource | None = None
+    ku_layer: str | None = None
 
 
 @dataclass(frozen=True)
@@ -138,14 +211,22 @@ class FeatureBBoxParams:
 
     ``axis_order`` is the order of the BBOX numbers of the service in
     ``native_crs`` (``"yx"`` = northing first, EPSG:2180 per EPSG; a swapped
-    order gives an empty answer without an error). ``selection``: ``level``
-    = one layer chosen by ``FeatureLayer.code`` (``--level``), ``all`` =
-    every layer. ``order_field``: ArcGIS ``orderByFields`` of the pages.
-    ``drop_fields``: fields whose value is the moment of the response (EGiB
-    ``DATA``) - kept out of the GeoPackage, reported in the sidecar.
+    order gives an empty answer without an error; OGC API Features: always
+    ``"xy"`` in ``OGC:CRS84``). ``selection``: ``level`` = the layers chosen
+    by ``FeatureLayer.code`` with the option ``selection_key`` (``--level``;
+    ``network`` for the CZ survey control networks; one code may name
+    several layers), ``all`` = every layer. ``order_field``: ArcGIS
+    ``orderByFields`` of the pages. ``drop_fields``: fields whose value is
+    the moment of the response (EGiB ``DATA``) - kept out of the GeoPackage,
+    reported in the sidecar. ``choice``: the option values selecting this
+    channel when a product has one service per value (ADR-043:
+    ``(("network", "gravity"),)``). ``timeout``: seconds of one request of
+    a service slower than the default of the orchestrator (OGC API Features
+    of GUGiK: 73-93 s per page of items, measured 2026-10-16); ``None`` =
+    the default.
     """
 
-    protocol: Literal["wfs", "arcgis"]
+    protocol: Literal["wfs", "arcgis", "ogcapi"]
     native_crs: str
     axis_order: Literal["xy", "yx"]
     page_size: int
@@ -153,6 +234,9 @@ class FeatureBBoxParams:
     selection: Literal["level", "all"]
     order_field: str | None = None
     drop_fields: tuple[str, ...] = ()
+    choice: tuple[tuple[str, str], ...] = ()
+    selection_key: str = "level"
+    timeout: int | None = None
 
 
 @dataclass(frozen=True)
@@ -169,7 +253,9 @@ class AtomFilesParams:
     member suffix, stored suffix), the longest suffix matching first; ``()``
     = the ZIP is stored 1:1. ``segment_tokens``: content tokens of the
     storage segment; the EPSG number of the chosen file is appended when the
-    dataset has several CRSs.
+    dataset has several CRSs. ``choice``: the option values selecting this
+    channel when a product publishes one feed per value (ADR-043:
+    ``(("format", "GPKG"),)``).
     """
 
     service_feed: str
@@ -177,6 +263,7 @@ class AtomFilesParams:
     crs: tuple[str, ...] = ()
     members: tuple[tuple[str, str], ...] = ()
     segment_tokens: tuple[str, ...] = ()
+    choice: tuple[tuple[str, str], ...] = ()
 
 
 ChannelParams = (

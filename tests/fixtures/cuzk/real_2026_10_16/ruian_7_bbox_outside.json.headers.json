@@ -1,0 +1,6 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis/rest/services/RUIAN/MapServer/7/query?f=json&outFields=kod%2Cnazev&returnGeometry=false&resultOffset=0&resultRecordCount=2000&geometry=-400000%2C-1100000%2C-399000%2C-1099000&geometryType=esriGeometryEnvelope&inSR=5514&spatialRel=esriSpatialRelIntersects",
+  "status": 200,
+  "Content-Type": "application/json; charset=UTF-8",
+  "ETag": "\"b107d9a9\""
+}

@@ -1,10 +1,12 @@
-# Prawdziwe odpowiedzi WFS i ArcGIS REST dla silnika `feature_bbox` (2026-10-15)
+# Prawdziwe odpowiedzi WFS, ArcGIS REST i OGC API Features dla silnika `feature_bbox` (2026-10-15, 2026-10-16)
 
 Nagrane 2026-10-15 przez `requests` (jednorazowy skrypt poza repo; surowe
 odpowiedzi i proby w `<katalog-danych>`) z czterech uslug: PRG i EGiB GUGiK
 (MapServer, WFS 2.0.0), RUIAN CUZK (ArcGIS REST 11.5) i HY-NET CUZK
-(GeoServer, WFS 2.0.0). Obok kazdej odpowiedzi `<plik>.headers.json` z kodem
-HTTP i `Content-Type` (konwencja `tests/conftest.py::recorded_response`).
+(GeoServer, WFS 2.0.0); 2026-10-16 doszlo OGC API Features PRNG GUGiK
+(sekcja "PRNG"). Obok kazdej odpowiedzi `<plik>.headers.json` z kodem HTTP,
+`Content-Type` i - gdy byl - `ETag` (konwencja
+`tests/conftest.py::recorded_response`).
 
 Pliki sa BEZ edycji, z trzema wyjatkami:
 
@@ -69,6 +71,22 @@ Filtr (`F`): `geometry=-455000,-1115000,-450000,-1110000&geometryType=esriGeomet
 | `hynet_hydronode_xy_hits.xml` | `?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=hy-n:HydroNode&SRSNAME=urn:ogc:def:crs:EPSG::5514&BBOX=-452000,-1112000,-451000,-1111000,urn:ogc:def:crs:EPSG::5514&RESULTTYPE=hits` (X,Y) | `numberMatched="11"` (odpowiedz `hits` tez ma `next`) |
 | `hynet_hydronode_yx_hits.xml` | jw. z osiami zamienionymi: `BBOX=-1112000,-452000,-1111000,-451000,...` | `numberMatched="0"`, bez bledu |
 
+## PRNG (`https://ogcapi.geoportal.gov.pl/res/ims/maps/PRNG/apiFeatures`)
+
+OGC API Features, nagrane 2026-10-16 (`requests`, parametry w kolejnosci
+silnika `f`, `bbox`, `limit`; `requests` koduje przecinki `bbox` jako `%2C`).
+`I` = `/collections/NazwaGeograficznaRP/items`. Pliki bez edycji; naglowki
+odpowiedzi 200 maja `ETag`, zadna nie ma `Last-Modified`.
+
+| Plik | Zapytanie | Czas | Wynik |
+|---|---|---|---|
+| `prng_collections.json` | `/collections?f=json` | 0,36 s | 200 `application/json`; 2 kolekcje: `PolskaNazwaGeograficznaSwiata` (przechowywanie EPSG:4326) i `NazwaGeograficznaRP` (EPSG:2180); `crs` obu tylko `http://www.opengis.net/def/crs/OGC/1.3/CRS84` |
+| `prng_rp_krk_l5_o0.json` | `I?f=json&bbox=19.93,50.055,19.945,50.065&limit=5` (Krakow, lon,lat) | 93,4 s | 200 `application/geo+json`; `numberMatched` 9, `numberReturned` 5; `next` = `I?f=json&offset=5&limit=5&bbox=19.93,50.055,19.945,50.065` |
+| `prng_rp_krk_l5_o5.json` | dokladnie `href` linku `next` powyzej | 79,6 s | `numberMatched` 9, `numberReturned` 4 (razem 9 roznych `id`); `previous` z `offset=0`, bez `next` |
+| `prng_rp_krk_l1_o0.json` | `I?f=json&bbox=19.93,50.055,19.945,50.065&limit=1` | 78,5 s | `numberMatched` 9, `numberReturned` 1; `next` z `offset=1&limit=1` |
+| `prng_rp_sea_l5_o0.json` | `I?f=json&bbox=14,54.9,14.01,54.91&limit=5` (Baltyk) | 93,7 s | `numberMatched` 0, `numberReturned` 0, `features` puste, bez `next` |
+| `prng_error_no_collection.json` | `/collections/NieMa/items?f=json&bbox=19.93,50.055,19.945,50.065&limit=5` | 0,31 s | **HTTP 400** `application/json`: `{"error":{"instance":"s-ims-02","message":"No map item PRNG.NieMa","code":600010,"values":["PRNG","NieMa"]}}` |
+
 ## Fakty z nagrania i prob na zywo (2026-10-15)
 
 - **Duplikat MapServera przesuwa ostatni obiekt za pozycje N-1.** PRG A06
@@ -114,3 +132,31 @@ Filtr (`F`): `geometry=-455000,-1115000,-450000,-1110000&geometryType=esriGeomet
 - **Deterministyczne bajty na zywo:** PRG A06 z `page_size` 1000 i 2 dal ten
   sam GPKG (ten sam sha256); powtorne pobrania PRG, EGiB (Warszawa) i RUIAN -
   te same bajty.
+
+## Fakty z nagrania OGC API (2026-10-16)
+
+- **Kazde zapytanie `items` PRNG trwa 78-95 s, niezaleznie od `limit`**
+  (`limit=1`: 78,5 s; `limit=5`: 79,6-94,8 s; pomiar planu E: 73-93 s,
+  `limit=10000` przyjety). `/collections` i blad nieznanej kolekcji - ponizej
+  0,4 s. 6 rownoleglych zapytan `items` (5 bboxow Krakowa i Baltyk) skonczylo
+  sie razem po 92,6-94,8 s: usluga nie kolejkuje zapytan. Dlatego silnik nie
+  pyta osobno o liczbe: N = `numberMatched` pierwszej strony.
+- **OGC API PRG jest szybkie:** `.../PRG/apiFeatures/collections/SadRejonowy/items`
+  z tym samym `bbox` i `limit=2` - 3,5 s (1 obiekt `MultiPolygon`, `id` =
+  `ID-<uuid>`, pole `powierzchnia` typu float); `/collections` PRG - 51
+  kolekcji w 0,58 s (6 granic administracyjnych `Granica{Panstwa,...}` i 45
+  innych), `crs` kazdej tylko CRS84.
+- **Link `next`** ma schemat i host uslugi, parametry `f`, `offset`, `limit`,
+  `bbox` (przecinki niekodowane, `bbox` jak w zapytaniu); ostatnia strona ma
+  `previous`, nie ma `next`. `numberMatched` jest na kazdej stronie.
+- **Obiekty PRNG:** `id` GeoJSON = `ID-<idPRNG>` (napis; ten sam w
+  `idLokalny`), `idPRNG` - liczba calkowita, reszta pol - napisy albo `null`
+  (np. `nazwaOboczna` `null` we wszystkich 9); geometria `MultiPoint` z jednym
+  punktem lon,lat. Pole `timeStamp` (chwila odpowiedzi) jest poza
+  `properties`.
+- **Uklad:** wyjscie tylko CRS84 (lista `crs` kolekcji). GPKG zapisany przez
+  GDAL 3.12.4 z `crs="OGC:CRS84"` ma wlasny SRS (`srs_id` 100000, WKT
+  z `AUTHORITY["OGC","CRS84"]`).
+- **Silnik na zywo:** `fetch_features` (`page_size=5`, bbox Krakowa jw.) -
+  `/collections` i 2 strony `items` w 190,8 s; GPKG z 9 nazwami
+  (`MultiPoint`, CRS84).

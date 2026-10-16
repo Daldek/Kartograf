@@ -1,21 +1,27 @@
-"""Engine ``feature_bbox`` (ADR-042 D3/D4) on real WFS and ArcGIS REST answers.
+"""Engine ``feature_bbox`` (ADR-042 D3/D4) on real WFS, ArcGIS REST and OGC
+API Features answers.
 
 Every response comes from ``tests/fixtures/pl/feature_bbox`` (recorded live
-2026-10-15; queries, dates and live facts in its README). The PL channels
-are the registry entries (``pl.gugik.prg``, ``pl.gugik.egib``) with
-``page_size=2`` - the ``COUNT`` of the recorded pages; the CZ channels
-(RUIAN REST, HY-NET WFS) are built here, plan D adds their descriptors.
+2026-10-15, OGC API PRNG 2026-10-16; queries, dates and live facts in its
+README). The PL channels are the registry entries (``pl.gugik.prg``,
+``pl.gugik.egib``) with ``page_size=2`` - the ``COUNT`` of the recorded
+pages; the CZ channels (RUIAN REST, HY-NET WFS) and the PRNG OGC API channel
+(``page_size=5`` = the recorded ``limit``) are built here, plans D and E add
+their descriptors.
 """
 
 import dataclasses
 import gzip
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
+from urllib.parse import parse_qsl
 
 import pyogrio
 import pyogrio.raw
 import pytest
+from pyproj import CRS
 
 from kartograf.core.bbox import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError
@@ -181,6 +187,69 @@ def ruian(count: str = "ruian_l12_count.json"):
     return route
 
 
+PRNG_ENDPOINT = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRNG/apiFeatures"
+PRNG_RP = FeatureLayer(
+    code="rp", source="NazwaGeograficznaRP", name="NazwaGeograficznaRP", id_field="id"
+)
+PRNG = FeatureBBoxParams(
+    protocol="ogcapi",
+    native_crs="OGC:CRS84",
+    axis_order="xy",
+    page_size=5,
+    layers=(PRNG_RP,),
+    selection="all",
+    timeout=300,
+)
+PRNG_COLLECTIONS = (f"{PRNG_ENDPOINT}/collections", {"f": "json"})
+PRNG_ITEMS = f"{PRNG_ENDPOINT}/collections/NazwaGeograficznaRP/items"
+# PRNG names, lon 19.93-19.945, lat 50.055-50.065 (Krakow): numberMatched 9 on
+# limit=5 pages - the first (5 names) and its ``next`` (offset=5, 4 names).
+PRNG_BBOX = BBox(19.93, 50.055, 19.945, 50.065, "OGC:CRS84")
+PRNG_NEXT = f"{PRNG_ITEMS}?f=json&offset=5&limit=5&bbox=19.93,50.055,19.945,50.065"
+PRNG_PAGES = {
+    ("19.93,50.055,19.945,50.065", "5", "0"): "prng_rp_krk_l5_o0.json",
+    ("19.93,50.055,19.945,50.065", "5", "5"): "prng_rp_krk_l5_o5.json",
+    ("19.93,50.055,19.945,50.065", "1", "0"): "prng_rp_krk_l1_o0.json",
+    ("14,54.9,14.01,54.91", "5", "0"): "prng_rp_sea_l5_o0.json",
+}
+
+
+def prng(replace: dict[str, Any] | None = None):
+    """Route of the PRNG OGC API: ``/collections`` and items pages by
+    ``bbox``/``limit``/``offset`` (query parameters or the ``next`` URL);
+    ``replace`` maps a fixture name to the answer served instead."""
+
+    def route(url, params):
+        if url == PRNG_COLLECTIONS[0]:
+            name = "prng_collections.json"
+        else:
+            base, _, query = url.partition("?")
+            assert base == PRNG_ITEMS
+            values = {**dict(parse_qsl(query)), **params}
+            key = (values["bbox"], values["limit"], values.get("offset", "0"))
+            name = PRNG_PAGES[key]
+        return (replace or {}).get(name, name)
+
+    return route
+
+
+def edited(name: str, change: Callable[[dict], Any]):
+    """Recorded JSON answer with its body changed in place by ``change``."""
+    payload = json.loads((FIXTURES / name).read_bytes())
+    change(payload)
+    return answer(name, body=json.dumps(payload, ensure_ascii=False).encode())
+
+
+def _without_next(payload: dict) -> None:
+    payload["links"] = [link for link in payload["links"] if link["rel"] != "next"]
+
+
+def _foreign_next(payload: dict) -> None:
+    for link in payload["links"]:
+        if link["rel"] == "next":
+            link["href"] = link["href"].replace("geoportal.gov.pl", "example.com")
+
+
 def test_wfs_axis_order_in_bbox():
     """BBOX numbers follow ``axis_order``: PRG ``yx`` (EPSG:2180 N,E, widened
     outward to whole mm), HY-NET ``xy`` (EPSG:5514 X,Y). The swapped HY-NET
@@ -295,6 +364,10 @@ def _arcgis_case(route):
     return FakeService(route), RUIAN_ENDPOINT, RUIAN, [OBEC], RUIAN_BBOX
 
 
+def _ogcapi_case(replace: dict[str, Any]):
+    return FakeService(prng(replace)), PRNG_ENDPOINT, PRNG, [PRNG_RP], PRNG_BBOX
+
+
 ERROR_CASES = {
     # EGiB UslugaZbiorcza without SERVICE: HTML page at HTTP 200
     "capabilities_html": lambda: _wfs_case({}, capabilities="egib_no_service.html"),
@@ -320,6 +393,15 @@ ERROR_CASES = {
             "egib_no_service.html" if "resultOffset" in params else ruian()(url, params)
         )
     ),
+    # OGC API: HTML page at HTTP 200 instead of /collections
+    "ogcapi_collections_html": lambda: _ogcapi_case(
+        {"prng_collections.json": "egib_no_service.html"}
+    ),
+    # OGC API: unknown collection on items - HTTP 400 with a JSON error (the
+    # collection listed by /collections disappeared before the first page)
+    "ogcapi_items_error_400": lambda: _ogcapi_case(
+        {"prng_rp_krk_l5_o0.json": "prng_error_no_collection.json"}
+    ),
 }
 
 
@@ -333,7 +415,7 @@ def test_html_and_exception_report_are_download_errors(case, tmp_path):
         )
 
     assert not isinstance(error.value, NoCoverageError)
-    if case == "hits_exception_report_400":
+    if case.endswith("_400"):
         assert error.value.status_code == 400
 
 
@@ -516,3 +598,146 @@ def test_arcgis_pages_use_offset_and_order(tmp_path):
     assert summary.features == {"Obec": 4}
     _, _, _, fields = pyogrio.raw.read(tmp_path / "result.gpkg", columns=["objectid"])
     assert list(fields[0]) == [6169, 6189, 12391, 13310]
+
+
+def _fetch_prng(service: FakeService, pages_dir: Path, bbox: BBox = PRNG_BBOX):
+    return fetch_features(
+        service, PRNG_ENDPOINT, PRNG, [PRNG_RP], bbox, pages_dir, timeout=5
+    )
+
+
+def test_ogcapi_pages_and_crs84(tmp_path):
+    """PRNG: ``/collections``, the first page by ``bbox`` (lon,lat CRS84,
+    widened outward) and ``limit``, the second only by its ``next`` link; one
+    CRS84 GPKG layer with the 9 names once each. A ``next`` off the service
+    host or a ``numberReturned`` other than the page features is a
+    ``DownloadError``; a bbox labelled in another CRS is a programmer error."""
+    service = FakeService(prng())
+    bbox = BBox(19.93000004, 50.05500003, 19.94499996, 50.06499997, "OGC:CRS84")
+
+    pages = _fetch_prng(service, tmp_path / "pages", bbox)
+
+    assert service.calls == [
+        PRNG_COLLECTIONS,
+        (PRNG_ITEMS, {"f": "json", "bbox": "19.93,50.055,19.945,50.065", "limit": "5"}),
+        (PRNG_NEXT, {}),
+    ]
+    assert pages.layers[0].matched == 9
+    summary = write_gpkg(tmp_path / "result.gpkg", pages, params=PRNG)
+    assert summary.features == {"NazwaGeograficznaRP": 9}
+    info = pyogrio.read_info(tmp_path / "result.gpkg", force_total_bounds=True)
+    assert CRS.from_user_input(info["crs"]) == CRS.from_user_input("OGC:CRS84")
+    min_x, min_y, max_x, max_y = info["total_bounds"]
+    assert 19.93 <= min_x <= max_x <= 19.945  # x = longitude
+    assert 50.055 <= min_y <= max_y <= 50.065  # y = latitude
+    _, _, _, fields = pyogrio.raw.read(tmp_path / "result.gpkg", columns=["id"])
+    assert len(set(fields[0])) == len(fields[0]) == 9
+
+    service = FakeService(
+        prng(
+            {"prng_rp_krk_l5_o0.json": edited("prng_rp_krk_l5_o0.json", _foreign_next)}
+        )
+    )
+    with pytest.raises(DownloadError):
+        _fetch_prng(service, tmp_path / "foreign")
+    assert len(service.calls) == 2  # nothing sent off the service
+
+    def overstated(payload: dict) -> None:
+        payload["numberReturned"] = len(payload["features"]) + 1
+
+    service = FakeService(
+        prng({"prng_rp_krk_l5_o5.json": edited("prng_rp_krk_l5_o5.json", overstated)})
+    )
+    with pytest.raises(DownloadError):
+        _fetch_prng(service, tmp_path / "overstated")
+
+    service = FakeService(prng())
+    with pytest.raises(ValueError):
+        _fetch_prng(service, tmp_path / "epsg", PRNG_BBOX._replace(crs="EPSG:4326"))
+    assert service.calls == []
+
+
+def test_ogcapi_count_is_number_matched():
+    """``count_features`` asks for one page with ``limit=1`` and returns its
+    ``numberMatched`` (9), not the one name on the page."""
+    service = FakeService(prng())
+
+    count = count_features(service, PRNG_ENDPOINT, PRNG, PRNG_RP, PRNG_BBOX, timeout=5)
+
+    assert count == 9
+    assert service.calls == [
+        (PRNG_ITEMS, {"f": "json", "bbox": "19.93,50.055,19.945,50.065", "limit": "1"})
+    ]
+
+
+OGCAPI_STREAM_CASES = {
+    # the second page reports another numberMatched (the data changed)
+    "number_matched_changed": lambda: (
+        {
+            "prng_rp_krk_l5_o5.json": edited(
+                "prng_rp_krk_l5_o5.json", lambda page: page.update(numberMatched=10)
+            )
+        },
+        3,
+    ),
+    # offset ignored: the next page repeats the first one and its next link
+    "page_without_new_ids": lambda: (
+        {"prng_rp_krk_l5_o5.json": "prng_rp_krk_l5_o0.json"},
+        3,
+    ),
+    # no next link after 5 of the 9 names
+    "no_next_before_n": lambda: (
+        {"prng_rp_krk_l5_o0.json": edited("prng_rp_krk_l5_o0.json", _without_next)},
+        2,
+    ),
+}
+
+
+@pytest.mark.parametrize("case", sorted(OGCAPI_STREAM_CASES))
+def test_ogcapi_inconsistent_stream_is_download_error(case, tmp_path):
+    """An OGC API page stream that cannot reach numberMatched unique ids
+    fails at once, without further requests."""
+    replace, requests = OGCAPI_STREAM_CASES[case]()
+    service = FakeService(prng(replace))
+
+    with pytest.raises(DownloadError) as error:
+        _fetch_prng(service, tmp_path / "pages")
+
+    assert not isinstance(error.value, NoCoverageError)
+    assert len(service.calls) == requests
+
+
+def test_ogcapi_sea_is_no_coverage(tmp_path):
+    """numberMatched 0 on the first page (Baltic Sea): ``NoCoverageError``
+    and no request after that page (OGC API has no separate count)."""
+    service = FakeService(prng())
+    sea = BBox(14.0, 54.9, 14.01, 54.91, "OGC:CRS84")
+
+    with pytest.raises(NoCoverageError):
+        _fetch_prng(service, tmp_path / "pages", sea)
+
+    assert service.calls == [
+        PRNG_COLLECTIONS,
+        (PRNG_ITEMS, {"f": "json", "bbox": "14,54.9,14.01,54.91", "limit": "5"}),
+    ]
+
+
+def test_ogcapi_missing_collection_is_download_error(tmp_path):
+    """A layer whose collection ``/collections`` does not list: a
+    ``DownloadError`` naming it, before any items request."""
+    missing = dataclasses.replace(PRNG_RP, source="NazwaGeograficznaPL", name="pl")
+    service = FakeService(prng())
+
+    with pytest.raises(DownloadError, match="NazwaGeograficznaPL") as error:
+        fetch_features(
+            service,
+            PRNG_ENDPOINT,
+            PRNG,
+            [PRNG_RP, missing],
+            PRNG_BBOX,
+            tmp_path / "pages",
+            timeout=5,
+        )
+
+    assert "NazwaGeograficznaRP" not in str(error.value)
+    assert service.calls == [PRNG_COLLECTIONS]

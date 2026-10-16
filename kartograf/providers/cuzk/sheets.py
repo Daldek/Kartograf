@@ -3,6 +3,9 @@ SheetIndex — KladyMapovychListu sheet index (ArcGIS REST /query) with a cache.
 
 Layer 24: SM5 (MAPNOM, MAPNAME, PODIL) in EPSG:5514.
 Layer 26: TM33 2x2 km grid (MAPNOM, IN_CZ) in EPSG:3045.
+Any other layer (e.g. 2 = ZTM10 S-JTSK in EPSG:5514, 14 = ZTM10 ETRS89 in
+EPSG:3045 - the ``sourceSpatialReference`` of the layer) through the generic
+``sheets_for_bbox``/``sheet`` (MAPNOM, MAPNAME) in the CRS given by the caller.
 Note: host `arcgis`, not `arcgis2`. Zero IO at import and construction.
 
 OVER-SELECTION FILTER (reconnaissance Task 1, step 3b) —
@@ -26,6 +29,8 @@ CZ" is PODIL of layer 24.
 """
 
 import logging
+import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -48,6 +53,11 @@ SM5_SYSTEM = "cz_sm5"  # `system` key in sheet_cache
 
 _SM5_FIELDS = "MAPNOM,MAPNAME,PODIL"
 _TM33_FIELDS = "MAPNOM,IN_CZ"
+_LAYER_FIELDS = "MAPNOM,MAPNAME"
+
+# MAPNOM of a generic layer: letters, digits and hyphens ("0510-D-11",
+# "NM-34-07-1-D-15"); nothing else, so it is safe in a where clause.
+_MAPNOM_PATTERN = re.compile(r"[A-Za-z0-9-]+")
 
 _SM5_HINT = "oczekiwano 2 albo 4 wielkich liter + 2 cyfr, np. CTES96, AS91"
 
@@ -87,12 +97,9 @@ class SheetIndex:
         if not isinstance(mapnom, str) or not CZ_SM5_PATTERN.match(mapnom.strip()):
             raise ValidationError(f"Niepoprawne godlo SM5: '{mapnom}' ({_SM5_HINT})")
         mapnom = mapnom.strip()  # consistent with detect_system (system registry)
-        if self._cache is not None:
-            cached = self._cache.get_sheet(SM5_SYSTEM, mapnom)
-            if cached is not None:
-                info = _info_from_payload(cached)
-                if info is not None:
-                    return info
+        cached = self._cached_sheet(SM5_SYSTEM, mapnom)
+        if cached is not None:
+            return cached
         # mapnom passed CZ_SM5_PATTERN (only [A-Z] and digits) — no injection
         features = self._client.query(
             self._endpoint,
@@ -107,9 +114,53 @@ class SheetIndex:
                 f"KladyMapovychListu (warstwa {SM5_LAYER})"
             )
         info = _sm5_info(features[0])
-        if self._cache is not None:
-            self._cache.set_sheet(SM5_SYSTEM, mapnom, _payload_from_info(info))
+        self._store_sheet(SM5_SYSTEM, mapnom, info)
         return info
+
+    def sheet(self, layer: int, mapnom: str, *, crs: str) -> SheetInfo:
+        """Sheet ``mapnom`` of the index ``layer`` with its bbox in ``crs``.
+
+        ValidationError before the network for characters outside
+        ``[A-Za-z0-9-]`` and after the query when the layer has no such sheet.
+        Cached in sheet_cache under the system ``cz_klady_<layer>``.
+        """
+        code = mapnom.strip() if isinstance(mapnom, str) else ""
+        if not _MAPNOM_PATTERN.fullmatch(code):
+            raise ValidationError(
+                f"Niepoprawne oznaczenie arkusza CUZK: '{mapnom}' "
+                f"(dozwolone litery, cyfry i '-', np. 0510-D-11)"
+            )
+        system = f"cz_klady_{layer}"
+        cached = self._cached_sheet(system, code)
+        if cached is not None and cached.bbox.crs == crs:
+            return cached
+        # code passed _MAPNOM_PATTERN (letters, digits, '-') — no injection
+        features = self._client.query(
+            self._endpoint,
+            layer,
+            where=f"MAPNOM='{code}'",
+            out_fields=_LAYER_FIELDS,
+            out_sr=crs,
+        )
+        if not features:
+            raise ValidationError(
+                f"Arkusz '{code}' nie istnieje w indeksie KladyMapovychListu "
+                f"(warstwa {layer})"
+            )
+        info = _layer_info(features[0], crs)
+        self._store_sheet(system, code, info)
+        return info
+
+    def sheets_for_bbox(self, layer: int, bbox: BBox) -> list[SheetInfo]:
+        """Sheets of the index ``layer`` intersecting ``bbox`` with their interior.
+
+        ``bbox.crs`` must be the native CRS of the layer (the service is asked
+        and answers in it). Sorted by MAPNOM; ``[]`` for a valid empty answer.
+        """
+        _validate_extent(bbox)
+        return self._bbox_sheets(
+            layer, bbox, _LAYER_FIELDS, bbox.crs, lambda f: _layer_info(f, bbox.crs)
+        )
 
     def sm5_sheets_for_bbox(self, bbox: BBox) -> list[SheetInfo]:
         """SM5 sheets intersecting the bbox (EPSG:5514), whatever their ``PODIL``.
@@ -118,26 +169,40 @@ class SheetIndex:
         ``file_sheets``.
         """
         _validate_request_bbox(bbox, SM5_CRS, "sm5_sheets_for_bbox")
-        features = self._client.query(
-            self._endpoint,
-            SM5_LAYER,
-            bbox=bbox,
-            out_fields=_SM5_FIELDS,
-            out_sr=SM5_CRS,
-        )
-        return _intersecting(bbox, [_sm5_info(f) for f in features])
+        return self._bbox_sheets(SM5_LAYER, bbox, _SM5_FIELDS, SM5_CRS, _sm5_info)
 
     def tm33_tiles_for_bbox(self, bbox: BBox) -> list[SheetInfo]:
         """TM33 tiles intersecting the bbox (with the IN_CZ attribute)."""
         _validate_request_bbox(bbox, TM33_CRS, "tm33_tiles_for_bbox")
+        return self._bbox_sheets(TM33_LAYER, bbox, _TM33_FIELDS, TM33_CRS, _tm33_info)
+
+    def _bbox_sheets(
+        self,
+        layer: int,
+        bbox: BBox,
+        out_fields: str,
+        out_sr: str,
+        to_info: Callable[[dict], SheetInfo],
+    ) -> list[SheetInfo]:
+        """Envelope query of ``layer`` with the client-side interior filter."""
         features = self._client.query(
             self._endpoint,
-            TM33_LAYER,
+            layer,
             bbox=bbox,
-            out_fields=_TM33_FIELDS,
-            out_sr=TM33_CRS,
+            out_fields=out_fields,
+            out_sr=out_sr,
         )
-        return _intersecting(bbox, [_tm33_info(f) for f in features])
+        return _intersecting(bbox, [to_info(f) for f in features])
+
+    def _cached_sheet(self, system: str, sheet: str) -> SheetInfo | None:
+        if self._cache is None:
+            return None
+        cached = self._cache.get_sheet(system, sheet)
+        return _info_from_payload(cached) if cached is not None else None
+
+    def _store_sheet(self, system: str, sheet: str, info: SheetInfo) -> None:
+        if self._cache is not None:
+            self._cache.set_sheet(system, sheet, _payload_from_info(info))
 
     def file_sheets(self, system: str, area: BBox) -> list[SheetInfo]:
         """Sheets of the CUZK files of a sheet system intersecting ``area``.
@@ -171,6 +236,10 @@ def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
             f"w tym ukladzie, a filtr przeciec wymaga wspolnego CRS), "
             f"otrzymano: {bbox.crs}"
         )
+    _validate_extent(bbox)
+
+
+def _validate_extent(bbox: BBox) -> None:
     if bbox.min_x >= bbox.max_x or bbox.min_y >= bbox.max_y:
         raise ValidationError(
             f"Niepoprawny bbox: ({bbox.min_x}, {bbox.min_y}, "
@@ -248,6 +317,18 @@ def _tm33_info(feature: dict) -> SheetInfo:
         bbox=_rings_envelope(feature, TM33_CRS),
         podil=None,
         in_cz=_parse_in_cz(attrs.get("IN_CZ")),
+    )
+
+
+def _layer_info(feature: dict, crs: str) -> SheetInfo:
+    """Generic sheet of any index layer (MAPNOM, MAPNAME, bbox in ``crs``)."""
+    name = (feature.get("attributes") or {}).get("MAPNAME")
+    return SheetInfo(
+        sheet=_mapnom(feature),
+        name=str(name) if name is not None else None,
+        bbox=_rings_envelope(feature, crs),
+        podil=None,
+        in_cz=None,
     )
 
 

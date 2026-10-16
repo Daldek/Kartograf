@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:gugik="https://www.gugik.gov.pl"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="https://www.gugik.gov.pl https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WFS/ModeleSiatkowe3D?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=gugik:SkorowidzModeleSiatkowe3D&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T12:30:37" numberMatched="unknown" numberReturned="2"
+   next="https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WFS/ModeleSiatkowe3D?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;TYPENAMES=gugik%3ASkorowidzModeleSiatkowe3D&amp;SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;BBOX=244500.0%2C566100.0%2C244700.0%2C566300.0%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;COUNT=2&amp;STARTINDEX=2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>244593.209045 565939.487796</gml:lowerCorner>
+      		<gml:upperCorner>244803.707654 566344.437090</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+    <wfs:member>
+      <gugik:SkorowidzModeleSiatkowe3D gml:id="SkorowidzModeleSiatkowe3D.6777">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>244598.558280 566139.287716</gml:lowerCorner>
+        		<gml:upperCorner>244803.707654 566344.437090</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzModeleSiatkowe3D.6777.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">244798.358273 566139.287716 244803.707654 566339.087776 244603.907521 566344.437090 244598.558280 566144.637024 244798.358273 566139.287716 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:akt_rok>2021</gugik:akt_rok>
+        <gugik:Zrodlo_danych>Zdj. lotnicze</gugik:Zrodlo_danych>
+        <gugik:Charakterystyka_przestrzenna_zrodla_danych>0.05 m</gugik:Charakterystyka_przestrzenna_zrodla_danych>
+        <gugik:uklad_xy>PL-2000:S7</gugik:uklad_xy>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:Blad_sredni_polozenia>0.2</gugik:Blad_sredni_polozenia>
+        <gugik:Blad_sredni_wysokosci>0.3</gugik:Blad_sredni_wysokosci>
+        <gugik:Numer_zgloszenia_pracy>DFT.7201.043.2023</gugik:Numer_zgloszenia_pracy>
+        <gugik:format>OBJ</gugik:format>
+        <gugik:Aktualnosc>2021-10-03</gugik:Aktualnosc>
+        <gugik:modul>74230_55482</gugik:modul>
+        <gugik:Modul_archiwizacji>200</gugik:Modul_archiwizacji>
+        <gugik:URL_do_pobrania>https://opendata.geoportal.gov.pl/DaneFotogrametryczne/Mesh/78944/78944_6777_74230_55482.zip</gugik:URL_do_pobrania>
+        <gugik:Data_wlaczenia_do_PZGiK>2024-02-09</gugik:Data_wlaczenia_do_PZGiK>
+      </gugik:SkorowidzModeleSiatkowe3D>
+    </wfs:member>
+    <wfs:member>
+      <gugik:SkorowidzModeleSiatkowe3D gml:id="SkorowidzModeleSiatkowe3D.6776">
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>244593.209045 565939.487796</gml:lowerCorner>
+        		<gml:upperCorner>244798.358273 566144.637024</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <gugik:msGeometry>
+          <gml:Polygon gml:id="SkorowidzModeleSiatkowe3D.6776.1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:exterior>
+              <gml:LinearRing>
+                <gml:posList srsDimension="2">244793.008898 565939.487796 244798.358273 566139.287716 244598.558280 566144.637024 244593.209045 565944.837098 244793.008898 565939.487796 </gml:posList>
+              </gml:LinearRing>
+            </gml:exterior>
+          </gml:Polygon>
+        </gugik:msGeometry>
+        <gugik:akt_rok>2021</gugik:akt_rok>
+        <gugik:Zrodlo_danych>Zdj. lotnicze</gugik:Zrodlo_danych>
+        <gugik:Charakterystyka_przestrzenna_zrodla_danych>0.05 m</gugik:Charakterystyka_przestrzenna_zrodla_danych>
+        <gugik:uklad_xy>PL-2000:S7</gugik:uklad_xy>
+        <gugik:uklad_h>PL-EVRF2007-NH</gugik:uklad_h>
+        <gugik:Blad_sredni_polozenia>0.2</gugik:Blad_sredni_polozenia>
+        <gugik:Blad_sredni_wysokosci>0.3</gugik:Blad_sredni_wysokosci>
+        <gugik:Numer_zgloszenia_pracy>DFT.7201.043.2023</gugik:Numer_zgloszenia_pracy>
+        <gugik:format>OBJ</gugik:format>
+        <gugik:Aktualnosc>2021-10-03</gugik:Aktualnosc>
+        <gugik:modul>74228_55482</gugik:modul>
+        <gugik:Modul_archiwizacji>200</gugik:Modul_archiwizacji>
+        <gugik:URL_do_pobrania>https://opendata.geoportal.gov.pl/DaneFotogrametryczne/Mesh/78944/78944_6776_74228_55482.zip</gugik:URL_do_pobrania>
+        <gugik:Data_wlaczenia_do_PZGiK>2024-02-09</gugik:Data_wlaczenia_do_PZGiK>
+      </gugik:SkorowidzModeleSiatkowe3D>
+    </wfs:member>
+</wfs:FeatureCollection>
+

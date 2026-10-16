@@ -209,7 +209,6 @@ class WfsIndex:
         self._retries = retries
         self._types: list[str] | None = None
         self._lock = threading.Lock()
-        self._feature_tag = f"{{{GUGIK_NS}}}{layer_prefix}"
 
     @property
     def endpoint(self) -> str:
@@ -371,8 +370,10 @@ class WfsIndex:
             url = following
 
     def _is_feature(self, elem: ET.Element) -> bool:
+        # local name: the NMT/NMPT/LAZ indexes publish http://www.gugik.gov.pl,
+        # the mesh index https://www.gugik.gov.pl (recorded 2026-10-16)
         tag = elem.tag
-        return isinstance(tag, str) and tag.startswith(self._feature_tag)
+        return isinstance(tag, str) and localname(tag).startswith(self._prefix)
 
 
 def parse_index_feature(feature: ET.Element) -> SkorowidzRecord | None:

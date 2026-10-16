@@ -67,6 +67,8 @@ def collection_sources() -> Iterator[FakePackageSession]:
             return wfs_get(url, params=params, **kwargs)
 
         monkeypatch.setattr(service, "get", route)
+        # the size of a package is asked before its transfer (K9)
+        monkeypatch.setattr(service, "head", session.head, raising=False)
         monkeypatch.setattr(
             LandCoverManager,
             "_get_provider_by_name",

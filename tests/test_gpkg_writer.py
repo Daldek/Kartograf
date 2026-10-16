@@ -2,7 +2,8 @@
 
 Pages are real answers from ``tests/fixtures/pl/feature_bbox`` (README),
 copied as ``fetch_features`` saves them; the PL channels are the registry
-entries ``pl.gugik.prg`` and ``pl.gugik.egib``.
+entries ``pl.gugik.prg`` and ``pl.gugik.egib``, the RUIAN and PRNG OGC API
+channels are built here.
 """
 
 import gzip
@@ -22,7 +23,7 @@ import pytest
 from kartograf.exceptions import DownloadError
 from kartograf.sources.descriptor import FeatureBBoxParams, FeatureLayer
 from kartograf.sources.registry import get_source
-from kartograf.transform.gpkg import write_gpkg
+from kartograf.transform.gpkg import GpkgSummary, write_gpkg
 from kartograf.transport.feature_bbox import FeaturePages, LayerPages
 
 FIXTURES = Path(__file__).parent / "fixtures" / "pl" / "feature_bbox"
@@ -48,6 +49,27 @@ RUIAN = FeatureBBoxParams(
     layers=(FeatureLayer(code="obec", source="12", name="Obec", id_field="objectid"),),
     selection="level",
     order_field="objectid",
+)
+PRNG = FeatureBBoxParams(
+    protocol="ogcapi",
+    native_crs="OGC:CRS84",
+    axis_order="xy",
+    page_size=5,
+    layers=(
+        FeatureLayer(
+            code="rp",
+            source="NazwaGeograficznaRP",
+            name="NazwaGeograficznaRP",
+            id_field="id",
+        ),
+        FeatureLayer(
+            code="world",
+            source="PolskaNazwaGeograficznaSwiata",
+            name="PolskaNazwaGeograficznaSwiata",
+            id_field="id",
+        ),
+    ),
+    selection="all",
 )
 
 
@@ -115,6 +137,20 @@ def ruian_pages(root: Path) -> FeaturePages:
         for field in json.loads(schema.read_bytes())["fields"]
     )
     return FeaturePages((LayerPages(RUIAN.layers[0], 4, tuple(paths), schema, fields),))
+
+
+def ogcapi_pages(
+    root: Path, layer: FeatureLayer, pages: Sequence[bytes], matched: int
+) -> LayerPages:
+    """Saved OGC API layer: the GeoJSON pages ``<k>.json``, no schema."""
+    layer_dir = root / layer.name
+    layer_dir.mkdir(parents=True)
+    paths = []
+    for index, page in enumerate(pages):
+        path = layer_dir / f"{index}.json"
+        path.write_bytes(page)
+        paths.append(path)
+    return LayerPages(layer, matched, tuple(paths), None, ())
 
 
 def polygons(wkb: bytes) -> int:
@@ -325,3 +361,53 @@ def test_arcgis_field_types_from_layer_fields(tmp_path):
     with closing(sqlite3.connect(tmp_path / "ruian.gpkg")) as connection:
         row = connection.execute(query, (6169,)).fetchone()
     assert row == ("Albrechtice", "2024-04-12T00:00:00Z", None, 5472359.0)
+
+
+def test_ogcapi_field_types_span_pages(tmp_path):
+    """PRNG pages with ``idPRNG`` null on the first page and integers on the
+    second: one int64 column with nulls, the same bytes as one page holding
+    all nine names; a field without any value is text; an empty layer (the
+    recorded empty answer) has the id column only."""
+    first = json.loads((FIXTURES / "prng_rp_krk_l5_o0.json").read_bytes())
+    second = json.loads((FIXTURES / "prng_rp_krk_l5_o5.json").read_bytes())
+    for feature in first["features"]:
+        feature["properties"]["idPRNG"] = None
+    merged = {**second, "features": first["features"] + second["features"]}
+    empty = (FIXTURES / "prng_rp_sea_l5_o0.json").read_bytes()
+    names, world = PRNG.layers
+
+    def write(name: str, pages: list[dict]) -> tuple[Path, GpkgSummary]:
+        bodies = [json.dumps(page, ensure_ascii=False).encode() for page in pages]
+        layers = (
+            ogcapi_pages(tmp_path / name, names, bodies, 9),
+            ogcapi_pages(tmp_path / name, world, [empty], 0),
+        )
+        path = tmp_path / f"{name}.gpkg"
+        return path, write_gpkg(path, FeaturePages(layers), params=PRNG)
+
+    split, summary = write("split", [first, second])
+    whole, _ = write("whole", [merged])
+
+    assert split.read_bytes() == whole.read_bytes()
+    assert summary.features == {
+        "NazwaGeograficznaRP": 9,
+        "PolskaNazwaGeograficznaSwiata": 0,
+    }
+    info = pyogrio.read_info(split, layer="NazwaGeograficznaRP")
+    types = dict(zip(info["fields"], info["dtypes"], strict=True))
+    assert (types["id"], types["idPRNG"], types["nazwaOboczna"]) == (
+        "object",
+        "int64",
+        "object",
+    )
+    with closing(sqlite3.connect(split)) as connection:
+        rows = dict(connection.execute("SELECT id, idPRNG FROM NazwaGeograficznaRP"))
+    assert rows == {
+        **{feature["id"]: None for feature in first["features"]},
+        **{
+            feature["id"]: feature["properties"]["idPRNG"]
+            for feature in second["features"]
+        },
+    }
+    info = pyogrio.read_info(split, layer=world.name)
+    assert (info["features"], list(info["fields"])) == (0, ["id"])

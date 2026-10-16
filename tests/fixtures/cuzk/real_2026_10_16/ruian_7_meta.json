@@ -1,0 +1,101 @@
+{
+ "currentVersion": 11.5,
+ "id": 7,
+ "name": "KatastralniUzemi",
+ "type": "Feature Layer",
+ "geometryType": "esriGeometryPolygon",
+ "sourceSpatialReference": {
+  "wkid": 102067,
+  "latestWkid": 5514,
+  "xyTolerance": 0.001,
+  "zTolerance": 0.001,
+  "mTolerance": 0.001,
+  "falseX": -33699800,
+  "falseY": -33699800,
+  "xyUnits": 10000,
+  "falseZ": -100000,
+  "zUnits": 10000,
+  "falseM": -100000,
+  "mUnits": 10000
+ },
+ "spatialReference": {
+  "wkid": 102067,
+  "latestWkid": 5514,
+  "xyTolerance": 0.001,
+  "zTolerance": 0.001,
+  "mTolerance": 0.001,
+  "falseX": -33699800,
+  "falseY": -33699800,
+  "xyUnits": 133638764.24698351,
+  "falseZ": -100000,
+  "zUnits": 10000,
+  "falseM": -100000,
+  "mUnits": 10000
+ },
+ "fields": [
+  {
+   "name": "objectid",
+   "type": "esriFieldTypeOID"
+  },
+  {
+   "name": "kod",
+   "type": "esriFieldTypeInteger"
+  },
+  {
+   "name": "nazev",
+   "type": "esriFieldTypeString"
+  },
+  {
+   "name": "nespravny",
+   "type": "esriFieldTypeString"
+  },
+  {
+   "name": "existujedigitalnimapa",
+   "type": "esriFieldTypeString"
+  },
+  {
+   "name": "obec",
+   "type": "esriFieldTypeInteger"
+  },
+  {
+   "name": "platiod",
+   "type": "esriFieldTypeDate"
+  },
+  {
+   "name": "platido",
+   "type": "esriFieldTypeDate"
+  },
+  {
+   "name": "idtransakce",
+   "type": "esriFieldTypeDouble"
+  },
+  {
+   "name": "globalniidnavrhuzmeny",
+   "type": "esriFieldTypeDouble"
+  },
+  {
+   "name": "rizeniid",
+   "type": "esriFieldTypeDouble"
+  },
+  {
+   "name": "datumvzniku",
+   "type": "esriFieldTypeDate"
+  },
+  {
+   "name": "shape",
+   "type": "esriFieldTypeGeometry"
+  },
+  {
+   "name": "st_area(shape)",
+   "type": "esriFieldTypeDouble"
+  },
+  {
+   "name": "st_length(shape)",
+   "type": "esriFieldTypeDouble"
+  }
+ ],
+ "maxRecordCount": 1000000,
+ "advancedQueryCapabilities": {
+  "supportsPagination": true
+ }
+}

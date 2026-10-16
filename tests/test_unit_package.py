@@ -1,6 +1,9 @@
-"""Engine ``unit_package`` (ADR-042 D1-D2): variants, URLs, package checks."""
+"""Engine ``unit_package`` (ADR-042 D1-D2, ADR-043): variants, URLs, package
+and file checks."""
 
+import json
 import zipfile
+from pathlib import Path
 
 import pytest
 
@@ -294,3 +297,58 @@ def test_variant_members_are_case_insensitive(tmp_path):
         timeout=5,
     )
     assert package.size == len(body)
+
+
+E0 = Path(__file__).parent / "fixtures" / "pl" / "e0" / "real_2026_10_16"
+E0_FILES = json.loads((E0 / "files.json").read_text(encoding="utf-8"))
+
+
+def _published(key: str) -> tuple[str, dict, bytes]:
+    """URL, headers and the recorded first bytes of a published file."""
+    entry = E0_FILES[key]
+    head = (E0 / entry["head"]).read_bytes()
+    return entry["url"], {**entry["headers"], "Content-Length": str(len(head))}, head
+
+
+@pytest.mark.parametrize(
+    ("key", "kind", "foreign"),
+    [
+        ("map10k_tiff", "tiff", "map10k_pdf"),
+        ("map10k_pdf", "pdf", "geoid2021_txt"),
+        ("geoid2021_txt", "txt", "map10k_tiff"),
+    ],
+)
+def test_non_zip_files_checked_by_kind(tmp_path, key, kind, foreign):
+    """A map sheet (TIFF, PDF) or a quasi-geoid model (TXT) is stored as
+    published after a check of its content: TIFF magic, ``%PDF``, a text
+    header. HTML at HTTP 200 and a file of another kind are a
+    ``DownloadError`` and leave no file."""
+    variant = PackageVariant(choice=(), url_template=None, file_kind=kind)
+    params = UnitPackageParams(unit="sheet", variants=(variant,))
+    url, headers, body = _published(key)
+
+    def fetch(answer: tuple[int, dict, bytes]):
+        staged = tmp_path / kind / "result"
+        staged.parent.mkdir(exist_ok=True)
+        session = FakePackageSession({url: answer})
+        return staged, lambda: fetch_package(
+            session, url, staged, params=params, variant=variant, timeout=5
+        )
+
+    staged, run = fetch((200, headers, body))
+    package = run()
+    assert (package.path, package.member) == (staged, None)
+    assert staged.read_bytes() == body
+
+    _, other_headers, other = _published(foreign)
+    html = b"<html><body>Plik nie istnieje</body></html>"
+    for answer in (
+        (200, {**headers, "Content-Type": "text/html", "Content-Length": "44"}, html),
+        (200, {**headers, "Content-Length": str(len(html))}, html),
+        (200, other_headers, other),
+    ):
+        staged.unlink(missing_ok=True)
+        staged, run = fetch(answer)
+        with pytest.raises(DownloadError):
+            run()
+        assert list(staged.parent.iterdir()) == []

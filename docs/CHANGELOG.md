@@ -574,6 +574,27 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E0: wspolny kontrakt kolekcji dla produktow planu E (silniki,
+  bez nowych produktow w rejestrze). Biblioteka
+  `download_collection`/`check_collection`/`validate_collection_request`
+  dostaje `ku` (katastralni uzemi CZ, 6 cyfr; obszar = KU z RUIAN), `format`,
+  `scale`, `sheet_system` i `network` (wartosci z deskryptorow: wybor kanalu,
+  np. jedna usluga WFS na siec, albo wariantu paczki). Nowe jednostki silnika
+  `unit_package`: arkusze (seria PL-1992 po liczbie czlonow godla albo warstwa
+  indeksu CUZK `KladyMapovychListu`, plik plasko `<segment>/<MAPNOM>`), kafle
+  z rekordow WFS (najnowszy rekord, `year` jako filtr, katalog strefy
+  `s7/`), KU (`ku/<kod>`) i tematy pliku krajowego
+  (`country/pl-<temat>`); adres pliku z szablonu (`{sheet}`, `{ku}`,
+  `{theme}`) albo z rekordu indeksu (GetFeatureInfo tabeli linkow,
+  `transport/index_records.py`); pliki bez ZIP (`file_kind` TIFF, PDF, TXT)
+  sprawdzane po zawartosci. Sygnal `index` porownuje etykiete rekordu
+  (np. data stanu bazy) z wersja lokalna bez pobierania. `feature_bbox`
+  obsluguje OGC API Features (CRS84, strony po `next`, kontrola
+  `numberMatched`/`numberReturned`) z osobnym limitem czasu kanalu
+  (`FeatureBBoxParams.timeout`; OGC API GUGiK odpowiada 78-95 s na strone).
+  Plik jednostki ponad 100 MiB dostaje `Notice` `DOWNLOAD_SIZE` z rozmiarem
+  z `HEAD` przed pobraniem (K9; dlatego przed kazdym pobraniem paczki jest
+  jedno zapytanie `HEAD`).
 - Grupa `hydro` (plan D, ADR-042 D16): `kartograf hydro download --product
   network --country cz` - siec wod HY-NET CUZK. Obszar (`--bbox`/
   `--geometry`) = jeden GeoPackage w EPSG:5514

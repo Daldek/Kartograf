@@ -21,10 +21,19 @@ multi-part EGiB parcel or building as repeated ``<ms:geom>`` elements and
 GDAL keeps only the LAST part without it (live 2026-10-15: building
 ``budynki.146510_8.0309.18_BUD`` = 2 polygons). ArcGIS GeoJSON pages:
 geometries from GDAL, attributes from the JSON typed by the layer ``fields``
-(``esriFieldTypeDate`` = epoch ms -> UTC ``DATETIME``). ``pyogrio`` returns
-linear geometries, so curves would be linearized the same way on every page
-(none occurred in the PRG, EGiB and RUIAN answers of 2026-10-15: the EGiB
-"Curve Polygon" of earlier probes is not in the data).
+(``esriFieldTypeDate`` = epoch ms -> UTC ``DATETIME``). OGC API Features
+GeoJSON pages: geometries from GDAL, attributes from the JSON with ONE type
+per field over every page of the layer, so the page split never changes the
+result: int -> int64, int+float -> float64, bool -> bool; strings, objects
+and arrays, integers outside int64, mixed kinds and fields without any value
+-> text (strings as they are, anything else as JSON text:
+``json.dumps(ensure_ascii=False, sort_keys=True)``). The id column comes
+first (``id_field="id"``: the GeoJSON ``id`` as the column ``id``; a property
+``id`` must hold the same value), the other fields in first-seen order; an
+empty layer has the id column only (``Unknown`` geometry). ``pyogrio``
+returns linear geometries, so curves would be linearized the same way on
+every page (none occurred in the PRG, EGiB and RUIAN answers of 2026-10-15:
+the EGiB "Curve Polygon" of earlier probes is not in the data).
 
 Deduplication by ``FeatureLayer.id_field``: an identical duplicate (every
 field except ``drop_fields``, and the geometry bytes) is skipped, the same id
@@ -32,9 +41,9 @@ with other content is a ``DownloadError``; a number of unique features other
 than ``matched`` (N) is a ``DownloadError``.
 
 Writing: ``pyogrio.raw.write`` (driver GPKG, ``promote_to_multi=True``, CRS
-``native_crs``, layer ``FeatureLayer.name`` with ``DESCRIPTION`` = the WFS
-type name or the ArcGIS layer name with its id, e.g. ``Vodni tok (93)`` in
-the service's spelling),
+``native_crs`` - OGC API: ``OGC:CRS84`` - layer ``FeatureLayer.name`` with
+``DESCRIPTION`` = the WFS type name, the ArcGIS layer name with its id, e.g.
+``Vodni tok (93)`` in the service's spelling, or the OGC API collection id),
 features in id order, the layer geometry type from the geometries (one
 family -> its Multi type, else ``Unknown``) or, for an empty layer, from the
 schema; ``OGR_CURRENT_DATE`` is fixed while writing, so the same pages give
@@ -99,6 +108,10 @@ _FAMILIES = {
     6: "Polygon",
 }
 _MULTI = {"MultiPoint", "MultiLineString", "MultiPolygon"}
+# OGC API: the id field that means the GeoJSON ``id`` member; the int64 range
+# of JSON integers written as numbers.
+_GEOJSON_ID = "id"
+_INT64_MIN, _INT64_MAX = -(2**63), 2**63 - 1
 
 # One feature: field values (schema order) and the WKB geometry.
 _Row = tuple[tuple[Any, ...], bytes | None]
@@ -145,9 +158,9 @@ def write_gpkg(
     Raises
     ------
     DownloadError
-        A page GDAL cannot read, one field with two types on different pages,
-        a feature without an id, the same id with other content, or unique
-        features != ``matched`` (incomplete answer).
+        A page GDAL cannot read, one field with two types on different pages
+        (WFS), a feature without an id, the same id with other content, or
+        unique features != ``matched`` (incomplete answer).
     ValueError
         ``path`` exists, no layers, or a WFS layer without schema/pages
         (programmer error).
@@ -163,6 +176,8 @@ def write_gpkg(
         for layer_pages in pages.layers:
             if params.protocol == "wfs":
                 table = _read_wfs(layer_pages, params, dropped)
+            elif params.protocol == "ogcapi":
+                table = _read_ogcapi(layer_pages, params, dropped)
             else:
                 table = _read_arcgis(layer_pages, params, dropped)
             _write_layer(path, table, layer_pages, params)
@@ -349,6 +364,102 @@ def _read_arcgis(
             _add(table, row, wkb, dropped, context)
     _check_complete(table, layer_pages, context)
     return table
+
+
+def _read_ogcapi(
+    layer_pages: "LayerPages", params: "FeatureBBoxParams", dropped: dict[str, set[str]]
+) -> _Table:
+    """Unique features of the OGC API GeoJSON pages: one pass over every page
+    types the fields (module docstring), a second one reads the rows."""
+    layer = layer_pages.layer
+    context = f"OGC API {layer.source}"
+    kinds: dict[str, set[str]] = {layer.id_field: set()}
+    for page in layer_pages.pages:
+        for values in _ogcapi_values(page, layer.id_field, context):
+            for name, value in values.items():
+                found = kinds.setdefault(name, set())
+                if value is not None:
+                    found.add(_json_kind(value))
+    names = list(kinds)
+    dtypes = [_json_dtype(kinds[name]) for name in names]
+    table = _new_table(names, dtypes, set(), "Unknown", layer.id_field, params, context)
+    for page in layer_pages.pages:
+        rows = _ogcapi_values(page, layer.id_field, context)
+        if not rows:
+            continue
+        _, _, geometries, _ = _read_page(page, context, columns=[])
+        if geometries is None or len(geometries) != len(rows):
+            raise DownloadError(
+                f"{context}: GDAL odczytal inna liczbe obiektow strony {page.name}"
+            )
+        for values, wkb in zip(rows, geometries, strict=True):
+            row = tuple(
+                _json_value(values.get(name), dtype)
+                for name, dtype in zip(names, dtypes, strict=True)
+            )
+            _add(table, row, wkb, dropped, context)
+    _check_complete(table, layer_pages, context)
+    return table
+
+
+def _ogcapi_values(page: Path, id_field: str, context: str) -> list[dict[str, Any]]:
+    """Attributes of every feature of a saved page; with ``id_field="id"`` the
+    GeoJSON ``id`` is the attribute ``id`` (a property ``id`` must equal it)."""
+    rows = []
+    for feature in json.loads(page.read_bytes())["features"]:
+        properties = feature.get("properties")
+        if properties is not None and not isinstance(properties, dict):
+            raise DownloadError(
+                f"{context}: strona {page.name} ma obiekt z properties innym niz "
+                "slownik"
+            )
+        values = dict(properties or {})
+        if id_field == _GEOJSON_ID:
+            ident = feature.get("id")
+            if values.get(_GEOJSON_ID, ident) != ident:
+                raise DownloadError(
+                    f"{context}: wlasciwosc id={values[_GEOJSON_ID]!r} rozna od "
+                    f"identyfikatora obiektu {ident!r}"
+                )
+            values[_GEOJSON_ID] = ident
+        rows.append(values)
+    return rows
+
+
+def _json_kind(value: Any) -> str:
+    """Kind of a non-null JSON value: ``bool``, ``int`` (int64 range),
+    ``float`` or ``text`` (strings, objects, arrays, larger integers)."""
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int):
+        return "int" if _INT64_MIN <= value <= _INT64_MAX else "text"
+    if isinstance(value, float):
+        return "float"
+    return "text"
+
+
+def _json_dtype(kinds: set[str]) -> np.dtype:
+    """Column type from the kinds of every value of a field: int -> int64,
+    int+float -> float64, bool -> bool, anything else (also no value) -> text."""
+    if kinds == {"bool"}:
+        return np.dtype(bool)
+    if kinds == {"int"}:
+        return np.dtype(np.int64)
+    if kinds and kinds <= {"int", "float"}:
+        return np.dtype(np.float64)
+    return np.dtype(object)
+
+
+def _json_value(value: Any, dtype: np.dtype) -> Any:
+    """JSON value as the column type (``None`` = null); a text column keeps
+    strings and holds any other value as JSON text."""
+    if value is None or dtype.kind in "bi":
+        return value
+    if dtype.kind == "f":
+        return float(value)
+    if isinstance(value, str):
+        return value
+    return json.dumps(value, ensure_ascii=False, sort_keys=True)
 
 
 def _new_table(
@@ -560,9 +671,9 @@ def _write_layer(
 
 
 def _description(layer_pages: "LayerPages", params: "FeatureBBoxParams") -> str:
-    """``gpkg_contents.description`` of a layer: the WFS type name, or the
+    """``gpkg_contents.description`` of a layer: the WFS type name, the
     ArcGIS layer name of the service with its id (``Vodni tok (93)``, the
-    name as the service spells it)."""
+    name as the service spells it) or the OGC API collection id."""
     layer = layer_pages.layer
     if params.protocol == "arcgis" and layer_pages.schema is not None:
         name = json.loads(layer_pages.schema.read_bytes()).get("name")

@@ -59,8 +59,12 @@ class CuzkClient:
         where: str | None = None,
         out_fields: str = "*",
         out_sr: str | None = None,
+        return_geometry: bool = True,
     ) -> list[dict]:
-        """GET {endpoint}/{layer}/query (f=json) with resultOffset pagination."""
+        """GET {endpoint}/{layer}/query (f=json) with resultOffset pagination.
+
+        ``return_geometry=False`` asks for attributes only (``returnGeometry=false``).
+        """
         url = f"{endpoint}/{layer}/query"
         features: list[dict] = []
         offset = 0
@@ -68,7 +72,7 @@ class CuzkClient:
             params: dict[str, str] = {
                 "f": "json",
                 "outFields": out_fields,
-                "returnGeometry": "true",
+                "returnGeometry": "true" if return_geometry else "false",
                 "resultOffset": str(offset),
                 "resultRecordCount": str(self.QUERY_PAGE_SIZE),
             }
