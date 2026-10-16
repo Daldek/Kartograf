@@ -132,8 +132,9 @@ def _provider(model: str, vertical_crs: str, cache: MetadataCache | None):
 
 def _validate_selection(
     *, model: str, vertical_crs: str, sheet: str | None, bbox: BBox | None
-) -> None:
-    """Exactly one of ``sheet``/``bbox`` and a valid choice - before any request."""
+) -> BBox | None:
+    """Exactly one of ``sheet``/``bbox`` and a valid choice - before any
+    request; the bbox in the registry spelling of its CRS (or ``None``)."""
     from kartograf.download.options import validate_request_bbox
 
     if (sheet is None) == (bbox is None):
@@ -141,9 +142,10 @@ def _validate_selection(
             "LAZ CZ: podaj dokladnie jedno z sheet (godlo) albo bbox (obszar)"
         )
     if bbox is not None:
-        validate_request_bbox(bbox)
+        bbox = validate_request_bbox(bbox)
     system = cz_sheet_system(sheet) if sheet is not None else None
     find_cz_laz_variant(model=model, vertical_crs=vertical_crs, system=system)
+    return bbox
 
 
 def _select(
@@ -335,7 +337,9 @@ def check_cz_laz(
     track ``cz_laz`` with the sheet code as ``unit``. Invalid choices raise
     the same errors as the download.
     """
-    _validate_selection(model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox)
+    bbox = _validate_selection(
+        model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
+    )
     sink = NoticeSink(on_notice)
     with open_cache(cache, force=False, on_notice=sink.add) as metadata:
         provider = _provider(model, vertical_crs, metadata)
@@ -408,7 +412,9 @@ def download_cz_laz(
     """
     validate_update(update)
     require_int(workers, "workers")
-    _validate_selection(model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox)
+    bbox = _validate_selection(
+        model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
+    )
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)

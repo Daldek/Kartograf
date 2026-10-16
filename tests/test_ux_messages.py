@@ -1,12 +1,14 @@
-"""Input errors of the 0.8.0 UX review (UX-01 - UX-14): the same text from the
-CLI and the library, before any network."""
+"""Input errors and input rules of the 0.8.0 UX review: the same text and
+result from the CLI and the library, before any network."""
+
+import json
 
 import pytest
 
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
 from kartograf.download.collections import validate_collection_request
-from kartograf.download.data import validate_data_request
+from kartograf.download.data import download_data, validate_data_request
 from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.notices import FILES, OF_SHEETS, count_text
@@ -208,3 +210,136 @@ def test_bdot10k_voivodeship_teryt_names_the_powiat_choice(tmp_path):
     assert str(error.value).startswith(
         "--teryt 14: BDOT10k jest publikowany per powiat - podaj --teryt <4 cyfry>"
     )
+
+
+# Cieszyn: an area crossing the PL-CZ border
+BORDER = BBox(18.60, 49.73, 18.66, 49.76, "EPSG:4326")
+
+
+def test_enumerated_values_are_taken_in_any_case(tmp_path, capsys):
+    # UX-11: --country PL, --vertical-crs evrf2007, --format shp and
+    # epsg:2180 were errors; each flag had its own spelling
+    def addresses(**case):
+        return validate_collection_request(
+            product="addresses", output_dir=tmp_path, whole_country=True, **case
+        )
+
+    canonical = addresses(country="pl", format="SHP")
+    assert addresses(country="PL", format="shp") == canonical
+    gminy = BBox(565000, 242000, 566000, 243000, "EPSG:2180")
+    assert validate_collection_request(
+        product="admin", output_dir=tmp_path, country="Pl", level="gmina",
+        bbox=gminy._replace(crs="epsg:2180"),
+    ) == validate_collection_request(
+        product="admin", output_dir=tmp_path, country="pl", level="gmina", bbox=gminy
+    )  # fmt: skip
+
+    from tests.test_download_data import G, _pl_sheets
+    from tests.test_manager_campaigns import C14, FakeCampaignProvider
+
+    def nmt_sheet(out, **case):
+        with _pl_sheets(FakeCampaignProvider(C14)):
+            report = download_data(
+                product="nmt", output_dir=out, sheet=G, resolution="1m", cache=False,
+                **case,
+            )  # fmt: skip
+        file = report.files[0].file
+        sidecar = file.version_path.with_name(f"{file.version_path.name}.meta.json")
+        return file.path.relative_to(out), json.loads(sidecar.read_text())["request"]
+
+    assert nmt_sheet(
+        tmp_path / "a", vertical_crs="evrf2007", country="PL"
+    ) == nmt_sheet(tmp_path / "b", vertical_crs="EVRF2007")
+
+    out = tmp_path / "store"
+    assert main([
+        "landcover", "download", "--source", "bdot10k", "--teryt", "1465",
+        "--format", "shp", "-o", str(out), "--check-updates",
+    ]) == 0  # fmt: skip
+    assert capsys.readouterr().out == (
+        "landcover/pl_bdot10k_shp/teryt/1465.zip: do pobrania\n"
+    )
+
+
+def test_pl_sheet_code_with_another_sheet_system_fails_before_network(tmp_path, capsys):
+    # the sheet system of a PL sheet code comes from the code; another
+    # --sheet-system was dropped silently
+    text = (
+        f"--sheet-system 2000 nie zgadza sie z godlem {SHEET} (PL-1992): uklad "
+        "arkuszy wynika z godla - pomin --sheet-system"
+    )
+    err = _cli_error(
+        capsys,
+        "elevation", "download", "--product", "nmt", "--sheet", SHEET,
+        "--sheet-system", "2000", "--resolution", "1m", "--vertical-crs",
+        "EVRF2007", "-o", str(tmp_path),
+    )  # fmt: skip
+    assert f"Error: {text}" in err
+    with pytest.raises(ValidationError, match="nie zgadza sie z godlem 6.129.30.25.3"):
+        validate_data_request(
+            product="orto", output_dir=tmp_path, sheet="6.129.30.25.3",
+            sheet_system="1992",
+        )  # fmt: skip
+    # the system of the code itself stays a valid (redundant) choice
+    assert (
+        validate_data_request(
+            product="nmt",
+            output_dir=tmp_path,
+            sheet=SHEET,
+            sheet_system="1992",
+            resolution="1m",
+            vertical_crs="EVRF2007",
+        )  # fmt: skip
+        is None
+    )
+
+
+def test_option_of_the_other_country_source(tmp_path):
+    # UX-15: --sheet-system selects the ZTM sheets (CZ); for the BDOT10k maps
+    # (PL) it was "nie dotyczy", and an auto area could never take it
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(
+            product="topographic", output_dir=tmp_path, country="pl",
+            bbox=BBox(565000, 242000, 566000, 243000, "EPSG:2180"),
+            scale="1:10000", format="TIFF", sheet_system="1992",
+        )  # fmt: skip
+    assert str(error.value) == (
+        "--sheet-system dotyczy tylko --product topographic (CZ: sjtsk, etrs89) - "
+        "dla PL pomin --sheet-system"
+    )
+    request = validate_collection_request(
+        product="topographic", output_dir=tmp_path, country="auto", bbox=BORDER,
+        scale="1:10000", format="TIFF", sheet_system="sjtsk",
+    )  # fmt: skip
+    choices = {part.country: part.choice for part in request.parts}
+    assert choices["CZ"]["sheet_system"] == "sjtsk"
+    assert "sheet_system" not in choices["PL"]
+
+
+def test_survey_network_per_country(tmp_path):
+    # UX-48: --level, --resolution and --vertical-crs took pl=...,cz=...;
+    # --network had one value for both countries (different networks)
+    request = validate_collection_request(
+        product="control", output_dir=tmp_path, country="auto", bbox=BORDER,
+        network={"pl": "horizontal", "cz": "gnss"},
+    )  # fmt: skip
+    assert {part.country: part.choice["network"] for part in request.parts} == {
+        "PL": "horizontal",
+        "CZ": "gnss",
+    }
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(
+            product="control", output_dir=tmp_path, country="auto", bbox=BORDER,
+            network="gnss",
+        )  # fmt: skip
+    assert "(zadanie PL+CZ: wartosc per kraj, np. --network pl=...,cz=..." in str(
+        error.value
+    )
+
+
+def test_project_init_without_output_is_an_input_error(tmp_path, capsys):
+    # UX-42: argparse "the following arguments are required" (code 2) instead
+    # of the Error: of every other command
+    err = _cli_error(capsys, "project", "init", "--project", str(tmp_path))
+    assert "Error: --output wymagane: katalog magazynu projektu" in err
+    assert not (tmp_path / "kartograf-project.json").exists()

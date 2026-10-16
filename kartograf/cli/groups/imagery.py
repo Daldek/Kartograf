@@ -85,6 +85,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     selection.add_argument(
         "--country",
+        type=str.lower,
         choices=COUNTRIES,
         default=None,
         help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
@@ -110,8 +111,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Uklad godel arkuszy PL - wymagany z --bbox/--geometry dla PL (bez "
         f"--cutout): {SHEET_SYSTEM_CHOICES}. Produkt z jednym ukladem (true "
         "orto: 1992, orto ukosna: 2000) i wycinek --cutout (tylko 1992): mozna "
-        "pominac. Nie dotyczy --sheet (uklad z godla) ani CZ (arkusze SM5; "
-        "z --country auto dotyczy czesci PL)",
+        "pominac. Z --sheet uklad wynika z godla (podana wartosc musi sie z nim "
+        "zgadzac). Nie dotyczy CZ (arkusze SM5; z --country auto dotyczy "
+        "czesci PL)",
     )
     sheets.add_argument(
         "--scale",
@@ -141,6 +143,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     cutout.add_argument(
         "--horizontal-crs",
+        type=str.upper,
         choices=[ORTO_CUTOUT_CRS],
         default=None,
         help="Uklad poziomy wycinka - wymagany z --cutout (bez --cutout blad): "

@@ -61,6 +61,7 @@ def add_bbox_crs(parser: Container) -> None:
     """``--bbox-crs``: the CRS of the ``--bbox`` numbers."""
     parser.add_argument(
         "--bbox-crs",
+        type=str.upper,
         choices=BBOX_CRS_CHOICES,
         default="EPSG:2180",
         help="Uklad wspolrzednych --bbox (domyslnie EPSG:2180)",
@@ -173,6 +174,4 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
             raise ValidationError(
                 f"Nieprawidlowy bbox: {reason}. {BBOX_EXPECTED}"
             ) from None
-    bbox = BBox(values[0], values[1], values[2], values[3], crs)
-    validate_request_bbox(bbox)
-    return bbox
+    return validate_request_bbox(BBox(values[0], values[1], values[2], values[3], crs))

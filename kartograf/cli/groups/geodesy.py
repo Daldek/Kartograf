@@ -19,8 +19,9 @@ def _content(content: argparse._ArgumentGroup, products: tuple[str, ...]) -> Non
         "--network",
         metavar="SIEC",
         default=None,
-        help=f"Siec osnowy (--product control; wymagana): {networks}. Obszar "
-        "PL+CZ (--country auto): jedna wartosc dla obu krajow",
+        help=f"Siec osnowy (--product control; wymagana): {networks}. Jedna "
+        "wartosc dotyczy kazdego kraju zadania; zadanie PL+CZ (--country auto) "
+        "z roznymi: pl=SIEC,cz=SIEC (np. pl=horizontal,cz=gnss)",
     )
 
 

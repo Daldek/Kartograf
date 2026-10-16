@@ -113,7 +113,7 @@ def _select(project: Project, names: Sequence[str] | None) -> tuple[ProjectTask,
     return tuple(selected)
 
 
-def init_project(project_dir: str | Path, *, output_dir: str | Path) -> Project:
+def init_project(project_dir: str | Path, *, output_dir: str | Path | None) -> Project:
     """Create a project: ``kartograf-project.json`` with the store ``output_dir``.
 
     The project directory and the store directory are created when missing.
@@ -123,14 +123,14 @@ def init_project(project_dir: str | Path, *, output_dir: str | Path) -> Project:
     Raises
     ------
     ValidationError
-        The manifest exists already (nothing is changed), an empty
+        The manifest exists already (nothing is changed), no or an empty
         ``output_dir`` or a store that cannot be created.
     """
     directory = absolute(project_dir)
     target = directory / MANIFEST_NAME
     if target.exists():
         raise ValidationError(f"projekt juz istnieje: {target}")
-    if not str(output_dir):
+    if output_dir is None or not str(output_dir):
         raise ValidationError(
             "--output wymagane: katalog magazynu projektu (np. data albo wspolny "
             "magazyn zespolu)"

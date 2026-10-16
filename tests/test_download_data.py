@@ -111,7 +111,6 @@ def test_area_outside_countries_is_validation_error(tmp_path):
     [
         ({"product": "foo"}, "--product 'foo': nieznana wartosc - dostepne: nmt"),
         ({"country": "xx"}, "--country 'xx': nieznana wartosc - dostepne: pl"),
-        ({"country": "PL"}, "--country 'PL': nieznana wartosc - dostepne: pl"),
         (
             {"sheet_system": "1993"},
             "--sheet-system '1993': nieznana wartosc - dostepne: 1992",
@@ -492,7 +491,6 @@ _BBOX_TRACKS = (
     [
         (BBox(1, 2, 3, 4, "bogus"), "nieobslugiwany uklad 'bogus'"),
         (BBox(1, 2, 3, 4, "EPSG:9999"), "nieobslugiwany uklad 'EPSG:9999'"),
-        (BBox(1, 2, 3, 4, "epsg:2180"), "nieobslugiwany uklad 'epsg:2180'"),
         (BBox(10, 10, 5, 5, "EPSG:2180"), "bbox odwrocony"),
     ],
 )

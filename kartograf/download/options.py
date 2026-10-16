@@ -8,8 +8,11 @@ plain (one value for every country of the request) or per country
 Nothing here touches the network.
 """
 
+import functools
+import re
 from collections.abc import Iterable, Mapping, Sequence
 from types import SimpleNamespace
+from typing import cast
 
 from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.core.sheet_parser import series_scale
@@ -31,7 +34,7 @@ from kartograf.providers.pl.gugik_orto import (
     wcs_cutout_channels,
 )
 from kartograf.sources.descriptor import SheetIndexParams
-from kartograf.sources.registry import sources_for
+from kartograf.sources.registry import all_sources, sources_for
 from kartograf.sources.variants import (
     CZ_LAZ_VERTICAL_TEXT,
     CZ_VERTICAL_TEXT,
@@ -484,6 +487,12 @@ def pl_option_error(
             f"--product {product}: GUGiK publikuje arkusze tylko {only} - godlo "
             f"{task.sheet} to PL-{code_system}"
         )
+    elif sheet_system is not None and sheet_system != code_system:
+        return (
+            f"--sheet-system {sheet_system} nie zgadza sie z godlem {task.sheet} "
+            f"(PL-{code_system}): uklad arkuszy wynika z godla - pomin "
+            "--sheet-system"
+        )
     else:
         effective = code_system
     if source_file:
@@ -686,8 +695,87 @@ def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None
     )
 
 
-def validate_request_bbox(bbox: BBox) -> None:
-    """Validate parsed bbox coordinates with the same text for CLI and API."""
+# Enumerated values given in any case (UX-11): the spelling of the registry
+# when the value is one of its values in another case; anything else stays as
+# given, so a message names it as the user wrote it.
+# A CRS code ``<authority>:<code>`` (``epsg:2180``); authorities are upper case.
+_CRS_CODE = re.compile(r"[A-Za-z]+:[0-9A-Za-z]+")
+
+
+def _spelling[T](value: T, known: Mapping[str, str]) -> T:
+    """``value`` as ``known[value.lower()]`` (``known``: lower case -> registry
+    spelling); a value of another type or not known unchanged."""
+    if not isinstance(value, str):
+        return value
+    return cast(T, known.get(value.strip().lower(), value))
+
+
+def canonical_country[T](value: T) -> T:
+    """``PL`` -> ``pl``, ``Auto`` -> ``auto`` (``--country``)."""
+    return _spelling(value, {code: code for code in COUNTRIES})
+
+
+@functools.cache
+def _formats() -> dict[str, str]:
+    """Lower case -> registry spelling of every file format a source offers
+    (variants of the sheet products, package variants and channel choices)."""
+    found: dict[str, str] = {}
+    for source in all_sources():
+        for variant in source.variants:
+            found.setdefault(variant.format.lower(), variant.format)
+        for channel in source.channels:
+            params = channel.params
+            choices = [dict(getattr(params, "choice", ()))]
+            choices += [dict(v.choice) for v in getattr(params, "variants", ())]
+            for choice in choices:
+                fmt = choice.get("format")
+                if fmt is not None:
+                    found.setdefault(fmt.lower(), fmt)
+    return found
+
+
+def canonical_format[T](value: T) -> T:
+    """``shp`` -> ``SHP``, ``ascii-nmt`` -> ``ASCII-NMT`` (``--format``)."""
+    return _spelling(value, _formats())
+
+
+def canonical_crs[T](value: T) -> T:
+    """``epsg:2180`` -> ``EPSG:2180``: a CRS code with an upper case authority
+    (``--bbox-crs``, ``--horizontal-crs``); not a CRS code: unchanged."""
+    if isinstance(value, str) and _CRS_CODE.fullmatch(value.strip()):
+        return cast(T, value.strip().upper())
+    return value
+
+
+@functools.cache
+def _vertical_names() -> dict[str, str]:
+    """Lower case -> registry spelling of every height system."""
+    names = {v.vertical_crs for v in variants() if v.vertical_crs}
+    return {name.lower(): name for name in names}
+
+
+def canonical_vertical_crs[T](value: T) -> T:
+    """``evrf2007`` -> ``EVRF2007``, ``BPV`` -> ``Bpv``: a height system (plain
+    or per country) in the spelling of the variant registry."""
+    if isinstance(value, Mapping):
+        names = _vertical_names()
+        return cast(T, {key: _spelling(name, names) for key, name in value.items()})
+    return _spelling(value, _vertical_names())
+
+
+def canonical_bbox[T](bbox: T) -> T:
+    """A ``BBox`` with its CRS code in the upper case spelling
+    (``epsg:5514`` = ``EPSG:5514``); any other value unchanged."""
+    if isinstance(bbox, BBox):
+        return cast(T, bbox._replace(crs=canonical_crs(bbox.crs)))
+    return bbox
+
+
+def validate_request_bbox(bbox: BBox) -> BBox:
+    """Validate parsed bbox coordinates with the same text for CLI and API;
+    returns the bbox with its CRS code in the registry spelling
+    (``epsg:2180`` = ``EPSG:2180``) - callers go on with it."""
+    bbox = canonical_bbox(bbox)
     if bbox.crs not in BBOX_CRS_CHOICES:
         raise ValidationError(
             f"Nieprawidlowy bbox: nieobslugiwany uklad {bbox.crs!r} - dostepne: "
@@ -705,6 +793,7 @@ def validate_request_bbox(bbox: BBox) -> None:
         validate_bbox(normalized)
     except ValidationError as e:
         raise ValidationError(f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}") from e
+    return bbox
 
 
 def validate_area_choice(

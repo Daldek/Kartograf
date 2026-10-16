@@ -455,7 +455,7 @@ def check_laz_area(
     The tile selection queries the WFS (as the download does); no LAZ bytes
     are transferred. Raises the same errors as the download's selection.
     """
-    validate_request_bbox(bbox)
+    bbox = validate_request_bbox(bbox)
     sink = NoticeSink(on_notice)
     with _selected(
         bbox,
@@ -561,7 +561,7 @@ def download_laz_area(
     NoCoverageError
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
-    validate_request_bbox(bbox)
+    bbox = validate_request_bbox(bbox)
     validate_update(update)
     require_int(workers, "workers")
     sink = NoticeSink(on_notice)
