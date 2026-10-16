@@ -41,6 +41,9 @@ LAZ_SUPERSEDED         info     (download_laz_area) skipped LAZ tiles
 CACHE_DISABLED         warning  (open_cache) metadata cache unusable
 =====================  =======  ==============================================
 
+The codes of every command (collections, land cover, project) with their
+level and condition: ``docs/USAGE.md`` section 2.
+
 Every former ``Error:`` is a ``ValidationError`` (input, raised before any
 download), a ``TransformError`` (no safe pinned operation) or a
 ``UnitFailure`` of the report (a failed country, sheet set or tile set;

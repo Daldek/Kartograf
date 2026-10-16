@@ -2095,7 +2095,9 @@ def _jobs(
             params = part.channel.params
             if isinstance(params, FeatureBBoxParams) and params.area_omitted:
                 sink.emit(
-                    "info", AREA_OMITTED, f"{request.product}: {params.area_omitted}"
+                    "info",
+                    AREA_OMITTED,
+                    f"{subject(part.descriptor)}: {params.area_omitted}",
                 )
             continue
         params = part.channel.params
