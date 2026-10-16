@@ -494,7 +494,7 @@ class TestCommandGroups:
         "elevation": ("--product", {"nmt", "nmpt", "laz"}),
         "imagery": ("--product", {"orto"}),
         "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
-        "boundaries": ("--product", {"admin"}),
+        "boundaries": ("--product", {"admin", "special"}),
         "cadastre": ("--product", {"map"}),
         "models3d": ("--product", {"buildings"}),
         "hydro": ("--product", {"network"}),

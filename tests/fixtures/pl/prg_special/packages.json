@@ -1,0 +1,12 @@
+{
+  "shp": {
+    "url": "https://opendata.geoportal.gov.pl/prg/granice/00_granice_specjalne_shp.zip",
+    "content_type": "application/octet-stream",
+    "length": 734171465
+  },
+  "xml": {
+    "url": "https://opendata.geoportal.gov.pl/prg/granice/00_granice_specjalne_xml.zip",
+    "content_type": "application/octet-stream",
+    "length": 757744521
+  }
+}

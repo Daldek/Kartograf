@@ -1,0 +1,310 @@
+{
+  "collections": [
+    {
+      "id": "GranicaPanstwa",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaWojewodztwa",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaPowiatu",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaGminy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaJednostkiEwidencyjnej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaObrebuEwidencyjnego",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaRejonuStatystycznego",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "GranicaObwoduSpisowego",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "SadApelacyjny",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "SadOkregowy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "SadRejonowy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "WojewodzkiSadAdministracyjny",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ProkuraturaRegionalna",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ProkuraturaOkregowa",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ProkuraturaRejonowa",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomendaWojewodzkaPolicji",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomendaPowiatowaPolicji",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomendaStolecznaPolicji",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomendaRejonowaPolicji",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomisariatPolicji",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomendaWojewodzkaStrazyPozarnej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "KomendaPowiatowaStrazyPozarnej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "OddzialStrazyGranicznej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "PlacowkaStrazyGranicznej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "DywizjonStrazyGranicznej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ObszarDzialaniaSzefaObronyCywilnejWojewodztwa",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ObszarDzialaniaSzefaObronyCywilnejPowiatu",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ObszarDzialaniaSzefaObronyCywilnejGminy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ArchiwumPanstwowe",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "UrzadSkarbowy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "WyspecjalizowanyUrzadSkarbowy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "UrzadCelnoSkarbowy",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "IzbaAdministracjiSkarbowej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "Nadlesnictwo",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "RegionalnaDyrekcjaLasowPanstwowych",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "ZarzadZlewniPanstwowegoGospodarstwaWodnegoWodyPolskie",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "RegionalnyZarzadGospodarkiWodnejPanstwowegoGospodarstwaWodnegoWodyPolskie",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "UrzadMorski",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "UrzadZeglugiSrodladowej",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "LiniaPodstawowaMorzaTerytorialnego",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "MorzeTerytorialneRP",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "MorskieWodyWewnetrzne",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "WylacznaStrefaEkonomiczna",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "StrefaPrzylegla",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "MorskaLiniaBrzegowa",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "PasNadbrzezny",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "PasOchronny",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "PasTechniczny",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "Reda",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "PortMorski",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    },
+    {
+      "id": "PrzystanMorska",
+      "crs": [
+        "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+      ]
+    }
+  ]
+}
