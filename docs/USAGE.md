@@ -20,6 +20,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.7 Raport dostępności (`elevation availability`)](#17-raport-dostępności-elevation-availability)
    - [1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k](#18-granice-ewidencja-modele-3d-budynków-i-archiwum-bdot10k)
    - [1.9 Dane CZ: ZABAGED, RUIAN i HY-NET](#19-dane-cz-zabaged-ruian-i-hy-net)
+   - [1.10 Nazwy geograficzne i mapy topograficzne](#110-nazwy-geograficzne-i-mapy-topograficzne)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
@@ -40,6 +41,8 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
 | `models3d` | `download`, `list-sources` | modele 3D budynków CityGML LoD1/LoD2 (PL) |
 | `hydro` | `download`, `list-sources` | sieć wód HY-NET (CZ) |
+| `names` | `download`, `list-sources` | PRNG RP, polskie nazwy świata (PL), Geonames (CZ) |
+| `maps` | `download`, `list-sources` | wizualizacje map BDOT10k (PL), ZTM (CZ) |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
@@ -1205,6 +1208,63 @@ to tysiące obiektów na warstwę ZABAGED (rekonesans 2026-10-15: 4979
 odcinków cieków), dla całego kraju użyj pliku krajowego. Szczegóły:
 ARCHITECTURE 4.8 i 4.10, [ADR-042](DECISIONS.md) errata 2–3.
 
+### 1.10 Nazwy geograficzne i mapy topograficzne
+
+`names download` pobiera `--product geographic`: PRNG RP dla `--country pl`
+albo Geonames dla `--country cz`; `--product world --country pl` oznacza
+**polskie nazwy geograficzne świata**, nie obcięcie obszaru do Polski.
+Obszar (`--bbox`, `--sheet` lub `--geometry`) daje GPKG z pełnymi geometriami
+obiektów przecinających obszar: PRNG w OGC:CRS84 (długość, szerokość), Geonames
+w EPSG:5514 (25 warstw). Duże zapytania PRNG mogą trwać ponad minutę na stronę;
+do kompletu danych użyj `--whole-country`. Wyniki obszaru nie mają taniego
+sygnału aktualizacji, do odświeżenia służy `--force`.
+
+```bash
+kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o <katalog-danych>
+kartograf names download --product world --country pl --bbox=-74.02,40.69,-73.92,40.79 --bbox-crs EPSG:4326 -o <katalog-danych>
+kartograf names download --product geographic --country cz --bbox=-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 -o <katalog-danych>
+kartograf names download --product geographic --country pl --whole-country --format SHP -o <katalog-danych>
+kartograf names download --product world --country pl --whole-country --format GML -o <katalog-danych>
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o <katalog-danych>
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --check-updates -o <katalog-danych>
+```
+
+PRNG RP ma **dwa** pliki krajowe (`miejscowosci`, `obiekty-fizjograficzne`);
+polskie nazwy świata mają jeden (`swiat`). Formaty GUGiK: `GML`, `SHP`,
+`XLSX` (oryginalne archiwa ZIP). Geonames: `GPKG` albo `FGDB` w
+`EPSG:5514`/`EPSG:3045`, wymagany jawny `--horizontal-crs`; plik krajowy to
+oryginalne ZIP z feedu ATOM CUZK, data wydania jest etykietą wersji i sygnałem
+`--check-updates`. Przed pobraniem plików krajowych pojawia się ostrzeżenie
+o ich rozmiarze.
+
+`maps download --product topographic` pobiera arkusze wizualizacji BDOT10k
+(`--country pl`, skale `1:10000`, `1:25000`, `1:50000`, `1:100000`, formaty
+`TIFF` i `PDF`) albo ZTM CUZK (`--country cz`, skale od `1:5000` do
+`1:250000`). Zarówno `--scale`, jak i `--format` są wymagane. Arkusze BDOT10k
+są gotowymi plikami TIFF/PDF, nie bazą wektorową BDOT10k; data `Stan bazy` z
+indeksu jest etykietą wersji i sygnałem aktualizacji. Dla ZTM `TIFF`, `DGN`
+i `SHP` pozostają oryginalnymi ZIP-ami, a `PDF` ma rozszerzenie `.pdf`.
+`S-JTSK` dopuszcza `TIFF`, `PDF`, `DGN`, `SHP`, `ETRS89` — tylko `TIFF` i
+`PDF`. Układ arkusza `sjtsk`/`etrs89` wynika z godła; `--sheet-system`
+jest wymagany przy `--bbox`/`--geometry`. ZTM sprawdza `ETag`/`Last-Modified`
+z `HEAD` bez pobierania danych.
+
+```bash
+kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o <katalog-danych>
+kartograf maps download --product topographic --country pl --sheet M-34-064 --scale 1:100000 --format PDF -o <katalog-danych>
+kartograf maps download --product topographic --country cz --sheet 0510-D-11 --scale 1:10000 --format TIFF -o <katalog-danych>
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o <katalog-danych>
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --check-updates -o <katalog-danych>
+kartograf maps list-sources
+kartograf names list-sources
+```
+
+CLI i API mają tę samą walidację, `Notice`, statusy i układ magazynu
+`data/names/` oraz `data/maps/`. Komendy nadają się także do manifestu
+(`kartograf project add <nazwa> names download ...` /
+`kartograf project add <nazwa> maps download ...`); katalog danych
+pochodzi wtedy z projektu.
+
 ---
 
 ## 2. Biblioteka Python
@@ -1215,8 +1275,9 @@ Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 `download_data`/`check_data`, `landcover download` i `soil download` =
 `LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`,
 `elevation availability` = `check_availability`,
-`boundaries download`, `cadastre download`, `models3d download` i `hydro
-download` = `download_collection`/`check_collection`. Błąd wejścia
+`boundaries download`, `cadastre download`, `models3d download`, `hydro
+download`, `names download` i `maps download` =
+`download_collection`/`check_collection`. Błąd wejścia
 to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 (CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
 `on_notice`.
@@ -1294,9 +1355,9 @@ print([v.label for v in variants(product="nmt", vertical_crs="KRON86", format="A
 # ['0.5m', '1m']
 ```
 
-Kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`; sekcje 1.8 i 1.9) — wynik
-`CollectionReport(files, failed, stale, notices, ok)`, elementy `files`
-i `failed` jak w `DataReport`:
+Kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`;
+sekcje 1.8–1.10) — wynik `CollectionReport(files, failed, stale, notices,
+ok)`, elementy `files` i `failed` jak w `DataReport`:
 
 ```python
 from kartograf import BBox, LandCoverManager, check_collection, download_collection
@@ -1327,6 +1388,20 @@ plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1
 print([(i.track, i.unit, i.status) for i in plan.items])  # [("collection", "1261", "unverifiable")]
 # = landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP
 LandCoverManager(out, "bdot10k").download(teryt="1261", year=2024, format="SHP")
+# = names download --product world --country pl --bbox=-74.02,40.69,-73.92,40.79
+world = download_collection(
+    product="world", country="pl", output_dir=out,
+    bbox=BBox(-74.02, 40.69, -73.92, 40.79, "EPSG:4326"),
+)
+# = maps download --product topographic --country cz --sheet 0510-D-11
+map_sheet = download_collection(
+    product="topographic", country="cz", output_dir=out,
+    sheet="0510-D-11", scale="1:10000", format="TIFF",
+)
+map_status = check_collection(
+    product="topographic", country="cz", output_dir=out,
+    sheet="0510-D-11", scale="1:10000", format="TIFF",
+)
 ```
 
 Walidacja bez sieci (np. przed zapisaniem zadania):
@@ -1823,8 +1898,8 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 20
 Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery download`: arkuszy PL NMT/NMPT/orto,
 kafli LAZ (PL i CZ), arkuszy CZ (TM33, SM5; ortofoto CZ), wycinków CZ i wycinków PL
 `--cutout` (także ortofotomapy), a także `landcover download`, `soil download`, `soil hsg`
-oraz `boundaries download`, `cadastre download`, `models3d download`
-i `hydro download`. Flagi
+oraz `boundaries download`, `cadastre download`, `models3d download`,
+`hydro download`, `names download` i `maps download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
 skorowidz); pozostałe tory różnią się sygnałem:
 
@@ -1840,6 +1915,10 @@ skorowidz); pozostałe tory różnią się sygnałem:
 | kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`; tor planu `collection`), ZABAGED obszaru i archiwum BDOT10k (`--year`) | brak (`none`) | jak wycinki; etykieta = rocznik/rok wydania albo data pobrania (sekcje 1.8, 1.9) |
 | pliki krajowe RUIAN i HY-NET | `ETag`/`Last-Modified` (`http`) | jak arkusze SM5 |
 | plik krajowy ZABAGED | wydanie z feedu ATOM (`metadata`) | etykieta = data wydania (`2026-10-04`); jak ortofoto CZ |
+| obszary PRNG/Geonames, kraj PRNG | brak (`none`) | `--force` do sprawdzenia nowej treści; PRNG RP ma dwie paczki krajowe |
+| kraj Geonames | wydanie feedu ATOM (`metadata`) | `--check-updates` porównuje datę wydania bez pobierania ZIP |
+| mapy BDOT10k | data `Stan bazy` skorowidza (`index`) | data osobna dla skali, bez pobierania TIFF/PDF |
+| ZTM CZ | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na arkusz |
 | HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
@@ -2101,9 +2180,9 @@ jesli ich nie ma. `add` przyjmuje po nazwie zadania te same komendy
 i flagi wyboru danych co zwykle `kartograf elevation download`,
 `imagery download` (takze ortofoto CZ i wycinek `--cutout`), `landcover
 download` (takze ZABAGED), `soil download`, `soil hsg`,
-`boundaries download`, `cadastre download`, `models3d download`
-i `hydro download`; arkusz ortofoto CZ przypina cztery pliki (JPEG i trzy
-JGW);
+`boundaries download`, `cadastre download`, `models3d download`,
+`hydro download`, `names download` i `maps download`; arkusz ortofoto CZ
+przypina cztery pliki (JPEG i trzy JGW);
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
 a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa

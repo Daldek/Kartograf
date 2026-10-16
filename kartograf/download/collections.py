@@ -968,7 +968,11 @@ def _resolve(
         return CollectionRequest(product, output_dir, None, True, (whole,))
     if args["sheet"] is not None:
         return CollectionRequest(
-            product, output_dir, None, False, (_sheet_part(args, descriptors, part),)
+            product,
+            output_dir,
+            None,
+            False,
+            (_sheet_part(args, descriptors, part, options),),
         )
     if country is None:
         raise ValidationError(
@@ -991,6 +995,7 @@ def _sheet_part(
     args: dict,
     descriptors: dict[str, SourceDescriptor],
     part: Callable[..., CollectionPart],
+    options: dict[str, str | None],
 ) -> CollectionPart:
     """The part of a sheet code (ADR-039 D4, ADR-043).
 
@@ -1012,6 +1017,21 @@ def _sheet_part(
         and not _is_pl_sheet(sheet)
         and _cuzk_sheet_channel(cz)
     ):
+        if cz.key == "cz.cuzk.ztm":
+            if re.fullmatch(r"[0-9]{4}-[A-Za-z0-9-]+", sheet):
+                inferred = "sjtsk"
+            elif re.fullmatch(r"[A-Za-z]{2}-[0-9]{2}-[A-Za-z0-9-]+", sheet):
+                inferred = "etrs89"
+            else:
+                inferred = None
+            selected = options["sheet_system"]
+            if inferred is not None and selected is not None and selected != inferred:
+                raise ValidationError(
+                    f"--sheet {sheet} nalezy do ukladu {inferred}, a podano "
+                    f"--sheet-system {selected}"
+                )
+            if inferred is not None:
+                options["sheet_system"] = inferred
         base = part("CZ", "area")
         grid = base.variant.sheet_grid if base.variant is not None else None
         if grid is None or grid.system != "cuzk":
@@ -2055,7 +2075,13 @@ def run_job(
         if isinstance(params, FeatureBBoxParams):
             crs = params.native_crs
         else:
-            crs = job.atom_crs or _record_crs(job) or job.channel.horizontal_crs
+            grid = job.variant.sheet_grid if job.variant is not None else None
+            crs = (
+                job.atom_crs
+                or _record_crs(job)
+                or (grid.crs if grid is not None else None)
+                or job.channel.horizontal_crs
+            )
         emit_sidecar(
             job.descriptor.key,
             data,

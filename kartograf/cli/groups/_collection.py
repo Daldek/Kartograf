@@ -49,15 +49,18 @@ def add_collection_commands(
     area_result: str,
     teryt_help: str | None = None,
     sheet: bool = True,
+    sheet_help: str = SHEET_AREA_HELP,
     whole_country_help: str | None = None,
+    check_help: str | None = None,
     content: Callable[[argparse._ArgumentGroup, tuple[str, ...]], None] | None = None,
 ) -> None:
     """``<group> download`` and ``<group> list-sources``.
 
     ``area_result``: what an area gives (help of the area flags);
     ``teryt_help``: the group has ``--teryt``; ``sheet``: the group has
-    ``--sheet`` (``False``: no PL source - the area of a sheet code is PL
-    only); ``whole_country_help``: the group has ``--whole-country``;
+    ``--sheet`` (``False``: no PL sheet area); ``sheet_help`` overrides its
+    help for groups with CZ map sheets; ``whole_country_help``: the group has
+    ``--whole-country``; ``check_help``: the source signals in --check-updates;
     ``content`` adds the content flags of the group (it gets the group's
     products).
     """
@@ -92,7 +95,7 @@ def add_collection_commands(
         selection.add_argument("--teryt", metavar="KOD", help=teryt_help)
     add_area_flags(
         selection,
-        sheet_help=f"{SHEET_AREA_HELP}; {area_result}" if sheet else None,
+        sheet_help=f"{sheet_help}; {area_result}" if sheet else None,
         bbox_help=f"{BBOX_HELP}; {area_result}",
         geometry_help=f"{GEOMETRY_HELP}; {area_result}",
     )
@@ -114,10 +117,13 @@ def add_collection_commands(
     )
     add_update_flags(
         output,
-        check_help="Porownaj lokalne wersje ze zrodlem bez pobierania: plik "
-        "z sygnalem zrodla (naglowki HTTP plikow krajowych CUZK) - porownanie "
-        "bez pobrania; paczki GUGiK i obiekty obszaru nie maja taniego sygnalu "
-        "(nie da sie sprawdzic bez pobrania), brakujace pliki = do pobrania",
+        check_help=check_help
+        or (
+            "Porownaj lokalne wersje ze zrodlem bez pobierania: plik "
+            "z sygnalem zrodla (naglowki HTTP plikow krajowych CUZK) - porownanie "
+            "bez pobrania; paczki GUGiK i obiekty obszaru nie maja taniego sygnalu "
+            "(nie da sie sprawdzic bez pobrania), brakujace pliki = do pobrania"
+        ),
         upgrade_help="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje; pliki "
         "bez taniego sygnalu zostaja lokalne (pobranie: --force); z --plan "
         "wykonaj zapisany plan",
