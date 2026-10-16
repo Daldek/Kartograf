@@ -50,6 +50,59 @@ def countries_for_bbox(bbox: BBox) -> tuple[str, ...]:
     return tuple(sorted(hits))
 
 
+def _coords(bbox: BBox, spec: str = ".2f") -> str:
+    return ",".join(
+        format(value, spec)
+        for value in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+
+
+def _reaches(wgs: BBox, code: str) -> bool:
+    """Whether a WGS84 bbox intersects the envelope of country ``code``."""
+    from kartograf.sources.registry import get_country
+
+    extent = get_country(code).extent_wgs84
+    return (
+        wgs.min_x < extent.max_x
+        and wgs.max_x > extent.min_x
+        and wgs.min_y < extent.max_y
+        and wgs.max_y > extent.min_y
+    )
+
+
+def outside_country(area: BBox, code: str, *, flag: str = "--bbox") -> str | None:
+    """Error text of the area of an explicit country (``--country pl|cz``)
+    lying outside the country's envelope - mostly numbers in another CRS than
+    ``--bbox-crs`` says or swapped axes; ``None``: the area reaches it.
+
+    ``flag``: the choice of the area (``--bbox``, ``--geometry``: the
+    envelope of the file). Without this check such an area reaches the
+    source and fails as "no data" after the network. An area in a Czech CRS
+    leaves it only through the pinned operation (ADR-024).
+    """
+    from kartograf.core.bbox import is_czech_crs
+
+    if is_czech_crs(area.crs):
+        from kartograf.providers.cuzk.raster import bbox_to_crs
+
+        wgs = bbox_to_crs(area, "EPSG:4326")
+    else:
+        wgs = bbox_to_wgs84(area)
+    if _reaches(wgs, code):
+        return None
+    text = f"{flag} ({area.crs}) lezy poza {code} (w EPSG:4326: {_coords(wgs)})"
+    if flag != "--bbox":
+        return f"{text}. Sprawdz uklad wspolrzednych pliku geometrii"
+    text += (
+        ". Sprawdz --bbox-crs (domyslnie EPSG:2180; wspolrzedne S-JTSK: --bbox-crs "
+        "EPSG:5514) i kolejnosc osi (EPSG:4326: dlugosc,szerokosc)"
+    )
+    swapped = BBox(area.min_y, area.min_x, area.max_y, area.max_x, area.crs)
+    if area.crs == "EPSG:4326" and _reaches(swapped, code):
+        text += f"; osie wygladaja na zamienione: --bbox {_coords(swapped, 'g')}"
+    return text
+
+
 @dataclass(frozen=True)
 class CountryPart:
     """Part of an area task for one country (``country_bbox``).

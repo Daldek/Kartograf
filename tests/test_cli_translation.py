@@ -351,7 +351,7 @@ def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check)
     if check:
         assert valid.out == ""
     else:
-        assert valid.out.startswith("Pobieranie kafle LAZ (WFS GUGiK, KRON86)...\n")
+        assert valid.out.startswith("Pobieranie kafli LAZ (WFS GUGiK, KRON86)...\n")
         assert "pl=KRON86,cz=Bpv" not in valid.out
 
 
