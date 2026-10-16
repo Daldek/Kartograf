@@ -46,8 +46,7 @@ wykonanych transformacji. Sidecary pisza **warstwy zarzadzajace** —
 (`download/cutout.py::write_pl_wcs_cutout_sidecar`), kafle LAZ PL w bibliotece
 (`download/laz.py::write_laz_sidecar`, ADR-029), pliki LAZ CZ
 (`download/cz_laz.py`), wynik HSG
-(`HSGCalculator._reuse_or_compute`, sekcja 4.8), wynik CZ
-(`download/cz_cutout.py::write_cz_sidecar`, takze z `download/cz_sheets.py`),
+(`HSGCalculator._reuse_or_compute`, sekcja 4.8), rastry CZ (nizej),
 ortofoto CZ (`download/cz_orto.py`, sekcja 4.4), wycinek ortofotomapy PL
 (`download/orto_cutout.py`, sekcja 4.3) i pliki kolekcji
 (`download/collections.py::run_job`, sekcja 4.10)
@@ -82,7 +81,7 @@ rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza przez
 `kartograf/transform/crs.py` — poza obwiednia w WGS84 do rozpoznania kraju
 i przyciecia pod `auto` (`bbox_to_wgs84` w `download/countries.py`, takze dla
 bboxa podanego w ukladzie czeskim) i obwiednia pliku geometrii w torze LAZ
-(`_resolve_laz_bbox`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
+(`download/area.py::geometry_envelope_2180`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
 Przeliczenia obwiedni miedzy ukladami PL i WGS84 (selekcja arkuszy
 w `core/sheet_parser.py` i `core/geometry.py`, `bbox_to_2180` wycinka
 i odkrywania TERYT dla ukladow nieczeskich, dyspozycja krajow w CLI,
@@ -111,14 +110,15 @@ obowiazuje dodatkowy pin EPSG:1622/1623 (`DATUM_STEP_PINS`), wykluczajacy
 EPSG:4829 dla Slowacji nawet gdy jego nominalne 0,5 m wyglada lepiej.
 Nominalna dokladnosc czeskiej operacji wynosi 1,0 m (ADR-024, errata 2).
 
-**Brak scalania miedzykrajowego (w 0.7.0).** Zadanie obszarowe przecinajace
+**Brak scalania miedzykrajowego (stan 0.8.0).** Zadanie obszarowe przecinajace
 wiecej niz jeden kraj daje **osobne pliki i osobne sidecary per kraj**,
-powiazane wspolnym `extra.parent_request`. W 0.7.0 Kartograf nie sklada
+powiazane wspolnym `extra.parent_request`. Kartograf nie sklada
 mozaiki transgranicznej i nie harmonizuje pionu miedzy krajami — pliki PL i CZ
 scala konsument (Hydrograf). Scalanie PL+CZ w jedna ciagla powierzchnie
-przygraniczna (wspolna siatka, EVRF2007 po obu stronach) to etap 2 Kartografa
-(R6, 2026-09-28; wczesniej zapisane jako zadanie Hydrografa; dane styku
-zmierzone na zywo 2026-09-29 — sekcja 4.6). Kartograf dostarcza wszystko,
+przygraniczna (wspolna siatka, EVRF2007 po obu stronach; R6, 2026-09-28,
+wczesniej zapisane jako zadanie Hydrografa) to zadanie bez przypisanego
+wydania (`docs/SCOPE.md` 3.1; dane styku zmierzone na zywo 2026-09-29 —
+sekcja 4.6). Kartograf dostarcza wszystko,
 czego takie scalenie wymaga: jawne kody CRS obu osi, `nodata`, opis uzytej
 operacji z dokladnoscia i wspolny klucz grupowania.
 
@@ -380,15 +380,18 @@ kartograf/
 │   │                    # opcjonalnie (dtype=) owijanie zrodel w VRT;
 │   │                    # check_source_grid (fazy siatki, SourceGrid.off_grid), has_valid_pixels
 │   ├── unit_package.py  # Silnik paczek jednostek (ADR-042 D1-D2): select_variant (bez sieci),
-│   │                    # package_url ({teryt}/{woj}), fetch_package (Content-Length, katalog
+│   │                    # package_url ({teryt}, {woj}, {sheet}, {ku}, {theme}), fetch_package (Content-Length, katalog
 │   │                    # ZIP, wymagane czlony, rozpakowanie jednego czlonu; 404 = NoCoverageError)
 │   ├── feature_bbox.py  # Silnik obiektow obszaru (ADR-042 D3/D4): WFS 2.0 i ArcGIS REST —
 │   │                    # metadane swiezo, liczba obiektow, strony po pozycji, kompletnosc;
 │   │                    # count_features, fetch_features -> FeaturePages (strony na dysku)
-│   └── atom.py          # Silnik atom_files (ADR-042 D12): atom_index (indeks feedu uslugi
-│                        # w cache z ETag), resolve_atom_file (feed zbioru -> plik, wydanie
-│                        # z updated), check_atom_crs, atom_segment_tokens, fetch_atom_file
-│                        # (rozmiar = length feedu), unpack_members (czlony ZIP 1:1)
+│   ├── atom.py          # Silnik atom_files (ADR-042 D12): atom_index (indeks feedu uslugi
+│   │                    # w cache z ETag), resolve_atom_file (feed zbioru -> plik, wydanie
+│   │                    # z updated), check_atom_crs, atom_segment_tokens, fetch_atom_file
+│   │                    # (rozmiar = length feedu), unpack_members (czlony ZIP 1:1)
+│   └── index_records.py # Rekordy indeksow plikow (ADR-043): IndexRecord, gfi_records/
+│                        # records_from_gfi (tabela linkow WMS GetFeatureInfo), wfs_records/
+│                        # records_from_wfs (rekordy WFS, np. kafle mesh)
 ├── providers/           # Providery danych
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider, LandCoverProvider
 │   ├── pl/              # GUGiK: gugik.py (NMT; jeden wariant rejestru na provider, P10,
@@ -419,6 +422,7 @@ kartograf/
 │   │                    # raster.py (CuzkRasterProvider — NMT DMR 5G/4G i NMPT DMP OK/1G,
 │   │                    # route(): plik openzu albo ImageServer, opcjonalnie Bpv -> EVRF2007),
 │   │                    # laz.py (CuzkLazProvider — LAZ DMR 5G/4G, DMP 1G/OK bez transformacji),
+│   │                    # ruian.py (cadastral_areas_for_bbox — KU obszaru z RUIAN, mapa katastralna CZ),
 │   │                    # __init__.py (create_cz_raster_provider — jedyne miejsce czeskich
 │   │                    # domyslow)
 │   ├── corine.py        # CORINE z Copernicus CLMS (+ fallback WMS PNG)
@@ -442,6 +446,8 @@ kartograf/
 │   │                    # walidacja wyborow: produkt, kraj, format, rozdzielczosc i uklad
 │   │                    # (z rejestru wariantow), system, skala, lata, opcje LAZ,
 │   │                    # ortofoto CZ (cz_orto_option_error) i wycinek orto; teksty jak w --help
+│   ├── arguments.py     # Kontrola typow argumentow biblioteki (STANDARDS 11.2): require_int,
+│   │                    # require_str, require_timeout, require_bool, require_codes
 │   ├── availability.py  # Raport dostepnosci (ADR-041, sekcja 4.9): check_availability (PL, CZ, auto),
 │   │                    # AvailabilityReport/AvailabilityCombination/AvailabilityArea
 │   ├── area.py          # Obszar zadania: bbox_to_2180, obwiednie geometrii,
@@ -757,7 +763,7 @@ Kto wypelnia ktory placeholder:
 |---|---|---|
 | `{vcrs}` | konstruktor `FileStorage(vertical_crs=)` albo jawne `resolve_subdir(vertical_crs=)` | raz, na starcie zadania — uklad pionowy jest wlasnoscia zadania, nie arkusza |
 | `{system}` | `FileStorage` per identyfikator (`get_path`/`get_raw_path`/`exists`/`delete`/`ensure_directory`), regula ta sama co `parser_registry.path_parts`: kropki -> `2000`, reszta -> `1992` | przy budowie kazdej sciezki |
-| `{system}` (jawnie) | tor LAZ: `LazTile.system` (`uklad_xy` kafla przez `parse_pl_system`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., system=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL WCS (`download_pl_cutout`: `system="1992"` na stale — `--target-crs` z `--system 2000` jest odrzucane, sekcja 4.3) i wycinek ortofotomapy (`download_orto_cutout`: `system="1992"`, tylko EPSG:2180); przestarzaly tor arkuszowy odrzuca arkusz we wspolrzednych PL-2000 | przed utworzeniem `FileStorage` / sciezki wycinka |
+| `{system}` (jawnie) | tor LAZ: `LazTile.system` (`uklad_xy` kafla przez `parse_pl_system`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., system=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL WCS (`download_pl_cutout`: `system="1992"` na stale — `--cutout` z `--sheet-system 2000` jest odrzucane, sekcja 4.3) i wycinek ortofotomapy (`download_orto_cutout`: `system="1992"`, tylko EPSG:2180) | przed utworzeniem `FileStorage` / sciezki wycinka |
 
 `FileStorage` waliduje wynik koncowy: segment, w ktorym po wypelnieniu zostala
 klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
@@ -773,8 +779,7 @@ Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
 i `<plik>.meta.json`: sidecar wersji w magazynie jest obowiazkowy,
 sidecar sciezki standardowej best-effort (sekcja 1). Poza magazynem
 `hsg_from_rasters` pisze sidecar best-effort. Bezposrednie wywolanie
-providera sidecara nie pisze (np. `CuzkRasterProvider.download`);
-sidecar godla CZ pisze `download/cz_sheets.py`.
+providera sidecara nie pisze (sekcja 1).
 
 | Pole | Znaczenie |
 |---|---|
@@ -939,7 +944,6 @@ cztery miejsca po przecinku) ma sidecar wersji KAZDEGO lotu rastrowego
 `full_sheet=true` — liczone z tego samego odczytu co sha256 przy zapisie
 (ASC bez `NODATA_value` = -9999, orto wg nodata/alfa; blad pomiaru = brak
 pola + ostrzezenie), nigdy dopisywane pozniej. Przy przedziale i `all`
-pole + ostrzezenie), nigdy dopisywane pozniej. Przy przedziale i `all`
 sidecar standardowy dostaje `extra.flights` (malejaco wg ADR-028; `id`,
 `date`, `full_sheet`); gdy ma > 1 lot i dowiazany lot nie ma
 `full_sheet=true`, dopisuje tez `coverage` z sidecarow wersji i porownuje
@@ -948,8 +952,8 @@ jego `id` (lot zadeklarowany jako pelny liczy sie jako pokryty w pelni) i
 CLI `Info:` na stderr (takze z `-q`). Pole `better_coverage` jest usuwane,
 gdy ponowne zadanie nie wykaze lepszego lotu. Pokrycie NIE przestawia
 dowiazania (najpierw najnowszy lot wg ADR-028, zasada "nigdy wstecz").
-dodatkowo `extra.acquisition_date` (`akt_data`) i `extra.full_sheet`
-(`czy_ark_wypelniony`), gdy znane.
+Sidecar LAZ niesie dodatkowo `extra.acquisition_date` (`akt_data`)
+i `extra.full_sheet` (`czy_ark_wypelniony`), gdy znane.
 
 ### 3.3 Kanoniczny uklad `data/`
 
@@ -1016,11 +1020,18 @@ data/
 │   ├── pl_prg_gmina/bbox/<coords>.gpkg         # obiekty obszaru (WFS), EPSG:2180; wersje <data>_<sha8>
 │   ├── pl_prg_gml/teryt/12.zip                 # paczka wojewodztwa 1:1
 │   ├── pl_prg_shp/country/pl.zip               # plik krajowy (--whole-country)
+│   ├── pl_prg_addresses/bbox/<coords>.gpkg     # punkty adresowe i ulice obszaru (WFS KIN), EPSG:2180
+│   ├── pl_prg_addresses_shp/teryt/1261.zip     # paczka powiatu 1:1; plik krajowy: _shp albo _gml, country/pl.zip
+│   ├── pl_prg_special/bbox/<coords>.gpkg       # granice specjalne obszaru (OGC API, warstwa na rodzaj), OGC:CRS84
+│   ├── pl_prg_special_shp/country/pl.zip       # plik krajowy (+ pl_prg_special_gml)
 │   ├── cz_ruian_obec/bbox/<coords>.gpkg        # RUIAN obszaru (REST), EPSG:5514, np. -470000_-1130000_...
-│   └── cz_ruian_shp/country/cz.zip             # plik krajowy SHP (sygnal http)
+│   ├── cz_ruian_shp/country/cz.zip             # plik krajowy SHP (sygnal http)
+│   └── cz_geomorphology_celek/bbox/<coords>.gpkg   # jednostki geomorfologiczne poziomu --level (REST), EPSG:5514
 ├── cadastre/
 │   ├── pl_egib/bbox/<coords>.gpkg              # dzialki i budynki obszaru (WFS), bez tokenu
-│   └── pl_egib_gpkg/teryt/1261.gpkg            # eksport powiatu (GPKG rozpakowany z ZIP)
+│   ├── pl_egib_gpkg/teryt/1261.gpkg            # eksport powiatu (GPKG rozpakowany z ZIP)
+│   ├── pl_rcn/teryt/1261.gpkg                  # RCN: eksport powiatu (teryt/12.gpkg - wojewodztwa), GPKG z ZIP
+│   └── cz_km_shp/ku/623164.zip                 # mapa katastralna CZ: paczka KU 1:1 (+ _dxf, _dgn, _vfk; sygnal http)
 ├── models3d/
 │   ├── pl_buildings_lod1_2024/teryt/1261.zip   # CityGML 1:1; wersje 2024_<sha8> (rok wydania)
 │   ├── pl_trees_lod1_2023/teryt/3063.zip       # drzewa CityGML 1:1 (paczka 0,3-25 GB); wersje 2023_<sha8>
@@ -1036,6 +1047,14 @@ data/
 │   ├── pl_geoid2021_evrf2007/country/pl.txt          # model quasi-geoidy PL-geoid2021 1:1 (TXT)
 │   ├── cz_control_vertical/bbox/<coords>.gpkg        # Bodove pole: warstwy sieci, EPSG:5514
 │   └── cz_qgzu2013/country/cz.zip                    # QGZU-2013 z feedu ATOM; wersje 2021-02-22_<sha8>
+├── names/
+│   ├── pl_prng/bbox/<coords>.gpkg              # PRNG obszaru (OGC API), OGC:CRS84 (+ pl_prng_world/)
+│   ├── pl_prng_shp/country/pl-miejscowosci.zip # plik krajowy 1:1 (+ pl-obiekty-fizjograficzne.zip; _gml, _xlsx)
+│   ├── cz_geonames/bbox/<coords>.gpkg          # Geonames obszaru (REST, 25 warstw), EPSG:5514
+│   └── cz_geonames_gpkg_5514/country/cz.zip    # plik krajowy z feedu ATOM (+ _fgdb, _3045); etykieta = wydanie
+├── maps/
+│   ├── pl_bdot10k_10000_tiff/M-34/64/D/d/1/M-34-64-D-d-1.tif   # wizualizacja BDOT10k; etykieta = data Stan bazy
+│   └── cz_ztm_10000_sjtsk_tiff/0510-D-11.zip   # ZTM: arkusz plasko w segmencie (PDF: .pdf; sygnal http)
 ├── soil/global_soilgrids_clay_0-5cm_mean/bbox/<coords>.tif   # wersje 2.0_<sha8> (wydanie)
 └── hsg/global_soilgrids_0-5cm_mean/bbox/<coords>.tif         # pochodna z wersji clay/sand/silt (D33)
 ```
@@ -1167,7 +1186,7 @@ data/
    hierarchia>/`).
 
 9. **Kolekcje (ADR-042 D8; rozszerzenie reguly 8).**
-   `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}<ext>`:
+   `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>|ku/<kod>|<hierarchia godla>|<strefa>/<plik>}<ext>`:
    segment = prefiks `storage_subdir` + tokeny wariantu tresci
    (`content_segment`), pod nim `unit_slot`: `teryt/<T>` (paczka powiatu
    albo wojewodztwa - takze, gdy obszar rozlozono na powiaty z PRG; BDOO:
@@ -1197,6 +1216,16 @@ data/
    `geodesy/pl_control_<siec>` (obszar), `geodesy/pl_control_<siec>_package`
    (paczka powiatu), `geodesy/pl_geoid2021_evrf2007`,
    `geodesy/cz_control_<siec>` i `geodesy/cz_qgzu2013`.
+   KU mapy katastralnej CZ ma slot `ku/<kod>` (`cadastre/cz_km_<format>/ku/623164.zip`),
+   temat pliku krajowego - `country/<kraj>-<temat>`
+   (`names/pl_prng_shp/country/pl-miejscowosci.zip`), arkusz ZTM - plik
+   plasko w segmencie (`maps/cz_ztm_10000_sjtsk_tiff/0510-D-11.zip`), arkusz
+   wizualizacji BDOT10k - hierarchie godla. Segmenty E2 i E3:
+   `names/pl_prng[_<format>]`, `names/pl_prng_world[_<format>]`,
+   `names/cz_geonames[_<format>_<epsg>]`, `maps/pl_bdot10k_<skala>_<format>`,
+   `maps/cz_ztm_<skala>_<uklad>_<format>`, `boundaries/pl_prg_addresses[_<format>]`,
+   `boundaries/pl_prg_special[_<format>]`, `boundaries/cz_geomorphology_<poziom>`,
+   `cadastre/pl_rcn` i `cadastre/cz_km_<format>`.
    Rozne tresci nigdy nie dziela slotu. Identyczna tresc innego wydania tej
    samej jednostki, formatu i LoD (`FileSlot.related_roots`, D7) nie zajmuje
    miejsca drugi raz: nowa wersja jest hardlinkiem do istniejacych danych
@@ -1206,6 +1235,27 @@ Nowe zrodlo rastrowe wymaga providera i toru dyspozycji (sekcja 5), ale
 jego `storage_subdir` (np. `nmt/de_bb_dgm1_dhhn2016/`) nie wymaga
 specjalnej reguly w kodzie sciezek; produkt kolekcji (regula 9) to sam
 wpis deskryptora z parametrami kanalu.
+
+**Katalogi najwyzszego poziomu** (grupa CLI i wybor produktu):
+
+| Katalog | Grupa CLI | Wybor |
+|---|---|---|
+| `nmt/` | `elevation` | `--product nmt` |
+| `nmpt/` | `elevation` | `--product nmpt` |
+| `laz/` | `elevation` | `--product laz` |
+| `contours/` | `elevation` | `--product contours` (CZ) |
+| `orto/` | `imagery` | `--product orto`, `true-orto`, `oblique-orto` |
+| `intensity/` | `imagery` | `--product intensity` |
+| `landcover/` | `landcover` | `--source bdot10k`, `bdoo`, `corine`, `zabaged`, `data50`, `data250` |
+| `soil/` | `soil` | `soil download --property` |
+| `hsg/` | `soil` | `soil hsg` |
+| `boundaries/` | `boundaries` | `--product admin`, `addresses`, `special`, `geomorphology` |
+| `cadastre/` | `cadastre` | `--product map`, `prices` |
+| `models3d/` | `models3d` | `--product buildings`, `trees`, `mesh` |
+| `hydro/` | `hydro` | `--product network` |
+| `names/` | `names` | `--product geographic`, `world` |
+| `maps/` | `maps` | `--product topographic` |
+| `geodesy/` | `geodesy` | `--product control`, `geoid` |
 
 **Migracja 0.6.x -> 0.7.0 (BREAKING):**
 
@@ -1661,9 +1711,9 @@ standardowa wskazuje istniejaca lokalna wersje (`linked_version`),
 manager NIE zglasza porazki: arkusz ma status `local` z
 `unverified=<tresc bledu>`, dowiazanie bez zmian. Lista/hierarchia: arkusz
 w `skipped`, a `DownloadResult.unverified` (godlo -> tresc bledu). CLI:
-`Warning: <godlo>: skorowidz GUGiK niedostepny — uzyto lokalnej wersji bez
+`Warning: <godlo>: skorowidz GUGiK niedostepny - uzyto lokalnej wersji bez
 sprawdzenia nowszej (<blad>)` (pojedyncze godlo) albo `Warning: skorowidz
-GUGiK niedostepny — dla N arkuszy uzyto lokalnych wersji bez sprawdzenia
+GUGiK niedostepny - dla N arkuszy uzyto lokalnych wersji bez sprawdzenia
 nowszej (<godla do 10>) (<pierwszy blad>)` (lista), stderr takze z `-q`, kod
 bez zmian. `upgrade`, `force` i brak lokalnej wersji (takze dowiazanie
 z usunieta wersja docelowa) — blad. Z granica roku: D14 (wyzej).
@@ -2231,7 +2281,7 @@ odpowiedza i nie ma zadnych kafli, `download_laz_area` rzuca
 `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto ida do
 `DownloadManager` (4.1), dla LAZ do `download_laz_area`;
 `--min-density` dla innych produktow = `Error:` przed siecia
-(`_reject_laz_only_opts`). `--year` z dowolna granica roku =
+(`download/options.py::validate_request`). `--year` z dowolna granica roku =
 `Error: --year wyklucza sie z --min-year/--max-year` przed siecia,
 takze w LAZ. Zadanie wylacznie CZ z flagami roku = `Error: CZ (CUZK)
 nie ma kampanii` (4.6). Wycinek `--cutout` z flaga roku = `Error:`
@@ -2246,6 +2296,7 @@ wnoszacy niepokryty kawalek zostaje (caly — LAZ nie jest przycinany).
 Dzieki temu PL-1992 i PL-2000 tego samego miejsca nie dubluja sie (w2:
 2025/PL-1992 zamiast 2025 + 2022/PL-2000:S7). W przedziale lat ta
 regula dziala na wybranych kaflach (jawne `newest` dozwolone).
+Pokrywa tylko kafel pelny (`czy_ark_wypelniony` !=
 `NIE`) i tylko rama albo tym samym godlem, nigdy obwiednia. Kafel, ktorego
 rama nie przecina obszaru (przecina go tylko obwiednia), jest pomijany.
 Pominiete kafle: `LazTileSelection.superseded` / `LazDownloadResult.superseded`
@@ -2296,8 +2347,8 @@ przeciety tylko obwiednia WFS trafia do `superseded` z powodem
 sa domknietymi granicami `akt_rok`; `--year` z dowolna z nich =
 blad w CLI (`ValidationError` w bibliotece). `download_laz_area`
 i `select_tiles` przyjmuja `year=`, `min_year=`, `max_year=`.
-Uklad LAZ bez zmian: bez `kampanie/` i dowiazan;
-`request.campaigns` w sidecarze tylko dla `all`.
+LAZ nie ma `kampanie/`; kafel jest wersja w `versions/`, a sciezka
+standardowa to dowiazanie (ADR-036); `request.campaigns` w sidecarze tylko dla `all`.
 
 Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
 (+ `.meta.json` z `extra.tile_sheet`/`year`/`nominal_density`/`url`,
