@@ -74,8 +74,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   teraz `Error:`). Biblioteka: `download_data`/`check_data(...,
   sheet_system=, cutout=False, horizontal_crs=None)` zamiast `system=`,
   `target_crs=`; `download_pl_cutout`/`check_pl_cutout`/`download_cz_cutout`/
-  `check_cz_cutout(..., horizontal_crs=)`, `create_dmr_provider`/
-  `CuzkDmrProvider(horizontal_crs=)`; `SheetParser(sheet, sheet_system=)`
+  `check_cz_cutout(..., horizontal_crs=)`, `create_cz_raster_provider`/
+  `CuzkRasterProvider(horizontal_crs=)`; `SheetParser(sheet, sheet_system=)`
   i `SheetParser.sheet_system`, `find_sheets_for_bbox(...,
   sheet_system)`, `find_sheets_for_geometry(..., sheet_system=)`;
   `SUPPORTED_TARGET_CRS` -> `CUTOUT_CRS`. Podpowiedz braku pokrycia mowi
@@ -116,18 +116,42 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `check_pl_cutout(bbox, horizontal_crs=..., output_dir=..., vertical_crs=...,
   product=...)`; plan wykonuj przez `download_pl_cutout(..., plan=plan)`.
 - CZ: arkusz CZ ma publiczne API `download_cz_sheet(sheet, *, output_dir,
-  vertical_crs, resolution=None, update, plan, cache, on_notice)` i
-  `check_cz_sheet` z tymi samymi argumentami (`CzSheetResult`; arkusz SM5
-  tylko `5m`, kafel TM33 wymaga `2m`/`5m`; errata decyzji 9 planu 2/3).
-  `check_cz_cutout(bbox, *, output_dir, horizontal_crs, vertical_crs,
-  resolution)` przyjmuje argumenty `download_cz_cutout` (bez providera
+  product, vertical_crs, resolution=None, update, plan, cache, on_notice)`
+  i `check_cz_sheet` z tymi samymi argumentami (`CzSheetResult`; arkusz SM5
+  tylko NMT `5m` / NMPT `0.5m`, kafel TM33 wymaga etykiety; errata decyzji
+  9 planu 2/3, `product` - plan B).
+  `check_cz_cutout(bbox, *, output_dir, product, horizontal_crs,
+  vertical_crs, resolution)` przyjmuje argumenty `download_cz_cutout` (bez providera
   i `image_crs`); `download_cz_cutout` dostaje `plan=`, `on_notice=`,
   `cache=True` (domyslny cache w cwd). Wyniki CZ maja `notices`
   (`all_nodata` zamiast ostrzezenia w logu). `run_cz_cutout` poza API.
   Co zrobic: `run_cz_cutout(provider, bbox, ...)` ->
-  `download_cz_cutout(bbox, ...)`; `check_cz_cutout(provider, bbox,
+  `download_cz_cutout(bbox, product="nmt", ...)`; `check_cz_cutout(provider, bbox,
   output_dir=, image_crs=)` -> `check_cz_cutout(bbox, output_dir=,
-  horizontal_crs=, vertical_crs=, resolution=)`.
+  product="nmt", horizontal_crs=, vertical_crs=, resolution=)`.
+- CZ z rejestru wariantow (ADR-041, plan B): `CuzkDmrProvider`
+  i `create_dmr_provider` usuniete bez aliasow - w ich miejsce
+  `CuzkRasterProvider(product, resolution, session=None, cache=None,
+  horizontal_crs=None, *, vertical_crs)` i `create_cz_raster_provider` z ta
+  sama sygnatura (`product` = `"nmt"`|`"nmpt"`, model z rejestru:
+  NMT `2m` DMR 5G / `5m` DMR 4G, NMPT `0.5m` DMP OK / `2m` DMP 1G);
+  `sm5_signal(sheet)` -> `file_signal(sheet)` (plik SM5 i kafla TM33).
+  `download_cz_sheet`/`check_cz_sheet`/`download_cz_cutout`/
+  `check_cz_cutout` wymagaja `product=`. `GugikLazProvider.download(url,
+  ...)` -> `download_tile(url, ...)` (A5-7: `download` providera przyjmuje
+  godlo). Kafel TM33 DMR 4G z `--vertical-crs EVRF2007` to gotowy plik
+  ETRS89 CUZK (EPSG:3045, bez warpu i operacji pionowej, sygnal `http`);
+  wersja z warpu zapisana w magazynie przed ta zmiana zostaje lokalna
+  z `Info:` (niesprawdzona; plik 0.7.x w sciezce standardowej jest
+  zastepowany przy pierwszym pobraniu). `--country auto` z `--product nmpt`
+  nie zaweza sie juz do PL (CZ ma NMPT): obszar PL+CZ z `--resolution
+  0.5m` (DMP OK) wymaga `--cutout`, a wycinek PL ma tylko 1 m. Co zrobic:
+  `CuzkDmrProvider(res, ...)`/`create_dmr_provider(res, ...)` ->
+  `CuzkRasterProvider("nmt", res, ...)`/`create_cz_raster_provider("nmt",
+  res, ...)`, `sm5_signal` -> `file_signal`; dopisz `product="nmt"` w torach
+  CZ; `GugikLazProvider.download` -> `download_tile`; kafle TM33 DMR 4G
+  EVRF2007 z magazynu sprzed tej zmiany odswiez `--force`; arkusze NMPT PL
+  0.5m przy granicy pobieraj z `--country pl`.
 - LAZ: `download_laz_area` przyjmuje `bbox` w dowolnym obslugiwanym CRS
   (uklady CZ tylko przez przypieta operacje), `plan=`, `cache=True`,
   `on_notice=` (`laz_superseded` zamiast wypisywania przez CLI) i
@@ -297,7 +321,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     z godla), `--vertical-crs` dla nmt/nmpt/laz (PL EVRF2007|KRON86, CZ
     Bpv|EVRF2007), `--resolution` dla NMT i NMPT tam, gdzie jest wybor (PL:
     etykiety rejestru wariantow, np. 0.5m|1m|5m - wpis o rejestrze wyzej;
-    CZ TM33 i obszar 2m|5m; wycinek `--cutout` i arkusz SM5 maja
+    CZ TM33 i obszar: NMT 2m|5m, NMPT 0.5m|2m; wycinek `--cutout` i arkusz SM5 maja
     jedna wartosc i moga ja pominac), `--sheet-system` dla PL
     `--bbox`/`--geometry` bez `--cutout` (1992|2000), `--horizontal-crs`
     z `--cutout`. `--resolution` i `--vertical-crs`
@@ -322,8 +346,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `MetadataCache(db_path, ...)`; `GugikProvider(*, vertical_crs, resolution)`,
     `GugikNmptProvider(*, vertical_crs, resolution)`, `GugikLazProvider(*, vertical_crs)`,
     `GugikOrtoProvider(*, color)`, `create_nmt_provider(vertical_crs,
-    resolution)`, `CuzkDmrProvider(resolution, ..., *, vertical_crs)`,
-    `create_dmr_provider(resolution, ..., *, vertical_crs)`;
+    resolution)`, `CuzkRasterProvider(product, resolution, ...,
+    *, vertical_crs)`, `create_cz_raster_provider(product, resolution,
+    ..., *, vertical_crs)`;
     `download_pl_cutout(bbox, *, horizontal_crs, output_dir,
     vertical_crs, product)` — parametr `resolution` usuniety (wycinek tylko
     1 m), a `prepare_pl_cutout` usuniety; `download_laz_area(bbox, *,
@@ -526,6 +551,30 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   bez pobierania danych; podpowiedz pobrania bez `--output` (tez po
   `kartograf project add NAZWA`). Opis: `docs/USAGE.md` 1.1 i 1.7.
   Zadanie projektu `elevation download` zapisuje opcje `format`.
+- Czechy w `elevation` (plan B, ADR-041): NMPT CZ - DMP OK 0.5m (arkusz
+  SM5 i kafel TM33 z plikow CUZK, wycinek z ImageServer) i DMP 1G 2m (kafel
+  TM33 i wycinek z ImageServer); kafle TM33 DMR 4G/DMP OK w EVRF2007 jako
+  gotowe pliki ETRS89 (EPSG:3045, bez transformacji); chmury punktow LAZ CZ
+  czterech modeli: `--product laz --model dmr5g|dmr4g|dmp1g|dmpok` (API
+  `model=`), `--vertical-crs Bpv` = arkusze SM5 (EPSG:5514), `EVRF2007` =
+  kafle TM33 (EPSG:3045), godlo albo obszar (arkusze z indeksu
+  `KladyMapovychListu`), plik `.laz` 1:1 z ZIP w
+  `laz/cz_<model>_<vcrs>/`, sygnal `http`, tor planu `cz_laz`.
+  `--country auto` z LAZ pobiera kafle PL i arkusze CZ ze wspolnym
+  `extra.parent_request`; `--year`/`--min-year`/`--max-year`,
+  `--all-campaigns` i `--min-density` zawezaja wtedy zadanie do PL
+  (`Info:`). Raport `elevation availability --country cz|auto` /
+  `check_availability(country="cz"|"auto")`: kombinacje CZ (model x
+  `S-JTSK`/`ETRS89-TM33`) z arkuszy indeksu i jednego `HEAD` na plik
+  (data publikacji, rozmiar; bez lat nalotu i bez pobierania plikow),
+  404 = arkusz bez pliku, inna awaria = blad; `Notice` `cz_service_only`
+  (DMR 5G, DMP 1G bez plikow arkuszy), `AVAILABILITY_COUNTRIES` = `pl`,
+  `cz`, `auto`, czesc `auto` niesprawdzona = `CHECK_FAILED` i `ok=False`
+  (CLI kod 1). Biblioteka: `CuzkRasterProvider`, `create_cz_raster_provider`,
+  `CuzkLazProvider`, `download_cz_laz`/`check_cz_laz`, `CzLazResult`,
+  `CzLazFailure` w `__all__`; `download_data`/`check_data(..., model=)`.
+  Projekt: `--model` w zadaniu `elevation download`. Opis:
+  `docs/USAGE.md` 1.4 i 1.7; E2E: `docs/research/2026-10-16-plan-b-e2e/raport.md`.
 - Granice, ewidencja i modele 3D budynkow GUGiK (plan C katalogu, ADR-042):
   grupy CLI `boundaries` (`--product admin`, PRG: obiekty obszaru z WFS
   z wymaganym `--level wojewodztwo|powiat|gmina|jednostka-ewidencyjna|obreb`,
@@ -593,9 +642,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
   plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
   nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
-  od planu) — dla kazdego toru: arkusze PL, kafle LAZ, arkusze CZ (SM5:
-  `ETag`), wycinki CZ i PL (bez taniego sygnalu: "nie da sie sprawdzic bez
-  pobrania"); przy `--country auto` jeden plan PL i CZ.
+  od planu) — dla kazdego toru: arkusze PL, kafle LAZ PL i CZ (CZ:
+  `ETag`/`Last-Modified` pliku), arkusze CZ (SM5 i natywne TM33:
+  `ETag`/`Last-Modified`), wycinki CZ i PL (bez taniego sygnalu:
+  "nie da sie sprawdzic bez pobrania"); przy `--country auto` jeden plan
+  PL i CZ.
 - CLI `landcover download` i `soilgrids hsg`: `--check-updates`,
   `--upgrade`, `--force`, `--plan PLIK` (tory planu `landcover` i `hsg`);
   status `uzyta ponownie` (HSG z tych samych wejsc, bez liczenia).

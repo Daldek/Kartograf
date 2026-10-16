@@ -31,7 +31,7 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 
 | Grupa | Komendy | Dane |
 |---|---|---|
-| `elevation` | `download`, `list-sources`, `availability` | NMT, NMPT (PL, CZ), LAZ (PL); raport dostępności PL |
+| `elevation` | `download`, `list-sources`, `availability` | NMT, NMPT i LAZ (PL, CZ); raport dostępności PL, CZ i `auto` |
 | `imagery` | `download`, `list-sources` | ortofotomapa (PL) |
 | `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), CORINE (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
@@ -220,22 +220,27 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   51,06°N) trafia także do CUZK, a prostokąt PL (14,07–24,20°E,
   49,00–54,90°N) obejmuje większość Czech. Dla czystej Polski użyj
   `--country pl`.
-- Wartości bez odpowiednika czeskiego (`--product nmpt|orto`,
+- Wartości bez odpowiednika czeskiego (`--product orto`,
   `--vertical-crs KRON86`, rozdzielczość, której CUZK nie ma, np.
-  `--resolution 1m` albo `0.5m`, oraz `--format` — w zwykłej, nie per-krajowej
+  `--resolution 1m` albo `0.5m` dla NMT (NMPT `0.5m` ma odpowiednik
+  DMP OK), oraz `--format` — w zwykłej, nie per-krajowej
   postaci) na obszarze objętym obwiedniami obu krajów same przełączają
-  `auto` na PL (komunikat `Info:`). W Pradze czy Brnie taka flaga kieruje
-  więc zadanie do GUGiK, który nie ma tam danych (błąd pobrania); błąd
-  przed siecią dostaje dopiero obszar poza prostokątem PL. LAZ na
-  obszarze sięgającym CZ wymaga jawnego `--country pl`. `--sheet-system`
+  `auto` na PL (komunikat `Info:`); dla LAZ także `--year`, `--min-year`,
+  `--max-year`, `--all-campaigns` i `--min-density`. W Pradze czy Brnie
+  taka flaga kieruje więc zadanie do GUGiK, który nie ma tam danych (błąd
+  pobrania); błąd przed siecią dostaje dopiero obszar poza prostokątem PL.
+  LAZ na obszarze sięgającym CZ bez tych flag pobiera pliki obu krajów
+  i wymaga `--model` (sekcja 1.4); bez niego `Error:` z podpowiedzią
+  `--country pl`. `--sheet-system`
   jest wymagane dla części PL zadania (bez `--cutout`), więc nie wybiera
   kraju.
-- Obszar sięgający CZ (`--country cz` albo `auto` z częścią CZ) wymaga
-  `--cutout --horizontal-crs <układ>`: CUZK nie ma trybu arkuszy dla
-  obszaru ([ADR-038](DECISIONS.md)). Pod `auto` część PL jest wtedy też
-  wycinkiem WCS (tylko 1 m, NMT/NMPT, bez wyboru kampanii); arkusze PL
-  z takiego obszaru pobiera `--country pl`. Bez `--cutout` — `Error:`
-  przed siecią z tą podpowiedzią.
+- Raster (NMT/NMPT) z obszaru sięgającego CZ (`--country cz` albo `auto`
+  z częścią CZ) wymaga `--cutout --horizontal-crs <układ>`: CUZK nie ma
+  trybu arkuszy rastra dla obszaru ([ADR-038](DECISIONS.md)). Pod `auto`
+  część PL jest wtedy też wycinkiem WCS (tylko 1 m, NMT/NMPT, bez wyboru
+  kampanii); arkusze PL z takiego obszaru pobiera `--country pl`. Bez
+  `--cutout` — `Error:` przed siecią z tą podpowiedzią. LAZ CZ nie ma
+  wycinka: obszar wybiera arkusze z indeksu CUZK (sekcja 1.4).
 - Pod `auto` przycięcie do obwiedni kraju jest komunikowane jako `Info:`;
   oryginalny bbox zachowuje `extra.parent_request`, cały bbox pobiera
   `--country pl`.
@@ -304,11 +309,32 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 
 ### 1.4 Czechy (CUZK)
 
+CZ ma rastry NMT, a od 0.8.0 także NMPT i chmury punktów LAZ. Model
+rastra wybierają `--product` i `--resolution`, model LAZ —
+`--model`; trasę (gotowy plik `openzu` albo usługa ImageServer) wyznaczają
+wariant i godło ([ADR-041](DECISIONS.md); warianty z gotowymi flagami:
+`kartograf elevation list-sources`, kolumna `WYBOR`):
+
+| Produkt | Model (flagi) | Arkusz SM5 (np. `CTES96`) | Kafel TM33 (np. `760_5518`) | Obszar (`--bbox`/`--geometry`) |
+|---|---|---|---|---|
+| `nmt` | DMR 4G (`--resolution 5m`) | plik TIFF EPSG:5514, Bpv; EVRF2007 przypiętą transformacją | EVRF2007: plik TIFF EPSG:3045 (natywnie); Bpv: `exportImage` + lokalny warp | wycinek `exportImage` (`--cutout`) |
+| `nmt` | DMR 5G (`--resolution 2m`) | brak (`Error:`) | `exportImage` + lokalny warp | wycinek `exportImage` (`--cutout`) |
+| `nmpt` | DMP OK (`--resolution 0.5m`) | jak DMR 4G | jak DMR 4G | wycinek `exportImage` (`--cutout`) |
+| `nmpt` | DMP 1G (`--resolution 2m`) | brak (`Error:`) | `exportImage` + lokalny warp | wycinek `exportImage` (`--cutout`) |
+| `laz` | `--model dmr5g`, `dmr4g`, `dmp1g`, `dmpok` | `.laz` EPSG:5514, tylko `--vertical-crs Bpv` | `.laz` EPSG:3045, tylko `--vertical-crs EVRF2007` | arkusze z indeksu CUZK (Bpv: SM5, EVRF2007: TM33), bez `--cutout` |
+
 ```bash
 # DMR 5G (2 m), godło TM33 (ten kafel leży w większości w Niemczech — głównie nodata)
 kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 kartograf elevation download --sheet CTES96 --product nmt --vertical-crs Bpv -o ./data # DMR 4G (5 m), godło SM5, kraj z godła
 kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF2007 --product nmt --resolution 2m -o ./data # Bpv -> EVRF2007 (EPSG:5621)
+# DMR 4G, kafel TM33 w EVRF2007: gotowy plik ETRS89 (EPSG:3045), bez transformacji
+kartograf elevation download --sheet 760_5518 --product nmt --resolution 5m --vertical-crs EVRF2007 -o ./data
+# NMPT DMP OK (0,5 m): arkusz SM5 (Bpv) i kafel TM33 (EVRF2007) z plików CUZK
+kartograf elevation download --sheet CTES96 --product nmpt --resolution 0.5m --vertical-crs Bpv -o ./data
+kartograf elevation download --sheet 760_5518 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
+# NMPT DMP 1G (2 m): kafel TM33 z usługi (warp)
+kartograf elevation download --sheet 760_5518 --product nmpt --resolution 2m --vertical-crs Bpv -o ./data
 # obszar CZ = jeden wycinek (--cutout); reprojekcja (tylko --bbox/--geometry,
 # nie godło) lokalnie przypiętą operacją
 kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
@@ -318,6 +344,13 @@ kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:43
 # bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
 # inaczej argparse odczyta wartość jako nieznaną flagę
 kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
+kartograf elevation download "--bbox=-447000,-1114000,-446600,-1113600" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 2m --product nmpt --vertical-crs Bpv -o ./data # wycinek DMP 1G
+# LAZ CZ: --model wybiera model, --vertical-crs pliki (Bpv = arkusze SM5, EVRF2007 = kafle TM33)
+kartograf elevation download --sheet CTES96 --product laz --model dmr5g --vertical-crs Bpv -o ./data
+kartograf elevation download --sheet 760_5518 --product laz --model dmpok --vertical-crs EVRF2007 -o ./data
+kartograf elevation download "--bbox=-447000,-1114000,-444000,-1113000" --bbox-crs EPSG:5514 --country cz --product laz --model dmr4g --vertical-crs Bpv -o ./data
+# pogranicze pod auto: kafle LAZ PL (WFS GUGiK) i arkusze CZ, wspólny extra.parent_request
+kartograf elevation download --bbox 18.615,49.740,18.640,49.755 --bbox-crs EPSG:4326 --country auto --product laz --model dmr4g --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
 ```
 
 `kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
@@ -327,37 +360,64 @@ kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-c
 wartość dla każdego kraju zadania (`--resolution 5m`) albo pary
 `kraj=wartość` (`--resolution pl=1m,cz=2m`, `--vertical-crs
 pl=EVRF2007,cz=Bpv`). Jedna wartość musi być dostępna w każdym kraju
-zadania (wspólne: `5m`, `EVRF2007`); inaczej `Error:` przed siecią
+zadania (wspólne: NMT `5m`, NMPT `0.5m`, `EVRF2007`; wycinek PL ma
+tylko 1 m, więc wycinki PL+CZ potrzebują zwykle formy per kraj);
+inaczej `Error:` przed siecią
 z podpowiedzią formy per kraj. Klucz kraju spoza zadania nie jest
 błędem. Zwykłe `--resolution 1m` albo `--vertical-crs KRON86` pod `auto`
 wskazują PL (`Info: --country auto -> pl`), bo CZ ich nie ma.
 Prostokątne obwiednie krajów mogą uruchomić CZ także dla obszaru
 w Polsce (część CZ bywa wtedy w całości nodata).
 
-- Rozdzielczość CZ: arkusz SM5 (np. `CTES96`) to gotowy plik DMR 4G,
-  który istnieje tylko w 5 m — `--resolution` można pominąć, a inne niż
-  `5m` jest błędem (`Error:`, kod 1, bez sieci). Kafel TM33
-  i `--bbox`/`--geometry` (wycinek, `--cutout`) są wycinane z usługi:
-  `--resolution` wymagane, `2m` (DMR 5G) albo `5m` (DMR 4G).
-
-- Obszar CZ (`--bbox`/`--geometry`) to zawsze jeden wycinek i wymaga
-  `--cutout --horizontal-crs` (natywnie `EPSG:5514`); bez `--cutout`
-  `Error:` przed siecią. PL bez `--cutout` daje listę arkuszy.
+- Rozdzielczość CZ: arkusz SM5 (np. `CTES96`) to gotowy plik DMR 4G
+  (NMT, tylko 5 m) albo DMP OK (NMPT, tylko 0,5 m) — `--resolution` można
+  pominąć, a inna wartość jest błędem (`Error:`, kod 1, bez sieci). Kafel
+  TM33 i `--bbox`/`--geometry` (wycinek, `--cutout`) wymagają
+  `--resolution`: NMT `2m` (DMR 5G) albo `5m` (DMR 4G), NMPT `0.5m`
+  (DMP OK) albo `2m` (DMP 1G). Kafel TM33 DMR 4G i DMP OK
+  z `--vertical-crs EVRF2007` to gotowy plik ETRS89 (EPSG:3045) z CUZK;
+  pozostałe kafle i wycinki są wycinane z usługi ImageServer.
+- Obszar CZ rastra (`--bbox`/`--geometry`) to zawsze jeden wycinek
+  i wymaga `--cutout --horizontal-crs` (natywnie `EPSG:5514`); bez
+  `--cutout` `Error:` przed siecią. PL bez `--cutout` daje listę arkuszy.
+- LAZ CZ (`--product laz`): `--model` wybiera model — `dmr5g` (teren,
+  DMR 5G), `dmr4g` (teren, siatka 5 m), `dmp1g` (powierzchnia, DMP 1G),
+  `dmpok` (powierzchnia, korelacja obrazowa) — i jest wymagane, gdy
+  zadanie obejmuje CZ; z zadaniem tylko PL albo z rastrem to `Error:`.
+  Plik `.laz` trafia do magazynu bajt w bajt jak w ZIP-ie CUZK, bez
+  transformacji punktów, więc `--vertical-crs` wybiera pliki: `Bpv` =
+  arkusze SM5 (S-JTSK, EPSG:5514), `EVRF2007` = kafle TM33 (ETRS89,
+  EPSG:3045); godło drugiego systemu to `Error:` przed siecią. Obszar
+  rozwija się do arkuszy indeksu CUZK tego systemu (arkusze SM5 z częścią
+  w CZ, kafle TM33); `--cutout`, `--resolution`, rok, kampanie
+  i `--min-density` dotyczą tylko LAZ PL (`Error:`). Plik, którego nie
+  udało się pobrać, nie przerywa pozostałych (`Error:` dla arkusza,
+  kod 1).
 - Porażka jednego kraju pod `auto` (brak danych albo awaria źródła) przy
   sukcesie drugiego kończy się kodem 0: na stderr `Warning:` o częściowym
   sukcesie i `Error:` z przyczyną porażki; kod 1, gdy żaden kraj nie dał
   wyniku albo `--country` było jawne.
-- Natywnie S-JTSK/Bpv (EPSG:5514); `KRON86` dla CZ jest nieosiągalny.
-  Szczegóły: SCOPE 2.2 i 3.2, ARCHITECTURE 4.4–4.6.
-- Magazyn wersji (0.8.0): arkusz CZ i wycinek CZ leżą jako wersje
-  w `<segment>/versions/`, ścieżka arkusza i `bbox/<współrzędne>.tif` to
-  hardlinki. Arkusz SM5 ma tani sygnał (`ETag`/`Last-Modified` pliku
-  `openzu`, zapisany w `extra.http` sidecara wersji): domyślnie jedno
+- Natywnie S-JTSK/Bpv (EPSG:5514: arkusze SM5, usługa ImageServer)
+  i ETRS89/EVRF2007 (EPSG:3045/5621: pliki kafli TM33 DMR 4G i DMP OK,
+  LAZ TM33); `KRON86` dla CZ jest nieosiągalny.
+  Szczegóły: SCOPE 2.2 i 3.2, ARCHITECTURE 4.4–4.7.
+- Magazyn wersji (0.8.0): arkusz CZ, plik LAZ CZ i wycinek CZ leżą jako
+  wersje w `<segment>/versions/`, ścieżka arkusza i `bbox/<współrzędne>.tif`
+  to hardlinki (segmenty `nmt/cz_dmr5g_<vcrs>`, `nmt/cz_dmr4g_<vcrs>`,
+  `nmpt/cz_dmpok_<vcrs>`, `nmpt/cz_dmp1g_<vcrs>`, `laz/cz_<model>_<vcrs>`).
+  Pliki `openzu` — arkusz SM5, kafel TM33 DMR 4G/DMP OK w EVRF2007
+  i LAZ CZ — mają tani sygnał (`ETag`/`Last-Modified` pliku, zapisany
+  w `extra.http` sidecara wersji): domyślnie jedno
   `HEAD` na plik z lokalną wersją — nowsza treść daje dopisek `; dostepna
   nowsza ... (--upgrade)`, a `--upgrade` ją pobiera; nieudane `HEAD` to
-  `Warning:` i lokalna wersja (z `--upgrade` — błąd). Kafel TM33 i wycinek
-  CZ (`exportImage`) nie mają taniego sygnału: lokalna wersja bez
-  sieci, ponowne pobranie tylko `--force`.
+  `Warning:` i lokalna wersja (z `--upgrade` — błąd). Kafel TM33
+  z ImageServer i wycinek CZ (`exportImage`) nie mają taniego sygnału:
+  lokalna wersja bez sieci, ponowne pobranie tylko `--force`.
+- Kafel TM33 DMR 4G w EVRF2007 zapisany w magazynie wersji przed tą
+  zmianą (warp z ImageServer, bez `extra.http`) zostaje lokalną wersją
+  z `Info:` (niesprawdzona); `--force` pobiera plik CUZK jako nową wersję
+  i przepina dowiązanie. Zwykły plik z 0.7.x w ścieżce standardowej jest
+  zastępowany przy pierwszym pobraniu.
 
 ### 1.5 Pokrycie terenu, gleby, HSG, cache
 
@@ -506,13 +566,18 @@ z podpowiedzianą skalą.
 `kartograf elevation availability` odpowiada **przed pobraniem**, dla
 jakich lat, układów arkuszy, rozdzielczości, układów wysokości i formatów
 obszar ma komplet pełnych arkuszy NMT/NMPT (LAZ: kafli) według skorowidza
-GUGiK. Czyta wyłącznie skorowidz WFS (ten sam, z którego pobiera
-`elevation download`) i maskę lądu PRG; żadnego pliku danych nie pobiera.
-Obszar wybiera się jak w `elevation download`: `--sheet` (godło PL-1992
-albo PL-2000; kraj z godła), `--bbox` (`--bbox-crs`) albo `--geometry`
-(`--layer`) — dwa ostatnie z `--country pl` (dziś jedyny kraj raportu;
-bez flagi `Error: --country wymagane z --bbox/--geometry: pl (GUGiK)`).
-`--year`/`--min-year`/`--max-year` zawężają roczniki skorowidza.
+GUGiK, a w Czechach (od 0.8.0) — które arkusze SM5 i kafle TM33 obszaru
+mają pliki CUZK. Czyta wyłącznie skorowidz WFS (ten sam, z którego pobiera
+`elevation download`) i maskę lądu PRG, a dla CZ indeks arkuszy
+`KladyMapovychListu` i nagłówki plików `openzu` (`HEAD`); żadnego pliku
+danych nie pobiera. Obszar wybiera się jak w `elevation download`:
+`--sheet` (godło PL-1992, PL-2000 albo CZ SM5/TM33; kraj z godła),
+`--bbox` (`--bbox-crs`) albo `--geometry` (`--layer`) — dwa ostatnie
+z `--country pl`, `cz` albo `auto` (bez flagi `Error: --country wymagane
+z --bbox/--geometry: pl (GUGiK), cz (CUZK), auto (...)`).
+`--year`/`--min-year`/`--max-year` zawężają roczniki skorowidza — tylko
+PL: z `--country cz` albo godłem CZ to `Error:`, pod `auto` obszar PL+CZ
+zawęża się do PL (`Info:`), a obszar tylko w CZ to `Error:`.
 
 ```bash
 kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
@@ -520,6 +585,11 @@ kartograf elevation availability --product nmpt --sheet M-34-64-D-d-2-1
 kartograf elevation availability --product laz --country pl --geometry zlewnia.gpkg --layer catchments --min-year 2020
 kartograf elevation availability --product nmt --country pl --bbox 339000,744800,343000,747000 --details
 kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000 --json > krakow.json
+# Czechy i pogranicze (od 0.8.0)
+kartograf elevation availability --product nmpt --sheet CTES96
+kartograf elevation availability --product nmpt --country cz "--bbox=-447000,-1114000,-446600,-1113600" --bbox-crs EPSG:5514
+kartograf elevation availability --product laz --country cz "--bbox=-450000,-1114000,-444000,-1113000" --bbox-crs EPSG:5514 --details
+kartograf elevation availability --product nmpt --country auto --bbox 18.615,49.740,18.640,49.755 --bbox-crs EPSG:4326 --json
 ```
 
 Kraków (NMT, bbox 4 x 4 km; wydruk na żywo 2026-10-15):
@@ -648,8 +718,8 @@ deskryptora, `year`, `acquisition_dates`, `published`, `campaigns`,
 `horizontal`, `resolution`, `vertical_crs`, `format`, `densities`,
 `complete`, `sheets_full`, `sheets_partial`, `uncovered_m2`,
 `download_hint` — polecenia bez przedrostka `kartograf `), `notices`,
-`ok`, `schema`. Pola `sheets_missing` i `size_bytes` są dziś puste
-(`[]`/`null`). Początek (Kraków):
+`ok`, `schema`. Pola `sheets_missing` i `size_bytes` wypełnia tylko część
+CZ (w PL `[]`/`null`). Początek (Kraków):
 
 ```json
 {
@@ -684,9 +754,11 @@ deskryptora, `year`, `acquisition_dates`, `published`, `campaigns`,
 każdą wartość listy w osobnej linii i wszystkie pola.)
 
 - **Bez danych to odpowiedź, nie błąd:** obszar bez arkuszy w skorowidzu
-  daje `Brak arkuszy NMT dla obszaru w skorowidzu GUGiK` (LAZ: `kafli`)
+  daje `Brak arkuszy NMT dla obszaru w skorowidzu GUGiK` (LAZ: `kafli`;
+  CZ: `Brak arkuszy NMPT dla obszaru w indeksie CUZK`)
   i kod 0. Awaria skorowidza albo PRG (sieć, strona WFS niespójna,
-  raport OGC) to `Error:` i kod 1 — nigdy pusty raport. Zakres lat bez
+  raport OGC) to `Error:` i kod 1 — nigdy pusty raport; tak samo awaria
+  indeksu CUZK albo `HEAD` pliku inna niż `404`. Zakres lat bez
   żadnego rocznika usługi: `Error: --year 2030: skorowidz GUGiK NMT nie
   ma rocznika ... - dostepne roczniki: ...`.
 - **`Info:`** (kod `index_unsupported` w bibliotece) wymienia rekordy
@@ -695,11 +767,12 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
   (np. 8-członowe godła ASCII NMT 10 m i części ASC 1 m, sekcja 7).
   Archiwa z rejestru nie trafiają do `Info:` — są kombinacjami.
 - **Cache:** typy warstw WFS, rekordy obszaru z obrysami arkuszy i maska
-  lądu PRG trafiają do cache metadanych (`.kartograf_cache.db`, TTL
+  lądu PRG, a dla CZ arkusze indeksu i wyniki `HEAD` plików trafiają do
+  cache metadanych (`.kartograf_cache.db`, TTL
   7 dni; `kartograf cache stats`: `Wpisy obszarow skorowidza`), więc
   ponowny raport dla tego samego obszaru nie pyta sieci (pomiar
   2026-10-15: 0,6–1,5 s zamiast ok. 5–7 s dla 16 km2). `--force`
-  pomija odczyt cache, odpytuje skorowidz i PRG ponownie i nadpisuje
+  pomija odczyt cache, odpytuje skorowidz, PRG i CUZK ponownie i nadpisuje
   wpisy.
 - **Czas:** maska lądu jest rasteryzowana na siatce 1 m w pasach po
   4 Mpx, więc raport dla dużego obszaru (np. całej zlewni) liczy się
@@ -707,6 +780,60 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
 - **Projekt:** `availability` nie jest komendą danych projektu
   (`kartograf project add NAZWA elevation availability ...` = `Error:`);
   do manifestu dodaj polecenie z linii `W projekcie` (sekcja 8).
+
+**Czechy (CUZK).** CUZK nie publikuje lat nalotu, więc kombinacja CZ to
+model i układ arkuszy z plikami w natywnym układzie wysokości: NMT —
+DMR 4G (`S-JTSK` Bpv i `ETRS89-TM33` EVRF2007), NMPT — DMP OK (te same
+dwa układy), LAZ — osiem kombinacji (cztery modele × dwa układy). DMR 5G
+i DMP 1G nie mają plików arkuszy: raport ich nie obejmuje i mówi o tym
+w `Info:` (są dostępne jako wycinek `--cutout`, kafel TM33 z usługi
+i LAZ `--model`) — o ile część CZ ma choć jeden arkusz indeksu (nie ma go
+np. część `auto` w głębi Polski wewnątrz prostokąta CZ). Arkusze to
+arkusze indeksu w części CZ obszaru (SM5 z częścią w CZ, kafle TM33) —
+te same, które pobiera LAZ dla obszaru; każdy plik sprawdza jedno `HEAD`:
+`200` = plik (`PUBLIKACJA` z `Last-Modified`, `ROZMIAR` — suma
+`Content-Length`; `-`, gdy żaden arkusz kombinacji nie ma pliku), `404`
+= arkusz bez pliku (`ARKUSZE SA/BRAK` = z plikiem/bez pliku,
+`sheets_missing`, kombinacja niekompletna, `uncovered_m2` — część
+prostokąta obszaru w ramach takich arkuszy, nigdy więcej niż `area_m2`),
+każda inna odpowiedź (`503`, sieć) to `Error:`, nigdy brak danych. Pole
+`area_m2` części CZ to prostokąt tej części w EPSG:5514 (godło: jego
+rama) — CZ nie ma maski lądu, więc przy granicy obejmuje też terytorium
+PL. Pod `--country auto` raport ma osobne tabele i `areas` PL i CZ;
+część, której nie udało się sprawdzić, przy sprawdzonej drugiej daje
+`Warning:`, `ok: false` w JSON i kod 1 (raport drugiej części jest
+wypisany). Stopka CZ podaje polecenia kompletnych kombinacji: raster —
+po jednym na arkusz (`--sheet`, `--resolution`, natywne
+`--vertical-crs`), LAZ — jedno polecenie obszaru z `--country cz`
+i `--model` (przy godle — po jednym na arkusz); przy więcej niż
+5 poleceniach kombinacji stopka podaje 5 i liczbę pozostałych
+(wszystkie: `--details` albo `--json`). Do polecenia dopisz `--output
+KATALOG` (w projekcie: `kartograf project add NAZWA` zamiast
+`kartograf`).
+
+Czechy (NMPT, bbox 400 x 400 m przy Czeskim Cieszynie; wydruk na żywo
+2026-10-16, ok. 1,3 s, z cache 0,6 s; raport E2E:
+`docs/research/2026-10-16-plan-b-e2e/raport.md`):
+
+```
+Dostepnosc NMPT CZ wg indeksu arkuszy i plikow CUZK: obszar 16,00 ha
+CUZK nie publikuje lat nalotu; daty = publikacja pliku
+
+  MODEL   UKLAD        ROZDZ.  WYSOKOSCI  FORMAT  ARKUSZE SA/BRAK  PUBLIKACJA  ROZMIAR  KOMPLET
+  DMP OK  S-JTSK       0.5m    Bpv        TIFF    1/0              2025-10-10  16,7 MB  tak
+  DMP OK  ETRS89-TM33  0.5m    EVRF2007   TIFF    1/0              2026-08-20  29,6 MB  tak
+
+Kompletne kombinacje CZ (pobranie: dodaj --output KATALOG; w projekcie: kartograf project add NAZWA zamiast kartograf):
+  DMP OK S-JTSK 0.5m Bpv TIFF
+    kartograf elevation download --product nmpt --sheet CTES86 --resolution 0.5m --vertical-crs Bpv
+  DMP OK ETRS89-TM33 0.5m EVRF2007 TIFF
+    kartograf elevation download --product nmpt --sheet 760_5516 --resolution 0.5m --vertical-crs EVRF2007
+```
+
+Na stderr: `Info: DMP 1G (2m) nie ma plikow arkuszy CUZK (raport ich nie
+obejmuje) - jest dla calego CZ jako wycinek (--cutout), kafel TM33
+z uslugi ImageServer (--sheet, np. 302_5550) i LAZ (--product laz --model
+dmp1g)`.
 
 ### 1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k
 
@@ -1051,6 +1178,7 @@ area = BBox(16.19, 50.42, 16.25, 50.45, "EPSG:4326")  # Kudowa-Zdrój / Náchod
 parts = split_bbox_by_country(area, cz_crs="EPSG:2180")  # {"CZ": ..., "PL": ...}
 cz = download_cz_cutout(
     parts["CZ"].bbox,
+    product="nmt",
     output_dir="./data",
     horizontal_crs="EPSG:2180",
     vertical_crs="EVRF2007",
@@ -1062,22 +1190,42 @@ print(cz.file.path)           # data/nmt/cz_dmr5g_evrf2007/bbox/<coords>.tif
 print(cz.all_nodata)
 # Część PL (parts["PL"].bbox) pobierz przez download_pl_cutout (wyżej).
 
-# Arkusz CZ: SM5 (gotowy plik DMR 4G, tylko 5m - resolution można pominąć)
-# albo kafel TM33 (resolution wymagane: "2m" / "5m")
+# Arkusz CZ: SM5 (gotowy plik DMR 4G 5m albo DMP OK 0.5m - resolution można
+# pominąć) albo kafel TM33 (resolution wymagane: NMT "2m"/"5m", NMPT "0.5m"/"2m");
+# product wymagany: "nmt" albo "nmpt"
 from kartograf import check_cz_sheet, download_cz_sheet
 
-sm5 = download_cz_sheet("CTES96", output_dir="./data", vertical_crs="Bpv")
+sm5 = download_cz_sheet("CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv")
 tm33 = download_cz_sheet(
-    "302_5550", output_dir="./data", vertical_crs="EVRF2007", resolution="2m"
+    "302_5550", output_dir="./data", product="nmt", vertical_crs="EVRF2007", resolution="2m"
+)
+# DMP OK, kafel TM33 w EVRF2007: gotowy plik ETRS89 (EPSG:3045) bez transformacji
+dmp = download_cz_sheet(
+    "760_5518", output_dir="./data", product="nmpt", vertical_crs="EVRF2007", resolution="0.5m"
 )
 
 # Sprawdzenie bez pobierania (plan kartograf-plan/1): blizniak check_* z tymi
 # samymi argumentami co pobranie; plan wykonuje pobranie z update="upgrade"
-plan = check_cz_sheet("CTES96", output_dir="./data", vertical_crs="Bpv")
+plan = check_cz_sheet("CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv")
 print([(i.track, i.unit, i.status) for i in plan.items])
 sm5 = download_cz_sheet(
-    "CTES96", output_dir="./data", vertical_crs="Bpv", update="upgrade", plan=plan
+    "CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv",
+    update="upgrade", plan=plan,
 )
+
+# LAZ CZ: model i układ wysokości (Bpv = arkusze SM5, EVRF2007 = kafle TM33);
+# godło (sheet=) albo obszar (bbox= w dowolnym obsługiwanym CRS)
+from kartograf import check_cz_laz, download_cz_laz
+
+selection_cz = dict(model="dmr5g", vertical_crs="Bpv", output_dir="./data",
+                    bbox=BBox(-447000, -1114000, -444000, -1113000, "EPSG:5514"))
+clouds = download_cz_laz(**selection_cz)
+for file in clouds.files:                  # VersionedFile na arkusz (.laz 1:1 z ZIP)
+    print(file.path, file.status)
+for failure in clouds.failed:              # porażka pliku nie przerywa pozostałych
+    print(failure.sheet, failure.error)
+plan = check_cz_laz(**selection_cz)        # pozycje toru cz_laz, jedno HEAD na plik
+clouds = download_cz_laz(**selection_cz, update="upgrade", plan=plan)
 ```
 
 **Cache metadanych w bibliotece.** Funkcje poziomu komendy i torów
@@ -1108,8 +1256,9 @@ lc = LandCoverManager("./data", "bdot10k", cache=MetadataCache(".kartograf_cache
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider` —
 od 0.8.0 z wymaganym `resolution=`, np. `GugikNmptProvider(vertical_crs="EVRF2007",
-resolution="0.5m")`, `GugikOrtoProvider`, `GugikLazProvider`/`download_laz_area` dla LAZ,
-`CuzkDmrProvider`/`create_dmr_provider` dla Czech, `Parser2000`,
+resolution="0.5m")`, `GugikOrtoProvider`, `GugikLazProvider`/`download_laz_area`
+dla LAZ PL, `CuzkRasterProvider`/`create_cz_raster_provider` dla rastrów CZ,
+`CuzkLazProvider`/`download_cz_laz` dla LAZ CZ, `Parser2000`,
 `ParserTM33`, `FileStorage`) — eksporty w `kartograf/__init__.py`, opis
 w SCOPE 2.10 i PRD 5.
 
@@ -1137,6 +1286,8 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
   `masked_pixels`, `zero_pixels`, `all_nodata`, `stale`, `notices`.
 - `CzCutoutResult` (wycinek CZ, `download_cz_cutout`) i `CzSheetResult`
   (arkusz CZ, `download_cz_sheet`): `file`, `all_nodata`, `stale`, `notices`.
+- `CzLazResult` (`download_cz_laz`): `sheets`, `files` (wersja na
+  arkusz), `failed` (`CzLazFailure(sheet, error)`), `stale`, `notices`, `ok`.
 - `LazDownloadResult` (`download_laz_area`): `tiles` (wybrane kafle),
   `files` (`VersionedFile` na kafel), `failed`, `superseded` (kafle
   pominięte jako pokryte przez nowsze), `stale`, `notices`.
@@ -1164,8 +1315,8 @@ pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 łączący pliki jednego zadania. Pełna tabela pól: ARCHITECTURE 3.2,
 `parent_request`: ARCHITECTURE 3.4. Sidecary pisze warstwa zarządzająca
 (`DownloadManager`, `LandCoverManager`, wycinki PL i CZ oraz kafle LAZ
-i arkusze CZ w bibliotece), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
-Bezpośrednie wywołanie providera (np. `CuzkDmrProvider` z biblioteki) zapisuje
+(PL i CZ) i arkusze CZ w bibliotece), a `FileStorage.delete()` usuwa sidecar razem z plikiem danych.
+Bezpośrednie wywołanie providera (np. `CuzkRasterProvider` z biblioteki) zapisuje
 sam plik danych, bez sidecara.
 
 **Gdzie leżą pliki.** `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
@@ -1355,7 +1506,7 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 20
 ### 4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)
 
 Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery download`: arkuszy PL NMT/NMPT/orto,
-kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
+kafli LAZ (PL i CZ), arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
 `--cutout`, a także `landcover download`, `soil download`, `soil hsg`
 oraz `boundaries download`, `cadastre download` i `models3d download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
@@ -1364,12 +1515,12 @@ skorowidz); pozostałe tory różnią się sygnałem:
 | Tor | Sygnał świeżości | Uwagi |
 |---|---|---|
 | arkusze PL | skorowidz GUGiK (`index`) | tabela niżej |
-| kafle LAZ | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
-| arkusze SM5 (CZ) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
-| kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
+| kafle LAZ PL | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
+| CZ: arkusze SM5, kafle TM33 DMR 4G/DMP OK w EVRF2007, pliki LAZ (tor planu `cz_laz`) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
+| pozostałe kafle TM33 (warp z ImageServer), wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
 | SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
-| BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
-| kolekcje (`boundaries`, `cadastre`, `models3d`; tor planu `collection`) i archiwum BDOT10k (`--year`) | brak (`none`) | jak TM33; etykieta = rocznik/rok wydania albo data pobrania (sekcja 1.8) |
+| BDOT10k, podgląd CORINE | brak (`none`) | jak wycinki; `--force` przy BDOT10k odświeża też cache PRG |
+| kolekcje (`boundaries`, `cadastre`, `models3d`; tor planu `collection`) i archiwum BDOT10k (`--year`) | brak (`none`) | jak wycinki; etykieta = rocznik/rok wydania albo data pobrania (sekcja 1.8) |
 | HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
@@ -1405,7 +1556,7 @@ w bibliotece `VersionedFile.same_as`), `bez zmian <etykieta>`,
 `lokalna wersja <etykieta>`
 (z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)`), po liście
 podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
-(także dla kafli LAZ). Arkusz CZ i wycinek dają jedną linię statusu
+(także dla kafli LAZ PL i CZ). Arkusz CZ, plik LAZ CZ i wycinek dają jedną linię statusu
 (jednostka: godło albo ścieżka wycinka pod `--output`).
 
 Biblioteka:
@@ -1425,6 +1576,7 @@ report = manager.download_sheets(
 )
 print(report.stale, report.files.get(godlo, ()))
 # LAZ: download_laz_area(..., update=, plan=) + check_laz_area (te same argumenty);
+# LAZ CZ: download_cz_laz(..., update=, plan=) + check_cz_laz (ten sam wybór);
 # wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
 # download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
 # check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
@@ -1528,9 +1680,10 @@ proxy).
 - Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
-- Wycinek `--cutout` jest tylko 1 m: NMT/NMPT w innych
+- Wycinek PL `--cutout` jest tylko 1 m: NMT/NMPT w innych
   rozdzielczościach (np. 0.5m, 5m) i archiwa pobieraj jako arkusze bez
-  tej flagi (sekcja 1.3).
+  tej flagi (sekcja 1.3); wycinek CZ ma krok modelu (0,5 m, 2 m albo 5 m,
+  sekcja 1.4).
 - Archiwa GUGiK (`--format XYZ|ASCII-NMT|TBD|TIN|TTN|GRD|DXF|DGN`) są
   pobierane jako pliki źródłowe bez konwersji (ZIP, `.ttn`, `.grd`,
   `.dxf`, `.dgn`): Kartograf nie rozpakowuje ich, nie przelicza na
@@ -1538,8 +1691,16 @@ proxy).
   który obsługuje dany format (sekcja 1.1).
 - Raport `elevation availability` ufa deklaracji skorowidza
   `calyArkuszWypelnionyTrescia`: arkusz NIE może mieć od 1 % do 99 %
-  danych, a raport nie mierzy treści plików (sekcja 1.7). Raport jest
-  dziś tylko dla PL (`--country pl`).
+  danych, a raport nie mierzy treści plików (sekcja 1.7). W CZ sprawdza
+  tylko istnienie plików (`HEAD`), nie zna lat nalotu, a `area_m2` części
+  CZ to prostokąt, nie ląd.
+- Podpowiedź pobrania raportu PL dla obszaru przy granicy (`--country pl`
+  albo część PL pod `auto`) jest poleceniem obszaru; jego pobranie planuje
+  też arkusze siatki leżące poza Polską bez rekordu GUGiK (na żywo
+  2026-10-16: `M-34-74-C-c-2-2` w CZ przy Cieszynie) — `nie udalo sie
+  sprawdzic: Brak danych ...` i kod 1, choć arkusze PL są w porządku.
+  Obejście: obszar bez terytorium obcego albo `--sheet` dla każdego
+  arkusza z `--details` (zachowanie od planu A, bez zmian w planie B).
 - Godła 8-członowe PL-1992 (wszystkie arkusze ASCII NMT 10 m i część
   arkuszy ASC 1 m w skorowidzu GUGiK) są poza układem godeł Kartografu:
   nie są pobierane, a raport dostępności wymienia je w `Info:`.
@@ -1552,8 +1713,10 @@ proxy).
   maskę i wersję dostaje wycinek `--cutout` /
   `download_pl_cutout`. Kompozycja serwera może różnić się
   od wyboru kampanii arkusza.
-- Wycinki (PL, CZ) i kafle TM33 nie mają taniego sygnału świeżości:
-  zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
+- Wycinki (PL, CZ) i kafle TM33 z ImageServer nie mają taniego sygnału
+  świeżości: zmiana treści u źródła albo maski PRG jest niewidoczna bez
+  `--force` (pliki openzu — arkusz SM5, kafel TM33 DMR 4G/DMP OK
+  w EVRF2007, LAZ CZ — mają sygnał HTTP, sekcja 4.3).
 - Granice PRG, EGiB, modele 3D i archiwum BDOT10k (sekcja 1.8) nie mają
   taniego sygnału świeżości: nowszą treść przynosi tylko `--force`.
 - Strony WFS GUGiK (obiekty obszaru PRG i EGiB) przychodzą po kilka
