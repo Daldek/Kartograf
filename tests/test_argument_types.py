@@ -11,6 +11,7 @@ import pytest
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import check_availability
 from kartograf.download.collections import check_collection, download_collection
+from kartograf.download.cz_laz import download_cz_laz
 from kartograf.download.data import check_data, download_data
 from kartograf.download.laz import check_laz_area, download_laz_area
 from kartograf.download.manager import DownloadManager
@@ -124,6 +125,18 @@ def test_laz_area_rejects_text_workers(tmp_path):
         download_laz_area(
             AREA, output_dir=tmp_path, vertical_crs="EVRF2007", workers="2"
         )
+
+
+def test_cz_laz_rejects_text_workers(tmp_path):
+    with pytest.raises(ValidationError, match="workers .*'2'"):
+        download_cz_laz(
+            model="dmr5g",
+            vertical_crs="EVRF2007",
+            output_dir=tmp_path,
+            sheet="760_5518",
+            workers="2",
+        )
+    assert not any(tmp_path.iterdir())
 
 
 @pytest.mark.parametrize(

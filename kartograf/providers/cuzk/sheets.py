@@ -112,7 +112,11 @@ class SheetIndex:
         return info
 
     def sm5_sheets_for_bbox(self, bbox: BBox) -> list[SheetInfo]:
-        """SM5 sheets intersecting the bbox (foundation of stage 2: LAZ/Orto)."""
+        """SM5 sheets intersecting the bbox (EPSG:5514), whatever their ``PODIL``.
+
+        The raw index query; the sheets of CUZK files (``PODIL > 0``) are
+        ``file_sheets``.
+        """
         _validate_request_bbox(bbox, SM5_CRS, "sm5_sheets_for_bbox")
         features = self._client.query(
             self._endpoint,
