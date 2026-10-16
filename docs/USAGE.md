@@ -251,7 +251,12 @@ starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
 ([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
 kafli"); `--year`/`--min-year`/`--max-year` zawężają wybór do przedziału lat
 (sekcja 4.1; rocznik spoza usługi = błąd z listą dostępnych). WFS GUGiK
-w EPSG:2180 używa kolejności osi (N,E).
+w EPSG:2180 używa kolejności osi (N,E). Obszar `--sheet` to rama arkusza
+(w EPSG:2180 obrócony czworokąt), nie jej obwiednia: kafel musi sięgać
+w obszar głębiej niż 1 m, więc sąsiedni arkusz stykający się z ramą
+krawędzią albo narożnikiem nie jest pobierany (`--sheet N-34-130-D-d-2-4`
+= 4 kafle 1:5000). Tak samo `--bbox`: kafel sięgający w niego o milimetry
+(zaokrąglenie ram GUGiK do 1 cm) jest pomijany.
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
@@ -932,8 +937,8 @@ Jak czytać tabelę:
 - Obszar jest ten sam, który pokrywa pobranie: `--sheet` = rama godła
   (pomiar pomija pas 1 m przy ramie — rama liczona z godła różni się od
   ramy GUGiK o centymetry), `--bbox` i `--geometry` (obwiednie obiektów,
-  jak arkusze `elevation download`) mierzone dokładnie; LAZ — obwiednia
-  arkusza albo całej geometrii, jak przy pobieraniu kafli. Arkusz
+  jak arkusze `elevation download`) mierzone dokładnie; LAZ — rama
+  arkusza albo obwiednia całej geometrii, jak przy pobieraniu kafli. Arkusz
   stykający się z obszarem tylko krawędzią nie należy do kombinacji.
 - Kolejność: rok malejąco, potem układ arkuszy, rozdzielczość, układ
   wysokości i format.
@@ -1984,7 +1989,9 @@ clouds = download_cz_laz(**selection_cz, update="upgrade", plan=plan)
 `cache: MetadataCache | bool = True`: domyślnie ten sam plik co CLI
 (`<cwd>/.kartograf_cache.db`, TTL 7 dni), `False` = bez cache, własny
 `MetadataCache` = ten. `update="force"` pomija odczyty z cache w tym
-wywołaniu (jak `--force`). Katalog tylko do odczytu: cache wyłączony
+wywołaniu (jak `--force`), a funkcje sprawdzenia (`check_data`,
+`check_*`, `LandCoverManager.check`) pomijają je zawsze (jak
+`--check-updates`). Katalog tylko do odczytu: cache wyłączony
 z `Notice` `cache_disabled`, pobieranie idzie dalej. Provider tworzony
 ręcznie (niżej) bez `MetadataCache` pyta skorowidz GUGiK przy KAŻDYM
 `download_sheet`; przekaż mu cache, a zapytania o arkusz ograniczą się do
@@ -2310,6 +2317,12 @@ pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
 ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
 `bez zmian`, inna = nowa wersja.
 
+`--check-updates` zawsze pyta źródło: odczyt cache metadanych (rekordy
+skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest pomijany, a wpisy
+są odświeżane — nowy lot opublikowany po ostatnim zapytaniu jest widoczny
+od razu, a bez sieci sprawdzenie kończy się `Error:`. Domyślne pobieranie
+korzysta z cache jak dotąd.
+
 ```bash
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 #   N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_4de1eac7
@@ -2466,6 +2479,18 @@ proxy).
 - Ortofoto CZ: tylko aktualny rocznik arkusza (archiwalne zdjęcia CUZK
   są płatne); pliki JGW nie niosą układu — w GIS przypisz EPSG:5514 do
   `<godło>.jpg` z `<godło>.jgw` (sekcja 1.4).
+- Ortofotomapa ukośna (`--product oblique-orto`) kampanii Kraków 2021
+  (np. arkusz `7.125.11.08`, kampania 78945): GeoTIFF ma własny opis układu
+  („Transverse Mercator, WGS84”) z parametrami PL-2000 strefy 7, bez kodu
+  EPSG. GDAL i rasterio nie podają kodu (`to_epsg()` = `None`), a przy
+  obniżonym progu pewności błędnie dopasowują EPSG:32634 (UTM 34N — obraz
+  wylądowałby ok. 6900 km dalej). Układ pliku to EPSG:2178 (PL-2000
+  strefa 7), jak `horizontal_crs` w sidecarze. W QGIS ustaw układ warstwy
+  na EPSG:2178; narzędziu wymagającemu kodu podaj go bez zmiany pliku:
+  `gdal_translate -of VRT -a_srs EPSG:2178 plik.tif plik.vrt`. Nie używaj
+  `gdal_edit.py` na pliku w magazynie — zmiana bajtów łamie sumę SHA-256
+  wersji i przypięcia projektu. Kampanie z kodem EPSG w pliku (np. Gdańsk
+  2024, EPSG:2177) tego nie wymagają.
 - ZABAGED: klasy nie są przeliczane na kody BDOT10k, a warstwy pliku
   krajowego mają inne nazwy niż wynik obszaru; HY-NET: wynik obszaru bez
   skrzyżowań cieków (tylko w pliku krajowym, EPSG:3045), pola warstw

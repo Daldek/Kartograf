@@ -6,11 +6,13 @@ laz``) is a thin layer over this module: it prints messages and translates
 the result into an exit code. There is no ``print`` or argparse here.
 
 Flow: bbox in any supported CRS -> EPSG:2180 (Czech CRSs only via the pinned
-operation) -> ``GugikLazProvider.select_tiles`` (WFS, tile selection from the
-newest vintage without duplicating the area) -> ``_run_laz_download``
-(parallel downloads into ``versions/``, mandatory version sidecars and
-standard hardlinks; tile failures collected). Public pair (Z2):
-``download_laz_area`` / ``check_laz_area`` with the same selection arguments.
+operation) or a sheet code -> its frame in EPSG:2180 and the envelope of
+the frame -> ``GugikLazProvider.select_tiles`` (WFS for the envelope, tile
+selection for the area from the newest vintage without duplicating it) ->
+``_run_laz_download`` (parallel downloads into ``versions/``, mandatory
+version sidecars and standard hardlinks; tile failures collected). Public
+pair (Z2): ``download_laz_area`` / ``check_laz_area`` with the same
+selection arguments.
 
 Example::
 
@@ -36,7 +38,8 @@ from pathlib import Path
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import bbox_coords
-from kartograf.core.sheet_parser import BBox
+from kartograf.core.coverage import Polygon
+from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.area import bbox_to_2180
 from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.fetch import (
@@ -67,6 +70,7 @@ from kartograf.providers.pl.gugik_laz import (
     LazTileSelection,
     SupersededLazTile,
 )
+from kartograf.providers.pl.skorowidz_wfs import sheet_frame_2180
 
 # (processed tiles, tiles selected for execution) — called in the caller's
 # thread; ``(0, total)`` comes once before the first tile download.
@@ -349,9 +353,31 @@ def _run_laz_download(
     )
 
 
+def _validate_area(bbox: BBox | None, sheet: str | None) -> None:
+    """Exactly one of ``bbox``/``sheet``, valid - before any request."""
+    if (bbox is None) == (sheet is None):
+        raise ValidationError(
+            "LAZ PL: podaj dokladnie jedno z sheet (godlo) albo bbox (obszar)"
+        )
+    if sheet is not None:
+        SheetParser(sheet)  # ParseError: an invalid sheet code
+    elif bbox is not None:
+        validate_request_bbox(bbox)
+
+
+def _query_area(bbox: BBox | None, sheet: str | None) -> tuple[BBox, Polygon | None]:
+    """EPSG:2180 WFS query window of the request and the sheet frame
+    (``None`` for a bbox: the window is the area)."""
+    if sheet is not None:
+        return SheetParser(sheet).get_bbox(crs="EPSG:2180"), sheet_frame_2180(sheet)
+    assert bbox is not None  # _validate_area
+    return bbox_to_2180(bbox), None
+
+
 @contextmanager
 def _selected(
-    bbox: BBox,
+    bbox: BBox | None,
+    sheet: str | None,
     *,
     vertical_crs: str,
     year: int | None,
@@ -365,7 +391,8 @@ def _selected(
     force: bool,
     sink: NoticeSink,
 ) -> Iterator[tuple[GugikLazProvider, LazTileSelection, BBox]]:
-    """Provider, WFS tile selection and EPSG:2180 area of one LAZ request.
+    """Provider, WFS tile selection and EPSG:2180 query window of one LAZ
+    request (a sheet: tiles of its frame, not of the envelope).
 
     The ``LAZ_SUPERSEDED`` notice is emitted right after the selection; an
     empty selection raises ``NoCoverageError`` after that notice. Library
@@ -380,7 +407,7 @@ def _selected(
         if value is not None:
             require_int(value, name)
     require_bool(all_campaigns, "all_campaigns")
-    area = bbox_to_2180(bbox)
+    area, frame = _query_area(bbox, sheet)
     with open_cache(cache, force=force, on_notice=sink.add) as metadata:
         if provider is None:
             # looked up on the module: callers patch the class at its source
@@ -402,6 +429,7 @@ def _selected(
             all_campaigns=all_campaigns,
             min_year=min_year,
             max_year=max_year,
+            frame=frame,
         )
         _emit_superseded(sink, selection.superseded)
         if not selection.tiles:
@@ -416,27 +444,30 @@ def _tile_label(tile: LazTile) -> str:
 def _emit_superseded(
     sink: NoticeSink, superseded: tuple[SupersededLazTile, ...]
 ) -> None:
-    """``LAZ_SUPERSEDED``: tiles skipped during selection, one line per tile."""
-    if not superseded:
+    """``LAZ_SUPERSEDED``: tiles covered by newer ones, one line per tile.
+
+    Tiles outside the area (an edge contact, the WFS envelope only) stay in
+    ``superseded`` with reason ``"outside"`` but are not reported: they are
+    not part of the requested area.
+    """
+    covered = [entry for entry in superseded if entry.covered_by]
+    if not covered:
         return
     lines = [
-        f"pominieto {len(superseded)} kafli LAZ - obszar pokrywaja nowsze kafle "
+        f"pominieto {len(covered)} kafli LAZ - obszar pokrywaja nowsze kafle "
         "(domyslnie najnowszy rocznik per obszar; inny rocznik: "
         "--year/--min-year/--max-year)"
     ]
-    for entry in superseded:
-        if entry.covered_by:
-            covering = ", ".join(_tile_label(t) for t in entry.covered_by)
-            reason = f"pokryty przez {covering}"
-        else:
-            reason = "rama kafla nie przecina obszaru (tylko obwiednia WFS)"
-        lines.append(f"  {_tile_label(entry.tile)}: {reason}")
+    for entry in covered:
+        covering = ", ".join(_tile_label(t) for t in entry.covered_by)
+        lines.append(f"  {_tile_label(entry.tile)}: pokryty przez {covering}")
     sink.emit("info", LAZ_SUPERSEDED, "\n".join(lines))
 
 
 def check_laz_area(
-    bbox: BBox,
+    bbox: BBox | None = None,
     *,
+    sheet: str | None = None,
     output_dir: str | Path,
     vertical_crs: str,
     year: int | None = None,
@@ -453,11 +484,14 @@ def check_laz_area(
 
     The tile selection queries the WFS (as the download does); no LAZ bytes
     are transferred. Raises the same errors as the download's selection.
+    The source is always asked (``--check-updates``): the metadata cache is
+    refreshed, never read.
     """
-    validate_request_bbox(bbox)
+    _validate_area(bbox, sheet)
     sink = NoticeSink(on_notice)
     with _selected(
         bbox,
+        sheet,
         vertical_crs=vertical_crs,
         year=year,
         min_density=min_density,
@@ -467,7 +501,7 @@ def check_laz_area(
         provider=provider,
         tolerance_m=tolerance_m,
         cache=cache,
-        force=False,
+        force=True,
         sink=sink,
     ) as (selected_provider, selection, _area):
         return _check_selection(
@@ -476,8 +510,9 @@ def check_laz_area(
 
 
 def download_laz_area(
-    bbox: BBox,
+    bbox: BBox | None = None,
     *,
+    sheet: str | None = None,
     output_dir: str | Path,
     vertical_crs: str,
     year: int | None = None,
@@ -500,10 +535,14 @@ def download_laz_area(
 
     Parameters
     ----------
-    bbox : BBox
+    bbox : BBox, optional
         Area in any supported CRS; converted to EPSG:2180 (Czech CRSs via
         the pinned operation), e.g. a geometry envelope from
         ``get_overall_bbox(path, target_crs="EPSG:2180")``.
+    sheet : str, optional
+        Instead of ``bbox``: a PL-1992 or PL-2000 sheet code. The WFS is
+        asked for the envelope of its frame, the tiles are those reaching
+        into the frame itself (neighbouring sheets only touch it).
     output_dir : str or Path
         Explicit base directory for LAZ tiles and their sidecars.
     vertical_crs : str
@@ -549,8 +588,10 @@ def download_laz_area(
     Raises
     ------
     ValidationError
-        Unknown/mismatched ``vertical_crs`` or invalid year bounds /
-        ``update`` mode.
+        Not exactly one of ``bbox``/``sheet``, unknown/mismatched
+        ``vertical_crs`` or invalid year bounds / ``update`` mode.
+    ParseError
+        An invalid ``sheet`` code.
     TransformError
         No safe pinned operation from a Czech CRS of ``bbox``.
     DownloadError
@@ -560,12 +601,13 @@ def download_laz_area(
     NoCoverageError
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
-    validate_request_bbox(bbox)
+    _validate_area(bbox, sheet)
     validate_update(update)
     require_int(workers, "workers")
     sink = NoticeSink(on_notice)
     with _selected(
         bbox,
+        sheet,
         vertical_crs=vertical_crs,
         year=year,
         min_density=min_density,

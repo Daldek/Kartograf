@@ -28,6 +28,7 @@ from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
     GugikLazProvider,
     LazTile,
+    select_all_intersecting,
     select_newest_cover,
 )
 
@@ -213,6 +214,34 @@ class TestSelectTilesOnRealWfs:
 
 
 AREA = BBox(100, 100, 200, 200, "EPSG:2180")
+
+
+@pytest.mark.parametrize("select", [select_newest_cover, select_all_intersecting])
+def test_tile_touching_the_area_edge_is_outside(select):
+    """A neighbour sharing an edge with the area (GUGiK frames rounded to
+    1 cm) or a corner reaching mm into it is not a tile of the area."""
+    inner = _tile("IN", 2024, _square(100, 100, 200, 200))
+    edge = _tile("EDGE", 2024, _square(199.99, 100, 300, 200))
+    corner = _tile("CORNER", 2024, _square(199.995, 199.995, 300, 300))
+    selection = select([inner, edge, corner], AREA)
+    assert [t.sheet for t in selection.tiles] == ["IN"]
+    assert sorted((s.tile.sheet, s.reason) for s in selection.superseded) == [
+        ("CORNER", "outside"),
+        ("EDGE", "outside"),
+    ]
+
+
+def test_area_narrower_than_twice_the_tolerance_takes_every_overlap():
+    """1 x 1 m across the edge of two tiles: no part of it lies 1 m inside a
+    tile, so every overlapping tile counts (instead of none - no data)."""
+    west = _tile("W", 2024, _square(0, 0, 200, 300))
+    east = _tile("E", 2024, _square(200, 0, 400, 300))
+    area = BBox(199.5, 100, 200.5, 101, "EPSG:2180")
+    every = select_all_intersecting([west, east], area)
+    assert sorted(t.sheet for t in every.tiles) == ["E", "W"]
+    newest = select_newest_cover([west, east], area)
+    assert [t.sheet for t in newest.tiles] == ["E"]  # W: a 0.5 m strip
+    assert [s.reason for s in newest.superseded] == ["covered"]
 
 
 class TestSelectNewestCover:

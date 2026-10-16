@@ -978,6 +978,42 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Naprawione
 
+- LAZ PL `--sheet`: kafle wybierane z ramy arkusza (w EPSG:2180 obrocony
+  czworokat), nie z jej obwiedni, a kafel musi siegac w obszar glebiej niz
+  1 m (`tolerance_m`): sasiedzi stykajacy sie z rama krawedzia albo
+  naroznikiem (ramy GUGiK zaokraglone do 1 cm) i kafel siegajacy
+  w `--bbox` o milimetry nie sa pobierane. Przyklad z USAGE 1.1 (`--sheet
+  N-34-130-D-d-2-4`) pobieral 13 kafli (1,83 GB) zamiast 4 (575 MB), arkusz
+  1:5000 - 6 kafli zamiast 1 (test na zywo 2026-10-16). To samo w
+  `elevation availability --product laz --sheet` (pole i kafle ramy).
+  Biblioteka: `download_laz_area`/`check_laz_area(sheet=)` (dokladnie jedno
+  z `bbox`/`sheet`, jak `download_cz_laz`), `select_tiles(frame=)`,
+  `select_newest_cover`/`select_all_intersecting` z rama jako wielokatem
+  EPSG:2180, `select_all_intersecting(tolerance_m=)`. `Info:` o pominietych
+  kaflach wymienia tylko kafle pokryte przez nowsze; kafle spoza obszaru
+  zostaja w `superseded` z powodem `outside`.
+- `--check-updates` (oraz `check_data`, `check_*`, `LandCoverManager.check`)
+  zawsze pyta zrodlo: cache metadanych jest otwierany w trybie
+  odswiezania (odczyt pominiety, wpisy zapisane od nowa) w kazdym torze.
+  Dotad arkusze PL (NMT/NMPT/orto), archiwa, pliki NMT 100 m, kolekcje,
+  LAZ CZ, arkusze CZ i land cover odpowiadaly z cache (TTL 7 dni) - takze
+  offline `aktualne`, a nowy lot opublikowany w tym czasie byl niewidoczny
+  (test na zywo 2026-10-16). Bez sieci sprawdzenie konczy sie teraz
+  `Error:`. Domyslne pobieranie i `--upgrade` czytaja cache jak dotad.
+- Dokumentacja: USAGE 7 - orto ukosna Krakow 2021 ma w GeoTIFF wlasny opis
+  ukladu bez kodu EPSG (GDAL zgaduje EPSG:32634); uklad pliku to EPSG:2178
+  jak w sidecarze, z obejsciem bez zmiany pliku.
+- CLI (test na zywo 2026-10-16): `kartograf` i `<grupa>` bez komendy
+  wypisuja pomoc na stderr z kodem 2 (dotad 0 - skrypt z pomylka
+  "przechodzil"); Ctrl-C konczy sie `Error: przerwano (Ctrl-C)` i kodem 130
+  zamiast tracebacku; `--check-updates --plan` do nieistniejacego katalogu
+  = `Error:` przed siecia (dotad po calym sprawdzeniu zrodla); bez plikow
+  (awaria WFS LAZ) brak podsumowania `Nowe: 0, ..., bledy: 0` przeczacego
+  linii `Error:`; ponowienia zapytan HTTP to linie `Warning:` z krotka
+  przyczyna (`HTTP 503`, `przekroczony czas odpowiedzi`, `brak sieci albo
+  DNS`, `zerwane albo odrzucone polaczenie`) zamiast surowego wyjatku
+  urllib3 (ok. 500 znakow); pelny wyjatek w lancuchu przyczyn
+  (`KARTOGRAF_DEBUG=1`).
 - Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
   `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca
   `^[A-Z]{4}[0-9]{2}$`), wiec `--sheet AS91` (DMR 4G) konczyl sie bledem

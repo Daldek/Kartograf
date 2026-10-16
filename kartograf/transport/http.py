@@ -20,6 +20,7 @@ from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import requests
+from urllib3.exceptions import NameResolutionError
 
 from kartograf.exceptions import DownloadError
 
@@ -73,6 +74,27 @@ def retry_wait(exc: requests.RequestException, backoff: float) -> float:
     if seconds < 0:
         return backoff
     return max(backoff, min(seconds, MAX_RETRY_AFTER))
+
+
+def failure_reason(exc: requests.RequestException | None) -> str:
+    """Short class of a failed request for user lines (``proba 1/3 nieudana
+    (...)``): the HTTP code, a timeout, no network/DNS or a broken connection.
+    The full exception stays in the cause chain (``KARTOGRAF_DEBUG=1``)."""
+    if exc is None:  # retries=0: no attempt was made
+        return "bez proby"
+    status = http_status(exc)
+    if status is not None:
+        return f"HTTP {status}"
+    if isinstance(exc, requests.Timeout):
+        return "przekroczony czas odpowiedzi"
+    reason = getattr(exc.args[0], "reason", None) if exc.args else None
+    if isinstance(reason, NameResolutionError):
+        return "brak sieci albo DNS (nieznana nazwa serwera)"
+    if isinstance(
+        exc, requests.ConnectionError | requests.exceptions.ChunkedEncodingError
+    ):
+        return "zerwane albo odrzucone polaczenie"
+    return type(exc).__name__
 
 
 def http_failure(
@@ -178,16 +200,18 @@ def get_with_retry(
             if attempt < retries - 1:
                 delay = retry_wait(exc, backoff_delay(attempt))
                 logger.warning(
-                    "%s: proba %s/%s nieudana: %s; ponowienie za %ss",
+                    "%s: proba %s/%s nieudana (%s); ponowienie za %ss",
                     context,
                     attempt + 1,
                     retries,
-                    exc,
+                    failure_reason(exc),
                     delay,
                 )
+                logger.debug("%s: %r", context, exc)
                 time.sleep(delay)
     raise http_failure(
-        f"{context}: pobranie nieudane po {retries} probach: {last_error}",
+        f"{context}: pobranie nieudane po {retries} probach "
+        f"({failure_reason(last_error)})",
         last_error,
     ) from last_error
 
@@ -245,16 +269,18 @@ def head_signal(
             if attempt < retries - 1:
                 delay = retry_wait(exc, backoff_delay(attempt))
                 logger.warning(
-                    "%s: proba %s/%s nieudana: %s; ponowienie za %ss",
+                    "%s: proba %s/%s nieudana (%s); ponowienie za %ss",
                     context,
                     attempt + 1,
                     retries,
-                    exc,
+                    failure_reason(exc),
                     delay,
                 )
+                logger.debug("%s: %r", context, exc)
                 time.sleep(delay)
     raise http_failure(
-        f"{context}: sprawdzenie nieudane po {retries} probach: {last_error}",
+        f"{context}: sprawdzenie nieudane po {retries} probach "
+        f"({failure_reason(last_error)})",
         last_error,
     ) from last_error
 
@@ -344,16 +370,18 @@ def download_to(
             if attempt < retries - 1:
                 wait = retry_wait(e, backoff_delay(attempt))
                 logger.warning(
-                    "Pobranie %s nieudane (proba %s/%s): %s; ponowienie za %ss",
+                    "Pobranie %s nieudane (proba %s/%s: %s); ponowienie za %ss",
                     context,
                     attempt + 1,
                     retries,
-                    e,
+                    failure_reason(e),
                     wait,
                 )
+                logger.debug("%s: %r", context, e)
                 time.sleep(wait)
 
     raise http_failure(
-        f"Nie udalo sie pobrac {context} po {retries} probach: {last_error}",
+        f"Nie udalo sie pobrac {context} po {retries} probach "
+        f"({failure_reason(last_error)})",
         last_error,
     ) from last_error

@@ -439,8 +439,8 @@ def check_cz_orto_sheet(
     ``cz_orto``), the current edition from the ATOM feeds, no image download.
 
     ``current``/``newer`` compare the local edition label, ``missing`` = no
-    local file, ``check_failed`` = the feeds could not be read. The feed
-    index is revalidated (conditional GET).
+    local file, ``check_failed`` = the feeds could not be read. The source is
+    always asked: the metadata cache is refreshed, never read.
 
     Raises
     ------
@@ -449,7 +449,7 @@ def check_cz_orto_sheet(
     """
     sheet = cz_orto_sheet(sheet)
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
+    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         release = _release_lookup(_session(), sheet, metadata, refresh=True)
         items = _inspect(_slots(sheet, output_dir), sheet, _edition(release))
     return new_plan(store_id(output_dir), items)

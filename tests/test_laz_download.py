@@ -65,7 +65,15 @@ _WINDOWS = {
         "sheet",
         (486674.8545, 636487.0308, 489050.3833, 638684.3633),
     ),
+    # 2026-10-16: sheet N-34-130-D-d-2-4 (live test of 0.8.0, P2-1)
+    "sheet4": (
+        LAZ_FIXTURES / "real_2026_10_16",
+        "sheet4",
+        (508419.1628, 769911.0903, 510851.5731, 772163.7346),
+    ),
 }
+# the four 1:5000 tiles of N-34-130-D-d-2-4; 9 neighbours share its edges
+SHEET4_TILES = [f"N-34-130-D-d-2-4-{i}" for i in range(1, 5)]
 
 
 def wfs_session(area: str = "w2") -> MagicMock:
@@ -693,6 +701,36 @@ class TestDownloadLazArea:
         pinned.assert_called_once_with(krovak, "EPSG:2180")
         assert [i.unit for i in plan.items] == ["N-34-139-A-c-1-1-3-4"]
 
+    def test_sheet_selects_the_tiles_of_its_frame(self, tmp_path):
+        """Live test 0.8.0 (P2-1): the envelope of the rotated PL-1992 frame
+        brought 9 neighbouring tiles (13 tiles, 1.83 GB instead of 4)."""
+        from unittest.mock import patch
+
+        from kartograf.core.sheet_parser import SheetParser
+
+        args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
+        with patch(
+            "kartograf.transport.http.make_gugik_session",
+            side_effect=lambda: wfs_session("sheet4"),
+        ):
+            by_sheet = check_laz_area(sheet="N-34-130-D-d-2-4", **args)
+            envelope = SheetParser("N-34-130-D-d-2-4").get_bbox(crs="EPSG:2180")
+            by_bbox = check_laz_area(envelope, **args)
+        assert [i.unit for i in by_sheet.items] == SHEET4_TILES
+        # the same window as a bbox: the neighbours overlap it, but not the
+        # tile whose corner reaches 4.6 mm into it
+        units = [i.unit for i in by_bbox.items]
+        assert len(units) == 12 and "N-34-131-C-c-3-1-1" not in units
+
+    def test_sheet_and_bbox_are_exclusive(self, tmp_path):
+        with pytest.raises(ValidationError, match="dokladnie jedno"):
+            check_laz_area(
+                W2_AREA,
+                sheet="N-34-130-D-d-2-4",
+                output_dir=tmp_path,
+                vertical_crs="EVRF2007",
+            )
+
     def test_check_laz_area_same_args(self, tmp_path):
         args = {
             "output_dir": tmp_path,
@@ -892,6 +930,16 @@ class TestCliOnRealWfs:
         for sidecar in sidecars:
             extra = json.loads(sidecar.read_text("utf-8"))["extra"]
             assert "parent_request" not in extra
+
+    def test_sheet_downloads_its_four_tiles_without_notice(self, tmp_path, capsys):
+        """The documented `--sheet N-34-130-D-d-2-4` (USAGE 1.1): the 4 tiles
+        of the sheet; the neighbours touching its frame are not reported."""
+        rc, session = _cli(tmp_path, "--sheet", "N-34-130-D-d-2-4", area="sheet4")
+        assert rc == 0
+        assert sorted(u.rsplit("_", 1)[-1] for u in downloaded_urls(session)) == [
+            f"{tile}.laz" for tile in SHEET4_TILES
+        ]
+        assert "pominieto" not in capsys.readouterr().err
 
     def test_year_downloads_older_system_without_info(self, tmp_path, capsys):
         rc, session = _cli(tmp_path, *self.W2, "--country", "pl", "--year", "2022")
