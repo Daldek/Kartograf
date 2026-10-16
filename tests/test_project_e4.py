@@ -22,13 +22,13 @@ def test_project_downloads_and_verifies_bdoo(tmp_path, monkeypatch):
         project,
         name="bdoo-klasy",
         command="landcover download",
-        options={"source": "bdoo", "teryt": "12", "year": 2023, "layers": ["KUIK"]},
+        options={"product": "bdoo", "teryt": "12", "year": 2023, "layers": ["KUIK"]},
     )
     add_project_task(
         project,
         name="bdoo-obszar",
         command="landcover download",
-        options={"source": "bdoo", "bbox": BORDER, "year": 2023},
+        options={"product": "bdoo", "bbox": BORDER, "year": 2023},
     )
     serve(
         monkeypatch,

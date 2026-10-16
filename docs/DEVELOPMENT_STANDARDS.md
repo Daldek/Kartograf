@@ -1095,8 +1095,9 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 # 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
 # 5. Dodaj eksport do kartograf/__init__.py (__all__)
 # 6. Napisz testy offline w tests/ (fixtury z realnych odpowiedzi serwera)
-# 7. CLI: dopisz zrodlo do choices i pomocy --source w grupie
-#    kartograf/cli/groups/landcover.py (download oraz list-layers); mapowanie
+# 7. CLI: produkt pojawia sie w choices i pomocy --product grupy
+#    kartograf/cli/groups/landcover.py (download oraz list-layers) z rejestru
+#    (LANDCOVER_PRODUCTS); mapowanie
 #    argumentow w kartograf/cli/landcover_cmd.py; nowa grupa komend = jeden
 #    nowy modul kartograf/cli/groups/<grupa>.py z register() (wykrywany
 #    automatycznie, ADR-039); cli/commands.py to tylko fasada

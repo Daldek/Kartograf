@@ -63,9 +63,9 @@ def _bdot(teryts, packages):
 
 # The CLI command of each LandCoverManager source (ADR-039: SoilGrids in ``soil``).
 _COMMAND = {
-    "bdot10k": ["landcover", "download", "--source", "bdot10k"],
-    "corine": ["landcover", "download", "--source", "corine"],
-    "zabaged": ["landcover", "download", "--source", "zabaged"],
+    "bdot10k": ["landcover", "download", "--product", "bdot10k"],
+    "corine": ["landcover", "download", "--product", "corine"],
+    "zabaged": ["landcover", "download", "--product", "zabaged"],
     "soilgrids": ["soil", "download"],
 }
 
@@ -178,7 +178,7 @@ def test_soilgrids_local_version_asks_no_edition(tmp_path):
 
 
 def test_zabaged_area(tmp_path, monkeypatch):
-    """``landcover download --source zabaged --bbox`` = ``LandCoverManager(o,
+    """``landcover download --product zabaged --bbox`` = ``LandCoverManager(o,
     "zabaged").download(bbox=...)``: one GeoPackage of the area, the same
     bytes and sidecar in both stores."""
     serve_zabaged(monkeypatch)

@@ -160,8 +160,8 @@ def test_bdoo_year_required(bdoo, monkeypatch, options, message):
     [
         ({"teryt": "1261"}, "bdoo jest publikowane per wojewodztwo - podaj --teryt 12"),
         ({"teryt": "1"}, "Nieprawidlowy kod TERYT '1'"),
-        ({"teryt": "12", "format": "GML"}, "--format dziala tylko z --source bdot10k"),
-        ({"whole_country": True}, "--whole-country dziala tylko z --source zabaged"),
+        ({"teryt": "12", "format": "GML"}, "--format dziala tylko z --product bdot10k"),
+        ({"whole_country": True}, "--whole-country dziala tylko z --product zabaged"),
     ],
 )
 def test_bdoo_selection_errors(bdoo, monkeypatch, options, message):

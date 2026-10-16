@@ -175,7 +175,7 @@ def test_imagery_new_flags_translation(tmp_path):
 def test_landcover_zabaged_translation(tmp_path):
     """``--whole-country --horizontal-crs`` = ``download(whole_country=True,
     horizontal_crs=...)`` of the ``zabaged`` source; an area passes neither."""
-    argv = ["landcover", "download", "--source", "zabaged", "-o", str(tmp_path)]
+    argv = ["landcover", "download", "--product", "zabaged", "-o", str(tmp_path)]
     with patch(_LANDCOVER) as manager:
         manager.return_value.download.return_value = LandCoverAreaResult(())
         rc = main([*argv, "--whole-country", "--horizontal-crs", "EPSG:3045"])

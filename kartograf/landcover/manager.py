@@ -125,28 +125,28 @@ COLLECTION_SOURCES: dict[str, str] = {
     "data50": "cz.cuzk.data50",
     "data250": "cz.cuzk.data250",
 }
-# Sources of ``landcover download`` (ADR-039; SoilGrids is ``soil download``):
-# the land cover descriptors of the registry in its order, named by the last
-# part of the key (``pl.gugik.bdot10k`` -> ``bdot10k``), and their description
-# in messages and --help texts.
+# Products of ``landcover download`` (ADR-039, ADR-044; SoilGrids is ``soil
+# download``): the land cover descriptors of the registry in its order, named
+# by the last part of the key (``pl.gugik.bdot10k`` -> ``bdot10k``), and their
+# description in messages and --help texts.
 _LANDCOVER = {d.key.rsplit(".", 1)[-1]: d for d in sources_for(product="landcover")}
-LANDCOVER_SOURCES: tuple[str, ...] = tuple(_LANDCOVER)
-LANDCOVER_SOURCE_CHOICES = ", ".join(
+LANDCOVER_PRODUCTS: tuple[str, ...] = tuple(_LANDCOVER)
+LANDCOVER_PRODUCT_CHOICES = ", ".join(
     f"{name} ({d.name}, {d.country})" for name, d in _LANDCOVER.items()
 )
-# How messages name the sources with TERYT units (``teryt``).
-_TERYT_SOURCES = "--source bdot10k (powiat, 4 cyfry) albo bdoo (wojewodztwo, 2 cyfry)"
-# The area selections of a source without TERYT units (CORINE, SoilGrids).
+# How messages name the products with TERYT units (``teryt``).
+_TERYT_PRODUCTS = "--product bdot10k (powiat, 4 cyfry) albo bdoo (wojewodztwo, 2 cyfry)"
+# The area selections of a product without TERYT units (CORINE, SoilGrids).
 _AREA_CHOICES = "--sheet, --bbox albo --geometry"
 
-# Options belonging to a different source are input errors; options not
-# belonging to any source are programming errors (e.g. removed output_path).
+# Options belonging to a different product are input errors; options not
+# belonging to any product are programming errors (e.g. removed output_path).
 # BDOT10k ``year`` = the yearly archive (ADR-042 D11), BDOO ``year`` = its
 # release (required), CORINE ``year`` = the CORINE edition; BDOO ``layers`` =
 # the classes kept from each package; ``whole_country`` = the national file
 # of the ATOM feed of ZABAGED, Data50 or Data250 in the CRS
 # ``horizontal_crs``.
-_SOURCE_OPTIONS: dict[str, frozenset[str]] = {
+_PRODUCT_OPTIONS: dict[str, frozenset[str]] = {
     "bdot10k": frozenset({"format", "layers", "keep_raw", "year"}),
     "bdoo": frozenset({"year", "layers"}),
     "corine": frozenset({"year"}),
@@ -156,11 +156,11 @@ _SOURCE_OPTIONS: dict[str, frozenset[str]] = {
     "data250": frozenset({"whole_country", "horizontal_crs"}),
 }
 _OPTIONS: dict[type, frozenset[str]] = {
-    Bdot10kProvider: _SOURCE_OPTIONS["bdot10k"] | {"timeout"},
-    CorineProvider: _SOURCE_OPTIONS["corine"] | {"timeout"},
-    SoilGridsProvider: _SOURCE_OPTIONS["soilgrids"] | {"timeout"},
+    Bdot10kProvider: _PRODUCT_OPTIONS["bdot10k"] | {"timeout"},
+    CorineProvider: _PRODUCT_OPTIONS["corine"] | {"timeout"},
+    SoilGridsProvider: _PRODUCT_OPTIONS["soilgrids"] | {"timeout"},
 }
-_KNOWN_OPTIONS = frozenset().union(*_SOURCE_OPTIONS.values(), {"timeout"})
+_KNOWN_OPTIONS = frozenset().union(*_PRODUCT_OPTIONS.values(), {"timeout"})
 _REQUIRED: dict[type, tuple[str, ...]] = {
     Bdot10kProvider: (),
     CorineProvider: ("year",),
@@ -187,22 +187,22 @@ _TRACK: Track = "landcover"
 _SlotKey = tuple[str, str, str]
 
 
-def require_landcover_source(source: object) -> str:
-    """``source`` of ``landcover download``: one of ``LANDCOVER_SOURCES``.
+def require_landcover_product(product: object) -> str:
+    """``product`` of ``landcover download``: one of ``LANDCOVER_PRODUCTS``.
 
     Raises
     ------
     ValidationError
-        Missing source or a source of another command (SoilGrids).
+        Missing product or a product of another command (SoilGrids).
     """
-    if source is None:
-        raise ValidationError(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
-    if not isinstance(source, str) or source not in LANDCOVER_SOURCES:
+    if product is None:
+        raise ValidationError(f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}")
+    if not isinstance(product, str) or product not in LANDCOVER_PRODUCTS:
         raise ValidationError(
-            f"--source {source!r}: nieznana wartosc - dostepne: "
-            f"{LANDCOVER_SOURCE_CHOICES}"
+            f"--product {product!r}: nieznana wartosc - dostepne: "
+            f"{LANDCOVER_PRODUCT_CHOICES}"
         )
-    return source
+    return product
 
 
 def _archive_channel(key: str) -> AccessChannel:
@@ -882,7 +882,7 @@ class LandCoverManager:
             bbox = validate_request_bbox(bbox)
         source = self._provider_name
         assert source is not None and self._collection is not None
-        allowed = _SOURCE_OPTIONS[source] | {"timeout"}
+        allowed = _PRODUCT_OPTIONS[source] | {"timeout"}
         unknown = sorted(set(options) - _KNOWN_OPTIONS)
         if unknown:
             raise TypeError(
@@ -892,9 +892,9 @@ class LandCoverManager:
             if name not in allowed and value is not None:
                 if name in ("keep_raw", "whole_country") and not value:
                     continue
-                owners = [s for s, names in _SOURCE_OPTIONS.items() if name in names]
+                owners = [s for s, names in _PRODUCT_OPTIONS.items() if name in names]
                 raise ValidationError(
-                    f"--{name.replace('_', '-')} dziala tylko z --source "
+                    f"--{name.replace('_', '-')} dziala tylko z --product "
                     f"{' albo '.join(owners)}"
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
@@ -913,7 +913,7 @@ class LandCoverManager:
             )
         if teryt is not None and get_source(self._collection).country != "PL":
             raise ValidationError(
-                f"--teryt dziala tylko z {_TERYT_SOURCES}; --source {source}: "
+                f"--teryt dziala tylko z {_TERYT_PRODUCTS}; --product {source}: "
                 "podaj --bbox, --geometry albo --whole-country"
             )
         return landcover_request(
@@ -1143,23 +1143,23 @@ class LandCoverManager:
         given = [v for v in (teryt, sheet, bbox, geometry) if v is not None]
         provider = self._provider
         bdot = isinstance(provider, Bdot10kProvider)
-        corine = isinstance(provider, CorineProvider)  # else SoilGrids (no --source)
+        corine = isinstance(provider, CorineProvider)  # else SoilGrids (soil group)
         if len(given) != 1:
             if bdot:
                 raise ValidationError(
-                    "Podaj dokladnie jeden wybor dla --source bdot10k: "
+                    "Podaj dokladnie jeden wybor dla --product bdot10k: "
                     f"{selection_choices(self._descriptor_key())}"
                 )
-            where = " dla --source corine" if corine else ""
+            where = " dla --product corine" if corine else ""
             raise ValidationError(
                 f"Podaj dokladnie jeden wybor{where}: {_AREA_CHOICES}"
             )
         check_layer(layer, geometry, landcover=bdot)
         if teryt is not None:
             if not bdot:
-                name = "--source corine" if corine else "SoilGrids"
+                name = "--product corine" if corine else "SoilGrids"
                 raise ValidationError(
-                    f"--teryt dziala tylko z {_TERYT_SOURCES}; {name}: podaj "
+                    f"--teryt dziala tylko z {_TERYT_PRODUCTS}; {name}: podaj "
                     f"{_AREA_CHOICES}"
                 )
             if not provider.validate_admin_unit(teryt):
@@ -1223,14 +1223,14 @@ class LandCoverManager:
             if name not in _OPTIONS[kind] and kwargs[name] is not None:
                 if name in ("keep_raw", "whole_country") and not kwargs[name]:
                     continue
-                sources = [
-                    source
-                    for source, options in _SOURCE_OPTIONS.items()
+                products = [
+                    product
+                    for product, options in _PRODUCT_OPTIONS.items()
                     if name in options
                 ]
                 raise ValidationError(
-                    f"--{name.replace('_', '-')} dziala tylko z --source "
-                    f"{' albo '.join(sources)}"
+                    f"--{name.replace('_', '-')} dziala tylko z --product "
+                    f"{' albo '.join(products)}"
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
         if kwargs.get("timeout") is not None:

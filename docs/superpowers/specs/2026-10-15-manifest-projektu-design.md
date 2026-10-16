@@ -146,7 +146,7 @@ jeszcze niepobrane.
       "name": "pokrycie",
       "command": "landcover download",
       "options": {
-        "source": "bdot10k",
+        "product": "bdot10k",
         "teryt": "1465"
       },
       "pinned_at": null,

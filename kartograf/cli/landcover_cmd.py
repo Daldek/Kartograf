@@ -29,7 +29,7 @@ from kartograf.download.collections import collection_classes, collection_layers
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
-    LANDCOVER_SOURCE_CHOICES,
+    LANDCOVER_PRODUCT_CHOICES,
     LandCoverManager,
 )
 
@@ -40,15 +40,17 @@ _UNIT_SOURCES = ("bdot10k", "bdoo")
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     """``landcover list-layers``: BDOT10k, ZABAGED, Data50 or Data250 layers,
     BDOO classes per release, CORINE years."""
-    if args.source is None:
-        print(f"Error: --source wymagane: {LANDCOVER_SOURCE_CHOICES}", file=sys.stderr)
+    if args.product is None:
+        print(
+            f"Error: --product wymagane: {LANDCOVER_PRODUCT_CHOICES}", file=sys.stderr
+        )
         return 1
-    # the catalogue of the source (no network, nothing written)
-    manager = LandCoverManager(".", args.source, cache=False)
+    # the catalogue of the product (no network, nothing written)
+    manager = LandCoverManager(".", args.product, cache=False)
     print(f"Warstwy zrodla {manager.provider_name}:")
     print()
-    if args.source in COLLECTION_SOURCES:
-        key = COLLECTION_SOURCES[args.source]
+    if args.product in COLLECTION_SOURCES:
+        key = COLLECTION_SOURCES[args.product]
         classes = collection_classes(key)
         if classes:
             _print_classes(classes)
@@ -62,7 +64,7 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         )
         return 0
     provider: Any = manager.provider
-    if args.source == "bdot10k":
+    if args.product == "bdot10k":
         for layer in provider.get_available_layers():
             desc = provider.get_layer_description(layer)
             print(f"    {layer}  - {desc}")
@@ -134,7 +136,7 @@ def _landcover_options(args: argparse.Namespace) -> dict:
 def landcover_task_arguments(args: argparse.Namespace) -> dict:
     """Data options shared by ``landcover download`` and ``project add``."""
     return {
-        "source": args.source,
+        "product": args.product,
         "teryt": args.teryt,
         **area_task_arguments(args),
         **_landcover_options(args),
@@ -144,8 +146,8 @@ def landcover_task_arguments(args: argparse.Namespace) -> dict:
 def cmd_landcover_download(args: argparse.Namespace) -> int:
     """``landcover download``: flags -> ``LandCoverManager.download``/``.check``."""
     missing = []
-    if args.source is None:
-        missing.append(f"--source wymagane: {LANDCOVER_SOURCE_CHOICES}")
+    if args.product is None:
+        missing.append(f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}")
     if args.output is None:
         missing.append(
             "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/...)"
@@ -156,7 +158,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         return 1
     options = _landcover_options(args)
     return run_land_cover(
-        args, args.source, options, teryt=args.teryt, workers=args.workers
+        args, args.product, options, teryt=args.teryt, workers=args.workers
     )
 
 

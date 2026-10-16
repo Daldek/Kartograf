@@ -507,7 +507,7 @@ class TestCommandGroups:
             {"orto", "intensity", "true-orto", "oblique-orto"},
         ),
         "landcover": (
-            "--source",
+            "--product",
             {"bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"},
         ),
         "boundaries": (
@@ -543,12 +543,20 @@ class TestCommandGroups:
                 [
                     "landcover",
                     "download",
-                    "--source",
+                    "--product",
                     "soilgrids",
                     "--sheet",
                     "N-34-130-D",
                 ],
                 "kartograf soil download",
+            ),
+            (
+                ["landcover", "download", "-s", "soilgrids", "--sheet", "N-34-130-D"],
+                "kartograf soil download",
+            ),
+            (
+                ["landcover", "list-layers", "--product=soilgrids"],
+                "kartograf soil list-layers",
             ),
             (
                 ["landcover", "list-layers", "--source=soilgrids"],
@@ -560,7 +568,9 @@ class TestCommandGroups:
             "download-orto",
             "soilgrids-hsg",
             "landcover-soilgrids",
+            "landcover-0.7-soilgrids",
             "list-layers-soilgrids",
+            "list-layers-0.7-soilgrids",
         ],
     )
     def test_removed_command_names_its_replacement(self, argv, replacement, capsys):
@@ -3215,7 +3225,7 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--teryt",
                 "1465",
@@ -3256,7 +3266,7 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--sheet",
                 "N-34-130-D",
@@ -3283,7 +3293,7 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--bbox",
                 "450000,550000,460000,560000",
@@ -3298,8 +3308,8 @@ class TestCmdLandcoverDownload:
         assert "out.gpkg: nowa wersja " in captured.out
 
     @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_source_corine(self, mock_mgr_cls, capsys, tmp_path):
-        """--source corine creates manager with corine provider."""
+    def test_landcover_download_product_corine(self, mock_mgr_cls, capsys, tmp_path):
+        """--product corine creates manager with corine provider."""
         mock_mgr = Mock()
         mock_mgr.provider_name = "CORINE Land Cover"
         mock_mgr.output_dir = tmp_path
@@ -3310,7 +3320,7 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "corine",
                 "--sheet",
                 "N-34-130-D",
@@ -3338,7 +3348,7 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--teryt",
                 "1465",
@@ -3356,7 +3366,7 @@ class TestCmdLandcoverDownload:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "-o",
                 "unused",
@@ -3374,8 +3384,8 @@ class TestCmdLandcoverDownload:
     @pytest.mark.parametrize(
         ("flags", "missing", "choices"),
         [
-            (["-o", "out"], "--source", "bdot10k"),
-            (["--source", "bdot10k"], "--output", "katalog"),
+            (["-o", "out"], "--product", "bdot10k"),
+            (["--product", "bdot10k"], "--output", "katalog"),
         ],
     )
     def test_missing_manager_argument_fails_before_download(
@@ -3390,12 +3400,12 @@ class TestCmdLandcoverDownload:
         assert err.startswith("Error: ")
         assert missing in err and choices in err
 
-    def test_list_layers_without_source_fails_with_choices(self, capsys):
+    def test_list_layers_without_product_fails_with_choices(self, capsys):
         rc = main(["landcover", "list-layers"])
         assert rc == 1
         err = capsys.readouterr().err
-        assert err.startswith("Error: --source")
-        assert all(source in err for source in ("bdot10k", "corine"))
+        assert err.startswith("Error: --product")
+        assert all(product in err for product in ("bdot10k", "corine"))
 
 
 # ===========================================================================
@@ -3650,7 +3660,7 @@ class TestCmdSoil:
 
 def test_landcover_download_no_selection(capsys):
     """No selection method -> exit 1."""
-    result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
+    result = main(["landcover", "download", "--product", "bdot10k", "-o", "unused"])
     assert result == 1
     captured = capsys.readouterr()
     assert "Error: Podaj dokladnie jeden wybor" in captured.err
@@ -4089,7 +4099,7 @@ class TestCmdLandcoverDownloadGeometry:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--geometry",
                 str(shp_file),
@@ -4115,7 +4125,7 @@ class TestCmdLandcoverDownloadGeometry:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--geometry",
                 str(shp_file),
@@ -4137,7 +4147,7 @@ class TestCmdLandcoverDownloadGeometry:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "--geometry",
                 str(tmp_path / "nonexistent.shp"),

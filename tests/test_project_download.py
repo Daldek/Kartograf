@@ -87,7 +87,7 @@ FIRST = {
     ),
     "bdot10k-area-keep-raw": (
         "landcover download",
-        {"source": "bdot10k", "bbox": BDOT_BBOX, "keep_raw": True},
+        {"product": "bdot10k", "bbox": BDOT_BBOX, "keep_raw": True},
         lambda: bdot(["0208", "0261"]),
         ["output", "raw", "output", "raw"],
     ),
@@ -101,7 +101,7 @@ FIRST = {
     ),
     "corine-preview": (
         "landcover download",
-        {"source": "corine", "sheet": "M-33-036-A", "year": 2018},
+        {"product": "corine", "sheet": "M-33-036-A", "year": 2018},
         lambda: landcover_sources(corine=_corine),
         ["output"],
     ),
@@ -183,7 +183,7 @@ def test_registry_variant_task_pins_file_of_its_segment(tmp_path):
 
 def test_incomplete_task_pins_nothing_and_retry_reuses_store(tmp_path):
     project = new_project(tmp_path)
-    options = {"source": "bdot10k", "bbox": BDOT_BBOX}
+    options = {"product": "bdot10k", "bbox": BDOT_BBOX}
     add_project_task(
         project, name="pokrycie", command="landcover download", options=options
     )
@@ -355,7 +355,7 @@ def test_restore_on_empty_store_same_content(tmp_path, monkeypatch):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "teryt": "1465"},
+        options={"product": "bdot10k", "teryt": "1465"},
     )
     with pl_sheets(), bdot(["1465"]):
         assert download_project(project).ok
@@ -402,7 +402,7 @@ def test_restore_partial_keeps_restored_pins(tmp_path, monkeypatch):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "bbox": BDOT_BBOX},
+        options={"product": "bdot10k", "bbox": BDOT_BBOX},
     )
     with bdot(["0208", "0261"]):
         assert download_project(project).ok
@@ -427,7 +427,7 @@ def test_restore_needs_same_geometry(tmp_path):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "geometry": os.path.relpath(area)},
+        options={"product": "bdot10k", "geometry": os.path.relpath(area)},
     )
     with bdot(["0208"]):
         assert download_project(project).ok
@@ -477,7 +477,7 @@ def test_upgrade_repins_whole_task(tmp_path, monkeypatch):
 
 def test_upgrade_failure_keeps_all_pins(tmp_path):
     project = new_project(tmp_path)
-    options = {"source": "bdot10k", "bbox": BDOT_BBOX}
+    options = {"product": "bdot10k", "bbox": BDOT_BBOX}
     add_project_task(
         project, name="pokrycie", command="landcover download", options=options
     )
@@ -513,7 +513,7 @@ def test_upgrade_without_signal_keeps_pin(tmp_path):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "teryt": "1465"},
+        options={"product": "bdot10k", "teryt": "1465"},
     )
     with bdot(["1465"]):
         assert download_project(project).ok
@@ -543,7 +543,7 @@ def test_force_same_content_keeps_pin_new_content_repins(tmp_path, monkeypatch):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "teryt": "1465"},
+        options={"product": "bdot10k", "teryt": "1465"},
     )
     with bdot(["1465"]):
         assert download_project(project).ok
@@ -612,7 +612,7 @@ def test_upgrade_accepts_changed_geometry(tmp_path):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "geometry": os.path.relpath(area)},
+        options={"product": "bdot10k", "geometry": os.path.relpath(area)},
     )
     with bdot(["0208"]):
         assert download_project(project).ok

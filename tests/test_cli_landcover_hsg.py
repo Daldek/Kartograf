@@ -46,7 +46,7 @@ def _session(fake):
 
 
 def _lc(tmp_path, *argv):
-    """``landcover download`` (``argv`` with ``--source``) into ``<tmp>/out``."""
+    """``landcover download`` (``argv`` with ``--product``) into ``<tmp>/out``."""
     return main(["landcover", "download", *argv, "-o", str(tmp_path / "out")])
 
 
@@ -143,7 +143,7 @@ def test_landcover_status_lines_and_summary(tmp_path, capsys, caplog):
         ),
         patch.object(Bdot10kProvider, "download_package", side_effect=package),
     ):
-        rc = _lc(tmp_path, "--source", "bdot10k", "--bbox", BBOX_ARG)
+        rc = _lc(tmp_path, "--product", "bdot10k", "--bbox", BBOX_ARG)
     assert rc == 1
     captured = capsys.readouterr()
     assert "landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: nowa wersja " in captured.out
@@ -166,9 +166,11 @@ def test_landcover_bdot_rerun_unchecked_line(tmp_path, capsys):
         return Bdot10kPackage(path=output_path, teryt=code, url="u", format="GPKG")
 
     with patch.object(Bdot10kProvider, "download_package", side_effect=package) as pkg:
-        assert _lc(tmp_path, "--source", "bdot10k", "--teryt", "1465") == 0
-        assert _lc(tmp_path, "--source", "bdot10k", "--teryt", "1465") == 0
-        assert _lc(tmp_path, "--source", "bdot10k", "--teryt", "1465", "--upgrade") == 0
+        assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "1465") == 0
+        assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "1465") == 0
+        assert (
+            _lc(tmp_path, "--product", "bdot10k", "--teryt", "1465", "--upgrade") == 0
+        )
     assert pkg.call_count == 1
     captured = capsys.readouterr()
     assert "landcover/pl_bdot10k_gpkg/teryt/1465.gpkg: lokalna wersja " in captured.out
@@ -184,7 +186,7 @@ def test_landcover_check_keep_raw_lines_name_each_file(tmp_path, capsys):
         "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
         return_value=["0208"],
     ):
-        argv = ["--source", "bdot10k", "--bbox", BBOX_ARG, "--keep-raw"]
+        argv = ["--product", "bdot10k", "--bbox", BBOX_ARG, "--keep-raw"]
         rc = _lc(tmp_path, *argv, "--check-updates")
     assert rc == 0
     assert capsys.readouterr().out.splitlines() == [
@@ -198,7 +200,7 @@ def test_landcover_corine_preview_line(tmp_path, capsys, caplog):
         _session(FakeCorine()),
         patch.object(CorineProvider, "has_clms_token", new=False),
     ):
-        rc = _lc(tmp_path, "--source", "corine", "--year", "2018", "--bbox", BBOX_ARG)
+        rc = _lc(tmp_path, "--product", "corine", "--year", "2018", "--bbox", BBOX_ARG)
     assert rc == 0
     captured = capsys.readouterr()
     assert captured.err == (
@@ -222,7 +224,8 @@ def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
         with pytest.raises(ValidationError) as exc:
             manager.download(sheet="XYZ", year=2018)
         assert (
-            _lc(tmp_path, "--source", "corine", "--sheet", "XYZ", "--year", "2018") == 1
+            _lc(tmp_path, "--product", "corine", "--sheet", "XYZ", "--year", "2018")
+            == 1
         )
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -264,7 +267,7 @@ def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
     ) as exc:
         getattr(manager, mode)(teryt="14")
     flags = ["--check-updates"] if mode == "check" else []
-    assert _lc(tmp_path, "--source", "bdot10k", "--teryt", "14", *flags) == 1
+    assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "14", *flags) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == f"Error: {exc.value}\n"
@@ -285,7 +288,7 @@ def test_invalid_landcover_bbox_matches_cli_and_api(
     with pytest.raises(ValidationError) as exc:
         getattr(manager, mode)(bbox=bbox)
     flags = ["--check-updates"] if mode == "check" else []
-    assert _lc(tmp_path, "--source", "bdot10k", "--bbox", coordinates, *flags) == 1
+    assert _lc(tmp_path, "--product", "bdot10k", "--bbox", coordinates, *flags) == 1
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == f"Error: {exc.value}\n"
@@ -431,7 +434,15 @@ _HSG = "kartograf.hydrology.HSGCalculator"
 
 
 def _bdot(tmp_path, *flags):
-    return ["landcover", "download", "--source", "bdot10k", "-o", str(tmp_path), *flags]
+    return [
+        "landcover",
+        "download",
+        "--product",
+        "bdot10k",
+        "-o",
+        str(tmp_path),
+        *flags,
+    ]
 
 
 def _file(path: Path) -> VersionedFile:
@@ -468,7 +479,7 @@ def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
     argv = [
         "landcover",
         "download",
-        "--source",
+        "--product",
         "corine",
         "--year",
         "2018",
@@ -480,7 +491,7 @@ def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
         *(["SWRS"] if flag == "--layers" else []),
     ]
     assert main(argv) == 1
-    assert f"Error: {flag} dziala tylko z --source bdot10k" in capsys.readouterr().err
+    assert f"Error: {flag} dziala tylko z --product bdot10k" in capsys.readouterr().err
 
 
 def test_keep_raw_flag(tmp_path):

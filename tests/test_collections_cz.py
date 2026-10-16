@@ -188,7 +188,7 @@ def test_zabaged_whole_country_requires_crs(tmp_path, monkeypatch, frozen_clock)
         manager.download(whole_country=True)
     with pytest.raises(ValidationError, match="--teryt"):
         manager.download(teryt="1261")
-    with pytest.raises(ValidationError, match="--source bdot10k"):
+    with pytest.raises(ValidationError, match="--product bdot10k"):
         manager.download(bbox=AREA, format="SHP")
 
     body = zip_bytes(["ZABAGED_RESULTS.gpkg"])

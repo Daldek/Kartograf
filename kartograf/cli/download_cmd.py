@@ -432,9 +432,9 @@ def cmd_download(
 
     ``products``: the ``--product`` values of the group; a missing
     ``--product`` names only them (ADR-039: the group checks the presence of
-    its choice flag, like ``--source`` of ``landcover download``; the value is
-    checked by argparse ``choices`` and by the library). ``None``: the
-    library message naming every product of ``download_data``.
+    its choice flag, as every group with ``--product``; the value is checked
+    by argparse ``choices`` and by the library). ``None``: the library
+    message naming every product of ``download_data``.
     """
     if products is not None:
         require_product(args.product, products)

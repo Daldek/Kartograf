@@ -300,7 +300,7 @@ def test_check_tracks_new_files_removed_files_unverifiable_and_failures(tmp_path
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "teryt": "1465"},
+        options={"product": "bdot10k", "teryt": "1465"},
     )
     tiles = LazTiles("N-33-131-B-a-1-1-1", "N-33-131-B-a-1-1-2")
     with laz_tiles(tiles), bdot(["1465"]):
@@ -357,7 +357,7 @@ def test_check_changed_geometry_warns_and_keeps_pins(tmp_path):
         project,
         name="pokrycie",
         command="landcover download",
-        options={"source": "bdot10k", "geometry": os.path.relpath(area)},
+        options={"product": "bdot10k", "geometry": os.path.relpath(area)},
     )
     with bdot(["0208"]):
         assert download_project(project).ok
