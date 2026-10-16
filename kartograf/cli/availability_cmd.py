@@ -278,9 +278,13 @@ def _print_pl_footer(found: list[AvailabilityCombination]) -> None:
         )
         return
     print(f"Najnowsza kompletna kombinacja: {_label(newest)}")
-    for hint in newest.download_hint:
+    hints = newest.download_hint
+    for hint in hints[:MAX_HINT_LINES]:
         print(f"  Pobranie (dodaj --output KATALOG): kartograf {hint}")
         print(f"  W projekcie: kartograf project add NAZWA {hint}")
+    rest = len(hints) - MAX_HINT_LINES
+    if rest > 0:
+        print(f"  ... pozostale polecenia: {rest} (wszystkie: --details albo --json)")
 
 
 def _print_cz_footer(found: list[AvailabilityCombination]) -> None:

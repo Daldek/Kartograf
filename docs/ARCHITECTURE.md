@@ -2447,8 +2447,8 @@ i tabela CZ (kolumny `MODEL`, `UKLAD`, `ROZDZ.`, `WYSOKOSCI`, `FORMAT`,
 `CUZK nie publikuje lat nalotu; daty = publikacja pliku`), `--details`
 (godla arkuszy niepelnych — CZ: bez pliku —, lad bez arkuszy, polecenia
 kazdej kombinacji), stopka z najnowsza kompletna kombinacja PL i
-z kompletnymi kombinacjami CZ (po `MAX_HINT_LINES` = 5 polecen i liczba
-pozostalych), `--json` = dokladnie
+z kompletnymi kombinacjami CZ (na kombinacje najwyzej `MAX_HINT_LINES`
+= 5 polecen i liczba pozostalych), `--json` = dokladnie
 `AvailabilityReport.to_json()`. `ok=False` (czesc `auto` niesprawdzona)
 = raport wypisany i kod 1. Raport nie jest komenda danych projektu
 (brak `_task`; `project add` go odrzuca). Przyklady i wydruki na zywo:
@@ -2584,14 +2584,26 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
 (magazyn pochodzi z `--output` uzytkownika albo z projektu, ADR-040).
 Obszar jak w zadaniu (`--country pl --bbox ... [--bbox-crs]` albo
 `--geometry PLIK [--layer]` + `--sheet-system`; `--sheet` — samo godlo,
-gdy jego pobranie siega arkuszy kombinacji, inaczej po poleceniu na
-arkusz), dla siatek PL-2000 po jednym poleceniu na skale arkuszy
+gdy kombinacja jest w jego ukladzie (PL-2000: godlo i jego potomkowie),
+inaczej po poleceniu na arkusz),
+dla siatek PL-2000 po jednym poleceniu na skale arkuszy
 (`--scale`), wariant (`--format` dla archiwow, `--resolution`, gdy
 wariant ma etykiete, `--vertical-crs`), `--year`, a `--full-sheet`, gdy
 w ktoryms arkuszu najnowszy rekord roku jest NIE, a pelny rekord tego
-roku istnieje. LAZ: obszar + `--vertical-crs` + `--year`. Polecenie
-wybiera dokladnie arkusze kombinacji (test
-`test_report_sheets_equal_download_selection`). CZ (`_cz_hint`): raster —
+roku istnieje. Regula siatki (decyzja koordynatora 2026-10-16, E2E
+planu B przy Cieszynie): polecenie obszaru albo godla tylko wtedy, gdy
+arkusze, ktore zaplanuje pobranie PL tej skali (`_selected_sheets`:
+siatka calego bboxa `--country pl` bez przyciecia, siatka geometrii albo
+potomkowie godla; jeden wybor na uklad i skale, `functools.cache`), sa
+podzbiorem arkuszy kombinacji; inaczej po poleceniu `--sheet` na arkusz
+z rekordem (`_grid_areas`, PL-2000 osobno dla kazdej skali) — arkusz
+siatki bez rekordu (za granica, morze, brak rekordu roku lub
+rozdzielczosci) dalby `Brak danych` (`check_failed`, kod 1). Archiwa
+(`source_file`) i LAZ: zawsze obszar albo godlo zadania (pobranie
+planuje tylko rekordy skorowidza). LAZ: obszar + `--vertical-crs` +
+`--year`. Polecenie wybiera dokladnie arkusze kombinacji (testy
+`test_report_sheets_equal_download_selection`,
+`test_border_hint_plans_only_sheets_with_records`). CZ (`_cz_hint`): raster —
 po poleceniu na arkusz z plikiem (`elevation download --product nmpt
 --sheet CTES86 --resolution 0.5m --vertical-crs Bpv`, uklad wysokosci
 natywny dla plikow systemu); LAZ — jedno polecenie obszaru zadania
