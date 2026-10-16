@@ -1,4 +1,4 @@
-"""``kartograf elevation``: NMT, NMPT (GUGiK), DMR 5G/4G (CUZK) and LAZ (ADR-039)."""
+"""``kartograf elevation``: NMT, NMPT and LAZ from GUGiK/CUZK (ADR-039)."""
 
 import argparse
 from functools import partial
@@ -26,7 +26,7 @@ from kartograf.download.options import (
     vertical_crs_text,
 )
 from kartograf.sources.descriptor import SourceDescriptor
-from kartograf.sources.variants import CZ_VERTICAL_TEXT
+from kartograf.sources.variants import CZ_VERTICAL_TEXT, cz_model_text
 
 
 def _source_choice(source: SourceDescriptor) -> str:
@@ -34,6 +34,8 @@ def _source_choice(source: SourceDescriptor) -> str:
     ``--vertical-crs`` only when the source has one height system."""
     flags = f"--product {source.product}"
     if source.country == "CZ":
+        if source.product == "laz":
+            return f"{flags} --country cz --model {source.variants[0].model}"
         return f"{flags} --country cz --resolution {source.resolution}"
     if not source.variants or source.product == "laz":
         return flags
@@ -52,23 +54,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     commands = add_group(
         subparsers,
         "elevation",
-        help="Wysokosci: NMT, NMPT, DMR (CZ), chmury punktow LAZ",
-        description="Dane wysokosciowe: arkusze NMT/NMPT z GUGiK (PL), DMR 5G/4G "
-        "z CUZK (CZ), kafle LAZ z GUGiK (PL) albo jeden wycinek wysokosci "
-        "(--cutout).",
+        help="Wysokosci: NMT, NMPT i chmury LAZ (PL i CZ)",
+        description="Dane wysokosciowe NMT/NMPT i chmury punktow LAZ "
+        "z GUGiK (PL) i CUZK (CZ).",
     )
     download = commands.add_parser(
         "download",
         help="Pobierz NMT, NMPT albo LAZ (arkusze, kafle albo wycinek)",
         description=(
-            "Pobierz NMT, NMPT (GUGiK, PL), DMR 5G/4G (CUZK, CZ) albo chmury "
-            "punktow LAZ (GUGiK, PL) do magazynu wersji. Dla PL --bbox/--geometry "
-            "rozwija sie na arkusze zrodlowe (LAZ: kafle), a z --cutout "
-            "--horizontal-crs daje JEDEN wycinek 1 m z WCS GUGiK (ADR-035); "
-            "obszar CZ jest dostepny tylko jako wycinek (--cutout; exportImage "
-            "pobierany natywnie w EPSG:5514, w innym ukladzie reprojektowany "
-            "lokalnie). Dane zrodlowe 1:1 daja arkusze PL i arkusz SM5; kafel "
-            "TM33 to lokalny warp z EPSG:5514 na siatke EPSG:3045 (ADR-024)."
+            "Pobierz NMT, NMPT i chmury punktow LAZ z GUGiK (PL) albo CUZK (CZ) "
+            "do magazynu wersji. PL: --bbox/--geometry wybiera arkusze/kafle LAZ, "
+            "--cutout --horizontal-crs daje wycinek 1 m z WCS GUGiK. "
+            "CZ: rastry SM5/TM33 z plikow CUZK albo ImageServer (kafle TM33 "
+            "DMR 4G i DMP OK z plikow ETRS89/EVRF2007); dla obszaru rastra "
+            "--cutout wymagane. LAZ CZ: --model i arkusz SM5/TM33 albo obszar "
+            "(arkusze z indeksu), bez --cutout i bez transformacji chmur."
         ),
     )
 
@@ -81,15 +81,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     add_area_flags(
         selection,
-        sheet_help="Godlo arkusza - pliki tego arkusza ze zrodla (grubsze godlo "
-        "rozwija sie na arkusze zrodla; LAZ: kafle przecinajace arkusz): PL-1992 "
-        "(np. N-34-130-D-d-2-4), PL-2000 (np. 6.129.30.25.3), CZ SM5 (np. "
-        "CTES96) albo CZ TM33 (np. 302_5550)",
+        sheet_help="Godlo arkusza: PL-1992 (np. N-34-130-D-d-2-4), PL-2000 "
+        "(np. 6.129.30.25.3), CZ SM5 (np. CTES96) albo CZ TM33 (np. "
+        "302_5550). PL LAZ: kafle przecinajace arkusz; CZ LAZ: plik godla",
         bbox_help="Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: "
         "EPSG:2180; ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: "
         "--bbox=-447000,...)",
-        geometry_help="Plik geometrii obszaru (SHP albo GPKG): arkusze i kafle LAZ "
-        "przecinajace obiekty; wycinek (--cutout) - obwiednia geometrii",
+        geometry_help="Plik geometrii (SHP albo GPKG): PL - arkusze/kafle LAZ "
+        "przecinajace obiekty; CZ LAZ - arkusze przecinajace obwiednie "
+        "geometrii; wycinek (--cutout) - obwiednia geometrii",
     )
     selection.add_argument(
         "--country",
@@ -114,12 +114,20 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "pl=WARTOSC,cz=WARTOSC (np. pl=1m,cz=2m)",
     )
     product.add_argument(
+        "--model",
+        metavar="MODEL",
+        default=None,
+        help=f"Model chmury LAZ CZ (wymagany z --product laz gdy zadanie siega CZ): "
+        f"{cz_model_text()}. Z --product laz PL i innym produktem: blad",
+    )
+    product.add_argument(
         "--vertical-crs",
         metavar="VCRS",
         default=None,
         help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}. CZ: "
-        f"{CZ_VERTICAL_TEXT}. Jedna wartosc dotyczy kazdego kraju zadania i musi "
-        "byc dla niego dostepna; zadanie PL+CZ z roznymi ukladami: "
+        f"{CZ_VERTICAL_TEXT}. LAZ CZ: Bpv = pliki SM5, EVRF2007 = pliki TM33; "
+        "chmury nie sa transformowane. Jedna wartosc dotyczy kazdego kraju "
+        "zadania i musi byc dla niego dostepna; PL+CZ z roznymi ukladami: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=EVRF2007,cz=Bpv)",
     )
     product.add_argument(
@@ -165,8 +173,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "w versions/, ponowne uruchomienie uzywa lokalnej wersji; --force "
         "pobiera); kompozycja lotow serwera (najnowszy lot arkuszy: pobierz "
         "arkusze bez --cutout); w trybie --geometry obejmuje CALA obwiednie "
-        "geometrii. CZ: wycinek exportImage - obszar CZ (takze czesc CZ przy "
-        "--country auto) wymaga --cutout",
+        "geometrii. CZ: wycinek rastra exportImage - obszar CZ z NMT/NMPT "
+        "(takze czesc CZ przy --country auto) wymaga --cutout; LAZ bez wycinka",
     )
     cutout.add_argument(
         "--horizontal-crs",
@@ -224,8 +232,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--min-density",
         type=int,
         metavar="N",
-        help="Tylko LAZ (--product laz; z innym produktem blad): zostaw kafle "
-        "o gestosci punktow >= N pkt/m2",
+        help="Tylko LAZ PL (--product laz; z innym produktem blad): "
+        "zostaw kafle o gestosci punktow >= N pkt/m2",
     )
 
     output = download.add_argument_group(OUTPUT_TITLE)
@@ -241,8 +249,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         output,
         check_help="Porownaj lokalne wersje ze zrodlem i wypisz raport (aktualne / "
         "nowsza / do pobrania / nie da sie sprawdzic bez pobrania); niczego nie "
-        "pobiera. Arkusze PL i LAZ: skorowidz/WFS, arkusze SM5: ETag, wycinki "
-        "i TM33: bez taniego sygnalu",
+        "pobiera. Pliki arkuszy SM5, kafle TM33 DMR 4G/DMP OK EVRF2007 "
+        "i LAZ CZ: ETag; wycinki i kafle z ImageServer: bez taniego sygnalu",
         upgrade_help="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje (domyslnie "
         "tylko informacja); pliki bez taniego sygnalu zostaja lokalne "
         "(pobranie: --force); z --plan wykonaj zapisany plan",
@@ -281,12 +289,11 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
         "availability",
         help="Raport dostepnosci NMT, NMPT i LAZ dla obszaru (bez pobierania)",
         description=(
-            "Dla jakich lat, ukladow, rozdzielczosci, ukladow wysokosci "
-            "i formatow obszar ma komplet pelnych arkuszy (LAZ: kafli) wg "
-            "skorowidza GUGiK - bez pobierania danych (tylko skorowidz WFS "
-            "i maska ladu PRG). Kompletna kombinacja: caly lad obszaru lezy "
-            "w arkuszach pelnych (calyArkuszWypelnionyTrescia). Stopka podaje "
-            "polecenie pobrania najnowszej kompletnej kombinacji."
+            "Dostepnosc arkuszy NMT/NMPT i plikow LAZ w GUGiK (PL: lata "
+            "pozyskania, komplet pokrycia wg skorowidza WFS i maski ladu PRG) "
+            "lub CUZK (CZ: arkusze z indeksu, pliki HTTP HEAD, daty publikacji "
+            "zamiast lat danych), bez pobierania danych. --country auto "
+            "raportuje osobno obie czesci obszaru."
         ),
     )
     selection = report.add_argument_group("Produkt i obszar")
@@ -298,7 +305,8 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     )
     add_area_flags(
         selection,
-        sheet_help="Godlo arkusza PL (PL-1992 albo PL-2000): obszar = rama arkusza",
+        sheet_help="Godlo arkusza PL-1992/PL-2000 lub CZ SM5/TM33: "
+        "obszar = rama arkusza",
         geometry_help="Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie "
         "obiektow (LAZ: obwiednia calej warstwy) - jak w elevation download",
     )
@@ -315,8 +323,8 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
         "--year",
         type=int,
         metavar="ROK",
-        help="Tylko ten rok (warstwa roczna skorowidza); skrot --min-year ROK "
-        "--max-year ROK",
+        help="Tylko ten rok (tylko PL: warstwa roczna skorowidza); skrot "
+        "--min-year ROK --max-year ROK",
     )
     years.add_argument(
         "--min-year", type=int, metavar="ROK", help="Dolna granica roku (wlacznie)"

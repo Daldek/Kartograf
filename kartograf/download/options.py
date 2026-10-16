@@ -16,8 +16,10 @@ from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.exceptions import ValidationError
 from kartograf.sources.variants import (
+    CZ_LAZ_VERTICAL_TEXT,
     CZ_VERTICAL_TEXT,
     FORMATS,
+    cz_laz_error,
     cz_resolution_text,
     cz_variant_error,
     find_variant,
@@ -29,9 +31,9 @@ from kartograf.sources.variants import (
 # Admissible values named in messages (also the CLI --help texts).
 _PRODUCT_TEXT = {
     "nmt": "Numeryczny Model Terenu; PL i CZ",
-    "nmpt": "Numeryczny Model Pokrycia Terenu; PL",
+    "nmpt": "Numeryczny Model Pokrycia Terenu; PL i CZ",
     "orto": "ortofotomapa RGB; PL",
-    "laz": "chmura punktow LIDAR; PL",
+    "laz": "chmura punktow LIDAR; PL i CZ",
 }
 
 
@@ -153,7 +155,6 @@ BBOX_CRS_CHOICES = (
 )
 
 
-CZ_ONLY_NMT = "--product {product} dla CZ bedzie dostepny w etapie 2 - teraz tylko nmt"
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
 _PRODUCTS = tuple(_PRODUCT_TEXT)
 _COUNTRIES = ("pl", "cz", "auto")
@@ -353,6 +354,21 @@ def cz_option_error(
             "--format dotyczy tylko PL (siatki ASC i archiwa GUGiK) - dla CZ "
             "pomin --format"
         )
+    if task.product == "laz":
+        if task.resolution is not None:
+            return "--resolution nie dotyczy LAZ CZ - pomin --resolution"
+        if task.min_density is not None:
+            return "--min-density dotyczy tylko LAZ PL - pomin --min-density"
+        if task.sheet_system is not None and "PL" not in countries:
+            return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+        error = cz_laz_error(model=task.model, vertical_crs=vertical_crs, system=system)
+        if error is not None:
+            return f"{error}{vcrs_hint}"
+        if vertical_crs is None:
+            return (
+                f"--vertical-crs wymagane dla LAZ CZ: {CZ_LAZ_VERTICAL_TEXT}{vcrs_hint}"
+            )
+        return None
     error = cz_variant_error(
         product=task.product, resolution=resolution, vertical_crs=None, system=system
     )
@@ -377,8 +393,13 @@ def cz_option_error(
 
 
 def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
-    """An area reaching CZ needs ``cutout``: CUZK has no sheets for an area."""
-    if task.sheet is not None or "CZ" not in countries or task.cutout:
+    """CZ raster areas require cutout; CZ LAZ areas use indexed sheets."""
+    if (
+        task.product == "laz"
+        or task.sheet is not None
+        or "CZ" not in countries
+        or task.cutout
+    ):
         return
     if "PL" in countries:
         raise ValidationError(
@@ -494,6 +515,12 @@ def validate_request(task: SimpleNamespace) -> None:
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
+    if task.model is not None and task.product != "laz":
+        raise ValidationError("--model dotyczy tylko --product laz w CZ")
+    if task.model is not None and task.country == "pl":
+        raise ValidationError(
+            "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
+        )
     task.min_year, task.max_year = year_bounds(task.year, task.min_year, task.max_year)
     if task.product != "laz" and task.min_density is not None:
         raise ValidationError(
