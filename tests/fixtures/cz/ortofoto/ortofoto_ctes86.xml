@@ -1,0 +1,22 @@
+﻿<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:georss="http://www.georss.org/georss" xmlns="http://www.w3.org/2005/Atom" xml:lang="cs">
+  <id>https://atom.cuzk.cz/ORTOFOTO/datasetFeeds/CZ-00025712-CUZK_ORTOFOTO_WRTO24.2024.CTES86.xml</id>
+  <title>Ortofoto České republiky - mapový list: Český Těšín 8-6</title>
+  <updated>2025-02-06T13:58:55+02:00</updated>
+  <author>
+    <name>Český úřad zeměměřický a katastrální</name>
+    <uri>https://geoportal.cuzk.cz</uri>
+    <email>cuzk.helpdesk@cuzk.cz</email>
+  </author>
+  <rights>žádné podmínky neplatí</rights>
+  <link href="https://atom.cuzk.cz/ORTOFOTO/ORTOFOTO.xml" hreflang="cs" type="application/atom+xml" rel="up" />
+  <link href="https://geoportal.cuzk.cz" rel="describedby" hreflang="cs" type="text/html" />
+  <entry>
+    <id>https://openzu.cuzk.cz/opendata/ORTOFOTO/WRTO24.2024.CTES86.zip</id>
+    <title>Ortofoto České republiky - mapový list: Český Těšín 8-6</title>
+    <updated>2025-02-06T13:58:55+02:00</updated>
+    <link href="https://openzu.cuzk.cz/opendata/ORTOFOTO/WRTO24.2024.CTES86.zip" length="16025095" rel="alternate" type="image/jpeg" hreflang="cs" />
+    <category label="S-JTSK" term="http://www.opengis.net/def/crs/EPSG/0/5514" />
+    <georss:polygon>49.7414 18.6144 49.7414 18.6512 49.7612 18.6512 49.7612 18.6144 49.7414 18.6144</georss:polygon>
+  </entry>
+</feed>

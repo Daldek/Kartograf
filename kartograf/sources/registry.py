@@ -571,6 +571,56 @@ def _orto_wcs(
     )
 
 
+# Orthophoto of CR (ADR-042 D13): one ZIP per SM5 sheet listed by the ORTOFOTO
+# ATOM feed (the release year is in the file name, so the URL exists only in
+# the feed); the JPEG and its three world files are stored 1:1.
+_ORTOFOTO_FEED = f"{_CUZK_ATOM}/ORTOFOTO/ORTOFOTO.xml"
+_CZ_ORTOFOTO = SourceDescriptor(
+    key="cz.cuzk.ortofoto",
+    country="CZ",
+    product="orto",
+    name="Ortofoto CR (JPEG, arkusze SM5)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=_ORTOFOTO_FEED,
+            notes=(
+                "aktualny rocznik arkusza (archiwalne ortofoto CUZK sa platne - "
+                "poza zakresem); JPEG z plikami JGW w S-JTSK, TM33N i TM34N"
+            ),
+            params=AtomFilesParams(
+                service_feed=_ORTOFOTO_FEED,
+                entry_pattern=(
+                    r"ORTOFOTO_WRTO24\.(?P<year>[0-9]{4})\."
+                    r"(?P<sheet>[A-Z]{2,4}[0-9]{2})\.xml$"
+                ),
+                members=(
+                    (".jpg", ".jpg"),
+                    (".jgw", ".jgw"),
+                    (".TM33N.jgw", ".TM33N.jgw"),
+                    (".TM34N.jgw", ".TM34N.jgw"),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=TileScheme(
+        kind="index",
+        crs="EPSG:5514",
+        width_m=2500.0,
+        height_m=2000.0,
+        description=(
+            "SM5: 2 albo 4 litery miasta + 2 cyfry; indeks KladyMapovychListu w. 24"
+        ),
+    ),
+    storage_subdir="orto/cz_sjtsk",
+    default_extension=".jpg",
+    license=_CUZK_LICENSE,
+)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -993,6 +1043,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _CZ_ZABAGED,
         _CZ_RUIAN,
         _CZ_HY_NET,
+        _CZ_ORTOFOTO,
     )
 }
 

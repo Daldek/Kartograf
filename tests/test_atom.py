@@ -324,16 +324,16 @@ def test_unpack_members_longest_suffix_first(tmp_path):
     archive = tmp_path / "ctes96.zip"
     archive.write_bytes(_zip(CTES96_MEMBERS))
 
-    paths = unpack_members(archive, ORTO, tmp_path, "CTES96", url="u")
+    unpacked = unpack_members(archive, ORTO, tmp_path, "CTES96", url="u")
 
-    assert {s: p.name for s, p in paths.items()} == {
-        ".jpg": "CTES96.jpg",
-        ".jgw": "CTES96.jgw",
-        ".TM33N.jgw": "CTES96.TM33N.jgw",
-        ".TM34N.jgw": "CTES96.TM34N.jgw",
+    assert {s: (u.path.name, u.member) for s, u in unpacked.items()} == {
+        ".jpg": ("CTES96.jpg", "WRTO24.2024.CTES96.jpg"),
+        ".jgw": ("CTES96.jgw", "WRTO24.2024.CTES96.jgw"),
+        ".TM33N.jgw": ("CTES96.TM33N.jgw", "WRTO24.2024.CTES96.TM33N.jgw"),
+        ".TM34N.jgw": ("CTES96.TM34N.jgw", "WRTO24.2024.CTES96.TM34N.jgw"),
     }
-    for suffix, path in paths.items():
-        assert path.read_bytes() == CTES96_MEMBERS[f"WRTO24.2024.CTES96{suffix}"]
+    for u in unpacked.values():
+        assert u.path.read_bytes() == CTES96_MEMBERS[u.member]
 
 
 def test_unpack_members_missing_member_is_download_error(tmp_path):

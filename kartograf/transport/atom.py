@@ -91,7 +91,8 @@ class AtomFile:
     ``length`` in bytes from the feed (``None`` when absent), ``updated`` of
     its entry, ``edition`` = the version label of its release, ``crs`` =
     its CRS category (``EPSG:<code>``), ``dataset_feed`` = the feed it was
-    read from.
+    read from, ``groups`` = the named groups of ``entry_pattern`` in the id
+    of that feed (``year``, ``sheet``).
     """
 
     url: str
@@ -100,6 +101,15 @@ class AtomFile:
     edition: str
     crs: str | None
     dataset_feed: str
+    groups: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class UnpackedMember:
+    """A ZIP member stored as ``path``; ``member`` = its name in the ZIP."""
+
+    path: Path
+    member: str
 
 
 def atom_segment_tokens(params: AtomFilesParams, crs: str | None) -> tuple[str, ...]:
@@ -376,6 +386,7 @@ def _select(
         edition=_edition(entry, updated, context),
         crs=crs if crs is not None else (codes[0] if len(codes) == 1 else None),
         dataset_feed=entry.dataset_feed,
+        groups=entry.groups,
     )
 
 
@@ -479,9 +490,10 @@ def fetch_atom_file(
 
 def unpack_members(
     archive: Path, params: AtomFilesParams, target_dir: Path, stem: str, *, url: str
-) -> dict[str, Path]:
+) -> dict[str, UnpackedMember]:
     """Members of ``params.members`` from a downloaded ZIP as
-    ``<target_dir>/<stem><stored suffix>``; stored suffix -> path.
+    ``<target_dir>/<stem><stored suffix>``; stored suffix -> the stored file
+    and its member name.
 
     Every member suffix must match exactly one ZIP member (the longest
     suffix wins: ``.TM33N.jgw`` before ``.jgw``); other members are left in
@@ -494,7 +506,7 @@ def unpack_members(
     """
     ordered = sorted(params.members, key=lambda pair: len(pair[0]), reverse=True)
     found: dict[str, list[zipfile.ZipInfo]] = {stored: [] for _, stored in ordered}
-    paths: dict[str, Path] = {}
+    paths: dict[str, UnpackedMember] = {}
     try:
         with zipfile.ZipFile(archive) as zf:
             for info in zf.infolist():
@@ -515,13 +527,13 @@ def unpack_members(
             for stored, (info,) in found.items():
                 target = Path(target_dir) / f"{stem}{stored}"
                 unpack_member(zf, info, target)
-                paths[stored] = target
+                paths[stored] = UnpackedMember(target, info.filename)
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
-        for path in paths.values():
-            path.unlink(missing_ok=True)
+        for unpacked in paths.values():
+            unpacked.path.unlink(missing_ok=True)
         raise DownloadError(f"{url}: uszkodzona paczka ZIP: {e}") from e
     except BaseException:
-        for path in paths.values():
-            path.unlink(missing_ok=True)
+        for unpacked in paths.values():
+            unpacked.path.unlink(missing_ok=True)
         raise
     return paths

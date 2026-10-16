@@ -117,6 +117,11 @@ from kartograf.download.cz_cutout import (
     check_cz_cutout,
     download_cz_cutout,
 )
+from kartograf.download.cz_orto import (
+    CzOrtoResult,
+    check_cz_orto_sheet,
+    download_cz_orto_sheet,
+)
 from kartograf.download.cz_sheets import (
     CzSheetResult,
     check_cz_sheet,
@@ -262,6 +267,10 @@ __all__ = [
     "CzSheetResult",
     "check_cz_sheet",
     "download_cz_sheet",
+    # Download (CZ orthophoto: SM5 sheet, JPEG + world files, ADR-042 D13)
+    "CzOrtoResult",
+    "check_cz_orto_sheet",
+    "download_cz_orto_sheet",
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",
