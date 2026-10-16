@@ -545,36 +545,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   takze `float`), `True`/`False`, kody jako `str` (`teryt="1261"`)
   i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
 
-### Zmienione
-
-- Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
-  (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
-  `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera
-  z `--resolution`/`--vertical-crs` w `cli/_args.py`). Nazwa deskryptora
-  `pl.gugik.orto`: `Ortofotomapa (arkusze wg kampanii; wycinek WCS
-  Standard i High)` (klucz `dataset` bez zmian). `AccessChannel.params`
-  ma dwa nowe typy: `AtomFilesParams` i `WcsCutoutParams`.
-- Listy produktow `elevation`/`imagery` i zrodel `landcover`
-  przeniesiono z parserow CLI do biblioteki (`download/options.py`,
-  `landcover/manager.py`): grupy CLI i manifest projektu korzystaja
-  z tych samych wyborow (zmiana wewnetrzna).
-- Nowa zaleznosc wykonawcza `pyogrio>=0.10` (GDAL wektorowy; kolo z wlasnym
-  GDAL, ok. 100 MB obok GDAL `rasterio`): zapis GeoPackage wyniku obszaru
-  `boundaries`/`cadastre download` (ADR-042 D5). Co zrobic: zaktualizuj
-  instalacje (`pip install -U kartograf` albo `pip install -e .` w repo) -
-  `pyogrio` instaluje sie razem z pakietem; bez niego pobranie obiektow
-  obszaru konczy sie bledem importu (paczki i pozostale komendy dzialaja).
-- `landcover download --format` przyjmuje takze `GML`, wylacznie z `--year`
-  (archiwum rocznikow BDOT10k); `--year` przy `--source bdot10k` oznacza
-  rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
-  (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
-  z podpowiedzia. Co zrobic: nic.
-- Dokumentacja umowy `update="force"` wobec cache providera (USAGE 2,
-  ARCHITECTURE, docstringi `DownloadManager`/`LandCoverManager`):
-  `force` odswieza cache otwierany przez sama funkcje; provider przekazany
-  jako gotowa instancja zachowuje swoj cache (pelne odswiezenie:
-  `MetadataCache(refresh=True)`). Zachowanie bez zmian. Co zrobic: nic.
-
 ### Dodane
 
 - Mesh 3D, drzewa, osnowy i quasi-geoidy (ADR-043): `models3d download
@@ -975,6 +945,36 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (SM5), `extra.edition` i status `relabeled` (ta sama tresc pod nowa
   etykieta; `VersionedFile.same_as` = etykieta najnowszej identycznej
   wersji, w CLI `(plik identyczny z <etykieta>)`).
+
+### Zmienione
+
+- Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
+  (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
+  `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera
+  z `--resolution`/`--vertical-crs` w `cli/_args.py`). Nazwa deskryptora
+  `pl.gugik.orto`: `Ortofotomapa (arkusze wg kampanii; wycinek WCS
+  Standard i High)` (klucz `dataset` bez zmian). `AccessChannel.params`
+  ma dwa nowe typy: `AtomFilesParams` i `WcsCutoutParams`.
+- Listy produktow `elevation`/`imagery` i zrodel `landcover`
+  przeniesiono z parserow CLI do biblioteki (`download/options.py`,
+  `landcover/manager.py`): grupy CLI i manifest projektu korzystaja
+  z tych samych wyborow (zmiana wewnetrzna).
+- Nowa zaleznosc wykonawcza `pyogrio>=0.10` (GDAL wektorowy; kolo z wlasnym
+  GDAL, ok. 100 MB obok GDAL `rasterio`): zapis GeoPackage wyniku obszaru
+  `boundaries`/`cadastre download` (ADR-042 D5). Co zrobic: zaktualizuj
+  instalacje (`pip install -U kartograf` albo `pip install -e .` w repo) -
+  `pyogrio` instaluje sie razem z pakietem; bez niego pobranie obiektow
+  obszaru konczy sie bledem importu (paczki i pozostale komendy dzialaja).
+- `landcover download --format` przyjmuje takze `GML`, wylacznie z `--year`
+  (archiwum rocznikow BDOT10k); `--year` przy `--source bdot10k` oznacza
+  rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
+  (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
+  z podpowiedzia. Co zrobic: nic.
+- Dokumentacja umowy `update="force"` wobec cache providera (USAGE 2,
+  ARCHITECTURE, docstringi `DownloadManager`/`LandCoverManager`):
+  `force` odswieza cache otwierany przez sama funkcje; provider przekazany
+  jako gotowa instancja zachowuje swoj cache (pelne odswiezenie:
+  `MetadataCache(refresh=True)`). Zachowanie bez zmian. Co zrobic: nic.
 
 ### Naprawione
 
