@@ -2591,11 +2591,15 @@ download` (takze ZABAGED), `soil download`, `soil hsg`,
 arkusz ortofoto CZ przypina cztery pliki (JPEG i trzy JGW);
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
-a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa
+a tryb wybiera sie przy `project download`. Opcje uruchomienia nie sa
+czescia zadania: `add` z `--workers` albo `soil hsg --stats` konczy sie
+`Error:` (rownolegle pobieranie: `project download --workers N`; domyslnie
+jak w komendzie danych). `remove NAZWA` usuwa
 zadanie i przypiecia z manifestu, **nie usuwa plikow** z magazynu.
 Nazwy zadan mozna podac pozycyjnie w `download`, `status` i `verify`;
 bez nazw polecenie obejmuje wszystkie zadania. `--project KATALOG`
-pozwala pracowac bez `cd` (domyslnie projekt jest w biezacym katalogu):
+pozwala pracowac bez `cd` (domyslnie projekt jest w biezacym katalogu;
+podpowiedzi polecen w komunikatach maja wtedy `--project KATALOG`):
 
 ```bash
 kartograf project verify --project ~/projekty/wisla
@@ -2610,6 +2614,9 @@ oznacza blad, nigdy cicha zamiane; odzyskaj kopie magazynu lub jawnie
 wybierz `--upgrade`. `status` bez sieci szybko sprawdza istnienie
 wersji i rozmiary; `verify` bez sieci czyta cale pliki i porownuje
 SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu.
+Zadanie jeszcze nie pobrane to linia `teren: nie pobrane (pobierz:
+kartograf project download teren)` i kod 1 (z `-q` sam kod: `kartograf
+project status -q || kartograf project download`).
 
 ### 8.2 Swiezosc i wariant danych
 
@@ -2698,11 +2705,13 @@ print(report.ok, [(task.name, task.outcome) for task in report.tasks])
 print(project_status(project_dir).ok, verify_project(project_dir).ok)
 check = check_project(project_dir)  # sonda zrodla; bez pobierania i zapisu
 print([(item.task, item.status) for item in check.files])
-download_project(project_dir, tasks=["teren"], update="upgrade")
+download_project(project_dir, tasks=["teren"], update="upgrade", workers=8)
 ```
 
 `init_project` i `add_project_task` zwracaja `Project`,
-`download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`),
+`download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`;
+`workers` = rownolegle pobieranie plikow kazdego zadania, `None` = domyslne
+komendy),
 a `check_project`, `project_status` i `verify_project` zwracaja
 `ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
 `open_project(project_dir)` czyta i waliduje manifest; API udostepnia

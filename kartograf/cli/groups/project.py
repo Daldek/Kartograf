@@ -77,6 +77,16 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     add_quiet(download)
     download.add_argument(
+        "--workers",
+        "-w",
+        type=int,
+        metavar="N",
+        default=None,
+        help="Rownolegle pobieranie plikow w kazdym zadaniu (domyslnie jak "
+        "w komendzie danych: elevation i imagery 4, pozostale 1; soil hsg bez "
+        "rownoleglosci)",
+    )
+    download.add_argument(
         "tasks",
         nargs="*",
         metavar="NAZWA",

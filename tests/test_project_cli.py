@@ -145,7 +145,7 @@ def test_data_parser_options_cover_manifest_options(command):
         ),
         (
             "soil hsg",
-            ["--sheet", G, "--depth", "0-5cm", "--stats"],
+            ["--sheet", G, "--depth", "0-5cm"],
             {"sheet": G, "depth": "0-5cm"},
         ),
         (
@@ -216,7 +216,7 @@ def test_add_records_selected_options_for_every_data_command(
     assert task.command == command
     for name, value in expected.items():
         assert task.options[name] == value
-    assert "stats" not in task.options and "quiet" not in task.options
+    assert "quiet" not in task.options
     assert task.files == ()
     assert (project / "data").is_dir()
     assert "Dodano zadanie warstwa" in capsys.readouterr().out
@@ -310,6 +310,38 @@ def test_add_rejects_update_modes_and_foreign_output(tmp_path, capsys, flag):
     assert flag in error
     assert manifest.read_bytes() == before
     assert list((project / "data").iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    ("command", "flag"),
+    [
+        (["elevation", "download", *SHEET_FLAGS, "-w", "8"], "--workers"),
+        (["elevation", "download", *SHEET_FLAGS, "--workers=2"], "--workers"),
+        (["soil", "hsg", "--sheet", G, "--depth", "0-5cm", "--stats"], "--stats"),
+    ],
+)
+def test_add_rejects_run_options(tmp_path, capsys, command, flag):
+    """Run and display options are not part of a task: an error, not a silently
+    dropped value (parallel downloads: ``project download --workers``)."""
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    before = _manifest_bytes(project)
+    assert main(_add(project, "teren", *command)) == 1
+    error = capsys.readouterr().err
+    assert error.startswith(f"Error: {flag} nie jest czescia zadania")
+    if flag == "--workers":
+        hint = f"kartograf project download --project {project} --workers N teren"
+        assert hint in error
+    assert _manifest_bytes(project) == before
+
+
+def test_project_download_rejects_workers_below_one(tmp_path, capsys):
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    with pytest.raises(ValidationError, match="--workers musi byc >= 1, podano 0"):
+        download_project(project, workers=0)
+    assert main(["project", "download", "--project", str(project), "-w", "0"]) == 1
+    assert capsys.readouterr().err == "Error: --workers musi byc >= 1, podano 0\n"
 
 
 def test_project_download_has_no_store_plan_file_option(tmp_path, capsys):
@@ -572,8 +604,18 @@ def test_status_errors_and_remove_leave_store_versions(tmp_path, capsys):
     project = tmp_path / "projekt"
     init_project(project, output_dir=project / "data")
     assert main(_add(project, "teren", "elevation", "download", *SHEET_FLAGS)) == 0
+    assert f"pobierz: kartograf project download --project {project} teren" in (
+        capsys.readouterr().out
+    )
     assert main(["project", "status", "--project", str(project), "-q"]) == 1
-    assert "Error: teren: zadanie nie pobrane" in capsys.readouterr().err
+    assert capsys.readouterr() == ("", "")  # a state: exit code only under -q
+    assert main(["project", "status", "--project", str(project)]) == 1
+    text = capsys.readouterr()
+    assert text.err == ""
+    assert text.out.splitlines()[-1] == (
+        f"teren: nie pobrane (pobierz: kartograf project download --project "
+        f"{project} teren)"
+    )
     with pl_sheets():
         assert main(["project", "download", "--project", str(project), "-q"]) == 0
     capsys.readouterr()
