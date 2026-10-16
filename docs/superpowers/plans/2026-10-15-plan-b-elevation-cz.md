@@ -233,12 +233,29 @@ tlumaczy). Dodatkowo:
    `Notice` `CHECK_FAILED` i `ok=False` (jak `download_data` `auto`); oba = blad.
    `areas`: CZ `crs="EPSG:5514"`, `area_m2` = czesc obszaru w CZ (prostokat
    czesci), `land_m2` = `area_m2` (CZ nie ma maski ladu w raporcie).
+   **Realizacja (2026-10-16):** czesc CZ w ukladzie kazdego systemu arkuszy
+   jak sciezka LAZ obszaru w `download_data` - `auto`: `country_bbox(...,
+   cz_crs=<5514|3045>)` z oryginalu, `cz`: bbox/obwiednia geometrii przez
+   `bbox_to_crs`; regula arkuszy `SheetIndex.file_sheets(system, obszar)`
+   (wspolna z `CuzkLazProvider.sheets`), w cache pod `"cz-sheets|<system>|
+   <obszar w mm>"`. Godlo CZ = rama arkusza (SM5 z indeksu po nazwie, TM33
+   z godla), arkusze drugiego systemu z obwiedni ramy. `CZ_SERVICE_ONLY`
+   per produkt (nmt: DMR 5G, nmpt: DMP 1G; tekst wymienia tez kafel TM33
+   z uslugi). Flagi roku tylko PL: `cz` (i godlo CZ) = `ValidationError`,
+   `auto` z obszarem w obu krajach = `AUTO_NARROWED_TO_PL`, obszar tylko
+   w CZ = `ValidationError`. CLI: `ok=False` = kod wyjscia 1 (raport czesci
+   PL drukowany).
 10. **Podpowiedzi CZ (bez `--output`):** raster SM5/TM33 - po jednej komendzie
     na arkusz (`elevation download --product nmpt --sheet CTES96 --resolution
     0.5m --vertical-crs Bpv`), CLI pokazuje 5 i liczbe pozostalych (jak
     `MAX_HINT_LINES`, `download/data.py:105`), JSON wszystkie; LAZ - jedna
     komenda obszaru (`elevation download --product laz --country cz --model
     dmr5g --vertical-crs Bpv --bbox ...`).
+    **Realizacja (2026-10-16):** kolejnosc flag jak w podpowiedziach PL
+    (obszar, potem wariant): `elevation download --product laz --country cz
+    --bbox=... --bbox-crs EPSG:5514 --model dmr5g --vertical-crs Bpv`; zadanie
+    z godlem CZ - LAZ tez po komendzie na arkusz (godlo siega tylko swojego
+    systemu); stopka CLI: kompletne kombinacje CZ, po 5 polecen.
 11. **Zmiany API (0.8.0, z "Co zrobic"):** `CuzkDmrProvider` ->
     `CuzkRasterProvider(product, ...)`, `create_dmr_provider` ->
     `create_cz_raster_provider(product, ...)`; `download_cz_sheet`/`check_cz_sheet`/

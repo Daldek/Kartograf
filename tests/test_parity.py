@@ -26,6 +26,7 @@ upgrade with a stale plan                  test_upgrade_with_stale_plan
 input errors (missing / bad / outside)     test_input_errors_same_type_and_text
 BDOT10k, CORINE, SoilGrids, HSG            tests/test_parity_landcover.py
 availability report ``--json``            test_availability_json
+availability report CZ ``--json``         test_cz_json_cli_equals_api
 =========================================  ==========================================
 """
 
@@ -208,6 +209,51 @@ def test_availability_json(tmp_path, monkeypatch):
         )
 
     assert code == 0
+    assert stdout.getvalue() == report.to_json()
+    assert_notices_printed(stderr.getvalue(), report.notices)
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_cz_json_cli_equals_api(tmp_path, monkeypatch):
+    """``elevation availability --country cz --json`` prints exactly the JSON
+    of ``check_availability(country="cz")`` and its notices on stderr (the
+    recorded CUZK index and ``HEAD`` answers of the Cieszyn border area)."""
+    from kartograf.cli import main
+    from kartograf.download.availability import check_availability
+    from tests.test_cuzk_laz import CIESZYN, CuzkSession
+
+    monkeypatch.chdir(tmp_path)
+    stdout, stderr = io.StringIO(), io.StringIO()
+    with (
+        patch(
+            "kartograf.transport.http.make_gugik_session", return_value=CuzkSession()
+        ),
+        contextlib.redirect_stdout(stdout),
+        contextlib.redirect_stderr(stderr),
+    ):
+        code = main(
+            [
+                "elevation",
+                "availability",
+                "--product",
+                "nmpt",
+                "--country",
+                "cz",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--json",
+                "--force",
+            ]
+        )
+    with patch(
+        "kartograf.transport.http.make_gugik_session", return_value=CuzkSession()
+    ):
+        report = check_availability(
+            product="nmpt", country="cz", bbox=CIESZYN, force=True
+        )
+
+    assert code == 0 and report.combinations and report.notices
     assert stdout.getvalue() == report.to_json()
     assert_notices_printed(stderr.getvalue(), report.notices)
 

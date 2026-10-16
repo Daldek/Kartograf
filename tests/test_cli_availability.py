@@ -1,22 +1,28 @@
 """``kartograf elevation availability`` (ADR-041): the CLI only translates the
 flags into ``check_availability`` and prints its report.
 
-Answers: the recorded GUGiK index and PRG answers (``RecordedIndex``, see
-``tests/test_availability.py``); no network, no data file.
+Answers: the recorded GUGiK index and PRG answers (``RecordedIndex``) and
+the recorded CUZK index and ``HEAD`` answers (``CuzkSession``), see
+``tests/test_availability.py``; no network, no data file.
 """
 
 import re
+from dataclasses import replace
 from unittest.mock import patch
 
 import pytest
 import requests
 
 from kartograf.cli import main
+from kartograf.download.availability import COUNTRY_CHOICES
 from tests.conftest import RecordedIndex, wfs_endpoint
+from tests.test_availability import CTES86_DMPOK, TILE_DMPOK, _Border, _FailingHead
+from tests.test_cuzk_laz import CuzkSession
 
 SESSION = "kartograf.transport.http.make_gugik_session"
 KRAKOW = ["--bbox", "565000,242000,569000,246000"]
 POMORZE = ["--bbox", "339000,744800,343000,747000"]
+CIESZYN = ["--bbox=-447000,-1114000,-446000,-1113000", "--bbox-crs", "EPSG:5514"]
 
 
 def _areas(product: str, place: str) -> dict[str, list[str]]:
@@ -26,9 +32,9 @@ def _areas(product: str, place: str) -> dict[str, list[str]]:
     }
 
 
-def _run(capsys, argv: list[str], session) -> tuple[int, str, str]:
+def _run(capsys, argv: list[str], session, product="nmt") -> tuple[int, str, str]:
     with patch(SESSION, return_value=session):
-        code = main(["elevation", "availability", "--product", "nmt", *argv])
+        code = main(["elevation", "availability", "--product", product, *argv])
     captured = capsys.readouterr()
     return code, captured.out, captured.err
 
@@ -131,10 +137,10 @@ def test_exit_codes(capsys):
 
     code, _, err = _run(capsys, KRAKOW, RecordedIndex())
     assert code == 1
-    assert err == "Error: --country wymagane z --bbox/--geometry: pl (GUGiK)\n"
+    assert err == f"Error: --country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}\n"
 
     with pytest.raises(SystemExit) as error:
-        _run(capsys, ["--country", "cz", *KRAKOW], RecordedIndex())
+        _run(capsys, ["--country", "de", *KRAKOW], RecordedIndex())
     assert error.value.code == 2
 
 
@@ -164,3 +170,132 @@ def test_force_skips_the_cache(capsys, tmp_path, monkeypatch):
 
     assert first.urls and cached.urls == [] and forced.urls
     assert out_cached == out_forced
+
+
+# =============================================================================
+# CZ and ``auto`` (plan B, decisions 9-10)
+# =============================================================================
+
+CZ_HEADER = [
+    "MODEL",
+    "UKLAD",
+    "ROZDZ.",
+    "WYSOKOSCI",
+    "FORMAT",
+    "ARKUSZE SA/BRAK",
+    "PUBLIKACJA",
+    "ROZMIAR",
+    "KOMPLET",
+]
+
+
+def test_cz_table_without_years(capsys):
+    code, out, err = _run(capsys, ["--country", "cz", *CIESZYN], CuzkSession(), "nmpt")
+
+    assert code == 0
+    assert out.startswith(
+        "Dostepnosc NMPT CZ wg indeksu arkuszy i plikow CUZK: obszar 1,00 km2\n"
+        "CUZK nie publikuje lat nalotu; daty = publikacja pliku\n\n"
+    )
+    header, *rows = _table(out)
+    assert header == CZ_HEADER
+    assert rows == [
+        ["DMP OK", "S-JTSK", "0.5m", "Bpv", "TIFF", "1/0", "2025-10-10", "16,7 MB"]
+        + ["tak"],
+        ["DMP OK", "ETRS89-TM33", "0.5m", "EVRF2007", "TIFF", "1/0", "2026-08-20"]
+        + ["29,6 MB", "tak"],
+    ]
+    assert out.endswith(
+        "  DMP OK S-JTSK 0.5m Bpv TIFF\n"
+        "    kartograf elevation download --product nmpt --sheet CTES86 "
+        "--resolution 0.5m --vertical-crs Bpv\n"
+        "  DMP OK ETRS89-TM33 0.5m EVRF2007 TIFF\n"
+        "    kartograf elevation download --product nmpt --sheet 760_5516 "
+        "--resolution 0.5m --vertical-crs EVRF2007\n"
+    )
+    assert err.startswith("Info: DMP 1G (2m) nie ma plikow arkuszy CUZK")
+
+
+def test_cz_sheets_without_file(capsys):
+    session = CuzkSession(missing=(CTES86_DMPOK, TILE_DMPOK))
+    code, out, _ = _run(
+        capsys, ["--country", "cz", *CIESZYN, "--details"], session, "nmpt"
+    )
+
+    assert code == 0
+    s_jtsk, tm33 = _table(out)[1:]
+    assert s_jtsk[5:] == ["0/1", "-", "-", "nie: 1 bez pliku (1,00 km2)"]
+    assert tm33[5] == "0/1" and tm33[-1].startswith("nie: 1 bez pliku (")
+    details = out.split("Szczegoly kombinacji:\n")[1]
+    assert details.startswith(
+        "  DMP OK S-JTSK 0.5m Bpv TIFF: nie: 1 bez pliku (1,00 km2)\n"
+        "    arkusze bez pliku (1): CTES86\n"
+    )
+    assert "    arkusze bez pliku (1): 760_5516\n" in details
+    assert "kartograf elevation download" not in out
+    assert out.endswith(
+        "Zadna kombinacja CZ nie ma plikow wszystkich arkuszy obszaru "
+        "(arkusze bez pliku: --details)\n"
+    )
+
+
+def test_cz_footer_shows_five_commands(capsys):
+    """Many sheets of a raster combination: the footer shows five commands
+    and the number of the others; ``--details`` shows all of them."""
+    from kartograf.download.availability import check_availability
+    from tests.test_cuzk_laz import CIESZYN as CIESZYN_BBOX
+
+    with patch(SESSION, return_value=CuzkSession()):
+        report = check_availability(
+            product="nmpt", country="cz", bbox=CIESZYN_BBOX, cache=False
+        )
+    hints = tuple(
+        f"elevation download --product nmpt --sheet CTES8{n} --resolution 0.5m "
+        "--vertical-crs Bpv"
+        for n in range(7)
+    )
+    many = replace(
+        report, combinations=(replace(report.combinations[0], download_hint=hints),)
+    )
+    argv = ["elevation", "availability", "--product", "nmpt", "--country", "cz"]
+
+    with patch("kartograf.cli.availability_cmd.check_availability", return_value=many):
+        main([*argv, *CIESZYN])
+        footer = capsys.readouterr().out.split("Kompletne kombinacje CZ")[1]
+        main([*argv, *CIESZYN, "--details"])
+        details = capsys.readouterr().out.split("Kompletne kombinacje CZ")[0]
+
+    shown = [line for line in footer.splitlines() if "kartograf elevation" in line]
+    assert shown == [f"    kartograf {hint}" for hint in hints[:5]]
+    assert footer.endswith(
+        "    ... pozostale polecenia: 2 (wszystkie: --details albo --json)\n"
+    )
+    assert all(f"    kartograf {hint}\n" in details for hint in hints)
+
+
+def test_auto_tables_per_country(capsys):
+    code, out, _ = _run(
+        capsys, ["--country", "auto", *CIESZYN], _Border("nmpt"), "nmpt"
+    )
+
+    assert code == 0
+    lines = out.splitlines()
+    assert lines[0].startswith("Dostepnosc NMPT PL wg skorowidza GUGiK: obszar ")
+    dates = lines.index("CUZK nie publikuje lat nalotu; daty = publikacja pliku")
+    assert lines[dates - 1].startswith("Dostepnosc NMPT CZ wg indeksu arkuszy")
+    assert re.split(r" {2,}", lines[dates + 2].strip()) == CZ_HEADER
+    assert "Najnowsza kompletna kombinacja: 2024 PL-1992 0.5m EVRF2007 ASC" in out
+    assert "  DMP OK S-JTSK 0.5m Bpv TIFF\n" in out
+
+
+def test_auto_part_failed_exit_code(capsys):
+    """A country that could not be checked: the report of the other one, a
+    warning and exit code 1 (the answer is incomplete)."""
+    session = _Border("nmpt", _FailingHead(TILE_DMPOK))
+    with patch("time.sleep"):
+        code, out, err = _run(capsys, ["--country", "auto", *CIESZYN], session, "nmpt")
+
+    assert code == 1
+    assert out.startswith("Dostepnosc NMPT PL wg skorowidza GUGiK")
+    assert "Dostepnosc NMPT CZ" not in out
+    assert "Warning: --country auto: nie udalo sie sprawdzic czesci CZ" in err

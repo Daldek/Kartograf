@@ -283,17 +283,25 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     """``elevation availability``: the report of ``check_availability``.
 
     Not a data command of a project manifest (no ``_task``, ADR-040): it
-    writes nothing, the report is its result.
+    writes nothing, the report is its result. ``--country`` and the help
+    texts come from ``AVAILABILITY_COUNTRIES`` (``pl``, ``cz``, ``auto``);
+    year flags are PL-only (the library rejects them for CZ and narrows
+    ``auto`` to PL).
     """
     report = commands.add_parser(
         "availability",
         help="Raport dostepnosci NMT, NMPT i LAZ dla obszaru (bez pobierania)",
         description=(
-            "Dostepnosc arkuszy NMT/NMPT i plikow LAZ w GUGiK (PL: lata "
-            "pozyskania, komplet pokrycia wg skorowidza WFS i maski ladu PRG) "
-            "lub CUZK (CZ: arkusze z indeksu, pliki HTTP HEAD, daty publikacji "
-            "zamiast lat danych), bez pobierania danych. --country auto "
-            "raportuje osobno obie czesci obszaru."
+            "Bez pobierania danych: PL - dla jakich lat, ukladow, "
+            "rozdzielczosci, ukladow wysokosci i formatow obszar ma komplet "
+            "pelnych arkuszy (LAZ: kafli) wg skorowidza GUGiK (skorowidz WFS "
+            "i maska ladu PRG; kompletna kombinacja: caly lad obszaru lezy "
+            "w arkuszach pelnych, calyArkuszWypelnionyTrescia); CZ - ktore "
+            "arkusze SM5 i kafle TM33 obszaru (indeks KladyMapovychListu) maja "
+            "pliki CUZK, z data publikacji i rozmiarem z naglowkow HEAD (CUZK "
+            "nie publikuje lat nalotu). --country auto: czesci PL i CZ obszaru "
+            "w jednym raporcie. Stopka podaje polecenia pobrania kompletnych "
+            "kombinacji (PL: najnowszej)."
         ),
     )
     selection = report.add_argument_group("Produkt i obszar")
@@ -305,10 +313,14 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     )
     add_area_flags(
         selection,
-        sheet_help="Godlo arkusza PL-1992/PL-2000 lub CZ SM5/TM33: "
-        "obszar = rama arkusza",
+        sheet_help="Godlo arkusza: PL (PL-1992 albo PL-2000), CZ SM5 (np. CTES96) "
+        "albo kafel TM33 (np. 760_5518); obszar = rama arkusza",
+        bbox_help="Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: "
+        "EPSG:2180; ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: "
+        "--bbox=-447000,...)",
         geometry_help="Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie "
-        "obiektow (LAZ: obwiednia calej warstwy) - jak w elevation download",
+        "obiektow (LAZ: obwiednia calej warstwy; CZ: obwiednia geometrii) - jak "
+        "w elevation download",
     )
     selection.add_argument(
         "--country",
@@ -318,13 +330,16 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
         f"{', '.join(AVAILABILITY_COUNTRIES.values())}. Z --sheet kraj wynika "
         "z godla",
     )
-    years = report.add_argument_group("Rok danych")
+    years = report.add_argument_group(
+        "Rok danych (tylko PL - CUZK nie publikuje lat nalotu: z --country cz "
+        "blad, z --country auto raport tylko czesci PL)"
+    )
     years.add_argument(
         "--year",
         type=int,
         metavar="ROK",
-        help="Tylko ten rok (tylko PL: warstwa roczna skorowidza); skrot "
-        "--min-year ROK --max-year ROK",
+        help="Tylko ten rok (warstwa roczna skorowidza GUGiK); skrot --min-year "
+        "ROK --max-year ROK",
     )
     years.add_argument(
         "--min-year", type=int, metavar="ROK", help="Dolna granica roku (wlacznie)"
@@ -336,8 +351,8 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     output.add_argument(
         "--details",
         action="store_true",
-        help="Dla kazdej kombinacji: godla arkuszy niepelnych, lad bez arkuszy "
-        "i polecenia pobrania",
+        help="Dla kazdej kombinacji: godla arkuszy niepelnych (CZ: arkuszy bez "
+        "pliku), obszar bez arkuszy i wszystkie polecenia pobrania",
     )
     output.add_argument(
         "--json",
@@ -348,6 +363,7 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     output.add_argument(
         "--force",
         action="store_true",
-        help="Pomin cache metadanych (odpytaj skorowidz i PRG ponownie, nadpisz cache)",
+        help="Pomin cache metadanych (odpytaj skorowidze, PRG i pliki CUZK "
+        "ponownie, nadpisz cache)",
     )
     report.set_defaults(_handler=cmd_availability)
