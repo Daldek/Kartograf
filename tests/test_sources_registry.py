@@ -22,6 +22,7 @@ from kartograf.sources.descriptor import (
     CountryProfile,
     FeatureBBoxParams,
     LicenseInfo,
+    SheetIndexParams,
     SourceDescriptor,
     TileScheme,
     TransportKind,
@@ -185,13 +186,15 @@ def test_channel_signals_match_inventory(key, transport, signal):
 
 
 def _collection_channels():
-    """Channels of the collection engines (the WCS cutout channels of the
-    orthophotomap carry provider configuration, ADR-042 D14)."""
+    """Channels of the collection engines (the WCS cutout channels and the
+    WMS sheet indexes of the images carry provider configuration, ADR-042
+    D14, plan E1)."""
     return [
         (d, ch)
         for d in sources_for()
         for ch in d.channels
-        if ch.params is not None and not isinstance(ch.params, WcsCutoutParams)
+        if ch.params is not None
+        and not isinstance(ch.params, WcsCutoutParams | SheetIndexParams)
     ]
 
 

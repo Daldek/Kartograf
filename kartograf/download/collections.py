@@ -92,10 +92,12 @@ from kartograf.notices import (
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
     DOWNLOAD_SIZE,
+    LARGE_FILE_BYTES,
     UNIT_LIST,
     WHOLE_COUNTRY_SIZE,
     Notice,
     NoticeSink,
+    size_text,
 )
 from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
@@ -145,8 +147,6 @@ logger = logging.getLogger(__name__)
 SERVICE_TIMEOUT = 60
 PACKAGE_TIMEOUT = 120
 PROBE_TIMEOUT = 30
-# A unit file above this size is announced before its transfer (K9).
-LARGE_FILE_BYTES = 100 * 1024 * 1024
 
 _TRACK: Track = "collection"
 # Land cover products stay with LandCoverManager (ADR-039 D8, ADR-042 D10).
@@ -1828,12 +1828,6 @@ def _local_only(slot: FileSlot) -> VersionedFile | None:
     return VersionedFile(slot.std, "local", local.label, local.sha256, local.path)
 
 
-def _size_text(length: int | None) -> str:
-    if length is None:
-        return "rozmiar nieznany (serwer nie podal Content-Length)"
-    return f"{length} B (ok. {length / 1e6:.0f} MB)"
-
-
 @dataclass
 class _Source:
     """``extra.source`` of the file being downloaded (set by the fetch)."""
@@ -1857,14 +1851,14 @@ def _announce_size(job: UnitJob, sink: NoticeSink, session: requests.Session) ->
         sink.emit(
             "warning",
             WHOLE_COUNTRY_SIZE,
-            f"{what} {job.country}: plik krajowy {job.url} - {_size_text(length)}",
+            f"{what} {job.country}: plik krajowy {job.url} - {size_text(length)}",
         )
     elif length is not None and length > LARGE_FILE_BYTES:
         sink.emit(
             "warning",
             DOWNLOAD_SIZE,
             f"{what} {job.country} {job.unit}: duzy plik {job.url} - "
-            f"{_size_text(length)}",
+            f"{size_text(length)}",
         )
 
 
@@ -1921,15 +1915,14 @@ def _fetch_atom(
         sink.emit(
             "warning",
             WHOLE_COUNTRY_SIZE,
-            f"{what} {job.country}: plik krajowy {file.url} - "
-            f"{_size_text(file.length)}",
+            f"{what} {job.country}: plik krajowy {file.url} - {size_text(file.length)}",
         )
     elif file.length is not None and file.length > LARGE_FILE_BYTES:
         sink.emit(
             "warning",
             DOWNLOAD_SIZE,
             f"{what} {job.country} {job.unit}: duzy plik {file.url} - "
-            f"{_size_text(file.length)}",
+            f"{size_text(file.length)}",
         )
     http = fetch_atom_file(session, file, staged, timeout=timeout)
     params = job.channel.params

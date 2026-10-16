@@ -23,6 +23,7 @@ from kartograf.sources.descriptor import (
     LicenseInfo,
     PackageVariant,
     SheetGrid,
+    SheetIndexParams,
     SignalKind,
     SourceDescriptor,
     TileScheme,
@@ -715,16 +716,24 @@ _CZ_HY_NET = SourceDescriptor(
 )
 
 # Orthophotomap WCS (DescribeCoverage 2.0.1, 2026-10-16): Standard and High
-# share one national grid with a 0.1 m step; the cutout pixel is a choice
-# (SCALEFACTOR). One GetCoverage reads at most 4 Mpx of coverage = 200 x 200 m
-# (64 s live 2026-10-15, docs/research/2026-10-15-plan-c-d/raport.md).
+# share one national grid with a 0.1 m step, the true orthophotomap has a
+# 0.05 m grid; the cutout pixel is a choice (SCALEFACTOR). One GetCoverage
+# reads at most 4 Mpx of coverage = 200 x 200 m at 0.1 m (64 s live
+# 2026-10-15, docs/research/2026-10-15-plan-c-d/raport.md).
 _ORTO_WCS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WCS"
+_ORTO_PIXELS = ("0.1", "0.25", "0.5", "1")
 
 
 def _orto_wcs(
-    service: str, variant: str, coverage_id: str, notes: str
+    service: str,
+    variant: str,
+    coverage_id: str,
+    notes: str,
+    *,
+    native_step: str,
+    resolutions: tuple[str, ...],
 ) -> AccessChannel:
-    """WCS cutout channel of the orthophotomap (ADR-042 D14); ``notes`` = the
+    """WCS cutout channel of an orthophotomap (ADR-042 D14); ``notes`` = the
     meaning of ``variant`` named in messages (abstract of the service)."""
     return AccessChannel(
         transport=TransportKind.WCS,
@@ -736,8 +745,8 @@ def _orto_wcs(
         params=WcsCutoutParams(
             variant=variant,
             coverage_id=coverage_id,
-            native_step=Decimal("0.1"),
-            resolutions=tuple(Decimal(v) for v in ("0.1", "0.25", "0.5", "1")),
+            native_step=Decimal(native_step),
+            resolutions=tuple(Decimal(v) for v in resolutions),
             max_native_pixels=4_000_000,
         ),
     )
@@ -907,7 +916,127 @@ _PL_NMT_100M = SourceDescriptor(
         ),
     ),
 )
-_E1_PL_SOURCES = (_PL_NMT_100M,)
+
+# Image products on GUGiK WMS sheet indexes (raport E, wiersze 2-4; GFI recorded
+# 2026-10-16, tests/fixtures/pl/{intensity,orto_true,orto_oblique}): one layer of
+# records each (intensity: PL-1992 and PL-2000 sheets in one layer; true orto:
+# 8-part PL-1992 codes; oblique: one layer per view direction, PL-2000 sheets of
+# 1:2000 and 1:1000). The layers are fixed, no GetCapabilities; the records of
+# intensity and true orto have no calyArkuszWypelnionyTrescia.
+_PL_INTENSITY = SourceDescriptor(
+    key="pl.gugik.intensity",
+    country="PL",
+    product="intensity",
+    name="Obrazy intensywnosci LIDAR (arkusze wg lotow)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WMS_SHEET_INDEX,
+            update_signal="index",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_PZGIK}/OI/WMS/SkorowidzeObrazowIntensywnosci",
+            notes=(
+                "GeoTIFF 1 pasmo (intensywnosc odbicia), piksel 0,25 m; arkusze "
+                "PL-1992 (godla 7-czlonowe) i PL-2000 wg lotow"
+            ),
+            params=SheetIndexParams(
+                layers=("SkorowidzeOI",),
+                systems=("1992", "2000"),
+                sheet_parts=7,
+                full_sheet=False,
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="intensity/pl_{system}",
+    default_extension=".tif",
+    license=_GUGIK_LICENSE,
+)
+_PL_ORTO_TRUE = SourceDescriptor(
+    key="pl.gugik.orto_true",
+    country="PL",
+    product="true-orto",
+    name="Prawdziwa ortofotomapa (true orto) wybranych miast (arkusze; wycinek WCS)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WMS_SHEET_INDEX,
+            update_signal="index",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_PZGIK}/ORTO/WMS/TrueOrtho",
+            notes=(
+                "GeoTIFF RGB, piksel 0,05 m; arkusze PL-1992 8-czlonowe (modul "
+                "GUGiK 1:2500) wg lotow"
+            ),
+            params=SheetIndexParams(
+                layers=("Skorowidze",),
+                systems=("1992",),
+                sheet_parts=8,
+                full_sheet=False,
+                extent="true orto GUGiK obejmuje tylko wybrane miasta (np. Gdansk)",
+            ),
+        ),
+        _orto_wcs(
+            "TrueOrto",
+            "true",
+            "True_Orthoimagery",
+            "prawdziwa ortofotomapa 0,05 m wybranych miast (poza nimi piksele 0,0,0)",
+            native_step="0.05",
+            resolutions=("0.05", *_ORTO_PIXELS),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="orto/pl_{system}_true",
+    default_extension=".tif",
+    license=_GUGIK_LICENSE,
+)
+_OBLIQUE_LAYER = "SkorowidzeOrtofotomapyUkosnej"
+_PL_ORTO_OBLIQUE = SourceDescriptor(
+    key="pl.gugik.orto_oblique",
+    country="PL",
+    product="oblique-orto",
+    name="Ortofotomapa ukosna wybranych miast (arkusze PL-2000, kierunki N, E, S, W)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WMS_SHEET_INDEX,
+            update_signal="index",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_PZGIK}/ORTO/WMS/{_OBLIQUE_LAYER}",
+            notes=(
+                "GeoTIFF RGB, piksel 0,05 m; arkusz to 4 pliki kierunkow (n, e, s, "
+                "w); arkusze PL-2000 (1:2000, 1:1000) wg lotow"
+            ),
+            params=SheetIndexParams(
+                layers=(),
+                systems=("2000",),
+                sheet_parts=7,
+                full_sheet=True,
+                directions=tuple(
+                    (code, f"{_OBLIQUE_LAYER}-{name}")
+                    for code, name in (
+                        ("n", "Polnoc"),
+                        ("e", "Wschod"),
+                        ("s", "Poludnie"),
+                        ("w", "Zachod"),
+                    )
+                ),
+                extent=(
+                    "orto ukosna GUGiK obejmuje tylko wybrane miasta (np. Krakow, "
+                    "Gdansk)"
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="orto/pl_{system}_oblique",
+    default_extension=".tif",
+    license=_GUGIK_LICENSE,
+)
+_E1_PL_SOURCES = (_PL_NMT_100M, _PL_INTENSITY, _PL_ORTO_TRUE, _PL_ORTO_OBLIQUE)
 
 # plan E - E2: geographic names and published topographic map sheets.
 _PRNG_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRNG/apiFeatures"
@@ -1179,18 +1308,29 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     update_signal="index",
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"sheet_files"}),
+                    endpoint=f"{_PZGIK}/ORTO/WMS/SkorowidzeWgAktualnosci",
+                    params=SheetIndexParams(
+                        layers=(),
+                        systems=("1992", "2000"),
+                        sheet_parts=7,
+                        full_sheet=True,
+                    ),
                 ),
                 _orto_wcs(
                     "StandardResolution",
                     "standard",
                     "Orthoimagery_StandardResolution",
                     "najnowsze dostepne ortofotomapy",
+                    native_step="0.1",
+                    resolutions=_ORTO_PIXELS,
                 ),
                 _orto_wcs(
                     "HighResolution",
                     "high",
                     "Orthoimagery_High_Resolution",
                     "ortofotomapy o pikselu 10 cm i mniejszym",
+                    native_step="0.1",
+                    resolutions=_ORTO_PIXELS,
                 ),
             ),
             tile_scheme=None,

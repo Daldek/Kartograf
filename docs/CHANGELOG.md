@@ -578,6 +578,29 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E1 (czesc 3, ADR-043): trzy produkty obrazow GUGiK
+  w `imagery download` na torze arkuszy ortofotomapy (kampanie, wersje,
+  `--year`/`--all-campaigns`, sygnal `index`): `--product intensity`
+  (obrazy intensywnosci LIDAR, `pl.gugik.intensity`, arkusze PL-1992
+  i PL-2000, `intensity/pl_<uklad>/...`), `--product true-orto` (prawdziwa
+  ortofotomapa wybranych miast, `pl.gugik.orto_true`, arkusze 8-czlonowe
+  PL-1992 w `orto/pl_1992_true/...`; `--cutout --horizontal-crs EPSG:2180
+  --resolution 0.05m|0.1m|0.25m|0.5m|1m` = wycinek z WCS `True_Orthoimagery`
+  w `orto/pl_1992_true_<piksel>/bbox/`, bez `--coverage`) i `--product
+  oblique-orto` (ortofotomapa ukosna, `pl.gugik.orto_oblique`, arkusze
+  PL-2000; arkusz to cztery pliki kierunkow `<godlo>_n|e|s|w.tif`
+  w `orto/pl_2000_oblique/...`, nowa flaga `--direction n,e,s,w` /
+  `direction=` w `download_data`/`check_data`, bez flagi wszystkie
+  cztery). Produkt z jednym ukladem arkuszy (true orto, orto ukosna) moze
+  pominac `--sheet-system`; `--full-sheet` tylko dla orto ukosnej (rekordy
+  intensywnosci i true orto nie deklaruja pelnego arkusza). Arkusz obrazu
+  ponad 100 MiB dostaje `DOWNLOAD_SIZE` z rozmiarem z `HEAD` przed `GET`
+  (takze ortofotomapa). Skorowidze obrazow opisuje nowy parametr kanalu
+  `SheetIndexParams` (warstwy, uklady arkuszy, kierunki, zasieg); jeden
+  provider `GugikImageProvider` (`GugikOrtoProvider` = ortofotomapa
+  z wariantami barw). Manifest projektu: opcja `direction` zadania
+  `imagery download`.
+
 - Plan E, Task E1 (czesc 2, ADR-043 D10): NMT 100 m GUGiK
   (`pl.gugik.nmt_100m`, wariant rejestru bez ukladu wysokosci - decyzja P1):
   `elevation download --product nmt --resolution 100m --bbox ... --country pl`

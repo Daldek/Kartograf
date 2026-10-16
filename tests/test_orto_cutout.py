@@ -22,7 +22,11 @@ from kartograf.download.data import check_data, download_data, validate_data_req
 from kartograf.download.orto_cutout import check_orto_cutout, download_orto_cutout
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import ALL_NODATA, AUTO_NARROWED_TO_PL, CUTOUT_SIZE, Notice
-from kartograf.providers.pl.gugik_orto import GugikOrtoProvider, wcs_cutout_channels
+from kartograf.providers.pl.gugik_orto import (
+    ORTO_KEY,
+    GugikOrtoProvider,
+    wcs_cutout_channels,
+)
 from kartograf.sources.descriptor import WcsCutoutParams
 from kartograf.transport.chunks import ChunkLimits
 from tests.conftest import recorded_response, write_gpkg_layers
@@ -144,7 +148,7 @@ def test_registry_channels_match_describe_coverage(variant, fixture):
     crs = {e.get("srsName") for e in root.iter() if e.get("srsName") is not None}
     (channel,) = [
         c
-        for c in wcs_cutout_channels()
+        for c in wcs_cutout_channels(ORTO_KEY)
         if isinstance(c.params, WcsCutoutParams) and c.params.variant == variant
     ]
     assert isinstance(channel.params, WcsCutoutParams)

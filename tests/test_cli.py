@@ -493,7 +493,10 @@ class TestCommandGroups:
     # the selection flag of each group's download and its values
     _CHOICES = {
         "elevation": ("--product", {"nmt", "nmpt", "laz"}),
-        "imagery": ("--product", {"orto"}),
+        "imagery": (
+            "--product",
+            {"orto", "intensity", "true-orto", "oblique-orto"},
+        ),
         "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
         "boundaries": ("--product", {"admin"}),
         "cadastre": ("--product", {"map"}),

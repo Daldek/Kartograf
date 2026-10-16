@@ -41,6 +41,17 @@ INDEX_UNSUPPORTED = "index_unsupported"
 # a cutout or a TM33 tile of the ImageServer, and their LAZ.
 CZ_SERVICE_ONLY = "cz_service_only"
 
+# A file above this size is announced (``DOWNLOAD_SIZE``) before its transfer
+# (K9): collection units and the image sheets of ``download_data``.
+LARGE_FILE_BYTES = 100 * 1024 * 1024
+
+
+def size_text(length: int | None) -> str:
+    """Size of a file in notices (``Content-Length`` of ``HEAD`` or a feed)."""
+    if length is None:
+        return "rozmiar nieznany (serwer nie podal Content-Length)"
+    return f"{length} B (ok. {length / 1e6:.0f} MB)"
+
 
 @dataclass(frozen=True)
 class Notice:

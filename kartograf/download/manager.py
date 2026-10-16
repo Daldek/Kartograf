@@ -11,6 +11,7 @@ import concurrent.futures
 import logging
 import os
 import shutil
+import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -65,9 +66,18 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.notices import NEWER_AVAILABLE, UNVERIFIED_LOCAL, Notice, NoticeSink
+from kartograf.notices import (
+    DOWNLOAD_SIZE,
+    LARGE_FILE_BYTES,
+    NEWER_AVAILABLE,
+    UNVERIFIED_LOCAL,
+    Notice,
+    NoticeSink,
+    size_text,
+)
 from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.skorowidz import SkorowidzRecord
+from kartograf.sources.registry import get_source
 
 # Outcome of one sheet: the strongest status among its files (spec 4.5).
 SheetStatus = Literal["new", "unchanged", "relabeled", "local"]
@@ -378,7 +388,8 @@ class CampaignProvider(Protocol):
 
     ``BaseProvider`` does not declare it — the manager picks the campaign
     flow by ``supports_campaigns is True`` and casts the provider to this
-    protocol.
+    protocol. ``record_length`` (``HEAD``) is called only for a provider
+    with ``announces_size is True`` (image sheets, K9).
     """
 
     def resolve_campaigns(
@@ -394,6 +405,8 @@ class CampaignProvider(Protocol):
     def download_record(self, record: SkorowidzRecord, output_path: Path) -> Path: ...
 
     def record_source(self, record: SkorowidzRecord) -> dict: ...
+
+    def record_length(self, record: SkorowidzRecord) -> int | None: ...
 
 
 # Type alias for progress callback
@@ -584,6 +597,16 @@ class DownloadManager:
         self._sheet_scale = (
             scale if scale in SheetParser.SCALE_HIERARCHY else _DEFAULT_SHEET_SCALE
         )
+        # File name suffix of the provider's files (a view direction of the
+        # oblique orthophotomap): the record URL ends with it too (B4).
+        suffix = getattr(self._provider, "storage_suffix", None)
+        self._url_suffix = suffix if isinstance(suffix, str) else ""
+        # HEAD before each transfer, DOWNLOAD_SIZE above LARGE_FILE_BYTES (K9).
+        self._announces_size = getattr(self._provider, "announces_size", False) is True
+        # DOWNLOAD_SIZE notices of the current call (worker threads), drained
+        # into ``DownloadResult.notices`` by ``_finish_result``.
+        self._size_notices: list[Notice] = []
+        self._size_lock = threading.Lock()
         if not self._campaign_aware and (
             all_campaigns or min_year is not None or max_year is not None or full_sheet
         ):
@@ -833,7 +856,7 @@ class DownloadManager:
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         parser = SheetParser(sheet)
-        if not self._source_files and _coarser(parser, self._sheet_scale):
+        if self.is_hierarchy(sheet):
             return self.download_hierarchy(
                 sheet,
                 self._sheet_scale,
@@ -841,6 +864,7 @@ class DownloadManager:
                 plan=plan,
                 on_progress=on_progress,
             )
+        self._drain_size_notices()  # a notice of an earlier failed call
         if plan is not None:
             return self.download_sheets(
                 [parser.sheet], update=update, plan=plan, on_progress=on_progress
@@ -869,6 +893,14 @@ class DownloadManager:
             result, parser.sheet, fetch, "skipped" if fetch.skipped else "completed"
         )
         return self._finish_result(result, single=True)
+
+    def is_hierarchy(self, sheet: str) -> bool:
+        """Whether ``download_sheet`` expands ``sheet`` to the provider's sheet
+        level: a PL-1992 code coarser than it (grids and images; an archive
+        variant keeps its index codes) - the result is a list of sheets."""
+        return not self._source_files and _coarser(
+            SheetParser(sheet), self._sheet_scale
+        )
 
     def download_hierarchy(
         self,
@@ -953,6 +985,7 @@ class DownloadManager:
         if plan is not None:
             require_store(plan, store_id(self._storage.output_dir))
         leaves = self._leaves(sheets)
+        self._drain_size_notices()  # a notice of an earlier failed call
         if plan is not None:
             return self._download_planned(leaves, plan, on_progress)
         logger.info(
@@ -1037,14 +1070,25 @@ class DownloadManager:
         plan: UpdatePlan,
         on_progress: ProgressCallback | None,
     ) -> DownloadResult:
-        """Recheck and execute exactly the selected positions of this request."""
-        from kartograf.download.updates import _items
+        """Recheck and execute exactly the selected positions of this request:
+        the positions of its sheets in this manager's segment and files (the
+        managers of the view directions of one oblique sheet share the
+        segment; their files differ by the name suffix)."""
+        from kartograf.download.updates import _items, _where
 
         requested = set(leaves)
+
+        def owns(item: PlanItem) -> bool:
+            segment, hierarchy = _where(self, item.unit)
+            std = self._storage.get_path(item.unit, self._default_ext)
+            return (item.segment, item.hierarchy) == (segment, hierarchy) and (
+                Path(item.name).stem == std.stem
+            )
+
         planned = [
             item
             for item in plan.items_for("pl_sheet")
-            if item.status in TODO_STATUSES and item.unit in requested
+            if item.status in TODO_STATUSES and item.unit in requested and owns(item)
         ]
         result = DownloadResult()
         if not planned:
@@ -1224,12 +1268,17 @@ class DownloadManager:
     ) -> VersionCommit:
         """Download one campaign file and commit it as a version (spec 3.1).
 
-        ``download_record`` writes into a private staging directory, then
-        ``verify_file_format`` and ``verify_sheet_extent`` (B4); one read gives
-        sha256 and — for a flight not declared full — ``extra.coverage``
-        (D13, D20); the mandatory version sidecar is written exclusively.
-        Any failure leaves no version and no staged file.
+        An image provider (``announces_size``) is asked for the file size
+        first (``HEAD``): a file over ``LARGE_FILE_BYTES`` is announced by
+        ``DOWNLOAD_SIZE`` before its transfer (K9). ``download_record`` writes
+        into a private staging directory, then ``verify_file_format`` and
+        ``verify_sheet_extent`` (B4); one read gives sha256 and — for a flight
+        not declared full — ``extra.coverage`` (D13, D20); the mandatory
+        version sidecar is written exclusively. Any failure leaves no version
+        and no staged file.
         """
+        if self._announces_size:
+            self._announce_size(sheet, record)
         root = self._storage.get_versions_root(sheet)
         name = self._storage.get_path(sheet, ext).name
         staged = new_incoming_dir(self._storage.get_versions_base(sheet)) / name
@@ -1258,6 +1307,31 @@ class DownloadManager:
             )
         finally:
             shutil.rmtree(staged.parent, ignore_errors=True)
+
+    def _announce_size(self, sheet: str, record: SkorowidzRecord) -> None:
+        """``DOWNLOAD_SIZE`` of a record file over ``LARGE_FILE_BYTES`` (the
+        text of the collections), forwarded to ``on_notice`` at once and kept
+        for the ``DownloadResult`` of the call."""
+        length = self._campaign_provider.record_length(record)
+        if length is None or length <= LARGE_FILE_BYTES:
+            return
+        key = getattr(self._provider, "descriptor_key", None)
+        what = get_source(key).product if isinstance(key, str) else "plik"
+        notice = Notice(
+            "warning",
+            DOWNLOAD_SIZE,
+            f"{what} PL {sheet}: duzy plik {record.url} - {size_text(length)}",
+        )
+        with self._size_lock:
+            self._size_notices.append(notice)
+        NoticeSink(self._on_notice).add(notice)
+
+    def _drain_size_notices(self) -> tuple[Notice, ...]:
+        """The ``DOWNLOAD_SIZE`` notices emitted since the last drain."""
+        with self._size_lock:
+            notices = tuple(self._size_notices)
+            self._size_notices.clear()
+        return notices
 
     def _resolve_chosen(
         self, sheet: str, records: tuple[SkorowidzRecord, ...] | None = None
@@ -1323,7 +1397,7 @@ class DownloadManager:
                 errors.append((record.url, e))
                 continue
             try:  # B4 + record datum + extension - before the network
-                verify_record_url(record.url, sheet)
+                verify_record_url(record.url, sheet, self._url_suffix)
                 verify_record_vertical_crs(record, self._record_vertical_crs, sheet)
                 ext = campaign_extension(ref, self._default_ext)
             except DownloadError as e:
@@ -1809,7 +1883,7 @@ class DownloadManager:
                 f"dostepna nowsza kampania dla {len(sheets)} arkuszy ({shown}) - "
                 "uzyto lokalnych wersji; pobierz: --upgrade",
             )
-        result.notices = sink.notices
+        result.notices = (*self._drain_size_notices(), *sink.notices)
         return result
 
     @staticmethod

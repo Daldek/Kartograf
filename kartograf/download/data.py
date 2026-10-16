@@ -45,8 +45,8 @@ download), a ``TransformError`` (no safe pinned operation) or a
 ``ok=False`` unless ``auto`` partial success applies).
 """
 
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Literal, cast
@@ -107,6 +107,7 @@ from kartograf.notices import (
 )
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
+from kartograf.providers.pl.gugik_orto import image_directions, image_source
 from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
 from kartograf.sources.variants import cz_model_text, cz_sheet_system
 
@@ -269,6 +270,7 @@ def download_data(
     cutout: bool = False,
     horizontal_crs: str | None = None,
     coverage: str | None = None,
+    direction: str | Sequence[str] | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -282,7 +284,9 @@ def download_data(
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> DataReport:
-    """Download NMT/NMPT/orto/LAZ for a sheet, bbox or geometry (spec 4.1).
+    """Download NMT/NMPT/LAZ and the images (orthophotomap, intensity
+    images, true and oblique orthophotomap) for a sheet, bbox or geometry
+    (spec 4.1).
 
     Parameter names and values are the ``elevation download`` / ``imagery download``
     flags in ``snake_case``. Every data choice is explicit (no defaults): ``product``,
@@ -290,16 +294,22 @@ def download_data(
     ``{"pl": "1m", "cz": "2m"}``; PL values from the variant registry,
     ``kartograf.sources.variants``), ``country`` (``pl``/``cz``/``auto``,
     required with ``bbox``/``geometry``), ``sheet_system``/``scale`` for PL
-    sheets of an area. ``format`` (PL NMT/NMPT): ``None`` = ASC grids, an
-    archive token (``"XYZ"``, ``"TBD"``, ...) = the original files of the
-    index, whose sheets (any scale) come from the index (ADR-041).
-    ``cutout=True`` with ``horizontal_crs`` gives ONE
-    cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an area
-    reaching CZ requires it). ``coverage`` - the orthophotomap cutout only
-    (``product="orto"``, ``cutout=True``, PL, ``horizontal_crs="EPSG:2180"``):
-    the WCS coverage ``"standard"`` or ``"high"``, with the cutout pixel in
-    ``resolution`` (``"0.1m"``, ``"0.25m"``, ``"0.5m"``, ``"1m"``; ADR-042
-    D14); orto sheets take neither.
+    sheets of an area (a product with one sheet system - true orto PL-1992,
+    oblique orto PL-2000 - may omit ``sheet_system``). ``format`` (PL
+    NMT/NMPT): ``None`` = ASC grids, an archive token (``"XYZ"``, ``"TBD"``,
+    ...) = the original files of the index, whose sheets (any scale) come
+    from the index (ADR-041). ``cutout=True`` with ``horizontal_crs`` gives
+    ONE cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an
+    area reaching CZ requires it). ``coverage`` - the orthophotomap cutout
+    only (``product="orto"``, ``cutout=True``, PL,
+    ``horizontal_crs="EPSG:2180"``): the WCS coverage ``"standard"`` or
+    ``"high"``, with the cutout pixel in ``resolution`` (``"0.1m"``,
+    ``"0.25m"``, ``"0.5m"``, ``"1m"``; ADR-042 D14); the true orthophotomap
+    (``product="true-orto"``) has one coverage and the pixels ``"0.05m"``
+    to ``"1m"``; image sheets take neither. ``direction`` - the oblique
+    orthophotomap only (``product="oblique-orto"``): a code or a sequence of
+    the view directions ``"n"``, ``"e"``, ``"s"``, ``"w"`` (each a file of
+    the sheet, ``<sheet>_<direction>.tif``); ``None`` = all four.
     ``bbox`` may be in any supported CRS; ``geometry`` is a SHP/GPKG file.
     ``update``/``plan``: modes of every track (``plan`` from ``check_data``
     with ``update="upgrade"``). ``cache``: ``True`` = default metadata cache
@@ -357,6 +367,7 @@ def check_data(
     cutout: bool = False,
     horizontal_crs: str | None = None,
     coverage: str | None = None,
+    direction: str | Sequence[str] | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -411,6 +422,7 @@ def validate_data_request(
     cutout: bool = False,
     horizontal_crs: str | None = None,
     coverage: str | None = None,
+    direction: str | Sequence[str] | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -464,6 +476,7 @@ _SELECTION = (
     "cutout",
     "horizontal_crs",
     "coverage",
+    "direction",
     "year",
     "min_year",
     "max_year",
@@ -495,6 +508,12 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
             raise ValidationError(
                 f"Godlo '{task.sheet}' nalezy do systemu {system.id} "
                 f"(kraj {system.country}), a podano --country {country}"
+            )
+        if not sources_for(country=system.country, product=task.product):
+            raise ValidationError(
+                f"--product {task.product} nie ma danych {system.country} - godlo "
+                f"'{task.sheet}' nalezy do systemu {system.id} (kraj "
+                f"{system.country}); podaj godlo kraju produktu"
             )
         if system.country == "CZ":
             if task.product == "orto":  # SM5 sheets, own rules (ADR-042 D13)
@@ -732,21 +751,22 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
 
 
 def _product_label(product: str, resolution: str | None, fmt: str | None = None) -> str:
-    """Request label in messages: orto has no resolution (K5), archives name
-    their format."""
-    if product == "orto":
-        return "product: orto"
+    """Request label in messages: images have no resolution (K5), archives
+    name their format."""
+    if image_source(product) is not None:
+        return f"product: {product}"
     if fmt is not None and fmt != "ASC":
         return f"format: {fmt}, resolution: {resolution or '-'}"
     return f"resolution: {resolution}"
 
 
 def _create_provider_and_storage(
-    product, output_dir, vertical_crs, resolution, cache=None, fmt=None
+    product, output_dir, vertical_crs, resolution, cache=None, fmt=None, direction=None
 ):
     """Provider and storage of a PL sheet product (``cache``: ``MetadataCache``
     or ``None``; GUGiK index records go through it, N6). ``fmt``: ``None``
-    = ASC grids, else an archive format of the variant registry."""
+    = ASC grids, else an archive format of the variant registry;
+    ``direction``: the view direction of an oblique orthophotomap sheet."""
     from kartograf.download.storage import storage_for_provider
 
     if product == "nmpt":
@@ -758,11 +778,11 @@ def _create_provider_and_storage(
             format=fmt or "ASC",
             cache=cache,
         )
-    elif product == "orto":
-        from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
+    elif image_source(product) is not None:
+        from kartograf.providers.pl.gugik_orto import image_provider
 
-        # `download_data` offers the RGB composition only (`product="orto"`)
-        provider = GugikOrtoProvider(cache=cache, color="RGB")
+        # `download_data` offers the RGB composition of the orthophotomap only
+        provider = image_provider(product, cache=cache, direction=direction)
     elif product == "nmt":
         from kartograf.providers.pl import create_nmt_provider
 
@@ -784,7 +804,8 @@ def _manager(
     task: SimpleNamespace,
     run: _Run,
     metadata: MetadataCache | None,
-    parent_request: dict | None = None,
+    parent_request: dict | None,
+    direction: str | None,
 ) -> DownloadManager:
     provider, storage = _create_provider_and_storage(
         task.product,
@@ -793,8 +814,9 @@ def _manager(
         task.resolution,
         cache=metadata,
         fmt=task.format,
+        direction=direction,
     )
-    manager = DownloadManager(
+    return DownloadManager(
         output_dir=task.output_dir,
         provider=provider,
         storage=storage,
@@ -808,14 +830,59 @@ def _manager(
         full_sheet=task.full_sheet,
         on_notice=run.sink.add,
     )
-    if manager.storage.has_legacy_campaigns() is True:
+
+
+def _managers(
+    task: SimpleNamespace,
+    run: _Run,
+    metadata: MetadataCache | None,
+    parent_request: dict | None = None,
+) -> list[DownloadManager]:
+    """The managers of a PL sheet request: one per view direction of the
+    oblique orthophotomap (its sheet is one file per direction, the chosen
+    ``direction`` or all of them), else one."""
+    directions = image_directions(task.product)
+    chosen: tuple[str | None, ...] = (
+        (task.direction or directions) if directions else (None,)
+    )
+    managers = [
+        _manager(task, run, metadata, parent_request, direction) for direction in chosen
+    ]
+    if managers[0].storage.has_legacy_campaigns() is True:
         run.sink.emit(
             "info",
             LEGACY_CAMPAIGNS_DIR,
             "katalog kampanie/ z wersji 0.7.x nie jest uzywany; dane "
             "zostana pobrane ponownie do versions/",
         )
-    return manager
+    return managers
+
+
+def _direction_of(manager: DownloadManager) -> str | None:
+    direction = getattr(manager.provider, "direction", None)
+    return direction if isinstance(direction, str) else None
+
+
+def _prefix(manager: DownloadManager) -> str:
+    """Prefix of the messages of one view direction (``kierunek n: ``)."""
+    direction = _direction_of(manager)
+    return f"kierunek {direction}: " if direction is not None else ""
+
+
+def _progress(
+    run: _Run, manager: DownloadManager
+) -> Callable[[DownloadProgress], None] | None:
+    """``on_progress`` of a manager: the events of a view direction name it
+    after the sheet (``7.125.11.08 n``)."""
+    direction = _direction_of(manager)
+    progress = run.on_progress
+    if progress is None or direction is None:
+        return progress
+
+    def on_progress(event: DownloadProgress) -> None:
+        progress(replace(event, sheet=f"{event.sheet} {direction}"))
+
+    return on_progress
 
 
 def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int | None:
@@ -826,7 +893,7 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
     if run.update != "upgrade" or run.loaded is None:
         return None
     report = manager.download_sheets(
-        sheets, update="upgrade", plan=run.loaded, on_progress=run.on_progress
+        sheets, update="upgrade", plan=run.loaded, on_progress=_progress(run, manager)
     )
     reported = any(n.code == UNVERIFIED_LOCAL for n in report.notices)
     for sheet, files in report.files.items():
@@ -838,69 +905,88 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
                 reported_check_failure=reported or sheet in report.unverified,
             )
     rc = run.add_stale(report.stale)
+    prefix = _prefix(manager)
     for sheet, message in report.errors.items():
-        run.fail(sheet, "PL", f"{sheet}: {message}", "download")
+        run.fail(sheet, "PL", f"{prefix}{sheet}: {message}", "download")
     return 1 if rc or report.failed else 0
 
 
-def _announcer(run: _Run, unit: str, details: str) -> Callable[[], None]:
+def _announcer(
+    on_progress: Callable[[DownloadProgress], None] | None, unit: str, details: str
+) -> Callable[[], None]:
     """``on_download`` hook: a ``start`` progress event when a transfer starts."""
 
     def announce() -> None:
-        if run.on_progress is not None:
-            run.on_progress(DownloadProgress(0, 1, unit, "start", details))
+        if on_progress is not None:
+            on_progress(DownloadProgress(0, 1, unit, "start", details))
 
     return announce
 
 
 def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
-    """PL sheet code (validated): one sheet, a coarser code or a ``scale`` list."""
+    """PL sheet code (validated): one sheet, a coarser code or a ``scale``
+    list; the view directions of an oblique sheet one after another."""
     if run.dry:
         return 0
-    label = _product_label(task.product, task.resolution)
     with open_cache(
         run.cache, force=run.update == "force", on_notice=run.sink.add
     ) as metadata:
-        manager = _manager(task, run, metadata)
-        sheets = (
-            [d.sheet for d in SheetParser(task.sheet).get_all_descendants(task.scale)]
-            if task.scale
-            else [task.sheet]
+        return max(
+            _download_pl_code(task, run, manager)
+            for manager in _managers(task, run, metadata)
         )
-        planned = _plan_modes(run, manager, sheets)
-        if planned is not None:
-            return planned
-        try:
-            if task.scale:
-                if run.on_progress is not None:
-                    count = manager.count_sheets(task.sheet, task.scale)
-                    run.on_progress(
-                        DownloadProgress(
-                            0, count, f"{task.sheet} to {task.scale}", "start", label
-                        )
+
+
+def _download_pl_code(
+    task: SimpleNamespace, run: _Run, manager: DownloadManager
+) -> int:
+    """The files of one manager of a PL sheet code request."""
+    label = _product_label(task.product, task.resolution)
+    prefix = _prefix(manager)
+    on_progress = _progress(run, manager)
+    sheets = (
+        [d.sheet for d in SheetParser(task.sheet).get_all_descendants(task.scale)]
+        if task.scale
+        else [task.sheet]
+    )
+    planned = _plan_modes(run, manager, sheets)
+    if planned is not None:
+        return planned
+    try:
+        if task.scale:
+            if on_progress is not None:
+                count = manager.count_sheets(task.sheet, task.scale)
+                on_progress(
+                    DownloadProgress(
+                        0, count, f"{task.sheet} to {task.scale}", "start", label
                     )
-                result = manager.download_hierarchy(
-                    task.sheet,
-                    task.scale,
-                    update=run.update,
-                    on_progress=run.on_progress,
                 )
-                return _finish_pl_sheets(task, run, result)
-            parsed = SheetParser(task.sheet)
-            expanded = parsed.sheet_system != "2000" and parsed.scale != "1:10000"
-            announce = _announcer(run, task.sheet, label)
-            if expanded:
-                announce()
-            result = manager.download_sheet(
+            result = manager.download_hierarchy(
                 task.sheet,
+                task.scale,
                 update=run.update,
-                on_progress=run.on_progress,
-                on_download=announce,
+                on_progress=on_progress,
             )
-        except DownloadError as e:
-            return run.fail(task.sheet, "PL", str(e), "download")
+            return _finish_pl_sheets(task, run, result, prefix)
+        parsed = SheetParser(task.sheet)
+        # a PL-1992 code coarser than the sheet level of the product (the
+        # manager expands it, ``DownloadManager.is_hierarchy``)
+        expanded = parsed.sheet_system != "2000" and parsed.scale != (
+            pl_target_scale(task)
+        )
+        announce = _announcer(on_progress, task.sheet, label)
+        if expanded:
+            announce()
+        result = manager.download_sheet(
+            task.sheet,
+            update=run.update,
+            on_progress=on_progress,
+            on_download=announce,
+        )
+    except DownloadError as e:
+        return run.fail(task.sheet, "PL", f"{prefix}{e}", "download")
     if expanded:
-        return _finish_pl_sheets(task, run, result)
+        return _finish_pl_sheets(task, run, result, prefix)
     reported = any(n.code == UNVERIFIED_LOCAL for n in result.notices)
     for file in result.files.get(parsed.sheet, ()):
         run.add(
@@ -1008,7 +1094,8 @@ def _download_pl_sheet_list(
     what: str,
     target_scale: str,
 ) -> int:
-    """PL sheet list (area without ``cutout``): manager + finish (D15)."""
+    """PL sheet list (area without ``cutout``): managers + finish (D15; the
+    view directions of the oblique orthophotomap one after another)."""
     if run.dry:
         return 0
     _emit_sheet_list(run, task, sheets, f"w skali {target_scale}", what)
@@ -1016,16 +1103,25 @@ def _download_pl_sheet_list(
         run.cache, force=run.update == "force", on_notice=run.sink.add
     ) as metadata:
         try:
-            manager = _manager(task, run, metadata, parent_request)
-            planned = _plan_modes(run, manager, sheets)
-            if planned is not None:
-                return planned
-            result = manager.download_sheets(
-                sheets, update=run.update, on_progress=run.on_progress
-            )
+            managers = _managers(task, run, metadata, parent_request)
         except DownloadError as e:
             return run.fail("PL", "PL", str(e), "download")
-    return _finish_pl_sheets(task, run, result)
+        rc = 0
+        for manager in managers:
+            prefix = _prefix(manager)
+            try:
+                planned = _plan_modes(run, manager, sheets)
+                if planned is not None:
+                    rc = max(rc, planned)
+                    continue
+                result = manager.download_sheets(
+                    sheets, update=run.update, on_progress=_progress(run, manager)
+                )
+            except DownloadError as e:
+                rc = max(rc, run.fail("PL", "PL", f"{prefix}{e}", "download"))
+                continue
+            rc = max(rc, _finish_pl_sheets(task, run, result, prefix))
+    return rc
 
 
 def _emit_sheet_list(
@@ -1064,7 +1160,7 @@ def _download_pl_archive(
         run.cache, force=run.update == "force", on_notice=run.sink.add
     ) as metadata:
         try:
-            manager = _manager(task, run, metadata, parent_request)
+            (manager,) = _managers(task, run, metadata, parent_request)
             provider = cast(GugikProvider, manager.provider)
             sheets = provider.index_sheets(
                 areas,
@@ -1157,12 +1253,15 @@ def _download_pl_files(
     return max(run.add_stale(stale), 1 if failed else 0)
 
 
-def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) -> int:
+def _finish_pl_sheets(
+    task: SimpleNamespace, run: _Run, result: DownloadResult, prefix: str = ""
+) -> int:
     """Files, notices and exit code of a multi-sheet PL request (D2/D10, R5).
 
     All downloaded/local -> 0; >= 1 file and the rest without GUGiK data ->
     ``NO_COVERAGE_SOME``, 0; >= 1 download failure -> failure, 1; no file at
-    all -> ``no_coverage`` failure, 1.
+    all -> ``no_coverage`` failure, 1. ``prefix`` names the view direction
+    of the result in its messages (``kierunek n: ``, oblique orthophotomap).
     """
     paths = _result_paths(result)
     _sheet_sidecar_notices(task, run, result, paths)
@@ -1183,7 +1282,7 @@ def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) 
         run.sink.emit(
             "warning",
             NO_COVERAGE_SOME,
-            f"GUGiK nie ma danych dla {len(missing)} z {total} arkuszy "
+            f"{prefix}GUGiK nie ma danych dla {len(missing)} z {total} arkuszy "
             f"({shown}) - pominiete (skorowidz GUGiK nie ma tych arkuszy dla "
             "wybranego produktu i rozdzielczosci, np. morze, obszar za granica, "
             f"brak NMT 5 m w czesci kraju); pobrano {len(paths)}",
@@ -1197,7 +1296,7 @@ def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) 
         return run.fail(
             "PL",
             "PL",
-            f"{len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
+            f"{prefix}{len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
             f"nie brak danych): {causes} - ponow pobranie",
             "download",
         )
@@ -1206,7 +1305,7 @@ def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) 
         return run.fail(
             "PL",
             "PL",
-            f"GUGiK nie ma danych dla zadnego z {total} arkuszy obszaru",
+            f"{prefix}GUGiK nie ma danych dla zadnego z {total} arkuszy obszaru",
             "no_coverage",
         )
     return 0
@@ -1218,6 +1317,9 @@ def _coverage_hints(run: _Run, result: DownloadResult) -> None:
     hints = list(
         dict.fromkeys(h for hs in result.no_coverage_hints.values() for h in hs)
     )
+    # the view directions of one oblique request share their hints
+    shown = {n.text for n in run.sink.notices if n.code == NO_COVERAGE_HINT}
+    hints = [hint for hint in hints if hint not in shown]
     for hint in hints[:MAX_HINT_LINES]:
         run.sink.emit("info", NO_COVERAGE_HINT, hint)
     rest = len(hints) - MAX_HINT_LINES
@@ -1456,14 +1558,18 @@ def _unit_of(path: Path, output_dir: Path) -> str:
 def _download_pl_cutout(
     task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
 ) -> int:
-    """PL cutout (``cutout``) from GUGiK WCS: NMT/NMPT (ADR-035) or the
-    orthophotomap (``coverage``, ADR-042 D14).
+    """PL cutout (``cutout``) from GUGiK WCS: NMT/NMPT (ADR-035) or an image
+    (the orthophotomap with ``coverage``, ADR-042 D14; the true
+    orthophotomap).
 
     A source failure is recorded for the PL part; invalid input and unexpected
     errors propagate to the caller.
     """
     from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
-    from kartograf.download.orto_cutout import check_orto_cutout, download_orto_cutout
+    from kartograf.download.orto_cutout import (
+        check_image_cutout,
+        download_image_cutout,
+    )
 
     if run.dry:
         return 0
@@ -1475,17 +1581,22 @@ def _download_pl_cutout(
     }
     result: PlCutoutResult | OrtoCutoutResult
     try:
-        if task.product == "orto":
-            orto = {**common, "coverage": task.coverage, "resolution": task.resolution}
+        if image_source(task.product) is not None:
+            image = {
+                **common,
+                "product": task.product,
+                "coverage": task.coverage,
+                "resolution": task.resolution,
+            }
             if run.check:
-                run.plans.append(check_orto_cutout(bbox, **orto))
+                run.plans.append(check_image_cutout(bbox, **image))
                 return 0
-            result = download_orto_cutout(
+            result = download_image_cutout(
                 bbox,
                 update=run.update,
                 plan=run.loaded,
                 parent_request=parent_request,
-                **orto,
+                **image,
             )
         else:
             selection = {
@@ -1560,7 +1671,9 @@ def _download_cz(
                 task.sheet,
                 update=run.update,
                 plan=run.loaded,
-                on_download=_announcer(run, task.sheet, f"CZ, resolution: {label}"),
+                on_download=_announcer(
+                    run.on_progress, task.sheet, f"CZ, resolution: {label}"
+                ),
                 **common,
             )
             run.add(
@@ -1583,7 +1696,9 @@ def _download_cz(
             update=run.update,
             plan=run.loaded,
             parent_request=parent_request,
-            on_download=_announcer(run, "CZ bbox", f"{resolution}, {target}"),
+            on_download=_announcer(
+                run.on_progress, "CZ bbox", f"{resolution}, {target}"
+            ),
             **common,
         )
     except DownloadError as e:
@@ -1709,7 +1824,9 @@ def _download_cz_orto(
                 plan=run.loaded,
                 parent_request=parent_request,
                 on_download=(
-                    _announcer(run, sheet, "CZ, ortofoto SM5") if bbox is None else None
+                    _announcer(run.on_progress, sheet, "CZ, ortofoto SM5")
+                    if bbox is None
+                    else None
                 ),
                 **common,
             )
@@ -1757,7 +1874,9 @@ def _download_pl_laz(
         return 0
     if run.on_progress is not None:
         _announcer(
-            run, "kafle LAZ", f"WFS GUGiK, {country_value(task.vertical_crs, 'PL')}"
+            run.on_progress,
+            "kafle LAZ",
+            f"WFS GUGiK, {country_value(task.vertical_crs, 'PL')}",
         )()
     on_progress = run.on_progress
 
