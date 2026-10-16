@@ -868,7 +868,7 @@ download_data(..., format: str | None = None,                          # contour
   auto` dla produktu jednego kraju zaweza obszar do tego kraju
   (`AUTO_NARROWED_TO_CZ`/`_PL`, jak kolekcje); `pl_only_flags` nie zna juz
   produktow.
-- [ ] **Step 6: CLI.**
+- [x] **Step 6: CLI.**
   - `elevation`: `contours` w produktach grupy (lista w bibliotece, jak
     `ELEVATION_PRODUCTS` z planu manifestu); `--format`; teksty
     `--resolution` i `--vertical-crs` z rejestru;
@@ -878,11 +878,19 @@ download_data(..., format: str | None = None,                          # contour
     `--product nmt --resolution 100m`);
   - parity (`tests/test_parity.py`): NMT 100 m, warstwice, orto ukosna
     `--direction n`.
-- [ ] **Step 7: Manifest (warunkowo).**
+
+  **Wykonane 2026-10-16:** parity w `tests/test_parity_e1.py` (jak
+  `test_parity_e2.py`); `elevation availability` ma wlasna liste produktow
+  (`AVAILABILITY_PRODUCTS`, bez warstwic - decyzja 7); linie
+  `--check-updates` pozycji jednej jednostki z kilkoma plikami (kierunki
+  orto ukosnej, JPEG i JGW ortofoto CZ) podaja nazwe pliku zamiast
+  czterokrotnego godla.
+- [x] **Step 7: Manifest (warunkowo).**
   - Opcje `elevation download` dostaja `format`, a `imagery download`
     dostaje `direction`;
     `test_task_options_equal_parser_data_flags` zielony;
-  - test zadania projektu z NMT 100 m (jednostka wojewodztwa).
+  - test zadania projektu z NMT 100 m (jednostka wojewodztwa) -
+    `tests/test_project_e1.py` (z zadaniem warstwic `format`).
 - [ ] **Step 8: Live (swiadomie, `-o <katalog-danych>/kartograf/e2e/<data>-plan-e1/`).**
   - NMT 100 m woj. 12 (7,6 MB): drugi przebieg lokalny,
     `--check-updates` = aktualne;
