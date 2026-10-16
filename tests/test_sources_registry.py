@@ -13,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from kartograf.core.sheet_parser import BBox
+from kartograf.download.collections import _capability
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     PACKAGE_URL_TOKENS,
@@ -39,6 +40,7 @@ from kartograf.sources.registry import (
     sources_for,
     vertical_crs_code,
 )
+from kartograf.sources.sidecar import _select_channel_by_capability
 from kartograf.sources.variants import ProductVariant, resolution_label, variants
 
 # Sidecar `dataset` keys of the PL NMT/NMPT sheet sources (ADR-041): ASC grids
@@ -221,6 +223,18 @@ def _collection_channels():
         for ch in d.channels
         if ch.params is not None and not isinstance(ch.params, WcsCutoutParams)
     ]
+
+
+def _sidecar_crs(channel: AccessChannel) -> tuple:
+    """CRSs a collection file sidecar takes from its channel: the horizontal
+    CRS of the file (native CRS of a feature service) and the vertical one."""
+    params = channel.params
+    horizontal = (
+        params.native_crs
+        if isinstance(params, FeatureBBoxParams)
+        else channel.horizontal_crs
+    )
+    return horizontal, channel.vertical_crs_options, channel.vertical_source
 
 
 def test_collection_channel_signals_match_inventory():
@@ -774,20 +788,19 @@ class TestCollectionChannels:
                 expected = {
                     TransportKind.WFS: "wfs",
                     TransportKind.ARCGIS_QUERY: "arcgis",
+                    TransportKind.OGC_API_FEATURES: "ogcapi",
                 }
                 assert ch.params.protocol == expected[ch.transport], d.key
                 assert ch.endpoint.startswith("https://"), d.key
 
-    def test_collection_capability_unique_in_descriptor(self):
-        """The sidecar picks the channel of a file by its capability."""
+    def test_sidecar_channel_describes_collection_channel(self):
+        """The sidecar reads the CRSs of a file from the first channel of the
+        capability that names its channel (ADR-043: channels of one kind - one
+        WFS service per network - share a capability), so that channel must
+        declare the same CRSs."""
         for d, ch in _collection_channels():
-            others = [c for c in d.channels if c is not ch]
-            own = [
-                cap
-                for cap in ch.capabilities
-                if all(cap not in c.capabilities for c in others)
-            ]
-            assert own, (d.key, ch.capabilities)
+            named = _select_channel_by_capability(d, _capability(d, ch))
+            assert _sidecar_crs(named) == _sidecar_crs(ch), (d.key, ch.endpoint)
 
     def test_url_templates_use_known_tokens(self):
         for d, ch in _collection_channels():
@@ -798,11 +811,80 @@ class TestCollectionChannels:
             choices = [v.choice for v in ch.params.variants]
             assert len(set(choices)) == len(choices), d.key
             for v in ch.params.variants:
-                tokens = set(re.findall(r"{([^}]*)}", v.url_template))
-                assert tokens <= set(PACKAGE_URL_TOKENS), (d.key, v.url_template)
-                assert v.url_template.startswith("https://"), d.key
+                if v.url_template is not None:
+                    tokens = set(re.findall(r"{([^}]*)}", v.url_template))
+                    assert tokens <= set(PACKAGE_URL_TOKENS), (d.key, v.url_template)
+                    assert v.url_template.startswith("https://"), d.key
                 for token in (*v.segment_tokens, *([v.edition] if v.edition else [])):
                     assert _SEGMENT_TOKEN.fullmatch(token), (d.key, token)
+
+    def test_unit_package_variants_addressable(self):
+        """Every variant of a unit package channel gets a URL for each unit
+        (ADR-043): a template filled only by tokens of its unit (a theme in
+        every template of a product of several themes), else the URL of an
+        index record."""
+        unit_tokens = {
+            "powiat": {"teryt", "woj"},
+            "woj": {"teryt", "woj"},
+            "country": set(),
+            "sheet": {"sheet"},
+            "tile": set(),
+            "ku": {"ku"},
+        }
+        for d, ch in _collection_channels():
+            params = ch.params
+            if not isinstance(params, UnitPackageParams):
+                continue
+            allowed = unit_tokens[params.unit] | ({"theme"} if params.themes else set())
+            for v in params.variants:
+                if v.url_template is None:
+                    assert params.index is not None, (d.key, v.choice)
+                    continue
+                tokens = set(re.findall(r"{([^}]*)}", v.url_template))
+                assert tokens <= allowed, (d.key, params.unit, v.url_template)
+                if params.themes:
+                    assert "theme" in tokens, (d.key, v.url_template)
+
+    def test_unit_sources_complete(self):
+        """Sheets, tiles and cadastral areas of an area are found from the
+        channel configuration alone (ADR-043): a sheet grid per variant, an
+        index layer per variant of an indexed channel, the RUIAN layer."""
+        for d, ch in _collection_channels():
+            params = ch.params
+            if not isinstance(params, UnitPackageParams):
+                continue
+            index = params.index
+            if params.unit == "tile":
+                assert index is not None and index.kind == "wfs", d.key
+            if params.unit == "ku":
+                assert params.ku_layer is not None, d.key
+            if index is not None:
+                assert params.unit in ("sheet", "tile"), d.key
+                if index.kind == "wms_gfi":
+                    assert index.parser == "map_links", d.key
+                else:
+                    assert index.url_field is not None, d.key
+            for v in params.variants:
+                if index is not None:
+                    assert v.index_layer, (d.key, v.choice)
+                grid = v.sheet_grid
+                if params.unit != "sheet":
+                    assert grid is None, (d.key, v.choice)
+                    continue
+                assert grid is not None, (d.key, v.choice)
+                if grid.system == "cuzk":
+                    assert grid.layer is not None and grid.crs, (d.key, v.choice)
+                else:
+                    assert grid.parts in range(2, 8), (d.key, v.choice)
+
+    def test_index_signal_only_with_index(self):
+        """Signal ``index`` compares the label of the unit's index record
+        (ADR-043): a collection channel has it exactly when it has an index."""
+        for d, ch in _collection_channels():
+            indexed = isinstance(ch.params, UnitPackageParams) and (
+                ch.params.index is not None
+            )
+            assert (ch.update_signal == "index") == indexed, (d.key, ch.endpoint)
 
     def test_feature_layers_unique(self):
         for d, ch in _collection_channels():

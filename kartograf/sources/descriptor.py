@@ -222,7 +222,7 @@ class FeatureBBoxParams:
     channel when a product has one service per value (ADR-043:
     ``(("network", "gravity"),)``). ``timeout``: seconds of one request of
     a service slower than the default of the orchestrator (OGC API Features
-    of GUGiK: 73-93 s per page of items, measured 2026-10-16); ``None`` =
+    of GUGiK PRNG: 78-95 s per page of items, measured 2026-10-16); ``None`` =
     the default.
     """
 
@@ -291,11 +291,13 @@ class AccessChannel:
     server_reprojection: bool = False
     capabilities: frozenset[str] = frozenset()
     # {"bbox_raster","bbox_vector","sheet_files","area_files","admin_unit_files",
-    #  "archive_unit_files","country_files"}; a collection channel (``params``
-    # of a collection engine) declares a capability no other channel of its
-    # descriptor has (sidecar channel selection, ``build_metadata(capability=)``);
-    # the WCS cutout channels of one descriptor share ``bbox_raster`` (same CRSs;
-    # the sidecar names the service in ``extra.source``)
+    #  "archive_unit_files","country_files"}; the sidecar of a collection file
+    # reads the CRSs from the first channel of the capability naming its
+    # channel (``build_metadata(capability=)``): a capability no other channel
+    # of the descriptor has, or one shared by channels of one kind with the
+    # same CRSs (ADR-043: one WFS service per network; the WCS cutout channels
+    # of one descriptor share ``bbox_raster``; the sidecar names the service in
+    # ``extra.source``)
     notes: str = ""
     endpoint: str = ""
     # Channel URL for descriptor-driven engines (stage 1: CuzkClient; ADR-042:
