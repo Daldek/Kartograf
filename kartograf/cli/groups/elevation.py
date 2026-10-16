@@ -1,4 +1,4 @@
-"""``kartograf elevation``: NMT, NMPT and LAZ from GUGiK/CUZK (ADR-039)."""
+"""``kartograf elevation``: NMT, NMPT, LAZ and contours from GUGiK/CUZK (ADR-039)."""
 
 import argparse
 from functools import partial
@@ -12,8 +12,12 @@ from kartograf.cli._args import (
 from kartograf.cli.availability_cmd import cmd_availability
 from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
-from kartograf.download.availability import AVAILABILITY_COUNTRIES
+from kartograf.download.availability import (
+    AVAILABILITY_COUNTRIES,
+    AVAILABILITY_PRODUCTS,
+)
 from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_contours import contours_formats
 from kartograf.download.options import (
     COUNTRIES,
     COUNTRY_CHOICES,
@@ -35,13 +39,15 @@ def _source_choice(source: SourceDescriptor) -> str:
     ``--vertical-crs`` only when the source has one height system (a variant
     without one takes none: NMT 100 m)."""
     flags = f"--product {source.product}"
+    variant = source.variants[0] if source.variants else None
     if source.country == "CZ":
-        if source.product == "laz":
-            return f"{flags} --country cz --model {source.variants[0].model}"
+        if source.product == "laz" and variant is not None:
+            return f"{flags} --country cz --model {variant.model}"
+        if variant is not None and variant.label is None:  # one format each
+            return f"{flags} --country cz --format {variant.format}"
         return f"{flags} --country cz --resolution {source.resolution}"
-    if not source.variants or source.product == "laz":
+    if variant is None or source.product == "laz":
         return flags
-    variant = source.variants[0]
     if variant.source_file:
         flags += f" --format {variant.format}"
     if variant.label is not None:
@@ -56,21 +62,24 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     commands = add_group(
         subparsers,
         "elevation",
-        help="Wysokosci: NMT, NMPT i chmury LAZ (PL i CZ)",
+        help="Wysokosci: NMT, NMPT i chmury LAZ (PL i CZ), warstwice (CZ)",
         description="Dane wysokosciowe NMT/NMPT i chmury punktow LAZ "
-        "z GUGiK (PL) i CUZK (CZ).",
+        "z GUGiK (PL) i CUZK (CZ) oraz warstwice ZABAGED (CZ).",
     )
     download = commands.add_parser(
         "download",
-        help="Pobierz NMT, NMPT albo LAZ (arkusze, kafle albo wycinek)",
+        help="Pobierz NMT, NMPT, LAZ albo warstwice (arkusze, kafle albo wycinek)",
         description=(
             "Pobierz NMT, NMPT i chmury punktow LAZ z GUGiK (PL) albo CUZK (CZ) "
             "do magazynu wersji. PL: --bbox/--geometry wybiera arkusze/kafle LAZ, "
-            "--cutout --horizontal-crs daje wycinek 1 m z WCS GUGiK. "
+            "--cutout --horizontal-crs daje wycinek 1 m z WCS GUGiK; NMT 100 m "
+            "(--resolution 100m) to pliki XYZ wojewodztw obszaru. "
             "CZ: rastry SM5/TM33 z plikow CUZK albo ImageServer (kafle TM33 "
             "DMR 4G i DMP OK z plikow ETRS89/EVRF2007); dla obszaru rastra "
             "--cutout wymagane. LAZ CZ: --model i arkusz SM5/TM33 albo obszar "
-            "(arkusze z indeksu), bez --cutout i bez transformacji chmur."
+            "(arkusze z indeksu), bez --cutout i bez transformacji chmur. "
+            "Warstwice CZ (--product contours --format SHP|DGN): ZIP arkusza SM5 "
+            "1:1, obszar = arkusze SM5 z indeksu, bez --cutout."
         ),
     )
 
@@ -85,11 +94,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         selection,
         sheet_help="Godlo arkusza - pliki tego arkusza ze zrodla (grubsze godlo "
         "rozwija sie na arkusze zrodla; LAZ PL: kafle przecinajace arkusz, LAZ "
-        "CZ: plik godla): PL-1992 (np. N-34-130-D-d-2-4), PL-2000 (np. "
-        "6.129.30.25.3), CZ SM5 (np. CTES96) albo CZ TM33 (np. 302_5550)",
+        "CZ: plik godla; NMT 100 m: pliki wojewodztw arkusza): PL-1992 (np. "
+        "N-34-130-D-d-2-4), PL-2000 (np. 6.129.30.25.3), CZ SM5 (np. CTES96; "
+        "warstwice tylko SM5) albo CZ TM33 (np. 302_5550)",
         geometry_help="Plik geometrii obszaru (SHP albo GPKG): PL - arkusze i "
-        "kafle LAZ przecinajace obiekty; CZ LAZ - arkusze przecinajace "
-        "obwiednie geometrii; wycinek (--cutout) - obwiednia geometrii",
+        "kafle LAZ przecinajace obiekty; CZ LAZ i warstwice - arkusze "
+        "przecinajace obwiednie geometrii; wycinek (--cutout) - obwiednia "
+        "geometrii",
     )
     selection.add_argument(
         "--country",
@@ -107,9 +118,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="RES",
         default=None,
         help="Rozdzielczosc siatki - wymagana tam, gdzie jest wybor. PL "
-        f"(siatki ASC): {resolution_text()}; wycinek --cutout tylko 1m (mozna "
-        "pominac); archiwa (--format): rozdzielczosci w kartograf elevation "
-        f"list-sources. CZ: {cz_resolution_help()}. LAZ bez rozdzielczosci. "
+        f"(siatki ASC; NMT 100m - pliki XYZ wojewodztw): {resolution_text()}; "
+        "wycinek --cutout tylko 1m (mozna pominac); archiwa (--format): "
+        "rozdzielczosci w kartograf elevation list-sources. CZ: "
+        f"{cz_resolution_help()}. LAZ i warstwice bez rozdzielczosci. "
         "Jedna wartosc dotyczy kazdego kraju zadania; zadanie PL+CZ z roznymi: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=1m,cz=2m)",
     )
@@ -124,9 +136,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--vertical-crs",
         metavar="VCRS",
         default=None,
-        help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}. CZ: "
+        help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}; NMT 100 m: "
+        "pomin (GUGiK nie deklaruje ukladu). CZ: "
         f"{CZ_VERTICAL_TEXT}. LAZ CZ: Bpv = pliki SM5, EVRF2007 = pliki TM33; "
-        "chmury nie sa transformowane. Jedna wartosc dotyczy kazdego kraju "
+        "chmury nie sa transformowane. Warstwice CZ: Bpv (mozna pominac). Jedna "
+        "wartosc dotyczy kazdego kraju "
         "zadania i musi byc dla niego dostepna; PL+CZ z roznymi ukladami: "
         "pl=WARTOSC,cz=WARTOSC (np. pl=EVRF2007,cz=Bpv)",
     )
@@ -134,11 +148,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--format",
         metavar="FORMAT",
         default=None,
-        help="Format pliku NMT/NMPT PL. Bez flagi: siatka ASC (format "
-        "produktu). Archiwa GUGiK - pliki zrodlowe jak w skorowidzu (bez "
+        help="Format pliku. NMT/NMPT PL: bez flagi siatka ASC (format "
+        "produktu); archiwa GUGiK - pliki zrodlowe jak w skorowidzu (bez "
         "konwersji, bez --cutout; arkusze roznych skal wynikaja ze "
-        f"skorowidza, bez --scale): {format_text()}. Warianty archiwow: "
-        "kartograf elevation list-sources",
+        f"skorowidza, bez --scale): {format_text()}. Warstwice CZ (--product "
+        f"contours, wymagany): {', '.join(contours_formats())} - ZIP arkusza SM5 "
+        "bez konwersji. Warianty: kartograf elevation list-sources",
     )
     sheets = download.add_argument_group("Arkusze obszaru")
     sheets.add_argument(
@@ -307,9 +322,9 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     selection = report.add_argument_group("Produkt i obszar")
     selection.add_argument(
         "--product",
-        choices=ELEVATION_PRODUCTS,
+        choices=AVAILABILITY_PRODUCTS,
         default=None,
-        help=f"Produkt (wymagany): {product_choices(ELEVATION_PRODUCTS)}",
+        help=f"Produkt (wymagany): {product_choices(AVAILABILITY_PRODUCTS)}",
     )
     add_area_flags(
         selection,
