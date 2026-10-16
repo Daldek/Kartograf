@@ -490,7 +490,7 @@ from kartograf import (
     HSGCalculator, HsgResult, hsg_from_rasters,
     # Project manifest (kartograf-project/1, ADR-040)
     init_project, open_project, add_project_task, remove_project_task,
-    download_project, check_project, project_status, verify_project,
+    download_project, check_project, get_project_status, verify_project,
     Project, ProjectTask, PinnedFile, ProjectReport, TaskResult,
     ProjectCheck, FileCheck,
     # Transport and mosaic (stable since 0.7.1)
@@ -1227,7 +1227,7 @@ kartograf/
 │   ├── model.py              # Project, ProjectTask, PinnedFile, ProjectReport, TaskResult, ProjectCheck, FileCheck
 │   ├── commands.py           # COMMANDS: komendy danych w zadaniach (opcje JSON, walidacja bez sieci, pobranie, przypięcia)
 │   ├── manifest.py           # odczyt, walidacja i atomowy zapis manifestu
-│   └── operations.py         # API: init_project, open_project, add/remove_project_task, download_project, check_project, project_status, verify_project
+│   └── operations.py         # API: init_project, open_project, add/remove_project_task, download_project, check_project, get_project_status, verify_project
 ├── auth/                  # Autentykacja (CLMS)
 │   ├── proxy.py               # Auth Proxy server
 │   └── client.py               # Auth Proxy client

@@ -13,8 +13,8 @@ from kartograf import (
     add_project_task,
     check_project,
     download_project,
+    get_project_status,
     open_project,
-    project_status,
     verify_project,
 )
 from kartograf.core.bbox import BBox
@@ -89,18 +89,18 @@ def test_status_only_stats_files_and_reports_missing(tmp_path):
     pin = open_project(project).tasks[0].files[0]
     data = project / "data" / pin.version
     with patch("kartograf.project.operations.file_digest", side_effect=AssertionError):
-        assert project_status(project).ok
+        assert get_project_status(project).ok
         data.write_bytes(data.read_bytes() + b"X")
-        result = project_status(project)
+        result = get_project_status(project)
         assert not result.ok and result.files[0].status == "corrupt"
         data.unlink()
-        result = project_status(project)
+        result = get_project_status(project)
         assert not result.ok and result.files[0].status == "missing"
     other = new_project(tmp_path, "other")
     add_project_task(
         other, name="teren", command="elevation download", options=PL_SHEET
     )
-    result = project_status(other)
+    result = get_project_status(other)
     assert not result.ok and result.files == () and result.not_downloaded == ("teren",)
 
 
@@ -378,6 +378,6 @@ def test_check_changed_geometry_warns_and_keeps_pins(tmp_path):
 
 def test_unknown_task_is_validation_error(tmp_path):
     project = _pl(tmp_path)
-    for call in (project_status, verify_project, check_project):
+    for call in (get_project_status, verify_project, check_project):
         with pytest.raises(ValidationError):
             call(project, tasks=["missing"])

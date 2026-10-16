@@ -9,9 +9,9 @@ from kartograf import (
     add_project_task,
     check_project,
     download_project,
+    get_project_status,
     init_project,
     open_project,
-    project_status,
     verify_project,
 )
 from kartograf.cli import main
@@ -578,7 +578,7 @@ def test_project_cli_matches_api_for_download_status_verify_and_updates(
     assert _manifest_bytes(cli_dir) == _manifest_bytes(api_dir)
 
     for cmd, call in (
-        ("status", project_status),
+        ("status", get_project_status),
         ("verify", verify_project),
     ):
         result = call(api_dir)

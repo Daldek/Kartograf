@@ -2774,7 +2774,7 @@ pustego katalogu).
 from pathlib import Path
 from kartograf import (
     add_project_task, check_project, download_project, init_project,
-    project_status, verify_project,
+    get_project_status, verify_project,
 )
 
 project_dir = Path.home() / "projekty" / "wisla"
@@ -2793,7 +2793,7 @@ add_project_task(
 )
 report = download_project(project_dir)
 print(report.ok, [(task.name, task.outcome) for task in report.tasks])
-print(project_status(project_dir).ok, verify_project(project_dir).ok)
+print(get_project_status(project_dir).ok, verify_project(project_dir).ok)
 check = check_project(project_dir)  # sonda zrodla; bez pobierania i zapisu
 print([(item.task, item.status) for item in check.files])
 download_project(project_dir, tasks=["teren"], update="upgrade", workers=8)
@@ -2803,7 +2803,7 @@ download_project(project_dir, tasks=["teren"], update="upgrade", workers=8)
 `download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`;
 `workers` = rownolegle pobieranie plikow kazdego zadania, `None` = domyslne
 komendy),
-a `check_project`, `project_status` i `verify_project` zwracaja
+a `check_project`, `get_project_status` i `verify_project` zwracaja
 `ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
 `open_project(project_dir)` czyta i waliduje manifest; API udostepnia
 takze `remove_project_task`. Operacje projektu domyslnie dzialaja bez

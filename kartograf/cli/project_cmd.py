@@ -11,9 +11,9 @@ from kartograf import (
     add_project_task,
     check_project,
     download_project,
+    get_project_status,
     init_project,
     open_project,
-    project_status,
     remove_project_task,
     verify_project,
 )
@@ -264,7 +264,7 @@ def cmd_project_download(args: argparse.Namespace) -> int:
 def cmd_project_status(args: argparse.Namespace) -> int:
     """Fast local file presence and size check through the public API."""
     return _render_check(
-        project_status(args.project, tasks=_selected_tasks(args)),
+        get_project_status(args.project, tasks=_selected_tasks(args)),
         quiet=args.quiet,
         checking_updates=False,
     )

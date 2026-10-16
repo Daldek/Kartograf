@@ -114,7 +114,7 @@ class ProjectReport:
 class FileCheck:
     """State of one pinned file (or of a plan position without a pin).
 
-    ``status``: ``ok``/``missing``/``corrupt`` (``project_status``,
+    ``status``: ``ok``/``missing``/``corrupt`` (``get_project_status``,
     ``verify_project``) or ``current``/``newer``/``added``/``removed``/
     ``unverifiable``/``check_failed``/``missing`` (``check_project``).
     ``detail``: the reason with a remedy, ``None`` when nothing to do.
@@ -131,7 +131,7 @@ class FileCheck:
 
 @dataclass(frozen=True)
 class ProjectCheck:
-    """Outcome of ``project_status``, ``verify_project`` and ``check_project``.
+    """Outcome of ``get_project_status``, ``verify_project`` and ``check_project``.
 
     ``not_downloaded``: selected tasks without pins. ``ok``: status/verify -
     every selected task pinned and every file ``ok``; check - no file

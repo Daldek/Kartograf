@@ -1533,7 +1533,7 @@ from kartograf import (
     remove_project_task,
     download_project,
     check_project,
-    project_status,
+    get_project_status,
     verify_project,
     Project,
     ProjectTask,
