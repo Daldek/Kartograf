@@ -1058,17 +1058,21 @@ dmp1g)`.
 
 ### 1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k
 
-Grupy `boundaries` (granice PRG, `--product admin`), `cadastre` (EGiB,
-`--product map`) i `models3d` (modele 3D budynków, `--product buildings`)
+Grupy `boundaries` (granice PRG, `--product admin`; punkty adresowe
+`addresses`; granice specjalne `special`), `cadastre` (EGiB i mapa
+katastralna CZ, `--product map`; ceny RCN, `--product prices`)
+i `models3d` (modele 3D budynków, `--product buildings`)
 mają wspólny kształt (ADR-042): dokładnie jeden wybór — `--teryt` (paczka
 jednostki), obszar `--bbox`/`--sheet`/`--geometry` (z `--country`) albo
 `--whole-country` (plik krajowy; tylko `boundaries`) — oraz tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`, `--workers` i `-q` jak
 w pozostałych grupach. Każda grupa ma tylko swoje flagi treści (`--level`
-w `boundaries`, `--lod`/`--year` w `models3d`; obca flaga to błąd parsera,
-kod 2). `cadastre` i `models3d` są tylko dla Polski (`--country pl`);
-`boundaries` ma też granice CZ (RUIAN), a sieć wód CZ — grupa `hydro`
-(sekcja 1.9). Archiwum roczników BDOT10k jest w grupie
+i `--format` w `boundaries`, `--format` i `--ku` w `cadastre`,
+`--lod`/`--year` w `models3d`; obca flaga to błąd parsera, kod 2).
+`models3d` jest tylko dla Polski (`--country pl`); `boundaries` ma też
+granice CZ (RUIAN) i jednostki geomorfologiczne CZ, `cadastre` — mapę
+katastralną CZ, a sieć wód CZ — grupa `hydro` (sekcja 1.9; przykłady CZ
+tego rozdziału także tam). Archiwum roczników BDOT10k jest w grupie
 `landcover` (`--year`).
 
 ```bash
@@ -1113,6 +1117,29 @@ kartograf boundaries download --product admin --teryt 12 -o ./data
 #   boundaries/pl_prg_gml/teryt/12.zip: lokalna wersja 2026-10-15 (bez sprawdzania; --check-updates)
 kartograf boundaries download --product admin --teryt 12 --check-updates -o ./data
 #   12: nie da sie sprawdzic bez pobrania (2026-10-15)
+
+# Punkty adresowe i ulice PRG (od 0.8.0): obszar, paczka powiatu, plik krajowy
+kartograf boundaries download --product addresses --country pl --bbox 566000,243500,566500,244000 -o ./data
+#   boundaries/pl_prg_addresses/bbox/566000_243500_566500_244000.gpkg: nowa wersja 2026-10-16_f8981d39
+kartograf boundaries download --product addresses --teryt 1261 -o ./data
+#   boundaries/pl_prg_addresses_shp/teryt/1261.zip: nowa wersja 2026-10-16_ad2e3b66
+kartograf boundaries download --product addresses --country pl --whole-country --format SHP -o <katalog-danych>
+#   Warning: addresses PL: plik krajowy https://opendata.geoportal.gov.pl/prg/adresy/PunktyAdresowe/POLSKA.zip - 563815148 B (ok. 564 MB)
+#   boundaries/pl_prg_addresses_shp/country/pl.zip: nowa wersja 2026-10-16_957a5138
+
+# Granice specjalne PRG: obszar (44 rodzaje, GPKG w OGC:CRS84) albo plik krajowy
+kartograf boundaries download --product special --country pl --bbox 21.0,52.22,21.01,52.23 --bbox-crs EPSG:4326 -o ./data
+#   Info: special: wynik obszaru bez obwodow spisowych (kolekcja GranicaObwoduSpisowego: usluga odpowiada minutami) - sa w pliku krajowym: --whole-country --format SHP|GML
+#   boundaries/pl_prg_special/bbox/21_52.22_21.01_52.23.gpkg: nowa wersja 2026-10-16_07b97606
+kartograf boundaries download --product special --country pl --whole-country --format SHP -o <katalog-danych>
+#   Warning: special PL: plik krajowy https://opendata.geoportal.gov.pl/prg/granice/00_granice_specjalne_shp.zip - 734171465 B (ok. 734 MB)
+
+# RCN (ceny nieruchomości): eksport powiatu (4 cyfry) albo województwa (2 cyfry)
+kartograf cadastre download --product prices --teryt 1201 -o ./data
+#   cadastre/pl_rcn/teryt/1201.gpkg: nowa wersja 2026-10-16_a612f064
+kartograf cadastre download --product prices --teryt 1261 -o <katalog-danych>
+#   Warning: prices PL 1261: duzy plik https://opendata.geoportal.gov.pl/InneDane/latest_exports/rcn_transakcje_ceny/GPKG/1261_transakcje_ceny.gpkg.zip - 301623607 B (ok. 302 MB)
+#   cadastre/pl_rcn/teryt/1261.gpkg: nowa wersja 2026-10-16_ed4cc8bb
 
 # Źródła grup (z rejestru, bez sieci)
 kartograf boundaries list-sources
@@ -1165,6 +1192,39 @@ trafia do pliku — jego wartości są w sidecarze
 (`extra.source.dropped_fields`), więc ta sama treść pobrana innego dnia
 to ta sama wersja.
 
+**Adresy PRG.** `--product addresses` (tylko PL) ma trzy wybory:
+obszar (`--bbox`/`--sheet`/`--geometry` z `--country pl`) daje jeden
+GeoPackage w EPSG:2180 z warstwami punktów adresowych i ulic obszaru
+(usługa WFS KIN GUGiK); `--teryt` przyjmuje tylko powiat (4 cyfry) i daje
+paczkę SHP 1:1 — `--teryt 12` to `Error:` z listą wyborów (paczek
+województw nie ma); `--whole-country --format SHP|GML` to plik krajowy
+(ok. 564 MB albo ok. 804 MB), którego rozmiar pojawia się jako `Warning:`
+przed transferem. `--format` jest wymagane tylko z plikiem krajowym.
+
+**Granice specjalne PRG.** `--product special` (tylko PL) wymaga obszaru
+albo `--whole-country --format SHP|GML` (ok. 734 MB dla SHP); `--teryt` to
+`Error:`. Wynik obszaru to jeden GeoPackage w OGC:CRS84 z 44 rodzajami
+granic (sądy, policja, urzędy skarbowe, lasy, wody, obszary morskie, ...),
+po jednej warstwie na rodzaj z obiektami przecinającymi obszar. Obszar
+trwa minuty (usługa OGC API PRG jest odpytywana o każdą kolekcję osobno;
+pomiar: Kraków 243 s, Warszawa 109 s), a przekroczenie limitu czasu
+(120 s) jest ponawiane. Obwody spisowe (`GranicaObwoduSpisowego`) nie są
+częścią wyniku obszaru — usługa odpowiada na nie od 158 do ponad 400 s —
+więc każdy obszar dostaje `Info:` wskazujący plik krajowy, w którym są.
+
+**RCN.** `--product prices` (tylko PL): `--teryt` z 4 cyframi to eksport
+powiatu, z 2 cyframi — województwa, a obszar to eksport każdego powiatu
+obszaru. Plik to GeoPackage w EPSG:2180 z warstwami
+`transakcje_dzialki`, `transakcje_budynki` i `transakcje_lokale`,
+odświeżany co dobę (plik jest podmieniany bez sygnału; nowa treść dopiero
+z `--force`). Paczka jest rozpakowywana do jednego GPKG, a brak którejś
+z trzech warstw to `Error:` i brak wersji. **Miejsce na dysku:** rozpakowanie
+i kontrola warstw idą w lokalnym katalogu tymczasowym systemu (u autora
+`/tmp` to pamięć RAM): powiat 1261 (302 MB w ZIP) rozpakowuje się do
+ok. 1,1 GB, więc przy eksporcie województwa (rząd 1,8 GB) zadbaj o miejsce
+w katalogu tymczasowym (`TMPDIR`). Ponad 100 MiB pojawia się `Warning:`
+z rozmiarem przed pobraniem.
+
 **Aktualność i wersje.** Paczki i obiekty usług GUGiK nie mają taniego
 sygnału zmian: kolejne uruchomienie używa lokalnej wersji bez zapytań,
 `--check-updates` raportuje `nie da sie sprawdzic bez pobrania`, a nową
@@ -1211,6 +1271,19 @@ kartograf hydro download --product network --country cz "--bbox=-470000,-1130000
 kartograf hydro download --product network --country cz --whole-country -o ./data
 #   -> hydro/cz_hynet_gpkg/country/cz.zip (HY-NET.gpkg w EPSG:3045, ok. 194 MB)
 kartograf hydro download --product network --country cz --whole-country --check-updates -o ./data
+
+# Jednostki geomorfologiczne CZ: poziom --level jest wymagany dla obszaru
+kartograf boundaries download --product geomorphology --country cz --level celek "--bbox=-452000,-1112000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
+#   boundaries/cz_geomorphology_celek/bbox/-452000_-1112000_-450000_-1110000.gpkg: nowa wersja 2026-10-16_c7facb92
+
+# Mapa katastralna CZ: paczka katastralniho uzemi (--ku, 6 cyfr) albo KU obszaru
+kartograf cadastre download --product map --ku 623164 --format SHP -o ./data
+#   cadastre/cz_km_shp/ku/623164.zip: nowa wersja 2026-10-16_aaee5b70
+kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 -o ./data
+#   Info: map: katastralni uzemi obszaru wg RUIAN (3): 652954, 696137, 753521
+#   cadastre/cz_km_shp/ku/652954.zip: nowa wersja 2026-10-16_223d7ce9 (i dwa kolejne KU)
+kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --check-updates -o ./data
+#   652954: aktualne (2026-10-16)   (tak samo 696137 i 753521)
 kartograf hydro list-sources
 ```
 
@@ -1268,6 +1341,28 @@ układu pliku nie ma (`--horizontal-crs` zbędne). Plik ma `ETag`:
 `--check-updates` raportuje `aktualne` albo `nowsza`. Usługa przekierowuje
 domyślny `User-Agent` programu `curl` na PDF z warunkami korzystania —
 Kartograf wysyła własny (`kartograf/<wersja>`).
+
+**Jednostki geomorfologiczne.** `boundaries download --product
+geomorphology --country cz` wymaga dla obszaru `--level`: `subprovincie`,
+`oblast`, `celek`, `podcelek`, `okrsek`, `podokrsek` albo `cast` (bez
+`--level` `Error:` z listą). Wynik to jeden GeoPackage w EPSG:5514
+z jednostkami tego poziomu przecinającymi obszar (pełne geometrie);
+pomiar: obszar 2 x 2 km dał 1 obiekt poziomu `celek`, a obszar 20 x 20 km
+9 obiektów poziomu `okrsek`.
+Produkt nie ma pliku krajowego ani `--teryt`.
+
+**Mapa katastralna CZ.** `cadastre download --product map --country cz`
+pobiera paczkę katastrálního území (KU) CUZK w formacie `--format`
+(`SHP`, `DXF`, `DGN` albo `VFK`; ZIP zapisany 1:1, format = osobny segment
+magazynu `cadastre/cz_km_<format>/ku/`). `--ku` (6 cyfr) wybiera jedno KU
+(z `--country pl` to `Error:`); obszar `--bbox`/`--geometry` daje paczkę
+każdego KU obszaru wg RUIAN (z `Info:` listą KU). Brak `--format` to
+`Error:` z listą formatów. KU bez paczki (np. 999999) kończy się
+`Error: ... (HTTP 404)`, a pozostałe KU zadania się zapisują. Paczki mają
+sygnał HTTP: kolejne uruchomienie używa lokalnej wersji po jednym `HEAD`,
+a `--check-updates` raportuje `aktualne` albo `nowsza` bez pobierania.
+Format VKM (wymiana katastralna) nie jest obsługiwany: jego adres
+odpowiada 404 dla KU 623164 (stan 2026-10-16).
 
 **Aktualność i rozmiar.** Obiekty obszaru (ZABAGED, RUIAN, HY-NET) nie
 mają taniego sygnału zmian: lokalna wersja bez zapytań, `--check-updates`
