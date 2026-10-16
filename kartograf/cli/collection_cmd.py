@@ -1,6 +1,7 @@
 """
-``boundaries download``, ``cadastre download`` and ``models3d download``:
-flags -> ``download_collection``/``check_collection`` (ADR-037, ADR-042 D9).
+``boundaries download``, ``cadastre download``, ``models3d download`` and
+``hydro download``: flags -> ``download_collection``/``check_collection``
+(ADR-037, ADR-042 D9).
 
 The CLI only translates: ``collection_task`` turns the flags of a group
 into library arguments (the same translation for the handler and for
@@ -14,9 +15,8 @@ import argparse
 import sys
 from pathlib import Path
 
-from kartograf.cli._args import parse_bbox_arg
+from kartograf.cli._args import parse_bbox_arg, parse_per_country
 from kartograf.cli.download_cmd import (
-    _per_country,
     _plan_context,
     _print_notice,
     _print_version_summary,
@@ -40,13 +40,13 @@ def collection_task(args: argparse.Namespace) -> dict:
     return {
         "product": args.product,
         "country": args.country,
-        "teryt": args.teryt,
-        "sheet": args.sheet,
+        "teryt": getattr(args, "teryt", None),
+        "sheet": getattr(args, "sheet", None),
         "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
         "geometry": Path(args.geometry) if args.geometry is not None else None,
         "layer": args.layer,
         "whole_country": getattr(args, "whole_country", False),
-        "level": _per_country(getattr(args, "level", None), "--level"),
+        "level": parse_per_country(getattr(args, "level", None), "--level"),
         "lod": getattr(args, "lod", None),
         "year": getattr(args, "year", None),
     }

@@ -350,8 +350,8 @@ def _collection_command(
     name: str, group: str, options: dict[str, OptionKind]
 ) -> TaskCommand:
     """``download_collection``/``check_collection`` limited to the products of
-    a collection group (``boundaries``, ``cadastre``, ``models3d``; ADR-042);
-    the result family is ``CollectionReport`` (``unit_report_files``)."""
+    a collection group (``boundaries``, ``cadastre``, ``models3d``, ``hydro``;
+    ADR-042); the result family is ``CollectionReport`` (``unit_report_files``)."""
 
     def validate(output_dir: Path, opts: Options) -> None:
         require_collection_product(opts.get("product"), group)
@@ -400,6 +400,11 @@ _COLLECTION: dict[str, OptionKind] = {
     "teryt": "str",
     **_AREA,
 }
+# A group without PL sources (``hydro``): no TERYT and no sheet code (both
+# select PL units and sheets).
+_CZ_COLLECTION: dict[str, OptionKind] = {
+    name: kind for name, kind in _COLLECTION.items() if name not in ("teryt", "sheet")
+}
 
 
 COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
@@ -433,6 +438,10 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                     "country": "str",
                     "sheet_system": "str",
                     "scale": "str",
+                    "cutout": "flag",
+                    "horizontal_crs": "str",
+                    "coverage": "str",
+                    "resolution": "per_country",
                     **_CAMPAIGNS,
                 },
             ),
@@ -443,10 +452,12 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                     "source": "str",
                     "teryt": "str",
                     **_AREA,
+                    "whole_country": "flag",
                     "year": "int",
                     "format": "str",
                     "layers": "str_list",
                     "keep_raw": "flag",
+                    "horizontal_crs": "str",
                 },
             ),
             _landcover_command(
@@ -465,6 +476,9 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                 "models3d download",
                 "models3d",
                 {**_COLLECTION, "lod": "int", "year": "int"},
+            ),
+            _collection_command(
+                "hydro download", "hydro", {**_CZ_COLLECTION, "whole_country": "flag"}
             ),
         )
     }

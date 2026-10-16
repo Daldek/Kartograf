@@ -883,7 +883,7 @@ class TestCli:
 
     def test_cli_laz_cutout_still_rejected(self, tmp_path, capsys):
         """``elevation download --product laz --cutout``: an error before WCS
-        (orto has no ``--cutout`` flag: ``imagery download``)."""
+        (the orthophotomap cutout is ``imagery download --cutout``)."""
         rc = self._main(tmp_path, Mock(), "--product", "laz")
 
         assert rc == 1
