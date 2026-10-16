@@ -395,6 +395,7 @@ def _collection_command(
             output_dir=output_dir,
             update=update,
             cache=cache,
+            on_progress=on_progress,
             on_notice=on_notice,
             **_run_options(workers),
             **opts,

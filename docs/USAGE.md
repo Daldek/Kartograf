@@ -1741,7 +1741,9 @@ download_collection(product="map", output_dir=out, country="pl",
 download_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
 lod2 = download_collection(product="buildings", output_dir=out, lod=2, country="pl",
                            bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
-                           on_notice=show)  # Notice unit_list: powiaty obszaru
+                           on_notice=show,  # Notice unit_list: powiaty obszaru
+                           on_progress=lambda p: print(p.current, p.total, p.sheet, p.status))
+# postęp jak dla listy arkuszy (zadanie z wieloma jednostkami; CLI: pasek, -q bez paska)
 for failure in lod2.failed:  # kind "no_coverage" = brak paczki powiatu (HTTP 404)
     print(failure.unit, failure.kind, failure.error)
 plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)

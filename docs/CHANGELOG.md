@@ -588,6 +588,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pod `--country auto` czesci tego kraju; dla samego drugiego kraju jest
   bledem z nazwa kraju, ktory ja ma (dotad "nie dotyczy" takze dla
   obszaru przy granicy, ktorego nie dalo sie pobrac). Co zrobic: nic.
+- Postep kolekcji: `download_collection(on_progress=)` i pasek postepu
+  (jak lista arkuszy: `>` przed transferem, `+` pobrana, `o` lokalna, `x`
+  blad) w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`
+  i `geodesy download`, w zrodlach kolekcji `landcover` (ZABAGED, BDOO,
+  Data50, Data250) i plikach NMT 100 m - dla zadania z wieloma
+  jednostkami (jedna jednostka: linia statusu i `Warning` z rozmiarem
+  duzego pliku); `-q` ukrywa pasek. Projekt przekazuje postep zadaniom
+  kolekcji.
 - Dokumentacja: USAGE 2 - tabela wszystkich kodow `Notice` (kod, poziom,
   kiedy, komendy); `sheet_list` (`download_data`, naglowek na stdout)
   i `unit_list` (kolekcje, takze arkusze map i archiwow osnow) opisane

@@ -720,7 +720,7 @@ class LandCoverManager:
                 teryt, sheet, bbox, geometry, layer, options, sink
             )
             return self._download_collection(
-                request, options, update, plan, workers, sink
+                request, options, update, plan, workers, sink, on_progress
             )
         teryt, sheet, bbox = self._validated(
             teryt, sheet, bbox, geometry, layer, options, sink
@@ -938,13 +938,15 @@ class LandCoverManager:
         plan: UpdatePlan | None,
         workers: int,
         sink: NoticeSink,
+        on_progress: Callable[[DownloadProgress], None] | None,
     ) -> LandCoverAreaResult:
         """The files of a collection source on the track ``landcover``.
 
         An area of unit packages (BDOO voivodeships) keeps going past a
         failing unit (``failed``, ``workers`` in parallel, as the BDOT10k
         powiats); one file (``teryt``, a national file, the objects of an
-        area) raises its failure, as CORINE and SoilGrids.
+        area) raises its failure, as CORINE and SoilGrids. Progress per unit
+        as ``download_collection``.
         """
         files, failed, stale = run_request(
             request,
@@ -955,6 +957,7 @@ class LandCoverManager:
             sink=sink,
             track=_TRACK,
             timeout=options.get("timeout"),
+            on_progress=on_progress,
         )
         units = (
             request.teryt is None

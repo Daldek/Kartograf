@@ -85,6 +85,7 @@ from kartograf.download.fetch import (
     local_version,
     validate_update,
 )
+from kartograf.download.manager import DownloadProgress
 from kartograf.download.options import (
     COUNTRY_CHOICES,
     canonical_country,
@@ -2675,6 +2676,7 @@ def download_collection(
     plan: UpdatePlan | None = None,
     workers: int = 1,
     cache: MetadataCache | bool = True,
+    on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> CollectionReport:
     """Download a collection product (``download`` of the collection groups)
@@ -2700,7 +2702,11 @@ def download_collection(
     ``update="upgrade"``); ``workers`` = units downloaded in parallel;
     ``cache`` = metadata cache of the PRG powiat query, of the CUZK sheet
     index and of the ATOM feed index (``True``: default file in the current
-    directory, ``False``: none); ``on_notice`` receives each notice when
+    directory, ``False``: none); ``on_progress`` receives the progress of
+    the units of a request with several units as for a sheet list
+    (``downloading`` right before a transfer with ``workers=1``, then
+    ``completed``, ``skipped``, ``failed`` or ``no_coverage`` of each
+    unit); ``on_notice`` receives each notice when
     emitted (``UNIT_LIST``, ``WHOLE_COUNTRY_SIZE`` before a national
     transfer, ``DOWNLOAD_SIZE`` before a unit file over 100 MiB, clipping
     notices of ``auto``).
@@ -2731,6 +2737,7 @@ def download_collection(
         workers=workers,
         cache=cache,
         sink=sink,
+        on_progress=on_progress,
     )
     return CollectionReport(
         files=files,
@@ -2929,6 +2936,17 @@ def _within_volume(
     return [by_key.get(job.key, job) for job in jobs]
 
 
+def _progress_status(outcome: VersionedFile | UnitFailure | None) -> str:
+    """Progress status of a finished unit, as for a sheet list: ``failed``
+    (``no_coverage`` without a file at the source), ``skipped`` (no
+    transfer: a local version or a unit outside the plan) or ``completed``."""
+    if isinstance(outcome, UnitFailure):
+        return "no_coverage" if outcome.kind == "no_coverage" else "failed"
+    if outcome is None or outcome.status == "local":
+        return "skipped"
+    return "completed"
+
+
 def run_request(
     request: CollectionRequest,
     *,
@@ -2939,9 +2957,16 @@ def run_request(
     sink: NoticeSink,
     track: Track = _TRACK,
     timeout: int | None = None,
+    on_progress: Callable[[DownloadProgress], None] | None = None,
 ) -> tuple[tuple[UnitFile, ...], tuple[UnitFailure, ...], tuple[PlanItem, ...]]:
     """Files, unit failures and stale plan positions of a validated request
     (``download_collection``; ``LandCoverManager`` on the track ``landcover``).
+
+    ``on_progress``: with more than one unit, one ``DownloadProgress`` per
+    unit (its ``sheet`` = the unit) - ``downloading`` right before a
+    transfer (``workers=1``), then ``completed``/``skipped``/``failed``/
+    ``no_coverage`` in completion order. One unit has its status line and
+    the size notices (``DOWNLOAD_SIZE``, ``WHOLE_COUNTRY_SIZE``) instead.
 
     Raises
     ------
@@ -2997,11 +3022,36 @@ def run_request(
                 logger.debug("%s %s: %s", request.product, job.unit, e)
                 return UnitFailure(job.unit, job.country, str(e), "download")
 
+        total = len(jobs)
+        # one unit: no bar (its size notice announces a large transfer)
+        report = on_progress if total > 1 else None
+
+        def progress(current: int, job: UnitJob, status: str) -> None:
+            if report is not None:
+                report(DownloadProgress(current, total, job.unit, status))
+
+        outcomes: list[VersionedFile | UnitFailure | None]
         if workers > 1 and len(jobs) > 1:
+            done: dict[int, VersionedFile | UnitFailure | None] = {}
             with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-                outcomes = list(pool.map(one, jobs))
+                futures = {pool.submit(one, job): i for i, job in enumerate(jobs)}
+                for future in concurrent.futures.as_completed(futures):
+                    index = futures[future]
+                    done[index] = future.result()
+                    progress(len(done), jobs[index], _progress_status(done[index]))
+            outcomes = [done[index] for index in range(total)]
         else:
-            outcomes = [one(job) for job in jobs]
+            transfers = (
+                {job.key for job in _transfers(jobs, update, planned)}
+                if report is not None
+                else set()
+            )
+            outcomes = []
+            for position, job in enumerate(jobs, 1):
+                if job.key in transfers:
+                    progress(position, job, "downloading")
+                outcomes.append(one(job))
+                progress(position, job, _progress_status(outcomes[-1]))
     files: list[UnitFile] = []
     failed: list[UnitFailure] = []
     for job, outcome in zip(jobs, outcomes, strict=True):
