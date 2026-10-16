@@ -14,6 +14,11 @@ template, ``fetch_package`` downloads the file atomically
 ``Content-Length``. A ZIP (``file_kind="zip"``): the central directory is
 read, the variant's member suffixes are required and - with ``unpack`` -
 exactly one member is streamed to the result (``zipfile`` checks its CRC).
+A channel with ``class_pattern`` (BDOO: files ``__OT_<KOD>_<typ>.``) needs at
+least one class member, and a choice of classes stores a new ZIP of the
+members of those classes only - in the order of the source, each streamed
+byte for byte with its name and date; none of them in the package =
+``NoCoverageError`` (the unit has no objects of those classes).
 A GeoPackage member with ``unpack_layers`` is unpacked in a local working
 directory first and its ``gpkg_contents`` must name every required layer:
 SQLite opens only that local copy (a store on a network volume has no
@@ -34,7 +39,7 @@ import tempfile
 import threading
 import zipfile
 import zlib
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,14 +74,17 @@ _KIND_TEXT: dict[FileKind, str] = {
 
 @dataclass(frozen=True)
 class PackageFile:
-    """A downloaded package: ``path`` = the stored file (the ZIP itself or the
-    unpacked member), ``http`` = ``response_signal`` of the download, ``size``
-    = bytes of the downloaded ZIP, ``member`` = the unpacked member name."""
+    """A downloaded package: ``path`` = the stored file (the ZIP itself, the
+    unpacked member or the ZIP of the chosen classes), ``http`` =
+    ``response_signal`` of the download, ``size`` = bytes of the downloaded
+    ZIP, ``member`` = the unpacked member name, ``classes`` = the chosen
+    classes found in the package (``()``: no class choice)."""
 
     path: Path
     http: dict
     size: int
     member: str | None = None
+    classes: tuple[str, ...] = ()
 
 
 def choice_keys(params: UnitPackageParams) -> tuple[str, ...]:
@@ -222,25 +230,32 @@ def fetch_package(
     params: UnitPackageParams,
     variant: PackageVariant,
     timeout: float,
+    classes: Sequence[str] = (),
 ) -> PackageFile:
-    """Download the file ``url`` into ``staged`` (the ZIP, its member or the
-    file of another ``variant.file_kind``).
+    """Download the file ``url`` into ``staged`` (the ZIP, its member, the
+    ZIP of the members of ``classes`` or the file of another
+    ``variant.file_kind``).
+
+    ``classes``: class codes of ``variant.classes`` (``layers``) - the
+    stored file holds only their members (module docstring).
 
     Raises
     ------
     NoCoverageError
-        HTTP 404: no file of this unit at the source.
+        HTTP 404: no file of this unit at the source; a package without a
+        member of any of ``classes``.
     DownloadError
         Any other HTTP/network failure (after the retry policy), a document
         instead of the file, fewer bytes than ``Content-Length``, an
-        unreadable ZIP, missing required members, not exactly one member to
-        unpack, a member failing its CRC or a file whose content is not of
-        its kind. No result file is left behind.
+        unreadable ZIP, missing required members or class members, not
+        exactly one member to unpack, a member failing its CRC or a file
+        whose content is not of its kind. No result file is left behind.
     """
     staged = Path(staged)
     kind = variant.file_kind
     unpack = params.unpack if kind == "zip" else None
-    archive_path = staged if unpack is None else staged.with_name(f"{staged.name}.zip")
+    rewrite = unpack is not None or bool(classes)
+    archive_path = staged.with_name(f"{staged.name}.zip") if rewrite else staged
     signal: dict = {}
     try:
         download_to(
@@ -259,6 +274,7 @@ def fetch_package(
                 f"Zrodlo nie publikuje {what} {url} (HTTP 404)", status_code=404
             ) from e
         raise
+    kept: tuple[str, ...] = ()
     try:
         size = archive_path.stat().st_size
         expected = signal.get("content_length")
@@ -267,7 +283,9 @@ def fetch_package(
                 f"{url}: pobrano {size} z {expected} bajtow (przerwany transfer)"
             )
         if kind == "zip":
-            member = _check_archive(url, archive_path, staged, params, variant)
+            member, kept = _check_archive(
+                url, archive_path, staged, params, variant, tuple(classes)
+            )
         else:
             _check_content(url, archive_path, kind)
             member = None
@@ -275,9 +293,9 @@ def fetch_package(
         staged.unlink(missing_ok=True)
         archive_path.unlink(missing_ok=True)
         raise
-    if unpack is not None:
+    if rewrite:
         archive_path.unlink(missing_ok=True)
-    return PackageFile(staged, signal, size, member)
+    return PackageFile(staged, signal, size, member, kept)
 
 
 def _check_content(url: str, path: Path, kind: FileKind) -> None:
@@ -317,8 +335,11 @@ def _check_archive(
     staged: Path,
     params: UnitPackageParams,
     variant: PackageVariant,
-) -> str | None:
-    """Central directory, required members and the optional unpacked member."""
+    classes: tuple[str, ...],
+) -> tuple[str | None, tuple[str, ...]]:
+    """Central directory, required members, class members and the optional
+    unpacked member or ZIP of ``classes``: the unpacked member name and the
+    classes kept."""
     try:
         with zipfile.ZipFile(archive_path) as archive:
             files = [info for info in archive.infolist() if not info.is_dir()]
@@ -333,8 +354,15 @@ def _check_archive(
                     f"{url}: paczka bez plikow {', '.join(missing)} "
                     f"({len(files)} plikow) - to nie sa oczekiwane dane"
                 )
+            if params.class_pattern is not None:
+                kept = _class_members(
+                    url, archive, files, params.class_pattern, classes, staged
+                )
+                return None, kept
+            if classes:
+                raise ValueError(f"{url}: wybor klas bez class_pattern kanalu")
             if params.unpack is None:
-                return None
+                return None, ()
             suffix = params.unpack.lower()
             chosen = [info for info in files if info.filename.lower().endswith(suffix)]
             if len(chosen) != 1:
@@ -346,13 +374,70 @@ def _check_archive(
                 _unpack_checked_layers(url, archive, chosen[0], staged, params)
             else:
                 unpack_member(archive, chosen[0], staged)
-            return chosen[0].filename
+            return chosen[0].filename, ()
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
         # BadZipFile: directory or CRC; zlib.error/EOFError: corrupt or cut
         # compressed data; NotImplementedError: unsupported compression
         raise DownloadError(f"{url}: uszkodzona paczka ZIP: {e}") from e
     except OSError as e:
         raise DownloadError(f"{url}: nie udalo sie odczytac paczki: {e}") from e
+
+
+def _class_members(
+    url: str,
+    archive: zipfile.ZipFile,
+    files: list[zipfile.ZipInfo],
+    pattern: str,
+    classes: tuple[str, ...],
+    staged: Path,
+) -> tuple[str, ...]:
+    """The class members of a package (``class_pattern``); with ``classes``
+    the ZIP of their members written to ``staged`` and the classes found."""
+    regex = re.compile(pattern)
+    found: list[tuple[zipfile.ZipInfo, str]] = []
+    for info in files:
+        match = regex.search(info.filename.rsplit("/", 1)[-1])
+        if match is not None:
+            found.append((info, match.group("code")))
+    if not found:
+        raise DownloadError(
+            f"{url}: paczka bez plikow klas obiektow ({len(files)} plikow) - to "
+            "nie sa oczekiwane dane"
+        )
+    if not classes:
+        return ()
+    present = {code for _, code in found}
+    kept = tuple(code for code in classes if code in present)
+    if not kept:
+        raise NoCoverageError(
+            f"{url}: paczka nie ma plikow klas {', '.join(classes)} (brak "
+            "obiektow tych klas w jednostce)"
+        )
+    _write_members(archive, [info for info, code in found if code in kept], staged)
+    return kept
+
+
+def _write_members(
+    archive: zipfile.ZipFile, members: list[zipfile.ZipInfo], target: Path
+) -> None:
+    """A new ZIP of ``members`` at ``target`` (atomically): each streamed
+    byte for byte (``zipfile`` checks its CRC) with its name, date, attributes
+    and compression method, in the given order - the same members give the
+    same bytes."""
+    tmp = target.with_name(f"{target.name}.{os.getpid()}_{threading.get_ident()}.tmp")
+    try:
+        with zipfile.ZipFile(tmp, "w") as result:
+            for info in members:
+                copy = zipfile.ZipInfo(info.filename, date_time=info.date_time)
+                copy.compress_type = info.compress_type
+                copy.external_attr = info.external_attr
+                copy.create_system = info.create_system
+                copy.file_size = info.file_size  # ZIP64 decided before writing
+                with archive.open(info) as source, result.open(copy, "w") as sink:
+                    shutil.copyfileobj(source, sink, _COPY_CHUNK)
+        os.replace(tmp, target)
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def unpack_member(

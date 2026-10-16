@@ -884,8 +884,11 @@ class TestCollectionChannels:
         assert archive.params.unit == "powiat"
         assert {d.key for d in sources_for(product="landcover")} == {
             "pl.gugik.bdot10k",
+            "pl.gugik.bdoo",
             "eu.clms.corine",
             "cz.cuzk.zabaged",
+            "cz.cuzk.data50",
+            "cz.cuzk.data250",
         }
         published = {dict(v.choice)["year"] for v in archive.params.variants}
         assert published == {str(year) for year in range(2014, 2026)}

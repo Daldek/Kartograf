@@ -1721,6 +1721,451 @@ _CZ_CADASTRAL_MAP = SourceDescriptor(
 )
 _E3_CZ_SOURCES = (_CZ_GEOMORPHOLOGY, _CZ_CADASTRAL_MAP)
 
+# --- plan E - E4 -------------------------------------------------------------
+# BDOO (raport E, wiersz 8; the 112 packages of 2026-10-16,
+# tests/fixtures/pl/bdoo): one GML ZIP per voivodeship and release (2015,
+# 2021-2026; 2014, 2016-2020 answer 404; no national file). The classes of a
+# release are the union over its 16 voivodeship packages: up to 2023 a
+# package has no file of a class without objects in its voivodeship, from
+# 2024 every package has all 26. GML in ``.xml`` files up to 2023, ``.gml``
+# from 2024; EPSG:2180.
+_BDOO = f"{_OPENDATA}/bdoo"
+_BDOO_CLASSES_2015 = tuple(
+    [
+        "ADJA",
+        "ADMS",
+        "BUHD",
+        "BUIN",
+        "BUIT",
+        "BUTR",
+        "BUUO",
+        "BUWT",
+        "BUZM",
+        "KUHU",
+        "KUIK",
+        "KUKO",
+        "KUPG",
+        "KUSC",
+        "KUSK",
+        "KUZA",
+        "OIKM",
+        "OIMK",
+        "PTGN",
+        "PTKM",
+        "PTLZ",
+        "PTNZ",
+        "PTPL",
+        "PTRK",
+        "PTSO",
+        "PTTR",
+        "PTUT",
+        "PTWP",
+        "PTWZ",
+        "PTZB",
+        "SKDR",
+        "SKPP",
+        "SKRP",
+        "SKRW",
+        "SKTR",
+        "SULN",
+        "SUPR",
+        "SWKN",
+        "SWRM",
+        "SWRS",
+        "TCON",
+        "TCPK",
+        "TCPN",
+        "TCRZ",
+    ]
+)
+_BDOO_CLASSES_2021 = tuple(
+    [
+        "ADJA",
+        "ADMS",
+        "BUHD",
+        "BUIN",
+        "BUIT",
+        "BUWT",
+        "BUZM",
+        "KUIK",
+        "KUKO",
+        "KUPG",
+        "KUSC",
+        "KUSK",
+        "OIKM",
+        "OIMK",
+        "PTGN",
+        "PTLZ",
+        "PTNZ",
+        "PTPL",
+        "PTRK",
+        "PTSO",
+        "PTTR",
+        "PTUT",
+        "PTWP",
+        "PTZB",
+        "SKDR",
+        "SKPP",
+        "SKRP",
+        "SKRW",
+        "SKTR",
+        "SULN",
+        "SWKN",
+        "SWRM",
+        "SWRS",
+        "TCON",
+        "TCPK",
+        "TCPN",
+        "TCRZ",
+    ]
+)
+_BDOO_CLASSES_2024 = tuple(
+    [
+        "ADJA",
+        "ADMS",
+        "BUUO",
+        "KUKO",
+        "KUPG",
+        "KUPW",
+        "KUSC",
+        "OIKM",
+        "OIMK",
+        "PTGN",
+        "PTLZ",
+        "PTNZ",
+        "PTRK",
+        "PTTR",
+        "PTUT",
+        "PTWP",
+        "PTZB",
+        "SKDR",
+        "SKPP",
+        "SKTR",
+        "SULN",
+        "SWKN",
+        "SWRS",
+        "TCPK",
+        "TCPN",
+        "TCRZ",
+    ]
+)
+_BDOO_RELEASES = (
+    ("2015", ".xml", _BDOO_CLASSES_2015),
+    ("2021", ".xml", _BDOO_CLASSES_2021),
+    ("2022", ".xml", _BDOO_CLASSES_2021),
+    ("2023", ".xml", _BDOO_CLASSES_2021),
+    ("2024", ".gml", _BDOO_CLASSES_2024),
+    ("2025", ".gml", _BDOO_CLASSES_2024),
+    ("2026", ".gml", _BDOO_CLASSES_2024),
+)
+_PL_BDOO = SourceDescriptor(
+    key="pl.gugik.bdoo",
+    country="PL",
+    product="landcover",
+    name="BDOO - baza danych obiektow ogolnogeograficznych (1:250 000)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="none",
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=f"{_BDOO}/",
+            notes=(
+                "paczka GML wojewodztwa wg rocznika (2015, 2021-2026) zapisywana "
+                "1:1; z --layers ZIP plikow wybranych klas"
+            ),
+            params=UnitPackageParams(
+                unit="woj",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("year", year),),
+                        url_template=f"{_BDOO}/{year}/PL.PZGiK.201.{{woj}}.zip",
+                        edition=year,
+                        segment_tokens=(year,),
+                        members=(suffix,),
+                        classes=classes,
+                    )
+                    for year, suffix, classes in _BDOO_RELEASES
+                ),
+                class_pattern=r"__OT_(?P<code>[A-Z]{4})_[A-Z]\.",
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="landcover/pl_bdoo",
+    default_extension=".zip",
+    license=_GUGIK_LICENSE,
+)
+_E4_PL_SOURCES = (_PL_BDOO,)
+
+# Data50 and Data250 (raport E, wiersze 17-18; services and feeds recorded
+# 2026-10-16, tests/fixtures/cz/data50_250): an area = one GeoPackage of
+# every object layer of DATA50/DATA250 MapServer in EPSG:5514 (the shaded
+# relief rasters 5 and 6 of DATA250 are not data), layer codes as ZABAGED
+# (the CUZK name without diacritics; no mapping to BDOT10k classes); the
+# national SHP ZIP of the ATOM feed in EPSG:5514 or EPSG:3045 only with
+# --whole-country.
+_DATA50_LAYERS = (
+    ("0", "hranice_spravni_jednotky_a_ku"),
+    ("1", "spravni_jednotky"),
+    ("2", "chranene_uzemi"),
+    ("3", "definicni_bod_spravniho_celku"),
+    ("4", "definicni_bod_casti_obce"),
+    ("5", "jmeno_b"),
+    ("6", "jmeno_l"),
+    ("7", "jmeno_p"),
+    ("8", "objekt_ruzny"),
+    ("9", "kotovany_bod"),
+    ("10", "pevnustka_bunkr"),
+    ("11", "kostel"),
+    ("12", "synagoga"),
+    ("13", "hrad"),
+    ("14", "zamek"),
+    ("15", "zricenina"),
+    ("16", "rozhledna_vysilac"),
+    ("17", "vezovita_stavba"),
+    ("18", "vodojem_vezovy"),
+    ("19", "vodojem_zemni"),
+    ("20", "vetrny_motor"),
+    ("21", "lyzarsky_mustek"),
+    ("22", "nemocnice"),
+    ("23", "autobusove_nadrazi"),
+    ("24", "cerpaci_stanice"),
+    ("25", "stadion"),
+    ("26", "budova"),
+    ("27", "zeleznicni_stanice"),
+    ("28", "pristav"),
+    ("29", "letiste"),
+    ("30", "akvadukt"),
+    ("31", "shybka"),
+    ("32", "lavka"),
+    ("33", "plavebni_komora"),
+    ("34", "jez"),
+    ("35", "hraz"),
+    ("36", "most"),
+    ("37", "zeleznicni_trat"),
+    ("38", "zeleznicni_vlecka"),
+    ("39", "lanova_draha"),
+    ("40", "tunel"),
+    ("41", "silnice_a_dalnice"),
+    ("42", "cesta"),
+    ("43", "pesina"),
+    ("44", "silnice_ve_vystavbe"),
+    ("45", "ulice"),
+    ("46", "privoz"),
+    ("47", "letiste_obvodova_linie"),
+    ("48", "elektricke_vedeni"),
+    ("49", "produktovod_potrubi"),
+    ("50", "jeskyne"),
+    ("51", "lesni_prusek"),
+    ("52", "skalnaty_sraz_skaly_bod"),
+    ("53", "skalnaty_sraz_skaly_linie"),
+    ("54", "terenni_stupen"),
+    ("55", "terenni_stupen_spadnice"),
+    ("56", "vrstevnice"),
+    ("57", "budova_blok_budov"),
+    ("58", "znicena_budova_rozvalina"),
+    ("59", "chatova_kolonie"),
+    ("60", "hrbitov"),
+    ("61", "usazovaci_nadrz_odkaliste"),
+    ("62", "vodni_plocha"),
+    ("63", "vodni_tok"),
+    ("64", "raseliniste_mocal_bazina"),
+    ("65", "zahrada_sad_park_vinice_chmelnice"),
+    ("66", "louka_pastvina"),
+    ("67", "les"),
+    ("68", "orna_puda_a_ostatni_plochy"),
+)
+_DATA250_LAYERS = (
+    ("0", "hranice_statniho_uzemi"),
+    ("1", "hranice_kraje"),
+    ("2", "hranice_okresu_obvodu_prahy"),
+    ("3", "hranice_obce"),
+    ("4", "chranene_uzemi"),
+    ("7", "nazev_mesta_s_vice_nez_100000_obyvateli"),
+    ("8", "nazev_mesta_od_50001_do_100000_obyvatel"),
+    ("9", "nazev_mesta_od_20001_do_50000_obyvatel"),
+    ("10", "nazev_mesta_od_5001_do_20000_obyvatel"),
+    ("11", "nazev_mesta_do_5000_obyvatel"),
+    ("12", "nazev_casti_mesta"),
+    ("13", "nazev_obce_s_vice_nez_2000_obyvateli"),
+    ("14", "nazev_obce_od_501_do_2000_obyvatel"),
+    ("15", "nazev_obce_do_500_obyvatel"),
+    ("16", "nazev_casti_obce"),
+    ("17", "nazev_mistni_casti"),
+    ("18", "kotovany_bod"),
+    ("19", "vstup_do_jeskyne"),
+    ("20", "pramen"),
+    ("21", "studna_vrt"),
+    ("22", "vodopad"),
+    ("23", "jez_bod"),
+    ("24", "plavebni_komora_bod"),
+    ("25", "rozhledna"),
+    ("26", "rozhledna_s_vysilacem"),
+    ("27", "vysilac"),
+    ("28", "kostel"),
+    ("29", "zamek"),
+    ("30", "zricenina_hradu_zricenina_zamku"),
+    ("31", "historicka_hradba_opevneni"),
+    ("32", "mohyla_pomnik_nahrobek"),
+    ("33", "hvezdarna"),
+    ("34", "nemocnice"),
+    ("35", "spravni_budova_urad"),
+    ("36", "skola"),
+    ("37", "sportovni_areal"),
+    ("38", "stadion"),
+    ("39", "aquapark"),
+    ("40", "upravna_vody"),
+    ("41", "cistirna_odpadnich_vod_cov"),
+    ("42", "prumyslovy_podnik"),
+    ("43", "precerpavaci_stanice"),
+    ("44", "halda_odval"),
+    ("45", "skladka_odpadu"),
+    ("46", "povrchova_tezba_lom"),
+    ("47", "usti_sachty_stoly_v_provozu"),
+    ("48", "elektrarna_jaderna"),
+    ("49", "elektrarna_tepelna"),
+    ("50", "elektrarna_vodni"),
+    ("51", "elektrarna_vetrna"),
+    ("52", "elektrarna_solarni"),
+    ("53", "spalovani_biomasy"),
+    ("54", "letiste_bod"),
+    ("55", "heliport"),
+    ("56", "pristav"),
+    ("57", "zeleznicni_stanice"),
+    ("58", "zeleznicni_zastavka"),
+    ("59", "zeleznicni_prejezd"),
+    ("60", "silnicni_krizeni"),
+    ("61", "krizovatka_mimourovnova_s_najezdy"),
+    ("62", "parkoviste_s_cerpaci_stanici"),
+    ("63", "parkoviste_bez_cerpaci_stanice"),
+    ("64", "stanice_privozu"),
+    ("65", "elektricke_vedeni"),
+    ("66", "dalkovy_produktovod_dalkove_potrubi"),
+    ("67", "privoz"),
+    ("68", "most_silnicni_2_uroven"),
+    ("69", "most_silnicni_1_uroven"),
+    ("70", "zeleznicni_trat"),
+    ("71", "zeleznicni_trat_elektrifikovana_normalni_rozchod_vice_koleji"),
+    ("72", "zeleznicni_trat_elektrifikovana_normalni_rozchod_1_kolej"),
+    ("73", "zeleznicni_trat_neelektrifikovana_normalni_rozchod_vice_koleji"),
+    ("74", "zeleznicni_trat_neelektrifikovana_normalni_rozchod_1_kolej"),
+    ("75", "zeleznicni_trat_nepouzivana"),
+    ("76", "most_zeleznicni_2_uroven"),
+    ("77", "most_zeleznicni_1_uroven"),
+    ("78", "tunel_silnicni"),
+    ("79", "tunel_zeleznicni"),
+    ("80", "dalnice_linie_bez_kontur"),
+    ("81", "silnice_pro_motorova_vozidla_linie_bez_kontur"),
+    ("82", "silnice_1_tridy_linie_bez_kontur"),
+    ("83", "silnice_2_tridy_linie_bez_kontur"),
+    ("84", "silnice_3_tridy_linie_bez_kontur"),
+    ("85", "dalnice"),
+    ("86", "silnice_pro_motorova_vozidla"),
+    ("87", "silnice_1_tridy"),
+    ("88", "silnice_2_tridy"),
+    ("89", "silnice_3_tridy"),
+    ("90", "silnice_neevidovana"),
+    ("91", "silnice_ve_vystavbe"),
+    ("92", "najezd"),
+    ("93", "pristavaci_draha"),
+    ("94", "hraz"),
+    ("95", "jez_linie"),
+    ("96", "plavebni_komora_linie"),
+    ("97", "vodni_tok_povrchovy_staly_od_20_do_50_m"),
+    ("98", "vodni_tok_povrchovy_staly_od_5_do_20_m"),
+    ("99", "vodni_tok_povrchovy_staly_do_5_m"),
+    ("100", "vodni_tok_povrchovy_obcasny"),
+    ("101", "vodni_tok_podzemni"),
+    ("102", "vodni_tok_popis"),
+    ("103", "terenni_stupen_hrana_jama"),
+    ("104", "skalnaty_sraz_skaly_linie"),
+    ("105", "vrstevnice_zesilena"),
+    ("106", "vrstevnice_zakladni"),
+    ("107", "vrstevnice_doplnkova"),
+    ("108", "vodni_plocha"),
+    ("109", "vodni_tok_povrchovy_sirsi_nez_50_m"),
+    ("110", "bazina_mocal"),
+    ("111", "ostrov"),
+    ("112", "blok_zastavby_s_vice_nez_5000_obyvateli"),
+    ("113", "letiste_plocha"),
+    ("114", "ovocny_sad_zahrada"),
+    ("115", "vinice"),
+    ("116", "chmelnice"),
+    ("117", "les"),
+)
+
+
+def _cz_data_source(
+    dataset: str, scale: str, layers: tuple[tuple[str, str], ...], sizes: str
+) -> SourceDescriptor:
+    """Data50/Data250 of CUZK: the objects of an area (REST) or the national
+    SHP ZIP (ATOM feed, one file per CRS)."""
+    feed = f"{_CUZK_ATOM}/{dataset}/{dataset}.xml"
+    return SourceDescriptor(
+        key=f"cz.cuzk.{dataset.lower()}",
+        country="CZ",
+        product="landcover",
+        name=f"{dataset} - cyfrowy model geograficzny Czech ({scale})",
+        provider_name="CUZK",
+        channels=(
+            AccessChannel(
+                transport=TransportKind.ARCGIS_QUERY,
+                update_signal="none",
+                horizontal_crs="EPSG:5514",
+                capabilities=frozenset({"bbox_vector"}),
+                endpoint=f"{_CUZK_ARCGIS}/{dataset.upper()}/MapServer",
+                notes=(
+                    f"{len(layers)} warstw obiektowych (nazwy zrodla); pelne "
+                    "geometrie obiektow przecinajacych obszar"
+                ),
+                params=FeatureBBoxParams(
+                    protocol="arcgis",
+                    native_crs="EPSG:5514",
+                    axis_order="xy",
+                    page_size=2000,
+                    layers=tuple(
+                        FeatureLayer(
+                            code=code, source=layer, name=code, id_field="OBJECTID"
+                        )
+                        for layer, code in layers
+                    ),
+                    selection="all",
+                    order_field="OBJECTID",
+                ),
+            ),
+            AccessChannel(
+                transport=TransportKind.DIRECT_FILES,
+                update_signal="metadata",
+                horizontal_crs="EPSG:5514",
+                capabilities=frozenset({"country_files"}),
+                endpoint=feed,
+                notes=f"plik krajowy SHP ({sizes}), tylko z --whole-country",
+                params=AtomFilesParams(
+                    service_feed=feed,
+                    entry_pattern=rf"CUZK_{dataset}_[0-9]+\.xml$",
+                    crs=("EPSG:5514", "EPSG:3045"),
+                    segment_tokens=("shp",),
+                ),
+            ),
+        ),
+        tile_scheme=None,
+        storage_subdir=f"landcover/cz_{dataset.lower()}",
+        default_extension=".gpkg",
+        license=_CUZK_LICENSE,
+    )
+
+
+_E4_CZ_SOURCES = (
+    _cz_data_source(
+        "Data50", "1:50 000", _DATA50_LAYERS, "516 MB EPSG:5514, 757 MB EPSG:3045"
+    ),
+    _cz_data_source(
+        "Data250", "1:250 000", _DATA250_LAYERS, "230 MB EPSG:5514, 320 MB EPSG:3045"
+    ),
+)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -2023,6 +2468,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _PL_BDOT10K_MAPS,
         # plan E - E3: PRG addresses and special boundaries, RCN.
         *_E3_PL_SOURCES,
+        # plan E - E4: BDOO.
+        *_E4_PL_SOURCES,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",
@@ -2086,6 +2533,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _CZ_ZTM,
         # plan E - E3: CZ geomorphology and cadastral map.
         *_E3_CZ_SOURCES,
+        # plan E - E4: CZ Data50 and Data250.
+        *_E4_CZ_SOURCES,
     )
 }
 

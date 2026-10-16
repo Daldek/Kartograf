@@ -1,0 +1,30 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss" xmlns:inspire_dls="http://inspire.ec.europa.eu/schemas/inspire_dls/1.0" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xml:lang="cs">
+    <id>https://atom.cuzk.gov.cz/Data250/datasetFeeds/CZ-00025712-CUZK_Data250_1.xml</id>
+    <title>Digitální geografický model území ČR (Data250)</title>
+    <updated>2026-05-12T10:17:18+02:00</updated>
+    <author>
+        <name>Český úřad zeměměřický a katastrální</name>
+        <uri>https://geoportal.cuzk.gov.cz</uri>
+        <email>cuzk.helpdesk@cuzk.gov.cz</email>
+    </author>
+    <rights>žádné podmínky neplatí</rights>
+    <link href="https://atom.cuzk.gov.cz/Data250/Data250.xml" hreflang="cs" rel="up" type="application/atom+xml"/>
+    <link href="https://geoportal.cuzk.gov.cz" hreflang="cs" rel="describedby" type="text/html"/>
+    <entry>
+        <id>https://openzu.cuzk.gov.cz/opendata/Data250/epsg-5514/data250.zip</id>
+        <title>Digitální geografický model území ČR (Data250)</title>
+        <updated>2026-05-12T10:16:28+02:00</updated>
+        <link href="https://openzu.cuzk.gov.cz/opendata/Data250/epsg-5514/data250.zip" length="230485722" rel="alternate" type="application/vnd.shp" hreflang="cs"/>
+        <category label="S-JTSK" term="http://www.opengis.net/def/crs/EPSG/0/5514"/>
+        <georss:polygon>51.3554 18.6364 50.8244 11.9385 48.2343 12.6032 48.7381 18.957 51.3554 18.6364</georss:polygon>
+    </entry>
+    <entry>
+        <id>https://openzu.cuzk.gov.cz/opendata/Data250/epsg-3045/data250.zip</id>
+        <title>Digitální geografický model území ČR (Data250)</title>
+        <updated>2026-05-12T10:17:18+02:00</updated>
+        <link href="https://openzu.cuzk.gov.cz/opendata/Data250/epsg-3045/data250.zip" length="320374437" rel="alternate" type="application/vnd.shp" hreflang="cs"/>
+        <category label="ETRS89-TM33N" term="http://www.opengis.net/def/crs/EPSG/0/3045"/>
+        <georss:polygon>51.3554 18.6364 50.8244 11.9385 48.2343 12.6032 48.7381 18.957 51.3554 18.6364</georss:polygon>
+    </entry>
+</feed>

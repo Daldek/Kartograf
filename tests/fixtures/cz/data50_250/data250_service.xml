@@ -1,0 +1,35 @@
+﻿<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:georss="http://www.georss.org/georss" xmlns:inspire_dls="http://inspire.ec.europa.eu/schemas/inspire_dls/1.0" xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xml:lang="cs">
+    <id>https://atom.cuzk.gov.cz/Data250/Data250.xml</id>
+    <title>Stahovací služba ATOM pro Data250</title>
+    <subtitle>Stahovací služba ATOM pro DATA250 je veřejná stahovací služba pro poskytování dat Digitálního geografického modelu území ČR (Data250). Služba poskytuje data pro celou republiku ve formátu shapefile. Obsah Data250 tvoří cca 50 typů geografických objektů. Databáze je strukturovaná do osmi tematických skupin - hranice územních jednotek, vodstvo, doprava, sídla, geografická jména, různé objekty, vegetace a povrch, výškopis. Data lze stáhnout po tematických oblastech nebo všechny vrstvy najednou. Služba splňuje technické pokyny pro INSPIRE stahovací služby verze 3.1. Pro stažení je datová sada komprimována (ZIP).</subtitle>
+    <updated>2026-05-12T10:17:18+02:00</updated>
+    <author>
+        <name>Český úřad zeměměřický a katastrální</name>
+        <uri>https://geoportal.cuzk.gov.cz</uri>
+        <email>cuzk.helpdesk@cuzk.gov.cz</email>
+    </author>
+    <rights>žádné podmínky neplatí</rights>
+    <link href="https://geoportal.cuzk.gov.cz/SDIProCSW/service.svc/get?REQUEST=GetRecordById&amp;SERVICE=CSW&amp;VERSION=2.0.2&amp;OUTPUTSCHEMA=http://www.isotc211.org/2005/gmd&amp;ELEMENTSETNAME=full&amp;Id=CZ-CUZK-ATOM-Data250" rel="describedby" title="metadata stahovací služby" type="application/xml"/>
+    <link href="https://atom.cuzk.gov.cz/Data250/Data250.xml" hreflang="cs" rel="self" type="application/atom+xml"/>
+    <link href="https://atom.cuzk.gov.cz/Data250/OSD-Data250.xml" hreflang="cs" rel="search" title="ČÚZK-ATOM-Data250" type="application/opensearchdescription+xml"/>
+    <!-- <link href="https://services.cuzk.gov.cz/atom-index/Data250/5514" rel="next" title="S-JTSK" type="text/xml"/> -->
+    <entry>
+        <id>https://atom.cuzk.gov.cz/Data250/datasetFeeds/CZ-00025712-CUZK_Data250_1.xml</id>
+        <title>Digitální geografický model území ČR (Data250)</title>
+        <updated>2026-05-12T10:17:18+02:00</updated>
+        <author>
+            <name>Český úřad zeměměřický a katastrální</name>
+            <uri>https://geoportal.cuzk.gov.cz</uri>
+            <email>cuzk.helpdesk@cuzk.gov.cz</email>
+        </author>
+        <rights>žádné podmínky neplatí</rights>
+        <link href="https://geoportal.cuzk.gov.cz/SDIProCSW/service.svc/get?REQUEST=GetRecordById&amp;SERVICE=CSW&amp;VERSION=2.0.2&amp;OUTPUTSCHEMA=http://www.isotc211.org/2005/gmd&amp;ELEMENTSETNAME=full&amp;Id=CZ-CUZK-DATA250-V" rel="describedby" title="metadata datasetu" type="application/xml"/>
+        <link href="https://atom.cuzk.gov.cz/Data250/datasetFeeds/CZ-00025712-CUZK_Data250_1.xml" rel="alternate" title="dataset feed" type="application/atom+xml"/>
+        <category label="S-JTSK" term="http://www.opengis.net/def/crs/EPSG/0/5514"/>
+        <category label="ETRS89-TM33N" term="http://www.opengis.net/def/crs/EPSG/0/3045"/>
+        <inspire_dls:spatial_dataset_identifier_code>CZ-00025712-CUZK_Data250_1</inspire_dls:spatial_dataset_identifier_code>
+        <inspire_dls:spatial_dataset_identifier_namespace>ČÚZK</inspire_dls:spatial_dataset_identifier_namespace>
+        <georss:polygon>51.3554 18.6364 50.8244 11.9385 48.2343 12.6032 48.7381 18.957 51.3554 18.6364</georss:polygon>
+    </entry>
+</feed>
