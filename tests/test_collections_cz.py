@@ -29,7 +29,7 @@ from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.notices import WHOLE_COUNTRY_SIZE
 from kartograf.sources import registry
-from kartograf.sources.descriptor import FeatureBBoxParams
+from kartograf.sources.descriptor import FeatureBBoxParams, FeatureLayer
 from tests.conftest import recorded_response
 from tests.fake_packages import FakePackageSession, FakeResponse, zip_bytes
 
@@ -380,10 +380,10 @@ def test_national_file_http_signal(tmp_path, monkeypatch, name, product, stored,
     assert item.file.version_path.read_bytes() == body
 
 
-def test_hynet_three_layers_and_misleading_next(tmp_path, monkeypatch, frozen_clock):
+def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen_clock):
     """Completeness from ``hits``: the last WatercourseLink page (1 feature)
     carries a ``next`` link (http, STARTINDEX=4) that is never followed; the
-    empty crossing type (no XSD schema at GeoServer) is an empty layer."""
+    area result is the geometric network (links and nodes)."""
     _page_size(monkeypatch, "cz.cuzk.hy_net", 2)
     fake = FakeCuzk()
     monkeypatch.setattr(col, "_session", lambda: fake)
@@ -402,11 +402,7 @@ def test_hynet_three_layers_and_misleading_next(tmp_path, monkeypatch, frozen_cl
         name: pyogrio.read_info(path, layer=name)["features"]
         for name, _ in pyogrio.list_layers(path)
     }
-    assert counts == {
-        "WatercourseLink": 3,
-        "HydroNode": 1,
-        "WatercourseSeparatedCrossing": 0,
-    }
+    assert counts == {"WatercourseLink": 3, "HydroNode": 1}
     assert pyogrio.read_info(path, layer="WatercourseLink")["crs"] == "EPSG:5514"
     starts = [p["STARTINDEX"] for u, p in fake.calls if "STARTINDEX" in p]
     assert "4" not in starts
@@ -414,6 +410,46 @@ def test_hynet_three_layers_and_misleading_next(tmp_path, monkeypatch, frozen_cl
     assert meta["horizontal_crs"] == "EPSG:5514"
     layers = {x["name"]: x["features"] for x in meta["extra"]["source"]["layers"]}
     assert layers == counts
+
+
+def test_wfs_type_without_objects_is_empty_layer(tmp_path, monkeypatch, frozen_clock):
+    """A WFS type without objects in the area (recorded: GeoServer answers for
+    WatercourseSeparatedCrossing - 0 hits, an empty page, no XSD schema) is an
+    empty GPKG layer with the id field: the layers of the file do not depend
+    on the area."""
+    source = registry.get_source("cz.cuzk.hy_net")
+    empty = FeatureLayer(
+        code="WatercourseSeparatedCrossing",
+        source="hy-n:WatercourseSeparatedCrossing",
+        name="WatercourseSeparatedCrossing",
+        id_field="gml_id",
+    )
+    channels = tuple(
+        dataclasses.replace(
+            ch,
+            params=dataclasses.replace(
+                ch.params, page_size=2, layers=(*ch.params.layers, empty)
+            ),
+        )
+        if isinstance(ch.params, FeatureBBoxParams)
+        else ch
+        for ch in source.channels
+    )
+    monkeypatch.setitem(
+        registry._SOURCES,
+        "cz.cuzk.hy_net",
+        dataclasses.replace(source, channels=channels),
+    )
+    monkeypatch.setattr(col, "_session", lambda: FakeCuzk())
+
+    report = download_collection(
+        product="network", country="cz", bbox=AREA, output_dir=tmp_path, cache=False
+    )
+
+    path = report.files[0].file.path
+    info = pyogrio.read_info(path, layer="WatercourseSeparatedCrossing")
+    assert info["features"] == 0
+    assert list(info["fields"]) == ["gml_id"]
 
 
 def test_hynet_whole_country_is_epsg_3045(tmp_path):

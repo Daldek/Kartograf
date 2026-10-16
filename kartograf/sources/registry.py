@@ -494,21 +494,25 @@ _CZ_HY_NET = SourceDescriptor(
             horizontal_crs="EPSG:5514",
             capabilities=frozenset({"bbox_vector"}),
             endpoint="https://geoportal.cuzk.gov.cz/geoserver/hy-n/wfs",
-            notes="odcinki ciekow, wezly i skrzyzowania przecinajace obszar",
+            notes=(
+                "odcinki ciekow i wezly sieci przecinajace obszar (skrzyzowania "
+                "bezkolizyjne - relacje bez geometrii - tylko w pliku krajowym)"
+            ),
             params=FeatureBBoxParams(
                 protocol="wfs",
                 native_crs="EPSG:5514",
                 axis_order="xy",
                 page_size=1000,
+                # No WatercourseSeparatedCrossing: its GML has no geometry (a
+                # relation of two links) and GeoServer answers RESULTTYPE=hits
+                # with a BBOX by 0 while the pages hold objects (2026-10-16:
+                # 30 x 30 km 0 vs 4, 100 x 100 km 0 vs 24), so completeness
+                # cannot be checked; the national file has the crossings.
                 layers=tuple(
                     FeatureLayer(
                         code=name, source=f"hy-n:{name}", name=name, id_field="gml_id"
                     )
-                    for name in (
-                        "WatercourseLink",
-                        "HydroNode",
-                        "WatercourseSeparatedCrossing",
-                    )
+                    for name in ("WatercourseLink", "HydroNode")
                 ),
                 selection="all",
             ),
