@@ -703,7 +703,7 @@ def _inspect_project(
     )
 
 
-def project_status(
+def get_project_status(
     project_dir: str | Path, *, tasks: Sequence[str] | None = None
 ) -> ProjectCheck:
     """Check pinned version and sidecar existence and data size, without hashing

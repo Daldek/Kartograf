@@ -19,9 +19,9 @@ from kartograf.project.operations import (
     add_project_task,
     check_project,
     download_project,
+    get_project_status,
     init_project,
     open_project,
-    project_status,
     remove_project_task,
     verify_project,
 )
@@ -37,9 +37,9 @@ __all__ = [
     "add_project_task",
     "check_project",
     "download_project",
+    "get_project_status",
     "init_project",
     "open_project",
-    "project_status",
     "remove_project_task",
     "verify_project",
 ]

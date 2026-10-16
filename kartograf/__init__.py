@@ -11,7 +11,7 @@ result (ADR-037): ``elevation download`` and ``imagery download`` =
 ``boundaries download``, ``cadastre download`` and ``models3d download`` =
 ``download_collection``/``check_collection`` (ADR-042), ``project`` =
 ``init_project``, ``add_project_task``, ``remove_project_task``,
-``download_project``, ``check_project``, ``project_status``,
+``download_project``, ``check_project``, ``get_project_status``,
 ``verify_project`` (``open_project`` reads a project, ADR-040).
 
 Example usage::
@@ -184,9 +184,9 @@ from kartograf.project import (
     add_project_task,
     check_project,
     download_project,
+    get_project_status,
     init_project,
     open_project,
-    project_status,
     remove_project_task,
     verify_project,
 )
@@ -329,7 +329,7 @@ __all__ = [
     "remove_project_task",
     "download_project",
     "check_project",
-    "project_status",
+    "get_project_status",
     "verify_project",
     "Project",
     "ProjectTask",

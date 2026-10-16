@@ -221,7 +221,7 @@ z manifestu.
 | `download --check-updates [NAZWA...]` | `check_project` | porownuje przypiecia ze zrodlem, niczego nie pobiera | tak | nie |
 | `download --upgrade [NAZWA...]` | `download_project(update="upgrade")` | pobiera nowsze dane wskazane sygnalem zrodla i przepina zadania | tak | przepina |
 | `download --force [NAZWA...]` | `download_project(update="force")` | pobiera wszystko ponownie; inna tresc = nowe przypiecie | tak | przepina |
-| `status [NAZWA...]` | `project_status` | zadania, przypiecia, istnienie i rozmiar plikow | nie | nie |
+| `status [NAZWA...]` | `get_project_status` | zadania, przypiecia, istnienie i rozmiar plikow | nie | nie |
 | `verify [NAZWA...]` | `verify_project` | sumy SHA-256 i zgodnosc z sidecarem wersji | nie | nie |
 | - | `open_project` | odczyt i walidacja manifestu (dla nakladek: QGIS, GUI) | nie | nie |
 
@@ -311,8 +311,8 @@ def download_project(project_dir: str | Path, *, tasks: Sequence[str] | None = N
 def check_project(project_dir: str | Path, *, tasks: Sequence[str] | None = None,
                   cache: MetadataCache | bool = False,
                   on_notice: Callable[[Notice], None] | None = None) -> ProjectCheck
-def project_status(project_dir: str | Path, *,
-                   tasks: Sequence[str] | None = None) -> ProjectCheck
+def get_project_status(project_dir: str | Path, *,
+                       tasks: Sequence[str] | None = None) -> ProjectCheck
 def verify_project(project_dir: str | Path, *,
                    tasks: Sequence[str] | None = None) -> ProjectCheck
 ```
@@ -359,7 +359,7 @@ class FileCheck:
     task: str; unit: str; path: str; status: PinStatus
     pinned_label: str | None; available_label: str | None; detail: str | None
 
-class ProjectCheck:    # project_status, verify_project, check_project
+class ProjectCheck:    # get_project_status, verify_project, check_project
     project: Project
     files: tuple[FileCheck, ...]
     not_downloaded: tuple[str, ...]     # zadania bez przypiec
@@ -374,7 +374,7 @@ Zasady API:
   postaci JSON i odczyt z niej robi biblioteka. Nieznana nazwa opcji albo
   opcja innej komendy = `ValidationError` (manifest bywa edytowany
   recznie, wiec blad wejscia, nie programu).
-- `ok` w `ProjectCheck`: `project_status`/`verify_project` - kazde wybrane
+- `ok` w `ProjectCheck`: `get_project_status`/`verify_project` - kazde wybrane
   zadanie przypiete i kazdy plik `ok`; `check_project` - zaden plik
   `check_failed` i zadne zadanie nie zakonczylo sie bledem.
 - Nieznana nazwa zadania w `tasks` = `ValidationError` przed jakimkolwiek

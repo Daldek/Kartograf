@@ -90,6 +90,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     usuniete bez aliasow. Co zrobic: `download_orto_cutout(bbox, ...)` ->
     `download_image_cutout(bbox, product="orto", ...)` (tak samo
     `check_*`), `OrtoCutoutResult` -> `ImageCutoutResult`.
+  - Stan projektu w API: `get_project_status` zamiast `project_status`
+    (ADR-044 D4; czasownik jak `init_project`, `verify_project`), bez
+    aliasu; `kartograf project status` bez zmian. Co zrobic: zamien
+    `project_status(...)` na `get_project_status(...)`.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -987,7 +991,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   odpytuje zrodlo bez pobierania, `--upgrade`/`--force` jawnie przepinaja
   zadania. Publiczne API: `init_project`, `open_project`,
   `add_project_task`, `remove_project_task`, `download_project`,
-  `check_project`, `project_status`, `verify_project` oraz typy
+  `check_project`, `get_project_status`, `verify_project` oraz typy
   `Project`, `ProjectTask`, `PinnedFile`, `ProjectReport`, `TaskResult`,
   `ProjectCheck`, `FileCheck`. Zadania obejmuja kazda komende `download`
   grup danych i `soil hsg` z ich opcjami (m.in. `cutout`,
