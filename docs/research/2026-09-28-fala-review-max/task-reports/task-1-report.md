@@ -98,8 +98,8 @@ edytowany rownolegle przez inny agent — nie dotykany).
 
 ## Pliki zmienione
 
-- `/home/claude-agent/workspace/Kartograf/CLAUDE.md`
-- `/home/claude-agent/workspace/Kartograf/docs/DECISIONS.md`
+- `<workspace>/Kartograf/CLAUDE.md`
+- `<workspace>/Kartograf/docs/DECISIONS.md`
 
 `git status --porcelain` po commicie: pusty (czysto).
 
