@@ -1047,6 +1047,17 @@ CRS84; HEAD paczek SHP/GML pokazal odpowiednio 734 171 465 i
 przyjeciem kanalu plikow krajowych sprawdzic rzeczywiste sufiksy czlonow
 ZIP (zwlaszcza `xml`/GML) i powtorzyc probe live pelnego obszaru.
 
+**Diagnoza zapisu GPKG (2026-10-16).** Blad `Failed to start transaction`
+dotyczyl skryptu diagnostycznego zapisujacego GPKG bezposrednio na wolumenie
+SMB/CIFS, a nie toru Kartografa. Minimalny zapis jednej nagranej warstwy
+`SadRejonowy` przez `write_gpkg` wprost do `<katalog-danych>` odtworzyl
+`DataSourceError: Failed to start transaction` (bez pozostawionego pliku).
+Ten sam niewielki obszar pobrany na zywo przez `download_collection` zakonczyl
+sie poprawnie: `write_gpkg` dostal lokalna sciezke
+`/tmp/kartograf-features-*/result.gpkg`, gotowy plik zostal przeniesiony
+do magazynu, a warstwa w magazynie ma jeden obiekt. `feature_bbox` juz
+spelnia ADR-042 D5; zmiana kodu ani test regresji nie sa potrzebne.
+
 ### Task E4: `landcover` - BDOO, Data50, Data250
 
 **Zaleznosci:** E0, C (BDOT10k archiwalny w `LandCoverManager`
