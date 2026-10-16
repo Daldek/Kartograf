@@ -17,6 +17,7 @@ from pathlib import Path
 
 from kartograf.cli._args import parse_bbox_arg, parse_per_country
 from kartograf.cli.download_cmd import (
+    _end_progress,
     _plan_context,
     _print_notice,
     _print_version_summary,
@@ -25,6 +26,7 @@ from kartograf.cli.download_cmd import (
     _status_line,
     _unit_of,
     _update_mode,
+    create_progress_callback,
     run_with_plan_file,
 )
 from kartograf.download.collections import (
@@ -53,7 +55,7 @@ def collection_task(args: argparse.Namespace) -> dict:
         "format": getattr(args, "format", None),
         "scale": getattr(args, "scale", None),
         "sheet_system": getattr(args, "sheet_system", None),
-        "network": getattr(args, "network", None),
+        "network": parse_per_country(getattr(args, "network", None), "--network"),
         "horizontal_crs": getattr(args, "horizontal_crs", None),
     }
 
@@ -73,13 +75,16 @@ def _collection_download(args: argparse.Namespace) -> int:
             args, check_collection(**arguments, on_notice=_print_notice)
         )
     update = _update_mode(args)
+    on_progress = create_progress_callback(args.quiet, args.workers)
     report = download_collection(
         **arguments,
         update=update,
         plan=_plan_context(args).loaded,
         workers=args.workers,
+        on_progress=on_progress,
         on_notice=_print_notice,
     )
+    _end_progress(on_progress)
     output = Path(args.output)
     if not args.quiet:
         for item in report.files:

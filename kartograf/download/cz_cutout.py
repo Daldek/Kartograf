@@ -325,7 +325,7 @@ def check_cz_cutout(
     """
     from kartograf.download.options import validate_request_bbox
 
-    validate_request_bbox(bbox)
+    bbox = validate_request_bbox(bbox)
     del cache, on_notice  # same signature as the download (Z2); unused here
     provider = _cz_provider(
         product=product,
@@ -379,7 +379,7 @@ def download_cz_cutout(
     """
     from kartograf.download.options import validate_request_bbox
 
-    validate_request_bbox(bbox)
+    bbox = validate_request_bbox(bbox)
     validate_update(update)
     sink = NoticeSink(on_notice)
     with open_cache(

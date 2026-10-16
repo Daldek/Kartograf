@@ -57,10 +57,9 @@ def test_flags_mutually_exclusive(tmp_path, flags, capsys):
 
 
 def test_plan_requires_check_or_upgrade(tmp_path, capsys):
-    with pytest.raises(SystemExit) as exc:
-        _run(FakeCampaignProvider(C14), tmp_path, "--sheet", G, "--plan", "p.json")
-    assert exc.value.code == 2
-    assert "--plan wymaga" in capsys.readouterr().err
+    rc = _run(FakeCampaignProvider(C14), tmp_path, "--sheet", G, "--plan", "p.json")
+    assert rc == 1
+    assert "Error: --plan wymaga" in capsys.readouterr().err
 
 
 def test_default_reports_newer_upgrade_downloads_it(tmp_path, capsys):
@@ -73,7 +72,7 @@ def test_default_reports_newer_upgrade_downloads_it(tmp_path, capsys):
         f"{G_PATH}: lokalna wersja 2025-04-27_83233; dostepna nowsza "
         "2025-10-21_84183 (--upgrade)"
     ) in captured.out
-    assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
+    assert "Info: dostepna nowsza kampania dla 1 arkusza" in captured.err
     assert fake.downloads == [REC["83233"].url]
     assert _run(fake, tmp_path, "--sheet", G, "--upgrade") == 0
     assert f"{G_PATH}: nowa wersja 2025-10-21_84183_" in capsys.readouterr().out

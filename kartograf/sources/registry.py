@@ -564,6 +564,11 @@ _CZ_ZABAGED = SourceDescriptor(
                 ),
                 selection="all",
                 order_field="OBJECTID",
+                area_omitted=(
+                    "wynik obszaru ma 22 warstwy pokrycia terenu i wod; pelna "
+                    "baza ZABAGED jest w pliku krajowym: --whole-country "
+                    "--horizontal-crs EPSG:5514|EPSG:3045"
+                ),
             ),
         ),
         AccessChannel(
@@ -685,6 +690,12 @@ _CZ_HY_NET = SourceDescriptor(
                     for name in ("WatercourseLink", "HydroNode")
                 ),
                 selection="all",
+                area_omitted=(
+                    "wynik obszaru bez skrzyzowan bezkolizyjnych (typ "
+                    "WatercourseSeparatedCrossing: relacje odcinkow bez geometrii, "
+                    "usluga nie liczy ich w obszarze) - sa w pliku krajowym: "
+                    "--whole-country --country cz"
+                ),
             ),
         ),
         AccessChannel(

@@ -89,6 +89,7 @@ def add_collection_commands(
     ]
     selection.add_argument(
         "--country",
+        type=str.lower,
         choices=COUNTRIES,
         default=None,
         help="Kraj zrodla - wymagany z --bbox/--geometry"

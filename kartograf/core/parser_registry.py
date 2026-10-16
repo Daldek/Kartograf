@@ -31,6 +31,7 @@ class SheetSystem:
     """Description of a single sheet coding system."""
 
     id: str  # "pl1992", "pl2000", "cz_tm33", "cz_sm5"
+    name: str  # in messages: "PL-1992", "PL-2000", "TM33", "SM5"
     country: str
     detect: Callable[[str], bool]  # receives the sheet code without whitespace
     path_parts: Callable[[str], list[str]]  # path parts for FileStorage
@@ -57,24 +58,28 @@ def _pl1992_path_parts(sheet: str) -> list[str]:
 SYSTEMS: tuple[SheetSystem, ...] = (
     SheetSystem(
         id="pl2000",
+        name="PL-2000",
         country="PL",
         detect=lambda sheet: bool(_PL2000_PATTERN.match(sheet)),
         path_parts=_pl2000_path_parts,
     ),
     SheetSystem(
         id="cz_tm33",
+        name="TM33",
         country="CZ",
         detect=lambda sheet: bool(CZ_TM33_PATTERN.match(sheet)),
         path_parts=lambda sheet: sheet.split("_"),
     ),
     SheetSystem(
         id="cz_sm5",
+        name="SM5",
         country="CZ",
         detect=lambda sheet: bool(CZ_SM5_PATTERN.match(sheet)),
         path_parts=lambda sheet: [sheet[:-2], sheet[-2:]],
     ),
     SheetSystem(
         id="pl1992",
+        name="PL-1992",
         country="PL",
         detect=lambda sheet: True,  # fallback - always last
         path_parts=_pl1992_path_parts,

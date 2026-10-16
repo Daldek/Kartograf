@@ -37,6 +37,35 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pikselach); `percent` grup to udzial w pikselach z danymi (jak dotad).
   Co zrobic: kod iterujacy po wyniku pomija klucz `nodata` albo iteruje
   po `HSG_VALUES`.
+- Przeglad spojnosci UX 0.8.0 (bledy wejscia przed siecia, CLI = API):
+  - `--layer` bez `--geometry` jest bledem w kazdej komendzie danych
+    i w `project add` (dotad wartosc byla po cichu pomijana i zapisywana
+    w manifescie). Co zrobic: usun `--layer` (warstwy danych BDOT10k/BDOO
+    wybiera `--layers`).
+  - LAZ PL odrzuca `--resolution`, `--sheet-system` i `--scale` (jak LAZ
+    CZ; dotad pomijane). Co zrobic: usun te flagi z pobran LAZ.
+  - Obszar jawnego `--country pl|cz` (`--bbox`, obwiednia `--geometry`)
+    lezacy poza obwiednia kraju konczy sie `ValidationError` z ukladem
+    obszaru w EPSG:4326 i podpowiedzia `--bbox-crs`/kolejnosci osi (dotad
+    "brak obiektow"/"Brak arkuszy" po zapytaniu zrodla). Co zrobic: popraw
+    `--bbox-crs` albo wspolrzedne (`names --product world` bez zmian).
+  - Komunikat "skorowidz GUGiK niedostepny - uzyto lokalnej wersji"
+    (`DownloadManager`) ma kod `CHECK_FAILED` zamiast `UNVERIFIED_LOCAL`;
+    `UNVERIFIED_LOCAL` znaczy tylko "lokalna wersja zrodla bez taniego
+    sygnalu" (`info`). Co zrobic: kod sprawdzajacy `Notice.code` dla awarii
+    skorowidza - `CHECK_FAILED`.
+  - CLI nie rozwija skrotow dlugich flag (`--out` nie znaczy `--output`,
+    `--stat` w `soil hsg` nie znaczy `--stats`); `--plan` bez
+    `--check-updates`/`--upgrade` to `Error:` z kodem 1 (dotad blad parsera,
+    kod 2). Co zrobic: pisz pelne nazwy flag.
+  - `--sheet` z godlem PL i `--sheet-system` innym niz uklad godla
+    (`elevation`/`imagery download`, np. godlo PL-1992 z `--sheet-system
+    2000`) to `Error:`/`ValidationError` przed siecia (dotad flaga byla po
+    cichu pomijana); zgodna wartosc nadal wolno podac. Co zrobic: usun
+    `--sheet-system` (uklad arkuszy wynika z godla).
+  - `project init` bez `--output`: `Error:` z kodem 1 jak w komendach
+    danych (dotad blad parsera, kod 2); `init_project(output_dir=None)` to
+    `ValidationError`. Co zrobic: skrypt sprawdzajacy kod 2 - kod 1.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -581,6 +610,30 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   na zapytanie wg pomiaru)`, stala `WCS_REQUEST_SECONDS`), zapytanie
   obszaru PRNG (`names download --product geographic|world`) - zmierzony
   czas odpowiedzi OGC API (`SLOW_SOURCE`, `FeatureBBoxParams.response_note`).
+- Przeglad UX 0.8.0, wartosci wejscia: `--country`, `--format`,
+  `--vertical-crs` i kody ukladow (`--bbox-crs`, `--horizontal-crs`, uklad
+  `BBox`) w dowolnej wielkosci liter (`--country PL`, `--format shp`,
+  `--vertical-crs evrf2007`/`bpv`, `epsg:2180`) - CLI i biblioteka (komendy
+  danych i funkcje z `bbox`) przyjmuja zapis rejestru; wartosc nieznana
+  komunikat podaje tak, jak ja wpisano. `geodesy download --network`
+  w skladni per kraj jak `--level` (`pl=horizontal,cz=gnss`; API `network=
+  {"pl": ..., "cz": ...}`, manifest: napis albo obiekt per kraj). Opcja
+  zrodla jednego kraju (`maps --sheet-system sjtsk|etrs89`, ZTM CZ) dotyczy
+  pod `--country auto` czesci tego kraju; dla samego drugiego kraju jest
+  bledem z nazwa kraju, ktory ja ma (dotad "nie dotyczy" takze dla
+  obszaru przy granicy, ktorego nie dalo sie pobrac). Co zrobic: nic.
+- Postep kolekcji: `download_collection(on_progress=)` i pasek postepu
+  (jak lista arkuszy: `>` przed transferem, `+` pobrana, `o` lokalna, `x`
+  blad) w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`
+  i `geodesy download`, w zrodlach kolekcji `landcover` (ZABAGED, BDOO,
+  Data50, Data250) i plikach NMT 100 m - dla zadania z wieloma
+  jednostkami (jedna jednostka: linia statusu i `Warning` z rozmiarem
+  duzego pliku); `-q` ukrywa pasek. Projekt przekazuje postep zadaniom
+  kolekcji.
+- Dokumentacja: USAGE 2 - tabela wszystkich kodow `Notice` (kod, poziom,
+  kiedy, komendy); `sheet_list` (`download_data`, naglowek na stdout)
+  i `unit_list` (kolekcje, takze arkusze map i archiwow osnow) opisane
+  jako dwa wydruki tej samej listy jednostek.
 - Mesh 3D, drzewa, osnowy i quasi-geoidy (ADR-043): `models3d download
   --product mesh` (modele siatkowe miast GUGiK: kafle indeksu WFS obszaru,
   ZIP OBJ+MTL+JPG 1:1
@@ -775,7 +828,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`hydro/cz_hynet/bbox/<coords>.gpkg`) z 2 warstwami: `WatercourseLink`
   (odcinki ciekow) i `HydroNode` (wezly); `WatercourseSeparatedCrossing`
   nie jest warstwa obszaru (bez geometrii w GML, GeoServer podaje dla BBOX
-  `hits` 0 mimo obiektow), skrzyzowania sa w pliku krajowym.
+  `hits` 0 mimo obiektow), skrzyzowania sa w pliku krajowym - przypomina
+  o tym `Info` (`AREA_OMITTED`) kazdego pobrania obszaru.
   `--whole-country --country cz` = `hydro/cz_hynet_gpkg/country/cz.zip`
   (GeoPackage w EPSG:3045, ok. 194 MB, sygnal `http`); `hydro
   list-sources`; biblioteka `download_collection(product="network", ...)`.
@@ -786,7 +840,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--whole-country --horizontal-crs EPSG:5514|EPSG:3045` = krajowy ZIP
   z feedu ATOM 1:1 (`landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip`,
   5,8/6,7 GB, etykieta = data wydania, sygnal `metadata`; warstwy pod
-  nazwami CUZK, innymi niz wynik obszaru). Biblioteka:
+  nazwami CUZK, innymi niz wynik obszaru - `Info` `AREA_OMITTED` przy
+  kazdym pobraniu obszaru wskazuje plik krajowy). Biblioteka:
   `LandCoverManager(output_dir, "zabaged")`.
 - RUIAN w `boundaries download --product admin --country cz|auto`
   (ADR-042 D17): `--level kraj|okres|obec|katastralni-uzemi` ->
@@ -910,7 +965,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ProjectCheck`, `FileCheck`. Zadania obejmuja kazda komende `download`
   grup danych i `soil hsg` z ich opcjami (m.in. `cutout`,
   `horizontal_crs`, `coverage`, `resolution` w `imagery download`;
-  `whole_country`, `horizontal_crs` w `landcover download`). Opis uzycia:
+  `whole_country`, `horizontal_crs` w `landcover download`).
+  `project download --workers N` (API `download_project(workers=)`) pobiera
+  pliki kazdego zadania rownolegle (domyslnie jak komenda danych); w `project
+  add` `--workers` i `soil hsg --stats` to `Error:` (opcje uruchomienia, nie
+  zadania). `status`/`verify`: zadanie nie pobrane to linia `NAZWA: nie
+  pobrane (pobierz: kartograf project download NAZWA)` i kod 1 (bez
+  `Error:`); podpowiedzi polecen `kartograf project ...` maja `--project
+  KATALOG`, gdy projekt nie jest biezacym katalogiem. Opis uzycia:
   `docs/USAGE.md` sekcja 8.
 - Biblioteka (ADR-037): `download_data`/`check_data` (`kartograf.download.data`)
   = komendy `kartograf elevation download` i `kartograf imagery download`:
@@ -1012,6 +1074,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Naprawione
 
+- Komunikaty przegladu UX 0.8.0: nieznana flaga zglaszana przez komende
+  (jej `usage`) z lista komend, ktore ja maja, i podpowiedzia typowych
+  pomylek (`landcover --product` -> `--source`, `soil download --product`
+  -> `--property`, `hydro --sheet`); `--bbox -447000,...` po spacji dziala
+  bez `=`; brak wyboru wymienia wybory produktu w kraju zadania (HY-NET CZ
+  bez `--teryt`/`--ku`/`--sheet`, osnowy z wartosciami `--network`, CORINE
+  i SoilGrids `--sheet, --bbox albo --geometry`); flagi zamiast kluczy
+  rejestru (`--sheet-system`, `--keep-raw`, `--teryt`) i nazwa produktu
+  w "nie dotyczy"; zrodla CZ `landcover` z godlem PL i `--teryt` 2 cyfr
+  BDOT10k z podpowiedzia; `--layers` bez wzgledu na wielkosc liter;
+  systemy godel jako `PL-1992`/`SM5`; poprawna odmiana liczebnikow ("2
+  pliki", "dla 1 arkusza", "Pobieranie kafli LAZ"); blad "brak obiektow
+  w obszarze" podaje obszar zadania w ukladzie uzytkownika.
 - LAZ PL `--sheet`: kafle wybierane z ramy arkusza (w EPSG:2180 obrocony
   czworokat), nie z jej obwiedni, a kafel musi siegac w obszar glebiej niz
   1 m (`tolerance_m`): sasiedzi stykajacy sie z rama krawedzia albo

@@ -493,8 +493,7 @@ kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326
 # pogranicze pod auto: osobne wycinki PL (WCS 1 m) i CZ, wspólny
 # extra.parent_request; różne wartości dla krajów w postaci pl=...,cz=...
 kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
-# bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
-# inaczej argparse odczyta wartość jako nieznaną flagę
+# bboxy w EPSG:5514 są na terytorium CZ ujemne — od 0.8.0 działa --bbox -447000,... i --bbox=-447000,...;
 kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
 kartograf elevation download "--bbox=-447000,-1114000,-446600,-1113600" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 2m --product nmpt --vertical-crs Bpv -o ./data # wycinek DMP 1G
 # LAZ CZ: --model wybiera model, --vertical-crs pliki (Bpv = arkusze SM5, EVRF2007 = kafle TM33)
@@ -1327,11 +1326,12 @@ w układzie usługi **EPSG:5514** (S-JTSK); `--whole-country` zapisuje plik
 krajowy CUZK 1:1, a jego rozmiar pojawia się jako `Warning:` przed
 transferem. Godło jako obszar i `--teryt` dotyczą tylko PL — obszar CZ
 podaj prostokątem albo plikiem geometrii. Współrzędne EPSG:5514 są
-w Czechach ujemne: podawaj je jako `--bbox=...` (bez spacji).
+w Czechach ujemne: `--bbox -460000,...` i `--bbox=-460000,...` działają tak samo.
 
 ```bash
 # ZABAGED (landcover): 22 warstwy pokrycia terenu i wód obszaru, EPSG:5514
 kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
+#   Info: zabaged: wynik obszaru ma 22 warstwy pokrycia terenu i wod; pelna baza ZABAGED jest w pliku krajowym: --whole-country --horizontal-crs EPSG:5514|EPSG:3045
 #   -> landcover/cz_zabaged/bbox/-460000_-1120000_-450000_-1110000.gpkg
 kartograf landcover list-layers --source zabaged
 # plik krajowy ZABAGED (5,8 GB w EPSG:5514 albo 6,7 GB w EPSG:3045) — tylko świadomie
@@ -1362,6 +1362,7 @@ kartograf boundaries download --product admin --country cz --whole-country -o ./
 
 # HY-NET (hydro): odcinki cieków i węzły obszaru, EPSG:5514
 kartograf hydro download --product network --country cz "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
+#   Info: network: wynik obszaru bez skrzyzowan bezkolizyjnych (typ WatercourseSeparatedCrossing: relacje odcinkow bez geometrii, usluga nie liczy ich w obszarze) - sa w pliku krajowym: --whole-country --country cz
 #   -> hydro/cz_hynet/bbox/-470000_-1130000_-440000_-1100000.gpkg (warstwy WatercourseLink, HydroNode)
 kartograf hydro download --product network --country cz --whole-country -o ./data
 #   -> hydro/cz_hynet_gpkg/country/cz.zip (HY-NET.gpkg w EPSG:3045, ok. 194 MB)
@@ -1397,7 +1398,8 @@ EPSG:5514` albo `EPSG:3045` (plik jest publikowany w dwóch układach)
 i zapisuje krajowy ZIP CUZK 1:1 (w środku `ZABAGED_RESULTS.gpkg`;
 Kartograf go nie rozpakowuje). Warstwy pliku krajowego to pełna baza pod
 nazwami CUZK (np. `VodniPlocha_c`, `TrvalyTravniPorost_c`) — **inne niż
-nazwy warstw wyniku obszaru**. Wynik obszaru jest zawsze w EPSG:5514
+nazwy warstw wyniku obszaru**; każde pobranie obszaru przypomina o tym
+linią `Info:` (`Notice` `area_omitted`). Wynik obszaru jest zawsze w EPSG:5514
 (`--horizontal-crs` z obszarem = `Error:`); `--teryt`, `--sheet`,
 `--format`, `--layers`, `--keep-raw` i `--year` z `--source zabaged` to
 `Error:`. Plik krajowy ma wydanie z feedu ATOM (etykieta np.
@@ -1440,7 +1442,9 @@ hydrograficzną INSPIRE z WFS CUZK. Wynik obszaru ma **2 warstwy**:
 obejmuje: w GML nie ma geometrii (to relacja dwóch odcinków), a usługa
 dla zapytania z BBOX podaje 0 obiektów, choć je zwraca (30 x 30 km:
 0 wobec 4) — kompletności nie da się sprawdzić; skrzyżowania są w pliku
-krajowym. Pola warstw pochodzą z treści odpowiedzi (schemat usługi to
+krajowym, o czym przypomina linia `Info:` każdego pobrania obszaru
+(`Notice` `area_omitted`, jak obwody spisowe granic specjalnych PRG).
+Pola warstw pochodzą z treści odpowiedzi (schemat usługi to
 tylko odwołanie do zdalnego schematu INSPIRE), więc ten sam typ może
 mieć w innym obszarze inne pola (strona z jednym węzłem nie ma
 `hydroNodeCategory`); warstwa bez obiektów ma samo pole `gml_id`. Plik
@@ -1522,7 +1526,9 @@ indeksu jest etykietą wersji i sygnałem aktualizacji. Dla ZTM `TIFF`, `DGN`
 i `SHP` pozostają oryginalnymi ZIP-ami, a `PDF` ma rozszerzenie `.pdf`.
 `S-JTSK` dopuszcza `TIFF`, `PDF`, `DGN`, `SHP`, `ETRS89` — tylko `TIFF` i
 `PDF`. Układ arkusza `sjtsk`/`etrs89` wynika z godła; `--sheet-system`
-jest wymagany przy `--bbox`/`--geometry`. ZTM sprawdza `ETag`/`Last-Modified`
+jest wymagany przy `--bbox`/`--geometry` ZTM i dotyczy tylko CZ (mapy
+BDOT10k mają arkusze PL-1992 — z `--country pl` flaga to `Error:`, pod
+`--country auto` dotyczy części CZ). ZTM sprawdza `ETag`/`Last-Modified`
 z `HEAD` bez pobierania danych.
 
 ```bash
@@ -1590,7 +1596,9 @@ arkusze 1:100 000 jego zasięgu (archiwum 1942 bywa ponad 1 GB — rozmiar
 w `Warning:` przed transferem). Sieć bez paczek powiatu z `--teryt` to
 `Error:` ze wskazaniem obszaru. Pod `--country auto` jedna wartość
 `--network` dotyczy obu krajów (wspólne: `horizontal`, `vertical`,
-`gravity`); błąd podaje wartości każdego kraju.
+`gravity`), a różne sieci podaje się per kraj jak `--level`:
+`--network pl=horizontal,cz=gnss` (biblioteka: `network={"pl":
+"horizontal", "cz": "gnss"}`); błąd podaje wartości każdego kraju.
 
 `geodesy download --product geoid` to model quasi-geoidy jako jeden plik
 krajowy, tylko z `--whole-country`: `--country pl` — PL-geoid2021 dla
@@ -1744,7 +1752,9 @@ download_collection(product="map", output_dir=out, country="pl",
 download_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
 lod2 = download_collection(product="buildings", output_dir=out, lod=2, country="pl",
                            bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
-                           on_notice=show)  # Notice unit_list: powiaty obszaru
+                           on_notice=show,  # Notice unit_list: powiaty obszaru
+                           on_progress=lambda p: print(p.current, p.total, p.sheet, p.status))
+# postęp jak dla listy arkuszy (zadanie z wieloma jednostkami; CLI: pasek, -q bez paska)
 for failure in lod2.failed:  # kind "no_coverage" = brak paczki powiatu (HTTP 404)
     print(failure.unit, failure.kind, failure.error)
 plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
@@ -2041,6 +2051,42 @@ dla LAZ PL, `CuzkRasterProvider`/`create_cz_raster_provider` dla rastrów CZ,
 `CuzkLazProvider`/`download_cz_laz` dla LAZ CZ, `Parser2000`,
 `ParserTM33`, `FileStorage`) — eksporty w `kartograf/__init__.py`, opis
 w SCOPE 2.10 i PRD 5.
+
+**Kody komunikatów (`Notice.code`).** Kod nie zależy od treści komunikatu
+(stałe w `kartograf/notices.py`); CLI wypisuje `info` jako `Info:`,
+`warning` jako `Warning:` na stderr, także z `-q` (wyjątek: `sheet_list`).
+
+| Kod | Poziom | Kiedy | Komendy |
+|---|---|---|---|
+| `sheet_list` | info | obszar rozwinięty na listę arkuszy przed pobraniem; CLI: nagłówek na stdout, ukryty przez `-q` | `elevation`, `imagery download` |
+| `unit_list` | info | jednostki obszaru kolekcji przed pobraniem: powiaty albo województwa (PRG), arkusze (mapy, archiwa osnów; także arkusze bez rekordu w indeksie), kafle mesh, katastralni území | kolekcje, `landcover --source bdoo` |
+| `geometry_layer_default` | info | GPKG z kilkoma warstwami bez `--layer`: użyta pierwsza | komendy z `--geometry` |
+| `auto_narrowed_to_pl`, `auto_narrowed_to_cz` | info | `--country auto` zawężone do jednego kraju (produkt albo wybór tylko tego kraju) | `elevation`, `imagery`, kolekcje, `elevation availability` |
+| `auto_clipped`, `auto_area_outside` | info | `--country auto`: część obszaru przycięta do obwiedni kraju albo leżąca poza PL i CZ | komendy z obszarem i `--country auto` |
+| `auto_partial_success` | warning | `--country auto`: jeden kraj zakończył się błędem, drugi pobrany (kod wyjścia 0) | `elevation`, `imagery download` |
+| `legacy_campaigns_dir` | info | w magazynie jest katalog `kampanie/` z 0.7.x | `elevation`, `imagery download` |
+| `newer_available` | info | źródło ma nowszy lot, użyta wersja lokalna (bez `--upgrade`) | arkusze PL `elevation`, `imagery` |
+| `check_failed` | warning | nie udało się sprawdzić źródła (np. skorowidz GUGiK niedostępny), użyta wersja lokalna | komendy danych, `elevation availability` |
+| `unverified_local` | info | `--upgrade`: wersja lokalna źródła bez taniego sygnału zmian (nowa treść: `--force`) | komendy danych |
+| `no_coverage_some`, `no_coverage_hint` | warning, info | część arkuszy bez danych GUGiK (pobrano co najmniej 1 plik) i podpowiedzi providera | `elevation`, `imagery download` |
+| `better_coverage`, `link_outside_range` | info | starszy lot z przedziału lat ma większe pokrycie; dowiązanie zostało na locie spoza przedziału | `elevation`, `imagery download` |
+| `sheet_crs_mismatch`, `incomplete_campaign` | warning | plik arkusza w innym układzie niż godło; najnowsza kampania deklaruje niepełny arkusz | `elevation`, `imagery download` |
+| `cutout_size` | info | wycinek PL: wiele zapytań WCS albo co najmniej 1 GiB, z szacowanym czasem (25–40 s na zapytanie) | `--cutout` (PL) |
+| `all_nodata` | warning | wycinek albo arkusz CZ bez danych (same nodata; wycinek PL w całości poza lądem to `Error:`) | `elevation`, `imagery download` |
+| `slow_source` | info | wolna usługa: zmierzony czas odpowiedzi przed zapytaniem obszaru (OGC API PRNG) | `names download` |
+| `laz_superseded` | info | kafle LAZ pominięte jako pokryte przez nowsze | `elevation download --product laz` |
+| `download_size`, `whole_country_size` | warning | plik jednostki ponad 100 MiB albo plik krajowy: rozmiar przed transferem | kolekcje, `landcover --whole-country`, arkusze true orto i orto ukośnej |
+| `area_omitted` | info | wynik obszaru celowo pomija warstwy źródła, które są w pliku krajowym (granice specjalne PRG, HY-NET, ZABAGED) | `boundaries`, `hydro`, `landcover download` |
+| `classes_absent` | info | paczka nie ma pliku którejś klasy `--layers` (brak takich obiektów) | `landcover --source bdoo` |
+| `corine_preview` | info | CORINE bez credentials CLMS: podgląd WMS zamiast danych | `landcover --source corine` |
+| `cache_disabled` | warning | cache metadanych nie do użycia (np. katalog tylko do odczytu); pobieranie trwa dalej | wszystkie |
+| `project_geometry_changed` | warning | plik geometrii zadania zmienił się od przypięcia | `project download --check-updates` |
+| `index_unsupported`, `cz_service_only` | info | rekordy indeksu, których Kartograf nie pobiera; modele CZ bez plików arkuszy (DMR 5G, DMP 1G) | `elevation availability` |
+
+Lista jednostek obszaru ma dwa kody z powodu wydruku: `sheet_list`
+(`download_data`) CLI drukuje jako nagłówek listy arkuszy na stdout,
+a `unit_list` (kolekcje, także arkusze map i archiwów osnów) jako `Info:`
+na stderr.
 
 ---
 
@@ -2630,11 +2676,15 @@ download` (takze ZABAGED), `soil download`, `soil hsg`,
 arkusz ortofoto CZ przypina cztery pliki (JPEG i trzy JGW);
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
-a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa
+a tryb wybiera sie przy `project download`. Opcje uruchomienia nie sa
+czescia zadania: `add` z `--workers` albo `soil hsg --stats` konczy sie
+`Error:` (rownolegle pobieranie: `project download --workers N`; domyslnie
+jak w komendzie danych). `remove NAZWA` usuwa
 zadanie i przypiecia z manifestu, **nie usuwa plikow** z magazynu.
 Nazwy zadan mozna podac pozycyjnie w `download`, `status` i `verify`;
 bez nazw polecenie obejmuje wszystkie zadania. `--project KATALOG`
-pozwala pracowac bez `cd` (domyslnie projekt jest w biezacym katalogu):
+pozwala pracowac bez `cd` (domyslnie projekt jest w biezacym katalogu;
+podpowiedzi polecen w komunikatach maja wtedy `--project KATALOG`):
 
 ```bash
 kartograf project verify --project ~/projekty/wisla
@@ -2653,7 +2703,9 @@ wersji i rozmiary; `verify` bez sieci czyta cale pliki i porownuje
 SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu. Linie
 plikow maja postac `zadanie: jednostka (plik): stan`, np. `orto_cz:
 CTES96 (CTES96.jpg): ok` - pliki jednej jednostki (JPEG i trzy JGW) sa
-rozroznialne.
+rozroznialne. Zadanie jeszcze nie pobrane to linia `teren: nie pobrane
+(pobierz: kartograf project download teren)` i kod 1 (z `-q` sam kod:
+`kartograf project status -q || kartograf project download`).
 
 ### 8.2 Swiezosc i wariant danych
 
@@ -2742,11 +2794,13 @@ print(report.ok, [(task.name, task.outcome) for task in report.tasks])
 print(project_status(project_dir).ok, verify_project(project_dir).ok)
 check = check_project(project_dir)  # sonda zrodla; bez pobierania i zapisu
 print([(item.task, item.status) for item in check.files])
-download_project(project_dir, tasks=["teren"], update="upgrade")
+download_project(project_dir, tasks=["teren"], update="upgrade", workers=8)
 ```
 
 `init_project` i `add_project_task` zwracaja `Project`,
-`download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`),
+`download_project` zwraca `ProjectReport` (`tasks`, `notices`, `ok`;
+`workers` = rownolegle pobieranie plikow kazdego zadania, `None` = domyslne
+komendy),
 a `check_project`, `project_status` i `verify_project` zwracaja
 `ProjectCheck` (`files`, `not_downloaded`, `notices`, `ok`).
 `open_project(project_dir)` czyta i waliduje manifest; API udostepnia

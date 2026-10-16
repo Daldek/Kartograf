@@ -18,6 +18,7 @@ country mappings, sequences) and the JSON form of ``tasks[].options``.
 
 import math
 import os
+import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path, PurePath
@@ -69,7 +70,12 @@ Options = dict[str, Any]
 
 
 class TaskDownload(Protocol):
-    """Download call of a command: the library function with the task options."""
+    """Download call of a command: the library function with the task options.
+
+    ``workers``: parallel transfers of the task's files (``None`` = the
+    default of the library function; HSG computes one raster from three
+    inputs and has no workers).
+    """
 
     def __call__(
         self,
@@ -78,6 +84,7 @@ class TaskDownload(Protocol):
         /,
         *,
         update: UpdateMode | None,
+        workers: int | None,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
@@ -198,6 +205,13 @@ def _hsg_files(result: HsgResult) -> TaskFiles:
 # Commands
 # =============================================================================
 
+
+def _run_options(workers: int | None) -> Options:
+    """``workers`` for a library call; ``None`` keeps the function's default
+    (``download_data``: 4, the other functions: 1, as the CLI groups)."""
+    return {} if workers is None else {"workers": workers}
+
+
 _AREA: dict[str, OptionKind] = {
     "sheet": "str",
     "bbox": "bbox",
@@ -228,6 +242,7 @@ def _data_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        workers: int | None,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
@@ -239,6 +254,7 @@ def _data_command(
             cache=cache,
             on_progress=on_progress,
             on_notice=on_notice,
+            **_run_options(workers),
             **opts,
         )
 
@@ -285,13 +301,18 @@ def _landcover_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        workers: int | None,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
     ) -> object:
         lc, rest = manager(output_dir, opts, cache)
         return lc.download(
-            **rest, update=update, on_notice=on_notice, on_progress=on_progress
+            **rest,
+            **_run_options(workers),
+            update=update,
+            on_notice=on_notice,
+            on_progress=on_progress,
         )
 
     def check(
@@ -324,6 +345,7 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
         opts: Options,
         *,
         update: UpdateMode | None,
+        workers: int | None,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
@@ -363,6 +385,7 @@ def _collection_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        workers: int | None,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
@@ -372,7 +395,9 @@ def _collection_command(
             output_dir=output_dir,
             update=update,
             cache=cache,
+            on_progress=on_progress,
             on_notice=on_notice,
+            **_run_options(workers),
             **opts,
         )
 
@@ -518,7 +543,7 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
             _collection_command(
                 "geodesy download",
                 "geodesy",
-                {**_COLLECTION, "whole_country": "flag", "network": "str"},
+                {**_COLLECTION, "whole_country": "flag", "network": "per_country"},
             ),
         )
     }
@@ -528,6 +553,20 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
 def data_commands_text() -> str:
     """The data commands a project accepts, for messages."""
     return ", ".join(COMMANDS)
+
+
+def project_command(project_dir: str | Path, subcommand: str, *args: str) -> str:
+    """A ``kartograf project`` command of a hint, ready to paste: with
+    ``--project <katalog>`` right after the subcommand when the project is
+    not the current directory (``add`` takes it before the task name)."""
+    words = ["kartograf", "project", subcommand]
+    try:
+        here = Path(project_dir).samefile(Path.cwd())
+    except OSError:
+        here = False
+    if not here:
+        words += ["--project", shlex.quote(str(project_dir))]
+    return " ".join([*words, *args])
 
 
 def task_command(name: str) -> TaskCommand:

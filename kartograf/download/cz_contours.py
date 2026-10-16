@@ -54,7 +54,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.notices import Notice, NoticeSink
+from kartograf.notices import FILES, Notice, NoticeSink, count_text
 from kartograf.sources.descriptor import SignalKind, SourceDescriptor
 from kartograf.sources.registry import get_source
 from kartograf.sources.sidecar import emit_sidecar
@@ -234,8 +234,8 @@ def _members(path: Path, url: str, fmt: str) -> list[str]:
     suffix = f".{fmt.lower()}"
     if not any(name.lower().endswith(suffix) for name in names):
         raise DownloadError(
-            f"{url}: paczka bez pliku {suffix} ({len(names)} plikow) - to nie sa "
-            "oczekiwane dane"
+            f"{url}: paczka bez pliku {suffix} ({count_text(len(names), *FILES)}) - "
+            "to nie sa oczekiwane dane"
         )
     return sorted(names)
 

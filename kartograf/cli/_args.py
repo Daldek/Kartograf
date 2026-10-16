@@ -23,10 +23,10 @@ from kartograf.exceptions import ValidationError
 # A parser or one of its argument groups (titled sections of --help).
 Container = argparse.ArgumentParser | argparse._ArgumentGroup
 
-# argparse takes "-447000,..." after a space for a flag: negative numbers with "="
 BBOX_HELP = (
     "Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180; "
-    "ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: --bbox=-447000,...)"
+    "wspolrzedne S-JTSK: --bbox-crs EPSG:5514, np. --bbox -447000,-1100000,"
+    "-437000,-1090000)"
 )
 # Area groups (land cover, soil): a sheet code is an area like --bbox (ADR-039).
 SHEET_AREA_HELP = (
@@ -61,6 +61,7 @@ def add_bbox_crs(parser: Container) -> None:
     """``--bbox-crs``: the CRS of the ``--bbox`` numbers."""
     parser.add_argument(
         "--bbox-crs",
+        type=str.upper,
         choices=BBOX_CRS_CHOICES,
         default="EPSG:2180",
         help="Uklad wspolrzednych --bbox (domyslnie EPSG:2180)",
@@ -173,6 +174,4 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
             raise ValidationError(
                 f"Nieprawidlowy bbox: {reason}. {BBOX_EXPECTED}"
             ) from None
-    bbox = BBox(values[0], values[1], values[2], values[3], crs)
-    validate_request_bbox(bbox)
-    return bbox
+    return validate_request_bbox(BBox(values[0], values[1], values[2], values[3], crs))

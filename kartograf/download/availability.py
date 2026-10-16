@@ -83,6 +83,8 @@ from kartograf.download.arguments import require_bool
 from kartograf.download.campaigns import in_year_range, year_range_label
 from kartograf.download.countries import country_bbox, split_bbox_by_country
 from kartograf.download.options import (
+    canonical_bbox,
+    canonical_country,
     product_choices,
     validate_area_choice,
     year_bounds,
@@ -552,7 +554,9 @@ def _validated(
     """
     from kartograf.core.parser_registry import detect_system
 
-    validate_area_choice(sheet, bbox, geometry)
+    country = canonical_country(country)
+    bbox = canonical_bbox(bbox)
+    validate_area_choice(sheet, bbox, geometry, layer)
     choices = product_choices(AVAILABILITY_PRODUCTS)
     if product is None:
         raise ValidationError(f"--product wymagane: {choices}")
@@ -574,7 +578,7 @@ def _validated(
         system = detect_system(sheet)
         if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
-                f"Godlo '{sheet}' nalezy do systemu {system.id} (kraj "
+                f"Godlo '{sheet}' nalezy do systemu {system.name} (kraj "
                 f"{system.country}), a podano --country {country}"
             )
         country = system.country.lower()
