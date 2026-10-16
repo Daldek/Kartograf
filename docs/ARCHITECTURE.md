@@ -479,11 +479,12 @@ kartograf/
 │   │                    # content_segment (prefiks + tokeny tresci), unit_slot (teryt/bbox/
 │   │                    # godlo/country, sloty pokrewne D7 — ADR-042 D8)
 │   ├── collections.py   # Kolekcje (ADR-042): download_collection/check_collection =
-│   │                    # komendy boundaries/cadastre/models3d/hydro download,
-│   │                    # validate_collection_request (bez sieci), CollectionReport, zadania
-│   │                    # jednostek (package_job/run_job/inspect_job; tor planu collection),
-│   │                    # landcover_request/run_request/plan_request (ZABAGED, BDOO,
-│   │                    # Data50, Data250)
+│   │                    # komendy boundaries/cadastre/models3d/hydro/names/maps/
+│   │                    # geodesy download, validate_collection_request (bez sieci),
+│   │                    # CollectionReport, zadania jednostek (package_job/run_job/
+│   │                    # inspect_job; tor planu collection), limit obszaru (100 plikow,
+│   │                    # 10 GB), landcover_request/run_request/plan_request (ZABAGED,
+│   │                    # BDOO, Data50, Data250)
 │   ├── updates.py       # Wewnetrzne pozycje planu PL (kartograf-plan/1, ADR-036)
 │   └── versions.py      # Magazyn wersjonowany (ADR-036): zapis wylaczny, etykiety,
 │                        # lista wersji, sprzatanie .incoming/
@@ -511,8 +512,9 @@ kartograf/
                          # _parser.py (parser glowny), _args.py (wspolne flagi),
                          # groups/ (grupy komend wg typu danych, ADR-039: elevation,
                          # imagery, landcover, soil, boundaries, cadastre, models3d,
-                         # hydro, project — jeden modul = jedna grupa; groups/_collection.py
-                         # to wspolny ksztalt komend kolekcji, nie grupa),
+                         # hydro, names, maps, geodesy, project — jeden modul = jedna
+                         # grupa; groups/_collection.py to wspolny ksztalt komend
+                         # kolekcji, nie grupa),
                          # download_cmd.py (download_data/check_data),
                          # availability_cmd.py (check_availability: tabele PL i CZ, --details, --json),
                          # collection_cmd.py (download_collection/check_collection),
@@ -566,6 +568,12 @@ to `resolve_subdir()`.
 | `cz.cuzk.hy_net` | `hydro/cz_hynet` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `pl.gugik.bdoo` | `landcover/pl_bdoo` (prefiks + tokeny: rocznik i klasy `--layers`, regula 9); slot `teryt/<woj>` | `.zip` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` | `landcover/cz_data50`, `landcover/cz_data250` (prefiks + tokeny, regula 9) | `.gpkg` (plik krajowy `.zip`) |
+| `pl.gugik.mesh_3d` | `models3d/pl_mesh` (prefiks, regula 9); slot `<strefa>/<plik kafla>` | `.zip` |
+| `pl.gugik.trees_3d` | `models3d/pl_trees` (prefiks + tokeny `lod1`, `2023`, regula 9) | `.zip` |
+| `pl.gugik.prpog` | `geodesy/pl_control` (prefiks + tokeny: siec, `package` paczki powiatu, regula 9) | `.gpkg` (paczka i archiwum `.zip`) |
+| `pl.gugik.quasigeoid` | `geodesy/pl_geoid2021` (prefiks + token `evrf2007`) | `.txt` |
+| `cz.cuzk.survey_control` | `geodesy/cz_control` (prefiks + token sieci) | `.gpkg` |
+| `cz.cuzk.qgzu` | `geodesy/cz_qgzu2013` | `.zip` |
 
 Kanal arkuszy kazdego deskryptora NMT/NMPT PL to `WFS` (`sheet_files`,
 sygnal `index`; skorowidz WFS GUGiK, od 0.8.0 zamiast `WMS_SHEET_INDEX`,
@@ -683,10 +691,17 @@ i capability kanalu kolekcji unikalnej w deskryptorze (`archive_unit_files`,
 | jw. | `WFS` `UslugaZbiorcza`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`: `dzialki`, `budynki`, id `gml_id`, `drop_fields=("DATA",)` |
 | `pl.gugik.buildings_3d` (`buildings`) | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `(lod, year)`: LoD1 2019 (`.../LOD1/2019/{woj}/{teryt}_gml.zip`, EPSG:9650), LoD1 2021/2022/2024 (`.../LOD1/<R>/{woj}/{teryt}.zip`, EPSG:9651), LoD2 2017 (`.../LOD2/{teryt}_gml.zip`, EPSG:9650); czlon `.gml`, `edition` = rok |
 | `pl.gugik.bdoo` (`landcover --source bdoo`, plan E4) | `DIRECT_FILES`, `admin_unit_files` | woj.; 7 wariantow `year` (2015, 2021-2026): `opendata/bdoo/<R>/PL.PZGiK.201.{woj}.zip`, czlon `.xml` (do 2023) albo `.gml` (od 2024), `edition` = rok; `classes` = suma klas 16 paczek rocznika (2015: 44, 2021-2023: 37, 2024-2026: 26), `class_pattern` `__OT_(?P<code>[A-Z]{4})_[A-Z]\.`; EPSG:2180; brak pliku krajowego |
+| `pl.gugik.mesh_3d` (`models3d --product mesh`, plan E5) | `DIRECT_FILES`, `area_files` | kafle obszaru z rekordow WFS `NMT/WFS/ModeleSiatkowe3D` (typ `gugik:SkorowidzModeleSiatkowe3D`, strony `next`); `IndexSource(unit_field=None)`: kafel = plik rekordu (`URL_do_pobrania`; pole `modul` powtarza sie w kilku pracach i miastach), etykieta `Aktualnosc_Numer_zgloszenia_pracy`, rok `akt_rok` (filtr `--year`), strefa `uklad_xy` (katalog slotu i uklad sidecara); czlon `.obj`, `vertical_crs` EPSG:9651; `index` |
+| `pl.gugik.trees_3d` (`models3d --product trees`, plan E5) | `DIRECT_FILES`, `admin_unit_files` | powiat; jeden wariant `(lod, year)` = (1, 2023): `InneDane/Drzewa3D/LOD1/2023/{woj}/{teryt}.zip` (0,3-25 GB; nie kazdy powiat ma paczke), czlon `.gml`, `edition` 2023, bez ukladu wysokosci (GML `srsName="EPSG:2180"`) |
+| `pl.gugik.prpog` (`geodesy --product control --country pl`, plan E5) | 4 x `WFS`, `bbox_vector` (wspolna capability, ADR-043 D6) | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`, `choice` `network`: `horizontal` (`PodstawowaOsnowaGeodezyjnaPozioma`: `Fundamentalna_pozioma`, `Bazowa_pozioma`), `vertical` (`PodstawowaOsnowaGeodezyjnaWysokosciowa`), `gravity` (`OsnowaGrawimetryczna`), `magnetic` (`OsnowaMagnetyczna`: punkty i `izogony`, bez `izogony_etykiety`); adres `.../PZGIK/<usluga>/WFS`; obiekty bez `gml:id`: id `nr_punktu` (izogony `zakres_wartosci_deklinacji`); warstwa GPKG = nazwa zrodla malymi literami |
+| jw. | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `network` `horizontal`/`vertical`: `bdpog/Pozioma/{teryt}_PodstawowaOsnowaPozioma.zip` (`Wysokosciowa`), czlon `.xls` (wykazy wspolrzednych; opisy JPG), tokeny `<siec>`, `package` |
+| jw. | `DIRECT_FILES`, `sheet_files` | arkusz 1:100 000 (`SheetGrid(system="1992", parts=3)`); warianty `network` `archive-1942`, `archive-kronsztadt60`: `bdpog/MaterialyArchiwalne/Katalogi_<Kartoteki1942\|Kronsztadt60>/{sheet}.zip` (godlo bez zera wiodacego), czlon `.pdf` (skany katalogow; uklad w sidecarze = uklad siatki arkuszy) |
+| `pl.gugik.quasigeoid` (`geodesy --product geoid --country pl`, plan E5) | `DIRECT_FILES`, `country_files` | kraj; `InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt` (42 MB, siatka 0,01 st.), `file_kind="txt"`, token `evrf2007`, EPSG:9702 (ETRF2000-PL), `vertical_crs` brak (model nie jest wysokosciami) |
 
-Kazdy z tych kanalow ma sygnal `none` (GUGiK nie podaje `ETag` ani
-`Last-Modified`; wynik WFS to migawka). Kanaly CZ (plan D, ADR-042
-D13-D17; obszar CZ zawsze w EPSG:5514 = DefaultCRS uslug):
+Kazdy z tych kanalow poza kaflami mesh 3D (`index`: etykieta rekordu
+indeksu) ma sygnal `none` (GUGiK nie podaje `ETag` ani `Last-Modified`;
+wynik WFS to migawka). Kanaly CZ (plan D, ADR-042 D13-D17; obszar CZ
+zawsze w EPSG:5514 = DefaultCRS uslug):
 
 | Deskryptor (wybor) | Kanal, capability | Parametry |
 |---|---|---|
@@ -698,6 +713,8 @@ D13-D17; obszar CZ zawsze w EPSG:5514 = DefaultCRS uslug):
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `openzu.cuzk.gov.cz/opendata/HY-NET/HY-NET.zip` (ok. 194 MB, EPSG:3045), czlon `.gpkg`, token `gpkg`; `http` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` (`landcover --source data50\|data250`, plan E4) | `ARCGIS_QUERY` `DATA50/MapServer`, `DATA250/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 69 i 116 warstw obiektowych (`registry.py::_DATA50_LAYERS`, `_DATA250_LAYERS`, kod = nazwa warstwy ASCII jak ZABAGED; rastry reliefu 5 i 6 DATA250 pominiete), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
 | jw. | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/Data50/Data50.xml` (`Data250/Data250.xml`; jeden zbior), `crs` EPSG:5514 i EPSG:3045, SHP ZIP 1:1 (Data50 516/757 MB, Data250 230/320 MB), token `shp` + kod EPSG; `metadata` |
+| `cz.cuzk.survey_control` (`geodesy --product control --country cz`, plan E5) | `ARCGIS_QUERY` `BodovaPole/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 1000, `selection="level"`, `selection_key="network"`: `gnss`=0, `horizontal`=18, 20, 2, 4, 6, 8, `densification`=38, 40, 22, 24, 26, 28, `horizontal-detailed`=42, `vertical`=44, `vertical-detailed`=46, `gravity`=48 (siec = suma warstw: punkty wyznaczone w ETRS89 nie sa podzbiorem warstw glownych; zniesione 10-17, 30-37 i etykiety pominiete), warstwa GPKG = nazwa CUZK ASCII (`bod_zvbp`), id `OBJECTID`; `none` |
+| `cz.cuzk.qgzu` (`geodesy --product geoid --country cz`, plan E5) | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/QGZU/QGZU.xml` (jeden zbior; feed zbioru i plik na hostach `atom.cuzk.cz`, `openzu.cuzk.cz`), EPSG:4258, ZIP 17 siatek TXT 1:1 (58 MB); `metadata` |
 | `cz.cuzk.ortofoto` (`imagery --product orto --country cz`) | `DIRECT_FILES` + `AtomFilesParams`, `sheet_files` | feed `atom.cuzk.gov.cz/ORTOFOTO/ORTOFOTO.xml`, wpis po godle SM5 (grupy `year`, `sheet`), czlony `.jpg`, `.jgw`, `.TM33N.jgw`, `.TM34N.jgw` 1:1; `metadata`; tor `download/cz_orto.py` (nie kolekcja) |
 
 Pliki krajowe CUZK z `ETag` maja sygnal `http`, pliki z feedu ATOM
@@ -1004,10 +1021,21 @@ data/
 ├── cadastre/
 │   ├── pl_egib/bbox/<coords>.gpkg              # dzialki i budynki obszaru (WFS), bez tokenu
 │   └── pl_egib_gpkg/teryt/1261.gpkg            # eksport powiatu (GPKG rozpakowany z ZIP)
-├── models3d/pl_buildings_lod1_2024/teryt/1261.zip   # CityGML 1:1; wersje 2024_<sha8> (rok wydania)
+├── models3d/
+│   ├── pl_buildings_lod1_2024/teryt/1261.zip   # CityGML 1:1; wersje 2024_<sha8> (rok wydania)
+│   ├── pl_trees_lod1_2023/teryt/3063.zip       # drzewa CityGML 1:1 (paczka 0,3-25 GB); wersje 2023_<sha8>
+│   └── pl_mesh/s7/78944_6777_74230_55482.zip   # kafel mesh = plik rekordu indeksu (OBJ+MTL+JPG 1:1),
+│                                               # katalog = uklad rekordu; wersje <Aktualnosc>_<zgloszenie>_<sha8>
 ├── hydro/
 │   ├── cz_hynet/bbox/<coords>.gpkg             # HY-NET obszaru (WFS: WatercourseLink, HydroNode), EPSG:5514
 │   └── cz_hynet_gpkg/country/cz.zip            # plik krajowy (GPKG w ZIP, EPSG:3045, sygnal http)
+├── geodesy/
+│   ├── pl_control_horizontal/bbox/<coords>.gpkg      # punkty sieci obszaru (WFS sieci), EPSG:2180
+│   ├── pl_control_horizontal_package/teryt/1201.zip  # paczka powiatu (wykazy XLS, opisy JPG) 1:1
+│   ├── pl_control_archive-1942/N-33/58/N-33-58.zip   # archiwum arkusza 1:100 000 1:1
+│   ├── pl_geoid2021_evrf2007/country/pl.txt          # model quasi-geoidy PL-geoid2021 1:1 (TXT)
+│   ├── cz_control_vertical/bbox/<coords>.gpkg        # Bodove pole: warstwy sieci, EPSG:5514
+│   └── cz_qgzu2013/country/cz.zip                    # QGZU-2013 z feedu ATOM; wersje 2021-02-22_<sha8>
 ├── soil/global_soilgrids_clay_0-5cm_mean/bbox/<coords>.tif   # wersje 2.0_<sha8> (wydanie)
 └── hsg/global_soilgrids_0-5cm_mean/bbox/<coords>.tif         # pochodna z wersji clay/sand/silt (D33)
 ```
@@ -1161,7 +1189,14 @@ data/
    plan E4: `landcover/cz_data50` i `landcover/cz_data50_shp_<5514|3045>`
    (tak samo `cz_data250`); plik krajowy CZ to `country/cz`, a
    `bbox/<coords>` CZ ma wspolrzedne EPSG:5514 (ujemne, np.
-   `-460000_-1120000_-450000_-1110000.gpkg`).
+   `-460000_-1120000_-450000_-1110000.gpkg`). Plan E: kafel indeksu ma slot
+   `<strefa>/<plik>` (mesh: katalog ukladu rekordu `s5`-`s7` albo `pl1992`,
+   nazwa pliku rekordu, np. `models3d/pl_mesh/s7/78944_6777_74230_55482.zip`),
+   arkusz - hierarchie godla (`geodesy/pl_control_archive-1942/N-33/58/`),
+   a segmenty E5 to `models3d/pl_trees_lod1_2023`,
+   `geodesy/pl_control_<siec>` (obszar), `geodesy/pl_control_<siec>_package`
+   (paczka powiatu), `geodesy/pl_geoid2021_evrf2007`,
+   `geodesy/cz_control_<siec>` i `geodesy/cz_qgzu2013`.
    Rozne tresci nigdy nie dziela slotu. Identyczna tresc innego wydania tej
    samej jednostki, formatu i LoD (`FileSlot.related_roots`, D7) nie zajmuje
    miejsca drugi raz: nowa wersja jest hardlinkiem do istniejacych danych
@@ -1304,8 +1339,9 @@ bez `update`, `plan`, `workers`, `on_progress`) zwraca jeden plan
 wewnetrzne nie.
 
 **Kolekcje (ADR-042, od 0.8.0).** `kartograf boundaries download`,
-`cadastre download`, `models3d download` i `hydro download` (grupy
-ADR-039, ADR-042 D9) to `download_collection(...)`/`check_collection(...)`
+`cadastre download`, `models3d download`, `hydro download`, `names
+download`, `maps download` i `geodesy download` (grupy ADR-039, ADR-042
+D9) to `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`) - jeden orkiestrator dla paczek jednostek,
 obiektow obszaru i plikow krajowych (takze z feedu ATOM), sterowany
 parametrami kanalu deskryptora (sekcja 4.10); ZABAGED (`landcover
@@ -2773,7 +2809,7 @@ co `check_availability(...).to_json()` z tym samym cache.
 ### 4.10 Kolekcje: paczki jednostek, obiekty obszaru i pliki feedu ATOM (ADR-042)
 
 **Komenda w bibliotece.** `kartograf
-boundaries|cadastre|models3d|hydro|names|maps download` =
+boundaries|cadastre|models3d|hydro|names|maps|geodesy download` =
 `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`); CLI tylko tlumaczy flagi
 (`cli/collection_cmd.py::collection_task` - to samo dla `_handler`
@@ -2789,7 +2825,16 @@ kraj (`pl`/`cz`/`auto` wymagany z obszarem; `whole_country` tylko
 (`lod`, `year`, `format`, `scale`, `sheet_system`, `network`) i poziom (`level`,
 z `auto` per kraj), `horizontal_crs` rowny ukladowi pliku. Blad podaje flagi
 CLI i wybory, ktore produkt ma (np. `--teryt 1261: admin nie ma paczek
-powiatow; dostepne: ...`).
+powiatow; dostepne: ...`). Wartosc opcji, ktorej nie ma zaden kanal
+danego wyboru, a ma kanal innego wyboru, nazywa ten wybor (`--network
+gravity: control (PL) - dostepne tylko dla --bbox/--sheet/--geometry
+(obiekty obszaru); dla --teryt: horizontal, vertical`); zadanie PL+CZ
+(`auto`) bez opcji wybierajacej albo z wartoscia jednego kraju dostaje
+wartosci drugiego kraju i wartosci wspolne (jedna wartosc dotyczy obu).
+Produktem kolekcji jest deskryptor z kanalem `unit_package` albo
+`feature_bbox` poza `landcover` albo z samym plikiem krajowym feedu ATOM
+jednego zbioru (QGZU; `atom.single_dataset`); feedy arkuszy i wojewodztw
+(ortofoto CZ, NMT 100 m) naleza do `download_data`.
 
 **Rodzaj wyboru wyznacza kanal (D2).**
 
@@ -2799,6 +2844,7 @@ powiatow; dostepne: ...`).
 | `ku` (6 cyfr; CZ) | `unit_package` KU | `[ku]` | `ku/<kod>` |
 | `sheet` albo arkusze przecinajace obszar | `unit_package` arkuszy z indeksem PL lub CUZK | `[godlo]`/arkusze obszaru | plasko `<MAPNOM>` w segmencie wariantu |
 | obszar produktu z kanalem `feature_bbox` | `feature_bbox` | jeden obszar w ukladzie natywnym uslugi | `bbox/<coords>.gpkg` |
+| obszar produktu z kanalem kafli (`unit="tile"`) | `unit_package` kafli z rekordow indeksu WFS | rekordy obszaru (strony `next`), `year` = filtr rekordow (`Notice` `unit_list`) | `<strefa>/<kafel>` |
 | obszar produktu bez `feature_bbox` (powiat) | `unit_package` powiatu | powiaty z PRG (`discover_teryts_for_bbox`, cache metadanych; `Notice` `unit_list`) | `teryt/<T>` kazdego powiatu |
 | `whole_country` | `unit_package` jednostki `country` albo `atom_files` (plik z feedu ATOM CUZK; `horizontal_crs` wymagany, gdy plik ma kilka ukladow) | `pl` albo `cz` (PRNG: tematy) | `country/<kod>` (PRNG: `pl-<temat>`) |
 
@@ -2832,10 +2878,28 @@ kind)` (`no_coverage` dla `NoCoverageError`, `download` dla
 failed, stale, notices, ok)`, `ok` = brak bledow i nieaktualnych pozycji
 planu. Czasy: `SERVICE_TIMEOUT` 60 s (WFS/REST, kanal moze miec wlasny
 `FeatureBBoxParams.timeout`, np. PRNG OGC API 180 s), `PACKAGE_TIMEOUT`
-120 s (paczka), `PROBE_TIMEOUT` 30 s (`HEAD`, zapytanie PRG).
+120 s (paczka), `PROBE_TIMEOUT` 30 s (`HEAD` sygnalu, zapytanie PRG),
+`SIZE_TIMEOUT` 120 s (`HEAD` rozmiaru: serwer opendata GUGiK odpowiada
+po 0,2-90 s, ok. 3,5 s na GB paczek drzew 3D).
 `LandCoverManager` uzywa tych samych `package_job`/`run_job`/
 `inspect_job` dla archiwum BDOT10k i `landcover_request`/`run_request`/
 `plan_request` dla ZABAGED (tor `landcover`, sekcja 4.8).
+
+**Limit obszaru (ADR-043 errata 3).** Zadanie obszaru (`bbox`, `sheet`,
+`geometry`), ktore pobraloby wiecej niz `VOLUME_FILES` = 100 plikow albo
+wiecej niz `VOLUME_BYTES` = 10 GB, konczy sie `ValidationError` PRZED
+pierwszym transferem (`run_request` -> `_within_volume`, jedno miejsce dla
+kolekcji, `LandCoverManager` i NMT 100 m): liczba plikow, rozmiar (suma
+`HEAD`/`length` feedu ATOM; ponad 100 plikow - szacunek ze sredniej
+`VOLUME_SAMPLE` = 5 plikow rozlozonych rownomiernie) i podpowiedz (zawez
+obszar, wybierz jednostke `--teryt`/`--ku`, wykonaj plan z czescia
+pozycji). Liczone sa pliki, ktore zadanie przesloloby: bez lokalnej
+wersji, z `update="force"` wszystkie, z `--upgrade --plan` pozycje planu;
+obiekty obszaru (`feature_bbox`) to jeden plik bez rozmiaru. Rozmiar
+zapytany przed transferem nie jest pytany drugi raz (`Notice`
+`download_size`, plik ATOM). Wybor jednostki (`teryt`, `ku`)
+i `whole_country` nazywaja swoje pliki same - bez limitu, rozmiar dalej
+w `Notice` przed transferem; brak opcji obejscia (decyzja 2026-10-15).
 
 **Silnik `unit_package` (`transport/unit_package.py`).**
 `select_variant(params, **choice)` wybiera opublikowany wariant bez sieci:
@@ -2948,9 +3012,10 @@ tresc = `unchanged`, inna = nowa wersja). Pliki krajowe CUZK z `ETag`
 (RUIAN, HY-NET) maja `http`: domyslnie jedno `HEAD` porownuje lokalna
 wersje (inny `ETag` = dopisek `dostepna nowsza`, `--upgrade` pobiera),
 `--check-updates` = `current`/`newer`. Plik z feedu ATOM (ZABAGED,
-Geonames kraj) ma `metadata`: wydanie z feedu przed pobraniem, inne
+Geonames kraj, QGZU) ma `metadata`: wydanie z feedu przed pobraniem, inne
 wydanie = `newer`. Mapy BDOT10k maja `index` (data `Stan bazy` osobno
-dla skali z GetFeatureInfo), arkusze ZTM `http` (`HEAD`).
+dla skali z GetFeatureInfo), kafle mesh 3D tez (etykieta rekordu WFS:
+`Aktualnosc` i `Numer_zgloszenia_pracy`), arkusze ZTM `http` (`HEAD`).
 Etykieta = `edition` wariantu (rocznik
 BDOT10k, rok modeli 3D; `label_source="edition"`), wydanie z feedu ATOM
 albo data pobrania (PRG, EGiB, RUIAN, HY-NET). Wydania tej samej tresci - warianty rozniace sie tylko wartoscia
@@ -2996,6 +3061,35 @@ warstwy RUIAN 7. `cz.cuzk.geomorphology` to ArcGIS REST
 (`GeomorfologickeJednotky`, EPSG:5514), jedna warstwa na poziom
 (`--level`, `selection="level"`). Mapa katastralna w formacie VKM jest
 poza 0.8.0 (adres pliku VKM odpowiada 404 dla KU 623164).
+
+**Modele 3D, osnowy i quasi-geoidy (E5).** `pl.gugik.mesh_3d` ma kanal
+`unit="tile"` z `IndexSource(kind="wfs", unit_field=None)`: indeks
+`ModeleSiatkowe3D` ma jeden rekord na plik, ale pole `modul` (`74230_55482`)
+nazywa kafle kilku prac i miast (26 633 wartosci w kilku miejscach kraju,
+138 miejsc z dwoma mesh jednego roku - ze zdjec i ze skaningu), wiec
+jednostka = nazwa pliku rekordu bez `.zip` (`78944_6777_74230_55482`),
+kazdy rekord obszaru to osobny plik, a `year` filtruje rekordy (regula
+"najnowszy rekord kafla" nie dotyczy mesh). Katalog slotu i uklad sidecara
+daje `uklad_xy` rekordu (OBJ we wspolrzednych tej strefy), wysokosci
+`EPSG:9651` z wariantu. `pl.gugik.trees_3d` to paczki powiatow jednego
+wydania (LoD1 2023; flagi `--lod`/`--year` mozna pominac, inna wartosc =
+blad) - 0,3-25 GB, `Notice` `download_size` przed transferem, strumien do
+stagingu i kontrola ZIP na dysku; obszar prawie zawsze przekracza limit
+10 GB, `--teryt` nie ma limitu. `pl.gugik.prpog` ma cztery kanaly WFS
+(jedna usluga na siec, wybor `choice` `network`, wspolna capability
+`bbox_vector`), paczki powiatu sieci poziomej i wysokosciowej
+(`unit="powiat"`, tokeny `<siec>`, `package`) i archiwa arkuszy 1:100 000
+(`unit="sheet"`, `SheetGrid(system="1992", parts=3)`; `--sheet` dowolnej
+skali daje arkusze 1:100 000 jego zasiegu). Siec grawimetryczna,
+magnetyczna i archiwa nie maja paczek powiatu: `--teryt` z nimi = blad
+z podpowiedzia wyboru obszaru. `cz.cuzk.survey_control` to jeden kanal
+ArcGIS z `selection_key="network"`, w ktorym jeden kod sieci nazywa kilka
+warstw (pozioma: 18, 20 i warstwy wyznaczone w ETRS89 2-8, ktore nie sa
+podzbiorem 18/20 - zero wspolnych punktow w kraju). Quasi-geoidy to jeden
+plik krajowy: PL-geoid2021 TXT (`file_kind="txt"`, plik bez ZIP sprawdzany
+jako tekst bez NUL i znacznikow) i QGZU ZIP z feedu ATOM (produkt kolekcji
+z samym kanalem ATOM jednego zbioru); obszar = blad z `--whole-country`.
+Kartograf nie stosuje modeli do innych danych (ADR-043, pkt 7 planu E).
 
 ---
 

@@ -9,6 +9,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- Limit obszaru kolekcji (plan E, E5; ADR-043 errata 3): `--bbox`/`--sheet`/
+  `--geometry` w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`,
+  `maps`, `geodesy`, w zrodlach kolekcji `landcover` (ZABAGED, BDOO,
+  Data50, Data250) i NMT 100 m, ktore pobralyby wiecej niz 100 plikow albo
+  wiecej niz 10 GB (suma `HEAD`/dlugosci z feedu ATOM; ponad 100 plikow -
+  szacunek z 5 plikow), konczy sie `Error:`/`ValidationError` przed
+  pierwszym transferem z liczba plikow, rozmiarem i podpowiedzia; liczone
+  sa pliki bez lokalnej wersji (`--force`: wszystkie, `--upgrade --plan`:
+  pozycje planu). Dotad obszar pobieral wszystko (np. paczki modeli 3D
+  wielu powiatow). Co zrobic: zawez obszar, wybierz jednostke (`--teryt`,
+  `--ku` - bez limitu) albo wykonaj plan z czescia pozycji
+  (`--check-updates --plan PLIK`, potem `--upgrade --plan PLIK`); opcji
+  obejscia nie ma.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -586,6 +599,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E5 (ADR-043): `models3d download --product mesh` (modele
+  siatkowe miast GUGiK: kafle indeksu WFS obszaru, ZIP OBJ+MTL+JPG 1:1
+  w `models3d/pl_mesh/<strefa>/<plik rekordu>.zip`, uklad z rekordu,
+  wysokosci EPSG:9651, etykieta = data i numer zgloszenia pracy, sygnal
+  `index` w `--check-updates`; kafel = plik rekordu, `--year` filtruje
+  rekordy) i `--product trees` (drzewa CityGML LoD1 2023, paczka powiatu
+  0,3-25 GB, `Warning` z rozmiarem przed transferem). Nowa grupa `geodesy`
+  (`download`, `list-sources`): `--product control --network ...` - osnowy
+  PL (WFS sieci `horizontal`, `vertical`, `gravity`, `magnetic` do GPKG
+  obszaru; paczki powiatu sieci poziomej i wysokosciowej `--teryt`;
+  archiwa arkuszy 1:100 000 `archive-1942`, `archive-kronsztadt60`) i CZ
+  (Bodove pole: `gnss`, `horizontal`, `densification`,
+  `horizontal-detailed`, `vertical`, `vertical-detailed`, `gravity`; siec
+  = suma jej warstw), `--product geoid --whole-country` - PL-geoid2021 (TXT
+  1:1) i QGZU-2013 (ZIP z feedu ATOM, wydanie z feedu). Pozycja manifestu
+  `geodesy download` (`network`, `whole_country`). Wartosc opcji dostepna
+  tylko w innym wyborze nazywa ten wybor (`--teryt` z `--network gravity`),
+  a zadanie PL+CZ bez `--network` podaje wartosci obu krajow i wspolne.
+  Przyklady i wyniki live: USAGE 1.11, `docs/research/2026-10-16-plan-e5-e2e/raport.md`.
 - Plan E, Task E4 (ADR-043): trzy zrodla w `landcover download --source`.
   `bdoo` (BDOO GUGiK, 1:250 000): paczka GML wojewodztwa na rocznik
   (`--year` wymagany: 2015, 2021-2026; `--teryt` 2 cyfry, kod powiatu =
