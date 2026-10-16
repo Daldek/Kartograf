@@ -588,6 +588,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   pod `--country auto` czesci tego kraju; dla samego drugiego kraju jest
   bledem z nazwa kraju, ktory ja ma (dotad "nie dotyczy" takze dla
   obszaru przy granicy, ktorego nie dalo sie pobrac). Co zrobic: nic.
+- Dokumentacja: USAGE 2 - tabela wszystkich kodow `Notice` (kod, poziom,
+  kiedy, komendy); `sheet_list` (`download_data`, naglowek na stdout)
+  i `unit_list` (kolekcje, takze arkusze map i archiwow osnow) opisane
+  jako dwa wydruki tej samej listy jednostek.
 - Mesh 3D, drzewa, osnowy i quasi-geoidy (ADR-043): `models3d download
   --product mesh` (modele siatkowe miast GUGiK: kafle indeksu WFS obszaru,
   ZIP OBJ+MTL+JPG 1:1
@@ -782,7 +786,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (`hydro/cz_hynet/bbox/<coords>.gpkg`) z 2 warstwami: `WatercourseLink`
   (odcinki ciekow) i `HydroNode` (wezly); `WatercourseSeparatedCrossing`
   nie jest warstwa obszaru (bez geometrii w GML, GeoServer podaje dla BBOX
-  `hits` 0 mimo obiektow), skrzyzowania sa w pliku krajowym.
+  `hits` 0 mimo obiektow), skrzyzowania sa w pliku krajowym - przypomina
+  o tym `Info` (`AREA_OMITTED`) kazdego pobrania obszaru.
   `--whole-country --country cz` = `hydro/cz_hynet_gpkg/country/cz.zip`
   (GeoPackage w EPSG:3045, ok. 194 MB, sygnal `http`); `hydro
   list-sources`; biblioteka `download_collection(product="network", ...)`.
@@ -793,7 +798,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--whole-country --horizontal-crs EPSG:5514|EPSG:3045` = krajowy ZIP
   z feedu ATOM 1:1 (`landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip`,
   5,8/6,7 GB, etykieta = data wydania, sygnal `metadata`; warstwy pod
-  nazwami CUZK, innymi niz wynik obszaru). Biblioteka:
+  nazwami CUZK, innymi niz wynik obszaru - `Info` `AREA_OMITTED` przy
+  kazdym pobraniu obszaru wskazuje plik krajowy). Biblioteka:
   `LandCoverManager(output_dir, "zabaged")`.
 - RUIAN w `boundaries download --product admin --country cz|auto`
   (ADR-042 D17): `--level kraj|okres|obec|katastralni-uzemi` ->
