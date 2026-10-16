@@ -167,7 +167,7 @@ def _prepare_pl_cutout(
     """
     from kartograf.download.options import validate_request_bbox
 
-    validate_request_bbox(bbox)
+    bbox = validate_request_bbox(bbox)
     if product not in CUTOUT_PRODUCTS:
         raise ValidationError(
             f"Produkt wycinka PL: {' albo '.join(CUTOUT_PRODUCTS)} (podano {product})"

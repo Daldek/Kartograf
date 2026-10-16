@@ -67,12 +67,14 @@ from kartograf.download.versions import (
 )
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import (
+    CHECK_FAILED,
     DOWNLOAD_SIZE,
     LARGE_FILE_BYTES,
     NEWER_AVAILABLE,
-    UNVERIFIED_LOCAL,
+    OF_SHEETS,
     Notice,
     NoticeSink,
+    count_text,
     size_text,
 )
 from kartograf.providers.base import BaseProvider
@@ -760,7 +762,8 @@ class DownloadManager:
             names = ", ".join(check.failed)
             raise DownloadError(
                 f"nie udalo sie sprawdzic roku danych dla {len(check.failed)} z "
-                f"{len(sheets)} arkuszy (blad skorowidza, nie brak danych): "
+                f"{count_text(len(sheets), *OF_SHEETS)} (blad skorowidza, nie brak "
+                f"danych): "
                 f"{names} - ponow pobranie"
             )
         if check.conflicts:
@@ -1481,7 +1484,7 @@ class DownloadManager:
         (``_is_transport_failure``) and the standard path points to an
         existing local version (``linked_version``) — NOT a failure:
         ``SheetFetch(skipped=True, unverified=<error>)`` from the local version;
-        ``UNVERIFIED_LOCAL`` is emitted by ``_finish_result``, link unchanged.
+        ``CHECK_FAILED`` is emitted by ``_finish_result``, link unchanged.
         ``upgrade``/``force``, no local version or another error — an
         exception. With year bounds the outage is handled per task (D14,
         ``_checked_range``).
@@ -1865,13 +1868,14 @@ class DownloadManager:
             else:
                 shown = ", ".join(sheets[:10]) + (" ..." if len(sheets) > 10 else "")
                 text = (
-                    f"skorowidz GUGiK niedostepny - dla {len(sheets)} arkuszy "
+                    "skorowidz GUGiK niedostepny - dla "
+                    f"{count_text(len(sheets), *OF_SHEETS)} "
                     "uzyto lokalnych wersji bez sprawdzenia nowszej "
                     f"({shown}) ({result.unverified[sheets[0]]})"
                 )
             sink.emit(
                 "warning",
-                UNVERIFIED_LOCAL,
+                CHECK_FAILED,
                 text.encode("ascii", "backslashreplace").decode("ascii"),
             )
         if result.newer:
@@ -1880,7 +1884,8 @@ class DownloadManager:
             sink.emit(
                 "info",
                 NEWER_AVAILABLE,
-                f"dostepna nowsza kampania dla {len(sheets)} arkuszy ({shown}) - "
+                "dostepna nowsza kampania dla "
+                f"{count_text(len(sheets), *OF_SHEETS)} ({shown}) - "
                 "uzyto lokalnych wersji; pobierz: --upgrade",
             )
         result.notices = (*self._drain_size_notices(), *sink.notices)

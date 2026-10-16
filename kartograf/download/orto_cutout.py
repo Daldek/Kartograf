@@ -224,7 +224,7 @@ def _prepare(
     # local import: options imports this module
     from kartograf.download.options import validate_request_bbox
 
-    validate_request_bbox(bbox)
+    bbox = validate_request_bbox(bbox)
     error = orto_cutout_error(
         key=key,
         coverage=coverage,

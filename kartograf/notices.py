@@ -1,4 +1,5 @@
-"""Structured data notices shared by command-level results and CLI output."""
+"""Structured data notices shared by command-level results and CLI output,
+and the text helpers of user messages (sizes, counted nouns, flag names)."""
 
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -55,6 +56,39 @@ def size_text(length: int | None) -> str:
     if length is None:
         return "rozmiar nieznany (serwer nie podal Content-Length)"
     return f"{length} B (ok. {length / 1e6:.0f} MB)"
+
+
+# Noun forms of ``count_text`` (one, few, many): the nominative/accusative
+# (``obszar daje 2 pliki``) and the genitive after ``dla``/``z`` (``OF_*``).
+FILES = ("plik", "pliki", "plikow")
+SHEETS = ("arkusz", "arkusze", "arkuszy")
+TILES = ("kafel", "kafle", "kafli")
+OF_FILES = ("pliku", "plikow", "plikow")
+OF_SHEETS = ("arkusza", "arkuszy", "arkuszy")
+OF_TILES = ("kafla", "kafli", "kafli")
+
+
+def count_text(count: int, one: str, few: str, many: str) -> str:
+    """A count with its Polish noun form: ``1 plik``, ``3 pliki``, ``5 plikow``.
+
+    ``one`` for 1, ``few`` for 2-4, 22-24, 32-34, ... (not 12-14), ``many``
+    for the rest (0, 5-21, 25-31, ...). After a preposition taking the
+    genitive (``dla``, ``z``) pass the genitive forms - the singular for one,
+    the plural for few and many: ``dla 1 arkusza``, ``dla 3 arkuszy``.
+    """
+    if count == 1:
+        form = one
+    elif count % 10 in (2, 3, 4) and count % 100 not in (12, 13, 14):
+        form = few
+    else:
+        form = many
+    return f"{count} {form}"
+
+
+def cli_flag(name: str) -> str:
+    """The CLI flag of a library parameter in messages: ``sheet_system`` ->
+    ``--sheet-system`` (keys of the source registry are parameter names)."""
+    return "--" + name.replace("_", "-")
 
 
 @dataclass(frozen=True)

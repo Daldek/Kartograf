@@ -53,6 +53,7 @@ import requests
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.notices import FILES, count_text
 from kartograf.sources.descriptor import AtomFilesParams
 from kartograf.sources.edition import edition_label
 from kartograf.transport.http import download_to, get_with_retry, response_signal
@@ -397,7 +398,8 @@ def _select(
         chosen = [element for element, _ in found]
     if len(chosen) != 1:
         raise DownloadError(
-            f"{context}: {len(chosen)} plikow zbioru bez rozstrzygniecia "
+            f"{context}: {count_text(len(chosen), *FILES)} zbioru bez "
+            "rozstrzygniecia "
             "(oczekiwano jednego)"
         )
     (element,) = chosen
