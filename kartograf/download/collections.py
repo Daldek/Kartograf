@@ -48,7 +48,7 @@ import requests
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import BBox, bbox_coords, is_czech_crs, transform_bbox
-from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
+from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox, series_scale
 from kartograf.download.area import (
     bbox_to_2180,
     emit_clipping_notices,
@@ -163,18 +163,6 @@ _UNIT_TEXT = {
 # Option values that select a channel or a published variant (ADR-043); the
 # allowed values are read from the descriptors (K1).
 _OPTION_NAMES = ("format", "scale", "sheet_system", "network")
-# PL-1992 sheet series of GUGiK by the number of members of the sheet code:
-# the label of ``find_sheets_for_bbox`` (``SheetParser`` labels are one level
-# finer than the GUGiK nomenclature: the GUGiK 1:10000 series has 6 members,
-# Kartograf label 1:25000; 3 members = the 1-144 grid, label 1:200000).
-_SERIES_LABEL = {
-    2: "1:1000000",
-    3: "1:200000",
-    4: "1:100000",
-    5: "1:50000",
-    6: "1:25000",
-    7: "1:10000",
-}
 # CRSs ``find_sheets_for_bbox`` accepts as they are (PL-1992, WGS84, PL-2000).
 _PL_GRID_CRS = (
     "EPSG:2180",
@@ -1335,9 +1323,7 @@ def _series_sheets(grid: SheetGrid, area: BBox) -> list[str]:
     """PL-1992 sheets of a series (``grid.parts`` members) intersecting
     ``area`` with a positive area (``find_sheets_for_bbox``; the series is
     mapped by its number of members, never by a scale label, plan E)."""
-    label = _SERIES_LABEL.get(grid.parts or 0)
-    if label is None:
-        raise ValueError(f"Seria arkuszy PL-1992 o {grid.parts} czlonach nie istnieje")
+    label = series_scale(grid.parts or 0)
     if area.crs.strip().upper() not in _PL_GRID_CRS:
         area = _to_crs(area, "EPSG:4326")
     return find_sheets_for_bbox(area, label, "1992")

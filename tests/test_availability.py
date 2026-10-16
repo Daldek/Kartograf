@@ -513,20 +513,56 @@ def test_sheet_request_counts_its_own_frame():
     assert report.request["sheet"] == "M-34-64-D-d-2-1"
 
 
-def test_records_outside_the_registry_are_one_info():
-    """Records on 8-part sheet codes (outside ``SheetParser``) are named in
-    one Info and are no combination."""
+_QUARTERS = tuple(f"N-33-142-B-b-4-1-{quarter}" for quarter in range(1, 5))
+
+
+def test_8_part_records_are_downloadable_combinations():
+    """Since plan E1 the 8-part codes are sheets of ``SheetParser``: the 2019
+    grids published per quarter of a 7-part sheet and the ASCII NMT 10 m
+    archive are combinations; a grid of quarters is downloaded per quarter
+    code (a 7-part request would plan a sheet without a record)."""
     report = _sheet_report("N-33-142-B-b-4-1", "E")
+
+    assert report.notices == ()
+    grid = _combo(report, 2019, "PL-1992", "1m")
+    assert grid.sheets_full == _QUARTERS
+    assert grid.download_hint == tuple(
+        f"elevation download --product nmt --sheet {sheet} --resolution 1m "
+        "--vertical-crs EVRF2007 --year 2019"
+        for sheet in _QUARTERS
+    )
+    archive = _combo(report, 2019, "PL-1992", "10m", fmt="ASCII-NMT")
+    assert archive.sheets_full == _QUARTERS
+    assert archive.download_hint == (
+        "elevation download --product nmt --sheet N-33-142-B-b-4-1 --format "
+        "ASCII-NMT --resolution 10m --vertical-crs EVRF2007 --year 2019",
+    )
+
+
+def test_records_outside_the_registry_are_one_info():
+    """Records of a variant outside the registry (the recorded ASCII NMT
+    records declaring 12 m instead of 10 m) are named in one Info and are
+    no combination."""
+    session = RecordedIndex(
+        {"nmt_evrf2007": ["sheet_nmt_evrf2007_N-33-142-B-b-4-1.xml"]}
+    )
+    for _, _, feature in session._features[wfs_endpoint("nmt_evrf2007")]:
+        fields = {element.tag.rsplit("}", 1)[-1]: element for element in feature}
+        if fields["format"].text == "ASCII NMT":
+            fields["char_przestrz"].text = "12.0 m"
+
+    report = _check(session, product="nmt", sheet="N-33-142-B-b-4-1")
 
     (notice,) = report.notices
     assert notice.level == "info" and notice.code == INDEX_UNSUPPORTED
     assert (
-        "ARC/INFO ASCII GRID 1m EVRF2007 (2019; arkusze: 4) - godla spoza ukladow "
-        "arkuszy PL-1992/PL-2000 (np. 8-czlonowe); ASCII NMT 10m EVRF2007 (2019; "
-        "arkusze: 4)"
-    ) in notice.text
-    # the sheet's own 2019 XYZ archive is a combination, the 8-part records not
-    assert {c.format for c in report.combinations if c.year == 2019} == {"XYZ"}
+        "ASCII NMT 12m EVRF2007 (2019; arkusze: 4) - wariant spoza rejestru"
+        in notice.text
+    )
+    assert {c.format for c in report.combinations if c.year == 2019} == {
+        "ASC",
+        "XYZ",
+    }
 
 
 def test_grid_published_under_xyz_name_is_a_combination():

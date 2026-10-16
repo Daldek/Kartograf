@@ -83,6 +83,14 @@ class BaseProvider(DataSourceProvider):
         """
         return None
 
+    @property
+    def sheet_scale(self) -> str:
+        """Label of the PL-1992 sheets the provider publishes (``SheetParser``
+        labels: ``1:10000`` = 7-part codes, ``1:5000`` = 8-part codes of the
+        true orthophoto). ``DownloadManager`` expands a coarser code to it;
+        a code of this level or a finer one is the sheet itself."""
+        return "1:10000"
+
     def source_info(self, sheet: str) -> dict | None:
         """Origin of the downloaded sheet, if the provider exposes it.
 

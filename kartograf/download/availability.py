@@ -168,7 +168,7 @@ _HORIZONTAL = {"1992": "PL-1992", "2000": "PL-2000"}
 _FORMAT_ORDER = {f.token: i for i, f in enumerate(FORMATS)}
 # Why an index record is not downloadable (INDEX_UNSUPPORTED texts).
 _REASONS = {
-    "sheet": "godla spoza ukladow arkuszy PL-1992/PL-2000 (np. 8-czlonowe)",
+    "sheet": "godla spoza ukladow arkuszy PL-1992/PL-2000",
     "url": "bez adresu https pliku",
     "crs": "bez ukladu wspolrzednych",
     "file": "format rekordu niezgodny z plikiem",

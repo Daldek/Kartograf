@@ -655,6 +655,51 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 
 **Zaleznosci:** E0, A, B, D.
 
+**Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-2 wykonane (fixtury
+w `tests/fixtures/pl/{nmt_100m,intensity,orto_true,orto_oblique}/`
+i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe). Kroki 3-9
+otwarte. Fakty z nagrania i kodu dla kolejnego wykonawcy (korekta planu):
+- Godla 8-czlonowe zamykaja ograniczenie ADR-041: `DownloadManager`
+  rozwija tylko godla grubsze od `BaseProvider.sheet_scale` (NMT/NMPT/orto
+  `1:10000`; true orto ustawi `1:5000`), godlo 8-czlonowe jest arkuszem
+  (siatki NMT 1 m 2019 per cwiartka, `--sheet`); `ASCII-NMT 10m` EVRF2007
+  dopisane do rejestru archiwow (ZIP: punkty co 0,5 m, skorowidz deklaruje
+  10 m). `_SERIES_LABEL` z kolekcji zastapione `series_scale(czlony)`
+  w `core/sheet_parser.py`.
+- NMT 100 m: wpis ATOM ma `<id>` = URL feedu zbioru z
+  `spatial_dataset_identifier_code=NMT100_<woj>`; linki feedu uslugi i zbioru
+  sa `http://`, odpowiadaja przez `https` (feedy 0,1-0,4 s, plik 7,7 s);
+  etykieta `<updated>` wpisu zbioru 2019-05-14. Wariant z `format="XYZ"`
+  bylby archiwum (`FileFormat.source_file`) i wymagalby `--format` - do
+  rozstrzygniecia: archiwum = `source_file` z `index_ref`, a 100 m
+  (ATOM, `index_ref=None`) jako format produktu dla `--resolution 100m`
+  (`--format XYZ` dozwolone, jedyna wartosc). `ProductVariant.vertical_crs`
+  musi przyjac `None` (miejsca: `vertical_crs_text`, `labels_by_vertical_crs`,
+  `variant_error`, `cutout.py:182`, `elevation._source_choice`). Tor: czesc
+  kolekcji `CollectionPart` z kanalem ATOM (grupa `woj`) + `run_request`/
+  `plan_request` (tor `collection`); `UnitJob.atom_key`, `_fetch_atom`:
+  `WHOLE_COUNTRY_SIZE` tylko dla pliku krajowego.
+- Intensywnosc: jedna warstwa `SkorowidzeOI` z rekordami PL-1992 (modul
+  1:5000) i PL-2000 (1:2000) w tym samym punkcie; bez
+  `calyArkuszWypelnionyTrescia` i bez `kolor`. True orto: warstwa
+  `Skorowidze`, godla 8-czlonowe (cwiartki 1 NW, 2 NE, 3 SW, 4 SE), bez
+  `dt_pzgik`. WCS `True_Orthoimagery` (0,05 m) oddaje siatke zapytania
+  (jak Standard), poza miastami piksele 0,0,0.
+- Orto ukosna: rekordy maja `kierunek` N/E/S/W (jedna warstwa na kierunek),
+  URL `..._<godlo>_<N|E|S|W>.tif` (B4 `verify_record_url` musi zdjac
+  przyrostek kierunku) i rozne skale PL-2000 (Krakow 1:2000, Gdansk
+  `6.224.25.03.1` 1:1000) - `--scale` dla obszaru zostaje wymagane, tylko
+  `--sheet-system` ma jedna wartosc (2000). Cztery pliki arkusza = cztery
+  managery (provider na kierunek, przyrostek nazwy `_n` w `FileStorage`);
+  `_download_planned` musi zawezic pozycje planu do segmentu i nazwy pliku
+  managera (inaczej pozycje innych kierunkow staja sie `stale`).
+- `HEAD` arkuszy obrazow (0,5-1,6 s): intensywnosc 85 MB, true orto
+  297 MB, ukosna 274-302 MB (`DOWNLOAD_SIZE` > 100 MiB).
+- Warstwice CZ: SHP 8 plikow, DGN 3 pliki, `ETag` i `Last-Modified`; slot
+  hierarchiczny `contours/cz_zabaged_<fmt>/CTES/96/CTES96.zip` (jak arkusze
+  SM5 planu B, nie plaski `mapnom` kolekcji E0); produkt elevation nie moze
+  stac sie produktem kolekcji (`_is_collection`).
+
 **Files:**
 - Modify: `kartograf/sources/registry.py` (blok E1), `kartograf/core/sheet_parser.py`,
   `kartograf/sources/descriptor.py` (`AtomFilesParams`), `kartograf/transport/atom.py` (z D),
@@ -680,7 +725,7 @@ download_data(..., format: str | None = None,                          # contour
 #   native_step=Decimal("0.05"), resolutions=(0.05, 0.1, 0.25, 0.5, 1), max_native_pixels=4_000_000
 ```
 
-- [ ] **Step 1: Fixtury (live).** Zrodla (raport E, wiersze 1-4 i 16):
+- [x] **Step 1: Fixtury (live).** Zrodla (raport E, wiersze 1-4 i 16):
   - feed uslugi `GUGIK_NMT100` (16 wpisow, id `NMT100_<woj>` w
     `inspire_dls:spatial_dataset_identifier_code`) i feed zbioru `NMT100_12`
     (link `application/zip`, `length` 7619580, kategoria EPSG:2180);
@@ -689,7 +734,7 @@ download_data(..., format: str | None = None,                          # contour
   - GFI `TrueOrtho/Skorowidze` w Gdansku i pusty w Krakowie;
   - GFI czterech warstw orto ukosnej w Krakowie;
   - `DescribeCoverage` `True_Orthoimagery` (siatka 0,05 m).
-- [ ] **Step 2: Godla 8-czlonowe (test RED, potem implementacja).** W `tests/test_sheet_parser.py`:
+- [x] **Step 2: Godla 8-czlonowe (test RED, potem implementacja).** W `tests/test_sheet_parser.py`:
   - `N-34-50-A-c-3-2-3` parsuje sie; obwiednia to cwiartka arkusza
     7-czlonowego `N-34-50-A-c-3-2` (numeracja 1-4 jak w poziomie
     wyzszym);

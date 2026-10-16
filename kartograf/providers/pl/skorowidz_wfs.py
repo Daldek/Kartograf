@@ -449,7 +449,7 @@ def index_feature_issue(feature: ET.Element) -> str | None:
     """Why a feature cannot become a record (``None`` = usable).
 
     ``"url"``: no HTTPS ``url_do_pobrania``; ``"sheet"``: ``godlo`` outside
-    the sheet systems of ``SheetParser`` (e.g. 8-part PL-1992 codes).
+    the sheet systems of ``SheetParser``.
     """
     url = feature_text(feature, "url_do_pobrania") or ""
     if not url.startswith("https://"):

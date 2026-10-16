@@ -1,0 +1,70 @@
+{
+  "contours_shp_CTES96": {
+    "url": "https://openzu.cuzk.gov.cz/opendata/ZABAGED-vyskopis/epsg-5514/CTES96.zip",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/x-zip-compressed",
+      "Content-Length": "1580278",
+      "ETag": "\"0ec953fb18dd1:0\"",
+      "Last-Modified": "Tue, 21 Jul 2026 10:26:00 GMT"
+    },
+    "members": [
+      [
+        "CTES96_Vrstevnice.cpg",
+        5
+      ],
+      [
+        "CTES96_Vrstevnice.dbf",
+        54943
+      ],
+      [
+        "CTES96_Vrstevnice.prj",
+        692
+      ],
+      [
+        "CTES96_Vrstevnice.sbn",
+        18436
+      ],
+      [
+        "CTES96_Vrstevnice.sbx",
+        1284
+      ],
+      [
+        "CTES96_Vrstevnice.shp",
+        4023644
+      ],
+      [
+        "CTES96_Vrstevnice.shp.xml",
+        7656
+      ],
+      [
+        "CTES96_Vrstevnice.shx",
+        15212
+      ]
+    ]
+  },
+  "contours_dgn_CTES96": {
+    "url": "https://openzu.cuzk.gov.cz/opendata/ZABAGED-vyskopis-DGN/epsg-5514/CTES96.zip",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/x-zip-compressed",
+      "Content-Length": "1429918",
+      "ETag": "\"0ec953fb18dd1:0\"",
+      "Last-Modified": "Tue, 21 Jul 2026 10:26:00 GMT"
+    },
+    "members": [
+      [
+        "CTES96_Vrstevnice.dgn",
+        1462272
+      ],
+      [
+        "CTES96_Vrstevnice.dgn.xml",
+        696
+      ],
+      [
+        "CTES96_Vrstevnice.prj",
+        734
+      ]
+    ]
+  }
+}

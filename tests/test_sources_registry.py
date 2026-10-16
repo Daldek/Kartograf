@@ -63,6 +63,7 @@ PL_ARCHIVE_KEYS = (
     "pl.gugik.nmt_ascii_nmt_0_5m",
     "pl.gugik.nmt_ascii_nmt_1m",
     "pl.gugik.nmt_ascii_nmt_5m",
+    "pl.gugik.nmt_ascii_nmt_10m",
     "pl.gugik.nmt_tbd_1m",
     "pl.gugik.nmt_tbd_5m",
     "pl.gugik.nmt_tbd_10m",

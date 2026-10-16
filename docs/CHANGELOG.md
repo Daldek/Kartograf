@@ -578,6 +578,22 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E1 (czesc 1, ADR-043 D10): godla 8-czlonowe PL-1992
+  w `SheetParser` (cwiartki arkusza 7-czlonowego, numeracja 1-4 jak wyzej:
+  `N-34-50-A-c-3-2-3`; etykieta Kartografa `1:5000`, GUGiK: modul 1:2500);
+  `find_sheets_for_bbox(..., "1:5000", "1992")` daje godla 8-czlonowe,
+  `get_children()` arkusza 7-czlonowego - jego cztery cwiartki, nowe
+  `series_scale(liczba_czlonow)` (seria GUGiK po liczbie czlonow, nie po
+  etykiecie). `DownloadManager` rozwija godlo grubsze od poziomu arkuszy
+  providera (`BaseProvider.sheet_scale`, NMT/NMPT/orto: 7 czlonow), a godlo
+  8-czlonowe pobiera jako arkusz: siatki NMT 1 m 2019 publikowane per
+  cwiartka (1678 rekordow skorowidza) sa do pobrania przez `--sheet
+  <godlo 8-czlonowe>` (podpowiedz `elevation availability`). Rejestr
+  archiwow dostaje `ASCII-NMT 10m` EVRF2007 (`pl.gugik.nmt_ascii_nmt_10m`,
+  215 arkuszy 8-czlonowych; ZIP zawiera punkty co 0,5 m, skorowidz deklaruje
+  10 m). Zamyka ograniczenie ADR-041 (rekordy z godlami 8-czlonowymi nie
+  sa juz `Info:` w raporcie dostepnosci).
+
 - Plan E, Task E0 (ADR-043 D1-D9): wspolny kontrakt kolekcji dla produktow
   planu E (silniki, bez nowych produktow w rejestrze). Biblioteka
   `download_collection`/`check_collection`/`validate_collection_request`
