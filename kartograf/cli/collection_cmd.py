@@ -1,6 +1,6 @@
 """
 ``download`` of the collection groups (``boundaries``, ``cadastre``,
-``models3d``, ``hydro``, ``names``, ``maps``): flags ->
+``models3d``, ``hydro``, ``names``, ``maps``, ``geodesy``): flags ->
 ``download_collection``/``check_collection`` (ADR-037, ADR-042 D9).
 
 The CLI only translates: ``collection_task`` turns the flags of a group
@@ -53,6 +53,7 @@ def collection_task(args: argparse.Namespace) -> dict:
         "format": getattr(args, "format", None),
         "scale": getattr(args, "scale", None),
         "sheet_system": getattr(args, "sheet_system", None),
+        "network": getattr(args, "network", None),
         "horizontal_crs": getattr(args, "horizontal_crs", None),
     }
 
