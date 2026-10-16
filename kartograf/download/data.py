@@ -14,11 +14,13 @@ Messages (inventory of the former CLI lines; Z3, decision 4):
 =====================  =======  ==============================================
 code                   level    condition
 =====================  =======  ==============================================
-SHEET_LIST             info     PL area or CZ orthophoto area expanded to a
-                                sheet list (header; the CLI prints it on
+SHEET_LIST             info     PL area, CZ orthophoto or contour area expanded
+                                to a sheet list (header; the CLI prints it on
                                 stdout, ``-q`` hides it)
 GEOMETRY_LAYER_DEFAULT info     GPKG with several layers, no ``layer``
-AUTO_NARROWED_TO_PL    info     ``auto`` + PL-only choice (ADR-023 pkt 5)
+AUTO_NARROWED_TO_PL    info     ``auto`` + PL-only product or choice (ADR-023
+                                pkt 5)
+AUTO_NARROWED_TO_CZ    info     ``auto`` + CZ-only product (contours)
 AUTO_CLIPPED           info     ``auto``: country part clipped to its envelope
 AUTO_AREA_OUTSIDE      info     ``auto``: part of the area outside PL/CZ
 AUTO_PARTIAL_SUCCESS   warning  ``auto``: one country failed, another succeeded
@@ -65,6 +67,7 @@ from kartograf.download.area import (
 from kartograf.download.arguments import require_int
 from kartograf.download.countries import countries_for_bbox, country_bbox
 from kartograf.download.cutout import PlCutoutResult
+from kartograf.download.cz_contours import PRODUCT as CONTOURS
 from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
@@ -90,6 +93,7 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.notices import (
+    AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
     AUTO_PARTIAL_SUCCESS,
     BETTER_COVERAGE,
@@ -284,9 +288,9 @@ def download_data(
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> DataReport:
-    """Download NMT/NMPT/LAZ and the images (orthophotomap, intensity
-    images, true and oblique orthophotomap) for a sheet, bbox or geometry
-    (spec 4.1).
+    """Download NMT/NMPT/LAZ, the CZ contours and the images
+    (orthophotomap, intensity images, true and oblique orthophotomap) for a
+    sheet, bbox or geometry (spec 4.1).
 
     Parameter names and values are the ``elevation download`` / ``imagery download``
     flags in ``snake_case``. Every data choice is explicit (no defaults): ``product``,
@@ -298,7 +302,10 @@ def download_data(
     oblique orto PL-2000 - may omit ``sheet_system``). ``format`` (PL
     NMT/NMPT): ``None`` = ASC grids, an archive token (``"XYZ"``, ``"TBD"``,
     ...) = the original files of the index, whose sheets (any scale) come
-    from the index (ADR-041). ``cutout=True`` with ``horizontal_crs`` gives
+    from the index (ADR-041); the CZ contours (``product="contours"``)
+    require it: ``"SHP"`` or ``"DGN"`` (the ZIP of an SM5 sheet, kept as
+    published; an area gives the SM5 sheets of the CUZK index, heights Bpv:
+    ``vertical_crs`` may be omitted). ``cutout=True`` with ``horizontal_crs`` gives
     ONE cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an
     area reaching CZ requires it). ``coverage`` - the orthophotomap cutout
     only (``product="orto"``, ``cutout=True``, PL,
@@ -587,6 +594,26 @@ def _dispatch_area(
         raise ValidationError(
             "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)"
         )
+    if auto:
+        # a product of one country keeps that country (as the collections)
+        own = tuple(
+            c for c in countries if sources_for(country=c, product=task.product)
+        )
+        if not own:
+            raise ValidationError(
+                f"--product {task.product} jest dostepny tylko dla "
+                f"{_product_countries(task.product)}, a obszar lezy w "
+                f"{', '.join(countries)}"
+            )
+        if own != countries:
+            run.sink.emit(
+                "info",
+                AUTO_NARROWED_TO_PL if own == ("PL",) else AUTO_NARROWED_TO_CZ,
+                f"--country auto -> {own[0].lower()} (--product {task.product} "
+                f"tylko dla {own[0]})",
+            )
+            auto = False
+            countries = own
     # ADR-023 point 5: a choice without a CZ counterpart decides the country
     if auto and len(countries) > 1 and "PL" in countries:
         pl_only = pl_only_flags(
@@ -699,13 +726,20 @@ def _dispatch_area(
     return max(exit_codes)
 
 
+def _product_countries(product: str) -> str:
+    """Countries with sources of ``product`` (``PL``, ``CZ``) in messages."""
+    return ", ".join(c for c in ("PL", "CZ") if sources_for(country=c, product=product))
+
+
 def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
     """Choices must be valid for EVERY country before any download."""
     hint = "; uzyj jawnie --country pl albo --country cz" if len(countries) > 1 else ""
-    if "CZ" in countries and not sources_for(country="CZ", product=task.product):
-        raise ValidationError(
-            f"--product {task.product} jest dostepny tylko dla PL{hint}"
-        )
+    for code in countries:
+        if not sources_for(country=code, product=task.product):
+            raise ValidationError(
+                f"--product {task.product} jest dostepny tylko dla "
+                f"{_product_countries(task.product)}{hint}"
+            )
     if (
         task.product == "laz"
         and task.model is None
@@ -720,6 +754,8 @@ def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -
             error = pl_option_error(task, countries=countries)
         elif task.product == "orto":
             error = cz_orto_option_error(task, countries=countries)
+        elif task.product == CONTOURS:
+            error = None  # CZ only: every choice checked by validate_request
         else:
             error = cz_option_error(task, countries=countries)
         if error is not None:
@@ -1629,7 +1665,7 @@ def _download_cz(
     parent_request: dict | None = None,
 ) -> int:
     """CZ request: a sheet code (TM33 tile / SM5 sheet) or an area cutout;
-    the orthophoto has its own track (``_download_cz_orto``)."""
+    the orthophoto and the contours have their own tracks."""
     from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
     from kartograf.download.cz_sheets import (
         check_cz_sheet,
@@ -1639,6 +1675,10 @@ def _download_cz(
 
     if task.product == "orto":
         return _download_cz_orto(task, run, bbox=bbox, parent_request=parent_request)
+    if task.product == CONTOURS:
+        return _download_cz_contours(
+            task, run, bbox=bbox, parent_request=parent_request
+        )
     has_sheet = bbox is None
     system = cz_sheet_system(task.sheet) if has_sheet else None
     # an `auto` area request was validated for all its countries already
@@ -1841,6 +1881,81 @@ def _download_cz_orto(
                 run.add(sheet, "CZ", file, reported_check_failure=position > 0)
             rc = max(rc, run.add_stale(result.stale))
             if all(file.status == "local" for file in result.files):
+                status = "skipped"
+        if bbox is not None and run.on_progress is not None:
+            run.on_progress(DownloadProgress(done, len(sheets), sheet, status))
+    return rc
+
+
+def _download_cz_contours(
+    task: SimpleNamespace,
+    run: _Run,
+    *,
+    bbox: BBox | None = None,
+    parent_request: dict | None = None,
+) -> int:
+    """CZ contours (plan E1): an SM5 sheet or the SM5 sheets of an area from
+    the CUZK index, one ZIP each; a failed sheet does not stop the others
+    (one ``UnitFailure`` per sheet). The choices were checked by
+    ``validate_request`` (a CZ-only product)."""
+    from kartograf.download.cz_contours import (
+        check_cz_contours_sheet,
+        cz_contours_area_sheets,
+        cz_contours_sheet,
+        download_cz_contours_sheet,
+    )
+
+    if bbox is None:
+        sheets: tuple[str, ...] = (cz_contours_sheet(task.sheet),)
+    if run.dry:
+        return 0
+    if bbox is not None:
+        try:
+            sheets = cz_contours_area_sheets(bbox)
+        except DownloadError as e:
+            return run.fail("CZ", "CZ", str(e), "download")
+        if not sheets:
+            return run.fail(
+                "CZ",
+                "CZ",
+                "indeks arkuszy SM5 CUZK nie ma arkuszy obszaru (obszar poza CZ?)",
+                "no_coverage",
+            )
+        what = "bbox" if task.geometry is None else f"geometry {task.geometry.name}"
+        _emit_sheet_list(run, task, list(sheets), "SM5 (CUZK)", what)
+    rc = 0
+    for done, sheet in enumerate(sheets, start=1):
+        status = "completed"
+        try:
+            if run.check:
+                run.plans.append(
+                    check_cz_contours_sheet(
+                        sheet, format=task.format, output_dir=task.output_dir
+                    )
+                )
+                continue
+            result = download_cz_contours_sheet(
+                sheet,
+                format=task.format,
+                output_dir=task.output_dir,
+                update=run.update,
+                plan=run.loaded,
+                parent_request=parent_request,
+                cache=run.cache,
+                on_notice=run.sink.add,
+                on_download=(
+                    _announcer(run.on_progress, sheet, f"CZ, warstwice {task.format}")
+                    if bbox is None
+                    else None
+                ),
+            )
+        except DownloadError as e:
+            rc = run.fail(sheet, "CZ", str(e), "download")
+            status = "failed"
+        else:
+            run.add(sheet, "CZ", result.file)
+            rc = max(rc, run.add_stale(result.stale))
+            if result.file is None or result.file.status == "local":
                 status = "skipped"
         if bbox is not None and run.on_progress is not None:
             run.on_progress(DownloadProgress(done, len(sheets), sheet, status))

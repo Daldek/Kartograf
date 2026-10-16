@@ -439,10 +439,11 @@ def test_variant_error_for_country_without_variants():
 _F = TransportKind.DIRECT_FILES
 _I = TransportKind.ARCGIS_IMAGE
 _CZ_MODELS = ("dmr5g", "dmr4g", "dmp1g", "dmpok")
-# (product, label or model, height system, sheet system, transport): a CUZK
-# file where one is published (S-JTSK files in Bpv, also EVRF2007 through the
-# pinned operation; ETRS89 files in EVRF2007), else the ImageServer warped
-# onto the TM33 grid; LAZ only as published (S-JTSK = Bpv, ETRS89 = EVRF2007).
+# (product, label, model or format, height system, sheet system, transport): a
+# CUZK file where one is published (S-JTSK files in Bpv, also EVRF2007 through
+# the pinned operation; ETRS89 files in EVRF2007), else the ImageServer warped
+# onto the TM33 grid; LAZ only as published (S-JTSK = Bpv, ETRS89 = EVRF2007);
+# ZABAGED contours: the SM5 ZIPs of both published formats (plan E1).
 _CZ_ROUTES = {
     ("nmt", "2m", "Bpv", "tm33", _I),
     ("nmt", "2m", "EVRF2007", "tm33", _I),
@@ -458,23 +459,35 @@ _CZ_ROUTES = {
     ("nmpt", "2m", "EVRF2007", "tm33", _I),
     *(("laz", model, "Bpv", "sm5", _F) for model in _CZ_MODELS),
     *(("laz", model, "EVRF2007", "tm33", _F) for model in _CZ_MODELS),
+    *(("contours", fmt, "Bpv", "sm5", _F) for fmt in ("SHP", "DGN")),
 }
 CZ_VARIANTS = variants(country="CZ")
 
 
 def _cz_id(v: ProductVariant) -> str:
-    return f"{v.product}-{v.label or v.model}-{v.vertical_crs}-{v.systems[0]}"
+    return (
+        f"{v.product}-{v.label or v.model or v.format}-{v.vertical_crs}-{v.systems[0]}"
+    )
 
 
 def test_cz_registry_matches_publication():
     found = {
-        (v.product, v.label or v.model, v.vertical_crs, v.systems[0], v.channel)
+        (
+            v.product,
+            v.label or v.model or v.format,
+            v.vertical_crs,
+            v.systems[0],
+            v.channel,
+        )
         for v in CZ_VARIANTS
     }
     assert found == _CZ_ROUTES
     assert len(CZ_VARIANTS) == len(_CZ_ROUTES)
     for v in CZ_VARIANTS:
         assert len(v.systems) == 1 and v.index_ref is None
+        if v.product == "contours":
+            assert v.model is None and v.label is None
+            continue
         assert v.model in CZ_MODELS
         assert v.format == ("LAZ" if v.product == "laz" else "TIFF")
 

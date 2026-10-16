@@ -646,8 +646,8 @@ _SCALE_ERROR = (
                 "format": "TBD",
                 "vertical_crs": "KRON86",
             },
-            "--format dotyczy tylko --product nmt i nmpt (PL), podano --product laz "
-            "- pomin --format",
+            "--format dotyczy tylko --product nmt i nmpt (PL) oraz contours (CZ), "
+            "podano --product laz - pomin --format",
         ),
     ],
     ids=["scale-sheet", "scale-bbox", "cutout", "xyz-resolution", "laz"],
@@ -680,8 +680,8 @@ def test_format_for_orto_is_validation_error(tmp_path):
             cache=False,
         )
     assert str(caught.value) == (
-        "--format dotyczy tylko --product nmt i nmpt (PL), podano --product orto "
-        "- pomin --format"
+        "--format dotyczy tylko --product nmt i nmpt (PL) oraz contours (CZ), "
+        "podano --product orto - pomin --format"
     )
 
 

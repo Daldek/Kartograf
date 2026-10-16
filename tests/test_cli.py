@@ -492,7 +492,7 @@ class TestCommandGroups:
     )
     # the selection flag of each group's download and its values
     _CHOICES = {
-        "elevation": ("--product", {"nmt", "nmpt", "laz"}),
+        "elevation": ("--product", {"nmt", "nmpt", "laz", "contours"}),
         "imagery": (
             "--product",
             {"orto", "intensity", "true-orto", "oblique-orto"},

@@ -126,7 +126,7 @@ plan kompletny. `pytanie Pn` znaczy: jedna decyzja uzytkownika (sekcja
 | 13 | Osnowy podstawowe (`pl.gugik.prpog`) | `geodesy download --product control --country pl --network ...` | E5 | do implementacji |
 | 14 | RCN (`pl.gugik.rcn`) | `cadastre download --product prices` | E3 | do implementacji |
 | 15 | Quasi-geoida PL-geoid2021 (`pl.gugik.quasigeoid`) | `geodesy download --product geoid --country pl --whole-country` | E5 | do implementacji |
-| 16 | CZ warstwice (`cz.cuzk.zabaged_contours`) | `elevation download --product contours --country cz` | E1 | do implementacji |
+| 16 | CZ warstwice (`cz.cuzk.zabaged_contours_shp`, `_dgn`) | `elevation download --product contours --country cz --format SHP\|DGN` | E1 | do implementacji |
 | 17 | CZ Data50 (`cz.cuzk.data50`) | `landcover download --source data50` | E4 | do implementacji |
 | 18 | CZ Data250 (`cz.cuzk.data250`) | `landcover download --source data250` | E4 | do implementacji |
 | 19 | CZ mapa katastralna (`cz.cuzk.cadastral_map`) | `cadastre download --product map --country cz --ku ...` | E3 | do implementacji (SHP, DXF, DGN, VFK); VKM poza 0.8.0 (P2) |
@@ -839,7 +839,7 @@ download_data(..., format: str | None = None,                          # contour
   - `Notice` `DOWNLOAD_SIZE` (kod z E0) dla arkuszy ponad 100 MiB (K9):
     E0 emituje go tylko w kolekcjach, `download_data` dostaje to w E1
     (`HEAD` przed `GET` arkusza, tekst jak w `collections._announce_size`).
-- [ ] **Step 5: Warstwice CZ.** Test RED w `tests/test_cz_contours.py`:
+- [x] **Step 5: Warstwice CZ.** Test RED w `tests/test_cz_contours.py`:
   - `test_contours_sheet_zip_kept`: `--sheet CTES96 --format SHP` daje
     `contours/cz_zabaged_shp/CTES/96/CTES96.zip` (8 plikow, ZIP bez
     rozpakowania); `--format DGN` trafia do osobnego segmentu;
@@ -854,6 +854,20 @@ download_data(..., format: str | None = None,                          # contour
   Implementacja na torze arkuszy CZ planu B. Szablon
   `openzu/ZABAGED-vyskopis{,-DGN}/epsg-5514/{sm5}.zip` i lista formatow
   w deskryptorze; feed ATOM (16 301 wpisow) zostaje nieuzywany.
+
+  **Wykonane 2026-10-16 (korekta planu):** jeden format = jeden deskryptor
+  (`cz.cuzk.zabaged_contours_shp`, `cz.cuzk.zabaged_contours_dgn`, wariant
+  rejestru `contours`/`Bpv`/`sm5` z formatem), jak archiwa GUGiK - kanal
+  `DIRECT_FILES` z szablonem URL, `channel_for` i segment bez nowego
+  mechanizmu wyboru kanalu. Tor: nowy modul `download/cz_contours.py`
+  (para `download_cz_contours_sheet`/`check_cz_contours_sheet`,
+  `cz_contours_area_sheets` = `SheetIndex.file_sheets("sm5")`), pozycje
+  planu w torze `cz_sheet`; `cz_sheets.py` zostaje torem rastrow (TIFF,
+  nodata, operacje przypiete). `data._download_cz_contours` jak
+  `_download_cz_orto` (porazka arkusza nie zatrzymuje innych). `--country
+  auto` dla produktu jednego kraju zaweza obszar do tego kraju
+  (`AUTO_NARROWED_TO_CZ`/`_PL`, jak kolekcje); `pl_only_flags` nie zna juz
+  produktow.
 - [ ] **Step 6: CLI.**
   - `elevation`: `contours` w produktach grupy (lista w bibliotece, jak
     `ELEVATION_PRODUCTS` z planu manifestu); `--format`; teksty

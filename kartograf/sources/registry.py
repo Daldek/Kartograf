@@ -1038,6 +1038,63 @@ _PL_ORTO_OBLIQUE = SourceDescriptor(
 )
 _E1_PL_SOURCES = (_PL_NMT_100M, _PL_INTENSITY, _PL_ORTO_TRUE, _PL_ORTO_OBLIQUE)
 
+# --- plan E - E1 (CZ) -------------------------------------------------------------
+# ZABAGED 2D contours (raport E, wiersz 16; HEAD recorded 2026-10-16,
+# tests/fixtures/cz/contours): one ZIP per SM5 sheet on openzu, S-JTSK with heights
+# in Bpv, ETag and Last-Modified; SHP (8 files) and DGN (3 files) in two
+# directories - one descriptor per format, as the PL archive formats. The ZIP is
+# kept as published. The ATOM feed of the dataset (16 301 entries) and the REST
+# service stay unused: the sheet URL is a template (plan E, decision 7).
+_CZ_CONTOURS_FORMATS = (("SHP", "ZABAGED-vyskopis"), ("DGN", "ZABAGED-vyskopis-DGN"))
+
+
+def _cz_contours_source(fmt: str, directory: str) -> SourceDescriptor:
+    """ZABAGED contours in ``fmt``: the openzu ZIP of an SM5 sheet (signal ``http``)."""
+    key = f"cz.cuzk.zabaged_contours_{fmt.lower()}"
+    return SourceDescriptor(
+        key=key,
+        country="CZ",
+        product="contours",
+        name=f"ZABAGED - warstwice 2D (vrstevnice; {fmt}, ZIP arkusza SM5)",
+        provider_name="CUZK",
+        channels=(
+            AccessChannel(
+                transport=TransportKind.DIRECT_FILES,
+                update_signal="http",
+                horizontal_crs=CZ_SYSTEM_CRS["sm5"],
+                vertical_crs_options=(_VERTICAL_CRS_CODES["Bpv"],),
+                capabilities=frozenset({"sheet_files"}),
+                endpoint=f"{_CUZK_OPENZU}/{directory}/epsg-5514/{{sheet}}.zip",
+                notes=(
+                    "arkusze SM5 (S-JTSK, wysokosci Bpv); ZIP zapisywany 1:1, bez "
+                    "rozpakowania i konwersji"
+                ),
+            ),
+        ),
+        tile_scheme=_CZ_SM5_SCHEME,
+        storage_subdir=f"contours/cz_zabaged_{fmt.lower()}",
+        default_extension=".zip",
+        license=_CUZK_LICENSE,
+        variants=(
+            ProductVariant(
+                source=key,
+                product="contours",
+                country="CZ",
+                resolution_m=None,
+                vertical_crs="Bpv",
+                format=fmt,
+                systems=("sm5",),
+                channel=TransportKind.DIRECT_FILES,
+                index_ref=None,
+            ),
+        ),
+    )
+
+
+_E1_CZ_SOURCES = tuple(
+    _cz_contours_source(fmt, directory) for fmt, directory in _CZ_CONTOURS_FORMATS
+)
+
 # plan E - E2: geographic names and published topographic map sheets.
 _PRNG_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRNG/apiFeatures"
 _BDOT10K_MAP_INDEX = IndexSource(
@@ -1648,6 +1705,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _CZ_RUIAN,
         _CZ_HY_NET,
         _CZ_ORTOFOTO,
+        # plan E - E1: CZ contours.
+        *_E1_CZ_SOURCES,
         # plan E - E2: CZ names and maps.
         _CZ_GEONAMES,
         _CZ_ZTM,
