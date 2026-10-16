@@ -44,6 +44,7 @@ the index records): a repeated report asks no service; ``force=True`` asks
 again and overwrites the entries.
 """
 
+import functools
 import json
 import math
 import shlex
@@ -72,7 +73,7 @@ from kartograf.core.coverage import (
     rectangle,
 )
 from kartograf.core.parser_tm33 import ParserTM33
-from kartograf.core.sheet_parser import SheetParser
+from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox
 from kartograf.download.area import (
     bbox_to_2180,
     geometry_envelope,
@@ -518,8 +519,10 @@ def _check_pl(
         area_m2=float(area_px),
         land_m2=float(land_px),
     )
+    # one grid selection per sheet system and scale for all the hints
+    select = functools.cache(functools.partial(_selected_sheets, request))
     return area, [
-        _combination(request, group, missing, uncovered)
+        _combination(request, group, missing, uncovered, select)
         for group, (missing, uncovered) in zip(groups, measured, strict=True)
     ]
 
@@ -1131,7 +1134,11 @@ def _span(values: list[str]) -> tuple[str, str] | None:
 
 
 def _combination(
-    request: _Request, group: _Group, missing: int, uncovered: int
+    request: _Request,
+    group: _Group,
+    missing: int,
+    uncovered: int,
+    select: Callable[[str, str], frozenset[str]],
 ) -> AvailabilityCombination:
     """The combination of a group of records, its sheets and download hint."""
     by_sheet: dict[str, list[_Entry]] = {}
@@ -1164,7 +1171,7 @@ def _combination(
         uncovered=uncovered > 0,
         uncovered_m2=float(uncovered),
         size_bytes=None,
-        download_hint=_download_hint(request, group, by_sheet),
+        download_hint=_download_hint(request, group, by_sheet, select),
     )
 
 
@@ -1555,46 +1562,116 @@ def _area_flags(request: _Request, country: str) -> list[str]:
     return ["--country", country, "--geometry", str(request.geometry), *layer]
 
 
-def _sheet_area(request: _Request, group: _Group, sheets: list[str]) -> list[list[str]]:
+def _selected_sheets(request: _Request, system: str, scale: str) -> frozenset[str]:
+    """Sheets that a PL download of the request's own selection plans at
+    ``scale`` (``download/data.py``): the grid of the area (``--country pl``:
+    the whole bbox, unclipped) or the descendants of the sheet code - with
+    the grid sheets that have no GUGiK record, e.g. abroad at the border."""
+    if request.sheet is not None:
+        code = request.sheet
+        if code.scale == scale:
+            return frozenset((code.sheet,))
+        return frozenset(d.sheet for d in code.get_all_descendants(scale))
+    if request.bbox is not None:
+        area = country_bbox(request.bbox, "PL", auto=False).bbox
+        return frozenset(find_sheets_for_bbox(area, scale, sheet_system=system))
+    from kartograf.core.geometry import find_sheets_for_geometry
+
+    assert request.geometry is not None
+    return frozenset(
+        find_sheets_for_geometry(
+            request.geometry, scale, request.layer, sheet_system=system
+        )
+    )
+
+
+def _grid_areas(
+    system: str,
+    sheets: list[str],
+    select: Callable[[str, str], frozenset[str]],
+    command: Callable[[str], list[str]],
+) -> list[list[str]]:
+    """Selection flags of a grid combination: per scale (PL-1992: 1:10000)
+    ``command(scale)`` when its download plans only sheets with a record of
+    the combination, else one ``--sheet`` per sheet - a hint never plans a
+    sheet without a GUGiK record (it would end with "Brak danych", exit 1)."""
+    if system == "2000":
+        scales = sorted({SheetParser(s).scale for s in sheets}, key=_scale_order)
+        parts = [(s, [x for x in sheets if SheetParser(x).scale == s]) for s in scales]
+    else:
+        parts = [("1:10000", sheets)]
+    areas: list[list[str]] = []
+    for scale, own in parts:
+        if select(system, scale) <= set(own):
+            areas.append(command(scale))
+        else:
+            areas.extend(["--sheet", sheet] for sheet in own)
+    return areas
+
+
+def _sheet_area(
+    request: _Request,
+    group: _Group,
+    sheets: list[str],
+    select: Callable[[str, str], frozenset[str]],
+) -> list[list[str]]:
     """Area flags of a sheet request: the code itself when a download of it
-    reaches the combination's sheets, else one command per sheet."""
+    plans exactly sheets of the combination, else one command per sheet."""
     code = request.sheet
     assert code is not None
     if request.product == "laz":
         return [["--sheet", code.sheet]]
     if group.system == code.sheet_system:
-        if group.variant.source_file or group.system == "1992":
+        if group.variant.source_file:
             return [["--sheet", code.sheet]]
+        if group.system == "1992":
+            return _grid_areas(
+                "1992", sheets, select, lambda _: ["--sheet", code.sheet]
+            )
         if all(s == code.sheet or s.startswith(code.sheet + ".") for s in sheets):
-            scales = sorted({SheetParser(s).scale for s in sheets}, key=_scale_order)
-            return [
-                ["--sheet", code.sheet]
-                + ([] if scale == code.scale else ["--scale", scale])
-                for scale in scales
-            ]
+            return _grid_areas(
+                "2000",
+                sheets,
+                select,
+                lambda scale: (
+                    ["--sheet", code.sheet]
+                    + ([] if scale == code.scale else ["--scale", scale])
+                ),
+            )
     return [["--sheet", sheet] for sheet in sheets]
 
 
 def _download_hint(
-    request: _Request, group: _Group, by_sheet: dict[str, list[_Entry]]
+    request: _Request,
+    group: _Group,
+    by_sheet: dict[str, list[_Entry]],
+    select: Callable[[str, str], frozenset[str]],
 ) -> tuple[str, ...]:
     """Commands downloading the combination (after ``kartograf ``, without
     ``--output``): the area of the request, the sheet system and scale
     (PL-2000 grids: one command per scale), the variant, ``--year`` and
     ``--full-sheet`` when a sheet's newest record of the year is partial while
-    a full one exists."""
+    a full one exists. A grid area or sheet code whose download would plan a
+    sheet without a record of the combination (coordinator decision
+    2026-10-16) gives one ``--sheet`` command per sheet instead."""
     sheets = sorted(by_sheet)
     if request.sheet is not None:
-        areas = _sheet_area(request, group, sheets)
+        areas = _sheet_area(request, group, sheets, select)
     elif request.product == "laz":
         areas = [_area_flags(request, "pl")]
     else:
         base = [*_area_flags(request, "pl"), "--sheet-system", group.system]
-        if group.system == "2000" and not group.variant.source_file:
-            scales = sorted({SheetParser(s).scale for s in sheets}, key=_scale_order)
-            areas = [[*base, "--scale", scale] for scale in scales]
-        else:
+        if group.variant.source_file:
             areas = [base]
+        else:
+            areas = _grid_areas(
+                group.system,
+                sheets,
+                select,
+                lambda scale: (
+                    [*base, "--scale", scale] if group.system == "2000" else base
+                ),
+            )
     variant = group.variant
     flags: list[str] = []
     if request.product != "laz":

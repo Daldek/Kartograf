@@ -110,12 +110,16 @@ def test_details_lists_partial_and_uncovered(capsys):
     assert (
         "  2022 PL-1992 0.5m EVRF2007 ASC: nie: 3 niepelne\n    arkusze niepelne (3): "
     ) in details
+    # the grid of the bbox has sheets without a 2022 1 m record: one command
+    # per sheet with a record (no command plans a sheet without one)
     assert (
         "  2022 PL-1992 1m EVRF2007 ASC: nie: brak arkuszy dla 0,88 ha\n"
         "    lad bez zadnego arkusza kombinacji: 0,88 ha\n"
-        "    kartograf elevation download --product nmt --country pl --bbox "
-        "339000,744800,343000,747000 --sheet-system 1992 --resolution 1m "
-        "--vertical-crs EVRF2007 --year 2022\n"
+        + "".join(
+            f"    kartograf elevation download --product nmt --sheet {sheet} "
+            "--resolution 1m --vertical-crs EVRF2007 --year 2022\n"
+            for sheet in ("N-33-58-A-c-1-4", "N-33-58-A-c-2-3", "N-33-58-A-c-3-1")
+        )
     ) in details
     assert "Zadna kombinacja nie pokrywa calego ladu" in out
 
@@ -273,6 +277,47 @@ def test_cz_footer_shows_five_commands(capsys):
         "    ... pozostale polecenia: 2 (wszystkie: --details albo --json)\n"
     )
     assert all(f"    kartograf {hint}\n" in details for hint in hints)
+
+
+def test_pl_footer_shows_five_commands(capsys):
+    """One ``--sheet`` per sheet (an area at the border or the coast): the
+    footer shows five commands and the number of the others."""
+    from kartograf.download.availability import check_availability
+    from tests.test_availability import KRAKOW as KRAKOW_BBOX
+
+    with patch(SESSION, return_value=RecordedIndex(_areas("nmt", "krakow"))):
+        report = check_availability(
+            product="nmt", country="pl", bbox=KRAKOW_BBOX, cache=False
+        )
+    newest = next(c for c in report.combinations if c.complete)
+    hints = tuple(
+        f"elevation download --product nmt --sheet M-34-64-C-c-{n}-1 "
+        "--resolution 1m --vertical-crs EVRF2007 --year 2025"
+        for n in range(1, 8)
+    )
+    many = replace(report, combinations=(replace(newest, download_hint=hints),))
+
+    with patch("kartograf.cli.availability_cmd.check_availability", return_value=many):
+        main(
+            [
+                "elevation",
+                "availability",
+                "--product",
+                "nmt",
+                "--country",
+                "pl",
+                *KRAKOW,
+            ]
+        )
+    footer = capsys.readouterr().out.split("Najnowsza kompletna kombinacja")[1]
+
+    shown = [line for line in footer.splitlines() if "Pobranie" in line]
+    assert shown == [
+        f"  Pobranie (dodaj --output KATALOG): kartograf {hint}" for hint in hints[:5]
+    ]
+    assert footer.endswith(
+        "  ... pozostale polecenia: 2 (wszystkie: --details albo --json)\n"
+    )
 
 
 def test_auto_tables_per_country(capsys):

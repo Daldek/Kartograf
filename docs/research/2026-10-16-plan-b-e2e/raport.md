@@ -53,3 +53,11 @@ pobranych recznie (`curl`) porownano z
   (`nie udalo sie sprawdzic: Brak danych NMPT 0.5m ...`, kod 1); arkusze
   PL sa poprawne. To zachowanie planu A (pobranie siatki arkuszy calego
   prostokata), plan B go nie zmienia - do decyzji koordynatora.
+  Rozstrzygniecie (koordynator, 2026-10-16): podpowiedz nie moze planowac
+  arkusza bez rekordu GUGiK. Poprawka (`fix(api): podpowiedz raportu PL bez
+  arkuszy bez rekordu GUGiK`): gdy siatka obszaru zawiera arkusz bez rekordu
+  kombinacji, podpowiedz to po jednym `--sheet` na arkusz z rekordem - dla
+  bboxa Cieszyna 3 polecenia 2024 0.5m zamiast polecenia obszaru; plan
+  z tych polecen obejmuje tylko 3 arkusze PL (test offline
+  `test_border_hint_plans_only_sheets_with_records`). Regula dotyczy tez
+  niepelnych kombinacji z dala od granicy (morze, brak rekordu roku).

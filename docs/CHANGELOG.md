@@ -638,7 +638,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   ukladow, rozdzielczosci, ukladow wysokosci i formatow obszar ma komplet
   pelnych arkuszy NMT/NMPT albo kafli LAZ wg skorowidza WFS i maski ladu PRG,
   bez pobierania danych; podpowiedz pobrania bez `--output` (tez po
-  `kartograf project add NAZWA`). Opis: `docs/USAGE.md` 1.1 i 1.7.
+  `kartograf project add NAZWA`). Podpowiedz nie planuje arkusza bez
+  rekordu kombinacji: gdy siatka obszaru albo potomkowie godla maja taki
+  arkusz (za granica - E2E planu B przy Cieszynie, morze, brak rekordu
+  roku), zamiast polecenia obszaru jest po jednym `--sheet` na arkusz
+  z rekordem (dotad `--check-updates` z podpowiedzi konczyl sie `Brak
+  danych` i kodem 1); stopka PL podaje najwyzej 5 polecen i liczbe
+  pozostalych, jak CZ. Opis: `docs/USAGE.md` 1.1 i 1.7.
   Zadanie projektu `elevation download` zapisuje opcje `format`.
 - Czechy w `elevation` (plan B, ADR-041): NMPT CZ - DMP OK 0.5m (arkusz
   SM5 i kafel TM33 z plikow CUZK, wycinek z ImageServer) i DMP 1G 2m (kafel

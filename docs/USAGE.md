@@ -825,21 +825,36 @@ obszar zadania, dopisuje `--sheet-system`, wariant (`--format` dla
 archiwów, `--resolution`, `--vertical-crs`) i `--year`; dla PL-2000 —
 po jednym poleceniu na skalę arkuszy kombinacji (`--scale`), a gdy
 w którymś arkuszu najnowszy rekord roku jest NIE, a pełny rekord tego
-roku istnieje — `--full-sheet`. Bez kompletnej kombinacji stopka mówi
+roku istnieje — `--full-sheet`. Polecenie obszaru (albo godła) pojawia
+się tylko wtedy, gdy jego pobranie planuje wyłącznie arkusze z rekordem
+kombinacji. Gdy siatka obszaru ma też arkusz bez takiego rekordu (za
+granicą, na morzu, bez danych z tego roku albo w tej rozdzielczości),
+podpowiedź to po jednym poleceniu `--sheet` na każdy arkusz z rekordem —
+żadne polecenie podpowiedzi nie kończy się `Brak danych` (kod 1); przy
+więcej niż 5 poleceniach stopka podaje 5 i liczbę pozostałych
+(wszystkie: `--details` albo `--json`).
+Archiwa (`--format`) i LAZ mają zawsze polecenie obszaru albo godła
+zadania. Bez kompletnej kombinacji stopka mówi
 `Zadna kombinacja nie pokrywa calego ladu obszaru pelnymi arkuszami
 (arkusze niepelne i brakujace: --details)`.
 
 `--details` dopisuje dla każdej kombinacji godła arkuszy niepełnych, ląd
-bez arkuszy i polecenie pobrania (fragment, Pomorze):
+bez arkuszy i polecenia pobrania (fragment, Pomorze — siatka obszaru ma
+arkusze morskie bez rekordów, więc rastry dostają polecenia `--sheet`):
 
 ```
 Szczegoly kombinacji:
   2025 PL-1992 0.5m EVRF2007 ASC: nie: 4 niepelne
     arkusze niepelne (4): N-33-58-A-c-1-3, N-33-58-A-c-1-4, N-33-58-A-c-2-3, N-33-58-A-c-3-1
-    kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-1-3 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-1-4 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-2-3 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-3-1 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
   2023 PL-1992 5m EVRF2007 ASC: nie: brak arkuszy dla 0,88 ha
     lad bez zadnego arkusza kombinacji: 0,88 ha
-    kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-1-4 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-2-3 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
+    kartograf elevation download --product nmt --sheet N-33-58-A-c-3-1 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
   2005 PL-1992 KRON86 TIN: tak
     kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TIN --vertical-crs KRON86 --year 2005
 ```
@@ -2014,13 +2029,6 @@ proxy).
   danych, a raport nie mierzy treści plików (sekcja 1.7). W CZ sprawdza
   tylko istnienie plików (`HEAD`), nie zna lat nalotu, a `area_m2` części
   CZ to prostokąt, nie ląd.
-- Podpowiedź pobrania raportu PL dla obszaru przy granicy (`--country pl`
-  albo część PL pod `auto`) jest poleceniem obszaru; jego pobranie planuje
-  też arkusze siatki leżące poza Polską bez rekordu GUGiK (na żywo
-  2026-10-16: `M-34-74-C-c-2-2` w CZ przy Cieszynie) — `nie udalo sie
-  sprawdzic: Brak danych ...` i kod 1, choć arkusze PL są w porządku.
-  Obejście: obszar bez terytorium obcego albo `--sheet` dla każdego
-  arkusza z `--details` (zachowanie od planu A, bez zmian w planie B).
 - Godła 8-członowe PL-1992 (wszystkie arkusze ASCII NMT 10 m i część
   arkuszy ASC 1 m w skorowidzu GUGiK) są poza układem godeł Kartografu:
   nie są pobierane, a raport dostępności wymienia je w `Info:`.

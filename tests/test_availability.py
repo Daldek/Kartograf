@@ -998,13 +998,34 @@ def test_auto_both_countries():
         "0.5m",
         True,
     )
-    assert newest.download_hint == (
-        f"elevation download --product nmpt --country pl {CIESZYN_AREA} "
-        "--sheet-system 1992 --resolution 0.5m --vertical-crs EVRF2007 --year 2024",
+    # the grid of the bbox also holds M-34-74-C-c-2-2 (CZ, no GUGiK record):
+    # one command per sheet with a record instead of the area command
+    assert newest.download_hint == tuple(
+        f"elevation download --product nmpt --sheet {sheet} --resolution 0.5m "
+        "--vertical-crs EVRF2007 --year 2024"
+        for sheet in newest.sheets_full
     )
     s_jtsk = next(c for c in report.combinations if c.country == "CZ")
     assert s_jtsk.sheets_full == ("CTES86",) and s_jtsk.complete
     assert [n.code for n in report.notices] == [CZ_SERVICE_ONLY]
+
+
+def test_border_hint_plans_only_sheets_with_records(tmp_path):
+    """Coordinator decision 2026-10-16 (live E2E of plan B at Cieszyn): the
+    area command of the PL part also planned the grid sheet M-34-74-C-c-2-2
+    in CZ without a GUGiK record - ``check_failed`` ("Brak danych"), exit 1.
+    The hint commands plan exactly the sheets of the combination."""
+    report = _check(_Border("nmpt"), product="nmpt", country="auto", bbox=CIESZYN)
+    newest = report.combinations[0]
+    planned = []
+    for hint in newest.download_hint:
+        args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
+        session = RecordedIndex(_areas("nmpt", "cieszyn"))
+        with patch(SESSION, return_value=session):
+            plan = check_data(**{**_download_arguments(args), "cache": False})
+        planned += [(item.unit, item.status) for item in plan.items]
+
+    assert sorted(planned) == [(sheet, "missing") for sheet in newest.sheets_full]
 
 
 def test_auto_one_country_failed():
