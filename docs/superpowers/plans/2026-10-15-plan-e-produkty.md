@@ -1185,12 +1185,17 @@ z `unit_package` i filtrem klas), D (ZABAGED w `LandCoverManager`
 z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
 
 **Files:**
-- Modify: `kartograf/landcover/manager.py` (`PROVIDERS`, opcje, wymagane
-  opcje), moduly zrodel `landcover` z C/D (dopisanie zrodel, bez nowego
-  providera kopiujacego pobieranie), `kartograf/cli/groups/landcover.py`
-  (wybory i teksty), `kartograf/sources/registry.py` (blok E4),
-  `tests/test_parity.py`
-- Create: `tests/test_bdoo.py`, `tests/test_cz_data50_250.py`, fixtury
+- Modify: `kartograf/landcover/manager.py` (`COLLECTION_SOURCES`, opcje
+  zrodel, wybory `--source` z rejestru), `kartograf/download/collections.py`
+  (`landcover_request` z `teryt`, `year`, `layers`; jednostki wojewodztw
+  obszaru; `collection_classes`), `kartograf/transport/unit_package.py`
+  (filtr klas), `kartograf/sources/descriptor.py` (`PackageVariant.classes`,
+  `UnitPackageParams.class_pattern`), `kartograf/notices.py`
+  (`CLASSES_ABSENT`), `kartograf/cli/groups/landcover.py` (wybory
+  i teksty), `kartograf/cli/landcover_cmd.py` (`list-layers` BDOO, linia
+  podsumowania obszaru BDOO), `kartograf/sources/registry.py` (blok E4)
+- Create: `tests/test_bdoo.py`, `tests/test_cz_data50_250.py`,
+  `tests/test_parity_e4.py`, `tests/test_project_e4.py`, fixtury
   `tests/fixtures/pl/bdoo/`, `tests/fixtures/cz/data50_250/`
 
 **Deskryptory** (raport E, wiersze 8, 17, 18):
@@ -1209,42 +1214,67 @@ z `feature_bbox`, `--whole-country` i `--horizontal-crs`).
     i `.../Data250/Data250.xml`, `crs=("EPSG:5514", "EPSG:3045")`,
     `segment_tokens=("shp",)`): plik krajowy SHP ZIP.
 
-- [ ] **Step 1: Fixtury (live):**
-  - `HEAD` BDOO 12/2023 i 12/2018 (404);
-  - przyciety prawdziwy ZIP BDOO (kilka plikow GML z centralnym katalogiem
-    jak zrodlo);
+- [x] **Step 1: Fixtury (live):**
+  - `HEAD` BDOO (wszystkie 112 paczek) i odpowiedz 404 rocznika 2018
+    (`GET`, `text/html`);
+  - przyciety prawdziwy ZIP BDOO 12/2023 (6 plikow, klasy KUIK i SKPP,
+    katalog centralny jak zrodlo), listy czlonow czterech paczek i klasy
+    wszystkich 112 paczek (`classes.json`);
   - metadane REST DATA50 i DATA250;
-  - dwie warstwy z `exceededTransferLimit`;
-  - feedy uslugi i zbioru `Data50`.
-- [ ] **Step 2: Test RED:**
+  - trzy warstwy z `exceededTransferLimit` (strony po 1 obiekcie);
+  - feedy uslugi i zbioru `Data50` i `Data250`; naglowki `HEAD` i listy
+    czlonow obu plikow krajowych 5514 (`national.json`, z E2E).
+- [x] **Step 2: Testy:**
   - `test_bdoo_year_required`: brak `--year` = `Error:` z lista lat;
     `--year 2018` = `Error:` z ta sama lista.
   - `test_bdoo_woj_units`: bbox Krakowa daje `12`; bbox na granicy dwoch
-    wojewodztw daje dwa pliki; `--teryt 1261` = `Error:` "BDOO jest
-    publikowane per wojewodztwo: --teryt 12".
+    wojewodztw daje dwa pliki; `--teryt 1261` = `Error:` "bdoo jest
+    publikowane per wojewodztwo - podaj --teryt 12"
+    (`test_bdoo_selection_errors`).
   - `test_bdoo_years_separate_slots`: 2015 i 2023 trafiaja do roznych
     segmentow; te same bajty w jednym slocie = `unchanged`.
-  - `test_bdoo_layers_filter`: `--layers ADJA` zostawia tylko pliki
-    `OT_ADJA_*` (osobny segment); nieznana klasa = `Error:`.
-  - `test_data50_bbox_feature_layers`: tylko warstwy obiektowe; kazda to
-    tabela GPKG; bbox w innym ukladzie niz natywny przechodzi na obwiednie
-    EPSG:5514.
-  - `test_data50_whole_country_crs`: `--whole-country` bez
+  - `test_bdoo_layers_filter`: `--layers SKPP,KUIK` na przycietej paczce
+    (ADJA ma 6,5 MB) zostawia tylko pliki tych klas (osobny segment, bajty
+    czlonow jak w zrodle, powtorka = `unchanged`); `test_bdoo_layers_class_absent`
+    (`Info` `classes_absent`, `NoCoverageError`); nieznana klasa i klasa
+    spoza rocznika = `Error:`.
+  - `test_bbox_feature_layers[data50|data250]`: tylko warstwy obiektowe;
+    kazda to tabela GPKG; bbox EPSG:4326 przechodzi na obwiednie EPSG:5514.
+  - `test_whole_country_crs[data50|data250]`: `--whole-country` bez
     `--horizontal-crs` = `Error:` z `EPSG:5514, EPSG:3045`; etykieta
-    z `<updated>`; `Notice` 515 542 917 B.
-  - Parametryzacja tych samych testow dla Data250.
-- [ ] **Step 3: Implementacja.** Zrodla w `LandCoverManager` na sciezkach
-  C (BDOO jak archiwum BDOT10k) i D (Data50/250 jak ZABAGED). Teksty
-  `--source` i `list-sources` z rejestru.
-- [ ] **Step 4: Manifest (warunkowo).** `landcover download` bez nowych
+    z `<updated>`; `Notice` z rozmiarem z feedu (w tescie rozmiar
+    podanego malego ZIP-a; 515 542 917 B - E2E).
+- [x] **Step 3: Implementacja.** Zrodla w `LandCoverManager` na sciezce
+  D (`landcover_request`) dla wszystkich trzech: BDOO nie idzie przez
+  zadania archiwum BDOT10k, tylko przez orkiestrator z ogolna regula
+  "produkt z samymi paczkami wojewodztw -> wojewodztwa obszaru" (wspolny
+  helper z NMT 100 m). Korekta wobec planu: filtr `--layers` BDOO to nie
+  filtr warstw GPKG BDOT10k, tylko wybor czlonow paczki
+  (`UnitPackageParams.class_pattern`, `PackageVariant.classes` = suma klas
+  rocznika); zapisany ZIP ma tylko pliki `__OT_<KOD>_<typ>` (bez obiektow
+  zlozonych, XSD i metadanych), klasa bez pliku = `Info` `classes_absent`.
+  Teksty `--source` i `list-sources` z rejestru; `list-layers --source
+  bdoo` wypisuje klasy kazdego rocznika.
+- [x] **Step 4: Manifest (warunkowo).** `landcover download` bez nowych
   flag (`test_task_options_equal_parser_data_flags` zielony bez zmian);
-  test zadania projektu z BDOO.
-- [ ] **Step 5: Live:**
-  - BDOO 12/2023 (11,5 MB), 12/2015 (14,6 MB) i `--layers`;
+  test zadania projektu z BDOO (`tests/test_project_e4.py`).
+- [x] **Step 5: Live** (`docs/research/2026-10-16-plan-e4-e2e/raport.md`):
+  - BDOO 12/2023 (11,5 MB), 12/2015 (14,6 MB), 12/2026 i `--layers`,
+    obszar 12+24 i arkusz;
   - Data50: bbox i kraj 5514 (516 MB);
   - Data250: bbox i kraj 5514 (230 MB);
   - drugi przebieg i `--check-updates`.
-- [ ] **Step 6: Brama i commit** - `feat(landcover): BDOO oraz Data50 i Data250 CZ (plan E, E4)`.
+- [x] **Step 6: Brama i commit** - commity `feat(landcover): deskryptory
+  BDOO, Data50 i Data250 ... (plan E, E4 krok 1)` i kolejne kroki 2-7.
+
+**Stan 2026-10-16 (E4 wykonane, galaz `feat/plan-e4`).** BDOO, Data50
+i Data250 sa w kodzie, CLI, manifescie i dokumentacji; wyniki live:
+`docs/research/2026-10-16-plan-e4-e2e/raport.md`. Odstepstwa od planu:
+(1) filtr klas BDOO w silniku paczek (wyzej, Step 3); (2) BDOO na torze
+`landcover_request` zamiast zadan archiwum BDOT10k; (3) nowy kod `Notice`
+`classes_absent`; (4) nowy niezmiennik rejestru: klasy wariantu tylko
+z `class_pattern`, bez `unpack`, na kanale jednostek TERYT albo pliku
+krajowego.
 
 ### Task E5: `models3d` i `geodesy` - mesh 3D, drzewa, osnowy PL i CZ, quasi-geoidy
 

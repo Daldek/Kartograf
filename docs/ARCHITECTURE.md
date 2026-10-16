@@ -482,14 +482,16 @@ kartograf/
 │   │                    # komendy boundaries/cadastre/models3d/hydro download,
 │   │                    # validate_collection_request (bez sieci), CollectionReport, zadania
 │   │                    # jednostek (package_job/run_job/inspect_job; tor planu collection),
-│   │                    # landcover_request/run_request/plan_request (ZABAGED)
+│   │                    # landcover_request/run_request/plan_request (ZABAGED, BDOO,
+│   │                    # Data50, Data250)
 │   ├── updates.py       # Wewnetrzne pozycje planu PL (kartograf-plan/1, ADR-036)
 │   └── versions.py      # Magazyn wersjonowany (ADR-036): zapis wylaczny, etykiety,
 │                        # lista wersji, sprzatanie .incoming/
 ├── landcover/manager.py # LandCoverManager — download/check (teryt|sheet|bbox|geometry,
 │                        # BDOT10k obszaru = kazdy powiat) -> LandCoverAreaResult (D29-D32);
 │                        # archiwum rocznikow BDOT10k (year=) przez zadania jednostek kolekcji,
-│                        # ZABAGED (COLLECTION_SOURCES) przez silniki kolekcji
+│                        # ZABAGED, BDOO, Data50 i Data250 (COLLECTION_SOURCES) przez
+│                        # silniki kolekcji
 ├── landcover/store.py   # hsg_segment, HSG_SEGMENT_PREFIX, selection_unit (spec 3.4)
 ├── hydrology/hsg.py     # HSGCalculator — calculate_hsg/check_hsg (sheet|bbox|geometry) z wersji
 │                        # wejsc SoilGrids (D33, reused), klasyfikacja USDA -> HSG (ADR-025),
@@ -562,6 +564,8 @@ to `resolve_subdir()`.
 | `cz.cuzk.zabaged` | `landcover/cz_zabaged` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `cz.cuzk.ruian` | `boundaries/cz_ruian` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `cz.cuzk.hy_net` | `hydro/cz_hynet` (prefiks + tokeny, regula 9) | `.gpkg` |
+| `pl.gugik.bdoo` | `landcover/pl_bdoo` (prefiks + tokeny: rocznik i klasy `--layers`, regula 9); slot `teryt/<woj>` | `.zip` |
+| `cz.cuzk.data50`, `cz.cuzk.data250` | `landcover/cz_data50`, `landcover/cz_data250` (prefiks + tokeny, regula 9) | `.gpkg` (plik krajowy `.zip`) |
 
 Kanal arkuszy kazdego deskryptora NMT/NMPT PL to `WFS` (`sheet_files`,
 sygnal `index`; skorowidz WFS GUGiK, od 0.8.0 zamiast `WMS_SHEET_INDEX`,
@@ -655,8 +659,8 @@ niemutowalna konfiguracje silnika - dane bez IO:
 
 | Typ | Pola | Silnik |
 |---|---|---|
-| `UnitPackageParams` | `unit` (`powiat`/`woj`/`country`), `variants` (`PackageVariant`), `unpack` (sufiks JEDNEGO czlonu zapisywanego zamiast ZIP; `None` = ZIP 1:1) | `transport/unit_package.py` |
-| `PackageVariant` | `choice` (opcje API/CLI wybierajace wariant, np. `(("format", "SHP"), ("year", "2024"))`; `()` = jedyny wariant), `url_template` (tokeny wylacznie `{teryt}`, `{woj}` = 2 pierwsze cyfry TERYT), `edition` (etykieta wersji), `segment_tokens`, `members` (wymagane sufiksy czlonow ZIP), `vertical_crs` (uklad wysokosci zadeklarowany w danych 3D) | jw. |
+| `UnitPackageParams` | `unit` (`powiat`/`woj`/`country`), `variants` (`PackageVariant`), `unpack` (sufiks JEDNEGO czlonu zapisywanego zamiast ZIP; `None` = ZIP 1:1), `class_pattern` (plan E4: wyrazenie szukane w nazwie pliku kazdego czlonu ZIP, grupa `code` = klasa czlonu; paczka bez pliku klasy to nie dane, a wybor klas `layers` zapisuje nowy ZIP plikow tych klas - kazdy czlon bajt w bajt, z nazwa, data i kompresja zrodla, w kolejnosci zrodla) | `transport/unit_package.py` |
+| `PackageVariant` | `choice` (opcje API/CLI wybierajace wariant, np. `(("format", "SHP"), ("year", "2024"))`; `()` = jedyny wariant), `url_template` (tokeny wylacznie `{teryt}`, `{woj}` = 2 pierwsze cyfry TERYT), `edition` (etykieta wersji), `segment_tokens`, `members` (wymagane sufiksy czlonow ZIP), `vertical_crs` (uklad wysokosci zadeklarowany w danych 3D), `classes` (plan E4: kody klas wydania do wyboru `layers`; `()` = bez wyboru klas) | jw. |
 | `FeatureBBoxParams` | `protocol` (`wfs`/`arcgis`, zgodny z `transport` kanalu `WFS`/`ARCGIS_QUERY`), `native_crs`, `axis_order` (`yx` = northing pierwszy w BBOX), `page_size`, `layers` (`FeatureLayer`), `selection` (`level` = jedna warstwa wg `--level`, `all` = kazda), `order_field` (ArcGIS `orderByFields`), `drop_fields` | `transport/feature_bbox.py` + `transform/gpkg.py` |
 | `FeatureLayer` | `code` (wartosc `--level` albo staly kod), `source` (typ WFS `ms:A03_Granice_gmin` albo id warstwy ArcGIS), `name` (warstwa GPKG), `id_field` (staly identyfikator obiektu: dedupe i kolejnosc) | jw. |
 | `AtomFilesParams` (plan D) | `service_feed` (feed uslugi ATOM), `entry_pattern` (wyrazenie na id feedu zbioru; grupa `sheet` = klucz indeksu, `year` = rok wydania w nazwie pliku; bez `sheet` feed ma jeden zbior), `crs` (kody EPSG kategorii ukladu plikow zbioru; `()` = jeden plik), `members` (pary sufiks czlonu ZIP -> sufiks zapisu; `()` = ZIP 1:1), `segment_tokens` (+ kod EPSG, gdy `crs` ma kilka ukladow) | `transport/atom.py` |
@@ -678,6 +682,7 @@ i capability kanalu kolekcji unikalnej w deskryptorze (`archive_unit_files`,
 | `pl.gugik.egib` (`map`) | `DIRECT_FILES`, `admin_unit_files` | powiat; `InneDane/latest_exports/eziudp_wfs/GPKG/{teryt}.gpkg.zip`, `unpack=".gpkg"`, token `gpkg` |
 | jw. | `WFS` `UslugaZbiorcza`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`: `dzialki`, `budynki`, id `gml_id`, `drop_fields=("DATA",)` |
 | `pl.gugik.buildings_3d` (`buildings`) | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `(lod, year)`: LoD1 2019 (`.../LOD1/2019/{woj}/{teryt}_gml.zip`, EPSG:9650), LoD1 2021/2022/2024 (`.../LOD1/<R>/{woj}/{teryt}.zip`, EPSG:9651), LoD2 2017 (`.../LOD2/{teryt}_gml.zip`, EPSG:9650); czlon `.gml`, `edition` = rok |
+| `pl.gugik.bdoo` (`landcover --source bdoo`, plan E4) | `DIRECT_FILES`, `admin_unit_files` | woj.; 7 wariantow `year` (2015, 2021-2026): `opendata/bdoo/<R>/PL.PZGiK.201.{woj}.zip`, czlon `.xml` (do 2023) albo `.gml` (od 2024), `edition` = rok; `classes` = suma klas 16 paczek rocznika (2015: 44, 2021-2023: 37, 2024-2026: 26), `class_pattern` `__OT_(?P<code>[A-Z]{4})_[A-Z]\.`; EPSG:2180; brak pliku krajowego |
 
 Kazdy z tych kanalow ma sygnal `none` (GUGiK nie podaje `ETag` ani
 `Last-Modified`; wynik WFS to migawka). Kanaly CZ (plan D, ADR-042
@@ -691,6 +696,8 @@ D13-D17; obszar CZ zawsze w EPSG:5514 = DefaultCRS uslug):
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `services.cuzk.gov.cz/shp/stat/epsg-5514/1.zip` (ok. 253 MB), czlon `.shp`, token `shp`; `http` |
 | `cz.cuzk.hy_net` (`network`) | `WFS` `geoserver/hy-n/wfs`, `bbox_vector` | `wfs`, EPSG:5514, `xy`, strona 1000, `selection="all"`: `hy-n:WatercourseLink`, `hy-n:HydroNode` (warstwy GPKG bez prefiksu), id `gml_id`; `none` |
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `openzu.cuzk.gov.cz/opendata/HY-NET/HY-NET.zip` (ok. 194 MB, EPSG:3045), czlon `.gpkg`, token `gpkg`; `http` |
+| `cz.cuzk.data50`, `cz.cuzk.data250` (`landcover --source data50\|data250`, plan E4) | `ARCGIS_QUERY` `DATA50/MapServer`, `DATA250/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 69 i 116 warstw obiektowych (`registry.py::_DATA50_LAYERS`, `_DATA250_LAYERS`, kod = nazwa warstwy ASCII jak ZABAGED; rastry reliefu 5 i 6 DATA250 pominiete), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
+| jw. | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/Data50/Data50.xml` (`Data250/Data250.xml`; jeden zbior), `crs` EPSG:5514 i EPSG:3045, SHP ZIP 1:1 (Data50 516/757 MB, Data250 230/320 MB), token `shp` + kod EPSG; `metadata` |
 | `cz.cuzk.ortofoto` (`imagery --product orto --country cz`) | `DIRECT_FILES` + `AtomFilesParams`, `sheet_files` | feed `atom.cuzk.gov.cz/ORTOFOTO/ORTOFOTO.xml`, wpis po godle SM5 (grupy `year`, `sheet`), czlony `.jpg`, `.jgw`, `.TM33N.jgw`, `.TM34N.jgw` 1:1; `metadata`; tor `download/cz_orto.py` (nie kolekcja) |
 
 Pliki krajowe CUZK z `ETag` maja sygnal `http`, pliki z feedu ATOM
@@ -983,7 +990,11 @@ data/
 │   ├── eu_corine_2018/N-34/130/D/N-34-130-D.tif  # CLMS; wersje <wydanie>_<sha8> (np. V2020_20u1_...)
 │   ├── eu_corine_2018_preview/bbox/<coords>.png  # podglad WMS bez credentials (D31)
 │   ├── cz_zabaged/bbox/<coords>.gpkg           # ZABAGED obszaru (REST, 22 warstwy), EPSG:5514
-│   └── cz_zabaged_gpkg_5514/country/cz.zip     # plik krajowy z feedu ATOM; wersje 2026-10-04_<sha8> (wydanie)
+│   ├── cz_zabaged_gpkg_5514/country/cz.zip     # plik krajowy z feedu ATOM; wersje 2026-10-04_<sha8> (wydanie)
+│   ├── pl_bdoo_2023/teryt/12.zip               # BDOO: paczka GML wojewodztwa 1:1; wersje 2023_<sha8> (rocznik)
+│   ├── pl_bdoo_2023_kuik-ptwp/teryt/12.zip     # --layers: ZIP plikow wybranych klas (kody posortowane)
+│   ├── cz_data50/bbox/<coords>.gpkg            # Data50 obszaru (REST, 69 warstw), EPSG:5514; cz_data250: 116
+│   └── cz_data50_shp_5514/country/cz.zip       # plik krajowy SHP z feedu ATOM; wersje 2026-04-28_<sha8>
 ├── boundaries/
 │   ├── pl_prg_gmina/bbox/<coords>.gpkg         # obiekty obszaru (WFS), EPSG:2180; wersje <data>_<sha8>
 │   ├── pl_prg_gml/teryt/12.zip                 # paczka wojewodztwa 1:1
@@ -1131,12 +1142,14 @@ data/
    `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>}<ext>`:
    segment = prefiks `storage_subdir` + tokeny wariantu tresci
    (`content_segment`), pod nim `unit_slot`: `teryt/<T>` (paczka powiatu
-   albo wojewodztwa - takze, gdy obszar rozlozono na powiaty z PRG),
-   `bbox/<coords>` (wynik obszaru; wspolrzedne w ukladzie NATYWNYM uslugi,
-   `.10g`, `_`) albo `country/<kod>` (plik krajowy, `pl`/`cz`); wersje
-   w `<segment>/versions/<ta sama hierarchia>/`. Tokeny = wariant tresci:
-   poziom (`pl_prg_gmina`), LoD i rok (`pl_buildings_lod1_2024`), format
-   i rocznik archiwum (`pl_bdot10k_shp_2024`). Wynik obszaru (zawsze GPKG
+   albo wojewodztwa - takze, gdy obszar rozlozono na powiaty z PRG; BDOO:
+   wojewodztwa tych powiatow), `bbox/<coords>` (wynik obszaru; wspolrzedne
+   w ukladzie NATYWNYM uslugi, `.10g`, `_`) albo `country/<kod>` (plik
+   krajowy, `pl`/`cz`); wersje w `<segment>/versions/<ta sama
+   hierarchia>/`. Tokeny = wariant tresci: poziom (`pl_prg_gmina`), LoD
+   i rok (`pl_buildings_lod1_2024`), format i rocznik archiwum
+   (`pl_bdot10k_shp_2024`), rocznik i wybrane klasy BDOO
+   (`pl_bdoo_2023_kuik-ptwp`, kody posortowane). Wynik obszaru (zawsze GPKG
    w ukladzie natywnym) nie ma tokenu formatu; paczka i plik krajowy maja
    token formatu zrodla, gdy produkt ma kilka formatow albo takze wynik
    obszaru (`pl_prg_gml`, `pl_prg_shp`, `pl_egib_gpkg` obok `pl_egib`),
@@ -1145,8 +1158,10 @@ data/
    `landcover/cz_zabaged_gpkg_5514` i `_3045` (plik krajowy w dwoch
    ukladach), `boundaries/cz_ruian_<poziom>` (np. `cz_ruian_obec`),
    `boundaries/cz_ruian_shp`, `hydro/cz_hynet`, `hydro/cz_hynet_gpkg`;
-   plik krajowy CZ to `country/cz`, a `bbox/<coords>` CZ ma wspolrzedne
-   EPSG:5514 (ujemne, np. `-460000_-1120000_-450000_-1110000.gpkg`).
+   plan E4: `landcover/cz_data50` i `landcover/cz_data50_shp_<5514|3045>`
+   (tak samo `cz_data250`); plik krajowy CZ to `country/cz`, a
+   `bbox/<coords>` CZ ma wspolrzedne EPSG:5514 (ujemne, np.
+   `-460000_-1120000_-450000_-1110000.gpkg`).
    Rozne tresci nigdy nie dziela slotu. Identyczna tresc innego wydania tej
    samej jednostki, formatu i LoD (`FileSlot.related_roots`, D7) nie zajmuje
    miejsca drugi raz: nowa wersja jest hardlinkiem do istniejacych danych
@@ -2292,7 +2307,7 @@ planu `cz_laz` (`unit` = godlo). Sidecar: `dataset` `cz.cuzk.<model>_laz`,
 (EPSG:8357/5621), `capability` `sheet_files`, `extra.http`, SM5
 `extra.mapname`/`cz_share`, obszar `extra.parent_request`.
 
-### 4.8 Land cover i gleby (BDOT10k, CORINE, ZABAGED, SoilGrids)
+### 4.8 Land cover i gleby (BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250, SoilGrids)
 
 **Magazyn wersji (ADR-036 D29-D33, plan 3/3, od 0.8.0).** `LandCoverManager(
 output_dir, provider, cache=True)` pisze WYLACZNIE do magazynu
@@ -2316,6 +2331,9 @@ Sygnal per kanal (`AccessChannel.update_signal`):
 | BDOT10k archiwum rocznikow (`year`, kanal `archive_unit_files`) | `none` | rocznik (`label_source="edition"`) | `landcover/pl_bdot10k_<gml\|shp>_<rok>` |
 | ZABAGED obszaru (`bbox`/`geometry`, REST, plan D) | `none` | data pobrania | `landcover/cz_zabaged` (`bbox/<coords>.gpkg`, EPSG:5514) |
 | ZABAGED plik krajowy (`whole_country`, feed ATOM) | `metadata`: data `updated` wpisu pliku w feedzie zbioru | wydanie (`2026-10-04`) | `landcover/cz_zabaged_gpkg_<5514\|3045>` (`country/cz.zip`) |
+| BDOO paczka wojewodztwa (`year` wymagany, plan E4) | `none` | rocznik (`label_source="edition"`) | `landcover/pl_bdoo_<rok>[_<klasy>]` (`teryt/<woj>.zip`) |
+| Data50, Data250 obszaru (REST, plan E4) | `none` | data pobrania | `landcover/cz_data50`, `landcover/cz_data250` (`bbox/<coords>.gpkg`, EPSG:5514) |
+| Data50, Data250 plik krajowy (`whole_country`, feed ATOM) | `metadata`: data `updated` wpisu pliku | wydanie (Data50 `2026-04-28`, Data250 `2026-05-12`) | `landcover/cz_data50_shp_<5514\|3045>`, `cz_data250_shp_...` (`country/cz.zip`) |
 
 `metadata` (tabela decyzji 2 planu 3/3): wydanie jest pytane raz na plik
 (`memoized_edition`) PRZED pobraniem — bez wydania nie powstaje wersja
@@ -2361,6 +2379,39 @@ pod nazwami CUZK, np. `VodniPlocha_c`), rozmiar z feedu w `Notice`
 na zapytanie: blad pobrania jest wyjatkiem (jak CORINE), nie pozycja
 `failed`. `get_available_layers()` zwraca 22 nazwy warstw wyniku obszaru,
 `get_supported_formats()` - `["GPKG"]`.
+
+**BDOO (PL, plan E4, ADR-043).** `LandCoverManager(output_dir, "bdoo")`
+idzie ta sama sciezka co ZABAGED (`COLLECTION_SOURCES`, `landcover_request`
+z `teryt`, `year` i `layers`). GUGiK publikuje BDOO tylko jako paczke GML
+wojewodztwa na rocznik (`opendata/bdoo/<R>/PL.PZGiK.201.<woj>.zip`; 2015,
+2021-2026; brak pliku krajowego), wiec `year` jest wymagany (brak albo
+rocznik spoza rejestru = `ValidationError` z lista), `teryt` to kod
+wojewodztwa (kod powiatu = blad z podpowiedzia `--teryt <woj>`), a obszar
+(`bbox`/`sheet`/`geometry`) daje paczki wojewodztw jego powiatow z PRG
+(ogolna regula orkiestratora dla produktu bez paczek powiatow, `Info`
+`unit_list`; wojewodztwo bez paczki trafia do `failed`, `workers`
+rownolegle). Paczka jest zapisywana 1:1 (`teryt/<woj>.zip`, etykieta =
+rocznik). `layers` (kody klas rocznika, `PackageVariant.classes`; klasa
+spoza rocznika = `ValidationError` z lista klas tego rocznika) zapisuje
+ZIP plikow `__OT_<KOD>_<typ>` wybranych klas (`class_pattern`) w osobnym
+segmencie `pl_bdoo_<rok>_<klasy>`: czlony bajt w bajt, z nazwa, data
+i kompresja zrodla, w kolejnosci zrodla - ta sama paczka daje te same
+bajty (`unchanged`); obiekty zlozone (`__OT_Ciek` itd.), XSD i metadane
+zostaja tylko w pelnej paczce. Do 2023 paczka nie ma pliku klasy bez
+obiektow w wojewodztwie (klasy rocznika = suma po 16 paczkach): brak
+czesci wybranych klas = `Info` `classes_absent`, brak wszystkich =
+`NoCoverageError` wojewodztwa; `extra.source.classes` = klasy zapisane.
+`get_available_layers()` zwraca klasy wszystkich rocznikow,
+`get_supported_formats()` - `["ZIP"]`.
+
+**Data50 i Data250 (CZ, plan E4).** Jak ZABAGED: obszar = jeden GPKG
+wszystkich warstw obiektowych uslugi `DATA50/MapServer` (69) albo
+`DATA250/MapServer` (116; rastry reliefu 5 i 6 nie sa danymi) w EPSG:5514,
+nazwy warstw ASCII z nazw CUZK, bez przeliczania na klasy BDOT10k;
+`whole_country=True` z `horizontal_crs` (`EPSG:5514` albo `EPSG:3045`) =
+krajowy ZIP SHP z feedu ATOM 1:1 (Data50 516/757 MB, Data250 230/320 MB;
+warstwy pliku pod wlasnymi nazwami, inne niz warstwy obszaru, np.
+`shp/Akvadukt.shp`, `AirfldA.shp`), wydanie z `updated` feedu.
 
 **BDOT10k z wielu powiatow (od 0.7.1, A2).** Pakiet BDOT10k jest zawsze
 pakietem CALEGO powiatu, wiec sciezka i `request` sidecara opisuja

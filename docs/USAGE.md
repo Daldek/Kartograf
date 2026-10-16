@@ -19,7 +19,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.6 Kiedy `--scale` jest wymagane](#16-kiedy---scale-jest-wymagane)
    - [1.7 Raport dostępności (`elevation availability`)](#17-raport-dostępności-elevation-availability)
    - [1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k](#18-granice-ewidencja-modele-3d-budynków-i-archiwum-bdot10k)
-   - [1.9 Dane CZ: ZABAGED, RUIAN i HY-NET](#19-dane-cz-zabaged-ruian-i-hy-net)
+   - [1.9 Dane CZ: ZABAGED, Data50, Data250, RUIAN i HY-NET](#19-dane-cz-zabaged-data50-data250-ruian-i-hy-net)
    - [1.10 Nazwy geograficzne i mapy topograficzne](#110-nazwy-geograficzne-i-mapy-topograficzne)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
@@ -35,7 +35,7 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 |---|---|---|
 | `elevation` | `download`, `list-sources`, `availability` | NMT, NMPT i LAZ (PL, CZ); raport dostępności PL, CZ i `auto` |
 | `imagery` | `download`, `list-sources` | ortofotomapa: arkusze PL (GUGiK) i CZ (CUZK, SM5), wycinek WCS PL (`--cutout`) |
-| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), CORINE, ZABAGED (CZ) (`--source`) |
+| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), BDOO (PL), CORINE, ZABAGED, Data50 i Data250 (CZ) (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
 | `boundaries` | `download`, `list-sources` | granice jednostek: PRG (PL), RUIAN (CZ) |
 | `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
@@ -56,10 +56,11 @@ Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
 (z `--bbox`/`--geometry`), `--vertical-crs` (NMT, NMPT, LAZ),
 `--resolution` (NMT i NMPT, gdy jest wybór; piksel wycinka ortofotomapy),
 `--sheet-system` (PL `--bbox`/`--geometry`
-bez `--cutout`), `--horizontal-crs` (z `--cutout`; plik krajowy ZABAGED),
-`--coverage` (wycinek ortofotomapy), `--scale` (PL-2000),
+bez `--cutout`), `--horizontal-crs` (z `--cutout`; plik krajowy ZABAGED,
+Data50, Data250), `--coverage` (wycinek ortofotomapy), `--scale` (PL-2000),
 `--level` (obszar `boundaries`; pod `auto` per kraj), `--lod` i `--year`
-(`models3d`, gdy wydań jest kilka) oraz `--format` z `--year` (archiwum BDOT10k)
+(`models3d`, gdy wydań jest kilka; rocznik BDOO) oraz `--format` z `--year`
+(archiwum BDOT10k)
 podaje się jawnie. Brak wartości to `Error:` z listą
 dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
 podaje też `kartograf <grupa> <komenda> --help`. Domyślne zostały tylko format,
@@ -654,6 +655,19 @@ kartograf landcover download --source bdot10k --bbox 16.70,50.45,16.80,50.55 \
 #   -> landcover/pl_bdot10k_gpkg_ptwp-swrs/teryt/<T>.gpkg
 #      i landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip
 
+# BDOO (baza ogólnogeograficzna GUGiK, 1:250 000): paczka GML województwa
+# na rocznik (--year wymagany: 2015, 2021-2026); --teryt = kod województwa
+kartograf landcover download --source bdoo --teryt 12 --year 2023 -o ./data
+#   landcover/pl_bdoo_2023/teryt/12.zip: nowa wersja 2023_bd431599   (ZIP 1:1, 11,5 MB)
+# obszar = paczki województw jego powiatów (PRG); --layers = ZIP plików wybranych klas
+kartograf landcover download --source bdoo --bbox 523000,253000,528000,258000 \
+    --year 2023 --layers KUIK,PTWP -o ./data
+#   Info: bdoo: wojewodztwa obszaru wg PRG (2): 12 (malopolskie), 24 (slaskie)
+#   Info: bdoo PL 24: paczka nie ma plikow klas KUIK (brak takich obiektow); zapisano klasy PTWP
+#   landcover/pl_bdoo_2023_kuik-ptwp/teryt/12.zip: nowa wersja 2023_830c40f8
+#   landcover/pl_bdoo_2023_kuik-ptwp/teryt/24.zip: nowa wersja 2023_79659873
+#   Nowe: 2, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 0 (./data)
+
 # Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
 kartograf soil hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
 #   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
@@ -663,6 +677,7 @@ kartograf soil hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o .
 # Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
 kartograf landcover list-layers --source zabaged   # 22 warstwy ZABAGED (sekcja 1.9)
+kartograf landcover list-layers --source bdoo      # klasy BDOO każdego rocznika (--year)
 kartograf soil list-layers
 kartograf cache stats
 kartograf cache clear
@@ -671,16 +686,36 @@ kartograf cache path
 
 `--output` to katalog magazynu (wersje w `versions/`, ścieżka standardowa
 = hardlink; ARCHITECTURE 3.3 reguła 8); `soil hsg -o plik.tif` to
-`Error:` (plik poza magazynem: `hsg_from_rasters`). `--teryt` dotyczy tylko
-BDOT10k (CORINE/SoilGrids: `--sheet`, `--bbox`, `--geometry`). BDOT10k
+`Error:` (plik poza magazynem: `hsg_from_rasters`). `--teryt` dotyczy
+BDOT10k (powiat, 4 cyfry) i BDOO (województwo, 2 cyfry); CORINE i SoilGrids
+wybierają obszar przez `--sheet`, `--bbox` albo `--geometry`. BDOT10k
 z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
 z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
 w `Wpisy TERYT`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
 się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
 credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
-parametry SoilGrids i lata CORINE: PRD 3.5–3.7. ZABAGED (`--source
-zabaged`, CZ: obszar albo plik krajowy): sekcja 1.9.
+parametry SoilGrids i lata CORINE: PRD 3.5–3.7. ZABAGED, Data50 i Data250
+(`--source zabaged|data50|data250`, CZ: obszar albo plik krajowy): sekcja 1.9.
+
+**BDOO.** `--source bdoo` pobiera bazę danych obiektów ogólnogeograficznych
+GUGiK (1:250 000) tak, jak ją publikuje GUGiK: paczkę GML województwa na
+rocznik (`--year` wymagany; roczników 2014 i 2016–2020 nie ma — `Error:`
+z listą, przed siecią). Pliku krajowego nie ma. Kod powiatu (`--teryt 1261`)
+kończy się `Error:` z podpowiedzią `--teryt 12`; obszar (`--bbox`,
+`--sheet`, `--geometry`) daje paczki wszystkich województw, które przecina
+(lista w `Info:`; błąd jednego województwa nie zatrzymuje pozostałych,
+`--workers` pobiera równolegle, na końcu linia podsumowania). `--layers`
+(kody klas, np. `PTWP,SWRS`; lista: `landcover list-layers --source bdoo`)
+zapisuje ZIP plików `__OT_<KOD>_<typ>` wybranych klas w osobnym segmencie
+(`pl_bdoo_2023_ptwp-swrs`): pliki są bajt w bajt jak w paczce, a obiekty
+złożone (`__OT_Ciek` itp.), XSD i metadane zostają tylko w pełnej paczce.
+Paczki do 2023 nie mają pliku klasy, której obiektów nie ma
+w województwie: brak części wybranych klas to `Info:`, brak wszystkich —
+błąd tego województwa. Klasa spoza rocznika (np. `KUIK` od 2024) to
+`Error:` z listą klas rocznika. Wersja ma etykietę rocznika; GUGiK nie
+podaje sygnału zmian, więc `--check-updates` zgłasza „nie da się sprawdzić
+bez pobrania”, a `--force` pobiera ponownie (ta sama treść = `bez zmian`).
 
 ### 1.6 Kiedy `--scale` jest wymagane
 
@@ -1235,7 +1270,7 @@ i EGiB — data pobrania. Sidecar wersji niesie wybór (`request`), źródło
 warstwy) i obszar zadania (`extra.parent_request`) — ARCHITECTURE 3.2
 i 4.10.
 
-### 1.9 Dane CZ: ZABAGED, RUIAN i HY-NET
+### 1.9 Dane CZ: ZABAGED, Data50, Data250, RUIAN i HY-NET
 
 Dane wektorowe CUZK (od 0.8.0, ADR-042 D15–D17) mają kształt kolekcji
 z sekcji 1.8: obszar `--bbox`/`--geometry` daje jeden GeoPackage obiektów
@@ -1255,6 +1290,18 @@ kartograf landcover list-layers --source zabaged
 kartograf landcover download --source zabaged --whole-country --horizontal-crs EPSG:5514 -o <katalog-danych>
 #   Warning: zabaged CZ: plik krajowy https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip - 5805826649 B (ok. 5806 MB)
 #   -> landcover/cz_zabaged_gpkg_5514/country/cz.zip (wersja 2026-10-04_<sha8>)
+
+# Data50 i Data250 (landcover): wszystkie warstwy obiektowe modelu obszaru
+# (69 / 116 warstw), EPSG:5514; bbox w EPSG:4326 -> jego obwiednia EPSG:5514
+kartograf landcover download --source data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326 -o ./data
+#   landcover/cz_data50/bbox/-450998.7179_-1112011.026_-450531.4728_-1111532.273.gpkg: nowa wersja 2026-10-16_7000764f
+kartograf landcover list-layers --source data250
+# plik krajowy SHP (Data50: 516 MB w EPSG:5514 albo 757 MB w EPSG:3045; Data250: 230/320 MB)
+kartograf landcover download --source data250 --whole-country --horizontal-crs EPSG:5514 -o ./data
+#   Warning: data250 CZ: plik krajowy https://openzu.cuzk.gov.cz/opendata/Data250/epsg-5514/data250.zip - 230485722 B (ok. 230 MB)
+#   landcover/cz_data250_shp_5514/country/cz.zip: nowa wersja 2026-05-12_ae501843
+kartograf landcover download --source data250 --whole-country --horizontal-crs EPSG:5514 --check-updates -o ./data
+#   landcover/cz_data250_shp_5514/country/cz.zip: aktualne (2026-05-12)
 
 # RUIAN (boundaries --country cz): jednostki poziomu --level przecinające obszar
 kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
@@ -1308,6 +1355,21 @@ nazwy warstw wyniku obszaru**. Wynik obszaru jest zawsze w EPSG:5514
 `Error:`. Plik krajowy ma wydanie z feedu ATOM (etykieta np.
 `2026-10-04`): `--check-updates` porównuje je bez pobierania, `--upgrade`
 pobiera nowe wydanie.
+
+**Data50 i Data250.** `--source data50` i `--source data250` to cyfrowe
+modele geograficzne CUZK w skali 1:50 000 i 1:250 000. Obszar daje jeden
+GeoPackage ze **wszystkimi warstwami obiektowymi** usługi REST
+`DATA50`/`DATA250` (69 i 116 warstw; lista: `landcover list-layers
+--source data50`; rastry reliefu Data250 nie są danymi obszaru), nazwy
+warstw jak w ZABAGED (nazwa CUZK bez diakrytyków, np. `vodni_tok`, `les`,
+`louka_pastvina`), bez przeliczania na kody BDOT10k; pusta warstwa zostaje
+ze schematem. `--whole-country` z `--horizontal-crs EPSG:5514` albo
+`EPSG:3045` zapisuje krajowy ZIP z plikami Shapefile 1:1 (Data50: katalog
+`shp/`, Data250: `DATA250_<rok>_SHP/`; nazwy warstw pliku krajowego są
+inne niż warstw wyniku obszaru, np. `Akvadukt.shp`, `AirfldA.shp`), z
+wydaniem z feedu ATOM (`--check-updates` bez pobierania). Pozostałe zasady
+jak dla ZABAGED: wynik obszaru zawsze w EPSG:5514, `--teryt`, `--sheet`,
+`--year`, `--layers`, `--format` i `--keep-raw` to `Error:`.
 
 **RUIAN.** `boundaries download --product admin --country cz` wymaga dla
 obszaru `--level`: `kraj`, `okres`, `obec` albo `katastralni-uzemi`
@@ -1552,6 +1614,11 @@ plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1
 print([(i.track, i.unit, i.status) for i in plan.items])  # [("collection", "1261", "unverifiable")]
 # = landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP
 LandCoverManager(out, "bdot10k").download(teryt="1261", year=2024, format="SHP")
+# = landcover download --source bdoo --teryt 12 --year 2023 --layers PTWP,SWRS
+bdoo = LandCoverManager(out, "bdoo").download(
+    teryt="12", year=2023, layers=["PTWP", "SWRS"], on_notice=show
+)  # data/landcover/pl_bdoo_2023_ptwp-swrs/teryt/12.zip; Notice classes_absent,
+#    gdy paczka nie ma pliku którejś klasy
 # = names download --product world --country pl --bbox=-74.02,40.69,-73.92,40.79
 world = download_collection(
     product="world", country="pl", output_dir=out,
@@ -1611,6 +1678,10 @@ print(area.files[0].file.path)  # data/landcover/cz_zabaged/bbox/-460000_-112000
 print(zabaged.get_available_layers())  # 22 nazwy warstw obszaru
 # plik krajowy (5,8 GB): Notice whole_country_size przed transferem
 zabaged.download(whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)
+# = landcover download --source data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326
+data50 = LandCoverManager(out, "data50")
+data50.download(bbox=BBox(18.566, 49.757, 18.572, 49.761, "EPSG:4326"))  # 69 warstw, EPSG:5514
+data50.download(whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)  # SHP, 516 MB
 # = boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox ...
 download_collection(product="admin", output_dir=out, country="auto",
                     level={"pl": "gmina", "cz": "obec"},
