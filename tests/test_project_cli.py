@@ -73,7 +73,7 @@ def test_data_parser_options_cover_manifest_options(command):
         "plan",
         "workers",
         "quiet",
-        "stats",
+        "summary",
     }
     parsed = {
         action.dest
@@ -327,7 +327,7 @@ def test_add_rejects_update_modes_and_foreign_output(tmp_path, capsys, flag):
     [
         (["elevation", "download", *SHEET_FLAGS, "-w", "8"], "--workers"),
         (["elevation", "download", *SHEET_FLAGS, "--workers=2"], "--workers"),
-        (["soil", "hsg", "--sheet", G, "--depth", "0-5cm", "--stats"], "--stats"),
+        (["soil", "hsg", "--sheet", G, "--depth", "0-5cm", "--summary"], "--summary"),
     ],
 )
 def test_add_rejects_run_options(tmp_path, capsys, command, flag):

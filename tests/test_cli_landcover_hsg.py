@@ -404,9 +404,9 @@ def test_hsg_cli_check_plan_tracks(tmp_path, capsys):
     assert "hsg/global_soilgrids_0-5cm_mean" in capsys.readouterr().out
 
 
-def test_hsg_cli_stats_from_store_path(tmp_path, capsys):
+def test_hsg_cli_summary_from_store_path(tmp_path, capsys):
     with _session(FakeSoilGrids("2.0")):
-        assert _hsg(tmp_path, "--stats") == 0
+        assert _hsg(tmp_path, "--summary") == 0
     out = capsys.readouterr().out
     assert "Statystyki HSG (procent grupy: z pikseli z danymi):" in out
     assert "Grupa B: " in out or "Grupa A: " in out

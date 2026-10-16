@@ -3725,6 +3725,11 @@ aliasow), wszystko z "Co zrobic" w CHANGELOG.
   `--source soilgrids` wskazuja grupe `soil`. Komunikaty bledow nazywaja
   `--product <x>`. Klucz opcji zadania projektu `landcover download`:
   `product` (manifest jest nowy w 0.8.0 - bez migracji klucza `source`).
+- D2. `soil hsg --summary` wypisuje statystyki HSG (udzial i powierzchnia
+  grup) zamiast `--stats` (nazwa nie myli sie z `soil download --stat`);
+  `--stats` = blad parsera (kod 2) z podpowiedzia `--summary`. `project
+  add` odrzuca `--summary` jak `--workers` (opcja wypisywania, nie czesc
+  zadania).
 
 **Konsekwencje:** Zmiana lamiaca CLI w 0.8.0 (CHANGELOG [0.8.0] "Co
 zrobic"); flaga wyboru danych ma te sama nazwe w kazdej grupie, wiec

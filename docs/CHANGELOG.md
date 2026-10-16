@@ -55,7 +55,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     sygnalu" (`info`). Co zrobic: kod sprawdzajacy `Notice.code` dla awarii
     skorowidza - `CHECK_FAILED`.
   - CLI nie rozwija skrotow dlugich flag (`--out` nie znaczy `--output`,
-    `--stat` w `soil hsg` nie znaczy `--stats`); `--plan` bez
+    `--lay` nie jest skrotem `--layer`/`--layers`); `--plan` bez
     `--check-updates`/`--upgrade` to `Error:` z kodem 1 (dotad blad parsera,
     kod 2). Co zrobic: pisz pelne nazwy flag.
   - `--sheet` z godlem PL i `--sheet-system` innym niz uklad godla
@@ -77,6 +77,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     zrobic: w skryptach zamien `--source X`/`-s X` na `--product X`;
     w recznie pisanym `kartograf-project.json` klucz `source` na `product`
     (`project add` zapisuje nowy klucz).
+  - `soil hsg --summary` wypisuje statystyki HSG (udzial i powierzchnia
+    grup A-D, brak danych) zamiast `--stats` (ADR-044; obok `soil download
+    --stat` nazwa myla); `--stats` konczy sie bledem parsera (kod 2)
+    z podpowiedzia `--summary`, a `project add ... soil hsg --summary` to
+    `Error:` (opcja wypisywania, nie zadania). Co zrobic: w skryptach
+    zamien `soil hsg ... --stats` na `--summary`.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -981,7 +987,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `whole_country`, `horizontal_crs` w `landcover download`).
   `project download --workers N` (API `download_project(workers=)`) pobiera
   pliki kazdego zadania rownolegle (domyslnie jak komenda danych); w `project
-  add` `--workers` i `soil hsg --stats` to `Error:` (opcje uruchomienia, nie
+  add` `--workers` i `soil hsg --summary` to `Error:` (opcje uruchomienia, nie
   zadania). `status`/`verify`: zadanie nie pobrane to linia `NAZWA: nie
   pobrane (pobierz: kartograf project download NAZWA)` i kod 1 (bez
   `Error:`); podpowiedzi polecen `kartograf project ...` maja `--project
@@ -1132,7 +1138,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (30 s), plik 16,8 MB samego nodata i kod 0 z `Warning:` (test na zywo
   2026-10-16). `Warning: wycinek w calosci nodata` zostaje dla WCS bez
   danych na ladzie.
-- HSG `--stats`: linia `Brak danych: <procent>% calego obszaru (<ha> ha)`
+- HSG `--summary`: linia `Brak danych: <procent>% calego obszaru (<ha> ha)`
   i naglowek `procent grupy: z pikseli z danymi`; dotad bbox 2 x 2 km
   z 19 ze 104 pikseli z danymi dawal samo `Grupa B: 100.0%`.
 - Projekt: odtworzenie brakujacej przypietej wersji przy zgodnej SHA-256

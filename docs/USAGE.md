@@ -698,7 +698,7 @@ kartograf landcover download --product bdoo --bbox 523000,253000,528000,258000 \
 #   Nowe: 2, nowa etykieta: 0, bez zmian: 0, lokalne: 0, bledy: 0 (./data)
 
 # Hydrologic Soil Groups dla metody SCS-CN (wejścia clay/sand/silt w tym samym magazynie)
-kartograf soil hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o ./data
+kartograf soil hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --summary -o ./data
 #   soil/global_soilgrids_{clay,sand,silt}_0-5cm_mean/bbox/...: nowa wersja 2.0_<sha8>
 #   hsg/global_soilgrids_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_470ef3d9
 # Ponownie (także z --force, gdy treść wejść się nie zmieniła): ... uzyta ponownie 2.0
@@ -2467,7 +2467,7 @@ print(report.stale, report.files.get(godlo, ()))
   tabela TR-55: `sandy_loam` = **B** (nie A), `clay_loam`
   i `silty_clay_loam` = **C** (nie D) — to klasy przejściowe, których grupa
   zależy też od struktury gleby ([ADR-025](DECISIONS.md)).
-- `--stats` podaje powierzchnie grup w ha także dla rastrów w EPSG:4326
+- `--summary` podaje powierzchnie grup w ha także dla rastrów w EPSG:4326
   (pole komórki liczone geodezyjnie na elipsoidzie, nie w stopniach
   kwadratowych). Procent grupy to udział **w pikselach z danymi**; osobna
   linia `Brak danych: <procent>% calego obszaru (<ha> ha)` podaje piksele
@@ -2557,7 +2557,7 @@ proxy).
   ISRIC: WCS z `OUTPUTCRS=EPSG:4326` oddaje GeoTIFF bez tagu NoData
   (pomiar 2026-10-16: Piastów/Ursus, 85 ze 104 pikseli = 0). Kartograf
   zapisuje plik bez zmian (sidecar `nodata` jak w pliku), a HSG traktuje
-  trójkę zer clay/sand/silt jako brak danych (`Brak danych` w `--stats`);
+  trójkę zer clay/sand/silt jako brak danych (`Brak danych` w `--summary`);
   w analizach własnych traktuj 0 g/kg w obszarze maskowanym jako brak
   wartości.
 - WCS ortofotomapy jest wolny (pomiar 2026-10-15: ok. 1 min na kawałek
@@ -2679,7 +2679,7 @@ arkusz ortofoto CZ przypina cztery pliki (JPEG i trzy JGW);
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
 a tryb wybiera sie przy `project download`. Opcje uruchomienia nie sa
-czescia zadania: `add` z `--workers` albo `soil hsg --stats` konczy sie
+czescia zadania: `add` z `--workers` albo `soil hsg --summary` konczy sie
 `Error:` (rownolegle pobieranie: `project download --workers N`; domyslnie
 jak w komendzie danych). `remove NAZWA` usuwa
 zadanie i przypiecia z manifestu, **nie usuwa plikow** z magazynu.

@@ -19,8 +19,8 @@ from kartograf.cli.groups import register_groups
 
 class _Parser(argparse.ArgumentParser):
     """``ArgumentParser`` without prefix abbreviations of long flags: a command
-    line keeps its meaning when a group gains a flag (``--stat`` is never read
-    as ``--stats``, ``--lay`` is no ambiguous prefix). Every subparser of the
+    line keeps its meaning when a group gains a flag (``--out`` is never read
+    as ``--output``, ``--lay`` is no ambiguous prefix). Every subparser of the
     CLI is of this class (``add_subparsers`` uses the class of its parser)."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -116,6 +116,7 @@ _UNKNOWN_HINTS = {
     "(np. zabaged, data50, data250 = CZ)",
     ("kartograf soil download", "--product"): "warstwe SoilGrids wybieraja "
     "--property, --depth i --stat; lista: kartograf soil list-layers",
+    ("kartograf soil hsg", "--stats"): "od 0.8.0 statystyki HSG wypisuje --summary",
     ("kartograf hydro download", "--sheet"): "obszar CZ: --bbox (np. z --bbox-crs "
     "EPSG:5514) albo --geometry",
 }
