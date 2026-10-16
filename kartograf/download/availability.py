@@ -33,10 +33,10 @@ ETRS89/EVRF2007). Its sheets are those of the ``KladyMapovychListu`` index in
 the CZ part of the area (``SheetIndex.file_sheets`` - the rule of the LAZ
 download, in the CRS of the sheet system), each checked by one ``HEAD`` of its
 file: 200 = a file (``Last-Modified`` = publication date, ``Content-Length``
-= size), 404 = no file (``sheets_missing``; ``uncovered_m2`` = the area in
-their frames), anything else = ``DownloadError``. ``country="auto"`` reports
-the PL and CZ parts of the area (rectangular country envelopes,
-``split_bbox_by_country``) in one report.
+= size), 404 = no file (``sheets_missing``; ``uncovered_m2`` = the part of the
+reported area in their frames), anything else = ``DownloadError``.
+``country="auto"`` reports the PL and CZ parts of the area (rectangular country
+envelopes, ``split_bbox_by_country``) in one report.
 
 The index answers, the feature types, the land mask, the CZ sheets and the
 ``HEAD`` answers go through the metadata cache (``index_area_cache``, TTL as
@@ -49,7 +49,7 @@ import math
 import shlex
 from collections.abc import Callable, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from pathlib import Path
@@ -65,6 +65,7 @@ from kartograf.core.bbox import BBox, bbox_coords
 from kartograf.core.coverage import (
     AREA_EPS,
     Polygon,
+    clip_convex,
     expand_convex,
     normalize_convex,
     polygon_area,
@@ -130,6 +131,7 @@ from kartograf.sources.variants import (
     source_format,
     variants,
 )
+from kartograf.transform.crs import CONTENT_POLICY, build_pinned_transform
 from kartograf.transport.http import MAX_RETRIES, SessionPerThread, head_signal
 
 AVAILABILITY_SCHEMA = "kartograf-availability/1"
@@ -1223,15 +1225,15 @@ def _check_cz(
         area = part.bbox
     bounds = _cz_area(part, area, _CZ_CRS)
     # a sheet code: its frame; an area: the rectangle of the CZ part
-    area_m2 = _rect_area(area if part.sheet is not None else bounds)
-    local: dict[str, BBox] = {}
+    reported = area if part.sheet is not None else bounds
     sheets: dict[str, tuple[_CzSheet, ...]] = {}
     for system in dict.fromkeys(file.system for file in files):
-        local[system] = _cz_area(part, area, CZ_SYSTEM_CRS[system])
         sheets[system] = (
             own_sheets
             if system == own
-            else _cz_index_sheets(index, system, local[system], metadata)
+            else _cz_index_sheets(
+                index, system, _cz_area(part, area, CZ_SYSTEM_CRS[system]), metadata
+            )
         )
     heads = _heads(
         [file.url(s.sheet) for file in files for s in sheets[file.system]],
@@ -1239,12 +1241,14 @@ def _check_cz(
         metadata,
     )
     combinations = [
-        _cz_combination(request, file, sheets[file.system], heads, local[file.system])
+        _cz_combination(request, file, sheets[file.system], heads, reported)
         for file in files
         if sheets[file.system]
     ]
     service_only = _cz_service_only(request.product)
-    if service_only is not None:
+    # an ``auto`` part without any CUZK sheet (an area in PL inside the CZ
+    # envelope) has no CZ data at all: nothing to say about the models
+    if service_only is not None and any(sheets.values()):
         sink.emit("info", CZ_SERVICE_ONLY, service_only)
     area_cz = AvailabilityArea(
         country="CZ",
@@ -1255,8 +1259,8 @@ def _check_cz(
             float(bounds.max_x),
             float(bounds.max_y),
         ),
-        area_m2=area_m2,
-        land_m2=area_m2,
+        area_m2=_rect_area(reported),
+        land_m2=_rect_area(reported),
     )
     return area_cz, combinations
 
@@ -1448,12 +1452,35 @@ def _http_date(value: str | None) -> str | None:
         return None
 
 
-def _overlap(frame: tuple[float, float, float, float], area: BBox) -> float:
-    """Area of the intersection of a sheet frame with the area (one CRS)."""
-    x0, y0, x1, y1 = frame
-    width = min(x1, area.max_x) - max(x0, area.min_x)
-    height = min(y1, area.max_y) - max(y0, area.min_y)
-    return width * height if width > 0 and height > 0 else 0.0
+def _uncovered_m2(missing: list[_CzSheet], system_crs: str, area: BBox) -> float:
+    """Area of ``area`` (the reported rectangle) in the frames of the sheets
+    without a file, measured in the CRS of ``area``: a frame of another CRS
+    (a TM33 tile against the S-JTSK rectangle of an area) is moved there corner
+    by corner through the pinned operation - its envelope would be larger than
+    the frame, and the uncovered area larger than the area itself."""
+    if not missing:
+        return 0.0
+    move = None
+    if wkid(system_crs) != wkid(area.crs):
+        x0, y0, x1, y1 = missing[0].frame
+        probe = replace(CONTENT_POLICY, probe_point=((x0 + x1) / 2, (y0 + y1) / 2))
+        move = build_pinned_transform(system_crs, area.crs, probe)
+    # local coordinates: 10^5-10^6 m would eat the precision of the area
+    ox, oy = area.min_x, area.min_y
+    clip = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+    total = 0.0
+    for sheet in missing:
+        x0, y0, x1, y1 = sheet.frame
+        xs, ys = np.array([x0, x1, x1, x0]), np.array([y0, y0, y1, y1])
+        if move is not None:
+            xs, ys = move.transform(xs, ys)
+        frame: Polygon = tuple(
+            (float(x) - ox, float(y) - oy) for x, y in zip(xs, ys, strict=True)
+        )
+        if polygon_area(frame) < 0:
+            frame = frame[::-1]
+        total += polygon_area(clip_convex(frame, clip))
+    return float(round(total))
 
 
 def _cz_combination(
@@ -1465,8 +1492,8 @@ def _cz_combination(
 ) -> AvailabilityCombination:
     """A CZ combination: index sheets with (``sheets_full``) and without
     (``sheets_missing``) a file, publication dates and size of the files,
-    ``uncovered_m2`` = the area in the frames of the sheets without a file
-    (``area`` in the CRS of the sheet system)."""
+    ``uncovered_m2`` = the part of ``area`` (the reported rectangle) in the
+    frames of the sheets without a file."""
     found = [(sheet, heads[file.url(sheet.sheet)]) for sheet in sheets]
     full = [sheet.sheet for sheet, head in found if head.found]
     missing = [sheet for sheet, head in found if not head.found]
@@ -1492,8 +1519,8 @@ def _cz_combination(
         sheets_partial=(),
         sheets_missing=tuple(sheet.sheet for sheet in missing),
         uncovered=bool(missing),
-        uncovered_m2=float(round(sum(_overlap(s.frame, area) for s in missing))),
-        size_bytes=sum(known) if len(known) == len(sizes) else None,
+        uncovered_m2=_uncovered_m2(missing, CZ_SYSTEM_CRS[file.system], area),
+        size_bytes=sum(known) if present and len(known) == len(sizes) else None,
         download_hint=_cz_hint(request, file, full),
     )
 
