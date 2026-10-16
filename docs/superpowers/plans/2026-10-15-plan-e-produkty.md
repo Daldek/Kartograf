@@ -655,10 +655,33 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 
 **Zaleznosci:** E0, A, B, D.
 
-**Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-2 wykonane (fixtury
+**Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-3 wykonane (fixtury
 w `tests/fixtures/pl/{nmt_100m,intensity,orto_true,orto_oblique}/`
-i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe). Kroki 3-9
-otwarte. Fakty z nagrania i kodu dla kolejnego wykonawcy (korekta planu):
+i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe; NMT 100 m,
+commit `85b53af`). Kroki 4-9 otwarte. Fakty z kodu dla kroku 4 (rozpoznane
+2026-10-16, bez implementacji):
+- `DownloadManager._download_planned` filtruje pozycje planu tylko po
+  `unit`: przy czterech managerach orto ukosnej musi zawezic je do nazwy
+  pliku managera (`updates._where`/`_items`), inaczej pozycje innych
+  kierunkow staja sie `stale`;
+- `campaigns.verify_record_url` bierze ostatni czlon `_` nazwy z URL:
+  `..._7.125.11.08_N.tif` nie przejdzie B4 bez zdjecia przyrostka kierunku;
+- `area.pl_only_flags` zaweza `--country auto` do PL tylko dla
+  `nmt/nmpt/orto` bez zrodla CZ - nowe produkty obrazow wymagaja
+  uogolnienia (kazdy produkt bez deskryptora CZ);
+- `options.pl_target_scale` daje dla PL-1992 `1:10000`; true orto potrzebuje
+  `series_scale(8)` z deskryptora (tez tekst `--scale` w `pl_option_error`);
+- `HEAD` przed `GET` tylko dla providerow obrazow (listy arkuszy NMT
+  placilyby ok. 0,5 s na arkusz); manager emituje przez
+  `NoticeSink(self._on_notice)`;
+- warstwy skorowidzy intensywnosci, true orto i orto ukosnej sa stale -
+  lista w deskryptorze omija `GetCapabilities` (bez fixtur tych uslug);
+- funkcje wycinka (`gugik_orto.wcs_cutout_channels`, `orto_cutout._prepare`,
+  `_write_sidecar`) sa zwiazane z `ORTO_KEY`: uogolnic po kluczu
+  deskryptora; jeden kanal WCS (true orto) = bez tokenu `coverage`
+  w segmencie (`orto/pl_1992_true_<res>`) i `--coverage` = `Error:`.
+
+Fakty z nagrania i kodu z krokow 1-2 (korekta planu):
 - Godla 8-czlonowe zamykaja ograniczenie ADR-041: `DownloadManager`
   rozwija tylko godla grubsze od `BaseProvider.sheet_scale` (NMT/NMPT/orto
   `1:10000`; true orto ustawi `1:5000`), godlo 8-czlonowe jest arkuszem
