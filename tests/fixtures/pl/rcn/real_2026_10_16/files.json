@@ -1,0 +1,24 @@
+{
+  "rcn_1201": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/latest_exports/rcn_transakcje_ceny/GPKG/1201_transakcje_ceny.gpkg.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "10406723"
+    },
+    "members": ["1201_transakcje_ceny.gpkg"]
+  },
+  "rcn_1261": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/latest_exports/rcn_transakcje_ceny/GPKG/1261_transakcje_ceny.gpkg.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "301623607"
+    }
+  },
+  "rcn_12": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/latest_exports/rcn_transakcje_ceny/GPKG/12_transakcje_ceny.gpkg.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "604038367"
+    }
+  }
+}

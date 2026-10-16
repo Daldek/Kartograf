@@ -1,7 +1,7 @@
 """
-``boundaries download``, ``cadastre download``, ``models3d download`` and
-``hydro download``: flags -> ``download_collection``/``check_collection``
-(ADR-037, ADR-042 D9).
+``download`` of the collection groups (``boundaries``, ``cadastre``,
+``models3d``, ``hydro``, ``names``, ``maps``): flags ->
+``download_collection``/``check_collection`` (ADR-037, ADR-042 D9).
 
 The CLI only translates: ``collection_task`` turns the flags of a group
 into library arguments (the same translation for the handler and for
@@ -41,6 +41,7 @@ def collection_task(args: argparse.Namespace) -> dict:
         "product": args.product,
         "country": args.country,
         "teryt": getattr(args, "teryt", None),
+        "ku": getattr(args, "ku", None),
         "sheet": getattr(args, "sheet", None),
         "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
         "geometry": Path(args.geometry) if args.geometry is not None else None,

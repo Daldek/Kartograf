@@ -14,21 +14,28 @@ template, ``fetch_package`` downloads the file atomically
 ``Content-Length``. A ZIP (``file_kind="zip"``): the central directory is
 read, the variant's member suffixes are required and - with ``unpack`` -
 exactly one member is streamed to the result (``zipfile`` checks its CRC).
-Another kind is stored as published and checked by its content: TIFF magic
-(``tiff``), ``%PDF-`` (``pdf``) or a text head (``txt``: no NUL bytes, the
-first non-empty line is not markup). HTTP 404 is
-``NoCoverageError`` (the source publishes no file of the unit), every other
-failure ``DownloadError``; the file never sits in memory and a failure
+A GeoPackage member with ``unpack_layers`` is unpacked in a local working
+directory first and its ``gpkg_contents`` must name every required layer:
+SQLite opens only that local copy (a store on a network volume has no
+working byte-range locks, ADR-042 D5), the checked file then moves to the
+staging path. Another kind is stored as published and checked by its
+content: TIFF magic (``tiff``), ``%PDF-`` (``pdf``) or a text head
+(``txt``: no NUL bytes, the first non-empty line is not markup). HTTP 404
+is ``NoCoverageError`` (the source publishes no file of the unit), every
+other failure ``DownloadError``; the file never sits in memory and a failure
 leaves no result file.
 """
 
 import os
 import re
 import shutil
+import sqlite3
+import tempfile
 import threading
 import zipfile
 import zlib
 from collections.abc import Mapping
+from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -335,7 +342,10 @@ def _check_archive(
                     f"{url}: oczekiwano dokladnie jednego pliku {params.unpack} "
                     f"w paczce, jest {len(chosen)}"
                 )
-            unpack_member(archive, chosen[0], staged)
+            if params.unpack_layers:
+                _unpack_checked_layers(url, archive, chosen[0], staged, params)
+            else:
+                unpack_member(archive, chosen[0], staged)
             return chosen[0].filename
     except (zipfile.BadZipFile, zlib.error, EOFError, NotImplementedError) as e:
         # BadZipFile: directory or CRC; zlib.error/EOFError: corrupt or cut
@@ -356,3 +366,38 @@ def unpack_member(
         os.replace(tmp, target)
     finally:
         tmp.unlink(missing_ok=True)
+
+
+def _unpack_checked_layers(
+    url: str,
+    archive: zipfile.ZipFile,
+    info: zipfile.ZipInfo,
+    staged: Path,
+    params: UnitPackageParams,
+) -> None:
+    """The GeoPackage member unpacked and checked in a local working directory
+    (module docstring), then moved to ``staged``."""
+    work = Path(tempfile.mkdtemp(prefix="kartograf-unpack-"))
+    try:
+        local = work / staged.name
+        unpack_member(archive, info, local)
+        found = _gpkg_layers(url, local)
+        missing = [layer for layer in params.unpack_layers if layer not in found]
+        if missing:
+            raise DownloadError(
+                f"{url}: GeoPackage bez warstw {', '.join(missing)} (sa: "
+                f"{', '.join(sorted(found)) or 'brak'}) - to nie sa oczekiwane dane"
+            )
+        shutil.move(str(local), staged)
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
+
+
+def _gpkg_layers(url: str, path: Path) -> set[str]:
+    """Table names of ``gpkg_contents`` (read-only connection)."""
+    try:
+        with closing(sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True)) as db:
+            rows = db.execute("SELECT table_name FROM gpkg_contents").fetchall()
+    except sqlite3.DatabaseError as e:
+        raise DownloadError(f"{url}: plik w paczce nie jest GeoPackage: {e}") from e
+    return {str(name) for (name,) in rows}
