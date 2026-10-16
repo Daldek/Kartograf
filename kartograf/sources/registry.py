@@ -1145,6 +1145,10 @@ def _prng_source(*, world: bool) -> SourceDescriptor:
                     ),
                     selection="all",
                     timeout=180,
+                    response_note=(
+                        "zapytanie OGC API PRNG - usluga odpowiada ok. 80-95 s na "
+                        "strone obiektow (pomiar 2026-10-16), czekaj"
+                    ),
                 ),
             ),
             AccessChannel(

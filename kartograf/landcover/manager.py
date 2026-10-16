@@ -64,6 +64,7 @@ from kartograf.download.fetch import (
     local_version,
     memoized_edition,
     new_staging,
+    refreshes_cache,
     store_file,
     use_local,
     validate_update,
@@ -707,7 +708,7 @@ class LandCoverManager:
             teryt, sheet, bbox, geometry, layer, options, sink
         )
         failed: tuple[LandCoverFailure, ...] = ()
-        with self._session(force=update == "force", sink=sink):
+        with self._session(force=refreshes_cache(update), sink=sink):
             if self._archive(options):
                 files, failed, stale = self._download_archive(
                     teryt,

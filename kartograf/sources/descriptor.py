@@ -275,6 +275,9 @@ class FeatureBBoxParams:
     out on purpose and where they are (PRG census districts: the service
     answers an area in minutes, the national file has them) - the text of
     the ``Info`` (``AREA_OMITTED``) of every area request of the channel.
+    ``response_note``: the measured answer time of a slow service, the text
+    of the ``Info`` (``SLOW_SOURCE``) right before the request of an area
+    (``None``: a usual service).
     """
 
     protocol: Literal["wfs", "arcgis", "ogcapi"]
@@ -289,6 +292,7 @@ class FeatureBBoxParams:
     selection_key: str = "level"
     timeout: int | None = None
     area_omitted: str | None = None
+    response_note: str | None = None
 
 
 @dataclass(frozen=True)

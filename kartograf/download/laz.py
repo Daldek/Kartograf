@@ -48,6 +48,7 @@ from kartograf.download.fetch import (
     VersionedFile,
     fetch_version,
     inspect_version,
+    refreshes_cache,
     validate_update,
 )
 from kartograf.download.options import validate_request_bbox
@@ -617,7 +618,7 @@ def download_laz_area(
         provider=provider,
         tolerance_m=tolerance_m,
         cache=cache,
-        force=update == "force",
+        force=refreshes_cache(update),
         sink=sink,
     ) as (selected_provider, selection, area):
         result = _run_laz_download(

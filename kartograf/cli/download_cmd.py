@@ -15,7 +15,7 @@ import argparse
 import sys
 import threading
 from collections import Counter
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -262,6 +262,13 @@ _PLAN_TEXT = {
 }
 
 
+def store_path_label(item: PlanItem) -> str:
+    """Subject of a plan line: the position's path below ``--output``, as in
+    the status lines of the download (one format in both modes; a derived
+    file and its raw ZIP of the same TERYT get different lines)."""
+    return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
+
+
 def _plan_line(item: PlanItem) -> str:
     if item.status == "newer":
         signal = item.available_signal or {}
@@ -276,51 +283,14 @@ def _plan_line(item: PlanItem) -> str:
         label = item.local_label or item.available_label
         if label:
             text += f" ({label})"
-    return f"{item.unit}: {text}"
+    return f"{store_path_label(item)}: {text}"
 
 
-def store_path_label(item: PlanItem) -> str:
-    """Plan line unit of a land cover/HSG position: its path below ``--output``
-    (as in the status lines), so a derived file and its raw ZIP of the same
-    TERYT (``keep_raw``) get different lines."""
-    return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
-
-
-def _multi_file_units(pairs: Iterable[tuple[str, str]]) -> set[str]:
-    """Units with several files among ``(unit, file name)`` pairs - the view
-    directions of an oblique orthophotomap sheet, the JPEG and world files of
-    a CZ orthophoto sheet: their lines name the file instead of the unit."""
-    names: dict[str, set[str]] = {}
-    for unit, name in pairs:
-        names.setdefault(unit, set()).add(name)
-    return {unit for unit, found in names.items() if len(found) > 1}
-
-
-def _file_name_label(plan: UpdatePlan) -> Callable[[PlanItem], str] | None:
-    """Plan line unit of a data request: the file name of a unit with
-    several files (``_multi_file_units``); ``None`` = every line names its unit."""
-    multi = _multi_file_units((item.unit, item.name) for item in plan.items)
-    if not multi:
-        return None
-
-    def label(item: PlanItem) -> str:
-        return item.name if item.unit in multi else item.unit
-
-    return label
-
-
-def _report_plan(
-    args: argparse.Namespace,
-    plan: UpdatePlan,
-    label: Callable[[PlanItem], str] | None = None,
-) -> int:
+def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
     """``--check-updates``: print the positions (stdout, also with ``-q``) and
     keep the plan for ``--plan``. A position that could not be checked = 1."""
     for item in plan.items:
-        line = _plan_line(item)
-        if label is not None:
-            line = f"{label(item)}{line[len(item.unit) :]}"
-        print(line)
+        print(_plan_line(item))
     _plan_context(args).plans.append(plan)
     return 1 if any(i.status == "check_failed" for i in plan.items) else 0
 
@@ -329,7 +299,7 @@ def _report_stale(stale: Sequence[PlanItem]) -> int:
     """``--upgrade --plan``: positions whose source changed since the plan."""
     for item in stale:
         print(
-            f"Error: {item.unit}: zrodlo zmienilo sie od planu "
+            f"Error: {store_path_label(item)}: zrodlo zmienilo sie od planu "
             f"({item.available_label or item.available_signal}) - sprawdz "
             "ponownie (--check-updates)",
             file=sys.stderr,
@@ -366,10 +336,13 @@ def _status_lines(
 
 
 def _status_line(unit: str, file: VersionedFile, update: UpdateMode | None) -> str:
-    """Status line of one file; a local version without a cheap signal gets
-    ``(bez sprawdzania; --check-updates)`` by default."""
+    """Status line of one file (``unit``: its path below ``--output``); a
+    local version the default mode did not compare with the source (no cheap
+    signal, or not asked: ADR-036 erratum 3) gets ``(bez sprawdzania;
+    --check-updates)``."""
     (line,) = _status_lines(unit, (file,), file.newer)
-    if file.status == "local" and file.unverified == "none" and update is None:
+    unchecked = file.unverified in ("none", "unchecked")
+    if file.status == "local" and unchecked and update is None:
         line += " (bez sprawdzania; --check-updates)"
     return line
 
@@ -486,7 +459,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
     try:
         if getattr(args, "check_updates", False):
             plan = check_data(**arguments, on_notice=on_notice)
-            return _report_plan(args, plan, _file_name_label(plan))
+            return _report_plan(args, plan)
         workers = getattr(args, "workers", 4) or 1
         on_progress = create_progress_callback(quiet, workers)
         report = download_data(
@@ -504,22 +477,18 @@ def _cmd_download(args: argparse.Namespace) -> int:
 
 
 def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> None:
-    """Status lines, summary, failures and stale positions of a report."""
+    """Status lines (the path of each file below ``--output``), summary,
+    failures and stale positions of a report."""
     update = _update_mode(args)
     _end_progress(on_progress)
     if not args.quiet:
         if getattr(on_progress, "used", False):
             print()  # campaign lines: a blank line before the status lines
-        multi = _multi_file_units(
-            (unit_file.unit, unit_file.file.path.name) for unit_file in report.files
-        )
+        output = Path(args.output)
         for unit_file in report.files:
-            unit = unit_file.unit
             print(
                 _status_line(
-                    unit_file.file.path.name if unit in multi else unit,
-                    unit_file.file,
-                    update,
+                    _unit_of(unit_file.file.path, output), unit_file.file, update
                 )
             )
         several = (

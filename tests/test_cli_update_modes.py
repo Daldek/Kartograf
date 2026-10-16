@@ -15,6 +15,8 @@ from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
 
 G = "N-34-139-C-a-3-1"
+# Subject of the status and plan lines: the path below --output (one format).
+G_PATH = f"nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/{G}.asc"
 
 
 def _run(fake, out, *argv):
@@ -68,13 +70,13 @@ def test_default_reports_newer_upgrade_downloads_it(tmp_path, capsys):
     assert _run(fake, tmp_path, "--sheet", G) == 0
     captured = capsys.readouterr()
     assert (
-        f"{G}: lokalna wersja 2025-04-27_83233; dostepna nowsza 2025-10-21_84183 "
-        "(--upgrade)"
+        f"{G_PATH}: lokalna wersja 2025-04-27_83233; dostepna nowsza "
+        "2025-10-21_84183 (--upgrade)"
     ) in captured.out
     assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
     assert fake.downloads == [REC["83233"].url]
     assert _run(fake, tmp_path, "--sheet", G, "--upgrade") == 0
-    assert f"{G}: nowa wersja 2025-10-21_84183_" in capsys.readouterr().out
+    assert f"{G_PATH}: nowa wersja 2025-10-21_84183_" in capsys.readouterr().out
     assert fake.downloads == [REC["83233"].url, REC["84183"].url]
 
 
@@ -85,7 +87,7 @@ def test_check_updates_prints_report_and_downloads_nothing(tmp_path, capsys):
     fake.records = {"newest": [REC["84183"]]}
     assert _run(fake, tmp_path, "--sheet", G, "--check-updates", "-q") == 0
     out = capsys.readouterr().out
-    assert out == (f"{G}: nowsza: 2025-10-21_84183 (lokalna 2025-04-27_83233)\n")
+    assert out == (f"{G_PATH}: nowsza: 2025-10-21_84183 (lokalna 2025-04-27_83233)\n")
     assert fake.downloads == [REC["83233"].url]
 
 
@@ -95,7 +97,7 @@ def test_check_updates_failure_is_partial_success_code(tmp_path, capsys):
     fake = FakeCampaignProvider(C14)
     fake.resolve_error = _transport_error(G, 503)
     assert _run(fake, tmp_path, "--sheet", G, "--check-updates") == 1
-    assert f"{G}: nie udalo sie sprawdzic: " in capsys.readouterr().out
+    assert f"{G_PATH}: nie udalo sie sprawdzic: " in capsys.readouterr().out
 
 
 def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys):
@@ -111,7 +113,7 @@ def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys
     capsys.readouterr()
 
     assert _run(fake, out, "--sheet", G, "--upgrade", "--plan", str(plan)) == 0
-    assert f"{G}: nowa wersja 2025-10-21_84183_" in capsys.readouterr().out
+    assert f"{G_PATH}: nowa wersja 2025-10-21_84183_" in capsys.readouterr().out
     assert fake.downloads == [REC["84183"].url]
 
 
@@ -161,6 +163,8 @@ def test_legacy_kampanie_info_once(tmp_path, capsys):
 
 CZ_BBOX = ("--bbox=-447000,-1114000,-446000,-1113000", "--bbox-crs", "EPSG:5514")
 CZ_2M = ("--resolution", "2m", "--vertical-crs", "Bpv")
+CZ_2M_PATH = "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif"
+SM5_PATH = "nmt/cz_dmr4g_bpv/CTES/96/CTES96.tif"
 PL_1M = ("--resolution", "1m", "--vertical-crs", "EVRF2007")
 PL_BBOX = ("--bbox", "500000,300000,501000,301000", "--country", "pl")
 LAZ_SHEET = "N-34-130-D-d-2-4"
@@ -289,7 +293,7 @@ def test_status_line_local_none_hint(tmp_path, capsys):
         capsys.readouterr()
         assert _download(tmp_path, "--sheet", "302_5550", *CZ_2M) == 0
     out = capsys.readouterr().out
-    assert out.startswith("302_5550: lokalna wersja ")
+    assert out.startswith(f"{CZ_2M_PATH}: lokalna wersja ")
     assert out.rstrip().endswith("(bez sprawdzania; --check-updates)")
     cz.download.assert_called_once()
 
@@ -300,14 +304,17 @@ def test_upgrade_none_signal_info_force(tmp_path, capsys):
         _download(tmp_path, "--sheet", "302_5550", *CZ_2M, "-q")
         assert _download(tmp_path, "--sheet", "302_5550", *CZ_2M, "--upgrade") == 0
     captured = capsys.readouterr()
-    assert "302_5550: lokalna wersja " in captured.out
+    assert f"{CZ_2M_PATH}: lokalna wersja " in captured.out
     assert "(bez sprawdzania" not in captured.out
     assert "Info: 302_5550: lokalna wersja " in captured.err
     assert "pobierz ponownie: --force" in captured.err
     cz.download.assert_called_once()
 
 
-def test_sm5_check_failed_warning_exit_code(tmp_path, capsys):
+def test_sm5_check_failed_exit_code_default_asks_nothing(tmp_path, capsys):
+    """A failed check is exit 1; the default download then uses the local
+    file without a HEAD (ADR-036 erratum 3) - no warning, the line says it
+    was not checked."""
     from kartograf.exceptions import DownloadError
 
     cz = _cz_provider_mock("5m")
@@ -318,11 +325,16 @@ def test_sm5_check_failed_warning_exit_code(tmp_path, capsys):
         cz.file_signal.side_effect = DownloadError("HEAD 503")
         capsys.readouterr()
         assert _download(tmp_path, *sm5, "--check-updates") == 1
-        assert "CTES96: nie udalo sie sprawdzic: HEAD 503" in capsys.readouterr().out
+        assert f"{SM5_PATH}: nie udalo sie sprawdzic: HEAD 503" in (
+            capsys.readouterr().out
+        )
+        heads = cz.file_signal.call_count
         assert _download(tmp_path, *sm5) == 0
     captured = capsys.readouterr()
-    assert "Warning: CTES96: nie udalo sie sprawdzic zrodla (HEAD 503)" in captured.err
-    assert captured.out.startswith("CTES96: lokalna wersja ")
+    assert "Warning:" not in captured.err
+    assert captured.out.startswith(f"{SM5_PATH}: lokalna wersja ")
+    assert "(bez sprawdzania; --check-updates)" in captured.out
+    assert cz.file_signal.call_count == heads
     cz.download.assert_called_once()
 
 

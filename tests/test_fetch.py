@@ -96,22 +96,23 @@ def test_first_download_is_version_with_link_and_extra_http(tmp_path):
     assert not any((slot.versions_base / v.INCOMING_DIR).iterdir())
 
 
-# Spec 4.2 table: (local signal, source HEAD, mode) -> outcome.
+# Spec 4.2 table: (local signal, source HEAD, mode) -> outcome. The default
+# mode asks no source for a local version (ADR-036 erratum 3): "unchecked".
 MATRIX = [
     # http, equal signal
-    ("http", E1, None, "local", None, None, 0),
+    ("http", E1, None, "local", None, "unchecked", 0),
     ("http", E1, "upgrade", "local", None, None, 0),
     ("http", E1, "force", "unchanged", None, None, 1),
     # http, different signal
-    ("http", E2, None, "local", '"e2"', None, 0),
+    ("http", E2, None, "local", None, "unchecked", 0),
     ("http", E2, "upgrade", "relabeled", None, None, 1),
     ("http", E2, "force", "relabeled", None, None, 1),
     # http, not comparable (source without ETag/Last-Modified)
-    ("http", NO_TAG, None, "local", None, "none", 0),
+    ("http", NO_TAG, None, "local", None, "unchecked", 0),
     ("http", NO_TAG, "upgrade", "local", None, "none", 0),
     ("http", NO_TAG, "force", "unchanged", None, None, 1),
-    # http, probe failure (default; upgrade raises — separate test)
-    ("http", DownloadError("HEAD 503"), None, "local", None, "check_failed", 0),
+    # http, probe failure (default: not asked; upgrade raises — separate test)
+    ("http", DownloadError("HEAD 503"), None, "local", None, "unchecked", 0),
     ("http", DownloadError("HEAD 503"), "force", "unchanged", None, None, 1),
     # none: no cheap signal
     ("none", None, None, "local", None, "none", 0),
@@ -139,7 +140,7 @@ def test_fetch_version_matrix(
     assert result.newer == newer
     assert (result.unverified or "").split(":")[0] == (unverified or "")
     assert src.downloads == downloads
-    assert src.probes == (1 if signal == "http" and update != "force" else 0)
+    assert src.probes == (1 if signal == "http" and update == "upgrade" else 0)
     assert os.path.samefile(slot.std, result.version_path)
     if status == "local":
         assert result.version_path == first.version_path
@@ -340,14 +341,14 @@ META_MATRIX = [
     (None, "2.0", None, "new", "2.0", None, None, 1),
     (None, "2.0", "upgrade", "new", "2.0", None, None, 1),
     (None, "2.0", "force", "new", "2.0", None, None, 1),
-    ("2.0", "2.0", None, "local", "2.0", None, None, 0),
+    ("2.0", "2.0", None, "local", "2.0", None, "unchecked", 0),
     ("2.0", "2.0", "upgrade", "local", "2.0", None, None, 0),
     ("2.0", "2.0", "force", "unchanged", "2.0", None, None, 1),
-    ("2.0", "2.1", None, "local", "2.0", "2.1", None, 0),
+    ("2.0", "2.1", None, "local", "2.0", None, "unchecked", 0),
     ("2.0", "2.1", "upgrade", "relabeled", "2.1", None, None, 1),
     ("2.0", "2.1", "force", "relabeled", "2.1", None, None, 1),
-    ("2.0", FAIL, None, "local", "2.0", None, "check_failed", 0),
-    ("downloaded", "2.0", None, "local", "2026-10-01", None, "none", 0),
+    ("2.0", FAIL, None, "local", "2.0", None, "unchecked", 0),
+    ("downloaded", "2.0", None, "local", "2026-10-01", None, "unchecked", 0),
     ("downloaded", "2.0", "upgrade", "local", "2026-10-01", None, "none", 0),
     ("downloaded", "2.0", "force", "relabeled", "2.0", None, None, 1),
 ]
@@ -371,7 +372,10 @@ def test_fetch_version_metadata_matrix(
     assert result.newer == newer
     assert (result.unverified or "").split(":")[0] == (unverified or "")
     assert src.downloads == dl
-    assert editions.calls <= 1
+    if update is None and local is not None:
+        assert editions.calls == 0  # the default mode asks no source
+    else:
+        assert editions.calls <= 1
     assert os.path.samefile(slot.std, result.version_path)
 
 

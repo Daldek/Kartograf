@@ -130,26 +130,6 @@ def test_sm5_version_with_extra_http(tmp_path):
     assert _metadata(file.path)["extra"]["link"] == "hardlink"
 
 
-def test_sm5_default_same_etag_is_local_one_head(tmp_path):
-    provider = SheetProvider()
-    first = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    second = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    assert second.file is not None and first.file is not None
-    assert second.file.status == "local"
-    assert second.file.version_path == first.file.version_path
-    assert provider.fetches == 1 and provider.heads == 1
-
-
-def test_sm5_default_new_etag_is_local_with_newer(tmp_path):
-    provider = SheetProvider()
-    _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    provider.http["etag"] = '"new-release"'
-    result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    assert result.file is not None
-    assert result.file.status == "local" and result.file.newer == '"new-release"'
-    assert provider.heads == 1 and provider.fetches == 1
-
-
 def test_sm5_upgrade_new_etag_downloads(tmp_path):
     provider = SheetProvider()
     before = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
@@ -179,15 +159,22 @@ def test_sm5_upgrade_head_failure_is_error(tmp_path):
     assert provider.fetches == 1
 
 
-def test_sm5_default_head_failure_is_local_unverified(tmp_path):
+def test_sm5_default_local_version_asks_no_head(tmp_path):
+    """The default mode asks no source for a local version (ADR-036 erratum 3):
+    offline (HEAD would fail) the local file is used at once, ``unchecked``."""
     provider = SheetProvider()
-    _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    with patch.object(provider, "file_signal", side_effect=DownloadError("brak HEAD")):
+    first = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
+    provider.http["etag"] = '"new-release"'
+    with patch.object(
+        provider, "file_signal", side_effect=DownloadError("brak HEAD")
+    ) as head:
         result = _run_cz_sheet(provider, _SHEET, output_dir=tmp_path)
-    assert result.file is not None
-    assert result.file.status == "local"
-    assert result.file.unverified == "check_failed: brak HEAD"
-    assert provider.fetches == 1
+    assert result.file is not None and first.file is not None
+    assert result.file.status == "local" and result.file.newer is None
+    assert result.file.version_path == first.file.version_path
+    assert result.file.unverified == "unchecked"
+    assert head.call_count == 0 and provider.fetches == 1
+    assert result.notices == ()
 
 
 def test_tm33_default_is_local_without_network(tmp_path):
@@ -852,13 +839,16 @@ def test_existing_tm33_warp_kept_locally(tmp_path):
         assert session.of("GET") == []
         forced = download_cz_sheet(_RAW_TM33, update="force", **selection)
 
-    for result in (kept, upgraded):
-        assert result.file is not None and result.file.status == "local"
-        assert result.file.version_path == warped.version_path
-        assert result.file.unverified == "none"
-        assert [n.code for n in result.notices] == [UNVERIFIED_LOCAL]
-        assert result.notices[0].level == "info"
-        assert "--force" in result.notices[0].text
+    # the default mode asks nothing; upgrade compares and reports decision 12
+    assert kept.file is not None and kept.file.status == "local"
+    assert kept.file.version_path == warped.version_path
+    assert kept.file.unverified == "unchecked" and kept.notices == ()
+    assert upgraded.file is not None and upgraded.file.status == "local"
+    assert upgraded.file.version_path == warped.version_path
+    assert upgraded.file.unverified == "none"
+    assert [n.code for n in upgraded.notices] == [UNVERIFIED_LOCAL]
+    assert upgraded.notices[0].level == "info"
+    assert "--force" in upgraded.notices[0].text
     assert session.of("GET") == [TM33_TIFF_URL]
     assert forced.file is not None and forced.file.status == "new"
     assert forced.file.version_path != warped.version_path

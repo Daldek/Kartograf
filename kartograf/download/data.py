@@ -68,7 +68,12 @@ from kartograf.download.arguments import require_int
 from kartograf.download.countries import countries_for_bbox, country_bbox
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.cz_contours import PRODUCT as CONTOURS
-from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
+from kartograf.download.fetch import (
+    UpdateMode,
+    VersionedFile,
+    emit_file_notices,
+    refreshes_cache,
+)
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
     campaign_opts_given,
@@ -207,9 +212,9 @@ class _Run:
 
     @property
     def refresh(self) -> bool:
-        """Metadata cache refreshed, not read: ``force`` and the check
-        (``--check-updates`` always asks the source)."""
-        return self.update == "force" or self.check
+        """Metadata cache refreshed, not read: the check (``--check-updates``
+        always asks the source), ``--upgrade`` and ``--force``."""
+        return self.check or refreshes_cache(self.update)
 
     def add_stale(self, stale) -> int:
         self.stale.extend(stale)
@@ -1651,7 +1656,11 @@ def _download_pl_cutout(
                 **selection,
             )
     except DownloadError as e:
-        return run.fail("PL", "PL", _error_text(e), "download")
+        # a cutout entirely off PL land (PRG mask) is "no data", like a sheet
+        kind: FailureKind = (
+            "no_coverage" if isinstance(e, NoCoverageError) else "download"
+        )
+        return run.fail("PL", "PL", _error_text(e), kind)
     if result.file is not None:
         run.add(_unit_of(result.file.path, task.output_dir), "PL", result.file)
     return run.add_stale(result.stale)

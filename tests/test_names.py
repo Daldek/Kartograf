@@ -16,7 +16,7 @@ from kartograf.download.collections import (
     validate_collection_request,
 )
 from kartograf.exceptions import ValidationError
-from kartograf.notices import WHOLE_COUNTRY_SIZE
+from kartograf.notices import SLOW_SOURCE, WHOLE_COUNTRY_SIZE
 from kartograf.sources import registry
 from kartograf.sources.descriptor import FeatureBBoxParams
 from tests.fake_packages import FakePackageSession, zip_bytes
@@ -63,6 +63,31 @@ def test_prng_bbox_paging_to_one_geopackage(tmp_path, monkeypatch):
     assert info["features"] == 9
     assert CRS.from_wkt(info["crs"]).to_authority() == ("OGC", "CRS84")
     assert len([url for url, _ in session.calls if "/items" in url]) == 2
+
+
+def test_prng_area_announces_slow_service(tmp_path, monkeypatch):
+    """Live test 0.8.0: PRNG answered 9 objects in 88-92 s without a word.
+    The area request says so (``Info``, measured time) before the query."""
+    _prng_page_size(monkeypatch, 5)
+    session = FakeService(prng())
+    monkeypatch.setattr(col, "_session", lambda: session)
+    seen: list[tuple[str, int]] = []
+    report = download_collection(
+        product="geographic",
+        country="pl",
+        bbox=BBox(19.93, 50.055, 19.945, 50.065, "EPSG:4326"),
+        output_dir=tmp_path,
+        cache=False,
+        on_notice=lambda n: seen.append((n.code, len(session.calls))),
+    )
+    assert report.ok, report.failed
+    (notice,) = [n for n in report.notices if n.code == SLOW_SOURCE]
+    assert notice.level == "info"
+    assert notice.text.startswith("geographic: zapytanie OGC API PRNG - usluga ")
+    assert "80-95 s" in notice.text
+    # announced before the first page of items
+    calls_then = dict(seen)[SLOW_SOURCE]
+    assert not any("/items" in url for url, _ in session.calls[:calls_then])
 
 
 def test_prng_pl1992_bbox_uses_lonlat_query(tmp_path):

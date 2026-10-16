@@ -37,6 +37,10 @@ DOWNLOAD_SIZE = "download_size"
 AUTO_NARROWED_TO_CZ = "auto_narrowed_to_cz"
 AREA_OMITTED = "area_omitted"
 CLASSES_ABSENT = "classes_absent"
+# A slow source announced with its measured answer time right before the
+# request (GUGiK PRNG OGC API Features; the WCS series of a PL cutout tells
+# its time in ``CUTOUT_SIZE``).
+SLOW_SOURCE = "slow_source"
 # Availability report: index records Kartograf does not download (outside the
 # variant registry, format inconsistent with the file, sheet code outside
 # SheetParser).

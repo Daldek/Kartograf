@@ -16,7 +16,7 @@ from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology import HSGCalculator
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.notices import CHECK_FAILED, Notice
+from kartograf.notices import Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
@@ -157,7 +157,9 @@ def test_soilgrids(tmp_path):
     _same(run, run.api_result.notices, run.api_result.ok)
 
 
-def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
+def test_soilgrids_local_version_asks_no_edition(tmp_path):
+    """CLI = API: a local version is used without the edition lookup (ADR-036
+    erratum 3) - an unavailable edition gives no warning in either."""
     edition = ["2.0"]
     with _providers(
         soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids(edition[0]))
@@ -170,13 +172,9 @@ def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
             tmp_path, "soilgrids", ["--bbox", BBOX_ARG, *CLAY_ARGS], bbox=BBOX, **CLAY
         )
     _same(run, run.api_result.notices, run.api_result.ok)
-    (warning,) = run.api_result.notices
-    assert warning.code == CHECK_FAILED and warning.level == "warning"
-    assert warning.text.startswith(
-        "soil/global_soilgrids_clay_0-5cm_mean/bbox/"
-        "770000_509000_772000_511000.tif: nie udalo sie sprawdzic zrodla ("
-    )
-    assert run.cli_stderr.count(f"Warning: {warning.text}\n") == 1
+    assert run.api_result.notices == ()
+    assert "Warning:" not in run.cli_stderr
+    assert "(bez sprawdzania; --check-updates)" in run.cli_stdout
 
 
 def test_zabaged_area(tmp_path, monkeypatch):

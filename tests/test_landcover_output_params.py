@@ -21,7 +21,7 @@ from kartograf.download.plan import UpdatePlan
 from kartograf.download.versions import VersionRef, list_versions
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
-from kartograf.notices import CHECK_FAILED, UNVERIFIED_LOCAL, Notice
+from kartograf.notices import UNVERIFIED_LOCAL, Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
@@ -101,21 +101,24 @@ class TestSoilGridsStore:
         )
         assert _sidecar(file.version_path)["request"]["stat"] == "Q0.95"
 
-    def test_soilgrids_default_local_one_capabilities_no_wcs(self, tmp_path):
+    def test_soilgrids_default_local_asks_no_capabilities(self, tmp_path):
+        # the default mode asks no source for a local version (ADR-036 erratum 3)
         _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids("2.0")
         result = _soil(tmp_path, session).download(bbox=BBOX, **CLAY)
         file = result.files[0].file
         assert (file.status, file.label) == ("local", "2.0")
-        assert file.newer is None and file.unverified is None
-        assert (session.capabilities, session.coverages) == (1, 0)
+        assert file.newer is None and file.unverified == "unchecked"
+        assert (session.capabilities, session.coverages) == (0, 0)
 
-    def test_soilgrids_new_edition_default_info_upgrade_downloads(self, tmp_path):
+    def test_soilgrids_new_edition_check_sees_it_upgrade_downloads(self, tmp_path):
         _soil(tmp_path, FakeSoilGrids("2.0", {"clay": 1})).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids("2.1", {"clay": 7})
         manager = _soil(tmp_path, session)
-        info = manager.download(bbox=BBOX, **CLAY).files[0].file
-        assert (info.status, info.label, info.newer) == ("local", "2.0", "2.1")
+        kept = manager.download(bbox=BBOX, **CLAY).files[0].file
+        assert (kept.status, kept.label, kept.newer) == ("local", "2.0", None)
+        (item,) = manager.check(bbox=BBOX, **CLAY).items
+        assert (item.status, item.available_label) == ("newer", "2.1")
         assert session.coverages == 0
         upgraded = manager.download(bbox=BBOX, update="upgrade", **CLAY).files[0].file
         assert (upgraded.status, upgraded.label) == ("new", "2.1")
@@ -133,23 +136,18 @@ class TestSoilGridsStore:
         assert session.coverages == 0
         assert not (tmp_path / "soil").exists()
 
-    def test_soilgrids_edition_unavailable_with_local_warns(self, tmp_path):
+    def test_soilgrids_edition_unavailable_with_local(self, tmp_path):
+        """Offline with a local version: the default mode uses it without a
+        request or warning; ``upgrade`` needs the edition - an error."""
         _soil(tmp_path, FakeSoilGrids("2.0")).download(bbox=BBOX, **CLAY)
         session = FakeSoilGrids(404)
         manager = _soil(tmp_path, session)
         observed = []
         result = manager.download(bbox=BBOX, on_notice=observed.append, **CLAY)
         file = result.files[0].file
-        assert file.status == "local"
-        assert (file.unverified or "").startswith("check_failed: ")
-        assert result.notices == tuple(observed)
-        (warning,) = result.notices
-        assert warning.level == "warning" and warning.code == CHECK_FAILED
-        error = file.unverified.split(":", 1)[1].strip()
-        assert warning.text == (
-            f"{SOIL_SEG}/bbox/{COORDS}.tif: nie udalo sie sprawdzic zrodla "
-            f"({error}) - uzyto lokalnej wersji {file.label}"
-        )
+        assert (file.status, file.unverified) == ("local", "unchecked")
+        assert result.notices == () and observed == []
+        assert session.capabilities == 0
         with pytest.raises(DownloadError):
             manager.download(bbox=BBOX, update="upgrade", **CLAY)
         assert session.coverages == 0

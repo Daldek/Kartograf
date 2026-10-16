@@ -43,6 +43,7 @@ from kartograf.download.fetch import (
     link_version,
     local_version,
     new_staging,
+    refreshes_cache,
     store_file,
     use_local,
     validate_update,
@@ -498,7 +499,9 @@ def download_cz_orto_sheet(
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+    with open_cache(
+        cache, force=refreshes_cache(update), on_notice=sink.add
+    ) as metadata:
         result = _run(
             _session(),
             metadata,

@@ -22,7 +22,7 @@ from kartograf.download.cutout import (
     download_pl_cutout,
 )
 from kartograf.download.plan import UpdatePlan
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
@@ -601,25 +601,25 @@ def test_zero_pixels_absent_from_sidecar_when_none(tmp_path):
     assert "zero_pixels" not in extra and extra["mask"]["masked_pixels"] == 0
 
 
-def test_all_outside_land_is_all_nodata(tmp_path):
+def test_all_outside_land_is_error_before_wcs(tmp_path):
+    """A cutout entirely off PL land (PRG mask) is no data, as in the sheet
+    mode: ``NoCoverageError`` before any WCS request, no version (live test
+    0.8.0: 6 WCS requests and a nodata-only file before)."""
     abroad = LandMask((_square(0, 0, 10, 10),), ())
-    with patch(MASK, return_value=abroad):
-        result = _run_pl_wcs_cutout(
+    session = _recorded_session()
+    with (
+        patch(MASK, return_value=abroad),
+        pytest.raises(NoCoverageError, match="w calosci poza ladem PL"),
+    ):
+        _run_pl_wcs_cutout(
             _cutout(tmp_path),
             provider=GugikProvider(
-                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
+                session=session, vertical_crs="EVRF2007", resolution="1m"
             ),
             now=NOW,
         )
-
-    assert result.all_nodata and result.file.path.exists()
-    assert result.masked_pixels == 400
-    assert _meta(result.file.path)["extra"]["all_nodata"] is True
-    with patch(MASK) as mask:
-        local = _run_pl_wcs_cutout(_cutout(tmp_path), update="upgrade")
-    assert local.file.status == "local"
-    assert local.all_nodata and local.masked_pixels == 400
-    mask.assert_not_called()
+    session.get.assert_not_called()
+    assert not list(tmp_path.rglob("*.tif"))
 
 
 def test_download_pl_cutout_writes_parent_request(tmp_path):
@@ -709,7 +709,8 @@ def test_download_pl_cutout_plan_stale_no_download(tmp_path):
 
 
 def test_cutout_size_notice_before_first_wcs_request(tmp_path):
-    """Several WCS chunks: ``CUTOUT_SIZE`` reaches ``on_notice`` before any WCS call."""
+    """Several WCS chunks: ``CUTOUT_SIZE`` with the estimated time (live test
+    0.8.0: 25-40 s per request) reaches ``on_notice`` before any WCS call."""
     events: list[object] = []
     provider = GugikProvider(
         session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
@@ -734,7 +735,7 @@ def test_cutout_size_notice_before_first_wcs_request(tmp_path):
             "info",
             CUTOUT_SIZE,
             "wycinek 20 x 20 px float32 (~0 MiB), 2 zapytan WCS GUGiK "
-            "pobieranych po kolei",
+            "pobieranych po kolei - ok. 50-80 s (25-40 s na zapytanie wg pomiaru)",
         ),
         "wcs",
     ]
@@ -748,17 +749,19 @@ def test_cutout_size_notice_absent_for_one_small_chunk(tmp_path):
 
 
 def test_all_nodata_notice(tmp_path):
-    abroad = LandMask((_square(0, 0, 10, 10),), ())
+    """Land per the mask, but the WCS answers nodata only: the file is stored
+    with the warning (the mask alone cannot tell)."""
     seen: list[Notice] = []
-    with _factory(_recorded_session()), patch(MASK, return_value=abroad):
+    session = _synthetic_session(lambda xs, ys: np.full_like(xs + ys, -9999.0))
+    with _factory(session), patch(MASK, return_value=ALL_LAND):
         result = download_pl_cutout(
             BBOX, output_dir=tmp_path, cache=False, on_notice=seen.append, **ARGS
         )
     expected = Notice(
         "warning",
         ALL_NODATA,
-        "wycinek w calosci nodata - obszar poza ladem PL (maska PRG: granica "
-        "panstwa bez morza terytorialnego i wod wewnetrznych)",
+        "wycinek w calosci nodata - WCS GUGiK nie zwrocil danych dla obszaru "
+        "(na ladzie wg maski PRG)",
     )
     assert result.all_nodata
     assert result.notices == (expected,)
@@ -985,20 +988,20 @@ class TestCli:
         assert "PRG" in capsys.readouterr().err
         session.get.assert_not_called()
 
-    def test_cli_all_nodata_warning_code_0(self, tmp_path, capsys):
+    def test_cli_outside_land_error_code_1(self, tmp_path, capsys):
         abroad = LandMask((_square(0, 0, 10, 10),), ())
+        session = _recorded_session()
         rc = self._main(
             tmp_path,
-            GugikProvider(
-                session=_recorded_session(), vertical_crs="EVRF2007", resolution="1m"
-            ),
+            GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m"),
             mask=abroad,
         )
 
-        assert rc == 0
+        assert rc == 1
         err = capsys.readouterr().err
-        assert err.startswith("Warning:") and "nodata" in err
-        assert len(list((tmp_path / "nmt").rglob("bbox/*.tif"))) == 1
+        assert err.startswith("Error:") and "w calosci poza ladem PL" in err
+        session.get.assert_not_called()
+        assert not list((tmp_path / "nmt").rglob("*.tif"))
 
     def test_cli_no_zero_pixels_info(self, tmp_path, capsys):
         session = _synthetic_session(lambda xs, ys: np.zeros_like(xs + ys))

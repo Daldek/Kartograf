@@ -79,6 +79,7 @@ from kartograf.download.fetch import (
     inspect_version,
     link_version,
     local_version,
+    refreshes_cache,
     validate_update,
 )
 from kartograf.download.options import (
@@ -106,6 +107,7 @@ from kartograf.notices import (
     CLASSES_ABSENT,
     DOWNLOAD_SIZE,
     LARGE_FILE_BYTES,
+    SLOW_SOURCE,
     UNIT_LIST,
     WHOLE_COUNTRY_SIZE,
     Notice,
@@ -1350,6 +1352,9 @@ class UnitJob:
     the file was asked before the transfer (the volume check of an area),
     ``size`` = its bytes (``None``: not known), ``atom_file`` = the file of
     the ATOM feed found then - the transfer asks for neither again.
+    ``unchecked``: a sheet with a local version in the default mode - its
+    index record was not asked (ADR-036 erratum 3), the local version is
+    used as it is.
     """
 
     descriptor: SourceDescriptor
@@ -1373,6 +1378,7 @@ class UnitJob:
     size: int | None = None
     sized: bool = False
     atom_file: AtomFile | None = None
+    unchecked: bool = False
 
     @property
     def key(self) -> _SLOT_KEY:
@@ -1718,8 +1724,13 @@ def _sheet_jobs(
     product: str,
     sink: NoticeSink,
     metadata: MetadataCache | None,
+    skip_local: bool = False,
 ) -> list[UnitJob]:
-    """The files of the map sheets of an area or of a sheet (ADR-043)."""
+    """The files of the map sheets of an area or of a sheet (ADR-043).
+
+    ``skip_local`` (the default download mode): a sheet with a local version
+    is not asked for its index record (one GetFeatureInfo per sheet) - the
+    job uses the local version (``UnitJob.unchecked``)."""
     params, variant = part.channel.params, part.variant
     assert isinstance(params, UnitPackageParams) and variant is not None
     grid = variant.sheet_grid
@@ -1733,14 +1744,31 @@ def _sheet_jobs(
         sheets = _series_sheets(grid, part.area)
     if not sheets:
         raise NoCoverageError(f"{product}: obszar nie przecina zadnego arkusza")
+    slots = {
+        sheet: unit_slot(
+            out,
+            part.segment,
+            part.ext,
+            mapnom=sheet if cuzk else None,
+            sheet=None if cuzk else sheet,
+        )
+        for sheet in sheets
+    }
+    local = (
+        {s for s in sheets if local_version(slots[s]) is not None}
+        if skip_local and params.index is not None
+        else set()
+    )
     records: dict[str, IndexRecord] = {}
     if params.index is not None:
         for sheet in sheets:
+            if sheet in local:
+                continue
             record = _sheet_record(params, variant, sheet, part.year_filter)
             if record is not None:
                 records[sheet] = record
-        missing = [sheet for sheet in sheets if sheet not in records]
-        sheets = [sheet for sheet in sheets if sheet in records]
+        missing = [s for s in sheets if s not in records and s not in local]
+        sheets = [s for s in sheets if s in records or s in local]
     else:
         missing = []
     text = f"{product}: arkusze ({len(sheets)}): {', '.join(sheets) or '-'}"
@@ -1753,23 +1781,35 @@ def _sheet_jobs(
             f"{product}: indeks nie ma rekordow{year} dla arkuszy obszaru "
             f"({', '.join(missing)})"
         )
-    return [
-        _record_job(
-            part,
-            unit=sheet,
-            slot=unit_slot(
-                out,
-                part.segment,
-                part.ext,
-                mapnom=sheet if cuzk else None,
-                sheet=None if cuzk else sheet,
-            ),
-            tokens={"sheet": sheet},
-            request={"sheet": sheet, **part.choice},
-            record=records.get(sheet),
+    jobs = []
+    for sheet in sheets:
+        request = {"sheet": sheet, **part.choice}
+        if sheet in local:
+            jobs.append(
+                UnitJob(
+                    descriptor=part.descriptor,
+                    channel=part.channel,
+                    country=part.country,
+                    unit=sheet,
+                    slot=slots[sheet],
+                    request=request,
+                    parent=part.parent,
+                    variant=variant,
+                    unchecked=True,
+                )
+            )
+            continue
+        jobs.append(
+            _record_job(
+                part,
+                unit=sheet,
+                slot=slots[sheet],
+                tokens={"sheet": sheet},
+                request=request,
+                record=records.get(sheet),
+            )
         )
-        for sheet in sheets
-    ]
+    return jobs
 
 
 def _tile_jobs(
@@ -1871,11 +1911,16 @@ def _ku_jobs(
 
 
 def _jobs(
-    request: CollectionRequest, sink: NoticeSink, metadata: MetadataCache | None
+    request: CollectionRequest,
+    sink: NoticeSink,
+    metadata: MetadataCache | None,
+    skip_local: bool = False,
 ) -> list[UnitJob]:
     """Unit jobs of a request; the units of an area come from PRG (powiats,
     voivodeships of an ATOM feed or of a product with voivodeship packages
-    only), the sheet grid or index, the tile index or RUIAN."""
+    only), the sheet grid or index, the tile index or RUIAN. ``skip_local``:
+    the default download mode - a map sheet with a local version is not
+    asked for its index record (``_sheet_jobs``)."""
     out = request.output_dir
     jobs: list[UnitJob] = []
     for part in request.parts:
@@ -1896,7 +1941,9 @@ def _jobs(
             continue
         assert isinstance(params, UnitPackageParams) and part.variant is not None
         if params.unit == "sheet":
-            jobs.extend(_sheet_jobs(out, part, request.product, sink, metadata))
+            jobs.extend(
+                _sheet_jobs(out, part, request.product, sink, metadata, skip_local)
+            )
             continue
         if params.unit == "tile":
             jobs.extend(_tile_jobs(out, part, request.product, sink))
@@ -2063,13 +2110,17 @@ def inspect_job(
     )
 
 
-def _local_only(slot: FileSlot) -> VersionedFile | None:
-    """A position left out of the plan: its local version, never a download."""
+def _local_only(slot: FileSlot, unverified: str | None = None) -> VersionedFile | None:
+    """A position left out of the plan (``unverified=None``) or a unit the
+    default mode did not ask (``"unchecked"``): its local version, never a
+    download."""
     local = local_version(slot)
     if local is None:
         return None
     link_version(slot.std, local, refresh=False)
-    return VersionedFile(slot.std, "local", local.label, local.sha256, local.path)
+    return VersionedFile(
+        slot.std, "local", local.label, local.sha256, local.path, unverified=unverified
+    )
 
 
 @dataclass
@@ -2295,6 +2346,14 @@ def run_job(
     """
     if planned is not None and job.key not in planned:
         return _local_only(job.slot)
+    if job.unchecked:
+        found = _local_only(job.slot, "unchecked")
+        if found is None:
+            raise DownloadError(
+                f"{job.unit}: lokalna wersja usunieta w trakcie pobierania - ponow "
+                "pobranie"
+            )
+        return found
     source = _Source()
     atom = _atom_file(job, session, cache, update == "upgrade") if job.atom else None
 
@@ -2304,6 +2363,12 @@ def run_job(
         if job.layers:
             params = job.channel.params
             assert isinstance(params, FeatureBBoxParams)
+            if params.response_note is not None:
+                sink.emit(
+                    "info",
+                    SLOW_SOURCE,
+                    f"{subject(job.descriptor)}: {params.response_note}",
+                )
             pages = timeout or params.timeout or SERVICE_TIMEOUT
             _fetch_features(job, staged, source, _http(session), pages)
             return None
@@ -2738,8 +2803,10 @@ def run_request(
     require_int(workers, "--workers")
     if workers < 1:
         raise ValidationError(f"workers musi byc >= 1, podano {workers}")
-    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
-        jobs = _jobs(request, sink, metadata)
+    with open_cache(
+        cache, force=refreshes_cache(update), on_notice=sink.add
+    ) as metadata:
+        jobs = _jobs(request, sink, metadata, update is None and plan is None)
         planned: set[_SLOT_KEY] | None = None
         stale: tuple[PlanItem, ...] = ()
         if plan is not None:

@@ -586,14 +586,17 @@ def test_index_signal_check_downloads_nothing(
     """``check_collection`` compares the label of the current record with the
     local version and never asks for the file: ``current`` with the same
     base date, ``newer`` with another one; the default download keeps the
-    local version and reports the newer record, ``upgrade`` fetches it."""
+    local version without asking the index (ADR-036 erratum 3), ``upgrade``
+    fetches the newer record."""
     install(monkeypatch, MAPS)
     gfi = (INDEX / "gfi_mapy10k_M-34-64-D-d-1.html").read_bytes()
-    record = {"body": gfi}
-    router.add_prefix(
-        f"{MAPS_GFI}?",
-        lambda: recorded(INDEX / "gfi_mapy10k_M-34-64-D-d-1.html", record["body"]),
-    )
+    record = {"body": gfi, "asked": 0}
+
+    def answer():
+        record["asked"] += 1
+        return recorded(INDEX / "gfi_mapy10k_M-34-64-D-d-1.html", record["body"])
+
+    router.add_prefix(f"{MAPS_GFI}?", answer)
     pdf_url = FILES["map10k_pdf"]["url"]
     router.add(pdf_url, file_answer("map10k_pdf", head_of("map10k_pdf")))
     choice = {
@@ -618,11 +621,11 @@ def test_index_signal_check_downloads_nothing(
         "2026-05-27",
         "2026-09-30",
     )
+    asked = record["asked"]
     kept = download_collection(**choice)
-    assert (kept.files[0].file.status, kept.files[0].file.newer) == (
-        "local",
-        "2026-09-30",
-    )
+    assert (kept.files[0].file.status, kept.files[0].file.newer) == ("local", None)
+    assert kept.files[0].file.unverified == "unchecked"
+    assert record["asked"] == asked  # no GetFeatureInfo for a local sheet
     assert router.gets(pdf_url) == 1
 
     router.add(pdf_url, file_answer("map10k_pdf", head_of("map10k_pdf") + b"%v2"))
@@ -792,7 +795,8 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
 
 def test_ku_units_from_ruian(tmp_path, router, monkeypatch, frozen_clock):
     """``--ku`` downloads the package of one cadastral area; an area asks
-    RUIAN for its areas; the second run compares the ``ETag``."""
+    RUIAN for its areas; the second run uses the local package without a
+    request (ADR-036 erratum 3)."""
     install(monkeypatch, KM)
     router.add_recorded(CUZK / "ruian_7_bbox_tesin.json")
     for code in ("652954", "696137", "753521"):  # a check compares the ETag (HEAD)
@@ -822,7 +826,7 @@ def test_ku_units_from_ruian(tmp_path, router, monkeypatch, frozen_clock):
         product="e0km", output_dir=tmp_path, ku="623164", format="SHP", cache=False
     )
     assert second.files[0].file.status == "local"
-    assert second.files[0].file.unverified is None  # ETag compared by HEAD
+    assert second.files[0].file.unverified == "unchecked"
     assert router.gets(entry["url"]) == 1
 
 

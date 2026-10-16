@@ -589,6 +589,23 @@ def test_status_errors_and_remove_leave_store_versions(tmp_path, capsys):
     assert store_file.read_bytes() == b"broken"
 
 
+def test_project_lines_name_unit_and_file(tmp_path, capsys):
+    """Live test 0.8.0: ``orto_cz: CTES96: ok`` four times. One format of the
+    project lines: ``task: unit (file): status`` - also for a fresh pin."""
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    assert main(_add(project, "teren", "elevation", "download", *SHEET_FLAGS)) == 0
+    with pl_sheets():
+        assert main(["project", "download", "--project", str(project)]) == 0
+    (pinned,) = open_project(project).tasks[0].files
+    name = pinned.path.rsplit("/", 1)[1]
+    assert f"teren: {pinned.unit} ({name}): przypieto {pinned.label}" in (
+        capsys.readouterr().out
+    )
+    assert main(["project", "status", "--project", str(project)]) == 0
+    assert f"teren: {pinned.unit} ({name}): ok" in capsys.readouterr().out
+
+
 def test_project_error_same_as_public_api(tmp_path, capsys):
     project = tmp_path / "projekt"
     init_project(project, output_dir=project / "data")

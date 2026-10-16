@@ -19,7 +19,6 @@ from kartograf.cli.download_cmd import (
     _unit_of,
     _update_mode,
     run_with_plan_file,
-    store_path_label,
 )
 from kartograf.cli.landcover_cmd import area_task_arguments, run_land_cover
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
@@ -121,7 +120,7 @@ def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) 
     and the HSG with one status line each (spec 4.5)."""
     if args.check_updates:
         plan = calc.check_hsg(**selection, on_notice=_print_notice)
-        return _report_plan(args, plan, store_path_label)
+        return _report_plan(args, plan)
     update = _update_mode(args)
     result = calc.calculate_hsg(
         **selection,
@@ -140,13 +139,18 @@ def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) 
 
     if args.stats and result.file is not None:
         print()
-        print("Statystyki HSG:")
+        print("Statystyki HSG (procent grupy: z pikseli z danymi):")
         stats = calc.get_hsg_statistics(result.file.path)
+        nodata = stats.pop("nodata")
         for group, data in stats.items():
             pct = data["percent"]
             area = data["area_ha"]
             print(f"  Grupa {group}: {pct:.1f}% ({area:.2f} ha)")
             print(f"           {data['description']}")
+        print(
+            f"  Brak danych: {nodata['percent']:.1f}% calego obszaru "
+            f"({nodata['area_ha']:.2f} ha)"
+        )
 
     if not args.quiet:
         print()
