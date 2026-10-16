@@ -9,6 +9,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
+  granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
+  (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
+  CZ w `orto/cz_sjtsk/`, wspolne `extra.parent_request`). `--resolution`
+  z `--product orto` bez `--cutout` jest bledem dla PL i CZ (arkusze maja
+  piksel zrodla). Co zrobic: tylko arkusze PL - `--country pl`
+  (`country="pl"`); usun `--resolution` z pobran arkuszy ortofotomapy
+  (piksel wycinka: `--cutout --coverage ... --resolution ...`).
 - CLI w grupach komend wg typu danych (ADR-039, bez aliasow): kazda grupa
   ma wlasne flagi i `--help`, a `list-sources` wypisuje jej zrodla z rejestru
   (bez sieci). Stare komendy koncza sie bledem parsera (kod 2) z nazwa nowej.
@@ -16,7 +24,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   | Dotad | Teraz |
   |---|---|
   | `kartograf download --product nmt\|nmpt\|laz ...` | `kartograf elevation download --product nmt\|nmpt\|laz ...` |
-  | `kartograf download --product orto ...` | `kartograf imagery download --product orto ...` (bez `--vertical-crs`, `--resolution`, `--cutout`, `--horizontal-crs`, `--min-density`; `--country` tylko `pl\|auto`) |
+  | `kartograf download --product orto ...` | `kartograf imagery download --product orto ...` (bez `--vertical-crs` i `--min-density`; `--resolution` tylko z `--cutout`; `--country pl\|cz\|auto`) |
   | `kartograf landcover download --source bdot10k\|corine ...` | bez zmian |
   | `kartograf landcover download --source soilgrids ...` | `kartograf soil download ...` (bez `--source`) |
   | `kartograf landcover list-layers --source soilgrids` | `kartograf soil list-layers` |
@@ -517,9 +525,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     prefiks segmentu); `CorineProvider.CLMS_DATASET_UIDS`/
     `CLMS_RASTER_DOWNLOAD_IDS` 2012/2006/2000 zmienione na identyfikatory
     z katalogu CLMS.
+- Typy argumentow biblioteki sprawdzane na wejsciu, bez konwersji
+  (STANDARDS 11.2, `kartograf/download/arguments.py`): `download_data`/
+  `check_data`, `LandCoverManager.download`/`check` (takze `year`
+  archiwum BDOT10k), `HSGCalculator.calculate_hsg`/`check_hsg`,
+  `download_collection`/`check_collection`, `check_availability`,
+  `DownloadManager` i `download_laz_area`/`check_laz_area` daja
+  `ValidationError` przed siecia dla liczby podanej jako napis
+  (`year="2018"`, `timeout="120"`, `workers="4"`, `min_density="10"`,
+  `lod="1"`), liczby niecalkowitej lub `bool` tam, gdzie oczekiwano `int`
+  (`year=2018.0`), przelacznika innego niz `True`/`False` (`cutout`,
+  `all_campaigns`, `full_sheet`, `keep_raw`, `whole_country`, `force`),
+  `timeout <= 0` i `layers` podanego jako napis (`"SWRS,PTWP"` byl czytany
+  znak po znaku). Dotad czesc z nich dzialala przypadkiem, czesc konczyla
+  sie poznym `ValueError` z `urllib3` albo `TypeError`. Flagi CLI bez
+  zmian. Co zrobic: przekazuj `int` (`timeout` takze `float`), `True`/
+  `False` i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
 
 ### Zmienione
 
+- Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
+  (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
+  `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera
+  z `--resolution`/`--vertical-crs` w `cli/_args.py`). Nazwa deskryptora
+  `pl.gugik.orto`: `Ortofotomapa (arkusze wg kampanii; wycinek WCS
+  Standard i High)` (klucz `dataset` bez zmian). `AccessChannel.params`
+  ma dwa nowe typy: `AtomFilesParams` i `WcsCutoutParams`.
 - Listy produktow `elevation`/`imagery` i zrodel `landcover`
   przeniesiono z parserow CLI do biblioteki (`download/options.py`,
   `landcover/manager.py`): grupy CLI i manifest projektu korzystaja
@@ -535,9 +566,67 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
   (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
   z podpowiedzia. Co zrobic: nic.
+- Dokumentacja umowy `update="force"` wobec cache providera (USAGE 2,
+  ARCHITECTURE, docstringi `DownloadManager`/`LandCoverManager`):
+  `force` odswieza cache otwierany przez sama funkcje; provider przekazany
+  jako gotowa instancja zachowuje swoj cache (pelne odswiezenie:
+  `MetadataCache(refresh=True)`). Zachowanie bez zmian. Co zrobic: nic.
 
 ### Dodane
 
+- Grupa `hydro` (plan D, ADR-042 D16): `kartograf hydro download --product
+  network --country cz` - siec wod HY-NET CUZK. Obszar (`--bbox`/
+  `--geometry`) = jeden GeoPackage w EPSG:5514
+  (`hydro/cz_hynet/bbox/<coords>.gpkg`) z 2 warstwami: `WatercourseLink`
+  (odcinki ciekow) i `HydroNode` (wezly); `WatercourseSeparatedCrossing`
+  nie jest warstwa obszaru (bez geometrii w GML, GeoServer podaje dla BBOX
+  `hits` 0 mimo obiektow), skrzyzowania sa w pliku krajowym.
+  `--whole-country --country cz` = `hydro/cz_hynet_gpkg/country/cz.zip`
+  (GeoPackage w EPSG:3045, ok. 194 MB, sygnal `http`); `hydro
+  list-sources`; biblioteka `download_collection(product="network", ...)`.
+- ZABAGED w `landcover download --source zabaged` (ADR-042 D15): obszar =
+  GeoPackage EPSG:5514 z 22 warstwami pokrycia terenu i wod
+  (`landcover/cz_zabaged/bbox/<coords>.gpkg`; lista: `landcover list-layers
+  --source zabaged`), bez przeliczania klas na kody BDOT10k;
+  `--whole-country --horizontal-crs EPSG:5514|EPSG:3045` = krajowy ZIP
+  z feedu ATOM 1:1 (`landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip`,
+  5,8/6,7 GB, etykieta = data wydania, sygnal `metadata`; warstwy pod
+  nazwami CUZK, innymi niz wynik obszaru). Biblioteka:
+  `LandCoverManager(output_dir, "zabaged")`.
+- RUIAN w `boundaries download --product admin --country cz|auto`
+  (ADR-042 D17): `--level kraj|okres|obec|katastralni-uzemi` ->
+  `boundaries/cz_ruian_<poziom>/bbox/<coords>.gpkg` (EPSG:5514);
+  `--whole-country --country cz` -> `boundaries/cz_ruian_shp/country/cz.zip`
+  (SHP, ok. 253 MB, `http`); pod `auto` poziom per kraj
+  (`--level pl=gmina,cz=obec`, API `level={"pl": "gmina", "cz": "obec"}`)
+  daje osobne pliki PRG i RUIAN.
+- Ortofoto CZ w `imagery download --product orto --country cz` (ADR-042
+  D13): arkusz SM5 (`--sheet CTES96`, `AS91`) albo obszar (arkusze SM5
+  z indeksu CUZK) -> cztery pliki ZIP CUZK 1:1 w
+  `orto/cz_sjtsk/<hierarchia SM5>/`: `<godlo>.jpg`, `.jgw` (EPSG:5514),
+  `.TM33N.jgw` (EPSG:3045), `.TM34N.jgw` (EPSG:3046); sidecar JPEG z
+  `extra.world_files`; tylko aktualny rocznik (archiwalne ortofoto CUZK
+  sa platne); wydanie z feedu ATOM (`metadata`, etykieta
+  `<rok>_<updated>`, np. `2024_2025-02-06`). Biblioteka:
+  `download_cz_orto_sheet`/`check_cz_orto_sheet` (`CzOrtoResult`), tor
+  planu `cz_orto`.
+- Wycinek ortofotomapy PL w magazynie (ADR-042 D14): `imagery download
+  --product orto --country pl --bbox|--geometry --cutout --horizontal-crs
+  EPSG:2180 --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` ->
+  `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif` (RGB z WCS GUGiK, bez
+  przeprobkowania, siatka wyrownana do piksela i sprawdzana, kawalki do
+  200 x 200 m, sygnal `none`; `high` poza obszarami 10 cm = obraz 0,0,0
+  z `extra.all_nodata` i `Warning:`). Biblioteka: `download_orto_cutout`/
+  `check_orto_cutout` (`OrtoCutoutResult`), `download_data(...,
+  coverage=)`.
+- Silnik `atom_files` (ADR-042 D12, `kartograf/transport/atom.py`):
+  pliki wskazywane feedem ATOM CUZK (feed uslugi -> feed zbioru -> plik),
+  wydanie z `updated`, indeks feedu w cache metadanych (`atom_cache`
+  z `ETag`, TTL 7 dni, warunkowy GET przy `--upgrade`/`--check-updates`,
+  jedno odswiezenie przy brakujacym kluczu albo 404 feedu zbioru).
+- Projekt (ADR-040): pozycja `hydro download`; opcje zadan `imagery
+  download` (`cutout`, `horizontal_crs`, `coverage`, `resolution`)
+  i `landcover download` (`whole_country`, `horizontal_crs`).
 - NMT/NMPT PL (ADR-041, plan A): siatki NMT 0.15m, 0.5m, 0.6m i 10m oraz
   NMPT 0.5m i 0.6m (pelna lista: `kartograf elevation list-sources`);
   archiwa GUGiK (`--format` XYZ, ASCII-NMT, TBD, TIN, TTN, GRD, DXF, DGN)
@@ -669,6 +758,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Naprawione
 
+- Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
+  `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca
+  `^[A-Z]{4}[0-9]{2}$`), wiec `--sheet AS91` (DMR 4G) konczyl sie bledem
+  godla PL. Teraz `cz_sm5` (`^[A-Z]{2}(?:[A-Z]{2})?[0-9]{2}$`, katalog
+  `AS/91`) - takze dla DMR i ortofoto CZ.
 - CORINE CLMS 2012/2006/2000: UID-y zbiorow i `@id` rastra nie istnialy
   w katalogu CLMS (`items_total: 0`); poprawione wg katalogu
   (`docs/research/2026-10-12-plan3-spec-check/raport.md`). Pobranie CLMS
@@ -688,8 +782,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `download_data`/`check_data` sprawdzaja przed siecia `product`,
   `country`, `sheet_system`, `horizontal_crs` (wartosci jak w `--help`) i bbox
   (odwrocony, nieskonczony: ten sam tekst `Nieprawidlowy bbox: ...` co
-  CLI); bledy wejscia wewnatrz czesci kraju (np. bbox EPSG:2177 z
-  `--sheet-system 1992`) sa `ValidationError`, a nie pozycja `failed`
+  CLI); bledy wejscia wewnatrz czesci kraju sa `ValidationError`, a nie
+  pozycja `failed`
   ani `DownloadError`. `LandCoverManager`: brak opcji (`year` CORINE,
   `property`/`depth`/`stat` SoilGrids) i opcje tylko BDOT10k (`format`,
   `layers`, `keep_raw`) dla innego zrodla to `ValidationError` z tekstem
@@ -722,6 +816,45 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `kartograf download --sheet N-34-130-D --resolution 5m ...` z cache
   z 0.7.x). Taki wpis jest teraz traktowany jak brak wpisu i skorowidz jest
   odpytywany ponownie. Co zrobic: nic (opcjonalnie `kartograf cache clear`).
+- `landcover download --check-updates --keep-raw` drukowal dwie
+  jednakowe linie planu (`0208: do pobrania`) dla GPKG i surowego ZIP tego
+  samego TERYT. Linie planu `landcover download`, `soil download` i `soil
+  hsg` oznaczaja teraz pozycje sciezka pod `--output`, jak linie statusu
+  (`landcover/pl_bdot10k_gpkg/teryt/0208.gpkg: do pobrania`, `soil hsg`:
+  zamiast `clay <wsp>` / `hsg <wsp>`). Co zrobic: skrypty parsujace linie
+  planu tych komend czytaja sciezke (plik planu JSON bez zmian).
+- `--bbox-crs EPSG:2176-2179` (strefy PL-2000) z `--sheet-system 1992`
+  konczyl sie `Error: Nieobslugiwany CRS: 'EPSG:2177'. Obslugiwane:
+  EPSG:2180, EPSG:4326`, choc uklad jest na liscie `--bbox-crs`.
+  `find_sheets_for_bbox(..., sheet_system="1992")` przyjmuje teraz te same
+  polskie uklady co PL-2000 (EPSG:2180, EPSG:4326, EPSG:2176-2179); uklady
+  CZ zamienia wczesniej `download_data` operacja przypieta.
+- Postep pobierania arkusza z kilkoma kampaniami (`--all-campaigns`,
+  `--full-sheet`): dotad linie `nowa wersja`/`lokalna wersja` pojawialy sie
+  dopiero po calym zadaniu. Biblioteka zglasza zdarzenia `DownloadProgress`
+  `campaigns` (lista lotow arkusza: `lokalna`/`do pobrania`) i `campaign`
+  (przed pobraniem kazdego lotu, `k/n`); CLI drukuje `  Kampanie <arkusz>
+  (do pobrania k z n): ...` i `  Pobieranie <arkusz> <etykieta> (k/n)...`.
+  `--upgrade --plan` arkuszy PL raportuje postep jak zwykle pobieranie.
+- Postep pobierania powiatow BDOT10k obszaru (`landcover download --bbox/
+  --sheet/--geometry`, takze archiwum `--year`): dotad brak jakiegokolwiek
+  postepu do konca zadania. `LandCoverManager.download(on_progress=)`
+  zglasza `DownloadProgress` per powiat jak lista arkuszy (`sheet` = TERYT:
+  `downloading` tuz przed transferem przy `--workers 1`, potem `completed`/
+  `skipped`/`failed` w kolejnosci ukonczenia); CLI i `project download`
+  rysuja ten sam pasek co dla arkuszy. Jeden `--teryt`, CORINE i SoilGrids
+  bez zmian (jeden plik).
+- Pasek postepu listy arkuszy (i powiatow BDOT10k), ktorego ostatnia
+  jednostka byla `o` (lokalna wersja), nie konczyl linii: pierwsza linia
+  statusu doklejala sie do paska (weryfikacja na zywo 2026-10-15). Linia
+  paska jest teraz zamykana przed liniami statusu i `Error:`.
+- Sidecar dowiazania (`<plik>.meta.json` sciezki standardowej) po awarii
+  zapisu zostawal stary i opisywal poprzednia wersje (ADR-030 M-8). Teraz
+  jest usuwany (ostrzezenie w logu), a nastepne uruchomienie odtwarza
+  dowiazanie i sidecar (ADR-030 errata 10).
+- Dokumentacja ortofotomapy (SCOPE, PRD, docstring `gugik_orto.py`):
+  rozdzielczosc "wg kampanii (np. 25 cm, 10 cm)" zamiast stalego 25 cm
+  (U6; README poprawione wczesniej).
 
 ## [0.7.2] - 2026-10-11
 

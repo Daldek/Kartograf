@@ -487,15 +487,17 @@ class TestCommandGroups:
         "boundaries",
         "cadastre",
         "models3d",
+        "hydro",
     )
     # the selection flag of each group's download and its values
     _CHOICES = {
         "elevation": ("--product", {"nmt", "nmpt", "laz"}),
         "imagery": ("--product", {"orto"}),
-        "landcover": ("--source", {"bdot10k", "corine"}),
+        "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
         "boundaries": ("--product", {"admin"}),
         "cadastre": ("--product", {"map"}),
         "models3d": ("--product", {"buildings"}),
+        "hydro": ("--product", {"network"}),
     }
 
     @pytest.mark.parametrize("group", _GROUPS)
@@ -590,6 +592,44 @@ class TestCommandGroups:
         for value in shown:
             args = parser.parse_args([group, "download", flag, value])
             assert getattr(args, flag.removeprefix("--")) == value
+
+    def test_hydro_group_registered(self):
+        """``hydro download`` has only the flags of the group (ADR-039): the
+        CZ network has no PL selections (``--teryt``, ``--sheet``) and no
+        content flags; the area, the national file and the store flags."""
+        parser = create_parser()
+        group = next(
+            action
+            for action in parser._actions
+            if isinstance(action, argparse._SubParsersAction)
+        ).choices["hydro"]
+        download = next(
+            action
+            for action in group._actions
+            if isinstance(action, argparse._SubParsersAction)
+        ).choices["download"]
+        flags = {flag for action in download._actions for flag in action.option_strings}
+        assert flags == {
+            "-h",
+            "--help",
+            "--product",
+            "--country",
+            "--bbox",
+            "--bbox-crs",
+            "--geometry",
+            "--layer",
+            "--whole-country",
+            "--output",
+            "-o",
+            "--check-updates",
+            "--upgrade",
+            "--force",
+            "--plan",
+            "--workers",
+            "-w",
+            "--quiet",
+            "-q",
+        }
 
 
 class TestCLIIntegration:
@@ -1774,13 +1814,7 @@ class TestCmdDownloadProduct:
 
     @pytest.mark.parametrize(
         "flag",
-        [
-            ["--vertical-crs", "KRON86"],
-            ["--resolution", "1m"],
-            ["--cutout"],
-            ["--horizontal-crs", "EPSG:2180"],
-            ["--min-density", "4"],
-        ],
+        [["--vertical-crs", "KRON86"], ["--min-density", "4"]],
         ids=lambda flag: flag[0],
     )
     @patch("kartograf.download.data._create_provider_and_storage")
@@ -1788,8 +1822,8 @@ class TestCmdDownloadProduct:
     def test_imagery_rejects_elevation_only_flags(
         self, mock_manager_cls, mock_create, flag, capsys, tmp_path
     ):
-        """Orthophoto has no vertical CRS, resolution, cutout or point density:
-        an elevation flag in ``imagery download`` is an input error, not a no-op."""
+        """Orthophoto has no vertical CRS or point density: an elevation flag
+        in ``imagery download`` is an input error, not a no-op."""
         argv = ["imagery", "download", "--product", "orto"]
         argv += ["--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path), *flag]
         with pytest.raises(SystemExit) as exc:
@@ -5265,7 +5299,7 @@ _CZ_FACTORY_PATCH = "kartograf.providers.cuzk.create_cz_raster_provider"
 class TestCzDownloadingAfterValidation:
     """``Downloading ...`` in the CZ flow only when the transfer really starts.
 
-    Uses the real ``CuzkDmrProvider`` (offline: ``CuzkClient`` and
+    Uses the real ``CuzkRasterProvider`` (offline: ``CuzkClient`` and
     ``SheetIndex`` mocked), so validations inside the provider run for real.
     """
 
@@ -6854,27 +6888,6 @@ class TestCountryDispatch:
         assert expected in str(exc.value)
         assert not (tmp_path / "laz").exists() and not (tmp_path / "nmpt").exists()
 
-    @patch("kartograf.download.data._download_cz")
-    def test_orto_bbox_with_country_cz_rejected(self, mock_cz, tmp_path, capsys):
-        """No CZ orthophoto: the library rejects it before the CZ flow, and
-        ``imagery download`` does not offer ``--country cz`` at all."""
-        from kartograf.download.data import download_data
-
-        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        with pytest.raises(
-            ValidationError, match="--product orto jest dostepny tylko dla PL"
-        ):
-            download_data(product="orto", output_dir=tmp_path, bbox=bbox, country="cz")
-        with pytest.raises(SystemExit) as exc:
-            main(
-                ["imagery", "download", "--product", "orto", "--country", "cz"]
-                + ["--bbox=-447000,-1114000,-446000,-1113000", "--bbox-crs"]
-                + ["EPSG:5514", "-o", str(tmp_path)]
-            )
-        assert exc.value.code == 2
-        assert "invalid choice: 'cz'" in capsys.readouterr().err
-        mock_cz.assert_not_called()
-
     # --- area modes: explicit --country cz ---
 
     @patch("kartograf.download.data._download_cz")
@@ -7292,18 +7305,6 @@ class TestAutoSplitBBox:
     # an area reaching CZ is a cutout (ADR-038): CZ native, PL from WCS
     _CUTOUT = ["--cutout", "--horizontal-crs", "EPSG:5514"]
 
-    @staticmethod
-    def _orto(bbox: str, *extra: str) -> list[str]:
-        """``imagery download`` of a WGS84 bbox with ``--country auto``."""
-        return ["imagery", "download", "--product", "orto", "--country", "auto"] + [
-            "--bbox",
-            bbox,
-            "--bbox-crs",
-            "EPSG:4326",
-            "-q",
-            *extra,
-        ]
-
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data._download_pl_cutout")
     def test_border_bbox_splits_into_both_countries(self, mock_pl, mock_cz, tmp_path):
@@ -7398,11 +7399,6 @@ class TestAutoSplitBBox:
         assert result == 0
         mock_manager_class.assert_not_called()
         assert mock_cz.call_args.kwargs["parent_request"]["countries"] == ["CZ"]
-
-    def test_cz_only_bbox_with_orto_reports_unavailable_product(self, tmp_path, capsys):
-        result = main(self._orto("13.3,49.7,13.5,49.8", "-o", str(tmp_path)))
-        assert result == 1
-        assert "--product orto jest dostepny tylko dla PL" in capsys.readouterr().err
 
     def test_single_country_error_has_no_country_hint(self, tmp_path, capsys):
         """With a single country the --country hint would be empty."""
@@ -8069,25 +8065,6 @@ class TestAutoSplitBBox:
         assert parent == mock_pl.call_args.args[3]
         # the CZ part goes in the RESULT CRS (cz_crs = target), not in Krovak
         assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:2180"
-
-    @patch("kartograf.download.data._download_cz")
-    @patch("kartograf.download.data.find_sheets_for_bbox")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_auto_with_product_orto_resolves_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        """Orthophoto for CZ is stage 2: auto resolves the country to PL."""
-        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
-
-        result = main(
-            self._orto(
-                "18.4,49.55,18.8,49.75", "--sheet-system", "1992", "-o", str(tmp_path)
-            )
-        )
-
-        assert result == 0
-        mock_cz.assert_not_called()
-        assert "--product orto" in capsys.readouterr().err
 
     def test_resolution_5m_border_cutout_rejected_for_pl(self, tmp_path, capsys):
         """5m exists on both sides, but a border area is a cutout (ADR-038 D3)
@@ -10321,25 +10298,6 @@ class TestCampaignOptions:
         mock_manager_class.assert_not_called()
         mock_cz.assert_not_called()
 
-    @patch("kartograf.download.data._download_cz")
-    @patch("kartograf.download.data.find_sheets_for_bbox")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_area_auto_pl_only_flag_plus_all_narrows_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, capsys, tmp_path
-    ):
-        mock_find.return_value = ["M-34-86-D-d-4-3"]
-        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.tif")
-
-        rc = main(
-            ["imagery", "download", "--product", "orto", "--country", "auto"]
-            + [*_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"]
-        )
-
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Info: --country auto -> pl (--product orto dotyczy tylko PL)" in err
-        mock_cz.assert_not_called()
-
     @staticmethod
     def _single(tmp_path):
         return main(
@@ -11323,16 +11281,19 @@ class TestErrorWithoutBlankLine:
         err = capsys.readouterr().err
         assert err.startswith("Error: brak kampanii od 2024")
 
-    def test_error_lead_only_after_unfinished_progress_line(self, capsys):
-        from kartograf.cli.download_cmd import _error_lead, create_progress_callback
+    def test_unfinished_progress_line_ends_before_status_lines(self, capsys):
+        """A bar line left open (last unit ``skipped``: live 2026-10-15 the
+        first status line was glued to it) gets its line end exactly once."""
+        from kartograf.cli.download_cmd import _end_progress, create_progress_callback
 
         cb = create_progress_callback(False)
-        assert _error_lead(cb) == ""
-        cb(DownloadProgress(0, 1, "N-1", "downloading", ""))
-        assert _error_lead(cb) == "\n"
-        cb(DownloadProgress(1, 1, "N-1", "failed", ""))
-        assert _error_lead(cb) == ""
-        assert _error_lead(None) == ""
+        cb(DownloadProgress(1, 2, "N-1", "completed", ""))
+        cb(DownloadProgress(2, 2, "N-2", "skipped", ""))
+        _end_progress(cb)
+        _end_progress(cb)
+        _end_progress(None)
+        last = capsys.readouterr().out.split("\r")[-1]
+        assert "o N-2" in last and last.endswith("\n") and last.count("\n") == 1
 
 
 class TestSoilgridsHsgNoEarlyMkdir:

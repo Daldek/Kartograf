@@ -162,10 +162,12 @@ def write_link_sidecar(link: Path, target: Path) -> None:
 
     A REGULAR file: tmp + ``os.replace`` (also replaces a sidecar symlink
     left by the user — never a write "through" it into the version
-    sidecar). ``extra.link_target`` = path relative to the link file
     (absolute when a relative one is impossible) — the only source of the
-    target. Unreadable version sidecar -> the old link sidecar is removed
-    + ``logger.warning``. Never raises (the link sidecar is best-effort).
+    target. Unreadable version sidecar or a failed write -> the old link
+    sidecar is removed + ``logger.warning``: it would describe another
+    version (ADR-030 errata 10, M-8); without it the link is an unknown
+    path and the next ``ensure_link`` relinks it and writes the sidecar.
+    Never raises (the link sidecar is best-effort).
     """
     sidecar = _sidecar_of(link)
     tmp = _tmp_name(sidecar, "tmp")
@@ -190,7 +192,12 @@ def write_link_sidecar(link: Path, target: Path) -> None:
     except Exception as e:  # noqa: BLE001 — link sidecar is best-effort
         with contextlib.suppress(OSError):
             tmp.unlink(missing_ok=True)
-        logger.warning(f"Nie udalo sie zapisac sidecara {sidecar}: {e}")
+        with contextlib.suppress(OSError):
+            sidecar.unlink(missing_ok=True)
+        logger.warning(
+            f"Nie udalo sie zapisac sidecara {sidecar}: {e} - stary sidecar "
+            "usuniety (nastepne uruchomienie odtworzy dowiazanie)"
+        )
 
 
 def update_sidecar_extra(data_path: Path, updates: dict) -> None:

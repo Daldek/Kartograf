@@ -12,6 +12,8 @@ no coverage)
 - Index areas of the availability report (``index_area_cache``: key built by
   the caller -> JSON payload: WFS index records with footprints, feature
   types, PRG land masks)
+- Indexes of CUZK ATOM service feeds (``atom_cache``: feed key -> the
+  ``ETag`` of the feed and its entries; ADR-042 D12)
 
 The cache uses SQLite with WAL mode for concurrent access support and
 supports time-based TTL for cache expiration. All reads and writes on the
@@ -77,10 +79,11 @@ class MetadataCache:
     data. Tables: ``record_cache`` (skorowidz records), ``campaigns_cache``
     (campaign lists), ``teryt_cache`` (point -> powiat TERYT),
     ``teryt_bbox_cache`` (EPSG:2180 area -> powiat TERYT codes, PRG WFS),
-    ``index_area_cache`` (availability report) - all with the TTL (default
-    7 days) - and ``sheet_cache`` (CZ sheet index,
-    SM5, fixed TTL of 30 days). ``refresh=True`` turns
-    every read into a miss while writes still happen (CLI ``--force``).
+    ``index_area_cache`` (availability report), ``atom_cache`` (ATOM service
+    feed indexes with their ``ETag``) - all with the TTL (default 7 days) -
+    and ``sheet_cache`` (CZ sheet index, SM5, fixed TTL of 30 days).
+    ``refresh=True`` turns every read into a miss while writes still happen
+    (CLI ``--force``).
 
     Parameters
     ----------
@@ -96,7 +99,8 @@ class MetadataCache:
     refresh : bool, optional
         Refresh mode (E14, CLI ``--force``): every read
         (``get_record``/``get_campaigns``/``get_teryt``/
-        ``get_teryts_for_bbox``/``get_sheet``) is a miss, while writes
+        ``get_teryts_for_bbox``/``get_sheet``/``get_index_area``/
+        ``get_atom_entries``) is a miss, while writes
         work normally - a freshly fetched record (or a confirmed lack of
         coverage) replaces the old entry, so the next run WITHOUT ``--force``
         gets the new record. Default ``False``.
@@ -318,6 +322,16 @@ class MetadataCache:
             """
             CREATE TABLE IF NOT EXISTS index_area_cache (
                 key       TEXT NOT NULL PRIMARY KEY,
+                payload   TEXT NOT NULL,
+                cached_at REAL NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS atom_cache (
+                feed      TEXT NOT NULL PRIMARY KEY,
+                etag      TEXT,
                 payload   TEXT NOT NULL,
                 cached_at REAL NOT NULL
             )
@@ -732,6 +746,48 @@ class MetadataCache:
         logger.debug(f"Cached index area {key[:80]}")
 
     # =========================================================================
+    # ATOM feed cache (index of a CUZK ATOM service feed, ADR-042 D12)
+    # =========================================================================
+
+    def get_atom_entries(self, feed: str) -> tuple[str | None, dict, bool] | None:
+        """Stored index of a service feed: ``(etag, entries, fresh)``.
+
+        ``fresh`` = younger than the TTL. An older index is returned too: its
+        ``ETag`` revalidates it with a conditional GET (``304`` keeps it).
+        ``None``: nothing stored or ``refresh`` mode.
+        """
+        if self._refresh:
+            return None
+        # Lock guards the read too - see comment in get_record().
+        with self._write_lock, self._db_errors():
+            conn = self._existing_connection()
+            if conn is None:
+                return None
+            row = conn.execute(
+                "SELECT etag, payload, cached_at FROM atom_cache WHERE feed=?", (feed,)
+            ).fetchone()
+            if row is None:
+                return None
+            etag, payload, cached_at = row
+            fresh = time.time() - cached_at < self._ttl_seconds
+            return etag, json.loads(payload), fresh
+        return None  # disabled by an SQLite error (_db_errors)
+
+    def set_atom_entries(self, feed: str, etag: str | None, entries: dict) -> None:
+        """Store the index of a service feed with its ``ETag`` (TTL from now)."""
+        with self._write_lock, self._db_errors():
+            conn = self._connection()
+            if conn is None:
+                return
+            conn.execute(
+                "INSERT OR REPLACE INTO atom_cache (feed, etag, payload, cached_at) "
+                "VALUES (?, ?, ?, ?)",
+                (feed, etag, json.dumps(entries, ensure_ascii=False), time.time()),
+            )
+            conn.commit()
+        logger.debug(f"Cached ATOM feed index {feed[:80]} ({len(entries)} entries)")
+
+    # =========================================================================
     # Management methods
     # =========================================================================
 
@@ -747,6 +803,7 @@ class MetadataCache:
             conn.execute("DELETE FROM teryt_bbox_cache")
             conn.execute("DELETE FROM sheet_cache")
             conn.execute("DELETE FROM index_area_cache")
+            conn.execute("DELETE FROM atom_cache")
             conn.commit()
             logger.info("Cache cleared")
 
@@ -774,6 +831,7 @@ class MetadataCache:
             - sheet_count: number of cached sheet entries
             - index_area_count: number of cached index areas (availability
               report: index records, feature types, land masks)
+            - atom_feed_count: number of cached ATOM service feed indexes
             - db_size_bytes: size of the database file in bytes
             - db_path: path to the database file
             - db_exists: whether the database file exists (it is created
@@ -783,13 +841,13 @@ class MetadataCache:
               ``strict`` only - in strict mode the call raises
               ``CacheError`` instead
         """
-        counts: tuple[int, ...] = (0, 0, 0, 0, 0, 0)
+        counts: tuple[int, ...] = (0, 0, 0, 0, 0, 0, 0)
         # Lock guards these reads too - see comment in get_record().
         with self._write_lock, self._db_errors():
             conn = self._existing_connection()
             if conn is None:
                 # Nothing cached yet - report zeros without creating the file.
-                counts = (0, 0, 0, 0, 0, 0)
+                counts = (0, 0, 0, 0, 0, 0, 0)
             else:
                 counts = tuple(
                     conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -800,6 +858,7 @@ class MetadataCache:
                         "teryt_bbox_cache",
                         "sheet_cache",
                         "index_area_cache",
+                        "atom_cache",
                     )
                 )
         (
@@ -809,6 +868,7 @@ class MetadataCache:
             teryt_areas,
             sheet_count,
             index_area_count,
+            atom_feed_count,
         ) = counts
         teryt_count = teryt_points + teryt_areas
 
@@ -821,6 +881,7 @@ class MetadataCache:
             "teryt_count": teryt_count,
             "sheet_count": sheet_count,
             "index_area_count": index_area_count,
+            "atom_feed_count": atom_feed_count,
             "db_size_bytes": db_size,
             "db_path": str(self._db_path),
             "db_exists": db_exists,
@@ -855,6 +916,8 @@ class MetadataCache:
             sheet_deleted = conn.execute("SELECT changes()").fetchone()[0]
             conn.execute("DELETE FROM index_area_cache WHERE cached_at < ?", (cutoff,))
             area_deleted = conn.execute("SELECT changes()").fetchone()[0]
+            conn.execute("DELETE FROM atom_cache WHERE cached_at < ?", (cutoff,))
+            atom_deleted = conn.execute("SELECT changes()").fetchone()[0]
             conn.commit()
             total = (
                 record_deleted
@@ -862,12 +925,14 @@ class MetadataCache:
                 + teryt_deleted
                 + sheet_deleted
                 + area_deleted
+                + atom_deleted
             )
             if total > 0:
                 logger.debug(
                     f"Pruned {total} expired entries ({record_deleted} Record, "
                     f"{campaign_deleted} Campaigns, {teryt_deleted} TERYT, "
-                    f"{sheet_deleted} Sheet, {area_deleted} Index area)"
+                    f"{sheet_deleted} Sheet, {area_deleted} Index area, "
+                    f"{atom_deleted} ATOM feed)"
                 )
             return total
         return 0  # disabled by an SQLite error (_db_errors)

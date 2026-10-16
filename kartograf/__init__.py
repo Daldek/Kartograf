@@ -123,6 +123,11 @@ from kartograf.download.cz_laz import (
     check_cz_laz,
     download_cz_laz,
 )
+from kartograf.download.cz_orto import (
+    CzOrtoResult,
+    check_cz_orto_sheet,
+    download_cz_orto_sheet,
+)
 from kartograf.download.cz_sheets import (
     CzSheetResult,
     check_cz_sheet,
@@ -143,6 +148,11 @@ from kartograf.download.laz import (
     download_laz_area,
 )
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
+from kartograf.download.orto_cutout import (
+    OrtoCutoutResult,
+    check_orto_cutout,
+    download_orto_cutout,
+)
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import VersionRef
@@ -252,6 +262,10 @@ __all__ = [
     "PlCutoutResult",
     "check_pl_cutout",
     "download_pl_cutout",
+    # Download (PL orthophotomap cutout: WCS Standard/High, ADR-042 D14)
+    "OrtoCutoutResult",
+    "check_orto_cutout",
+    "download_orto_cutout",
     # Download (CZ cutout, countries)
     "CountryPart",
     "countries_for_bbox",
@@ -268,6 +282,10 @@ __all__ = [
     "CzLazResult",
     "check_cz_laz",
     "download_cz_laz",
+    # Download (CZ orthophoto: SM5 sheet, JPEG + world files, ADR-042 D13)
+    "CzOrtoResult",
+    "check_cz_orto_sheet",
+    "download_cz_orto_sheet",
     # Download (LAZ tiles, D17)
     "LazDownloadResult",
     "LazTileFailure",

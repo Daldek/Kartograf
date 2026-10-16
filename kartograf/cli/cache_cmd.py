@@ -73,6 +73,7 @@ def cmd_cache(args: argparse.Namespace) -> int:
             print(f"  Wpisy TERYT: {st['teryt_count']}")
             print(f"  Wpisy arkuszy: {st['sheet_count']}")
             print(f"  Wpisy obszarow skorowidza: {st['index_area_count']}")
+            print(f"  Indeksy feedow ATOM: {st['atom_feed_count']}")
             db_size_kb = st["db_size_bytes"] / 1024
             if not st["db_exists"]:
                 print("  Rozmiar bazy: - (plik jeszcze nie utworzony)")

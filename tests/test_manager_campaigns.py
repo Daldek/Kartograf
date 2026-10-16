@@ -2003,3 +2003,33 @@ def test_full_sheet_missing_full_flight_downloaded_by_default(tmp_path):
     assert fake.downloads == [REC["84183"].url, REC["83233"].url]
     assert linked_version(full_path(tmp_path)) == campaign_path(tmp_path, REC["83233"])
     assert result.new == [G]
+
+
+def test_all_campaigns_reports_each_flight_before_download(tmp_path):
+    """Backlog 0.8.0: with several flights the library reports the flight list
+    (local / to download) and each flight download before it starts."""
+    fake = FakeCampaignProvider(
+        {"newest": [REC["84183"]], "all": [REC["84183"], REC["83233"], REC["78047"]]}
+    )
+    DownloadManager(tmp_path, provider=fake, all_campaigns=False).download_sheet(G)
+    events: list[DownloadProgress] = []
+    m = DownloadManager(tmp_path, provider=fake, all_campaigns=True)
+    m.download_sheet(G, on_progress=events.append)
+    assert [(e.status, e.current, e.total) for e in events] == [
+        ("campaigns", 2, 3),
+        ("campaign", 1, 2),
+        ("campaign", 2, 2),
+    ]
+    assert events[0].message == (
+        "2025-10-21_84183 lokalna, 2025-04-27_83233 do pobrania, "
+        "2023-09-05_78047 do pobrania"
+    )
+    assert [e.message for e in events[1:]] == ["2025-04-27_83233", "2023-09-05_78047"]
+
+
+def test_single_flight_has_no_campaign_events(tmp_path):
+    events: list[DownloadProgress] = []
+    DownloadManager(tmp_path, provider=FakeCampaignProvider(C14)).download_sheet(
+        G, on_progress=events.append
+    )
+    assert events == []

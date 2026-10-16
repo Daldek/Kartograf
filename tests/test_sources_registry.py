@@ -17,6 +17,7 @@ from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     PACKAGE_URL_TOKENS,
     AccessChannel,
+    AtomFilesParams,
     CountryProfile,
     FeatureBBoxParams,
     LicenseInfo,
@@ -24,6 +25,7 @@ from kartograf.sources.descriptor import (
     TileScheme,
     TransportKind,
     UnitPackageParams,
+    WcsCutoutParams,
 )
 from kartograf.sources.registry import (
     all_countries,
@@ -117,6 +119,10 @@ EXPECTED_KEYS = {
     "pl.gugik.prg",
     "pl.gugik.egib",
     "pl.gugik.buildings_3d",
+    "cz.cuzk.zabaged",
+    "cz.cuzk.ruian",
+    "cz.cuzk.hy_net",
+    "cz.cuzk.ortofoto",
 }
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
@@ -125,6 +131,7 @@ CHANNEL_SIGNALS = [
     *((key, TransportKind.WFS, "index") for key in PL_SHEET_KEYS),
     *((key, TransportKind.WCS, "none") for key in PL_WCS_KEYS),
     ("pl.gugik.orto", TransportKind.WMS_SHEET_INDEX, "index"),
+    ("pl.gugik.orto", TransportKind.WCS, "none"),
     ("pl.gugik.laz", TransportKind.WFS, "index"),
     ("pl.gugik.bdot10k", TransportKind.DIRECT_FILES, "none"),
     ("eu.clms.corine", TransportKind.CLMS_API, "metadata"),
@@ -145,6 +152,13 @@ CHANNEL_SIGNALS = [
     ("pl.gugik.egib", TransportKind.DIRECT_FILES, "none"),
     ("pl.gugik.egib", TransportKind.WFS, "none"),
     ("pl.gugik.buildings_3d", TransportKind.DIRECT_FILES, "none"),
+    ("cz.cuzk.zabaged", TransportKind.ARCGIS_QUERY, "none"),
+    ("cz.cuzk.zabaged", TransportKind.DIRECT_FILES, "metadata"),
+    ("cz.cuzk.ruian", TransportKind.ARCGIS_QUERY, "none"),
+    ("cz.cuzk.ruian", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.hy_net", TransportKind.WFS, "none"),
+    ("cz.cuzk.hy_net", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.ortofoto", TransportKind.DIRECT_FILES, "metadata"),
 ]
 
 # Collection channels (ADR-042 D6) by their capability - a descriptor may have
@@ -157,6 +171,13 @@ COLLECTION_CHANNEL_SIGNALS = [
     ("pl.gugik.egib", "admin_unit_files", "none"),
     ("pl.gugik.egib", "bbox_vector", "none"),
     ("pl.gugik.buildings_3d", "admin_unit_files", "none"),
+    ("cz.cuzk.zabaged", "bbox_vector", "none"),
+    ("cz.cuzk.zabaged", "country_files", "metadata"),
+    ("cz.cuzk.ruian", "bbox_vector", "none"),
+    ("cz.cuzk.ruian", "country_files", "http"),
+    ("cz.cuzk.hy_net", "bbox_vector", "none"),
+    ("cz.cuzk.hy_net", "country_files", "http"),
+    ("cz.cuzk.ortofoto", "sheet_files", "metadata"),
 ]
 
 PL_VARIANTS = variants(country="PL")
@@ -192,8 +213,13 @@ def test_every_channel_has_an_inventoried_signal():
 
 
 def _collection_channels():
+    """Channels of the collection engines (the WCS cutout channels of the
+    orthophotomap carry provider configuration, ADR-042 D14)."""
     return [
-        (d, ch) for d in sources_for() for ch in d.channels if ch.params is not None
+        (d, ch)
+        for d in sources_for()
+        for ch in d.channels
+        if ch.params is not None and not isinstance(ch.params, WcsCutoutParams)
     ]
 
 
@@ -298,7 +324,7 @@ class TestRegistry:
             k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmpt")
         }
         cz = sources_for(country="CZ")
-        assert {d.key for d in cz} == set(CZ_KEYS)
+        assert {d.key for d in cz} == {k for k in EXPECTED_KEYS if k.startswith("cz.")}
         assert {d.key for d in sources_for(country="CZ", product="nmpt")} == {
             "cz.cuzk.dmp1g",
             "cz.cuzk.dmpok",
@@ -398,6 +424,7 @@ class TestRegistry:
     def test_no_vertical_for_orto_and_landcover(self):
         for key in (
             "pl.gugik.orto",
+            "cz.cuzk.ortofoto",
             "pl.gugik.bdot10k",
             "eu.clms.corine",
             "global.isric.soilgrids",
@@ -409,7 +436,9 @@ class TestRegistry:
         cz = get_country("CZ")
         assert cz.code == "CZ"
         assert cz.extent_wgs84 == BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326")
-        assert cz.dataset_keys == tuple(sorted(CZ_KEYS))
+        assert cz.dataset_keys == tuple(
+            sorted(k for k in EXPECTED_KEYS if k.startswith("cz."))
+        )
 
     def test_all_countries(self):
         codes = [c.code for c in all_countries()]
@@ -735,7 +764,11 @@ class TestCollectionChannels:
         assert channels
         for d, ch in channels:
             if ch.transport == TransportKind.DIRECT_FILES:
-                assert isinstance(ch.params, UnitPackageParams), d.key
+                assert isinstance(ch.params, UnitPackageParams | AtomFilesParams), d.key
+                if isinstance(ch.params, AtomFilesParams):
+                    assert ch.params.service_feed == ch.endpoint, d.key
+                    assert ch.endpoint.startswith("https://"), d.key
+                    assert ch.update_signal == "metadata", d.key
             else:
                 assert isinstance(ch.params, FeatureBBoxParams), d.key
                 expected = {
@@ -809,6 +842,7 @@ class TestCollectionChannels:
         assert {d.key for d in sources_for(product="landcover")} == {
             "pl.gugik.bdot10k",
             "eu.clms.corine",
+            "cz.cuzk.zabaged",
         }
         published = {dict(v.choice)["year"] for v in archive.params.variants}
         assert published == {str(year) for year in range(2014, 2026)}

@@ -12,6 +12,7 @@ from typing import Any
 
 from kartograf.cli._args import parse_bbox_arg
 from kartograf.cli.download_cmd import (
+    _end_progress,
     _plan_context,
     _print_notice,
     _print_version_summary,
@@ -20,21 +21,38 @@ from kartograf.cli.download_cmd import (
     _report_stale,
     _unit_of,
     _update_mode,
+    create_progress_callback,
     run_with_plan_file,
+    store_path_label,
 )
+from kartograf.download.collections import collection_layers
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.landcover.manager import LANDCOVER_SOURCE_CHOICES, LandCoverManager
+from kartograf.landcover.manager import (
+    COLLECTION_SOURCES,
+    LANDCOVER_SOURCE_CHOICES,
+    LandCoverManager,
+)
 
 
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
-    """``landcover list-layers``: BDOT10k layers or CORINE years."""
+    """``landcover list-layers``: BDOT10k or ZABAGED layers, CORINE years."""
     if args.source is None:
         print(f"Error: --source wymagane: {LANDCOVER_SOURCE_CHOICES}", file=sys.stderr)
         return 1
     # the catalogue of the source (no network, nothing written)
-    provider: Any = LandCoverManager(".", args.source, cache=False).provider
-    print(f"Warstwy zrodla {provider.name}:")
+    manager = LandCoverManager(".", args.source, cache=False)
+    print(f"Warstwy zrodla {manager.provider_name}:")
     print()
+    if args.source in COLLECTION_SOURCES:
+        for layer in collection_layers(COLLECTION_SOURCES[args.source]):
+            print(f"    {layer.name}  - warstwa uslugi {layer.source}")
+        print()
+        print(
+            "  Nazwy = warstwy GeoPackage obszaru (--bbox/--geometry); plik "
+            "krajowy (--whole-country) ma warstwy pelnej bazy pod nazwami CUZK."
+        )
+        return 0
+    provider: Any = manager.provider
     if args.source == "bdot10k":
         for layer in provider.get_available_layers():
             desc = provider.get_layer_description(layer)
@@ -69,6 +87,10 @@ def _landcover_options(args: argparse.Namespace) -> dict:
         options["layers"] = args.layers
     if args.keep_raw:
         options["keep_raw"] = True
+    if args.whole_country:
+        options["whole_country"] = True
+    if args.horizontal_crs is not None:
+        options["horizontal_crs"] = args.horizontal_crs
     return options
 
 
@@ -132,21 +154,24 @@ def _landcover_task(
     workers: int,
 ) -> int:
     """One request: a plan (``--check-updates``) or the files with one status
-    line each (spec 4.5)."""
+    line each (spec 4.5); BDOT10k by an area draws the powiat progress bar
+    first."""
     if args.check_updates:
-        return _report_plan(
-            args, manager.check(**selection, on_notice=_print_notice, **options)
-        )
+        plan = manager.check(**selection, on_notice=_print_notice, **options)
+        return _report_plan(args, plan, store_path_label)
     update = _update_mode(args)
+    on_progress = create_progress_callback(args.quiet, workers)
     result = manager.download(
         **selection,
         update=update,
         plan=_plan_context(args).loaded,
         workers=workers,
         on_notice=_print_notice,
+        on_progress=on_progress,
         **options,
     )
     out = manager.output_dir
+    _end_progress(on_progress)
     statuses = []
     for item in result.files:
         for file in (item.file, item.raw):
