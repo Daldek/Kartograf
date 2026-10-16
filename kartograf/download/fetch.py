@@ -186,15 +186,23 @@ def _signal_label(signal: dict) -> str:
 def _check_label_args(
     signal: SignalKind, version: VersionRef | None, edition: EditionLookup | None
 ) -> None:
-    """``metadata``: the edition labels the version; other signals: ``version``."""
+    """``metadata``: the edition labels the version; ``index``: ``version``
+    (the caller selected the file by its record, LAZ) or ``edition`` (the
+    label of the unit's index record, compared like an edition, ADR-043);
+    other signals: ``version``."""
     if signal == "metadata":
         if edition is None or version is not None:
             raise ValidationError(
                 "sygnal metadata: wersje etykietuje wydanie (edition=, bez version=)"
             )
+    elif signal == "index":
+        if (version is None) == (edition is None):
+            raise ValidationError(
+                "sygnal index: version= albo edition= (etykieta rekordu indeksu)"
+            )
     elif version is None or edition is not None:
         raise ValidationError(
-            f"sygnal {signal}: wymagane version=, edition= tylko dla metadata"
+            f"sygnal {signal}: wymagane version=, edition= tylko dla metadata i index"
         )
 
 
@@ -221,7 +229,7 @@ def _keep_local(
         if update == "upgrade":
             return False, None, None
         return True, _signal_label(remote), None
-    if signal == "metadata" and edition is not None:
+    if signal in ("metadata", "index") and edition is not None:
         if local.label_source != "edition":
             return True, None, "none"  # not from an edition: not comparable
         try:
@@ -237,7 +245,7 @@ def _keep_local(
         return True, current, None
     if signal in ("none", "http"):  # http without a probe: no cheap signal
         return True, None, "none"
-    return True, None, None  # index: the caller selected the file
+    return True, None, None  # index without a record label: the caller selected
 
 
 def use_local(
@@ -258,9 +266,11 @@ def use_local(
     ..."`` (default) or the ``DownloadError`` (``"upgrade"``). ``metadata``
     + ``edition``: a version labelled by an edition is compared with the
     current edition the same way; a version with another label source is
-    not comparable. ``none`` (and ``http`` without a probe) = local with
-    ``unverified="none"``; ``index`` = local (the caller selected the file
-    by its signal). A used local version gets the standard path linked.
+    not comparable; ``index`` + ``edition`` (the label of the unit's index
+    record, ADR-043) is compared the same way. ``none`` (and ``http``
+    without a probe) = local with ``unverified="none"``; ``index`` without
+    an edition = local (the caller selected the file by its record). A used
+    local version gets the standard path linked.
 
     Raises
     ------
@@ -404,7 +414,9 @@ def fetch_version(
 
     ``signal="metadata"`` requires ``edition`` (the version label is
     ``VersionRef(edition().id, "edition")``, asked BEFORE the download: no
-    version without an edition, D30); other signals require ``version``.
+    version without an edition, D30); ``signal="index"`` takes ``version``
+    or ``edition`` (the label of the unit's index record, labelled the same
+    way, ADR-043); other signals require ``version``.
     A download goes into a private staging directory and becomes a version;
     a failure leaves no version and no staging directory.
 
@@ -459,11 +471,14 @@ def inspect_version(
     ``probe`` -> ``current``/``newer`` (``unverifiable`` when the signals
     are not comparable), ``metadata`` -> ``current``/``newer`` by the
     edition (``unverifiable`` for a version not labelled by an edition),
-    ``index`` -> ``current``, ``none`` -> ``unverifiable``. A failed probe
-    or edition = ``check_failed``. ``available`` = ``(label, signal)`` of
-    the source known to the caller (e.g. the LAZ tile record); with
-    ``http`` the signal is the probe's, with ``metadata``
-    ``(edition id, {"edition": id})``.
+    ``index`` + ``edition`` (the label of the unit's index record,
+    ADR-043) -> the same comparison, ``index`` without an edition ->
+    ``current`` (the caller selected the file by its record), ``none`` ->
+    ``unverifiable``. A failed probe or edition = ``check_failed``.
+    ``available`` = ``(label, signal)`` of the source known to the caller
+    (e.g. the LAZ tile record, the fields of an index record); with ``http``
+    the signal is the probe's, with ``metadata`` ``(edition id, {"edition":
+    id})``; with ``index`` + ``edition`` the label is the edition id.
 
     Raises
     ------
@@ -482,6 +497,9 @@ def inspect_version(
         elif signal == "metadata" and edition is not None:
             label = edition().id
             remote = {"edition": label}
+        elif signal == "index" and edition is not None:
+            label = edition().id
+            remote = remote if remote is not None else {"edition": label}
     except DownloadError as e:
         status, error = "check_failed", str(e)
     else:
@@ -490,7 +508,7 @@ def inspect_version(
         elif signal == "http" and probe is not None:
             same = same_http_signal(http_signal_of(local), remote)
             status = "unverifiable" if same is None else "current" if same else "newer"
-        elif signal == "metadata":
+        elif signal == "metadata" or (signal == "index" and edition is not None):
             if local.label_source != "edition":
                 status = "unverifiable"
             else:

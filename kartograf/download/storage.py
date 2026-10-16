@@ -718,7 +718,13 @@ def bbox_slot(
 # Content token of a segment (spec 3.4, ADR-042 D8): lowercase, no separators.
 _SEGMENT_TOKEN = re.compile(r"[a-z0-9.-]+")
 _TERYT = re.compile(r"[0-9]{2,7}")
-_COUNTRY = re.compile(r"[a-z]{2}")
+# Country code, with the theme of a national file of several themes (ADR-043:
+# ``pl-miejscowosci``).
+_COUNTRY = re.compile(r"[a-z]{2}(?:-[a-z0-9]+)*")
+_KU = re.compile(r"[0-9]{6}")
+_TILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
+_ZONE = re.compile(r"[a-z0-9-]+")
+_MAPNOM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
 
 
 def token_segment(prefix: str, tokens: Sequence[str]) -> str:
@@ -762,28 +768,43 @@ def unit_slot(
     bbox: BBox | None = None,
     sheet: str | None = None,
     country: str | None = None,
+    ku: str | None = None,
+    tile: str | None = None,
+    zone: str | None = None,
+    mapnom: str | None = None,
     related_roots: Sequence[Path] = (),
 ) -> FileSlot:
-    """Version slot of one file of a unit (exactly one selection, ADR-042 D8).
+    """Version slot of one file of a unit (exactly one selection, ADR-042 D8,
+    ADR-043).
 
     ``teryt`` -> ``<segment>/teryt/<TERYT><ext>``; ``bbox`` ->
     ``<segment>/bbox/<coords><ext>`` in the bbox's own CRS (``bbox_slot``;
     the caller passes the CRS of the result); ``sheet`` ->
     ``<segment>/<path_parts>/<canonical sheet><ext>``; ``country`` ->
-    ``<segment>/country/<code><ext>`` (lowercase ``pl``/``cz``). Versions
-    live in ``<segment>/versions/<same hierarchy>/``; ``related_roots`` as
-    in ``FileSlot``.
+    ``<segment>/country/<code><ext>`` (lowercase ``pl``/``cz``, with the
+    theme of a national file of several themes: ``pl-miejscowosci``);
+    ``ku`` -> ``<segment>/ku/<code><ext>`` (CZ cadastral area, 6 digits);
+    ``tile`` -> ``<segment>/<zone>/<tile><ext>`` (a tile of an index; ``zone``
+    = the directory of its CRS, ``s7``; without a zone ``tile/``);
+    ``mapnom`` -> ``<segment>/<MAPNOM><ext>`` (a sheet of a CUZK sheet index
+    layer, flat). Versions live in ``<segment>/versions/<same hierarchy>/``;
+    ``related_roots`` as in ``FileSlot``.
 
     Raises
     ------
     ValidationError
         Not exactly one selection, a TERYT code that is not 2-7 digits, a
-        country code that is not two letters, or an invalid sheet code.
+        country code that is not two letters (optionally ``-<theme>``), a KU
+        code that is not 6 digits, a tile, zone or MAPNOM with other
+        characters, a zone without a tile, or an invalid sheet code.
     """
-    given = [v for v in (teryt, bbox, sheet, country) if v is not None]
-    if len(given) != 1:
+    given = [
+        v for v in (teryt, bbox, sheet, country, ku, tile, mapnom) if v is not None
+    ]
+    if len(given) != 1 or (zone is not None and tile is None):
         raise ValidationError(
-            "Podaj dokladnie jeden wybor: teryt, bbox, sheet albo country"
+            "Podaj dokladnie jeden wybor: teryt, bbox, sheet, country, ku, tile "
+            "albo mapnom (zone tylko z tile)"
         )
     output_dir = Path(output_dir)
     related = tuple(Path(r) for r in related_roots)
@@ -807,6 +828,20 @@ def unit_slot(
         if not _COUNTRY.fullmatch(name):
             raise ValidationError(f"Nieprawidlowy kod kraju: {country!r}")
         parts = ["country"]
+    elif ku is not None:
+        if not _KU.fullmatch(ku):
+            raise ValidationError(f"Nieprawidlowy kod katastralniho uzemi: {ku!r}")
+        parts, name = ["ku"], ku
+    elif tile is not None:
+        if not _TILE.fullmatch(tile):
+            raise ValidationError(f"Nieprawidlowy identyfikator kafla: {tile!r}")
+        if zone is not None and not _ZONE.fullmatch(zone):
+            raise ValidationError(f"Nieprawidlowy katalog ukladu kafla: {zone!r}")
+        parts, name = [zone or "tile"], tile
+    elif mapnom is not None:
+        if not _MAPNOM.fullmatch(mapnom):
+            raise ValidationError(f"Nieprawidlowe godlo arkusza CUZK: {mapnom!r}")
+        parts, name = [], mapnom
     else:
         assert sheet is not None
         name = SheetParser(sheet).sheet

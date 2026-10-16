@@ -1,9 +1,10 @@
 """
-Engine ``feature_bbox`` (ADR-042 D3/D4): features of an area from WFS 2.0
-or an ArcGIS REST layer, saved page by page for ``transform.gpkg``.
+Engine ``feature_bbox`` (ADR-042 D3/D4): features of an area from WFS 2.0,
+an ArcGIS REST layer or OGC API Features, saved page by page for
+``transform.gpkg``.
 
-Completeness comes from a number, never from links. Before the first page
-the service metadata is fetched fresh (no metadata cache, D3): WFS
+Completeness comes from a number, never from links alone. Before the first
+page the service metadata is fetched fresh (no metadata cache, D3): WFS
 ``GetCapabilities`` once per ``fetch_features`` (every layer exists as a
 FeatureType whose DefaultCRS has the EPSG code of ``native_crs``, the
 ``CountDefault`` limit is not below ``page_size``) and ``DescribeFeatureType``
@@ -35,16 +36,34 @@ A WFS layer with N = 0 next to non-empty ones still gets its (empty) page
 ``STARTINDEX=0``: GDAL builds the layer schema from the XSD and a document.
 An empty ArcGIS layer needs no page (schema = layer JSON).
 
+OGC API Features (GUGiK ``ogcapi.geoportal.gov.pl``: GeoJSON in CRS84 only;
+PRNG takes 73-95 s per ``items`` request whatever the ``limit``, PRG 3.5 s,
+measured 2026-10-16) keeps the requests to a minimum: ``/collections?f=json``
+once per ``fetch_features`` (every ``FeatureLayer.source`` is a collection
+``id``), then per layer the first page ``/collections/<id>/items`` with
+``f=json``, ``bbox`` and ``limit=page_size``, whose ``numberMatched`` is N
+(no separate count request). Later pages come only from the ``rel="next"``
+link (GeoJSON or untyped, one href), which must stay on the scheme and host
+of the endpoint; every page has ``numberReturned`` = its number of features
+and ``numberMatched`` = N (else the data changed). The stream stops at N
+unique ids; no ``next`` before N, a page without a new id or more than N
+unique ids is a ``DownloadError``. N = 0 in every layer is
+``NoCoverageError`` after the first pages (no further request). The feature
+id is the GeoJSON ``id`` for ``id_field="id"``, else the property
+``id_field``.
+
 BBOX: WFS ``BBOX=<a>,<b>,<c>,<d>,urn:ogc:def:crs:EPSG::<code>`` in the
 channel ``axis_order`` (``yx`` = northing first: EPSG:2180 per EPSG; ``xy``:
 EPSG:5514 X,Y; a swapped order silently gives another area or nothing),
-``SRSNAME`` = the same URN; ArcGIS envelopes are always x,y. Coordinates are
-rounded OUTWARD to whole millimetres. An HTML answer, XML whose root is not
-the expected document (``ows:ExceptionReport``) or JSON with ``error`` at
-HTTP 200 is a ``DownloadError``; HTTP failures and retries come from
+``SRSNAME`` = the same URN; ArcGIS envelopes are always x,y; OGC API
+``bbox=<minlon>,<minlat>,<maxlon>,<maxlat>`` in CRS84. Coordinates are
+rounded OUTWARD to whole millimetres (CRS84: to 1e-7 degree, about 1 cm). An
+HTML answer, XML whose root is not the expected document
+(``ows:ExceptionReport``) or JSON with ``error`` at HTTP 200 is a
+``DownloadError``; HTTP failures and retries come from
 ``transport.http.get_with_retry``. Every page is written to
-``pages_dir/<layer.name>/<start>.gml|.json`` as it arrives (one page in
-memory at a time).
+``pages_dir/<layer.name>/<start>.gml|.json`` (OGC API: ``<k>.json``, k =
+page number from 0) as it arrives (one page in memory at a time).
 """
 
 import json
@@ -55,6 +74,8 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Hashable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TypeGuard
+from urllib.parse import urljoin, urlsplit
 
 import requests
 
@@ -84,22 +105,39 @@ _EPSG_FORMS = (
     re.compile(r"https?://www\.opengis\.net/gml/srs/epsg\.xml#(\d+)", re.IGNORECASE),
 )
 _DIGITS = re.compile(r"[0-9]+")
+_CRS84_FORMS = (
+    re.compile(r"OGC:CRS84", re.IGNORECASE),
+    re.compile(r"urn:ogc:def:crs:OGC:[^:]*:CRS84", re.IGNORECASE),
+    re.compile(r"https?://www\.opengis\.net/def/crs/OGC/[^/]+/CRS84", re.IGNORECASE),
+)
+# Decimals of the BBOX numbers: whole millimetres; CRS84 degrees: 1e-7 degree
+# (about 1 cm).
+_METRE_DIGITS = 3
+_DEGREE_DIGITS = 7
+# OGC API: the feature id field that means the GeoJSON ``id`` member.
+_GEOJSON_ID = "id"
+_JSON_MEDIA = {"application/geo+json", "application/json"}
+_DEFAULT_PORTS = {"http": 80, "https": 443}
 
 # One fetched page: its file, the number of rows and the ids of its features.
 _Page = tuple[Path, int, list[Hashable]]
+# One OGC API page: numberMatched, the ids of its features, its ``next`` href.
+_OgcapiPage = tuple[int, list[Hashable], str | None]
 
 
 @dataclass(frozen=True)
 class LayerPages:
     """Saved answer of one source layer.
 
-    ``matched`` = N from ``RESULTTYPE=hits`` / ``returnCountOnly``;
-    ``pages`` = page files in ``STARTINDEX``/``resultOffset`` order (GML or
-    GeoJSON; ``()`` for an empty ArcGIS layer); ``schema`` = the saved service
-    description of the layer: WFS ``DescribeFeatureType`` XSD, ArcGIS the
-    layer JSON (``<layer>?f=json``; its ``geometryType`` types an empty
-    layer); ``fields`` = ArcGIS ``(name, esriFieldType)`` of that JSON, ``()``
-    for WFS.
+    ``matched`` = N from ``RESULTTYPE=hits`` / ``returnCountOnly`` / the
+    ``numberMatched`` of the first OGC API page; ``pages`` = page files in
+    ``STARTINDEX``/``resultOffset``/``next`` order (GML or GeoJSON; ``()``
+    for an empty ArcGIS layer, the empty first page of an empty OGC API
+    layer); ``schema`` = the saved service description of the layer: WFS
+    ``DescribeFeatureType`` XSD, ArcGIS the layer JSON (``<layer>?f=json``;
+    its ``geometryType`` types an empty layer), ``None`` for OGC API (the
+    pages are the only description); ``fields`` = ArcGIS
+    ``(name, esriFieldType)`` of that JSON, ``()`` for WFS and OGC API.
     """
 
     layer: FeatureLayer
@@ -127,7 +165,10 @@ def count_features(
 ) -> int:
     """Number of features of ``layer`` intersecting ``bbox`` (``native_crs``).
 
-    WFS ``RESULTTYPE=hits`` (``numberMatched``), ArcGIS ``returnCountOnly``.
+    WFS ``RESULTTYPE=hits`` (``numberMatched``), ArcGIS ``returnCountOnly``,
+    OGC API Features the ``numberMatched`` of one ``items`` page with
+    ``limit=1`` - as slow as a full page at GUGiK (PRNG: 78 s, 2026-10-16),
+    so ``fetch_features`` takes N from its first page instead.
 
     Raises
     ------
@@ -139,6 +180,8 @@ def count_features(
         parameters (programmer error).
     """
     code = _check_request(params, bbox)
+    if params.protocol == "ogcapi":
+        return _ogcapi_count(session, endpoint, layer, bbox, timeout)
     if params.protocol == "wfs":
         return _wfs_hits(session, endpoint, params, layer, bbox, code, timeout)
     return _arcgis_count(session, endpoint, layer, bbox, code, timeout)
@@ -162,11 +205,14 @@ def fetch_features(
     Raises
     ------
     NoCoverageError
-        Valid answers with N = 0 in every layer (no page is fetched).
+        Valid answers with N = 0 in every layer (no page is fetched; OGC API:
+        nothing after the first page of every layer).
     DownloadError
         A layer missing from the service, another DefaultCRS / layer CRS,
         a service page limit below ``page_size``, an error document, an
-        unknown count, an incomplete or inconsistent page stream.
+        unknown count, an incomplete or inconsistent page stream (OGC API:
+        a ``next`` link off the service, ``numberReturned`` other than the
+        features of the page, ``numberMatched`` changing between pages).
     ValueError
         No layers, repeated layer names, ``bbox`` not in ``native_crs`` or
         inconsistent channel parameters (programmer error).
@@ -178,6 +224,10 @@ def fetch_features(
     names = [layer.name for layer in layers]
     if len(set(names)) != len(names):
         raise ValueError(f"Powtorzone nazwy warstw: {names}")
+    if params.protocol == "ogcapi":
+        return _ogcapi_features(
+            session, endpoint, params, layers, bbox, Path(pages_dir), timeout
+        )
 
     infos: list[bytes] = []
     if params.protocol == "wfs":
@@ -192,10 +242,7 @@ def fetch_features(
         for layer in layers
     ]
     if not any(matched):
-        raise NoCoverageError(
-            f"{_service(params, endpoint)}: brak obiektow w obszarze "
-            f"(warstwy: {', '.join(layer.source for layer in layers)})"
-        )
+        raise _no_coverage(params, endpoint, layers)
     result = []
     for index, (layer, total) in enumerate(zip(layers, matched, strict=True)):
         layer_dir = Path(pages_dir) / layer.name
@@ -304,7 +351,23 @@ def _page_loop(
 
 
 def _check_request(params: FeatureBBoxParams, bbox: BBox) -> str:
-    """Native EPSG code; programmer errors of the call are ``ValueError``."""
+    """Native CRS of the call - the EPSG code (``"2180"``) for WFS and ArcGIS,
+    ``"CRS84"`` for OGC API Features; programmer errors are ``ValueError``."""
+    if params.page_size <= 0:
+        raise ValueError(f"page_size musi byc dodatnie: {params.page_size}")
+    if params.protocol == "ogcapi":
+        if not _is_crs84(params.native_crs):
+            raise ValueError(
+                f"Kanal OGC API Features wymaga ukladu OGC:CRS84, "
+                f"nie {params.native_crs!r}"
+            )
+        if not _is_crs84(bbox.crs):
+            raise ValueError(
+                f"bbox w ukladzie {bbox.crs!r}, oczekiwano {params.native_crs!r}"
+            )
+        if params.axis_order != "xy":
+            raise ValueError("bbox OGC API Features ma zawsze kolejnosc osi lon,lat")
+        return "CRS84"
     code = _epsg_code(params.native_crs)
     if code is None:
         raise ValueError(f"Uklad natywny {params.native_crs!r} nie jest kodem EPSG")
@@ -312,8 +375,6 @@ def _check_request(params: FeatureBBoxParams, bbox: BBox) -> str:
         raise ValueError(
             f"bbox w ukladzie {bbox.crs!r}, oczekiwano {params.native_crs!r}"
         )
-    if params.page_size <= 0:
-        raise ValueError(f"page_size musi byc dodatnie: {params.page_size}")
     if params.protocol == "arcgis":
         if not params.order_field:
             raise ValueError("Kanal ArcGIS wymaga order_field (orderByFields)")
@@ -336,21 +397,41 @@ def _epsg_code(crs: str) -> str | None:
     return None
 
 
+def _is_crs84(crs: str) -> bool:
+    """Whether a CRS label is OGC CRS84 (``OGC:CRS84``, its URN or URI)."""
+    text = crs.strip()
+    return any(form.fullmatch(text) for form in _CRS84_FORMS)
+
+
 def _service(params: FeatureBBoxParams, endpoint: str) -> str:
-    return f"{'WFS' if params.protocol == 'wfs' else 'ArcGIS'} {endpoint}"
+    label = {"wfs": "WFS", "arcgis": "ArcGIS", "ogcapi": "OGC API"}[params.protocol]
+    return f"{label} {endpoint}"
 
 
-def _mm(value: float, rounding: Callable[[float], int]) -> str:
-    """Coordinate rounded to whole millimetres by ``math.floor``/``math.ceil``
+def _no_coverage(
+    params: FeatureBBoxParams, endpoint: str, layers: tuple[FeatureLayer, ...]
+) -> NoCoverageError:
+    return NoCoverageError(
+        f"{_service(params, endpoint)}: brak obiektow w obszarze "
+        f"(warstwy: {', '.join(layer.source for layer in layers)})"
+    )
+
+
+def _outward(value: float, digits: int, rounding: Callable[[float], int]) -> str:
+    """Coordinate rounded to ``digits`` decimals by ``math.floor``/``math.ceil``
     (outward rounding never shrinks the area; trailing zeros dropped)."""
-    text = f"{rounding(round(value * 1000, 6)) / 1000:.3f}"
+    scale = 10**digits
+    text = f"{rounding(round(value * scale, 6)) / scale:.{digits}f}"
     return text.rstrip("0").rstrip(".")
 
 
-def _bbox_numbers(bbox: BBox, axis_order: str) -> str:
-    """The four BBOX numbers in the service axis order, widened to mm."""
-    min_x, min_y = _mm(bbox.min_x, math.floor), _mm(bbox.min_y, math.floor)
-    max_x, max_y = _mm(bbox.max_x, math.ceil), _mm(bbox.max_y, math.ceil)
+def _bbox_numbers(bbox: BBox, axis_order: str, digits: int = _METRE_DIGITS) -> str:
+    """The four BBOX numbers in the service axis order, widened outward to
+    ``digits`` decimals (default: whole millimetres)."""
+    min_x = _outward(bbox.min_x, digits, math.floor)
+    min_y = _outward(bbox.min_y, digits, math.floor)
+    max_x = _outward(bbox.max_x, digits, math.ceil)
+    max_y = _outward(bbox.max_y, digits, math.ceil)
     if axis_order == "yx":
         return f"{min_y},{min_x},{max_y},{max_x}"
     return f"{min_x},{min_y},{max_x},{max_y}"
@@ -598,9 +679,10 @@ def _layer_url(endpoint: str, layer: FeatureLayer) -> str:
     return f"{endpoint.rstrip('/')}/{layer.source}"
 
 
-def _arcgis_json(response: requests.Response, context: str) -> dict:
-    """JSON object of an ArcGIS answer; ``error`` (also at HTTP 200) or
-    anything that is not a JSON object is a ``DownloadError``."""
+def _service_json(response: requests.Response, context: str, service: str) -> dict:
+    """JSON object of an ArcGIS or OGC API answer; ``error`` (also at HTTP 200;
+    both services put a ``message`` in it) or anything that is not a JSON
+    object is a ``DownloadError``."""
     try:
         payload = json.loads(response.content)
     except (ValueError, UnicodeDecodeError) as e:
@@ -613,7 +695,9 @@ def _arcgis_json(response: requests.Response, context: str) -> dict:
     if error is not None:
         message = error.get("message") if isinstance(error, dict) else error
         details = error.get("details") if isinstance(error, dict) else None
-        raise DownloadError(f"{context}: blad uslugi ArcGIS: {message} {details or ''}")
+        raise DownloadError(
+            f"{context}: blad uslugi {service}: {message} {details or ''}"
+        )
     return payload
 
 
@@ -647,7 +731,7 @@ def _arcgis_layer(
     response = get_with_retry(
         session, url, timeout=timeout, description=context, params={"f": "json"}
     )
-    info = _arcgis_json(response, context)
+    info = _service_json(response, context, "ArcGIS")
     fields = info.get("fields")
     if not isinstance(fields, list) or not all(
         isinstance(field, dict)
@@ -700,7 +784,7 @@ def _arcgis_count(
         description=context,
         params={**_arcgis_filter(bbox, code), "returnCountOnly": "true", "f": "json"},
     )
-    count = _arcgis_json(response, context).get("count")
+    count = _service_json(response, context, "ArcGIS").get("count")
     if not isinstance(count, int) or isinstance(count, bool) or count < 0:
         raise DownloadError(f"{context}: usluga nie podala liczby obiektow ({count!r})")
     return count
@@ -737,7 +821,7 @@ def _arcgis_page(
     )
     target = layer_dir / f"{start}.json"
     target.write_bytes(response.content)
-    payload = _arcgis_json(response, context)
+    payload = _service_json(response, context, "ArcGIS")
     features = payload.get("features")
     if payload.get("type") != "FeatureCollection" or not isinstance(features, list):
         raise DownloadError(f"{context}: odpowiedz nie jest kolekcja GeoJSON")
@@ -751,3 +835,240 @@ def _arcgis_page(
             )
         ids.append(value)
     return target, len(features), ids
+
+
+# --- OGC API Features -------------------------------------------------------
+
+
+def _items_url(endpoint: str, layer: FeatureLayer) -> str:
+    return f"{endpoint.rstrip('/')}/collections/{layer.source}/items"
+
+
+def _ogcapi_query(bbox: BBox, limit: int) -> dict[str, str]:
+    return {
+        "f": "json",
+        "bbox": _bbox_numbers(bbox, "xy", _DEGREE_DIGITS),
+        "limit": str(limit),
+    }
+
+
+def _ogcapi_features(
+    session: requests.Session,
+    endpoint: str,
+    params: FeatureBBoxParams,
+    layers: tuple[FeatureLayer, ...],
+    bbox: BBox,
+    pages_dir: Path,
+    timeout: float,
+) -> FeaturePages:
+    """``/collections`` once, then the pages of every layer (module doc)."""
+    _check_collections(session, endpoint, layers, timeout)
+    result = []
+    for layer in layers:
+        layer_dir = pages_dir / layer.name
+        layer_dir.mkdir(parents=True, exist_ok=True)
+        pages = _ogcapi_layer(
+            session, endpoint, params, layer, bbox, layer_dir, timeout
+        )
+        logger.info(
+            "%s (%s): %s obiektow, %s stron",
+            _service(params, endpoint),
+            layer.source,
+            pages.matched,
+            len(pages.pages),
+        )
+        result.append(pages)
+    if not any(layer_pages.matched for layer_pages in result):
+        raise _no_coverage(params, endpoint, layers)
+    return FeaturePages(tuple(result))
+
+
+def _check_collections(
+    session: requests.Session,
+    endpoint: str,
+    layers: tuple[FeatureLayer, ...],
+    timeout: float,
+) -> None:
+    """Every layer is a collection ``id`` of ``/collections?f=json``."""
+    url = f"{endpoint.rstrip('/')}/collections"
+    context = f"OGC API {url}"
+    response = get_with_retry(
+        session, url, timeout=timeout, description=context, params={"f": "json"}
+    )
+    collections = _service_json(response, context, "OGC API").get("collections")
+    if not isinstance(collections, list):
+        raise DownloadError(f"{context}: odpowiedz bez listy kolekcji (collections)")
+    published = {item.get("id") for item in collections if isinstance(item, dict)}
+    missing = [layer.source for layer in layers if layer.source not in published]
+    if missing:
+        raise DownloadError(
+            f"{context}: usluga nie publikuje kolekcji {', '.join(missing)}"
+        )
+
+
+def _ogcapi_layer(
+    session: requests.Session,
+    endpoint: str,
+    params: FeatureBBoxParams,
+    layer: FeatureLayer,
+    bbox: BBox,
+    layer_dir: Path,
+    timeout: float,
+) -> LayerPages:
+    """Pages of one collection: the first by ``bbox`` and ``limit``, the next
+    ones only by ``rel="next"``, until N unique ids (module doc)."""
+    url = _items_url(endpoint, layer)
+    context = f"OGC API {url}"
+    pages: list[Path] = []
+
+    def fetch(page_url: str, query: dict[str, str] | None) -> _OgcapiPage:
+        description = f"{context} (strona {len(pages)})"
+        response = get_with_retry(
+            session, page_url, timeout=timeout, description=description, params=query
+        )
+        target = layer_dir / f"{len(pages)}.json"
+        target.write_bytes(response.content)
+        pages.append(target)
+        return _ogcapi_page(response, layer, description)
+
+    total, ids, link = fetch(url, _ogcapi_query(bbox, params.page_size))
+    seen: set[Hashable] = set()
+    while True:
+        before = len(seen)
+        seen.update(ids)
+        if len(seen) > total:
+            raise DownloadError(
+                f"{context}: strony daja {len(seen)} roznych obiektow, "
+                f"a numberMatched {total} (dane zmienily sie w trakcie)"
+            )
+        if len(seen) == total:
+            return LayerPages(layer, total, tuple(pages), None, ())
+        if len(seen) == before or link is None:
+            reason = "brak nowych obiektow" if len(seen) == before else "brak next"
+            raise DownloadError(
+                f"{context}: niepelna odpowiedz - {len(seen)} z {total} obiektow "
+                f"(strona {len(pages) - 1}: {reason})"
+            )
+        url = _next_url(url, link, endpoint, context)
+        matched, ids, link = fetch(url, None)
+        if matched != total:
+            raise DownloadError(
+                f"{context}: numberMatched strony {len(pages) - 1} to {matched}, "
+                f"a pierwszej {total} (dane zmienily sie w trakcie)"
+            )
+
+
+def _ogcapi_count(
+    session: requests.Session,
+    endpoint: str,
+    layer: FeatureLayer,
+    bbox: BBox,
+    timeout: float,
+) -> int:
+    url = _items_url(endpoint, layer)
+    context = f"OGC API {url} (limit=1)"
+    response = get_with_retry(
+        session,
+        url,
+        timeout=timeout,
+        description=context,
+        params=_ogcapi_query(bbox, 1),
+    )
+    matched, _, _ = _ogcapi_page(response, layer, context)
+    return matched
+
+
+def _ogcapi_page(
+    response: requests.Response, layer: FeatureLayer, context: str
+) -> _OgcapiPage:
+    """``numberMatched``, the feature ids and the ``next`` href of a page: a
+    GeoJSON FeatureCollection whose ``numberReturned`` equals its features."""
+    payload = _service_json(response, context, "OGC API")
+    features = payload.get("features")
+    if payload.get("type") != "FeatureCollection" or not isinstance(features, list):
+        raise DownloadError(f"{context}: odpowiedz nie jest kolekcja GeoJSON")
+    matched = payload.get("numberMatched")
+    if not _is_count(matched):
+        raise DownloadError(
+            f"{context}: usluga nie podala liczby obiektow (numberMatched={matched!r})"
+        )
+    returned = payload.get("numberReturned")
+    if not _is_count(returned) or returned != len(features):
+        raise DownloadError(
+            f"{context}: niepelna strona (numberReturned={returned!r}, "
+            f"obiektow {len(features)})"
+        )
+    ids = [_ogcapi_id(feature, layer.id_field, context) for feature in features]
+    return matched, ids, _next_link(payload, context)
+
+
+def _is_count(value: object) -> TypeGuard[int]:
+    return isinstance(value, int) and not isinstance(value, bool) and value >= 0
+
+
+def _ogcapi_id(feature: object, id_field: str, context: str) -> Hashable:
+    """The GeoJSON ``id`` (``id_field="id"``) or the property ``id_field``."""
+    value: object = None
+    if isinstance(feature, dict):
+        if id_field == _GEOJSON_ID:
+            value = feature.get("id")
+        else:
+            properties = feature.get("properties")
+            value = properties.get(id_field) if isinstance(properties, dict) else None
+    if (
+        isinstance(value, bool)
+        or not isinstance(value, str | int | float)
+        or (isinstance(value, str) and not value.strip())
+    ):
+        raise DownloadError(
+            f"{context}: obiekt bez identyfikatora {id_field} ({value!r})"
+        )
+    return value
+
+
+def _next_link(payload: dict, context: str) -> str | None:
+    """``href`` of the ``rel="next"`` link of a page (GeoJSON or untyped;
+    ``None`` without one); two different hrefs are a ``DownloadError``."""
+    links = payload.get("links")
+    if links is None:
+        return None
+    if not isinstance(links, list):
+        raise DownloadError(f"{context}: pole links nie jest lista")
+    hrefs = {
+        link["href"]
+        for link in links
+        if isinstance(link, dict)
+        and link.get("rel") == "next"
+        and isinstance(link.get("href"), str)
+        and _json_media(link.get("type"))
+    }
+    if len(hrefs) > 1:
+        raise DownloadError(f"{context}: kilka linkow next: {', '.join(sorted(hrefs))}")
+    return hrefs.pop() if hrefs else None
+
+
+def _json_media(media: object) -> bool:
+    """Whether a link ``type`` is GeoJSON/JSON or absent."""
+    if media is None:
+        return True
+    return isinstance(media, str) and media.split(";")[0].strip().lower() in _JSON_MEDIA
+
+
+def _next_url(current: str, href: str, endpoint: str, context: str) -> str:
+    """Absolute ``next`` URL; off the scheme and host of ``endpoint`` it is a
+    ``DownloadError`` (the request would leave the service)."""
+    url = urljoin(current, href)
+    if _origin(url) != _origin(endpoint):
+        raise DownloadError(f"{context}: link next spoza uslugi {endpoint}: {url}")
+    return url
+
+
+def _origin(url: str) -> tuple[str, str | None, int | None]:
+    """Scheme, host and port (the default of the scheme when absent) of a URL."""
+    parts = urlsplit(url)
+    scheme = parts.scheme.lower()
+    try:
+        port = parts.port
+    except ValueError:  # not a number or out of range: matches no endpoint
+        return scheme, None, None
+    return scheme, parts.hostname, port or _DEFAULT_PORTS.get(scheme)

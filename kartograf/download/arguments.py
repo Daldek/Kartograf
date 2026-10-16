@@ -23,6 +23,13 @@ def require_int(value: object, name: str) -> None:
         )
 
 
+def require_str(value: object, name: str) -> None:
+    """``ValidationError`` unless ``value`` is a ``str`` (a code is never a number:
+    ``teryt=1261`` would lose leading zeros, e.g. ``0208``)."""
+    if not isinstance(value, str):
+        raise ValidationError(f"{name} musi byc napisem (str), otrzymano {value!r}")
+
+
 def require_timeout(value: object, name: str = "timeout") -> None:
     """``ValidationError`` unless ``value`` is a positive number of seconds."""
     if isinstance(value, bool) or not isinstance(value, int | float):

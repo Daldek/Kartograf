@@ -1,0 +1,126 @@
+{
+  "map10k_tiff": {
+    "url": "https://opendata.geoportal.gov.pl/Mapy/Topograficzne/Wizualizacja_BDOT10k_10000/M-34-064/M-34-064-D-d-1.tif",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "66592473"
+    },
+    "head": "M-34-064-D-d-1.tif.head"
+  },
+  "map10k_pdf": {
+    "url": "https://opendata.geoportal.gov.pl/Mapy/Topograficzne/Wizualizacja_BDOT10k_10000/M-34-064/M-34-064-D-d-1.pdf",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "56875203"
+    },
+    "head": "M-34-064-D-d-1.pdf.head"
+  },
+  "geoid2021_txt": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "42328086"
+    },
+    "head": "geoid2021-PL-EVRF2007-NH.txt.head"
+  },
+  "rcn_1261": {
+    "url": "https://opendata.geoportal.gov.pl/InneDane/latest_exports/rcn_transakcje_ceny/GPKG/1261_transakcje_ceny.gpkg.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "301623607"
+    }
+  },
+  "prng_miejscowosci_gml": {
+    "url": "https://opendata.geoportal.gov.pl/prng/PRNG_MIEJSCOWOSCI_GML.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "20358653"
+    },
+    "members": [
+      "Export danych PRNG z dnia 2026-10-15",
+      "PRNG_MIEJSCOWOSCI_GML.xml",
+      "NG_PRNG.xsd",
+      "PRNG_legenda_nazwy kolumn_XLS SHP GML.XLSX"
+    ]
+  },
+  "prng_obiekty_gml": {
+    "url": "https://opendata.geoportal.gov.pl/prng/PRNG_OBIEKTY_FIZJOGRAFICZNE_GML.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "26414682"
+    },
+    "members": [
+      "Informacja o dacie exportu danych PRNG.txt",
+      "PRNG_OBIEKTY_FIZJOGRAFICZNE_GML.xml",
+      "NG_PRNG.xsd",
+      "PRNG_legenda_nazwy kolumn_XLS SHP GML.XLSX"
+    ]
+  },
+  "cz_km_shp_623164": {
+    "url": "https://services.cuzk.gov.cz/shp/ku/epsg-5514/623164.zip",
+    "headers": {
+      "Content-Type": "application/zip",
+      "Content-Length": "4537652",
+      "ETag": "\"97bf22df759dd1:0\"",
+      "Last-Modified": "Mon, 12 Oct 2026 03:09:10 GMT"
+    },
+    "members": [
+      "623164/",
+      "623164/BUDOVY_B.shp",
+      "623164/BUDOVY_B.shx",
+      "623164/BUDOVY_B.dbf",
+      "623164/BUDOVY_B.prj",
+      "623164/BUDOVY_B.cpg",
+      "623164/PARCELY_KN_P.shp",
+      "623164/PARCELY_KN_P.shx",
+      "623164/PARCELY_KN_P.dbf",
+      "623164/PARCELY_KN_P.prj",
+      "623164/PARCELY_KN_P.cpg"
+    ]
+  },
+  "cz_ztm10_tiff_0510-C-15": {
+    "url": "https://openzu.cuzk.gov.cz/opendata/ZTM10-SJTSK-TIFF/0510-C-15.zip",
+    "headers": {
+      "Content-Type": "application/x-zip-compressed",
+      "Content-Length": "38888699",
+      "ETag": "\"bb4e568d7f4db1:0\"",
+      "Last-Modified": "Mon, 14 Jul 2025 15:50:33 GMT"
+    }
+  },
+  "cz_ztm10_tiff_0510-D-11": {
+    "url": "https://openzu.cuzk.gov.cz/opendata/ZTM10-SJTSK-TIFF/0510-D-11.zip",
+    "headers": {
+      "Content-Type": "application/x-zip-compressed",
+      "Content-Length": "13959425",
+      "ETag": "\"2e35b51cd7f4db1:0\"",
+      "Last-Modified": "Mon, 14 Jul 2025 15:51:07 GMT"
+    }
+  },
+  "cz_km_shp_652954": {
+    "url": "https://services.cuzk.gov.cz/shp/ku/epsg-5514/652954.zip",
+    "headers": {
+      "Content-Type": "application/zip",
+      "Content-Length": "811905",
+      "ETag": "\"48753529f759dd1:0\"",
+      "Last-Modified": "Mon, 12 Oct 2026 03:09:57 GMT"
+    }
+  },
+  "cz_km_shp_696137": {
+    "url": "https://services.cuzk.gov.cz/shp/ku/epsg-5514/696137.zip",
+    "headers": {
+      "Content-Type": "application/zip",
+      "Content-Length": "1169044",
+      "ETag": "\"4f2d465df759dd1:0\"",
+      "Last-Modified": "Mon, 12 Oct 2026 03:11:24 GMT"
+    }
+  },
+  "cz_km_shp_753521": {
+    "url": "https://services.cuzk.gov.cz/shp/ku/epsg-5514/753521.zip",
+    "headers": {
+      "Content-Type": "application/zip",
+      "Content-Length": "629370",
+      "ETag": "\"0e6781a5749dd1:0\"",
+      "Last-Modified": "Sun, 20 Sep 2026 23:23:54 GMT"
+    }
+  }
+}

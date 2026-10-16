@@ -26,10 +26,12 @@ LAZ_SUPERSEDED = "laz_superseded"
 CORINE_PREVIEW = "corine_preview"
 CACHE_DISABLED = "cache_disabled"
 PROJECT_GEOMETRY_CHANGED = "project_geometry_changed"
-# Collections (ADR-042): units of an area, size of a national file before
-# its transfer, ``--country auto`` narrowed to the countries with the product.
+# Collections (ADR-042, ADR-043): units of an area, size of a national file
+# before its transfer, size of a unit file over 100 MiB before its transfer
+# (``HEAD``, K9), ``--country auto`` narrowed to the countries with the product.
 UNIT_LIST = "unit_list"
 WHOLE_COUNTRY_SIZE = "whole_country_size"
+DOWNLOAD_SIZE = "download_size"
 AUTO_NARROWED_TO_CZ = "auto_narrowed_to_cz"
 # Availability report: index records Kartograf does not download (outside the
 # variant registry, format inconsistent with the file, sheet code outside

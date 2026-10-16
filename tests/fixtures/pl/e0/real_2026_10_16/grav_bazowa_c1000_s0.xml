@@ -1,0 +1,203 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaGrawimetryczna?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:Bazowa_grawimetryczna&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T12:47:53" numberMatched="6" numberReturned="6">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>234447.030000 503088.988000</gml:lowerCorner>
+      		<gml:upperCorner>293925.304000 637908.810000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: FeatureId item 'ptid' not found in typename 'Bazowa_grawimetryczna'. -->
+    <wfs:member>
+      <ms:Bazowa_grawimetryczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>264503.774000 503088.988000</gml:lowerCorner>
+        		<gml:upperCorner>264503.774000 503088.988000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>264503.774000 503088.988000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>6</ms:ogc_fid>
+        <ms:nr_punktu>531206101</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>264503.774</ms:x1992>
+        <ms:y1992>503088.988</ms:y1992>
+        <ms:MP>0.01</ms:MP>
+        <ms:h_plevrf2007nh></ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh></ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh></ms:h_plkron86nh>
+        <ms:mh_plkron86nh></ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Znak specjalny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:g>981049982.0</ms:g>
+        <ms:mg>8.0</ms:mg>
+        <ms:vg>-3.127</ms:vg>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Grawimetryczna/Opisy_BOG/531206101.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_grawimetryczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_grawimetryczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>289947.092000 621623.702000</gml:lowerCorner>
+        		<gml:upperCorner>289947.092000 621623.702000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>289947.092000 621623.702000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>9</ms:ogc_fid>
+        <ms:nr_punktu>154302501</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>289947.092</ms:x1992>
+        <ms:y1992>621623.702</ms:y1992>
+        <ms:MP>0.01</ms:MP>
+        <ms:h_plevrf2007nh>230.8628</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.002</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>230.6929</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.002</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Znak specjalny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:g>981056033.5</ms:g>
+        <ms:mg>6.7</ms:mg>
+        <ms:vg>-3.146</ms:vg>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Grawimetryczna/Opisy_BOG/154302501.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_grawimetryczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_grawimetryczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>293925.304000 514304.509000</gml:lowerCorner>
+        		<gml:upperCorner>293925.304000 514304.509000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>293925.304000 514304.509000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>10</ms:ogc_fid>
+        <ms:nr_punktu>521404100</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>293925.304</ms:x1992>
+        <ms:y1992>514304.509</ms:y1992>
+        <ms:MP>0.01</ms:MP>
+        <ms:h_plevrf2007nh>327.3600</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>327.1950</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.010</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Znak specjalny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:g>981064552.1</ms:g>
+        <ms:mg>7.4</ms:mg>
+        <ms:vg>-3.252</ms:vg>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Grawimetryczna/Opisy_BOG/521404100.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_grawimetryczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_grawimetryczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>241114.470000 515750.130000</gml:lowerCorner>
+        		<gml:upperCorner>241114.470000 515750.130000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>241114.470000 515750.130000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>133</ms:ogc_fid>
+        <ms:nr_punktu>406333100</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>241114.470</ms:x1992>
+        <ms:y1992>515750.130</ms:y1992>
+        <ms:MP>0.10</ms:MP>
+        <ms:h_plevrf2007nh>244.7840</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>244.6500</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.010</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:g>981034176.4</ms:g>
+        <ms:mg>8.0</ms:mg>
+        <ms:vg>-3.088</ms:vg>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Grawimetryczna/Opisy_BOG/406333100.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_grawimetryczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_grawimetryczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>234447.030000 602099.090000</gml:lowerCorner>
+        		<gml:upperCorner>234447.030000 602099.090000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>234447.030000 602099.090000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>135</ms:ogc_fid>
+        <ms:nr_punktu>407723100</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>234447.030</ms:x1992>
+        <ms:y1992>602099.090</ms:y1992>
+        <ms:MP>0.10</ms:MP>
+        <ms:h_plevrf2007nh>241.3840</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>241.2330</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.010</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:g>981006454.1</ms:g>
+        <ms:mg>7.9</ms:mg>
+        <ms:vg>-3.053</ms:vg>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Grawimetryczna/Opisy_BOG/407723100.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_grawimetryczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_grawimetryczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>237468.830000 637908.810000</gml:lowerCorner>
+        		<gml:upperCorner>237468.830000 637908.810000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>237468.830000 637908.810000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>136</ms:ogc_fid>
+        <ms:nr_punktu>407823100</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>237468.830</ms:x1992>
+        <ms:y1992>637908.810</ms:y1992>
+        <ms:MP>0.10</ms:MP>
+        <ms:h_plevrf2007nh>221.6270</ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh>0.010</ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh>221.4530</ms:h_plkron86nh>
+        <ms:mh_plkron86nh>0.010</ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Dobry</ms:stan_znaku>
+        <ms:g>981000210.0</ms:g>
+        <ms:mg>7.1</ms:mg>
+        <ms:vg>-3.164</ms:vg>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Grawimetryczna/Opisy_BOG/407823100.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_grawimetryczna>
+    </wfs:member>
+</wfs:FeatureCollection>
+

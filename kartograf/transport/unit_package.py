@@ -1,36 +1,63 @@
 """
-Engine ``unit_package`` (ADR-042 D1-D2): one ZIP per unit from a URL template.
+Engine ``unit_package`` (ADR-042 D1-D2, ADR-043): one file per unit.
 
 A collection channel with ``UnitPackageParams`` publishes one package per
-administrative unit (powiat, voivodeship) or one national file; each
-``PackageVariant`` is one published choice (year, format, LoD) with its URL
-template. ``select_variant`` picks the variant of a user's choice without
-any network (a missing or unknown value is a ``ValidationError`` naming
-the allowed values), ``package_url`` fills the template, ``fetch_package``
-downloads the package atomically (``transport.http.download_to``), checks
-its bytes against ``Content-Length``, reads the ZIP central directory,
-requires the variant's member suffixes and - with ``unpack`` - streams
-exactly one member to the result (``zipfile`` checks its CRC). HTTP 404 is
-``NoCoverageError`` (the source publishes no package of the unit), every
-other failure ``DownloadError``; the package never sits in memory and a
-failure leaves no result file.
+unit - administrative unit (powiat, voivodeship), national file (one per
+theme), map sheet, index tile or CZ cadastral area; each ``PackageVariant``
+is one published choice (year, format, LoD, scale, sheet system, network)
+with its URL template, or with ``url_template=None`` the URL of the unit's
+index record (``index_url``). ``select_variant`` picks the variant of a
+user's choice without any network (a missing or unknown value is a
+``ValidationError`` naming the allowed values), ``package_url`` fills the
+template, ``fetch_package`` downloads the file atomically
+(``transport.http.download_to``) and checks its bytes against
+``Content-Length``. A ZIP (``file_kind="zip"``): the central directory is
+read, the variant's member suffixes are required and - with ``unpack`` -
+exactly one member is streamed to the result (``zipfile`` checks its CRC).
+Another kind is stored as published and checked by its content: TIFF magic
+(``tiff``), ``%PDF-`` (``pdf``) or a text head (``txt``: no NUL bytes, the
+first non-empty line is not markup). HTTP 404 is
+``NoCoverageError`` (the source publishes no file of the unit), every other
+failure ``DownloadError``; the file never sits in memory and a failure
+leaves no result file.
 """
 
 import os
+import re
 import shutil
 import threading
 import zipfile
 import zlib
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
 import requests
 
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.sources.descriptor import PackageVariant, UnitPackageParams
+from kartograf.sources.descriptor import FileKind, PackageVariant, UnitPackageParams
 from kartograf.transport.http import download_to, response_signal
 
 _COPY_CHUNK = 1_048_576
+_TOKEN = re.compile(r"{(\w+)}")
+# Bytes read to check a file that is not a ZIP by its content.
+_HEAD_BYTES = 4096
+# Classic and BigTIFF byte-order marks with the version number.
+_TIFF_MAGIC = (b"II*\x00", b"MM\x00*", b"II+\x00", b"MM\x00+")
+# Suffix of the stored file of each kind (a ZIP without ``unpack`` included).
+FILE_SUFFIX: dict[FileKind, str] = {
+    "zip": ".zip",
+    "tiff": ".tif",
+    "pdf": ".pdf",
+    "txt": ".txt",
+}
+# Kind of the expected file in messages ("zamiast <...>", "oczekiwano <...>").
+_KIND_TEXT: dict[FileKind, str] = {
+    "zip": "paczki ZIP",
+    "tiff": "pliku TIFF",
+    "pdf": "pliku PDF",
+    "txt": "pliku tekstowego",
+}
 
 
 @dataclass(frozen=True)
@@ -108,23 +135,73 @@ def select_variant(params: UnitPackageParams, **choice: str | None) -> PackageVa
     raise AssertionError(f"Warianty kanalu nie sa rozroznialne: {candidates}")
 
 
-def package_url(variant: PackageVariant, *, teryt: str | None) -> str:
-    """URL of the variant's package for a unit: ``{teryt}`` and ``{woj}`` (its
-    first two digits); ``teryt=None`` only for a template without tokens."""
-    code = teryt or ""
-    if not code and "{" in variant.url_template:
-        raise ValueError(f"Szablon {variant.url_template} wymaga kodu TERYT")
-    return variant.url_template.format(teryt=code, woj=code[:2])
+def package_url(
+    variant: PackageVariant,
+    *,
+    teryt: str | None = None,
+    sheet: str | None = None,
+    ku: str | None = None,
+    theme: str | None = None,
+) -> str:
+    """URL of the variant's file for a unit: the template tokens ``{teryt}``,
+    ``{woj}`` (its first two digits), ``{sheet}``, ``{ku}`` and ``{theme}``.
+
+    Raises
+    ------
+    ValueError
+        A variant without a template (its URL comes from an index record,
+        ``index_url``) or a template token without a value (programmer
+        error).
+    """
+    template = variant.url_template
+    if template is None:
+        raise ValueError("Wariant bez szablonu URL - adres daje rekord indeksu")
+    values = {
+        "teryt": teryt,
+        "woj": teryt[:2] if teryt else None,
+        "sheet": sheet,
+        "ku": ku,
+        "theme": theme,
+    }
+    missing = sorted(
+        {token for token in _TOKEN.findall(template) if values.get(token) is None}
+    )
+    if missing:
+        raise ValueError(f"Szablon {template} wymaga {', '.join(missing)}")
+    return template.format(**{key: value or "" for key, value in values.items()})
 
 
-def reject_documents(url: str):
-    """``download_to`` validator: an HTML/XML document instead of a package."""
+def index_url(variant: PackageVariant, urls: Mapping[str, str], *, unit: str) -> str:
+    """URL of the variant in the index record of ``unit`` (``url_template``
+    ``None``): the only link of a record with one URL (key ``""``), else the
+    link of the variant's ``format`` choice.
+
+    Raises
+    ------
+    DownloadError
+        The record has no link of that format (the index changed shape: the
+        file cannot be addressed).
+    """
+    if set(urls) == {""}:
+        return urls[""]
+    file_format = dict(variant.choice).get("format")
+    if file_format is None or file_format not in urls:
+        raise DownloadError(
+            f"{unit}: rekord indeksu bez pliku {file_format or '?'} "
+            f"(sa: {', '.join(sorted(urls)) or 'brak'})"
+        )
+    return urls[file_format]
+
+
+def reject_documents(url: str, kind: FileKind = "zip"):
+    """``download_to`` validator: an HTML/XML document instead of the file."""
 
     def validate(response: requests.Response) -> None:
         content_type = str(response.headers.get("Content-Type", "")).lower()
         if "html" in content_type or "xml" in content_type:
             raise DownloadError(
-                f"{url}: zrodlo zwrocilo dokument ({content_type}) zamiast paczki ZIP"
+                f"{url}: zrodlo zwrocilo dokument ({content_type}) zamiast "
+                f"{_KIND_TEXT[kind]}"
             )
 
     return validate
@@ -139,22 +216,24 @@ def fetch_package(
     variant: PackageVariant,
     timeout: float,
 ) -> PackageFile:
-    """Download the package ``url`` into ``staged`` (the ZIP or its member).
+    """Download the file ``url`` into ``staged`` (the ZIP, its member or the
+    file of another ``variant.file_kind``).
 
     Raises
     ------
     NoCoverageError
-        HTTP 404: no package of this unit at the source.
+        HTTP 404: no file of this unit at the source.
     DownloadError
         Any other HTTP/network failure (after the retry policy), a document
-        instead of a ZIP, fewer bytes than ``Content-Length``, an unreadable
-        ZIP, missing required members, not exactly one member to unpack or a
-        member failing its CRC. No result file is left behind.
+        instead of the file, fewer bytes than ``Content-Length``, an
+        unreadable ZIP, missing required members, not exactly one member to
+        unpack, a member failing its CRC or a file whose content is not of
+        its kind. No result file is left behind.
     """
     staged = Path(staged)
-    archive_path = (
-        staged if params.unpack is None else staged.with_name(f"{staged.name}.zip")
-    )
+    kind = variant.file_kind
+    unpack = params.unpack if kind == "zip" else None
+    archive_path = staged if unpack is None else staged.with_name(f"{staged.name}.zip")
     signal: dict = {}
     try:
         download_to(
@@ -163,13 +242,14 @@ def fetch_package(
             archive_path,
             timeout=timeout,
             description=url,
-            validate=reject_documents(url),
+            validate=reject_documents(url, kind),
             on_response=lambda response: signal.update(response_signal(response)),
         )
     except DownloadError as e:
         if e.status_code == 404:
+            what = "paczki" if kind == "zip" else "pliku"
             raise NoCoverageError(
-                f"Zrodlo nie publikuje paczki {url} (HTTP 404)", status_code=404
+                f"Zrodlo nie publikuje {what} {url} (HTTP 404)", status_code=404
             ) from e
         raise
     try:
@@ -179,14 +259,49 @@ def fetch_package(
             raise DownloadError(
                 f"{url}: pobrano {size} z {expected} bajtow (przerwany transfer)"
             )
-        member = _check_archive(url, archive_path, staged, params, variant)
+        if kind == "zip":
+            member = _check_archive(url, archive_path, staged, params, variant)
+        else:
+            _check_content(url, archive_path, kind)
+            member = None
     except BaseException:
         staged.unlink(missing_ok=True)
         archive_path.unlink(missing_ok=True)
         raise
-    if params.unpack is not None:
+    if unpack is not None:
         archive_path.unlink(missing_ok=True)
     return PackageFile(staged, signal, size, member)
+
+
+def _check_content(url: str, path: Path, kind: FileKind) -> None:
+    """A file that is not a ZIP checked by its first bytes (module docstring)."""
+    try:
+        with open(path, "rb") as stream:
+            head = stream.read(_HEAD_BYTES)
+    except OSError as e:
+        raise DownloadError(f"{url}: nie udalo sie odczytac pliku: {e}") from e
+    if kind == "tiff":
+        valid = head[:4] in _TIFF_MAGIC
+    elif kind == "pdf":
+        valid = head.startswith(b"%PDF-")
+    else:
+        valid = _is_text(head)
+    if not valid:
+        raise DownloadError(
+            f"{url}: oczekiwano {_KIND_TEXT[kind]}, a plik zaczyna sie od "
+            f"{head[:16]!r} - to nie sa oczekiwane dane"
+        )
+
+
+def _is_text(head: bytes) -> bool:
+    """Text without NUL bytes (any 8-bit encoding) whose first non-empty line
+    is not markup: an HTML or XML document is never the published text file,
+    and binary files (ZIP, TIFF, PDF streams) carry NUL bytes in their head."""
+    if not head or b"\x00" in head:
+        return False
+    text = head.decode("latin-1").lstrip("\ufeff\xef\xbb\xbf")
+    first = next((line.strip() for line in text.splitlines() if line.strip()), "")
+    return bool(first) and not first.startswith("<")
 
 
 def _check_archive(

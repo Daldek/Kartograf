@@ -1,0 +1,1 @@
+{"displayFieldName":"MAPNAME","fieldAliases":{"MAPNOM":"MAPNOM","MAPNAME":"MAPNAME"},"geometryType":"esriGeometryPolygon","spatialReference":{"wkid":102067,"latestWkid":5514},"fields":[{"name":"MAPNOM","type":"esriFieldTypeString","alias":"MAPNOM","length":50},{"name":"MAPNAME","type":"esriFieldTypeString","alias":"MAPNAME","length":50}],"features":[]}

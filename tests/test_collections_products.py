@@ -309,7 +309,9 @@ def test_bdot10k_year_teryt_slot_and_sidecar(tmp_path, frozen_clock):
     assert meta["extra"]["source"] == {"url": url, "edition": "2024"}
     assert meta["extra"]["version"] == {"label": "2024", "label_source": "edition"}
     assert "parent_request" not in meta["extra"]
-    assert session.calls == [("GET", url)]
+    # one transfer, its size asked before it (K9: no notice below 100 MiB)
+    assert session.calls == [("HEAD", url), ("GET", url)]
+    assert not result.notices
 
 
 def test_bdot10k_year_area_powiats(tmp_path, frozen_clock):
