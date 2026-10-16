@@ -273,14 +273,14 @@ def _run_cz_sheet(
         )
         if route.files and file.unverified == "none":
             # decision 12: a local version without the HTTP signal of the file
-            # (e.g. a TM33 tile warped from the ImageServer before 0.8.0)
+            # (e.g. a TM33 tile warped from the ImageServer by an earlier build)
             notices = (
                 Notice(
                     "info",
                     UNVERIFIED_LOCAL,
                     f"{sheet}: lokalna wersja {file.label} bez sygnalu HTTP pliku "
-                    "CUZK (np. kafel z warpu ImageServer sprzed 0.8.0) - "
-                    "niesprawdzona; plik CUZK: --force",
+                    "CUZK (np. kafel wyciety z ImageServer przez wczesniejsza "
+                    "wersje Kartografa) - niesprawdzona; plik CUZK: --force",
                 ),
             )
     return CzSheetResult(file, empty, stale, notices)
