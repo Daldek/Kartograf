@@ -83,6 +83,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     z podpowiedzia `--summary`, a `project add ... soil hsg --summary` to
     `Error:` (opcja wypisywania, nie zadania). Co zrobic: w skryptach
     zamien `soil hsg ... --stats` na `--summary`.
+  - Wycinek obrazu PL ma jedna pare funkcji dla ortofotomapy i true orto
+    (ADR-044 D3): `download_image_cutout`/`check_image_cutout` (wynik
+    `ImageCutoutResult`) sa w `kartograf.__all__`; owijki 0.8.0-dev
+    `download_orto_cutout`/`check_orto_cutout` i nazwa `OrtoCutoutResult`
+    usuniete bez aliasow. Co zrobic: `download_orto_cutout(bbox, ...)` ->
+    `download_image_cutout(bbox, product="orto", ...)` (tak samo
+    `check_*`), `OrtoCutoutResult` -> `ImageCutoutResult`.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -885,8 +892,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif` (RGB z WCS GUGiK, bez
   przeprobkowania, siatka wyrownana do piksela i sprawdzana, kawalki do
   200 x 200 m, sygnal `none`; `high` poza obszarami 10 cm = obraz 0,0,0
-  z `extra.all_nodata` i `Warning:`). Biblioteka: `download_orto_cutout`/
-  `check_orto_cutout` (`OrtoCutoutResult`), `download_data(...,
+  z `extra.all_nodata` i `Warning:`). Biblioteka: `download_image_cutout`/
+  `check_image_cutout(..., product="orto", coverage=, resolution=)`
+  (`ImageCutoutResult`; ta sama para dla true orto), `download_data(...,
   coverage=)`.
 - Silnik `atom_files` (ADR-042 D12, `kartograf/transport/atom.py`):
   pliki wskazywane feedem ATOM CUZK (feed uslugi -> feed zbioru -> plik),

@@ -19,7 +19,7 @@ import requests
 from kartograf.core.bbox import BBox
 from kartograf.download.area import pl_only_flags
 from kartograf.download.data import check_data, download_data, validate_data_request
-from kartograf.download.orto_cutout import check_orto_cutout, download_orto_cutout
+from kartograf.download.orto_cutout import check_image_cutout, download_image_cutout
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import ALL_NODATA, AUTO_NARROWED_TO_PL, CUTOUT_SIZE, Notice
 from kartograf.providers.pl.gugik_orto import (
@@ -64,6 +64,8 @@ RECORDED = {
 # 1 x 1 m in Krakow: 4 x 4 px at 0.25 m (one recorded GetCoverage)
 KRAKOW = BBox(566000, 243000, 566001, 243001, "EPSG:2180")
 ARGS = {"horizontal_crs": "EPSG:2180", "coverage": "standard", "resolution": "0.25m"}
+# The orthophotomap cutout of ``download_image_cutout``.
+ORTO = {"product": "orto", **ARGS}
 SEGMENT = "orto/pl_1992_standard_0.25m"
 
 
@@ -233,15 +235,15 @@ def test_orto_cutout_requires_variant(tmp_path, overrides, fragments):
         ({"resolution": "25cm"}, "0.1m, 0.25m, 0.5m, 1m"),
     ],
 )
-def test_download_orto_cutout_rejects_choice_before_network(
+def test_download_image_cutout_rejects_choice_before_network(
     tmp_path, overrides, fragment
 ):
     with (
         patch(SESSION_FACTORY) as factory,
         pytest.raises(ValidationError, match=fragment),
     ):
-        download_orto_cutout(
-            KRAKOW, output_dir=tmp_path, cache=False, **{**ARGS, **overrides}
+        download_image_cutout(
+            KRAKOW, output_dir=tmp_path, cache=False, **{**ORTO, **overrides}
         )
     factory.assert_not_called()
     assert not any(tmp_path.iterdir())
@@ -303,7 +305,9 @@ def test_provider_cutout_is_geotiff_only(tmp_path):
 def test_orto_cutout_slot_and_sidecar(tmp_path, args, bbox, fixture, source):
     session = _session()
     with patch(SESSION_FACTORY, return_value=session):
-        result = download_orto_cutout(bbox, output_dir=tmp_path, cache=False, **args)
+        result = download_image_cutout(
+            bbox, product="orto", output_dir=tmp_path, cache=False, **args
+        )
 
     coords = "_".join(
         format(v, ".10g") for v in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
@@ -348,12 +352,12 @@ def test_orto_cutout_grid_and_chunks(tmp_path):
     )[1]
     request = BBox(566000.1, 243000.05, 566000.9, 243000.95, "EPSG:2180")
     with patch(PROVIDER_FACTORY, return_value=provider):
-        result = download_orto_cutout(
+        result = download_image_cutout(
             request,
             output_dir=tmp_path,
             cache=False,
             on_notice=seen.append,
-            **ARGS,
+            **ORTO,
         )
 
     assert result.file.path.name == "566000_243000_566001_243001.tif"
@@ -425,22 +429,22 @@ def test_orto_cutout_exception_report_is_download_error(tmp_path, answer):
         patch(SESSION_FACTORY, return_value=session),
         pytest.raises(DownloadError),
     ):
-        download_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+        download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     assert _left_behind(tmp_path) == []
-    plan = check_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+    plan = check_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     assert plan.items[0].status == "missing"
 
 
 def test_orto_cutout_local_reuse_and_force_unchanged(tmp_path):
     first_session = _session()
     with patch(SESSION_FACTORY, return_value=first_session):
-        first = download_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+        first = download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     with patch(SESSION_FACTORY) as factory:
-        local = download_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+        local = download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     forced_session = _session()
     with patch(SESSION_FACTORY, return_value=forced_session):
-        forced = download_orto_cutout(
-            KRAKOW, output_dir=tmp_path, cache=False, update="force", **ARGS
+        forced = download_image_cutout(
+            KRAKOW, output_dir=tmp_path, cache=False, update="force", **ORTO
         )
 
     assert first.file.status == "new"
@@ -452,14 +456,14 @@ def test_orto_cutout_local_reuse_and_force_unchanged(tmp_path):
     assert forced.file.version_path == first.file.version_path
 
 
-def test_check_orto_cutout_unverifiable(tmp_path):
+def test_check_image_cutout_unverifiable(tmp_path):
     with patch(SESSION_FACTORY) as factory:
-        before = check_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+        before = check_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     factory.assert_not_called()
     with patch(SESSION_FACTORY, return_value=_session()):
-        result = download_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+        result = download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     with patch(SESSION_FACTORY) as factory:
-        after = check_orto_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ARGS)
+        after = check_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     factory.assert_not_called()
 
     (missing,) = before.items
@@ -477,14 +481,14 @@ def test_check_orto_cutout_unverifiable(tmp_path):
 def test_orto_cutout_all_black_is_kept_with_warning(tmp_path):
     """High outside its 10 cm areas answers 0,0,0: a version with a warning."""
     bbox = BBox(738960, 626588, 738960.4, 626588.4, "EPSG:2180")
-    args = {**ARGS, "coverage": "high", "resolution": "0.1m"}
+    args = {**ORTO, "coverage": "high", "resolution": "0.1m"}
     seen: list[Notice] = []
     with patch(SESSION_FACTORY, return_value=_session()):
-        result = download_orto_cutout(
+        result = download_image_cutout(
             bbox, output_dir=tmp_path, cache=False, on_notice=seen.append, **args
         )
     with patch(SESSION_FACTORY) as factory:
-        local = download_orto_cutout(bbox, output_dir=tmp_path, cache=False, **args)
+        local = download_image_cutout(bbox, output_dir=tmp_path, cache=False, **args)
 
     assert result.file.status == "new"
     assert [(n.level, n.code) for n in seen] == [("warning", ALL_NODATA)]

@@ -1025,14 +1025,14 @@ z WCS dla obszaru PL, oba w magazynie wersji.
 
 #### Capabilities
 ```python
-from kartograf import BBox, download_cz_orto_sheet, download_orto_cutout
+from kartograf import BBox, download_cz_orto_sheet, download_image_cutout
 
 cz = download_cz_orto_sheet("CTES96", output_dir="./data")  # CzOrtoResult
-cut = download_orto_cutout(
+cut = download_image_cutout(
     BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
-    horizontal_crs="EPSG:2180", output_dir="./data",
+    product="orto", horizontal_crs="EPSG:2180", output_dir="./data",
     coverage="standard", resolution="0.25m",
-)  # OrtoCutoutResult
+)  # ImageCutoutResult
 ```
 
 #### CLI Commands
@@ -1434,13 +1434,13 @@ from kartograf import (
     check_collection,
     CollectionReport,
 
-    # Download (orthophoto: CZ SM5 sheet, PL WCS cutout; ADR-042 D13-D14)
+    # Download (orthophoto: CZ SM5 sheet; PL image cutout, ADR-042 D13-D14, ADR-044)
     download_cz_orto_sheet,
     check_cz_orto_sheet,
     CzOrtoResult,
-    download_orto_cutout,
-    check_orto_cutout,
-    OrtoCutoutResult,
+    download_image_cutout,
+    check_image_cutout,
+    ImageCutoutResult,
 
     # Availability report (`kartograf elevation availability`, ADR-041)
     check_availability,

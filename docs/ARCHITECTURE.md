@@ -462,9 +462,9 @@ kartograf/
 │   ├── plan.py          # Plan aktualizacji kartograf-plan/1 (PlanItem.track/unit)
 │   ├── cutout.py        # Wycinek PL WCS (ADR-035): download_pl_cutout/check_pl_cutout,
 │   │                    # maska ladu, sidecar (kroki wewnetrzne prywatne)
-│   ├── orto_cutout.py   # Wycinek obrazu PL WCS (ADR-042 D14, plan E1): download_image_cutout/
+│   ├── orto_cutout.py   # Wycinek obrazu PL WCS (ADR-042 D14, plan E1, ADR-044): download_image_cutout/
 │   │                    # check_image_cutout (ortofotomapa i true orto po kluczu deskryptora),
-│   │                    # download_orto_cutout/check_orto_cutout, OrtoCutoutResult, orto_cutout_error
+│   │                    # ImageCutoutResult, orto_cutout_error
 │   ├── cz_cutout.py     # Wycinek CZ: download_cz_cutout/check_cz_cutout, write_cz_sidecar
 │   ├── cz_sheets.py     # Arkusz CZ TM33/SM5: download_cz_sheet/check_cz_sheet, CzSheetResult,
 │   │                    # cz_sheet_variant (wiersz trasy rastra CZ, plan B)
@@ -763,7 +763,7 @@ Kto wypelnia ktory placeholder:
 |---|---|---|
 | `{vcrs}` | konstruktor `FileStorage(vertical_crs=)` albo jawne `resolve_subdir(vertical_crs=)` | raz, na starcie zadania — uklad pionowy jest wlasnoscia zadania, nie arkusza |
 | `{system}` | `FileStorage` per identyfikator (`get_path`/`get_raw_path`/`exists`/`delete`/`ensure_directory`), regula ta sama co `parser_registry.path_parts`: kropki -> `2000`, reszta -> `1992` | przy budowie kazdej sciezki |
-| `{system}` (jawnie) | tor LAZ: `LazTile.system` (`uklad_xy` kafla przez `parse_pl_system`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., system=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL WCS (`download_pl_cutout`: `system="1992"` na stale — `--cutout` z `--sheet-system 2000` jest odrzucane, sekcja 4.3) i wycinek ortofotomapy (`download_orto_cutout`: `system="1992"`, tylko EPSG:2180) | przed utworzeniem `FileStorage` / sciezki wycinka |
+| `{system}` (jawnie) | tor LAZ: `LazTile.system` (`uklad_xy` kafla przez `parse_pl_system`; nieznany = kafel pominiety / `ValidationError`) przez `FileStorage.get_raw_path(..., system=)` — jedno zrodlo prawdy dla CLI i biblioteki (zn. 8, review max); wycinek PL WCS (`download_pl_cutout`: `system="1992"` na stale — `--cutout` z `--sheet-system 2000` jest odrzucane, sekcja 4.3) i wycinek obrazu (`download_image_cutout`: `system="1992"`, tylko EPSG:2180) | przed utworzeniem `FileStorage` / sciezki wycinka |
 
 `FileStorage` waliduje wynik koncowy: segment, w ktorym po wypelnieniu zostala
 klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
@@ -774,7 +774,7 @@ klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
 Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
 (`download_data`, `DownloadManager`, `LandCoverManager`, `download_pl_cutout`,
 `download_laz_area`, `download_cz_cutout`, `download_cz_sheet`,
-`download_cz_laz`, `download_cz_orto_sheet`, `download_orto_cutout`,
+`download_cz_laz`, `download_cz_orto_sheet`, `download_image_cutout`,
 `download_collection`, `HSGCalculator`) zapisuje dane
 i `<plik>.meta.json`: sidecar wersji w magazynie jest obowiazkowy,
 sidecar sciezki standardowej best-effort (sekcja 1). Poza magazynem
@@ -1383,7 +1383,7 @@ CLI wypisuje je jako `Info:`/`Warning:` na stderr (takze z `-q`), naglowek
 listy arkuszy (`SHEET_LIST`) na stdout. `check_data` (te same argumenty
 bez `update`, `plan`, `workers`, `on_progress`) zwraca jeden plan
 `kartograf-plan/1` (pod `auto` z pozycjami PL i CZ). Tory sa publiczne
-(`download_pl_cutout`, `download_orto_cutout`, `download_cz_cutout`,
+(`download_pl_cutout`, `download_image_cutout`, `download_cz_cutout`,
 `download_cz_sheet`, `download_cz_orto_sheet`, `download_laz_area`,
 `download_cz_laz`, `DownloadManager`) z parami `check_*`; ich kroki
 wewnetrzne nie.
@@ -1959,9 +1959,10 @@ dwa pliki ze wspolnym `extra.parent_request`.
 EPSG:2180 --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` =
 `download_data(product="orto", cutout=True, horizontal_crs="EPSG:2180",
 coverage=..., resolution=...)` -> `download/orto_cutout.py::
-download_orto_cutout(bbox, *, horizontal_crs, output_dir, coverage,
-resolution, update, plan, parent_request, cache, on_notice)` ->
-`OrtoCutoutResult(file, stale, notices)`; `check_orto_cutout(...)` z tym
+download_image_cutout(bbox, *, product, horizontal_crs, output_dir,
+coverage, resolution, update, plan, parent_request, cache, on_notice)` ->
+`ImageCutoutResult(file, stale, notices)` (ADR-044 D3: jedna para dla
+`product="orto"` i `"true-orto"`); `check_image_cutout(...)` z tym
 samym wyborem daje plan (tor `pl_cutout`; lokalna wersja =
 `unverifiable`). Inaczej niz NMT/NMPT:
 
