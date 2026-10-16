@@ -20,6 +20,7 @@ zaokraglenie na zewnatrz do mm).
 | `*_l<id>_tesin_r1_o<o>.json.gz` | jw. + `outSR=5514&outFields=*&orderByFields=OBJECTID&resultOffset=<o>&resultRecordCount=1&returnGeometry=true&f=geojson` | jeden obiekt na strone; pierwsze strony warstw 66 i 67 (Data50) oraz 117 (Data250) maja `exceededTransferLimit: true` |
 | `data50_service.xml`, `data250_service.xml` | `atom.cuzk.gov.cz/Data50/Data50.xml` (`Data250`) | jeden zbior `CUZK_Data50_1` (`CUZK_Data250_1`), kategorie EPSG:5514 i EPSG:3045 |
 | `data50_dataset.xml`, `data250_dataset.xml` | `.../datasetFeeds/CZ-00025712-CUZK_Data50_1.xml` (`Data250`) | dwa pliki SHP ZIP: `openzu/Data50/epsg-5514/data50.zip` (`length` 515 542 917, `updated` 2026-04-28T10:09:14+02:00) i `epsg-3045/data50.zip` (756 987 213); Data250: 230 485 722 (2026-05-12T10:16:28+02:00) i 320 374 437 |
+| `national.json` | `HEAD` `openzu.cuzk.gov.cz/opendata/<Data50/Data250>/epsg-5514/<data50/data250>.zip` i katalog centralny pliku pobranego przez Kartograf (E2E 2026-10-16) | `url`, naglowki `HEAD` (`Content-Type`, `Content-Length`, `Last-Modified`, `ETag`) i pelna lista czlonow ZIP w kolejnosci katalogu: Data50 557 (`!readme.txt`, katalog SHP, projekty ArcGIS, `shp/`), Data250 448 (`DATA250_2026_SHP/`, w tym rastry reliefu `.tif`) |
 
 ## Fakty z nagrania (2026-10-16)
 
@@ -33,5 +34,8 @@ zaokraglenie na zewnatrz do mm).
 - Strony z `resultRecordCount=2000` maja `exceededTransferLimit`, gdy
   warstwa ma wiecej obiektow niz strona; silnik liczy strony z
   `returnCountOnly`, nie z tej flagi.
+- Plik krajowy SHP ma wlasne nazwy warstw (Data50: nazwy CUZK, np.
+  `shp/Akvadukt.shp`; Data250: kody angielskie, np. `AirfldA.shp`), inne niz
+  warstwy uslugi REST; Kartograf zapisuje go 1:1.
 
 Testy: `tests/test_cz_data50_250.py`, `tests/test_parity_e4.py`.

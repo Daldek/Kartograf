@@ -838,6 +838,26 @@ class TestCollectionChannels:
                 layers = params.unpack_layers
                 assert len(set(layers)) == len(layers), d.key
 
+    def test_class_choice_only_on_teryt_or_country_packages(self):
+        """``classes`` of a variant (``layers``, BDOO) are found by the
+        channel's ``class_pattern`` in the members of a package kept as a ZIP
+        (no ``unpack``); only the jobs of TERYT units and national files carry
+        the chosen classes - on a sheet, tile or cadastral area channel the
+        choice would be ignored."""
+        for d, ch in _collection_channels():
+            params = ch.params
+            if not isinstance(params, UnitPackageParams):
+                continue
+            if any(variant.classes for variant in params.variants):
+                assert params.class_pattern is not None, d.key
+                assert re.compile(params.class_pattern).groupindex.keys() == {"code"}
+                assert params.unpack is None, d.key
+                assert params.unit in ("powiat", "woj", "country"), d.key
+                for variant in params.variants:  # segment tokens of a choice
+                    assert all(
+                        _SEGMENT_TOKEN.fullmatch(c.lower()) for c in variant.classes
+                    )
+
     def test_index_signal_only_with_index(self):
         """Signal ``index`` compares the label of the unit's index record
         (ADR-043): a collection channel has it exactly when it has an index."""
