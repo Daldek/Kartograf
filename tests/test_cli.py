@@ -506,7 +506,7 @@ class TestCommandGroups:
             {"admin", "addresses", "special", "geomorphology"},
         ),
         "cadastre": ("--product", {"map", "prices"}),
-        "models3d": ("--product", {"buildings"}),
+        "models3d": ("--product", {"buildings", "mesh", "trees"}),
         "hydro": ("--product", {"network"}),
     }
 

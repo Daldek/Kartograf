@@ -117,6 +117,13 @@ class UnpackedMember:
     member: str
 
 
+def single_dataset(params: AtomFilesParams) -> bool:
+    """Whether the feed has exactly one dataset: ``entry_pattern`` has no
+    ``sheet``/``woj`` group keying the index (a national file, key ``""``)."""
+    groups = re.compile(params.entry_pattern).groupindex
+    return not any(group in groups for group in _KEY_GROUPS)
+
+
 def atom_segment_tokens(params: AtomFilesParams, crs: str | None) -> tuple[str, ...]:
     """Content tokens of the storage segment: ``segment_tokens`` plus the
     EPSG number of the chosen file when the dataset has several CRSs."""
@@ -247,7 +254,7 @@ def _parse_service(
         raise DownloadError(
             f"{context}: feed nie ma zbiorow pasujacych do {params.entry_pattern!r}"
         )
-    if not any(g in pattern.groupindex for g in _KEY_GROUPS) and len(entries) != 1:
+    if single_dataset(params) and len(entries) != 1:
         raise DownloadError(
             f"{context}: oczekiwano jednego zbioru, jest {len(entries)}"
         )
