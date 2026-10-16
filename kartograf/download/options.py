@@ -12,17 +12,31 @@ from collections.abc import Iterable, Mapping, Sequence
 from types import SimpleNamespace
 
 from kartograf.core.bbox import BBox, validate_bbox
+from kartograf.core.sheet_parser import series_scale
 from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_contours import PRODUCT as CONTOURS
+from kartograf.download.cz_contours import contours_formats
 from kartograf.download.cz_orto import cz_orto_sheet
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
 from kartograf.exceptions import ValidationError
-from kartograf.providers.pl.gugik_orto import coverage_choices
+from kartograf.providers.pl.gugik_orto import (
+    ORTO_KEY,
+    coverage_choices,
+    cutout_choice_error,
+    image_directions,
+    image_source,
+    sheet_index,
+    wcs_cutout_channels,
+)
+from kartograf.sources.descriptor import SheetIndexParams
 from kartograf.sources.variants import (
     CZ_LAZ_VERTICAL_TEXT,
     CZ_VERTICAL_TEXT,
     FORMATS,
+    UNKNOWN_VERTICAL,
+    ProductVariant,
     cz_laz_error,
     cz_resolution_text,
     cz_variant_error,
@@ -38,6 +52,12 @@ _PRODUCT_TEXT = {
     "nmpt": "Numeryczny Model Pokrycia Terenu; PL i CZ",
     "orto": "ortofotomapa RGB; PL i CZ",
     "laz": "chmura punktow LIDAR; PL i CZ",
+    CONTOURS: "warstwice ZABAGED - wektor 2D, arkusze SM5, SHP albo DGN; CZ",
+    "intensity": "obrazy intensywnosci LIDAR, 1 pasmo 0,25 m; PL",
+    "true-orto": "prawdziwa ortofotomapa (true orto) wybranych miast, 0,05 m; PL",
+    "oblique-orto": (
+        "ortofotomapa ukosna wybranych miast, arkusz = 4 pliki kierunkow n, e, s, w; PL"
+    ),
 }
 
 
@@ -50,8 +70,8 @@ def product_choices(products: Iterable[str] = tuple(_PRODUCT_TEXT)) -> str:
 PRODUCT_CHOICES = product_choices()
 # Products of the CLI groups (ADR-039): ``elevation download`` and ``imagery
 # download`` offer only these; a new product of a group is added here.
-ELEVATION_PRODUCTS: tuple[str, ...] = ("nmt", "nmpt", "laz")
-IMAGERY_PRODUCTS: tuple[str, ...] = ("orto",)
+ELEVATION_PRODUCTS: tuple[str, ...] = ("nmt", "nmpt", "laz", CONTOURS)
+IMAGERY_PRODUCTS: tuple[str, ...] = ("orto", "intensity", "true-orto", "oblique-orto")
 
 
 def require_product(product: str | None, products: Sequence[str]) -> None:
@@ -84,6 +104,35 @@ _VERTICAL_CRS_TEXT = {
 _SHEET_PRODUCTS = ("nmt", "nmpt")
 
 
+def _image_index(product: object) -> SheetIndexParams | None:
+    """Sheet index of an image product (orthophotomap family, plan E1)."""
+    source = image_source(product)
+    return sheet_index(source.key) if source is not None else None
+
+
+def image_cutout_key(product: object) -> str | None:
+    """Descriptor key of the WCS cutout of an image product (``orto``,
+    ``true-orto``); ``None`` for a product without one."""
+    source = image_source(product)
+    if source is None or not wcs_cutout_channels(source.key):
+        return None
+    return source.key
+
+
+def cutout_products() -> tuple[str, ...]:
+    """Products with a PL cutout (``--cutout``): the grids and the images with
+    a WCS cutout channel, registry order."""
+    images = (p for p in IMAGERY_PRODUCTS if image_cutout_key(p) is not None)
+    return (*_SHEET_PRODUCTS, *images)
+
+
+def _or_list(values: Sequence[str]) -> str:
+    """``a, b albo c``."""
+    return (
+        f"{', '.join(values[:-1])} albo {values[-1]}" if len(values) > 1 else values[0]
+    )
+
+
 def resolution_text(country: str = "PL") -> str:
     """Grid resolutions (``--resolution``) of every sheet product, from the
     variant registry: ``NMT (EVRF2007: 0.15m, ...; KRON86: 0.5m, 1m), NMPT (...)``."""
@@ -98,8 +147,11 @@ def resolution_text(country: str = "PL") -> str:
 
 
 def vertical_crs_text(country: str = "PL") -> str:
-    """Height systems of the country's variants (``--vertical-crs``)."""
-    names = sorted({v.vertical_crs for v in variants(country=country)})
+    """Height systems of the country's variants (``--vertical-crs``; a
+    variant without one takes no flag)."""
+    names = sorted(
+        {v.vertical_crs for v in variants(country=country) if v.vertical_crs}
+    )
     return ", ".join(
         f"{name} ({_VERTICAL_CRS_TEXT[name]})" if name in _VERTICAL_CRS_TEXT else name
         for name in names
@@ -216,6 +268,62 @@ def _format_of(task: SimpleNamespace) -> str | None:
     return getattr(task, "format", None)
 
 
+def pl_file_variant(task: SimpleNamespace) -> ProductVariant | None:
+    """The PL variant of the request published as voivodeship files of an
+    ATOM feed (no sheet index: NMT 100 m, plan E1), ``None`` for the sheet
+    variants. Chosen by the product, the PL resolution and the format
+    (``None`` or the variant's own); nothing is validated here."""
+    resolution = country_value(task.resolution, "PL")
+    if task.product not in _SHEET_PRODUCTS or not isinstance(resolution, str):
+        return None
+    fmt = _format_of(task)
+    return next(
+        (
+            v
+            for v in variants(product=task.product, country="PL", resolution=resolution)
+            if v.index_ref is None and fmt in (None, v.format)
+        ),
+        None,
+    )
+
+
+# Choices of the sheet tracks a file variant has none of (flag, attribute).
+_SHEET_CHOICES = (
+    ("--sheet-system", "sheet_system"),
+    ("--scale", "scale"),
+    ("--year", "year"),
+    ("--min-year", "min_year"),
+    ("--max-year", "max_year"),
+    ("--all-campaigns", "all_campaigns"),
+    ("--full-sheet", "full_sheet"),
+    ("--cutout", "cutout"),
+    ("--horizontal-crs", "horizontal_crs"),
+    ("--min-density", "min_density"),
+)
+
+
+def _file_variant_error(task: SimpleNamespace, variant: ProductVariant) -> str | None:
+    """Error text of the choices a voivodeship file variant does not take."""
+    label = variant.label or ""
+    shown = f"{variant.product.upper()} {label.removesuffix('m')} m"
+    reason = f"{shown} to pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka"
+    for flag, name in _SHEET_CHOICES:
+        value = getattr(task, name)
+        if value is not None and value is not False:
+            return f"{flag} nie dotyczy --resolution {label}: {reason}"
+    if task.country == "cz":
+        return f"--country cz nie dotyczy --resolution {label} (tylko PL): {reason}"
+    if (
+        country_value(task.vertical_crs, "PL") is not None
+        and variant.vertical_crs is None
+    ):
+        return (
+            f"--vertical-crs nie dotyczy --resolution {label}: {UNKNOWN_VERTICAL} - "
+            f"GUGiK nie deklaruje ukladu wysokosci {shown}; pomin --vertical-crs"
+        )
+    return None
+
+
 def pl_option_error(
     task: SimpleNamespace,
     *,
@@ -228,8 +336,12 @@ def pl_option_error(
     ``code_system``/``code_scale`` describe a sheet request (sheet system and
     scale of the code); ``None`` = area request (bbox/geometry). NMT/NMPT
     choices are checked against the variant registry
-    (``kartograf.sources.variants``): format, resolution, height system.
+    (``kartograf.sources.variants``): format, resolution, height system. A
+    voivodeship file variant (``pl_file_variant``) was checked by
+    ``validate_request`` already.
     """
+    if pl_file_variant(task) is not None:
+        return None
     product = task.product
     resolution = country_value(task.resolution, "PL")
     vertical_crs = country_value(task.vertical_crs, "PL")
@@ -264,15 +376,17 @@ def pl_option_error(
                 return f"{error}{res_hint}"
     elif fmt is not None:
         return (
-            f"--format dotyczy tylko --product nmt i nmpt (PL), podano "
-            f"--product {product} - pomin --format"
+            f"--format dotyczy tylko --product nmt i nmpt (PL) oraz {CONTOURS} "
+            f"(CZ), podano --product {product} - pomin --format"
         )
 
-    if product == "orto":
+    index = _image_index(product)
+    if index is not None:
         if vertical_crs is not None:
+            noun = "ortofotomapa" if product == "orto" else "obraz"
             return (
-                "--vertical-crs nie dotyczy --product orto "
-                "(ortofotomapa nie ma ukladu pionowego)"
+                f"--vertical-crs nie dotyczy --product {product} "
+                f"({noun} nie ma ukladu pionowego)"
             )
     elif vertical_crs is None:
         return (
@@ -299,6 +413,7 @@ def pl_option_error(
         return None  # LAZ: per-tile system from WFS, no sheet scale
     sheet_system = task.sheet_system
     scale = task.scale
+    systems = index.systems if index is not None else _SHEET_SYSTEMS
     if cutout:
         if sheet_system not in (None, "1992"):
             return (
@@ -312,23 +427,45 @@ def pl_option_error(
             f"--scale nie dotyczy --format {fmt}: arkusze archiwum (rozne skale) "
             "wynikaja ze skorowidza GUGiK - pomin --scale"
         )
+    only = ", ".join(f"PL-{system}" for system in systems)
     if code_system is None:
         if sheet_system is None:
+            if len(systems) == 1:
+                effective = systems[0]  # one admissible value may be omitted
+            else:
+                cutout_hint = (
+                    "; jeden wycinek zamiast arkuszy: --cutout"
+                    if product in cutout_products()
+                    else ""
+                )
+                return (
+                    f"--sheet-system wymagane dla --bbox/--geometry w PL: "
+                    f"{SHEET_SYSTEM_CHOICES}{cutout_hint}"
+                )
+        elif sheet_system not in systems:
             return (
-                f"--sheet-system wymagane dla --bbox/--geometry w PL: "
-                f"{SHEET_SYSTEM_CHOICES}; jeden wycinek zamiast arkuszy: --cutout"
+                f"--sheet-system {sheet_system} nie dotyczy --product {product}: "
+                f"GUGiK publikuje arkusze tylko {only} - pomin --sheet-system"
             )
-        effective = sheet_system
+        else:
+            effective = sheet_system
+    elif code_system not in systems:
+        return (
+            f"--product {product}: GUGiK publikuje arkusze tylko {only} - godlo "
+            f"{task.sheet} to PL-{code_system}"
+        )
     else:
         effective = code_system
     if source_file:
         return None  # archive sheets come from the index (any scale)
     if effective == "1992":
         if scale is not None:
+            parts = index.sheet_parts if index is not None else 7
+            label = series_scale(parts)
             return (
                 "--scale nie dotyczy PL-1992: GUGiK publikuje arkusze PL-1992 "
-                "tylko w 1:10000 (godlo 7-czlonowe), a grubsze godlo rozwija sie "
-                "do 1:10000 samo - pomin --scale"
+                f"tylko w {label} (godlo {parts}-czlonowe), a grubsze godlo rozwija "
+                f"sie do {label} samo - pomin --scale"
             )
         return None
     if scale is None and (code_system is None or code_scale == "1:10000"):
@@ -356,8 +493,9 @@ def cz_option_error(
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
     if _format_of(task) is not None:
         return (
-            "--format dotyczy tylko PL (siatki ASC i archiwa GUGiK) - dla CZ "
-            "pomin --format"
+            f"--format dotyczy w CZ tylko --product {CONTOURS} (warstwice); "
+            f"{task.product.upper()} CZ to pliki CUZK bez wyboru formatu - pomin "
+            "--format"
         )
     if task.product == "laz":
         if task.resolution is not None:
@@ -394,6 +532,45 @@ def cz_option_error(
         return f"{error}{vcrs_hint}"
     if "PL" not in countries and task.sheet_system is not None:
         return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+    return None
+
+
+def _contours_error(task: SimpleNamespace) -> str | None:
+    """Error text of a CZ contours request (``None`` = valid): vector SM5
+    sheets take ``--format`` (required, values of the registry) and the
+    height system of their files (one value: may be omitted); no grid,
+    flight, cutout or view choice."""
+    if task.product != CONTOURS:
+        return None
+    reason = "warstwice to arkusze SM5 (wektor) - bez rozdzielczosci, lotow i wycinka"
+    for flag, name in (
+        ("--resolution", "resolution"),
+        *_SHEET_CHOICES,
+        ("--coverage", "coverage"),
+        ("--direction", "direction"),
+    ):
+        value = getattr(task, name)
+        if value is not None and value is not False:
+            return f"{flag} nie dotyczy --product {CONTOURS}: {reason}"
+    formats = contours_formats()
+    fmt = _format_of(task)
+    if fmt is None:
+        return f"--format wymagane dla --product {CONTOURS}: {', '.join(formats)}"
+    if fmt not in formats:
+        return (
+            f"--format {fmt!r}: nieznana wartosc dla --product {CONTOURS} - "
+            f"dostepne: {', '.join(formats)}"
+        )
+    heights = sorted(
+        {v.vertical_crs for v in variants(product=CONTOURS) if v.vertical_crs}
+    )
+    vertical_crs = country_value(task.vertical_crs, "CZ")
+    if vertical_crs is not None and vertical_crs not in heights:
+        return (
+            f"--vertical-crs {vertical_crs} nie dotyczy --product {CONTOURS}: "
+            f"warstwice ZABAGED maja wysokosci {', '.join(heights)} (mozna pominac "
+            "--vertical-crs)"
+        )
     return None
 
 
@@ -461,7 +638,7 @@ def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None
     """CZ raster areas require cutout; CZ LAZ and orthophoto areas use the
     indexed sheets."""
     if (
-        task.product in ("laz", "orto")
+        task.product in ("laz", "orto", CONTOURS)
         or task.sheet is not None
         or "CZ" not in countries
         or task.cutout
@@ -545,10 +722,14 @@ def validate_request(task: SimpleNamespace) -> None:
 
     Exactly one selection, explicit product/output, country for areas,
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
-    LAZ-only and non-LAZ options, the orthophotomap cutout (``coverage``,
-    pixel, EPSG:2180 only, PL only). Narrows ``task.min_year``/``max_year``.
-    Types of library arguments first (``year="2018"``, ``cutout="no"``:
-    ``ValidationError``, no conversion; STANDARDS 11.2).
+    LAZ-only and non-LAZ options, the image cutout (orthophotomap
+    ``coverage``, pixel, EPSG:2180 only, PL only), the view directions
+    (``direction``, oblique orthophotomap; narrowed to a tuple of codes in
+    registry order), ``full_sheet`` only where the index declares full
+    sheets, the choices a voivodeship file variant (NMT 100 m) does not
+    take. Narrows ``task.min_year``/``max_year``. Types of library arguments
+    first (``year="2018"``, ``cutout="no"``: ``ValidationError``, no
+    conversion; STANDARDS 11.2).
     """
     validate_area_choice(task.sheet, task.bbox, task.geometry)
     for flag, name in (
@@ -585,10 +766,11 @@ def validate_request(task: SimpleNamespace) -> None:
             f"--sheet-system {task.sheet_system!r}: nieznana wartosc - dostepne: "
             f"{SHEET_SYSTEM_CHOICES}"
         )
-    orto_cutout = task.cutout and task.product == "orto"
+    cutout_key = image_cutout_key(task.product)
+    image_cutout = task.cutout and cutout_key is not None
     if (
         task.horizontal_crs is not None
-        and not orto_cutout
+        and not image_cutout
         and task.horizontal_crs not in CUTOUT_CRS
     ):
         raise ValidationError(
@@ -597,6 +779,14 @@ def validate_request(task: SimpleNamespace) -> None:
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
+    error = _contours_error(task)
+    if error is not None:
+        raise ValidationError(error)
+    file_variant = pl_file_variant(task)
+    if file_variant is not None:
+        error = _file_variant_error(task, file_variant)
+        if error is not None:
+            raise ValidationError(error)
     if task.model is not None and task.product != "laz":
         raise ValidationError("--model dotyczy tylko --product laz w CZ")
     if task.model is not None and task.country == "pl":
@@ -611,9 +801,19 @@ def validate_request(task: SimpleNamespace) -> None:
         )
     if task.product == "laz" and task.full_sheet:
         raise ValidationError(
-            "--full-sheet dziala tylko z NMT/NMPT/orto (podano laz) - LAZ "
+            "--full-sheet dziala tylko z NMT/NMPT i obrazami (podano laz) - LAZ "
             "nie ma sciezki standardowej ani dowiazania full_sheet/; pomin --full-sheet"
         )
+    index = _image_index(task.product)
+    if task.full_sheet and index is not None and not index.full_sheet:
+        raise ValidationError(
+            f"--full-sheet nie dotyczy --product {task.product}: rekordy skorowidza "
+            "GUGiK nie deklaruja pelnego arkusza (bez calyArkuszWypelnionyTrescia) "
+            "- pomin --full-sheet"
+        )
+    error = _direction_error(task)
+    if error is not None:
+        raise ValidationError(error)
     if task.cutout:
         if task.sheet is not None:
             raise ValidationError(
@@ -621,15 +821,17 @@ def validate_request(task: SimpleNamespace) -> None:
                 "zasieg i uklad produktu (arkusz PL 1:1 w ukladzie arkusza, "
                 "arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce EPSG:3045)"
             )
-        if task.product == "laz":
+        if task.product not in cutout_products():
             raise ValidationError(
-                "--cutout dziala tylko z --product nmt, nmpt albo orto (wycinek "
-                "z WCS GUGiK); laz - pobierz bez --cutout"
+                f"--cutout dziala tylko z --product {_or_list(cutout_products())} "
+                f"(wycinek z WCS GUGiK); {task.product} - pobierz bez --cutout"
             )
-        if orto_cutout:
-            if task.country == "cz":
+        if image_cutout:
+            assert cutout_key is not None  # image_cutout
+            if task.product == "orto" and task.country == "cz":
                 raise ValidationError(ORTO_CUTOUT_PL_ONLY)
             error = orto_cutout_error(
+                key=cutout_key,
                 coverage=task.coverage,
                 resolution=country_value(task.resolution, "PL"),
                 horizontal_crs=task.horizontal_crs,
@@ -647,17 +849,65 @@ def validate_request(task: SimpleNamespace) -> None:
             "arkusze maja uklad z godla - dodaj --cutout albo pomin "
             "--horizontal-crs"
         )
-    if task.coverage is not None and not orto_cutout:
+    if task.coverage is not None and not image_cutout:
+        if cutout_key is not None and len(wcs_cutout_channels(cutout_key)) == 1:
+            error = cutout_choice_error(cutout_key, task.coverage, None)
+            assert error is not None  # a coverage of a one-channel cutout
+            raise ValidationError(error)
         raise ValidationError(
             "--coverage dziala tylko z --cutout --product orto (wariant WCS "
-            f"wycinka ortofotomapy: {coverage_choices()}) - pomin --coverage"
+            f"wycinka ortofotomapy: {coverage_choices(ORTO_KEY)}) - pomin --coverage"
         )
-    if task.product == "orto" and not task.cutout and task.resolution is not None:
+    if (
+        image_source(task.product) is not None
+        and not task.cutout
+        and task.resolution is not None
+    ):
+        if task.product == "orto":
+            raise ValidationError(
+                "--resolution z --product orto dotyczy tylko wycinka (--cutout); "
+                "arkusze ortofotomapy maja piksel zrodla (PL: kampanii, CZ: arkusza "
+                "SM5 w pliku JGW) - pomin --resolution"
+            )
+        where = "dotyczy tylko wycinka (--cutout)" if cutout_key else "nie dotyczy"
         raise ValidationError(
-            "--resolution z --product orto dotyczy tylko wycinka (--cutout); "
-            "arkusze ortofotomapy maja piksel zrodla (PL: kampanii, CZ: arkusza "
-            "SM5 w pliku JGW) - pomin --resolution"
+            f"--resolution z --product {task.product} {where}; arkusze maja "
+            "piksel zrodla (rekordu skorowidza GUGiK) - pomin --resolution"
         )
+
+
+def _direction_error(task: SimpleNamespace) -> str | None:
+    """Error text of ``direction`` (``None`` = valid); a valid choice is
+    narrowed to the tuple of its codes in registry order (``None`` stays:
+    every direction of the product)."""
+    direction = task.direction
+    if direction is None:
+        return None
+    codes = image_directions(task.product)
+    if not codes:
+        products = [p for p in IMAGERY_PRODUCTS if image_directions(p)]
+        return (
+            f"--direction dotyczy tylko --product {_or_list(products)} (kierunki "
+            "widoku orto ukosnej) - pomin --direction"
+        )
+    values = (direction,) if isinstance(direction, str) else direction
+    if (
+        not isinstance(values, tuple | list)
+        or not values
+        or not all(isinstance(value, str) for value in values)
+    ):
+        return (
+            f"--direction {direction!r}: podaj kierunek albo liste kierunkow: "
+            f"{', '.join(codes)}"
+        )
+    for value in values:
+        if value not in codes:
+            return (
+                f"--direction {value!r}: nieznana wartosc - dostepne: "
+                f"{', '.join(codes)} (polnoc, wschod, poludnie, zachod)"
+            )
+    task.direction = tuple(code for code in codes if code in values)
+    return None
 
 
 def campaign_opts_given(task: SimpleNamespace) -> bool:
@@ -718,7 +968,8 @@ def resolve_pl_options(
     keeps its own values). Single-valued choices are filled in: the cutout
     is 1m only and PL-1992 only, a variant with one label in the registry
     (archive ``GRD``: 5m) takes it, a sheet request takes its sheet system
-    from the code.
+    from the code, an image product with one sheet system (true orto:
+    PL-1992, oblique orto: PL-2000) takes it.
     """
     error = pl_option_error(task, code_system=code_system, code_scale=code_scale)
     if error is not None:
@@ -742,6 +993,10 @@ def resolve_pl_options(
         task.sheet_system = code_system
     elif task.cutout:
         task.sheet_system = "1992"
+    elif task.sheet_system is None:
+        index = _image_index(task.product)
+        if index is not None and len(index.systems) == 1:
+            task.sheet_system = index.systems[0]
 
 
 def is_source_file_request(task: SimpleNamespace) -> bool:
@@ -751,5 +1006,10 @@ def is_source_file_request(task: SimpleNamespace) -> bool:
 
 
 def pl_target_scale(task: SimpleNamespace) -> str:
-    """Sheet scale of a PL area request: PL-1992 fixed 1:10000, PL-2000 ``scale``."""
-    return task.scale if task.sheet_system == "2000" else "1:10000"
+    """Sheet scale of a PL area request: PL-2000 ``scale``, PL-1992 the level
+    of the product (``1:10000``; the 8-part ``1:5000`` codes of the true
+    orthophotomap, ``series_scale``)."""
+    if task.sheet_system == "2000":
+        return task.scale
+    index = _image_index(task.product)
+    return series_scale(index.sheet_parts if index is not None else 7)

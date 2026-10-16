@@ -31,13 +31,14 @@ from kartograf.download.data import download_data
 from kartograf.download.fetch import VersionedFile
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.manager import DownloadProgress, DownloadResult
+from kartograf.download.options import pl_file_variant
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.prg import LandMask
 from kartograf.sources.registry import sources_for
-from kartograf.sources.variants import ProductVariant, variants
+from kartograf.sources.variants import UNKNOWN_VERTICAL, ProductVariant, variants
 from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
 from tests.cz_fakes import cz_factory, route_of
 
@@ -300,9 +301,9 @@ class TestFormatChildren:
         assert "N-34-130-D-c" in output
         assert "N-34-130-D-d" in output
 
-    def test_format_children_10k_no_children(self):
-        """Test formatting children of 1:10000 (nie ma arkuszy potomnych)."""
-        parser = SheetParser("N-34-130-D-d-2-4")
+    def test_format_children_8_part_no_children(self):
+        """The 8-part sheet is the lowest level (nie ma arkuszy potomnych)."""
+        parser = SheetParser("N-34-130-D-d-2-4-1")
         output = format_children(parser)
 
         assert "nie ma arkuszy potomnych" in output
@@ -491,8 +492,11 @@ class TestCommandGroups:
     )
     # the selection flag of each group's download and its values
     _CHOICES = {
-        "elevation": ("--product", {"nmt", "nmpt", "laz"}),
-        "imagery": ("--product", {"orto"}),
+        "elevation": ("--product", {"nmt", "nmpt", "laz", "contours"}),
+        "imagery": (
+            "--product",
+            {"orto", "intensity", "true-orto", "oblique-orto"},
+        ),
         "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
         "boundaries": ("--product", {"admin", "special"}),
         "cadastre": ("--product", {"map"}),
@@ -645,8 +649,9 @@ class TestCLIIntegration:
         assert "1:10000" in captured.out
         # Should show hierarchy
         assert "Hierarchia" in captured.out
-        # Should show no children message
-        assert "nie ma arkuszy potomnych" in captured.out
+        # The 7-part sheet lists its four 8-part quarters
+        assert "Arkusze potomne N-34-130-D-d-2-4 (4)" in captured.out
+        assert "N-34-130-D-d-2-4-4 (1:5000)" in captured.out
 
     def test_all_scales(self, capsys):
         """Test parsing all scale levels."""
@@ -1975,11 +1980,13 @@ def _grid_labels(product: str, vertical_crs: str | None = None) -> list[str]:
 
 
 def _registry_grids(product: str) -> set[tuple[str, str]]:
-    """``{(vertical CRS, label)}`` of the product's PL ASC grids (registry)."""
+    """``{(vertical CRS, label)}`` of the product's PL variants in the product
+    format (registry): the ASC grids and the voivodeship files without a
+    height system (NMT 100 m, listed under ``UNKNOWN_VERTICAL``)."""
     return {
-        (v.vertical_crs, v.label)
-        for v in variants(product=product, country="PL", format="ASC")
-        if v.label is not None
+        (v.vertical_crs or UNKNOWN_VERTICAL, v.label)
+        for v in variants(product=product, country="PL")
+        if v.label is not None and not v.source_file
     }
 
 
@@ -2186,10 +2193,12 @@ class TestNmt5mKron86Rejected:
         assert task.vertical_crs == "KRON86"  # no silent swap
 
 
-# PL NMT/NMPT variants of the registry (grids and archives): every one is a
-# valid choice of `elevation download` (ADR-041)
+# PL NMT/NMPT sheet variants of the registry (grids and archives of the WFS
+# index): every one is a valid sheet choice of `elevation download` (ADR-041)
 _PL_SHEET_VARIANTS = tuple(
-    v for v in variants(country="PL") if v.product in ("nmt", "nmpt")
+    v
+    for v in variants(country="PL")
+    if v.product in ("nmt", "nmpt") and v.index_ref is not None
 )
 
 
@@ -2198,7 +2207,9 @@ def _variant_id(variant: ProductVariant) -> str:
 
 
 def _variant_flags(variant: ProductVariant) -> list[str]:
-    """``elevation download`` flags of ``variant`` (no ``--format`` = ASC grid)."""
+    """``elevation download`` flags of a sheet ``variant`` (no ``--format`` =
+    ASC grid); a sheet variant always has a height system."""
+    assert variant.vertical_crs is not None
     flags = ["--product", variant.product, "--vertical-crs", variant.vertical_crs]
     if variant.label is not None:
         flags += ["--resolution", variant.label]
@@ -2355,6 +2366,9 @@ class TestRegistryVariantsCli:
             if variant.product == "laz":
                 continue
             assert args.vertical_crs in (None, variant.vertical_crs), flags
+            if variant.index_ref is None:  # voivodeship files (ATOM, NMT 100 m)
+                assert pl_file_variant(args) == variant, flags
+                continue
             cls = GugikProvider if variant.product == "nmt" else GugikNmptProvider
             provider = cls(
                 vertical_crs=variant.vertical_crs,

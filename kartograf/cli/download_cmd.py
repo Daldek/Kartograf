@@ -15,7 +15,7 @@ import argparse
 import sys
 import threading
 from collections import Counter
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -276,6 +276,29 @@ def store_path_label(item: PlanItem) -> str:
     return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
 
 
+def _multi_file_units(pairs: Iterable[tuple[str, str]]) -> set[str]:
+    """Units with several files among ``(unit, file name)`` pairs - the view
+    directions of an oblique orthophotomap sheet, the JPEG and world files of
+    a CZ orthophoto sheet: their lines name the file instead of the unit."""
+    names: dict[str, set[str]] = {}
+    for unit, name in pairs:
+        names.setdefault(unit, set()).add(name)
+    return {unit for unit, found in names.items() if len(found) > 1}
+
+
+def _file_name_label(plan: UpdatePlan) -> Callable[[PlanItem], str] | None:
+    """Plan line unit of a data request: the file name of a unit with
+    several files (``_multi_file_units``); ``None`` = every line names its unit."""
+    multi = _multi_file_units((item.unit, item.name) for item in plan.items)
+    if not multi:
+        return None
+
+    def label(item: PlanItem) -> str:
+        return item.name if item.unit in multi else item.unit
+
+    return label
+
+
 def _report_plan(
     args: argparse.Namespace,
     plan: UpdatePlan,
@@ -403,6 +426,7 @@ def download_task_arguments(args: argparse.Namespace) -> dict:
         "cutout": getattr(args, "cutout", False),
         "horizontal_crs": getattr(args, "horizontal_crs", None),
         "coverage": getattr(args, "coverage", None),
+        "direction": getattr(args, "direction", None),
         "year": getattr(args, "year", None),
         "min_year": getattr(args, "min_year", None),
         "max_year": getattr(args, "max_year", None),
@@ -452,7 +476,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
     try:
         if getattr(args, "check_updates", False):
             plan = check_data(**arguments, on_notice=on_notice)
-            return _report_plan(args, plan)
+            return _report_plan(args, plan, _file_name_label(plan))
         workers = getattr(args, "workers", 4) or 1
         on_progress = create_progress_callback(quiet, workers)
         report = download_data(
@@ -476,8 +500,18 @@ def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> 
     if not args.quiet:
         if getattr(on_progress, "used", False):
             print()  # campaign lines: a blank line before the status lines
+        multi = _multi_file_units(
+            (unit_file.unit, unit_file.file.path.name) for unit_file in report.files
+        )
         for unit_file in report.files:
-            print(_status_line(unit_file.unit, unit_file.file, update))
+            unit = unit_file.unit
+            print(
+                _status_line(
+                    unit_file.file.path.name if unit in multi else unit,
+                    unit_file.file,
+                    update,
+                )
+            )
         several = (
             args.product == "laz"
             or len(report.files) > 1

@@ -76,6 +76,7 @@ class FileStorage:
         subdir: str | None = None,
         variant: str | None = None,
         format: str | None = None,
+        suffix: str | None = None,
     ):
         """
         Initialize file storage.
@@ -112,13 +113,24 @@ class FileStorage:
         format : str or None, optional
             NMT/NMPT file format token ("ASC" grids when None, archives
             "XYZ", "TBD", ...).
+        suffix : str or None, optional
+            File name suffix after the sheet code (``_n``: one view direction
+            of the oblique orthophotomap - several files of one sheet in one
+            segment). Take it from ``provider.storage_suffix``; None
+            (default) names the file by the sheet code alone.
         """
         if variant is not None and not re.fullmatch(r"[a-z0-9]+", variant):
             raise ValidationError(
                 f"Nieprawidlowy wariant segmentu storage: '{variant}' "
                 "(oczekiwano [a-z0-9]+)"
             )
+        if suffix is not None and not re.fullmatch(r"_[a-z0-9]+", suffix):
+            raise ValidationError(
+                f"Nieprawidlowy przyrostek nazwy pliku storage: '{suffix}' "
+                "(oczekiwano _[a-z0-9]+)"
+            )
         self._variant = variant
+        self._suffix = suffix or ""
         self._subdir_override = subdir
         self._product = product
         self._resolution = resolution or ""
@@ -254,7 +266,7 @@ class FileStorage:
         return self._sheet_path(normalized, ext)
 
     def _sheet_path(self, normalized: str, ext: str, *subtree: str) -> Path:
-        """``<output>/<segment>/<subtree...>/<hierarchy>/<sheet><ext>``.
+        """``<output>/<segment>/<subtree...>/<hierarchy>/<sheet><suffix><ext>``.
 
         ``normalized`` is the canonical sheet code (``SheetParser(...).sheet``,
         A7: ``'M-33-036-...'`` and ``'M-33-36-...'`` map to one path).
@@ -262,7 +274,7 @@ class FileStorage:
         dir_path = self._output_dir / self._resolved_subdir(normalized)
         for part in (*subtree, *self._get_directory_parts(normalized)):
             dir_path = dir_path / part
-        return dir_path / f"{normalized}{ext}"
+        return dir_path / f"{normalized}{self._suffix}{ext}"
 
     def get_versions_base(self, sheet: str) -> Path:
         """``<output>/<segment>/versions`` of the sheet's segment (spec 3).
@@ -660,7 +672,9 @@ def storage_for_provider(
     ``vertical_crs`` is "EVRF2007", "KRON86", "Bpv", or None only where the
     segment has no vertical dimension (orthophoto). The provider's actual
     height system wins over an injected value. The optional variant
-    (``storage_variant``: ortho CIR/B-W) is appended to the segment.
+    (``storage_variant``: ortho CIR/B-W) is appended to the segment, the
+    optional file name suffix (``storage_suffix``: a view direction of the
+    oblique orthophotomap) to the sheet code.
     """
     provider_vertical_crs = getattr(provider, "vertical_crs", None)
     if isinstance(provider_vertical_crs, str):
@@ -672,12 +686,14 @@ def storage_for_provider(
         else None
     )
     variant = getattr(provider, "storage_variant", None)
+    suffix = getattr(provider, "storage_suffix", None)
     return FileStorage(
         output_dir,
         resolution=resolution,
         subdir=subdir,
         vertical_crs=vertical_crs,
         variant=variant if isinstance(variant, str) else None,
+        suffix=suffix if isinstance(suffix, str) else None,
     )
 
 

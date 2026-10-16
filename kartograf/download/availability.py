@@ -168,7 +168,7 @@ _HORIZONTAL = {"1992": "PL-1992", "2000": "PL-2000"}
 _FORMAT_ORDER = {f.token: i for i, f in enumerate(FORMATS)}
 # Why an index record is not downloadable (INDEX_UNSUPPORTED texts).
 _REASONS = {
-    "sheet": "godla spoza ukladow arkuszy PL-1992/PL-2000 (np. 8-czlonowe)",
+    "sheet": "godla spoza ukladow arkuszy PL-1992/PL-2000",
     "url": "bez adresu https pliku",
     "crs": "bez ukladu wspolrzednych",
     "file": "format rekordu niezgodny z plikiem",
@@ -335,11 +335,12 @@ class _Parts:
 @dataclass(frozen=True)
 class _CzFile:
     """A file channel of a CZ variant in the native height system of its
-    files; ``endpoint`` = openzu ``.../{sheet}.zip``."""
+    files (``vertical_crs``); ``endpoint`` = openzu ``.../{sheet}.zip``."""
 
     variant: ProductVariant
     system: str  # "sm5" | "tm33"
     endpoint: str
+    vertical_crs: str
 
     def url(self, sheet: str) -> str:
         return self.endpoint.format(sheet=sheet)
@@ -719,7 +720,7 @@ def _services(product: str) -> list[_Service]:
     """WFS index services of the product (registry order, one per endpoint)."""
     found: dict[str, _Service] = {}
     for variant in variants(product=product, country="PL"):
-        if variant.index_ref is not None:
+        if variant.index_ref is not None and variant.vertical_crs is not None:
             found.setdefault(
                 variant.index_ref.endpoint,
                 _Service(variant.vertical_crs, variant.index_ref),
@@ -1281,15 +1282,16 @@ def _cz_files(product: str) -> list[_CzFile]:
     model in both pairs."""
     found = []
     for variant in variants(product=product, country="CZ"):
-        if variant.channel != TransportKind.DIRECT_FILES:
+        vertical_crs = variant.vertical_crs
+        if variant.channel != TransportKind.DIRECT_FILES or vertical_crs is None:
             continue
         (system,) = variant.systems
         channel = channel_for(
             variant.source, TransportKind.DIRECT_FILES, CZ_SYSTEM_CRS[system]
         )
-        native = vertical_crs_code(variant.vertical_crs) in channel.vertical_crs_options
+        native = vertical_crs_code(vertical_crs) in channel.vertical_crs_options
         if native and channel.endpoint is not None:
-            found.append(_CzFile(variant, system, channel.endpoint))
+            found.append(_CzFile(variant, system, channel.endpoint, vertical_crs))
     return found
 
 
@@ -1520,7 +1522,7 @@ def _cz_combination(
         campaigns=(),
         horizontal=_CZ_HORIZONTAL[file.system],
         resolution=variant.label,
-        vertical_crs=variant.vertical_crs,
+        vertical_crs=file.vertical_crs,
         format=variant.format,
         densities=(),
         complete=not missing,
@@ -1710,7 +1712,7 @@ def _cz_hint(request: _Request, file: _CzFile, sheets: list[str]) -> tuple[str, 
     product = request.product
     if product == "laz":
         assert variant.model is not None
-        flags = ["--model", variant.model, "--vertical-crs", variant.vertical_crs]
+        flags = ["--model", variant.model, "--vertical-crs", file.vertical_crs]
         areas = (
             [["--sheet", sheet] for sheet in sheets]
             if request.cz_sheet is not None
@@ -1718,7 +1720,7 @@ def _cz_hint(request: _Request, file: _CzFile, sheets: list[str]) -> tuple[str, 
         )
     else:
         assert variant.label is not None
-        flags = ["--resolution", variant.label, "--vertical-crs", variant.vertical_crs]
+        flags = ["--resolution", variant.label, "--vertical-crs", file.vertical_crs]
         areas = [["--sheet", sheet] for sheet in sheets]
     return tuple(
         shlex.join(["elevation", "download", "--product", product, *area, *flags])

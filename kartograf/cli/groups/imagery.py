@@ -1,5 +1,7 @@
-"""``kartograf imagery``: orthophotomap - GUGiK sheets and WCS cutout (PL),
-CUZK SM5 sheets (CZ) (ADR-039, ADR-042 D13, D14)."""
+"""``kartograf imagery``: GUGiK images - orthophotomap (sheets and WCS
+cutout), intensity images, true orthophotomap (sheets and WCS cutout),
+oblique orthophotomap (PL) - and CUZK SM5 orthophoto sheets (CZ) (ADR-039,
+ADR-042 D13, D14, plan E1)."""
 
 import argparse
 from functools import partial
@@ -9,6 +11,7 @@ from kartograf.cli._args import (
     add_area_flags,
     add_quiet,
     add_update_flags,
+    layer_codes,
 )
 from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
@@ -22,8 +25,8 @@ from kartograf.download.options import (
 )
 from kartograf.download.orto_cutout import (
     ORTO_CUTOUT_CRS,
-    coverage_choices,
     cutout_resolution_choices,
+    orto_coverage_choices,
 )
 from kartograf.sources.descriptor import SourceDescriptor
 
@@ -42,21 +45,25 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     commands = add_group(
         subparsers,
         "imagery",
-        help="Obrazy lotnicze: ortofotomapa PL i CZ",
+        help="Obrazy lotnicze: ortofotomapa PL i CZ, obrazy intensywnosci, true "
+        "orto i orto ukosna (PL)",
         description="Obrazy lotnicze w magazynie wersji: ortofotomapa GUGiK (PL: "
-        "arkusze i wycinek WCS) i CUZK (CZ: arkusze SM5).",
+        "arkusze i wycinek WCS) i CUZK (CZ: arkusze SM5), obrazy intensywnosci "
+        "LIDAR, prawdziwa ortofotomapa (true orto: arkusze i wycinek WCS) i "
+        "ortofotomapa ukosna GUGiK (PL).",
     )
     download = commands.add_parser(
         "download",
-        help="Pobierz arkusze ortofotomapy (PL, CZ) albo wycinek (PL)",
+        help="Pobierz arkusze obrazow (PL, CZ) albo wycinek (PL)",
         description=(
-            "Pobierz ortofotomape RGB do magazynu wersji. PL (GUGiK): arkusze "
-            "wg kampanii (--bbox/--geometry rozwija sie na arkusze zrodlowe, "
-            "godla PL-1992 albo PL-2000) albo jeden wycinek GeoTIFF z WCS "
-            "(--cutout). CZ (CUZK): arkusze SM5 aktualnego rocznika (archiwalne "
-            "ortofoto CUZK sa platne), JPEG z plikami JGW w S-JTSK, TM33N "
-            "i TM34N (--bbox/--geometry rozwija sie na arkusze SM5). Arkusze: "
-            "pliki zrodlowe 1:1, piksel zrodla."
+            "Pobierz obrazy do magazynu wersji. PL (GUGiK): arkusze wg kampanii "
+            "(--bbox/--geometry rozwija sie na arkusze zrodlowe, godla PL-1992 "
+            "albo PL-2000) albo jeden wycinek GeoTIFF z WCS (--cutout: "
+            "ortofotomapa i true orto); orto ukosna: arkusz = 4 pliki kierunkow "
+            "(--direction). CZ (CUZK, tylko ortofotomapa): arkusze SM5 "
+            "aktualnego rocznika (archiwalne ortofoto CUZK sa platne), JPEG "
+            "z plikami JGW w S-JTSK, TM33N i TM34N (--bbox/--geometry rozwija sie "
+            "na arkusze SM5). Arkusze: pliki zrodlowe 1:1, piksel zrodla."
         ),
     )
 
@@ -85,6 +92,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "musi sie z nim zgadzac). Wycinek (--cutout) tylko PL: z auto obejmuje "
         "czesc PL",
     )
+    selection.add_argument(
+        "--direction",
+        metavar="KIERUNKI",
+        type=layer_codes,
+        default=None,
+        help="Tylko --product oblique-orto: kierunki widoku po przecinku (n, e, "
+        "s, w; np. n,e); arkusz orto ukosnej to plik na kierunek "
+        "(<godlo>_<kierunek>.tif); bez flagi wszystkie cztery",
+    )
 
     sheets = download.add_argument_group("Arkusze obszaru")
     sheets.add_argument(
@@ -92,8 +108,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         choices=["1992", "2000"],
         default=None,
         help="Uklad godel arkuszy PL - wymagany z --bbox/--geometry dla PL (bez "
-        f"--cutout): {SHEET_SYSTEM_CHOICES}. Wycinek --cutout: tylko 1992 (mozna "
-        "pominac). Nie dotyczy --sheet (uklad z godla) ani CZ (arkusze SM5; "
+        f"--cutout): {SHEET_SYSTEM_CHOICES}. Produkt z jednym ukladem (true "
+        "orto: 1992, orto ukosna: 2000) i wycinek --cutout (tylko 1992): mozna "
+        "pominac. Nie dotyczy --sheet (uklad z godla) ani CZ (arkusze SM5; "
         "z --country auto dotyczy czesci PL)",
     )
     sheets.add_argument(
@@ -102,11 +119,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="Skala arkuszy PL-2000 do pobrania - wymagana z --bbox/--geometry "
         "--sheet-system 2000 i z godlem PL-2000 1:10000 (np. 7.171.21): "
         f"{SCALE_2000_CHOICES}; z drobniejszym godlem PL-2000 opcjonalna "
-        "(rozwija godlo do potomkow w tej skali). PL-1992: niedozwolona - "
-        "GUGiK publikuje arkusze PL-1992 tylko w 1:10000 (godlo 7-czlonowe), "
-        "grubsze godlo rozwija sie do 1:10000 samo. Nie dotyczy CZ (arkusze "
-        "SM5 1:5000; z --country auto dotyczy czesci PL) i --cutout. "
-        "Szczegoly: docs/USAGE.md 1.6",
+        "(rozwija godlo do potomkow w tej skali); orto ukosna ma arkusze "
+        "1:2000 i 1:1000. PL-1992: niedozwolona - GUGiK publikuje arkusze "
+        "PL-1992 w jednej skali (1:10000, godlo 7-czlonowe; true orto: 1:5000, "
+        "godlo 8-czlonowe), a grubsze godlo rozwija sie do niej samo. Nie "
+        "dotyczy CZ (arkusze SM5 1:5000; z --country auto dotyczy czesci PL) "
+        "i --cutout. Szczegoly: docs/USAGE.md 1.6",
     )
 
     cutout = download.add_argument_group("Wycinek zamiast arkuszy (tylko PL)")
@@ -114,11 +132,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--cutout",
         action="store_true",
         help="Tryb JEDNEGO wycinka zamiast arkuszy (tylko --bbox/--geometry, "
-        "tylko PL; wymaga --horizontal-crs, --coverage i --resolution): GeoTIFF "
-        "RGB z WCS GUGiK na siatce uslugi (obraz bez przeprobkowania, bez maski "
-        "ladu), plik <wsp>.tif (wersje w versions/, ponowne uruchomienie uzywa "
-        "lokalnej wersji; --force pobiera); kompozycja lotow serwera (bez "
-        "wyboru roku); w trybie --geometry obejmuje CALA obwiednie geometrii",
+        "tylko PL, ortofotomapa i true orto; wymaga --horizontal-crs i "
+        "--resolution, ortofotomapa takze --coverage): GeoTIFF RGB z WCS GUGiK "
+        "na siatce uslugi (obraz bez przeprobkowania, bez maski ladu), plik "
+        "<wsp>.tif (wersje w versions/, ponowne uruchomienie uzywa lokalnej "
+        "wersji; --force pobiera); kompozycja lotow serwera (bez wyboru roku); "
+        "w trybie --geometry obejmuje CALA obwiednie geometrii",
     )
     cutout.add_argument(
         "--horizontal-crs",
@@ -131,8 +150,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--coverage",
         metavar="WARIANT",
         default=None,
-        help="Wariant WCS wycinka - wymagany z --cutout (bez --cutout blad): "
-        f"{coverage_choices()}",
+        help="Wariant WCS wycinka ortofotomapy - wymagany z --cutout --product "
+        "orto (bez --cutout blad; true orto ma jeden wariant - pomin): "
+        f"{orto_coverage_choices()}",
     )
     cutout.add_argument(
         "--resolution",
@@ -140,7 +160,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="RES",
         default=None,
         help="Piksel wycinka - wymagany z --cutout (arkusze maja piksel zrodla: "
-        f"bez --cutout blad): {cutout_resolution_choices()}",
+        f"bez --cutout blad): {cutout_resolution_choices(IMAGERY_PRODUCTS)}",
     )
 
     campaigns = download.add_argument_group(
@@ -180,8 +200,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     campaigns.add_argument(
         "--full-sheet",
         action="store_true",
-        help="Gdy najnowszy lot arkusza nie jest pelny "
-        "(calyArkuszWypelnionyTrescia), pobierz tez najnowszy pelny lot "
+        help="Ortofotomapa i orto ukosna (rekordy intensywnosci i true orto nie "
+        "deklaruja pelnego arkusza: blad): gdy najnowszy lot arkusza nie jest "
+        "pelny (calyArkuszWypelnionyTrescia), pobierz tez najnowszy pelny lot "
         "z zakresu lat (najwyzej jeden dodatkowy lot na arkusz) i dowiaz go "
         "w <segment>/full_sheet/; pelny = w granicach Polski; nie dziala "
         "z --cutout",
@@ -194,7 +215,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="KATALOG",
         default=None,
         help="Katalog wyniku (wymagany); pliki trafiaja do "
-        "<KATALOG>/orto/<segment>/...",
+        "<KATALOG>/orto/<segment>/... (obrazy intensywnosci: "
+        "<KATALOG>/intensity/<segment>/...)",
     )
     add_update_flags(
         output,

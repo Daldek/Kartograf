@@ -147,13 +147,13 @@ def pl_only_flags(
 
     ADR-023 point 5; per-country values name both countries, ``sheet_system``
     is required for every PL sheet area, ``cutout`` and campaign options work
-    with both countries. PL-only is read from the registries: a product,
-    height system or resolution without a CZ source of the product,
-    ``--format`` (PL files only) and the orthophotomap cutout - ``--coverage``
-    and its pixel (``--resolution`` of orto: the WCS cutout of GUGiK; whether
-    CZ has an orthophotomap does not matter, its sheets have no pixel choice).
-    LAZ flight and density choices are published only by GUGiK and narrow an
-    area to PL.
+    with both countries. PL-only is read from the registries: a height system
+    or resolution without a CZ source of the product, ``--format`` (PL files
+    only) and the orthophotomap cutout - ``--coverage`` and its pixel
+    (``--resolution`` of orto: the WCS cutout of GUGiK; whether CZ has an
+    orthophotomap does not matter, its sheets have no pixel choice). LAZ
+    flight and density choices are published only by GUGiK and narrow an
+    area to PL. A product of one country narrows ``auto`` before (``download_data``).
     """
     from kartograf.sources.registry import sources_for
     from kartograf.sources.variants import variants
@@ -163,8 +163,6 @@ def pl_only_flags(
     cz_labels = {d.resolution for d in cz} | {v.label for v in cz_variants}
     cz_vertical = {v.vertical_crs for v in cz_variants}
     flags: list[str] = []
-    if product in ("nmt", "nmpt", "orto") and not cz:
-        flags.append(f"--product {product}")
     if isinstance(vertical_crs, str) and vertical_crs not in cz_vertical:
         flags.append(f"--vertical-crs {vertical_crs}")
     if isinstance(resolution, str) and (

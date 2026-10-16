@@ -455,7 +455,7 @@ def _laz_indexes() -> dict[str, IndexRef]:
     return {
         v.vertical_crs: v.index_ref
         for v in variants(product="laz", country="PL")
-        if v.index_ref is not None
+        if v.index_ref is not None and v.vertical_crs is not None
     }
 
 

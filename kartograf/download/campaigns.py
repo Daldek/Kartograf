@@ -549,7 +549,7 @@ def _alnum(text: str) -> str:
     return re.sub(r"[^0-9A-Za-z]", "", text)
 
 
-def verify_record_url(url: str, sheet: str) -> None:
+def verify_record_url(url: str, sheet: str, suffix: str = "") -> None:
     """The record URL file name must end with the sheet code (B4).
 
     GUGiK names files ``<id>_<number>_<sheet>.<ext>``; a URL without the
@@ -560,11 +560,22 @@ def verify_record_url(url: str, sheet: str) -> None:
     (``NMT-N-33-77-B-c-3-3.zip``) and the code without separators
     (``NMT-N34121Cb33.xyz.zip``) name the sheet too; a name of another
     sheet (2 archive records of the inventory) is still an error.
+    ``suffix``: the file name ends with the sheet code followed by it,
+    compared without case (a view direction of the oblique orthophotomap:
+    ``_n`` for ``..._7.125.11.08_N.tif``).
     """
     name = PurePosixPath(urlparse(url).path).name
     lowered = name.lower()
     ending = next((e for e in _ARCHIVE_ENDINGS if lowered.endswith(e)), None)
     stem = name[: -len(ending)] if ending else PurePosixPath(name).stem
+    if suffix:
+        if not stem.lower().endswith(suffix.lower()):
+            raise DownloadError(
+                f"URL rekordu skorowidza nie konczy sie godlem {sheet} "
+                f"z przyrostkiem {suffix}: {url}",
+                sheet=sheet,
+            )
+        stem = stem[: -len(suffix)]
     token = stem.rsplit("_", 1)[-1]
     if token.upper().startswith("NMT-"):
         token = token[4:]

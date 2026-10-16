@@ -14,6 +14,7 @@ from kartograf.core.sheet_parser import (
     SheetParser,
     _bboxes_intersect,
     find_sheets_for_bbox,
+    series_scale,
 )
 from kartograf.exceptions import ParseError, ValidationError
 
@@ -382,23 +383,77 @@ class TestSheetParserComponentsImmutability:
 class TestSheetParserScaleHierarchy:
     """Tests of the scale hierarchy."""
 
-    def test_scale_hierarchy_order(self):
-        """Test of the correct order of scales in the hierarchy."""
-        expected = [
-            "1:1000000",
-            "1:500000",
-            "1:200000",
-            "1:100000",
-            "1:50000",
-            "1:25000",
-            "1:10000",
-        ]
-        assert expected == SheetParser.SCALE_HIERARCHY
-
     def test_all_scales_have_patterns(self):
         """Test that all scales have patterns defined."""
         for scale in SheetParser.SCALE_HIERARCHY:
             assert scale in SheetParser.PATTERNS
+
+
+class TestSheetParser8Part:
+    """8-part PL-1992 codes (true orthophoto sheets, GUGiK module 1:2500):
+    the quarters of a 7-part sheet, numbered 1-4 like the level above."""
+
+    def test_8_part_code_parses(self):
+        parser = SheetParser("N-34-50-A-c-3-2-3")
+
+        assert parser.sheet == "N-34-50-A-c-3-2-3"
+        assert parser.sheet_system == "1992"
+        assert parser.components["arkusz_5k"] == "3"
+
+    @pytest.mark.parametrize(
+        ("quarter", "row", "col"), [(1, 0, 0), (2, 0, 1), (3, 1, 0), (4, 1, 1)]
+    )
+    def test_bbox_is_a_quarter_of_the_7_part_sheet(self, quarter, row, col):
+        """Numbering 1 NW, 2 NE, 3 SW, 4 SE (the recorded GetFeatureInfo of
+        the true orthophoto index at the quarter centres, Gdansk)."""
+        parent = SheetParser("N-34-50-A-c-3-2").get_bbox("EPSG:4326")
+        width = (parent.max_x - parent.min_x) / 2
+        height = (parent.max_y - parent.min_y) / 2
+
+        bbox = SheetParser(f"N-34-50-A-c-3-2-{quarter}").get_bbox("EPSG:4326")
+
+        assert bbox.min_x == pytest.approx(parent.min_x + col * width)
+        assert bbox.max_x == pytest.approx(parent.min_x + (col + 1) * width)
+        assert bbox.max_y == pytest.approx(parent.max_y - row * height)
+        assert bbox.min_y == pytest.approx(parent.max_y - (row + 1) * height)
+
+    def test_parent_is_the_7_part_sheet(self):
+        parent = SheetParser("N-34-50-A-c-3-2-3").get_parent()
+
+        assert parent is not None and parent.sheet == "N-34-50-A-c-3-2"
+
+    def test_7_part_sheet_has_the_four_quarters_as_children(self):
+        children = SheetParser("N-34-50-A-c-3-2").get_children()
+
+        assert [c.sheet for c in children] == [
+            f"N-34-50-A-c-3-2-{quarter}" for quarter in range(1, 5)
+        ]
+        assert all(c.get_parent().sheet == "N-34-50-A-c-3-2" for c in children)
+
+    def test_8_part_sheet_has_no_children(self):
+        assert SheetParser("N-34-50-A-c-3-2-3").get_children() == []
+
+    def test_find_sheets_for_bbox_returns_8_part_codes(self):
+        frame = SheetParser("N-34-50-A-c-3-2").get_bbox("EPSG:4326")
+
+        found = find_sheets_for_bbox(frame, series_scale(8), "1992")
+
+        assert found == [f"N-34-50-A-c-3-2-{quarter}" for quarter in range(1, 5)]
+
+    def test_series_scale_is_one_level_finer_than_gugik(self):
+        """Kartograf labels of the GUGiK series by their number of members:
+        7 members (GUGiK 1:5000) = 1:10000, 8 members (GUGiK 1:2500) =
+        1:5000; the codes found at a series label have that many members."""
+        area = BBox(18.53, 54.52, 18.56, 54.54, "EPSG:4326")
+
+        for parts in (6, 7, 8):
+            found = find_sheets_for_bbox(area, series_scale(parts), "1992")
+            assert found and all(len(code.split("-")) == parts for code in found)
+
+    @pytest.mark.parametrize("sheet", ["N-34-50-A-c-3-2-5", "N-34-50-A-c-3-2-3-1"])
+    def test_codes_beyond_the_8_part_level_are_rejected(self, sheet):
+        with pytest.raises(ParseError, match="Nieprawidlowe godlo"):
+            SheetParser(sheet)
 
 
 # =============================================================================
@@ -599,12 +654,14 @@ class TestSheetParserGetChildren:
         assert children[3].sheet == "N-34-130-D-d-2-4"
         assert all(c.scale == "1:10000" for c in children)
 
-    def test_get_children_from_10k_returns_empty(self):
-        """Test that get_children() for the 1:10000 scale returns an empty list."""
-        parser = SheetParser("N-34-130-D-d-2-4")
-        children = parser.get_children()
+    def test_get_children_from_10k(self):
+        """A 7-part sheet (label 1:10000) has its four 8-part quarters."""
+        children = SheetParser("N-34-130-D-d-2-4").get_children()
 
-        assert children == []
+        assert [c.sheet for c in children] == [
+            f"N-34-130-D-d-2-4-{quarter}" for quarter in range(1, 5)
+        ]
+        assert all(c.scale == "1:5000" for c in children)
 
     @pytest.mark.parametrize("letter", "ABCD")
     def test_children_of_500k_lie_inside_parent_bbox(self, letter):
@@ -745,7 +802,7 @@ class TestSheetParserGetAllDescendants:
         parser = SheetParser("N-34-130-D")
 
         with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
-            parser.get_all_descendants("1:5000")
+            parser.get_all_descendants("1:2500")
 
     def test_descendants_target_scale_not_smaller(self):
         """Test of get_all_descendants() when the target scale is >= the current one."""
@@ -1139,7 +1196,7 @@ class TestFindSheetsForBBox:
         """Test of a wrong target scale → ValidationError."""
         bbox = BBox(20.0, 52.0, 20.5, 52.5, "EPSG:4326")
         with pytest.raises(ValidationError, match="Nieprawidlowa skala"):
-            find_sheets_for_bbox(bbox, "1:5000", sheet_system="1992")
+            find_sheets_for_bbox(bbox, "1:2500", sheet_system="1992")
 
     def test_invalid_crs(self):
         """Test of an unsupported CRS → ValidationError."""

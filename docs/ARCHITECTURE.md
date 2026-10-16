@@ -393,8 +393,11 @@ kartograf/
 │   ├── base.py          # DataSourceProvider (ABC), BaseProvider, LandCoverProvider
 │   ├── pl/              # GUGiK: gugik.py (NMT; jeden wariant rejestru na provider, P10,
 │   │                    # index_sheets — arkusze archiwum ze skorowidza), gugik_nmpt.py,
-│   │                    # gugik_orto.py (arkusze; wycinek WCS Standard/High z kanalow
-│   │                    # rejestru: coverage_choices, cutout_resolution_labels),
+│   │                    # gugik_orto.py (GugikImageProvider: arkusze obrazow ze skorowidza
+│   │                    # WMS opisanego SheetIndexParams - ortofotomapa (GugikOrtoProvider,
+│   │                    # barwy), intensywnosc, true orto, orto ukosna (provider na
+│   │                    # kierunek, storage_suffix); wycinek WCS z kanalow rejestru:
+│   │                    # coverage_choices, cutout_resolution_labels, wcs_cutout_channels),
 │   │                    # gugik_laz.py (select_tiles, select_all_intersecting;
 │   │                    # transport WfsIndex), bdot10k.py,
 │   │                    # skorowidz.py (SkorowidzRecord, wybor ADR-028,
@@ -453,8 +456,9 @@ kartograf/
 │   ├── plan.py          # Plan aktualizacji kartograf-plan/1 (PlanItem.track/unit)
 │   ├── cutout.py        # Wycinek PL WCS (ADR-035): download_pl_cutout/check_pl_cutout,
 │   │                    # maska ladu, sidecar (kroki wewnetrzne prywatne)
-│   ├── orto_cutout.py   # Wycinek ortofotomapy PL WCS (ADR-042 D14): download_orto_cutout/
-│   │                    # check_orto_cutout, OrtoCutoutResult, orto_cutout_error
+│   ├── orto_cutout.py   # Wycinek obrazu PL WCS (ADR-042 D14, plan E1): download_image_cutout/
+│   │                    # check_image_cutout (ortofotomapa i true orto po kluczu deskryptora),
+│   │                    # download_orto_cutout/check_orto_cutout, OrtoCutoutResult, orto_cutout_error
 │   ├── cz_cutout.py     # Wycinek CZ: download_cz_cutout/check_cz_cutout, write_cz_sidecar
 │   ├── cz_sheets.py     # Arkusz CZ TM33/SM5: download_cz_sheet/check_cz_sheet, CzSheetResult,
 │   │                    # cz_sheet_variant (wiersz trasy rastra CZ, plan B)
@@ -462,6 +466,9 @@ kartograf/
 │   │                    # CzLazFailure — arkusz albo obszar, pula watkow, tor planu cz_laz
 │   ├── cz_orto.py       # Ortofoto CZ (ADR-042 D13): download_cz_orto_sheet/check_cz_orto_sheet,
 │   │                    # CzOrtoResult, cz_orto_sheet, cz_orto_area_sheets (indeks SM5)
+│   ├── cz_contours.py   # Warstwice ZABAGED CZ (plan E1): download_cz_contours_sheet/
+│   │                    # check_cz_contours_sheet, CzContoursResult, cz_contours_area_sheets;
+│   │                    # ZIP arkusza SM5 1:1, sygnal http, tor planu cz_sheet
 │   ├── laz.py           # Kafle LAZ PL (ADR-029): download_laz_area/check_laz_area — bbox
 │   │                    # w dowolnym CRS, pula watkow, sidecar kafla, porazki w wyniku
 │   ├── manager.py       # DownloadManager — arkusze PL (ThreadPoolExecutor), sidecary;
@@ -536,6 +543,11 @@ to `resolve_subdir()`.
 | archiwa `pl.gugik.<produkt>_<format>[_<etykieta>]`, np. `pl.gugik.nmt_tbd_25m`, `pl.gugik.nmt_ascii_nmt_1m`, `pl.gugik.nmt_tin`, `pl.gugik.nmpt_xyz_0_5m` | `<produkt>/pl_{system}_<format>[_<etykieta>]_{vcrs}`, np. `nmt/pl_{system}_tbd_25m_{vcrs}`, `nmt/pl_{system}_ascii-nmt_1m_{vcrs}`, `nmt/pl_{system}_tin_{vcrs}` | wg formatu: `.zip` (XYZ, ASCII-NMT, TBD, TIN), `.ttn`, `.grd`, `.dxf`, `.dgn` |
 | `pl.gugik.orto` | `orto/pl_{system}` (+ `_<wariant>` dla CIR/B-W, regula 5); wycinek WCS `orto/pl_1992_<coverage>_<res>` (tokeny, regula 5) | `.tif` |
 | `cz.cuzk.ortofoto` | `orto/cz_sjtsk` (hierarchia SM5) | `.jpg` (+ `.jgw`, `.TM33N.jgw`, `.TM34N.jgw`) |
+| `pl.gugik.nmt_100m` | `nmt/pl_1992_100m` (bez `{vcrs}`: uklad wysokosci nieznany, P1); slot `teryt/<woj>` | `.zip` |
+| `pl.gugik.intensity` | `intensity/pl_{system}` | `.tif` |
+| `pl.gugik.orto_true` | `orto/pl_{system}_true`; wycinek WCS `orto/pl_1992_true_<res>` | `.tif` |
+| `pl.gugik.orto_oblique` | `orto/pl_{system}_oblique`; plik `<godlo>_<kierunek>` (`FileStorage(suffix=)`) | `.tif` |
+| `cz.cuzk.zabaged_contours_shp`, `cz.cuzk.zabaged_contours_dgn` | `contours/cz_zabaged_shp`, `contours/cz_zabaged_dgn` (hierarchia SM5) | `.zip` |
 | `pl.gugik.laz` | `laz/pl_{system}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
 | `cz.cuzk.dmr4g` | `nmt/cz_dmr4g_{vcrs}` | `.tif` |
@@ -687,6 +699,24 @@ Typ HY-NET `WatercourseSeparatedCrossing` nie jest warstwa obszaru: nie
 ma geometrii w GML (relacja dwoch odcinkow), a GeoServer dla zapytania
 z BBOX podaje `hits` 0 mimo obiektow na stronach (ADR-042 errata 2);
 skrzyzowania zawiera plik krajowy.
+
+Kanaly planu E1 (ADR-043; produkty `download_data`, nie kolekcje):
+
+| Deskryptor (wybor) | Kanal, capability | Parametry |
+|---|---|---|
+| `pl.gugik.nmt_100m` (`elevation --product nmt --resolution 100m`) | `DIRECT_FILES` + `AtomFilesParams`, `admin_unit_files` | feed `mapy.geoportal.gov.pl/.../ATOM/httpauth/atom/GUGIK_NMT100`, wpis zbioru po `NMT100_<woj>` (grupa `woj`), `force_https` (linki `http://` feedow GUGiK pobierane przez `https`), ZIP z plikiem XYZ 1:1; `metadata`; wariant rejestru bez ukladu wysokosci (`vertical_crs=None`, `vertical_note`, P1); tor `collection` (`collections.atom_area_request`) |
+| `pl.gugik.intensity` (`imagery --product intensity`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files` | `OI/WMS/SkorowidzeObrazowIntensywnosci`, warstwa `SkorowidzeOI`, arkusze PL-1992 (godla 7-czlonowe) i PL-2000, bez `calyArkuszWypelnionyTrescia` (`full_sheet=False`); `index` |
+| `pl.gugik.orto_true` (`imagery --product true-orto`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files`; `WCS` + `WcsCutoutParams`, `bbox_raster` | skorowidz `ORTO/WMS/TrueOrtho` (`Skorowidze`, godla 8-czlonowe PL-1992, `extent` = wybrane miasta); WCS `True_Orthoimagery` (siatka 0,05 m, piksele `0.05m`-`1m`, jedna usluga = bez `--coverage`); `index` / `none` |
+| `pl.gugik.orto_oblique` (`imagery --product oblique-orto`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files` | `ORTO/WMS/SkorowidzeOrtofotomapyUkosnej`, warstwa na kierunek (`directions`: `n`, `e`, `s`, `w`), arkusze PL-2000 1:2000 i 1:1000, `full_sheet=True`; plik `<godlo>_<kierunek>.tif`; `index` |
+| `cz.cuzk.zabaged_contours_shp`, `cz.cuzk.zabaged_contours_dgn` (`elevation --product contours --country cz --format SHP\|DGN`) | `DIRECT_FILES`, `sheet_files` | `openzu.cuzk.gov.cz/opendata/ZABAGED-vyskopis{,-DGN}/epsg-5514/{sheet}.zip` (jeden format = jeden deskryptor, jak archiwa GUGiK), arkusze SM5, S-JTSK, Bpv, ZIP 1:1; `http`; tor `download/cz_contours.py` |
+
+`SheetIndexParams(layers, systems, sheet_parts, full_sheet, directions=(),
+extent=None)` opisuje skorowidz WMS obrazu: warstwy rekordow (stale - bez
+`GetCapabilities`; ortofotomapa ma `layers=()` i warstwy z
+`GetCapabilities`), uklady arkuszy (jeden = `--sheet-system` mozna
+pominac), liczbe czlonow godla (`series_scale`: 7 = `1:10000`, 8 =
+`1:5000`), czy rekordy deklaruja pelny arkusz (`--full-sheet`), kierunki
+widoku (kod, warstwa) i zasieg do podpowiedzi `NoCoverageError`.
 
 **`SourceDescriptor.resolve_subdir(*, system=None, vertical_crs=None) -> str`**
 wypelnia szablon przez `str.replace`, a nie `str.format` — czesciowe
@@ -917,7 +947,8 @@ data/
 │   ├── cz_dmr5g_bpv/bbox/<coords>.tif       # DOWIAZANIE: wycinki bbox CZ (wersje w versions/bbox/)
 │   ├── cz_dmr5g_evrf2007/...
 │   ├── cz_dmr4g_bpv/CTES/96/CTES96.tif      # DOWIAZANIE; sidecar wersji z extra.http (ETag)
-│   └── cz_dmr4g_evrf2007/760/5518/760_5518.tif   # natywny kafel TM33 z pliku openzu (plan B), extra.http
+│   ├── cz_dmr4g_evrf2007/760/5518/760_5518.tif   # natywny kafel TM33 z pliku openzu (plan B), extra.http
+│   └── pl_1992_100m/teryt/12.zip            # NMT 100 m: ZIP z XYZ wojewodztwa 1:1 (feed ATOM; uklad wysokosci nieznany)
 ├── nmpt/
 │   ├── pl_1992_1m_evrf2007/...              # (+ _kron86, + pl_2000_..., + 0.5m, 0.6m, xyz_0.5m/xyz_1m KRON86)
 │   ├── pl_1992_1m_evrf2007/bbox/<coords>.tif # DOWIAZANIE: wycinek NMPT WCS
@@ -929,6 +960,9 @@ data/
 │   ├── pl_1992_cir/...                      # wariant CIR (B/W: pl_<uklad>_bw), E12
 │   ├── pl_1992_standard_0.25m/bbox/<coords>.tif   # DOWIAZANIE: wycinek WCS ortofotomapy (4.3, ADR-042 D14)
 │   ├── pl_1992_high_0.1m/versions/bbox/2026-10-16_<sha8>/<coords>.tif   # wersja wycinka High
+│   ├── pl_1992_true/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif   # true orto: arkusz 8-czlonowy (plan E1)
+│   ├── pl_1992_true_0.05m/bbox/<coords>.tif # DOWIAZANIE: wycinek WCS True_Orthoimagery
+│   ├── pl_2000_oblique/7/125/11/08/7.125.11.08_n.tif   # orto ukosna: plik na kierunek (_n, _e, _s, _w)
 │   ├── cz_sjtsk/CTES/96/CTES96.jpg          # DOWIAZANIE: ortofoto CZ, JPEG z ZIP CUZK 1:1 (4.4, ADR-042 D13)
 │   ├── cz_sjtsk/CTES/96/CTES96.jgw          # + CTES96.TM33N.jgw i CTES96.TM34N.jgw (pliki georeferencji)
 │   └── cz_sjtsk/versions/AS/91/2025_2026-02-24_<sha8>/AS91.jpg   # wersja (etykieta <rok>_<updated>); godlo As
@@ -937,6 +971,8 @@ data/
 ├── laz/cz_dmr5g_bpv/CTES/96/CTES96.laz      # DOWIAZANIE: LAZ CZ (plan B) 1:1 z ZIP openzu; SM5 = EPSG:5514/Bpv
 ├── laz/cz_dmr5g_bpv/versions/CTES/96/<data>_<sha8>/CTES96.laz   # wersja
 ├── laz/cz_dmpok_evrf2007/760/5518/760_5518.laz   # kafel TM33 = EPSG:3045/EVRF2007
+├── intensity/pl_1992/M-34/64/D/d/1/4/M-34-64-D-d-1-4.tif   # obraz intensywnosci (1 pasmo; + pl_2000/...)
+├── contours/cz_zabaged_shp/CTES/96/CTES96.zip   # warstwice ZABAGED: ZIP arkusza SM5 1:1 (+ cz_zabaged_dgn)
 ├── landcover/
 │   ├── pl_bdot10k_gpkg/teryt/1465.gpkg          # DOWIAZANIE; wersje w versions/teryt/<data>_<sha8>/
 │   ├── pl_bdot10k_gpkg_ptwp-swrs/teryt/1465.gpkg # filtr warstw (kody posortowane, lowercase)
@@ -1696,6 +1732,31 @@ Wynik: **wiele plikow** — lista arkuszy w segmencie jak w 4.1 (dowiazania do
 wersji w `versions/`; przy `all` dodatkowo kazda kampania). To jest
 asymetria wzgledem CZ, gdzie bbox daje jeden wycinek.
 
+**Obrazy GUGiK planu E1 (ADR-043).** Intensywnosc, true orto i orto
+ukosna ida torem arkuszy ortofotomapy (`DownloadManager`, kampanie, wersje,
+sygnal `index`): jeden provider `GugikImageProvider`
+(`providers/pl/gugik_orto.py`) sparametryzowany `SheetIndexParams`
+deskryptora (sekcja 3.1). Obszar rozwija sie do godel serii skorowidza
+(`series_scale(sheet_parts)`: true orto `1:5000`, godla 8-czlonowe;
+jeden uklad arkuszy = `--sheet-system` mozna pominac). Orto ukosna to
+cztery managery - po jednym na kierunek (`data._managers`, provider
+z `direction`, `storage_suffix` `_n`/`_e`/`_s`/`_w`); `verify_record_url`
+zdejmuje przyrostek kierunku z nazwy pliku (`_N.tif`), a
+`DownloadManager._download_planned` zaweza pozycje planu do segmentu
+i nazwy pliku managera. Przed `GET` arkusza obrazu idzie `HEAD`; plik
+ponad 100 MiB (`LARGE_FILE_BYTES`) dostaje `Notice` `download_size`
+z rozmiarem (K9). Wycinek true orto: sekcja 4.3 (`download_image_cutout`,
+kanal `WCS` deskryptora, bez tokenu `coverage` w segmencie).
+
+**NMT 100 m (ADR-043 D10).** `--resolution 100m` to wariant rejestru bez
+indeksu arkuszy (`pl_file_variant`): obszar (`--bbox`, `--geometry`, rama
+`--sheet`) daje wojewodztwa z PRG (`discover_teryts_for_bbox`, dwie
+pierwsze cyfry TERYT), a kazde - plik feedu ATOM GUGiK
+(`collections.atom_area_request`, tor planu `collection`, slot
+`nmt/pl_1992_100m/teryt/<woj>.zip`, sygnal `metadata` z `updated` wpisu
+zbioru). Flagi arkuszy, lotow, wycinka i `--vertical-crs` = `ValidationError`
+przed siecia.
+
 ### 4.3 Bbox / geometria PL z `--cutout` (ADR-035, ADR-038, ADR-042 D14)
 
 CLI `elevation download --bbox`/`--geometry --cutout --horizontal-crs` oraz
@@ -1920,6 +1981,22 @@ z `--country cz` = blad, `--cutout` z CZ = blad. JGW nie niesie ukladu -
 uklad kazdego pliku podaje jego sidecar (JPEG: `extra.world_files`,
 sekcja 3.2). Piksel arkusza wynika z JGW (probki 2026-10-16: 0,125 m).
 
+**Warstwice CZ (plan E1, od 0.8.0).** `elevation download --product
+contours --format SHP|DGN` -> tor `download/cz_contours.py` (dyspozycja
+`data._download_cz_contours`, jak ortofoto CZ): godlo SM5 (kafel TM33 =
+blad) albo arkusze SM5 obszaru z plikami CUZK
+(`SheetIndex.file_sheets("sm5")`, bbox przeliczony do EPSG:5514 przypieta
+operacja). Kazdy arkusz: ZIP openzu z szablonu kanalu deskryptora formatu
+(`cz.cuzk.zabaged_contours_<format>`) pobrany 1:1 do
+`contours/cz_zabaged_<format>/<hierarchia SM5>/<godlo>.zip`; przed zapisem
+wersji czlony ZIP i ich CRC sa sprawdzane (strona HTML albo przeciety ZIP
+= `DownloadError`, brak wersji), sidecar: lista czlonow (`extra.members`),
+`mapname`/`cz_share` z indeksu, `extra.http`, uklad EPSG:5514, wysokosci
+Bpv. Sygnal `http` (jedno `HEAD` przy lokalnej wersji), tor planu
+`cz_sheet` (jednostka = godlo). `--resolution`, `--cutout`,
+`--horizontal-crs`, flagi arkuszy PL i lotow = blad przed siecia
+(`options._contours_error`).
+
 ### 4.5 Bbox CZ
 
 Jeden wycinek `exportImage` uslugi wariantu (DMR 5G `dmr5g`, DMR 4G `dmr4g`,
@@ -1992,7 +2069,10 @@ EVRF2007: TM33); wymaga `--model`, bez niego `ValidationError` (`obszar
 siega CZ: podaj --model ... albo --country pl`). Ortofotomapa (plan D) bez
 `--cutout` daje arkusze PL (`--sheet-system` dla czesci PL) i arkusze SM5
 CZ (dotad `auto_narrowed_to_pl`), a kolekcje - plik obszaru na kraj
-(sekcja 4.10); (2) na obszarze
+(sekcja 4.10). Produkt jednego kraju (intensywnosc, true orto, orto ukosna:
+PL; warstwice: CZ) zaweza `auto` do tego kraju z `Info:`
+`auto_narrowed_to_pl`/`auto_narrowed_to_cz` (jak kolekcje); obszar tylko
+w drugim kraju = `ValidationError`; (2) na obszarze
 spornym flaga bez odpowiednika czeskiego (`--vertical-crs KRON86`,
 rozdzielczosc spoza rejestru CZ, np.
 `--resolution 1m` albo `0.5m` dla NMT — NMPT `0.5m` to DMP OK, kazde

@@ -608,6 +608,20 @@ class TestDownloadManagerDownloadSheets:
             "6.179.12.20",
         ]
 
+    def test_expand_sheets_to_the_sheet_level(self):
+        """A code coarser than the provider's sheet level expands to it; an
+        8-part code is the sheet itself for 7-part products (GUGiK publishes
+        some 1 m grids per quarter) and the leaf of the 8-part level."""
+        quarters = [f"N-34-50-A-c-3-2-{quarter}" for quarter in range(1, 5)]
+
+        assert DownloadManager.expand_sheets(["N-34-50-A-c-3-2-3"]) == [
+            "N-34-50-A-c-3-2-3"
+        ]
+        assert DownloadManager.expand_sheets(["N-34-50-A-c-3-2"], "1:5000") == (
+            quarters
+        )
+        assert len(DownloadManager.expand_sheets(["N-34-50-A-c-3"], "1:5000")) == 16
+
     @pytest.mark.parametrize("workers", [1, 4])
     def test_expands_coarse_and_dedupes(self, tmp_path, provider, workers):
         manager = DownloadManager(
