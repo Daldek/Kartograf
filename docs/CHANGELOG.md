@@ -964,6 +964,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Naprawione
 
+- LAZ PL `--sheet`: kafle wybierane z ramy arkusza (w EPSG:2180 obrocony
+  czworokat), nie z jej obwiedni, a kafel musi siegac w obszar glebiej niz
+  1 m (`tolerance_m`): sasiedzi stykajacy sie z rama krawedzia albo
+  naroznikiem (ramy GUGiK zaokraglone do 1 cm) i kafel siegajacy
+  w `--bbox` o milimetry nie sa pobierane. Przyklad z USAGE 1.1 (`--sheet
+  N-34-130-D-d-2-4`) pobieral 13 kafli (1,83 GB) zamiast 4 (575 MB), arkusz
+  1:5000 - 6 kafli zamiast 1 (test na zywo 2026-10-16). To samo w
+  `elevation availability --product laz --sheet` (pole i kafle ramy).
+  Biblioteka: `download_laz_area`/`check_laz_area(sheet=)` (dokladnie jedno
+  z `bbox`/`sheet`, jak `download_cz_laz`), `select_tiles(frame=)`,
+  `select_newest_cover`/`select_all_intersecting` z rama jako wielokatem
+  EPSG:2180, `select_all_intersecting(tolerance_m=)`. `Info:` o pominietych
+  kaflach wymienia tylko kafle pokryte przez nowsze; kafle spoza obszaru
+  zostaja w `superseded` z powodem `outside`.
 - Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
   `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca
   `^[A-Z]{4}[0-9]{2}$`), wiec `--sheet AS91` (DMR 4G) konczyl sie bledem

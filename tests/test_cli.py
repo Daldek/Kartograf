@@ -9820,10 +9820,10 @@ class TestCampaignOptions:
     ):
         from kartograf.providers.pl.gugik_laz import SupersededLazTile
 
-        tile = TestCmdDownloadLaz()._fake_tiles()[0]
+        older, newer = TestCmdDownloadLaz()._fake_tiles()[:2]
         provider = mock_provider_cls.return_value
         provider.select_tiles.return_value = _selection(
-            [], [SupersededLazTile(tile, ())]
+            [], [SupersededLazTile(older, (newer,))]
         )
         rc = main(
             [

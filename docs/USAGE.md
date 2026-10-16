@@ -240,7 +240,12 @@ starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
 ([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
 kafli"); `--year`/`--min-year`/`--max-year` zawężają wybór do przedziału lat
 (sekcja 4.1; rocznik spoza usługi = błąd z listą dostępnych). WFS GUGiK
-w EPSG:2180 używa kolejności osi (N,E).
+w EPSG:2180 używa kolejności osi (N,E). Obszar `--sheet` to rama arkusza
+(w EPSG:2180 obrócony czworokąt), nie jej obwiednia: kafel musi sięgać
+w obszar głębiej niż 1 m, więc sąsiedni arkusz stykający się z ramą
+krawędzią albo narożnikiem nie jest pobierany (`--sheet N-34-130-D-d-2-4`
+= 4 kafle 1:5000). Tak samo `--bbox`: kafel sięgający w niego o milimetry
+(zaokrąglenie ram GUGiK do 1 cm) jest pomijany.
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
 
@@ -921,8 +926,8 @@ Jak czytać tabelę:
 - Obszar jest ten sam, który pokrywa pobranie: `--sheet` = rama godła
   (pomiar pomija pas 1 m przy ramie — rama liczona z godła różni się od
   ramy GUGiK o centymetry), `--bbox` i `--geometry` (obwiednie obiektów,
-  jak arkusze `elevation download`) mierzone dokładnie; LAZ — obwiednia
-  arkusza albo całej geometrii, jak przy pobieraniu kafli. Arkusz
+  jak arkusze `elevation download`) mierzone dokładnie; LAZ — rama
+  arkusza albo obwiednia całej geometrii, jak przy pobieraniu kafli. Arkusz
   stykający się z obszarem tylko krawędzią nie należy do kombinacji.
 - Kolejność: rok malejąco, potem układ arkuszy, rozdzielczość, układ
   wysokości i format.
