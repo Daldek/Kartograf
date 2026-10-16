@@ -1,18 +1,17 @@
 """
-PL orthophotomap cutout from GUGiK WCS in the versioned store (ADR-042 D14).
+PL image cutouts from GUGiK WCS in the versioned store (ADR-042 D14, ADR-044).
 
-``download_orto_cutout`` / ``check_orto_cutout`` (Z2 pair; ``download_data``
-with ``product="orto"`` and ``cutout=True``): one RGB GeoTIFF of an area from
-the Standard or High WCS coverage of ``pl.gugik.orto`` (``coverage``) with
-the chosen pixel (``resolution``, label K2), in EPSG:2180 only - the image is
-never resampled locally (no warp; no land mask: pixels without imagery stay
-0,0,0 as the service sends them). The request is aligned OUTWARD to
-multiples of the pixel and fetched by the image provider (``SCALEFACTOR``,
-chunks within the channel budget counted in coverage pixels, stitched
-without resampling). The true orthophotomap (``product="true-orto"``, plan
-E1) has one WCS channel (0.05 m coverage, ``pl.gugik.orto_true``) and takes
-no ``coverage``: ``download_image_cutout`` / ``check_image_cutout`` serve
-both products.
+``download_image_cutout`` / ``check_image_cutout`` (Z2 pair; ``download_data``
+with ``product="orto"`` or ``"true-orto"`` and ``cutout=True``): one RGB
+GeoTIFF of an area from the Standard or High WCS coverage of ``pl.gugik.orto``
+(``coverage``) with the chosen pixel (``resolution``, label K2), in EPSG:2180
+only - the image is never resampled locally (no warp; no land mask: pixels
+without imagery stay 0,0,0 as the service sends them). The request is aligned
+OUTWARD to multiples of the pixel and fetched by the image provider
+(``SCALEFACTOR``, chunks within the channel budget counted in coverage
+pixels, stitched without resampling). The true orthophotomap
+(``product="true-orto"``, plan E1) has one WCS channel (0.05 m coverage,
+``pl.gugik.orto_true``) and takes no ``coverage``.
 
 The standard path ``<output>/orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif``
 (coords of the aligned grid in EPSG:2180; true orthophotomap:
@@ -31,11 +30,11 @@ with a wrong grid or HTTP 400.
 
 Example::
 
-    from kartograf import BBox, download_orto_cutout
+    from kartograf import BBox, download_image_cutout
 
-    result = download_orto_cutout(
+    result = download_image_cutout(
         BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
-        horizontal_crs="EPSG:2180", output_dir="./data",
+        product="orto", horizontal_crs="EPSG:2180", output_dir="./data",
         coverage="standard", resolution="0.25m",
     )
     print(result.file.path)
@@ -164,8 +163,9 @@ def cutout_resolution_choices(products: tuple[str, ...]) -> str:
 
 
 @dataclass(frozen=True)
-class OrtoCutoutResult:
-    """Versioned orthophotomap cutout and its data notices.
+class ImageCutoutResult:
+    """Versioned image cutout (orthophotomap, true orthophotomap) and its
+    data notices.
 
     ``file`` is ``None`` only when a plan skips the cutout and nothing is
     available locally; otherwise it points to the standard bbox link.
@@ -408,7 +408,7 @@ def _run(
     parent_request: dict | None,
     sink: NoticeSink,
     now: datetime | None = None,
-) -> OrtoCutoutResult:
+) -> ImageCutoutResult:
     """Use the local cutout or download a new immutable version.
 
     A plan executes only its matching missing position (changed ones land in
@@ -429,9 +429,9 @@ def _run(
         if not todo:
             local = local_version(slot)
             if local is None:
-                return OrtoCutoutResult(None, stale=stale)
+                return ImageCutoutResult(None, stale=stale)
             link_version(slot.std, local, refresh=False)
-            return OrtoCutoutResult(
+            return ImageCutoutResult(
                 VersionedFile(slot.std, "local", local.label, local.sha256, local.path),
                 stale=stale,
             )
@@ -495,7 +495,7 @@ def _run(
             "wycinek w calosci bez obrazu (piksele 0,0,0) - WCS GUGiK nie ma "
             f"w tym obszarze ortofotomapy {cutout.variant} ({cutout.channel.notes})",
         )
-    return OrtoCutoutResult(file, stale=stale)
+    return ImageCutoutResult(file, stale=stale)
 
 
 def _cutout_key(product: str) -> str:
@@ -559,13 +559,34 @@ def download_image_cutout(
     parent_request: dict | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
-) -> OrtoCutoutResult:
+) -> ImageCutoutResult:
     """One versioned RGB GeoTIFF of an area from the WCS of a GUGiK image
-    ``product``: ``"orto"`` (``coverage`` ``"standard"`` or ``"high"``, see
-    ``download_orto_cutout``) or ``"true-orto"`` (one channel, 0.05 m
-    coverage of selected cities: ``coverage=None``; pixels ``"0.05m"``,
-    ``"0.1m"``, ``"0.25m"``, ``"0.5m"``, ``"1m"``; 0,0,0 outside the cities).
-    The rest as ``download_orto_cutout``.
+    ``product``.
+
+    ``product``: ``"orto"`` - the orthophotomap, ``coverage`` ``"standard"``
+    (newest orthophotomaps) or ``"high"`` (pixel 10 cm and finer; 0,0,0
+    elsewhere), ``resolution`` a label K2 of the channel (``"0.1m"``,
+    ``"0.25m"``, ``"0.5m"``, ``"1m"``); ``"true-orto"`` - the true
+    orthophotomap, one channel (0.05 m coverage of selected cities:
+    ``coverage=None``; pixels ``"0.05m"``, ``"0.1m"``, ``"0.25m"``,
+    ``"0.5m"``, ``"1m"``; 0,0,0 outside the cities). ``horizontal_crs``:
+    ``"EPSG:2180"`` only (the image is not resampled). ``bbox`` may be in any
+    supported CRS (for a geometry pass its envelope); the result grid is
+    ``bbox`` in EPSG:2180 aligned OUTWARD to multiples of the pixel. The
+    server composes the flights itself (no year choice). Default and
+    ``update="upgrade"`` use a local version without a request;
+    ``update="force"`` downloads again. ``plan`` (from
+    ``check_image_cutout``) downloads only its missing position; a changed
+    position lands in ``stale``. ``parent_request`` goes to the sidecar only
+    when given. ``cache`` is accepted for symmetry with the other tracks (the
+    cutout reads no metadata); ``on_notice`` receives each data notice when
+    it is emitted.
+
+    Returns
+    -------
+    ImageCutoutResult
+        ``file`` - standard link and version status; ``notices`` -
+        ``CUTOUT_SIZE`` (before the first WCS request) and ``ALL_NODATA``.
 
     Raises
     ------
@@ -593,96 +614,3 @@ def download_image_cutout(
         cutout, update=update, plan=plan, parent_request=parent_request, sink=sink
     )
     return replace(result, notices=sink.notices)
-
-
-def check_orto_cutout(
-    bbox: BBox,
-    *,
-    horizontal_crs: str,
-    output_dir: str | Path,
-    coverage: str,
-    resolution: str,
-    cache: MetadataCache | bool = True,
-    on_notice: Callable[[Notice], None] | None = None,
-) -> UpdatePlan:
-    """Update plan of ``download_orto_cutout`` with the same arguments, no download.
-
-    The WCS channel has no remote version signal, so the plan (track
-    ``pl_cutout``) reads only the local store: no request is made. ``cache``
-    and ``on_notice`` are accepted for symmetry with the download.
-
-    Raises ``ValidationError`` for an invalid choice and ``TransformError``
-    when a Czech CRS has no safe pinned operation, exactly as the download.
-    """
-    return check_image_cutout(
-        bbox,
-        product="orto",
-        horizontal_crs=horizontal_crs,
-        output_dir=output_dir,
-        coverage=coverage,
-        resolution=resolution,
-        cache=cache,
-        on_notice=on_notice,
-    )
-
-
-def download_orto_cutout(
-    bbox: BBox,
-    *,
-    horizontal_crs: str,
-    output_dir: str | Path,
-    coverage: str,
-    resolution: str,
-    update: UpdateMode | None = None,
-    plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
-    cache: MetadataCache | bool = True,
-    on_notice: Callable[[Notice], None] | None = None,
-) -> OrtoCutoutResult:
-    """One versioned RGB GeoTIFF of an area from the orthophotomap WCS of GUGiK.
-
-    ``coverage``: ``"standard"`` (newest orthophotomaps) or ``"high"`` (pixel
-    10 cm and finer; 0,0,0 elsewhere); ``resolution``: the pixel, a label K2
-    of the channel (``"0.1m"``, ``"0.25m"``, ``"0.5m"``, ``"1m"``);
-    ``horizontal_crs``: ``"EPSG:2180"`` only (the image is not resampled).
-    ``bbox`` may be in any supported CRS (for a geometry pass its envelope);
-    the result grid is ``bbox`` in EPSG:2180 aligned OUTWARD to multiples of
-    the pixel. The server composes the flights itself (no year choice).
-    Default and ``update="upgrade"`` use a local version without a request;
-    ``update="force"`` downloads again. ``plan`` (from
-    ``check_orto_cutout``) downloads only its missing position; a changed
-    position lands in ``stale``. ``parent_request`` goes to the sidecar only
-    when given. ``cache`` is accepted for symmetry with the other tracks (the
-    cutout reads no metadata); ``on_notice`` receives each data notice when
-    it is emitted. The true orthophotomap: ``download_image_cutout``.
-
-    Returns
-    -------
-    OrtoCutoutResult
-        ``file`` - standard link and version status; ``notices`` -
-        ``CUTOUT_SIZE`` (before the first WCS request) and ``ALL_NODATA``.
-
-    Raises
-    ------
-    ValidationError
-        Invalid bbox, choice or update mode (before any request), or too
-        little disk space on download.
-    TransformError
-        No safe pinned operation from a Czech CRS of ``bbox`` to EPSG:2180.
-    DownloadError
-        WCS failure, an error document or a raster off the requested grid;
-        no version is committed.
-    """
-    return download_image_cutout(
-        bbox,
-        product="orto",
-        horizontal_crs=horizontal_crs,
-        output_dir=output_dir,
-        coverage=coverage,
-        resolution=resolution,
-        update=update,
-        plan=plan,
-        parent_request=parent_request,
-        cache=cache,
-        on_notice=on_notice,
-    )

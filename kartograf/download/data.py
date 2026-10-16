@@ -101,7 +101,7 @@ from kartograf.download.options import (
     resolve_pl_options,
     validate_request,
 )
-from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, OrtoCutoutResult
+from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, ImageCutoutResult
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import (
     DownloadError,
@@ -1655,7 +1655,7 @@ def _download_pl_cutout(
         "cache": run.cache,
         "on_notice": run.sink.add,
     }
-    result: PlCutoutResult | OrtoCutoutResult
+    result: PlCutoutResult | ImageCutoutResult
     try:
         if image_source(task.product) is not None:
             image = {

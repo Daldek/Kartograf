@@ -1809,7 +1809,7 @@ Ortofoto CZ, wycinek ortofotomapy PL i dane CZ (sekcje 1.3, 1.4 i 1.9):
 ```python
 from kartograf import (
     BBox, LandCoverManager, check_cz_orto_sheet, download_collection,
-    download_cz_orto_sheet, download_data, download_orto_cutout,
+    download_cz_orto_sheet, download_data, download_image_cutout,
 )
 
 out = "./data"
@@ -1830,10 +1830,10 @@ cut = download_data(product="orto", country="pl", output_dir=out,
                     bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
                     cutout=True, horizontal_crs="EPSG:2180",
                     coverage="standard", resolution="0.25m", on_notice=show)
-# tor wycinka (OrtoCutoutResult: file, stale, notices); plan: check_orto_cutout
-high = download_orto_cutout(BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
-                            horizontal_crs="EPSG:2180", output_dir=out,
-                            coverage="high", resolution="0.1m")
+# tor wycinka (ImageCutoutResult: file, stale, notices); plan: check_image_cutout
+high = download_image_cutout(BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
+                             product="orto", horizontal_crs="EPSG:2180",
+                             output_dir=out, coverage="high", resolution="0.1m")
 print(high.file.path)  # data/orto/pl_1992_high_0.1m/bbox/566000_243000_566200_243200.tif
 
 # = landcover download --product zabaged --bbox=-460000,-1120000,-450000,-1110000 --bbox-crs EPSG:5514
@@ -1885,7 +1885,7 @@ path = result.files["N-34-130-D-d-2-4"][0].version_path
 # provider.download_bbox(bbox, path) — NMT/NMPT: jednopasmowy float32 GeoTIFF
 # na siatce 1 m EPSG:2180, ortofotomapa: RGB z jednego zapytania Standard;
 # bez maski PRG i bez wersji. Wycinek NMT/NMPT w magazynie wersji:
-# download_pl_cutout (niżej), ortofotomapy: download_orto_cutout (wyżej).
+# download_pl_cutout (niżej), ortofotomapy: download_image_cutout (wyżej).
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
 path = kron.download_bbox(area, Path("my_area.tif"))
@@ -2431,9 +2431,9 @@ report = manager.download_sheets(
 print(report.stale, report.files.get(godlo, ()))
 # LAZ: download_laz_area(..., update=, plan=) + check_laz_area (te same argumenty);
 # LAZ CZ: download_cz_laz(..., update=, plan=) + check_cz_laz (ten sam wybór);
-# wycinki i arkusze CZ: download_pl_cutout / download_orto_cutout /
+# wycinki i arkusze CZ: download_pl_cutout / download_image_cutout /
 # download_cz_cutout / download_cz_sheet / download_cz_orto_sheet(..., update=,
-# plan=) + check_pl_cutout / check_orto_cutout / check_cz_cutout /
+# plan=) + check_pl_cutout / check_image_cutout / check_cz_cutout /
 # check_cz_sheet / check_cz_orto_sheet (te same argumenty); land cover:
 # LandCoverManager.download(..., update=, plan=) + check (te same argumenty);
 # HSG: calculate_hsg(..., update=, plan=) + check_hsg; kolekcje:

@@ -216,7 +216,7 @@ i ZTM (2.15), Bodove pole i QGZU-2013 (2.16).
   --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` -> jeden GeoTIFF
   RGB `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif` (WCS Standard/High,
   siatka 0,1 m, kawałki 200 x 200 m, bez przepróbkowania i maski lądu;
-  `download_orto_cutout`/`check_orto_cutout`)
+  `download_image_cutout`/`check_image_cutout` z `product="orto"`)
 - Ortofoto CZ (0.8.0, ADR-042 D13): `--country cz` (arkusz SM5 albo obszar)
   -> JPEG + `.jgw`/`.TM33N.jgw`/`.TM34N.jgw` z ATOM CUZK 1:1 w
   `orto/cz_sjtsk/`, tylko aktualny rocznik (`download_cz_orto_sheet`)
@@ -454,9 +454,9 @@ from kartograf import (
     download_data, check_data, DataReport, UnitFile, UnitFailure,
     # Download (collections: `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, ADR-042)
     download_collection, check_collection, CollectionReport,
-    # Download (orthophoto: CZ SM5 sheet, PL WCS cutout; ADR-042 D13-D14)
+    # Download (orthophoto: CZ SM5 sheet; PL image cutout, ADR-042 D13-D14, ADR-044)
     download_cz_orto_sheet, check_cz_orto_sheet, CzOrtoResult,
-    download_orto_cutout, check_orto_cutout, OrtoCutoutResult,
+    download_image_cutout, check_image_cutout, ImageCutoutResult,
     # Availability report (`kartograf elevation availability`, ADR-041)
     check_availability, AvailabilityReport, AvailabilityCombination,
     AvailabilityArea,
@@ -1202,7 +1202,7 @@ kartograf/
 │   ├── collections.py        # download_collection/check_collection = `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download` (ADR-042); limit obszaru; kolekcje landcover
 │   ├── cz_orto.py            # Ortofoto CZ: download_cz_orto_sheet/check_cz_orto_sheet (ADR-042 D13)
 │   ├── cz_contours.py        # Warstwice ZABAGED CZ: ZIP arkusza SM5 1:1 (download_cz_contours_sheet, ADR-043)
-│   ├── orto_cutout.py        # Wycinek ortofotomapy PL WCS: download_orto_cutout/check_orto_cutout (ADR-042 D14)
+│   ├── orto_cutout.py        # Wycinek obrazu PL WCS (ortofotomapa, true orto): download_image_cutout/check_image_cutout (ADR-042 D14, ADR-044)
 │   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── countries.py          # Podział obszaru na kraje (countries_for_bbox, split_bbox_by_country)
