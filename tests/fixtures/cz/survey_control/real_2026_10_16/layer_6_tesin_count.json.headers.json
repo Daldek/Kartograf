@@ -1,0 +1,6 @@
+{
+  "url": "https://ags.cuzk.gov.cz/arcgis/rest/services/BodovaPole/MapServer/6/query?geometry=-452000%2C-1113000%2C-449000%2C-1110000&geometryType=esriGeometryEnvelope&inSR=5514&spatialRel=esriSpatialRelIntersects&returnCountOnly=true&f=json",
+  "status": 200,
+  "Content-Type": "application/json; charset=UTF-8",
+  "ETag": "\"1792052096\""
+}

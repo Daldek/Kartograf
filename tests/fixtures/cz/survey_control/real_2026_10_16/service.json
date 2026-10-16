@@ -1,0 +1,524 @@
+{
+ "currentVersion": 11.5,
+ "spatialReference": {
+  "wkid": 102067,
+  "latestWkid": 5514,
+  "xyTolerance": 0.001,
+  "zTolerance": 0.001,
+  "mTolerance": 0.001,
+  "falseX": -33699800,
+  "falseY": -33699800,
+  "xyUnits": 10000,
+  "falseZ": -100000,
+  "zUnits": 10000,
+  "falseM": -100000,
+  "mUnits": 10000
+ },
+ "maxRecordCount": 2000,
+ "layers": [
+  {
+   "id": 101,
+   "name": "Tíhové bodové pole",
+   "parentLayerId": -1,
+   "subLayerIds": [
+    48,
+    49
+   ],
+   "type": "Group Layer",
+   "geometryType": null
+  },
+  {
+   "id": 48,
+   "name": "Bod ZTBP",
+   "parentLayerId": 101,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 49,
+   "name": "Čísla bodů ZTBP",
+   "parentLayerId": 101,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 102,
+   "name": "Výškové bodové pole",
+   "parentLayerId": -1,
+   "subLayerIds": [
+    44,
+    45,
+    46,
+    47
+   ],
+   "type": "Group Layer",
+   "geometryType": null
+  },
+  {
+   "id": 44,
+   "name": "Bod ZVBP",
+   "parentLayerId": 102,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 45,
+   "name": "Čísla bodů ZVBP",
+   "parentLayerId": 102,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 46,
+   "name": "Bod PVBP",
+   "parentLayerId": 102,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 47,
+   "name": "Čísla bodů PVBP",
+   "parentLayerId": 102,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 103,
+   "name": "Polohové bodové pole - body PPBP",
+   "parentLayerId": -1,
+   "subLayerIds": [
+    42,
+    43
+   ],
+   "type": "Group Layer",
+   "geometryType": null
+  },
+  {
+   "id": 42,
+   "name": "Bod PPBP",
+   "parentLayerId": 103,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 43,
+   "name": "Čísla bodů PPBP",
+   "parentLayerId": 103,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 104,
+   "name": "Polohové bodové pole - Zhb",
+   "parentLayerId": -1,
+   "subLayerIds": [
+    22,
+    23,
+    24,
+    25,
+    26,
+    27,
+    28,
+    29,
+    30,
+    31,
+    32,
+    33,
+    34,
+    35,
+    36,
+    37,
+    38,
+    39,
+    40,
+    41
+   ],
+   "type": "Group Layer",
+   "geometryType": null
+  },
+  {
+   "id": 22,
+   "name": "ZhB určený v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 23,
+   "name": "Čísla ZhB určených v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 24,
+   "name": "ZhB určený v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 25,
+   "name": "Čísla ZhB určených v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 26,
+   "name": "Přidružený bod k ZhB určený v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 27,
+   "name": "Čísla přidružených bodů k ZhB určených v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 28,
+   "name": "Přidružený bod k ZhB určený v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 29,
+   "name": "Čísla přidružených bodů k ZhB určených v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 30,
+   "name": "Zrušený ZhB určený v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 31,
+   "name": "Čísla zrušených ZhB určených v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 32,
+   "name": "Zrušený ZhB určený v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 33,
+   "name": "Čísla zrušených ZhB určených v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 34,
+   "name": "Zrušený přidružený bod k bodu ZhB určený v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 35,
+   "name": "Čísla zrušených přidružených bodů k bodu ZhB určených v ETRS89",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 36,
+   "name": "Zrušený přidružený bod k bodu ZhB určený v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 37,
+   "name": "Čísla zrušených přidružených bodů k bodu ZhB určených v ETRS89 metodou RTK",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 38,
+   "name": "ZhB",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 39,
+   "name": "Čísla ZhB",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 40,
+   "name": "Přidružený bod k ZhB",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 41,
+   "name": "Čísla přidružených bodů k ZhB",
+   "parentLayerId": 104,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 105,
+   "name": "Polohové bodové pole - body ZPBP",
+   "parentLayerId": -1,
+   "subLayerIds": [
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9,
+    10,
+    11,
+    12,
+    13,
+    14,
+    15,
+    16,
+    17,
+    18,
+    19,
+    20,
+    21
+   ],
+   "type": "Group Layer",
+   "geometryType": null
+  },
+  {
+   "id": 2,
+   "name": "Bod ZPBP určený v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 3,
+   "name": "Čísla bodů ZPBP určených v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 4,
+   "name": "Bod ZPBP určený v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 5,
+   "name": "Čísla bodů ZPBP určených v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 6,
+   "name": "Přidružený bod k bodu ZPBP určený v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 7,
+   "name": "Čísla přidružených bodů k bodu ZPBP určených v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 8,
+   "name": "Přidružený bod k bodu ZPBP určený v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 9,
+   "name": "Čísla přidružených bodů k bodu ZPBP určených v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 10,
+   "name": "Zrušený bod ZPBP určený v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 11,
+   "name": "Čísla zrušených bodů ZPBP určených v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 12,
+   "name": "Zrušený bod ZPBP určený v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 13,
+   "name": "Čísla zrušených bodů ZPBP určených v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 14,
+   "name": "Zrušený přidružený bod k bodu ZPBP určený v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 15,
+   "name": "Čísla zrušených přidružených bodů k bodu ZPBP určených v ETRS89",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 16,
+   "name": "Zrušený přidružený bod k bodu ZPBP určený v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 17,
+   "name": "Čísla zrušených přidružených bodů k bodu ZPBP určených v ETRS89 metodou RTK",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 18,
+   "name": "Bod ZPBP",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 19,
+   "name": "Čísla bodů ZPBP",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 20,
+   "name": "Přidružený bod k bodu ZPBP",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 21,
+   "name": "Čísla přidružených bodů k bodu ZPBP",
+   "parentLayerId": 105,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 106,
+   "name": "Stanice sítě CZEPOS",
+   "parentLayerId": -1,
+   "subLayerIds": [
+    0,
+    1
+   ],
+   "type": "Group Layer",
+   "geometryType": null
+  },
+  {
+   "id": 0,
+   "name": "CZEPOS",
+   "parentLayerId": 106,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  },
+  {
+   "id": 1,
+   "name": "Označení stanic sítě CZEPOS",
+   "parentLayerId": 106,
+   "subLayerIds": null,
+   "type": "Feature Layer",
+   "geometryType": "esriGeometryPoint"
+  }
+ ]
+}

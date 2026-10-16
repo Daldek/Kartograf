@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/PodstawowaOsnowaGeodezyjnaWysokosciowa/WFS?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=ms%3ABazowa_wysokosciowa&SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&BBOX=240600%2C567600%2C241200%2C568300%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&RESULTTYPE=hits",
+  "status": 200,
+  "Content-Type": "text/xml; subtype=\"gml/3.2.1\"; charset=UTF-8"
+}

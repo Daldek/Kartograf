@@ -210,3 +210,22 @@ def test_unusable_tile_skipped(caplog):
         records = records_from_wfs(features, source=MESH)
     assert [r.unit for r in records] == ["74228_55482"]
     assert "SkorowidzModeleSiatkowe3D.6777" in caplog.text
+
+
+def test_file_name_is_the_unit_without_unit_field():
+    """Without ``unit_field`` a record is the unit of its own file (the mesh
+    ``modul`` names tiles of several works, measured 2026-10-16): the unit is
+    the file name without ``.zip``, the zone and label stay those of the
+    record."""
+    root = ET.fromstring((FIXTURES / "mesh_p1.xml").read_bytes())
+    features = [e for e in root.iter() if e.tag.endswith("}SkorowidzModeleSiatkowe3D")]
+    source = IndexSource(**{**MESH.__dict__, "unit_field": None})
+
+    records = records_from_wfs(features, source=source)
+
+    assert [r.unit for r in records] == [
+        "78944_6777_74230_55482",
+        "78944_6776_74228_55482",
+    ]
+    assert {r.zone for r in records} == {"s7"}
+    assert {r.raw["modul"] for r in records} == {"74230_55482", "74228_55482"}

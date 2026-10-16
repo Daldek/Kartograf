@@ -25,6 +25,7 @@ import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from html.parser import HTMLParser
+from pathlib import PurePosixPath
 from urllib.parse import urlencode, urlparse
 
 import requests
@@ -65,8 +66,10 @@ class IndexRecord:
 
     ``unit``: the canonical PL sheet code (``SheetParser(...).sheet``) of a
     GFI record, the tile id (``unit_field``, e.g. ``"74230_55482"``) of a WFS
-    record. ``urls``: file format in upper case (``"PDF"``, ``"TIFF"``) ->
-    HTTPS URL, ``{"": url}`` for a record with one URL (``url_field``).
+    record - or, without ``unit_field``, the name of its file without the
+    suffix (``"78944_6777_74230_55482"``). ``urls``: file format in upper
+    case (``"PDF"``, ``"TIFF"``) -> HTTPS URL, ``{"": url}`` for a record with
+    one URL (``url_field``).
     ``label``: version label (D29, ``edition_label``). ``year``: year of the
     data (``year_field``; ``map_links``: year of the base date). ``zone``:
     slot directory of a tile from ``zone_field`` (``"PL-2000:S7"`` ->
@@ -213,12 +216,17 @@ class _Unusable(Exception):
 
 def _wfs_record(feature: ET.Element, source: IndexSource) -> IndexRecord:
     raw = _feature_fields(feature)
-    unit = raw.get(source.unit_field)
-    if not unit:
-        raise _Unusable(f"brak pola {source.unit_field}")
     url = raw.get(source.url_field or "", "")
     if not url.startswith("https://"):
         raise _Unusable(f"brak adresu HTTPS w polu {source.url_field}")
+    if source.unit_field is None:
+        unit = PurePosixPath(urlparse(url).path).stem
+        if not unit:
+            raise _Unusable(f"adres {url} bez nazwy pliku")
+    else:
+        unit = raw.get(source.unit_field, "")
+        if not unit:
+            raise _Unusable(f"brak pola {source.unit_field}")
     parts = [raw[name] for name in source.label_fields if raw.get(name)]
     if not parts:
         raise _Unusable(f"brak wartosci pol etykiety {', '.join(source.label_fields)}")
