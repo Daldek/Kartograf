@@ -986,6 +986,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   offline `aktualne`, a nowy lot opublikowany w tym czasie byl niewidoczny
   (test na zywo 2026-10-16). Bez sieci sprawdzenie konczy sie teraz
   `Error:`. Domyslne pobieranie i `--upgrade` czytaja cache jak dotad.
+- Dokumentacja: USAGE 7 - orto ukosna Krakow 2021 ma w GeoTIFF wlasny opis
+  ukladu bez kodu EPSG (GDAL zgaduje EPSG:32634); uklad pliku to EPSG:2178
+  jak w sidecarze, z obejsciem bez zmiany pliku.
 - Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
   `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca
   `^[A-Z]{4}[0-9]{2}$`), wiec `--sheet AS91` (DMR 4G) konczyl sie bledem
