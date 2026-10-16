@@ -2,8 +2,10 @@
 
 Fixtures: ``tests/fixtures/cz/feature_bbox`` (ZABAGED REST and HY-NET WFS,
 recorded 2026-10-15, README there), ``tests/fixtures/pl/feature_bbox``
-(RUIAN layer 12 and the HY-NET GetCapabilities of plan C) and
-``tests/fixtures/cz/atom`` (ZABAGED-GPKG feeds).
+(RUIAN layer 12 and the HY-NET GetCapabilities of plan C),
+``tests/fixtures/cz/atom`` (ZABAGED-GPKG feeds) and
+``tests/fixtures/cz/unit_package`` (``HEAD`` and ZIP members of the RUIAN and
+HY-NET national files).
 """
 
 import dataclasses
@@ -29,7 +31,7 @@ from kartograf.notices import WHOLE_COUNTRY_SIZE
 from kartograf.sources import registry
 from kartograf.sources.descriptor import FeatureBBoxParams
 from tests.conftest import recorded_response
-from tests.fake_packages import FakeResponse, zip_bytes
+from tests.fake_packages import FakePackageSession, FakeResponse, zip_bytes
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CZ = FIXTURES / "cz" / "feature_bbox"
@@ -37,7 +39,14 @@ PL = FIXTURES / "pl" / "feature_bbox"
 ATOM = FIXTURES / "cz" / "atom"
 HYNET = "https://geoportal.cuzk.gov.cz/geoserver/hy-n/wfs"
 RUIAN = "https://ags.cuzk.gov.cz/arcgis/rest/services/RUIAN/MapServer"
+ZABAGED = "https://ags.cuzk.gov.cz/arcgis/rest/services/ZABAGED_POLOHOPIS/MapServer"
+ZABAGED_SERVICE = "https://atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml"
 ZABAGED_FEED = "https://atom.cuzk.gov.cz/ZABAGED-GPKG/datasetFeeds/CZ-00025712-CUZK_ZABAGED-GPKG_1.xml"
+ZABAGED_5514 = "https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip"
+# HEAD headers (real size and ETag) and ZIP member names, recorded 2026-10-16
+NATIONAL = json.loads(
+    (FIXTURES / "cz" / "unit_package" / "packages.json").read_text(encoding="utf-8")
+)
 # 500 x 500 m at Cesky Tesin (EPSG:5514): HY-NET 3 links, 1 node, 0 crossings
 AREA = BBox(-451000, -1112000, -450500, -1111500, "EPSG:5514")
 _SHORT = {
@@ -66,6 +75,8 @@ class FakeCuzk:
         self.calls.append((url, params))
         if url in self.extra:
             return self.extra[url]()
+        if url.startswith(f"{ZABAGED}/"):
+            return answer(self._zabaged(url.removeprefix(f"{ZABAGED}/"), params))
         if url == HYNET:
             return answer(self._hynet(params))
         if url == f"{RUIAN}/12":
@@ -90,13 +101,35 @@ class FakeCuzk:
             return CZ / f"hynet_{short}_b5_hits.xml"
         return CZ / f"hynet_{short}_b5_c2_s{params['STARTINDEX']}.xml"
 
+    @staticmethod
+    def _zabaged(path: str, params: dict) -> Path:
+        layer, _, query = path.partition("/")
+        if not query:
+            return CZ / f"zabaged_l{layer}_info.json"
+        assert params["geometry"] == "-451000,-1112000,-450500,-1111500"
+        if params.get("returnCountOnly") == "true":
+            return CZ / f"zabaged_l{layer}_b5_count.json"
+        return CZ / f"zabaged_l{layer}_b5_r2_o{params['resultOffset']}.json.gz"
 
-def _page_size(monkeypatch, key: str, size: int) -> None:
+
+def _page_size(
+    monkeypatch, key: str, size: int, sources: set[str] | None = None
+) -> None:
     """The registry entry with the area channel paging by ``size`` (the
-    COUNT/resultRecordCount of the recorded pages)."""
+    COUNT/resultRecordCount of the recorded pages); ``sources`` keeps only
+    the layers with these source ids (the recorded ones)."""
     source = registry.get_source(key)
+
+    def recorded(params: FeatureBBoxParams) -> FeatureBBoxParams:
+        layers = tuple(
+            layer
+            for layer in params.layers
+            if sources is None or layer.source in sources
+        )
+        return dataclasses.replace(params, page_size=size, layers=layers)
+
     channels = tuple(
-        dataclasses.replace(ch, params=dataclasses.replace(ch.params, page_size=size))
+        dataclasses.replace(ch, params=recorded(ch.params))
         if isinstance(ch.params, FeatureBBoxParams)
         else ch
         for ch in source.channels
@@ -149,23 +182,8 @@ def test_zabaged_whole_country_requires_crs(tmp_path, monkeypatch, frozen_clock)
         manager.download(bbox=AREA, format="SHP")
 
     body = zip_bytes(["ZABAGED_RESULTS.gpkg"])
-    feed = (ATOM / "zabaged_dataset.xml").read_bytes()
-    feed = feed.replace(b'length="5805826649"', f'length="{len(body)}"'.encode())
-    url = "https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip"
     events: list[str] = []
-    fake = FakeCuzk(
-        {
-            "https://atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml": lambda: answer(
-                ATOM / "zabaged_service.xml"
-            ),
-            ZABAGED_FEED: lambda: answer(ATOM / "zabaged_dataset.xml", body=feed),
-            url: lambda: (
-                events.append("GET")
-                or FakeResponse(200, {"Content-Length": str(len(body))}, body)
-            ),
-        }
-    )
-    monkeypatch.setattr(col, "_session", lambda: fake)
+    _zabaged_country(monkeypatch, body, events)
     result = manager.download(
         whole_country=True,
         horizontal_crs="EPSG:5514",
@@ -183,6 +201,183 @@ def test_zabaged_whole_country_requires_crs(tmp_path, monkeypatch, frozen_clock)
     assert meta["request"] == {"whole_country": True, "horizontal_crs": "EPSG:5514"}
     assert meta["extra"]["source"]["edition"] == "2026-10-04"
     assert meta["extra"]["version"]["label_source"] == "edition"
+
+
+def _zabaged_country(monkeypatch, body: bytes, events: list[str]) -> dict[str, bytes]:
+    """ZABAGED-GPKG feeds and the EPSG:5514 national file (``body``, its size
+    in the feed ``length``); a GET of the file appends ``"GET"`` to
+    ``events``. Returns the dataset feed bytes by name (``"dataset"``) - a
+    test may publish a new edition by replacing them."""
+    feed = (ATOM / "zabaged_dataset.xml").read_bytes()
+    feeds = {
+        "dataset": feed.replace(
+            b'length="5805826649"', f'length="{len(body)}"'.encode()
+        )
+    }
+
+    def national_file() -> FakeResponse:
+        events.append("GET")
+        return FakeResponse(200, {"Content-Length": str(len(body))}, body)
+
+    fake = FakeCuzk(
+        {
+            ZABAGED_SERVICE: lambda: answer(ATOM / "zabaged_service.xml"),
+            ZABAGED_FEED: lambda: answer(
+                ATOM / "zabaged_dataset.xml", body=feeds["dataset"]
+            ),
+            ZABAGED_5514: national_file,
+        }
+    )
+    monkeypatch.setattr(col, "_session", lambda: fake)
+    return feeds
+
+
+def test_zabaged_whole_country_check_by_edition(tmp_path, monkeypatch, frozen_clock):
+    """``--check-updates`` of the national file reads only the ATOM feeds:
+    the same ``updated`` of the file entry = ``current``, a later one =
+    ``newer`` (labelled by the new date); the file itself is never fetched."""
+    events: list[str] = []
+    feeds = _zabaged_country(monkeypatch, zip_bytes(["ZABAGED_RESULTS.gpkg"]), events)
+    manager = LandCoverManager(tmp_path, "zabaged", cache=False)
+    choice = {"whole_country": True, "horizontal_crs": "EPSG:5514"}
+    assert [i.status for i in manager.check(**choice).items] == ["missing"]
+    manager.download(**choice)
+    assert events == ["GET"]
+
+    plan = manager.check(**choice)
+    (item,) = plan.items
+    assert (item.track, item.status, item.local_label) == (
+        "landcover",
+        "current",
+        "2026-10-04",
+    )
+
+    feeds["dataset"] = feeds["dataset"].replace(
+        b"<updated>2026-10-04T18:51:04+02:00</updated>",
+        b"<updated>2026-10-11T18:00:00+02:00</updated>",
+    )
+    (item,) = manager.check(**choice).items
+    assert (item.status, item.local_label, item.available_label) == (
+        "newer",
+        "2026-10-04",
+        "2026-10-11",
+    )
+    assert events == ["GET"]
+
+
+def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
+    """An area -> one GPKG in EPSG:5514 with one layer per ZABAGED layer
+    named by its code, complete against ``returnCountOnly`` (2 + 1 objects in
+    two pages), an empty layer keeps its schema, the layer description names
+    the service layer and its id; an area has no cheap update signal
+    (``unverifiable`` without a request)."""
+    _page_size(monkeypatch, "cz.cuzk.zabaged", 2, sources={"93", "132", "138"})
+    fake = FakeCuzk()
+    monkeypatch.setattr(col, "_session", lambda: fake)
+    manager = LandCoverManager(tmp_path, "zabaged", cache=False)
+
+    (item,) = manager.download(bbox=AREA).files
+
+    path = item.file.path
+    assert path == (
+        tmp_path / "landcover/cz_zabaged/bbox/-451000_-1112000_-450500_-1111500.gpkg"
+    )
+    counts = {
+        name: pyogrio.read_info(path, layer=name)["features"]
+        for name, _ in pyogrio.list_layers(path)
+    }
+    assert counts == {
+        "vodni_tok": 2,
+        "vodni_plocha": 0,
+        "orna_puda_a_ostatni_dale_nespecifikovane_plochy": 3,
+    }
+    empty = pyogrio.read_info(path, layer="vodni_plocha")
+    assert empty["crs"] == "EPSG:5514" and "fid_zbg" in list(empty["fields"])
+    assert pyogrio.read_info(path, layer="vodni_tok")["layer_metadata"] == {
+        "DESCRIPTION": "Vodní tok (93)"
+    }
+    meta = _meta(path)
+    assert (meta["dataset"], meta["horizontal_crs"]) == ("cz.cuzk.zabaged", "EPSG:5514")
+
+    fake.calls.clear()
+    (planned,) = manager.check(bbox=AREA).items
+    assert (planned.track, planned.status) == ("landcover", "unverifiable")
+    assert fake.calls == []
+
+
+@pytest.mark.parametrize(
+    ("name", "product", "stored", "crs"),
+    [
+        (
+            "ruian_country",
+            "admin",
+            "boundaries/cz_ruian_shp/country/cz.zip",
+            "EPSG:5514",
+        ),
+        ("hynet_country", "network", "hydro/cz_hynet_gpkg/country/cz.zip", "EPSG:3045"),
+    ],
+)
+def test_national_file_http_signal(tmp_path, monkeypatch, name, product, stored, crs):
+    """RUIAN and HY-NET national files (signal ``http``): the real size from
+    ``HEAD`` announced before the transfer, the ZIP stored 1:1 with the CRS
+    of the file; ``--check-updates`` asks only ``HEAD`` - the same ``ETag`` =
+    ``current``, another = ``newer``; the default run keeps the local file,
+    ``--upgrade`` stores the new one next to it. No frozen clock: of two
+    versions with one label (the day of the download) the later is newest."""
+    entry = NATIONAL[name]
+    url, head = entry["url"], entry["headers"]
+    body = zip_bytes(entry["members"])
+    session = FakePackageSession(
+        {url: (200, {**head, "Content-Length": str(len(body))}, body)},
+        heads={url: head},
+    )
+    monkeypatch.setattr(col, "_session", lambda: session)
+    choice = {
+        "product": product,
+        "country": "cz",
+        "whole_country": True,
+        "output_dir": tmp_path,
+        "cache": False,
+    }
+    seen: list[tuple[str, int]] = []
+
+    report = download_collection(
+        **choice, on_notice=lambda n: seen.append((n.code, session.gets(url)))
+    )
+
+    assert report.ok
+    (item,) = report.files
+    assert item.file.path == tmp_path / stored
+    assert item.file.path.read_bytes() == body
+    assert seen == [(WHOLE_COUNTRY_SIZE, 0)]
+    assert head["Content-Length"] in report.notices[0].text
+    meta = _meta(item.file.version_path)
+    assert meta["horizontal_crs"] == crs
+    assert meta["extra"]["http"]["etag"] == head["ETag"]
+
+    session.calls.clear()
+    (current,) = check_collection(**choice).items
+    assert current.status == "current"
+    assert session.calls == [("HEAD", url)]
+
+    session.heads[url] = {**head, "ETag": '"nowe-wydanie"'}
+    (newer,) = check_collection(**choice).items
+    assert newer.status == "newer"
+    kept = download_collection(**choice)
+    assert [f.file.status for f in kept.files] == ["local"]
+    assert session.gets(url) == 0  # no transfer since the first download
+
+    new_body = zip_bytes(entry["members"], content=b"nowe wydanie")
+    session.routes[url] = (
+        200,
+        {**head, "ETag": '"nowe-wydanie"', "Content-Length": str(len(new_body))},
+        new_body,
+    )
+    upgraded = download_collection(**choice, update="upgrade")
+    (fresh,) = upgraded.files
+    assert fresh.file.path.read_bytes() == new_body
+    assert fresh.file.version_path != item.file.version_path
+    assert item.file.version_path.read_bytes() == body
 
 
 def test_hynet_three_layers_and_misleading_next(tmp_path, monkeypatch, frozen_clock):
