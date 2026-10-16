@@ -145,7 +145,7 @@ def test_area_outside_countries_is_validation_error(tmp_path):
         ),
         (
             {"product": "laz", "cutout": True},
-            "--cutout dziala tylko z --product nmt, nmpt albo orto",
+            "--cutout dziala tylko z --product nmt, nmpt, orto albo true-orto",
         ),
         (
             {"product": "orto", "vertical_crs": None, "cutout": True},

@@ -126,7 +126,7 @@ plan kompletny. `pytanie Pn` znaczy: jedna decyzja uzytkownika (sekcja
 | 13 | Osnowy podstawowe (`pl.gugik.prpog`) | `geodesy download --product control --country pl --network ...` | E5 | do implementacji |
 | 14 | RCN (`pl.gugik.rcn`) | `cadastre download --product prices` | E3 | do implementacji |
 | 15 | Quasi-geoida PL-geoid2021 (`pl.gugik.quasigeoid`) | `geodesy download --product geoid --country pl --whole-country` | E5 | do implementacji |
-| 16 | CZ warstwice (`cz.cuzk.zabaged_contours`) | `elevation download --product contours --country cz` | E1 | do implementacji |
+| 16 | CZ warstwice (`cz.cuzk.zabaged_contours_shp`, `_dgn`) | `elevation download --product contours --country cz --format SHP\|DGN` | E1 | do implementacji |
 | 17 | CZ Data50 (`cz.cuzk.data50`) | `landcover download --source data50` | E4 | do implementacji |
 | 18 | CZ Data250 (`cz.cuzk.data250`) | `landcover download --source data250` | E4 | do implementacji |
 | 19 | CZ mapa katastralna (`cz.cuzk.cadastral_map`) | `cadastre download --product map --country cz --ku ...` | E3 | do implementacji (SHP, DXF, DGN, VFK); VKM poza 0.8.0 (P2) |
@@ -655,6 +655,87 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 
 **Zaleznosci:** E0, A, B, D.
 
+**Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-4 wykonane (fixtury
+w `tests/fixtures/pl/{nmt_100m,intensity,orto_true,orto_oblique}/`
+i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe; NMT 100 m,
+commit `85b53af`; obrazy - krok 4, ponizej). Kroki 5-9 wykonane 2026-10-16
+(warstwice CZ, CLI, parity, manifest, E2E, dokumenty). Krok 4 w kodzie:
+`SheetIndexParams` (descriptor) w kanale `WMS_SHEET_INDEX` orto,
+intensywnosci, true orto i orto ukosnej; `GugikImageProvider` (jeden kod;
+`GugikOrtoProvider` = orto z barwami); `FileStorage(suffix=)` i
+`storage_suffix` kierunku; `verify_record_url(..., suffix)`;
+`DownloadManager._download_planned` zaweza plan do segmentu i plikow
+managera; `HEAD` + `DOWNLOAD_SIZE` w `_download_version` dla
+`announces_size`; `data._managers` (manager na kierunek);
+`orto_cutout.download_image_cutout` (orto i true orto po kluczu
+deskryptora); `direction` w `download_data`/`check_data`, CLI
+`imagery --direction`, manifest `direction`. Fakty z kodu dla kroku 4
+(rozpoznane 2026-10-16 przed implementacja):
+- `DownloadManager._download_planned` filtruje pozycje planu tylko po
+  `unit`: przy czterech managerach orto ukosnej musi zawezic je do nazwy
+  pliku managera (`updates._where`/`_items`), inaczej pozycje innych
+  kierunkow staja sie `stale`;
+- `campaigns.verify_record_url` bierze ostatni czlon `_` nazwy z URL:
+  `..._7.125.11.08_N.tif` nie przejdzie B4 bez zdjecia przyrostka kierunku;
+- `area.pl_only_flags` zaweza `--country auto` do PL tylko dla
+  `nmt/nmpt/orto` bez zrodla CZ - nowe produkty obrazow wymagaja
+  uogolnienia (kazdy produkt bez deskryptora CZ);
+- `options.pl_target_scale` daje dla PL-1992 `1:10000`; true orto potrzebuje
+  `series_scale(8)` z deskryptora (tez tekst `--scale` w `pl_option_error`);
+- `HEAD` przed `GET` tylko dla providerow obrazow (listy arkuszy NMT
+  placilyby ok. 0,5 s na arkusz); manager emituje przez
+  `NoticeSink(self._on_notice)`;
+- warstwy skorowidzy intensywnosci, true orto i orto ukosnej sa stale -
+  lista w deskryptorze omija `GetCapabilities` (bez fixtur tych uslug);
+- funkcje wycinka (`gugik_orto.wcs_cutout_channels`, `orto_cutout._prepare`,
+  `_write_sidecar`) sa zwiazane z `ORTO_KEY`: uogolnic po kluczu
+  deskryptora; jeden kanal WCS (true orto) = bez tokenu `coverage`
+  w segmencie (`orto/pl_1992_true_<res>`) i `--coverage` = `Error:`.
+
+Fakty z nagrania i kodu z krokow 1-2 (korekta planu):
+- Godla 8-czlonowe zamykaja ograniczenie ADR-041: `DownloadManager`
+  rozwija tylko godla grubsze od `BaseProvider.sheet_scale` (NMT/NMPT/orto
+  `1:10000`; true orto ustawi `1:5000`), godlo 8-czlonowe jest arkuszem
+  (siatki NMT 1 m 2019 per cwiartka, `--sheet`); `ASCII-NMT 10m` EVRF2007
+  dopisane do rejestru archiwow (ZIP: punkty co 0,5 m, skorowidz deklaruje
+  10 m). `_SERIES_LABEL` z kolekcji zastapione `series_scale(czlony)`
+  w `core/sheet_parser.py`.
+- NMT 100 m: wpis ATOM ma `<id>` = URL feedu zbioru z
+  `spatial_dataset_identifier_code=NMT100_<woj>`; linki feedu uslugi i zbioru
+  sa `http://`, odpowiadaja przez `https` (feedy 0,1-0,4 s, plik 7,7 s);
+  etykieta `<updated>` wpisu zbioru 2019-05-14. **Rozstrzygniete przez
+  koordynatora 2026-10-16:** `--product nmt --resolution 100m` bez
+  `--format` (jeden format zrodla = wariant 100 m); `--format XYZ`
+  dozwolone jako jedyna wartosc dla 100 m; pozostale archiwa bez zmian
+  (`source_file` z indeksem WFS). W kodzie: `ProductVariant.source_file`
+  = format archiwum ORAZ `index_ref` (wariant 100 m z `format="XYZ"`,
+  `index_ref=None` jest formatem produktu). `ProductVariant.vertical_crs`
+  przyjmuje `None` (+ `vertical_note` do `extra.vertical_crs_note`). Tor:
+  `collections.atom_area_request` (czesc z kanalem ATOM, grupa `woj`) +
+  `run_request`/`plan_request` (tor `collection`); `UnitJob.atom_key`,
+  `_fetch_atom`: `WHOLE_COUNTRY_SIZE` tylko dla pliku krajowego,
+  `DOWNLOAD_SIZE` powyzej 100 MiB.
+- Intensywnosc: jedna warstwa `SkorowidzeOI` z rekordami PL-1992 (modul
+  1:5000) i PL-2000 (1:2000) w tym samym punkcie; bez
+  `calyArkuszWypelnionyTrescia` i bez `kolor`. True orto: warstwa
+  `Skorowidze`, godla 8-czlonowe (cwiartki 1 NW, 2 NE, 3 SW, 4 SE), bez
+  `dt_pzgik`. WCS `True_Orthoimagery` (0,05 m) oddaje siatke zapytania
+  (jak Standard), poza miastami piksele 0,0,0.
+- Orto ukosna: rekordy maja `kierunek` N/E/S/W (jedna warstwa na kierunek),
+  URL `..._<godlo>_<N|E|S|W>.tif` (B4 `verify_record_url` musi zdjac
+  przyrostek kierunku) i rozne skale PL-2000 (Krakow 1:2000, Gdansk
+  `6.224.25.03.1` 1:1000) - `--scale` dla obszaru zostaje wymagane, tylko
+  `--sheet-system` ma jedna wartosc (2000). Cztery pliki arkusza = cztery
+  managery (provider na kierunek, przyrostek nazwy `_n` w `FileStorage`);
+  `_download_planned` musi zawezic pozycje planu do segmentu i nazwy pliku
+  managera (inaczej pozycje innych kierunkow staja sie `stale`).
+- `HEAD` arkuszy obrazow (0,5-1,6 s): intensywnosc 85 MB, true orto
+  297 MB, ukosna 274-302 MB (`DOWNLOAD_SIZE` > 100 MiB).
+- Warstwice CZ: SHP 8 plikow, DGN 3 pliki, `ETag` i `Last-Modified`; slot
+  hierarchiczny `contours/cz_zabaged_<fmt>/CTES/96/CTES96.zip` (jak arkusze
+  SM5 planu B, nie plaski `mapnom` kolekcji E0); produkt elevation nie moze
+  stac sie produktem kolekcji (`_is_collection`).
+
 **Files:**
 - Modify: `kartograf/sources/registry.py` (blok E1), `kartograf/core/sheet_parser.py`,
   `kartograf/sources/descriptor.py` (`AtomFilesParams`), `kartograf/transport/atom.py` (z D),
@@ -672,7 +753,8 @@ download_data(..., format: str | None = None,                          # contour
               direction: str | Sequence[str] | None = None) -> DataReport  # oblique-orto: subset of n,e,s,w; None = all
 # rejestr wariantow (A): ProductVariant(source="pl.gugik.nmt_100m", product="nmt", country="PL",
 #   resolution_m=Decimal("100"), vertical_crs=None (P1), format="XYZ", systems=("1992",),
-#   channel=TransportKind.DIRECT_FILES, index_ref=None)
+#   channel=TransportKind.DIRECT_FILES, index_ref=None, vertical_note=...)  # source_file=False:
+#   format produktu dla --resolution 100m; --format XYZ dozwolone (jedyna wartosc)
 # AtomFilesParams (D) + E1: service_feed=".../ATOM/httpauth/atom/GUGIK_NMT100",
 #   entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})" (id wpisu GUGiK to URL),
 #   crs=() (jeden plik), members=() (ZIP zostaje), force_https=True (nowe pole: linki GUGiK http -> https)
@@ -680,7 +762,7 @@ download_data(..., format: str | None = None,                          # contour
 #   native_step=Decimal("0.05"), resolutions=(0.05, 0.1, 0.25, 0.5, 1), max_native_pixels=4_000_000
 ```
 
-- [ ] **Step 1: Fixtury (live).** Zrodla (raport E, wiersze 1-4 i 16):
+- [x] **Step 1: Fixtury (live).** Zrodla (raport E, wiersze 1-4 i 16):
   - feed uslugi `GUGIK_NMT100` (16 wpisow, id `NMT100_<woj>` w
     `inspire_dls:spatial_dataset_identifier_code`) i feed zbioru `NMT100_12`
     (link `application/zip`, `length` 7619580, kategoria EPSG:2180);
@@ -689,7 +771,7 @@ download_data(..., format: str | None = None,                          # contour
   - GFI `TrueOrtho/Skorowidze` w Gdansku i pusty w Krakowie;
   - GFI czterech warstw orto ukosnej w Krakowie;
   - `DescribeCoverage` `True_Orthoimagery` (siatka 0,05 m).
-- [ ] **Step 2: Godla 8-czlonowe (test RED, potem implementacja).** W `tests/test_sheet_parser.py`:
+- [x] **Step 2: Godla 8-czlonowe (test RED, potem implementacja).** W `tests/test_sheet_parser.py`:
   - `N-34-50-A-c-3-2-3` parsuje sie; obwiednia to cwiartka arkusza
     7-czlonowego `N-34-50-A-c-3-2` (numeracja 1-4 jak w poziomie
     wyzszym);
@@ -698,7 +780,7 @@ download_data(..., format: str | None = None,                          # contour
 
   Etykieta poziomu w schemacie Kartografa: `1:5000` (GUGiK: 1:2500).
   Docstring klasy dostaje to zdanie; backlog A1-8 bez zmian.
-- [ ] **Step 3: Wariant 100 m (P1: uklad nieznany) i tor jednostek.** Test RED w `tests/test_nmt_100m.py`:
+- [x] **Step 3: Wariant 100 m (P1: uklad nieznany) i tor jednostek.** Test RED w `tests/test_nmt_100m.py`:
   - `test_area_selects_voivodeships`: bbox Krakowa daje tylko `12`;
     bbox na granicy wojewodztw daje dwa pliki; `--sheet` daje wojewodztwa
     przecinajace arkusz;
@@ -723,7 +805,7 @@ download_data(..., format: str | None = None,                          # contour
   - wojewodztwa obszaru z `discover_teryts_for_bbox` (dwie pierwsze cyfry);
   - pozycje planu na torze `collection` (bez nowego toru);
   - `--vertical-crs` dla 100 m = `Error:` (uklad nieznany, P1).
-- [ ] **Step 4: Intensywnosc, true orto, orto ukosna.** Test RED w `tests/test_imagery_products.py`:
+- [x] **Step 4: Intensywnosc, true orto, orto ukosna.** Test RED w `tests/test_imagery_products.py`:
   - `test_intensity_campaigns_like_orto`: arkusz PL-1992 ma loty 2023
     i 2025; bez `--year` pobiera 2025, `--year 2023` pobiera 2023;
     `--all-campaigns` pobiera oba do `versions/`; plik ma 1 pasmo i piksel
@@ -757,7 +839,7 @@ download_data(..., format: str | None = None,                          # contour
   - `Notice` `DOWNLOAD_SIZE` (kod z E0) dla arkuszy ponad 100 MiB (K9):
     E0 emituje go tylko w kolekcjach, `download_data` dostaje to w E1
     (`HEAD` przed `GET` arkusza, tekst jak w `collections._announce_size`).
-- [ ] **Step 5: Warstwice CZ.** Test RED w `tests/test_cz_contours.py`:
+- [x] **Step 5: Warstwice CZ.** Test RED w `tests/test_cz_contours.py`:
   - `test_contours_sheet_zip_kept`: `--sheet CTES96 --format SHP` daje
     `contours/cz_zabaged_shp/CTES/96/CTES96.zip` (8 plikow, ZIP bez
     rozpakowania); `--format DGN` trafia do osobnego segmentu;
@@ -772,7 +854,21 @@ download_data(..., format: str | None = None,                          # contour
   Implementacja na torze arkuszy CZ planu B. Szablon
   `openzu/ZABAGED-vyskopis{,-DGN}/epsg-5514/{sm5}.zip` i lista formatow
   w deskryptorze; feed ATOM (16 301 wpisow) zostaje nieuzywany.
-- [ ] **Step 6: CLI.**
+
+  **Wykonane 2026-10-16 (korekta planu):** jeden format = jeden deskryptor
+  (`cz.cuzk.zabaged_contours_shp`, `cz.cuzk.zabaged_contours_dgn`, wariant
+  rejestru `contours`/`Bpv`/`sm5` z formatem), jak archiwa GUGiK - kanal
+  `DIRECT_FILES` z szablonem URL, `channel_for` i segment bez nowego
+  mechanizmu wyboru kanalu. Tor: nowy modul `download/cz_contours.py`
+  (para `download_cz_contours_sheet`/`check_cz_contours_sheet`,
+  `cz_contours_area_sheets` = `SheetIndex.file_sheets("sm5")`), pozycje
+  planu w torze `cz_sheet`; `cz_sheets.py` zostaje torem rastrow (TIFF,
+  nodata, operacje przypiete). `data._download_cz_contours` jak
+  `_download_cz_orto` (porazka arkusza nie zatrzymuje innych). `--country
+  auto` dla produktu jednego kraju zaweza obszar do tego kraju
+  (`AUTO_NARROWED_TO_CZ`/`_PL`, jak kolekcje); `pl_only_flags` nie zna juz
+  produktow.
+- [x] **Step 6: CLI.**
   - `elevation`: `contours` w produktach grupy (lista w bibliotece, jak
     `ELEVATION_PRODUCTS` z planu manifestu); `--format`; teksty
     `--resolution` i `--vertical-crs` z rejestru;
@@ -782,12 +878,20 @@ download_data(..., format: str | None = None,                          # contour
     `--product nmt --resolution 100m`);
   - parity (`tests/test_parity.py`): NMT 100 m, warstwice, orto ukosna
     `--direction n`.
-- [ ] **Step 7: Manifest (warunkowo).**
+
+  **Wykonane 2026-10-16:** parity w `tests/test_parity_e1.py` (jak
+  `test_parity_e2.py`); `elevation availability` ma wlasna liste produktow
+  (`AVAILABILITY_PRODUCTS`, bez warstwic - decyzja 7); linie
+  `--check-updates` pozycji jednej jednostki z kilkoma plikami (kierunki
+  orto ukosnej, JPEG i JGW ortofoto CZ) podaja nazwe pliku zamiast
+  czterokrotnego godla.
+- [x] **Step 7: Manifest (warunkowo).**
   - Opcje `elevation download` dostaja `format`, a `imagery download`
     dostaje `direction`;
     `test_task_options_equal_parser_data_flags` zielony;
-  - test zadania projektu z NMT 100 m (jednostka wojewodztwa).
-- [ ] **Step 8: Live (swiadomie, `-o <katalog-danych>/kartograf/e2e/<data>-plan-e1/`).**
+  - test zadania projektu z NMT 100 m (jednostka wojewodztwa) -
+    `tests/test_project_e1.py` (z zadaniem warstwic `format`).
+- [x] **Step 8: Live (swiadomie, `-o <katalog-danych>/kartograf/e2e/<data>-plan-e1/`).**
   - NMT 100 m woj. 12 (7,6 MB): drugi przebieg lokalny,
     `--check-updates` = aktualne;
   - warstwice CTES96 SHP i DGN;
@@ -797,8 +901,10 @@ download_data(..., format: str | None = None,                          # contour
   - bledy przed siecia (pusty katalog wyniku).
 
   Sprawdz `gdalinfo` (pasma, piksel, EPSG), liste ZIP i sidecary. Wyniki
-  do raportu E2E (EZ).
-- [ ] **Step 9: Brama i commit** - `feat(elevation,imagery): NMT 100 m, warstwice CZ, intensywnosc, true orto i orto ukosna (plan E, E1)`.
+  do raportu E2E (EZ). **Wykonane:** `docs/research/2026-10-16-plan-e1-e2e/raport.md`
+  (wszystko kod 0; do wyjasnienia w EZ: plik orto ukosnej `7.125.11.08_N.tif`
+  GDAL rozpoznaje jako EPSG:32634, sidecar i godlo - EPSG:2178, bez E17).
+- [x] **Step 9: Brama i commit** - `feat(elevation,imagery): NMT 100 m, warstwice CZ, intensywnosc, true orto i orto ukosna (plan E, E1)`.
 
 ### Task E2: grupy `names` i `maps` - PRNG, nazwy swiata, Geonames, wizualizacje BDOT10k, ZTM
 

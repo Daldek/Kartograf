@@ -1,0 +1,29 @@
+{
+  "intensity_2025": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/ObrazyIntensywnosci/83138/83138_47493_M-34-64-D-d-1-4.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "84985518",
+      "Content-Disposition": "attachment; filename=\"83138_47493_M-34-64-D-d-1-4.tif\""
+    }
+  },
+  "intensity_2023": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/ObrazyIntensywnosci/78993/78993_30287_M-34-64-D-d-1-4.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "85089428",
+      "Content-Disposition": "attachment; filename=\"78993_30287_M-34-64-D-d-1-4.tif\""
+    }
+  },
+  "intensity_2000": {
+    "url": "https://opendata.geoportal.gov.pl/DaneFotogrametryczne/ObrazyIntensywnosci/77913/77913_25340_7.125.11.17.tif",
+    "status": 200,
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "25624682",
+      "Content-Disposition": "attachment; filename=\"77913_25340_7.125.11.17.tif\""
+    }
+  }
+}

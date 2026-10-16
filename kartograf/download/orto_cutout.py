@@ -7,12 +7,16 @@ the Standard or High WCS coverage of ``pl.gugik.orto`` (``coverage``) with
 the chosen pixel (``resolution``, label K2), in EPSG:2180 only - the image is
 never resampled locally (no warp; no land mask: pixels without imagery stay
 0,0,0 as the service sends them). The request is aligned OUTWARD to
-multiples of the pixel and fetched by ``GugikOrtoProvider`` (``SCALEFACTOR``,
-chunks within the channel budget counted in 0.1 m coverage pixels, stitched
-without resampling).
+multiples of the pixel and fetched by the image provider (``SCALEFACTOR``,
+chunks within the channel budget counted in coverage pixels, stitched
+without resampling). The true orthophotomap (``product="true-orto"``, plan
+E1) has one WCS channel (0.05 m coverage, ``pl.gugik.orto_true``) and takes
+no ``coverage``: ``download_image_cutout`` / ``check_image_cutout`` serve
+both products.
 
 The standard path ``<output>/orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif``
-(coords of the aligned grid in EPSG:2180) links to an immutable version in
+(coords of the aligned grid in EPSG:2180; true orthophotomap:
+``orto/pl_1992_true_<res>``) links to an immutable version in
 ``versions/bbox/``. The channel has no freshness signal (``none``): a local
 version is used without any request and ``update="force"`` downloads again
 (the same bytes = ``unchanged``; a repeated request gives the same bytes).
@@ -77,16 +81,16 @@ from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
+    GugikImageProvider,
     GugikOrtoProvider,
     OrtoCoverage,
+    coverage_choices,
     cutout_choice_error,
     cutout_resolution_labels,
+    image_source,
     wcs_cutout_channel,
     wcs_cutout_channels,
 )
-
-# The ``--coverage`` text of ``--help`` for the CLI, which imports no providers (Z1)
-from kartograf.providers.pl.gugik_orto import coverage_choices as coverage_choices
 from kartograf.sources.descriptor import AccessChannel, WcsCutoutParams
 from kartograf.sources.registry import PL_1992_CRS, get_source
 from kartograf.sources.variants import parse_resolution
@@ -108,42 +112,55 @@ _GRID_TOL_PX = 1e-6
 
 
 def orto_cutout_error(
-    *, coverage: object, resolution: object, horizontal_crs: object
+    *, key: str, coverage: object, resolution: object, horizontal_crs: object
 ) -> str | None:
-    """Error text of an orthophotomap cutout choice (``None`` = valid).
+    """Error text of the cutout choice of image source ``key`` (``None`` =
+    valid).
 
     Texts name the CLI flags (``download_data`` passes them 1:1, STANDARDS
     11); the coverages and pixels are listed from the registry.
     """
-    error = cutout_choice_error(coverage, resolution)
+    error = cutout_choice_error(key, coverage, resolution)
     if error is not None:
         return error
+    product = get_source(key).product
     if horizontal_crs is None:
         return (
-            "--horizontal-crs wymagane z --cutout --product orto: tylko "
+            f"--horizontal-crs wymagane z --cutout --product {product}: tylko "
             f"{ORTO_CUTOUT_CRS} (bez przeprobkowania obrazu)"
         )
     if horizontal_crs != ORTO_CUTOUT_CRS:
         return (
-            f"--horizontal-crs {horizontal_crs} nie dziala z --product orto: "
+            f"--horizontal-crs {horizontal_crs} nie dziala z --product {product}: "
             f"wycinek ortofotomapy tylko {ORTO_CUTOUT_CRS} (bez przeprobkowania "
             "obrazu)"
         )
     return None
 
 
-def cutout_resolution_choices() -> str:
-    """``standard: 0.1m, 0.25m, 0.5m, 1m; high: ...``: the cutout pixels of
-    every coverage, registry order (``--resolution`` in ``--help``)."""
-    variants = [
-        channel.params.variant
-        for channel in wcs_cutout_channels()
-        if isinstance(channel.params, WcsCutoutParams)
-    ]
-    return "; ".join(
-        f"{variant}: {', '.join(cutout_resolution_labels(variant))}"
-        for variant in variants
-    )
+def orto_coverage_choices() -> str:
+    """The ``--coverage`` values of the orthophotomap cutout (``--help`` of
+    the CLI, which imports no providers, Z1)."""
+    return coverage_choices(ORTO_KEY)
+
+
+def cutout_resolution_choices(products: tuple[str, ...]) -> str:
+    """``orto standard: 0.1m, ...; true-orto: 0.05m, ...``: the cutout pixels
+    of every cutout channel of the image ``products``, registry order
+    (``--resolution`` in ``--help``)."""
+    parts = []
+    for product in products:
+        source = image_source(product)
+        channels = wcs_cutout_channels(source.key) if source is not None else ()
+        for channel in channels:
+            assert source is not None  # channels of a source
+            params = channel.params
+            assert isinstance(params, WcsCutoutParams)  # wcs_cutout_channels
+            coverage = params.variant if len(channels) > 1 else None
+            labels = cutout_resolution_labels(source.key, coverage)
+            name = f"{product} {coverage}" if coverage is not None else product
+            parts.append(f"{name}: {', '.join(labels)}")
+    return "; ".join(parts)
 
 
 @dataclass(frozen=True)
@@ -164,9 +181,11 @@ class OrtoCutoutResult:
 
 @dataclass(frozen=True)
 class _OrtoCutout:
-    """A prepared cutout: the choice, the aligned result grid and its slot."""
+    """A prepared cutout: the source, the choice, the aligned result grid and
+    its slot (``coverage`` ``None``: the one channel of the source)."""
 
-    coverage: OrtoCoverage
+    key: str
+    coverage: str | None
     resolution: str
     channel: AccessChannel
     grid: BBox
@@ -179,13 +198,21 @@ class _OrtoCutout:
         """Size of the uncompressed RGB result (bytes)."""
         return self.width * self.height * _RGB_BYTES
 
+    @property
+    def variant(self) -> str:
+        """Name of the WCS channel in messages (``standard``, ``true``)."""
+        params = self.channel.params
+        assert isinstance(params, WcsCutoutParams)  # wcs_cutout_channel
+        return params.variant
+
 
 def _prepare(
     bbox: BBox,
     *,
+    key: str,
     horizontal_crs: str,
     output_dir: str | Path,
-    coverage: str,
+    coverage: str | None,
     resolution: str,
 ) -> _OrtoCutout:
     """Validate the choice and fix the result grid, without network access.
@@ -199,7 +226,10 @@ def _prepare(
 
     validate_request_bbox(bbox)
     error = orto_cutout_error(
-        coverage=coverage, resolution=resolution, horizontal_crs=horizontal_crs
+        key=key,
+        coverage=coverage,
+        resolution=resolution,
+        horizontal_crs=horizontal_crs,
     )
     if error is not None:
         raise ValidationError(error)
@@ -213,13 +243,14 @@ def _prepare(
         for v in (aligned.min_x, aligned.min_y, aligned.max_x, aligned.max_y)
     )
     grid = BBox(min_x, min_y, max_x, max_y, aligned.crs)
-    segment = token_segment(
-        get_source(ORTO_KEY).resolve_subdir(system="1992"), (coverage, resolution)
-    )
+    # one channel: its segment names the product (orto/pl_1992_true_<res>)
+    tokens = (resolution,) if coverage is None else (coverage, resolution)
+    segment = token_segment(get_source(key).resolve_subdir(system="1992"), tokens)
     return _OrtoCutout(
-        coverage=cast(OrtoCoverage, coverage),
+        key=key,
+        coverage=coverage,
         resolution=resolution,
-        channel=wcs_cutout_channel(coverage),
+        channel=wcs_cutout_channel(key, coverage),
         grid=grid,
         width=width,
         height=height,
@@ -227,12 +258,17 @@ def _prepare(
     )
 
 
-def _cutout_provider(cutout: _OrtoCutout) -> GugikOrtoProvider:
-    """Provider of the cutout's WCS channel and pixel (the RGB composition)."""
-    return GugikOrtoProvider(
-        color=GugikOrtoProvider.DEFAULT_COLOR,
-        coverage=cutout.coverage,
-        resolution=cutout.resolution,
+def _cutout_provider(cutout: _OrtoCutout) -> GugikImageProvider:
+    """Provider of the cutout's WCS channel and pixel (the orthophotomap: the
+    RGB composition)."""
+    if cutout.key == ORTO_KEY:
+        return GugikOrtoProvider(
+            color=GugikOrtoProvider.DEFAULT_COLOR,
+            coverage=cast(OrtoCoverage, cutout.coverage),
+            resolution=cutout.resolution,
+        )
+    return GugikImageProvider(
+        cutout.key, coverage=cutout.coverage, resolution=cutout.resolution
     )
 
 
@@ -311,7 +347,7 @@ def _has_image(path: Path) -> bool:
 def _write_sidecar(
     cutout: _OrtoCutout,
     path: Path,
-    provider: GugikOrtoProvider,
+    provider: GugikImageProvider,
     *,
     version: VersionRef,
     digest: ContentDigest,
@@ -321,9 +357,10 @@ def _write_sidecar(
 ) -> None:
     """The mandatory, exclusive sidecar of a cutout version.
 
-    ``request`` = the aligned grid and the choice; ``extra.source`` = the WCS
-    request (endpoint, coverage id, format, ``scalefactor`` when the pixel is
-    not the coverage step) and the server composition of flights.
+    ``request`` = the aligned grid and the choice (``coverage`` only where
+    the source has several channels); ``extra.source`` = the WCS request
+    (endpoint, coverage id, format, ``scalefactor`` when the pixel is not the
+    coverage step) and the server composition of flights.
     """
     from kartograf.sources.sidecar import emit_sidecar
 
@@ -346,15 +383,14 @@ def _write_sidecar(
         extra["all_nodata"] = True
     if http is not None:
         extra["http"] = http
+    request: dict = {"bbox": bbox_coords(cutout.grid), "bbox_crs": ORTO_CUTOUT_CRS}
+    if cutout.coverage is not None:
+        request["coverage"] = cutout.coverage
+    request["resolution"] = cutout.resolution
     emit_sidecar(
-        ORTO_KEY,
+        cutout.key,
         path,
-        request={
-            "bbox": bbox_coords(cutout.grid),
-            "bbox_crs": ORTO_CUTOUT_CRS,
-            "coverage": cutout.coverage,
-            "resolution": cutout.resolution,
-        },
+        request=request,
         horizontal_crs=ORTO_CUTOUT_CRS,
         capability="bbox_raster",
         extra=extra,
@@ -400,7 +436,7 @@ def _run(
                 stale=stale,
             )
 
-    provider: GugikOrtoProvider | None = None
+    provider: GugikImageProvider | None = None
     all_nodata = False
 
     def fetch(staged: Path) -> None:
@@ -413,7 +449,7 @@ def _run(
                 CUTOUT_SIZE,
                 f"wycinek {cutout.width} x {cutout.height} px RGB uint8 "
                 f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan "
-                f"WCS GUGiK ({cutout.coverage} {cutout.resolution}) pobieranych "
+                f"WCS GUGiK ({cutout.variant} {cutout.resolution}) pobieranych "
                 "po kolei",
             )
         _check_disk_space(cutout, staged)
@@ -423,7 +459,7 @@ def _run(
             staged,
             "GTiff",
             provider.WCS_CUTOUT_READ_TIMEOUT,
-            f"wycinek ortofotomapy {cutout.coverage} {cutout.resolution} "
+            f"wycinek ortofotomapy {cutout.variant} {cutout.resolution} "
             f"({grid.min_x:.0f},{grid.min_y:.0f})-({grid.max_x:.0f},{grid.max_y:.0f})",
         )
         _check_result(staged, cutout)
@@ -457,9 +493,106 @@ def _run(
             "warning",
             ALL_NODATA,
             "wycinek w calosci bez obrazu (piksele 0,0,0) - WCS GUGiK nie ma "
-            f"w tym obszarze ortofotomapy {cutout.coverage} ({cutout.channel.notes})",
+            f"w tym obszarze ortofotomapy {cutout.variant} ({cutout.channel.notes})",
         )
     return OrtoCutoutResult(file, stale=stale)
+
+
+def _cutout_key(product: str) -> str:
+    """Descriptor key of the WCS cutout of an image ``product``."""
+    source = image_source(product)
+    if source is None or not wcs_cutout_channels(source.key):
+        raise ValidationError(
+            f"--product {product!r}: brak wycinka WCS obrazu - wycinek maja "
+            "--product orto i true-orto"
+        )
+    return source.key
+
+
+def check_image_cutout(
+    bbox: BBox,
+    *,
+    product: str,
+    horizontal_crs: str,
+    output_dir: str | Path,
+    coverage: str | None,
+    resolution: str,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_image_cutout`` with the same arguments, no
+    download.
+
+    The WCS channel has no remote version signal, so the plan (track
+    ``pl_cutout``) reads only the local store: no request is made. ``cache``
+    and ``on_notice`` are accepted for symmetry with the download.
+
+    Raises ``ValidationError`` for an invalid choice and ``TransformError``
+    when a Czech CRS has no safe pinned operation, exactly as the download.
+    """
+    del cache, on_notice  # same signature as the download (Z2); unused here
+    cutout = _prepare(
+        bbox,
+        key=_cutout_key(product),
+        horizontal_crs=horizontal_crs,
+        output_dir=output_dir,
+        coverage=coverage,
+        resolution=resolution,
+    )
+    slot = cutout.slot
+    item = inspect_version(
+        slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal
+    )
+    return new_plan(store_id(slot.output_dir), (item,))
+
+
+def download_image_cutout(
+    bbox: BBox,
+    *,
+    product: str,
+    horizontal_crs: str,
+    output_dir: str | Path,
+    coverage: str | None,
+    resolution: str,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    parent_request: dict | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> OrtoCutoutResult:
+    """One versioned RGB GeoTIFF of an area from the WCS of a GUGiK image
+    ``product``: ``"orto"`` (``coverage`` ``"standard"`` or ``"high"``, see
+    ``download_orto_cutout``) or ``"true-orto"`` (one channel, 0.05 m
+    coverage of selected cities: ``coverage=None``; pixels ``"0.05m"``,
+    ``"0.1m"``, ``"0.25m"``, ``"0.5m"``, ``"1m"``; 0,0,0 outside the cities).
+    The rest as ``download_orto_cutout``.
+
+    Raises
+    ------
+    ValidationError
+        A product without a WCS cutout, an invalid bbox, choice or update
+        mode (before any request), or too little disk space on download.
+    TransformError
+        No safe pinned operation from a Czech CRS of ``bbox`` to EPSG:2180.
+    DownloadError
+        WCS failure, an error document or a raster off the requested grid;
+        no version is committed.
+    """
+    validate_update(update)
+    cutout = _prepare(
+        bbox,
+        key=_cutout_key(product),
+        horizontal_crs=horizontal_crs,
+        output_dir=output_dir,
+        coverage=coverage,
+        resolution=resolution,
+    )
+    del cache  # the WCS cutout reads no metadata (symmetry, Z2)
+    sink = NoticeSink(on_notice)
+    result = _run(
+        cutout, update=update, plan=plan, parent_request=parent_request, sink=sink
+    )
+    return replace(result, notices=sink.notices)
 
 
 def check_orto_cutout(
@@ -481,19 +614,16 @@ def check_orto_cutout(
     Raises ``ValidationError`` for an invalid choice and ``TransformError``
     when a Czech CRS has no safe pinned operation, exactly as the download.
     """
-    del cache, on_notice  # same signature as the download (Z2); unused here
-    cutout = _prepare(
+    return check_image_cutout(
         bbox,
+        product="orto",
         horizontal_crs=horizontal_crs,
         output_dir=output_dir,
         coverage=coverage,
         resolution=resolution,
+        cache=cache,
+        on_notice=on_notice,
     )
-    slot = cutout.slot
-    item = inspect_version(
-        slot, track=_TRACK, unit=slot.std.stem, signal=cutout.channel.update_signal
-    )
-    return new_plan(store_id(slot.output_dir), (item,))
 
 
 def download_orto_cutout(
@@ -524,7 +654,7 @@ def download_orto_cutout(
     position lands in ``stale``. ``parent_request`` goes to the sidecar only
     when given. ``cache`` is accepted for symmetry with the other tracks (the
     cutout reads no metadata); ``on_notice`` receives each data notice when
-    it is emitted.
+    it is emitted. The true orthophotomap: ``download_image_cutout``.
 
     Returns
     -------
@@ -543,17 +673,16 @@ def download_orto_cutout(
         WCS failure, an error document or a raster off the requested grid;
         no version is committed.
     """
-    validate_update(update)
-    cutout = _prepare(
+    return download_image_cutout(
         bbox,
+        product="orto",
         horizontal_crs=horizontal_crs,
         output_dir=output_dir,
         coverage=coverage,
         resolution=resolution,
+        update=update,
+        plan=plan,
+        parent_request=parent_request,
+        cache=cache,
+        on_notice=on_notice,
     )
-    del cache  # the WCS cutout reads no metadata (symmetry, Z2)
-    sink = NoticeSink(on_notice)
-    result = _run(
-        cutout, update=update, plan=plan, parent_request=parent_request, sink=sink
-    )
-    return replace(result, notices=sink.notices)

@@ -302,9 +302,9 @@ class TestEdgeCases:
         parser = SheetParser("N-34")
         assert parser.get_parent() is None
 
-    def test_10k_sheet_has_no_children(self):
-        """Test that 1:10k sheet has no children."""
-        parser = SheetParser("N-34-130-D-d-2-4")
+    def test_8_part_sheet_has_no_children(self):
+        """The 8-part PL-1992 sheet is the lowest level of the hierarchy."""
+        parser = SheetParser("N-34-130-D-d-2-4-1")
         assert parser.get_children() == []
 
     def test_500k_to_200k_has_36_children(self):

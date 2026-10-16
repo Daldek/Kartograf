@@ -36,7 +36,7 @@ class SheetParser:
     """
     Parser of topographic map sheet codes for the 1992 and 2000 systems.
 
-    Supported scales: 1:1000000 to 1:10000
+    Supported scales: 1:1000000 to 1:5000 (8-part codes)
 
     Attributes
     ----------
@@ -65,7 +65,11 @@ class SheetParser:
     GUGiK calls the same sheet the 1:5000 archiving module; the 1-144 grid is
     labelled '1:200000' but has the dimensions of the official 1:100000 sheet
     (20' x 30'). Labels are kept for backward compatibility of the public API
-    and CLI `--scale`; aliases are planned for the next major release.
+    and CLI `--scale`; aliases are planned for the next major release. The
+    8-part level (a quarter of a 7-part sheet, numbered 1-4 like the level
+    above: N-34-50-A-c-3-2-3; the true orthophoto sheets) is labelled
+    '1:5000' here, GUGiK calls it the 1:2500 module. A series of sheets is
+    named by its number of members, never by a label (``series_scale``).
     """
 
     # Scale hierarchy (from largest to smallest)
@@ -77,6 +81,7 @@ class SheetParser:
         "1:50000",
         "1:25000",
         "1:10000",
+        "1:5000",
     ]
 
     # Sheet code patterns for each scale ([0-9]: ASCII digits only, not \d)
@@ -90,6 +95,10 @@ class SheetParser:
         "1:10000": (
             r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})-([A-D])-([a-d])-([1-4])-([1-4])$"
         ),
+        "1:5000": (
+            r"^([A-Z])-([0-9]{1,2})-([0-9]{1,3})-([A-D])-([a-d])-([1-4])-([1-4])"
+            r"-([1-4])$"
+        ),
     }
 
     # Component names for each regex group
@@ -101,6 +110,7 @@ class SheetParser:
         "arkusz_50k",
         "arkusz_25k",
         "arkusz_10k",
+        "arkusz_5k",
     ]
 
     # Allowed coordinate systems
@@ -385,6 +395,7 @@ class SheetParser:
         "1:100000": ["a", "b", "c", "d"],  # 1:100k → 1:50k (4 parts)
         "1:50000": ["1", "2", "3", "4"],  # 1:50k → 1:25k (4 parts)
         "1:25000": ["1", "2", "3", "4"],  # 1:25k → 1:10k (4 parts)
+        "1:10000": ["1", "2", "3", "4"],  # 7-part → 8-part quarters (4 parts)
     }
 
     def get_parent(self) -> "SheetParser | None":
@@ -463,7 +474,7 @@ class SheetParser:
         -------
         List[SheetParser]
             List of child sheet parsers.
-            Empty list if this is the lowest level (1:10k).
+            Empty list if this is the lowest level (8-part, label 1:5000).
 
         Examples
         --------
@@ -480,7 +491,7 @@ class SheetParser:
         current_scale_idx = self.SCALE_HIERARCHY.index(self._scale)
 
         if current_scale_idx == len(self.SCALE_HIERARCHY) - 1:
-            return []  # Already the lowest level (1:10k)
+            return []  # Already the lowest level (8-part code)
 
         # Special logic for 1:500k → 1:200k (36 sheets)
         if self._scale == "1:500000":
@@ -643,6 +654,7 @@ class SheetParser:
         "1:50000": (5.0, 7.5),  # 5' × 7.5' (4 per 1:100k)
         "1:25000": (2.5, 3.75),  # 2.5' × 3.75' (4 per 1:50k)
         "1:10000": (1.25, 1.875),  # 1.25' × 1.875' (4 per 1:25k)
+        "1:5000": (0.625, 0.9375),  # 8-part: 0.625' × 0.9375' (4 per 1:10k)
     }
 
     # Mapping of letters to positions in the 2×2 grid (row, col) - 0-indexed
@@ -739,14 +751,7 @@ class SheetParser:
             return (south_1m, north_1m, west_1m, east_1m)
 
         # 1:500k - 2×2 subdivision of 1:1M
-        if self._scale in (
-            "1:500000",
-            "1:200000",
-            "1:100000",
-            "1:50000",
-            "1:25000",
-            "1:10000",
-        ):
+        if self._scale in self.SCALE_HIERARCHY[1:]:
             south, north, west, east = self._apply_500k_subdivision(
                 south_1m, north_1m, west_1m, east_1m
             )
@@ -873,7 +878,54 @@ class SheetParser:
             west = west + col_q * q_width
             east = west + q_width
 
+            if self._scale == "1:10000":
+                return (south, north, west, east)
+
+        # 8-part (label 1:5000) - 1:10k sheet split into 4 parts (1-4)
+        if "arkusz_5k" in self._components:
+            num = self._components["arkusz_5k"]
+            row_q, col_q = self._QUADRANT_POSITIONS[num]
+            q_height = (north - south) / 2.0
+            q_width = (east - west) / 2.0
+            north = north - row_q * q_height
+            south = north - q_height
+            west = west + col_q * q_width
+            east = west + q_width
+
         return (south, north, west, east)
+
+
+# Kartograf label of a PL-1992 series by the number of members of its codes
+# (labels are one level finer than the GUGiK nomenclature, class notes; 3
+# members = the 1-144 grid, the 1:500000 sheets A-D are no GUGiK series).
+_SERIES_SCALE = {
+    2: "1:1000000",
+    3: "1:200000",
+    4: "1:100000",
+    5: "1:50000",
+    6: "1:25000",
+    7: "1:10000",
+    8: "1:5000",
+}
+
+
+def series_scale(parts: int) -> str:
+    """Kartograf label of the PL-1992 sheets with ``parts`` members.
+
+    The GUGiK series are named by the number of members of their codes: 6
+    members (GUGiK 1:10000) = ``"1:25000"``, 7 (GUGiK 1:5000 module) =
+    ``"1:10000"``, 8 (GUGiK 1:2500 module) = ``"1:5000"``; 3 members = the
+    1-144 grid (``"1:200000"``), 2 = ``"1:1000000"``.
+
+    Raises
+    ------
+    ValueError
+        No PL-1992 series with this number of members.
+    """
+    scale = _SERIES_SCALE.get(parts)
+    if scale is None:
+        raise ValueError(f"Seria arkuszy PL-1992 o {parts} czlonach nie istnieje")
+    return scale
 
 
 # =========================================================================
@@ -992,7 +1044,8 @@ def find_sheets_for_bbox(
         are converted by the caller with the pinned operation
     target_scale : str
         PL-1992: "1:1000000", "1:500000", "1:200000", "1:100000",
-        "1:50000", "1:25000" or "1:10000" (published sheet scale).
+        "1:50000", "1:25000", "1:10000" (7-part codes) or "1:5000" (8-part
+        codes; ``series_scale`` names a GUGiK series by its members).
         PL-2000: "1:10000", "1:5000", "1:2000", "1:1000" or "1:500".
     system : str
         "1992" selects the PL-1992 sheet hierarchy; "2000" selects the

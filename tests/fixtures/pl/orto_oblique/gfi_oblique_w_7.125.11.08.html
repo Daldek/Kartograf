@@ -1,0 +1,272 @@
+ <head><meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+.accordioni {
+  background-color: #ddd;
+  color: #444;
+  cursor: pointer;
+  padding: 10px;
+  border: none;
+  text-align: left;
+  outline: none;
+  font-size: 11px;
+  transition: 0.4s;
+  width: 236px;
+  font-family: Verdana,Arial,Helvetica,sans-serif;
+ 
+}
+
+.active, .accordioni:hover {
+  background-color: #ccc;
+}
+
+.accordioni:after {
+  content: '\002B';
+  color: #777;
+  font-weight: bold;
+  float: right;
+  margin-left: 5px;
+}
+
+.active:after {
+  content: "\2212";
+}
+
+.panel {
+  padding: 0 18px;
+  background-color: white;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.2s ease-out;
+    width: 200px;
+	margin-top: 2px;
+	margin-bottom: 5px;
+}
+
+
+ul, ol, li, h1, h2, h3, h4, h5, h6, pre, form, fieldset, input, p, blockquote, th, td {
+		margin: 0;
+		padding: 0;
+		font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+p {
+	font-size: 11px;
+
+}
+	
+.gwt-HTML {
+
+	
+	font-size: 10px;
+	border-collapse: separate;
+    border-spacing: 2px;
+	color: black;
+	direction: ltr;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+img {
+		max-width: 16px;
+		max-height: 16px;
+		border: 0;
+	}
+
+.item-ico {
+	margin: 8px 8px 0 8px;
+	float: left;
+
+}
+
+.resultR {
+    left: 0;
+    height: 2.5em;
+   line-height: normal;
+   position: relative;
+   padding: 0;
+}
+
+.item-label {
+    color: #333;
+    line-height: 12px;
+	float: left;
+    margin: 9px 0 0 0;
+    width: 190px;
+    font-size: 9px;
+    font-weight: normal;
+
+}
+b {
+ 
+	color: #000;
+	float: left;
+    width: 190px;
+    font-size: 11px;
+    font-weight: bold;
+	display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    padding-right: 2em;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+}
+.item-content {
+	padding: 8px 0 0 32px;
+	clear: both;
+    color: #000;
+	font-size: 10px;
+}
+
+.item-fieldname {
+    clear: both;
+    color: #333;
+	font-size: 10px;
+    display: block;
+    float: left;
+    width: 190px;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+}
+
+.item-fieldvalue {
+    color: #000;
+    font-weight: bold;
+	display: block;
+    float: left;
+    width: 190px;
+	font-size: 10px;
+	font-family: Verdana,Arial,Helvetica,sans-serif;
+
+}
+
+.item-fielddesc {
+    display: block;
+    float: left;
+    width: 190px;
+    margin: 0 0 8px 0;
+    padding: 0 8px 4px 0;
+    color: #aaa;
+    font-size: 9px;
+    border-bottom: 1px solid #aaa;
+}
+.wordwrap {
+            word-wrap: break-word;
+            word-break: break-all;
+}
+
+
+
+
+</style>
+<script>
+
+
+function compare(a, b) {
+  //alert (1);
+  const arkuszA = a.aktualnosc;
+  const arkuszB = b.aktualnosc;
+
+  let comparison = 0;
+  if (arkuszA > arkuszB) {
+    comparison = 1;
+  } else if (arkuszA < arkuszB) {
+    comparison = -1;
+  }
+  return comparison * -1;
+}
+
+function createTable (skor_orto_ukosne) {
+
+
+
+	skor_orto_ukosne.sort( compare );
+	console.log(skor_orto_ukosne.sort(compare));
+	
+	var textCustom, fLen, icustom;
+
+	fLen = skor_orto_ukosne.length;
+
+	textCustom = "";
+		for (icustom = 0; icustom < fLen; icustom++) {
+		  
+		  textCustom += "<button class='accordioni'>" + skor_orto_ukosne[icustom].godlo + " " + skor_orto_ukosne[icustom].aktualnoscRok  + " " + skor_orto_ukosne[icustom].kierunek + "</button><div class='panel'>";
+		  textCustom += "<span class='item-fieldvalue wordwrap' title='Pobierz plik'><a href='"+ skor_orto_ukosne[icustom].url+"'>Pobierz plik danych dla tej sekcji</a><br/></span><span class='item-fielddesc'></span>"
+		  textCustom += "<span class='item-fieldname'>Godło</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].godlo+"'>"+skor_orto_ukosne[icustom].godlo+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Aktualność</span><span class='item-fieldvalue' title='"+ skor_orto_ukosne[icustom].aktualnosc +"'>" + skor_orto_ukosne[icustom].aktualnosc + "</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Kierunek</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].kierunek+"'>"+skor_orto_ukosne[icustom].kierunek+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Wielkość piksela</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].charakterystykaPrzestrzenna+"'>"+skor_orto_ukosne[icustom].charakterystykaPrzestrzenna+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Układ współrzędnych poziomych</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].ukladWspolrzednychPoziomych+"'>"+skor_orto_ukosne[icustom].ukladWspolrzednychPoziomych+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Cały arkusz wypełniony treścią</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].calyArkuszWypelnionyTrescia+"'>"+skor_orto_ukosne[icustom].calyArkuszWypelnionyTrescia+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Moduł archiwizacji</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].modulArchiwizacji+"'>"+skor_orto_ukosne[icustom].modulArchiwizacji+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Źródło danych</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].zrDanych+"'>"+skor_orto_ukosne[icustom].zrDanych+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Kolor</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].kolor+"'>"+skor_orto_ukosne[icustom].kolor+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Numer zgłoszenia pracy</span><span class='item-fieldvalue' title='"+skor_orto_ukosne[icustom].numerZgloszeniaPracy+"'>"+skor_orto_ukosne[icustom].numerZgloszeniaPracy+"</span><span class='item-fielddesc'></span>";
+		  textCustom += "<span class='item-fieldname'>Data włączenia do PZGiK</span><span class='item-fieldvalue' title='"+ skor_orto_ukosne[icustom].dt_pzgik +"'>" + skor_orto_ukosne[icustom].dt_pzgik + "</span><span class='item-fielddesc'></span>";
+		  textCustom += "</div>";
+		}
+
+return textCustom;
+
+}
+
+
+</script>
+
+</head>
+<body>
+<!-- <p>Kliknij w celu rozwinięcia zawartości.</p> -->
+
+
+
+
+
+
+<div id="listOfObjectsAkt3" style="width: 256px; margin-bottom: 3px;"></div>
+<div id="listOfObjects3" style="width: 256px; margin-bottom: 3px;"></div>
+
+<script>
+var skor_orto_ukosne = [];
+
+
+
+skor_orto_ukosne.push({url:"https://opendata.geoportal.gov.pl/DaneFotogrametryczne/OrtoUkosne/78945/78945_1221127_7.125.11.08_W.tif",godlo:"7.125.11.08", aktualnosc:"2021-10-03", kierunek:"W", charakterystykaPrzestrzenna:"0.05", ukladWspolrzednychPoziomych:"PL-2000:S7", calyArkuszWypelnionyTrescia:"TAK", modulArchiwizacji:"1:2000", zrDanych:"Zdj. cyfrowe", kolor:"RGB", numerZgloszeniaPracy:"DFT.7201.043.2023", aktualnoscRok:"2021", dt_pzgik:"2024-02-09"});
+
+
+
+if (skor_orto_ukosne[0].aktualnoscRok>0) {
+  document.getElementById("listOfObjectsAkt3").innerHTML = "<p>Ortofotomapa ukośna - zachód</p>";
+  document.getElementById("listOfObjects3").innerHTML = createTable(skor_orto_ukosne);
+  } 
+  else 	{
+
+		document.getElementById("listOfObjects3").innerHTML = "<p>Dane z warstwy 'Ortofotomapa ukośna - zachód' możliwe do pobrania w skali 1:250 000 lub większych</p><br>";
+
+	}
+
+</script>
+
+
+
+
+<script>
+var acc = document.getElementsByClassName("accordioni");
+var customValue;
+console.log(acc.length);
+
+for (customValue = 0; customValue < acc.length; customValue++) {
+	console.log(customValue);
+  acc[customValue].addEventListener("click", function() {
+    this.classList.toggle("active");
+    var panel = this.nextElementSibling;
+    if (panel.style.maxHeight) {
+      panel.style.maxHeight = null;
+    } else {
+      panel.style.maxHeight = panel.scrollHeight + "px";
+    } 
+  });
+}
+</script>
+
+</body>

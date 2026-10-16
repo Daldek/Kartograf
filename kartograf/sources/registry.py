@@ -23,6 +23,7 @@ from kartograf.sources.descriptor import (
     LicenseInfo,
     PackageVariant,
     SheetGrid,
+    SheetIndexParams,
     SignalKind,
     SourceDescriptor,
     TileScheme,
@@ -296,8 +297,9 @@ _BOTH = ("EVRF2007", "KRON86")
 
 # PL sheet variants: every ASC grid of the WFS inventory 2026-10-15 and the
 # archive formats downloaded as source files (decision 2026-10-15, ADR-041).
-# ASCII NMT 10 m is absent: all its 215 sheets have 8-part codes outside the
-# PL-1992 sheet system of SheetParser (reported by `availability` as Info).
+# ASCII NMT 10 m lies on 215 8-part sheets (in SheetParser since plan E1; the
+# ZIP holds points every 0.5 m although the index declares 10 m - the record
+# label names the variant, as for every archive).
 _PL_SHEET_SOURCES = (
     _pl_sheet_source("nmt", "0.15m", _EVRF),
     _pl_sheet_source("nmt", "0.5m", _BOTH),
@@ -313,6 +315,7 @@ _PL_SHEET_SOURCES = (
     _pl_sheet_source("nmt", "0.5m", _EVRF, format="ASCII-NMT"),
     _pl_sheet_source("nmt", "1m", _EVRF, format="ASCII-NMT"),
     _pl_sheet_source("nmt", "5m", _BOTH, format="ASCII-NMT"),
+    _pl_sheet_source("nmt", "10m", _EVRF, format="ASCII-NMT"),
     _pl_sheet_source("nmt", "1m", _BOTH, format="TBD"),
     _pl_sheet_source("nmt", "5m", _BOTH, format="TBD"),
     _pl_sheet_source("nmt", "10m", _BOTH, format="TBD"),
@@ -713,16 +716,24 @@ _CZ_HY_NET = SourceDescriptor(
 )
 
 # Orthophotomap WCS (DescribeCoverage 2.0.1, 2026-10-16): Standard and High
-# share one national grid with a 0.1 m step; the cutout pixel is a choice
-# (SCALEFACTOR). One GetCoverage reads at most 4 Mpx of coverage = 200 x 200 m
-# (64 s live 2026-10-15, docs/research/2026-10-15-plan-c-d/raport.md).
+# share one national grid with a 0.1 m step, the true orthophotomap has a
+# 0.05 m grid; the cutout pixel is a choice (SCALEFACTOR). One GetCoverage
+# reads at most 4 Mpx of coverage = 200 x 200 m at 0.1 m (64 s live
+# 2026-10-15, docs/research/2026-10-15-plan-c-d/raport.md).
 _ORTO_WCS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WCS"
+_ORTO_PIXELS = ("0.1", "0.25", "0.5", "1")
 
 
 def _orto_wcs(
-    service: str, variant: str, coverage_id: str, notes: str
+    service: str,
+    variant: str,
+    coverage_id: str,
+    notes: str,
+    *,
+    native_step: str,
+    resolutions: tuple[str, ...],
 ) -> AccessChannel:
-    """WCS cutout channel of the orthophotomap (ADR-042 D14); ``notes`` = the
+    """WCS cutout channel of an orthophotomap (ADR-042 D14); ``notes`` = the
     meaning of ``variant`` named in messages (abstract of the service)."""
     return AccessChannel(
         transport=TransportKind.WCS,
@@ -734,8 +745,8 @@ def _orto_wcs(
         params=WcsCutoutParams(
             variant=variant,
             coverage_id=coverage_id,
-            native_step=Decimal("0.1"),
-            resolutions=tuple(Decimal(v) for v in ("0.1", "0.25", "0.5", "1")),
+            native_step=Decimal(native_step),
+            resolutions=tuple(Decimal(v) for v in resolutions),
             max_native_pixels=4_000_000,
         ),
     )
@@ -847,110 +858,241 @@ _CZ_ORTOFOTO = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
-# plan E - E3: special PRG boundaries, separate from administrative boundaries.
-_PRG_SPECIAL_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRG/apiFeatures"
-_PRG_SPECIAL_COLLECTIONS = (
-    "GranicaRejonuStatystycznego",
-    "GranicaObwoduSpisowego",
-    "SadApelacyjny",
-    "SadOkregowy",
-    "SadRejonowy",
-    "WojewodzkiSadAdministracyjny",
-    "ProkuraturaRegionalna",
-    "ProkuraturaOkregowa",
-    "ProkuraturaRejonowa",
-    "KomendaWojewodzkaPolicji",
-    "KomendaPowiatowaPolicji",
-    "KomendaStolecznaPolicji",
-    "KomendaRejonowaPolicji",
-    "KomisariatPolicji",
-    "KomendaWojewodzkaStrazyPozarnej",
-    "KomendaPowiatowaStrazyPozarnej",
-    "OddzialStrazyGranicznej",
-    "PlacowkaStrazyGranicznej",
-    "DywizjonStrazyGranicznej",
-    "ObszarDzialaniaSzefaObronyCywilnejWojewodztwa",
-    "ObszarDzialaniaSzefaObronyCywilnejPowiatu",
-    "ObszarDzialaniaSzefaObronyCywilnejGminy",
-    "ArchiwumPanstwowe",
-    "UrzadSkarbowy",
-    "WyspecjalizowanyUrzadSkarbowy",
-    "UrzadCelnoSkarbowy",
-    "IzbaAdministracjiSkarbowej",
-    "Nadlesnictwo",
-    "RegionalnaDyrekcjaLasowPanstwowych",
-    "ZarzadZlewniPanstwowegoGospodarstwaWodnegoWodyPolskie",
-    "RegionalnyZarzadGospodarkiWodnejPanstwowegoGospodarstwaWodnegoWodyPolskie",
-    "UrzadMorski",
-    "UrzadZeglugiSrodladowej",
-    "LiniaPodstawowaMorzaTerytorialnego",
-    "MorzeTerytorialneRP",
-    "MorskieWodyWewnetrzne",
-    "WylacznaStrefaEkonomiczna",
-    "StrefaPrzylegla",
-    "MorskaLiniaBrzegowa",
-    "PasNadbrzezny",
-    "PasOchronny",
-    "PasTechniczny",
-    "Reda",
-    "PortMorski",
-    "PrzystanMorska",
+# --- plan E - E1 (PL) -------------------------------------------------------------
+# NMT 100 m (raport E, wiersz 1; feeds recorded 2026-10-16): one ATOM dataset per
+# voivodeship (dataset feed id ``...spatial_dataset_identifier_code=NMT100_<woj>``),
+# one ZIP with an XYZ text file each. The feeds link everything with http://, the
+# host answers over https. Neither the feeds nor the CSW record declare a height
+# system (decision P1 of 2026-10-15: unknown; no {vcrs} in the segment).
+_NMT100_FEED = (
+    "https://mapy.geoportal.gov.pl/wss/service/ATOM/httpauth/atom/GUGIK_NMT100"
 )
-
-_PL_PRG_SPECIAL = SourceDescriptor(
-    key="pl.gugik.prg_special",
+_NMT100_NOTE = (
+    "GUGiK nie deklaruje ukladu wysokosci NMT 100 m (feed ATOM i rekord CSW bez "
+    "ukladu; model z NMT projektu LPIS) - uklad wysokosci nieznany"
+)
+_PL_NMT_100M = SourceDescriptor(
+    key="pl.gugik.nmt_100m",
     country="PL",
-    product="special",
-    name="PRG - granice specjalne",
+    product="nmt",
+    name="Numeryczny Model Terenu 100 m (XYZ, pliki wojewodztw; uklad wysokosci "
+    "nieznany)",
     provider_name="GUGiK",
     channels=(
         AccessChannel(
-            transport=TransportKind.OGC_API_FEATURES,
-            horizontal_crs="OGC:CRS84",
-            capabilities=frozenset({"bbox_vector"}),
-            endpoint=_PRG_SPECIAL_API,
-            update_signal="none",
-            params=FeatureBBoxParams(
-                protocol="ogcapi",
-                native_crs="OGC:CRS84",
-                axis_order="xy",
-                page_size=10000,
-                layers=tuple(
-                    FeatureLayer(code=name, source=name, name=name, id_field="id")
-                    for name in _PRG_SPECIAL_COLLECTIONS
-                ),
-                selection="all",
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=_NMT100_FEED,
+            notes=(
+                "feed ATOM GUGiK: jeden ZIP z plikiem XYZ na wojewodztwo (wydanie "
+                "2019); wojewodztwa obszaru wg PRG; ZIP zapisywany 1:1"
+            ),
+            params=AtomFilesParams(
+                service_feed=_NMT100_FEED,
+                entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})",
+                force_https=True,
             ),
         ),
+    ),
+    tile_scheme=None,
+    storage_subdir="nmt/pl_1992_100m",
+    default_extension=".zip",
+    license=_GUGIK_LICENSE,
+    resolution="100m",
+    variants=(
+        ProductVariant(
+            source="pl.gugik.nmt_100m",
+            product="nmt",
+            country="PL",
+            resolution_m=Decimal("100"),
+            vertical_crs=None,
+            format="XYZ",
+            systems=("1992",),
+            channel=TransportKind.DIRECT_FILES,
+            index_ref=None,
+            vertical_note=_NMT100_NOTE,
+        ),
+    ),
+)
+
+# Image products on GUGiK WMS sheet indexes (raport E, wiersze 2-4; GFI recorded
+# 2026-10-16, tests/fixtures/pl/{intensity,orto_true,orto_oblique}): one layer of
+# records each (intensity: PL-1992 and PL-2000 sheets in one layer; true orto:
+# 8-part PL-1992 codes; oblique: one layer per view direction, PL-2000 sheets of
+# 1:2000 and 1:1000). The layers are fixed, no GetCapabilities; the records of
+# intensity and true orto have no calyArkuszWypelnionyTrescia.
+_PL_INTENSITY = SourceDescriptor(
+    key="pl.gugik.intensity",
+    country="PL",
+    product="intensity",
+    name="Obrazy intensywnosci LIDAR (arkusze wg lotow)",
+    provider_name="GUGiK",
+    channels=(
         AccessChannel(
-            transport=TransportKind.DIRECT_FILES,
-            horizontal_crs="EPSG:2180",
-            capabilities=frozenset({"country_files"}),
-            endpoint=f"{_OPENDATA}/prg/granice/",
-            update_signal="none",
-            params=UnitPackageParams(
-                unit="country",
-                variants=tuple(
-                    PackageVariant(
-                        choice=(("format", fmt),),
-                        url_template=(
-                            f"{_OPENDATA}/prg/granice/00_granice_specjalne_{suffix}.zip"
-                        ),
-                        segment_tokens=(fmt.lower(),),
-                        members=(member,),
+            transport=TransportKind.WMS_SHEET_INDEX,
+            update_signal="index",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_PZGIK}/OI/WMS/SkorowidzeObrazowIntensywnosci",
+            notes=(
+                "GeoTIFF 1 pasmo (intensywnosc odbicia), piksel 0,25 m; arkusze "
+                "PL-1992 (godla 7-czlonowe) i PL-2000 wg lotow"
+            ),
+            params=SheetIndexParams(
+                layers=("SkorowidzeOI",),
+                systems=("1992", "2000"),
+                sheet_parts=7,
+                full_sheet=False,
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="intensity/pl_{system}",
+    default_extension=".tif",
+    license=_GUGIK_LICENSE,
+)
+_PL_ORTO_TRUE = SourceDescriptor(
+    key="pl.gugik.orto_true",
+    country="PL",
+    product="true-orto",
+    name="Prawdziwa ortofotomapa (true orto) wybranych miast (arkusze; wycinek WCS)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WMS_SHEET_INDEX,
+            update_signal="index",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_PZGIK}/ORTO/WMS/TrueOrtho",
+            notes=(
+                "GeoTIFF RGB, piksel 0,05 m; arkusze PL-1992 8-czlonowe (modul "
+                "GUGiK 1:2500) wg lotow"
+            ),
+            params=SheetIndexParams(
+                layers=("Skorowidze",),
+                systems=("1992",),
+                sheet_parts=8,
+                full_sheet=False,
+                extent="true orto GUGiK obejmuje tylko wybrane miasta (np. Gdansk)",
+            ),
+        ),
+        _orto_wcs(
+            "TrueOrto",
+            "true",
+            "True_Orthoimagery",
+            "prawdziwa ortofotomapa 0,05 m wybranych miast (poza nimi piksele 0,0,0)",
+            native_step="0.05",
+            resolutions=("0.05", *_ORTO_PIXELS),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="orto/pl_{system}_true",
+    default_extension=".tif",
+    license=_GUGIK_LICENSE,
+)
+_OBLIQUE_LAYER = "SkorowidzeOrtofotomapyUkosnej"
+_PL_ORTO_OBLIQUE = SourceDescriptor(
+    key="pl.gugik.orto_oblique",
+    country="PL",
+    product="oblique-orto",
+    name="Ortofotomapa ukosna wybranych miast (arkusze PL-2000, kierunki N, E, S, W)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WMS_SHEET_INDEX,
+            update_signal="index",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_PZGIK}/ORTO/WMS/{_OBLIQUE_LAYER}",
+            notes=(
+                "GeoTIFF RGB, piksel 0,05 m; arkusz to 4 pliki kierunkow (n, e, s, "
+                "w); arkusze PL-2000 (1:2000, 1:1000) wg lotow"
+            ),
+            params=SheetIndexParams(
+                layers=(),
+                systems=("2000",),
+                sheet_parts=7,
+                full_sheet=True,
+                directions=tuple(
+                    (code, f"{_OBLIQUE_LAYER}-{name}")
+                    for code, name in (
+                        ("n", "Polnoc"),
+                        ("e", "Wschod"),
+                        ("s", "Poludnie"),
+                        ("w", "Zachod"),
                     )
-                    for fmt, suffix, member in (
-                        ("SHP", "shp", ".shp"),
-                        ("GML", "xml", ".gml"),
-                    )
+                ),
+                extent=(
+                    "orto ukosna GUGiK obejmuje tylko wybrane miasta (np. Krakow, "
+                    "Gdansk)"
                 ),
             ),
         ),
     ),
     tile_scheme=None,
-    storage_subdir="boundaries/pl_prg_special",
-    default_extension=".gpkg",
+    storage_subdir="orto/pl_{system}_oblique",
+    default_extension=".tif",
     license=_GUGIK_LICENSE,
+)
+_E1_PL_SOURCES = (_PL_NMT_100M, _PL_INTENSITY, _PL_ORTO_TRUE, _PL_ORTO_OBLIQUE)
+
+# --- plan E - E1 (CZ) -------------------------------------------------------------
+# ZABAGED 2D contours (raport E, wiersz 16; HEAD recorded 2026-10-16,
+# tests/fixtures/cz/contours): one ZIP per SM5 sheet on openzu, S-JTSK with heights
+# in Bpv, ETag and Last-Modified; SHP (8 files) and DGN (3 files) in two
+# directories - one descriptor per format, as the PL archive formats. The ZIP is
+# kept as published. The ATOM feed of the dataset (16 301 entries) and the REST
+# service stay unused: the sheet URL is a template (plan E, decision 7).
+_CZ_CONTOURS_FORMATS = (("SHP", "ZABAGED-vyskopis"), ("DGN", "ZABAGED-vyskopis-DGN"))
+
+
+def _cz_contours_source(fmt: str, directory: str) -> SourceDescriptor:
+    """ZABAGED contours in ``fmt``: the openzu ZIP of an SM5 sheet (signal ``http``)."""
+    key = f"cz.cuzk.zabaged_contours_{fmt.lower()}"
+    return SourceDescriptor(
+        key=key,
+        country="CZ",
+        product="contours",
+        name=f"ZABAGED - warstwice 2D (vrstevnice; {fmt}, ZIP arkusza SM5)",
+        provider_name="CUZK",
+        channels=(
+            AccessChannel(
+                transport=TransportKind.DIRECT_FILES,
+                update_signal="http",
+                horizontal_crs=CZ_SYSTEM_CRS["sm5"],
+                vertical_crs_options=(_VERTICAL_CRS_CODES["Bpv"],),
+                capabilities=frozenset({"sheet_files"}),
+                endpoint=f"{_CUZK_OPENZU}/{directory}/epsg-5514/{{sheet}}.zip",
+                notes=(
+                    "arkusze SM5 (S-JTSK, wysokosci Bpv); ZIP zapisywany 1:1, bez "
+                    "rozpakowania i konwersji"
+                ),
+            ),
+        ),
+        tile_scheme=_CZ_SM5_SCHEME,
+        storage_subdir=f"contours/cz_zabaged_{fmt.lower()}",
+        default_extension=".zip",
+        license=_CUZK_LICENSE,
+        variants=(
+            ProductVariant(
+                source=key,
+                product="contours",
+                country="CZ",
+                resolution_m=None,
+                vertical_crs="Bpv",
+                format=fmt,
+                systems=("sm5",),
+                channel=TransportKind.DIRECT_FILES,
+                index_ref=None,
+            ),
+        ),
+    )
+
+
+_E1_CZ_SOURCES = tuple(
+    _cz_contours_source(fmt, directory) for fmt, directory in _CZ_CONTOURS_FORMATS
 )
 
 # plan E - E2: geographic names and published topographic map sheets.
@@ -1207,6 +1349,111 @@ _CZ_ZTM = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
+# plan E - E3: special PRG boundaries, separate from administrative boundaries.
+_PRG_SPECIAL_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRG/apiFeatures"
+_PRG_SPECIAL_COLLECTIONS = (
+    "GranicaRejonuStatystycznego",
+    "GranicaObwoduSpisowego",
+    "SadApelacyjny",
+    "SadOkregowy",
+    "SadRejonowy",
+    "WojewodzkiSadAdministracyjny",
+    "ProkuraturaRegionalna",
+    "ProkuraturaOkregowa",
+    "ProkuraturaRejonowa",
+    "KomendaWojewodzkaPolicji",
+    "KomendaPowiatowaPolicji",
+    "KomendaStolecznaPolicji",
+    "KomendaRejonowaPolicji",
+    "KomisariatPolicji",
+    "KomendaWojewodzkaStrazyPozarnej",
+    "KomendaPowiatowaStrazyPozarnej",
+    "OddzialStrazyGranicznej",
+    "PlacowkaStrazyGranicznej",
+    "DywizjonStrazyGranicznej",
+    "ObszarDzialaniaSzefaObronyCywilnejWojewodztwa",
+    "ObszarDzialaniaSzefaObronyCywilnejPowiatu",
+    "ObszarDzialaniaSzefaObronyCywilnejGminy",
+    "ArchiwumPanstwowe",
+    "UrzadSkarbowy",
+    "WyspecjalizowanyUrzadSkarbowy",
+    "UrzadCelnoSkarbowy",
+    "IzbaAdministracjiSkarbowej",
+    "Nadlesnictwo",
+    "RegionalnaDyrekcjaLasowPanstwowych",
+    "ZarzadZlewniPanstwowegoGospodarstwaWodnegoWodyPolskie",
+    "RegionalnyZarzadGospodarkiWodnejPanstwowegoGospodarstwaWodnegoWodyPolskie",
+    "UrzadMorski",
+    "UrzadZeglugiSrodladowej",
+    "LiniaPodstawowaMorzaTerytorialnego",
+    "MorzeTerytorialneRP",
+    "MorskieWodyWewnetrzne",
+    "WylacznaStrefaEkonomiczna",
+    "StrefaPrzylegla",
+    "MorskaLiniaBrzegowa",
+    "PasNadbrzezny",
+    "PasOchronny",
+    "PasTechniczny",
+    "Reda",
+    "PortMorski",
+    "PrzystanMorska",
+)
+
+_PL_PRG_SPECIAL = SourceDescriptor(
+    key="pl.gugik.prg_special",
+    country="PL",
+    product="special",
+    name="PRG - granice specjalne",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.OGC_API_FEATURES,
+            horizontal_crs="OGC:CRS84",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=_PRG_SPECIAL_API,
+            update_signal="none",
+            params=FeatureBBoxParams(
+                protocol="ogcapi",
+                native_crs="OGC:CRS84",
+                axis_order="xy",
+                page_size=10000,
+                layers=tuple(
+                    FeatureLayer(code=name, source=name, name=name, id_field="id")
+                    for name in _PRG_SPECIAL_COLLECTIONS
+                ),
+                selection="all",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_OPENDATA}/prg/granice/",
+            update_signal="none",
+            params=UnitPackageParams(
+                unit="country",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("format", fmt),),
+                        url_template=(
+                            f"{_OPENDATA}/prg/granice/00_granice_specjalne_{suffix}.zip"
+                        ),
+                        segment_tokens=(fmt.lower(),),
+                        members=(member,),
+                    )
+                    for fmt, suffix, member in (
+                        ("SHP", "shp", ".shp"),
+                        ("GML", "xml", ".gml"),
+                    )
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="boundaries/pl_prg_special",
+    default_extension=".gpkg",
+    license=_GUGIK_LICENSE,
+)
 
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
@@ -1224,18 +1471,29 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     update_signal="index",
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"sheet_files"}),
+                    endpoint=f"{_PZGIK}/ORTO/WMS/SkorowidzeWgAktualnosci",
+                    params=SheetIndexParams(
+                        layers=(),
+                        systems=("1992", "2000"),
+                        sheet_parts=7,
+                        full_sheet=True,
+                    ),
                 ),
                 _orto_wcs(
                     "StandardResolution",
                     "standard",
                     "Orthoimagery_StandardResolution",
                     "najnowsze dostepne ortofotomapy",
+                    native_step="0.1",
+                    resolutions=_ORTO_PIXELS,
                 ),
                 _orto_wcs(
                     "HighResolution",
                     "high",
                     "Orthoimagery_High_Resolution",
                     "ortofotomapy o pikselu 10 cm i mniejszym",
+                    native_step="0.1",
+                    resolutions=_ORTO_PIXELS,
                 ),
             ),
             tile_scheme=None,
@@ -1491,12 +1749,14 @@ _SOURCES: dict[str, SourceDescriptor] = {
             default_extension=".zip",
             license=_GUGIK_LICENSE,
         ),
-        # plan E - E3: PRG special boundaries.
-        _PL_PRG_SPECIAL,
+        # plan E - E1
+        *_E1_PL_SOURCES,
         # plan E - E2: PL names and maps.
         _PL_PRNG,
         _PL_PRNG_WORLD,
         _PL_BDOT10K_MAPS,
+        # plan E - E3: PRG special boundaries.
+        _PL_PRG_SPECIAL,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",
@@ -1553,6 +1813,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _CZ_RUIAN,
         _CZ_HY_NET,
         _CZ_ORTOFOTO,
+        # plan E - E1: CZ contours.
+        *_E1_CZ_SOURCES,
         # plan E - E2: CZ names and maps.
         _CZ_GEONAMES,
         _CZ_ZTM,

@@ -548,6 +548,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
+- Plan E, Task E1: linie wyniku i `--check-updates` w `elevation`/`imagery
+  download` podaja dla jednostki z kilkoma plikami nazwe pliku zamiast powtorzonego
+  godla: kierunki orto ukosnej (`7.125.11.08_n.tif: aktualne ...`) i pliki
+  ortofoto CZ (`CTES96.jpg`, `CTES96.TM33N.jgw`, ...); jednostka z jednym
+  plikiem bez zmian. `elevation availability --product` przyjmuje nadal
+  tylko `nmt`, `nmpt`, `laz` (warstwice i NMT 100 m poza raportem, ADR-043).
+  Co zrobic: skrypt czytajacy linie `--check-updates` ortofoto CZ dopasowuje
+  nazwe pliku zamiast godla.
 - Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
   (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
   `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera
@@ -577,6 +585,83 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `MetadataCache(refresh=True)`). Zachowanie bez zmian. Co zrobic: nic.
 
 ### Dodane
+
+- Plan E, Task E1 (czesc 4, ADR-043): warstwice ZABAGED CUZK w `elevation
+  download --product contours --country cz --format SHP|DGN` (`--sheet`
+  arkusza SM5, `--bbox`/`--geometry` = arkusze SM5 obszaru z indeksu
+  `KladyMapovychListu`): ZIP arkusza z openzu zapisany 1:1 (bez
+  rozpakowania i konwersji; czlony i CRC sprawdzane przed zapisem wersji)
+  w `contours/cz_zabaged_shp|dgn/<hierarchia SM5>/<godlo>.zip`, sidecar
+  z lista czlonow ZIP, `mapname`/`cz_share` z indeksu i `extra.http`;
+  sygnal `http` (lokalna wersja po jednym `HEAD`, `--check-updates` bez
+  pobrania, tor planu `cz_sheet`). Deskryptory
+  `cz.cuzk.zabaged_contours_shp` i `cz.cuzk.zabaged_contours_dgn` (jeden
+  format = jeden deskryptor, jak archiwa GUGiK); `--format` wymagane,
+  `--vertical-crs` tylko `Bpv` (mozna pominac); `--resolution`, `--cutout`,
+  `--horizontal-crs`, `--sheet-system`, `--scale`, flagi roku i lotow =
+  `Error:` ("warstwice to arkusze SM5 (wektor) ..."); kafel TM33 = `Error:`.
+  `--country auto` dla produktu jednego kraju zaweza obszar do tego kraju
+  (`Info:` `auto_narrowed_to_cz`/`auto_narrowed_to_pl`, jak w kolekcjach;
+  dotyczy tez intensywnosci, true orto i orto ukosnej, dotad `Error:`),
+  a `--country pl` z warstwicami to `Error:` "... dostepny tylko dla CZ".
+  Tekst bledu `--format` z innym produktem wymienia `contours (CZ)`.
+
+- Plan E, Task E1 (czesc 3, ADR-043): trzy produkty obrazow GUGiK
+  w `imagery download` na torze arkuszy ortofotomapy (kampanie, wersje,
+  `--year`/`--all-campaigns`, sygnal `index`): `--product intensity`
+  (obrazy intensywnosci LIDAR, `pl.gugik.intensity`, arkusze PL-1992
+  i PL-2000, `intensity/pl_<uklad>/...`), `--product true-orto` (prawdziwa
+  ortofotomapa wybranych miast, `pl.gugik.orto_true`, arkusze 8-czlonowe
+  PL-1992 w `orto/pl_1992_true/...`; `--cutout --horizontal-crs EPSG:2180
+  --resolution 0.05m|0.1m|0.25m|0.5m|1m` = wycinek z WCS `True_Orthoimagery`
+  w `orto/pl_1992_true_<piksel>/bbox/`, bez `--coverage`) i `--product
+  oblique-orto` (ortofotomapa ukosna, `pl.gugik.orto_oblique`, arkusze
+  PL-2000; arkusz to cztery pliki kierunkow `<godlo>_n|e|s|w.tif`
+  w `orto/pl_2000_oblique/...`, nowa flaga `--direction n,e,s,w` /
+  `direction=` w `download_data`/`check_data`, bez flagi wszystkie
+  cztery). Produkt z jednym ukladem arkuszy (true orto, orto ukosna) moze
+  pominac `--sheet-system`; `--full-sheet` tylko dla orto ukosnej (rekordy
+  intensywnosci i true orto nie deklaruja pelnego arkusza). Arkusz obrazu
+  ponad 100 MiB dostaje `DOWNLOAD_SIZE` z rozmiarem z `HEAD` przed `GET`
+  (takze ortofotomapa). Skorowidze obrazow opisuje nowy parametr kanalu
+  `SheetIndexParams` (warstwy, uklady arkuszy, kierunki, zasieg); jeden
+  provider `GugikImageProvider` (`GugikOrtoProvider` = ortofotomapa
+  z wariantami barw). Manifest projektu: opcja `direction` zadania
+  `imagery download`.
+
+- Plan E, Task E1 (czesc 2, ADR-043 D10): NMT 100 m GUGiK
+  (`pl.gugik.nmt_100m`, wariant rejestru bez ukladu wysokosci - decyzja P1):
+  `elevation download --product nmt --resolution 100m --bbox ... --country pl`
+  (takze `--sheet`, `--geometry`) pobiera pliki wojewodztw obszaru (wg PRG)
+  z feedu ATOM GUGiK do `nmt/pl_1992_100m/teryt/<woj>.zip` - ZIP z plikiem
+  XYZ 1:1, wersja = data `updated` wpisu feedu (sygnal `metadata`:
+  `--check-updates` czyta tylko feedy), sidecar z `vertical_crs: null`,
+  `extra.vertical_crs_note` ("GUGiK nie deklaruje ukladu wysokosci ...")
+  i `extra.source` (feed uslugi, feed zbioru, kod wojewodztwa, URL,
+  `length`). `--format` mozna pominac (`XYZ` - jedyna wartosc);
+  `--vertical-crs`, `--sheet-system`, `--scale`, flagi roku i lotow,
+  `--full-sheet`, `--cutout`, `--horizontal-crs`, `--min-density`
+  i `--country cz` = `Error:` przed siecia. Silnik `atom_files` dostaje
+  grupe `woj` w `AtomFilesParams.entry_pattern` (jednostki wojewodztw
+  obszaru) i `force_https` (linki `http://` feedow GUGiK pobierane przez
+  `https` tego samego hosta); plik ATOM jednostki ponad 100 MiB dostaje
+  `DOWNLOAD_SIZE` (krajowy - jak dotad `WHOLE_COUNTRY_SIZE`).
+
+- Plan E, Task E1 (czesc 1, ADR-043 D10): godla 8-czlonowe PL-1992
+  w `SheetParser` (cwiartki arkusza 7-czlonowego, numeracja 1-4 jak wyzej:
+  `N-34-50-A-c-3-2-3`; etykieta Kartografa `1:5000`, GUGiK: modul 1:2500);
+  `find_sheets_for_bbox(..., "1:5000", "1992")` daje godla 8-czlonowe,
+  `get_children()` arkusza 7-czlonowego - jego cztery cwiartki, nowe
+  `series_scale(liczba_czlonow)` (seria GUGiK po liczbie czlonow, nie po
+  etykiecie). `DownloadManager` rozwija godlo grubsze od poziomu arkuszy
+  providera (`BaseProvider.sheet_scale`, NMT/NMPT/orto: 7 czlonow), a godlo
+  8-czlonowe pobiera jako arkusz: siatki NMT 1 m 2019 publikowane per
+  cwiartka (1678 rekordow skorowidza) sa do pobrania przez `--sheet
+  <godlo 8-czlonowe>` (podpowiedz `elevation availability`). Rejestr
+  archiwow dostaje `ASCII-NMT 10m` EVRF2007 (`pl.gugik.nmt_ascii_nmt_10m`,
+  215 arkuszy 8-czlonowych; ZIP zawiera punkty co 0,5 m, skorowidz deklaruje
+  10 m). Zamyka ograniczenie ADR-041 (rekordy z godlami 8-czlonowymi nie
+  sa juz `Info:` w raporcie dostepnosci).
 
 - Plan E, Task E0 (ADR-043 D1-D9): wspolny kontrakt kolekcji dla produktow
   planu E (silniki, bez nowych produktow w rejestrze). Biblioteka

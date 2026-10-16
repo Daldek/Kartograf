@@ -16,11 +16,13 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 
 ## Obsługiwane dane
 
-- **NMT (PL)** — Numeryczny Model Terenu z GUGiK: siatki 0,15–10 m (np. 0,5 m, 1 m, 5 m) i archiwa GUGiK jako pliki źródłowe
+- **NMT (PL)** — Numeryczny Model Terenu z GUGiK: siatki 0,15–10 m (np. 0,5 m, 1 m, 5 m), archiwa GUGiK jako pliki źródłowe i NMT 100 m (pliki XYZ województw)
 - **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
+- **Warstwice (CZ)** — warstwice ZABAGED CUZK, arkusze SM5 (ZIP SHP albo DGN)
 - **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK (0,5 m, 0,6 m, 1 m)
 - **Ortofotomapa (PL)** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm): arkusze albo wycinek WCS Standard/High z wyborem piksela
 - **Ortofoto (CZ)** — arkusze SM5 CUZK (JPEG z plikami georeferencji JGW, aktualny rocznik)
+- **Obrazy GUGiK (PL)** — obrazy intensywności LIDAR, prawdziwa ortofotomapa (true orto) wybranych miast (arkusze i wycinek WCS) i ortofotomapa ukośna (cztery kierunki widoku)
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
 - **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu

@@ -131,6 +131,34 @@ def test_dataset_feed_link_and_length():
     assert service.urls() == [ORTO_SERVICE, CTES96_FEED]
 
 
+def test_index_keyed_by_voivodeship():
+    """GUGiK NMT 100 m: the ``woj`` group keys the index (one dataset per
+    voivodeship, the id of the entry is the URL of its dataset feed); the
+    ``http://`` links are followed over https with ``force_https``."""
+    nmt100 = Path(__file__).parent / "fixtures" / "pl" / "nmt_100m"
+    service = (
+        "https://mapy.geoportal.gov.pl/wss/service/ATOM/httpauth/atom/GUGIK_NMT100"
+    )
+    params = AtomFilesParams(
+        service_feed=service,
+        entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})",
+        force_https=True,
+    )
+    fake = FakeService(
+        {service: lambda: recorded_response(nmt100 / "service_feed.xml")}
+    )
+    index = atom_index(fake, params, cache=None)
+
+    assert sorted(index) == [f"{code:02d}" for code in range(2, 33, 2)]
+    assert dict(index["12"].groups) == {"woj": "12"}
+    assert index["12"].dataset_feed == (
+        f"{service}?spatial_dataset_identifier_code=NMT100_12"
+        "&spatial_dataset_identifier_namespace=PL.PZGiK.205"
+    )
+    plain = atom_index(fake, AtomFilesParams(service, params.entry_pattern), cache=None)
+    assert plain["12"].dataset_feed.startswith("http://mapy.geoportal.gov.pl/")
+
+
 @pytest.mark.parametrize(
     "edit, message",
     [
