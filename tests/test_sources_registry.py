@@ -827,6 +827,17 @@ class TestCollectionChannels:
                 else:
                     assert grid.parts in range(2, 8), (d.key, v.choice)
 
+    def test_checked_layers_only_with_one_geopackage(self):
+        """``unpack_layers`` are tables of the ONE GeoPackage unpacked from
+        the package (RCN); without ``unpack=".gpkg"`` the package would be
+        stored unchecked."""
+        for d, ch in _collection_channels():
+            params = ch.params
+            if isinstance(params, UnitPackageParams) and params.unpack_layers:
+                assert params.unpack == ".gpkg", d.key
+                layers = params.unpack_layers
+                assert len(set(layers)) == len(layers), d.key
+
     def test_index_signal_only_with_index(self):
         """Signal ``index`` compares the label of the unit's index record
         (ADR-043): a collection channel has it exactly when it has an index."""
