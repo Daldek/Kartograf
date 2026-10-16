@@ -1030,6 +1030,23 @@ GPKG), D (RUIAN w `boundaries`).
     PROGRESS, P2).
 - [ ] **Step 6: Brama i commit** - `feat(boundaries,cadastre): PRG adresy i granice specjalne, geomorfologia CZ, RCN, mapa katastralna CZ (plan E, E3)`.
 
+**Stan 2026-10-16 (pierwszy wycinek E3).** Biblioteka ma deskryptor
+`pl.gugik.prg_special`: 45 jawnie nazwanych kolekcji OGC API (bez szesciu
+`Granica*` administracyjnych), obszar do GPKG w CRS84 oraz pliki krajowe
+SHP/GML wybierane przez `format`. Fixtury: prawdziwy katalog 51 kolekcji,
+odpowiedz `SadRejonowy/items` i naglowki HEAD obu paczek krajowych. Testy
+biblioteki sprawdzaja kontrakt 45 kolekcji, bledy wyboru, zapis GPKG
+z jednej prawdziwej warstwy i sciezke paczki krajowej ze sztucznym ZIP.
+Brak CLI i manifestu dla `special` (celowo poza pierwszym wycinkiem).
+Nastepny wykonawca: dodac PRG adresy, RCN, mape katastralna CZ i
+geomorfologie CZ, grupy CLI/parity/manifest, a potem uruchomic pelne
+scenariusze live Task E3. Pulapki: usluga OGC API pyta o wszystkie
+45 kolekcji osobno; rekordy publikowane w EPSG:4258 wychodza tylko jako
+CRS84; HEAD paczek SHP/GML pokazal odpowiednio 734 171 465 i
+757 744 521 bajtow, ale zawartosci duzych ZIP nie pobrano. Przed
+przyjeciem kanalu plikow krajowych sprawdzic rzeczywiste sufiksy czlonow
+ZIP (zwlaszcza `xml`/GML) i powtorzyc probe live pelnego obszaru.
+
 ### Task E4: `landcover` - BDOO, Data50, Data250
 
 **Zaleznosci:** E0, C (BDOT10k archiwalny w `LandCoverManager`
