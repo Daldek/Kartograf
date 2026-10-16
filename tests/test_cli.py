@@ -498,8 +498,11 @@ class TestCommandGroups:
             {"orto", "intensity", "true-orto", "oblique-orto"},
         ),
         "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
-        "boundaries": ("--product", {"admin", "special"}),
-        "cadastre": ("--product", {"map"}),
+        "boundaries": (
+            "--product",
+            {"admin", "addresses", "special", "geomorphology"},
+        ),
+        "cadastre": ("--product", {"map", "prices"}),
         "models3d": ("--product", {"buildings"}),
         "hydro": ("--product", {"network"}),
     }
