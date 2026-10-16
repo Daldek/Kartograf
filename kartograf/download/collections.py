@@ -32,11 +32,12 @@ version without a transfer. Every file goes through
 ``fetch_version``/``inspect_version`` of its slot (plan track
 ``collection``); a failing unit lands in ``failed``, the others still run.
 
-``LandCoverManager`` runs the BDOT10k archive through the same unit jobs
-(``package_job``, ``run_job``, ``inspect_job``) and ZABAGED, BDOO, Data50
-and Data250 through ``landcover_request``/``run_request``/``plan_request``
-on its own plan track; the ``layers`` of BDOO keep the files of the chosen
-classes of each package (``UnitPackageParams.class_pattern``).
+``download_landcover`` (``LandCoverManager``) runs the BDOT10k archive
+through the same unit jobs (``package_job``, ``run_job``, ``inspect_job``)
+and ZABAGED, BDOO, Data50 and Data250 through
+``landcover_request``/``run_request``/``plan_request`` on its own plan
+track; the ``layers`` of BDOO keep the files of the chosen classes of each
+package (``UnitPackageParams.class_pattern``).
 """
 
 import concurrent.futures
@@ -191,7 +192,7 @@ VOLUME_BYTES = 10 * 10**9
 VOLUME_SAMPLE = 5
 
 _TRACK: Track = "collection"
-# Land cover products stay with LandCoverManager (ADR-039 D8, ADR-042 D10).
+# Land cover products are ``download_landcover``'s (ADR-042 D10, ADR-044).
 _LANDCOVER_GROUP = "landcover"
 _TERYT = re.compile(r"[0-9]{2}(?:[0-9]{2})?")
 _KU = re.compile(r"[0-9]{6}")

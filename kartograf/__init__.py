@@ -3,16 +3,20 @@ Kartograf - download spatial data: NMT/NMPT/orthophoto/LAZ from GUGiK (PL),
 DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
 
 Every CLI command has one library function with the same choices and the same
-result (ADR-037): ``elevation download`` and ``imagery download`` =
+result (ADR-037, ADR-044): ``elevation download`` and ``imagery download`` =
 ``download_data``/``check_data``, ``elevation availability`` =
-``check_availability``, ``landcover download`` and ``soil download`` =
-``LandCoverManager.download``/``.check``,
-``soil hsg`` = ``HSGCalculator.calculate_hsg``/``.check_hsg``,
-``boundaries download``, ``cadastre download`` and ``models3d download`` =
-``download_collection``/``check_collection`` (ADR-042), ``project`` =
-``init_project``, ``add_project_task``, ``remove_project_task``,
-``download_project``, ``check_project``, ``get_project_status``,
-``verify_project`` (``open_project`` reads a project, ADR-040).
+``check_availability``, ``landcover download`` =
+``download_landcover``/``check_landcover``, ``soil download`` =
+``download_soil``/``check_soil``, ``soil hsg`` = ``calculate_hsg``/
+``check_hsg`` (``--summary``: ``hsg_statistics``), the collection groups
+(``boundaries``, ``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``,
+``geodesy download``) = ``download_collection``/``check_collection``
+(ADR-042), ``project`` = ``init_project``, ``add_project_task``,
+``remove_project_task``, ``download_project``, ``check_project``,
+``get_project_status``, ``verify_project`` (``open_project`` reads a
+project, ADR-040). Every data report (``DataReport``, ``CollectionReport``,
+``LandCoverReport``, ``SoilReport``, ``HsgReport``) has ``files`` and
+``failed`` (``UnitFile``/``UnitFailure``), ``stale``, ``notices`` and ``ok``.
 
 Example usage::
 
@@ -75,12 +79,12 @@ Example usage::
         product="nmt",
     )
 
-    # Land cover and HSG in the same store (versions, result with the file)
-    from kartograf import HSGCalculator, LandCoverManager
-    lc = LandCoverManager("./data", "bdot10k").download(teryt="1465")
+    # Land cover and HSG in the same store (versions, report with the files)
+    from kartograf import calculate_hsg, download_landcover
+    lc = download_landcover(product="bdot10k", output_dir="./data", teryt="1465")
     print(lc.files[0].file.path, lc.ok)  # data/landcover/pl_bdot10k_gpkg/...
-    hsg = HSGCalculator("./data").calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
-    print(hsg.file.path, hsg.file.label)  # data/hsg/..., SoilGrids edition
+    hsg = calculate_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
+    print(hsg.files[0].file.path, hsg.files[0].file.label)  # SoilGrids edition
 """
 
 from kartograf.cache.metadata import MetadataCache
@@ -165,12 +169,20 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
-from kartograf.hydrology.hsg import HSGCalculator, HsgResult, hsg_from_rasters
+from kartograf.hydrology.hsg import (
+    HsgReport,
+    calculate_hsg,
+    check_hsg,
+    hsg_from_rasters,
+    hsg_statistics,
+)
 from kartograf.landcover.manager import (
-    LandCoverAreaResult,
-    LandCoverFailure,
-    LandCoverManager,
-    LandCoverResult,
+    LandCoverReport,
+    SoilReport,
+    check_landcover,
+    check_soil,
+    download_landcover,
+    download_soil,
 )
 from kartograf.notices import Notice
 from kartograf.project import (
@@ -292,11 +304,13 @@ __all__ = [
     "LazTileFailure",
     "check_laz_area",
     "download_laz_area",
-    # Land Cover
-    "LandCoverManager",
-    "LandCoverResult",
-    "LandCoverAreaResult",
-    "LandCoverFailure",
+    # Land cover and soil (`landcover download`, `soil download`, ADR-044)
+    "download_landcover",
+    "check_landcover",
+    "LandCoverReport",
+    "download_soil",
+    "check_soil",
+    "SoilReport",
     "Edition",
     # Providers
     "BaseProvider",
@@ -318,9 +332,11 @@ __all__ = [
     # TERYT (PRG)
     "discover_teryts_for_bbox",
     "teryt_for_point",
-    # Hydrology
-    "HSGCalculator",
-    "HsgResult",
+    # Hydrology (`soil hsg`, ADR-044)
+    "calculate_hsg",
+    "check_hsg",
+    "HsgReport",
+    "hsg_statistics",
     "hsg_from_rasters",
     # Project manifest (kartograf-project.json, ADR-040)
     "init_project",
