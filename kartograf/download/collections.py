@@ -16,7 +16,8 @@ native CRS of the service (``feature_bbox``: WFS, ArcGIS REST, OGC API
 Features), the files of its map sheets (PL-1992 series computed from the
 extent, a layer of the CUZK sheet index), of its index tiles (WFS records)
 or of its CZ cadastral areas (RUIAN), or - for a product without such a
-channel - the package of every powiat of the area (PRG); the units of an
+channel - the package of every powiat of the area (PRG; a product with
+voivodeship packages only: of every voivodeship); the units of an
 area are listed in a ``UNIT_LIST`` notice. ``whole_country`` -> the
 national file (one per theme; ``unit_package`` of the country or a file of
 a CUZK ATOM feed, ``atom_files``: edition = signal ``metadata``) after a
@@ -29,8 +30,10 @@ version without a transfer. Every file goes through
 ``collection``); a failing unit lands in ``failed``, the others still run.
 
 ``LandCoverManager`` runs the BDOT10k archive through the same unit jobs
-(``package_job``, ``run_job``, ``inspect_job``) and ZABAGED through
-``landcover_request``/``run_request``/``plan_request`` on its own plan track.
+(``package_job``, ``run_job``, ``inspect_job``) and ZABAGED, BDOO, Data50
+and Data250 through ``landcover_request``/``run_request``/``plan_request``
+on its own plan track; the ``layers`` of BDOO keep the files of the chosen
+classes of each package (``UnitPackageParams.class_pattern``).
 """
 
 import concurrent.futures
@@ -56,7 +59,12 @@ from kartograf.download.area import (
     parent_request_for,
     resolve_geometry_layer,
 )
-from kartograf.download.arguments import require_bool, require_int, require_str
+from kartograf.download.arguments import (
+    require_bool,
+    require_codes,
+    require_int,
+    require_str,
+)
 from kartograf.download.countries import countries_for_bbox, country_bbox
 from kartograf.download.data import UnitFailure, UnitFile
 from kartograf.download.fetch import (
@@ -92,6 +100,7 @@ from kartograf.notices import (
     AREA_OMITTED,
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
+    CLASSES_ABSENT,
     DOWNLOAD_SIZE,
     LARGE_FILE_BYTES,
     UNIT_LIST,
@@ -277,6 +286,21 @@ def collection_layers(descriptor_key: str) -> tuple[FeatureLayer, ...]:
     return channel.params.layers
 
 
+def collection_classes(descriptor_key: str) -> dict[str, tuple[str, ...]]:
+    """Classes ``layers`` may keep from the packages of a source, per
+    published variant (``"--year 2023"`` -> codes; ``{}``: no classes)."""
+    found: dict[str, tuple[str, ...]] = {}
+    for channel in get_source(descriptor_key).channels:
+        if isinstance(channel.params, UnitPackageParams):
+            for variant in channel.params.variants:
+                if variant.classes:
+                    where = " ".join(
+                        f"--{key} {value}" for key, value in variant.choice
+                    )
+                    found[where] = variant.classes
+    return found
+
+
 def require_collection_product(product: str | None, group: str) -> None:
     """``product`` of a collection group command (``boundaries download``,
     ...): one of the group's products; a missing one names only them.
@@ -354,13 +378,14 @@ class CollectionPart:
     ``variant`` (``unit_package``) or ``layers`` (``feature_bbox``) is the
     content; ``choice`` the content values of the sidecar ``request``
     (``year``, ``lod``, ``level``, ``format``, ``scale``, ``sheet_system``,
-    ``network``); ``area`` the area of the part (native CRS of a
+    ``network``, ``layers``); ``area`` the area of the part (native CRS of a
     ``feature_bbox`` channel; any CRS for the units of a package channel);
     ``sheet`` the requested sheet code of a sheet channel (the series sheets
     of its extent, or the CUZK sheet itself); ``year_filter`` the year of the
     index records of a ``tile``/``sheet`` channel (the newest record of a
     unit without it); ``parent`` the ``extra.parent_request`` of its files;
-    ``extra`` more ``extra`` of their sidecars (``vertical_crs_note``).
+    ``extra`` more ``extra`` of their sidecars (``vertical_crs_note``);
+    ``classes`` the classes kept from each package (``layers``, BDOO).
     """
 
     country: str
@@ -376,6 +401,7 @@ class CollectionPart:
     sheet: str | None = None
     year_filter: int | None = None
     extra: dict = field(default_factory=dict)
+    classes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -438,9 +464,11 @@ def _available(descriptor: SourceDescriptor) -> str:
 
     An area names the channels ``_channel_for`` gives it: the objects of the
     area (``feature_bbox``), its sheets, tiles or cadastral areas, and only
-    without those the packages of its powiats.
+    without those the packages of its powiats (or of its voivodeships for a
+    product without powiat packages).
     """
     area_units = bool(_area_channels(descriptor))
+    by_area = _area_package_channels(descriptor)
     options: list[str] = []
     for channel in descriptor.channels:
         params = channel.params
@@ -457,8 +485,9 @@ def _available(descriptor: SourceDescriptor) -> str:
                     "country": "--whole-country (plik krajowy)",
                 }[params.unit]
             )
-            if params.unit == "powiat" and not area_units:
-                options.append("--bbox/--sheet/--geometry (paczki powiatow obszaru)")
+            if not area_units and channel in by_area:
+                units = "powiatow" if params.unit == "powiat" else "wojewodztw"
+                options.append(f"--bbox/--sheet/--geometry (paczki {units} obszaru)")
         elif isinstance(params, FeatureBBoxParams):
             options.append("--bbox/--sheet/--geometry (obiekty obszaru)")
         elif isinstance(params, AtomFilesParams):
@@ -485,6 +514,14 @@ def _area_channels(descriptor: SourceDescriptor) -> list[AccessChannel]:
             and channel.params.unit in _AREA_UNITS
         )
     ]
+
+
+def _area_package_channels(descriptor: SourceDescriptor) -> list[AccessChannel]:
+    """TERYT packages of an area without an area channel: the powiat
+    packages, else the voivodeship packages (BDOO)."""
+    return _package_channels(descriptor, "powiat") or _package_channels(
+        descriptor, "woj"
+    )
 
 
 def _feature_channel(descriptor: SourceDescriptor) -> AccessChannel | None:
@@ -534,6 +571,11 @@ def _candidates(
         assert teryt is not None
         unit = "woj" if len(teryt) == 2 else "powiat"
         missing = f"--teryt {teryt}: {product} nie ma {_UNIT_TEXT[unit]}"
+        if unit == "powiat" and _package_channels(descriptor, "woj"):
+            missing = (
+                f"--teryt {teryt}: {product} jest publikowane per wojewodztwo - "
+                f"podaj --teryt {teryt[:2]}"
+            )
         return _package_channels(descriptor, unit), missing
     if kind == "ku":
         missing = f"--ku: {product} ({country}) nie ma {_UNIT_TEXT['ku']}"
@@ -542,7 +584,7 @@ def _candidates(
         atom = [c for c in descriptor.channels if isinstance(c.params, AtomFilesParams)]
         missing = f"--whole-country: {product} ({country}) nie ma pliku krajowego"
         return _package_channels(descriptor, "country") + atom, missing
-    channels = _area_channels(descriptor) or _package_channels(descriptor, "powiat")
+    channels = _area_channels(descriptor) or _area_package_channels(descriptor)
     return channels, f"{product} ({country}) nie ma danych dla obszaru"
 
 
@@ -640,11 +682,14 @@ def _content(
     options: Mapping[str, str | None],
     horizontal_crs: str | None,
     countries: tuple[str, ...] = (),
+    classes: Sequence[str] | None = None,
 ) -> CollectionPart:
     """Content of one country part: variant, layers or ATOM file, segment and
     request values. ``options``: ``format``, ``scale``, ``sheet_system``,
     ``network`` (``None`` = not given). ``countries``: the countries of an
-    area request (hint of the per-country ``--level`` syntax)."""
+    area request (hint of the per-country ``--level`` syntax). ``classes``:
+    the ``layers`` of a land cover source whose packages hold class files
+    (BDOO; ``None`` = not given)."""
     product = subject(descriptor)
     params = channel.params
     level_value = country_value(level, code)
@@ -652,6 +697,7 @@ def _content(
     variant: PackageVariant | None = None
     layers: tuple[FeatureLayer, ...] = ()
     year_filter: int | None = None
+    kept: tuple[str, ...] = ()
     choice: dict[str, object]
     if isinstance(params, UnitPackageParams):
         if level_value is not None:
@@ -669,13 +715,17 @@ def _content(
         )
         if record_year:
             year_filter = year
-        segment = content_segment(descriptor.key, variant.segment_tokens)
+        kept = _chosen_classes(variant, classes, product)
+        tokens = (*variant.segment_tokens, *_class_tokens(kept))
+        segment = content_segment(descriptor.key, tokens)
         ext = params.unpack or FILE_SUFFIX[variant.file_kind]
         choice = {
             key: value
             for key, value in (("lod", lod), ("year", year), *given.items())
             if value is not None
         }
+        if kept:
+            choice["layers"] = list(kept)
         crs = channel.horizontal_crs
     elif isinstance(params, AtomFilesParams):
         selecting = dict(params.choice)
@@ -692,6 +742,7 @@ def _content(
                     f"({descriptor.country}: biezace wydanie z feedu ATOM)"
                 )
         _check_selecting(selecting, given, f"pliku krajowego {product} ({code})")
+        _chosen_classes(None, classes, product)
         check_atom_crs(params, horizontal_crs)
         segment = content_segment(
             descriptor.key, atom_segment_tokens(params, horizontal_crs)
@@ -705,6 +756,7 @@ def _content(
             params, descriptor, code, level, level_value, lod, year, given, countries
         )
         segment = content_segment(descriptor.key, tokens)
+        _chosen_classes(None, classes, product)
         ext = ".gpkg"
         crs = params.native_crs
         if horizontal_crs is not None and horizontal_crs != crs:
@@ -729,7 +781,41 @@ def _content(
         ext,
         choice,
         year_filter=year_filter,
+        classes=kept,
     )
+
+
+def _chosen_classes(
+    variant: PackageVariant | None, classes: Sequence[str] | None, product: str
+) -> tuple[str, ...]:
+    """The classes ``layers`` keeps from each package of ``variant``, sorted
+    (``()``: not given).
+
+    Raises
+    ------
+    ValidationError
+        ``layers`` for content without classes (a national file, objects of
+        an area, a package stored whole), an empty choice or a class the
+        release does not publish (the text lists its classes).
+    """
+    if classes is None:
+        return ()
+    published = variant.classes if variant is not None else ()
+    if variant is None or not published:
+        raise ValidationError(
+            f"--layers nie dotyczy {product} (zawartosc zapisywana w calosci)"
+        )
+    wanted = tuple(sorted(set(classes)))
+    where = " ".join(f"--{key} {value}" for key, value in variant.choice)
+    unknown = [code for code in wanted if code not in published]
+    if not wanted or unknown:
+        problem = (
+            f"--layers {','.join(unknown)}: brak takich klas w {product} {where}"
+            if unknown
+            else f"--layers: podaj co najmniej jedna klase {product} {where}"
+        )
+        raise ValidationError(f"{problem}; dostepne: {', '.join(published)}")
+    return wanted
 
 
 def _check_selecting(
@@ -897,6 +983,10 @@ def _resolve(
     for name in ("teryt", "ku", "sheet", *_OPTION_NAMES):
         if args[name] is not None:
             require_str(args[name], f"--{name.replace('_', '-')}")
+    # ``layers``: the classes of a land cover source (``landcover_request``)
+    classes = args.get("layers")
+    if classes is not None:
+        require_codes(classes, "--layers", "['ADJA', 'PTWP']")
     product = args["product"]
     if descriptors is None:
         descriptors = _descriptors(product)
@@ -916,6 +1006,7 @@ def _resolve(
         "year": args["year"],
         "options": options,
         "horizontal_crs": args["horizontal_crs"],
+        "classes": classes,
     }
     teryt, ku = args["teryt"], args["ku"]
     output_dir = Path(args["output_dir"])
@@ -1157,7 +1248,8 @@ class UnitJob:
     the CRS ``atom_crs`` (its URL and edition come from the feed at run
     time). ``request`` is the sidecar ``request`` (the user's choice in
     this unit), ``parent`` its ``extra.parent_request``, ``extra`` more
-    ``extra`` of the sidecar.
+    ``extra`` of the sidecar, ``classes`` the classes kept from the package
+    (``layers``; ``()`` = the package as published).
     """
 
     descriptor: SourceDescriptor
@@ -1177,6 +1269,7 @@ class UnitJob:
     atom_key: str = ""
     record: IndexRecord | None = None
     extra: dict = field(default_factory=dict)
+    classes: tuple[str, ...] = ()
 
     @property
     def key(self) -> _SLOT_KEY:
@@ -1188,6 +1281,12 @@ class UnitJob:
         return self.channel.update_signal
 
 
+def _class_tokens(classes: Sequence[str]) -> tuple[str, ...]:
+    """Segment token of the chosen classes (``kuik-skpp``; ``()``: none) -
+    another content, another segment (ADR-042 D8, as BDOT10k ``--layers``)."""
+    return ("-".join(classes),) if classes else ()
+
+
 def _related_roots(
     output_dir: Path,
     descriptor: SourceDescriptor,
@@ -1197,12 +1296,13 @@ def _related_roots(
     *,
     teryt: str | None,
     country: str | None,
+    classes: tuple[str, ...] = (),
 ) -> tuple[Path, ...]:
     """Version directories of the same unit in other editions (ADR-042 D7).
 
     Editions of one content: variants whose choice differs only in the
-    values equal to the edition (``year``) - same format, same LoD. Only
-    existing directories.
+    values equal to the edition (``year``) - same format, same LoD, the
+    same chosen classes. Only existing directories.
     """
     if variant.edition is None:
         return ()
@@ -1216,7 +1316,8 @@ def _related_roots(
             continue
         if {(k, v) for k, v in other.choice if k not in edition_keys} != rest:
             continue
-        segment = content_segment(descriptor.key, other.segment_tokens)
+        tokens = (*other.segment_tokens, *_class_tokens(classes))
+        segment = content_segment(descriptor.key, tokens)
         root = unit_slot(output_dir, segment, ext, teryt=teryt, country=country)
         if root.versions_root.is_dir():
             roots.append(root.versions_root)
@@ -1241,16 +1342,26 @@ def package_job(
     request: dict,
     parent: dict | None = None,
     theme: str | None = None,
+    classes: tuple[str, ...] = (),
 ) -> UnitJob:
     """The package of one unit (``teryt``) or the national file (``teryt=None``;
-    ``theme``: one file of a national product of several themes)."""
+    ``theme``: one file of a national product of several themes; ``classes``:
+    only the members of these classes are stored)."""
     params = channel.params
     assert isinstance(params, UnitPackageParams)
-    segment = content_segment(descriptor.key, variant.segment_tokens)
+    tokens = (*variant.segment_tokens, *_class_tokens(classes))
+    segment = content_segment(descriptor.key, tokens)
     ext = params.unpack or FILE_SUFFIX[variant.file_kind]
     code = None if teryt is not None else _country_unit(country, theme)
     related = _related_roots(
-        output_dir, descriptor, params, variant, ext, teryt=teryt, country=code
+        output_dir,
+        descriptor,
+        params,
+        variant,
+        ext,
+        teryt=teryt,
+        country=code,
+        classes=classes,
     )
     slot = unit_slot(
         output_dir, segment, ext, teryt=teryt, country=code, related_roots=related
@@ -1266,6 +1377,7 @@ def package_job(
         variant=variant,
         url=package_url(variant, teryt=teryt, theme=theme),
         whole_country=teryt is None,
+        classes=classes,
     )
 
 
@@ -1306,10 +1418,39 @@ def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
     )
 
 
+def _area_voivodeships(
+    part: CollectionPart, sink: NoticeSink, metadata: MetadataCache | None
+) -> list[str]:
+    """The voivodeships of the area of ``part``: the first two digits of its
+    PRG powiats, sorted and listed in a ``UNIT_LIST`` notice.
+
+    Raises
+    ------
+    NoCoverageError
+        The area intersects no powiat.
+    DownloadError
+        The PRG query failed.
+    """
+    assert part.area is not None
+    what = subject(part.descriptor)
+    teryts = discover_teryts_for_bbox(
+        part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
+    )
+    codes = sorted({teryt[:2] for teryt in teryts})
+    if not codes:
+        raise NoCoverageError(f"{what}: obszar nie przecina zadnego wojewodztwa (PRG)")
+    named = ", ".join(f"{code} ({WOJEWODZTWO_NAMES.get(code, '?')})" for code in codes)
+    sink.emit(
+        "info",
+        UNIT_LIST,
+        f"{what}: wojewodztwa obszaru wg PRG ({len(codes)}): {named}",
+    )
+    return codes
+
+
 def _voivodeship_jobs(
     out: Path,
     part: CollectionPart,
-    product: str,
     sink: NoticeSink,
     metadata: MetadataCache | None,
 ) -> list[UnitJob]:
@@ -1319,20 +1460,7 @@ def _voivodeship_jobs(
     assert isinstance(params, AtomFilesParams) and part.area is not None
     if "woj" not in re.compile(params.entry_pattern).groupindex:
         raise ValueError(f"{part.descriptor.key}: obszar kanalu ATOM wymaga grupy woj")
-    teryts = discover_teryts_for_bbox(
-        part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
-    )
-    codes = sorted({teryt[:2] for teryt in teryts})
-    if not codes:
-        raise NoCoverageError(
-            f"{product}: obszar nie przecina zadnego wojewodztwa (PRG)"
-        )
-    named = ", ".join(f"{code} ({WOJEWODZTWO_NAMES.get(code, '?')})" for code in codes)
-    sink.emit(
-        "info",
-        UNIT_LIST,
-        f"{product}: wojewodztwa obszaru wg PRG ({len(codes)}): {named}",
-    )
+    codes = _area_voivodeships(part, sink, metadata)
     return [
         UnitJob(
             descriptor=part.descriptor,
@@ -1643,8 +1771,8 @@ def _jobs(
     request: CollectionRequest, sink: NoticeSink, metadata: MetadataCache | None
 ) -> list[UnitJob]:
     """Unit jobs of a request; the units of an area come from PRG (powiats,
-    voivodeships of an ATOM feed), the sheet grid or index, the tile index
-    or RUIAN."""
+    voivodeships of an ATOM feed or of a product with voivodeship packages
+    only), the sheet grid or index, the tile index or RUIAN."""
     out = request.output_dir
     jobs: list[UnitJob] = []
     for part in request.parts:
@@ -1661,9 +1789,7 @@ def _jobs(
             if request.whole_country:
                 jobs.append(_atom_job(out, part))
             else:
-                jobs.extend(
-                    _voivodeship_jobs(out, part, request.product, sink, metadata)
-                )
+                jobs.extend(_voivodeship_jobs(out, part, sink, metadata))
             continue
         assert isinstance(params, UnitPackageParams) and part.variant is not None
         if params.unit == "sheet":
@@ -1692,24 +1818,28 @@ def _jobs(
                         teryt=request.teryt,
                         request={**selection, **part.choice},
                         theme=theme,
+                        classes=part.classes,
                     )
                 )
             continue
         assert part.area is not None
-        teryts = discover_teryts_for_bbox(
-            part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
-        )
-        if not teryts:
-            raise NoCoverageError(
-                f"{request.product}: obszar nie przecina zadnego powiatu (PRG)"
+        if params.unit == "woj":
+            units = _area_voivodeships(part, sink, metadata)
+        else:
+            units = discover_teryts_for_bbox(
+                part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
             )
-        sink.emit(
-            "info",
-            UNIT_LIST,
-            f"{request.product}: powiaty obszaru wg PRG ({len(teryts)}): "
-            f"{', '.join(teryts)}",
-        )
-        for teryt in teryts:
+            if not units:
+                raise NoCoverageError(
+                    f"{request.product}: obszar nie przecina zadnego powiatu (PRG)"
+                )
+            sink.emit(
+                "info",
+                UNIT_LIST,
+                f"{request.product}: powiaty obszaru wg PRG ({len(units)}): "
+                f"{', '.join(units)}",
+            )
+        for teryt in units:
             jobs.append(
                 package_job(
                     out,
@@ -1720,6 +1850,7 @@ def _jobs(
                     teryt=teryt,
                     request={"teryt": teryt, **part.choice},
                     parent=part.parent,
+                    classes=part.classes,
                 )
             )
     return jobs
@@ -1876,6 +2007,8 @@ def _fetch_package(
     session: requests.Session,
     timeout: int,
 ) -> dict:
+    """A package (or the members of its chosen classes) into ``staged``; the
+    chosen classes the unit has no file of are reported (``CLASSES_ABSENT``)."""
     assert job.url is not None and job.variant is not None
     params = job.channel.params
     assert isinstance(params, UnitPackageParams)
@@ -1887,12 +2020,24 @@ def _fetch_package(
         params=params,
         variant=job.variant,
         timeout=timeout,
+        classes=job.classes,
     )
     value: dict = {"url": job.url}
     if job.variant.edition is not None:
         value["edition"] = job.variant.edition
     if package.member is not None:
         value["member"] = package.member
+    if job.classes:
+        value["classes"] = list(package.classes)
+        absent = [code for code in job.classes if code not in package.classes]
+        if absent:
+            sink.emit(
+                "info",
+                CLASSES_ABSENT,
+                f"{subject(job.descriptor)} {job.country} {job.unit}: paczka nie ma "
+                f"plikow klas {', '.join(absent)} (brak takich obiektow); zapisano "
+                f"klasy {', '.join(package.classes)}",
+            )
     if job.record is not None:
         assert params.index is not None
         value["index"] = params.index.endpoint
@@ -2260,24 +2405,29 @@ def landcover_request(
     descriptor_key: str,
     *,
     output_dir: str | Path | None,
+    teryt: str | None,
     sheet: str | None,
     bbox: BBox | None,
     geometry: str | Path | None,
     layer: str | None,
     whole_country: bool,
+    year: int | None,
+    layers: Sequence[str] | None,
     horizontal_crs: str | None,
     sink: NoticeSink,
 ) -> CollectionRequest:
     """The request of a land cover source on the collection engines
-    (``LandCoverManager``: ZABAGED, ADR-042 D10/D15): its one country, an
-    area or ``whole_country``; the same rules as ``validate_collection_request``
-    (no network)."""
+    (``LandCoverManager``: ZABAGED, ADR-042 D10/D15; BDOO, Data50 and
+    Data250, ADR-043): its one country, ``teryt`` (a voivodeship of BDOO), an
+    area or ``whole_country``, the release ``year`` and the classes
+    ``layers`` kept from each package; the same rules as
+    ``validate_collection_request`` (no network)."""
     descriptor = get_source(descriptor_key)
     args = {
         "product": descriptor.product,
         "output_dir": output_dir,
         "country": descriptor.country.lower(),
-        "teryt": None,
+        "teryt": teryt,
         "ku": None,
         "sheet": sheet,
         "bbox": bbox,
@@ -2286,12 +2436,13 @@ def landcover_request(
         "whole_country": whole_country,
         "level": None,
         "lod": None,
-        "year": None,
+        "year": year,
         "format": None,
         "scale": None,
         "sheet_system": None,
         "network": None,
         "horizontal_crs": horizontal_crs,
+        "layers": layers,
     }
     return _resolve(args, sink, {descriptor.country: descriptor})
 

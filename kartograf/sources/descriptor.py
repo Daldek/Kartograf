@@ -185,7 +185,10 @@ class PackageVariant:
     ``index_layer``: the sheets of an area and the index layer of this
     variant (a map scale has its own grid and layer). ``file_kind``: a file
     other than a ZIP is stored as published and checked by its content (TIFF
-    magic, ``%PDF``, a text header) instead of a ZIP directory.
+    magic, ``%PDF``, a text header) instead of a ZIP directory. ``classes``:
+    the class codes of the release that ``layers`` may select (BDOO: the
+    union over its voivodeship packages; ``()`` = no class selection), the
+    members of a class found by ``UnitPackageParams.class_pattern``.
     """
 
     choice: tuple[tuple[str, str], ...]
@@ -197,6 +200,7 @@ class PackageVariant:
     sheet_grid: SheetGrid | None = None
     index_layer: str | None = None
     file_kind: FileKind = "zip"
+    classes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -213,7 +217,12 @@ class UnitPackageParams:
     ``unpack``: the suffix of the ONE member stored instead of the ZIP
     (``None`` = the file is stored 1:1). ``unpack_layers``: the layers
     (``gpkg_contents`` tables) the unpacked GeoPackage must hold (RCN: the
-    three transaction layers; ``()`` = not checked).
+    three transaction layers; ``()`` = not checked). ``class_pattern``: a
+    regular expression searched in the file name of each ZIP member whose
+    group ``code`` is the class of the member (BDOO
+    ``__OT_<KOD>_<typ>.``): a package without any class member is not data,
+    and a choice of ``layers`` stores a ZIP of the members of those classes
+    only (each member byte for byte).
     """
 
     unit: Literal["powiat", "woj", "country", "sheet", "tile", "ku"]
@@ -223,6 +232,7 @@ class UnitPackageParams:
     index: IndexSource | None = None
     ku_layer: str | None = None
     unpack_layers: tuple[str, ...] = ()
+    class_pattern: str | None = None
 
 
 @dataclass(frozen=True)

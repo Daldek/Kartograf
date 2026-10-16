@@ -497,7 +497,10 @@ class TestCommandGroups:
             "--product",
             {"orto", "intensity", "true-orto", "oblique-orto"},
         ),
-        "landcover": ("--source", {"bdot10k", "corine", "zabaged"}),
+        "landcover": (
+            "--source",
+            {"bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"},
+        ),
         "boundaries": (
             "--product",
             {"admin", "addresses", "special", "geomorphology"},
