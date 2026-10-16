@@ -62,12 +62,14 @@ _REMOVED_COMMANDS = {
 }
 
 
-def _source_value(argv: Sequence[str]) -> str | None:
-    """The ``--source``/``-s`` value of a command line (``None`` if absent)."""
+def _product_value(argv: Sequence[str]) -> str | None:
+    """The ``--product`` (also the 0.7.x ``--source``/``-s``) value of a command
+    line (``None`` if absent)."""
     for i, arg in enumerate(argv):
-        if arg.startswith("--source="):
-            return arg.partition("=")[2]
-        if arg in ("--source", "-s") and i + 1 < len(argv):
+        flag, eq, value = arg.partition("=")
+        if eq and flag in ("--product", "--source"):
+            return value
+        if arg in ("--product", "--source", "-s") and i + 1 < len(argv):
             return argv[i + 1]
     return None
 
@@ -76,8 +78,9 @@ def removed_command_error(argv: Sequence[str]) -> str | None:
     """Error text for a command line of a command removed in 0.8.0.
 
     ``kartograf download``, ``kartograf soilgrids ...`` and ``kartograf
-    landcover ... --source soilgrids`` name their replacement; ``None`` for
-    every other command line (argparse handles it).
+    landcover ... --product soilgrids`` (also the 0.7.x ``--source
+    soilgrids``) name their replacement; ``None`` for every other command
+    line (argparse handles it).
     """
     if not argv:
         return None
@@ -86,7 +89,7 @@ def removed_command_error(argv: Sequence[str]) -> str | None:
         return (
             f"komenda '{command}' usunieta w 0.8.0 - uzyj {_REMOVED_COMMANDS[command]}"
         )
-    if command == "landcover" and _source_value(argv[1:]) == "soilgrids":
+    if command == "landcover" and _product_value(argv[1:]) == "soilgrids":
         return (
             "SoilGrids jest w grupie soil od 0.8.0 - uzyj kartograf soil download "
             "albo kartograf soil list-layers"
@@ -97,12 +100,19 @@ def removed_command_error(argv: Sequence[str]) -> str | None:
 # ``--bbox -447000,...``: argparse takes a value starting with "-" after a
 # space for a flag; four comma-separated numbers are always a --bbox value.
 _BBOX_VALUE = re.compile(r"-?[0-9]+(\.[0-9]+)?(,-?[0-9]+(\.[0-9]+)?){3}")
-# Usual mix-ups of a command with a flag of another group: the hint replaces
-# the list of the commands having the flag.
+# Usual mix-ups of a command with a flag of another group (or a flag removed
+# in 0.8.0): the hint replaces the list of the commands having the flag.
+_LANDCOVER_PRODUCT_HINT = (
+    "od 0.8.0 produkt wybiera --product, np. --product bdot10k; lista: kartograf "
+    "landcover list-sources"
+)
 _UNKNOWN_HINTS = {
-    ("kartograf landcover download", "--product"): "landcover wybiera zrodlo "
-    "flaga --source, np. --source bdot10k; lista: kartograf landcover list-sources",
-    ("kartograf landcover download", "--country"): "kraj wynika z --source "
+    **{
+        (f"kartograf landcover {command}", flag): _LANDCOVER_PRODUCT_HINT
+        for command in ("download", "list-layers")
+        for flag in ("--source", "-s")
+    },
+    ("kartograf landcover download", "--country"): "kraj wynika z --product "
     "(np. zabaged, data50, data250 = CZ)",
     ("kartograf soil download", "--product"): "warstwe SoilGrids wybieraja "
     "--property, --depth i --stat; lista: kartograf soil list-layers",

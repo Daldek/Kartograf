@@ -406,9 +406,9 @@ lc.download(sheet="N-34-130-D", layers=["PTWP", "SWRS"], workers=4)
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source bdot10k --teryt 1465 -o ./data
-kartograf landcover download --source bdot10k --sheet N-34-130-D -o ./data
-kartograf landcover list-layers --source bdot10k
+kartograf landcover download --product bdot10k --teryt 1465 -o ./data
+kartograf landcover download --product bdot10k --sheet N-34-130-D -o ./data
+kartograf landcover list-layers --product bdot10k
 ```
 
 ---
@@ -457,8 +457,8 @@ ani tokenu. Bez credentials — podgląd PNG przez WMS (sidecar
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source corine --year 2018 --sheet N-34-130-D -o ./data
-kartograf landcover list-layers --source corine
+kartograf landcover download --product corine --year 2018 --sheet N-34-130-D -o ./data
+kartograf landcover list-layers --product corine
 ```
 
 ---
@@ -994,8 +994,8 @@ result = lc.download(teryt="1261", year=2024, format="SHP")  # LandCoverAreaResu
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
-kartograf landcover download --source bdot10k --sheet N-34-130-D --year 2018 --format GML -o ./data
+kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
+kartograf landcover download --product bdot10k --sheet N-34-130-D --year 2018 --format GML -o ./data
 ```
 
 ---
@@ -1115,18 +1115,18 @@ Baza danych obiektów ogólnogeograficznych GUGiK (1:250 000): paczka GML
 województwa na rocznik, zapisywana 1:1 w magazynie wersji.
 
 #### Requirements
-- `--source bdoo` z wymaganym `--year` (2015, 2021-2026); `--teryt`
+- `--product bdoo` z wymaganym `--year` (2015, 2021-2026); `--teryt`
   2 cyfry (kod powiatu = błąd z podpowiedzią), obszar = paczki województw
   jego powiatów wg PRG -> `landcover/pl_bdoo_<rok>/teryt/<woj>.zip`.
-- `--layers` (klasy rocznika: `landcover list-layers --source bdoo`)
+- `--layers` (klasy rocznika: `landcover list-layers --product bdoo`)
   zapisuje ZIP plików wybranych klas (`pl_bdoo_<rok>_<klasy>`); klasa bez
   pliku w paczce = `Info:` (`classes_absent`), klasa spoza rocznika = błąd.
 - Etykieta wersji = rocznik, sygnał `none`.
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source bdoo --teryt 12 --year 2023 -o ./data
-kartograf landcover download --source bdoo --bbox 523000,253000,528000,258000 --year 2023 --layers KUIK,PTWP -o ./data
+kartograf landcover download --product bdoo --teryt 12 --year 2023 -o ./data
+kartograf landcover download --product bdoo --bbox 523000,253000,528000,258000 --year 2023 --layers KUIK,PTWP -o ./data
 ```
 
 ---
@@ -1143,10 +1143,10 @@ obiektów przecinających obszar (pełne geometrie, EPSG:5514), a
 transferem.
 
 #### Requirements
-- ZABAGED (`landcover --source zabaged`): 22 warstwy pokrycia terenu
+- ZABAGED (`landcover --product zabaged`): 22 warstwy pokrycia terenu
   i wód (bez przeliczania klas na kody BDOT10k); plik krajowy GPKG
   w EPSG:5514 albo EPSG:3045 (`--horizontal-crs` wymagane) z feedu ATOM.
-- Data50 i Data250 (`landcover --source data50|data250`): wszystkie
+- Data50 i Data250 (`landcover --product data50|data250`): wszystkie
   warstwy obiektowe usługi REST (69 / 116); plik krajowy SHP jak ZABAGED.
 - RUIAN (`boundaries --product admin --country cz|auto`): `--level
   kraj|okres|obec|katastralni-uzemi`, pod `auto` poziom per kraj
@@ -1160,8 +1160,8 @@ transferem.
 
 #### CLI Commands
 ```bash
-kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
-kartograf landcover download --source data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326 -o ./data
+kartograf landcover download --product zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
+kartograf landcover download --product data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326 -o ./data
 kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
 kartograf boundaries download --product geomorphology --country cz --level celek "--bbox=-452000,-1112000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
 kartograf hydro download --product network --country cz --whole-country -o ./data

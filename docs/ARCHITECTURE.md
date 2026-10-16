@@ -689,14 +689,14 @@ i capability kanalu kolekcji unikalnej w deskryptorze (`archive_unit_files`,
 
 | Deskryptor (`--product`) | Kanal, capability | Parametry |
 |---|---|---|
-| `pl.gugik.bdot10k` (`landcover --source bdot10k --year`) | `DIRECT_FILES`, `archive_unit_files` | powiat; 24 warianty `(format, year)`: 2014-2025 x `GML` (czlon `.xml`) / `SHP` (`.shp`), `.../Archiwum/bdot10k/<R>/<F>/{woj}/{teryt}_<F>_<R>.zip`, `edition` = rok |
+| `pl.gugik.bdot10k` (`landcover --product bdot10k --year`) | `DIRECT_FILES`, `archive_unit_files` | powiat; 24 warianty `(format, year)`: 2014-2025 x `GML` (czlon `.xml`) / `SHP` (`.shp`), `.../Archiwum/bdot10k/<R>/<F>/{woj}/{teryt}_<F>_<R>.zip`, `edition` = rok |
 | `pl.gugik.prg` (`admin`) | `WFS` `AdministrativeBoundaries`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="level"`: `wojewodztwo`=A01, `powiat`=A02, `gmina`=A03, `jednostka-ewidencyjna`=A05, `obreb`=A06, id `IIP_IDENTY` |
 | jw. | `DIRECT_FILES`, `admin_unit_files` | woj.; `prg/granice/{woj}_GraniceAdministracyjne.zip`, czlon `.gml`, token `gml` |
 | jw. | `DIRECT_FILES`, `country_files` | kraj; `prg/granice/00_jednostki_administracyjne.zip` (ok. 377 MB), czlon `.shp`, token `shp` |
 | `pl.gugik.egib` (`map`) | `DIRECT_FILES`, `admin_unit_files` | powiat; `InneDane/latest_exports/eziudp_wfs/GPKG/{teryt}.gpkg.zip`, `unpack=".gpkg"`, token `gpkg` |
 | jw. | `WFS` `UslugaZbiorcza`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`: `dzialki`, `budynki`, id `gml_id`, `drop_fields=("DATA",)` |
 | `pl.gugik.buildings_3d` (`buildings`) | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `(lod, year)`: LoD1 2019 (`.../LOD1/2019/{woj}/{teryt}_gml.zip`, EPSG:9650), LoD1 2021/2022/2024 (`.../LOD1/<R>/{woj}/{teryt}.zip`, EPSG:9651), LoD2 2017 (`.../LOD2/{teryt}_gml.zip`, EPSG:9650); czlon `.gml`, `edition` = rok |
-| `pl.gugik.bdoo` (`landcover --source bdoo`, plan E4) | `DIRECT_FILES`, `admin_unit_files` | woj.; 7 wariantow `year` (2015, 2021-2026): `opendata/bdoo/<R>/PL.PZGiK.201.{woj}.zip`, czlon `.xml` (do 2023) albo `.gml` (od 2024), `edition` = rok; `classes` = suma klas 16 paczek rocznika (2015: 44, 2021-2023: 37, 2024-2026: 26), `class_pattern` `__OT_(?P<code>[A-Z]{4})_[A-Z]\.`; EPSG:2180; brak pliku krajowego |
+| `pl.gugik.bdoo` (`landcover --product bdoo`, plan E4) | `DIRECT_FILES`, `admin_unit_files` | woj.; 7 wariantow `year` (2015, 2021-2026): `opendata/bdoo/<R>/PL.PZGiK.201.{woj}.zip`, czlon `.xml` (do 2023) albo `.gml` (od 2024), `edition` = rok; `classes` = suma klas 16 paczek rocznika (2015: 44, 2021-2023: 37, 2024-2026: 26), `class_pattern` `__OT_(?P<code>[A-Z]{4})_[A-Z]\.`; EPSG:2180; brak pliku krajowego |
 | `pl.gugik.mesh_3d` (`models3d --product mesh`, plan E5) | `DIRECT_FILES`, `area_files` | kafle obszaru z rekordow WFS `NMT/WFS/ModeleSiatkowe3D` (typ `gugik:SkorowidzModeleSiatkowe3D`, strony `next`); `IndexSource(unit_field=None)`: kafel = plik rekordu (`URL_do_pobrania`; pole `modul` powtarza sie w kilku pracach i miastach), etykieta `Aktualnosc_Numer_zgloszenia_pracy`, rok `akt_rok` (filtr `--year`), strefa `uklad_xy` (katalog slotu i uklad sidecara); czlon `.obj`, `vertical_crs` EPSG:9651; `index` |
 | `pl.gugik.trees_3d` (`models3d --product trees`, plan E5) | `DIRECT_FILES`, `admin_unit_files` | powiat; jeden wariant `(lod, year)` = (1, 2023): `InneDane/Drzewa3D/LOD1/2023/{woj}/{teryt}.zip` (0,3-25 GB; nie kazdy powiat ma paczke), czlon `.gml`, `edition` 2023, bez ukladu wysokosci (GML `srsName="EPSG:2180"`) |
 | `pl.gugik.prpog` (`geodesy --product control --country pl`, plan E5) | 4 x `WFS`, `bbox_vector` (wspolna capability, ADR-043 D6) | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`, `choice` `network`: `horizontal` (`PodstawowaOsnowaGeodezyjnaPozioma`: `Fundamentalna_pozioma`, `Bazowa_pozioma`), `vertical` (`PodstawowaOsnowaGeodezyjnaWysokosciowa`), `gravity` (`OsnowaGrawimetryczna`), `magnetic` (`OsnowaMagnetyczna`: punkty i `izogony`, bez `izogony_etykiety`); adres `.../PZGIK/<usluga>/WFS`; obiekty bez `gml:id`: id `nr_punktu` (izogony `zakres_wartosci_deklinacji`); warstwa GPKG = nazwa zrodla malymi literami |
@@ -711,13 +711,13 @@ zawsze w EPSG:5514 = DefaultCRS uslug):
 
 | Deskryptor (wybor) | Kanal, capability | Parametry |
 |---|---|---|
-| `cz.cuzk.zabaged` (`landcover --source zabaged`) | `ARCGIS_QUERY` `ZABAGED_POLOHOPIS/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 22 warstwy (`registry.py::_ZABAGED_LAYERS`, kod = nazwa warstwy ASCII), `order_field="OBJECTID"`, id `fid_zbg`; `none` |
+| `cz.cuzk.zabaged` (`landcover --product zabaged`) | `ARCGIS_QUERY` `ZABAGED_POLOHOPIS/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 22 warstwy (`registry.py::_ZABAGED_LAYERS`, kod = nazwa warstwy ASCII), `order_field="OBJECTID"`, id `fid_zbg`; `none` |
 | jw. | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml` (jeden zbior), `crs` EPSG:5514 i EPSG:3045, ZIP 1:1, token `gpkg` + kod EPSG; `metadata` |
 | `cz.cuzk.ruian` (`admin`) | `ARCGIS_QUERY` `RUIAN/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 1000, `selection="level"`: `kraj`=17, `okres`=15, `obec`=12, `katastralni-uzemi`=7, `order_field="objectid"`, id `kod`; `none` |
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `services.cuzk.gov.cz/shp/stat/epsg-5514/1.zip` (ok. 253 MB), czlon `.shp`, token `shp`; `http` |
 | `cz.cuzk.hy_net` (`network`) | `WFS` `geoserver/hy-n/wfs`, `bbox_vector` | `wfs`, EPSG:5514, `xy`, strona 1000, `selection="all"`: `hy-n:WatercourseLink`, `hy-n:HydroNode` (warstwy GPKG bez prefiksu), id `gml_id`; `none` |
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `openzu.cuzk.gov.cz/opendata/HY-NET/HY-NET.zip` (ok. 194 MB, EPSG:3045), czlon `.gpkg`, token `gpkg`; `http` |
-| `cz.cuzk.data50`, `cz.cuzk.data250` (`landcover --source data50\|data250`, plan E4) | `ARCGIS_QUERY` `DATA50/MapServer`, `DATA250/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 69 i 116 warstw obiektowych (`registry.py::_DATA50_LAYERS`, `_DATA250_LAYERS`, kod = nazwa warstwy ASCII jak ZABAGED; rastry reliefu 5 i 6 DATA250 pominiete), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
+| `cz.cuzk.data50`, `cz.cuzk.data250` (`landcover --product data50\|data250`, plan E4) | `ARCGIS_QUERY` `DATA50/MapServer`, `DATA250/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 69 i 116 warstw obiektowych (`registry.py::_DATA50_LAYERS`, `_DATA250_LAYERS`, kod = nazwa warstwy ASCII jak ZABAGED; rastry reliefu 5 i 6 DATA250 pominiete), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
 | jw. | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/Data50/Data50.xml` (`Data250/Data250.xml`; jeden zbior), `crs` EPSG:5514 i EPSG:3045, SHP ZIP 1:1 (Data50 516/757 MB, Data250 230/320 MB), token `shp` + kod EPSG; `metadata` |
 | `cz.cuzk.survey_control` (`geodesy --product control --country cz`, plan E5) | `ARCGIS_QUERY` `BodovaPole/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 1000, `selection="level"`, `selection_key="network"`: `gnss`=0, `horizontal`=18, 20, 2, 4, 6, 8, `densification`=38, 40, 22, 24, 26, 28, `horizontal-detailed`=42, `vertical`=44, `vertical-detailed`=46, `gravity`=48 (siec = suma warstw: punkty wyznaczone w ETRS89 nie sa podzbiorem warstw glownych; zniesione 10-17, 30-37 i etykiety pominiete), warstwa GPKG = nazwa CUZK ASCII (`bod_zvbp`), id `OBJECTID`; `none` |
 | `cz.cuzk.qgzu` (`geodesy --product geoid --country cz`, plan E5) | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/QGZU/QGZU.xml` (jeden zbior; feed zbioru i plik na hostach `atom.cuzk.cz`, `openzu.cuzk.cz`), EPSG:4258, ZIP 17 siatek TXT 1:1 (58 MB); `metadata` |
@@ -1246,7 +1246,7 @@ wpis deskryptora z parametrami kanalu.
 | `contours/` | `elevation` | `--product contours` (CZ) |
 | `orto/` | `imagery` | `--product orto`, `true-orto`, `oblique-orto` |
 | `intensity/` | `imagery` | `--product intensity` |
-| `landcover/` | `landcover` | `--source bdot10k`, `bdoo`, `corine`, `zabaged`, `data50`, `data250` |
+| `landcover/` | `landcover` | `--product bdot10k`, `bdoo`, `corine`, `zabaged`, `data50`, `data250` |
 | `soil/` | `soil` | `soil download --property` |
 | `hsg/` | `soil` | `soil hsg` |
 | `boundaries/` | `boundaries` | `--product admin`, `addresses`, `special`, `geomorphology` |
@@ -1395,7 +1395,7 @@ D9) to `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`) - jeden orkiestrator dla paczek jednostek,
 obiektow obszaru i plikow krajowych (takze z feedu ATOM), sterowany
 parametrami kanalu deskryptora (sekcja 4.10); ZABAGED (`landcover
-download --source zabaged`) idzie przez te same silniki z
+download --product zabaged`) idzie przez te same silniki z
 `LandCoverManager` (sekcja 4.8).
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
@@ -2583,7 +2583,7 @@ zmian`).
 
 **Archiwum rocznikow BDOT10k (ADR-042 D10-D11, od 0.8.0).**
 `LandCoverManager(..., "bdot10k").download(..., year=R, format="GML"|"SHP")`
-(CLI `landcover download --source bdot10k --year R --format GML|SHP`)
+(CLI `landcover download --product bdot10k --year R --format GML|SHP`)
 pobiera roczniki 2014-2025 (stan z poczatku roku) z kanalu
 `archive_unit_files` deskryptora `pl.gugik.bdot10k`: paczka ZIP powiatu
 zapisywana 1:1, bez scalania GPKG, w
@@ -3122,8 +3122,8 @@ PRG w CRS84 (44 kolekcje jawnie w deskryptorze) z limitem czasu kanalu
 o kazda kolekcje osobno) i plikiem krajowym SHP/GML. Kolekcja
 `GranicaObwoduSpisowego` nie wchodzi do wyniku obszaru (odpowiedz po
 158 do ponad 400 s): `FeatureBBoxParams.area_omitted` niesie tekst, ktory
-silnik kolekcji zamienia w `Info` `AREA_OMITTED` (`<produkt albo
---source>: <tekst>`) przy kazdym zadaniu obszaru kanalu (obwody sa
+silnik kolekcji zamienia w `Info` `AREA_OMITTED` (`<produkt>: <tekst>`)
+przy kazdym zadaniu obszaru kanalu (obwody sa
 w pliku krajowym). Ten sam mechanizm maja `cz.cuzk.hy_net` (typ
 `WatercourseSeparatedCrossing` bez geometrii tylko w pliku krajowym)
 i `cz.cuzk.zabaged` (22 warstwy obszaru wobec pelnej bazy pliku

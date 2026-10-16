@@ -40,11 +40,11 @@ from tests.test_wcs_cutout import ALL_LAND, MASK, _synthetic_session
 # BDOT10k archive of powiat 1261 from fixture packages.
 PRG_AREA = {"product": "admin", "country": "pl", "level": "obreb", "bbox": PRG_BBOX}
 BUILDINGS = {"product": "buildings", "teryt": "1261", "lod": 1, "year": 2024}
-BDOT_ARCHIVE = {"source": "bdot10k", "teryt": "1261", "year": 2024, "format": "SHP"}
+BDOT_ARCHIVE = {"product": "bdot10k", "teryt": "1261", "year": 2024, "format": "SHP"}
 # CZ (plan D): the SM5 orthophoto sheet CTES96 (JPEG and three world files)
 # and ZABAGED of a recorded area.
 CZ_ORTO_SHEET = {"product": "orto", "country": "cz", "sheet": "CTES96"}
-ZABAGED = {"source": "zabaged", "bbox": ZABAGED_AREA}
+ZABAGED = {"product": "zabaged", "bbox": ZABAGED_AREA}
 
 
 @contextmanager

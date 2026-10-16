@@ -219,7 +219,7 @@ def test_add_rejects_non_data_command_and_foreign_option(tmp_path):
             tmp_path / "p",
             name="t",
             command="landcover download",
-            options={"source": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"},
+            options={"product": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"},
         )
     assert open_project(tmp_path / "p").tasks == ()
 

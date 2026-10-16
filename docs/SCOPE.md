@@ -291,13 +291,13 @@ i ZTM (2.15), Bodove pole i QGZU-2013 (2.16).
   powiatu) bez duplikatu — dowiązanie twarde, status `relabeled` (D7);
   brak paczki powiatu (404) = NoCoverageError tego powiatu
 
-# BDOO (GUGiK, 1:250 000) — `--source bdoo` (pl.gugik.bdoo, 0.8.0, ADR-043):
+# BDOO (GUGiK, 1:250 000) — `--product bdoo` (pl.gugik.bdoo, 0.8.0, ADR-043):
 - paczka GML województwa na rocznik (`--year` wymagany: 2015, 2021-2026),
   ZIP 1:1 -> landcover/pl_bdoo_<rok>/teryt/<woj>.zip; `--teryt` 2 cyfry
   (kod powiatu = błąd z podpowiedzią), obszar (--bbox/--sheet/--geometry)
   = paczki województw jego powiatów wg PRG
 - `--layers` = ZIP plików wybranych klas rocznika (lista: landcover
-  list-layers --source bdoo) -> landcover/pl_bdoo_<rok>_<klasy>/; klasa
+  list-layers --product bdoo) -> landcover/pl_bdoo_<rok>_<klasy>/; klasa
   bez pliku w paczce = Info (classes_absent), klasa spoza rocznika = błąd
 - etykieta wersji = rocznik, sygnał: brak
 
@@ -314,7 +314,7 @@ i ZTM (2.15), Bodove pole i QGZU-2013 (2.16).
   wydania z katalogu CLMS (sygnał metadata), podgląd WMS osobno
   w landcover/eu_corine_<rok>_preview/ (etykieta = data pobrania)
 
-# ZABAGED, Data50 i Data250 (CZ) w `landcover download --source`: sekcja 2.14
+# ZABAGED, Data50 i Data250 (CZ) w `landcover download --product`: sekcja 2.14
 # Wszystkie źródła land cover: sidecar wersji <plik>.meta.json (sekcja 2.11)
 ```
 
@@ -369,7 +369,7 @@ kartograf elevation download --bbox ... --sheet-system 2000 --scale 1:2000 --pro
 kartograf imagery download --bbox ... --product orto --country pl --sheet-system 1992 -o ./data # ortofoto dla bbox
 kartograf imagery download --bbox ... --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data # wycinek WCS
 kartograf imagery download --sheet CTES96 --product orto -o ./data # ortofoto CZ (arkusz SM5: JPEG + 3 JGW)
-kartograf landcover download --source zabaged --bbox=... --bbox-crs EPSG:5514 -o ./data # ZABAGED (22 warstwy, EPSG:5514); --whole-country --horizontal-crs EPSG:5514|EPSG:3045
+kartograf landcover download --product zabaged --bbox=... --bbox-crs EPSG:5514 -o ./data # ZABAGED (22 warstwy, EPSG:5514); --whole-country --horizontal-crs EPSG:5514|EPSG:3045
 kartograf boundaries download --product admin --country cz --level obec --bbox=... --bbox-crs EPSG:5514 -o ./data # RUIAN; auto: --level pl=gmina,cz=obec
 kartograf hydro download --product network --country cz --bbox=... --bbox-crs EPSG:5514 -o ./data # HY-NET; --whole-country (EPSG:3045)
 kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT z pliku geometrii
@@ -396,12 +396,12 @@ kartograf elevation download --sheet <godlo> --year 2025 --all-campaigns --produ
 kartograf elevation download --sheet <godlo> --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowszy lot, nie starszy niż rok
 kartograf elevation download --bbox ... --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # najnowszy lot do roku (dowiązanie nigdy wstecz)
 kartograf elevation download --bbox ... --product laz --all-campaigns --country pl --vertical-crs EVRF2007 -o ./data # LAZ bez deduplikacji pokrycia
-kartograf landcover download --source bdot10k --teryt <kod> -o ./data  # obszar: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
-kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data # archiwum roczników BDOT10k (2014-2025, GML|SHP, ZIP 1:1)
-kartograf landcover download --source corine --sheet <arkusz> -o ./data --year 2018
+kartograf landcover download --product bdot10k --teryt <kod> -o ./data  # obszar: --bbox [--bbox-crs] / --sheet / --geometry; --layers, --keep-raw, --workers, -q
+kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP -o ./data # archiwum roczników BDOT10k (2014-2025, GML|SHP, ZIP 1:1)
+kartograf landcover download --product corine --sheet <arkusz> -o ./data --year 2018
 kartograf soil download --property <param> -o ./data --depth 0-5cm --stat mean # --sheet/--bbox (bez --teryt)
 kartograf landcover list-sources
-kartograf landcover list-layers --source <source>
+kartograf landcover list-layers --product <produkt>
 kartograf soil hsg --sheet <arkusz> -o ./data --depth 0-5cm # oblicz HSG z wersji SoilGrids
 kartograf boundaries download --product admin --country pl --level gmina --bbox ... -o ./data # granice PRG obszaru (GPKG z WFS); --teryt 12 / --whole-country --country pl
 kartograf boundaries list-sources
@@ -412,8 +412,8 @@ kartograf models3d list-sources
 kartograf elevation download --product contours --country cz --format SHP --sheet CTES96 -o ./data # warstwice ZABAGED CZ (ZIP arkusza SM5; SHP|DGN)
 kartograf elevation download --product nmt --resolution 100m --country pl --bbox ... -o ./data # NMT 100 m: pliki XYZ województw z feedu ATOM
 kartograf imagery download --product intensity --sheet <godlo> -o ./data # obrazy intensywności LIDAR; także --product true-orto, oblique-orto (--direction)
-kartograf landcover download --source bdoo --teryt 12 --year 2023 -o ./data # BDOO: paczka GML województwa; --layers wybrane klasy
-kartograf landcover download --source data50 --bbox=... --bbox-crs EPSG:5514 -o ./data # Data50/Data250 CZ; --whole-country --horizontal-crs EPSG:5514|EPSG:3045
+kartograf landcover download --product bdoo --teryt 12 --year 2023 -o ./data # BDOO: paczka GML województwa; --layers wybrane klasy
+kartograf landcover download --product data50 --bbox=... --bbox-crs EPSG:5514 -o ./data # Data50/Data250 CZ; --whole-country --horizontal-crs EPSG:5514|EPSG:3045
 kartograf boundaries download --product addresses --country pl --bbox ... -o ./data # punkty adresowe i ulice PRG; --teryt <4 cyfry>; --whole-country --format SHP|GML
 kartograf boundaries download --product special --country pl --bbox ... -o ./data # 44 rodzaje granic specjalnych PRG (OGC API); --whole-country --format SHP|GML
 kartograf boundaries download --product geomorphology --country cz --level celek --bbox=... --bbox-crs EPSG:5514 -o ./data # jednostki geomorfologiczne CZ
@@ -724,15 +724,15 @@ from kartograf import (
 # godło jako obszar i --teryt tylko PL. Silnik plików z feedu ATOM:
 # transport/atom.py (atom_files, indeks feedu w cache z ETag).
 
-# ZABAGED — `landcover download --source zabaged` (cz.cuzk.zabaged):
+# ZABAGED — `landcover download --product zabaged` (cz.cuzk.zabaged):
 - obszar -> landcover/cz_zabaged/bbox/<coords>.gpkg: 22 warstwy pokrycia
   terenu i wód (REST ZABAGED_POLOHOPIS; kody = nazwy ASCII warstw usługi),
-  bez przeliczania klas na kody BDOT10k; lista: landcover list-layers --source zabaged
+  bez przeliczania klas na kody BDOT10k; lista: landcover list-layers --product zabaged
 - --whole-country --horizontal-crs EPSG:5514|EPSG:3045 -> plik krajowy GPKG
   z feedu ATOM (5,8/6,7 GB) w landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip;
   warstwy pełnej bazy pod nazwami CUZK (inne niż wynik obszaru); sygnał metadata
 
-# Data50 i Data250 — `landcover download --source data50|data250` (cz.cuzk.data50/data250, 0.8.0):
+# Data50 i Data250 — `landcover download --product data50|data250` (cz.cuzk.data50/data250, 0.8.0):
 - obszar -> landcover/cz_data50/bbox/<coords>.gpkg: wszystkie warstwy
   obiektowe usługi REST (Data50: 69, Data250: 116) w EPSG:5514
 - --whole-country --horizontal-crs EPSG:5514|EPSG:3045 -> krajowy ZIP SHP

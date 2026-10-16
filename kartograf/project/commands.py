@@ -53,7 +53,7 @@ from kartograf.hydrology.hsg import HSG_INPUTS, HSGCalculator, HsgResult
 from kartograf.landcover.manager import (
     LandCoverAreaResult,
     LandCoverManager,
-    require_landcover_source,
+    require_landcover_product,
 )
 from kartograf.notices import Notice
 from kartograf.project.model import PinRole
@@ -276,19 +276,19 @@ def _data_command(
 
 
 def _landcover_command(
-    name: str, source: str | None, options: dict[str, OptionKind]
+    name: str, product: str | None, options: dict[str, OptionKind]
 ) -> TaskCommand:
-    """``LandCoverManager.download``/``.check``: of the task's ``source``
-    (``landcover download``) or of a fixed source (``soil download``)."""
+    """``LandCoverManager.download``/``.check``: of the task's ``product``
+    (``landcover download``) or of a fixed product (``soil download``)."""
 
     def manager(
         output_dir: Path, opts: Options, cache: MetadataCache | bool
     ) -> tuple[LandCoverManager, Options]:
         rest = dict(opts)
         chosen = (
-            source
-            if source is not None
-            else require_landcover_source(rest.pop("source", None))
+            product
+            if product is not None
+            else require_landcover_product(rest.pop("product", None))
         )
         return LandCoverManager(output_dir, chosen, cache=cache), rest
 
@@ -480,7 +480,7 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                 "landcover download",
                 None,
                 {
-                    "source": "str",
+                    "product": "str",
                     "teryt": "str",
                     **_AREA,
                     "whole_country": "flag",

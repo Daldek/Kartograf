@@ -126,7 +126,7 @@ INVALID = {
     "duplicate-name": lambda doc: doc["tasks"][1].update(name="teren"),
     "bad-name": _set((*T, "name"), "Teren 1"),
     "unknown-command": _set((*T, "command"), "elevation list-sources"),
-    "option-of-another-command": _set((*T, "options", "source"), "bdot10k"),
+    "option-of-another-command": _set((*T, "options", "keep_raw"), True),
     "option-null": _set((*T, "options", "year"), None),
     "option-wrong-type": _set((*T, "options", "year"), "2022"),
     "version-dotdot": _set((*F, "version"), "nmt/../versions/x/a.asc"),

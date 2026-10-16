@@ -19,8 +19,8 @@ from kartograf.cli.landcover_cmd import (
 )
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
-    LANDCOVER_SOURCE_CHOICES,
-    LANDCOVER_SOURCES,
+    LANDCOVER_PRODUCT_CHOICES,
+    LANDCOVER_PRODUCTS,
     bdoo_year_choices,
     bdot10k_archive_choices,
 )
@@ -28,9 +28,9 @@ from kartograf.sources.descriptor import AtomFilesParams, SourceDescriptor
 from kartograf.sources.registry import get_source
 
 
-def _source_flag(source: SourceDescriptor) -> str:
-    """``--source`` of a descriptor: the last part of its key (``pl.gugik.bdot10k``)."""
-    return f"--source {source.key.rsplit('.', 1)[-1]}"
+def _product_flag(source: SourceDescriptor) -> str:
+    """``--product`` of a descriptor: the last part of its key (``bdot10k``)."""
+    return f"--product {source.key.rsplit('.', 1)[-1]}"
 
 
 def _national_file_crs() -> list[str]:
@@ -60,8 +60,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     download = commands.add_parser(
         "download",
-        help="Pobierz dane wybranego zrodla (--source)",
-        description="Pobierz dane wybranego zrodla (--source) dla jednego "
+        help="Pobierz dane wybranego produktu (--product)",
+        description="Pobierz dane wybranego produktu (--product) dla jednego "
         "obszaru: --teryt, --sheet, --bbox albo --geometry. BDOT10k obszaru "
         "= paczki kazdego powiatu, ktory obszar przecina (PRG); z --year "
         "paczki z archiwum rocznikow BDOT10k (GML albo SHP, zapis 1:1). "
@@ -76,13 +76,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "1:1).",
     )
 
-    selection = download.add_argument_group("Zrodlo i obszar")
+    selection = download.add_argument_group("Produkt i obszar")
     selection.add_argument(
-        "--source",
-        "-s",
-        choices=LANDCOVER_SOURCES,
+        "--product",
+        choices=LANDCOVER_PRODUCTS,
         default=None,
-        help=f"Zrodlo (wymagane): {LANDCOVER_SOURCE_CHOICES}",
+        help=f"Produkt (wymagany): {LANDCOVER_PRODUCT_CHOICES}",
     )
     selection.add_argument(
         "--teryt",
@@ -104,7 +103,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "Warning przed pobraniem",
     )
 
-    options = download.add_argument_group("Parametry zrodla")
+    options = download.add_argument_group("Parametry produktu")
     options.add_argument(
         "--year",
         type=int,
@@ -191,19 +190,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         _handler=cmd_landcover_download, _task=landcover_task_arguments
     )
 
-    add_list_sources(commands, "landcover", ("landcover",), _source_flag)
+    add_list_sources(commands, "landcover", ("landcover",), _product_flag)
 
     layers = commands.add_parser(
         "list-layers",
-        help="Wypisz warstwy wybranego zrodla",
+        help="Wypisz warstwy wybranego produktu",
         description="Wypisz warstwy BDOT10k, ZABAGED, Data50 i Data250, klasy "
         "BDOO wg rocznikow albo lata CORINE (bez sieci)",
     )
     layers.add_argument(
-        "--source",
-        "-s",
-        choices=LANDCOVER_SOURCES,
+        "--product",
+        choices=LANDCOVER_PRODUCTS,
         default=None,
-        help=f"Zrodlo (wymagane): {LANDCOVER_SOURCE_CHOICES}",
+        help=f"Produkt (wymagany): {LANDCOVER_PRODUCT_CHOICES}",
     )
     layers.set_defaults(_handler=cmd_landcover_list_layers)

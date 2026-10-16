@@ -121,7 +121,7 @@ def test_data_parser_options_cover_manifest_options(command):
         (
             "landcover download",
             [
-                "--source",
+                "--product",
                 "bdot10k",
                 "--teryt",
                 "1465",
@@ -132,7 +132,7 @@ def test_data_parser_options_cover_manifest_options(command):
                 "--keep-raw",
             ],
             {
-                "source": "bdot10k",
+                "product": "bdot10k",
                 "teryt": "1465",
                 "layers": ["SWRS", "PTWP"],
                 "keep_raw": True,
@@ -174,8 +174,18 @@ def test_data_parser_options_cover_manifest_options(command):
         ),
         (
             "landcover download",
-            ["--source", "zabaged", "--whole-country", "--horizontal-crs", "EPSG:3045"],
-            {"source": "zabaged", "whole_country": True, "horizontal_crs": "EPSG:3045"},
+            [
+                "--product",
+                "zabaged",
+                "--whole-country",
+                "--horizontal-crs",
+                "EPSG:3045",
+            ],
+            {
+                "product": "zabaged",
+                "whole_country": True,
+                "horizontal_crs": "EPSG:3045",
+            },
         ),
         (
             "boundaries download",

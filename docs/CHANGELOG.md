@@ -66,6 +66,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `project init` bez `--output`: `Error:` z kodem 1 jak w komendach
     danych (dotad blad parsera, kod 2); `init_project(output_dir=None)` to
     `ValidationError`. Co zrobic: skrypt sprawdzajacy kod 2 - kod 1.
+  - `landcover download` i `landcover list-layers` wybieraja dane przez
+    `--product` jak kazda grupa danych (ADR-044; dotad `--source`/`-s`).
+    `--source` i `-s` koncza sie bledem parsera (kod 2) z podpowiedzia
+    `--product`; `--product soilgrids` (jak dawne `--source soilgrids`)
+    wskazuje grupe `soil`. Komunikaty bledow nazywaja `--product <x>`
+    (np. `--teryt dziala tylko z --product bdot10k ...`), kolumna WYBOR
+    `landcover list-sources` - `--product bdot10k`. Klucz opcji zadania
+    projektu `landcover download` to `product` (dotad `source`). Co
+    zrobic: w skryptach zamien `--source X`/`-s X` na `--product X`;
+    w recznie pisanym `kartograf-project.json` klucz `source` na `product`
+    (`project add` zapisuje nowy klucz).
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -82,7 +93,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   |---|---|
   | `kartograf download --product nmt\|nmpt\|laz ...` | `kartograf elevation download --product nmt\|nmpt\|laz ...` |
   | `kartograf download --product orto ...` | `kartograf imagery download --product orto ...` (bez `--vertical-crs` i `--min-density`; `--resolution` tylko z `--cutout`; `--country pl\|cz\|auto`) |
-  | `kartograf landcover download --source bdot10k\|corine ...` | bez zmian |
+  | `kartograf landcover download --source bdot10k\|corine ...` | `kartograf landcover download --product bdot10k\|corine ...` (ADR-044) |
   | `kartograf landcover download --source soilgrids ...` | `kartograf soil download ...` (bez `--source`) |
   | `kartograf landcover list-layers --source soilgrids` | `kartograf soil list-layers` |
   | `kartograf soilgrids hsg ...` | `kartograf soil hsg ...` |
@@ -392,9 +403,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `--sheet-system` nie
     przelacza juz `--country auto` na PL. Podpowiedz braku pokrycia dla
     PL-1992 nie podaje `--scale`.
-  - CLI `landcover download`: wymagane `--source`, `--output`, `--year`
-    (corine); `landcover list-layers --source`; `soil download`:
-    `--property`/`--depth`/`--stat`; `soil hsg`: `--output` i `--depth`.
+  - CLI `landcover download`: wymagane `--product` (w 0.7.x `--source`),
+    `--output`, `--year` (corine); `landcover list-layers --product`;
+    `soil download`: `--property`/`--depth`/`--stat`; `soil hsg`:
+    `--output` i `--depth`.
     Dla BDOT10k `--format` domyslnie wybiera `GPKG` (bez `--year`); dla
     innych zrodel jest bledem.
   - API: `DownloadManager(output_dir, provider, *, ...)` — oba wymagane,
@@ -665,14 +677,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   plan z czescia pozycji (`--check-updates --plan PLIK`, potem `--upgrade
   --plan PLIK`). Liczone sa pliki bez lokalnej wersji (`--force`:
   wszystkie, `--upgrade --plan`: pozycje planu); opcji obejscia nie ma.
-- BDOO, Data50 i Data250 (ADR-043): trzy zrodla w `landcover download --source`.
+- BDOO, Data50 i Data250 (ADR-043): trzy produkty `landcover download
+  --product`.
   `bdoo` (BDOO GUGiK, 1:250 000): paczka GML wojewodztwa na rocznik
   (`--year` wymagany: 2015, 2021-2026; `--teryt` 2 cyfry, kod powiatu =
   `Error:` z podpowiedzia `--teryt <woj>`; obszar `--bbox`/`--sheet`/
   `--geometry` = paczki wojewodztw jego powiatow z PRG, `Info` z lista,
   wojewodztwo bez paczki w `failed`, `--workers`, linia podsumowania)
   zapisana 1:1 w `landcover/pl_bdoo_<rok>/teryt/<woj>.zip` z etykieta
-  rocznika; `--layers` (klasy rocznika, `landcover list-layers --source
+  rocznika; `--layers` (klasy rocznika, `landcover list-layers --product
   bdoo`) zapisuje ZIP plikow `__OT_<KOD>_<typ>` wybranych klas (czlony
   bajt w bajt, `pl_bdoo_<rok>_<klasy>`), klasa bez pliku w paczce = `Info`
   `classes_absent` (nowy kod `Notice`), brak wszystkich = blad wojewodztwa,
@@ -833,10 +846,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--whole-country --country cz` = `hydro/cz_hynet_gpkg/country/cz.zip`
   (GeoPackage w EPSG:3045, ok. 194 MB, sygnal `http`); `hydro
   list-sources`; biblioteka `download_collection(product="network", ...)`.
-- ZABAGED w `landcover download --source zabaged` (ADR-042 D15): obszar =
+- ZABAGED w `landcover download --product zabaged` (ADR-042 D15): obszar =
   GeoPackage EPSG:5514 z 22 warstwami pokrycia terenu i wod
   (`landcover/cz_zabaged/bbox/<coords>.gpkg`; lista: `landcover list-layers
-  --source zabaged`), bez przeliczania klas na kody BDOT10k;
+  --product zabaged`), bez przeliczania klas na kody BDOT10k;
   `--whole-country --horizontal-crs EPSG:5514|EPSG:3045` = krajowy ZIP
   z feedu ATOM 1:1 (`landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip`,
   5,8/6,7 GB, etykieta = data wydania, sygnal `metadata`; warstwy pod
@@ -934,7 +947,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   GeoPackage w ukladzie uslugi (EPSG:2180) z pelnymi geometriami,
   kompletnosc sprawdzana liczba obiektow uslugi; sygnal swiezosci `none`
   (nowa tresc: `--force`). Opis: `docs/USAGE.md` 1.8, ARCHITECTURE 4.10.
-- Archiwum rocznikow BDOT10k: `landcover download --source bdot10k --year
+- Archiwum rocznikow BDOT10k: `landcover download --product bdot10k --year
   2014..2025 --format GML|SHP` (stan z poczatku roku) zapisuje oryginalna
   paczke powiatu ZIP 1:1 w `landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip`
   z etykieta = rok; identyczne roczniki tego samego powiatu zajmuja miejsce
@@ -1062,7 +1075,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `pyogrio` instaluje sie razem z pakietem; bez niego pobranie obiektow
   obszaru konczy sie bledem importu (paczki i pozostale komendy dzialaja).
 - `landcover download --format` przyjmuje takze `GML`, wylacznie z `--year`
-  (archiwum rocznikow BDOT10k); `--year` przy `--source bdot10k` oznacza
+  (archiwum rocznikow BDOT10k); `--year` przy `--product bdot10k` oznacza
   rocznik archiwum (dotad tylko CORINE). Bez `--year` dziala jak dotad
   (biezace paczki GPKG/SHP); `--format GML` bez `--year` to `Error:`
   z podpowiedzia. Co zrobic: nic.
@@ -1076,17 +1089,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 - Komunikaty przegladu UX 0.8.0: nieznana flaga zglaszana przez komende
   (jej `usage`) z lista komend, ktore ja maja, i podpowiedzia typowych
-  pomylek (`landcover --product` -> `--source`, `soil download --product`
-  -> `--property`, `hydro --sheet`); `--bbox -447000,...` po spacji dziala
-  bez `=`; brak wyboru wymienia wybory produktu w kraju zadania (HY-NET CZ
-  bez `--teryt`/`--ku`/`--sheet`, osnowy z wartosciami `--network`, CORINE
-  i SoilGrids `--sheet, --bbox albo --geometry`); flagi zamiast kluczy
-  rejestru (`--sheet-system`, `--keep-raw`, `--teryt`) i nazwa produktu
-  w "nie dotyczy"; zrodla CZ `landcover` z godlem PL i `--teryt` 2 cyfr
-  BDOT10k z podpowiedzia; `--layers` bez wzgledu na wielkosc liter;
-  systemy godel jako `PL-1992`/`SM5`; poprawna odmiana liczebnikow ("2
-  pliki", "dla 1 arkusza", "Pobieranie kafli LAZ"); blad "brak obiektow
-  w obszarze" podaje obszar zadania w ukladzie uzytkownika.
+  pomylek (`landcover --source`/`-s` -> `--product`, `soil download
+  --product` -> `--property`, `hydro --sheet`); `--bbox -447000,...` po
+  spacji dziala bez `=`; brak wyboru wymienia wybory produktu w kraju
+  zadania (HY-NET CZ bez `--teryt`/`--ku`/`--sheet`, osnowy z wartosciami
+  `--network`, CORINE i SoilGrids `--sheet, --bbox albo --geometry`);
+  flagi zamiast kluczy rejestru (`--sheet-system`, `--keep-raw`,
+  `--teryt`) i nazwa produktu w "nie dotyczy"; zrodla CZ `landcover`
+  z godlem PL i `--teryt` 2 cyfr BDOT10k z podpowiedzia; `--layers` bez
+  wzgledu na wielkosc liter; systemy godel jako `PL-1992`/`SM5`; poprawna
+  odmiana liczebnikow ("2 pliki", "dla 1 arkusza", "Pobieranie kafli
+  LAZ"); blad "brak obiektow w obszarze" podaje obszar zadania w ukladzie
+  uzytkownika.
 - LAZ PL `--sheet`: kafle wybierane z ramy arkusza (w EPSG:2180 obrocony
   czworokat), nie z jej obwiedni, a kafel musi siegac w obszar glebiej niz
   1 m (`tolerance_m`): sasiedzi stykajacy sie z rama krawedzia albo

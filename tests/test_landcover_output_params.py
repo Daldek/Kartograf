@@ -227,7 +227,7 @@ class TestSoilGridsStore:
     def test_soilgrids_teryt_not_supported_before_network(self, tmp_path):
         session = FakeSoilGrids()
         with pytest.raises(
-            ValidationError, match="--teryt dziala tylko z --source bdot10k"
+            ValidationError, match="--teryt dziala tylko z --product bdot10k"
         ):
             _soil(tmp_path, session).download(teryt="1465", **CLAY)
         assert session.capabilities == 0
@@ -305,7 +305,7 @@ class TestCorineStore:
 
     def test_corine_teryt_not_supported(self, tmp_path):
         with pytest.raises(
-            ValidationError, match="--teryt dziala tylko z --source bdot10k"
+            ValidationError, match="--teryt dziala tylko z --product bdot10k"
         ):
             _corine(tmp_path, FakeCorine()).download(teryt="1465", year=2018)
 

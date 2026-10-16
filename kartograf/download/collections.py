@@ -611,10 +611,8 @@ def selection_choices(descriptor_key: str) -> str:
 
 def _subject_flag(descriptor: SourceDescriptor) -> str:
     """The flag choosing a source in messages: ``--product admin`` (a
-    collection product), ``--source zabaged`` (a land cover source)."""
-    if descriptor.storage_subdir.split("/", 1)[0] == _LANDCOVER_GROUP:
-        return f"--source {subject(descriptor)}"
-    return f"--product {descriptor.product}"
+    collection product), ``--product zabaged`` (a land cover product)."""
+    return f"--product {subject(descriptor)}"
 
 
 def _choice_text(descriptors: Mapping[str, SourceDescriptor], country: object) -> str:
@@ -687,7 +685,8 @@ def _cuzk_sheet_channel(descriptor: SourceDescriptor) -> bool:
 
 def subject(descriptor: SourceDescriptor) -> str:
     """How messages name a source: the product of a collection group
-    (``admin``), the ``--source`` of a land cover source (``zabaged``)."""
+    (``admin``), the ``--product`` of a land cover source - the last part of
+    its key (``zabaged``)."""
     if descriptor.storage_subdir.split("/", 1)[0] == _LANDCOVER_GROUP:
         return descriptor.key.rsplit(".", 1)[-1]
     return descriptor.product
@@ -1181,7 +1180,8 @@ def _selection_kind(args: dict, descriptors: Mapping[str, SourceDescriptor]) -> 
 
 
 def _is_landcover(descriptors: Mapping[str, SourceDescriptor]) -> bool:
-    """A land cover source (``--source``) rather than a collection product."""
+    """A land cover source (``landcover download``) rather than a collection
+    product."""
     return any(
         d.storage_subdir.split("/", 1)[0] == _LANDCOVER_GROUP
         for d in descriptors.values()

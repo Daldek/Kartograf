@@ -357,7 +357,7 @@ class TestLandCoverCLI:
         """Test list-layers for BDOT10k."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "list-layers", "--source", "bdot10k"])
+        result = main(["landcover", "list-layers", "--product", "bdot10k"])
         assert result == 0
         captured = capsys.readouterr()
         assert "PTLZ" in captured.out
@@ -367,7 +367,7 @@ class TestLandCoverCLI:
         """Test list-layers for CORINE."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "list-layers", "--source", "corine"])
+        result = main(["landcover", "list-layers", "--product", "corine"])
         assert result == 0
         captured = capsys.readouterr()
         assert "2018" in captured.out  # Most recent available year
@@ -378,7 +378,7 @@ class TestLandCoverCLI:
         from kartograf.cli.commands import main
         from kartograf.download.collections import collection_layers
 
-        result = main(["landcover", "list-layers", "--source", "zabaged"])
+        result = main(["landcover", "list-layers", "--product", "zabaged"])
         assert result == 0
         listed = [
             line.split()[0]
@@ -395,7 +395,7 @@ class TestLandCoverCLI:
         from kartograf.cli.commands import main
         from kartograf.download.collections import collection_classes
 
-        assert main(["landcover", "list-layers", "--source", "bdoo"]) == 0
+        assert main(["landcover", "list-layers", "--product", "bdoo"]) == 0
         out = capsys.readouterr().out
         blocks = re.findall(r"^  (--year \d{4}) \((\d+)\):\n((?:    .*\n)+)", out, re.M)
         listed = {
@@ -410,7 +410,7 @@ class TestLandCoverCLI:
         """Test download without selection method."""
         from kartograf.cli.commands import main
 
-        result = main(["landcover", "download", "--source", "bdot10k", "-o", "unused"])
+        result = main(["landcover", "download", "--product", "bdot10k", "-o", "unused"])
         assert result == 1
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
@@ -423,7 +423,7 @@ class TestLandCoverCLI:
             [
                 "landcover",
                 "download",
-                "--source",
+                "--product",
                 "bdot10k",
                 "-o",
                 "unused",
@@ -451,7 +451,7 @@ class TestLandCoverCLI:
                 [
                     "landcover",
                     "download",
-                    "--source",
+                    "--product",
                     "bdot10k",
                     f"--bbox={bbox}",
                     "-o",
@@ -492,7 +492,10 @@ class TestLandCoverInvalidOptions:
                 [*_SOIL, "--property", "soc", "--depth", "0-5cm", "--stat", "median"],
                 "Nieprawidlowa statystyka",
             ),
-            (["landcover", "download", "--source", "corine", "--year", "1999"], "1999"),
+            (
+                ["landcover", "download", "--product", "corine", "--year", "1999"],
+                "1999",
+            ),
         ],
     )
     def test_invalid_option_is_user_error(self, command, fragment, tmp_path, capsys):
@@ -529,7 +532,7 @@ class TestBdot10kShpFormat:
                 [
                     "landcover",
                     "download",
-                    "--source",
+                    "--product",
                     "bdot10k",
                     "--teryt",
                     "1465",
@@ -1600,11 +1603,11 @@ class TestLandCoverNoSideEffectsOnInit:
         "argv",
         [
             ["landcover", "list-sources"],
-            ["landcover", "list-layers", "--source", "bdot10k"],
-            ["landcover", "list-layers", "--source", "corine"],
-            ["landcover", "list-layers", "--source", "zabaged"],
-            ["landcover", "list-layers", "--source", "bdoo"],
-            ["landcover", "list-layers", "--source", "data50"],
+            ["landcover", "list-layers", "--product", "bdot10k"],
+            ["landcover", "list-layers", "--product", "corine"],
+            ["landcover", "list-layers", "--product", "zabaged"],
+            ["landcover", "list-layers", "--product", "bdoo"],
+            ["landcover", "list-layers", "--product", "data50"],
             ["soil", "list-layers"],
             ["soil", "list-sources"],
             ["elevation", "list-sources"],
@@ -1914,7 +1917,7 @@ class TestBdot10kSidecarSource:
                 [
                     "landcover",
                     "download",
-                    "--source",
+                    "--product",
                     "bdot10k",
                     "--teryt",
                     "0262",
@@ -1942,7 +1945,7 @@ class TestLandCoverManagerCache:
 
 
 class TestLandCoverCliManyCounties:
-    """``landcover download --source bdot10k`` through ``main`` (cwd = tmp_path:
+    """``landcover download --product bdot10k`` through ``main`` (cwd = tmp_path:
     the CLI ``MetadataCache`` lands in cwd)."""
 
     def test_cli_bbox_downloads_every_county(self, tmp_path, capsys, monkeypatch):
@@ -1970,7 +1973,7 @@ class TestLandCoverCliManyCounties:
                 [
                     "landcover",
                     "download",
-                    "--source",
+                    "--product",
                     "bdot10k",
                     "--bbox",
                     "340000,290000,350000,300000",
@@ -2001,7 +2004,7 @@ class TestLandCoverCliManyCounties:
                 [
                     "landcover",
                     "download",
-                    "--source",
+                    "--product",
                     "bdot10k",
                     "--bbox",
                     "340000,290000,350000,300000",

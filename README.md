@@ -13,11 +13,12 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 
 ## Obsługiwane dane
 
-Komendy są pogrupowane wg typu danych (`kartograf <grupa> download`); produkt
-wybiera `--product` (w `landcover` — `--source`). Źródła grupy i wartości
-wyboru wypisuje `kartograf <grupa> list-sources`.
+Komendy są pogrupowane wg typu danych (`kartograf <grupa> download`); dane
+wybiera `--product` w każdej grupie (w `soil` — `--property`, `--depth`,
+`--stat`). Źródła grupy i wartości wyboru wypisuje
+`kartograf <grupa> list-sources`.
 
-| Grupa | Dane (wartość `--product`, w `landcover` — `--source`) |
+| Grupa | Dane (wartość `--product`) |
 |---|---|
 | `elevation` | NMT (`nmt`): PL — siatki GUGiK 0,15–10 m, archiwa GUGiK jako pliki źródłowe, NMT 100 m (pliki XYZ województw); CZ — DMR 5G/4G (2 m / 5 m). NMPT (`nmpt`): PL — 0,5 / 0,6 / 1 m; CZ — DMP OK 0,5 m, DMP 1G 2 m. Chmury punktów LIDAR (`laz`): PL (GUGiK) i CZ (`--model` `dmr5g`, `dmr4g`, `dmp1g`, `dmpok`). Warstwice ZABAGED (`contours`, CZ): arkusze SM5, SHP albo DGN. Raport dostępności bez pobierania: `elevation availability` |
 | `imagery` | Ortofotomapa (`orto`): PL — arkusze GUGiK wg kampanii (np. 25 cm, 10 cm) albo wycinek WCS Standard/High; CZ — arkusze SM5 CUZK (JPEG z plikami JGW). PL: obrazy intensywności LIDAR (`intensity`), prawdziwa ortofotomapa wybranych miast (`true-orto`, arkusze i wycinek WCS), ortofotomapa ukośna (`oblique-orto`, cztery kierunki widoku) |
@@ -70,7 +71,7 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 kartograf imagery download --bbox 566000,243000,566500,243500 --country pl --product orto --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
 
 # Dane CZ (CUZK): ZABAGED, granice RUIAN, sieć wód HY-NET (współrzędne EPSG:5514 jako --bbox=...)
-kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
+kartograf landcover download --product zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
 kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
 kartograf hydro download --product network --country cz --whole-country -o ./data
 
@@ -78,14 +79,14 @@ kartograf hydro download --product network --country cz --whole-country -o ./dat
 kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 
 # Pokrycie terenu i grupy hydrologiczne gleb
-kartograf landcover download --source bdot10k --teryt 1465 -o ./data
+kartograf landcover download --product bdot10k --teryt 1465 -o ./data
 kartograf soil hsg --sheet N-34-130-D --stats -o ./data --depth 0-5cm
 
 # Granice, ewidencja, modele 3D budynków i archiwum BDOT10k (GUGiK)
 kartograf boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000 -o ./data
 kartograf cadastre download --product map --teryt 1261 -o ./data
 kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
-kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
+kartograf landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
 
 # Nazwy geograficzne i gotowe arkusze map (katalog danych poza repozytorium)
 kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o ~/kartograf-data

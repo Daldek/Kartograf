@@ -103,14 +103,14 @@ def test_options_json_roundtrip(tmp_path):
         (absolute, absolute.as_posix(), absolute),
     ):
         landcover = {
-            "source": "bdot10k",
+            "product": "bdot10k",
             "geometry": given,
             "layers": ("SWRS", "PTWP"),
             "keep_raw": True,
         }
         data = options_to_json(LANDCOVER, landcover)
         assert data == {
-            "source": "bdot10k",
+            "product": "bdot10k",
             "geometry": saved,
             "layers": ["SWRS", "PTWP"],
             "keep_raw": True,
@@ -125,7 +125,10 @@ def test_options_json_roundtrip(tmp_path):
 @pytest.mark.parametrize(
     ("command", "options"),
     [
-        (LANDCOVER, {"source": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"}),
+        (
+            LANDCOVER,
+            {"product": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"},
+        ),
         (SOIL, {"sheet": HSG_SHEET, "timeout": 30}),
         (ELEVATION, {**PL_SHEET, "output_dir": "data"}),
         (ELEVATION, {**PL_SHEET, "update": "upgrade"}),
@@ -135,7 +138,7 @@ def test_options_json_roundtrip(tmp_path):
         (ELEVATION, {**PL_SHEET, "year": True}),
         (ELEVATION, {**PL_SHEET, "bbox": [1, 2, 3, 4]}),
         (ELEVATION, {**PL_SHEET, "resolution": {"pl": 1}}),
-        (LANDCOVER, {"source": "bdot10k", "teryt": "1465", "layers": "SWRS"}),
+        (LANDCOVER, {"product": "bdot10k", "teryt": "1465", "layers": "SWRS"}),
         (HYDRO, {"product": "network", "teryt": "1261"}),
     ],
     ids=[
@@ -163,14 +166,14 @@ def test_options_reject_unknown_and_foreign(command, options):
     [
         (
             LANDCOVER,
-            {"source": "soilgrids", "bbox": BDOT_BBOX},
-            "--source 'soilgrids': nieznana wartosc",
+            {"product": "soilgrids", "bbox": BDOT_BBOX},
+            "--product 'soilgrids': nieznana wartosc",
         ),
         (IMAGERY, {"product": "nmt", "sheet": G}, "--product 'nmt': nieznana wartosc"),
         (ELEVATION, {"sheet": G}, "--product wymagane: nmt ("),
-        (LANDCOVER, {"teryt": "1465"}, "--source wymagane: bdot10k ("),
+        (LANDCOVER, {"teryt": "1465"}, "--product wymagane: bdot10k ("),
     ],
-    ids=["soilgrids-in-landcover", "nmt-in-imagery", "no-product", "no-source"],
+    ids=["soilgrids-in-landcover", "nmt-in-imagery", "no-product", "no-landcover"],
 )
 def test_choice_of_another_command_rejected(tmp_path, command, options, library):
     data = options_to_json(command, options)
@@ -193,7 +196,7 @@ def test_choice_of_another_command_rejected(tmp_path, command, options, library)
         {"year": "2024"},
         {"geometry": ""},
         {"resolution": ["1m"]},
-        {"source": "bdot10k"},
+        {"keep_raw": True},
         [],
     ],
 )
@@ -217,9 +220,9 @@ VALIDATION = {
         lambda out, o: download_data(output_dir=out, cache=False, **o),
     ),
     "landcover download": (
-        {"source": "bdot10k", "teryt": "1465"},
-        {"source": "corine", "bbox": _BBOX},
-        lambda out, o: LandCoverManager(out, o.pop("source"), cache=False).download(
+        {"product": "bdot10k", "teryt": "1465"},
+        {"product": "corine", "bbox": _BBOX},
+        lambda out, o: LandCoverManager(out, o.pop("product"), cache=False).download(
             **o
         ),
     ),
@@ -320,7 +323,7 @@ def test_files_auto_partial_success_incomplete(tmp_path):
 
 def test_files_bdot_area_failed_powiat_incomplete(tmp_path):
     with bdot(["0208", "0224", "0261"], FakePackages(fail={"0224"})):
-        result = _run(LANDCOVER, tmp_path, {"source": "bdot10k", "bbox": BDOT_BBOX})
+        result = _run(LANDCOVER, tmp_path, {"product": "bdot10k", "bbox": BDOT_BBOX})
     files = LANDCOVER.files(result)
     assert not files.complete
     assert _roles(files) == [("output", "0208"), ("output", "0261")]
@@ -332,7 +335,7 @@ def test_files_bdot_keep_raw_has_raw_role(tmp_path):
         result = _run(
             LANDCOVER,
             tmp_path,
-            {"source": "bdot10k", "teryt": "1465", "keep_raw": True},
+            {"product": "bdot10k", "teryt": "1465", "keep_raw": True},
         )
     files = LANDCOVER.files(result)
     assert files.complete and _roles(files) == [("output", "1465"), ("raw", "1465")]

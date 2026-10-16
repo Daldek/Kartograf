@@ -1,5 +1,5 @@
 """CLI and public API produce identical versioned stores for the E4 sources
-(``landcover download --source bdoo|data50|data250`` =
+(``landcover download --product bdoo|data50|data250`` =
 ``LandCoverManager(out, source).download``): BDOO of a voivodeship and of an
 area with ``--layers``, Data50 objects of an area, the Data250 national file,
 and the same first error for invalid choices (recorded answers of
@@ -22,7 +22,7 @@ pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 def _landcover(tmp_path, source: str, cli_args: list[str], **api_kwargs):
     return run_both(
-        ["landcover", "download", "--source", source, *cli_args],
+        ["landcover", "download", "--product", source, *cli_args],
         lambda out: LandCoverManager(out, source).download(**api_kwargs),
         tmp_path,
     )

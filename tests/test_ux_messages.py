@@ -143,7 +143,7 @@ def test_cz_source_with_a_pl_sheet_code_names_the_source(tmp_path):
     with pytest.raises(ValidationError) as error:
         LandCoverManager(tmp_path, "zabaged").validate_request(sheet="N-34-130-D")
     assert str(error.value) == (
-        "--source zabaged (CZ): godlo N-34-130-D nie wyznacza obszaru CZ - podaj "
+        "--product zabaged (CZ): godlo N-34-130-D nie wyznacza obszaru CZ - podaj "
         "--bbox (np. w EPSG:5514) albo --geometry"
     )
 
@@ -181,9 +181,14 @@ def test_unknown_flag_is_reported_by_the_command_with_its_owners(capsys):
         "boundaries, cadastre, geodesy, landcover, models3d download). Opcje: "
         "kartograf elevation download --help"
     ) in err
-    with pytest.raises(SystemExit):
-        main(["landcover", "download", "--product", "bdot10k"])
-    assert "landcover wybiera zrodlo flaga --source" in capsys.readouterr().err
+    # UX-08: landcover chose its data with --source until 0.8.0
+    for flag in ("--source", "-s"):
+        with pytest.raises(SystemExit):
+            main(["landcover", "download", flag, "bdot10k"])
+        assert (
+            f"nieznana opcja {flag} (od 0.8.0 produkt wybiera --product, np. "
+            "--product bdot10k; lista: kartograf landcover list-sources)"
+        ) in capsys.readouterr().err
 
 
 def test_flag_prefixes_are_not_abbreviations(capsys):
@@ -253,7 +258,7 @@ def test_enumerated_values_are_taken_in_any_case(tmp_path, capsys):
 
     out = tmp_path / "store"
     assert main([
-        "landcover", "download", "--source", "bdot10k", "--teryt", "1465",
+        "landcover", "download", "--product", "bdot10k", "--teryt", "1465",
         "--format", "shp", "-o", str(out), "--check-updates",
     ]) == 0  # fmt: skip
     assert capsys.readouterr().out == (
