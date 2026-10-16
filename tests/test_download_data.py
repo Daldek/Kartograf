@@ -281,7 +281,7 @@ def test_laz_start_progress_uses_resolved_pl_vertical_crs(tmp_path):
             cache=False,
         )
     assert report.ok
-    assert events == [DownloadProgress(0, 1, "kafle LAZ", "start", "WFS GUGiK, KRON86")]
+    assert events == [DownloadProgress(0, 1, "kafli LAZ", "start", "WFS GUGiK, KRON86")]
 
 
 def _border_tracks(order: list[str], *, cz_error: Exception | None = None):

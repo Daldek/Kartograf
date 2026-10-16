@@ -31,6 +31,7 @@ from kartograf.providers.pl.gugik_orto import (
     wcs_cutout_channels,
 )
 from kartograf.sources.descriptor import SheetIndexParams
+from kartograf.sources.registry import sources_for
 from kartograf.sources.variants import (
     CZ_LAZ_VERTICAL_TEXT,
     CZ_VERTICAL_TEXT,
@@ -90,6 +91,16 @@ def require_product(product: str | None, products: Sequence[str]) -> None:
             f"--product {product!r}: nieznana wartosc - dostepne: "
             f"{product_choices(products)}"
         )
+
+
+def product_directory(product: str) -> str:
+    """Top directory of the files of a ``download_data`` product in the store
+    (``nmt``, ``orto``): the first element of its sources' storage segments."""
+    tops = dict.fromkeys(
+        source.storage_subdir.split("/", 1)[0]
+        for source in sources_for(product=product)
+    )
+    return "|".join(tops) or product
 
 
 COUNTRY_CHOICES = (
@@ -350,6 +361,11 @@ def pl_option_error(
     res_hint = _per_country_hint(task.resolution, "--resolution", countries)
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
     source_file = fmt is not None and fmt != "ASC"
+    if product == "laz" and resolution is not None:
+        return (
+            "--resolution nie dotyczy LAZ - chmura punktow nie ma siatki; pomin "
+            "--resolution"
+        )
 
     if product in _SHEET_PRODUCTS:
         if cutout:
@@ -409,8 +425,22 @@ def pl_option_error(
         if error is not None:
             return f"{error}{vcrs_hint}"
 
-    if product == "laz":
-        return None  # LAZ: per-tile system from WFS, no sheet scale
+    if product == "laz":  # per-tile system from WFS, no sheet scale
+        flags = [
+            flag
+            for flag, value in (
+                ("--sheet-system", task.sheet_system),
+                ("--scale", task.scale),
+            )
+            if value is not None
+        ]
+        if flags:
+            verb = "nie dotycza" if len(flags) > 1 else "nie dotyczy"
+            return (
+                f"{' i '.join(flags)} {verb} LAZ PL - uklad kazdego kafla pochodzi "
+                f"z WFS GUGiK; pomin {' i '.join(flags)}"
+            )
+        return None
     sheet_system = task.sheet_system
     scale = task.scale
     systems = index.systems if index is not None else _SHEET_SYSTEMS
@@ -678,10 +708,14 @@ def validate_request_bbox(bbox: BBox) -> None:
 
 
 def validate_area_choice(
-    sheet: str | None, bbox: BBox | None, geometry: object | None
+    sheet: str | None,
+    bbox: BBox | None,
+    geometry: object | None,
+    layer: object | None = None,
 ) -> None:
-    """Exactly one area choice and a valid bbox (texts shared by every
-    command taking ``--sheet/--bbox/--geometry``; no network)."""
+    """Exactly one area choice, a valid bbox and ``layer`` only with
+    ``geometry`` (texts shared by every command taking
+    ``--sheet/--bbox/--geometry``; no network)."""
     # the CLI parses --bbox before anything else: the same first error
     if bbox is not None:
         validate_request_bbox(bbox)
@@ -692,6 +726,30 @@ def validate_area_choice(
         )
     if provided == 0:
         raise ValidationError("Podaj wybor obszaru: --sheet, --bbox albo --geometry")
+    check_layer(layer, geometry)
+
+
+def check_layer(layer: object, geometry: object, *, landcover: bool = False) -> None:
+    """``layer`` names a layer of the ``geometry`` file; without a geometry
+    file it would be ignored. ``landcover``: the message points to
+    ``--layers`` (the data layers of BDOT10k and BDOO).
+
+    Raises
+    ------
+    ValidationError
+        ``layer`` without ``geometry``.
+    """
+    if layer is not None and geometry is None:
+        hint = "; warstwy danych BDOT10k i BDOO wybiera --layers" if landcover else ""
+        raise ValidationError(
+            f"--layer dotyczy tylko --geometry (warstwa pliku GPKG z obszarem){hint}"
+        )
+
+
+def output_required(directory: str) -> str:
+    """Error text of a request without ``output_dir`` (every store command):
+    ``directory`` = the top directory of its files (``nmt``, ``boundaries``)."""
+    return f"--output wymagane: katalog magazynu (pliki w <KATALOG>/{directory}/...)"
 
 
 def year_bounds(
@@ -731,7 +789,7 @@ def validate_request(task: SimpleNamespace) -> None:
     first (``year="2018"``, ``cutout="no"``: ``ValidationError``, no
     conversion; STANDARDS 11.2).
     """
-    validate_area_choice(task.sheet, task.bbox, task.geometry)
+    validate_area_choice(task.sheet, task.bbox, task.geometry, task.layer)
     for flag, name in (
         ("--cutout", "cutout"),
         ("--all-campaigns", "all_campaigns"),
@@ -748,10 +806,7 @@ def validate_request(task: SimpleNamespace) -> None:
             f"{PRODUCT_CHOICES}"
         )
     if task.output_dir is None:
-        raise ValidationError(
-            "--output wymagane: katalog wyniku (pliki trafiaja do "
-            "<KATALOG>/<produkt>/<segment>/...)"
-        )
+        raise ValidationError(output_required(product_directory(task.product)))
     if task.sheet is None and task.country is None:
         raise ValidationError(
             f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
@@ -989,6 +1044,8 @@ def resolve_pl_options(
             ).label
     task.resolution = resolution
     task.vertical_crs = vertical_crs
+    if task.product == "laz":
+        return  # every tile has its system from the WFS index (no sheet system)
     if code_system is not None:
         task.sheet_system = code_system
     elif task.cutout:

@@ -26,14 +26,14 @@ AUTO_AREA_OUTSIDE      info     ``auto``: part of the area outside PL/CZ
 AUTO_PARTIAL_SUCCESS   warning  ``auto``: one country failed, another succeeded
 LEGACY_CAMPAIGNS_DIR   info     0.7.x ``kampanie/`` directory present
 NEWER_AVAILABLE        info     (DownloadManager) newer campaign, local used
-UNVERIFIED_LOCAL       warning  (DownloadManager) index down, local used
+CHECK_FAILED           warning  local version used, source check failed (also
+                                a GUGiK index down in DownloadManager)
 NO_COVERAGE_SOME       warning  some sheets without GUGiK data, >= 1 file
 NO_COVERAGE_HINT       info     provider hints for sheets without data
 BETTER_COVERAGE        info     older flight with better coverage
 LINK_OUTSIDE_RANGE     info     link kept on a flight outside the request
 SHEET_CRS_MISMATCH     warning  sheet file CRS differs from the sheet code
 INCOMPLETE_CAMPAIGN    warning  newest campaign declares an incomplete sheet
-CHECK_FAILED           warning  local version used, source check failed
 UNVERIFIED_LOCAL       info     ``upgrade``: local version without a signal
 CUTOUT_SIZE            info     (PL cutouts) several WCS requests or >= 1 GiB
 ALL_NODATA             warning  (cutouts, CZ sheet) raster without data
@@ -65,7 +65,11 @@ from kartograf.download.area import (
     resolve_geometry_layer,
 )
 from kartograf.download.arguments import require_int
-from kartograf.download.countries import countries_for_bbox, country_bbox
+from kartograf.download.countries import (
+    countries_for_bbox,
+    country_bbox,
+    outside_country,
+)
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.cz_contours import PRODUCT as CONTOURS
 from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
@@ -103,11 +107,15 @@ from kartograf.notices import (
     LINK_OUTSIDE_RANGE,
     NO_COVERAGE_HINT,
     NO_COVERAGE_SOME,
+    OF_SHEETS,
+    OF_TILES,
     SHEET_CRS_MISMATCH,
     SHEET_LIST,
+    SHEETS,
     UNVERIFIED_LOCAL,
     Notice,
     NoticeSink,
+    count_text,
 )
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
@@ -513,13 +521,13 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
         country = task.country
         if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
-                f"Godlo '{task.sheet}' nalezy do systemu {system.id} "
+                f"Godlo '{task.sheet}' nalezy do systemu {system.name} "
                 f"(kraj {system.country}), a podano --country {country}"
             )
         if not sources_for(country=system.country, product=task.product):
             raise ValidationError(
                 f"--product {task.product} nie ma danych {system.country} - godlo "
-                f"'{task.sheet}' nalezy do systemu {system.id} (kraj "
+                f"'{task.sheet}' nalezy do systemu {system.name} (kraj "
                 f"{system.country}); podaj godlo kraju produktu"
             )
         if system.country == "CZ":
@@ -648,6 +656,11 @@ def _dispatch_area(
     require_cz_cutout(task, countries)
     if "PL" in countries:
         reject_campaign_opts_with_cutout(task)
+    if task.country != "auto":
+        flag = "--bbox" if filepath is None else "--geometry"
+        error = outside_country(bbox, countries[0], flag=flag)
+        if error is not None:
+            raise ValidationError(error)
 
     parent_request = parent_request_for(bbox, countries)
     cz_crs = (
@@ -773,6 +786,9 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
         bbox = cz_geometry_bbox(
             task.geometry, task.layer, task.horizontal_crs or "EPSG:5514"
         )
+        error = outside_country(bbox, "CZ", flag="--geometry")
+        if error is not None:
+            raise ValidationError(error)
         return _download_cz(
             task, run, bbox=bbox, parent_request=parent_request_for(bbox, ("CZ",))
         )
@@ -933,7 +949,7 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
     report = manager.download_sheets(
         sheets, update="upgrade", plan=run.loaded, on_progress=_progress(run, manager)
     )
-    reported = any(n.code == UNVERIFIED_LOCAL for n in report.notices)
+    reported = any(n.code == CHECK_FAILED for n in report.notices)
     for sheet, files in report.files.items():
         for file in files:
             run.add(
@@ -1025,7 +1041,7 @@ def _download_pl_code(
         return run.fail(task.sheet, "PL", f"{prefix}{e}", "download")
     if expanded:
         return _finish_pl_sheets(task, run, result, prefix)
-    reported = any(n.code == UNVERIFIED_LOCAL for n in result.notices)
+    reported = any(n.code == CHECK_FAILED for n in result.notices)
     for file in result.files.get(parsed.sheet, ()):
         run.add(
             parsed.sheet,
@@ -1303,7 +1319,7 @@ def _finish_pl_sheets(
     """
     paths = _result_paths(result)
     _sheet_sidecar_notices(task, run, result, paths)
-    reported = any(n.code == UNVERIFIED_LOCAL for n in result.notices)
+    reported = any(n.code == CHECK_FAILED for n in result.notices)
     for sheet, files in result.files.items():
         for file in files:
             run.add(
@@ -1320,7 +1336,8 @@ def _finish_pl_sheets(
         run.sink.emit(
             "warning",
             NO_COVERAGE_SOME,
-            f"{prefix}GUGiK nie ma danych dla {len(missing)} z {total} arkuszy "
+            f"{prefix}GUGiK nie ma danych dla {len(missing)} z "
+            f"{count_text(total, *OF_SHEETS)} "
             f"({shown}) - pominiete (skorowidz GUGiK nie ma tych arkuszy dla "
             "wybranego produktu i rozdzielczosci, np. morze, obszar za granica, "
             f"brak NMT 5 m w czesci kraju); pobrano {len(paths)}",
@@ -1334,7 +1351,8 @@ def _finish_pl_sheets(
         return run.fail(
             "PL",
             "PL",
-            f"{prefix}{len(hard)} z {total} arkuszy nie pobrano (blad pobrania, "
+            f"{prefix}{len(hard)} z {count_text(total, *OF_SHEETS)} nie pobrano "
+            "(blad pobrania, "
             f"nie brak danych): {causes} - ponow pobranie",
             "download",
         )
@@ -1343,7 +1361,8 @@ def _finish_pl_sheets(
         return run.fail(
             "PL",
             "PL",
-            f"{prefix}GUGiK nie ma danych dla zadnego z {total} arkuszy obszaru",
+            f"{prefix}GUGiK nie ma danych dla zadnego z "
+            f"{count_text(total, *OF_SHEETS)} obszaru",
             "no_coverage",
         )
     return 0
@@ -1470,7 +1489,7 @@ def _crs_mismatch(run: _Run, paths: list[Path]) -> None:
     run.sink.emit(
         "warning",
         SHEET_CRS_MISMATCH,
-        f"{len(found)} arkuszy GUGiK opublikowano w innym ukladzie "
+        f"{count_text(len(found), *SHEETS)} GUGiK opublikowano w innym ukladzie "
         f"niz wskazuje godlo: {shown} - sidecar opisuje uklad pliku "
         "(horizontal_crs); deklaracja rekordu w extra.source.declared_crs",
     )
@@ -1503,7 +1522,8 @@ def _better_coverage(run: _Run, result: DownloadResult, paths: list[Path]) -> No
     if not better:
         return
     lines = [
-        f"dla {len(better)} arkuszy starszy lot z przedzialu ma wieksze "
+        f"dla {count_text(len(better), *OF_SHEETS)} starszy lot z przedzialu ma "
+        "wieksze "
         "pokrycie niz najnowszy (dowiazanie wskazuje najnowszy):"
     ]
     shown = dict(sorted(better.items())[:10])
@@ -1992,7 +2012,7 @@ def _download_pl_laz(
     if run.on_progress is not None:
         _announcer(
             run.on_progress,
-            "kafle LAZ",
+            "kafli LAZ",
             f"WFS GUGiK, {country_value(task.vertical_crs, 'PL')}",
         )()
     on_progress = run.on_progress
@@ -2020,7 +2040,8 @@ def _download_pl_laz(
         return run.fail(
             "PL",
             "PL",
-            f"{len(result.failed)} z {len(result.tiles)} kafli LAZ nie pobrano "
+            f"{len(result.failed)} z {count_text(len(result.tiles), *OF_TILES)} "
+            "LAZ nie pobrano "
             f"(blad pobrania): {names} - ponow pobranie{details}",
             "download",
         )

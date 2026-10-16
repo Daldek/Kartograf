@@ -24,6 +24,7 @@ BDOO, Data50, Data250) on its requests - both on the plan track
 import concurrent.futures
 import logging
 import os
+import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -51,6 +52,7 @@ from kartograf.download.collections import (
     plan_request,
     run_job,
     run_request,
+    selection_choices,
 )
 from kartograf.download.fetch import (
     EditionLookup,
@@ -69,7 +71,7 @@ from kartograf.download.fetch import (
     validate_update,
 )
 from kartograf.download.manager import DownloadProgress
-from kartograf.download.options import validate_request_bbox
+from kartograf.download.options import check_layer, validate_request_bbox
 from kartograf.download.plan import (
     PlanItem,
     Track,
@@ -127,7 +129,9 @@ LANDCOVER_SOURCE_CHOICES = ", ".join(
     f"{name} ({d.name}, {d.country})" for name, d in _LANDCOVER.items()
 )
 # How messages name the sources with TERYT units (``teryt``).
-_TERYT_SOURCES = "BDOT10k (powiat, 4 cyfry) i BDOO (wojewodztwo, 2 cyfry)"
+_TERYT_SOURCES = "--source bdot10k (powiat, 4 cyfry) albo bdoo (wojewodztwo, 2 cyfry)"
+# The area selections of a source without TERYT units (CORINE, SoilGrids).
+_AREA_CHOICES = "--sheet, --bbox albo --geometry"
 
 # Options belonging to a different source are input errors; options not
 # belonging to any source are programming errors (e.g. removed output_path).
@@ -889,7 +893,7 @@ class LandCoverManager:
             )
         if teryt is not None and get_source(self._collection).country != "PL":
             raise ValidationError(
-                f"{source}: wybor --teryt dziala tylko dla {_TERYT_SOURCES} - "
+                f"--teryt dziala tylko z {_TERYT_SOURCES}; --source {source}: "
                 "podaj --bbox, --geometry albo --whole-country"
             )
         return landcover_request(
@@ -1114,18 +1118,38 @@ class LandCoverManager:
         stays in its CRS (PRG converts it, ``parent_request`` keeps it).
         """
         given = [v for v in (teryt, sheet, bbox, geometry) if v is not None]
+        provider = self._provider
+        bdot = isinstance(provider, Bdot10kProvider)
+        corine = isinstance(provider, CorineProvider)  # else SoilGrids (no --source)
         if len(given) != 1:
-            raise ValidationError(
-                "Podaj dokladnie jeden wybor: teryt, sheet, bbox albo geometry"
-            )
-        if teryt is not None:
-            if not isinstance(self._provider, Bdot10kProvider):
+            if bdot:
                 raise ValidationError(
-                    f"{self._provider.name}: wybor teryt dziala tylko dla "
-                    f"{_TERYT_SOURCES} - podaj bbox, sheet albo geometry"
+                    "Podaj dokladnie jeden wybor dla --source bdot10k: "
+                    f"{selection_choices(self._descriptor_key())}"
                 )
-            if not self._provider.validate_admin_unit(teryt):
-                raise ValidationError(f"Nieprawidlowy kod TERYT: {teryt}")
+            where = " dla --source corine" if corine else ""
+            raise ValidationError(
+                f"Podaj dokladnie jeden wybor{where}: {_AREA_CHOICES}"
+            )
+        check_layer(layer, geometry, landcover=bdot)
+        if teryt is not None:
+            if not bdot:
+                name = "--source corine" if corine else "SoilGrids"
+                raise ValidationError(
+                    f"--teryt dziala tylko z {_TERYT_SOURCES}; {name}: podaj "
+                    f"{_AREA_CHOICES}"
+                )
+            if not provider.validate_admin_unit(teryt):
+                if re.fullmatch(r"[0-9]{2}", teryt):
+                    raise ValidationError(
+                        f"--teryt {teryt}: BDOT10k jest publikowany per powiat - "
+                        "podaj --teryt <4 cyfry> (np. 1465); dostepne: "
+                        f"{selection_choices(self._descriptor_key())}"
+                    )
+                raise ValidationError(
+                    f"Nieprawidlowy kod TERYT {teryt!r}: powiat BDOT10k (4 cyfry, "
+                    "np. 1465)"
+                )
         if sheet is not None:
             SheetParser(sheet)  # a malformed code: ParseError before any request
         if geometry is not None:
@@ -1237,10 +1261,13 @@ class LandCoverManager:
         if kwargs.get("layers") is not None:
             normalize_layers(kwargs["layers"])
             if fmt != "GPKG":
-                raise ValidationError("Filtr warstw BDOT10k dziala tylko z GPKG")
+                raise ValidationError(
+                    "--layers dotyczy tylko --format GPKG (SHP to oryginalny ZIP "
+                    "paczki)"
+                )
         if kwargs.get("keep_raw") and fmt != "GPKG":
             raise ValidationError(
-                "keep_raw dotyczy tylko GPKG (SHP to juz oryginalny ZIP)"
+                "--keep-raw dotyczy tylko --format GPKG (SHP to juz oryginalny ZIP)"
             )
 
     def _archive_variant(self, kwargs: dict) -> PackageVariant:

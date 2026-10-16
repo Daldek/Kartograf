@@ -469,8 +469,7 @@ kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326
 # pogranicze pod auto: osobne wycinki PL (WCS 1 m) i CZ, wspólny
 # extra.parent_request; różne wartości dla krajów w postaci pl=...,cz=...
 kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
-# bboxy w EPSG:5514 są na terytorium CZ ujemne — podaj je jako --bbox=... (bez spacji),
-# inaczej argparse odczyta wartość jako nieznaną flagę
+# bboxy w EPSG:5514 są na terytorium CZ ujemne — od 0.8.0 działa --bbox -447000,... i --bbox=-447000,...;
 kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
 kartograf elevation download "--bbox=-447000,-1114000,-446600,-1113600" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 2m --product nmpt --vertical-crs Bpv -o ./data # wycinek DMP 1G
 # LAZ CZ: --model wybiera model, --vertical-crs pliki (Bpv = arkusze SM5, EVRF2007 = kafle TM33)
@@ -1302,7 +1301,7 @@ w układzie usługi **EPSG:5514** (S-JTSK); `--whole-country` zapisuje plik
 krajowy CUZK 1:1, a jego rozmiar pojawia się jako `Warning:` przed
 transferem. Godło jako obszar i `--teryt` dotyczą tylko PL — obszar CZ
 podaj prostokątem albo plikiem geometrii. Współrzędne EPSG:5514 są
-w Czechach ujemne: podawaj je jako `--bbox=...` (bez spacji).
+w Czechach ujemne: `--bbox -460000,...` i `--bbox=-460000,...` działają tak samo.
 
 ```bash
 # ZABAGED (landcover): 22 warstwy pokrycia terenu i wód obszaru, EPSG:5514

@@ -398,7 +398,8 @@ def test_area_without_powiats_is_no_coverage(tmp_path, session):
             product="buildings",
             output_dir=tmp_path,
             country="pl",
-            bbox=BBox(450000, 800000, 451000, 801000, "EPSG:2180"),
+            # Baltic Sea inside the PL envelope (a bbox outside it fails before PRG)
+            bbox=BBox(450000, 780000, 451000, 781000, "EPSG:2180"),
             lod=2,
             cache=False,
         )

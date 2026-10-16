@@ -77,10 +77,11 @@ def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
 
 @pytest.mark.parametrize("command", [["landcover", "download"], ["soil", "hsg"]])
 def test_plan_without_mode_is_error(tmp_path, command, capsys):
-    with pytest.raises(SystemExit) as exc:
-        main([*command, "--plan", str(tmp_path / "p.json"), "-o", str(tmp_path)])
-    assert exc.value.code == 2
-    assert "--plan wymaga --check-updates albo --upgrade" in capsys.readouterr().err
+    rc = main([*command, "--plan", str(tmp_path / "p.json"), "-o", str(tmp_path)])
+    assert rc == 1
+    assert "Error: --plan wymaga --check-updates albo --upgrade" in (
+        capsys.readouterr().err
+    )
 
 
 def test_landcover_check_writes_plan(tmp_path, capsys):
@@ -253,7 +254,11 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
 @pytest.mark.parametrize("mode", ["check", "download"])
 def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
     manager = LandCoverManager(tmp_path / "api", "bdot10k", cache=False)
-    with pytest.raises(ValidationError, match="^Nieprawidlowy kod TERYT: 14$") as exc:
+    with pytest.raises(
+        ValidationError,
+        match="^--teryt 14: BDOT10k jest publikowany per powiat - podaj --teryt "
+        "<4 cyfry>",
+    ) as exc:
         getattr(manager, mode)(teryt="14")
     flags = ["--check-updates"] if mode == "check" else []
     assert _lc(tmp_path, "--source", "bdot10k", "--teryt", "14", *flags) == 1
@@ -451,7 +456,7 @@ def test_layers_bad_code_is_library_error_before_network(tmp_path, capsys):
     assert rc == 1
     get.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
-    assert line.startswith("Error: ") and "swrs1" in line
+    assert line.startswith("Error: ") and "SWRS1" in line
 
 
 @pytest.mark.parametrize("flag", ["--layers", "--keep-raw"])
