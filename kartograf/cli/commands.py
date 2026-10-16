@@ -11,6 +11,7 @@ private helpers are imported from the target module (e.g.
 """
 
 import argparse
+import logging
 import os
 import sys
 
@@ -54,14 +55,32 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     handler = getattr(parsed_args, "_handler", None)
     if handler is None:
         # no command, or a data group without its command: that level's help
-        getattr(parsed_args, "_group_parser", parser).print_help()
-        return 0
+        # on stderr and exit 2, like any other missing argument (a script
+        # with a typo must not "pass")
+        getattr(parsed_args, "_group_parser", parser).print_help(sys.stderr)
+        return 2
     # --plan needs a mode in every store command
     if getattr(parsed_args, "plan", None) is not None and not (
         parsed_args.check_updates or parsed_args.upgrade
     ):
         raise ValidationError("--plan wymaga --check-updates albo --upgrade")
     return handler(parsed_args)
+
+
+class _StderrLines(logging.Handler):
+    """Records of the HTTP transport (a failed attempt before its retry) as
+    ``Warning:`` lines on the current stderr; the Python fallback printed
+    them without a prefix. Other library records stay where they were."""
+
+    def emit(self, record: logging.LogRecord) -> None:
+        prefix = "Error" if record.levelno >= logging.ERROR else "Warning"
+        print(f"{prefix}: {record.getMessage()}", file=sys.stderr)
+
+
+def _retry_lines() -> None:
+    log = logging.getLogger("kartograf.transport.http")
+    if not any(isinstance(handler, _StderrLines) for handler in log.handlers):
+        log.addHandler(_StderrLines(logging.WARNING))
 
 
 def main(args: list[str] | None = None) -> int:
@@ -78,6 +97,7 @@ def main(args: list[str] | None = None) -> int:
     int
         Exit code (0 for success, non-zero for error)
     """
+    _retry_lines()
     parser = create_parser()
     argv = sys.argv[1:] if args is None else args
     removed = removed_command_error(argv)
@@ -88,6 +108,11 @@ def main(args: list[str] | None = None) -> int:
 
     try:
         return _dispatch(parser, parsed_args)
+    except KeyboardInterrupt:
+        # versions are committed atomically from .incoming/ staging (a stale
+        # leftover is removed by a later run): no half-written file is kept
+        print("Error: przerwano (Ctrl-C)", file=sys.stderr)
+        return 130
     except KartografError as e:
         if os.environ.get("KARTOGRAF_DEBUG"):
             raise

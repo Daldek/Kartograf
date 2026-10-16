@@ -506,7 +506,7 @@ def _check_pl(
         envelope,
         mask,
         groups,
-        sheet_frame=request.sheet is not None and request.product != "laz",
+        sheet_frame=request.sheet is not None,
     )
     if unsupported:
         sink.emit("info", INDEX_UNSUPPORTED, _unsupported_text(unsupported))
@@ -688,18 +688,15 @@ def _area_polygons(
     request: _Request, layer_name: str | None, bbox: BBox | None = None
 ) -> list[Polygon]:
     """The PL area as convex (E, N) polygons in EPSG:2180 - the area a
-    download of the same choice covers: NMT/NMPT the sheet frame, the bbox
-    envelope (``bbox``: the PL part of ``auto``), the feature envelopes of the
-    geometry file (sheets per feature); LAZ the envelope of the sheet frame or
-    of the whole geometry (tiles of one bbox).
+    download of the same choice covers: the sheet frame (LAZ too: tiles of
+    the frame, not of its envelope), the bbox envelope (``bbox``: the PL part
+    of ``auto``), NMT/NMPT the feature envelopes of the geometry file (sheets
+    per feature), LAZ the envelope of the whole geometry (tiles of one bbox).
     """
     from kartograf.core.geometry import get_overall_bbox, read_feature_bboxes
 
     laz = request.product == "laz"
     if request.sheet is not None:
-        if laz:
-            b = request.sheet.get_bbox(crs="EPSG:2180")
-            return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y)]
         return [sheet_frame_2180(request.sheet.sheet)]
     area = bbox if bbox is not None else request.bbox
     if area is not None:

@@ -61,7 +61,7 @@ TestPruneEmptyDirs`):
 $ .venv/bin/python -m pytest tests/test_storage.py -q -k test_segment_templates_come_from_registry
 ...
 E   AttributeError: <module 'kartograf.download.storage' from
-    '/home/claude-agent/workspace/Kartograf/kartograf/download/storage.py'>
+    '<workspace>/Kartograf/kartograf/download/storage.py'>
     has no attribute 'get_source'
 ======================= 2 failed, 76 deselected in 0.38s =======================
 ```

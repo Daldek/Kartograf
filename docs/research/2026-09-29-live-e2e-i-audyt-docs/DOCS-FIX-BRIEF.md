@@ -12,7 +12,7 @@ Wyniki (wszystko w tym katalogu `.superpowers/sdd/2026-09-29-live-e2e-i-docs/`):
   uzytkownika; w tej fali NIE naprawiasz kodu.**
 
 Twoje zadanie: jedna fala poprawek DOKUMENTACJI, po ktorej dokumenty biezace mowia prawde o kodzie
-i o wynikach testow na zywo. Repo: `/home/claude-agent/workspace/Kartograf`. Hydrograf — NIE ruszasz.
+i o wynikach testow na zywo. Repo: `<workspace>/Kartograf`. Hydrograf — NIE ruszasz.
 
 ## Zasady
 

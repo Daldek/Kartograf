@@ -204,6 +204,19 @@ def test_laz_full_tiles_only():
     assert _combo(krakow, 2025, "PL-1992", None, fmt="LAZ").complete
 
 
+def test_laz_sheet_reports_the_tiles_of_its_frame():
+    """Live test 0.8.0 (P2-1): like the download, a LAZ sheet is its frame -
+    not the envelope with the 8 neighbouring 1:2500 tiles and +2.5 % area."""
+    session = RecordedIndex(_areas("laz", "krakow"))
+    report = _check(session, product="laz", sheet="M-34-64-D-d-1-4-2")
+
+    newest = _combo(report, 2025, "PL-1992", None, fmt="LAZ")
+    assert newest.complete
+    assert newest.sheets_full == tuple(f"M-34-64-D-d-1-4-2-{i}" for i in range(1, 5))
+    (area,) = report.areas
+    assert 1_294_000 <= area.area_m2 <= 1_295_500  # the frame, envelope 1 326 743
+
+
 # =============================================================================
 # Contract
 # =============================================================================
@@ -645,6 +658,28 @@ def test_report_sheets_equal_download_selection(tmp_path):
         (item.available_label or "").startswith(str(newest.year)) for item in plan.items
     )
     assert not any("opendata" in url for url in session.urls)
+
+
+def test_check_asks_the_index_despite_cached_records(tmp_path):
+    """Live test 0.8.0 (P2-2): ``--check-updates`` always asks the source - a
+    sheet record in the metadata cache (TTL 7 days) is refreshed, not read,
+    so a flight published since the last query is found."""
+    report = _report("nmt", "krakow")
+    newest = next(c for c in report.combinations if c.complete)
+    (hint,) = newest.download_hint
+    args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
+    kwargs = {
+        **_download_arguments(args),
+        "cache": MetadataCache(tmp_path / "cache.db"),
+    }
+    asked = []
+    for _ in range(2):
+        session = RecordedIndex(_areas("nmt", "krakow"))
+        with patch(SESSION, return_value=session):
+            check_data(**kwargs)
+        asked.append([url for url in session.urls if "GetFeature" in url])
+
+    assert asked[0] and asked[1] == asked[0]
 
 
 # =============================================================================

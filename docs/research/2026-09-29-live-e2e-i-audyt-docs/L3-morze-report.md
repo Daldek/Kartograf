@@ -341,7 +341,7 @@ szablonu GUGiK. Uwaga poboczna: `text/html` bez charset -> `requests` dekoduje U
 jako ISO-8859-1 (polskie znaki znieksztalcone); dla regexu URL i znacznikow (ASCII) bez
 znaczenia. Strona czeska (drugi przypadek z (j)) — zakres L4.
 
-## Surowe artefakty (`WD` = `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L3-morze`)
+## Surowe artefakty (`WD` = `<workspace>/Kartograf/e2e-data/2026-09-29-live/L3-morze`)
 
 - Logi przebiegow CLI: `WD/runlog/<tag>.{cmd,out,err,rc,time}` — `A5_2180`, `A1_2180`,
   `B5_2180`, `B5_2180_retry`, `B5_2180_retry2_w1`, `B5_2180_cli4`, `A5s_5514`,

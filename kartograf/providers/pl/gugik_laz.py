@@ -167,8 +167,9 @@ class SupersededLazTile:
 
     ``covered_by`` — selected tiles (newer, or earlier in the order of the
     same year) that together cover the tile's intersection with the area
-    (within ``COVERAGE_TOLERANCE_M``). Empty tuple: the tile polygon does not
-    intersect the area at all (only the WFS envelope did).
+    (within ``COVERAGE_TOLERANCE_M``). Empty tuple: the tile does not reach
+    into the area - only its edge touches it (a neighbouring sheet of a
+    sheet request) or only the WFS envelope intersected it.
     """
 
     tile: LazTile
@@ -234,6 +235,58 @@ def _significant(poly: Polygon) -> bool:
     return len(poly) >= 3 and abs(polygon_area(poly)) > AREA_EPS
 
 
+def _local_area(area: BBox | Polygon) -> tuple[float, float, Polygon]:
+    """Local origin and the area as a local convex CCW polygon.
+
+    ``area``: an EPSG:2180 ``BBox`` or a convex CCW (E, N) polygon in
+    EPSG:2180 (a sheet frame, ``skorowidz_wfs.sheet_frame_2180``). Local
+    coordinates: values of ~10^5-10^6 m eat up precision.
+    """
+    if isinstance(area, BBox):
+        if area.crs != "EPSG:2180":
+            raise ValidationError(f"obszar musi byc w EPSG:2180, podano {area.crs}")
+        return (
+            area.min_x,
+            area.min_y,
+            rectangle(0.0, 0.0, area.max_x - area.min_x, area.max_y - area.min_y),
+        )
+    ox = min(x for x, _ in area)
+    oy = min(y for _, y in area)
+    return ox, oy, _shift(area, ox, oy)
+
+
+def _width(poly: Polygon) -> float:
+    """Smallest width of a convex polygon (a supporting line holds an edge)."""
+    width = math.inf
+    for i, (x0, y0) in enumerate(poly):
+        x1, y1 = poly[(i + 1) % len(poly)]
+        length = math.hypot(x1 - x0, y1 - y0)
+        if length > 0:
+            far = max(abs((x1 - x0) * (y - y0) - (y1 - y0) * (x - x0)) for x, y in poly)
+            width = min(width, far / length)
+    return width
+
+
+def _edge_rim(area: Polygon, tolerance_m: float) -> float:
+    """Rim of the reach rule: ``tolerance_m``, or 0 for an area at most twice
+    as wide (it has no inner part - any overlap counts)."""
+    return tolerance_m if _width(area) > 2 * tolerance_m else 0.0
+
+
+def _reaches(region: Polygon, area: Polygon, rim_m: float) -> bool:
+    """The tile region overlaps the area by more than an edge sliver.
+
+    The region with its edges moved ``rim_m`` inwards must still overlap the
+    area (the ``overlaps_area`` rule of the sheet indexes): a neighbouring
+    sheet shares an edge with the frame of a sheet request and touches it
+    only (GUGiK frames are rounded to 1 cm, frame edges are curves in
+    EPSG:2180). A region at most twice ``rim_m`` wide is taken whole.
+    """
+    if rim_m > 0 and _width(region) > 2 * rim_m:
+        region = expand_convex(region, -rim_m)
+    return _significant(clip_convex(region, area))
+
+
 def _bounds(poly: Polygon) -> tuple[float, float, float, float]:
     xs = [p[0] for p in poly]
     ys = [p[1] for p in poly]
@@ -295,7 +348,7 @@ def _uncovered_parts(
 
 def select_newest_cover(
     tiles: Iterable[LazTile],
-    area: BBox,
+    area: BBox | Polygon,
     tolerance_m: float = COVERAGE_TOLERANCE_M,
 ) -> LazTileSelection:
     """
@@ -312,6 +365,10 @@ def select_newest_cover(
 
     - the tile extent is its ``footprint``; without it the envelope (excess =
       the tile stays more easily),
+    - a tile must reach more than ``tolerance_m`` into the area: one that
+      only touches it along an edge (the neighbouring sheet of a sheet frame)
+      goes to ``superseded`` as ``"outside"``; an area at most twice as wide
+      as the tolerance takes every overlapping tile,
     - only tiles with ``full_sheet`` other than ``False`` cover, and only
       with their ``footprint`` (the envelope of a rotated frame sticks out
       beyond it by even ~15 m) or with the same sheet (the same sheet frame —
@@ -319,13 +376,11 @@ def select_newest_cover(
     - a tile without any geometry (NaN) stays, unless a full tile with the
       same sheet has already been selected.
 
-    ``area`` must be in EPSG:2180 (like the WFS tiles).
+    ``area``: an EPSG:2180 ``BBox`` or a convex CCW (E, N) polygon in
+    EPSG:2180 (the frame of a sheet request), like the WFS tiles.
     """
-    if area.crs != "EPSG:2180":
-        raise ValidationError(f"obszar musi byc w EPSG:2180, podano {area.crs}")
-    # Local coordinate origin: coordinates of ~10^5-10^6 m eat up precision.
-    ox, oy = area.min_x, area.min_y
-    area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+    ox, oy, area_poly = _local_area(area)
+    rim = _edge_rim(area_poly, tolerance_m)
 
     kept: list[LazTile] = []
     # (tile, expanded extent, envelope of the expanded extent)
@@ -335,11 +390,11 @@ def select_newest_cover(
     full_by_sheet: dict[str, LazTile] = {}
     for tile in sorted(tiles, key=_tile_order_key):
         region = _tile_region(tile, ox, oy)
+        if region is not None and not _reaches(region, area_poly, rim):
+            superseded.append(SupersededLazTile(tile=tile))  # outside the area
+            continue
         part = clip_convex(region, area_poly) if region is not None else None
         remaining, covered_by = _uncovered_parts(tile, part, covers, full_by_sheet)
-        if part is not None and remaining is None and not covered_by:
-            superseded.append(SupersededLazTile(tile=tile))  # envelope only
-            continue
         if remaining == []:
             superseded.append(SupersededLazTile(tile=tile, covered_by=covered_by))
             continue
@@ -353,21 +408,24 @@ def select_newest_cover(
     )
 
 
-def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSelection:
+def select_all_intersecting(
+    tiles: Iterable[LazTile],
+    area: BBox | Polygon,
+    tolerance_m: float = COVERAGE_TOLERANCE_M,
+) -> LazTileSelection:
     """
-    All LAZ tiles whose extent intersects ``area`` (no deduplication).
+    All LAZ tiles reaching into ``area`` (no deduplication).
 
     With ``all_campaigns=True`` (ADR-030), tiles covered by newer ones are
     not skipped (unlike :func:`select_newest_cover`). The tile extent is its
-    ``footprint`` (envelope without it); a tile whose polygon has no positive
-    shared area with the area (only the WFS envelope intersected it) goes to
-    ``superseded`` with an empty ``covered_by`` (reason ``"outside"``).
-    A tile without any geometry (NaN) stays. ``area`` in EPSG:2180.
+    ``footprint`` (envelope without it); a tile that reaches no more than
+    ``tolerance_m`` into the area (an edge contact, or only the WFS envelope
+    intersected it) goes to ``superseded`` with an empty ``covered_by``
+    (reason ``"outside"``). A tile without any geometry (NaN) stays.
+    ``area`` as in :func:`select_newest_cover`.
     """
-    if area.crs != "EPSG:2180":
-        raise ValidationError(f"obszar musi byc w EPSG:2180, podano {area.crs}")
-    ox, oy = area.min_x, area.min_y
-    area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+    ox, oy, area_poly = _local_area(area)
+    rim = _edge_rim(area_poly, tolerance_m)
 
     kept: list[LazTile] = []
     superseded: list[SupersededLazTile] = []
@@ -376,8 +434,8 @@ def select_all_intersecting(tiles: Iterable[LazTile], area: BBox) -> LazTileSele
         if region is None:
             kept.append(tile)  # cannot be judged without geometry — download
             continue
-        if not _significant(clip_convex(region, area_poly)):
-            superseded.append(SupersededLazTile(tile=tile))  # envelope only
+        if not _reaches(region, area_poly, rim):
+            superseded.append(SupersededLazTile(tile=tile))  # outside the area
             continue
         kept.append(tile)
     return LazTileSelection(
@@ -392,7 +450,7 @@ def _reference_year_conflicts(
     reference: LazTileSelection,
     selected: LazTileSelection,
     found: list[LazTile],
-    area: BBox,
+    area: BBox | Polygon,
     min_year: int | None,
     max_year: int | None,
     tolerance_m: float,
@@ -405,8 +463,7 @@ def _reference_year_conflicts(
     # Local import avoids the download -> manager -> provider import cycle.
     from kartograf.download.campaigns import in_year_range
 
-    ox, oy = area.min_x, area.min_y
-    area_poly = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
+    ox, oy, area_poly = _local_area(area)
     covers: list[tuple[LazTile, Polygon, tuple[float, float, float, float]]] = []
     full_by_sheet: dict[str, LazTile] = {}
     for tile in selected.tiles:
@@ -689,6 +746,7 @@ class GugikLazProvider(DataSourceProvider):
         all_campaigns: bool = False,
         min_year: int | None = None,
         max_year: int | None = None,
+        frame: Polygon | None = None,
     ) -> LazTileSelection:
         """
         Query WFS for tiles intersecting ``bbox`` and pick those to download.
@@ -703,7 +761,7 @@ class GugikLazProvider(DataSourceProvider):
         Parameters
         ----------
         bbox : BBox
-            Area of interest in EPSG:2180.
+            Area of interest in EPSG:2180 (the WFS query window).
         year : int, optional
             Exact acquisition year (equivalent to ``min_year=max_year``).
         min_density : int, optional
@@ -714,15 +772,23 @@ class GugikLazProvider(DataSourceProvider):
         timeout : int, optional
             Per-request timeout for WFS calls.
         tolerance_m : float, optional
-            Edge tolerance of the coverage rule (default
-            ``COVERAGE_TOLERANCE_M`` = 1 m; ``0`` = exact).
+            Edge tolerance of the selection (default ``COVERAGE_TOLERANCE_M``
+            = 1 m; ``0`` = exact): a tile must reach deeper into the area,
+            and a strip of the area narrower than it does not keep an older
+            tile.
         all_campaigns : bool, optional
             False (default) selects the newest flights within year bounds
             under the ADR-029 coverage rule; True selects every tile in bounds
-            intersecting ``bbox`` (:func:`select_all_intersecting`), without
+            reaching into the area (:func:`select_all_intersecting`), without
             coverage-based deduplication (ADR-030).
         min_year, max_year : int, optional
             Closed acquisition-year bounds; exclusive with ``year``.
+        frame : tuple of (x, y), optional
+            Sheet frame inside ``bbox``: a convex CCW (E, N) polygon in
+            EPSG:2180 (``skorowidz_wfs.sheet_frame_2180``). The WFS is asked
+            for ``bbox``, the tiles are selected for the frame - a rotated
+            PL-1992 frame is smaller than its envelope, and the neighbouring
+            sheets only touch it.
 
         Returns
         -------
@@ -797,15 +863,16 @@ class GugikLazProvider(DataSourceProvider):
             if has_range
             else found
         )
+        area = bbox if frame is None else frame
         selection = (
-            select_all_intersecting(candidates, bbox)
+            select_all_intersecting(candidates, area, tolerance_m)
             if all_campaigns
-            else select_newest_cover(candidates, bbox, tolerance_m)
+            else select_newest_cover(candidates, area, tolerance_m)
         )
         if has_range:
-            reference = select_newest_cover(found, bbox, tolerance_m)
+            reference = select_newest_cover(found, area, tolerance_m)
             conflicts, labels, partial_years = _reference_year_conflicts(
-                reference, selection, found, bbox, lo, hi, tolerance_m
+                reference, selection, found, area, lo, hi, tolerance_m
             )
             if conflicts:
                 raise year_range_error(

@@ -3019,8 +3019,10 @@ def plan_request(
     sink: NoticeSink,
     track: Track = _TRACK,
 ) -> UpdatePlan:
-    """Update plan of a validated request (no data downloaded)."""
-    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
+    """Update plan of a validated request (no data downloaded). The source is
+    always asked: the metadata cache (PRG units, indexes, feeds) is
+    refreshed, never read (``--check-updates``)."""
+    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         jobs = _jobs(request, sink, metadata)
         items = [inspect_job(job, track=track, cache=metadata) for job in jobs]
     return new_plan(request.output_dir, items)

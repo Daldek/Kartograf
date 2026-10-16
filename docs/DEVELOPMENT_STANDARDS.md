@@ -1,7 +1,7 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 3.3
-**Data:** 2026-10-08
+**Wersja:** 3.4
+**Data:** 2026-10-16
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
 
@@ -42,6 +42,14 @@
 > `ruff format --check .` (cale repo, takze skrypty w `docs/research/`)
 > oraz `mypy kartograf/ tests/` bez bledow; koniec porownywania z lista
 > bledow (8.3, 3.1, 6.3, 18).
+>
+> **Nota 3.4 (2026-10-16, wydanie 0.8.0):** CLI tylko tlumaczy na publiczne
+> API (7.3, ADR-037); bledy wejscia jako `ValidationError`, typy argumentow
+> sprawdzane bez konwersji i brak wartosci domyslnych wplywajacych na dane
+> (11.1-11.2); teksty dla uzytkownika po polsku w ASCII (9.4); `--output`
+> wymagane (6.4); nowa grupa lub komenda zapisujaca dane z pozycja
+> manifestu (17.2, ADR-039, ADR-040); nowy produkt kolekcji na silnikach
+> (17.5, ADR-042, ADR-043); jednostki w przykladzie 4.2.
 
 ---
 
@@ -214,8 +222,8 @@ chore(deps): requests 2.32.0
 # GOOD
 area_km2 = 45.3
 elevation_m = 250.0
-resolution_m = 1  # 1m or 5m
-bbox_coords = [50.0, 19.0, 51.0, 20.0]
+resolution_m = 1.0  # pixel size in metres (e.g. 0.5, 1, 5)
+bbox_wgs84_deg = (19.0, 50.0, 20.0, 51.0)  # min_lon, min_lat, max_lon, max_lat
 timeout_s = 30
 
 # BAD — unit ambiguity
@@ -1142,34 +1150,50 @@ i spec manifestu, sekcja 5.
 
 ### 17.5 Nowy produkt kolekcji (deskryptor z parametrami kanalu, ADR-042)
 
-Paczki jednostek (powiat, wojewodztwo, plik krajowy) i obiekty obszaru
-z WFS/ArcGIS REST nie dostaja providera ani nowego kodu silnika: produkt
-to wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
-`transport/feature_bbox.py`, `transform/gpkg.py`) i orkiestrator
-`download/collections.py`.
+Paczki jednostek (powiat, wojewodztwo, arkusz, kafel indeksu, KU, plik
+krajowy), pliki z feedu ATOM i obiekty obszaru z WFS, ArcGIS REST albo
+OGC API Features nie dostaja providera ani nowego kodu silnika: produkt to
+wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
+`transport/feature_bbox.py`, `transport/atom.py`, `transport/index_records.py`,
+`transform/gpkg.py`) i orkiestrator `download/collections.py`.
 
 ```python
 # 1. Wpis SourceDescriptor w kartograf/sources/registry.py (albo nowy kanal
 #    istniejacego deskryptora, jak archiwum BDOT10k) z AccessChannel.params:
-#    - UnitPackageParams(unit="powiat"|"woj"|"country", variants, unpack):
+#    - UnitPackageParams(unit="powiat"|"woj"|"country"|"sheet"|"tile"|"ku",
+#      variants, unpack, themes, index, ku_layer, class_pattern):
 #      PackageVariant(choice, url_template, edition, segment_tokens,
-#      members, vertical_crs); w url_template tylko tokeny {teryt} i {woj};
+#      members, vertical_crs, sheet_grid, index_layer, file_kind, classes);
+#      w url_template tylko tokeny {teryt}, {woj}, {sheet}, {ku} i {theme};
+#      url_template=None = URL z rekordu indeksu (index=IndexSource(kind
+#      "wms_gfi"|"wfs", endpoint, parser, unit_field, url_field,
+#      label_fields, year_field, zone_field)); file_kind "zip"|"tiff"|
+#      "pdf"|"txt" (plik sprawdzany po pierwszych bajtach); class_pattern
+#      = wybor czlonow paczki po kodzie klasy (BDOO --layers);
 #      wszystkie warianty kanalu maja te same klucze choice (np. ("lod",
 #      "year")) i rozne wartosci; segment_tokens i edition pasuja do
 #      [a-z0-9.-]+; members = sufiksy wymaganych czlonow ZIP.
-#    - FeatureBBoxParams(protocol="wfs"|"arcgis", native_crs, axis_order
-#      "xy"|"yx", page_size > 0, layers: FeatureLayer(code, source, name,
-#      id_field) z unikalnymi code/source/name (przy selection "level" code
-#      pasuje do [a-z0-9.-]+), selection "level"|"all",
-#      order_field (wymagane dla arcgis), drop_fields); page_size nie wiekszy
-#      niz limit strony uslugi (CountDefault / maxRecordCount - sprawdzane
-#      przy pobraniu).
+#    - FeatureBBoxParams(protocol="wfs"|"arcgis"|"ogcapi", native_crs,
+#      axis_order "xy"|"yx", page_size > 0, layers: FeatureLayer(code,
+#      source, name, id_field) z unikalnymi source/name (code unikalny poza
+#      selection "level", gdzie jeden code moze nazwac kilka warstw
+#      i pasuje do [a-z0-9.-]+), selection "level"|"all", selection_key,
+#      order_field (wymagane dla arcgis), drop_fields, choice, timeout
+#      (wolna usluga), area_omitted (Info o warstwie poza wynikiem
+#      obszaru)); page_size nie wiekszy niz limit strony uslugi
+#      (CountDefault / maxRecordCount - sprawdzane przy pobraniu).
+#    - AtomFilesParams(service_feed, entry_pattern, crs, members,
+#      segment_tokens, choice, force_https): pliki wskazane feedem ATOM.
 #    Protokol zgodny z transportem kanalu (WFS -> "wfs", ARCGIS_QUERY ->
-#    "arcgis"; DIRECT_FILES -> UnitPackageParams); url_template i endpoint
-#    kanalu obiektow zaczynaja sie od https://.
-#    Capability kanalu kolekcji unikalna w deskryptorze (sidecar wybiera
-#    po niej kanal pliku); update_signal kanalu wg sygnalu zrodla
-#    (paczki i wyniki WFS GUGiK: "none").
+#    "arcgis", OGC_API_FEATURES -> "ogcapi"; DIRECT_FILES -> UnitPackageParams
+#    albo AtomFilesParams); url_template i endpoint kanalu zaczynaja sie
+#    od https://.
+#    Capability kanalu kolekcji moga dzielic kanaly jednego rodzaju (np.
+#    usluga WFS na siec), jesli deklaruja te same uklady - sidecar czyta
+#    uklady z pierwszego kanalu tej capability (ADR-043 D6); kanal i wariant
+#    wybieraja wartosci opcji z choice (ADR-043 D5); update_signal kanalu
+#    wg sygnalu zrodla (paczki i wyniki WFS GUGiK: "none"; kanal
+#    z IndexSource: "index").
 # 2. Kolejnosc osi (axis_order) potwierdz testem na prawdziwej odpowiedzi
 #    uslugi: zamiana osi daje pusty wynik BEZ bledu (tests/test_feature_bbox.py).
 # 3. Inwentarz sygnalow w tests/test_sources_registry.py: CHANNEL_SIGNALS
@@ -1186,7 +1210,7 @@ to wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
 ```
 
 Kontrakt i checklista zrodla: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj);
-decyzje: ADR-042 w `docs/DECISIONS.md`.
+decyzje: ADR-042 i ADR-043 w `docs/DECISIONS.md`.
 
 ---
 
@@ -1209,8 +1233,8 @@ decyzje: ADR-042 w `docs/DECISIONS.md`.
 
 ---
 
-**Wersja dokumentu:** 3.3
-**Data ostatniej aktualizacji:** 2026-10-08
+**Wersja dokumentu:** 3.4
+**Data ostatniej aktualizacji:** 2026-10-16
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
 *Odstepstwa od tych standardow wymagaja uzasadnienia — w tym dokumencie albo w ADR (`docs/DECISIONS.md`).*

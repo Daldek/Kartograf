@@ -2,7 +2,7 @@
 
 Data: 2026-09-29. Galaz `develop`, HEAD 152c31e (repo TYLKO DO ODCZYTU — zero zmian w
 kodzie/testach/dokumentacji, `git status` czysty przez cala sesje). Katalog roboczy:
-`/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L6-inne-granice/`
+`<workspace>/Kartograf/e2e-data/2026-09-29-live/L6-inne-granice/`
 (gitignored). Laczny rozmiar pobranych danych: **120 MB** (budzet <= ~3 GB, `--workers 2`
 przez caly czas).
 
@@ -290,7 +290,7 @@ przy 5 m NIE mozna od razu przypisac granicy bez kontroli inland.
 
 ## Surowe artefakty
 
-Wszystko w `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L6-inne-granice/`:
+Wszystko w `<workspace>/Kartograf/e2e-data/2026-09-29-live/L6-inne-granice/`:
 
 - `probe.py` — offline sanity (sheet count + `_countries_for_bbox`) przed kazdym
   live zapytaniem.

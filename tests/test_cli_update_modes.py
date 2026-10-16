@@ -116,10 +116,12 @@ def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys
 
 def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
     """Live 2026-10-12: a --plan path in a missing directory crashed with
-    ``Error: FileNotFoundError: ...`` and the debug hint."""
+    ``Error: FileNotFoundError: ...``; live 0.8.0: the error came only after
+    the whole check of the source. Now one Error line before any request."""
     plan = tmp_path / "missing" / "plan.json"
+    fake = FakeCampaignProvider(C14)
     rc = _run(
-        FakeCampaignProvider(C14),
+        fake,
         tmp_path / "data",
         "--sheet",
         G,
@@ -129,8 +131,11 @@ def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
     )
     assert rc == 1
     err = capsys.readouterr().err
-    assert f"Error: nie udalo sie zapisac planu {plan}: " in err
-    assert "KARTOGRAF_DEBUG" not in err and "FileNotFoundError" not in err
+    assert err == (
+        f"Error: --plan {plan}: katalog {plan.parent} nie istnieje - utworz go "
+        "albo podaj inny plik planu\n"
+    )
+    assert fake.resolve_calls == []  # no index query before the error
 
 
 def test_upgrade_plan_of_other_store_is_error(tmp_path, capsys):
