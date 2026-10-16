@@ -1,0 +1,80 @@
+{
+  "currentVersion": 11.5,
+  "id": 39,
+  "name": "GJ_03_celek",
+  "type": "Feature Layer",
+  "geometryType": "esriGeometryPolygon",
+  "sourceSpatialReference": {
+    "wkid": 102067,
+    "latestWkid": 5514,
+    "xyTolerance": 0.001,
+    "zTolerance": 0.001,
+    "mTolerance": 0.001,
+    "falseX": -33699800,
+    "falseY": -33699800,
+    "xyUnits": 10000,
+    "falseZ": -100000,
+    "zUnits": 10000,
+    "falseM": -100000,
+    "mUnits": 10000
+  },
+  "extent": {
+    "xmin": -904585.2798999995,
+    "ymin": -1227295.8299999982,
+    "xmax": -431724.30000000075,
+    "ymax": -935236.9499999993,
+    "spatialReference": {
+      "wkid": 102067,
+      "latestWkid": 5514,
+      "xyTolerance": 0.001,
+      "zTolerance": 0.001,
+      "mTolerance": 0.001,
+      "falseX": -33699800,
+      "falseY": -33699800,
+      "xyUnits": 10000,
+      "falseZ": -100000,
+      "zUnits": 10000,
+      "falseM": -100000,
+      "mUnits": 10000
+    }
+  },
+  "fields": [
+    {
+      "name": "OBJECTID",
+      "type": "esriFieldTypeOID"
+    },
+    {
+      "name": "Shape",
+      "type": "esriFieldTypeGeometry"
+    },
+    {
+      "name": "CELEK_K",
+      "type": "esriFieldTypeString"
+    },
+    {
+      "name": "CELEK_P",
+      "type": "esriFieldTypeString"
+    },
+    {
+      "name": "CELEK_K_1",
+      "type": "esriFieldTypeString"
+    },
+    {
+      "name": "CELEK_P_1",
+      "type": "esriFieldTypeString"
+    },
+    {
+      "name": "Shape_Length",
+      "type": "esriFieldTypeDouble"
+    },
+    {
+      "name": "Shape_Area",
+      "type": "esriFieldTypeDouble"
+    }
+  ],
+  "maxRecordCount": 2000,
+  "advancedQueryCapabilities": {
+    "supportsPagination": true,
+    "supportsOrderBy": true
+  }
+}

@@ -1,15 +1,16 @@
 """
 ``download`` and ``list-sources`` of a collection group (``boundaries``,
-``cadastre``, ``models3d``, ``hydro``; ADR-042 D9).
+``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``; ADR-042 D9).
 
 Every collection group has the same command shape: ``--product`` and
 ``--country`` like ``elevation``/``imagery``, one selection (``--teryt``,
-``--sheet``/``--bbox``/``--geometry``, in some groups ``--whole-country``),
-the content flags of the group only (``--level``, ``--lod``/``--year``),
-the store flags and ``--workers`` (default 1). ``--teryt`` and ``--sheet``
-select PL units and sheet codes: a group without PL sources (``hydro``) has
-neither. The choices in ``--help`` come from the source registry through
-the library.
+in ``cadastre`` ``--ku``, ``--sheet``/``--bbox``/``--geometry``, in some
+groups ``--whole-country``), the content flags of the group only
+(``--level``, ``--lod``/``--year``, ``--format``, ...), the store flags and
+``--workers`` (default 1). ``--teryt`` and ``--sheet`` select PL units and
+sheet codes: a group without PL sources (``hydro``) has neither; ``--ku``
+selects a CZ cadastral area. The choices in ``--help`` come from the source
+registry through the library.
 """
 
 import argparse
@@ -48,6 +49,7 @@ def add_collection_commands(
     description: str,
     area_result: str,
     teryt_help: str | None = None,
+    ku_help: str | None = None,
     sheet: bool = True,
     sheet_help: str = SHEET_AREA_HELP,
     whole_country_help: str | None = None,
@@ -57,7 +59,8 @@ def add_collection_commands(
     """``<group> download`` and ``<group> list-sources``.
 
     ``area_result``: what an area gives (help of the area flags);
-    ``teryt_help``: the group has ``--teryt``; ``sheet``: the group has
+    ``teryt_help``: the group has ``--teryt``; ``ku_help``: the group has
+    ``--ku`` (CZ cadastral area); ``sheet``: the group has
     ``--sheet`` (``False``: no PL sheet area); ``sheet_help`` overrides its
     help for groups with CZ map sheets; ``whole_country_help``: the group has
     ``--whole-country``; ``check_help``: the source signals in --check-updates;
@@ -74,10 +77,11 @@ def add_collection_commands(
         default=None,
         help=f"Produkt (wymagany): {collection_product_choices(products)}",
     )
-    pl_selections = [
+    unit_countries = [
         text
         for text, given in (
             ("Z --teryt tylko pl", teryt_help is not None),
+            ("Z --ku tylko cz", ku_help is not None),
             ("Z --sheet kraj wynika z godla", sheet),
         )
         if given
@@ -89,10 +93,12 @@ def add_collection_commands(
         help="Kraj zrodla - wymagany z --bbox/--geometry"
         + (" i --whole-country (bez auto)" if whole_country_help else "")
         + f": {COUNTRY_CHOICES}"
-        + "".join(f". {text}" for text in pl_selections),
+        + "".join(f". {text}" for text in unit_countries),
     )
     if teryt_help is not None:
         selection.add_argument("--teryt", metavar="KOD", help=teryt_help)
+    if ku_help is not None:
+        selection.add_argument("--ku", metavar="KOD", help=ku_help)
     add_area_flags(
         selection,
         sheet_help=f"{sheet_help}; {area_result}" if sheet else None,

@@ -211,7 +211,9 @@ class UnitPackageParams:
     layer of RUIAN ``KatastralniUzemi``, field ``kod``). ``index``: the
     records giving the URL and the version label of each sheet or tile.
     ``unpack``: the suffix of the ONE member stored instead of the ZIP
-    (``None`` = the file is stored 1:1).
+    (``None`` = the file is stored 1:1). ``unpack_layers``: the layers
+    (``gpkg_contents`` tables) the unpacked GeoPackage must hold (RCN: the
+    three transaction layers; ``()`` = not checked).
     """
 
     unit: Literal["powiat", "woj", "country", "sheet", "tile", "ku"]
@@ -220,6 +222,7 @@ class UnitPackageParams:
     themes: tuple[str, ...] = ()
     index: IndexSource | None = None
     ku_layer: str | None = None
+    unpack_layers: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

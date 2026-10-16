@@ -1,0 +1,70 @@
+{
+  "powiat_1261": {
+    "url": "https://opendata.geoportal.gov.pl/prg/adresy/PunktyAdresowe/12/1261.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "6066872"
+    },
+    "members": [
+      "PRG_Miejscowosc_1261.cpg",
+      "PRG_Miejscowosc_1261.dbf",
+      "PRG_Miejscowosc_1261.prj",
+      "PRG_Miejscowosc_1261.shp",
+      "PRG_Miejscowosc_1261.shx",
+      "PRG_Place_1261.cpg",
+      "PRG_Place_1261.dbf",
+      "PRG_Place_1261.prj",
+      "PRG_Place_1261.shp",
+      "PRG_Place_1261.shx",
+      "PRG_Ulice_1261.cpg",
+      "PRG_Ulice_1261.dbf",
+      "PRG_Ulice_1261.prj",
+      "PRG_Ulice_1261.shp",
+      "PRG_Ulice_1261.shx",
+      "PRG_PunktyAdresowe_1261.cpg",
+      "PRG_PunktyAdresowe_1261.dbf",
+      "PRG_PunktyAdresowe_1261.prj",
+      "PRG_PunktyAdresowe_1261.shp",
+      "PRG_PunktyAdresowe_1261.shx"
+    ]
+  },
+  "country_shp": {
+    "url": "https://opendata.geoportal.gov.pl/prg/adresy/PunktyAdresowe/POLSKA.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "563815148"
+    }
+  },
+  "country_gml": {
+    "url": "https://opendata.geoportal.gov.pl/prg/adresy/PRG-punkty_adresowe.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "804071557"
+    },
+    "members": [
+      "26_swietokrzyskie_16.10.2026_12.10.25.gml",
+      "12_malopolskie_16.10.2026_12.11.00.gml",
+      "28_warminsko-mazurskie_16.10.2026_12.11.22.gml",
+      "24_slaskie_16.10.2026_12.11.58.gml",
+      "18_podkarpackie_16.10.2026_12.12.32.gml",
+      "10_lodzkie_16.10.2026_12.13.02.gml",
+      "06_lubelskie_16.10.2026_12.13.32.gml",
+      "22_pomorskie_16.10.2026_12.13.59.gml",
+      "04_kujawsko-pomorskie_16.10.2026_12.14.23.gml",
+      "14_mazowieckie_16.10.2026_12.15.13.gml",
+      "08_lubuskie_16.10.2026_12.15.44.gml",
+      "16_opolskie_16.10.2026_12.15.56.gml",
+      "32_zachodniopomorskie_16.10.2026_12.16.11.gml",
+      "30_wielkopolskie_16.10.2026_12.16.45.gml",
+      "02_dolnoslaskie_16.10.2026_12.17.21.gml",
+      "20_podlaskie_16.10.2026_12.17.40.gml"
+    ]
+  },
+  "woj_12": {
+    "url": "https://opendata.geoportal.gov.pl/prg/adresy/PunktyAdresowe/12.zip",
+    "status": 404,
+    "headers": {
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  }
+}

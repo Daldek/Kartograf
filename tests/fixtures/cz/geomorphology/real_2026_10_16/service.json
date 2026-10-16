@@ -1,0 +1,251 @@
+{
+  "currentVersion": 11.5,
+  "spatialReference": {
+    "wkid": 102067,
+    "latestWkid": 5514,
+    "xyTolerance": 0.001,
+    "zTolerance": 0.001,
+    "mTolerance": 0.001,
+    "falseX": -33699800,
+    "falseY": -33699800,
+    "xyUnits": 10000,
+    "falseZ": -100000,
+    "zUnits": 10000,
+    "falseM": -100000,
+    "mUnits": 10000
+  },
+  "maxRecordCount": 2000,
+  "layers": [
+    {
+      "id": 0,
+      "name": "Anno_GJ_07_casti",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 1,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 0
+    },
+    {
+      "id": 2,
+      "name": "Anno_GJ_06_podokrsek",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 3,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 2
+    },
+    {
+      "id": 4,
+      "name": "Anno_GJ_05_okrsek",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 5,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 4
+    },
+    {
+      "id": 6,
+      "name": "Anno_GJ_04_podcelek",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 7,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 6
+    },
+    {
+      "id": 8,
+      "name": "Anno_GJ_03_celek",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 9,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 8
+    },
+    {
+      "id": 10,
+      "name": "Anno_GJ_02_oblasti",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 11,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 10
+    },
+    {
+      "id": 12,
+      "name": "Anno_GJ_01_subprovincie",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 13,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 12
+    },
+    {
+      "id": 14,
+      "name": "copy_100Anno",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 15,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 14
+    },
+    {
+      "id": 16,
+      "name": "copy_10Anno",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 17,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 16
+    },
+    {
+      "id": 18,
+      "name": "copy_25Anno",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 19,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 18
+    },
+    {
+      "id": 20,
+      "name": "copy_50Anno",
+      "type": "Annotation Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 21,
+      "name": "Default",
+      "type": null,
+      "geometryType": null,
+      "parentLayerId": 20
+    },
+    {
+      "id": 22,
+      "name": "StinovanyModelReliefu",
+      "type": "Mosaic Layer",
+      "geometryType": null,
+      "parentLayerId": -1
+    },
+    {
+      "id": 23,
+      "name": "Boundary",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": 22
+    },
+    {
+      "id": 24,
+      "name": "Footprint",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": 22
+    },
+    {
+      "id": 25,
+      "name": "Image",
+      "type": "Raster Layer",
+      "geometryType": null,
+      "parentLayerId": 22
+    },
+    {
+      "id": 33,
+      "name": "GJ_01_subprovincie",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 34,
+      "name": "GJ_02_oblasti",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 35,
+      "name": "GJ_04_podcelek",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 36,
+      "name": "GJ_05_okrsek",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 37,
+      "name": "GJ_06_podokrsek",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 38,
+      "name": "GJ_07_casti",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    },
+    {
+      "id": 39,
+      "name": "GJ_03_celek",
+      "type": "Feature Layer",
+      "geometryType": "esriGeometryPolygon",
+      "parentLayerId": -1
+    }
+  ]
+}

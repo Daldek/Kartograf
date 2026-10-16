@@ -9,6 +9,7 @@ in the sidecar; managers do not enforce them.
 
 import re
 from decimal import Decimal
+from typing import Literal
 
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.core.sheet_parser import BBox, SheetParser
@@ -1455,6 +1456,258 @@ _PL_PRG_SPECIAL = SourceDescriptor(
     license=_GUGIK_LICENSE,
 )
 
+# PRG address points (raport E, wiersz 9; WFS and package heads recorded
+# 2026-10-16, tests/fixtures/pl/prg_addresses): the KIN WFS (GeoServer, N,E
+# axes, gml:id on every feature, CountDefault 10000), one SHP package per
+# powiat (no voivodeship packages: 404) and two national files - SHP
+# (POLSKA.zip) and GML (PRG-punkty_adresowe.zip: 16 voivodeship GML files of
+# the PRGAD schema).
+_PRG_ADDRESSES = f"{_OPENDATA}/prg/adresy"
+_PL_PRG_ADDRESSES = SourceDescriptor(
+    key="pl.gugik.prg_addresses",
+    country="PL",
+    product="addresses",
+    name="PRG - punkty adresowe i ulice",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WFS,
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=(
+                "https://mapy.geoportal.gov.pl/wss/ext/wfs/"
+                "KrajowaIntegracjaNumeracjiAdresowej"
+            ),
+            update_signal="none",
+            notes="punkty adresowe i ulice przecinajace obszar (stan uslugi)",
+            params=FeatureBBoxParams(
+                protocol="wfs",
+                native_crs="EPSG:2180",
+                axis_order="yx",
+                page_size=1000,
+                layers=(
+                    FeatureLayer(
+                        code="punkty_adresowe",
+                        source="adresyUlice:A07_Punkty_adresowe",
+                        name="punkty_adresowe",
+                        id_field="gml_id",
+                    ),
+                    FeatureLayer(
+                        code="ulice",
+                        source="adresyUlice:A08_Ulice",
+                        name="ulice",
+                        id_field="gml_id",
+                    ),
+                ),
+                selection="all",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=f"{_PRG_ADDRESSES}/PunktyAdresowe/",
+            update_signal="none",
+            notes=(
+                "paczka SHP powiatu: punkty adresowe, ulice, place, miejscowosci "
+                "(GUGiK nie publikuje paczek wojewodztw)"
+            ),
+            params=UnitPackageParams(
+                unit="powiat",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=f"{_PRG_ADDRESSES}/PunktyAdresowe/{{woj}}/{{teryt}}.zip",
+                        segment_tokens=("shp",),
+                        members=(".shp",),
+                    ),
+                ),
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_PRG_ADDRESSES}/",
+            update_signal="none",
+            notes=(
+                "plik krajowy SHP (ok. 564 MB) albo GML (16 plikow wojewodztw, "
+                "ok. 804 MB), tylko z --whole-country"
+            ),
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(("format", "SHP"),),
+                        url_template=f"{_PRG_ADDRESSES}/PunktyAdresowe/POLSKA.zip",
+                        segment_tokens=("shp",),
+                        members=(".shp",),
+                    ),
+                    PackageVariant(
+                        choice=(("format", "GML"),),
+                        url_template=f"{_PRG_ADDRESSES}/PRG-punkty_adresowe.zip",
+                        segment_tokens=("gml",),
+                        members=(".gml",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="boundaries/pl_prg_addresses",
+    default_extension=".gpkg",
+    license=_GUGIK_LICENSE,
+)
+
+# Transaction prices (RCN; raport E, wiersz 14; heads and a trimmed real
+# GeoPackage recorded 2026-10-16, tests/fixtures/pl/rcn): the daily export of
+# one powiat or voivodeship, a ZIP with ONE GeoPackage of three layers in
+# EPSG:2180. The file under latest_exports is replaced (1261: 236 404 584 B
+# on 2026-10-15, 301 623 607 B on 2026-10-16), so there is no cheap signal.
+_RCN = f"{_OPENDATA}/InneDane/latest_exports/rcn_transakcje_ceny/GPKG"
+
+
+def _rcn_channel(unit: Literal["powiat", "woj"], text: str) -> AccessChannel:
+    """The RCN export of one TERYT unit (``powiat``: 4 digits, ``woj``: 2)."""
+    return AccessChannel(
+        transport=TransportKind.DIRECT_FILES,
+        horizontal_crs="EPSG:2180",
+        capabilities=frozenset({"admin_unit_files"}),
+        endpoint=f"{_RCN}/",
+        update_signal="none",
+        notes=(
+            f"eksport {text} odswiezany co dobe: GeoPackage z warstwami "
+            "transakcje_dzialki, transakcje_budynki, transakcje_lokale"
+        ),
+        params=UnitPackageParams(
+            unit=unit,
+            variants=(
+                PackageVariant(
+                    choice=(),
+                    url_template=f"{_RCN}/{{teryt}}_transakcje_ceny.gpkg.zip",
+                ),
+            ),
+            unpack=".gpkg",
+            unpack_layers=(
+                "transakcje_dzialki",
+                "transakcje_budynki",
+                "transakcje_lokale",
+            ),
+        ),
+    )
+
+
+_PL_RCN = SourceDescriptor(
+    key="pl.gugik.rcn",
+    country="PL",
+    product="prices",
+    name="RCN - rejestr cen nieruchomosci (transakcje: dzialki, budynki, lokale)",
+    provider_name="GUGiK",
+    channels=(_rcn_channel("powiat", "powiatu"), _rcn_channel("woj", "wojewodztwa")),
+    tile_scheme=None,
+    storage_subdir="cadastre/pl_rcn",
+    default_extension=".gpkg",
+    license=_GUGIK_LICENSE,
+)
+_E3_PL_SOURCES = (_PL_PRG_ADDRESSES, _PL_PRG_SPECIAL, _PL_RCN)
+
+# Geomorphological units (raport E, wiersz 24; service and layer 39 recorded
+# 2026-10-16, tests/fixtures/cz/geomorphology): --level -> one polygon layer
+# of GeomorfologickeJednotky/MapServer. The annotation layers (0-21) and the
+# shaded relief mosaic (22-25) are not data.
+_GEOMORPHOLOGY_LEVELS = (
+    ("subprovincie", "33"),
+    ("oblast", "34"),
+    ("celek", "39"),
+    ("podcelek", "35"),
+    ("okrsek", "36"),
+    ("podokrsek", "37"),
+    ("cast", "38"),
+)
+_CZ_GEOMORPHOLOGY = SourceDescriptor(
+    key="cz.cuzk.geomorphology",
+    country="CZ",
+    product="geomorphology",
+    name="Jednostki geomorfologiczne Czech (od subprovincie do casti)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/GeomorfologickeJednotky/MapServer",
+            update_signal="none",
+            notes="pelne geometrie jednostek poziomu --level przecinajacych obszar",
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                layers=tuple(
+                    FeatureLayer(code=code, source=layer, name=code, id_field="OBJECTID")
+                    for code, layer in _GEOMORPHOLOGY_LEVELS
+                ),
+                selection="level",
+                order_field="OBJECTID",
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="boundaries/cz_geomorphology",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+# Cadastral map (raport E, wiersz 19; heads and member lists recorded
+# 2026-10-16, tests/fixtures/cz/cadastral_map): one ZIP per cadastral area
+# (KU) in each of four formats, each with ETag and Last-Modified; the KU of
+# an area come from RUIAN KatastralniUzemi. VKM (a pilot of 10 KU) is not
+# part of 0.8.0 (decision P2 of 2026-10-15).
+_CUZK_SERVICES = "https://services.cuzk.gov.cz"
+_CZ_CADASTRAL_MAP = SourceDescriptor(
+    key="cz.cuzk.cadastral_map",
+    country="CZ",
+    product="map",
+    name="Mapa katastralna Czech (katastralni mapa: SHP, DXF, DGN, VFK)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=f"{_CUZK_SERVICES}/",
+            update_signal="http",
+            notes=(
+                "paczka katastralniho uzemi (KU) w jednym z formatow; KU obszaru "
+                "wg RUIAN; ZIP zapisywany 1:1"
+            ),
+            params=UnitPackageParams(
+                unit="ku",
+                ku_layer=f"{_CUZK_ARCGIS}/RUIAN/MapServer/7",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("format", fmt),),
+                        url_template=f"{_CUZK_SERVICES}/{path}/{{ku}}.zip",
+                        segment_tokens=(fmt.lower(),),
+                        members=(member,),
+                    )
+                    for fmt, path, member in (
+                        ("SHP", "shp/ku/epsg-5514", ".shp"),
+                        ("DXF", "dxf/ku", ".dxf"),
+                        ("DGN", "dgn/ku", ".dgn"),
+                        ("VFK", "vfk/stavy/aktualni", ".vfk"),
+                    )
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="cadastre/cz_km",
+    default_extension=".zip",
+    license=_CUZK_LICENSE,
+)
+_E3_CZ_SOURCES = (_CZ_GEOMORPHOLOGY, _CZ_CADASTRAL_MAP)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -1755,8 +2008,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _PL_PRNG,
         _PL_PRNG_WORLD,
         _PL_BDOT10K_MAPS,
-        # plan E - E3: PRG special boundaries.
-        _PL_PRG_SPECIAL,
+        # plan E - E3: PRG addresses and special boundaries, RCN.
+        *_E3_PL_SOURCES,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",
@@ -1818,6 +2071,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         # plan E - E2: CZ names and maps.
         _CZ_GEONAMES,
         _CZ_ZTM,
+        # plan E - E3: CZ geomorphology and cadastral map.
+        *_E3_CZ_SOURCES,
     )
 }
 
