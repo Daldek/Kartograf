@@ -367,18 +367,14 @@ def test_restore_on_empty_store_same_content(tmp_path, monkeypatch):
         report = download_project(colleague)
     assert report.ok
     assert [r.outcome for r in report.tasks] == ["restored", "restored"]
-    teren, pokrycie = report.project.tasks
-    assert teren == pinned[0]  # campaign label: same version path
-    (old,), (new,) = pinned[1].files, pokrycie.files
-    assert (new.sha256, new.size_bytes, new.path) == (
-        old.sha256,
-        old.size_bytes,
-        old.path,
-    )
-    assert old.label == "2026-10-12" and new.label == "2026-11-03"
-    assert pokrycie.pinned_at == pinned[1].pinned_at
-    assert report.tasks[1].pinned == (new,) and report.tasks[1].unpinned == (old,)
-    assert file_digest(colleague / "data" / new.version)[0] == old.sha256
+    # the same SHA-256 on another day: the bytes go back under the pinned
+    # version, the manifest keeps version and label (live test 0.8.0)
+    assert report.project.tasks == pinned
+    (old,) = pinned[1].files
+    assert old.label == "2026-10-12"
+    assert report.tasks[1].pinned == (old,) and report.tasks[1].unpinned == ()
+    assert file_digest(colleague / "data" / old.version)[0] == old.sha256
+    assert verify_project(colleague).ok
 
 
 def test_restore_conflict_keeps_pin(tmp_path):
@@ -400,7 +396,7 @@ def test_restore_conflict_keeps_pin(tmp_path):
     assert len(stored) == 1 and file_digest(stored[0])[0] != pin.sha256
 
 
-def test_restore_partial_saves_restored_pins(tmp_path, monkeypatch):
+def test_restore_partial_keeps_restored_pins(tmp_path, monkeypatch):
     project = new_project(tmp_path)
     add_project_task(
         project,
@@ -419,7 +415,8 @@ def test_restore_partial_saves_restored_pins(tmp_path, monkeypatch):
     assert result.outcome == "failed"
     assert [pin.unit for pin in result.pinned] == ["0208"]
     first, second = report.project.tasks[0].files
-    assert (first.unit, first.label) == ("0208", "2026-11-03")
+    assert (first.unit, first.label) == ("0208", "2026-10-12")  # the pin as it was
+    assert (colleague / "data" / first.version).is_file()
     assert (second.unit, second.label) == ("0261", "2026-10-12")  # unchanged pin
 
 
