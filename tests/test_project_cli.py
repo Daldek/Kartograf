@@ -172,6 +172,74 @@ def test_add_records_selected_options_for_every_data_command(
     assert "Dodano zadanie warstwa" in capsys.readouterr().out
 
 
+def test_cz_laz_task_pins_model_file_and_rejects_availability(
+    tmp_path, monkeypatch, capsys
+):
+    """A project task keeps the model and pins the downloaded CUZK LAZ version."""
+    from tests.test_cuzk_laz import CTES96_URL, CuzkSession, zip_member
+    from tests.test_cz_laz import recorded
+
+    monkeypatch.chdir(tmp_path)
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    assert (
+        main(
+            _add(
+                project,
+                "teren",
+                "elevation",
+                "download",
+                "--product",
+                "laz",
+                "--country",
+                "cz",
+                "--model",
+                "dmr4g",
+                "--vertical-crs",
+                "Bpv",
+                "--sheet",
+                "CTES96",
+            )
+        )
+        == 0
+    )
+    (task,) = open_project(project).tasks
+    assert task.options["model"] == "dmr4g"
+    assert task.files == ()
+
+    with recorded(CuzkSession()) as session:
+        assert (
+            main(["project", "download", "--project", str(project), "teren", "-q"]) == 0
+        )
+    assert session.of("GET") == [CTES96_URL]
+    (task,) = open_project(project).tasks
+    (pin,) = task.files
+    assert pin.path == "laz/cz_dmr4g_bpv/CTES/96/CTES96.laz"
+    assert (project / "data" / pin.version).read_bytes() == zip_member(CTES96_URL)
+
+    before = _manifest_bytes(project)
+    assert (
+        main(
+            _add(
+                project,
+                "raport",
+                "elevation",
+                "availability",
+                "--product",
+                "laz",
+                "--country",
+                "cz",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+            )
+        )
+        == 1
+    )
+    assert "do projektu mozna dodac komendy zapisujace dane" in capsys.readouterr().err
+    assert _manifest_bytes(project) == before
+
+
 @pytest.mark.parametrize(
     "flag", ["--upgrade", "--force", "--check-updates", "--plan", "--output"]
 )
