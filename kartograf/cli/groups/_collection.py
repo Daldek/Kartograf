@@ -1,16 +1,17 @@
 """
 ``download`` and ``list-sources`` of a collection group (``boundaries``,
-``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``; ADR-042 D9).
+``cadastre``, ``models3d``, ``hydro``, ``names``, ``maps``, ``geodesy``;
+ADR-042 D9).
 
 Every collection group has the same command shape: ``--product`` and
 ``--country`` like ``elevation``/``imagery``, one selection (``--teryt``,
 in ``cadastre`` ``--ku``, ``--sheet``/``--bbox``/``--geometry``, in some
 groups ``--whole-country``), the content flags of the group only
-(``--level``, ``--lod``/``--year``, ``--format``, ...), the store flags and
-``--workers`` (default 1). ``--teryt`` and ``--sheet`` select PL units and
-sheet codes: a group without PL sources (``hydro``) has neither; ``--ku``
-selects a CZ cadastral area. The choices in ``--help`` come from the source
-registry through the library.
+(``--level``, ``--lod``/``--year``, ``--format``, ``--network``, ...), the
+store flags and ``--workers`` (default 1). ``--teryt`` and ``--sheet``
+select PL units and sheet codes: a group without PL sources (``hydro``) has
+neither; ``--ku`` selects a CZ cadastral area. The choices in ``--help``
+come from the source registry through the library.
 """
 
 import argparse

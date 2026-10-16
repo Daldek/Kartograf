@@ -350,8 +350,9 @@ def _collection_command(
     name: str, group: str, options: dict[str, OptionKind]
 ) -> TaskCommand:
     """``download_collection``/``check_collection`` limited to the products of
-    a collection group (``boundaries``, ``cadastre``, ``models3d``, ``hydro``;
-    ADR-042); the result family is ``CollectionReport`` (``unit_report_files``)."""
+    a collection group (``boundaries``, ``cadastre``, ``models3d``, ``hydro``,
+    ``names``, ``maps``, ``geodesy``; ADR-042); the result family is
+    ``CollectionReport`` (``unit_report_files``)."""
 
     def validate(output_dir: Path, opts: Options) -> None:
         require_collection_product(opts.get("product"), group)
@@ -513,6 +514,11 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                     "format": "str",
                     "sheet_system": "str",
                 },
+            ),
+            _collection_command(
+                "geodesy download",
+                "geodesy",
+                {**_COLLECTION, "whole_country": "flag", "network": "str"},
             ),
         )
     }

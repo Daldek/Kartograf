@@ -489,6 +489,7 @@ class TestCommandGroups:
         "cadastre",
         "models3d",
         "hydro",
+        "geodesy",
     )
     # the selection flag of each group's download and its values
     _CHOICES = {
@@ -508,6 +509,7 @@ class TestCommandGroups:
         "cadastre": ("--product", {"map", "prices"}),
         "models3d": ("--product", {"buildings", "mesh", "trees"}),
         "hydro": ("--product", {"network"}),
+        "geodesy": ("--product", {"control", "geoid"}),
     }
 
     @pytest.mark.parametrize("group", _GROUPS)
