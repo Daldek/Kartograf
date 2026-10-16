@@ -2468,6 +2468,18 @@ proxy).
 - Ortofoto CZ: tylko aktualny rocznik arkusza (archiwalne zdjęcia CUZK
   są płatne); pliki JGW nie niosą układu — w GIS przypisz EPSG:5514 do
   `<godło>.jpg` z `<godło>.jgw` (sekcja 1.4).
+- Ortofotomapa ukośna (`--product oblique-orto`) kampanii Kraków 2021
+  (np. arkusz `7.125.11.08`, kampania 78945): GeoTIFF ma własny opis układu
+  („Transverse Mercator, WGS84”) z parametrami PL-2000 strefy 7, bez kodu
+  EPSG. GDAL i rasterio nie podają kodu (`to_epsg()` = `None`), a przy
+  obniżonym progu pewności błędnie dopasowują EPSG:32634 (UTM 34N — obraz
+  wylądowałby ok. 6900 km dalej). Układ pliku to EPSG:2178 (PL-2000
+  strefa 7), jak `horizontal_crs` w sidecarze. W QGIS ustaw układ warstwy
+  na EPSG:2178; narzędziu wymagającemu kodu podaj go bez zmiany pliku:
+  `gdal_translate -of VRT -a_srs EPSG:2178 plik.tif plik.vrt`. Nie używaj
+  `gdal_edit.py` na pliku w magazynie — zmiana bajtów łamie sumę SHA-256
+  wersji i przypięcia projektu. Kampanie z kodem EPSG w pliku (np. Gdańsk
+  2024, EPSG:2177) tego nie wymagają.
 - ZABAGED: klasy nie są przeliczane na kody BDOT10k, a warstwy pliku
   krajowego mają inne nazwy niż wynik obszaru; HY-NET: wynik obszaru bez
   skrzyżowań cieków (tylko w pliku krajowym, EPSG:3045), pola warstw
