@@ -405,6 +405,9 @@ _COLLECTION: dict[str, OptionKind] = {
 _CZ_COLLECTION: dict[str, OptionKind] = {
     name: kind for name, kind in _COLLECTION.items() if name not in ("teryt", "sheet")
 }
+_SHEET_COLLECTION: dict[str, OptionKind] = {
+    name: kind for name, kind in _COLLECTION.items() if name != "teryt"
+}
 
 
 COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
@@ -480,6 +483,26 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
             ),
             _collection_command(
                 "hydro download", "hydro", {**_CZ_COLLECTION, "whole_country": "flag"}
+            ),
+            _collection_command(
+                "names download",
+                "names",
+                {
+                    **_SHEET_COLLECTION,
+                    "whole_country": "flag",
+                    "format": "str",
+                    "horizontal_crs": "str",
+                },
+            ),
+            _collection_command(
+                "maps download",
+                "maps",
+                {
+                    **_SHEET_COLLECTION,
+                    "scale": "str",
+                    "format": "str",
+                    "sheet_system": "str",
+                },
             ),
         )
     }

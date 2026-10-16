@@ -19,8 +19,10 @@ from kartograf.sources.descriptor import (
     CountryProfile,
     FeatureBBoxParams,
     FeatureLayer,
+    IndexSource,
     LicenseInfo,
     PackageVariant,
+    SheetGrid,
     SignalKind,
     SourceDescriptor,
     TileScheme,
@@ -845,6 +847,261 @@ _CZ_ORTOFOTO = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
+# plan E - E2: geographic names and published topographic map sheets.
+_PRNG_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRNG/apiFeatures"
+_BDOT10K_MAP_INDEX = IndexSource(
+    kind="wms_gfi",
+    endpoint=f"{_PZGIK}/BDOT/WMS/PobieranieArkuszeMapBDOT10k",
+    parser="map_links",
+    unit_field="godlo",
+    url_field=None,
+    label_fields=("stan_bazy",),
+)
+
+
+def _prng_source(*, world: bool) -> SourceDescriptor:
+    product = "world" if world else "geographic"
+    source = "prng_world" if world else "prng"
+    collection = "PolskaNazwaGeograficznaSwiata" if world else "NazwaGeograficznaRP"
+    themes = ("SWIAT",) if world else ("MIEJSCOWOSCI", "OBIEKTY_FIZJOGRAFICZNE")
+    return SourceDescriptor(
+        key=f"pl.gugik.{source}",
+        country="PL",
+        product=product,
+        name=(
+            "PRNG - polskie nazwy geograficzne swiata"
+            if world
+            else "PRNG - nazwy geograficzne RP"
+        ),
+        provider_name="GUGiK",
+        channels=(
+            AccessChannel(
+                transport=TransportKind.OGC_API_FEATURES,
+                horizontal_crs="OGC:CRS84",
+                capabilities=frozenset({"bbox_vector"}),
+                endpoint=_PRNG_API,
+                update_signal="none",
+                params=FeatureBBoxParams(
+                    protocol="ogcapi",
+                    native_crs="OGC:CRS84",
+                    axis_order="xy",
+                    page_size=10000,
+                    layers=(
+                        FeatureLayer(
+                            code=product,
+                            source=collection,
+                            name="prng_world" if world else "prng",
+                            id_field="id",
+                        ),
+                    ),
+                    selection="all",
+                    timeout=180,
+                ),
+            ),
+            AccessChannel(
+                transport=TransportKind.DIRECT_FILES,
+                horizontal_crs="EPSG:2180" if not world else "EPSG:4326",
+                capabilities=frozenset({"country_files"}),
+                endpoint=f"{_OPENDATA}/prng/",
+                update_signal="none",
+                params=UnitPackageParams(
+                    unit="country",
+                    themes=themes,
+                    variants=tuple(
+                        PackageVariant(
+                            choice=(("format", fmt),),
+                            url_template=f"{_OPENDATA}/prng/PRNG_{{theme}}_{fmt}.zip",
+                            segment_tokens=(fmt.lower(),),
+                        )
+                        for fmt in ("GML", "SHP", "XLSX")
+                    ),
+                ),
+            ),
+        ),
+        tile_scheme=None,
+        storage_subdir=f"names/pl_{source}",
+        default_extension=".gpkg",
+        license=_GUGIK_LICENSE,
+    )
+
+
+_PL_PRNG = _prng_source(world=False)
+_PL_PRNG_WORLD = _prng_source(world=True)
+
+_PL_BDOT10K_MAPS = SourceDescriptor(
+    key="pl.gugik.bdot10k_maps",
+    country="PL",
+    product="topographic",
+    name="Wizualizacje map topograficznych BDOT10k",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=_BDOT10K_MAP_INDEX.endpoint,
+            update_signal="index",
+            params=UnitPackageParams(
+                unit="sheet",
+                index=_BDOT10K_MAP_INDEX,
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("scale", scale), ("format", fmt)),
+                        url_template=None,
+                        segment_tokens=(scale.split(":")[1], fmt.lower()),
+                        sheet_grid=SheetGrid(system="1992", parts=parts),
+                        index_layer=layer,
+                        file_kind="tiff" if fmt == "TIFF" else "pdf",
+                    )
+                    for scale, parts, layer in (
+                        ("1:10000", 6, "Mapy10k"),
+                        ("1:25000", 5, "Mapy25k"),
+                        ("1:50000", 4, "Mapy50k"),
+                        ("1:100000", 3, "Mapy100k"),
+                    )
+                    for fmt in ("TIFF", "PDF")
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="maps/pl_bdot10k",
+    default_extension=".tif",
+    license=_GUGIK_LICENSE,
+)
+
+# Object layers 0-24 of GEONAMES/Geonames/MapServer (published 2026-10-16).
+_GEONAMES_NAMES = (
+    "mesta_obce",
+    "casti_mest_obci",
+    "mistni_casti",
+    "chranena_uzemi_prirody",
+    "regiony",
+    "reky_velke_vodni_plochy",
+    "ostatni_vodni_toky_a_plochy",
+    "ostatni_objekty_vodstva",
+    "rozsahle_terenni_tvary",
+    "ostatni_terenni_tvary",
+    "povrch_vegetace",
+    "pozemni_komunikace",
+    "vodni_komunikace",
+    "letiste",
+    "telekomunikacni_zarizeni",
+    "kulturni_objekty",
+    "hrady_zamky_tvrze",
+    "sakralni_objekty",
+    "hrbitovy_hrobky",
+    "sportovni_zarizeni",
+    "lecebna_lazenska_zarizeni",
+    "ubytovaci_stravovaci_zarizeni",
+    "vyrobni_tezebni_zarizeni",
+    "ostatni",
+    "hranicni_jmena",
+)
+
+_CZ_GEONAMES = SourceDescriptor(
+    key="cz.cuzk.geonames",
+    country="CZ",
+    product="geographic",
+    name="Geonames - nazwy geograficzne Czech",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/GEONAMES/Geonames/MapServer",
+            update_signal="none",
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                layers=tuple(
+                    FeatureLayer(
+                        code=name, source=str(i), name=name, id_field="OBJECTID"
+                    )
+                    for i, name in enumerate(_GEONAMES_NAMES)
+                ),
+                selection="all",
+                order_field="OBJECTID",
+            ),
+        ),
+        *(
+            AccessChannel(
+                transport=TransportKind.DIRECT_FILES,
+                horizontal_crs="EPSG:5514",
+                capabilities=frozenset({"country_files"}),
+                endpoint=f"{_CUZK_ATOM}/GEONAMES-{fmt}/GEONAMES-{fmt}.xml",
+                update_signal="metadata",
+                params=AtomFilesParams(
+                    service_feed=f"{_CUZK_ATOM}/GEONAMES-{fmt}/GEONAMES-{fmt}.xml",
+                    entry_pattern=rf"CUZK_GEONAMES-{fmt}_[0-9]+\.xml$",
+                    crs=("EPSG:5514", "EPSG:3045"),
+                    segment_tokens=(fmt.lower(),),
+                    choice=(("format", fmt),),
+                ),
+            )
+            for fmt in ("GPKG", "FGDB")
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="names/cz_geonames",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+_CZ_ZTM = SourceDescriptor(
+    key="cz.cuzk.ztm",
+    country="CZ",
+    product="topographic",
+    name="ZTM - zakladni topograficke mapy Czech",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=f"{_CUZK_OPENZU}/",
+            update_signal="http",
+            params=UnitPackageParams(
+                unit="sheet",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(
+                            ("scale", f"1:{scale * 1000}"),
+                            ("sheet_system", system.lower()),
+                            ("format", fmt),
+                        ),
+                        url_template=(
+                            f"{_CUZK_OPENZU}/ZTM{scale}-{service}-{fmt}/"
+                            "{sheet}" + (".pdf" if fmt == "PDF" else ".zip")
+                        ),
+                        segment_tokens=(str(scale * 1000), system.lower(), fmt.lower()),
+                        sheet_grid=SheetGrid(
+                            system="cuzk",
+                            layer=2 * i + (12 if system == "ETRS89" else 0),
+                            crs="EPSG:3045" if system == "ETRS89" else "EPSG:5514",
+                        ),
+                        file_kind="pdf" if fmt == "PDF" else "zip",
+                    )
+                    for i, scale in enumerate((5, 10, 25, 50, 100, 250))
+                    for system, service, formats in (
+                        ("SJTSK", "SJTSK", ("TIFF", "PDF", "DGN", "SHP")),
+                        ("ETRS89", "ETRS89", ("TIFF", "PDF")),
+                    )
+                    for fmt in formats
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="maps/cz_ztm",
+    default_extension=".zip",
+    license=_CUZK_LICENSE,
+)
+
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -1128,6 +1385,10 @@ _SOURCES: dict[str, SourceDescriptor] = {
             default_extension=".zip",
             license=_GUGIK_LICENSE,
         ),
+        # plan E - E2: PL names and maps.
+        _PL_PRNG,
+        _PL_PRNG_WORLD,
+        _PL_BDOT10K_MAPS,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",
@@ -1184,6 +1445,9 @@ _SOURCES: dict[str, SourceDescriptor] = {
         _CZ_RUIAN,
         _CZ_HY_NET,
         _CZ_ORTOFOTO,
+        # plan E - E2: CZ names and maps.
+        _CZ_GEONAMES,
+        _CZ_ZTM,
     )
 }
 

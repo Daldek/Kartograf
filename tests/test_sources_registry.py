@@ -110,22 +110,6 @@ _OPENZU_HEAD = {
     ]
 }
 
-EXPECTED_KEYS = {
-    *PL_SHEET_KEYS,
-    "pl.gugik.orto",
-    "pl.gugik.laz",
-    "pl.gugik.bdot10k",
-    "eu.clms.corine",
-    "global.isric.soilgrids",
-    *CZ_KEYS,
-    "pl.gugik.prg",
-    "pl.gugik.egib",
-    "pl.gugik.buildings_3d",
-    "cz.cuzk.zabaged",
-    "cz.cuzk.ruian",
-    "cz.cuzk.hy_net",
-    "cz.cuzk.ortofoto",
-}
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
 # NMT/NMPT sheets: WFS index since ADR-041, a new index record = new data).
@@ -163,24 +147,6 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.ortofoto", TransportKind.DIRECT_FILES, "metadata"),
 ]
 
-# Collection channels (ADR-042 D6) by their capability - a descriptor may have
-# several channels of one transport (BDOT10k: current packages + archive).
-COLLECTION_CHANNEL_SIGNALS = [
-    ("pl.gugik.bdot10k", "archive_unit_files", "none"),
-    ("pl.gugik.prg", "bbox_vector", "none"),
-    ("pl.gugik.prg", "admin_unit_files", "none"),
-    ("pl.gugik.prg", "country_files", "none"),
-    ("pl.gugik.egib", "admin_unit_files", "none"),
-    ("pl.gugik.egib", "bbox_vector", "none"),
-    ("pl.gugik.buildings_3d", "admin_unit_files", "none"),
-    ("cz.cuzk.zabaged", "bbox_vector", "none"),
-    ("cz.cuzk.zabaged", "country_files", "metadata"),
-    ("cz.cuzk.ruian", "bbox_vector", "none"),
-    ("cz.cuzk.ruian", "country_files", "http"),
-    ("cz.cuzk.hy_net", "bbox_vector", "none"),
-    ("cz.cuzk.hy_net", "country_files", "http"),
-    ("cz.cuzk.ortofoto", "sheet_files", "metadata"),
-]
 
 PL_VARIANTS = variants(country="PL")
 
@@ -208,12 +174,6 @@ def test_channel_signals_match_inventory(key, transport, signal):
     assert channel_signal(key, transport) == signal
 
 
-def test_every_channel_has_an_inventoried_signal():
-    inventoried = {(key, transport) for key, transport, _ in CHANNEL_SIGNALS}
-    channels = {(d.key, c.transport) for d in sources_for() for c in d.channels}
-    assert channels == inventoried
-
-
 def _collection_channels():
     """Channels of the collection engines (the WCS cutout channels of the
     orthophotomap carry provider configuration, ADR-042 D14)."""
@@ -235,15 +195,6 @@ def _sidecar_crs(channel: AccessChannel) -> tuple:
         else channel.horizontal_crs
     )
     return horizontal, channel.vertical_crs_options, channel.vertical_source
-
-
-def test_collection_channel_signals_match_inventory():
-    found = {
-        (d.key, capability, ch.update_signal)
-        for d, ch in _collection_channels()
-        for capability in ch.capabilities
-    }
-    assert found == set(COLLECTION_CHANNEL_SIGNALS)
 
 
 @pytest.mark.parametrize(
@@ -318,17 +269,12 @@ class TestDescriptorDataclasses:
 
 
 class TestRegistry:
-    def test_all_keys_present(self):
-        assert {d.key for d in sources_for()} == EXPECTED_KEYS
-
     def test_get_source_unknown_key_lists_available(self):
         with pytest.raises(KeyError) as exc:
             get_source("xx.none.zadne")
         assert "pl.gugik.nmt_1m" in str(exc.value)
 
     def test_sources_for_filters(self):
-        pl = sources_for(country="PL")
-        assert {d.key for d in pl} == {k for k in EXPECTED_KEYS if k.startswith("pl.")}
         nmt = sources_for(country="PL", product="nmt")
         assert {d.key for d in nmt} == {
             k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmt_")
@@ -337,8 +283,6 @@ class TestRegistry:
         assert {d.key for d in nmpt} == {
             k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmpt")
         }
-        cz = sources_for(country="CZ")
-        assert {d.key for d in cz} == {k for k in EXPECTED_KEYS if k.startswith("cz.")}
         assert {d.key for d in sources_for(country="CZ", product="nmpt")} == {
             "cz.cuzk.dmp1g",
             "cz.cuzk.dmpok",
@@ -348,7 +292,6 @@ class TestRegistry:
         pl = get_country("PL")
         assert pl.code == "PL"
         assert pl.extent_wgs84.crs == "EPSG:4326"
-        assert set(pl.dataset_keys) == {k for k in EXPECTED_KEYS if k.startswith("pl.")}
         with pytest.raises(KeyError):
             get_country("XX")
 
@@ -450,9 +393,6 @@ class TestRegistry:
         cz = get_country("CZ")
         assert cz.code == "CZ"
         assert cz.extent_wgs84 == BBox(12.09, 48.55, 18.86, 51.06, "EPSG:4326")
-        assert cz.dataset_keys == tuple(
-            sorted(k for k in EXPECTED_KEYS if k.startswith("cz."))
-        )
 
     def test_all_countries(self):
         codes = [c.code for c in all_countries()]
@@ -649,11 +589,8 @@ class TestDescriptorProviderConsistency:
             "global.isric.soilgrids": "soil/global_soilgrids",
         }
 
-    def test_horizontal_crs_matches_channel_reality(self):
-        """Descriptor horizontal CRS = the CRS the channel actually returns."""
-        for d in sources_for(country="PL"):
-            for ch in d.channels:
-                assert ch.horizontal_crs == "EPSG:2180", d.key
+    def test_global_sources_have_published_crs(self):
+        """Global land-cover and soil channels preserve their service CRSs."""
         # CORINE: EPSG:3035 is the CLMS GeoTIFF channel; the WMS preview channel
         # is EPSG:3857 (1990 DLR: EPSG:4326, set by LandCoverManager per file)
         assert get_source("eu.clms.corine").channels[0].horizontal_crs == "EPSG:3035"

@@ -2641,41 +2641,45 @@ co `check_availability(...).to_json()` z tym samym cache.
 
 ### 4.10 Kolekcje: paczki jednostek, obiekty obszaru i pliki feedu ATOM (ADR-042)
 
-**Komenda w bibliotece.** `kartograf boundaries|cadastre|models3d|hydro
-download` = `download_collection(...)`/`check_collection(...)`
+**Komenda w bibliotece.** `kartograf
+boundaries|cadastre|models3d|hydro|names|maps download` =
+`download_collection(...)`/`check_collection(...)`
 (`download/collections.py`); CLI tylko tlumaczy flagi
 (`cli/collection_cmd.py::collection_task` - to samo dla `_handler`
-i `_task` projektu) i wypisuje wynik, a wspolny ksztalt komend czterech grup
-jest w `cli/groups/_collection.py` (teksty `--help` z biblioteki:
+i `_task` projektu), a wspolny ksztalt grup jest w
+`cli/groups/_collection.py` (teksty `--help` z biblioteki:
 `collection_product_choices`, `collection_level_choices`,
 `collection_variant_choices`). `validate_collection_request` sprawdza caly
 wybor BEZ sieci i jest jedynym miejscem regul (wolaja ja obie funkcje
 i pozycje projektu): wspolrzedne bboxa, dokladnie jeden wybor (`teryt`,
-`sheet`, `bbox`, `geometry`, `whole_country`), produkt z rejestru, kraj
-(`pl`/`cz`/`auto` wymagany z obszarem; `whole_country` tylko `pl`/`cz`;
-z `sheet` z godla - tylko godlo PL, obszar CZ to `bbox`/`geometry`;
-z `teryt` tylko `pl`), kanal dla rodzaju wyboru, wariant
-(`lod`, `year`) i poziom (`level`, z `auto` per kraj), `horizontal_crs`
-rowny ukladowi pliku. Blad podaje flagi CLI i wybory, ktore produkt ma
-(np. `--teryt 1261: admin nie ma paczek powiatow; dostepne: ...`).
+`ku`, `sheet`, `bbox`, `geometry`, `whole_country`), produkt z rejestru,
+kraj (`pl`/`cz`/`auto` wymagany z obszarem; `whole_country` tylko
+`pl`/`cz`; z `sheet` z godla), kanal dla rodzaju wyboru, wariant
+(`lod`, `year`, `format`, `scale`, `sheet_system`, `network`) i poziom (`level`,
+z `auto` per kraj), `horizontal_crs` rowny ukladowi pliku. Blad podaje flagi
+CLI i wybory, ktore produkt ma (np. `--teryt 1261: admin nie ma paczek
+powiatow; dostepne: ...`).
 
 **Rodzaj wyboru wyznacza kanal (D2).**
 
 | Wybor | Kanal | Jednostki | Plik (regula 9 sekcji 3.3) |
 |---|---|---|---|
 | `teryt` (2 cyfry = woj., 4 = powiat; PL) | `unit_package` tej jednostki | `[teryt]` | `teryt/<T>` |
+| `ku` (6 cyfr; CZ) | `unit_package` KU | `[ku]` | `ku/<kod>` |
+| `sheet` albo arkusze przecinajace obszar | `unit_package` arkuszy z indeksem PL lub CUZK | `[godlo]`/arkusze obszaru | plasko `<MAPNOM>` w segmencie wariantu |
 | obszar produktu z kanalem `feature_bbox` | `feature_bbox` | jeden obszar w ukladzie natywnym uslugi | `bbox/<coords>.gpkg` |
-| obszar produktu bez `feature_bbox` | `unit_package` powiatu | powiaty z PRG (`discover_teryts_for_bbox`, cache metadanych; `Notice` `unit_list`) | `teryt/<T>` kazdego powiatu |
-| `whole_country` | `unit_package` jednostki `country` albo `atom_files` (plik z feedu ATOM CUZK; `horizontal_crs` wymagany, gdy plik ma kilka ukladow) | `pl` albo `cz` | `country/<kod>` |
+| obszar produktu bez `feature_bbox` (powiat) | `unit_package` powiatu | powiaty z PRG (`discover_teryts_for_bbox`, cache metadanych; `Notice` `unit_list`) | `teryt/<T>` kazdego powiatu |
+| `whole_country` | `unit_package` jednostki `country` albo `atom_files` (plik z feedu ATOM CUZK; `horizontal_crs` wymagany, gdy plik ma kilka ukladow) | `pl` albo `cz` (PRNG: tematy) | `country/<kod>` (PRNG: `pl-<temat>`) |
 
-Obszar: `bbox` w ukladzie z listy `--bbox-crs`, `sheet` = zasieg godla PL
-(EPSG:2180), `geometry` = obwiednia obiektow pliku (`--layer`). Pod
-`country="auto"` obszar dzielony jest na kraje jak w `download_data`
+Obszar: `bbox` w ukladzie z listy `--bbox-crs`, `sheet` = zasieg godla
+PL albo CZ, `geometry` = obwiednia obiektow pliku (`--layer`).
+Pod `country="auto"` obszar dzielony jest na kraje jak w `download_data`
 (sekcja 4.6) i zawezany do krajow, w ktorych produkt istnieje (`Notice`
-`auto_narrowed_to_pl`/`auto_narrowed_to_cz`). Obszar przeliczony do ukladu
-natywnego uslugi (`transform_bbox`; uklady czeskie - operacja przypieta)
-albo pochodzacy z arkusza/geometrii/`auto` daje `extra.parent_request`
-(sekcja 3.4); paczki powiatow obszaru maja je zawsze. Plik krajowy:
+`auto_narrowed_to_pl`/`auto_narrowed_to_cz`); `world --country pl` nie
+przycina obszaru do Polski. Obszar przeliczony do ukladu natywnego uslugi
+(`transform_bbox`; uklady czeskie - operacja przypieta) albo pochodzacy
+z arkusza/geometrii/`auto` daje `extra.parent_request` (sekcja 3.4);
+paczki powiatow obszaru maja je zawsze. Plik krajowy:
 najpierw `HEAD` (plik z feedu ATOM: `length` feedu, bez `HEAD`)
 i `Notice` `whole_country_size` (`warning`: bajty albo "rozmiar
 nieznany"), potem transfer (K7). Produkt jednego kraju pod `auto` jest
@@ -2695,9 +2699,10 @@ kind)` (`no_coverage` dla `NoCoverageError`, `download` dla
 `DownloadError`), pozostale jednostki dzialaja dalej (`workers` =
 `ThreadPoolExecutor`, sesja HTTP per watek). Wynik: `CollectionReport(files,
 failed, stale, notices, ok)`, `ok` = brak bledow i nieaktualnych pozycji
-planu. Czasy: `SERVICE_TIMEOUT` 60 s (zapytanie i strona uslugi),
-`PACKAGE_TIMEOUT` 120 s (paczka), `PROBE_TIMEOUT` 30 s (`HEAD`, zapytanie
-PRG). `LandCoverManager` uzywa tych samych `package_job`/`run_job`/
+planu. Czasy: `SERVICE_TIMEOUT` 60 s (WFS/REST, kanal moze miec wlasny
+`FeatureBBoxParams.timeout`, np. PRNG OGC API 180 s), `PACKAGE_TIMEOUT`
+120 s (paczka), `PROBE_TIMEOUT` 30 s (`HEAD`, zapytanie PRG).
+`LandCoverManager` uzywa tych samych `package_job`/`run_job`/
 `inspect_job` dla archiwum BDOT10k i `landcover_request`/`run_request`/
 `plan_request` dla ZABAGED (tor `landcover`, sekcja 4.8).
 
@@ -2803,15 +2808,18 @@ wolumenie sieciowym bez blokad), potem trafia do `versions/.incoming/`
 magazynu.
 
 **Magazyn, sygnaly i etykiety (D6, D7).** Sygnal = `update_signal` kanalu.
-Kanaly kolekcji PL i obiekty obszaru CZ maja `none` (GUGiK nie podaje
-`ETag` ani `Last-Modified`, wynik WFS/REST to migawka): lokalna wersja jest
-uzywana bez zapytan, `--check-updates` = `unverifiable` (CLI: `nie da sie
-sprawdzic bez pobrania`), nowa tresc przynosi tylko `--force` (ta sama
+Kanaly bez jawnie ogloszonego sygnalu (`PRG`, `EGiB`, obszary
+`PRNG`/`Geonames`, kraj `PRNG` i inne obiekty obszaru) maja `none`:
+lokalna wersja jest uzywana bez zapytan, `--check-updates` = `unverifiable`
+(`nie da sie sprawdzic bez pobrania`), nowa tresc przynosi tylko
+`--force` (ta sama
 tresc = `unchanged`, inna = nowa wersja). Pliki krajowe CUZK z `ETag`
 (RUIAN, HY-NET) maja `http`: domyslnie jedno `HEAD` porownuje lokalna
 wersje (inny `ETag` = dopisek `dostepna nowsza`, `--upgrade` pobiera),
-`--check-updates` = `current`/`newer`. Plik z feedu ATOM (ZABAGED kraj) ma
-`metadata`: wydanie z feedu przed pobraniem, inne wydanie = `newer`.
+`--check-updates` = `current`/`newer`. Plik z feedu ATOM (ZABAGED,
+Geonames kraj) ma `metadata`: wydanie z feedu przed pobraniem, inne
+wydanie = `newer`. Mapy BDOT10k maja `index` (data `Stan bazy` osobno
+dla skali z GetFeatureInfo), arkusze ZTM `http` (`HEAD`).
 Etykieta = `edition` wariantu (rocznik
 BDOT10k, rok modeli 3D; `label_source="edition"`), wydanie z feedu ATOM
 albo data pobrania (PRG, EGiB, RUIAN, HY-NET). Wydania tej samej tresci - warianty rozniace sie tylko wartoscia
@@ -2819,6 +2827,20 @@ rowna wydaniu (`year`), przy tym samym formacie i LoD - to sloty pokrewne
 (`FileSlot.related_roots`): identyczny sha256 w innym wydaniu tej samej
 jednostki = hardlink do istniejacych danych, status `relabeled`
 (`same_as` = etykieta znalezionej wersji).
+
+**Nazwy i mapy (E2).** `pl.gugik.prng` i `pl.gugik.prng_world` maja po
+jednej kolekcji OGC API Features (natywnie CRS84; `numberMatched`, strony
+`next`, strona do 10000 obiektow, limit jednego zapytania 180 s).
+`world` nie ogranicza obszaru do zasiegu PL; krajowe PRNG to ZIP-y
+oryginalnych dwoch tematow RP albo jednego `SWIAT`. Geonames CUZK to
+25 warstw ArcGIS REST w EPSG:5514 i dwa kanaly krajowe feedu ATOM
+(`GPKG`/`FGDB`, wybor EPSG:5514/3045). Mapy BDOT10k to 4 skale x
+2 formaty z rekordow `wms_gfi` (`Mapy10k`...`Mapy100k`); skala
+okresla liczbe czlonow godla, format oddzielny segment magazynu.
+ZTM CUZK to 6 skal x 2 uklady (S-JTSK/ETRS89), odpowiednio
+ZIP TIFF/DGN/SHP lub PDF (ETRS89 tylko TIFF/PDF). System arkusza
+wynika z jego godla, ale sprzeczny `sheet_system` jest bledem;
+`sheet_grid.crs` wariantu daje sidecar EPSG:5514 albo EPSG:3045.
 
 ---
 

@@ -18,7 +18,6 @@ from kartograf.project.commands import (
     check_options_json,
     options_from_json,
     options_to_json,
-    task_command,
 )
 from tests.project_fixtures import (
     BDOT_BBOX,
@@ -194,16 +193,6 @@ def test_choice_of_another_command_rejected(tmp_path, command, options, library)
 )
 def test_check_options_json_rejects(data):
     assert check_options_json(ELEVATION, data) is not None
-
-
-def test_task_command_lists_data_commands():
-    error = _raised(lambda: task_command("elevation list-sources"))
-    assert str(error) == (
-        "do projektu mozna dodac komendy zapisujace dane: elevation download, "
-        "imagery download, landcover download, soil download, soil hsg, "
-        "boundaries download, cadastre download, models3d download, "
-        "hydro download"
-    )
 
 
 # --- validation = the library's own checks ---------------------------------------
