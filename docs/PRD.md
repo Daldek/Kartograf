@@ -578,17 +578,19 @@ kartograf soil hsg --sheet N-34-130-D -o ./data --depth 0-5cm --check-updates --
 
 ---
 
-### 3.9 Feature: NMT Czechy (CUZK DMR 5G/4G, etap 1)
+### 3.9 Feature: NMT, NMPT i LAZ Czechy (CUZK; DMR 5G/4G, DMP OK/1G, LAZ)
 
 **Priority:** P1 (High)
-**Status:** Production (etap 1, v0.7.0)
+**Status:** Production (NMT od v0.7.0; NMPT i LAZ od v0.8.0, plan B)
 
 #### Description
-Pobieranie czeskiego modelu terenu z CUZK: DMR 5G (2 m, godło TM33 — obliczalna
+Pobieranie czeskich modeli z CUZK: NMT DMR 5G (2 m, godło TM33 — obliczalna
 siatka kafli 2x2 km w EPSG:3045) i DMR 4G (5 m, godło SM5 z indeksu arkuszy
-`KladyMapovychListu`, EPSG:5514), a także wycinek bbox/geometrii przez
-`exportImage` (ArcGIS ImageServer). Etap 1 obejmuje wyłącznie `nmt`;
-DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
+`KladyMapovychListu`, EPSG:5514, albo kafel TM33), NMPT DMP OK (0,5 m, jak
+DMR 4G) i DMP 1G (2 m, jak DMR 5G), a także wycinek bbox/geometrii przez
+`exportImage` (ArcGIS ImageServer) oraz chmury punktów LAZ czterech modeli
+(DMR 5G, DMR 4G, DMP 1G, DMP OK). Ortofoto i ZABAGED dla CZ — plan D
+(`docs/SCOPE.md` 3.1, 3.3).
 
 #### Requirements
 - `--country {pl,cz,auto}` (wymagane z `--bbox`/`--geometry` od 0.8.0; z `--sheet` kraj z godła): kraj z formatu godła albo
@@ -596,36 +598,60 @@ DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
   `auto` daje osobne pliki PL i CZ ze wspólnym `extra.parent_request` (bez
   scalania PL+CZ — R6, etap 2). Kod 0 = sukces co najmniej jednego kraju;
   przy porażce drugiego `Warning:`.
-- Opcje bez odpowiednika czeskiego (`--product nmpt|orto`, `--vertical-crs
+- Opcje bez odpowiednika czeskiego (`--product orto`, `--vertical-crs
   KRON86`, rozdzielczość, której CUZK nie ma, np. `--resolution 1m` albo
-  `0.5m`, oraz `--format`) rozstrzygają obszar sporny do PL z `Info:`.
-- Żądania do CUZK wyłącznie w natywnym EPSG:5514; obszar CZ to zawsze
+  `0.5m` dla NMT — NMPT `0.5m` to DMP OK, oraz `--format`; dla LAZ także
+  `--year`, `--min-year`, `--max-year`, `--all-campaigns`, `--min-density`)
+  rozstrzygają obszar sporny do PL z `Info:`.
+- Model rastra wynika z `--product` i `--resolution` (NMT `2m` DMR 5G /
+  `5m` DMR 4G, NMPT `0.5m` DMP OK / `2m` DMP 1G); arkusz SM5 istnieje tylko
+  dla DMR 4G i DMP OK (`--resolution` można pominąć), kafel TM33 wymaga
+  `--resolution`. Gotowe pliki openzu: arkusz SM5 (EPSG:5514, Bpv) i kafel
+  TM33 DMR 4G/DMP OK w EVRF2007 (EPSG:3045, bez transformacji); pozostałe
+  kafle TM33 = `exportImage` + lokalny warp.
+- Żądania do CUZK wyłącznie w natywnym EPSG:5514; obszar rastra CZ to zawsze
   jeden wycinek i wymaga `--cutout --horizontal-crs {EPSG:2180,EPSG:5514,
   EPSG:3045}` (ADR-038; tylko `--bbox`/`--geometry`); reprojekcja pozioma
   lokalnie przypiętą operacją — krok S-JTSK → ETRS89 przez
   EPSG:1622/1623 (ADR-024). `--cutout` z godłem = błąd. Pod `auto` obszar
-  PL+CZ też wymaga `--cutout` (część PL = wycinek WCS).
-- Układ wysokościowy natywny Bpv; opcjonalnie `--vertical-crs EVRF2007`
-  (EPSG:5621, przypięta operacja). KRON86 nieosiągalny dla CZ.
+  PL+CZ rastra też wymaga `--cutout` (część PL = wycinek WCS).
+- Układ wysokościowy natywny Bpv (pliki ETRS89: EVRF2007); opcjonalnie
+  `--vertical-crs EVRF2007` (EPSG:5621, przypięta operacja). KRON86
+  nieosiągalny dla CZ.
+- LAZ CZ: `--model dmr5g|dmr4g|dmp1g|dmpok` wymagany (z PL albo rastrem =
+  `Error:`); plik `.laz` 1:1 z ZIP, bez transformacji — `--vertical-crs Bpv`
+  = arkusze SM5 (EPSG:5514), `EVRF2007` = kafle TM33 (EPSG:3045); godło
+  albo obszar (arkusze indeksu), bez `--cutout`; błąd jednego pliku nie
+  przerywa pozostałych. Pod `auto` LAZ pobiera kafle PL i arkusze CZ.
 - `exportImage` kafelkowany po stronie klienta (budżet 4 Mpx na żądanie),
-  piksel dokładnie 2 m / 5 m.
+  piksel dokładnie 0,5 m / 2 m / 5 m (krok modelu).
 - Indeks arkuszy SM5 cache'owany w `MetadataCache` (`sheet_cache`, TTL 30 dni;
   `--force` odpytuje na nowo).
 - CZ nie ma kampanii: `--all-campaigns`/`--min-year` bez części PL = `Error:`
   przed siecią (sekcja 3.11).
+- Raport `elevation availability --country cz|auto` / `check_availability`:
+  arkusze indeksu i jedno `HEAD` na plik (data publikacji, rozmiar), bez
+  lat nalotu i bez pobierania plików; `404` = arkusz bez pliku, inna awaria
+  = błąd; część `auto` niesprawdzona = `ok=False` (kod 1).
 
 #### Capabilities
 ```python
 from pathlib import Path
 
-from kartograf import BBox, create_dmr_provider
+from kartograf import BBox, create_cz_raster_provider, download_cz_laz
 
-provider = create_dmr_provider(resolution="2m", vertical_crs="Bpv")  # DMR 5G
+provider = create_cz_raster_provider("nmt", "2m", vertical_crs="Bpv")  # DMR 5G
 provider.download("302_5550", Path("./302_5550.tif"))      # kafel TM33
 
-provider_evrf = create_dmr_provider(resolution="5m", vertical_crs="EVRF2007")
+provider_evrf = create_cz_raster_provider("nmt", "5m", vertical_crs="EVRF2007")
 bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
 provider_evrf.download_bbox(bbox, Path("./area.tif"))      # wycinek exportImage
+
+dmp = create_cz_raster_provider("nmpt", "0.5m", vertical_crs="EVRF2007")  # DMP OK
+dmp.download("760_5518", Path("./760_5518.tif"))           # plik ETRS89 1:1
+
+clouds = download_cz_laz(model="dmr5g", vertical_crs="Bpv", output_dir="./data",
+                         sheet="CTES96")                   # LAZ CZ w magazynie
 ```
 
 #### CLI Commands
@@ -636,6 +662,10 @@ kartograf elevation download --sheet 302_5550 --country cz --vertical-crs EVRF20
 kartograf elevation download --bbox 18.60,49.752,18.65,49.768 --bbox-crs EPSG:4326 --country auto --cutout --horizontal-crs EPSG:5514 --product nmt --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
 kartograf elevation download --bbox 18.55,49.60,18.60,49.65 --bbox-crs EPSG:4326 --country cz --cutout --horizontal-crs EPSG:2180 --product nmt --resolution 2m --vertical-crs Bpv -o ./data
 kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-crs EPSG:5514 --country cz --cutout --horizontal-crs EPSG:5514 --resolution 5m --product nmt --vertical-crs Bpv -o ./data
+kartograf elevation download --sheet CTES96 --product nmpt --vertical-crs Bpv -o ./data # DMP OK (SM5, tylko 0.5m)
+kartograf elevation download --sheet 760_5518 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data # DMP OK, plik ETRS89
+kartograf elevation download --sheet CTES96 --product laz --model dmr5g --vertical-crs Bpv -o ./data # LAZ CZ
+kartograf elevation availability --product nmpt --country cz "--bbox=-447000,-1114000,-446600,-1113600" --bbox-crs EPSG:5514
 ```
 
 ---
@@ -1102,6 +1132,12 @@ from kartograf import (
     check_cz_sheet,
     download_cz_sheet,
 
+    # Download (LAZ CZ: model, arkusz/obszar)
+    CzLazResult,
+    CzLazFailure,
+    check_cz_laz,
+    download_cz_laz,
+
     # Download (LAZ tiles, D17)
     LazDownloadResult,
     LazTileFailure,
@@ -1129,8 +1165,9 @@ from kartograf import (
     Bdot10kPackage,
     CorineProvider,
     SoilGridsProvider,
-    CuzkDmrProvider,
-    create_dmr_provider,
+    CuzkRasterProvider,
+    create_cz_raster_provider,
+    CuzkLazProvider,
 
     # TERYT (PRG)
     discover_teryts_for_bbox,
@@ -1273,7 +1310,9 @@ mypy >= 1.13           # Type checking
 - [x] Kampanie GUGiK `--campaigns`/`--min-year` (0.7.0)
 
 ### Etap 2/3 (CZ) i dalej — szczegóły w `docs/SCOPE.md` 3.1
-- [ ] CZ: DMP (odpowiednik NMPT), ortofoto, LAZ; ZABAGED (etap 3)
+- [x] CZ: DMP OK i DMP 1G (NMPT), LAZ czterech modeli oraz raport
+      dostępności CZ/auto (plan B, 0.8.0)
+- [ ] Ortofoto CZ i ZABAGED (plan D)
 - [ ] Wielokąt granicy kraju zamiast prostokątnej obwiedni (`--country auto`)
 - [ ] Scalanie wycinków PL+CZ w jedną powierzchnię przygraniczną (R6)
 - [ ] Wycinek PL `--cutout` z arkuszy PL-2000

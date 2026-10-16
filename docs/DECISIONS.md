@@ -3119,6 +3119,47 @@ CZ (uzupelnienie ADR-041).
   wyboru modelu rastra (`--model` dla NMT/NMPT - rastry wybiera
   `--resolution`).
 
+**Uzupelnienie (2026-10-16, zakonczenie planu B):**
+- Trasa rastra CZ: `CuzkRasterProvider.route(sheet=None) -> CzRasterRoute`
+  (kanal, uklad wyniku, przypiete operacje; `None` = wycinek) - tory arkusza
+  i wycinka pisza sidecar z trasy, operacja pionowa powstaje w `route()`
+  przed siecia. Wariant rastra wybiera `find_cz_variant`/`cz_variant_error`,
+  LAZ `find_cz_laz_variant`/`cz_laz_error` (`sources/variants.py`;
+  `find_variant` zostaje dla PL); sygnal pliku `file_signal(sheet)`.
+- Arkusze plikow obszaru - jedna regula dla pobrania LAZ i raportu
+  (`SheetIndex.file_sheets(system, area)`): SM5 z `PODIL > 0`, TM33 - kafle
+  warstwy 26 (`IN_CZ` ma w indeksie jedna wartosc `CZ`, kafli poza CZ
+  indeks nie ma); arkusz stykajacy sie z obszarem krawedzia albo
+  zachodzacy o mniej niz 1 cm odpada (szum wspolrzednych ArcGIS ok. 1 mm).
+- `--country auto` z LAZ: kafle PL z WFS i arkusze CZ wg ukladu wysokosci,
+  wspolny `extra.parent_request`; flagi LAZ tylko-PL (`--year`,
+  `--min-year`, `--max-year`, `--all-campaigns`, `--min-density`) zawezaja
+  `auto` do PL (`Info:`); obszar siegajacy CZ bez `--model` = `Error:`
+  z lista modeli i `--country pl`.
+- Raport CZ: `HEAD` rownolegle (8 watkow), cache `head|<url>`
+  i `cz-sheets|...` jak rekordy skorowidza (`--force` pomija odczyt);
+  `uncovered_m2` mierzone w ukladzie raportowanego obszaru (prostokat
+  czesci CZ w EPSG:5514, godlo - jego rama; rama kafla TM33 przeniesiona
+  wierzcholkami przypieta operacja), wiec nie przekracza `area_m2`;
+  `size_bytes = None`, gdy zaden arkusz nie ma pliku; `Info:`
+  `cz_service_only` tylko dla czesci CZ z arkuszami indeksu. `auto`:
+  czesc niesprawdzona przy drugiej sprawdzonej = `Warning:` `check_failed`,
+  `ok=False` (CLI kod 1), obie = blad; flagi roku: `cz` = blad, `auto` =
+  zawezenie do PL. Podpowiedzi CZ: raster - polecenie na arkusz, LAZ -
+  jedno polecenie obszaru z `--model`; kazda przechodzi
+  `validate_data_request` i `project add` bez sieci.
+- Istniejace kafle TM33 DMR 4G EVRF2007 z warpu: tryb domyslny zostawia
+  lokalna wersje (`Info:` - niesprawdzona), `--force` pobiera plik CUZK
+  jako nowa wersje i przepina dowiazanie.
+- E2E na zywo 2026-10-16 (`docs/research/2026-10-16-plan-b-e2e/raport.md`):
+  DMP OK SM5 5000x4000 px 0,5 m; natywne kafle TM33 DMP OK i DMR 4G
+  EVRF2007 z wartosciami 1:1 z ZIP CUZK; DMR 4G TM33 natywnie wobec
+  dawnego warpu na tej samej siatce: mediana |roznicy| 0,06 m, p95 0,39 m,
+  maks. 1,66 m; wycinek DMP 1G 2 m zgodny geometrycznie z natywnym DMP OK
+  (ponizej 1/4 piksela); LAZ CZ arkusza i kafla bajtowo rowne czlonom ZIP;
+  wybor arkuszy obszaru = indeks po odsianiu stykajacych sie; raport CZ
+  i `auto` bez `GET` plikow, `--json` = API.
+
 ---
 
 ## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
