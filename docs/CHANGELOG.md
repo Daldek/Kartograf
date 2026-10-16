@@ -9,19 +9,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
-- Limit obszaru kolekcji (plan E, E5; ADR-043 errata 3): `--bbox`/`--sheet`/
-  `--geometry` w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`,
-  `maps`, `geodesy`, w zrodlach kolekcji `landcover` (ZABAGED, BDOO,
-  Data50, Data250) i NMT 100 m, ktore pobralyby wiecej niz 100 plikow albo
-  wiecej niz 10 GB (suma `HEAD`/dlugosci z feedu ATOM; ponad 100 plikow -
-  szacunek z 5 plikow), konczy sie `Error:`/`ValidationError` przed
-  pierwszym transferem z liczba plikow, rozmiarem i podpowiedzia; liczone
-  sa pliki bez lokalnej wersji (`--force`: wszystkie, `--upgrade --plan`:
-  pozycje planu). Dotad obszar pobieral wszystko (np. paczki modeli 3D
-  wielu powiatow). Co zrobic: zawez obszar, wybierz jednostke (`--teryt`,
-  `--ku` - bez limitu) albo wykonaj plan z czescia pozycji
-  (`--check-updates --plan PLIK`, potem `--upgrade --plan PLIK`); opcji
-  obejscia nie ma.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -44,9 +31,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   | `kartograf soilgrids hsg ...` | `kartograf soil hsg ...` |
   | `kartograf parse`, `kartograf cache` | bez zmian |
 
-  Nowe: `kartograf <grupa> list-sources` w kazdej grupie; brak `--product`
+  Nowe: `kartograf <grupa> list-sources` w kazdej grupie danych; brak `--product`
   daje komunikat z produktami tylko tej grupy; `--sheet` i `--year` maja
-  w kazdej grupie jedna definicje (ADR-039 D4, D5). Biblioteka, sidecar
+  w kazdej grupie danych jedna definicje (ADR-039 D4, D5). Biblioteka, sidecar
   i uklad `data/` bez zmian. Python: `kartograf.cli.commands` nie ma
   `cmd_landcover` ani `cmd_soilgrids`, `parse_bbox_arg` jest w
   `kartograf.cli._args`. Co zrobic: w skryptach zamien komendy wg tabeli
@@ -66,10 +53,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Usuniete bez aliasow: `kartograf.providers.pl.nmt_vertical_crs`,
     `require_nmt_vertical_crs`, `NMT_5M_VERTICAL_CRS`,
     `GugikProvider.SUPPORTED_RESOLUTIONS`, `SUPPORTED_VERTICAL_CRS`,
-    `SUPPORTED_VERTICAL_CRS_5M`, `WMS_INDEX_ENDPOINTS`,
-    `get_supported_resolutions()`, `get_supported_vertical_crs_for_resolution()`,
-    `GugikNmptProvider.SUPPORTED_RESOLUTIONS`, `WMS_INDEX_ENDPOINTS`,
-    `FileStorage.SUPPORTED_RESOLUTIONS`, `GugikLazProvider.WFS_ENDPOINTS`.
+    `SUPPORTED_VERTICAL_CRS_5M`, `get_supported_resolutions()`,
+    `get_supported_vertical_crs_for_resolution()`,
+    `GugikNmptProvider.SUPPORTED_RESOLUTIONS`,
+    `FileStorage.SUPPORTED_RESOLUTIONS`, `GugikLazProvider.WFS_ENDPOINTS`
+    oraz `WMS_SKOROWIDZE_ENDPOINTS` (`GugikProvider`, `GugikNmptProvider`).
     Co zrobic: warianty z `kartograf.sources.variants.variants(product=,
     country=, vertical_crs=, resolution=, system=, format=)` (pola `label`,
     `vertical_crs`, `format`, `source`, `index_ref.endpoint`);
@@ -114,10 +102,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `upgrade(manager, plan)` -> `manager.download_sheets(sheets, update="upgrade",
   plan=plan)`. Usunieto `last_result`, `last_sheet`, `UpgradeReport` oraz
   eksport `SheetFetch`; `max_workers=` menedzera -> `workers=`, dodano
-  `year=` i `on_notice=`. Co zrobic (takze w Hydrografie,
-  `scripts/download_dem.py`): korzystaj z wartosci zwroconej, aktualizuj
-  wywolania metod i odczyty plikow z `result.files`, a komunikaty wypisuj
-  z `on_notice` bez ponownego przetwarzania `result.notices`.
+  `year=` i `on_notice=`. Co zrobic: korzystaj z wartosci zwroconej,
+  aktualizuj wywolania metod i odczyty plikow z `result.files`, a komunikaty
+  wypisuj z `on_notice` bez ponownego przetwarzania `result.notices`.
 - Cache metadanych (Z6, ADR-037): funkcje publiczne (`download_data`,
   `check_data`, tory `download_*`/`check_*`, `LandCoverManager`,
   `HSGCalculator`) przyjmuja `cache: MetadataCache | bool = True` -
@@ -195,8 +182,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Usuniete: `download_all_counties`, `check_all_counties`, `download_by_teryt`,
   `download_by_bbox`, `download_by_sheet`, `download_batch`,
   `LandCoverResult.stale`; wybor `teryt` dla CORINE/SoilGrids to
-  `ValidationError` (nie `NotImplementedError`). Co zrobic (takze Hydrograf
-  `scripts/download_landcover.py`): `download_*`/`download_all_counties` ->
+  `ValidationError` (nie `NotImplementedError`). Co zrobic:
+  `download_*`/`download_all_counties` ->
   `download(teryt=|sheet=|bbox=|geometry=)`; plik pojedynczego wyboru:
   `result.files[0].file`; nieaktualne pozycje planu: `result.stale`;
   `download_batch(items)` -> petla po `download` albo `workers=` dla
@@ -209,36 +196,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `hsg/global_soilgrids_<glebokosc>_mean` bez zmian - istniejace magazyny
   dzialaja bez migracji). `bbox` w dowolnym CRS, `geometry` = obwiednia
   pliku; `HsgResult.notices` i `ok`; `HSGCalculator(cache=True)`. Co
-  zrobic (Hydrograf `core/cn_calculator.py`, `scripts/bootstrap.py`):
-  `calculate_hsg_by_bbox(bbox, depth=..., stat="mean")` ->
+  zrobic: `calculate_hsg_by_bbox(bbox, depth=..., stat="mean")` ->
   `calculate_hsg(bbox=bbox, depth=...)`; analogicznie arkusz i `check_hsg`.
-- `kartograf download` = `download_data(...)` / `check_data(...)` (nowe,
-  `kartograf.download.data`): cala logika komendy (godlo i kraj,
-  `country="auto"` z zawezeniem do PL i czesciowym sukcesem, walidacja
-  kazdego kraju przed pobraniem, rozwiniecie obszaru PL na arkusze,
-  `parent_request`) jest w bibliotece; wynik `DataReport(files, failed,
-  stale, superseded, notices, ok)`, CLI tylko tlumaczy flagi i wypisuje
-  raport. Bledy wejscia to `ValidationError` z tekstem jak w CLI.
-  Komunikaty o danych (`Info:`/`Warning:`) powstaja w bibliotece jako
-  `Notice` (m.in. przyciecie `auto`, brak pokrycia, dowiazania spoza
-  zakresu); stopnie w komunikatach przyciecia jako `st.N`/`st.E` (ASCII).
-  W podsumowaniu `bledy:` liczy nieudane czesci zadania (arkusze bez danych
-  GUGiK to `Warning:`, nie blad). Dodane do API: `download_data`,
-  `check_data`, `DataReport`, `UnitFile`, `UnitFailure`, `get_overall_bbox`,
-  `transform_bbox`, `parent_request_for`. Co zrobic: skrypty wolajace CLI
-  przez `subprocess` moga przejsc na `download_data` z tymi samymi
-  wartosciami (`resolution={"pl": "1m", "cz": "2m"}` zamiast `pl=1m,cz=2m`).
-- `kartograf landcover download` i `kartograf soilgrids hsg`: jedno
-  wywolanie biblioteki na komende; nowe flagi `--bbox-crs` (bbox w dowolnym
-  ukladzie z listy, jak w `download`) i `--quiet` (bez linii statusu na
-  stdout; `Info:`/`Warning:` na stderr zostaja), w `landcover download`
-  takze `--layers KODY` (filtr warstw BDOT10k GPKG, np. `SWRS,PTWP`),
-  `--keep-raw` (oryginalny ZIP GUGiK w magazynie) i `--workers N`
-  (rownolegle powiaty obszaru BDOT10k, domyslnie 1). Brak albo kilka
-  wyborow obszaru: blad biblioteki `Podaj dokladnie jeden wybor: ...`
+- CLI `elevation download` i `imagery download` tylko tlumacza flagi na
+  `download_data`/`check_data` (opis w Dodane): bledy wejscia to
+  `ValidationError` z tekstem jak w CLI, komunikaty o danych
+  (`Info:`/`Warning:`) powstaja w bibliotece jako `Notice` (m.in.
+  przyciecie `auto`, brak pokrycia, dowiazania spoza zakresu); stopnie
+  w komunikatach przyciecia jako `st.N`/`st.E` (ASCII). W podsumowaniu
+  `bledy:` liczy nieudane czesci zadania (arkusze bez danych GUGiK to
+  `Warning:`, nie blad). Co zrobic: skrypty dopasowujace wyjscie CLI -
+  nowe teksty; skrypty wolajace CLI przez `subprocess` moga przejsc na
+  `download_data` z tymi samymi wartosciami (`resolution={"pl": "1m",
+  "cz": "2m"}` zamiast `pl=1m,cz=2m`).
+- `kartograf landcover download` i `kartograf soil hsg`: brak albo kilka
+  wyborow obszaru to blad biblioteki `Podaj dokladnie jeden wybor: ...`
   (land cover/HSG) lub `Podaj wybor obszaru: ...` /
   `Podaj dokladnie jeden wybor obszaru: ...` (`download_data`) zamiast
-  angielskich komunikatow.
+  angielskich komunikatow; nowe flagi tych komend - Dodane. Co zrobic:
+  patrz Jezyk (Z5) nizej.
 - Sidecar: wspolrzedne `request.bbox` i `extra.parent_request.bbox` zawsze
   jako liczby zmiennoprzecinkowe (`770000.0`), takze dla `BBox` z liczb
   calkowitych - ten sam plik z CLI i z biblioteki. Co zrobic: nic
@@ -291,12 +267,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   fazie siatki). Co zrobic: usun obsluge tego wyjatku; faze siatki
   wlasnych zrodel sprawdza `check_source_grid(...).off_grid`.
 - CLI: godlo podaje sie flaga `--sheet` (ADR-031 errata 1, bez aliasow):
-  `kartograf download N-34-130-D-d-2-4` -> `kartograf download --sheet
-  N-34-130-D-d-2-4` (takze godla PL-2000 i CZ, np. `--sheet 302_5550`);
-  `landcover download --godlo` i `soilgrids hsg --godlo` -> `--sheet`.
-  `kartograf parse` przyjmuje godlo pozycyjnie jak dotad (w pomocy:
-  `SHEET`). Co zrobic: dopisz `--sheet` przed godlem w `download`, zamien
-  `--godlo` na `--sheet`.
+  `kartograf download N-34-130-D-d-2-4` (0.7.x) -> `kartograf elevation
+  download --sheet N-34-130-D-d-2-4 ...` (ortofotomapa: `imagery
+  download`; takze godla PL-2000 i CZ, np. `--sheet 302_5550`);
+  `landcover download --godlo` -> `--sheet`, `soilgrids hsg --godlo` ->
+  `soil hsg --sheet`. `kartograf parse` przyjmuje godlo pozycyjnie jak
+  dotad (w pomocy: `GODLO`). Co zrobic: dopisz `--sheet` przed godlem
+  (nazwy komend: tabela grup wyzej), zamien `--godlo` na `--sheet`.
 - Biblioteka: polskie identyfikatory publicznego API zastapione
   angielskimi, bez aliasow (ADR-031 errata 1). `godlo` -> `sheet`,
   `godla` -> `sheets` we wszystkich parametrach i atrybutach (m.in.
@@ -316,9 +293,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zamiast `{uklad}`), w `SheetParser` `sheet_system` (`SheetParser(sheet,
   sheet_system=)`, `.sheet_system`, ADR-038), `SheetParser.VALID_UKLADY` ->
   `VALID_SYSTEMS`, `CampaignRef.zgloszenie` -> `survey_work_id`,
-  `WMS_SKOROWIDZE_ENDPOINT(S)` -> `WMS_INDEX_ENDPOINT(S)`
-  (`GugikProvider`, `GugikNmptProvider`, `GugikOrtoProvider`). Co zrobic:
-  zamien nazwy w wywolaniach i odczytach atrybutow (Hydrograf, Hydrolog).
+  `GugikOrtoProvider.WMS_SKOROWIDZE_ENDPOINT` -> `WMS_INDEX_ENDPOINT`
+  (`WMS_SKOROWIDZE_ENDPOINTS` NMT i NMPT usuniete - wpis o rejestrze
+  wariantow wyzej). Co zrobic: zamien nazwy w wywolaniach i odczytach
+  atrybutow.
   Klucze sidecara i wartosci (godla) bez zmian.
 - CLI i biblioteka: `--campaigns {newest,all}` oraz parametr
   `campaigns="newest"|"all"` zastapiono przelacznikiem `--all-campaigns`
@@ -337,7 +315,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z lista dopuszczalnych wartosci (kod 1, przed siecia); API:
   `TypeError` dla wymaganych argumentow sygnatury, `ValidationError`
   dla brakujacych opcji warunkowych (m.in. `year` CORINE, `depth` HSG).
-  - CLI `download`: wymagane `--product` (nmt|nmpt|orto|laz), `--output`,
+  - CLI `elevation download` i `imagery download`: wymagane `--product`
+    (elevation: nmt|nmpt|laz|contours; imagery: orto|intensity|true-orto|
+    oblique-orto), `--output`,
     `--country` z `--bbox`/`--geometry` (pl|cz|auto; z `--sheet` kraj
     z godla), `--vertical-crs` dla nmt/nmpt/laz (PL EVRF2007|KRON86, CZ
     Bpv|EVRF2007), `--resolution` dla NMT i NMPT tam, gdzie jest wybor (PL:
@@ -356,9 +336,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     przelacza juz `--country auto` na PL. Podpowiedz braku pokrycia dla
     PL-1992 nie podaje `--scale`.
   - CLI `landcover download`: wymagane `--source`, `--output`, `--year`
-    (corine), `--property`/`--depth`/`--stat` (soilgrids); `landcover
-    list-layers --source`; `soilgrids hsg --output` i `--depth`. Dla BDOT10k
-    `--format` domyslnie wybiera `GPKG`; dla innych zrodel jest bledem.
+    (corine); `landcover list-layers --source`; `soil download`:
+    `--property`/`--depth`/`--stat`; `soil hsg`: `--output` i `--depth`.
+    Dla BDOT10k `--format` domyslnie wybiera `GPKG` (bez `--year`); dla
+    innych zrodel jest bledem.
   - API: `DownloadManager(output_dir, provider, *, ...)` — oba wymagane,
     parametry `vertical_crs` i `resolution` usuniete (decyduje provider);
     `FileStorage(output_dir, *, resolution, vertical_crs, ...)`, metody
@@ -388,7 +369,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   usun `--scale` z zadan PL-1992). Biblioteka: przekaz provider
   i katalog do `DownloadManager`/`LandCoverManager`, sciezke do
   `MetadataCache` (CLI uzywa `.kartograf_cache.db` w katalogu biezacym).
-- Magazyn wersjonowany dla arkuszy PL NMT/NMPT/orto (ADR-036, plan 1/3;
+- Magazyn wersjonowany dla arkuszy PL NMT/NMPT/orto (ADR-036;
   spec `docs/superpowers/specs/2026-10-08-versioned-store-design.md`):
   - Uklad: `<segment>/kampanie/<data>_<id>/...` -> `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/<godlo>.<ext>`
     (wersja niezmienna, sidecar pisany raz). Brak migracji: `kampanie/`
@@ -402,6 +383,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - `--force` pobiera ponownie i odswieza cache metadanych, ale niczego
     nie nadpisuje: ta sama tresc = `bez zmian`, inna = nowa wersja obok
     starej. `--force`, `--upgrade` i `--check-updates` wykluczaja sie.
+    Co zrobic: nie lacz `--force`, `--upgrade` i `--check-updates`.
   - Biblioteka: `download_sheet/download_hierarchy/download_sheets(...,
     skip_existing=)` -> `update: None | "upgrade" | "force"`. Co zrobic:
     `skip_existing=False` zamien na `update="force"`, `skip_existing=True`
@@ -423,8 +405,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `list_files(..., versions=True)`.
   - Provider bez kampanii (atrapy, obce providery): plik tez jest wersja
     (etykieta = data pobrania UTC); jego sidecar jest obowiazkowy (bez
-    deskryptora: sidecar okrojony), porazka zapisu = blad arkusza.
-  - CLI: zamiast `Downloaded to`, `Skipped ... already exists` i `Downloaded
+    deskryptora: sidecar okrojony), porazka zapisu = blad arkusza. Co
+    zrobic: nic.
+  - CLI (`elevation download`, `imagery download`): zamiast `Downloaded to`,
+    `Skipped ... already exists` i `Downloaded
     N files ...` jedna linia na plik (`<godlo>: nowa wersja
     <etykieta>_<sha8>` / `nowa etykieta ... (plik identyczny z
     <etykieta>)` / `bez zmian
@@ -434,9 +418,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Awaria skorowidza bez granicy roku: lokalna wersja dla kazdej
     strategii (dotad tylko `newest`); z granica roku gdy KAZDY arkusz ma
     lokalna wersje z zakresu — lokalne wersje z ostrzezeniem (dotad zawsze
-    blad zadania). Tylko tryb domyslny.
+    blad zadania). Tylko tryb domyslny. Co zrobic: nic.
 - Magazyn wersjonowany dla LAZ, arkuszy i wycinkow CZ oraz wycinkow PL
-  z WCS (ADR-036, plan 2/3):
+  z WCS (ADR-036):
   - LAZ: kafel = wersja w `laz/<segment>/versions/<hierarchia>/<data>_<zgloszenie>_<sha8>/<plik>.laz`,
     sciezka standardowa = hardlink, sidecar wersji obowiazkowy. Kafel
     z lokalna wersja nie jest pobierany ponownie; nowszy nalot (inne
@@ -467,9 +451,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   - Stary zwykly plik 0.7.x w sciezce LAZ/CZ/wycinka jest zastepowany
     dowiazaniem do nowej wersji przy pierwszym pobraniu (D24). Co zrobic:
     nic (kopie poza magazynem nie sa ruszane).
-  - `run_cz_cutout`, `run_cz_sheet`, `run_pl_wcs_cutout`: pole `file` jest
-    `None` tylko z `plan=`, gdy plan nie wykonuje tego pliku i nie ma
-    wersji lokalnej.
+  - `download_cz_cutout`, `download_cz_sheet`, `download_pl_cutout`: pole
+    `file` wyniku jest `None` tylko z `plan=`, gdy plan nie wykonuje tego
+    pliku i nie ma wersji lokalnej. Co zrobic: przy wykonaniu planu
+    sprawdz `result.file is None`.
   - `PlanItem.sheet` -> `PlanItem.unit`, nowe pole `track` (`pl_sheet`,
     `laz_tile`, `cz_sheet`, `pl_cutout`, `cz_cutout`); `PlanItem`/
     `UpdatePlan` w `kartograf.download.plan` (eksport z `kartograf` bez
@@ -481,7 +466,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     zrobic: wycinek NMT/NMPT w magazynie — `download_pl_cutout(bbox,
     "EPSG:2180", ...)`; surowy WCS (np. ortofotomapa) poza magazynem —
     `provider.download_bbox(bbox, path)`.
-  - CLI LAZ, CZ i wycinki: zamiast `Downloaded to ...`/`Skipped ...`
+  - CLI `elevation download` (LAZ, CZ i wycinki): zamiast `Downloaded to ...`/`Skipped ...`
     jedna linia statusu na plik (`<arkusz|sciezka wycinka|plik LAZ>:
     nowa wersja ...` / `lokalna wersja ...`), dla LAZ podsumowanie
     licznikow; plik bez taniego sygnalu (TM33, wycinki) dostaje
@@ -489,7 +474,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     wyjscie przestaw na nowe linie.
   - Sidecar: `downloaded_at` z mikrosekundami (porzadek dwoch pobran
     w tej samej sekundzie). Co zrobic: parsery ISO 8601 bez zmian.
-- Magazyn wersjonowany dla land cover i HSG (ADR-036 D29-D33, plan 3/3):
+- Magazyn wersjonowany dla land cover i HSG (ADR-036 D29-D33):
   - Uklad: pliki `bdot10k_..._teryt_<T>.gpkg`, `corine_<rok>_sheet_<godlo>.png`,
     `soilgrids_<wl>_<gl>_<stat>_bbox_<wsp>.tif`, `hsg_<godlo>_<gl>.tif`
     -> segmenty spec 3.4 z wersjami: `landcover/pl_bdot10k_gpkg[_<warstwy>]/teryt/<T>.gpkg`
@@ -506,9 +491,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `output_path` usuniety (`TypeError`), wynik `LandCoverResult` /
     `LandCoverAreaResult` / `HsgResult` zamiast `Path`, `HSGCalculator(output_dir,
     provider=None)` (katalog wymagany), `keep_intermediate` usuniety (wejscia
-    clay/sand/silt to wersje SoilGrids w magazynie). Co zrobic (Hydrograf:
-    `backend/scripts/download_landcover.py`, `backend/core/cn_calculator.py`,
-    `backend/scripts/bootstrap.py`): `LandCoverManager(<korzen magazynu>,
+    clay/sand/silt to wersje SoilGrids w magazynie). Co zrobic:
+    `LandCoverManager(<korzen magazynu>,
     ...).download(teryt=|sheet=|bbox=|geometry=)` bez `output_path` i
     `path = result.files[0].file.path` (dla wielu powiatow przejdz po
     `result.files`); `HSGCalculator(<korzen>).calculate_hsg(bbox=bbox,
@@ -529,15 +513,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `extra.source_files` (`name`, `file` = sciezka wersji ZIP wzgledem
     `--output`, `sha256`). Sidecar HSG: `extra.source_files` z `file`,
     `sha256`, `label` wejsc; `request` = wybor (bez `bbox` przy arkuszu).
-  - CLI `landcover download` i `soilgrids hsg`: zamiast `Downloaded to:` /
+    Co zrobic: czytaj `extra.source_files[].file` (sciezka wzgledem
+    `--output`) i `sha256` zamiast `extra.source.raw_file`.
+  - CLI `landcover download` i `soil hsg`: zamiast `Downloaded to:` /
     `HSG raster saved to:` linia statusu na plik (sciezka wzgledem
-    `--output`); `soilgrids hsg --output` tylko katalog magazynu (`.tif` =
+    `--output`); `soil hsg --output` tylko katalog magazynu (`.tif` =
     `Error:`), `--keep-intermediate` usuniete. Co zrobic: skrypty parsujace
     wyjscie przestaw na linie statusu.
   - `SourceDescriptor.storage_subdir` jest zawsze `str` (land cover:
     prefiks segmentu); `CorineProvider.CLMS_DATASET_UIDS`/
     `CLMS_RASTER_DOWNLOAD_IDS` 2012/2006/2000 zmienione na identyfikatory
-    z katalogu CLMS.
+    z katalogu CLMS. Co zrobic: nic.
 - Typy argumentow biblioteki sprawdzane na wejsciu, bez konwersji
   (STANDARDS 11.2, `kartograf/download/arguments.py`): `download_data`/
   `check_data`, `LandCoverManager.download`/`check` (takze `year`
@@ -552,7 +538,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `timeout <= 0` i `layers` podanego jako napis (`"SWRS,PTWP"` byl czytany
   znak po znaku); `download_collection`/`check_collection`/
   `validate_collection_request` przyjmuja `teryt`, `sheet`, `ku`, `format`,
-  `scale`, `sheet_system` i `network` tylko jako `str` (plan E, E0: kod
+  `scale`, `sheet_system` i `network` tylko jako `str` (ADR-043 D5: kod
   podany liczba traci zera wiodace, np. `0208`). Dotad czesc z nich dzialala
   przypadkiem, czesc konczyla sie poznym `ValueError` z `urllib3` albo
   `TypeError`. Flagi CLI bez zmian. Co zrobic: przekazuj `int` (`timeout`
@@ -561,14 +547,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
-- Plan E, Task E1: linie wyniku i `--check-updates` w `elevation`/`imagery
-  download` podaja dla jednostki z kilkoma plikami nazwe pliku zamiast powtorzonego
-  godla: kierunki orto ukosnej (`7.125.11.08_n.tif: aktualne ...`) i pliki
-  ortofoto CZ (`CTES96.jpg`, `CTES96.TM33N.jgw`, ...); jednostka z jednym
-  plikiem bez zmian. `elevation availability --product` przyjmuje nadal
-  tylko `nmt`, `nmpt`, `laz` (warstwice i NMT 100 m poza raportem, ADR-043).
-  Co zrobic: skrypt czytajacy linie `--check-updates` ortofoto CZ dopasowuje
-  nazwe pliku zamiast godla.
 - Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
   (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
   `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera
@@ -599,8 +577,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
-- Plan E, Task E5 (ADR-043): `models3d download --product mesh` (modele
-  siatkowe miast GUGiK: kafle indeksu WFS obszaru, ZIP OBJ+MTL+JPG 1:1
+- Mesh 3D, drzewa, osnowy i quasi-geoidy (ADR-043): `models3d download
+  --product mesh` (modele siatkowe miast GUGiK: kafle indeksu WFS obszaru,
+  ZIP OBJ+MTL+JPG 1:1
   w `models3d/pl_mesh/<strefa>/<plik rekordu>.zip`, uklad z rekordu,
   wysokosci EPSG:9651, etykieta = data i numer zgloszenia pracy, sygnal
   `index` w `--check-updates`; kafel = plik rekordu, `--year` filtruje
@@ -618,7 +597,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   tylko w innym wyborze nazywa ten wybor (`--teryt` z `--network gravity`),
   a zadanie PL+CZ bez `--network` podaje wartosci obu krajow i wspolne.
   Przyklady i wyniki live: USAGE 1.11, `docs/research/2026-10-16-plan-e5-e2e/raport.md`.
-- Plan E, Task E4 (ADR-043): trzy zrodla w `landcover download --source`.
+- Limit obszaru kolekcji (ADR-043 errata 3): obszar (`--bbox`/`--sheet`/
+  `--geometry`) w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`,
+  `maps`, `geodesy`, w zrodlach kolekcji `landcover` (ZABAGED, BDOO,
+  Data50, Data250) i NMT 100 m, ktory pobralby wiecej niz 100 plikow albo
+  wiecej niz 10 GB (suma `HEAD`/dlugosci z feedu ATOM; ponad 100 plikow -
+  szacunek z 5 plikow), konczy sie `Error:`/`ValidationError` przed
+  pierwszym transferem z liczba plikow, rozmiarem i podpowiedzia: zawez
+  obszar, wybierz jednostke (`--teryt`, `--ku` - bez limitu) albo wykonaj
+  plan z czescia pozycji (`--check-updates --plan PLIK`, potem `--upgrade
+  --plan PLIK`). Liczone sa pliki bez lokalnej wersji (`--force`:
+  wszystkie, `--upgrade --plan`: pozycje planu); opcji obejscia nie ma.
+- BDOO, Data50 i Data250 (ADR-043): trzy zrodla w `landcover download --source`.
   `bdoo` (BDOO GUGiK, 1:250 000): paczka GML wojewodztwa na rocznik
   (`--year` wymagany: 2015, 2021-2026; `--teryt` 2 cyfry, kod powiatu =
   `Error:` z podpowiedzia `--teryt <woj>`; obszar `--bbox`/`--sheet`/
@@ -637,7 +627,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `UnitPackageParams.class_pattern`; obszar produktu z samymi paczkami
   wojewodztw daje paczki wojewodztw obszaru. Przyklady i wyniki live:
   USAGE 1.5 i 1.9, `docs/research/2026-10-16-plan-e4-e2e/raport.md`.
-- Plan E, Task E3 (ADR-043): grupy `boundaries` i `cadastre` dostaja
+- Adresy i granice specjalne PRG, RCN, geomorfologia i mapa katastralna CZ
+  (ADR-043): grupy `boundaries` i `cadastre` dostaja
   produkty `boundaries download --product addresses|special|geomorphology`
   i `cadastre download --product map --country cz|prices`, flagi
   `--format` (pliki krajowe i formaty mapy katastralnej) oraz `--ku`
@@ -653,7 +644,26 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (KU obszaru z RUIAN; sygnal HTTP); VKM poza 0.8.0. Zadania manifestu
   projektu dla obu grup przyjmuja `format` i `ku`. Przyklady i wyniki live:
   USAGE 1.8 i 1.9, `docs/research/2026-10-16-plan-e3-e2e/raport.md`.
-- Plan E, Task E1 (czesc 4, ADR-043): warstwice ZABAGED CUZK w `elevation
+- Nazwy geograficzne i mapy topograficzne (ADR-043): grupy `kartograf
+  names` i `kartograf maps` z
+  `download`/`list-sources`, wspolna funkcja biblioteki
+  `download_collection`/`check_collection` oraz zadania manifestu projektu.
+  `names --product geographic --country pl` pobiera PRNG RP jako obszarowy
+  GPKG OGC:CRS84 (OGC API Features; duze strony, timeout 180 s) albo dwa
+  krajowe ZIP-y GML/SHP/XLSX; `--product world --country pl` pozwala pobierac
+  polskie nazwy swiata rowniez poza Polska (obszar i jeden plik krajowy).
+  Geonames CUZK (`geographic --country cz`) udostepnia 25 warstw obszaru
+  EPSG:5514 albo krajowy ZIP GPKG/FGDB w EPSG:5514/3045 z feedu ATOM
+  (wydanie z `updated`, sygnal `metadata`). Obszary nie maja taniego sygnalu.
+  `maps --product topographic --country pl` pobiera gotowe arkusze
+  wizualizacji BDOT10k w skalach 1:10000/25000/50000/100000 jako TIFF lub
+  PDF (data `Stan bazy` z indeksu jako sygnal); `--country cz` pobiera ZTM
+  w szesciu skalach, ukladzie arkuszy S-JTSK lub ETRS89 rozpoznawanym
+  z godla i formatach TIFF/PDF (S-JTSK takze DGN/SHP; formaty inne niz
+  PDF sa ZIP-ami). Arkusze ZTM maja sygnal HTTP; sidecar ma uklad wariantu
+  EPSG:5514 lub EPSG:3045. Osobne segmenty magazynu `data/names/`,
+  `data/maps/`; przyklady i wyniki live: USAGE 1.10 i raport E2E.
+- Warstwice ZABAGED CUZK (ADR-043) w `elevation
   download --product contours --country cz --format SHP|DGN` (`--sheet`
   arkusza SM5, `--bbox`/`--geometry` = arkusze SM5 obszaru z indeksu
   `KladyMapovychListu`): ZIP arkusza z openzu zapisany 1:1 (bez
@@ -672,8 +682,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dotyczy tez intensywnosci, true orto i orto ukosnej, dotad `Error:`),
   a `--country pl` z warstwicami to `Error:` "... dostepny tylko dla CZ".
   Tekst bledu `--format` z innym produktem wymienia `contours (CZ)`.
-
-- Plan E, Task E1 (czesc 3, ADR-043): trzy produkty obrazow GUGiK
+- Obrazy GUGiK (ADR-043): trzy produkty
   w `imagery download` na torze arkuszy ortofotomapy (kampanie, wersje,
   `--year`/`--all-campaigns`, sygnal `index`): `--product intensity`
   (obrazy intensywnosci LIDAR, `pl.gugik.intensity`, arkusze PL-1992
@@ -688,16 +697,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `direction=` w `download_data`/`check_data`, bez flagi wszystkie
   cztery). Produkt z jednym ukladem arkuszy (true orto, orto ukosna) moze
   pominac `--sheet-system`; `--full-sheet` tylko dla orto ukosnej (rekordy
-  intensywnosci i true orto nie deklaruja pelnego arkusza). Arkusz obrazu
-  ponad 100 MiB dostaje `DOWNLOAD_SIZE` z rozmiarem z `HEAD` przed `GET`
-  (takze ortofotomapa). Skorowidze obrazow opisuje nowy parametr kanalu
-  `SheetIndexParams` (warstwy, uklady arkuszy, kierunki, zasieg); jeden
-  provider `GugikImageProvider` (`GugikOrtoProvider` = ortofotomapa
-  z wariantami barw). Manifest projektu: opcja `direction` zadania
-  `imagery download`.
-
-- Plan E, Task E1 (czesc 2, ADR-043 D10): NMT 100 m GUGiK
-  (`pl.gugik.nmt_100m`, wariant rejestru bez ukladu wysokosci - decyzja P1):
+  intensywnosci i true orto nie deklaruja pelnego arkusza). Skorowidze
+  obrazow opisuje nowy parametr kanalu `SheetIndexParams` (warstwy, uklady
+  arkuszy, kierunki, zasieg); jeden provider `GugikImageProvider`
+  (`GugikOrtoProvider` = ortofotomapa z wariantami barw). Manifest
+  projektu: opcja `direction` zadania `imagery download`. Linie wyniku
+  i `--check-updates` jednostki z kilkoma plikami (kierunki orto ukosnej,
+  pliki ortofoto CZ) podaja nazwe pliku (`7.125.11.08_n.tif: aktualne
+  ...`, `CTES96.TM33N.jgw`); `elevation availability --product` przyjmuje
+  tylko `nmt`, `nmpt`, `laz` (warstwice i NMT 100 m poza raportem).
+- NMT 100 m GUGiK (ADR-043 D10; `pl.gugik.nmt_100m`, wariant rejestru bez
+  ukladu wysokosci):
   `elevation download --product nmt --resolution 100m --bbox ... --country pl`
   (takze `--sheet`, `--geometry`) pobiera pliki wojewodztw obszaru (wg PRG)
   z feedu ATOM GUGiK do `nmt/pl_1992_100m/teryt/<woj>.zip` - ZIP z plikiem
@@ -711,10 +721,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i `--country cz` = `Error:` przed siecia. Silnik `atom_files` dostaje
   grupe `woj` w `AtomFilesParams.entry_pattern` (jednostki wojewodztw
   obszaru) i `force_https` (linki `http://` feedow GUGiK pobierane przez
-  `https` tego samego hosta); plik ATOM jednostki ponad 100 MiB dostaje
-  `DOWNLOAD_SIZE` (krajowy - jak dotad `WHOLE_COUNTRY_SIZE`).
-
-- Plan E, Task E1 (czesc 1, ADR-043 D10): godla 8-czlonowe PL-1992
+  `https` tego samego hosta).
+- Godla 8-czlonowe PL-1992 (ADR-043 D10)
   w `SheetParser` (cwiartki arkusza 7-czlonowego, numeracja 1-4 jak wyzej:
   `N-34-50-A-c-3-2-3`; etykieta Kartografa `1:5000`, GUGiK: modul 1:2500);
   `find_sheets_for_bbox(..., "1:5000", "1992")` daje godla 8-czlonowe,
@@ -729,9 +737,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   215 arkuszy 8-czlonowych; ZIP zawiera punkty co 0,5 m, skorowidz deklaruje
   10 m). Zamyka ograniczenie ADR-041 (rekordy z godlami 8-czlonowymi nie
   sa juz `Info:` w raporcie dostepnosci).
-
-- Plan E, Task E0 (ADR-043 D1-D9): wspolny kontrakt kolekcji dla produktow
-  planu E (silniki, bez nowych produktow w rejestrze). Biblioteka
+- Silniki kolekcji (ADR-043 D1-D9): wspolny kontrakt kolekcji dla nowych
+  produktow ADR-043 (bez nowych produktow w rejestrze). Biblioteka
   `download_collection`/`check_collection`/`validate_collection_request`
   dostaje `ku` (katastralni uzemi CZ, 6 cyfr; obszar = KU z RUIAN), `format`,
   `scale`, `sheet_system` i `network` (wartosci z deskryptorow: wybor kanalu,
@@ -752,28 +759,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   obsluguje OGC API Features (CRS84, strony po `next`, kontrola
   `numberMatched`/`numberReturned`) z osobnym limitem czasu kanalu
   (`FeatureBBoxParams.timeout`; OGC API PRNG GUGiK odpowiada 78-95 s na
-  strone). Plik jednostki ponad 100 MiB dostaje `Notice` `DOWNLOAD_SIZE`
-  z rozmiarem z `HEAD` przed swoim pobraniem (K9; dlatego przed kazdym
+  strone). Plik ponad 100 MiB (paczka lub plik jednostki kolekcji, plik
+  ATOM jednostki, arkusz obrazu GUGiK i ortofotomapy) dostaje `Notice`
+  `DOWNLOAD_SIZE` z rozmiarem (z `HEAD` albo feedu ATOM) przed swoim
+  pobraniem (plik krajowy: `WHOLE_COUNTRY_SIZE`); dlatego przed kazdym
   pobraniem paczki, takze produktow planow C/D, jest jedno zapytanie
-  `HEAD`).
-- Plan E, Task E2: grupy `kartograf names` i `kartograf maps` z
-  `download`/`list-sources`, wspolna funkcja biblioteki
-  `download_collection`/`check_collection` oraz zadania manifestu projektu.
-  `names --product geographic --country pl` pobiera PRNG RP jako obszarowy
-  GPKG OGC:CRS84 (OGC API Features; duze strony, timeout 180 s) albo dwa
-  krajowe ZIP-y GML/SHP/XLSX; `--product world --country pl` pozwala pobierac
-  polskie nazwy swiata rowniez poza Polska (obszar i jeden plik krajowy).
-  Geonames CUZK (`geographic --country cz`) udostepnia 25 warstw obszaru
-  EPSG:5514 albo krajowy ZIP GPKG/FGDB w EPSG:5514/3045 z feedu ATOM
-  (wydanie z `updated`, sygnal `metadata`). Obszary nie maja taniego sygnalu.
-  `maps --product topographic --country pl` pobiera gotowe arkusze
-  wizualizacji BDOT10k w skalach 1:10000/25000/50000/100000 jako TIFF lub
-  PDF (data `Stan bazy` z indeksu jako sygnal); `--country cz` pobiera ZTM
-  w szesciu skalach, ukladzie arkuszy S-JTSK lub ETRS89 rozpoznawanym
-  z godla i formatach TIFF/PDF (S-JTSK takze DGN/SHP; formaty inne niz
-  PDF sa ZIP-ami). Arkusze ZTM maja sygnal HTTP; sidecar ma uklad wariantu
-  EPSG:5514 lub EPSG:3045. Osobne segmenty magazynu `data/names/`,
-  `data/maps/`; przyklady i wyniki live: USAGE 1.10 i raport E2E.
+  `HEAD`.
 - Grupa `hydro` (plan D, ADR-042 D16): `kartograf hydro download --product
   network --country cz` - siec wod HY-NET CUZK. Obszar (`--bbox`/
   `--geometry`) = jeden GeoPackage w EPSG:5514
@@ -824,9 +815,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wydanie z `updated`, indeks feedu w cache metadanych (`atom_cache`
   z `ETag`, TTL 7 dni, warunkowy GET przy `--upgrade`/`--check-updates`,
   jedno odswiezenie przy brakujacym kluczu albo 404 feedu zbioru).
-- Projekt (ADR-040): pozycja `hydro download`; opcje zadan `imagery
-  download` (`cutout`, `horizontal_crs`, `coverage`, `resolution`)
-  i `landcover download` (`whole_country`, `horizontal_crs`).
 - NMT/NMPT PL (ADR-041, plan A): siatki NMT 0.15m, 0.5m, 0.6m i 10m oraz
   NMPT 0.5m i 0.6m (pelna lista: `kartograf elevation list-sources`);
   archiwa GUGiK (`--format` XYZ, ASCII-NMT, TBD, TIN, TTN, GRD, DXF, DGN)
@@ -906,7 +894,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `archive_unit_files` w `pl.gugik.bdot10k`. Projekt (ADR-040): zadania
   `boundaries download`, `cadastre download` i `models3d download`.
   Weryfikacja na zywo: `docs/research/2026-10-15-plan-c-live/raport.md`.
-
 - Projekt (ADR-040): grupa `kartograf project` (`init`, `add`, `remove`,
   `download`, `status`, `verify`) zapisuje zadania i przypiete wersje
   w `kartograf-project.json` (`kartograf-project/1`). `download` odtwarza
@@ -916,16 +903,43 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `add_project_task`, `remove_project_task`, `download_project`,
   `check_project`, `project_status`, `verify_project` oraz typy
   `Project`, `ProjectTask`, `PinnedFile`, `ProjectReport`, `TaskResult`,
-  `ProjectCheck`, `FileCheck`. Opis uzycia: `docs/USAGE.md` sekcja 8.
-
-- Biblioteka (ADR-037): `download_data`/`check_data` = komenda
-  `kartograf download` (wynik `DataReport`, `UnitFile`, `UnitFailure`),
-  `download_cz_sheet`/`check_cz_sheet`, `check_laz_area`,
-  `get_overall_bbox`, `transform_bbox`, `parent_request_for` w API;
-  testy zgodnosci CLI = API (`tests/test_parity.py`,
-  `tests/test_parity_landcover.py`). CLI: flagi `landcover download
-  --layers --keep-raw --bbox-crs --workers --quiet` i `soilgrids hsg
-  --bbox-crs --quiet` (szczegoly w BREAKING wyzej).
+  `ProjectCheck`, `FileCheck`. Zadania obejmuja kazda komende `download`
+  grup danych i `soil hsg` z ich opcjami (m.in. `cutout`,
+  `horizontal_crs`, `coverage`, `resolution` w `imagery download`;
+  `whole_country`, `horizontal_crs` w `landcover download`). Opis uzycia:
+  `docs/USAGE.md` sekcja 8.
+- Biblioteka (ADR-037): `download_data`/`check_data` (`kartograf.download.data`)
+  = komendy `kartograf elevation download` i `kartograf imagery download`:
+  cala logika komendy (godlo i kraj, `country="auto"` z zawezeniem do PL
+  i czesciowym sukcesem, walidacja kazdego kraju przed pobraniem,
+  rozwiniecie obszaru PL na arkusze, `parent_request`) jest w bibliotece,
+  wynik `DataReport(files, failed, stale, superseded, notices, ok)`.
+  W API takze `UnitFile`, `UnitFailure`, `download_cz_sheet`/`check_cz_sheet`,
+  `check_laz_area`, `get_overall_bbox`, `transform_bbox`,
+  `parent_request_for`; testy zgodnosci CLI = API (`tests/test_parity.py`,
+  `tests/test_parity_landcover.py`). CLI: `landcover download` i `soil hsg`
+  to jedno wywolanie biblioteki na komende, z nowymi flagami `--bbox-crs`
+  (bbox w dowolnym ukladzie z listy) i `--quiet` (bez linii statusu na
+  stdout; `Info:`/`Warning:` na stderr zostaja), a w `landcover download`
+  takze `--layers KODY` (filtr warstw BDOT10k GPKG, np. `SWRS,PTWP`),
+  `--keep-raw` (oryginalny ZIP GUGiK w magazynie) i `--workers N`
+  (rownolegle powiaty obszaru BDOT10k, domyslnie 1).
+- Walidacja wejscia w bibliotece przed siecia, z tym samym tekstem co CLI
+  (ADR-037): `download_data`/`check_data` sprawdzaja `product`, `country`,
+  `sheet_system`, `horizontal_crs` (wartosci jak w `--help`) i bbox
+  (odwrocony, nieskonczony: `Nieprawidlowy bbox: ...`); bbox (wspolrzedne
+  i uklad z listy `--bbox-crs`, nieznany uklad = `ValidationError`) takze
+  w `download_pl_cutout`/`check_pl_cutout`, `download_cz_cutout`/
+  `check_cz_cutout`, `download_laz_area`/`check_laz_area`,
+  `LandCoverManager` i `HSGCalculator` (katalog `.tif` odrzucony jak
+  w CLI); `resolution`/`vertical_crs` innego typu niz tekst albo slownik
+  = `ValidationError`; kod TERYT sprawdzany takze w `check`. Bledy wejscia
+  wewnatrz czesci kraju sa `ValidationError`, nie pozycja `failed`.
+  Komunikaty `nie udalo sie sprawdzic zrodla` i
+  `lokalna wersja ... niesprawdzona` land cover i HSG sa `Notice`
+  biblioteki; arkusz PL uzyty lokalnie przy niedostepnym skorowidzu daje
+  jeden komunikat; `--check-updates` pod `auto` z awaria jednego kraju
+  podaje blad z nazwa kraju.
 - Biblioteka: `Notice(level, code, text)` w publicznym API oraz
   `kartograf.notices.NoticeSink` (zbieranie komunikatow i przekazanie do
   callbacku); tekst komunikatow ograniczony do ASCII, kody sa stale.
@@ -934,15 +948,16 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   biezacym (`default_cache_path()`); `cache=False` pomija cache, a `force=True`
   dla przekazanej instancji uzywa osobnego polaczenia bez zmiany jej odczytow.
   Wylaczenie cache jest zglaszane przez `Notice` (`cache_disabled`).
-- CLI `download`: `--check-updates [--plan PLIK]` (raport bez pobierania,
-  plan JSON `kartograf-plan/1`), `--upgrade [--plan PLIK]` (pobranie
+- CLI `elevation download` i `imagery download`: `--check-updates
+  [--plan PLIK]` (raport bez pobierania, plan JSON `kartograf-plan/1`),
+  `--upgrade [--plan PLIK]` (pobranie
   nowszej tresci; wykonanie planu z kontrola, czy zrodlo nie zmienilo sie
   od planu) — dla kazdego toru: arkusze PL, kafle LAZ PL i CZ (CZ:
   `ETag`/`Last-Modified` pliku), arkusze CZ (SM5 i natywne TM33:
   `ETag`/`Last-Modified`), wycinki CZ i PL (bez taniego sygnalu:
   "nie da sie sprawdzic bez pobrania"); przy `--country auto` jeden plan
   PL i CZ.
-- CLI `landcover download` i `soilgrids hsg`: `--check-updates`,
+- CLI `landcover download`, `soil download` i `soil hsg`: `--check-updates`,
   `--upgrade`, `--force`, `--plan PLIK` (tory planu `landcover` i `hsg`);
   status `uzyta ponownie` (HSG z tych samych wejsc, bez liczenia).
 - Biblioteka: `UpdatePlan`, `PlanItem`, `UpdateMode`, `VersionRef`,
@@ -953,8 +968,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `kartograf.download.fetch` dostarcza `fetch_version`/`inspect_version`,
   `use_local`/`store_file` i sygnal wydania `metadata`; status `reused`
   oznacza HSG z tych samych wejsc bez ponownego liczenia.
-- Biblioteka: `check_cz_cutout`/`check_pl_cutout`, `check_cz_sheet`/
-  `download_cz_sheet` i `check_laz_area` w `__all__`; kanaly
+- Biblioteka: `check_cz_cutout`/`check_pl_cutout` w `__all__`; kanaly
   `AccessChannel.update_signal`/`channel_signal`, transport
   `response_signal`, `head_signal`, `download_to(on_response=)`,
   `get_with_retry(headers=)`; sidecary `extra.version`, `extra.http`
@@ -984,42 +998,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Error: nie udalo sie zapisac planu <PLIK>: ...` (kod 1) zamiast
   `Error: FileNotFoundError: ...` z podpowiedzia `KARTOGRAF_DEBUG`
   (weryfikacja na zywo 2026-10-12).
-- Ponowna weryfikacja spojnosci CLI = API (ADR-037, 2026-10-12):
-  `download_data`/`check_data` sprawdzaja przed siecia `product`,
-  `country`, `sheet_system`, `horizontal_crs` (wartosci jak w `--help`) i bbox
-  (odwrocony, nieskonczony: ten sam tekst `Nieprawidlowy bbox: ...` co
-  CLI); bledy wejscia wewnatrz czesci kraju sa `ValidationError`, a nie
-  pozycja `failed`
-  ani `DownloadError`. `LandCoverManager`: brak opcji (`year` CORINE,
-  `property`/`depth`/`stat` SoilGrids) i opcje tylko BDOT10k (`format`,
-  `layers`, `keep_raw`) dla innego zrodla to `ValidationError` z tekstem
-  CLI (dotad `TypeError`); `landcover download --format` z innym zrodlem
-  niz bdot10k to blad (dotad po cichu pomijany). `HSGCalculator("x.tif")`
-  odrzuca katalog `.tif` jak CLI; `check_hsg` ma `timeout`; odczyt
-  `HSGCalculator.provider` nie wylacza juz cache. Komunikaty
-  `nie udalo sie sprawdzic zrodla` i `lokalna wersja ... niesprawdzona` dla
-  land cover i HSG sa `Notice` biblioteki (dotad tylko w CLI). Bez
-  podwojnych linii na stderr: logi duplikujace `Notice` (`skorowidz GUGiK
-  niedostepny`) i porazki powiatow BDOT10k obnizone do `debug`.
-  `Zapytanie WFS GUGiK ...` LAZ zastapione zdarzeniem postepu po walidacji
-  (z ukladem PL), `soilgrids hsg` bez wlasnego przechwytywania wyjatkow.
-- Druga runda (2026-10-12): bbox sprawdzany (wspolrzedne i uklad z listy
-  `--bbox-crs`, nieznany uklad = `ValidationError`, nie `CRSError`) takze
-  w `download_pl_cutout`/`check_pl_cutout`, `download_cz_cutout`/
-  `check_cz_cutout`, `download_laz_area`/`check_laz_area`,
-  `LandCoverManager` i `HSGCalculator`; `resolution`/`vertical_crs` innego
-  typu niz tekst/slownik = `ValidationError`; kod TERYT sprawdzany takze
-  w `check`. Bez angielskich linii logu na stderr (`No data for ...`,
-  `Failed to download ...`, podglad CORINE) - przyczyna porazki arkusza
-  jest w tekscie bledu (`DataReport.failed`, `Error:`). Arkusz PL uzyty
-  lokalnie przy niedostepnym skorowidzu daje jeden komunikat (dotad dwa).
-  `--check-updates` pod `auto` z awaria jednego kraju: komunikat bez
-  "pobrano", blad z nazwa kraju. `Info:` podgladu CORINE dopiero po
-  walidacji zadania; `soilgrids hsg` bez naglowka przed walidacja.
+- `landcover download --format` z innym zrodlem niz bdot10k konczy sie
+  bledem (dotad byl po cichu pomijany); `LandCoverManager` bez wymaganej
+  opcji zrodla (`year` CORINE, `property`/`depth`/`stat` SoilGrids) albo
+  z opcja tylko BDOT10k (`format`, `layers`, `keep_raw`) dla innego zrodla
+  daje `ValidationError` z tekstem CLI (dotad `TypeError`). Bez
+  angielskich i podwojnych linii logu na stderr (`No data for ...`,
+  `Failed to download ...`, podglad CORINE, `Zapytanie WFS GUGiK ...` LAZ,
+  logi powielajace `Notice`, porazki powiatow BDOT10k): przyczyna porazki
+  jest w tekscie bledu (`Error:`, pole `failed` wyniku).
 - Wpis "brak pokrycia" w cache metadanych zapisany przed 0.8.0 (komunikat
   albo podpowiedz z polskimi znakami lub myslnikiem `—`) przerywal
   pobieranie bledem `Tekst komunikatu musi byc zapisany w ASCII` (np.
-  `kartograf download --sheet N-34-130-D --resolution 5m ...` z cache
+  `kartograf elevation download --sheet N-34-130-D --resolution 5m ...` z cache
   z 0.7.x). Taki wpis jest teraz traktowany jak brak wpisu i skorowidz jest
   odpytywany ponownie. Co zrobic: nic (opcjonalnie `kartograf cache clear`).
 - `landcover download --check-updates --keep-raw` drukowal dwie
@@ -1060,7 +1051,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dowiazanie i sidecar (ADR-030 errata 10).
 - Dokumentacja ortofotomapy (SCOPE, PRD, docstring `gugik_orto.py`):
   rozdzielczosc "wg kampanii (np. 25 cm, 10 cm)" zamiast stalego 25 cm
-  (U6; README poprawione wczesniej).
+  (README poprawione wczesniej).
 
 ## [0.7.2] - 2026-10-11
 
