@@ -107,16 +107,19 @@
 > 0. **Cykl 0.8.0 OTWARTY; cel: 0.8.0 z podprojektami 2 i 3.** Stan,
 >    decyzje uzytkownika, scalone i niescalone galezie oraz kolejnosc
 >    krokow: sekcja "Sesja 2026-10-15 - przygotowanie 0.8.0" nizej.
->    Grupy CLI (ADR-039), manifest (ADR-040), plany A i C sa na `develop`;
->    B, D (galezie w worktree) i E do dokonczenia. Push tylko za zgoda
->    uzytkownika; stan sprawdzaj `git log origin/develop..develop`.
->    Hydrograf/Hydrolog: nowe nazwy flag i argumentow (CHANGELOG [0.8.0],
->    BREAKING).
+>    Grupy CLI (ADR-039), manifest (ADR-040), plany A, C i D sa na
+>    `develop`; plan B konczy sie na galezi (niezacommitowany krok
+>    podpowiedzi raportu), plan E: E0 rozpoczety na galezi WIP, E1-E5
+>    nierozpoczete. Praca PRZERWANA przez uzytkownika 2026-10-16 - wznowic
+>    od listy "Wznowienie" w sekcji sesji. Push tylko za zgoda uzytkownika;
+>    stan sprawdzaj `git log origin/develop..develop`. Hydrograf/Hydrolog:
+>    nowe nazwy flag i argumentow (CHANGELOG [0.8.0], BREAKING).
 > 1. **Subagenci:** pracuja w git worktree w
 >    `/home/claude-agent/workspace/wt/<galaz>`, kazdy na wlasnej galezi od
->    `develop`. Kontekst i zasady dla nich: plik sesji `ctx-0.8.0.md`
->    (cel wydania, zasada produktowa, worktree, brama przed zgloszeniem
->    gotowosci, commity autora `Daldek <git@debever.pl>` bez
+>    `develop`. Plik kontekstu `ctx-0.8.0.md` byl artefaktem sesji (w nowej
+>    sesji go nie ma): zasady dla subagentow trzeba przekazac od nowa
+>    (cel wydania i decyzje - sekcja sesji 2026-10-15; zasada produktowa;
+>    worktree; brama przed zgloszeniem gotowosci; commity autora `Daldek <git@debever.pl>` bez
 >    `Co-Authored-By`, bez merge i push, tajny katalog danych na testy na
 >    zywo - w repo tylko `<katalog-danych>`, decyzje koordynatora, zakaz
 >    upraszczania, format raportu). Limit wspolbieznosci subagentow ustala
@@ -181,37 +184,70 @@
   postep per kampania i powiatow BDOT10k, errata 10 ADR-030 M-8, U6 w SCOPE/
   PRD/docstringu orto, domkniecie paska postepu); CHANGELOG i backlog
   zaktualizowane (`938504a`).
-- Brama na `develop` (938504a): pytest offline 4536 passed, 18 deselected;
-  `ruff check` i `ruff format --check` czyste (207 plikow); `mypy kartograf/
-  tests/` bez bledow (205 plikow).
-- Niescalone galezie (worktree w `/home/claude-agent/workspace/wt/`):
-  - Plan B: `feat/plan-b-elevation-cz` zielona na `d004ba9` (DMP OK/1G,
-    natywne kafle TM33, LAZ CZ; brama 4609 passed, ruff i mypy czyste;
-    `develop` niescalony do galezi). `feat/plan-b-availability-cz` (Zadanie
-    6, raport availability CZ) w toku, zmiany niezacommitowane.
-    `wip/plan-b-task5-cli` (5c59129) niezielona. Zostalo: Zadanie 5
-    (`model` w `download_data`/`check_data`/`validate_data_request`, usuniecie
-    `CZ_ONLY_NMT`, `_download_cz_laz`, LAZ CZ obszarowo przez
-    `_dispatch_area`, `--model` w CLI, testy z planu), 7 (`model` w manifescie),
-    8 (ADR-041 uzupelnienie z CRLF, CHANGELOG z "Co zrobic", USAGE,
-    ARCHITECTURE, SCOPE, PRD), 9 (E2E na zywo, raport
-    `docs/research/2026-10-15-plan-b-e2e/raport.md`), na koniec merge
-    `develop` i brama.
-  - Plan D: `feat/plan-d-cz-data` na `8f095f5` (Taski 1-3: `atom_files`,
-    produkty kolekcji, ZABAGED/RUIAN/HY-NET bez CLI; pelna brama po
-    ostatniej poprawce nieuruchomiona). Task 5 (wycinek orto PL) gotowy na
-    `feat/plan-d-orto-cutout` (`691c284`, brama zielona). Task 4 (ortofoto
-    CZ) niezacommitowany na `feat/plan-d-cz-orto`. Zostalo: Taski 6 (CLI
-    `hydro`, `imagery --country cz`, `landcover --source zabaged`, `boundaries
-    --country cz|auto`, manifest) i 7 (ADR-042 errata D5, dokumentacja,
-    E2E), scalenie galezi (konflikty z planem B: `data.py`, `options.py`).
-  - Plan E: nierozpoczety (`docs/superpowers/plans/2026-10-15-plan-e-produkty.md`;
-    E0 sekwencyjnie przed E1-E5).
-- Kroki do wydania (kolejnosc): dokonczyc B i D i scalic; plan E; przeglad
-  spojnosci dokumentacji i UX; AUDYT dokumentacji `docs/` i README (prosba
-  uzytkownika); test na zywo calego wydania; przygotowanie wydania
-  (wersja 0.8.0, data w CHANGELOG, PROGRESS) - bez merge do `main`, tagu i
-  push.
+- Scalono pozniej (2026-10-15/16): plan D (`0260049`: `atom_files`,
+  ZABAGED, RUIAN, HY-NET, grupa `hydro`, ortofoto CZ z ATOM, wycinek orto
+  PL w magazynie `--cutout --coverage`, ADR-042 errata; E2E
+  `docs/research/2026-10-15-plan-d-e2e/raport.md`). Brama na `develop`
+  po planie D (raport agenta): pytest offline 4678 passed, ruff, ruff
+  format i mypy czyste.
+- Plan B (`feat/plan-b-elevation-cz`, worktree
+  `/home/claude-agent/workspace/wt/feat/plan-b-elevation-cz`): Zadania 1-9
+  zrobione i zacommitowane (DMP OK/1G, natywne kafle TM33, LAZ CZ, raport
+  dostepnosci CZ i `auto`, `--model`, manifest, docs, ADR-041 uzupelnienie,
+  E2E `docs/research/2026-10-16-plan-b-e2e/raport.md`); `develop` z planem D
+  scalony do galezi (`9d25bc1`, brama zielona 4827 passed); `26ae85d`
+  (`require_int(workers)` w `download_cz_laz`, teksty) bez pelnej bramy.
+  NIEZACOMMITOWANE w worktree: poprawka podpowiedzi raportu PL przy
+  granicy (decyzja koordynatora: podpowiedz nie moze planowac arkuszy bez
+  rekordu GUGiK - wtedy jedno `--sheet` na arkusz z rekordem;
+  `availability.py` `_selected_sheets`/`_grid_areas`, test
+  `test_border_hint_plans_only_sheets_with_records`, 53 testy availability
+  zielone). Uwaga: regula daje tez wiele `--sheet` dla niepelnych
+  kombinacji z dala od granicy (morze, brak rekordu roku).
+- Plan E: `feat/plan-e0-engines` = `develop` bez zmian; WIP na
+  `wip/feat/plan-e0-engines` (`c307f8f`, tylko `sources/descriptor.py`:
+  `SheetGrid`, `IndexSource`, `FileKind`, nowe pola kanalow; brama
+  nieuruchomiona, prawdopodobny blad mypy w `unit_package.package_url`).
+  Pomiary 2026-10-16: OGC API GUGiK (PRNG) odpowiada 73-93 s na zapytanie
+  (`SERVICE_TIMEOUT=60` za krotki - decyzja w E0/E2); GFI Mapy10k bez
+  charset (UTF-8); WFS mesh z przestrzenia nazw https; Klady warstwa 14
+  natywnie EPSG:3045; RUIAN 7 `returnGeometry=false` zwraca `kod`/`nazev`.
+  Plan E wymaga korekty wzgledem kodu C/D (sygnal `index` porownywany jak
+  wydanie, `_capability` bez wymogu unikalnosci - osnowy PL maja 4 kanaly,
+  SheetGrid bez PL-2000, `choice` w `AtomFilesParams` - Geonames GPKG/FGDB
+  to dwa feedy).
+- Wznowienie (kolejnosc):
+  1. Plan B: w worktree dokonczyc krok podpowiedzi (docs: USAGE 7 ok. l.
+     2017-2023, ARCHITECTURE 4.9 "Podpowiedz pobrania", CHANGELOG, dopisek
+     w raporcie E2E B; ruff), commit `fix(api): podpowiedz raportu PL bez
+     arkuszy bez rekordu GUGiK`, pelna brama, `git merge develop`,
+     fast-forward do `develop`.
+  2. Plan E: E0 od WIP (`c307f8f`) - 12 krokow w raporcie agenta: silnik
+     `unit_package` z URL z rekordu indeksu i tokenami `{sheet}`/`{ku}`/
+     `{theme}` + `file_kind`, sloty `unit_slot` (arkusze CZ, `ku/<kod>`,
+     kafle, tematy krajowe), sygnal `index`, parametry kolekcji (`ku`,
+     `format`, `scale`, `sheet_system`, `network`, `choice`,
+     `selection_key`), `transport/index_records.py`, OGC API w
+     `feature_bbox`, `SheetIndex.sheets_for_bbox`, `Notice` `DOWNLOAD_SIZE`,
+     fixtury i testy, ADR-043 (CRLF), CHANGELOG, korekta planu E; potem
+     E1-E5 wg planu.
+  3. Przeglad spojnosci dokumentacji i UX; AUDYT dokumentacji `docs/`
+     i README (prosba uzytkownika); test na zywo calego wydania;
+     przygotowanie wydania (wersja 0.8.0, data w CHANGELOG, PROGRESS) - bez
+     merge do `main`, tagu i push.
+  4. Sprzatanie po integracji: usunac worktree i galezie scalone/zbedne
+     (`feat/plan-d-cz-orto`, `feat/plan-d-orto-cutout`, `feat/plan-d-cli`,
+     `docs/plan-d`, `feat/plan-b-cz-laz`, `feat/plan-b-availability-cz`,
+     `wip/plan-b-task3-raster`, `wip/plan-b-task5-cli`, galezie fali 1-2;
+     `git worktree list`, `git branch --merged develop`).
+- Ryzyka zgloszone przez agentow: `write_gpkg` trzyma cala warstwe w RAM
+  (duze obszary ZABAGED); bajty GPKG powtarzalne tylko w obrebie jednej
+  wersji GDAL; schemat pol HY-NET zalezy od tresci strony; WFS PRG
+  sporadycznie HTTP 400 (Kartograf nie ponawia 4xx); WCS orto PL wolny;
+  rsync `-aH` na SMB/cifs czasem dubluje hardlinki (USAGE).
+- Subagenci: 3 przerwania limitami modeli (Codex `usage_limit_reached`,
+  Opus 429); kilka razy edycje sciezka wzgledna trafily do glownego repo
+  (cofniete) - w zadaniach wymagac sciezek bezwzglednych.
 
 ### Sesja 2026-10-13 (druga) — katalog produktow GUGiK i CUZK, spec podprojektu 3
 
