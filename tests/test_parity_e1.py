@@ -26,7 +26,8 @@ def _same(run, statuses: list[str]) -> None:
 def test_nmt_100m_voivodeship(tmp_path, monkeypatch):
     """``elevation download --product nmt --resolution 100m`` = ``download_data``:
     the ZIP of voivodeship 12 for an area in Krakow."""
-    monkeypatch.setattr(col, "_session", FakeGugik)
+    gugik = FakeGugik()  # one ZIP for both runs (its member timestamp)
+    monkeypatch.setattr(col, "_session", lambda: gugik)
     run = run_both(
         [
             "elevation",
@@ -78,9 +79,9 @@ def test_contours_sheet(tmp_path, monkeypatch):
 @pytest.mark.usefixtures("images")
 def test_oblique_direction_and_check_lines(tmp_path):
     """``imagery download --product oblique-orto --direction n`` =
-    ``download_data(direction="n")``: one file of the sheet; the check of
-    all four directions prints one line per file (file names, not the sheet
-    code four times)."""
+    ``download_data(direction="n")``: one file of the sheet; the check and
+    the download of all four directions print one line per file (file
+    names, not the sheet code four times)."""
     argv = ["imagery", "download", "--product", "oblique-orto", "--sheet"]
     run = run_both(
         [*argv, OBLIQUE_SHEET, "--direction", "n", "-q"],
@@ -108,4 +109,17 @@ def test_oblique_direction_and_check_lines(tmp_path):
         "missing",
         "missing",
         "missing",
+    ]
+
+    every = run_both(
+        [*argv, OBLIQUE_SHEET],
+        lambda out: download_data(
+            product="oblique-orto", sheet=OBLIQUE_SHEET, output_dir=out
+        ),
+        tmp_path,
+    )
+    _same(every, ["local", "new", "new", "new"])
+    status = [line for line in every.cli_stdout.splitlines() if ".tif: " in line]
+    assert [line.split(": ")[0] for line in status] == [
+        f"{OBLIQUE_SHEET}_{code}.tif" for code in ("n", "e", "s", "w")
     ]

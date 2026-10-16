@@ -183,6 +183,54 @@ tylko KRON86): `kartograf elevation list-sources`.
 - Treść jest sprawdzana tylko co do formatu (kompletny ZIP, sygnatura
   TTN, nagłówek Intergraph, sekcje DXF); pokrycie archiwów nie jest mierzone.
 
+**NMT 100 m (od 0.8.0).** `--resolution 100m` to pliki województw z feedu
+ATOM GUGiK (ZIP z jednym plikiem XYZ, wydanie 2019), nie arkusze:
+
+```bash
+# Kraków: plik województwa 12 (ZIP 7,6 MB); obszar na granicy województw daje dwa pliki
+kartograf elevation download --product nmt --resolution 100m --country pl --bbox 564000,241000,570000,247000 --bbox-crs EPSG:2180 -o ./data
+#   Info: nmt: wojewodztwa obszaru wg PRG (1): 12 (malopolskie)
+#   -> nmt/pl_1992_100m/teryt/12.zip (ZIP 1:1, wersja 2019-05-14 = data wpisu feedu)
+```
+
+- Układ wysokości jest **nieznany** (GUGiK go nie deklaruje): sidecar ma
+  `vertical_crs: null` i `extra.vertical_crs_note`; `--vertical-crs` to
+  `Error:`. `--format XYZ` można pominąć.
+- Bez arkuszy, lotów i wycinka: `--sheet-system`, `--scale`, flagi roku,
+  `--all-campaigns`, `--full-sheet`, `--cutout`, `--horizontal-crs`,
+  `--min-density` i `--country cz` to `Error: ... NMT 100 m to pliki
+  wojewodztw z ATOM - bez arkuszy, lotow i wycinka`. `--check-updates`
+  czyta tylko feedy.
+
+**Obrazy intensywności, true orto i orto ukośna (od 0.8.0).** Arkusze
+GUGiK jak ortofotomapa (kampanie, `--year`, `--all-campaigns`, sygnał
+skorowidza), GeoTIFF 1:1. Plik ponad 100 MiB jest zapowiadany przed
+pobraniem (`Warning: ... duzy plik <URL> - 296853152 B (ok. 297 MB)`).
+
+```bash
+# obrazy intensywności LIDAR: 1 pasmo, piksel 0,25 m; arkusze PL-1992 i PL-2000
+kartograf imagery download --product intensity --sheet M-34-64-D-d-1-4 -o ./data
+#   -> intensity/pl_1992/M-34/64/D/d/1/4/M-34-64-D-d-1-4.tif
+# true orto wybranych miast (np. Gdańsk): godła 8-członowe PL-1992, RGB 0,05 m (ok. 300 MB)
+kartograf imagery download --product true-orto --sheet N-34-50-A-c-3-2-3 -o ./data
+#   -> orto/pl_1992_true/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif
+# wycinek true orto z WCS: piksel 0.05m-1m, tylko EPSG:2180, bez --coverage
+kartograf imagery download --product true-orto --country pl --bbox 470100,740100,470200,740200 --cutout --horizontal-crs EPSG:2180 --resolution 0.05m -o ./data
+#   -> orto/pl_1992_true_0.05m/bbox/470100_740100_470200_740200.tif
+# orto ukośna (Kraków, Gdańsk): arkusz = 4 pliki kierunków; --direction wybiera część
+kartograf imagery download --product oblique-orto --sheet 7.125.11.08 --direction n -o ./data
+#   -> orto/pl_2000_oblique/7/125/11/08/7.125.11.08_n.tif (bez flagi także _e, _s, _w)
+```
+
+- Produkt z jednym układem arkuszy (true orto: 1992, orto ukośna: 2000)
+  może pominąć `--sheet-system`; orto ukośna ma arkusze 1:2000 i 1:1000,
+  więc obszar wymaga `--scale`. `--full-sheet` tylko dla orto ukośnej
+  (rekordy intensywności i true orto nie deklarują pełnego arkusza).
+- Linie wyniku i `--check-updates` jednostki z kilkoma plikami podają nazwę
+  pliku (`7.125.11.08_e.tif: do pobrania ...`).
+- Pod `--country auto` produkt jednego kraju zawęża obszar do tego kraju
+  (`Info: --country auto -> pl (--product intensity tylko dla PL)`).
+
 LAZ: domyślnie pobierany jest najnowszy kafel dla każdego fragmentu obszaru;
 starsze kafle pokryte przez nowsze są pomijane z komunikatem `Info:`
 ([ADR-029](DECISIONS.md), szczegóły: SCOPE 2.5 i ARCHITECTURE 4.7 "Wybór
@@ -553,6 +601,27 @@ kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuz
   PL i arkusze SM5 CZ (dotąd `auto` zawężało ortofotomapę do PL);
   pliki obu krajów mają wspólne `extra.parent_request`. Szczegóły:
   ARCHITECTURE 4.4, [ADR-042](DECISIONS.md) D13 (errata 4).
+
+**Warstwice CZ (`elevation download --product contours`, od 0.8.0).**
+Warstwice ZABAGED CUZK: ZIP arkusza SM5 z openzu zapisany 1:1 (bez
+rozpakowania), S-JTSK (EPSG:5514), wysokości Bpv.
+
+```bash
+kartograf elevation download --product contours --format SHP --sheet CTES96 -o ./data
+#   -> contours/cz_zabaged_shp/CTES/96/CTES96.zip (8 plików SHP)
+kartograf elevation download --product contours --format DGN --sheet CTES96 -o ./data
+#   -> contours/cz_zabaged_dgn/CTES/96/CTES96.zip (3 pliki)
+# obszar = arkusze SM5 z indeksu CUZK (tu CTES86 i CTES96)
+kartograf elevation download --product contours --format SHP --country cz "--bbox=-448500,-1113500,-446500,-1112500" --bbox-crs EPSG:5514 -o ./data
+```
+
+- `--format SHP|DGN` jest wymagane; `--vertical-crs` można pominąć (tylko
+  `Bpv`). `--resolution`, `--cutout`, `--horizontal-crs`, flagi arkuszy PL
+  i lotów to `Error: ... warstwice to arkusze SM5 (wektor) - bez
+  rozdzielczosci, lotow i wycinka`; kafel TM33 i `--country pl` - `Error:`.
+- Aktualność: sygnał HTTP (`ETag`) - lokalna wersja po jednym `HEAD`,
+  `--check-updates` bez pobierania. Sidecar ma listę plików ZIP
+  (`extra.members`), `mapname` i `cz_share` z indeksu.
 
 ### 1.5 Pokrycie terenu, gleby, HSG, cache
 

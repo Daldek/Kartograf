@@ -92,6 +92,13 @@ Kartograf automatyzuje ten proces oferując:
   (błąd przed siecią, lista skal); provider/`DownloadManager` wywołany
   bez skali, gdy GUGiK ma wyłącznie arkusze potomne, daje `NoCoverageError`
   z podpowiedzią `--scale 1:2000` (bez cichego pobrania zastępczego PL-1992)
+- NMT 100 m (0.8.0, plan E1, ADR-043 D10): `--resolution 100m` -> pliki
+  województw obszaru z feedu ATOM GUGiK (ZIP z XYZ 1:1,
+  `nmt/pl_1992_100m/teryt/<woj>.zip`, wydanie 2019); układ wysokości
+  nieznany (GUGiK go nie deklaruje: sidecar `vertical_crs: null`
+  z adnotacją, `--vertical-crs` = błąd); bez arkuszy, lotów i wycinka
+- Godła 8-członowe PL-1992 (0.8.0, plan E1): ćwiartki arkusza 7-członowego
+  (`N-34-50-A-c-3-2-3`, etykieta `1:5000`; arkusze true orto)
 
 # Źródło: GUGiK (Główny Urząd Geodezji i Kartografii)
 # API: WFS (skorowidz), WCS (wycinek 1 m), OpenData
@@ -159,6 +166,12 @@ dokładnie jeden arkusz. Nieznana wartość `sheet_system=` to `ValidationError`
 # Licencja: CC BY 4.0
 ```
 
+Warstwice CZ (0.8.0, plan E1): `elevation download --product contours
+--country cz --format SHP|DGN` - warstwice ZABAGED CUZK, ZIP arkusza SM5
+z openzu 1:1 (`contours/cz_zabaged_<format>/`; S-JTSK, wysokości Bpv;
+sygnał `http`), godło SM5 albo arkusze SM5 obszaru z indeksu
+`KladyMapovychListu`; bez wycinka i bez kanału REST (ADR-043).
+
 **Poza zakresem (planowane):** wielokąt granicy administracyjnej (zamiast
 prostokątnej obwiedni kraju) — patrz sekcja 3.2, znane ograniczenie.
 Ortofoto CZ, ZABAGED, RUIAN i HY-NET są w zakresie 0.8.0 (plan D,
@@ -207,6 +220,14 @@ sekcja 2.14).
 - Ortofoto CZ (0.8.0, ADR-042 D13): `--country cz` (arkusz SM5 albo obszar)
   -> JPEG + `.jgw`/`.TM33N.jgw`/`.TM34N.jgw` z ATOM CUZK 1:1 w
   `orto/cz_sjtsk/`, tylko aktualny rocznik (`download_cz_orto_sheet`)
+- Obrazy GUGiK planu E1 (0.8.0, ADR-043): `imagery download --product
+  intensity` (obrazy intensywności LIDAR, 1 pasmo 0,25 m, arkusze PL-1992
+  i PL-2000), `--product true-orto` (prawdziwa ortofotomapa wybranych
+  miast, godła 8-członowe PL-1992; wycinek WCS `True_Orthoimagery`
+  `--resolution 0.05m`-`1m`) i `--product oblique-orto` (ortofotomapa
+  ukośna, arkusze PL-2000, arkusz = 4 pliki kierunków, `--direction`);
+  tor arkuszy ortofotomapy (kampanie, `--year`, sygnał `index`), plik
+  ponad 100 MiB zapowiadany rozmiarem z `HEAD`
 
 # Źródło: GUGiK (PL), CUZK (CZ)
 # API: WCS, WMS GetFeatureInfo, OpenData; ATOM CUZK
