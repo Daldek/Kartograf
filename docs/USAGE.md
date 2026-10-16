@@ -372,8 +372,16 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   starej. Nieudane pobranie nie rusza poprzedniej wersji ani dowiązania.
   Pliki `<współrzędne>_<RRRRMMDD>.tif` z 0.7.x nie są rozpoznawane (usuń
   je ręcznie). `--workers` i `--scale` nie zmieniają wycinka WCS.
-  `Info:` podaje liczbę żądań przy więcej niż jednym kawałku lub wyniku
-  >= 1 GiB (tylko gdy wycinek będzie pobierany).
+  `Info:` podaje liczbę żądań i szacowany czas przy więcej niż jednym
+  kawałku lub wyniku >= 1 GiB (tylko gdy wycinek będzie pobierany):
+  WCS GUGiK oddaje kawałek ok. 1 Mpx w 25–40 s (pomiar 2026-10-16/17,
+  z ponowieniami), np. 16 żądań = ok. 7–11 min.
+- Obszar w całości poza lądem PL (maska PRG: morze, zagranica) kończy się
+  `Error: wycinek NMT: obszar w calosci poza ladem PL ...` (kod 1) przed
+  pierwszym żądaniem WCS, bez wersji w magazynie — jak tryb arkuszy
+  (`GUGiK nie ma danych ...`). Plik samego nodata (`Warning: wycinek
+  w calosci nodata ...`) zostaje tylko wtedy, gdy WCS nie odda danych
+  dla obszaru na lądzie.
 - Wycinek NMT/NMPT jest **tylko 1 m** z siatki ASC: `--resolution 1m` albo bez
   `--resolution`. Inna rozdzielczość kończy się przed siecią (kod 1)
   komunikatem `Error: wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK);
@@ -609,13 +617,14 @@ kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuz
   PL. Kafel TM33 jako `--sheet` to `Error: ortofoto CZ ma arkusze SM5 (np.
   CTES96, AS91); kafle TM33 sa tylko dla NMT ...`; `--cutout` z CZ — `Error:`.
 - **Aktualność.** Etykieta wersji to rok i data wydania z feedu ATOM
-  (`2024_2025-02-06`). Domyślnie lokalne pliki są porównywane z feedem
-  (nowszy rocznik = dopisek `; dostepna nowsza ... (--upgrade)`),
+  (`2024_2025-02-06`). Domyślnie lokalne pliki są używane bez zapytań
+  (dopisek `(bez sprawdzania; --check-updates)`; bez sieci od razu),
   `--check-updates` sprawdza wydanie bez pobierania zdjęć, `--upgrade`
   pobiera nowy rocznik (stare wersje zostają w `versions/`), `--force`
   pobiera ponownie (ta sama treść = `bez zmian`). Jeden arkusz to jedno
-  pobranie ZIP i jedno sprawdzenie wydania; nieudane sprawdzenie daje
-  jedno `Warning:` na arkusz. Pliki JGW są zapisywane przed JPEG, więc
+  pobranie ZIP i jedno sprawdzenie wydania; nieudane sprawdzenie
+  (`--check-updates`) daje jedną linię `nie udalo sie sprawdzic` na plik.
+  Pliki JGW są zapisywane przed JPEG, więc
   wersja zdjęcia zawsze ma pliki georeferencji.
 - **Pogranicze.** Pod `--country auto` obszar przy granicy daje arkusze
   PL i arkusze SM5 CZ (dotąd `auto` zawężało ortofotomapę do PL);
@@ -1171,7 +1180,7 @@ kartograf cadastre download --product map --country pl --bbox 565000,243000,5670
 kartograf boundaries download --product admin --teryt 12 -o ./data
 #   boundaries/pl_prg_gml/teryt/12.zip: lokalna wersja 2026-10-15 (bez sprawdzania; --check-updates)
 kartograf boundaries download --product admin --teryt 12 --check-updates -o ./data
-#   12: nie da sie sprawdzic bez pobrania (2026-10-15)
+#   boundaries/pl_prg_gml/teryt/12.zip: nie da sie sprawdzic bez pobrania (2026-10-15)
 
 # Punkty adresowe i ulice PRG (od 0.8.0): obszar, paczka powiatu, plik krajowy
 kartograf boundaries download --product addresses --country pl --bbox 566000,243500,566500,244000 -o ./data
@@ -1369,7 +1378,7 @@ kartograf cadastre download --product map --country cz --format SHP "--bbox=-452
 #   Info: map: katastralni uzemi obszaru wg RUIAN (3): 652954, 696137, 753521
 #   cadastre/cz_km_shp/ku/652954.zip: nowa wersja 2026-10-16_223d7ce9 (i dwa kolejne KU)
 kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --check-updates -o ./data
-#   652954: aktualne (2026-10-16)   (tak samo 696137 i 753521)
+#   cadastre/cz_km_shp/ku/652954.zip: aktualne (2026-10-16)   (tak samo 696137 i 753521)
 kartograf hydro list-sources
 ```
 
@@ -1480,9 +1489,11 @@ albo Geonames dla `--country cz`; `--product world --country pl` oznacza
 **polskie nazwy geograficzne świata**, nie obcięcie obszaru do Polski.
 Obszar (`--bbox`, `--sheet` lub `--geometry`) daje GPKG z pełnymi geometriami
 obiektów przecinających obszar: PRNG w OGC:CRS84 (długość, szerokość), Geonames
-w EPSG:5514 (25 warstw). Duże zapytania PRNG mogą trwać ponad minutę na stronę;
-do kompletu danych użyj `--whole-country`. Wyniki obszaru nie mają taniego
-sygnału aktualizacji, do odświeżenia służy `--force`.
+w EPSG:5514 (25 warstw). Zapytanie PRNG trwa ok. 80–95 s na stronę obiektów
+(pomiar 2026-10-16) — przed nim pada `Info: geographic: zapytanie OGC API
+PRNG - usluga odpowiada ...`; do kompletu danych użyj `--whole-country`.
+Wyniki obszaru nie mają taniego sygnału aktualizacji, do odświeżenia służy
+`--force`.
 
 ```bash
 kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o ~/kartograf-data
@@ -1556,7 +1567,7 @@ kartograf models3d download --product mesh --country pl --bbox 566200,244650,566
 #   Info: mesh: kafle obszaru (1): s7/78944_6777_74230_55482
 #   models3d/pl_mesh/s7/78944_6777_74230_55482.zip: nowa wersja 2021-10-03_DFT.7201.043.2023_7950f585
 kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check-updates -o ~/kartograf-data
-#   s7/78944_6777_74230_55482: aktualne (2021-10-03_DFT.7201.043.2023)
+#   models3d/pl_mesh/s7/78944_6777_74230_55482.zip: aktualne (2021-10-03_DFT.7201.043.2023)
 kartograf models3d download --product trees --teryt 3063 -o ~/kartograf-data
 #   Warning: trees PL 3063: duzy plik https://opendata.geoportal.gov.pl/InneDane/Drzewa3D/LOD1/2023/30/3063.zip - 324674789 B (ok. 325 MB)
 #   models3d/pl_trees_lod1_2023/teryt/3063.zip: nowa wersja 2023_25a77518
@@ -2132,7 +2143,8 @@ Szczegóły trybów: sekcja 4.3.
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
   sshfs/FUSE) kończy pobranie arkusza błędem. Na udziale SMB montowanym
   bez `serverino` (niestabilne numery i-węzłów) dowiązanie jest
-  potwierdzane sumą SHA-256 (jeden odczyt pliku przy każdym uruchomieniu).
+  potwierdzane sumą SHA-256 (jeden odczyt pliku przy każdym uruchomieniu;
+  koszt: sekcja 7).
 - **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` — bez zachowania
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
@@ -2280,24 +2292,30 @@ kafli LAZ (PL i CZ), arkuszy CZ (TM33, SM5; ortofoto CZ), wycinków CZ i wycink�
 oraz `boundaries download`, `cadastre download`, `models3d download`,
 `hydro download`, `names download` i `maps download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
-skorowidz); pozostałe tory różnią się sygnałem:
+skorowidz); pozostałe tory różnią się sygnałem. Bez `--check-updates`
+i `--upgrade` plik z lokalną wersją jest używany **bez zapytania
+o sygnał** (`HEAD`, wydanie, feed ATOM, rekord indeksu arkusza mapy):
+linia `lokalna wersja ... (bez sprawdzania; --check-updates)`, bez sieci
+od razu i bez `Warning:`. Sygnał porównują `--check-updates` (`nowsza:
+...`) i `--upgrade` (pobiera nowszą treść). Arkusze PL i kafle LAZ PL
+pytają skorowidz o wybór plików (rekordy skorowidza arkuszy z cache):
 
 | Tor | Sygnał świeżości | Uwagi |
 |---|---|---|
 | arkusze PL | skorowidz GUGiK (`index`) | tabela niżej |
 | kafle LAZ PL | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
-| CZ: arkusze SM5, kafle TM33 DMR 4G/DMP OK w EVRF2007, pliki LAZ (tor planu `cz_laz`) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
+| CZ: arkusze SM5, kafle TM33 DMR 4G/DMP OK w EVRF2007, pliki LAZ (tor planu `cz_laz`) | `ETag`/`Last-Modified` (`http`) | `--check-updates`/`--upgrade`: jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
 | pozostałe kafle TM33 (warp z ImageServer), wycinki CZ i PL (także ortofotomapy) | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
-| ortofoto CZ (arkusz SM5; tor planu `cz_orto`) | wydanie z feedu ATOM CUZK (`metadata`) | etykieta = `<rok>_<wydanie>` (`2024_2025-02-06`); jedno sprawdzenie wydania na arkusz (cztery pliki); nowszy rocznik = `dostepna nowsza ... (--upgrade)`, `--upgrade` pobiera |
-| SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
+| ortofoto CZ (arkusz SM5; tor planu `cz_orto`) | wydanie z feedu ATOM CUZK (`metadata`) | etykieta = `<rok>_<wydanie>` (`2024_2025-02-06`); jedno sprawdzenie wydania na arkusz (cztery pliki); nowszy rocznik = `nowsza: ...` w `--check-updates`, `--upgrade` pobiera |
+| SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `nowsza: ...` w `--check-updates`, `--upgrade` pobiera; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną domyślnie lokalna wersja bez zapytania (z `--upgrade` `Error:`) |
 | BDOT10k, podgląd CORINE | brak (`none`) | jak wycinki; `--force` przy BDOT10k odświeża też cache PRG |
 | kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`; tor planu `collection`), ZABAGED obszaru i archiwum BDOT10k (`--year`) | brak (`none`) | jak wycinki; etykieta = rocznik/rok wydania albo data pobrania (sekcje 1.8, 1.9) |
 | pliki krajowe RUIAN i HY-NET | `ETag`/`Last-Modified` (`http`) | jak arkusze SM5 |
 | plik krajowy ZABAGED | wydanie z feedu ATOM (`metadata`) | etykieta = data wydania (`2026-10-04`); jak ortofoto CZ |
 | obszary PRNG/Geonames, kraj PRNG | brak (`none`) | `--force` do sprawdzenia nowej treści; PRNG RP ma dwie paczki krajowe |
 | kraj Geonames | wydanie feedu ATOM (`metadata`) | `--check-updates` porównuje datę wydania bez pobierania ZIP |
-| mapy BDOT10k | data `Stan bazy` skorowidza (`index`) | data osobna dla skali, bez pobierania TIFF/PDF |
-| ZTM CZ | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na arkusz |
+| mapy BDOT10k | data `Stan bazy` skorowidza (`index`) | data osobna dla skali, bez pobierania TIFF/PDF; arkusz z lokalną wersją domyślnie bez GetFeatureInfo |
+| ZTM CZ | `ETag`/`Last-Modified` (`http`) | `--check-updates`/`--upgrade`: jedno `HEAD` na arkusz |
 | HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
@@ -2317,30 +2335,35 @@ pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
 ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
 `bez zmian`, inna = nowa wersja.
 
-`--check-updates` zawsze pyta źródło: odczyt cache metadanych (rekordy
-skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest pomijany, a wpisy
-są odświeżane — nowy lot opublikowany po ostatnim zapytaniu jest widoczny
-od razu, a bez sieci sprawdzenie kończy się `Error:`. Domyślne pobieranie
-korzysta z cache jak dotąd.
+`--check-updates` i `--upgrade` zawsze pytają źródło: odczyt cache
+metadanych (rekordy skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest
+pomijany, a wpisy są odświeżane — nowy lot opublikowany po ostatnim
+zapytaniu jest widoczny od razu (także bez wcześniejszego
+`--check-updates`), a bez sieci sprawdzenie kończy się `Error:`.
+Domyślne pobieranie korzysta z cache jak dotąd.
 
 ```bash
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
-#   N-34-139-C-a-3-1: nowa wersja 2025-10-21_84183_4de1eac7
+#   nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc: nowa wersja 2025-10-21_84183_4de1eac7
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --check-updates --plan plan.json
-#   N-34-139-C-a-3-1: aktualne (2025-10-21_84183)
+#   nmt/pl_1992_1m_evrf2007/N-34/139/C/a/3/1/N-34-139-C-a-3-1.asc: aktualne (2025-10-21_84183)
 kartograf elevation download --sheet N-34-139-C-a-3-1 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data --upgrade --plan plan.json
 ```
 
-Wynik: jedna linia na plik — `nowa wersja <etykieta>_<sha8>`, `nowa
+Wynik: jedna linia na plik — jej podmiot to zawsze ścieżka pliku pod
+`--output` (ta sama w pobraniu i w `--check-updates`, każdy plik osobno,
+np. cztery kierunki orto ukośnej i pliki JPEG/JGW ortofoto CZ), potem
+`nowa wersja <etykieta>_<sha8>`, `nowa
 etykieta <etykieta> (plik identyczny z <etykieta>)` (GUGiK opublikował pod
 nowym rekordem plik bajtowo identyczny z najnowszą istniejącą wersją; nowy
 katalog wersji to dowiązanie, bez dodatkowego miejsca na dysku;
 w bibliotece `VersionedFile.same_as`), `bez zmian <etykieta>`,
 `lokalna wersja <etykieta>`
-(z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)`), po liście
+(z dopiskiem `; dostepna nowsza <etykieta> (--upgrade)` z rekordu
+skorowidza albo `(bez sprawdzania; --check-updates)`), po liście
 podsumowanie `Nowe: N, nowa etykieta: N, bez zmian: N, lokalne: N, bledy: N`
-(także dla kafli LAZ PL i CZ). Arkusz CZ, plik LAZ CZ i wycinek dają jedną linię statusu
-(jednostka: godło albo ścieżka wycinka pod `--output`).
+(także dla kafli LAZ PL i CZ). Arkusz CZ, plik LAZ CZ i wycinek dają jedną
+linię statusu.
 
 Biblioteka:
 
@@ -2398,7 +2421,11 @@ print(report.stale, report.files.get(godlo, ()))
   zależy też od struktury gleby ([ADR-025](DECISIONS.md)).
 - `--stats` podaje powierzchnie grup w ha także dla rastrów w EPSG:4326
   (pole komórki liczone geodezyjnie na elipsoidzie, nie w stopniach
-  kwadratowych).
+  kwadratowych). Procent grupy to udział **w pikselach z danymi**; osobna
+  linia `Brak danych: <procent>% calego obszaru (<ha> ha)` podaje piksele
+  bez danych (klasa 0: wszystkie wejścia 0 albo nodata). W bibliotece
+  `get_hsg_statistics()` zwraca je pod kluczem `nodata` (procent liczony
+  od wszystkich pikseli). Skąd zera SoilGrids: sekcja 7.
 
 ---
 
@@ -2470,6 +2497,21 @@ proxy).
   tej flagi (sekcja 1.3); wycinek CZ ma krok modelu (0,5 m, 2 m albo 5 m,
   sekcja 1.4). Wycinek ortofotomapy ma piksel do wyboru
   (`0.1m`–`1m`), ale tylko w EPSG:2180 i tylko dla PL.
+- Magazyn na udziale SMB/cifs bez `serverino` (sekcja 4): każde
+  uruchomienie czyta cały plik dla każdego dowiązania (ścieżka standardowa
+  i `full_sheet/`), także przy `lokalna wersja` (pomiar 2026-10-16: orto
+  PL 300 MB = ok. 5 s; magazyn setek arkuszy = minuty). Montuj udział
+  z `serverino` albo trzymaj magazyn na dysku lokalnym. Kartograf nie
+  skraca tego sprawdzenia: skrót bez sumy (liczba dowiązań, rozmiar, czas
+  modyfikacji) mógłby uznać dowiązanie do starszej wersji tego samego
+  rozmiaru za aktualne.
+- SoilGrids zwraca w obszarach maskowanych **0**, nie `-32768` z opisu
+  ISRIC: WCS z `OUTPUTCRS=EPSG:4326` oddaje GeoTIFF bez tagu NoData
+  (pomiar 2026-10-16: Piastów/Ursus, 85 ze 104 pikseli = 0). Kartograf
+  zapisuje plik bez zmian (sidecar `nodata` jak w pliku), a HSG traktuje
+  trójkę zer clay/sand/silt jako brak danych (`Brak danych` w `--stats`);
+  w analizach własnych traktuj 0 g/kg w obszarze maskowanym jako brak
+  wartości.
 - WCS ortofotomapy jest wolny (pomiar 2026-10-15: ok. 1 min na kawałek
   200 x 200 m; obszar 1 x 1 km = 25 kawałków niezależnie od piksela),
   a Standard bywa przejściowo niedostępny. Złożony z kawałków wycinek nie
@@ -2602,11 +2644,16 @@ Pierwsze `download` przypina komplet plikow zadania dopiero po pelnym
 sukcesie; wynik HSG przypina rowniez trzy pliki wejsciowe SoilGrids.
 Ponowne `download` **nie zmienia przypiec** ani nie odpytuje zrodla,
 gdy przypiete pliki sa obecne. Gdy ich brakuje, probuje odtworzyc
-zadanie: akceptuje tylko te same sumy SHA-256. Inna tresc u zrodla
-oznacza blad, nigdy cicha zamiane; odzyskaj kopie magazynu lub jawnie
-wybierz `--upgrade`. `status` bez sieci szybko sprawdza istnienie
+zadanie: akceptuje tylko te same sumy SHA-256 i zapisuje bajty pod
+przypieta wersja (`version`, `label`) - manifest sie nie zmienia, takze
+gdy zrodlo daje inna etykiete (np. data pobrania innego dnia). Inna tresc
+u zrodla oznacza blad, nigdy cicha zamiane; odzyskaj kopie magazynu lub
+jawnie wybierz `--upgrade`. `status` bez sieci szybko sprawdza istnienie
 wersji i rozmiary; `verify` bez sieci czyta cale pliki i porownuje
-SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu.
+SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu. Linie
+plikow maja postac `zadanie: jednostka (plik): stan`, np. `orto_cz:
+CTES96 (CTES96.jpg): ok` - pliki jednej jednostki (JPEG i trzy JGW) sa
+rozroznialne.
 
 ### 8.2 Swiezosc i wariant danych
 
