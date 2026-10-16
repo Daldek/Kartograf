@@ -397,13 +397,21 @@ class TestCmdParse:
 class TestMain:
     """Tests for main() function."""
 
-    def test_no_command_shows_help(self, capsys):
-        """Test that no command shows help."""
+    def test_no_command_shows_help_and_fails(self, capsys):
+        """No command: the help on stderr and exit 2 (a script with a typo
+        must not pass)."""
         result = main([])
 
-        assert result == 0
+        assert result == 2
         captured = capsys.readouterr()
-        assert "usage" in captured.out.lower() or "kartograf" in captured.out
+        assert captured.err.startswith("usage: kartograf") and captured.out == ""
+
+    def test_ctrl_c_is_an_error_line_and_exit_130(self, capsys):
+        """Ctrl-C mid-command: one Error line, exit 130 - no traceback."""
+        with patch("kartograf.cli.commands.cmd_parse", side_effect=KeyboardInterrupt):
+            result = main(["parse", "N-34-130-D"])
+        assert result == 130
+        assert capsys.readouterr().err == "Error: przerwano (Ctrl-C)\n"
 
     def test_help_flag(self, capsys):
         """Test --help flag."""
@@ -514,10 +522,10 @@ class TestCommandGroups:
 
     @pytest.mark.parametrize("group", _GROUPS)
     def test_group_without_command_prints_its_commands(self, group, capsys):
-        assert main([group]) == 0
-        out = capsys.readouterr().out
-        assert out.startswith(f"usage: kartograf {group}")
-        assert "download" in out and "list-sources" in out
+        assert main([group]) == 2
+        err = capsys.readouterr().err
+        assert err.startswith(f"usage: kartograf {group}")
+        assert "download" in err and "list-sources" in err
 
     @pytest.mark.parametrize(
         ("argv", "replacement"),
@@ -1399,8 +1407,8 @@ class TestDownloadCLIIntegration:
 
     def test_main_lists_data_groups(self, capsys):
         """Top-level help directs people to the grouped commands."""
-        assert main([]) == 0
-        text = capsys.readouterr().out
+        assert main([]) == 2
+        text = capsys.readouterr().err
         assert all(
             group in text for group in ("elevation", "imagery", "landcover", "soil")
         )
@@ -3402,9 +3410,9 @@ class TestCmdSoil:
     def test_soil_help(self, capsys):
         """The soil group exposes download, HSG and source discovery."""
         result = main(["soil"])
-        assert result == 0
+        assert result == 2
         captured = capsys.readouterr()
-        assert all(name in captured.out for name in ("download", "hsg", "list-sources"))
+        assert all(name in captured.err for name in ("download", "hsg", "list-sources"))
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
@@ -4938,7 +4946,7 @@ class TestCmdDownloadLaz:
         assert result == 1
         err = capsys.readouterr().err
         assert "Error: WFS" in err
-        assert "connection reset by peer" in err
+        assert "(zerwane albo odrzucone polaczenie)" in err
         assert "Brak kafli LAZ" not in err
         assert get.call_count == 3
 
@@ -6232,11 +6240,9 @@ class TestCmdDownloadCz:
 
         crashing = _cz_provider_mock()
         crashing.download_bbox.side_effect = KeyboardInterrupt
-        with (
-            patch(_CZ_FACTORY_PATCH, return_value=crashing),
-            pytest.raises(KeyboardInterrupt),
-        ):
-            _cmd_download_cz(_cz_args(tmp_path / "c", sheet=None), bbox=bbox)
+        with patch(_CZ_FACTORY_PATCH, return_value=crashing):
+            rc = _cmd_download_cz(_cz_args(tmp_path / "c", sheet=None), bbox=bbox)
+        assert rc == 130  # Ctrl-C: Error line and exit 130
         assert log.disabled is False
 
     def test_tm33_sheet_all_nodata_warns_but_returns_0(self, tmp_path, capsys):

@@ -604,7 +604,10 @@ class TestDiscoverTiles:
         p._available_years["EVRF2007"] = [2024]
         with (
             patch("kartograf.transport.http.time.sleep"),
-            pytest.raises(DownloadError, match="2024.*reset.*wynik bylby niepelny"),
+            pytest.raises(
+                DownloadError,
+                match="2024.*zerwane albo odrzucone.*wynik bylby niepelny",
+            ),
         ):
             p.discover_tiles(QUERY_BBOX, year=2024)
         assert session.get.call_count == 3
