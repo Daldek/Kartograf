@@ -604,6 +604,24 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   z rozmiarem z `HEAD` przed swoim pobraniem (K9; dlatego przed kazdym
   pobraniem paczki, takze produktow planow C/D, jest jedno zapytanie
   `HEAD`).
+- Plan E, Task E2: grupy `kartograf names` i `kartograf maps` z
+  `download`/`list-sources`, wspolna funkcja biblioteki
+  `download_collection`/`check_collection` oraz zadania manifestu projektu.
+  `names --product geographic --country pl` pobiera PRNG RP jako obszarowy
+  GPKG OGC:CRS84 (OGC API Features; duze strony, timeout 180 s) albo dwa
+  krajowe ZIP-y GML/SHP/XLSX; `--product world --country pl` pozwala pobierac
+  polskie nazwy swiata rowniez poza Polska (obszar i jeden plik krajowy).
+  Geonames CUZK (`geographic --country cz`) udostepnia 25 warstw obszaru
+  EPSG:5514 albo krajowy ZIP GPKG/FGDB w EPSG:5514/3045 z feedu ATOM
+  (wydanie z `updated`, sygnal `metadata`). Obszary nie maja taniego sygnalu.
+  `maps --product topographic --country pl` pobiera gotowe arkusze
+  wizualizacji BDOT10k w skalach 1:10000/25000/50000/100000 jako TIFF lub
+  PDF (data `Stan bazy` z indeksu jako sygnal); `--country cz` pobiera ZTM
+  w szesciu skalach, ukladzie arkuszy S-JTSK lub ETRS89 rozpoznawanym
+  z godla i formatach TIFF/PDF (S-JTSK takze DGN/SHP; formaty inne niz
+  PDF sa ZIP-ami). Arkusze ZTM maja sygnal HTTP; sidecar ma uklad wariantu
+  EPSG:5514 lub EPSG:3045. Osobne segmenty magazynu `data/names/`,
+  `data/maps/`; przyklady i wyniki live: USAGE 1.10 i raport E2E.
 - Grupa `hydro` (plan D, ADR-042 D16): `kartograf hydro download --product
   network --country cz` - siec wod HY-NET CUZK. Obszar (`--bbox`/
   `--geometry`) = jeden GeoPackage w EPSG:5514

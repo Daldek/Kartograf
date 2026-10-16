@@ -30,6 +30,8 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **ZABAGED (CZ)** — 22 warstwy pokrycia terenu i wód CUZK (obszar) albo plik krajowy GPKG
 - **Granice RUIAN (CZ)** — kraje, okresy, obce i katastralni uzemi z CUZK
 - **HY-NET (CZ)** — sieć hydrograficzna CUZK (odcinki cieków i węzły; plik krajowy)
+- **Nazwy geograficzne** — PRNG (Polska i polskie nazwy świata), Geonames CUZK: obiekty obszaru albo archiwum krajowe
+- **Mapy topograficzne** — gotowe arkusze wizualizacji BDOT10k (PL) i ZTM (CZ), TIFF/PDF oraz formaty ZTM
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
 - **SoilGrids** — globalne dane glebowe (ISRIC)
 - **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
@@ -86,6 +88,12 @@ kartograf boundaries download --product admin --country pl --level gmina --bbox 
 kartograf cadastre download --product map --teryt 1261 -o ./data
 kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
 kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
+
+# Nazwy i gotowe arkusze map: jawny katalog danych poza repozytorium
+kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o <katalog-danych>
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o <katalog-danych>
+kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o <katalog-danych>
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o <katalog-danych>
 ```
 
 Pełna lista opcji: `kartograf <grupa> <komenda> --help`. Więcej przykładów, wybór
