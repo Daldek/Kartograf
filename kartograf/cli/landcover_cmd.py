@@ -24,7 +24,6 @@ from kartograf.cli.download_cmd import (
     _update_mode,
     create_progress_callback,
     run_with_plan_file,
-    store_path_label,
 )
 from kartograf.download.collections import collection_classes, collection_layers
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
@@ -196,7 +195,7 @@ def _landcover_task(
     first."""
     if args.check_updates:
         plan = manager.check(**selection, on_notice=_print_notice, **options)
-        return _report_plan(args, plan, store_path_label)
+        return _report_plan(args, plan)
     update = _update_mode(args)
     on_progress = create_progress_callback(args.quiet, workers)
     result = manager.download(

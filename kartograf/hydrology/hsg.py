@@ -875,8 +875,11 @@ class HSGCalculator:
         Returns
         -------
         dict
-            Per-group dict with keys: count, area_m2, area_ha, percent,
-            description.
+            Per-group dict (``A``-``D``) with keys: count, area_m2, area_ha,
+            percent (share of the cells WITH data), description; plus
+            ``nodata`` - the cells without data (class 0: an input gap, e.g.
+            a SoilGrids cell with 0 in every input) with the same keys and
+            ``percent`` = share of ALL cells of the raster.
 
         Notes
         -----
@@ -897,7 +900,8 @@ class HSGCalculator:
                     src.height, abs(src.transform[0] * src.transform[4])
                 )  # m²
 
-        # Count pixels for each HSG
+        # Count pixels for each HSG; the shares are of the cells with data,
+        # the cells without data (0) get their own entry (share of all cells)
         total_valid = np.sum(hsg > 0)
         stats = {}
 
@@ -915,6 +919,15 @@ class HSGCalculator:
                 "description": HSG_DESCRIPTIONS[name],
             }
 
+        empty = np.sum(hsg == 0, axis=1)
+        empty_m2 = float(np.sum(empty * row_area))
+        stats["nodata"] = {
+            "count": int(np.sum(empty)),
+            "area_m2": empty_m2,
+            "area_ha": empty_m2 / 10000,
+            "percent": float(np.sum(empty) / hsg.size * 100) if hsg.size else 0.0,
+            "description": "Brak danych: komorki bez wartosci wejsc (klasa 0)",
+        }
         return stats
 
 

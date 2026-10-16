@@ -82,6 +82,14 @@ def validate_update(update: object) -> None:
         )
 
 
+def refreshes_cache(update: UpdateMode | None) -> bool:
+    """Whether a download mode refreshes the metadata cache instead of
+    reading it: ``"upgrade"`` and ``"force"`` ask the source like
+    ``--check-updates`` (a flight published within the cache TTL is seen);
+    the default mode reads it (TTL 7 days)."""
+    return update in ("upgrade", "force")
+
+
 @dataclass(frozen=True)
 class FileSlot:
     """Where one file of a track lives in the store.
@@ -124,11 +132,14 @@ class VersionedFile:
     ``status``: ``new`` (new version), ``unchanged`` (downloaded content
     equal to an existing version), ``relabeled`` (same content, new label,
     D23), ``local`` (no download) or ``reused`` (a derived file whose inputs
-    match an existing version, nothing computed, D33). ``newer``: default
-    mode, the source signal differs from the local version (ETag or
-    Last-Modified of the source, or the newer edition). ``unverified``: the
-    local version was used without a comparison — ``"none"`` (no cheap or
-    comparable signal) or ``"check_failed: <error>"``. ``same_as``: for
+    match an existing version, nothing computed, D33). ``newer``: the
+    source signal differs from the local version (ETag or Last-Modified of
+    the source, or the newer edition; the default mode knows it only from
+    an index record asked for the selection). ``unverified``: the local
+    version was used without a comparison — ``"unchecked"`` (the default
+    mode asks no source for the freshness of a local version: ADR-036
+    erratum 3, ``--check-updates``/``--upgrade`` compare it), ``"none"`` (no
+    cheap or comparable signal) or ``"check_failed: <error>"``. ``same_as``: for
     ``relabeled``, the label of the newest existing version with identical
     content; otherwise ``None``.
     """
@@ -213,7 +224,17 @@ def _keep_local(
     probe: Probe | None,
     edition: EditionLookup | None,
 ) -> tuple[bool, str | None, str | None]:
-    """``(keep_local, newer, unverified)`` for an existing local version."""
+    """``(keep_local, newer, unverified)`` for an existing local version.
+
+    The default mode asks no source (no ``HEAD``, no edition lookup) and
+    keeps the local version ``"unchecked"`` (ADR-036 erratum 3); the label
+    of an index record (signal ``index``) was already asked for the
+    selection and is still compared."""
+    if update is None and (
+        (signal == "http" and probe is not None)
+        or (signal == "metadata" and edition is not None)
+    ):
+        return True, None, "unchecked"
     if signal == "http" and probe is not None:
         try:
             remote = probe()
@@ -259,18 +280,21 @@ def use_local(
     """The local version to use, or ``None`` = the file must be downloaded.
 
     Spec 4.2 table (plan 2/3 4, plan 3/3 decision 2). Without ``"force"``
-    an existing local version is used; ``http`` + ``probe``: one ``HEAD``
-    compares it with the source — equal = local, different = local with
-    ``newer`` (default) or a download (``"upgrade"``), not comparable =
-    ``unverified="none"``, a probe failure = ``unverified="check_failed:
-    ..."`` (default) or the ``DownloadError`` (``"upgrade"``). ``metadata``
-    + ``edition``: a version labelled by an edition is compared with the
-    current edition the same way; a version with another label source is
-    not comparable; ``index`` + ``edition`` (the label of the unit's index
-    record, ADR-043) is compared the same way. ``none`` (and ``http``
-    without a probe) = local with ``unverified="none"``; ``index`` without
-    an edition = local (the caller selected the file by its record). A used
-    local version gets the standard path linked.
+    an existing local version is used. The default mode asks no source for
+    it: ``http`` + ``probe`` and ``metadata`` + ``edition`` give
+    ``unverified="unchecked"`` without a request (ADR-036 erratum 3).
+    ``"upgrade"``: ``http`` + ``probe``: one ``HEAD`` compares it with the
+    source — equal = local, different = a download, not comparable =
+    ``unverified="none"``, a probe failure = the ``DownloadError``.
+    ``metadata`` + ``edition``: a version labelled by an edition is compared
+    with the current edition the same way; a version with another label
+    source is not comparable. ``index`` + ``edition`` (the label of the
+    unit's index record, ADR-043, known without a request) is compared in
+    every mode: different = local with ``newer`` (default) or a download
+    (``"upgrade"``). ``none`` (and ``http`` without a probe) = local with
+    ``unverified="none"``; ``index`` without an edition = local (the caller
+    selected the file by its record). A used local version gets the
+    standard path linked.
 
     Raises
     ------

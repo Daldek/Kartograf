@@ -23,7 +23,6 @@ from kartograf.hydrology.hsg import (
     texture_to_hsg,
     texture_to_hsg_array,
 )
-from kartograf.notices import CHECK_FAILED, Notice
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.edition import Edition
 
@@ -708,7 +707,9 @@ class TestHSGCalculatorCalculateFull:
         assert [item.status for item in short.items] == ["check_failed"] * 4
         assert all(item.error == "limit 17 sekund" for item in short.items)
 
-    def test_hsg_input_check_failure_notice_reaches_result_and_callback(self, tmp_path):
+    def test_hsg_default_inputs_ask_no_source(self, tmp_path):
+        """The default mode asks no source for local inputs (ADR-036 erratum
+        3): an edition lookup that would fail changes nothing, no notice."""
         provider = RasterSoilGrids()
         calc = HSGCalculator(tmp_path, provider)
         calc.calculate_hsg(bbox=BBOX, depth="0-5cm")
@@ -717,13 +718,8 @@ class TestHSGCalculatorCalculateFull:
         result = calc.calculate_hsg(bbox=BBOX, depth="0-5cm", on_notice=observed.append)
         assert result.file.status == "reused"
         assert result.inputs[0].file.status == "local"
-        expected = Notice(
-            "warning",
-            CHECK_FAILED,
-            f"soil/global_soilgrids_clay_0-5cm_mean/bbox/{COORDS}.tif: "
-            "nie udalo sie sprawdzic zrodla (caps 503) - uzyto lokalnej wersji 2.0",
-        )
-        assert result.notices == tuple(observed) == (expected,)
+        assert result.inputs[0].file.unverified == "unchecked"
+        assert result.notices == tuple(observed) == ()
 
     def test_hsg_plan_upgrade_recomputes_with_new_input(self, tmp_path):
         provider = RasterSoilGrids()
@@ -775,6 +771,22 @@ class TestHSGCalculatorCalculateFull:
         assert stats["D"]["count"] == 0
         assert abs(stats["A"]["percent"] - 50.0) < 0.1
         assert abs(stats["B"]["percent"] - 25.0) < 0.1
+
+    def test_get_hsg_statistics_no_data_entry(self, tmp_path):
+        """Live test 0.8.0: 19 of 104 SoilGrids cells had data and the groups
+        said 100 %. The groups are shares of the cells WITH data, the cells
+        without data (0) get ``nodata`` with the share of ALL cells."""
+        calc = HSGCalculator(tmp_path)
+        data = np.array([[2, 0, 0, 0], [2, 0, 0, 0]], dtype=np.uint8)
+        hsg_path = tmp_path / "hsg.tif"
+        _create_test_raster(hsg_path, data)
+
+        stats = calc.get_hsg_statistics(hsg_path)
+
+        assert stats["B"]["percent"] == 100.0 and stats["B"]["count"] == 2
+        assert stats["nodata"]["count"] == 6
+        assert stats["nodata"]["percent"] == 75.0
+        assert stats["nodata"]["area_ha"] == pytest.approx(3 * stats["B"]["area_ha"])
 
     def test_get_hsg_statistics_geographic_crs_area_in_hectares(self, tmp_path):
         """EPSG:4326 rasters get geodetic areas, not square degrees."""

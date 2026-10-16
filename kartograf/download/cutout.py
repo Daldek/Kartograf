@@ -46,6 +46,7 @@ from kartograf.download.fetch import (
     inspect_version,
     link_version,
     local_version,
+    refreshes_cache,
     validate_update,
 )
 from kartograf.download.plan import (
@@ -58,7 +59,7 @@ from kartograf.download.plan import (
 )
 from kartograf.download.storage import bbox_cutout_path, bbox_slot
 from kartograf.download.versions import ContentDigest, VersionRef, read_version
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import channel_signal, get_source
@@ -77,6 +78,23 @@ CUTOUT_CRS = ("EPSG:2180", "EPSG:5514", "EPSG:3045")
 # margin (WARP_MARGIN_PX) — shared with the CZ flow, from transform/crs.py (D9).
 # Products of a PL WCS cutout.
 CUTOUT_PRODUCTS = ("nmt", "nmpt")
+# Seconds of one GUGiK WCS request of a cutout chunk (ASC grid, ~1 Mpx),
+# retries included - measured live: NMT 3 x 4 km, 16 requests in 410-667 s
+# (2026-10-16); NMT and NMPT 2 x 2 km, 6 requests each, 391 s both
+# (2026-10-17). The ``CUTOUT_SIZE`` notice estimates a series with it.
+WCS_REQUEST_SECONDS = (25, 40)
+
+
+def wcs_time_text(requests: int) -> str:
+    """Estimated time of ``requests`` WCS requests one after another:
+    ``ok. 50-80 s`` below 2 minutes, else ``ok. 7-11 min``."""
+    low, high = (requests * seconds for seconds in WCS_REQUEST_SECONDS)
+    if high < 120:
+        return f"ok. {low}-{high} s"
+    low_min = max(1, round(low / 60))
+    return f"ok. {low_min}-{max(low_min, round(high / 60))} min"
+
+
 # Layers of the PL land mask (sidecar ``extra.mask.layers``, ADR-035).
 LAND_MASK_LAYERS = (
     "A00_Granice_panstwa",
@@ -515,15 +533,6 @@ def _run_pl_wcs_cutout(
         if selected_provider is None:
             selected_provider = _wcs_cutout_provider(cutout)
         chunks = len(selected_provider.plan_wcs_chunks(cutout.bbox_source_2180))
-        if sink is not None and (chunks > 1 or cutout.estimated_bytes >= 2**30):
-            height, width = cutout.grid_shape
-            sink.emit(
-                "info",
-                CUTOUT_SIZE,
-                f"wycinek {width} x {height} px float32 "
-                f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan "
-                "WCS GUGiK pobieranych po kolei",
-            )
         _check_wcs_disk_space(cutout, staged)
         timeout = selected_provider.DEFAULT_TIMEOUT
         b = cutout.bbox_source_2180
@@ -532,6 +541,24 @@ def _run_pl_wcs_cutout(
         grid = selected_provider.WCS_GRID
         mask_area = align_bbox(b, grid.step, grid)[0] if grid is not None else b
         mask = fetch_land_mask(mask_area, timeout=timeout)
+        if not mask.has_land(b, cutout.pixel_size):
+            # the sheet mode has no record there either: no version, no WCS
+            raise NoCoverageError(
+                f"wycinek {cutout.product.upper()}: obszar w calosci poza ladem PL "
+                "(maska PRG: granica panstwa bez morza terytorialnego i wod "
+                "wewnetrznych) - GUGiK nie ma tu danych; zmien --bbox"
+            )
+        if sink is not None and (chunks > 1 or cutout.estimated_bytes >= 2**30):
+            height, width = cutout.grid_shape
+            sink.emit(
+                "info",
+                CUTOUT_SIZE,
+                f"wycinek {width} x {height} px float32 "
+                f"(~{cutout.estimated_bytes / 2**20:.0f} MiB), {chunks} zapytan "
+                f"WCS GUGiK pobieranych po kolei - {wcs_time_text(chunks)} "
+                f"({WCS_REQUEST_SECONDS[0]}-{WCS_REQUEST_SECONDS[1]} s na "
+                "zapytanie wg pomiaru)",
+            )
         description = (
             f"wycinek {cutout.product.upper()} {cutout.vertical_crs} "
             f"({b.min_x:.0f},{b.min_y:.0f})-({b.max_x:.0f},{b.max_y:.0f})"
@@ -650,7 +677,9 @@ def download_pl_cutout(
         product=product,
     )
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+    with open_cache(
+        cache, force=refreshes_cache(update), on_notice=sink.add
+    ) as metadata:
         result = _run_pl_wcs_cutout(
             cutout,
             provider=_wcs_cutout_provider(cutout, metadata),
@@ -661,10 +690,12 @@ def download_pl_cutout(
         )
     file = result.file
     if result.all_nodata and file is not None and file.status != "local":
+        # an area off PL land fails before WCS (PRG mask); nodata on land is
+        # an answer of the service
         sink.emit(
             "warning",
             ALL_NODATA,
-            "wycinek w calosci nodata - obszar poza ladem PL (maska PRG: "
-            "granica panstwa bez morza terytorialnego i wod wewnetrznych)",
+            "wycinek w calosci nodata - WCS GUGiK nie zwrocil danych dla obszaru "
+            "(na ladzie wg maski PRG)",
         )
     return replace(result, notices=sink.notices)

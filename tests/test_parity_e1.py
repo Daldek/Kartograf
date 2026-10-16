@@ -80,8 +80,8 @@ def test_contours_sheet(tmp_path, monkeypatch):
 def test_oblique_direction_and_check_lines(tmp_path):
     """``imagery download --product oblique-orto --direction n`` =
     ``download_data(direction="n")``: one file of the sheet; the check and
-    the download of all four directions print one line per file (file
-    names, not the sheet code four times)."""
+    the download of all four directions print one line per file, both named
+    by the path below ``--output`` (one format of the status lines)."""
     argv = ["imagery", "download", "--product", "oblique-orto", "--sheet"]
     run = run_both(
         [*argv, OBLIQUE_SHEET, "--direction", "n", "-q"],
@@ -102,6 +102,10 @@ def test_oblique_direction_and_check_lines(tmp_path):
     )
     lines = checked.cli_stdout.splitlines()
     assert [line.split(": ")[0] for line in lines] == [
+        "/".join((item.segment, item.hierarchy, item.name))
+        for item in checked.api_result.items
+    ]
+    assert [line.split(": ")[0].rsplit("/", 1)[1] for line in lines] == [
         f"{OBLIQUE_SHEET}_{code}.tif" for code in ("n", "e", "s", "w")
     ]
     assert [item.status for item in checked.api_result.items] == [
@@ -121,5 +125,6 @@ def test_oblique_direction_and_check_lines(tmp_path):
     _same(every, ["local", "new", "new", "new"])
     status = [line for line in every.cli_stdout.splitlines() if ".tif: " in line]
     assert [line.split(": ")[0] for line in status] == [
-        f"{OBLIQUE_SHEET}_{code}.tif" for code in ("n", "e", "s", "w")
+        "/".join((item.segment, item.hierarchy, item.name))
+        for item in checked.api_result.items
     ]

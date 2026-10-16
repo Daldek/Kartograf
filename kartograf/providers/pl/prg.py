@@ -25,6 +25,7 @@ import numpy as np
 import rasterio
 import requests
 from rasterio.features import rasterize
+from rasterio.transform import from_origin
 from rasterio.windows import Window
 
 from kartograf.cache.metadata import MetadataCache
@@ -218,6 +219,23 @@ class LandMask:
                 all_touched=False,
             )
         return classes
+
+    def has_land(self, area: BBox, pixel: float) -> bool:
+        """Whether a pixel centre of the ``pixel`` grid of ``area`` (EPSG:2180)
+        lies on land (``burn`` in row strips, stops at the first land pixel).
+        ``False``: a cutout of the area would be nodata only (sea, abroad) -
+        decided from the mask alone, before any WCS request."""
+        if not self.country:
+            return False
+        width = max(1, round((area.max_x - area.min_x) / pixel))
+        height = max(1, round((area.max_y - area.min_y) / pixel))
+        rows = max(1, _MASK_STRIP_PX // width)
+        for row in range(0, height, rows):
+            strip = min(rows, height - row)
+            transform = from_origin(area.min_x, area.max_y - row * pixel, pixel, pixel)
+            if np.any(self.burn(transform, (strip, width)) == LAND):
+                return True
+        return False
 
     def apply(self, path: Path, nodata: float) -> tuple[int, int]:
         """Mask a float32 EPSG:2180 GeoTIFF in place: pixels outside land -> nodata.

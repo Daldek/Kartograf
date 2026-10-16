@@ -1330,7 +1330,7 @@ class TestCmdDownload:
         assert result == 0
         captured = capsys.readouterr()
         assert captured.err == ""
-        assert "A: lokalna wersja 2025-01-01_1" in captured.out
+        assert "A.asc: lokalna wersja 2025-01-01_1" in captured.out
         assert "Nowe: 0, nowa etykieta: 0, bez zmian: 0, lokalne: 4, bledy: 0" in (
             captured.out
         )
@@ -1655,14 +1655,17 @@ class TestCmdDownloadProduct:
         assert "Pobieranie N-34-130-D-d-2-4 (product: orto)" in out
         assert "resolution" not in out
 
-    # --- N6/E14: PL-path MetadataCache — --force = cache in refresh mode ---
+    # --- N6/E14: PL-path MetadataCache — --force/--upgrade = refresh mode ---
 
+    @pytest.mark.parametrize("mode", ["--force", "--upgrade"])
     @patch("kartograf.download.data._create_provider_and_storage")
     @patch("kartograf.download.data.DownloadManager")
-    def test_force_passes_refresh_cache_to_provider_factory(
-        self, mock_manager_cls, mock_create, tmp_path
+    def test_force_and_upgrade_pass_refresh_cache_to_provider_factory(
+        self, mock_manager_cls, mock_create, tmp_path, mode
     ):
-        """``--force`` skips old metadata, then saves the new record."""
+        """``--force`` and ``--upgrade`` (live test 0.8.0: like
+        ``--check-updates``, a flight published within the TTL is seen) skip
+        old metadata, then save the new record."""
         from kartograf.cache.defaults import open_cache
 
         key = ("nmt", "1m", "EVRF2007", "N-34-130-D-d-2-4")
@@ -1699,7 +1702,7 @@ class TestCmdDownloadProduct:
                 "pl=EVRF2007,cz=Bpv",
                 "--sheet",
                 "N-34-130-D-d-2-4",
-                "--force",
+                mode,
                 "-o",
                 str(tmp_path),
                 "-q",
@@ -3472,6 +3475,13 @@ class TestCmdSoil:
                 "percent": 10.0,
                 "description": "Very slow infiltration",
             },
+            "nodata": {
+                "count": 50,
+                "area_m2": 4000,
+                "area_ha": 0.4,
+                "percent": 20.0,
+                "description": "Brak danych",
+            },
         }
         mock_calc_cls.return_value = mock_calc
 
@@ -3493,6 +3503,7 @@ class TestCmdSoil:
         assert "Statystyki HSG" in captured.out
         assert "Grupa A" in captured.out
         assert "50.0%" in captured.out
+        assert "  Brak danych: 20.0% calego obszaru (0.40 ha)" in captured.out
 
     @patch("kartograf.hydrology.HSGCalculator")
     def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
@@ -6082,8 +6093,8 @@ class TestCmdDownloadCz:
             second = capsys.readouterr().out
 
         assert "Pobieranie 302_5550 (CZ, resolution: 2m)" in first
-        assert "302_5550: nowa wersja " in first
-        assert "302_5550: lokalna wersja " in second
+        assert "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif: nowa wersja " in first
+        assert "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif: lokalna wersja " in second
         assert "(bez sprawdzania; --check-updates)" in second  # TM33: signal none
         provider.download.assert_called_once()
 
@@ -8876,14 +8887,15 @@ class TestSingleSheetSkipMessage:
         provider = _SheetProvider({})
         assert self._run(tmp_path, provider) == 0
         first = capsys.readouterr().out
-        assert "N-34-130-D-d-2-4: nowa wersja " in first
+        sheet = "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc"
+        assert f"{sheet}: nowa wersja " in first
 
         assert self._run(tmp_path, provider) == 0
 
         out = capsys.readouterr().out
         assert provider.calls == ["N-34-130-D-d-2-4"]  # the second run without network
         assert "nowa wersja" not in out
-        assert "N-34-130-D-d-2-4: lokalna wersja " in out
+        assert f"{sheet}: lokalna wersja " in out
 
     def test_force_reports_unchanged_content(self, tmp_path, capsys):
         provider = _SheetProvider({})
@@ -8892,7 +8904,9 @@ class TestSingleSheetSkipMessage:
 
         assert self._run(tmp_path, provider, "--force") == 0
 
-        assert "N-34-130-D-d-2-4: bez zmian " in capsys.readouterr().out
+        assert (
+            "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc: bez zmian "
+        ) in capsys.readouterr().out
         assert len(provider.calls) == 2
 
 
@@ -9028,7 +9042,10 @@ class TestUnreadableMetadataCache:
         assert files == ["N-34-130-D-d-2-4.asc"]
         assert providers[0].calls == ["N-34-130-D-d-2-4"]
         captured = capsys.readouterr()
-        assert "N-34-130-D-d-2-4: nowa wersja " in captured.out
+        assert (
+            "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc: "
+            "nowa wersja "
+        ) in captured.out
         assert "Error:" not in captured.err
         assert len(self._cache_warnings(captured.err)) == 1
         assert captured.err.startswith("Warning: cache metadanych nieczytelny (")
@@ -10386,7 +10403,7 @@ class TestCampaignOptions:
         assert self._single(tmp_path) == 0
         captured = capsys.readouterr()
         assert (
-            "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233; dostepna nowsza "
+            "a.asc: lokalna wersja 2025-04-27_83233; dostepna nowsza "
             "2025-10-21_84183 (--upgrade)"
         ) in captured.out
         assert "Info: dostepna nowsza kampania dla 1 arkuszy" in captured.err
@@ -10405,7 +10422,7 @@ class TestCampaignOptions:
 
         assert self._single(tmp_path) == 0
         out = capsys.readouterr().out
-        assert "N-34-130-D-d-2-4: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
+        assert "N-34-130-D-d-2-4.asc: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
 
     @patch("kartograf.download.data.find_sheets_for_bbox")
     @patch("kartograf.download.data.DownloadManager")
@@ -10456,13 +10473,13 @@ class TestCampaignOptions:
 
         assert rc == 0
         out = capsys.readouterr().out
-        assert "A: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
-        assert "A: lokalna wersja 2023-09-05_78047" in out
+        assert "a.asc: nowa wersja 2025-10-21_84183_0a1b2c3d" in out
+        assert "a.asc: lokalna wersja 2023-09-05_78047" in out
         assert (
-            "B: nowa etykieta 2025-10-21_84190 (plik identyczny z 2023-09-05_78047)"
+            "b.asc: nowa etykieta 2025-10-21_84190 (plik identyczny z 2023-09-05_78047)"
             in out
         )
-        assert "C: bez zmian 2025-10-21_84191" in out
+        assert "c.asc: bez zmian 2025-10-21_84191" in out
         assert (
             "Nowe: 1, nowa etykieta: 1, bez zmian: 1, lokalne: 2, bledy: 0 "
             f"({tmp_path})"
@@ -11026,7 +11043,7 @@ class TestListMessagesUx:
 
         assert rc == 0
         out = capsys.readouterr().out
-        assert "N-34-130-D-d-2-4: lokalna wersja 2025-04-27_83233" in out
+        assert "a.asc: lokalna wersja 2025-04-27_83233" in out
         assert "Pobieranie" not in out
 
     @patch("kartograf.download.data.DownloadManager")
@@ -11653,7 +11670,7 @@ class TestFullSheetOption:
         assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert fake.downloads == [REC["84183"].url, REC["83233"].url]
-        assert captured.out.count(f"{self.G}: nowa wersja ") == 2
+        assert captured.out.count(f"/{self.G}.asc: nowa wersja ") == 2
         first = self._partial_warning(captured.err)
         assert self.G in first and "full_sheet/" in first
         assert "uzyj --full-sheet" not in first
@@ -11661,7 +11678,7 @@ class TestFullSheetOption:
         assert self._run(fake, "--sheet", self.G, "--full-sheet", "-o", out) == 0
         captured = capsys.readouterr()
         assert len(fake.downloads) == 2
-        assert captured.out.count(f"{self.G}: lokalna wersja ") == 2
+        assert captured.out.count(f"/{self.G}.asc: lokalna wersja ") == 2
         assert self._partial_warning(captured.err) == first
 
     def test_without_flag_hints_full_sheet(self, capsys, tmp_path):

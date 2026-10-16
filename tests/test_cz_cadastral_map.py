@@ -154,7 +154,8 @@ def test_cz_km_area_ku_discovery_and_etag(tmp_path, router):
     ]
     second = download_collection(**request, cache=False)
     assert [f.file.status for f in second.files] == ["local"] * 3
-    assert all(f.file.unverified is None for f in second.files)
+    # the default mode asks no source for local packages (ADR-036 erratum 3)
+    assert all(f.file.unverified == "unchecked" for f in second.files)
     assert sum(router.gets(url) for url in urls) == 3
 
 

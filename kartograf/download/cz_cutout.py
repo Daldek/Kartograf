@@ -23,6 +23,7 @@ from kartograf.download.fetch import (
     inspect_version,
     link_version,
     local_version,
+    refreshes_cache,
     validate_update,
 )
 from kartograf.download.plan import (
@@ -381,7 +382,9 @@ def download_cz_cutout(
     validate_request_bbox(bbox)
     validate_update(update)
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+    with open_cache(
+        cache, force=refreshes_cache(update), on_notice=sink.add
+    ) as metadata:
         provider = _cz_provider(
             product=product,
             horizontal_crs=horizontal_crs,

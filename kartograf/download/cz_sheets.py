@@ -33,6 +33,7 @@ from kartograf.download.fetch import (
     inspect_version,
     link_version,
     local_version,
+    refreshes_cache,
     validate_update,
 )
 from kartograf.download.plan import (
@@ -381,7 +382,9 @@ def download_cz_sheet(
     """
     validate_update(update)
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+    with open_cache(
+        cache, force=refreshes_cache(update), on_notice=sink.add
+    ) as metadata:
         provider = _sheet_provider(
             sheet,
             product=product,

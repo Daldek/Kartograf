@@ -349,10 +349,11 @@ def test_cz_orto_metadata_signal(tmp_path, cuzk, cache):
     ]
     assert len(cuzk.zip_requests()) == 1  # checks read only the feeds
 
+    # the default mode asks no feed for local files (ADR-036 erratum 3)
     default = download_data(**selection)
-    assert [(f.file.status, f.file.newer) for f in default.files] == [
-        ("local", "2025_2026-03-02")
-    ] * 4
+    assert [
+        (f.file.status, f.file.newer, f.file.unverified) for f in default.files
+    ] == [("local", None, "unchecked")] * 4
     assert len(cuzk.zip_requests()) == 1
 
     upgraded = download_data(**selection, update="upgrade", plan=plan)
@@ -370,9 +371,10 @@ def test_cz_orto_metadata_signal(tmp_path, cuzk, cache):
     assert len(cuzk.zip_requests()) == 2
 
 
-def test_cz_orto_check_failure_reported_once_per_sheet(tmp_path, cuzk):
-    """One edition lookup per sheet: a dataset feed that cannot be read is
-    asked once and reported once, the four local files stay in use."""
+def test_cz_orto_default_local_files_ask_no_feed(tmp_path, cuzk):
+    """The default mode uses the four local files without asking the feeds
+    (ADR-036 erratum 3): a feed that cannot be read changes nothing - no
+    request, no warning (offline the second run is immediate)."""
     selection = {
         "product": "orto",
         "country": "cz",
@@ -389,11 +391,9 @@ def test_cz_orto_check_failure_reported_once_per_sheet(tmp_path, cuzk):
 
     assert report.ok
     assert [f.file.status for f in report.files] == ["local"] * 4
-    assert all(
-        (f.file.unverified or "").startswith("check_failed: ") for f in report.files
-    )
-    assert [n.code for n in report.notices].count(CHECK_FAILED) == 1
-    assert cuzk.calls == [SERVICE, feed]
+    assert all(f.file.unverified == "unchecked" for f in report.files)
+    assert CHECK_FAILED not in [n.code for n in report.notices]
+    assert cuzk.calls == []
 
 
 @pytest.mark.parametrize(

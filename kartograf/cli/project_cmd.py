@@ -3,7 +3,7 @@
 import argparse
 import sys
 from collections import Counter
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from kartograf import (
     FileCheck,
@@ -140,7 +140,13 @@ def _check_line(file: FileCheck, checking_updates: bool) -> str:
         }.get(file.status, file.status)
     if file.detail and file.detail != status:
         status += f": {file.detail}"
-    return f"{file.task}: {file.unit}: {status}"
+    return f"{file.task}: {_unit_file(file.unit, file.path)}: {status}"
+
+
+def _unit_file(unit: str, path: str) -> str:
+    """Subject of a project line: the unit and its file name, ``CTES96
+    (CTES96.jpg)`` - the files of one unit stay distinguishable."""
+    return f"{unit} ({PurePosixPath(path).name})"
 
 
 def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) -> int:
@@ -210,7 +216,10 @@ def cmd_project_download(args: argparse.Namespace) -> int:
                 line += f" ({_file_count(len(current.files))})"
             print(line)
             for pin in result.pinned:
-                print(f"{result.name}: {pin.unit}: przypieto {pin.label}")
+                print(
+                    f"{result.name}: {_unit_file(pin.unit, pin.path)}: "
+                    f"przypieto {pin.label}"
+                )
     if not args.quiet:
         counts = Counter(task.outcome for task in report.tasks)
         print(

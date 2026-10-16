@@ -40,6 +40,7 @@ from kartograf.download.fetch import (
     VersionedFile,
     fetch_version,
     inspect_version,
+    refreshes_cache,
     validate_update,
 )
 from kartograf.download.plan import (
@@ -413,7 +414,9 @@ def download_cz_laz(
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=update == "force", on_notice=sink.add) as metadata:
+    with open_cache(
+        cache, force=refreshes_cache(update), on_notice=sink.add
+    ) as metadata:
         provider = _provider(model, vertical_crs, metadata)
         result = _run(
             provider,

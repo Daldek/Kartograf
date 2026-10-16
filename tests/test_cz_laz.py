@@ -211,7 +211,7 @@ def test_cz_laz_check_and_upgrade_plan(tmp_path):
     with recorded(CuzkSession()) as session:
         again = download_cz_laz(**common)
     assert [f.status for f in again.files] == ["local"]
-    assert session.calls == [("HEAD", CTES96_URL)]
+    assert session.calls == []  # the default mode asks no source (ADR-036 erratum 3)
 
     with recorded(CuzkSession()) as session:
         (current,) = check_cz_laz(**common).items

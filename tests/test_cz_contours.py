@@ -288,8 +288,9 @@ def test_contours_country_rules(tmp_path, openzu):
 
 
 def test_contours_http_signal(tmp_path, openzu):
-    """A second run uses the local version after one ``HEAD`` (``ETag``); a
-    new ZIP is reported, then ``upgrade`` downloads it as a new version."""
+    """A second run uses the local version without a request (ADR-036 erratum
+    3); a new ZIP is seen by the check (``HEAD``), then ``upgrade`` downloads
+    it as a new version."""
     selection = {
         "product": "contours",
         "format": "SHP",
@@ -302,14 +303,14 @@ def test_contours_http_signal(tmp_path, openzu):
 
     openzu.calls.clear()
     again = download_data(**selection).files[0].file
-    assert again.status == "local" and again.newer is None
-    assert openzu.calls == [("HEAD", url)]
+    assert again.status == "local" and again.unverified == "unchecked"
+    assert openzu.calls == []
     assert check_data(**selection).items[0].status == "current"
 
     new_zip = _archive("SHP", "CTES96", edition="2027")
     openzu.publish(url, new_zip, '"nowe-wydanie"')
     reported = download_data(**selection).files[0].file
-    assert reported.status == "local" and reported.newer is not None
+    assert reported.status == "local" and reported.newer is None
     assert check_data(**selection).items[0].status == "newer"
 
     upgraded = download_data(**selection, update="upgrade").files[0].file

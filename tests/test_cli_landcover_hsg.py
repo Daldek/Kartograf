@@ -96,16 +96,19 @@ def test_landcover_check_writes_plan(tmp_path, capsys):
     assert not (tmp_path / "out" / "soil").exists()
 
 
-def test_landcover_soilgrids_status_and_newer_edition_info(tmp_path, capsys):
+def test_landcover_soilgrids_status_default_asks_no_edition(tmp_path, capsys):
     with _session(FakeSoilGrids("2.0")):
         assert _soil(tmp_path, *SOIL) == 0
     first = capsys.readouterr().out
     assert f"{CLAY}: nowa wersja 2.0_" in first
     assert "Downloaded to:" not in first
-    with _session(FakeSoilGrids("2.1")):
+    newer = FakeSoilGrids("2.1")
+    with _session(newer):
         assert _soil(tmp_path, *SOIL) == 0
     out = capsys.readouterr().out
-    assert f"{CLAY}: lokalna wersja 2.0; dostepna nowsza 2.1 (--upgrade)" in out
+    # the default mode asks no source for a local version (ADR-036 erratum 3)
+    assert f"{CLAY}: lokalna wersja 2.0 (bez sprawdzania; --check-updates)" in out
+    assert newer.capabilities == 0
 
 
 def test_landcover_upgrade_plan_stale_exit_1(tmp_path, capsys):
@@ -120,7 +123,7 @@ def test_landcover_upgrade_plan_stale_exit_1(tmp_path, capsys):
         rc = _soil(tmp_path, *SOIL, "--upgrade", "--plan", str(plan_file))
     assert rc == 1
     assert fake.coverages == 0
-    assert f"Error: {COORDS}: zrodlo zmienilo sie od planu (2.1)" in (
+    assert f"Error: {CLAY}: zrodlo zmienilo sie od planu (2.1)" in (
         capsys.readouterr().err
     )
 
@@ -397,8 +400,9 @@ def test_hsg_cli_stats_from_store_path(tmp_path, capsys):
     with _session(FakeSoilGrids("2.0")):
         assert _hsg(tmp_path, "--stats") == 0
     out = capsys.readouterr().out
-    assert "Statystyki HSG:" in out
+    assert "Statystyki HSG (procent grupy: z pikseli z danymi):" in out
     assert "Grupa B: " in out or "Grupa A: " in out
+    assert "  Brak danych: " in out and "% calego obszaru (" in out
     store = Path(tmp_path / "out" / "hsg/global_soilgrids_0-5cm_mean/bbox")
     assert (store / f"{COORDS}.tif").exists()
 
