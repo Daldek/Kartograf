@@ -586,6 +586,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E4 (ADR-043): trzy zrodla w `landcover download --source`.
+  `bdoo` (BDOO GUGiK, 1:250 000): paczka GML wojewodztwa na rocznik
+  (`--year` wymagany: 2015, 2021-2026; `--teryt` 2 cyfry, kod powiatu =
+  `Error:` z podpowiedzia `--teryt <woj>`; obszar `--bbox`/`--sheet`/
+  `--geometry` = paczki wojewodztw jego powiatow z PRG, `Info` z lista,
+  wojewodztwo bez paczki w `failed`, `--workers`, linia podsumowania)
+  zapisana 1:1 w `landcover/pl_bdoo_<rok>/teryt/<woj>.zip` z etykieta
+  rocznika; `--layers` (klasy rocznika, `landcover list-layers --source
+  bdoo`) zapisuje ZIP plikow `__OT_<KOD>_<typ>` wybranych klas (czlony
+  bajt w bajt, `pl_bdoo_<rok>_<klasy>`), klasa bez pliku w paczce = `Info`
+  `classes_absent` (nowy kod `Notice`), brak wszystkich = blad wojewodztwa,
+  klasa spoza rocznika = `Error:`. `data50` i `data250` (CUZK): obszar =
+  jeden GeoPackage wszystkich warstw obiektowych uslugi REST (69 i 116)
+  w EPSG:5514, `--whole-country --horizontal-crs EPSG:5514|EPSG:3045` =
+  krajowy ZIP SHP z feedu ATOM 1:1 (wydanie z feedu, rozmiar w `Warning`
+  przed transferem). Silniki: `PackageVariant.classes`,
+  `UnitPackageParams.class_pattern`; obszar produktu z samymi paczkami
+  wojewodztw daje paczki wojewodztw obszaru. Przyklady i wyniki live:
+  USAGE 1.5 i 1.9, `docs/research/2026-10-16-plan-e4-e2e/raport.md`.
 - Plan E, Task E3 (ADR-043): grupy `boundaries` i `cadastre` dostaja
   produkty `boundaries download --product addresses|special|geomorphology`
   i `cadastre download --product map --country cz|prices`, flagi

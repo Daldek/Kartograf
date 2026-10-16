@@ -26,6 +26,7 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
 - **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu
+- **BDOO (PL)** — baza danych obiektów ogólnogeograficznych GUGiK (1:250 000): paczki GML województw, roczniki 2015 i 2021-2026, opcjonalnie tylko wybrane klasy
 - **Granice administracyjne (PRG)** — granice jednostek administracyjnych i ewidencyjnych z GUGiK
 - **EGiB** — mapa ewidencyjna z GUGiK (działki i budynki)
 - **Punkty adresowe i ulice (PRG)** — punkty adresowe i ulice obszaru (GeoPackage) albo paczka powiatu / plik krajowy z GUGiK
@@ -35,6 +36,7 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **Jednostki geomorfologiczne (CZ)** — poziomy od subprovincie do části (obszar; CUZK)
 - **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
 - **ZABAGED (CZ)** — 22 warstwy pokrycia terenu i wód CUZK (obszar) albo plik krajowy GPKG
+- **Data50 i Data250 (CZ)** — cyfrowe modele geograficzne CUZK 1:50 000 i 1:250 000: wszystkie warstwy obiektowe obszaru (GeoPackage) albo plik krajowy SHP
 - **Granice RUIAN (CZ)** — kraje, okresy, obce i katastralni uzemi z CUZK
 - **HY-NET (CZ)** — sieć hydrograficzna CUZK (odcinki cieków i węzły; plik krajowy)
 - **Nazwy geograficzne** — PRNG (Polska i polskie nazwy świata), Geonames CUZK: obiekty obszaru albo archiwum krajowe
