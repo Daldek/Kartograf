@@ -6730,25 +6730,6 @@ class TestCountryDispatch:
         assert result == 1
         assert "etapie 2" in capsys.readouterr().err
 
-    @patch("kartograf.download.data._download_cz")
-    def test_orto_bbox_with_country_cz_rejected(self, mock_cz, tmp_path, capsys):
-        """No CZ orthophoto: the library rejects it before the CZ flow, and
-        ``imagery download`` does not offer ``--country cz`` at all."""
-        from kartograf.download.data import download_data
-
-        bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        with pytest.raises(ValidationError, match="etapie 2"):
-            download_data(product="orto", output_dir=tmp_path, bbox=bbox, country="cz")
-        with pytest.raises(SystemExit) as exc:
-            main(
-                ["imagery", "download", "--product", "orto", "--country", "cz"]
-                + ["--bbox=-447000,-1114000,-446000,-1113000", "--bbox-crs"]
-                + ["EPSG:5514", "-o", str(tmp_path)]
-            )
-        assert exc.value.code == 2
-        assert "invalid choice: 'cz'" in capsys.readouterr().err
-        mock_cz.assert_not_called()
-
     # --- area modes: explicit --country cz ---
 
     @patch("kartograf.download.data._download_cz")
@@ -7165,18 +7146,6 @@ class TestAutoSplitBBox:
     # an area reaching CZ is a cutout (ADR-038): CZ native, PL from WCS
     _CUTOUT = ["--cutout", "--horizontal-crs", "EPSG:5514"]
 
-    @staticmethod
-    def _orto(bbox: str, *extra: str) -> list[str]:
-        """``imagery download`` of a WGS84 bbox with ``--country auto``."""
-        return ["imagery", "download", "--product", "orto", "--country", "auto"] + [
-            "--bbox",
-            bbox,
-            "--bbox-crs",
-            "EPSG:4326",
-            "-q",
-            *extra,
-        ]
-
     @patch("kartograf.download.data._download_cz")
     @patch("kartograf.download.data._download_pl_cutout")
     def test_border_bbox_splits_into_both_countries(self, mock_pl, mock_cz, tmp_path):
@@ -7271,12 +7240,6 @@ class TestAutoSplitBBox:
         assert result == 0
         mock_manager_class.assert_not_called()
         assert mock_cz.call_args.kwargs["parent_request"]["countries"] == ["CZ"]
-
-    def test_cz_only_bbox_with_orto_rejected_as_stage_2(self, tmp_path, capsys):
-        """Country decided by the area - a stage 2 message, not about the choice."""
-        result = main(self._orto("13.3,49.7,13.5,49.8", "-o", str(tmp_path)))
-        assert result == 1
-        assert "etapie 2" in capsys.readouterr().err
 
     def test_single_country_error_has_no_country_hint(self, tmp_path, capsys):
         """With a single country the --country hint would be empty."""
@@ -7941,25 +7904,6 @@ class TestAutoSplitBBox:
         assert parent == mock_pl.call_args.args[3]
         # the CZ part goes in the RESULT CRS (cz_crs = target), not in Krovak
         assert mock_cz.call_args.kwargs["bbox"].crs == "EPSG:2180"
-
-    @patch("kartograf.download.data._download_cz")
-    @patch("kartograf.download.data.find_sheets_for_bbox")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_auto_with_product_orto_resolves_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, tmp_path, capsys
-    ):
-        """Orthophoto for CZ is stage 2: auto resolves the country to PL."""
-        self._pl_mocks(mock_manager_class, mock_find, tmp_path, "M-34-86-D-d-4-3")
-
-        result = main(
-            self._orto(
-                "18.4,49.55,18.8,49.75", "--sheet-system", "1992", "-o", str(tmp_path)
-            )
-        )
-
-        assert result == 0
-        mock_cz.assert_not_called()
-        assert "--product orto" in capsys.readouterr().err
 
     def test_resolution_5m_border_cutout_rejected_for_pl(self, tmp_path, capsys):
         """5m exists on both sides, but a border area is a cutout (ADR-038 D3)
@@ -10198,25 +10142,6 @@ class TestCampaignOptions:
         assert err.startswith("Error: obszar siega CZ") and "--country pl" in err
         assert "Info:" not in err
         mock_manager_class.assert_not_called()
-        mock_cz.assert_not_called()
-
-    @patch("kartograf.download.data._download_cz")
-    @patch("kartograf.download.data.find_sheets_for_bbox")
-    @patch("kartograf.download.data.DownloadManager")
-    def test_area_auto_pl_only_flag_plus_all_narrows_to_pl(
-        self, mock_manager_class, mock_find, mock_cz, capsys, tmp_path
-    ):
-        mock_find.return_value = ["M-34-86-D-d-4-3"]
-        mock_manager_class.return_value = _sheet_list_manager(tmp_path / "x.tif")
-
-        rc = main(
-            ["imagery", "download", "--product", "orto", "--country", "auto"]
-            + [*_BORDER_BBOX, "--all-campaigns", "-o", str(tmp_path), "-q"]
-        )
-
-        assert rc == 0
-        err = capsys.readouterr().err
-        assert "Info: --country auto -> pl (--product orto dotyczy tylko PL)" in err
         mock_cz.assert_not_called()
 
     @staticmethod

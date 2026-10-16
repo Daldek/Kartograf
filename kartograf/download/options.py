@@ -15,6 +15,7 @@ from kartograf.core.bbox import BBox, validate_bbox
 from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_orto import cz_orto_sheet
 from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
 from kartograf.exceptions import ValidationError
@@ -31,7 +32,7 @@ from kartograf.sources.variants import (
 _PRODUCT_TEXT = {
     "nmt": "Numeryczny Model Terenu; PL i CZ",
     "nmpt": "Numeryczny Model Pokrycia Terenu; PL",
-    "orto": "ortofotomapa RGB; PL",
+    "orto": "ortofotomapa RGB; PL i CZ",
     "laz": "chmura punktow LIDAR; PL",
 }
 
@@ -360,6 +361,66 @@ def cz_option_error(
     return None
 
 
+def cz_orto_option_error(
+    task: SimpleNamespace, *, countries: tuple[str, ...] = ("CZ",)
+) -> str | None:
+    """Error text for the CZ orthophoto choices (``None`` = valid; ADR-042 D13).
+
+    CUZK publishes only the current release of an SM5 sheet (archival
+    orthophotos are paid - out of scope) as a JPEG with world files: no
+    year, campaign, sheet system or scale choice (a request with PL applies
+    them to its PL part), no height system or format (``--resolution`` of
+    orthophoto sheets is rejected for both countries by ``validate_request``).
+    """
+    if task.sheet is not None:
+        try:
+            cz_orto_sheet(task.sheet)
+        except ValidationError as e:
+            return str(e)
+    if "PL" not in countries:
+        flag = next(
+            (
+                name
+                for name, given in (
+                    ("--year", task.year is not None),
+                    ("--min-year", task.year is None and task.min_year is not None),
+                    ("--max-year", task.year is None and task.max_year is not None),
+                    ("--all-campaigns", task.all_campaigns),
+                    ("--full-sheet", task.full_sheet),
+                )
+                if given
+            ),
+            None,
+        )
+        if flag is not None:
+            return (
+                f"{flag} dotyczy tylko PL - CUZK publikuje tylko aktualny rocznik "
+                "arkusza ortofoto CZ (archiwalne ortofoto CUZK sa platne, poza "
+                "zakresem)"
+            )
+        if task.sheet_system is not None:
+            return (
+                "--sheet-system dotyczy tylko PL - ortofoto CZ to arkusze SM5 "
+                "(godlo rozpoznawane wzorcem, arkusze obszaru z indeksu SM5)"
+            )
+        if task.scale is not None:
+            return (
+                "--scale dotyczy tylko PL - ortofoto CZ to arkusze SM5 w jednej "
+                "skali (1:5000)"
+            )
+    if country_value(task.vertical_crs, "CZ") is not None:
+        return (
+            "--vertical-crs nie dotyczy --product orto "
+            "(ortofotomapa nie ma ukladu pionowego)"
+        )
+    if _format_of(task) is not None:
+        return (
+            "--format nie dotyczy ortofoto CZ (pliki CUZK: JPEG i JGW bez "
+            "konwersji) - pomin --format"
+        )
+    return None
+
+
 def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
     """An area reaching CZ needs ``cutout``: CUZK has no sheets for an area."""
     if task.sheet is not None or "CZ" not in countries or task.cutout:
@@ -546,7 +607,8 @@ def validate_request(task: SimpleNamespace) -> None:
     if task.product == "orto" and not task.cutout and task.resolution is not None:
         raise ValidationError(
             "--resolution z --product orto dotyczy tylko wycinka (--cutout); "
-            "arkusze ortofotomapy maja piksel kampanii - pomin --resolution"
+            "arkusze ortofotomapy maja piksel zrodla (PL: kampanii, CZ: arkusza "
+            "SM5 w pliku JGW) - pomin --resolution"
         )
 
 

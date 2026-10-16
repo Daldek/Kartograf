@@ -4,9 +4,10 @@ Update plan ``kartograf-plan/1`` shared by every download track (spec 4.4).
 A plan lists the files of a request with their local version and the source
 freshness signal, WITHOUT downloading anything. Every position belongs to a
 track (``pl_sheet``, ``laz_tile``, ``cz_sheet``, ``pl_cutout``,
-``cz_cutout``, ``landcover``, ``hsg``, ``collection``); ``unit`` is the task
-unit of the track (sheet code, LAZ tile sheet, CZ sheet, bbox coordinates,
-TERYT, country code of a national file).
+``cz_cutout``, ``landcover``, ``hsg``, ``collection``, ``cz_orto``); ``unit``
+is the task unit of the track (sheet code, LAZ tile sheet, CZ sheet, bbox
+coordinates, TERYT, country code of a national file, SM5 sheet of the CZ
+orthophoto - four positions: the JPEG and its three world files).
 Executing a plan (``--upgrade --plan``) re-checks the signal:
 ``select_planned`` keeps only the planned positions
 whose fresh check is identical, the rest are ``stale``; positions removed
@@ -34,6 +35,7 @@ Track = Literal[
     "landcover",
     "hsg",
     "collection",
+    "cz_orto",
 ]
 TRACKS: tuple[Track, ...] = get_args(Track)
 # Statuses a plan executes.

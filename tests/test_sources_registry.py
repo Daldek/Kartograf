@@ -93,6 +93,7 @@ EXPECTED_KEYS = {
     "cz.cuzk.zabaged",
     "cz.cuzk.ruian",
     "cz.cuzk.hy_net",
+    "cz.cuzk.ortofoto",
 }
 
 # Signal inventory (docs/research/2026-10-12-signal-inventory/raport.md;
@@ -121,6 +122,7 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.ruian", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.hy_net", TransportKind.WFS, "none"),
     ("cz.cuzk.hy_net", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.ortofoto", TransportKind.DIRECT_FILES, "metadata"),
 ]
 
 # Collection channels (ADR-042 D6) by their capability - a descriptor may have
@@ -139,6 +141,7 @@ COLLECTION_CHANNEL_SIGNALS = [
     ("cz.cuzk.ruian", "country_files", "http"),
     ("cz.cuzk.hy_net", "bbox_vector", "none"),
     ("cz.cuzk.hy_net", "country_files", "http"),
+    ("cz.cuzk.ortofoto", "sheet_files", "metadata"),
 ]
 
 PL_VARIANTS = variants(country="PL")
@@ -381,6 +384,7 @@ class TestRegistry:
     def test_no_vertical_for_orto_and_landcover(self):
         for key in (
             "pl.gugik.orto",
+            "cz.cuzk.ortofoto",
             "pl.gugik.bdot10k",
             "eu.clms.corine",
             "global.isric.soilgrids",
