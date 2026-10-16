@@ -207,6 +207,37 @@ def test_current_target_without_valid_sidecar_does_not_block_relink(tmp_path):
     assert ensure_link(link, a, k_a).changed is True
 
 
+def test_failed_sidecar_write_drops_stale_sidecar_and_heals(
+    tmp_path, monkeypatch, caplog
+):
+    """ADR-030 errata 10 (M-8): the link moved to B but its sidecar write
+    failed - the old sidecar (describing A) is removed, never left behind;
+    the next call relinks and writes the sidecar of B."""
+    a, k_a = _a(tmp_path)
+    b, k_b = _b(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, a, k_a)
+    real_replace = os.replace
+
+    def failing(src, dst):
+        if str(dst).endswith(".meta.json"):
+            raise OSError("brak miejsca")
+        real_replace(src, dst)
+
+    monkeypatch.setattr(os, "replace", failing)
+    assert ensure_link(link, b, k_b).changed is True
+    monkeypatch.setattr(os, "replace", real_replace)
+
+    assert _hardlinked(link, b)
+    assert not _sidecar(link).exists()
+    assert not list(link.parent.glob("*.tmp"))
+    assert "Nie udalo sie zapisac sidecara" in caplog.text
+    assert linked_version(link) is None
+    assert ensure_link(link, b, k_b).changed is True
+    meta = json.loads(_sidecar(link).read_text())
+    assert meta["extra"]["version"]["label"] == B[0]
+
+
 def test_relpath_valueerror_gives_absolute_link_target(tmp_path, monkeypatch):
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)

@@ -15,6 +15,7 @@ from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.download.availability import AVAILABILITY_COUNTRIES
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.options import (
+    COUNTRIES,
     COUNTRY_CHOICES,
     ELEVATION_PRODUCTS,
     SCALE_2000_CHOICES,
@@ -81,19 +82,17 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     add_area_flags(
         selection,
-        sheet_help="Godlo arkusza: PL-1992 (np. N-34-130-D-d-2-4), PL-2000 "
-        "(np. 6.129.30.25.3), CZ SM5 (np. CTES96) albo CZ TM33 (np. "
-        "302_5550). PL LAZ: kafle przecinajace arkusz; CZ LAZ: plik godla",
-        bbox_help="Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: "
-        "EPSG:2180; ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: "
-        "--bbox=-447000,...)",
-        geometry_help="Plik geometrii (SHP albo GPKG): PL - arkusze/kafle LAZ "
-        "przecinajace obiekty; CZ LAZ - arkusze przecinajace obwiednie "
-        "geometrii; wycinek (--cutout) - obwiednia geometrii",
+        sheet_help="Godlo arkusza - pliki tego arkusza ze zrodla (grubsze godlo "
+        "rozwija sie na arkusze zrodla; LAZ PL: kafle przecinajace arkusz, LAZ "
+        "CZ: plik godla): PL-1992 (np. N-34-130-D-d-2-4), PL-2000 (np. "
+        "6.129.30.25.3), CZ SM5 (np. CTES96) albo CZ TM33 (np. 302_5550)",
+        geometry_help="Plik geometrii obszaru (SHP albo GPKG): PL - arkusze i "
+        "kafle LAZ przecinajace obiekty; CZ LAZ - arkusze przecinajace "
+        "obwiednie geometrii; wycinek (--cutout) - obwiednia geometrii",
     )
     selection.add_argument(
         "--country",
-        choices=["pl", "cz", "auto"],
+        choices=COUNTRIES,
         default=None,
         help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
         f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
@@ -315,9 +314,6 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
         selection,
         sheet_help="Godlo arkusza: PL (PL-1992 albo PL-2000), CZ SM5 (np. CTES96) "
         "albo kafel TM33 (np. 760_5518); obszar = rama arkusza",
-        bbox_help="Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: "
-        "EPSG:2180; ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: "
-        "--bbox=-447000,...)",
         geometry_help="Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie "
         "obiektow (LAZ: obwiednia calej warstwy; CZ: obwiednia geometrii) - jak "
         "w elevation download",

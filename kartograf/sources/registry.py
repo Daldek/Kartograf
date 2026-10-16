@@ -8,12 +8,14 @@ in the sidecar; managers do not enforce them.
 """
 
 import re
+from decimal import Decimal
 
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import ValidationError
 from kartograf.sources.descriptor import (
     AccessChannel,
+    AtomFilesParams,
     CountryProfile,
     FeatureBBoxParams,
     FeatureLayer,
@@ -24,6 +26,7 @@ from kartograf.sources.descriptor import (
     TileScheme,
     TransportKind,
     UnitPackageParams,
+    WcsCutoutParams,
 )
 from kartograf.sources.variants import (
     IndexRef,
@@ -328,7 +331,6 @@ _PL_SHEET_SOURCES = (
 
 # --- CUZK (CZ, plan B) -----------------------------------------------------------
 _AGS = "https://ags.cuzk.gov.cz/arcgis2/rest/services"
-_OPENZU = "https://openzu.cuzk.gov.cz/opendata"
 # Horizontal CRS of the CZ sheet systems (``ProductVariant.systems``): SM5 sheets
 # in S-JTSK / Krovak, TM33 tiles 2x2 km in ETRS89 / TM33N.
 CZ_SYSTEM_CRS = {"sm5": "EPSG:5514", "tm33": "EPSG:3045"}
@@ -385,7 +387,7 @@ def _cz_files(directory: str, system: str) -> AccessChannel:
         horizontal_crs=crs,
         vertical_crs_options=(_VERTICAL_CRS_CODES[_CZ_FILE_VERTICAL[system]],),
         capabilities=frozenset({"sheet_files"}),
-        endpoint=f"{_OPENZU}/{directory}/epsg-{crs.split(':')[1]}/{{sheet}}.zip",
+        endpoint=f"{_CUZK_OPENZU}/{directory}/epsg-{crs.split(':')[1]}/{{sheet}}.zip",
         notes=_CZ_FILE_NOTES[system],
     )
 
@@ -491,6 +493,252 @@ def _cz_laz_source(model: str, directory: str, name: str) -> SourceDescriptor:
     )
 
 
+# CZ collections (plan D, ADR-042 D15-D17). Area results come from the
+# services in their DefaultCRS (EPSG:5514); national files from CUZK in the
+# CRS of the file (ATOM category / file name).
+_CUZK_ARCGIS = "https://ags.cuzk.gov.cz/arcgis/rest/services"
+_CUZK_OPENZU = "https://openzu.cuzk.gov.cz/opendata"
+_CUZK_ATOM = "https://atom.cuzk.gov.cz"
+
+# ZABAGED land cover and hydrography layers (ADR-042 D15): the ArcGIS REST
+# layer id and its code = the layer name without diacritics, lower case,
+# runs outside [a-z0-9] as "_" (ZABAGED_POLOHOPIS/MapServer?f=pjson,
+# 2026-10-15). The codes are the GPKG layer names; no translation of the
+# classes to BDOT10k codes. Lines: 93, 112; the rest polygons.
+_ZABAGED_LAYERS = (
+    ("93", "vodni_tok"),
+    ("99", "budova_jednotliva_nebo_blok_budov_plocha"),
+    ("112", "brehova_cara"),
+    ("114", "areal_ucelove_zastavby"),
+    ("115", "ostatni_plocha_v_sidlech"),
+    ("116", "hrbitov"),
+    ("117", "skladka"),
+    ("118", "povrchova_tezba_lom"),
+    ("129", "sesuv_pudy_sut"),
+    ("130", "skalni_utvary"),
+    ("131", "bazina_mocal"),
+    ("132", "vodni_plocha"),
+    ("134", "udrzovana_zelen"),
+    ("135", "ovocny_sad_zahrada"),
+    ("136", "vinice"),
+    ("137", "chmelnice"),
+    ("138", "orna_puda_a_ostatni_dale_nespecifikovane_plochy"),
+    ("139", "trvaly_travni_porost"),
+    ("140", "lesni_puda_s_krovinatym_porostem"),
+    ("141", "lesni_puda_s_kosodrevinou"),
+    ("142", "lesni_puda_se_stromy"),
+    ("144", "lesni_puda_se_stromy_kategorizovana_plocha"),
+)
+
+_CZ_ZABAGED = SourceDescriptor(
+    key="cz.cuzk.zabaged",
+    country="CZ",
+    product="landcover",
+    name="ZABAGED - Zakladni baze geografickych dat CR (pokrycie terenu i wody)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/ZABAGED_POLOHOPIS/MapServer",
+            notes=(
+                "22 warstwy pokrycia terenu i hydrografii (nazwy zrodla); pelne "
+                "geometrie obiektow przecinajacych obszar"
+            ),
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=2000,
+                layers=tuple(
+                    FeatureLayer(code=code, source=layer, name=code, id_field="fid_zbg")
+                    for layer, code in _ZABAGED_LAYERS
+                ),
+                selection="all",
+                order_field="OBJECTID",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_CUZK_ATOM}/ZABAGED-GPKG/ZABAGED-GPKG.xml",
+            notes=(
+                "plik krajowy GPKG (5,8 GB EPSG:5514, 6,7 GB EPSG:3045; warstwy "
+                "pelnej bazy pod nazwami CUZK), tylko z --whole-country"
+            ),
+            params=AtomFilesParams(
+                service_feed=f"{_CUZK_ATOM}/ZABAGED-GPKG/ZABAGED-GPKG.xml",
+                entry_pattern=r"CUZK_ZABAGED-GPKG_[0-9]+\.xml$",
+                crs=("EPSG:5514", "EPSG:3045"),
+                segment_tokens=("gpkg",),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="landcover/cz_zabaged",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+# RUIAN levels (ADR-042 D17): --level code -> layer of RUIAN/MapServer.
+_RUIAN_LEVELS = (
+    ("kraj", "17", "VyssiUzemneSamospravnyCelek"),
+    ("okres", "15", "Okres"),
+    ("obec", "12", "Obec"),
+    ("katastralni-uzemi", "7", "KatastralniUzemi"),
+)
+
+_CZ_RUIAN = SourceDescriptor(
+    key="cz.cuzk.ruian",
+    country="CZ",
+    product="admin",
+    name="RUIAN - granice jednostek terytorialnych (kraje, okresy, obce, k.u.)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.ARCGIS_QUERY,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=f"{_CUZK_ARCGIS}/RUIAN/MapServer",
+            notes="pelne geometrie jednostek przecinajacych obszar",
+            params=FeatureBBoxParams(
+                protocol="arcgis",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                layers=tuple(
+                    FeatureLayer(code=code, source=layer, name=name, id_field="kod")
+                    for code, layer, name in _RUIAN_LEVELS
+                ),
+                selection="level",
+                order_field="objectid",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="http",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"country_files"}),
+            endpoint="https://services.cuzk.gov.cz/shp/stat/epsg-5514/",
+            notes="plik krajowy SHP (ok. 253 MB), tylko z --whole-country",
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template="https://services.cuzk.gov.cz/shp/stat/epsg-5514/1.zip",
+                        segment_tokens=("shp",),
+                        members=(".shp",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="boundaries/cz_ruian",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+_CZ_HY_NET = SourceDescriptor(
+    key="cz.cuzk.hy_net",
+    country="CZ",
+    product="network",
+    name="HY-NET - siec hydrograficzna (INSPIRE Hydrography - Network)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.WFS,
+            update_signal="none",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint="https://geoportal.cuzk.gov.cz/geoserver/hy-n/wfs",
+            notes=(
+                "odcinki ciekow i wezly sieci przecinajace obszar (skrzyzowania "
+                "bezkolizyjne - relacje bez geometrii - tylko w pliku krajowym)"
+            ),
+            params=FeatureBBoxParams(
+                protocol="wfs",
+                native_crs="EPSG:5514",
+                axis_order="xy",
+                page_size=1000,
+                # No WatercourseSeparatedCrossing: its GML has no geometry (a
+                # relation of two links) and GeoServer answers RESULTTYPE=hits
+                # with a BBOX by 0 while the pages hold objects (2026-10-16:
+                # 30 x 30 km 0 vs 4, 100 x 100 km 0 vs 24), so completeness
+                # cannot be checked; the national file has the crossings.
+                layers=tuple(
+                    FeatureLayer(
+                        code=name, source=f"hy-n:{name}", name=name, id_field="gml_id"
+                    )
+                    for name in ("WatercourseLink", "HydroNode")
+                ),
+                selection="all",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="http",
+            horizontal_crs="EPSG:3045",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_CUZK_OPENZU}/HY-NET/",
+            notes=(
+                "plik krajowy GPKG (ok. 194 MB) w EPSG:3045 (kategoria feedu ATOM), "
+                "tylko z --whole-country"
+            ),
+            params=UnitPackageParams(
+                unit="country",
+                variants=(
+                    PackageVariant(
+                        choice=(),
+                        url_template=f"{_CUZK_OPENZU}/HY-NET/HY-NET.zip",
+                        segment_tokens=("gpkg",),
+                        members=(".gpkg",),
+                    ),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="hydro/cz_hynet",
+    default_extension=".gpkg",
+    license=_CUZK_LICENSE,
+)
+
+# Orthophotomap WCS (DescribeCoverage 2.0.1, 2026-10-16): Standard and High
+# share one national grid with a 0.1 m step; the cutout pixel is a choice
+# (SCALEFACTOR). One GetCoverage reads at most 4 Mpx of coverage = 200 x 200 m
+# (64 s live 2026-10-15, docs/research/2026-10-15-plan-c-d/raport.md).
+_ORTO_WCS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WCS"
+
+
+def _orto_wcs(
+    service: str, variant: str, coverage_id: str, notes: str
+) -> AccessChannel:
+    """WCS cutout channel of the orthophotomap (ADR-042 D14); ``notes`` = the
+    meaning of ``variant`` named in messages (abstract of the service)."""
+    return AccessChannel(
+        transport=TransportKind.WCS,
+        update_signal="none",
+        horizontal_crs=PL_1992_CRS,
+        capabilities=frozenset({"bbox_raster"}),
+        notes=notes,
+        endpoint=f"{_ORTO_WCS}/{service}",
+        params=WcsCutoutParams(
+            variant=variant,
+            coverage_id=coverage_id,
+            native_step=Decimal("0.1"),
+            resolutions=tuple(Decimal(v) for v in ("0.1", "0.25", "0.5", "1")),
+            max_native_pixels=4_000_000,
+        ),
+    )
+
+
 # CUZK products (research 2026-10-15, 3.1-3.3): DMR 5G and DMP 1G have no
 # raster files (DMR5G-TIFF/DMP1G-TIFF = 404), every model has LAZ files.
 _CZ_SOURCES = (
@@ -547,6 +795,56 @@ _CZ_SOURCES = (
     ),
 )
 
+# Orthophoto of CR (ADR-042 D13): one ZIP per SM5 sheet listed by the ORTOFOTO
+# ATOM feed (the release year is in the file name, so the URL exists only in
+# the feed); the JPEG and its three world files are stored 1:1.
+_ORTOFOTO_FEED = f"{_CUZK_ATOM}/ORTOFOTO/ORTOFOTO.xml"
+_CZ_ORTOFOTO = SourceDescriptor(
+    key="cz.cuzk.ortofoto",
+    country="CZ",
+    product="orto",
+    name="Ortofoto CR (JPEG, arkusze SM5)",
+    provider_name="CUZK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs="EPSG:5514",
+            capabilities=frozenset({"sheet_files"}),
+            endpoint=_ORTOFOTO_FEED,
+            notes=(
+                "aktualny rocznik arkusza (archiwalne ortofoto CUZK sa platne - "
+                "poza zakresem); JPEG z plikami JGW w S-JTSK, TM33N i TM34N"
+            ),
+            params=AtomFilesParams(
+                service_feed=_ORTOFOTO_FEED,
+                entry_pattern=(
+                    r"ORTOFOTO_WRTO24\.(?P<year>[0-9]{4})\."
+                    r"(?P<sheet>[A-Z]{2,4}[0-9]{2})\.xml$"
+                ),
+                members=(
+                    (".jpg", ".jpg"),
+                    (".jgw", ".jgw"),
+                    (".TM33N.jgw", ".TM33N.jgw"),
+                    (".TM34N.jgw", ".TM34N.jgw"),
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=TileScheme(
+        kind="index",
+        crs="EPSG:5514",
+        width_m=2500.0,
+        height_m=2000.0,
+        description=(
+            "SM5: 2 albo 4 litery miasta + 2 cyfry; indeks KladyMapovychListu w. 24"
+        ),
+    ),
+    storage_subdir="orto/cz_sjtsk",
+    default_extension=".jpg",
+    license=_CUZK_LICENSE,
+)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -555,7 +853,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.orto",
             country="PL",
             product="orto",
-            name="Ortofotomapa Standard Resolution (25 cm)",
+            name="Ortofotomapa (arkusze wg kampanii; wycinek WCS Standard i High)",
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -563,6 +861,18 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     update_signal="index",
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"sheet_files"}),
+                ),
+                _orto_wcs(
+                    "StandardResolution",
+                    "standard",
+                    "Orthoimagery_StandardResolution",
+                    "najnowsze dostepne ortofotomapy",
+                ),
+                _orto_wcs(
+                    "HighResolution",
+                    "high",
+                    "Orthoimagery_High_Resolution",
+                    "ortofotomapy o pikselu 10 cm i mniejszym",
                 ),
             ),
             tile_scheme=None,
@@ -870,6 +1180,10 @@ _SOURCES: dict[str, SourceDescriptor] = {
             license=_SOILGRIDS_LICENSE,
         ),
         *_CZ_SOURCES,
+        _CZ_ZABAGED,
+        _CZ_RUIAN,
+        _CZ_HY_NET,
+        _CZ_ORTOFOTO,
     )
 }
 

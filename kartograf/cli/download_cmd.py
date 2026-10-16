@@ -13,12 +13,13 @@ and ``soil hsg``.
 
 import argparse
 import sys
+import threading
 from collections import Counter
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kartograf.cli._args import parse_bbox_arg
+from kartograf.cli._args import parse_bbox_arg, parse_per_country
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -28,25 +29,30 @@ from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
 from kartograf.transform.crs import TransformError
 
-_COUNTRY_KEYS = ("pl", "cz")
-
 
 class _ProgressPrinter:
     """Progress bar callback; ``pending`` = last line without a line ending.
 
     With ``--workers > 1`` ``pending`` reflects the last write (at worst
     a redundant or missing ``\\n`` before ``Error:``). ``used``: something was
-    drawn (a blank line separates the bar from the status lines).
+    drawn (a blank line separates the bar from the status lines). Campaign
+    lines may come from worker threads: one lock keeps them whole.
     """
 
     def __init__(self, workers: int = 1) -> None:
         self.pending = False
         self.used = False
         self.workers = workers
+        self._lock = threading.Lock()
 
     def __call__(self, progress: DownloadProgress) -> None:
         """Print progress bar and status (``start``: a transfer begins;
-        ``tiles``: LAZ tile counter)."""
+        ``tiles``: LAZ tile counter; ``campaigns``/``campaign``: flights of
+        a sheet with several selected campaigns)."""
+        if progress.status in ("campaigns", "campaign"):
+            with self._lock:
+                self._campaign_line(progress)
+            return
         if progress.status == "start":
             if progress.total > 1:  # a sheet hierarchy: "<code> to <scale>"
                 print(
@@ -57,7 +63,6 @@ class _ProgressPrinter:
             else:
                 print(f"Pobieranie {progress.sheet} ({progress.message})...")
             return
-        self.used = True
         if progress.status == "tiles":
             if progress.current == 0:
                 print(
@@ -95,6 +100,27 @@ class _ProgressPrinter:
             print(line, end="", flush=True)
             self.pending = True
 
+    def _campaign_line(self, progress: DownloadProgress) -> None:
+        """``Kampanie <arkusz> (do pobrania k z n): ...`` before the first
+        flight download of a sheet, then ``Pobieranie <arkusz> <etykieta>
+        (k/n)...`` before each one; ends a pending bar line first."""
+        if self.pending:
+            print()
+            self.pending = False
+        self.used = True
+        if progress.status == "campaigns":
+            print(
+                f"  Kampanie {progress.sheet} (do pobrania {progress.current} z "
+                f"{progress.total}): {progress.message}",
+                flush=True,
+            )
+        else:
+            print(
+                f"  Pobieranie {progress.sheet} {progress.message} "
+                f"({progress.current}/{progress.total})...",
+                flush=True,
+            )
+
 
 def create_progress_callback(quiet: bool = False, workers: int = 1):
     """Progress callback for downloads (``None`` under ``quiet``)."""
@@ -103,9 +129,12 @@ def create_progress_callback(quiet: bool = False, workers: int = 1):
     return _ProgressPrinter(workers)
 
 
-def _error_lead(on_progress) -> str:
-    """``"\\n"`` only if the progress bar left a line unterminated."""
-    return "\n" if getattr(on_progress, "pending", False) is True else ""
+def _end_progress(on_progress) -> None:
+    """End a bar line left unterminated (the last unit ``skipped``, a LAZ
+    tile counter) before the status lines and errors."""
+    if getattr(on_progress, "pending", False) is True:
+        print()
+        on_progress.pending = False
 
 
 # Cache warnings already printed by the current command (several tracks may
@@ -240,6 +269,13 @@ def _plan_line(item: PlanItem) -> str:
     return f"{item.unit}: {text}"
 
 
+def store_path_label(item: PlanItem) -> str:
+    """Plan line unit of a land cover/HSG position: its path below ``--output``
+    (as in the status lines), so a derived file and its raw ZIP of the same
+    TERYT (``keep_raw``) get different lines."""
+    return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
+
+
 def _report_plan(
     args: argparse.Namespace,
     plan: UpdatePlan,
@@ -345,24 +381,6 @@ def _print_version_summary(
 # =============================================================================
 
 
-def _per_country(raw: str | None, flag: str) -> str | dict[str, str] | None:
-    """``5m`` (every country) or ``pl=1m,cz=2m`` (per country) as library value."""
-    if raw is None or "=" not in raw:
-        return raw
-    values: dict[str, str] = {}
-    for item in raw.split(","):
-        key, sep, value = item.partition("=")
-        key = key.strip().lower()
-        if not sep or key not in _COUNTRY_KEYS or not value.strip() or key in values:
-            raise ValidationError(
-                f"{flag}: nieprawidlowa wartosc {raw!r} - podaj jedna wartosc dla "
-                f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
-                f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=..."
-            )
-        values[key] = value.strip()
-    return values
-
-
 def download_task_arguments(args: argparse.Namespace) -> dict:
     """Data options shared by a group download and a project task."""
     return {
@@ -372,16 +390,19 @@ def download_task_arguments(args: argparse.Namespace) -> dict:
         "geometry": Path(args.geometry) if getattr(args, "geometry", None) else None,
         "layer": getattr(args, "layer", None),
         "country": args.country,
-        "vertical_crs": _per_country(
+        "vertical_crs": parse_per_country(
             getattr(args, "vertical_crs", None), "--vertical-crs"
         ),
-        "resolution": _per_country(getattr(args, "resolution", None), "--resolution"),
+        "resolution": parse_per_country(
+            getattr(args, "resolution", None), "--resolution"
+        ),
         "model": getattr(args, "model", None),
         "format": getattr(args, "format", None),
         "sheet_system": getattr(args, "sheet_system", None),
         "scale": getattr(args, "scale", None),
         "cutout": getattr(args, "cutout", False),
         "horizontal_crs": getattr(args, "horizontal_crs", None),
+        "coverage": getattr(args, "coverage", None),
         "year": getattr(args, "year", None),
         "min_year": getattr(args, "min_year", None),
         "max_year": getattr(args, "max_year", None),
@@ -451,9 +472,10 @@ def _cmd_download(args: argparse.Namespace) -> int:
 def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> None:
     """Status lines, summary, failures and stale positions of a report."""
     update = _update_mode(args)
+    _end_progress(on_progress)
     if not args.quiet:
         if getattr(on_progress, "used", False):
-            print()  # the progress bar ends without a newline
+            print()  # campaign lines: a blank line before the status lines
         for unit_file in report.files:
             print(_status_line(unit_file.unit, unit_file.file, update))
         several = (
@@ -468,8 +490,6 @@ def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> 
                 sum(1 for f in report.failed if f.kind == "download"),
                 Path(args.output) / ("laz" if args.product == "laz" else ""),
             )
-    lead = _error_lead(on_progress)
     for failure in report.failed:
-        print(f"{lead}Error: {failure.error}", file=sys.stderr)
-        lead = ""
+        print(f"Error: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)

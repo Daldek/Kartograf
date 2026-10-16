@@ -2,8 +2,9 @@
 and ``soil hsg``: same store bytes, statuses, plan and notices, frozen clock.
 
 Scenarios: BDOT10k ``teryt``, BDOT10k area of several powiats (one failing),
-BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, HSG
-``bbox`` and ``geometry``, ``--check-updates --plan`` + ``--upgrade --plan``.
+BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, ZABAGED
+area (recorded CUZK REST answers), HSG ``bbox`` and ``geometry``,
+``--check-updates --plan`` + ``--upgrade --plan``.
 """
 
 from unittest.mock import patch
@@ -22,6 +23,8 @@ from kartograf.providers.soilgrids import SoilGridsProvider
 from tests.conftest import FakeCorine, FakeSoilGrids, tiny_geotiff, write_gpkg_layers
 from tests.fake_packages import FakePackageSession, package_route
 from tests.parity import assert_notices_printed, assert_same_store, run_both
+from tests.test_collections_cz import AREA as ZABAGED_AREA
+from tests.test_collections_cz import serve_zabaged
 from tests.test_hsg import RasterSoilGrids
 from tests.test_landcover_output_params import FakePackages
 
@@ -29,6 +32,9 @@ BBOX = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
 BBOX_ARG = "770000,509000,772000,511000"
 CLAY = {"property": "clay", "depth": "0-5cm", "stat": "mean"}
 CLAY_ARGS = ["--property", "clay", "--depth", "0-5cm", "--stat", "mean"]
+# ZABAGED of Cesky Tesin, 500 x 500 m (tests/fixtures/cz/feature_bbox/README.md):
+# layers 93 (2 lines), 132 (no features) and 138 (3 polygons, pages of 2)
+ZABAGED_ARGS = ["--bbox=-451000,-1112000,-450500,-1111500", "--bbox-crs", "EPSG:5514"]
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 
@@ -59,6 +65,7 @@ def _bdot(teryts, packages):
 _COMMAND = {
     "bdot10k": ["landcover", "download", "--source", "bdot10k"],
     "corine": ["landcover", "download", "--source", "corine"],
+    "zabaged": ["landcover", "download", "--source", "zabaged"],
     "soilgrids": ["soil", "download"],
 }
 
@@ -172,6 +179,16 @@ def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
     assert run.cli_stderr.count(f"Warning: {warning.text}\n") == 1
 
 
+def test_zabaged_area(tmp_path, monkeypatch):
+    """``landcover download --source zabaged --bbox`` = ``LandCoverManager(o,
+    "zabaged").download(bbox=...)``: one GeoPackage of the area, the same
+    bytes and sidecar in both stores."""
+    serve_zabaged(monkeypatch)
+    run = _landcover(tmp_path, "zabaged", ZABAGED_ARGS, bbox=ZABAGED_AREA)
+    _same(run, run.api_result.notices, run.api_result.ok)
+    assert [r.file.status for r in run.api_result.files] == ["new"]
+
+
 @pytest.mark.parametrize(
     ("source", "flags", "options"),
     [
@@ -197,6 +214,12 @@ def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
             {"year": 2018, "format": "GPKG"},
         ),
         ("bdot10k", ["--year", "2018"], {"year": 2018}),  # archive needs GML/SHP
+        ("zabaged", ["--year", "2018"], {"year": 2018}),  # BDOT10k/CORINE option
+        (  # an area of ZABAGED is always in the CRS of the service
+            "zabaged",
+            ["--horizontal-crs", "EPSG:3045"],
+            {"horizontal_crs": "EPSG:3045"},
+        ),
         (
             "bdot10k",
             ["--year", "2018", "--format", "GPKG"],

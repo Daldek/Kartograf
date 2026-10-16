@@ -51,19 +51,19 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwa `--target-crs`, wlaczanie wycinka flaga ukladu); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback), uzupelnia [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`record_cache`) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`--campaigns all`/`--min-year` dla LAZ; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial lat i pokrycie referencji; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile), uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) ((f).1 obejmuje LAZ) |
-| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7) i [ADR-036](#adr-036-magazyn-wersjonowany) (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`) |
+| [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) | Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem | 2026-10-07 | Przyjeta — czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.campaign`), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial, skan i konflikt; errata 7) i [ADR-036](#adr-036-magazyn-wersjonowany) (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`kampanie/`), [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wycinek tylko `newest`), [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (strategie), [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ: `all`, `--min-year`) i [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`campaigns_cache`); errata 10: otwarte drobiazgi przegladu zamkniete (M-8: sidecar dowiazania usuwany po awarii zapisu) |
 | [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) | Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0) | 2026-10-08 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (jezyk tekstow dla uzytkownika, Z5); czesciowo zastepuje [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) (nazwy kluczy `extra.source`) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (nazwy kluczy `extra.campaign`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0) (konwencja nazw kluczy sidecara `kartograf-meta/1`); errata 1: API/CLI po angielsku w 0.8.0 bez aliasow (pkt 2-3 nieaktualne) |
 | [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) | Wybor roku danych: przedzial lat, zatrzymanie przy konflikcie | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (`--full-sheet` z pkt 4; errata 1); czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (pkt 2: D14, pkt 4: D13; errata 3); errata 2: `--all-campaigns`/`all_campaigns` od 0.8.0; uzupelnia [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) (LAZ) i [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (kampanie PL) |
 | [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) | Drugie dowiazanie do najnowszego pelnego lotu (`full_sheet/`, `--full-sheet`) | 2026-10-10 | Przyjeta — czesciowo zastapiona przez [ADR-036](#adr-036-magazyn-wersjonowany) (F-U5: `kampanie/`; errata 1); uzupelnia [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) ((d): drugie dowiazanie; errata 8) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 4: `--full-sheet`; errata 1) |
-| [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
+| [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (kawalki wycinka ortofotomapy; errata 1: zszycie bit w bit tylko dla NMT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, plan 2/3) |
-| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D23 miedzy wydaniami, sloty jednostek; D27 czesciowo zastapione - wycinek orto w magazynie); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
+| [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — czesciowo zastapiona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D27: wycinek ortofotomapy w magazynie; errata 2); uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D23 miedzy wydaniami, sloty jednostek); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`) |
 | [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
 | [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
 | [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
 | [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta |
-| [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta; uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami; czesciowo zastepuje D27 - wycinek orto w magazynie), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu) |
+| [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta; czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto) |
 
 ---
 
@@ -1623,7 +1623,7 @@ GetFeature, nie konflikt z konkretnym kaflem. Sidecar kafla dostaje
 ## ADR-030: Strategie kampanii (`newest`/`all`), `--min-year` i uklad `kampanie/` z dowiazaniem
 
 **Data:** 2026-10-07 (decyzje uzytkownika)
-**Status:** Przyjeta — czesciowo zastapiona przez ADR-031 (nazwy kluczy `extra.campaign`), ADR-032 (przedzial, skan i konflikt; errata 7) i ADR-036 (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez ADR-033 (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-031 (nazwy kluczy `extra.campaign`), ADR-032 (przedzial, skan i konflikt; errata 7) i ADR-036 (uklad `kampanie/`, automatyczne `newest`, kopia zamiast hardlinku; errata 9); uzupelniona przez ADR-033 (drugie dowiazanie `full_sheet/`; errata 8); uzupelnia ADR-026 (`kampanie/`), ADR-027 (wycinek tylko `newest`), ADR-028 (strategie; regula wyboru `newest` bez zmian), ADR-029 (LAZ: `all`, `--min-year`) i ADR-019 (`campaigns_cache`); errata 10: otwarte drobiazgi przegladu zamkniete (M-8: sidecar dowiazania usuwany po awarii zapisu)
 
 **Kontekst:** Arkusz GUGiK ma czesto kilka kampanii (rozne daty pozyskania,
 zlecenia, zrodla: skaning laserowy albo zdjecia lotnicze). Pomiar 2026-10-07
@@ -2006,6 +2006,22 @@ pliku (D22); (4) `--force` pobiera ponownie, ale nie nadpisuje (ta sama
 tresc = `unchanged`, inna = nowa wersja). Regula wyboru rekordu i klucz
 "najnowszej" bez zmian.
 
+**Errata 10 (2026-10-15, 0.8.0, zamkniecie "Otwarte drobne" z przegladu
+T11/FB):** (1) wycinek `--target-crs` przy fallbacku I-1 bez `Warning:` -
+nieaktualne: wycinek PL idzie z WCS GUGiK (ADR-035, od 0.8.0 `--cutout`),
+bez skorowidza i bez fallbacku I-1 (`PlCutoutResult.unverified` usuniete
+razem z torem arkuszowym, errata 2 ADR-035); (2) podwojna linia I-1 w CLI -
+naprawione wczesniej (log managera na `debug`, jedno `Warning:`); (3)
+`MetadataCache.__del__` `ImportError` przy zamykaniu interpretera -
+naprawione w FB (`__del__` bez importow i wyjatkow); (4) M-7 podwojny INFO
+liczby kampanii - naprawione (jeden INFO); (5) M-8 nieaktualny sidecar
+dowiazania po awarii zapisu - poprawione: gdy zapis `<link>.meta.json` sie
+nie uda (`write_link_sidecar`), stary sidecar jest usuwany (`Warning` w
+logu), bo opisywalby poprzednia wersje. Dowiazanie bez sidecara to sciezka
+nieznana: nastepne uruchomienie odtwarza dowiazanie i sidecar (samonaprawa
+bez stanu posredniego, ktory klamie; test
+`test_failed_sidecar_write_drops_stale_sidecar_and_heals`).
+
 ---
 
 ## ADR-031: Jezyk identyfikatorow — angielski (sidecar od 0.7.0, API/CLI do v1.0.0)
@@ -2333,7 +2349,7 @@ z zakresu to "brak lokalnej wersji" (tryb domyslny go pobiera).
 ## ADR-034: Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla)
 
 **Data:** 2026-10-10
-**Status:** Przyjeta — uzupelniona przez ADR-035 (ASC 1 Mpx i NMPT); uzupelnia ADR-023 (kawalkowanie CUZK) i ADR-024 (kotwica NW)
+**Status:** Przyjeta — uzupelniona przez ADR-035 (ASC 1 Mpx i NMPT) i ADR-042 (kawalki wycinka ortofotomapy; errata 1: zszycie bit w bit tylko dla NMT); uzupelnia ADR-023 (kawalkowanie CUZK) i ADR-024 (kotwica NW)
 
 **Kontekst:** CUZK dzielil duze zadania `exportImage` przez `_tile_grid`
 w kliencie, a GUGiK WCS `download_bbox` wykonywal jedno zapytanie bez
@@ -2383,6 +2399,25 @@ CUZK zachowuje dotychczasowy wynik i parametry zapytan. Wycinki PL
 z WCS w (a) moga wykorzystac ten mechanizm (D-U3), ale obecny wycinek
 PL nadal sklada arkusze; usuniecie parametrow arkuszowych publicznego
 `mosaic_and_crop` pozostaje kandydatem do 0.8.0.
+
+**Errata 1 (2026-10-16, ADR-042 D14, plan D):** "kawalki z tej samej
+siatki skladaja sie bit w bit" dotyczy tylko NMT (siatka arkuszy 1 m).
+Wycinek ortofotomapy PL w magazynie (`--cutout --coverage --resolution`,
+`download/orto_cutout.py`) ma juz zmierzona siatke (DescribeCoverage
+2026-10-16: krok 0,1 m obu coverage, Standard i High) i jest dzielony na
+kawalki (budzet 4 Mpx pikseli coverage = 200 x 200 m, parzyste rozmiary
+kawalkow), ale zszyte kawalki NIE sa rowne bit w bit jednemu zapytaniu
+calego obszaru: serwer przeprobkowuje kazde zapytanie we wlasnym zasiegu
+(pomiar 2026-10-16: 20 x 20 m przy 0,1 m - 75-93 % pikseli cwiartki
+rozne, srednio 4 DN, max 89; 40 x 40 m przy 0,25 m - 70 % pikseli,
+srednio 4,4 DN, max 120). Powtorzone to samo zapytanie daje te same
+bajty, a kazdy kawalek jest odpowiedzia serwera skopiowana 1:1 (bez
+resamplingu), wiec ten sam obszar i piksel daja powtarzalny wynik; inny
+podzial na kawalki (inny obszar) moze dac w tym samym miejscu inne
+wartosci pikseli. Czesc o orto zdania "NMPT i orto nie maja zmierzonej
+siatki: pozostaja przy jednym zapytaniu bez wyrownania" dotyczy juz
+tylko surowego `GugikOrtoProvider.download_bbox` bez `coverage` (plik
+poza magazynem). Pomiary: `tests/fixtures/pl/orto_wcs/README.md`.
 
 ---
 
@@ -2500,7 +2535,7 @@ pliki `<wsp>_<RRRRMMDD>.tif` z 0.7.x nie sa rozpoznawane (D10).
 ## ADR-036: Magazyn wersjonowany
 
 **Data:** 2026-10-12 (spec zaakceptowany 2026-10-11, decyzje D1-D24; rewizje 2026-10-12, D26-D28 i D29-D33)
-**Status:** Przyjeta — uzupelniona przez ADR-037 (arkusz CZ w publicznym API; errata 1) i ADR-042 (D23 miedzy wydaniami, sloty jednostek; D27 czesciowo zastapione - wycinek orto w magazynie); czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
+**Status:** Przyjeta — czesciowo zastapiona przez ADR-042 (D27: wycinek ortofotomapy w magazynie; errata 2); uzupelniona przez ADR-037 (arkusz CZ w publicznym API; errata 1) i ADR-042 (D23 miedzy wydaniami, sloty jednostek); czesciowo zastepuje ADR-030 (`kampanie/`, automatyczne `newest`, kopia), ADR-032 (pkt 2 i 4), ADR-033 (F-U5), ADR-035 (W-U3/W-U8) i ADR-003 (`DownloadManager.download_bbox`); uzupelnia ADR-026 (`versions/`; land cover i HSG w ukladzie `data/`)
 
 **Kontekst:** Do 0.7.x magazyn mogl po cichu nadpisac dane: `--force`
 nadpisywal plik kampanii, `newest` automatycznie przestawial sciezke na
@@ -2624,6 +2659,17 @@ Decyzje rewizji 2026-10-12 (plan 3/3, weryfikacja
 w `kartograf/__init__.py`); wczesniejsze "bez publicznego API arkusza CZ"
 nie obowiazuje. Tory sa wywolywane przez `download_data`/`check_data`
 (spojnosc CLI i API, ADR-037).
+
+**Errata 2 (2026-10-16, ADR-042 D14, plan D):** D27 (i zdanie errata 2
+ADR-003 "surowy WCS (np. ortofotomapa) poza magazynem") czesciowo nie
+obowiazuje: ortofotomapa PL ma wycinek WCS w magazynie wersji
+(`imagery download --product orto --cutout --horizontal-crs EPSG:2180
+--coverage standard|high --resolution 0.1m|0.25m|0.5m|1m`,
+`download_orto_cutout`/`check_orto_cutout`, segment
+`orto/pl_1992_<coverage>_<res>/bbox/`, sygnal `none`, tor planu
+`pl_cutout`). Surowe `GugikOrtoProvider.download_bbox` bez `coverage`
+zostaje plikiem poza magazynem; `DownloadManager.download_bbox` pozostaje
+usuniete.
 
 ---
 
@@ -3165,7 +3211,7 @@ CZ (uzupelnienie ADR-041).
 ## ADR-042: Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D
 
 **Data:** 2026-10-15
-**Status:** Przyjeta; uzupelnia ADR-015 (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), ADR-036 (D23 miedzy wydaniami; czesciowo zastepuje D27 - wycinek orto w magazynie), ADR-039 (grupy boundaries, cadastre, models3d, hydro) i ADR-040 (pozycje komend projektu)
+**Status:** Przyjeta; czesciowo zastepuje ADR-036 (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia ADR-015 (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), ADR-034 (kawalki wycinka ortofotomapy; errata 1 ADR-034), ADR-036 (D23 miedzy wydaniami, sloty jednostek), ADR-039 (grupy boundaries, cadastre, models3d, hydro) i ADR-040 (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto)
 
 **Kontekst:** Spec katalogu (K5-K7) wymaga, by produkt z raportu byl
 wpisem deskryptora i konfiguracja kanalu, nie providerem. Plany C i D
@@ -3333,6 +3379,126 @@ Wynik WFS/REST jest migawka bez sygnalu: `--check-updates` raportuje
 miec inny uklad niz wynik obszaru (HY-NET 3045 vs 5514) - sidecar podaje
 faktyczny. Szczegoly i pomiary: `docs/research/2026-10-15-plan-c-d/raport.md`,
 plany `docs/superpowers/plans/2026-10-15-plan-c-*.md`, `...-plan-d-*.md`.
+
+**Errata 1 (2026-10-16, plan D Task 2, D12):** indeks feedu uslugi ATOM
+lezy w `MetadataCache` (tabela `atom_cache`, klucz = feed + `entry_pattern`)
+razem z `ETag` feedu: w TTL (7 dni) bez zapytania; starszy indeks oraz
+`--upgrade` i `--check-updates` (`refresh`) wysylaja warunkowy GET
+(`If-None-Match`; 304 = indeks bez zmian). Klucz brakujacy w indeksie
+z cache albo 404 feedu zbioru = JEDNO odswiezenie indeksu (nieaktualny
+cache nie ukrywa nowego rocznika). Feed zbioru (ok. 1,4 KB) jest czytany
+zawsze swiezo - jego wpis niesie wydanie. Etykieta wersji = data
+`updated` wpisu PLIKU w feedzie zbioru, poprzedzona grupa `year` wzorca,
+gdy ja ma (`2024_2025-02-06` ortofoto, `2026-10-04` ZABAGED). Feed uslugi
+jest czytany strumieniowo (ORTOFOTO: 23,7 MB, 16 301 wpisow), limit
+odczytu 120 s, feed zbioru 60 s. Klucz spoza feedu = `NoCoverageError`;
+HTML zamiast feedu, wpis bez dokladnie jednego linku `alternate`, kilka
+plikow bez rozstrzygniecia, rozmiar inny niz `length` feedu albo
+`Content-Length` = `DownloadError`; uklad spoza kategorii feedu =
+`ValidationError` bez sieci. Czlony ZIP (`AtomFilesParams.members`) sa
+kopiowane 1:1, najdluzszy sufiks najpierw (`.TM33N.jgw` przed `.jgw`).
+
+**Errata 2 (2026-10-16, plan D Task 3 i test na zywo, D3, D5, D16):**
+wynik obszaru HY-NET ma 2 warstwy, `WatercourseLink` i `HydroNode` (nie
+3 typy WFS): `WatercourseSeparatedCrossing` nie ma geometrii w GML (to
+relacja dwoch odcinkow `net:element`), a GeoServer dla zapytania z BBOX
+podaje `hits` 0, choc strony zwracaja obiekty (30 x 30 km: 0 wobec 4,
+100 x 100 km: 0 wobec 24) - kompletnosci D3 nie da sie sprawdzic.
+Skrzyzowania sa w pliku krajowym (`--whole-country`). Kody i nazwy warstw
+GPKG = nazwy typow WFS. `DescribeFeatureType` HY-NET to tylko
+`xsd:include` zdalnego schematu INSPIRE: taki XSD nie trafia do GDAL
+(D5 "schemat z metadanych uslugi" nie dotyczy tej uslugi) - pola sa
+czytane z tresci kazdej strony, warstwa dostaje sume pol stron
+w kolejnosci pierwszego wystapienia (brak pola = null, jedno pole o dwoch
+typach = `DownloadError`), wiec schemat zalezy od tresci: ten sam typ moze
+miec w innym obszarze inne pola (strona z jednym wezlem nie ma
+`hydroNodeCategory`). Pusta warstwa bez schematu XSD (0 obiektow typu)
+= warstwa z samym polem `gml_id` (geometria `Unknown`), nie schemat bez
+obiektow z D3. Usluga przekierowuje domyslny `User-Agent` curla (302) na
+PDF z warunkami; Kartograf wysyla `kartograf/<wersja>`. Plik krajowy:
+ZIP 1:1 z wymaganym czlonem `.gpkg` (`hydro/cz_hynet_gpkg/country/cz.zip`,
+ok. 194 MB), tylko EPSG:3045 (inne `horizontal_crs` = `ValidationError`).
+Produkt tylko CZ: `--country pl` = blad, `auto` zaweza do CZ
+(`auto_narrowed_to_cz`), `--level` = blad (stala zawartosc).
+
+**Errata 3 (2026-10-16, plan D Task 3, D10, D15, D17):** ZABAGED: 22
+warstwy obszaru (id i kody w `registry.py::_ZABAGED_LAYERS`; linie 93
+`vodni_tok` i 112 `brehova_cara`, reszta poligony), strona 2000,
+`orderByFields=OBJECTID`, id `fid_zbg`. Opis warstwy GPKG
+(`gpkg_contents.description`) = nazwa warstwy ArcGIS w pisowni uslugi
+z id (`Vodní tok (93)`, RUIAN `Obec (12)`). Plik krajowy = ZIP 1:1 (czlon
+`ZABAGED_RESULTS.gpkg`) w `landcover/cz_zabaged_gpkg_<5514|3045>/country/cz.zip`
+z warstwami pelnej bazy pod nazwami CUZK (np. `VodniPlocha_c`), innymi niz
+kody wyniku obszaru; rozmiar z `length` feedu w `Notice`
+`whole_country_size` przed transferem (wydanie 2026-10-04: 5,8 GB
+EPSG:5514, 6,7 GB EPSG:3045). `LandCoverManager(output_dir, "zabaged")`
+(`COLLECTION_SOURCES`, bez klasy providera): `teryt`, `format`, `layers`,
+`keep_raw`, `year` = `ValidationError` z nazwa zrodla (takze
+w `validate_request`), `sheet` = blad (obszar CZ: `bbox`/`geometry`),
+`horizontal_crs` z obszarem = blad (wynik zawsze EPSG:5514); blad
+pobrania jest wyjatkiem, nie pozycja `failed` (jeden plik na zapytanie,
+jak CORINE). RUIAN: `kraj`=17 `VyssiUzemneSamospravnyCelek`, `okres`=15
+`Okres`, `obec`=12 `Obec`, `katastralni-uzemi`=7 `KatastralniUzemi`
+(nazwy warstw GPKG), strona 1000, `orderByFields=objectid`, id `kod`;
+plik krajowy `boundaries/cz_ruian_shp/country/cz.zip` (ZIP 1:1, wymagany
+czlon `.shp`, ok. 253 MB, `http`). Pod `auto` poziom per kraj
+(`{"pl": "gmina", "cz": "obec"}`; jedna wartosc niedostepna w ktoryms
+kraju = blad z podpowiedzia `--level pl=<poziom>,cz=<poziom>`);
+`--teryt` z `--country cz` i godlo CZ jako obszar kolekcji = blad.
+Zapis GPKG (D5) trzyma cala warstwe w pamieci - ryzyko dla bardzo
+duzych obszarow.
+
+**Errata 4 (2026-10-16, plan D Task 4, D13):** ortofoto CZ to tylko
+aktualny rocznik arkusza (archiwalne ortofoto CUZK sa platne): z
+`--country cz` flagi `--year`, `--min-year`, `--max-year`,
+`--all-campaigns`, `--full-sheet`, `--sheet-system`, `--scale`,
+`--vertical-crs` i `--format` = `ValidationError` (pod `auto` flagi
+kampanii i arkuszy dzialaja dla czesci PL); kafel TM33 jako `--sheet` =
+blad z podpowiedzia SM5, `--cutout` z CZ = blad. Obszar pod `auto` daje
+arkusze PL i arkusze SM5 CZ (dotad `auto_narrowed_to_pl` - orto nie
+mialo zrodla CZ); `--resolution` z orto bez `--cutout` = blad dla obu
+krajow (piksel arkusza wynika ze zrodla). Sidecar JPEG: `horizontal_crs`
+EPSG:5514 i `extra.world_files` = `{".jgw": "EPSG:5514", ".TM33N.jgw":
+"EPSG:3045", ".TM34N.jgw": "EPSG:3046"}` (pomiar 2026-10-16 na CTES96,
+CTES86 i AS91: poczatek plikow TM = poczatek S-JTSK przeliczony do
+EPSG:3045/3046 z dokladnoscia 0,03 m); sidecar kazdego JGW ma
+`horizontal_crs` swojego ukladu. JGW nie niesie ukladu - w GIS przypisuje
+go uzytkownik (JPEG + `.jgw` = EPSG:5514). Jedno sprawdzenie wydania na
+arkusz (jedno `resolve_atom_file`, porazka zapamietana): cztery pliki
+dziela wynik, `check_failed` raz na arkusz. Kolejnosc zapisu `.jgw`,
+`.TM33N.jgw`, `.TM34N.jgw`, `.jpg`: wersja JPEG zawsze ma pliki JGW, plik
+z nieudanym zapisem nie ma wersji (nastepne uruchomienie go dopisuje).
+API: `download_cz_orto_sheet`/`check_cz_orto_sheet` (`CzOrtoResult`),
+tor planu `cz_orto`, jednostka = godlo.
+
+**Errata 5 (2026-10-16, plan D Task 5, D14):** wycinek ortofotomapy
+tylko w EPSG:2180 (obraz nie jest przeprobkowywany lokalnie;
+`--horizontal-crs` wymagane, inna wartosc = blad), `--coverage`
+i `--resolution` wymagane bez wartosci domyslnych (wybory z kanalow WCS
+rejestru), tylko kompozycja RGB, bez wyboru roku (kompozycja serwera).
+Zakres jest wyrownany NA ZEWNATRZ do wielokrotnosci piksela, a wynik
+sprawdzany (rozmiar, krok, naroznik NW, 3 pasma uint8, EPSG:2180): inna
+siatka = `DownloadError` bez wersji. Nieparzysta liczba pikseli 0,25 m
+to ulamek pikseli coverage 0,1 m - serwer odpowiada zla siatka albo
+HTTP 400 - dlatego kawalki maja parzyste rozmiary. Budzet kawalka
+GeoTIFF liczony w pikselach coverage (jak ASC): 4 Mpx = 200 x 200 m
+niezaleznie od piksela wyniku; limit odczytu kawalka 300 s (pomiar
+2026-10-15: 4 Mpx Standard 64 s, 2000 x 2000 px przy `SCALEFACTOR=0.4`
+176 s). Zszyte kawalki NIE sa bit w bit rowne jednemu zapytaniu
+(errata 1 ADR-034). High poza obszarami pikseli 10 cm odpowiada HTTP 200
+z obrazem 0,0,0: wersja powstaje z `extra.all_nodata: true` i `Notice`
+`all_nodata` (ostrzezenie); maski ladu PRG nie ma. Pobranie sprawdza
+miejsce na dysku (2 x rozmiar wyniku) i zapowiada `cutout_size` dla
+wiecej niz jednego zapytania albo >= 1 GiB. Sidecar: `resolution`
+(z deskryptora) = `null`, piksel i wariant w `request.resolution`
+i `request.coverage`, `extra.source` = faktyczny endpoint, coverage id,
+format, `scalefactor` (piksel inny niz 0,1 m) i `composition: server`;
+pola ukladow z pierwszego kanalu `bbox_raster` (Standard i High maja te
+same). Nazwa `pl.gugik.orto`: `Ortofotomapa (arkusze wg kampanii; wycinek
+WCS Standard i High)`. Pod `auto` `--coverage` i `--resolution` orto
+zawezaja zadanie do PL (`auto_narrowed_to_pl`); obszar tylko w CZ =
+blad. API: `download_orto_cutout`/`check_orto_cutout`
+(`OrtoCutoutResult`), tor planu `pl_cutout`.
 
 ---
 

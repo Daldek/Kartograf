@@ -12,9 +12,13 @@ from collections.abc import Iterable, Mapping, Sequence
 from types import SimpleNamespace
 
 from kartograf.core.bbox import BBox, validate_bbox
+from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_orto import cz_orto_sheet
+from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
 from kartograf.exceptions import ValidationError
+from kartograf.providers.pl.gugik_orto import coverage_choices
 from kartograf.sources.variants import (
     CZ_LAZ_VERTICAL_TEXT,
     CZ_VERTICAL_TEXT,
@@ -32,7 +36,7 @@ from kartograf.sources.variants import (
 _PRODUCT_TEXT = {
     "nmt": "Numeryczny Model Terenu; PL i CZ",
     "nmpt": "Numeryczny Model Pokrycia Terenu; PL i CZ",
-    "orto": "ortofotomapa RGB; PL",
+    "orto": "ortofotomapa RGB; PL i CZ",
     "laz": "chmura punktow LIDAR; PL i CZ",
 }
 
@@ -157,10 +161,11 @@ BBOX_CRS_CHOICES = (
 
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
 _PRODUCTS = tuple(_PRODUCT_TEXT)
-_COUNTRIES = ("pl", "cz", "auto")
+# Keys of a per-country value (``pl=1m,cz=2m``) and the ``--country`` values
+# of a data request (also the CLI choices).
+COUNTRY_KEYS = ("pl", "cz")
+COUNTRIES = (*COUNTRY_KEYS, "auto")
 _SHEET_SYSTEMS = ("1992", "2000")
-
-_COUNTRY_KEYS = ("pl", "cz")
 
 PerCountry = str | Mapping[str, str] | None
 
@@ -184,7 +189,7 @@ def check_per_country(raw: PerCountry, flag: str) -> None:
         keys = [k.strip().lower() for k in raw if isinstance(k, str)]
         valid = (
             len(keys) == len(raw)
-            and all(k in _COUNTRY_KEYS for k in keys)
+            and all(k in COUNTRY_KEYS for k in keys)
             and len(set(keys)) == len(keys)
             and all(isinstance(v, str) and v.strip() for v in raw.values())
         )
@@ -392,10 +397,71 @@ def cz_option_error(
     return None
 
 
+def cz_orto_option_error(
+    task: SimpleNamespace, *, countries: tuple[str, ...] = ("CZ",)
+) -> str | None:
+    """Error text for the CZ orthophoto choices (``None`` = valid; ADR-042 D13).
+
+    CUZK publishes only the current release of an SM5 sheet (archival
+    orthophotos are paid - out of scope) as a JPEG with world files: no
+    year, campaign, sheet system or scale choice (a request with PL applies
+    them to its PL part), no height system or format (``--resolution`` of
+    orthophoto sheets is rejected for both countries by ``validate_request``).
+    """
+    if task.sheet is not None:
+        try:
+            cz_orto_sheet(task.sheet)
+        except ValidationError as e:
+            return str(e)
+    if "PL" not in countries:
+        flag = next(
+            (
+                name
+                for name, given in (
+                    ("--year", task.year is not None),
+                    ("--min-year", task.year is None and task.min_year is not None),
+                    ("--max-year", task.year is None and task.max_year is not None),
+                    ("--all-campaigns", task.all_campaigns),
+                    ("--full-sheet", task.full_sheet),
+                )
+                if given
+            ),
+            None,
+        )
+        if flag is not None:
+            return (
+                f"{flag} dotyczy tylko PL - CUZK publikuje tylko aktualny rocznik "
+                "arkusza ortofoto CZ (archiwalne ortofoto CUZK sa platne, poza "
+                "zakresem)"
+            )
+        if task.sheet_system is not None:
+            return (
+                "--sheet-system dotyczy tylko PL - ortofoto CZ to arkusze SM5 "
+                "(godlo rozpoznawane wzorcem, arkusze obszaru z indeksu SM5)"
+            )
+        if task.scale is not None:
+            return (
+                "--scale dotyczy tylko PL - ortofoto CZ to arkusze SM5 w jednej "
+                "skali (1:5000)"
+            )
+    if country_value(task.vertical_crs, "CZ") is not None:
+        return (
+            "--vertical-crs nie dotyczy --product orto "
+            "(ortofotomapa nie ma ukladu pionowego)"
+        )
+    if _format_of(task) is not None:
+        return (
+            "--format nie dotyczy ortofoto CZ (pliki CUZK: JPEG i JGW bez "
+            "konwersji) - pomin --format"
+        )
+    return None
+
+
 def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
-    """CZ raster areas require cutout; CZ LAZ areas use indexed sheets."""
+    """CZ raster areas require cutout; CZ LAZ and orthophoto areas use the
+    indexed sheets."""
     if (
-        task.product == "laz"
+        task.product in ("laz", "orto")
         or task.sheet is not None
         or "CZ" not in countries
         or task.cutout
@@ -479,9 +545,20 @@ def validate_request(task: SimpleNamespace) -> None:
 
     Exactly one selection, explicit product/output, country for areas,
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
-    LAZ-only and non-LAZ options. Narrows ``task.min_year``/``max_year``.
+    LAZ-only and non-LAZ options, the orthophotomap cutout (``coverage``,
+    pixel, EPSG:2180 only, PL only). Narrows ``task.min_year``/``max_year``.
+    Types of library arguments first (``year="2018"``, ``cutout="no"``:
+    ``ValidationError``, no conversion; STANDARDS 11.2).
     """
     validate_area_choice(task.sheet, task.bbox, task.geometry)
+    for flag, name in (
+        ("--cutout", "cutout"),
+        ("--all-campaigns", "all_campaigns"),
+        ("--full-sheet", "full_sheet"),
+    ):
+        require_bool(getattr(task, name), flag)
+    if task.min_density is not None:
+        require_int(task.min_density, "--min-density")
     if task.product is None:
         raise ValidationError(f"--product wymagane: {PRODUCT_CHOICES}")
     if task.product not in _PRODUCTS:
@@ -498,7 +575,7 @@ def validate_request(task: SimpleNamespace) -> None:
         raise ValidationError(
             f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
         )
-    if task.country is not None and task.country not in _COUNTRIES:
+    if task.country is not None and task.country not in COUNTRIES:
         raise ValidationError(
             f"--country {task.country!r}: nieznana wartosc - dostepne: "
             f"{COUNTRY_CHOICES}"
@@ -508,7 +585,12 @@ def validate_request(task: SimpleNamespace) -> None:
             f"--sheet-system {task.sheet_system!r}: nieznana wartosc - dostepne: "
             f"{SHEET_SYSTEM_CHOICES}"
         )
-    if task.horizontal_crs is not None and task.horizontal_crs not in CUTOUT_CRS:
+    orto_cutout = task.cutout and task.product == "orto"
+    if (
+        task.horizontal_crs is not None
+        and not orto_cutout
+        and task.horizontal_crs not in CUTOUT_CRS
+    ):
         raise ValidationError(
             f"--horizontal-crs {task.horizontal_crs!r}: nieznana wartosc - "
             f"dostepne: {', '.join(CUTOUT_CRS)}"
@@ -539,12 +621,22 @@ def validate_request(task: SimpleNamespace) -> None:
                 "zasieg i uklad produktu (arkusz PL 1:1 w ukladzie arkusza, "
                 "arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce EPSG:3045)"
             )
-        if task.product in ("orto", "laz"):
+        if task.product == "laz":
             raise ValidationError(
-                "--cutout dziala tylko z --product nmt albo nmpt (wycinek "
-                "wysokosci); orto i laz - pobierz bez --cutout"
+                "--cutout dziala tylko z --product nmt, nmpt albo orto (wycinek "
+                "z WCS GUGiK); laz - pobierz bez --cutout"
             )
-        if task.horizontal_crs is None:
+        if orto_cutout:
+            if task.country == "cz":
+                raise ValidationError(ORTO_CUTOUT_PL_ONLY)
+            error = orto_cutout_error(
+                coverage=task.coverage,
+                resolution=country_value(task.resolution, "PL"),
+                horizontal_crs=task.horizontal_crs,
+            )
+            if error is not None:
+                raise ValidationError(error)
+        elif task.horizontal_crs is None:
             raise ValidationError(
                 f"--horizontal-crs wymagane z --cutout (uklad wycinka): "
                 f"{', '.join(CUTOUT_CRS)}"
@@ -554,6 +646,17 @@ def validate_request(task: SimpleNamespace) -> None:
             "--horizontal-crs dziala tylko z --cutout (uklad jednego wycinka); "
             "arkusze maja uklad z godla - dodaj --cutout albo pomin "
             "--horizontal-crs"
+        )
+    if task.coverage is not None and not orto_cutout:
+        raise ValidationError(
+            "--coverage dziala tylko z --cutout --product orto (wariant WCS "
+            f"wycinka ortofotomapy: {coverage_choices()}) - pomin --coverage"
+        )
+    if task.product == "orto" and not task.cutout and task.resolution is not None:
+        raise ValidationError(
+            "--resolution z --product orto dotyczy tylko wycinka (--cutout); "
+            "arkusze ortofotomapy maja piksel zrodla (PL: kampanii, CZ: arkusza "
+            "SM5 w pliku JGW) - pomin --resolution"
         )
 
 

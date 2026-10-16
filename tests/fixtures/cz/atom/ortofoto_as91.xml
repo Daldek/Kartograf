@@ -1,0 +1,22 @@
+﻿<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:georss="http://www.georss.org/georss" xmlns="http://www.w3.org/2005/Atom" xml:lang="cs">
+  <id>https://atom.cuzk.gov.cz/ORTOFOTO/datasetFeeds/CZ-00025712-CUZK_ORTOFOTO_WRTO24.2025.AS91.xml</id>
+  <title>Ortofoto České republiky - mapový list: Aš 9-1</title>
+  <updated>2026-02-24T09:03:19+02:00</updated>
+  <author>
+    <name>Český úřad zeměměřický a katastrální</name>
+    <uri>https://geoportal.cuzk.gov.cz</uri>
+    <email>cuzk.helpdesk@cuzk.gov.cz</email>
+  </author>
+  <rights>žádné podmínky neplatí</rights>
+  <link href="https://atom.cuzk.gov.cz/ORTOFOTO/ORTOFOTO.xml" hreflang="cs" type="application/atom+xml" rel="up" />
+  <link href="https://geoportal.cuzk.gov.cz" rel="describedby" hreflang="cs" type="text/html" />
+  <entry>
+    <id>https://openzu.cuzk.gov.cz/opendata/ORTOFOTO/WRTO24.2025.AS91.zip</id>
+    <title>Ortofoto České republiky - mapový list: Aš 9-1</title>
+    <updated>2026-02-24T09:03:19+02:00</updated>
+    <link href="https://openzu.cuzk.gov.cz/opendata/ORTOFOTO/WRTO24.2025.AS91.zip" length="55308158" rel="alternate" type="image/jpeg" hreflang="cs" />
+    <category label="S-JTSK" term="http://www.opengis.net/def/crs/EPSG/0/5514" />
+    <georss:polygon>50.2204 12.1595 50.2204 12.1987 50.2419 12.1987 50.2419 12.1595 50.2204 12.1595</georss:polygon>
+  </entry>
+</feed>

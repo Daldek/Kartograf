@@ -135,6 +135,7 @@ def pl_only_flags(
     vertical_crs: object,
     resolution: object,
     format: object = None,
+    coverage: object = None,
     *,
     year: int | None = None,
     min_year: int | None = None,
@@ -144,8 +145,15 @@ def pl_only_flags(
 ) -> list[str]:
     """Choices without a CZ counterpart resolve ``country="auto"`` to PL.
 
-    Per-country values still name both countries. LAZ flight and density
-    choices are published only by GUGiK and narrow an area to PL.
+    ADR-023 point 5; per-country values name both countries, ``sheet_system``
+    is required for every PL sheet area, ``cutout`` and campaign options work
+    with both countries. PL-only is read from the registries: a product,
+    height system or resolution without a CZ source of the product,
+    ``--format`` (PL files only) and the orthophotomap cutout - ``--coverage``
+    and its pixel (``--resolution`` of orto: the WCS cutout of GUGiK; whether
+    CZ has an orthophotomap does not matter, its sheets have no pixel choice).
+    LAZ flight and density choices are published only by GUGiK and narrow an
+    area to PL.
     """
     from kartograf.sources.registry import sources_for
     from kartograf.sources.variants import variants
@@ -159,11 +167,8 @@ def pl_only_flags(
         flags.append(f"--product {product}")
     if isinstance(vertical_crs, str) and vertical_crs not in cz_vertical:
         flags.append(f"--vertical-crs {vertical_crs}")
-    if (
-        isinstance(resolution, str)
-        and cz
-        and resolution not in cz_labels
-        and product != "laz"
+    if isinstance(resolution, str) and (
+        product == "orto" or (cz and resolution not in cz_labels and product != "laz")
     ):
         flags.append(f"--resolution {resolution}")
     if isinstance(format, str):
@@ -179,6 +184,8 @@ def pl_only_flags(
             flags.append("--all-campaigns")
         if min_density is not None:
             flags.append("--min-density")
+    if isinstance(coverage, str):
+        flags.append(f"--coverage {coverage}")
     return flags
 
 

@@ -247,9 +247,9 @@ def test_country_rules(tmp_path):
         validate_collection_request(
             product="admin", output_dir=tmp_path, whole_country=True, country="auto"
         )
-    with pytest.raises(ValidationError):  # no CZ descriptor of the product (plan C)
+    with pytest.raises(ValidationError, match="tylko dla PL"):  # EGiB: PL only
         validate_collection_request(
-            product="admin", output_dir=tmp_path, whole_country=True, country="cz"
+            product="map", output_dir=tmp_path, whole_country=True, country="cz"
         )
     with pytest.raises(ValidationError):  # sheet of another country than --country
         validate_collection_request(

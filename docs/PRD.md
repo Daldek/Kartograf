@@ -264,7 +264,7 @@ kartograf elevation availability --product nmpt --sheet M-34-64-D-d-2-1
 **Status:** Production
 
 #### Description
-Pobieranie ortofotomapy (zdjęcia lotnicze) z GUGiK w rozdzielczości 25cm.
+Pobieranie ortofotomapy (zdjęcia lotnicze) z GUGiK w rozdzielczości wg kampanii (np. 25 cm, 10 cm).
 Wariant koloru wymagany w API (`GugikOrtoProvider(color="RGB")`; CLI pobiera RGB); `GugikOrtoProvider(color="CIR")`
 wybiera podczerwień (osobny segment `orto/pl_<układ>_cir/`). Kampanie jak dla
 NMT (sekcja 3.11).
@@ -287,6 +287,10 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 ```bash
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
+# wycinek WCS w magazynie (0.8.0, ADR-042 D14): wariant i piksel jawnie, tylko EPSG:2180
+kartograf imagery download --bbox 566000,243000,566500,243500 --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
+# ortofoto CZ (0.8.0, ADR-042 D13): arkusz SM5 = JPEG + 3 pliki JGW, aktualny rocznik
+kartograf imagery download --sheet CTES96 --product orto -o ./data
 ```
 
 ---
@@ -589,8 +593,9 @@ siatka kafli 2x2 km w EPSG:3045) i DMR 4G (5 m, godło SM5 z indeksu arkuszy
 `KladyMapovychListu`, EPSG:5514, albo kafel TM33), NMPT DMP OK (0,5 m, jak
 DMR 4G) i DMP 1G (2 m, jak DMR 5G), a także wycinek bbox/geometrii przez
 `exportImage` (ArcGIS ImageServer) oraz chmury punktów LAZ czterech modeli
-(DMR 5G, DMR 4G, DMP 1G, DMP OK). Ortofoto i ZABAGED dla CZ — plan D
-(`docs/SCOPE.md` 3.1, 3.3).
+(DMR 5G, DMR 4G, DMP 1G, DMP OK) — plan B. Ortofoto CZ (arkusze SM5 z ATOM),
+ZABAGED, RUIAN i HY-NET doszły w 0.8.0 (plan D, `docs/SCOPE.md` 2.4
+i 2.14, `docs/USAGE.md` 1.4 i 1.9).
 
 #### Requirements
 - `--country {pl,cz,auto}` (wymagane z `--bbox`/`--geometry` od 0.8.0; z `--sheet` kraj z godła): kraj z formatu godła albo
@@ -598,11 +603,12 @@ DMR 4G) i DMP 1G (2 m, jak DMR 5G), a także wycinek bbox/geometrii przez
   `auto` daje osobne pliki PL i CZ ze wspólnym `extra.parent_request` (bez
   scalania PL+CZ — R6, etap 2). Kod 0 = sukces co najmniej jednego kraju;
   przy porażce drugiego `Warning:`.
-- Opcje bez odpowiednika czeskiego (`--product orto`, `--vertical-crs
-  KRON86`, rozdzielczość, której CUZK nie ma, np. `--resolution 1m` albo
-  `0.5m` dla NMT — NMPT `0.5m` to DMP OK, oraz `--format`; dla LAZ także
-  `--year`, `--min-year`, `--max-year`, `--all-campaigns`, `--min-density`)
-  rozstrzygają obszar sporny do PL z `Info:`.
+- Opcje bez odpowiednika czeskiego (`--vertical-crs KRON86`, rozdzielczość,
+  której CUZK nie ma, np. `--resolution 1m` albo `0.5m` dla NMT — NMPT
+  `0.5m` to DMP OK, `--format`, `--coverage` i `--resolution` wycinka
+  ortofotomapy; dla LAZ także `--year`, `--min-year`, `--max-year`,
+  `--all-campaigns`, `--min-density`) rozstrzygają obszar sporny do PL
+  z `Info:`.
 - Model rastra wynika z `--product` i `--resolution` (NMT `2m` DMR 5G /
   `5m` DMR 4G, NMPT `0.5m` DMP OK / `2m` DMP 1G); arkusz SM5 istnieje tylko
   dla DMR 4G i DMP OK (`--resolution` można pominąć), kafel TM33 wymaga
@@ -1312,7 +1318,7 @@ mypy >= 1.13           # Type checking
 ### Etap 2/3 (CZ) i dalej — szczegóły w `docs/SCOPE.md` 3.1
 - [x] CZ: DMP OK i DMP 1G (NMPT), LAZ czterech modeli oraz raport
       dostępności CZ/auto (plan B, 0.8.0)
-- [ ] Ortofoto CZ i ZABAGED (plan D)
+- [x] CZ: ortofoto (arkusze SM5), ZABAGED, RUIAN, HY-NET (0.8.0, plan D)
 - [ ] Wielokąt granicy kraju zamiast prostokątnej obwiedni (`--country auto`)
 - [ ] Scalanie wycinków PL+CZ w jedną powierzchnię przygraniczną (R6)
 - [ ] Wycinek PL `--cutout` z arkuszy PL-2000

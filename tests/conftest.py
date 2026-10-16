@@ -604,8 +604,9 @@ WCS_FIXTURES = Path(__file__).parent / "fixtures" / "gugik_wcs" / "real_2026_10_
 def recorded_response(path: Path, body: bytes | None = None):
     """Mock ``requests.Response`` replaying a recorded body and its headers.
 
-    ``<file>.headers.json`` next to the body holds the HTTP status and
-    ``Content-Type`` (fixture README); ``body`` overrides the recorded bytes.
+    ``<file>.headers.json`` next to the body holds the HTTP status,
+    ``Content-Type`` and - when recorded - ``ETag``/``Last-Modified``
+    (fixture README); ``body`` overrides the recorded bytes.
     ``iter_content`` yields small blocks, so streaming readers see several.
     """
     from unittest.mock import Mock
@@ -616,7 +617,7 @@ def recorded_response(path: Path, body: bytes | None = None):
     content = path.read_bytes() if body is None else body
     response = Mock()
     response.status_code = meta["status"]
-    response.headers = {"Content-Type": meta["Content-Type"]}
+    response.headers = {key: value for key, value in meta.items() if key != "status"}
     response.content = content
     response.text = content.decode("utf-8", errors="replace")
     response.iter_content = lambda chunk_size=1: (

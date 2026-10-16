@@ -14,8 +14,9 @@ Messages (inventory of the former CLI lines; Z3, decision 4):
 =====================  =======  ==============================================
 code                   level    condition
 =====================  =======  ==============================================
-SHEET_LIST             info     PL area expanded to a sheet list (header;
-                                the CLI prints it on stdout, ``-q`` hides it)
+SHEET_LIST             info     PL area or CZ orthophoto area expanded to a
+                                sheet list (header; the CLI prints it on
+                                stdout, ``-q`` hides it)
 GEOMETRY_LAYER_DEFAULT info     GPKG with several layers, no ``layer``
 AUTO_NARROWED_TO_PL    info     ``auto`` + PL-only choice (ADR-023 pkt 5)
 AUTO_CLIPPED           info     ``auto``: country part clipped to its envelope
@@ -32,7 +33,7 @@ SHEET_CRS_MISMATCH     warning  sheet file CRS differs from the sheet code
 INCOMPLETE_CAMPAIGN    warning  newest campaign declares an incomplete sheet
 CHECK_FAILED           warning  local version used, source check failed
 UNVERIFIED_LOCAL       info     ``upgrade``: local version without a signal
-CUTOUT_SIZE            info     (download_pl_cutout) large cutout
+CUTOUT_SIZE            info     (PL cutouts) several WCS requests or >= 1 GiB
 ALL_NODATA             warning  (cutouts, CZ sheet) raster without data
 LAZ_SUPERSEDED         info     (download_laz_area) skipped LAZ tiles
 CACHE_DISABLED         warning  (open_cache) metadata cache unusable
@@ -61,13 +62,16 @@ from kartograf.download.area import (
     pl_only_flags,
     resolve_geometry_layer,
 )
+from kartograf.download.arguments import require_int
 from kartograf.download.countries import countries_for_bbox, country_bbox
+from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
     campaign_opts_given,
     country_value,
     cz_option_error,
+    cz_orto_option_error,
     is_source_file_request,
     pl_option_error,
     pl_target_scale,
@@ -76,6 +80,7 @@ from kartograf.download.options import (
     resolve_pl_options,
     validate_request,
 )
+from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, OrtoCutoutResult
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import (
     DownloadError,
@@ -101,8 +106,8 @@ from kartograf.notices import (
 )
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
-from kartograf.sources.registry import horizontal_crs_for_sheet
-from kartograf.sources.variants import cz_model_text, cz_sheet_system, variants
+from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
+from kartograf.sources.variants import cz_model_text, cz_sheet_system
 
 FailureKind = Literal["no_coverage", "download", "country"]
 MAX_HINT_LINES = 5
@@ -230,6 +235,7 @@ def _start(
     from kartograf.download.fetch import validate_update
 
     validate_update(update)
+    require_int(workers, "--workers")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     run = _Run(
@@ -261,6 +267,7 @@ def download_data(
     scale: str | None = None,
     cutout: bool = False,
     horizontal_crs: str | None = None,
+    coverage: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -287,7 +294,11 @@ def download_data(
     index, whose sheets (any scale) come from the index (ADR-041).
     ``cutout=True`` with ``horizontal_crs`` gives ONE
     cutout of the area instead of sheets (PL: GUGiK WCS, CZ: CUZK; an area
-    reaching CZ requires it).
+    reaching CZ requires it). ``coverage`` - the orthophotomap cutout only
+    (``product="orto"``, ``cutout=True``, PL, ``horizontal_crs="EPSG:2180"``):
+    the WCS coverage ``"standard"`` or ``"high"``, with the cutout pixel in
+    ``resolution`` (``"0.1m"``, ``"0.25m"``, ``"0.5m"``, ``"1m"``; ADR-042
+    D14); orto sheets take neither.
     ``bbox`` may be in any supported CRS; ``geometry`` is a SHP/GPKG file.
     ``update``/``plan``: modes of every track (``plan`` from ``check_data``
     with ``update="upgrade"``). ``cache``: ``True`` = default metadata cache
@@ -299,8 +310,9 @@ def download_data(
     Raises
     ------
     ValidationError
-        Invalid or missing choice (before any download; texts name the CLI
-        flags, the CLI prints them as ``Error:``).
+        Invalid or missing choice, or an argument of a wrong type
+        (``year="2018"``, ``workers="4"``; never converted) - before any
+        download; texts name the CLI flags, the CLI prints them as ``Error:``.
     ParseError
         Malformed sheet code.
     TransformError
@@ -343,6 +355,7 @@ def check_data(
     scale: str | None = None,
     cutout: bool = False,
     horizontal_crs: str | None = None,
+    coverage: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -396,6 +409,7 @@ def validate_data_request(
     scale: str | None = None,
     cutout: bool = False,
     horizontal_crs: str | None = None,
+    coverage: str | None = None,
     year: int | None = None,
     min_year: int | None = None,
     max_year: int | None = None,
@@ -448,6 +462,7 @@ _SELECTION = (
     "scale",
     "cutout",
     "horizontal_crs",
+    "coverage",
     "year",
     "min_year",
     "max_year",
@@ -481,6 +496,8 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
                 f"(kraj {system.country}), a podano --country {country}"
             )
         if system.country == "CZ":
+            if task.product == "orto":  # SM5 sheets, own rules (ADR-042 D13)
+                return _download_cz(task, run)
             _reject_campaign_opts_without_pl(task, ("CZ",))
             if task.product == "laz":
                 return _download_cz_laz(task, run)
@@ -550,6 +567,7 @@ def _dispatch_area(
             task.vertical_crs,
             task.resolution,
             task.format,
+            task.coverage,
             year=task.year,
             min_year=task.min_year,
             max_year=task.max_year,
@@ -568,7 +586,10 @@ def _dispatch_area(
         raise ValidationError(
             "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
         )
-    _reject_campaign_opts_without_pl(task, countries)
+    if task.product == "orto" and task.cutout and "PL" not in countries:
+        raise ValidationError(ORTO_CUTOUT_PL_ONLY)
+    if task.product != "orto":  # CZ orthophoto: its own year rules (ADR-042 D13)
+        _reject_campaign_opts_without_pl(task, countries)
     _validate_cross_country(task, countries)
     require_cz_cutout(task, countries)
     if "PL" in countries:
@@ -654,7 +675,7 @@ def _dispatch_area(
 def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
     """Choices must be valid for EVERY country before any download."""
     hint = "; uzyj jawnie --country pl albo --country cz" if len(countries) > 1 else ""
-    if "CZ" in countries and not variants(product=task.product, country="CZ"):
+    if "CZ" in countries and not sources_for(country="CZ", product=task.product):
         raise ValidationError(
             f"--product {task.product} jest dostepny tylko dla PL{hint}"
         )
@@ -670,6 +691,8 @@ def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -
     for code in countries:
         if code == "PL":
             error = pl_option_error(task, countries=countries)
+        elif task.product == "orto":
+            error = cz_orto_option_error(task, countries=countries)
         else:
             error = cz_option_error(task, countries=countries)
         if error is not None:
@@ -680,10 +703,13 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
     """Geometry request: explicit CZ (envelope in the CZ CRS) or country dispatch."""
     assert task.geometry is not None
     if task.country == "cz" and task.product != "laz":
-        _reject_campaign_opts_without_pl(task, ("CZ",))
+        if task.product != "orto":  # CZ orthophoto: its own year rules
+            _reject_campaign_opts_without_pl(task, ("CZ",))
         require_cz_cutout(task, ("CZ",))
         task.layer = resolve_geometry_layer(task.geometry, task.layer, run.sink)
-        bbox = cz_geometry_bbox(task.geometry, task.layer, task.horizontal_crs)
+        bbox = cz_geometry_bbox(
+            task.geometry, task.layer, task.horizontal_crs or "EPSG:5514"
+        )
         return _download_cz(
             task, run, bbox=bbox, parent_request=parent_request_for(bbox, ("CZ",))
         )
@@ -791,7 +817,9 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
         return 0
     if run.update != "upgrade" or run.loaded is None:
         return None
-    report = manager.download_sheets(sheets, update="upgrade", plan=run.loaded)
+    report = manager.download_sheets(
+        sheets, update="upgrade", plan=run.loaded, on_progress=run.on_progress
+    )
     reported = any(n.code == UNVERIFIED_LOCAL for n in report.notices)
     for sheet, files in report.files.items():
         for file in files:
@@ -1358,34 +1386,53 @@ def _unit_of(path: Path, output_dir: Path) -> str:
 def _download_pl_cutout(
     task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
 ) -> int:
-    """PL cutout (``cutout``) from GUGiK WCS (ADR-035).
+    """PL cutout (``cutout``) from GUGiK WCS: NMT/NMPT (ADR-035) or the
+    orthophotomap (``coverage``, ADR-042 D14).
 
     A source failure is recorded for the PL part; invalid input and unexpected
     errors propagate to the caller.
     """
     from kartograf.download.cutout import check_pl_cutout, download_pl_cutout
+    from kartograf.download.orto_cutout import check_orto_cutout, download_orto_cutout
 
     if run.dry:
         return 0
-    selection = {
+    common = {
         "horizontal_crs": task.horizontal_crs,
         "output_dir": task.output_dir,
-        "vertical_crs": task.vertical_crs,
-        "product": task.product,
         "cache": run.cache,
         "on_notice": run.sink.add,
     }
+    result: PlCutoutResult | OrtoCutoutResult
     try:
-        if run.check:
-            run.plans.append(check_pl_cutout(bbox, **selection))
-            return 0
-        result = download_pl_cutout(
-            bbox,
-            update=run.update,
-            plan=run.loaded,
-            parent_request=parent_request,
-            **selection,
-        )
+        if task.product == "orto":
+            orto = {**common, "coverage": task.coverage, "resolution": task.resolution}
+            if run.check:
+                run.plans.append(check_orto_cutout(bbox, **orto))
+                return 0
+            result = download_orto_cutout(
+                bbox,
+                update=run.update,
+                plan=run.loaded,
+                parent_request=parent_request,
+                **orto,
+            )
+        else:
+            selection = {
+                **common,
+                "vertical_crs": task.vertical_crs,
+                "product": task.product,
+            }
+            if run.check:
+                run.plans.append(check_pl_cutout(bbox, **selection))
+                return 0
+            result = download_pl_cutout(
+                bbox,
+                update=run.update,
+                plan=run.loaded,
+                parent_request=parent_request,
+                **selection,
+            )
     except DownloadError as e:
         return run.fail("PL", "PL", _error_text(e), "download")
     if result.file is not None:
@@ -1400,7 +1447,8 @@ def _download_cz(
     bbox: BBox | None = None,
     parent_request: dict | None = None,
 ) -> int:
-    """CZ request: a sheet code (TM33 tile / SM5 sheet) or an area cutout."""
+    """CZ request: a sheet code (TM33 tile / SM5 sheet) or an area cutout;
+    the orthophoto has its own track (``_download_cz_orto``)."""
     from kartograf.download.cz_cutout import check_cz_cutout, download_cz_cutout
     from kartograf.download.cz_sheets import (
         check_cz_sheet,
@@ -1408,6 +1456,8 @@ def _download_cz(
         download_cz_sheet,
     )
 
+    if task.product == "orto":
+        return _download_cz_orto(task, run, bbox=bbox, parent_request=parent_request)
     has_sheet = bbox is None
     system = cz_sheet_system(task.sheet) if has_sheet else None
     # an `auto` area request was validated for all its countries already
@@ -1529,6 +1579,84 @@ def _download_cz_laz(
     rc = run.add_stale(result.stale)
     for failure in result.failed:
         rc = run.fail(failure.sheet, "CZ", _error_text(failure.error), "download")
+    return rc
+
+
+def _download_cz_orto(
+    task: SimpleNamespace,
+    run: _Run,
+    *,
+    bbox: BBox | None = None,
+    parent_request: dict | None = None,
+) -> int:
+    """CZ orthophoto (ADR-042 D13): an SM5 sheet or the SM5 sheets of an area
+    from the CUZK index, four files each; a failed sheet does not stop the
+    others (one ``UnitFailure`` per sheet)."""
+    from kartograf.download.cz_orto import (
+        check_cz_orto_sheet,
+        cz_orto_area_sheets,
+        download_cz_orto_sheet,
+    )
+
+    # an `auto` area request was validated for all its countries already
+    countries = ("CZ",) if bbox is None or task.country == "cz" else ("CZ", "PL")
+    error = cz_orto_option_error(task, countries=countries)
+    if error is not None:
+        raise ValidationError(error)
+    if run.dry:
+        return 0
+    if bbox is None:
+        sheets: tuple[str, ...] = (task.sheet.strip(),)
+    else:
+        try:
+            sheets = cz_orto_area_sheets(bbox)
+        except DownloadError as e:
+            return run.fail("CZ", "CZ", str(e), "download")
+        if not sheets:
+            return run.fail(
+                "CZ",
+                "CZ",
+                "indeks arkuszy SM5 CUZK nie ma arkuszy obszaru (obszar poza CZ?)",
+                "no_coverage",
+            )
+        what = "bbox" if task.geometry is None else f"geometry {task.geometry.name}"
+        _emit_sheet_list(run, task, list(sheets), "SM5 (CUZK)", what)
+    common = {
+        "output_dir": task.output_dir,
+        "cache": run.cache,
+        "on_notice": run.sink.add,
+    }
+    rc = 0
+    for done, sheet in enumerate(sheets, start=1):
+        status = "completed"
+        try:
+            if run.check:
+                run.plans.append(check_cz_orto_sheet(sheet, **common))
+                continue
+            result = download_cz_orto_sheet(
+                sheet,
+                update=run.update,
+                plan=run.loaded,
+                parent_request=parent_request,
+                on_download=(
+                    _announcer(run, sheet, "CZ, ortofoto SM5") if bbox is None else None
+                ),
+                **common,
+            )
+        except DownloadError as e:
+            no_data = isinstance(e, NoCoverageError)
+            kind: FailureKind = "no_coverage" if no_data else "download"
+            rc = run.fail(sheet, "CZ", str(e), kind)
+            status = "no_coverage" if no_data else "failed"
+        else:
+            for position, file in enumerate(result.files):
+                # one CHECK_FAILED per sheet: its files share one edition lookup
+                run.add(sheet, "CZ", file, reported_check_failure=position > 0)
+            rc = max(rc, run.add_stale(result.stale))
+            if all(file.status == "local" for file in result.files):
+                status = "skipped"
+        if bbox is not None and run.on_progress is not None:
+            run.on_progress(DownloadProgress(done, len(sheets), sheet, status))
     return rc
 
 
