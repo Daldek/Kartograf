@@ -7,6 +7,7 @@ area flags of a command; ``soil download`` runs SoilGrids through it.
 
 import argparse
 import sys
+import textwrap
 from pathlib import Path
 from typing import Any
 
@@ -25,7 +26,7 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
     store_path_label,
 )
-from kartograf.download.collections import collection_layers
+from kartograf.download.collections import collection_classes, collection_layers
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
@@ -33,9 +34,13 @@ from kartograf.landcover.manager import (
     LandCoverManager,
 )
 
+# Sources whose area is several TERYT unit packages (summary line).
+_UNIT_SOURCES = ("bdot10k", "bdoo")
+
 
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
-    """``landcover list-layers``: BDOT10k or ZABAGED layers, CORINE years."""
+    """``landcover list-layers``: BDOT10k, ZABAGED, Data50 or Data250 layers,
+    BDOO classes per release, CORINE years."""
     if args.source is None:
         print(f"Error: --source wymagane: {LANDCOVER_SOURCE_CHOICES}", file=sys.stderr)
         return 1
@@ -44,7 +49,12 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     print(f"Warstwy zrodla {manager.provider_name}:")
     print()
     if args.source in COLLECTION_SOURCES:
-        for layer in collection_layers(COLLECTION_SOURCES[args.source]):
+        key = COLLECTION_SOURCES[args.source]
+        classes = collection_classes(key)
+        if classes:
+            _print_classes(classes)
+            return 0
+        for layer in collection_layers(key):
             print(f"    {layer.name}  - warstwa uslugi {layer.source}")
         print()
         print(
@@ -65,6 +75,34 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
         print()
         print("  Rok referencyjny: --year.")
     return 0
+
+
+def _print_classes(classes: dict[str, tuple[str, ...]]) -> None:
+    """Class codes of a source of packages (BDOO) per release (``--year``)."""
+    print("  Klasy obiektow (--layers) wg rocznika; kod = OT_<KOD> w nazwach plikow")
+    print("  paczki wojewodztwa.")
+    for where, codes in classes.items():
+        print()
+        print(f"  {where} ({len(codes)}):")
+        print(
+            textwrap.fill(
+                ", ".join(codes),
+                width=78,
+                initial_indent="    ",
+                subsequent_indent="    ",
+            )
+        )
+    print()
+    print(
+        textwrap.fill(
+            "--layers zapisuje ZIP plikow wybranych klas. Paczka ma pliki tylko "
+            "tych klas, ktorych obiekty sa w wojewodztwie (do 2023): brak czesci "
+            "klas = Info, brak wszystkich = blad wojewodztwa.",
+            width=78,
+            initial_indent="  ",
+            subsequent_indent="  ",
+        )
+    )
 
 
 def area_task_arguments(args: argparse.Namespace) -> dict:
@@ -181,7 +219,8 @@ def _landcover_task(
     for failure in result.failed:
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(result.stale)
-    # several files (BDOT10k area): one summary line, as for sheet lists
-    if source == "bdot10k" and selection["teryt"] is None and not args.quiet:
+    # several files (an area of BDOT10k powiats or BDOO voivodeships): one
+    # summary line, as for sheet lists
+    if source in _UNIT_SOURCES and selection["teryt"] is None and not args.quiet:
         _print_version_summary(statuses, len(result.failed), out)
     return 0 if result.ok else 1

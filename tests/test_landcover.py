@@ -8,6 +8,7 @@ and LandCoverManager classes.
 import hashlib
 import json
 import os
+import re
 import shutil
 import sqlite3
 import zipfile
@@ -387,6 +388,23 @@ class TestLandCoverCLI:
         layers = collection_layers("cz.cuzk.zabaged")
         assert len(listed) == 22
         assert listed == [layer.name for layer in layers]
+
+    def test_landcover_list_layers_bdoo(self, capsys):
+        """BDOO: under each ``--year`` the classes ``--layers`` accepts in
+        that release (registry), without network; KUIK ends with 2023."""
+        from kartograf.cli.commands import main
+        from kartograf.download.collections import collection_classes
+
+        assert main(["landcover", "list-layers", "--source", "bdoo"]) == 0
+        out = capsys.readouterr().out
+        blocks = re.findall(r"^  (--year \d{4}) \((\d+)\):\n((?:    .*\n)+)", out, re.M)
+        listed = {
+            where: tuple(" ".join(text.split()).split(", "))
+            for where, count, text in blocks
+        }
+        assert listed == collection_classes("pl.gugik.bdoo")
+        assert {int(count) for _, count, _ in blocks} == {44, 37, 26}
+        assert "KUIK" in listed["--year 2023"] and "KUIK" not in listed["--year 2024"]
 
     def test_landcover_download_no_selection(self, capsys):
         """Test download without selection method."""
@@ -1585,6 +1603,8 @@ class TestLandCoverNoSideEffectsOnInit:
             ["landcover", "list-layers", "--source", "bdot10k"],
             ["landcover", "list-layers", "--source", "corine"],
             ["landcover", "list-layers", "--source", "zabaged"],
+            ["landcover", "list-layers", "--source", "bdoo"],
+            ["landcover", "list-layers", "--source", "data50"],
             ["soil", "list-layers"],
             ["soil", "list-sources"],
             ["elevation", "list-sources"],

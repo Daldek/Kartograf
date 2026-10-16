@@ -1,5 +1,5 @@
-"""``kartograf landcover``: BDOT10k (GUGiK), CORINE Land Cover and ZABAGED
-(CUZK) (ADR-039, ADR-042 D15)."""
+"""``kartograf landcover``: BDOT10k and BDOO (GUGiK), CORINE Land Cover,
+ZABAGED, Data50 and Data250 (CUZK) (ADR-039, ADR-042 D15, ADR-043)."""
 
 import argparse
 
@@ -21,6 +21,7 @@ from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
     LANDCOVER_SOURCE_CHOICES,
     LANDCOVER_SOURCES,
+    bdoo_year_choices,
     bdot10k_archive_choices,
 )
 from kartograf.sources.descriptor import AtomFilesParams, SourceDescriptor
@@ -52,9 +53,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     commands = add_group(
         subparsers,
         "landcover",
-        help="Pokrycie terenu: BDOT10k, CORINE Land Cover, ZABAGED",
-        description="Pokrycie terenu: wektorowa baza BDOT10k (GUGiK, PL), CORINE "
-        "Land Cover (Copernicus, UE) i ZABAGED (CUZK, CZ) w magazynie wersji.",
+        help="Pokrycie terenu: BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250",
+        description="Pokrycie terenu i bazy ogolnogeograficzne: wektorowe bazy "
+        "BDOT10k i BDOO (GUGiK, PL), CORINE Land Cover (Copernicus, UE), "
+        "ZABAGED, Data50 i Data250 (CUZK, CZ) w magazynie wersji.",
     )
     download = commands.add_parser(
         "download",
@@ -63,10 +65,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "obszaru: --teryt, --sheet, --bbox albo --geometry. BDOT10k obszaru "
         "= paczki kazdego powiatu, ktory obszar przecina (PRG); z --year "
         "paczki z archiwum rocznikow BDOT10k (GML albo SHP, zapis 1:1). "
-        "ZABAGED (CZ): obszar (--bbox/--geometry) = jeden GeoPackage warstw "
-        "pokrycia terenu i wod w EPSG:5514 (klasy ZABAGED, bez przeliczenia "
-        "na kody BDOT10k; lista: landcover list-layers), --whole-country = "
-        "plik krajowy GPKG z feedu ATOM CUZK (zapis 1:1).",
+        "BDOO (--year wymagany): oryginalna paczka GML wojewodztwa (--teryt "
+        "2 cyfry; obszar = paczki wojewodztw, ktore przecina, wg PRG); "
+        "--layers zostawia pliki wybranych klas. ZABAGED, Data50 i Data250 "
+        "(CZ): obszar (--bbox/--geometry) = jeden GeoPackage warstw uslugi w "
+        "EPSG:5514 (ZABAGED: pokrycie terenu i wody, Data50/Data250: "
+        "wszystkie warstwy obiektowe; nazwy CUZK, bez przeliczenia na kody "
+        "BDOT10k; lista: landcover list-layers), --whole-country = plik "
+        "krajowy z feedu ATOM CUZK (ZABAGED: GPKG, Data50/Data250: SHP; zapis "
+        "1:1).",
     )
 
     selection = download.add_argument_group("Zrodlo i obszar")
@@ -80,18 +87,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     selection.add_argument(
         "--teryt",
         metavar="KOD",
-        help="Kod TERYT powiatu (4 cyfry, np. 1465; tylko BDOT10k)",
+        help="Kod TERYT: powiat BDOT10k (4 cyfry, np. 1465) albo wojewodztwo "
+        "BDOO (2 cyfry, np. 12)",
     )
     add_area_flags(
         selection,
-        sheet_help=f"{SHEET_AREA_HELP}; BDOT10k: powiaty przecinajace arkusz",
+        sheet_help=f"{SHEET_AREA_HELP}; BDOT10k: powiaty przecinajace arkusz, "
+        "BDOO: wojewodztwa",
     )
     selection.add_argument(
         "--whole-country",
         action="store_true",
-        help="Tylko ZABAGED: plik krajowy zamiast obszaru (ZIP z GeoPackage "
-        "pelnej bazy pod nazwami warstw CUZK, kilka GB; wymaga "
-        "--horizontal-crs); rozmiar z feedu w Warning przed pobraniem",
+        help="Tylko ZABAGED, Data50 i Data250: plik krajowy zamiast obszaru "
+        "(ZIP 1:1 - ZABAGED: GeoPackage pelnej bazy, kilka GB; Data50/Data250: "
+        "Shapefile, 230-760 MB; wymaga --horizontal-crs); rozmiar z feedu w "
+        "Warning przed pobraniem",
     )
 
     options = download.add_argument_group("Parametry zrodla")
@@ -104,7 +114,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "2012, 2006, 2000 (edycje pokrycia terenu CLMS/WMS), 1990 (tylko "
         "podglad WMS). BDOT10k: rocznik archiwum (stan z poczatku roku) "
         f"{bdot10k_archive_choices()} - oryginalna paczka powiatu ZIP; bez "
-        "--year biezace paczki",
+        f"--year biezace paczki. BDOO (wymagany): rocznik {bdoo_year_choices()} "
+        "- oryginalna paczka wojewodztwa ZIP",
     )
     options.add_argument(
         "--format",
@@ -120,9 +131,10 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="KODY",
         type=layer_codes,
         default=None,
-        help="Tylko biezace BDOT10k GPKG: zostaw wybrane warstwy, kody po "
-        "przecinku (np. SWRS,PTWP; lista: landcover list-layers); domyslnie "
-        "wszystkie",
+        help="Kody po przecinku (np. SWRS,PTWP); domyslnie wszystkie. Biezace "
+        "BDOT10k GPKG: zostaw wybrane warstwy. BDOO: ZIP plikow wybranych "
+        "klas z kazdej paczki (bez obiektow zlozonych, XSD i metadanych). "
+        "Lista: landcover list-layers",
     )
     options.add_argument(
         "--keep-raw",
@@ -134,8 +146,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--horizontal-crs",
         choices=_national_file_crs(),
         default=None,
-        help="Tylko ZABAGED z --whole-country (wymagany): uklad pliku krajowego; "
-        "wynik obszaru zawsze w ukladzie uslugi EPSG:5514",
+        help="Tylko --whole-country (ZABAGED, Data50, Data250; wymagany): "
+        "uklad pliku krajowego; wynik obszaru zawsze w ukladzie uslugi "
+        "EPSG:5514",
     )
 
     output = download.add_argument_group(OUTPUT_TITLE)
@@ -150,14 +163,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     add_update_flags(
         output,
         check_help="Porownaj lokalne wersje ze zrodlem bez pobierania: CORINE "
-        "(CLMS) i plik krajowy ZABAGED - wydanie zrodla; BDOT10k, podglad "
-        "CORINE i obszar ZABAGED - brak taniego sygnalu (nie da sie sprawdzic "
-        "bez pobrania)",
-        upgrade_help="Pobierz nowsze wydanie CORINE albo pliku krajowego ZABAGED "
-        "(domyslnie tylko informacja); BDOT10k, podglad CORINE i obszar ZABAGED "
-        "zostaja lokalne (pobranie: --force); z --plan wykonaj zapisany plan",
-        force_help="Pobierz ponownie kazdy plik (BDOT10k: takze odswiez powiaty "
-        "z PRG); ta sama tresc = bez zmian, inna = nowa wersja",
+        "(CLMS) i pliki krajowe ZABAGED, Data50, Data250 - wydanie zrodla; "
+        "BDOT10k, BDOO, podglad CORINE i obszary CUZK - brak taniego sygnalu "
+        "(nie da sie sprawdzic bez pobrania)",
+        upgrade_help="Pobierz nowsze wydanie CORINE albo pliku krajowego CUZK "
+        "(domyslnie tylko informacja); BDOT10k, BDOO, podglad CORINE i obszary "
+        "CUZK zostaja lokalne (pobranie: --force); z --plan wykonaj zapisany "
+        "plan",
+        force_help="Pobierz ponownie kazdy plik (BDOT10k i BDOO: takze odswiez "
+        "jednostki obszaru z PRG); ta sama tresc = bez zmian, inna = nowa wersja",
         plan_help="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
@@ -167,8 +181,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         type=int,
         metavar="N",
         default=1,
-        help="Tylko BDOT10k obszaru (wiele powiatow): liczba rownoleglych "
-        "pobran (domyslnie 1)",
+        help="Tylko obszar BDOT10k albo BDOO (wiele powiatow albo wojewodztw): "
+        "liczba rownoleglych pobran (domyslnie 1)",
     )
     add_quiet(output)
     download.set_defaults(
@@ -180,7 +194,8 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     layers = commands.add_parser(
         "list-layers",
         help="Wypisz warstwy wybranego zrodla",
-        description="Wypisz warstwy BDOT10k i ZABAGED albo lata CORINE (bez sieci)",
+        description="Wypisz warstwy BDOT10k, ZABAGED, Data50 i Data250, klasy "
+        "BDOO wg rocznikow albo lata CORINE (bez sieci)",
     )
     layers.add_argument(
         "--source",
