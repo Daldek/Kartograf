@@ -107,7 +107,8 @@ def add_quiet(parser: Container) -> None:
 
 
 def layer_codes(text: str) -> tuple[str, ...]:
-    """``--layers SWRS,PTWP`` -> ``("SWRS", "PTWP")``; codes checked by the library."""
+    """``--layers SWRS,PTWP`` -> ``("SWRS", "PTWP")`` (also ``--direction n,e``);
+    codes checked by the library."""
     return tuple(code.strip() for code in text.split(","))
 
 

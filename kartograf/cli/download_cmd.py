@@ -403,6 +403,7 @@ def download_task_arguments(args: argparse.Namespace) -> dict:
         "cutout": getattr(args, "cutout", False),
         "horizontal_crs": getattr(args, "horizontal_crs", None),
         "coverage": getattr(args, "coverage", None),
+        "direction": getattr(args, "direction", None),
         "year": getattr(args, "year", None),
         "min_year": getattr(args, "min_year", None),
         "max_year": getattr(args, "max_year", None),

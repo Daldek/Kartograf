@@ -9,7 +9,9 @@ in the sidecar (``build_metadata(capability=)``) and are not enforced in manager
 A provider-driven channel may carry a typed configuration as well:
 ``WcsCutoutParams`` describes a WCS coverage offered as a cutout in the store
 (the orthophotomap Standard and High coverages of ``pl.gugik.orto``, ADR-042
-D14) - a cutout of the provider, not a collection product.
+D14; the true orthophotomap) - a cutout of the provider, not a collection
+product; ``SheetIndexParams`` the WMS sheet index of a GUGiK image product
+(orthophotomap, intensity images, true and oblique orthophotomap, plan E1).
 
 Collection channels (ADR-042, ADR-043) carry typed engine configuration in
 ``AccessChannel.params``: ``UnitPackageParams`` (one file per unit - TERYT
@@ -58,8 +60,10 @@ class WcsCutoutParams:
     """WCS channel offered as a cutout in the store (ADR-042 D14).
 
     ``variant`` is the public choice (``coverage="standard"``, CLI
-    ``--coverage``; the channel ``notes`` say what it holds), ``coverage_id``
-    the ``COVERAGEID`` of the service, ``native_step`` the coverage pixel in
+    ``--coverage``; the channel ``notes`` say what it holds) of a descriptor
+    with several cutout channels; with one (the true orthophotomap) there is
+    no choice and ``variant`` only names the channel. ``coverage_id`` is the
+    ``COVERAGEID`` of the service, ``native_step`` the coverage pixel in
     metres (DescribeCoverage) and ``resolutions`` the result pixels offered
     (labels K2 via ``kartograf.sources.variants.resolution_label``); a pixel
     other than ``native_step`` is requested with ``SCALEFACTOR``.
@@ -73,6 +77,35 @@ class WcsCutoutParams:
     native_step: Decimal
     resolutions: tuple[Decimal, ...]
     max_native_pixels: int
+
+
+@dataclass(frozen=True)
+class SheetIndexParams:
+    """WMS sheet index (skorowidz) of a GUGiK image product (plan E1).
+
+    The image provider asks the index of ``AccessChannel.endpoint`` for each
+    sheet (GetFeatureInfo at its centre) and downloads the file of the
+    chosen record: the orthophotomap, the intensity images, the true and the
+    oblique orthophotomap share one code. ``layers``: the index layers, the
+    newest first; ``()`` = the yearly layers named by GetCapabilities (the
+    orthophotomap). ``directions``: ``(code, layer)`` of each view direction
+    of an oblique image - one file per direction in its own layer, the
+    record field ``kierunek`` holds the code in upper case. ``systems``: the
+    PL sheet systems of the records (``"1992"``, ``"2000"``);
+    ``sheet_parts``: the members of their PL-1992 codes (7 = the ``1:10000``
+    sheets, 8 = the ``1:5000`` ones of the true orthophotomap;
+    ``series_scale``). ``full_sheet``: the records declare whether the sheet
+    is full (``calyArkuszWypelnionyTrescia``, ``--full-sheet``). ``extent``:
+    where the product exists - the hint of a sheet without a record
+    (``None``: the whole country).
+    """
+
+    layers: tuple[str, ...]
+    systems: tuple[str, ...]
+    sheet_parts: int
+    full_sheet: bool
+    directions: tuple[tuple[str, str], ...] = ()
+    extent: str | None = None
 
 
 # URL template tokens of a unit package (ADR-042 D1, ADR-043): the TERYT code
@@ -273,7 +306,11 @@ class AtomFilesParams:
 
 
 ChannelParams = (
-    UnitPackageParams | FeatureBBoxParams | AtomFilesParams | WcsCutoutParams
+    UnitPackageParams
+    | FeatureBBoxParams
+    | AtomFilesParams
+    | WcsCutoutParams
+    | SheetIndexParams
 )
 
 

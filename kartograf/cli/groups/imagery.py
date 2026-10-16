@@ -1,5 +1,7 @@
-"""``kartograf imagery``: orthophotomap - GUGiK sheets and WCS cutout (PL),
-CUZK SM5 sheets (CZ) (ADR-039, ADR-042 D13, D14)."""
+"""``kartograf imagery``: GUGiK images - orthophotomap (sheets and WCS
+cutout), intensity images, true orthophotomap (sheets and WCS cutout),
+oblique orthophotomap (PL) - and CUZK SM5 orthophoto sheets (CZ) (ADR-039,
+ADR-042 D13, D14, plan E1)."""
 
 import argparse
 from functools import partial
@@ -9,6 +11,7 @@ from kartograf.cli._args import (
     add_area_flags,
     add_quiet,
     add_update_flags,
+    layer_codes,
 )
 from kartograf.cli.download_cmd import cmd_download, download_task_arguments
 from kartograf.cli.groups import add_group, add_list_sources
@@ -22,8 +25,8 @@ from kartograf.download.options import (
 )
 from kartograf.download.orto_cutout import (
     ORTO_CUTOUT_CRS,
-    coverage_choices,
     cutout_resolution_choices,
+    orto_coverage_choices,
 )
 from kartograf.sources.descriptor import SourceDescriptor
 
@@ -85,6 +88,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "musi sie z nim zgadzac). Wycinek (--cutout) tylko PL: z auto obejmuje "
         "czesc PL",
     )
+    selection.add_argument(
+        "--direction",
+        metavar="KIERUNKI",
+        type=layer_codes,
+        default=None,
+        help="Tylko --product oblique-orto: kierunki widoku po przecinku (n, e, "
+        "s, w; np. n,e); arkusz orto ukosnej to plik na kierunek "
+        "(<godlo>_<kierunek>.tif); bez flagi wszystkie cztery",
+    )
 
     sheets = download.add_argument_group("Arkusze obszaru")
     sheets.add_argument(
@@ -132,7 +144,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="WARIANT",
         default=None,
         help="Wariant WCS wycinka - wymagany z --cutout (bez --cutout blad): "
-        f"{coverage_choices()}",
+        f"{orto_coverage_choices()}",
     )
     cutout.add_argument(
         "--resolution",
@@ -140,7 +152,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="RES",
         default=None,
         help="Piksel wycinka - wymagany z --cutout (arkusze maja piksel zrodla: "
-        f"bez --cutout blad): {cutout_resolution_choices()}",
+        f"bez --cutout blad): {cutout_resolution_choices(IMAGERY_PRODUCTS)}",
     )
 
     campaigns = download.add_argument_group(

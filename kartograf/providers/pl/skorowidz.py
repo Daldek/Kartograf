@@ -21,7 +21,12 @@ from kartograf.exceptions import (
     ValidationError,
 )
 from kartograf.sources.registry import parse_pl_system
-from kartograf.transport.http import SessionPerThread, download_to, get_with_retry
+from kartograf.transport.http import (
+    SessionPerThread,
+    download_to,
+    get_with_retry,
+    head_signal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -471,6 +476,10 @@ class SkorowidzLayersMixin(SourceInfoMixin):
     supports_campaigns: bool = True
     # Download description in logs/messages: "<file from URL> (<label>)"
     DOWNLOAD_LABEL = "OpenData"
+    # HEAD of a record file before its transfer (``DownloadManager``:
+    # ``DOWNLOAD_SIZE`` above 100 MiB, K9): image providers only - a list of
+    # NMT sheets would pay ~0.5 s per sheet for files far below the limit.
+    announces_size: bool = False
 
     def _skorowidz_query(self, parser: SheetParser) -> SkorowidzQuery:
         """Provider hook: cache key, endpoint and product filter for a sheet."""
@@ -756,6 +765,23 @@ class SkorowidzLayersMixin(SourceInfoMixin):
             # file name from the URL (campaign id + sheet) tells campaigns apart in logs
             description=f"{record.url.rsplit('/', 1)[-1]} ({self.DOWNLOAD_LABEL})",
         )
+
+    def record_length(self, record: SkorowidzRecord) -> int | None:
+        """``Content-Length`` of the record file from ``HEAD``; ``None`` when
+        the server gives none or the request fails (the download that follows
+        reports its own failure)."""
+        try:
+            signal = head_signal(
+                self._sessions.get(),
+                record.url,
+                timeout=self.DEFAULT_TIMEOUT,
+                retries=self.MAX_RETRIES,
+                description=f"HEAD {record.url.rsplit('/', 1)[-1]}",
+            )
+        except DownloadError as e:
+            logger.debug("HEAD %s: %s", record.url, e)
+            return None
+        return signal["content_length"]
 
     def __init__(self) -> None:
         super().__init__()

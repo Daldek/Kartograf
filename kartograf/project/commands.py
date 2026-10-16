@@ -445,6 +445,7 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
                     "cutout": "flag",
                     "horizontal_crs": "str",
                     "coverage": "str",
+                    "direction": "str_list",
                     "resolution": "per_country",
                     **_CAMPAIGNS,
                 },

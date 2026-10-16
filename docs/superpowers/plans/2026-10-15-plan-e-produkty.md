@@ -655,11 +655,22 @@ class IndexSource:               # rekordy z URL dla jednostek "sheet"/"tile"
 
 **Zaleznosci:** E0, A, B, D.
 
-**Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-3 wykonane (fixtury
+**Stan (2026-10-16, galaz `feat/plan-e1`):** kroki 1-4 wykonane (fixtury
 w `tests/fixtures/pl/{nmt_100m,intensity,orto_true,orto_oblique}/`
 i `tests/fixtures/cz/contours/` z README; godla 8-czlonowe; NMT 100 m,
-commit `85b53af`). Kroki 4-9 otwarte. Fakty z kodu dla kroku 4 (rozpoznane
-2026-10-16, bez implementacji):
+commit `85b53af`; obrazy - krok 4, ponizej). Kroki 5-9 otwarte (warstwice
+CZ, reszta CLI i list-sources, parity, E2E, dokumenty). Krok 4 w kodzie:
+`SheetIndexParams` (descriptor) w kanale `WMS_SHEET_INDEX` orto,
+intensywnosci, true orto i orto ukosnej; `GugikImageProvider` (jeden kod;
+`GugikOrtoProvider` = orto z barwami); `FileStorage(suffix=)` i
+`storage_suffix` kierunku; `verify_record_url(..., suffix)`;
+`DownloadManager._download_planned` zaweza plan do segmentu i plikow
+managera; `HEAD` + `DOWNLOAD_SIZE` w `_download_version` dla
+`announces_size`; `data._managers` (manager na kierunek);
+`orto_cutout.download_image_cutout` (orto i true orto po kluczu
+deskryptora); `direction` w `download_data`/`check_data`, CLI
+`imagery --direction`, manifest `direction`. Fakty z kodu dla kroku 4
+(rozpoznane 2026-10-16 przed implementacja):
 - `DownloadManager._download_planned` filtruje pozycje planu tylko po
   `unit`: przy czterech managerach orto ukosnej musi zawezic je do nazwy
   pliku managera (`updates._where`/`_items`), inaczej pozycje innych
@@ -794,7 +805,7 @@ download_data(..., format: str | None = None,                          # contour
   - wojewodztwa obszaru z `discover_teryts_for_bbox` (dwie pierwsze cyfry);
   - pozycje planu na torze `collection` (bez nowego toru);
   - `--vertical-crs` dla 100 m = `Error:` (uklad nieznany, P1).
-- [ ] **Step 4: Intensywnosc, true orto, orto ukosna.** Test RED w `tests/test_imagery_products.py`:
+- [x] **Step 4: Intensywnosc, true orto, orto ukosna.** Test RED w `tests/test_imagery_products.py`:
   - `test_intensity_campaigns_like_orto`: arkusz PL-1992 ma loty 2023
     i 2025; bez `--year` pobiera 2025, `--year 2023` pobiera 2023;
     `--all-campaigns` pobiera oba do `versions/`; plik ma 1 pasmo i piksel
