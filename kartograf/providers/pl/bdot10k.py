@@ -60,17 +60,23 @@ _LAYER_CODE = re.compile(r"[A-Z]{4}")
 
 
 def normalize_layers(layers: Sequence[str]) -> list[str]:
-    """Sorted unique BDOT10k layer codes; ``ValidationError`` for a bad code.
+    """Sorted unique BDOT10k layer codes in upper case (``ptwp`` = ``PTWP``);
+    ``ValidationError`` for a bad code.
 
-    A code is 4 upper-case letters (``PTWP``, ``SWRS``); an empty selection
-    is an error too.
+    A code is 4 letters (``PTWP``, ``SWRS``); an empty selection is an error
+    too.
     """
-    wanted = sorted(set(layers))
+    wanted = sorted({layer.strip().upper() for layer in layers})
     bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
-    if bad or not wanted:
+    if not wanted:
         raise ValidationError(
-            f"Nieprawidlowe kody warstw BDOT10k: {bad or '[]'} "
-            "(4 wielkie litery, np. PTWP, SWRS)"
+            "--layers: podaj co najmniej jeden kod warstwy BDOT10k (4 litery, "
+            "np. PTWP, SWRS)"
+        )
+    if bad:
+        raise ValidationError(
+            f"Nieprawidlowe kody warstw BDOT10k: {', '.join(bad)} (4 litery, np. "
+            "PTWP, SWRS)"
         )
     return wanted
 

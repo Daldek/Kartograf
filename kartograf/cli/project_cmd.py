@@ -17,7 +17,11 @@ from kartograf import (
     remove_project_task,
     verify_project,
 )
-from kartograf.cli._parser import create_parser, removed_command_error
+from kartograf.cli._parser import (
+    create_parser,
+    parse_command_line,
+    removed_command_error,
+)
 from kartograf.cli.download_cmd import _print_notice, create_progress_callback
 from kartograf.download.fetch import UpdateMode
 from kartograf.exceptions import ValidationError
@@ -54,7 +58,7 @@ def cmd_project_add(args: argparse.Namespace) -> int:
         raise ValidationError(
             f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
         )
-    parsed = parser.parse_args(command_args)
+    parsed = parse_command_line(parser, command_args)
     task = getattr(parsed, "_task", None)
     if task is None:
         raise ValidationError(

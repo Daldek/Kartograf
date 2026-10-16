@@ -329,7 +329,7 @@ def test_project_download_has_no_store_plan_file_option(tmp_path, capsys):
             ]
         )
     assert error.value.code == 2
-    assert "unrecognized arguments: --plan" in capsys.readouterr().err
+    assert "nieznana opcja --plan (maja ja:" in capsys.readouterr().err
     assert _manifest_bytes(project) == before
 
 

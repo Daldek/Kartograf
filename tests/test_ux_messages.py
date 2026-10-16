@@ -1,0 +1,210 @@
+"""Input errors of the 0.8.0 UX review (UX-01 - UX-14): the same text from the
+CLI and the library, before any network."""
+
+import pytest
+
+from kartograf.cli.commands import main
+from kartograf.core.bbox import BBox
+from kartograf.download.collections import validate_collection_request
+from kartograf.download.data import validate_data_request
+from kartograf.exceptions import ValidationError
+from kartograf.landcover.manager import LandCoverManager
+from kartograf.notices import FILES, OF_SHEETS, count_text
+
+SHEET = "N-34-130-D-d-2-4"
+
+
+@pytest.fixture(autouse=True)
+def _no_network(monkeypatch):
+    """Every check below happens before a request: a request is a failure."""
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("request before validation")
+
+    monkeypatch.setattr("requests.Session.request", refuse)
+
+
+@pytest.mark.parametrize(
+    ("count", "files", "of_sheets"),
+    [
+        (1, "1 plik", "1 arkusza"),
+        (2, "2 pliki", "2 arkuszy"),
+        (4, "4 pliki", "4 arkuszy"),
+        (5, "5 plikow", "5 arkuszy"),
+        (12, "12 plikow", "12 arkuszy"),
+        (22, "22 pliki", "22 arkuszy"),
+        (25, "25 plikow", "25 arkuszy"),
+        (112, "112 plikow", "112 arkuszy"),
+    ],
+)
+def test_count_text_polish_numerals(count, files, of_sheets):
+    assert count_text(count, *FILES) == files
+    assert count_text(count, *OF_SHEETS) == of_sheets
+
+
+def _cli_error(capsys, *argv: str) -> str:
+    assert main(list(argv)) == 1
+    return capsys.readouterr().err
+
+
+def test_layer_without_geometry_is_an_error_in_cli_api_and_project(tmp_path, capsys):
+    # UX-01: --layer names a layer of the --geometry file; without it the
+    # value was dropped silently (and written into the project manifest)
+    text = "--layer dotyczy tylko --geometry"
+    err = _cli_error(
+        capsys,
+        "boundaries", "download", "--product", "admin", "--teryt", "14",
+        "--layer", "x", "-o", str(tmp_path),
+    )  # fmt: skip
+    assert text in err
+    with pytest.raises(ValidationError, match=text):
+        validate_collection_request(
+            product="admin", output_dir=tmp_path, teryt="14", layer="x"
+        )
+    with pytest.raises(ValidationError, match=f"{text}.*wybiera --layers"):
+        LandCoverManager(tmp_path, "bdot10k").validate_request(
+            teryt="1465", layer="PTWP"
+        )
+    with pytest.raises(ValidationError, match=text):
+        validate_data_request(
+            product="nmt", output_dir=tmp_path, sheet=SHEET, layer="x",
+            resolution="1m", vertical_crs="EVRF2007",
+        )  # fmt: skip
+    assert main(["project", "init", "--project", str(tmp_path), "-o", "data"]) == 0
+    err = _cli_error(
+        capsys,
+        "project", "add", "--project", str(tmp_path), "t1", "boundaries",
+        "download", "--product", "admin", "--teryt", "14", "--layer", "x",
+    )  # fmt: skip
+    assert text in err
+
+
+@pytest.mark.parametrize(
+    ("flags", "text"),
+    [
+        (["--resolution", "1m"], "--resolution nie dotyczy LAZ"),
+        (["--sheet-system", "2000"], "--sheet-system nie dotyczy LAZ PL"),
+        (
+            ["--sheet-system", "2000", "--scale", "1:500"],
+            "--sheet-system i --scale nie dotycza LAZ PL",
+        ),
+    ],
+)
+def test_pl_laz_rejects_grid_and_sheet_flags(tmp_path, capsys, flags, text):
+    # UX-02: LAZ CZ rejected them, LAZ PL dropped them silently
+    err = _cli_error(
+        capsys,
+        "elevation", "download", "--product", "laz", "--sheet", SHEET,
+        "--vertical-crs", "EVRF2007", "-o", str(tmp_path), *flags,
+    )  # fmt: skip
+    assert text in err
+
+
+def test_registry_keys_are_named_as_flags(tmp_path):
+    # UX-03: messages named --sheet_system (a registry key, not a flag)
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(
+            product="topographic", output_dir=tmp_path, country="pl",
+            bbox=BBox(565000, 242000, 566000, 243000, "EPSG:2180"),
+            scale="1:10000", format="TIFF", sheet_system="1992",
+        )  # fmt: skip
+    assert "--sheet-system" in str(error.value)
+    assert "--sheet_system" not in str(error.value)
+
+
+def test_missing_selection_names_only_the_selections_of_the_product(tmp_path):
+    # UX-04: the text listed --teryt, --ku and --sheet for HY-NET (CZ)
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(
+            product="network", output_dir=tmp_path, country="cz"
+        )
+    assert str(error.value) == (
+        "Podaj dokladnie jeden wybor dla --product network (CZ): --bbox/--geometry "
+        "(obiekty obszaru), --whole-country (plik krajowy)"
+    )
+
+
+def test_survey_control_hint_names_the_network_of_each_selection(tmp_path):
+    # UX-14: the hint listed --bbox/--sheet/--geometry twice, without --network
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(
+            product="control", output_dir=tmp_path, country="pl",
+            whole_country=True, network="horizontal",
+        )  # fmt: skip
+    text = str(error.value)
+    assert "--teryt <4 cyfry> z --network horizontal|vertical (paczka powiatu)" in text
+    assert "z --network archive-1942|archive-kronsztadt60 (arkusze obszaru)" in text
+
+
+def test_cz_source_with_a_pl_sheet_code_names_the_source(tmp_path):
+    # UX-05: the error pointed to --country cz, a flag landcover does not have
+    with pytest.raises(ValidationError) as error:
+        LandCoverManager(tmp_path, "zabaged").validate_request(sheet="N-34-130-D")
+    assert str(error.value) == (
+        "--source zabaged (CZ): godlo N-34-130-D nie wyznacza obszaru CZ - podaj "
+        "--bbox (np. w EPSG:5514) albo --geometry"
+    )
+
+
+def test_area_outside_the_explicit_country_fails_before_network(tmp_path):
+    # UX-06: S-JTSK numbers read as EPSG:2180 failed as "no objects" after the
+    # network; swapped EPSG:4326 axes as "no sheets"
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(
+            product="network", output_dir=tmp_path, country="cz",
+            bbox=BBox(-600000, -1100000, -590000, -1090000, "EPSG:2180"),
+        )  # fmt: skip
+    assert str(error.value).startswith("--bbox (EPSG:2180) lezy poza CZ")
+    assert "--bbox-crs EPSG:5514" in str(error.value)
+    with pytest.raises(ValidationError) as error:
+        validate_data_request(
+            product="nmt", output_dir=tmp_path, country="pl", sheet_system="1992",
+            resolution="1m", vertical_crs="EVRF2007",
+            bbox=BBox(50.05, 19.93, 50.06, 19.94, "EPSG:4326"),
+        )  # fmt: skip
+    assert str(error.value).endswith(
+        "osie wygladaja na zamienione: --bbox 19.93,50.05,19.94,50.06"
+    )
+
+
+def test_unknown_flag_is_reported_by_the_command_with_its_owners(capsys):
+    # UX-07: argparse of the root named neither the command nor a hint
+    with pytest.raises(SystemExit) as exit_:
+        main(["elevation", "download", "--product", "nmt", "--teryt", "1465"])
+    assert exit_.value.code == 2
+    err = capsys.readouterr().err
+    assert err.startswith("usage: kartograf elevation download")
+    assert (
+        "kartograf elevation download: error: nieznana opcja --teryt (maja ja: "
+        "boundaries, cadastre, geodesy, landcover, models3d download). Opcje: "
+        "kartograf elevation download --help"
+    ) in err
+    with pytest.raises(SystemExit):
+        main(["landcover", "download", "--product", "bdot10k"])
+    assert "landcover wybiera zrodlo flaga --source" in capsys.readouterr().err
+
+
+def test_flag_prefixes_are_not_abbreviations(capsys):
+    # UX-09: --stat of soil hsg was read as its --stats
+    with pytest.raises(SystemExit):
+        main(["soil", "hsg", "--depth", "0-5cm", "--stat", "mean", "--sheet", "X"])
+    assert "nieznana opcja --stat (maja ja: soil download)" in capsys.readouterr().err
+
+
+def test_negative_bbox_after_a_space_is_the_bbox_value(tmp_path, capsys):
+    # UX-10: "--bbox -600000,..." ended with "expected one argument"
+    err = _cli_error(
+        capsys,
+        "hydro", "download", "--product", "network", "--country", "cz",
+        "--bbox", "-600000,-1100000,-590000,-1090000", "-o", str(tmp_path),
+    )  # fmt: skip
+    assert "lezy poza CZ" in err  # parsed as a bbox, checked by the library
+
+
+def test_bdot10k_voivodeship_teryt_names_the_powiat_choice(tmp_path):
+    # UX-12: "Nieprawidlowy kod TERYT: 14" without a hint
+    with pytest.raises(ValidationError) as error:
+        LandCoverManager(tmp_path, "bdot10k").validate_request(teryt="14")
+    assert str(error.value).startswith(
+        "--teryt 14: BDOT10k jest publikowany per powiat - podaj --teryt <4 cyfry>"
+    )

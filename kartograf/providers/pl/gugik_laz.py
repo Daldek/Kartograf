@@ -54,6 +54,7 @@ from kartograf.core.coverage import (
 )
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import TILES, count_text
 from kartograf.providers.base import DataSourceProvider
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
@@ -844,7 +845,8 @@ class GugikLazProvider(DataSourceProvider):
                 yield tile
         if returned and not kept:
             raise DownloadError(
-                f"WFS {layer}: serwer zwrocil {returned} kafli, zaden nie "
+                f"WFS {layer}: serwer zwrocil {count_text(returned, *TILES)}, "
+                "zaden nie "
                 "przecina zadanego bboxa - niezgodnosc kolejnosci osi "
                 "(zglos blad)"
             )

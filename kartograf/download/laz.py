@@ -59,7 +59,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.notices import LAZ_SUPERSEDED, Notice, NoticeSink
+from kartograf.notices import LAZ_SUPERSEDED, TILES, Notice, NoticeSink, count_text
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
     GugikLazProvider,
@@ -420,7 +420,8 @@ def _emit_superseded(
     if not superseded:
         return
     lines = [
-        f"pominieto {len(superseded)} kafli LAZ - obszar pokrywaja nowsze kafle "
+        f"pominieto {count_text(len(superseded), *TILES)} LAZ - obszar pokrywaja "
+        "nowsze kafle "
         "(domyslnie najnowszy rocznik per obszar; inny rocznik: "
         "--year/--min-year/--max-year)"
     ]

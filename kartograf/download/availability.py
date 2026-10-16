@@ -552,7 +552,7 @@ def _validated(
     """
     from kartograf.core.parser_registry import detect_system
 
-    validate_area_choice(sheet, bbox, geometry)
+    validate_area_choice(sheet, bbox, geometry, layer)
     choices = product_choices(AVAILABILITY_PRODUCTS)
     if product is None:
         raise ValidationError(f"--product wymagane: {choices}")
@@ -574,7 +574,7 @@ def _validated(
         system = detect_system(sheet)
         if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
-                f"Godlo '{sheet}' nalezy do systemu {system.id} (kraj "
+                f"Godlo '{sheet}' nalezy do systemu {system.name} (kraj "
                 f"{system.country}), a podano --country {country}"
             )
         country = system.country.lower()

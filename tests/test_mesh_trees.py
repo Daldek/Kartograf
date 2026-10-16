@@ -222,7 +222,7 @@ def test_mesh_city_area_over_the_file_limit(tmp_path, router):
     with pytest.raises(ValidationError) as refused:
         download_collection(**_mesh(tmp_path, bbox=KRAKOW_122))
     text = str(refused.value)
-    assert "122 plikow do pobrania" in text and "limit" in text
+    assert "122 pliki do pobrania" in text and "limit" in text
     heads = [url for method, url in router.calls if method == "HEAD"]
     assert len(heads) == VOLUME_SAMPLE
     sizes = MESH_FILES["area_122"]["content_length"]

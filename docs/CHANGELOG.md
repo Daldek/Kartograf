@@ -9,6 +9,28 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- Przeglad spojnosci UX 0.8.0 (bledy wejscia przed siecia, CLI = API):
+  - `--layer` bez `--geometry` jest bledem w kazdej komendzie danych
+    i w `project add` (dotad wartosc byla po cichu pomijana i zapisywana
+    w manifescie). Co zrobic: usun `--layer` (warstwy danych BDOT10k/BDOO
+    wybiera `--layers`).
+  - LAZ PL odrzuca `--resolution`, `--sheet-system` i `--scale` (jak LAZ
+    CZ; dotad pomijane). Co zrobic: usun te flagi z pobran LAZ.
+  - Obszar jawnego `--country pl|cz` (`--bbox`, obwiednia `--geometry`)
+    lezacy poza obwiednia kraju konczy sie `ValidationError` z ukladem
+    obszaru w EPSG:4326 i podpowiedzia `--bbox-crs`/kolejnosci osi (dotad
+    "brak obiektow"/"Brak arkuszy" po zapytaniu zrodla). Co zrobic: popraw
+    `--bbox-crs` albo wspolrzedne (`names --product world` bez zmian).
+  - Komunikat "skorowidz GUGiK niedostepny - uzyto lokalnej wersji"
+    (`DownloadManager`) ma kod `CHECK_FAILED` zamiast `UNVERIFIED_LOCAL`;
+    `UNVERIFIED_LOCAL` znaczy tylko "lokalna wersja zrodla bez taniego
+    sygnalu" (`info`). Co zrobic: kod sprawdzajacy `Notice.code` dla awarii
+    skorowidza - `CHECK_FAILED`.
+  - CLI nie rozwija skrotow dlugich flag (`--out` nie znaczy `--output`,
+    `--stat` w `soil hsg` nie znaczy `--stats`); `--plan` bez
+    `--check-updates`/`--upgrade` to `Error:` z kodem 1 (dotad blad parsera,
+    kod 2). Co zrobic: pisz pelne nazwy flag.
+
 - Limit obszaru kolekcji (plan E, E5; ADR-043 errata 3): `--bbox`/`--sheet`/
   `--geometry` w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`,
   `maps`, `geodesy`, w zrodlach kolekcji `landcover` (ZABAGED, BDOO,
@@ -963,6 +985,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wersji, w CLI `(plik identyczny z <etykieta>)`).
 
 ### Naprawione
+
+- Komunikaty przegladu UX 0.8.0: nieznana flaga zglaszana przez komende
+  (jej `usage`) z lista komend, ktore ja maja, i podpowiedzia typowych
+  pomylek (`landcover --product` -> `--source`, `soil download --product`
+  -> `--property`, `hydro --sheet`); `--bbox -447000,...` po spacji dziala
+  bez `=`; brak wyboru wymienia wybory produktu w kraju zadania (HY-NET CZ
+  bez `--teryt`/`--ku`/`--sheet`, osnowy z wartosciami `--network`, CORINE
+  i SoilGrids `--sheet, --bbox albo --geometry`); flagi zamiast kluczy
+  rejestru (`--sheet-system`, `--keep-raw`, `--teryt`) i nazwa produktu
+  w "nie dotyczy"; zrodla CZ `landcover` z godlem PL i `--teryt` 2 cyfr
+  BDOT10k z podpowiedzia; `--layers` bez wzgledu na wielkosc liter;
+  systemy godel jako `PL-1992`/`SM5`; poprawna odmiana liczebnikow ("2
+  pliki", "dla 1 arkusza", "Pobieranie kafli LAZ"); blad "brak obiektow
+  w obszarze" podaje obszar zadania w ukladzie uzytkownika.
 
 - Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
   `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca

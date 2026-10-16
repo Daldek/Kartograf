@@ -8,12 +8,24 @@ shared by the groups live in ``kartograf/cli/_args.py``.
 """
 
 import argparse
+import re
 import sys
 from collections.abc import Sequence
 from typing import Any, NoReturn
 
 from kartograf._version import build_version
 from kartograf.cli.groups import register_groups
+
+
+class _Parser(argparse.ArgumentParser):
+    """``ArgumentParser`` without prefix abbreviations of long flags: a command
+    line keeps its meaning when a group gains a flag (``--stat`` is never read
+    as ``--stats``, ``--lay`` is no ambiguous prefix). Every subparser of the
+    CLI is of this class (``add_subparsers`` uses the class of its parser)."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        kwargs.setdefault("allow_abbrev", False)
+        super().__init__(*args, **kwargs)
 
 
 class _LazyVersionAction(argparse.Action):
@@ -82,6 +94,118 @@ def removed_command_error(argv: Sequence[str]) -> str | None:
     return None
 
 
+# ``--bbox -447000,...``: argparse takes a value starting with "-" after a
+# space for a flag; four comma-separated numbers are always a --bbox value.
+_BBOX_VALUE = re.compile(r"-?[0-9]+(\.[0-9]+)?(,-?[0-9]+(\.[0-9]+)?){3}")
+# Usual mix-ups of a command with a flag of another group: the hint replaces
+# the list of the commands having the flag.
+_UNKNOWN_HINTS = {
+    ("kartograf landcover download", "--product"): "landcover wybiera zrodlo "
+    "flaga --source, np. --source bdot10k; lista: kartograf landcover list-sources",
+    ("kartograf landcover download", "--country"): "kraj wynika z --source "
+    "(np. zabaged, data50, data250 = CZ)",
+    ("kartograf soil download", "--product"): "warstwe SoilGrids wybieraja "
+    "--property, --depth i --stat; lista: kartograf soil list-layers",
+    ("kartograf hydro download", "--sheet"): "obszar CZ: --bbox (np. z --bbox-crs "
+    "EPSG:5514) albo --geometry",
+}
+
+
+def _join_bbox_values(argv: Sequence[str]) -> list[str]:
+    """``--bbox -447000,...`` -> ``--bbox=-447000,...`` (negative coordinates,
+    e.g. S-JTSK, after a space)."""
+    joined: list[str] = []
+    i = 0
+    while i < len(argv):
+        if (
+            argv[i] == "--bbox"
+            and i + 1 < len(argv)
+            and _BBOX_VALUE.fullmatch(argv[i + 1])
+        ):
+            joined.append(f"--bbox={argv[i + 1]}")
+            i += 2
+            continue
+        joined.append(argv[i])
+        i += 1
+    return joined
+
+
+def _subparsers(parser: argparse.ArgumentParser) -> argparse._SubParsersAction | None:
+    return next(
+        (a for a in parser._actions if isinstance(a, argparse._SubParsersAction)),
+        None,
+    )
+
+
+def _command_parser(
+    root: argparse.ArgumentParser, parsed: argparse.Namespace
+) -> argparse.ArgumentParser:
+    """The parser of the command of a parsed line (``kartograf elevation
+    download``); the group or the root parser of a line without one."""
+    current = root
+    group = getattr(parsed, "command", None)
+    names = (group, getattr(parsed, f"{group}_command", None) if group else None)
+    for name in names:
+        action = _subparsers(current)
+        if name is None or action is None or name not in action.choices:
+            break
+        current = action.choices[name]
+    return current
+
+
+def _flag_owners(root: argparse.ArgumentParser, flag: str) -> str:
+    """The commands having ``flag``: ``boundaries, cadastre download; soil hsg``."""
+    by_command: dict[str, list[str]] = {}
+    top = _subparsers(root)
+    assert top is not None
+    for group, group_parser in top.choices.items():
+        commands = _subparsers(group_parser)
+        parsers = (
+            commands.choices.items() if commands is not None else [("", group_parser)]
+        )
+        for command, command_parser in parsers:
+            if flag in command_parser._option_string_actions:
+                by_command.setdefault(command, []).append(group)
+    return "; ".join(
+        f"{', '.join(groups)} {command}".strip()
+        for command, groups in by_command.items()
+    )
+
+
+def _unknown_text(
+    root: argparse.ArgumentParser, command: argparse.ArgumentParser, extras: list[str]
+) -> str:
+    """The input error of arguments a command does not have."""
+    options = f"Opcje: {command.prog} --help"
+    first = extras[0]
+    flag = first.partition("=")[0]
+    if not flag.startswith("-"):
+        return f"nieznany argument {first}. {options}"
+    hint = _UNKNOWN_HINTS.get((command.prog, flag))
+    if hint is None:
+        owners = _flag_owners(root, flag)
+        hint = f"maja ja: {owners}" if owners else None
+    return f"nieznana opcja {flag}" + (f" ({hint})" if hint else "") + f". {options}"
+
+
+def parse_command_line(
+    parser: argparse.ArgumentParser, argv: Sequence[str]
+) -> argparse.Namespace:
+    """``parser.parse_args(argv)`` with readable input errors (exit code 2).
+
+    ``--bbox`` with negative coordinates after a space is joined with its
+    value; an unknown flag is reported by the parser of the command (its
+    usage) with the commands that have it, or a hint for the usual mix-ups
+    (``landcover download --product``, ``soil download --product``, ...).
+    ``kartograf`` and ``project add`` parse data command lines with it.
+    """
+    parsed, extras = parser.parse_known_args(_join_bbox_values(argv))
+    if extras:
+        command = _command_parser(parser, parsed)
+        command.error(_unknown_text(parser, command, extras))
+    return parsed
+
+
 def create_parser() -> argparse.ArgumentParser:
     """
     Create and configure the argument parser.
@@ -91,7 +215,7 @@ def create_parser() -> argparse.ArgumentParser:
     argparse.ArgumentParser
         Configured argument parser
     """
-    parser = argparse.ArgumentParser(
+    parser = _Parser(
         prog="kartograf",
         description=(
             "Pobieranie danych przestrzennych z GUGiK (PL), CUZK (CZ), Copernicus "

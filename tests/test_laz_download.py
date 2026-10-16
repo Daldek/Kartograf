@@ -747,7 +747,7 @@ class TestDownloadLazArea:
         assert notice.level == "info" and notice.code == LAZ_SUPERSEDED
         lines = notice.text.split("\n")
         assert lines[0] == (
-            "pominieto 2 kafli LAZ - obszar pokrywaja nowsze kafle (domyslnie "
+            "pominieto 2 kafle LAZ - obszar pokrywaja nowsze kafle (domyslnie "
             "najnowszy rocznik per obszar; inny rocznik: --year/--min-year/--max-year)"
         )
         assert (
@@ -807,8 +807,6 @@ def _cli(tmp_path, *args, area: str = "w2"):
                 "./data",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
                 "--vertical-crs",
                 "pl=EVRF2007,cz=Bpv",
                 *args,
@@ -833,7 +831,7 @@ class TestCliOnRealWfs:
             "83230_1743191_N-34-139-A-c-1-1-3-4.laz"
         ]
         # Info on stderr despite -q; full list of skipped tiles with the covering tile
-        assert "Info: pominieto 2 kafli LAZ" in err
+        assert "Info: pominieto 2 kafle LAZ" in err
         assert (
             "7.173.21.06.2 (2022, PL-2000:S7): pokryty przez "
             "N-34-139-A-c-1-1-3-4 (2025, PL-1992)"

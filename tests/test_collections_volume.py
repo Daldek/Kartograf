@@ -117,7 +117,7 @@ def test_more_files_than_the_limit_refused_before_any_transfer(tmp_path, router)
         _download(tmp_path, bbox=SQUARE_50)
 
     text = str(refused.value)
-    assert text.startswith("e5volume: obszar daje 144 plikow do pobrania, ")
+    assert text.startswith("e5volume: obszar daje 144 pliki do pobrania, ")
     assert "szacunkowo ok. 8,6 GB (sredni rozmiar 5 z 144 plikow wg HEAD)" in text
     assert f"limit jednego zadania to {VOLUME_FILES} plikow i 10 GB" in text
     assert "Zawez obszar (--bbox, --sheet, --geometry)" in text
