@@ -38,7 +38,7 @@ from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.notices import SHEET_LIST, Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.skorowidz_wfs import sheet_frame_2180
-from kartograf.sources.variants import variants
+from kartograf.sources.variants import UNKNOWN_VERTICAL, variants
 from tests.conftest import (
     render_wfs_body,
     wfs_fixture,
@@ -635,7 +635,7 @@ _SCALE_ERROR = (
                 "vertical_crs": "KRON86",
             },
             "PL nie ma rozdzielczosci 0.5m dla NMT XYZ - dostepne: EVRF2007: 1m, 5m; "
-            "KRON86: 1m",
+            "KRON86: 1m; uklad wysokosci nieznany: 100m",
         ),
         (
             ["--product", "laz", "--sheet", f"{SHEET}-1", "--format", "TBD"]
@@ -686,7 +686,8 @@ def test_format_for_orto_is_validation_error(tmp_path):
 
 
 def test_xyz_resolution_error_lists_the_registry(tmp_path):
-    """The labels offered for ``--format XYZ`` are those of the registry."""
+    """The labels offered for ``--format XYZ`` are those of the registry
+    (with the voivodeship files NMT 100 m, whose height system is unknown)."""
     prefix = "PL nie ma rozdzielczosci 0.5m dla NMT XYZ - dostepne: "
     with pytest.raises(ValidationError) as caught:
         download_data(
@@ -708,7 +709,9 @@ def test_xyz_resolution_error_lists_the_registry(tmp_path):
     }
     found = variants(product="nmt", country="PL", format="XYZ")
     registry = {
-        vertical_crs: {v.label for v in found if v.vertical_crs == vertical_crs}
+        vertical_crs or UNKNOWN_VERTICAL: {
+            v.label for v in found if v.vertical_crs == vertical_crs
+        }
         for vertical_crs in {v.vertical_crs for v in found}
     }
     assert listed == registry

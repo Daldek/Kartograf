@@ -358,7 +358,8 @@ class CollectionPart:
     ``sheet`` the requested sheet code of a sheet channel (the series sheets
     of its extent, or the CUZK sheet itself); ``year_filter`` the year of the
     index records of a ``tile``/``sheet`` channel (the newest record of a
-    unit without it); ``parent`` the ``extra.parent_request`` of its files.
+    unit without it); ``parent`` the ``extra.parent_request`` of its files;
+    ``extra`` more ``extra`` of their sidecars (``vertical_crs_note``).
     """
 
     country: str
@@ -373,6 +374,7 @@ class CollectionPart:
     parent: dict | None = None
     sheet: str | None = None
     year_filter: int | None = None
+    extra: dict = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -1129,10 +1131,12 @@ class UnitJob:
     its size announced before the transfer); ``record``: the index record
     of a sheet or tile (URL, version label with signal ``index``, the
     sidecar ``extra.source``); ``layers`` + ``bbox``: the objects of an
-    area; ``atom`` = the national file of a CUZK ATOM feed in the CRS
-    ``atom_crs`` (its URL and edition come from the feed at run time).
-    ``request`` is the sidecar ``request`` (the user's choice in this
-    unit), ``parent`` its ``extra.parent_request``.
+    area; ``atom`` = a file of an ATOM feed: the dataset ``atom_key`` (a
+    voivodeship TERYT code; ``""`` = the only dataset, the national file) in
+    the CRS ``atom_crs`` (its URL and edition come from the feed at run
+    time). ``request`` is the sidecar ``request`` (the user's choice in
+    this unit), ``parent`` its ``extra.parent_request``, ``extra`` more
+    ``extra`` of the sidecar.
     """
 
     descriptor: SourceDescriptor
@@ -1149,7 +1153,9 @@ class UnitJob:
     whole_country: bool = False
     atom: bool = False
     atom_crs: str | None = None
+    atom_key: str = ""
     record: IndexRecord | None = None
+    extra: dict = field(default_factory=dict)
 
     @property
     def key(self) -> _SLOT_KEY:
@@ -1277,6 +1283,91 @@ def _atom_job(output_dir: Path, part: CollectionPart) -> UnitJob:
         atom=True,
         atom_crs=crs if isinstance(crs, str) else None,
     )
+
+
+def _voivodeship_jobs(
+    out: Path,
+    part: CollectionPart,
+    product: str,
+    sink: NoticeSink,
+    metadata: MetadataCache | None,
+) -> list[UnitJob]:
+    """The files of the voivodeships of an area from an ATOM feed keyed by
+    ``woj`` (the first two digits of the powiats of the area, PRG)."""
+    params = part.channel.params
+    assert isinstance(params, AtomFilesParams) and part.area is not None
+    if "woj" not in re.compile(params.entry_pattern).groupindex:
+        raise ValueError(f"{part.descriptor.key}: obszar kanalu ATOM wymaga grupy woj")
+    teryts = discover_teryts_for_bbox(
+        part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
+    )
+    codes = sorted({teryt[:2] for teryt in teryts})
+    if not codes:
+        raise NoCoverageError(
+            f"{product}: obszar nie przecina zadnego wojewodztwa (PRG)"
+        )
+    named = ", ".join(f"{code} ({WOJEWODZTWO_NAMES.get(code, '?')})" for code in codes)
+    sink.emit(
+        "info",
+        UNIT_LIST,
+        f"{product}: wojewodztwa obszaru wg PRG ({len(codes)}): {named}",
+    )
+    return [
+        UnitJob(
+            descriptor=part.descriptor,
+            channel=part.channel,
+            country=part.country,
+            unit=code,
+            slot=unit_slot(out, part.segment, part.ext, teryt=code),
+            request={"teryt": code, **part.choice},
+            parent=part.parent,
+            atom=True,
+            atom_key=code,
+            extra=part.extra,
+        )
+        for code in codes
+    ]
+
+
+def atom_area_request(
+    descriptor_key: str,
+    *,
+    product: str,
+    output_dir: Path,
+    area: BBox,
+    parent: dict | None,
+    choice: dict,
+    extra: dict,
+) -> CollectionRequest:
+    """The request of the voivodeship files of an area from the ATOM channel
+    of ``descriptor_key`` (``download_data``: NMT 100 m, plan E1; no network).
+
+    ``area`` in any supported CRS, ``parent`` = ``extra.parent_request`` of
+    the files, ``choice`` = the content values of their sidecar ``request``,
+    ``extra`` = more ``extra`` of their sidecars. The files land in
+    ``<storage_subdir>/teryt/<woj><ext>`` (track ``collection``).
+    """
+    descriptor = get_source(descriptor_key)
+    channel = next(
+        c for c in descriptor.channels if isinstance(c.params, AtomFilesParams)
+    )
+    assert isinstance(channel.params, AtomFilesParams)
+    part = CollectionPart(
+        country=descriptor.country,
+        descriptor=descriptor,
+        channel=channel,
+        variant=None,
+        layers=(),
+        segment=content_segment(
+            descriptor_key, atom_segment_tokens(channel.params, None)
+        ),
+        ext=".zip",
+        choice=dict(choice),
+        area=area,
+        parent=parent,
+        extra=dict(extra),
+    )
+    return CollectionRequest(product, Path(output_dir), None, False, (part,))
 
 
 def _record_job(
@@ -1530,8 +1621,9 @@ def _ku_jobs(
 def _jobs(
     request: CollectionRequest, sink: NoticeSink, metadata: MetadataCache | None
 ) -> list[UnitJob]:
-    """Unit jobs of a request; the units of an area come from PRG (powiats),
-    the sheet grid or index, the tile index or RUIAN."""
+    """Unit jobs of a request; the units of an area come from PRG (powiats,
+    voivodeships of an ATOM feed), the sheet grid or index, the tile index
+    or RUIAN."""
     out = request.output_dir
     jobs: list[UnitJob] = []
     for part in request.parts:
@@ -1540,7 +1632,12 @@ def _jobs(
             continue
         params = part.channel.params
         if isinstance(params, AtomFilesParams):
-            jobs.append(_atom_job(out, part))
+            if request.whole_country:
+                jobs.append(_atom_job(out, part))
+            else:
+                jobs.extend(
+                    _voivodeship_jobs(out, part, request.product, sink, metadata)
+                )
             continue
         assert isinstance(params, UnitPackageParams) and part.variant is not None
         if params.unit == "sheet":
@@ -1640,7 +1737,7 @@ def _atom_file(
         lambda: resolve_atom_file(
             _http(session),
             params,
-            key="",
+            key=job.atom_key,
             crs=job.atom_crs,
             cache=cache,
             refresh=refresh,
@@ -1795,21 +1892,37 @@ def _fetch_atom(
     session: requests.Session,
     timeout: int,
 ) -> dict:
-    """The national file of an ATOM feed: its size from the feed before the
-    transfer (K7), the ZIP 1:1."""
-    sink.emit(
-        "warning",
-        WHOLE_COUNTRY_SIZE,
-        f"{subject(job.descriptor)} {job.country}: plik krajowy {file.url} - "
-        f"{_size_text(file.length)}",
-    )
+    """A file of an ATOM feed, the ZIP 1:1: the size from the feed before
+    the transfer - always for the national file (``WHOLE_COUNTRY_SIZE``,
+    K7), above ``LARGE_FILE_BYTES`` for a voivodeship file
+    (``DOWNLOAD_SIZE``, K9)."""
+    what = subject(job.descriptor)
+    if job.whole_country:
+        sink.emit(
+            "warning",
+            WHOLE_COUNTRY_SIZE,
+            f"{what} {job.country}: plik krajowy {file.url} - "
+            f"{_size_text(file.length)}",
+        )
+    elif file.length is not None and file.length > LARGE_FILE_BYTES:
+        sink.emit(
+            "warning",
+            DOWNLOAD_SIZE,
+            f"{what} {job.country} {job.unit}: duzy plik {file.url} - "
+            f"{_size_text(file.length)}",
+        )
     http = fetch_atom_file(session, file, staged, timeout=timeout)
-    source.value = {
+    params = job.channel.params
+    assert isinstance(params, AtomFilesParams)
+    value: dict = {
         "url": file.url,
+        "service_feed": params.service_feed,
         "dataset_feed": file.dataset_feed,
-        "edition": file.edition,
-        "updated": file.updated,
     }
+    if job.atom_key:
+        value["dataset"] = job.atom_key
+    value.update(edition=file.edition, updated=file.updated, length=file.length)
+    source.value = value
     return http
 
 
@@ -1883,9 +1996,10 @@ def run_job(
     result by the download date; the sidecar names the channel by its
     capability and carries ``extra.source``
     (``url``/``edition``/``member``/``index``/``layer``/``record``,
-    ``url``/``dataset_feed``/``edition``/``updated`` or
-    ``service``/``layers``/``dropped_fields``), ``extra.http`` of a file and
-    ``extra.parent_request``; a tile record declaring its CRS (``uklad_xy``)
+    ``url``/``service_feed``/``dataset_feed``/``dataset``/``edition``/
+    ``updated``/``length`` or ``service``/``layers``/``dropped_fields``),
+    ``extra.http`` of a file, ``extra.parent_request`` and the job's
+    ``extra``; a tile record declaring its CRS (``uklad_xy``)
     names it as the CRS of the file. ``session``: HTTP session of the
     requests (``LandCoverManager``: its provider's; ``None``: one per thread
     of this module); ``timeout``: seconds of one request (``None``:
@@ -1932,7 +2046,7 @@ def run_job(
     def write(
         data: Path, ref: VersionRef, digest: ContentDigest, http: dict | None
     ) -> None:
-        extra: dict = {"source": source.value}
+        extra: dict = {"source": source.value, **job.extra}
         if http:
             extra["http"] = http
         if job.parent:

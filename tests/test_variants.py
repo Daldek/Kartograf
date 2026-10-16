@@ -45,8 +45,10 @@ _EK = ("EVRF2007", "KRON86")
 
 # Product contract from the WFS inventory 2026-10-15 (plan A, decisions 3 and
 # 13): every ASC grid and every archive format the GUGiK indexes publish on
-# sheets of the PL-1992/PL-2000 systems, with their height systems.
-_PL_INVENTORY_TABLE: list[tuple[str, str, str | None, tuple[str, ...]]] = [
+# sheets of the PL-1992/PL-2000 systems, with their height systems; plus the
+# voivodeship files of the ATOM feed NMT 100 m (plan E1), whose height system
+# GUGiK does not declare (decision P1: None).
+_PL_INVENTORY_TABLE: list[tuple[str, str, str | None, tuple[str | None, ...]]] = [
     # ASC grids
     ("nmt", "ASC", "0.15m", _E),
     ("nmt", "ASC", "0.5m", _EK),
@@ -82,6 +84,8 @@ _PL_INVENTORY_TABLE: list[tuple[str, str, str | None, tuple[str, ...]]] = [
     ("nmpt", "XYZ", "1m", _K),
     # point clouds (tiles, no resolution)
     ("laz", "LAZ", None, _EK),
+    # voivodeship files of the ATOM feed (no sheet index, no height system)
+    ("nmt", "XYZ", "100m", (None,)),
 ]
 
 PL_INVENTORY = {
@@ -134,14 +138,21 @@ def test_variant_source_is_descriptor(variant):
     assert variant in descriptor.variants
     sheets = next(c for c in descriptor.channels if c.transport == variant.channel)
     options = sheets.vertical_crs_options
-    assert resolve_vertical_crs(variant.vertical_crs, options) in options
+    if variant.vertical_crs is None:  # no height system: the channel declares none
+        assert options == ()
+        assert variant.vertical_note
+    else:
+        assert resolve_vertical_crs(variant.vertical_crs, options) in options
 
 
 def test_index_ref_is_one_service_per_product_and_height_system():
     refs = defaultdict(set)
     for v in PL_VARIANTS:
+        if v.index_ref is None:  # the ATOM voivodeship files: no sheet index
+            assert v.channel == TransportKind.DIRECT_FILES
+            assert not v.source_file  # its format is the product format
+            continue
         assert v.channel == TransportKind.WFS
-        assert v.index_ref is not None
         refs[(v.product, v.vertical_crs)].add(v.index_ref)
     assert set(refs) == {
         (product, vcrs) for product in ("nmt", "nmpt", "laz") for vcrs in _EK
@@ -238,7 +249,11 @@ def test_variants_filters_combine():
         "pl.gugik.nmpt_xyz_0_5m",
         "pl.gugik.nmpt_xyz_1m",
     }
-    assert variants(country="PL", system="2000") == PL_VARIANTS
+    # every sheet variant may have PL-2000 sheets; the voivodeship files are
+    # PL-1992 only
+    assert variants(country="PL", system="2000") == tuple(
+        v for v in PL_VARIANTS if v.index_ref is not None
+    )
     assert variants(country="PL", system="sm5") == ()
 
 
@@ -285,7 +300,10 @@ def test_find_variant_unique_choice(
     assert v.format == (fmt or ("LAZ" if product == "laz" else "ASC"))
 
 
-_NMT_LABELS = "EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m"
+_NMT_LABELS = (
+    "EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m; "
+    "uklad wysokosci nieznany: 100m"
+)
 _NMPT_LABELS = "EVRF2007: 0.5m, 0.6m, 1m; KRON86: 0.5m, 1m"
 
 

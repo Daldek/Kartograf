@@ -73,6 +73,7 @@ from kartograf.download.options import (
     cz_option_error,
     cz_orto_option_error,
     is_source_file_request,
+    pl_file_variant,
     pl_option_error,
     pl_target_scale,
     reject_campaign_opts_with_cutout,
@@ -503,6 +504,13 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
                 return _download_cz_laz(task, run)
             return _download_cz(task, run)
         parsed = SheetParser(task.sheet)
+        if pl_file_variant(task) is not None:
+            return _download_pl_files(
+                task,
+                run,
+                parsed.get_bbox(crs="EPSG:2180"),
+                {"sheet": parsed.sheet, "countries": ["PL"]},
+            )
         resolve_pl_options(
             task, code_system=parsed.sheet_system, code_scale=parsed.scale
         )
@@ -916,7 +924,10 @@ def _result_paths(result: DownloadResult) -> list[Path]:
 def _download_pl_bbox(
     task: SimpleNamespace, run: _Run, bbox: BBox, parent_request: dict
 ) -> int:
-    """PL part of a bbox request: a cutout (``cutout``) or a sheet list."""
+    """PL part of a bbox request: a cutout (``cutout``), a sheet list or the
+    voivodeship files of a file variant."""
+    if pl_file_variant(task) is not None:
+        return _download_pl_files(task, run, bbox, parent_request)
     resolve_pl_options(task)
     if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
@@ -948,10 +959,13 @@ def _download_pl_geometry(
     parent_request: dict,
     bbox: BBox,
 ) -> int:
-    """PL part of a geometry request: sheets per feature, or a cutout of the
-    (clipped) envelope with ``cutout``."""
+    """PL part of a geometry request: sheets per feature, a cutout of the
+    (clipped) envelope with ``cutout``, or the voivodeship files of a file
+    variant for that envelope."""
     from kartograf.core.geometry import find_sheets_for_geometry
 
+    if pl_file_variant(task) is not None:
+        return _download_pl_files(task, run, bbox, parent_request)
     resolve_pl_options(task)
     if task.cutout:
         return _download_pl_cutout(task, run, bbox, parent_request)
@@ -1085,6 +1099,62 @@ def _download_pl_archive(
         except DownloadError as e:
             return run.fail("PL", "PL", str(e), "download")
     return _finish_pl_sheets(task, run, result)
+
+
+def _download_pl_files(
+    task: SimpleNamespace, run: _Run, area: BBox, parent_request: dict
+) -> int:
+    """PL voivodeship files of an ATOM feed (NMT 100 m, ADR-043 D10).
+
+    The voivodeships of the area (``area`` in any CRS; a sheet: its extent)
+    come from PRG; each file goes to ``<segment>/teryt/<woj>.zip`` on the
+    plan track ``collection`` with the edition of its dataset feed (signal
+    ``metadata``). Flags of the sheet tracks were rejected by
+    ``validate_request``.
+    """
+    from kartograf.download.collections import (
+        atom_area_request,
+        plan_request,
+        run_request,
+    )
+
+    variant = pl_file_variant(task)
+    assert variant is not None
+    if run.dry:
+        return 0
+    request = atom_area_request(
+        variant.source,
+        product=task.product,
+        output_dir=task.output_dir,
+        area=area,
+        parent=parent_request,
+        choice={"resolution": variant.label},
+        extra=(
+            {"vertical_crs_note": variant.vertical_note}
+            if variant.vertical_note
+            else {}
+        ),
+    )
+    try:
+        if run.check:
+            run.plans.append(plan_request(request, cache=run.cache, sink=run.sink))
+            return 0
+        files, failed, stale = run_request(
+            request,
+            update=run.update,
+            plan=run.loaded,
+            workers=run.workers,
+            cache=run.cache,
+            sink=run.sink,
+        )
+    except NoCoverageError as e:
+        return run.fail("PL", "PL", str(e), "no_coverage")
+    except DownloadError as e:
+        return run.fail("PL", "PL", str(e), "download")
+    # run_request emitted the file notices already
+    run.files.extend(files)
+    run.failed.extend(failed)
+    return max(run.add_stale(stale), 1 if failed else 0)
 
 
 def _finish_pl_sheets(task: SimpleNamespace, run: _Run, result: DownloadResult) -> int:

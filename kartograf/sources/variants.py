@@ -16,6 +16,12 @@ the GUGiK file formats of the index (``ASC`` grids and the archive formats
 downloaded as source files) and the variant error messages. Pure data and
 pure functions, no IO.
 
+A PL variant without a sheet index (``index_ref=None``: NMT 100 m, the
+voivodeship files of an ATOM feed, plan E) has one format - its product
+format, no ``--format`` choice - and may have no height system
+(``vertical_crs=None``: the source does not declare one, decision P1 of
+2026-10-15; no ``--vertical-crs``).
+
 CZ variants (plan B, ADR-041 supplement) are the rows of the route table:
 one per (product, resolution or model, height system, sheet system ``sm5``
 /``tm33``) with the channel serving it - the CUZK file (``DIRECT_FILES``)
@@ -174,6 +180,8 @@ CZ_LAZ_VERTICAL_TEXT = (
     "Bpv (arkusze SM5, S-JTSK) albo EVRF2007 (kafle TM33, ETRS89); chmury "
     "punktow bez transformacji"
 )
+# Name of the missing height system of a variant in messages (P1).
+UNKNOWN_VERTICAL = "uklad wysokosci nieznany"
 
 
 @dataclass(frozen=True)
@@ -185,21 +193,26 @@ class ProductVariant:
     of the registry), CZ ``("sm5",)`` or ``("tm33",)`` (one row of the route
     table per sheet system). ``channel``: the transport of the file - PL the
     WFS index, CZ ``DIRECT_FILES`` (CUZK file) or ``ARCGIS_IMAGE`` (the
-    ImageServer warped onto the TM33 grid). ``index_ref`` = the WFS index of
-    the records (PL); ``None`` for variants without one. ``model``: the CUZK
+    ImageServer warped onto the TM33 grid), PL ``DIRECT_FILES`` for the
+    voivodeship files of an ATOM feed. ``index_ref`` = the WFS index of the
+    records (PL); ``None`` for variants without one. ``model``: the CUZK
     model (``dmr5g``, ``dmr4g``, ``dmp1g``, ``dmpok``); ``None`` in PL.
+    ``vertical_crs=None``: the source declares no height system (NMT 100 m,
+    P1); ``vertical_note`` says so in the sidecar
+    (``extra.vertical_crs_note``).
     """
 
     source: str  # descriptor key = sidecar `dataset` ("pl.gugik.nmt_0_5m")
     product: str  # "nmt" | "nmpt" | "laz"
     country: str  # "PL" | "CZ"
     resolution_m: Decimal | None  # None: LAZ, TIN/TTN (no resolution in the index)
-    vertical_crs: str  # CLI name: "EVRF2007" | "KRON86" | "Bpv"
+    vertical_crs: str | None  # CLI name: "EVRF2007" | "KRON86" | "Bpv"; None: unknown
     format: str  # FileFormat.token: "ASC", "XYZ", ... ; LAZ: "LAZ"; CZ: "TIFF"
     systems: tuple[str, ...]
     channel: TransportKind
     index_ref: IndexRef | None
     model: str | None = None
+    vertical_note: str | None = None
 
     @property
     def label(self) -> str | None:
@@ -210,9 +223,12 @@ class ProductVariant:
 
     @property
     def source_file(self) -> bool:
-        """Archive format: the file is kept as published (no cutout)."""
+        """An archive of the sheet index (``--format`` required): the file is
+        kept as published (no cutout, no mosaic). A variant without a sheet
+        index (ATOM voivodeship files) has one format - its product format -
+        even when it is an archive format of the index (XYZ ZIP)."""
         known = _BY_TOKEN.get(self.format)
-        return known is not None and known.source_file
+        return known is not None and known.source_file and self.index_ref is not None
 
 
 def resolution_label(value: Decimal) -> str:
@@ -300,23 +316,35 @@ def _sorted_labels(found: tuple[ProductVariant, ...]) -> list[str]:
     return [resolution_label(value) for value in values]
 
 
+def _system_name(vertical_crs: str | None) -> str:
+    return UNKNOWN_VERTICAL if vertical_crs is None else vertical_crs
+
+
+def _named_systems(found: tuple[ProductVariant, ...]) -> list[str]:
+    """Height systems of the variants a ``--vertical-crs`` can name, sorted
+    (a variant without one takes no flag)."""
+    return sorted({v.vertical_crs for v in found if v.vertical_crs is not None})
+
+
 def labels_by_vertical_crs(found: tuple[ProductVariant, ...]) -> str:
     """``EVRF2007: 0.5m, 1m; KRON86: 1m`` - labels of the variants per height
-    system (registry order of the systems)."""
-    groups: dict[str, list[ProductVariant]] = {}
+    system (registry order of the systems; variants without one under
+    ``UNKNOWN_VERTICAL``)."""
+    groups: dict[str | None, list[ProductVariant]] = {}
     for variant in found:
         groups.setdefault(variant.vertical_crs, []).append(variant)
     parts = []
     for vertical_crs, group in groups.items():
         labels = _sorted_labels(tuple(group))
         parts.append(
-            f"{vertical_crs}: {', '.join(labels) if labels else 'bez rozdzielczosci'}"
+            f"{_system_name(vertical_crs)}: "
+            f"{', '.join(labels) if labels else 'bez rozdzielczosci'}"
         )
     return "; ".join(parts)
 
 
 def _primary(found: tuple[ProductVariant, ...]) -> tuple[ProductVariant, ...]:
-    """Variants in the product format (no archive)."""
+    """Variants in the product format (no archive of the sheet index)."""
     return tuple(v for v in found if not v.source_file)
 
 
@@ -364,9 +392,14 @@ def variant_error(
     else:
         in_crs = tuple(v for v in chosen if v.vertical_crs == vertical_crs)
         if not in_crs:
-            systems = sorted({v.vertical_crs for v in chosen})
+            named = _named_systems(chosen)
+            if not named:
+                return (
+                    f"{shown} ({country}): {UNKNOWN_VERTICAL} (zrodlo go nie "
+                    "deklaruje) - pomin --vertical-crs"
+                )
             return (
-                f"{shown} ({country}) jest dostepny tylko w {', '.join(systems)} - "
+                f"{shown} ({country}) jest dostepny tylko w {', '.join(named)} - "
                 f"podano --vertical-crs {vertical_crs}"
             )
     labels = _sorted_labels(in_crs)
@@ -386,10 +419,16 @@ def variant_error(
         return None
     everywhere = _sorted_labels(chosen)
     if resolution in everywhere:
-        systems = sorted({v.vertical_crs for v in chosen if v.label == resolution})
+        of_label = tuple(v for v in chosen if v.label == resolution)
+        named = _named_systems(of_label)
+        if not named:
+            return (
+                f"{shown} {resolution} ({country}): {UNKNOWN_VERTICAL} (zrodlo go "
+                "nie deklaruje) - pomin --vertical-crs"
+            )
         return (
             f"{shown} {resolution} ({country}) jest dostepny tylko w "
-            f"{', '.join(systems)} - podano --vertical-crs {vertical_crs}; "
+            f"{', '.join(named)} - podano --vertical-crs {vertical_crs}; "
             f"dostepne w {vertical_crs}: {', '.join(labels)}"
         )
     return (
@@ -403,13 +442,14 @@ def find_variant(
     product: str,
     country: str,
     resolution: str | None,
-    vertical_crs: str,
+    vertical_crs: str | None,
     format: str | None = None,
 ) -> ProductVariant:
     """The one variant of a choice; ``ValidationError`` with ``variant_error``.
 
     ``resolution=None`` selects the only variant of the format and height
-    system (``GRD``: 5m, ``TIN``: none); ``format=None`` = product format.
+    system (``GRD``: 5m, ``TIN``: none); ``format=None`` = product format;
+    ``vertical_crs=None`` = a variant without a height system (NMT 100 m).
     """
     error = variant_error(
         product=product,
@@ -420,14 +460,20 @@ def find_variant(
     )
     if error is not None:
         raise ValidationError(error)
-    found = variants(product=product, country=country, vertical_crs=vertical_crs)
-    candidates = (
-        _primary(found)
-        if format is None
-        else tuple(v for v in found if v.format == format)
+    found = variants(product=product, country=country)
+    candidates = tuple(
+        v
+        for v in (_primary(found) if format is None else found)
+        if v.vertical_crs == vertical_crs
+        and (format is None or v.format == format)
+        and (resolution is None or v.label == resolution)
     )
-    if resolution is not None:
-        candidates = tuple(v for v in candidates if v.label == resolution)
+    if not candidates:
+        name = _PRODUCT_NAMES.get(product, product.upper())
+        raise ValidationError(
+            f"--vertical-crs wymagane dla {name} {country}: "
+            f"{', '.join(_named_systems(found))}"
+        )
     return candidates[0]
 
 
@@ -587,7 +633,7 @@ def cz_laz_error(
             f"{CZ_LAZ_VERTICAL_TEXT}"
         )
     if system is not None and not any(system in v.systems for v in chosen):
-        native = sorted({v.vertical_crs for v in rows if system in v.systems})
+        native = _named_systems(tuple(v for v in rows if system in v.systems))
         other = chosen[0].systems[0]
         shown, _example = _CZ_SYSTEM_TEXT[system]
         alternative, example = _CZ_SYSTEM_TEXT[other]
