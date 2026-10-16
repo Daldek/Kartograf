@@ -287,6 +287,10 @@ provider.download_bbox(bbox, Path("./area.tif"), format="GTiff")
 ```bash
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf imagery download --bbox 771000,509000,772000,510000 --product orto --country pl --sheet-system 1992 -o ./data
+# wycinek WCS w magazynie (0.8.0, ADR-042 D14): wariant i piksel jawnie, tylko EPSG:2180
+kartograf imagery download --bbox 566000,243000,566500,243500 --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
+# ortofoto CZ (0.8.0, ADR-042 D13): arkusz SM5 = JPEG + 3 pliki JGW, aktualny rocznik
+kartograf imagery download --sheet CTES96 --product orto -o ./data
 ```
 
 ---
@@ -587,8 +591,10 @@ kartograf soil hsg --sheet N-34-130-D -o ./data --depth 0-5cm --check-updates --
 Pobieranie czeskiego modelu terenu z CUZK: DMR 5G (2 m, godło TM33 — obliczalna
 siatka kafli 2x2 km w EPSG:3045) i DMR 4G (5 m, godło SM5 z indeksu arkuszy
 `KladyMapovychListu`, EPSG:5514), a także wycinek bbox/geometrii przez
-`exportImage` (ArcGIS ImageServer). Etap 1 obejmuje wyłącznie `nmt`;
-DMP, ortofoto, LAZ i ZABAGED dla CZ to etapy 2–3 (`docs/SCOPE.md` 3.1).
+`exportImage` (ArcGIS ImageServer). Ortofoto CZ (arkusze SM5 z ATOM),
+ZABAGED, RUIAN i HY-NET doszły w 0.8.0 (plan D, `docs/SCOPE.md` 2.4
+i 2.14, `docs/USAGE.md` 1.4 i 1.9); DMP i LAZ dla CZ to etap 2
+(`docs/SCOPE.md` 3.1).
 
 #### Requirements
 - `--country {pl,cz,auto}` (wymagane z `--bbox`/`--geometry` od 0.8.0; z `--sheet` kraj z godła): kraj z formatu godła albo
@@ -1272,8 +1278,9 @@ mypy >= 1.13           # Type checking
 - [x] Czechy, etap 1: DMR 5G/4G z CUZK, `--country` (0.7.0)
 - [x] Kampanie GUGiK `--campaigns`/`--min-year` (0.7.0)
 
-### Etap 2/3 (CZ) i dalej — szczegóły w `docs/SCOPE.md` 3.1
-- [ ] CZ: DMP (odpowiednik NMPT), ortofoto, LAZ; ZABAGED (etap 3)
+### Etap 2 (CZ) i dalej — szczegóły w `docs/SCOPE.md` 3.1
+- [x] CZ: ortofoto (arkusze SM5), ZABAGED, RUIAN, HY-NET (0.8.0, plan D)
+- [ ] CZ: DMP (odpowiednik NMPT), LAZ
 - [ ] Wielokąt granicy kraju zamiast prostokątnej obwiedni (`--country auto`)
 - [ ] Scalanie wycinków PL+CZ w jedną powierzchnię przygraniczną (R6)
 - [ ] Wycinek PL `--cutout` z arkuszy PL-2000

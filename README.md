@@ -2,9 +2,10 @@
 
 Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
 (Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
-geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT PL
-(`--cutout --horizontal-crs`) — także granice, ewidencję i modele 3D
-budynków GUGiK — i zapisuje je w uporządkowanym katalogu `data/`
+geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT
+i ortofotomapy PL (`--cutout --horizontal-crs`) — także granice, ewidencję
+i modele 3D budynków GUGiK oraz dane wektorowe CUZK (ZABAGED, RUIAN, HY-NET)
+— i zapisuje je w uporządkowanym katalogu `data/`
 razem z metadanymi każdego pliku. Działa
 jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
@@ -18,13 +19,17 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **NMT (PL)** — Numeryczny Model Terenu z GUGiK: siatki 0,15–10 m (np. 0,5 m, 1 m, 5 m) i archiwa GUGiK jako pliki źródłowe
 - **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
 - **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK (0,5 m, 0,6 m, 1 m)
-- **Ortofotomapa** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm)
+- **Ortofotomapa (PL)** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm): arkusze albo wycinek WCS Standard/High z wyborem piksela
+- **Ortofoto (CZ)** — arkusze SM5 CUZK (JPEG z plikami georeferencji JGW, aktualny rocznik)
 - **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
 - **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
 - **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu
 - **Granice administracyjne (PRG)** — granice jednostek administracyjnych i ewidencyjnych z GUGiK
 - **EGiB** — mapa ewidencyjna z GUGiK (działki i budynki)
 - **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
+- **ZABAGED (CZ)** — 22 warstwy pokrycia terenu i wód CUZK (obszar) albo plik krajowy GPKG
+- **Granice RUIAN (CZ)** — kraje, okresy, obce i katastralni uzemi z CUZK
+- **HY-NET (CZ)** — sieć hydrograficzna CUZK (odcinki cieków i węzły; plik krajowy)
 - **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
 - **SoilGrids** — globalne dane glebowe (ISRIC)
 - **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
@@ -51,6 +56,7 @@ kartograf parse N-34-130-D-d-2-4
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet M-34-64-D-d-2-1 --product nmpt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
+kartograf imagery download --sheet CTES96 --product orto -o ./data   # ortofoto CZ (SM5)
 
 # Jakie lata, rozdzielczości i formaty mają komplet arkuszy dla obszaru (bez pobierania)
 kartograf elevation availability --product nmt --country pl --bbox 565000,242000,569000,246000
@@ -61,6 +67,12 @@ kartograf elevation download --geometry zlewnia.gpkg --layer catchments --produc
 
 # Jeden wycinek obszaru zamiast arkuszy (PL: WCS GUGiK 1 m, CZ: CUZK)
 kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --product nmt --vertical-crs EVRF2007 --cutout --horizontal-crs EPSG:2180 -o ./data
+kartograf imagery download --bbox 566000,243000,566500,243500 --country pl --product orto --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
+
+# Dane CZ (CUZK): ZABAGED, granice RUIAN, sieć wód HY-NET (współrzędne EPSG:5514 jako --bbox=...)
+kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
+kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
+kartograf hydro download --product network --country cz --whole-country -o ./data
 
 # NMT Czech
 kartograf elevation download --sheet 302_5550 --country cz --product nmt --resolution 2m --vertical-crs Bpv -o ./data

@@ -1,8 +1,8 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.25
-**Data:** 2026-10-15
+**Wersja:** 3.26
+**Data:** 2026-10-16
 **Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu; ostatnie wydanie v0.7.2, 2026-10-11)
 
 ---
@@ -146,9 +146,9 @@ dokładnie jeden arkusz. Nieznana wartość `sheet_system=` to `ValidationError`
 # Licencja: CC BY 4.0
 ```
 
-**Poza zakresem etapu 1 (planowane — etap 2/3):** DMP (Digitalni model
-povrchu, odpowiednik NMPT), Ortofoto CZ, LAZ/LIDAR CZ (etap 2); ZABAGED
-(wektorowa baza topograficzna, odpowiednik BDOT10k, 149 warstw — etap 3).
+**Poza zakresem etapu 1 (planowane — etap 2):** DMP (Digitalni model
+povrchu, odpowiednik NMPT), LAZ/LIDAR CZ. Ortofoto CZ, ZABAGED, RUIAN
+i HY-NET są w zakresie 0.8.0 (plan D, sekcja 2.14).
 Wielokąt granicy administracyjnej (zamiast prostokątnej obwiedni kraju) —
 patrz sekcja 3.2, znane ograniczenie.
 
@@ -186,9 +186,18 @@ patrz sekcja 3.2, znane ograniczenie.
   GetCapabilities/GetFeatureInfo; `GugikOrtoProvider(color="CIR")` wybiera
   wariant podczerwieni
 - Obsługa formatów WCS: GTiff, PNG, JPEG
+- Wycinek w magazynie (0.8.0, ADR-042 D14): `imagery download --product orto
+  --country pl --bbox|--geometry --cutout --horizontal-crs EPSG:2180
+  --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` -> jeden GeoTIFF
+  RGB `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif` (WCS Standard/High,
+  siatka 0,1 m, kawałki 200 x 200 m, bez przepróbkowania i maski lądu;
+  `download_orto_cutout`/`check_orto_cutout`)
+- Ortofoto CZ (0.8.0, ADR-042 D13): `--country cz` (arkusz SM5 albo obszar)
+  -> JPEG + `.jgw`/`.TM33N.jgw`/`.TM34N.jgw` z ATOM CUZK 1:1 w
+  `orto/cz_sjtsk/`, tylko aktualny rocznik (`download_cz_orto_sheet`)
 
-# Źródło: GUGiK
-# API: WCS, WMS GetFeatureInfo, OpenData
+# Źródło: GUGiK (PL), CUZK (CZ)
+# API: WCS, WMS GetFeatureInfo, OpenData; ATOM CUZK
 ```
 
 ### 2.5 LAZ (Chmury Punktów LIDAR) - IN SCOPE
@@ -311,6 +320,11 @@ kartograf elevation download --bbox ... --product laz --year 2024 --min-density 
 kartograf elevation download --bbox min_x,min_y,max_x,max_y --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT dla bbox
 kartograf elevation download --bbox ... --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data # NMT w ukladzie PL-2000 (arkusze 1:2000)
 kartograf imagery download --bbox ... --product orto --country pl --sheet-system 1992 -o ./data # ortofoto dla bbox
+kartograf imagery download --bbox ... --product orto --country pl --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data # wycinek WCS
+kartograf imagery download --sheet CTES96 --product orto -o ./data # ortofoto CZ (arkusz SM5: JPEG + 3 JGW)
+kartograf landcover download --source zabaged --bbox=... --bbox-crs EPSG:5514 -o ./data # ZABAGED (22 warstwy, EPSG:5514); --whole-country --horizontal-crs EPSG:5514|EPSG:3045
+kartograf boundaries download --product admin --country cz --level obec --bbox=... --bbox-crs EPSG:5514 -o ./data # RUIAN; auto: --level pl=gmina,cz=obec
+kartograf hydro download --product network --country cz --bbox=... --bbox-crs EPSG:5514 -o ./data # HY-NET; --whole-country (EPSG:3045)
 kartograf elevation download --geometry area.shp --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data # NMT z pliku geometrii
 kartograf elevation download --geometry area.gpkg --layer catchments --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf elevation download --sheet <godlo> --resolution 5m --product nmt --vertical-crs EVRF2007 -o ./data # NMT 5m
@@ -369,8 +383,11 @@ from kartograf import (
     transform_bbox, parent_request_for,
     # Download (command level: `kartograf elevation download` / `imagery download`, spec 4.1)
     download_data, check_data, DataReport, UnitFile, UnitFailure,
-    # Download (collections: `boundaries`/`cadastre`/`models3d download`, ADR-042)
+    # Download (collections: `boundaries`/`cadastre`/`models3d`/`hydro download`, ADR-042)
     download_collection, check_collection, CollectionReport,
+    # Download (orthophoto: CZ SM5 sheet, PL WCS cutout; ADR-042 D13-D14)
+    download_cz_orto_sheet, check_cz_orto_sheet, CzOrtoResult,
+    download_orto_cutout, check_orto_cutout, OrtoCutoutResult,
     # Availability report (`kartograf elevation availability`, ADR-041)
     check_availability, AvailabilityReport, AvailabilityCombination,
     AvailabilityArea,
@@ -554,7 +571,7 @@ from kartograf import (
   (poziom, LoD, rok) wymagany, gdy źródło publikuje więcej niż jeden —
   brak wartości domyślnych wpływających na dane
 - --country pl|cz|auto wymagane z --bbox/--geometry, z --teryt tylko pl;
-  dziś wyłącznie PL (CZ dla tych grup: plan D)
+  CZ: granice RUIAN i grupa hydro (sekcja 2.14), cadastre i models3d tylko PL
 - --check-updates | --upgrade | --force, --plan, --workers (domyślnie 1), -q;
   pozycje zadań projektu (`kartograf project add <nazwa> boundaries download ...`)
 - sygnał aktualności none (GUGiK nie podaje ETag/Last-Modified, wynik WFS
@@ -569,6 +586,37 @@ from kartograf import (
 # API: WFS 2.0 (obiekty obszaru), OpenData (paczki ZIP jednostek)
 ```
 
+### 2.14 Dane CZ: ZABAGED, RUIAN, HY-NET (CUZK, ADR-042 D15-D17) - IN SCOPE
+
+```python
+# Wspólne: obszar (--bbox/--geometry, --country cz albo auto) = jeden GPKG
+# obiektów przecinających obszar w EPSG:5514 (pełne geometrie); plik krajowy
+# tylko z --whole-country, ZIP CUZK 1:1, rozmiar w Warning przed transferem;
+# godło jako obszar i --teryt tylko PL. Silnik plików z feedu ATOM:
+# transport/atom.py (atom_files, indeks feedu w cache z ETag).
+
+# ZABAGED — `landcover download --source zabaged` (cz.cuzk.zabaged):
+- obszar -> landcover/cz_zabaged/bbox/<coords>.gpkg: 22 warstwy pokrycia
+  terenu i wód (REST ZABAGED_POLOHOPIS; kody = nazwy ASCII warstw usługi),
+  bez przeliczania klas na kody BDOT10k; lista: landcover list-layers --source zabaged
+- --whole-country --horizontal-crs EPSG:5514|EPSG:3045 -> plik krajowy GPKG
+  z feedu ATOM (5,8/6,7 GB) w landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip;
+  warstwy pełnej bazy pod nazwami CUZK (inne niż wynik obszaru); sygnał metadata
+
+# RUIAN — `boundaries download --product admin --country cz|auto` (cz.cuzk.ruian):
+- --level kraj|okres|obec|katastralni-uzemi -> boundaries/cz_ruian_<poziom>/bbox/;
+  pod auto poziom per kraj (--level pl=gmina,cz=obec) -> pliki PRG i RUIAN
+- --whole-country --country cz -> boundaries/cz_ruian_shp/country/cz.zip (SHP, http)
+
+# HY-NET — grupa `hydro`, `download --product network --country cz` (cz.cuzk.hy_net):
+- obszar -> hydro/cz_hynet/bbox/<coords>.gpkg: WatercourseLink i HydroNode
+  (WatercourseSeparatedCrossing bez geometrii i z hits 0 - tylko plik krajowy)
+- --whole-country -> hydro/cz_hynet_gpkg/country/cz.zip (GPKG w EPSG:3045, http)
+
+# Źródło: CUZK (CC BY 4.0)
+# API: ArcGIS REST (ZABAGED, RUIAN), WFS 2.0 GeoServer (HY-NET), ATOM, openzu
+```
+
 ---
 
 ## 3. Out of Scope - Wersja 0.8.0
@@ -578,7 +626,7 @@ from kartograf import (
 ```python
 # Etap 2 (CZ, po etapie 1):
 - DMP (Digitalni model povrchu) — odpowiednik NMPT
-- Ortofoto CZ, LAZ/LIDAR CZ
+- LAZ/LIDAR CZ
 - Wielokąt granicy administracyjnej CZ zamiast prostokątnej obwiedni
   (CountryProfile.extent_wgs84) — usuwa fałszywe zapytania do CUZK dla
   bboxów leżących w całości w Polsce (patrz 3.2)
@@ -599,8 +647,9 @@ from kartograf import (
   wydania (nie weszło do 0.7.1; ADR-030 errata 6)
 - Kampanie dla CZ (CUZK nie publikuje historii) — backlog po 0.7.0
 
-# Etap 3 (CZ):
-- ZABAGED — wektorowa baza topograficzna (149 warstw), odpowiednik BDOT10k
+# Dane CZ poza zakresem 0.8.0 (plan D):
+- Archiwalne ortofoto CUZK (płatne) — tylko aktualny rocznik arkusza
+- Wycinek ortofotomapy w innym układzie niż EPSG:2180 (bez przepróbkowania)
 
 # Kolekcje GUGiK (ADR-042) — poza zakresem:
 - Paczka wojewódzka EGiB (ok. 1,4 GB): `cadastre --teryt <2 cyfry>` = błąd
@@ -688,7 +737,8 @@ from kartograf import (
   odczyt i zapisuje świeży wpis (w CZ tak samo dla indeksu arkuszy SM5)
 
 # CZ (CUZK, etap 1) — dodatkowe ograniczenia:
-- Produkt CZ w etapie 1: wyłącznie nmt (DMR 5G/4G) — nmpt/orto/laz w etapie 2
+- Produkty CZ: nmt (DMR 5G/4G), orto (arkusze SM5, tylko aktualny rocznik),
+  ZABAGED, RUIAN, HY-NET (plan D); nmpt/laz CZ — etap 2
 - exportImage: sufity usługi 15000x4100 px, praktyczny limit ~8 Mpx;
   klient kafelkuje według budżetu 4 Mpx na żądanie, snap NW daje piksel
   dokładnie 2 m/5 m, a krawędź E/S może różnić się o <= 1/2 px
@@ -765,7 +815,8 @@ from kartograf import (
 - PRG `--teryt <4 cyfry>` = błąd (PRG publikuje paczki wojewódzkie; obszar
   powiatu przez --bbox/--geometry); EGiB `--teryt <2 cyfry>` = błąd
   z podpowiedzią `--teryt <4 cyfry>`; `models3d --whole-country` = błąd
-- Dziś tylko PL: `--country cz` dla tych grup = błąd (CZ: plan D)
+- `cadastre` i `models3d` tylko PL (`--country cz` = błąd); RUIAN
+  (`boundaries`) i HY-NET (`hydro`): sekcja 2.14
 - LoD2 (jedyne wydanie 2017) nie pokrywa kraju: brak paczki powiatu = błąd
   tego powiatu
 - Strony WFS GUGiK: kilka sekund na stronę 1000 obiektów (na żywo
@@ -911,7 +962,9 @@ kartograf/
 │   ├── data.py               # download_data/check_data = `kartograf elevation download` / `imagery download` (ADR-037)
 │   ├── options.py            # Walidacja wyborów zadania (teksty jak w --help; warianty z rejestru)
 │   ├── availability.py       # Raport dostępności: check_availability, AvailabilityReport (ADR-041)
-│   ├── collections.py        # download_collection/check_collection = `boundaries`/`cadastre`/`models3d download` (ADR-042)
+│   ├── collections.py        # download_collection/check_collection = `boundaries`/`cadastre`/`models3d`/`hydro download` (ADR-042)
+│   ├── cz_orto.py            # Ortofoto CZ: download_cz_orto_sheet/check_cz_orto_sheet (ADR-042 D13)
+│   ├── orto_cutout.py        # Wycinek ortofotomapy PL WCS: download_orto_cutout/check_orto_cutout (ADR-042 D14)
 │   ├── area.py               # Obszar: bbox_to_2180, geometria, parent_request, przycięcie auto
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── countries.py          # Podział obszaru na kraje (countries_for_bbox, split_bbox_by_country)
@@ -937,14 +990,14 @@ kartograf/
 └── cli/                   # CLI: tylko tłumaczenie flag i wypisanie wyniku (ADR-037)
     ├── _parser.py             # argparse — parser główny (parse, cache, błąd usuniętych komend)
     ├── _args.py               # wspólne flagi (obszar, tryby aktualizacji, --quiet)
-    ├── groups/                # grupy komend wg typu danych (ADR-039): elevation, imagery, landcover, soil, boundaries, cadastre, models3d
+    ├── groups/                # grupy komend wg typu danych (ADR-039): elevation, imagery, landcover, soil, boundaries, cadastre, models3d, hydro
     │                          #   (jeden moduł = jedna grupa z register(); wykrywane automatycznie)
     │                          #   _collection.py: wspólny kształt download/list-sources grup kolekcji (add_collection_commands)
     ├── parse_cmd.py           # `kartograf parse`
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
     ├── availability_cmd.py    # `elevation availability` -> check_availability (tabela, --details, --json)
     ├── landcover_cmd.py       # `landcover download` -> LandCoverManager
-    ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d download` -> download_collection/check_collection
+    ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d`/`hydro download` -> download_collection/check_collection
     ├── soil_cmd.py            # `soil download`, `soil hsg`
     ├── cache_cmd.py           # `kartograf cache`
     └── commands.py            # Fasada zgodności — re-eksport + entry point `main`
@@ -1061,9 +1114,10 @@ pyogrio >= 0.10        # GDAL wektorowy: zapis GPKG wyników obszaru kolekcji (A
 | 2026-10-13 | 3.23 | Podprojekt 3: odwołanie do inwentaryzacji GUGiK/ČÚZK i zaakceptowanego specu (kolejność planów A–E) |
 | 2026-10-15 | 3.24 | Plan A (ADR-041): rejestr wariantów NMT/NMPT (siatki 0.15–10 m, NMPT z `--resolution`), archiwa GUGiK jako pliki źródłowe (`--format`), skorowidz WFS, raport dostępności `elevation availability`/`check_availability` (2.1, 2.3, 2.9, 2.10, 3.2, 3.3, 4.1, 6.1) |
 | 2026-10-15 | 3.25 | Plan C podprojektu 3 (ADR-042): granice PRG, EGiB i modele 3D budynków (grupy `boundaries`, `cadastre`, `models3d`, sekcja 2.13), archiwum roczników BDOT10k (2.6), `download_collection`/`check_collection`, układ segmentów kolekcji (2.11), ograniczenia (3.1, 3.2), moduły i `pyogrio` (4), źródła (5) |
+| 2026-10-16 | 3.26 | Plan D (ADR-042 D12-D17): ortofoto CZ i wycinek ortofotomapy PL (2.4), dane CZ ZABAGED, RUIAN, HY-NET i grupa `hydro` (2.14), CLI i API (2.9, 2.10), ograniczenia (3.1, 3.2), moduły (4.1) |
 
 ---
 
-**Wersja dokumentu:** 3.25
-**Data ostatniej aktualizacji:** 2026-10-15
+**Wersja dokumentu:** 3.26
+**Data ostatniej aktualizacji:** 2026-10-16
 **Status:** Kod v0.8.0-dev (ostatnie wydanie v0.7.2, 2026-10-11)
