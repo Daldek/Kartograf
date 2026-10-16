@@ -672,13 +672,15 @@ def _channel_for(
     kind: str,
     teryt: str | None,
     options: Mapping[str, str | None],
+    countries: tuple[str, ...] = (),
 ) -> AccessChannel:
     """The channel of a kind of selection (ADR-042 D2); of several, the one
     whose option values (``network``, ``format``, ...) admit the given ones
     (ADR-043: one WFS service per network, one ATOM feed per format); a value
     only another selection offers names that selection. A single candidate
     is returned as it is - its content checks name the allowed values
-    (``_content``)."""
+    (``_content``). ``countries``: the countries of an area request (the
+    values of each in a message)."""
     candidates, missing = _candidates(descriptor, kind, teryt)
     if not candidates:
         raise ValidationError(f"{missing}; dostepne: {_available(descriptor)}")
@@ -703,6 +705,7 @@ def _channel_for(
                 raise ValidationError(
                     f"--{key} {value}: niedostepne dla {where}; dostepne: "
                     f"{', '.join(values)}"
+                    f"{_option_hint(descriptor, key, countries)}"
                 )
         chosen = " ".join(f"--{key} {value}" for key, value in given.items())
         raise ValidationError(f"{chosen}: niedostepne razem dla {where}")
@@ -722,8 +725,34 @@ def _channel_for(
                 )
                 raise ValidationError(
                     f"--{key} wymagane dla {where}: {', '.join(values)}"
+                    f"{_option_hint(descriptor, key, countries)}"
                 )
     return admitted[0]
+
+
+def _option_hint(
+    descriptor: SourceDescriptor, key: str, countries: tuple[str, ...]
+) -> str:
+    """Hint of a request in PL and CZ (the message names the values of the
+    country of ``descriptor``): one value of the option ``key`` applies to
+    every country - the values of the other countries and those of all."""
+    if len(countries) < 2:
+        return ""
+    values = collection_choice_values(descriptor.product, key)
+    others = "; ".join(
+        f"{code}: {', '.join(values.get(code, ()))}"
+        for code in countries
+        if code != descriptor.country
+    )
+    common = [
+        value
+        for value in values.get(countries[0], ())
+        if all(value in values.get(code, ()) for code in countries[1:])
+    ]
+    return (
+        f" (zadanie PL+CZ: jedna wartosc dla obu krajow - {others}; wspolne: "
+        f"{', '.join(common) or 'brak'})"
+    )
 
 
 def _level_hint(level: str | Mapping[str, str] | None, product: str) -> str:
@@ -946,7 +975,8 @@ def _feature_content(
                 f"--level nie dotyczy produktu {product} (wybor: --{selector} "
                 f"{', '.join(codes)})"
             )
-        value, hint, unknown = given.get(selector), "", f"niedostepne dla {where}"
+        value, unknown = given.get(selector), f"niedostepne dla {where}"
+        hint = _option_hint(descriptor, selector, countries)
     if value is None:
         raise ValidationError(
             f"--{selector} wymagane dla {where}: {', '.join(codes)}{hint}"
@@ -1087,7 +1117,7 @@ def _resolve(
                 f"--product {product} jest dostepny tylko dla "
                 f"{', '.join(sorted(descriptors))}"
             )
-        channel = _channel_for(descriptor, area_kind, teryt, options)
+        channel = _channel_for(descriptor, area_kind, teryt, options, countries)
         return _content(code, descriptor, channel, countries=countries, **content)
 
     if kind == "teryt":
