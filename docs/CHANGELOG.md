@@ -978,6 +978,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   EPSG:2180, `select_all_intersecting(tolerance_m=)`. `Info:` o pominietych
   kaflach wymienia tylko kafle pokryte przez nowsze; kafle spoza obszaru
   zostaja w `superseded` z powodem `outside`.
+- `--check-updates` (oraz `check_data`, `check_*`, `LandCoverManager.check`)
+  zawsze pyta zrodlo: cache metadanych jest otwierany w trybie
+  odswiezania (odczyt pominiety, wpisy zapisane od nowa) w kazdym torze.
+  Dotad arkusze PL (NMT/NMPT/orto), archiwa, pliki NMT 100 m, kolekcje,
+  LAZ CZ, arkusze CZ i land cover odpowiadaly z cache (TTL 7 dni) - takze
+  offline `aktualne`, a nowy lot opublikowany w tym czasie byl niewidoczny
+  (test na zywo 2026-10-16). Bez sieci sprawdzenie konczy sie teraz
+  `Error:`. Domyslne pobieranie i `--upgrade` czytaja cache jak dotad.
 - Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
   `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca
   `^[A-Z]{4}[0-9]{2}$`), wiec `--sheet AS91` (DMR 4G) konczyl sie bledem

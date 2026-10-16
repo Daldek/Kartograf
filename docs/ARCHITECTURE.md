@@ -1429,9 +1429,11 @@ zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
 CLI i biblioteka uzywaja tego samego cache (Z6, ADR-037): parametr
 `cache: MetadataCache | bool = True` funkcji publicznych (`True` =
 `<cwd>/.kartograf_cache.db` przez `cache/defaults.py::open_cache`, `False` =
-bez cache); `update="force"` (CLI `--force`) otwiera go w trybie
-`MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
-(E14); `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa: `force`
+bez cache); `update="force"` (CLI `--force`) i kazde sprawdzenie
+(`check_*`, `check_data`, CLI `--check-updates` - zawsze pyta zrodlo)
+otwieraja go w trybie `MetadataCache(refresh=True)` — odczyt pominiety,
+swiezy rekord zapisany (E14); domyslne pobieranie i `--upgrade` czytaja
+cache w TTL. `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa: `force`
 odswieza tylko cache otwierany przez funkcje (parametr `cache`, provider
 tworzony przez nia albo po nazwie); provider przekazany jako instancja
 (`DownloadManager`, `LandCoverManager`, `download_laz_area(provider=)`)
@@ -2937,9 +2939,9 @@ albo date wydania (`WRTO24.<rok>.<arkusz>.zip`,
 usuwane z drzewa) do `klucz -> AtomEntry`: `entry_pattern` szukany w id
 feedu zbioru, grupa `sheet` = klucz (bez niej feed ma jeden zbior,
 klucz `""`). Indeks lezy w `MetadataCache` (`atom_cache`) z `ETag`
-feedu: w TTL (7 dni) bez zapytania, starszy albo `refresh` (`--upgrade`,
-`--check-updates`) - warunkowy GET `If-None-Match` (304 = bez zmian);
-`--force` (cache w trybie odswiezania) czyta feed od nowa.
+feedu: w TTL (7 dni) bez zapytania, starszy albo `refresh` (`--upgrade`):
+warunkowy GET `If-None-Match` (304 = bez zmian); `--force`
+i `--check-updates` (cache w trybie odswiezania) czytaja feed od nowa.
 `resolve_atom_file` czyta feed zbioru zawsze swiezo (maly, niesie
 wydanie) i wybiera plik po kategorii ukladu (`check_atom_crs` - bez
 sieci); klucz brakujacy w indeksie z cache albo 404 feedu zbioru = JEDNO
