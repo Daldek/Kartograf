@@ -137,7 +137,10 @@ def test_exit_codes(capsys):
         # --force: the empty answer of the run above is in the cache
         code, out, err = _run(capsys, ["--country", "pl", *KRAKOW, "--force"], failing)
     assert code == 1 and out == ""
-    assert err.startswith("Error: ") and "wynik bylby niepelny" in err
+    # retries are Warning lines; the result is one Error line, the last
+    *retries, error = err.splitlines()
+    assert all(line.startswith("Warning: ") for line in retries)
+    assert error.startswith("Error: ") and "wynik bylby niepelny" in error
 
     code, _, err = _run(capsys, KRAKOW, RecordedIndex())
     assert code == 1

@@ -989,6 +989,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dokumentacja: USAGE 7 - orto ukosna Krakow 2021 ma w GeoTIFF wlasny opis
   ukladu bez kodu EPSG (GDAL zgaduje EPSG:32634); uklad pliku to EPSG:2178
   jak w sidecarze, z obejsciem bez zmiany pliku.
+- CLI (test na zywo 2026-10-16): `kartograf` i `<grupa>` bez komendy
+  wypisuja pomoc na stderr z kodem 2 (dotad 0 - skrypt z pomylka
+  "przechodzil"); Ctrl-C konczy sie `Error: przerwano (Ctrl-C)` i kodem 130
+  zamiast tracebacku; `--check-updates --plan` do nieistniejacego katalogu
+  = `Error:` przed siecia (dotad po calym sprawdzeniu zrodla); bez plikow
+  (awaria WFS LAZ) brak podsumowania `Nowe: 0, ..., bledy: 0` przeczacego
+  linii `Error:`; ponowienia zapytan HTTP to linie `Warning:` z krotka
+  przyczyna (`HTTP 503`, `przekroczony czas odpowiedzi`, `brak sieci albo
+  DNS`, `zerwane albo odrzucone polaczenie`) zamiast surowego wyjatku
+  urllib3 (ok. 500 znakow); pelny wyjatek w lancuchu przyczyn
+  (`KARTOGRAF_DEBUG=1`).
 - Godla SM5 z dwiema literami (99 arkuszy As, `AS22`...`AS94`):
   `detect_system("AS91")` zwracal uklad PL-1992 (fallback wzorca
   `^[A-Z]{4}[0-9]{2}$`), wiec `--sheet AS91` (DMR 4G) konczyl sie bledem
