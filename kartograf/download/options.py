@@ -145,10 +145,11 @@ BBOX_CRS_CHOICES = (
 CZ_ONLY_NMT = "--product {product} dla CZ bedzie dostepny w etapie 2 - teraz tylko nmt"
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
 _PRODUCTS = tuple(_PRODUCT_TEXT)
-_COUNTRIES = ("pl", "cz", "auto")
+# Keys of a per-country value (``pl=1m,cz=2m``) and the ``--country`` values
+# of a data request (also the CLI choices).
+COUNTRY_KEYS = ("pl", "cz")
+COUNTRIES = (*COUNTRY_KEYS, "auto")
 _SHEET_SYSTEMS = ("1992", "2000")
-
-_COUNTRY_KEYS = ("pl", "cz")
 
 PerCountry = str | Mapping[str, str] | None
 
@@ -172,7 +173,7 @@ def check_per_country(raw: PerCountry, flag: str) -> None:
         keys = [k.strip().lower() for k in raw if isinstance(k, str)]
         valid = (
             len(keys) == len(raw)
-            and all(k in _COUNTRY_KEYS for k in keys)
+            and all(k in COUNTRY_KEYS for k in keys)
             and len(set(keys)) == len(keys)
             and all(isinstance(v, str) and v.strip() for v in raw.values())
         )
@@ -533,7 +534,7 @@ def validate_request(task: SimpleNamespace) -> None:
         raise ValidationError(
             f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
         )
-    if task.country is not None and task.country not in _COUNTRIES:
+    if task.country is not None and task.country not in COUNTRIES:
         raise ValidationError(
             f"--country {task.country!r}: nieznana wartosc - dostepne: "
             f"{COUNTRY_CHOICES}"

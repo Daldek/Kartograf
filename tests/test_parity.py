@@ -18,13 +18,17 @@ campaigns (all, ``min_year``, full sheet)  test_campaign_options
 PL cutout ``cutout`` + ``horizontal_crs``  test_pl_cutout
 CZ sheet TM33 / SM5                        test_cz_sheet / test_cz_sm5_sheet
 CZ cutout                                  test_cz_cutout
+CZ orthophoto SM5 sheet (4 files)          test_cz_orto_sheet
+orthophoto cutout (``coverage``)           test_orto_cutout
+CZ orthophoto check + plan + upgrade       test_cz_orto_check_plan_upgrade
 ``auto`` PL+CZ, partial success            test_auto_partial_success
 ``auto`` narrowed to PL                    test_auto_narrowed_to_pl
 LAZ sheet / bbox EPSG:4326 + min_density   test_laz_sheet / test_laz_bbox_4326_mi...
 check + plan + upgrade with plan           test_check_plan_upgrade
 upgrade with a stale plan                  test_upgrade_with_stale_plan
 input errors (missing / bad / outside)     test_input_errors_same_type_and_text
-BDOT10k, CORINE, SoilGrids, HSG            tests/test_parity_landcover.py
+BDOT10k, CORINE, SoilGrids, HSG, ZABAGED   tests/test_parity_landcover.py
+PRG, RUIAN, HY-NET, EGiB, 3D models        tests/test_parity_collections.py
 availability report ``--json``            test_availability_json
 =========================================  ==========================================
 """
@@ -39,8 +43,10 @@ import requests
 
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
+from kartograf.download import cz_orto
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.data import check_data, download_data
+from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED
 from kartograf.providers.pl.gugik import GugikProvider
@@ -48,11 +54,19 @@ from tests.conftest import RecordedIndex, wfs_endpoint, wfs_fixture, wfs_respons
 from tests.parity import assert_notices_printed, assert_same_store, run_both
 from tests.test_cli import _cz_provider_mock
 from tests.test_cli_update_modes import LazCliProvider
+from tests.test_cz_orto import FakeCuzk, _members
 from tests.test_geometry import _write_prj
 from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
+from tests.test_orto_cutout import ARGS as ORTO_CUTOUT
+from tests.test_orto_cutout import KRAKOW
+from tests.test_orto_cutout import SESSION_FACTORY as ORTO_WCS_SESSION
+from tests.test_orto_cutout import _session as orto_wcs_session
 
 G = "N-34-139-C-a-3-1"
 CZ_FACTORY = "kartograf.providers.cuzk.create_dmr_provider"
+CZ_ORTO = {"product": "orto", "country": "cz", "sheet": "CTES96"}
+CZ_ORTO_ARGS = ["imagery", "download", "--product", "orto", "--country", "cz"]
+CZ_ORTO_ARGS += ["--sheet", "CTES96"]
 
 
 def _same(run, report, *, statuses: list[str] | None = None) -> None:
@@ -720,6 +734,93 @@ def test_cz_sm5_sheet(tmp_path):
             tmp_path,
         )
     _same(run, run.api_result, statuses=["new"])
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_cz_orto_sheet(tmp_path, monkeypatch):
+    """``imagery download --country cz --sheet CTES96`` = ``download_data``:
+    the JPEG and the three world files of the SM5 sheet (ATOM feed)."""
+    fake = FakeCuzk()
+    monkeypatch.setattr(cz_orto, "_session", lambda: fake)
+    run = run_both(
+        [*CZ_ORTO_ARGS, "-q"],
+        lambda out: download_data(output_dir=out, **CZ_ORTO),
+        tmp_path,
+    )
+    _same(run, run.api_result, statuses=["new"] * 4)
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_orto_cutout(tmp_path):
+    """``imagery download --cutout --coverage --resolution`` =
+    ``download_data(cutout=True, coverage=..., resolution=...)``: one GeoTIFF
+    of the recorded WCS answer (Standard, 0.25 m)."""
+    with patch(ORTO_WCS_SESSION, return_value=orto_wcs_session()):
+        run = run_both(
+            [
+                "imagery",
+                "download",
+                "--product",
+                "orto",
+                "--country",
+                "pl",
+                _bbox_arg(KRAKOW),
+                "--cutout",
+                "--horizontal-crs",
+                ORTO_CUTOUT["horizontal_crs"],
+                "--coverage",
+                ORTO_CUTOUT["coverage"],
+                "--resolution",
+                ORTO_CUTOUT["resolution"],
+                "-q",
+            ],
+            lambda out: download_data(
+                product="orto",
+                output_dir=out,
+                country="pl",
+                bbox=KRAKOW,
+                cutout=True,
+                **ORTO_CUTOUT,
+            ),
+            tmp_path,
+        )
+    _same(run, run.api_result, statuses=["new"])
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_cz_orto_check_plan_upgrade(tmp_path, monkeypatch):
+    """Track ``cz_orto``: a new release of the sheet in the feed gives the
+    same plan (``--check-updates --plan`` = ``check_data``) and the same
+    store after ``--upgrade --plan`` (world files relabeled, a new JPEG)."""
+    fake = FakeCuzk()
+    monkeypatch.setattr(cz_orto, "_session", lambda: fake)
+    first = run_both(
+        [*CZ_ORTO_ARGS, "-q"],
+        lambda out: download_data(output_dir=out, **CZ_ORTO),
+        tmp_path,
+    )
+    _same(first, first.api_result, statuses=["new"] * 4)
+    image = _members("CTES86")[".jpg"]
+    fake.release("CTES96", "2025", "2026-03-02T08:00:00+02:00", image)
+    plan_file = tmp_path / "plan.json"
+    checked = run_both(
+        [*CZ_ORTO_ARGS, "--check-updates", "--plan", str(plan_file)],
+        lambda out: check_data(output_dir=out, **CZ_ORTO),
+        tmp_path,
+    )
+    assert checked.cli_code == 0
+    api_plan = checked.api_result
+    cli_plan = UpdatePlan.from_json(plan_file.read_text(encoding="utf-8"))
+    assert cli_plan.items == api_plan.items
+    assert [(i.track, i.status) for i in api_plan.items] == [("cz_orto", "newer")] * 4
+    upgraded = run_both(
+        [*CZ_ORTO_ARGS, "--upgrade", "--plan", str(plan_file), "-q"],
+        lambda out: download_data(
+            output_dir=out, update="upgrade", plan=api_plan, **CZ_ORTO
+        ),
+        tmp_path,
+    )
+    _same(upgraded, upgraded.api_result, statuses=["relabeled"] * 3 + ["new"])
 
 
 @pytest.mark.usefixtures("frozen_clock")

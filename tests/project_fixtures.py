@@ -4,7 +4,9 @@ Stores are real (``tmp_path``) and written by the real library functions;
 only the sources are fakes of the download tests: PL sheets
 (``FakeCampaignProvider``), LAZ tiles (``FakeProvider`` of the LAZ tests),
 CZ (``_cz_provider_mock``), BDOT10k packages (``FakePackages``), SoilGrids
-(``RasterSoilGrids``, ``FakeSoilGrids``) and CORINE (``FakeCorine``).
+(``RasterSoilGrids``, ``FakeSoilGrids``), CORINE (``FakeCorine``), the CZ
+orthophoto feed (``FakeCuzk`` of ``tests/test_cz_orto.py``) and ZABAGED
+(``serve_zabaged``).
 """
 
 import os
@@ -18,16 +20,19 @@ import pytest
 
 from kartograf import init_project
 from kartograf.core.bbox import BBox
+from kartograf.download import cz_orto
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from tests.fake_packages import FakePackageSession, package_route
 from tests.test_cli import _cz_provider_mock
 from tests.test_collections_products import serve_prg_obreby
+from tests.test_cz_orto import FakeCuzk
 from tests.test_feature_bbox import PRG_BBOX
 from tests.test_landcover_output_params import FakePackages
 from tests.test_laz_download import FakeProvider, _selection, _tile
 from tests.test_manager_campaigns import C14, FakeCampaignProvider
+from tests.test_parity_landcover import ZABAGED_AREA, serve_zabaged
 from tests.test_wcs_cutout import ALL_LAND, MASK, _synthetic_session
 
 # Collections (ADR-042): PRG obreby of a recorded area, 3D models and the
@@ -35,6 +40,10 @@ from tests.test_wcs_cutout import ALL_LAND, MASK, _synthetic_session
 PRG_AREA = {"product": "admin", "country": "pl", "level": "obreb", "bbox": PRG_BBOX}
 BUILDINGS = {"product": "buildings", "teryt": "1261", "lod": 1, "year": 2024}
 BDOT_ARCHIVE = {"source": "bdot10k", "teryt": "1261", "year": 2024, "format": "SHP"}
+# CZ (plan D): the SM5 orthophoto sheet CTES96 (JPEG and three world files)
+# and ZABAGED of a recorded area.
+CZ_ORTO_SHEET = {"product": "orto", "country": "cz", "sheet": "CTES96"}
+ZABAGED = {"source": "zabaged", "bbox": ZABAGED_AREA}
 
 
 @contextmanager
@@ -63,6 +72,23 @@ def collection_sources() -> Iterator[FakePackageSession]:
             staticmethod(lambda name, cache=None: Bdot10kProvider(session=session)),
         )
         yield session
+
+
+@contextmanager
+def cz_orto_feed() -> Iterator[FakeCuzk]:
+    """The CUZK ORTOFOTO feed, dataset feeds and sheet ZIPs (``FakeCuzk``)."""
+    fake = FakeCuzk()
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        monkeypatch.setattr(cz_orto, "_session", lambda: fake)
+        yield fake
+
+
+@contextmanager
+def zabaged_area() -> Iterator[None]:
+    """ZABAGED REST of ``ZABAGED_AREA`` from the recorded answers."""
+    with pytest.MonkeyPatch.context() as monkeypatch:
+        serve_zabaged(monkeypatch)
+        yield
 
 
 G = "N-34-139-C-a-3-1"

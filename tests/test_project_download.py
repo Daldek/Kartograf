@@ -29,20 +29,24 @@ from tests.project_fixtures import (
     BDOT_ARCHIVE,
     BDOT_BBOX,
     BUILDINGS,
+    CZ_ORTO_SHEET,
     HSG_SHEET,
     LAZ_AREA,
     PL_SHEET,
     PRG_AREA,
+    ZABAGED,
     G,
     LazTiles,
     auto_pl_cz,
     bdot,
     collection_sources,
     copy_manifest,
+    cz_orto_feed,
     landcover_sources,
     laz_tiles,
     new_project,
     pl_sheets,
+    zabaged_area,
 )
 from tests.test_cli import _cz_provider_mock
 from tests.test_hsg import RasterSoilGrids
@@ -120,6 +124,9 @@ FIRST = {
         collection_sources,
         ["output"],
     ),
+    # one SM5 sheet = four pinned files: the JPEG and three world files
+    "cz-orto-sheet": ("imagery download", CZ_ORTO_SHEET, cz_orto_feed, ["output"] * 4),
+    "zabaged-area": ("landcover download", ZABAGED, zabaged_area, ["output"]),
 }
 
 

@@ -16,6 +16,7 @@ from kartograf.download.availability import AVAILABILITY_COUNTRIES
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ
 from kartograf.download.options import (
+    COUNTRIES,
     COUNTRY_CHOICES,
     ELEVATION_PRODUCTS,
     SCALE_2000_CHOICES,
@@ -85,15 +86,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "rozwija sie na arkusze zrodla; LAZ: kafle przecinajace arkusz): PL-1992 "
         "(np. N-34-130-D-d-2-4), PL-2000 (np. 6.129.30.25.3), CZ SM5 (np. "
         "CTES96) albo CZ TM33 (np. 302_5550)",
-        bbox_help="Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: "
-        "EPSG:2180; ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: "
-        "--bbox=-447000,...)",
         geometry_help="Plik geometrii obszaru (SHP albo GPKG): arkusze i kafle LAZ "
         "przecinajace obiekty; wycinek (--cutout) - obwiednia geometrii",
     )
     selection.add_argument(
         "--country",
-        choices=["pl", "cz", "auto"],
+        choices=COUNTRIES,
         default=None,
         help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
         f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
