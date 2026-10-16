@@ -319,13 +319,13 @@ def check_cz_sheet(
 ) -> UpdatePlan:
     """Update plan of ``download_cz_sheet`` with the same arguments, no download.
 
-    A file route compares the openzu ZIP's HTTP signal (one HEAD request,
-    sheet index from the metadata cache); an ImageServer tile has no remote
-    signal and reads only the local store. Invalid choices raise the same
-    errors as the download.
+    A file route compares the openzu ZIP's HTTP signal (one HEAD request and
+    the sheet index, both from the source: the metadata cache is refreshed,
+    never read); an ImageServer tile has no remote signal and reads only the
+    local store. Invalid choices raise the same errors as the download.
     """
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
+    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         provider = _sheet_provider(
             sheet,
             product=product,

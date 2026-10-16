@@ -5,9 +5,9 @@
 **Dokumenty referencyjne** (czytaj tylko potrzebne fragmenty): `CLAUDE.md` (sekcje "Uklad data/", "Ograniczenia": `--country auto`, `--target-crs` dla PL, CZ), `docs/ARCHITECTURE.md` (sekcja 3: uklad `data/`, sidecar; 4.3: wycinek PL), `docs/PROGRESS.md` ("Nastepne kroki" pkt 12 — checklista live (a)-(j)). Prostokaty krajow (`sources/registry.py`): PL 14,07-24,20°E / 49,00-54,90°N; CZ 12,09-18,86°E / 48,55-51,06°N (prostokat, nie wielokat granicy).
 
 ## Srodowisko
-- Repo `/home/claude-agent/workspace/Kartograf` jest dla Ciebie **TYLKO DO ODCZYTU**: zadnych zmian w kodzie, testach, dokumentacji; zadnych commitow; `git status` repo ma zostac czysty.
-- CLI: `/home/claude-agent/workspace/Kartograf/.venv/bin/kartograf`; Python: `/home/claude-agent/workspace/Kartograf/.venv/bin/python` (`import kartograf` dziala).
-- Twoj katalog roboczy: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/<ID>/` (gitignored; utworz). **KAZDE polecenie uruchamiaj z tego katalogu** (`cd`), bo cache metadanych `.kartograf_cache.db` powstaje w biezacym katalogu — izolacja od innych agentow dzialajacych rownolegle. Dane: `-o ./data`. Skrypty pomocnicze tez tam.
+- Repo `<workspace>/Kartograf` jest dla Ciebie **TYLKO DO ODCZYTU**: zadnych zmian w kodzie, testach, dokumentacji; zadnych commitow; `git status` repo ma zostac czysty.
+- CLI: `<workspace>/Kartograf/.venv/bin/kartograf`; Python: `<workspace>/Kartograf/.venv/bin/python` (`import kartograf` dziala).
+- Twoj katalog roboczy: `<workspace>/Kartograf/e2e-data/2026-09-29-live/<ID>/` (gitignored; utworz). **KAZDE polecenie uruchamiaj z tego katalogu** (`cd`), bo cache metadanych `.kartograf_cache.db` powstaje w biezacym katalogu — izolacja od innych agentow dzialajacych rownolegle. Dane: `-o ./data`. Skrypty pomocnicze tez tam.
 - `/tmp` to tmpfs (RAM) — nie zapisuj tam rastrow.
 - Siec dziala (skorowidze WMS GUGiK i ArcGIS REST CUZK odpowiadaja).
 
@@ -25,6 +25,6 @@
 6. Oceniaj tez z perspektywy uzytkownika: czy komunikaty i wynik sa zrozumiale; czego brakuje w dokumentacji (fakty zachowania, ktore warto opisac).
 
 ## Raport
-- Pelny raport: `/home/claude-agent/workspace/Kartograf/.superpowers/sdd/2026-09-29-live-e2e-i-docs/<ID>-report.md`. Sekcje: Zakres (obszary z bboxami/godlami i uzasadnieniem wyboru), Wyniki per scenariusz (PASS / FAIL / UWAGA + dowod), Bledy (reprodukcja), Zachowanie do udokumentowania, Odpowiedzi na pozycje checklisty, Surowe artefakty (sciezki).
+- Pelny raport: `<workspace>/Kartograf/.superpowers/sdd/2026-09-29-live-e2e-i-docs/<ID>-report.md`. Sekcje: Zakres (obszary z bboxami/godlami i uzasadnieniem wyboru), Wyniki per scenariusz (PASS / FAIL / UWAGA + dowod), Bledy (reprodukcja), Zachowanie do udokumentowania, Odpowiedzi na pozycje checklisty, Surowe artefakty (sciezki).
 - Odpowiedz kontrolerowi krotko (<= 15 linii): status, liczba scenariuszy PASS/FAIL/UWAGA, najwazniejsze bledy (jedno zdanie kazdy), sciezka raportu.
 - Nie uruchamiaj subagentow.

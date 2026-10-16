@@ -782,7 +782,9 @@ class LandCoverManager:
         the areas of ZABAGED, Data50 and Data250 have no cheap signal
         (``unverifiable``/``missing``). BDOT10k and BDOO by an area ask PRG
         for its units (every powiat or voivodeship is a position).
-        ``keep_raw`` adds the raw ZIP position of the same unit.
+        ``keep_raw`` adds the raw ZIP position of the same unit. The source
+        is always asked: the metadata cache opened here is refreshed, never
+        read (an instance ``MetadataCache`` too: its file, refreshing).
         """
         sink = NoticeSink(on_notice)
         _canonical_options(options)
@@ -794,7 +796,7 @@ class LandCoverManager:
         teryt, sheet, bbox = self._validated(
             teryt, sheet, bbox, geometry, layer, options, sink
         )
-        with self._session(force=False, sink=sink):
+        with self._session(force=True, sink=sink):
             if self._archive(options):
                 teryts = (
                     [teryt]

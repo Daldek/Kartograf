@@ -300,7 +300,7 @@ przy `NoCoverageError`/`DownloadError` (zn. 10 objal tylko `<segment>/bbox/`).
 
 ## 7. Surowe artefakty
 
-Katalog: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L4-pogranicze-cz/`
+Katalog: `<workspace>/Kartograf/e2e-data/2026-09-29-live/L4-pogranicze-cz/`
 - `runs/<scenariusz>/` — cmd, stdout, stderr, rc, time, maxrss (32 przebiegi); `runs/S1c_lib_retry.txt`
 - `data/` (glowne dane i wycinki), `data_w1/` (BUG-L4-3), `data_rac/` (Raciborz)
 - `styk_{cieszyn5m,karkonosze5m,karkonosze1m2m,beskid1m2m,karkonosze_op1622,beskid_op1622}.txt` + `.png`

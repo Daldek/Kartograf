@@ -337,10 +337,10 @@ class TestLandCoverCLI:
         from kartograf.cli.commands import main
 
         result = main(["landcover"])
-        assert result == 0
+        assert result == 2  # a group without its command
         captured = capsys.readouterr()
-        assert "download" in captured.out
-        assert "list-sources" in captured.out
+        assert "download" in captured.err
+        assert "list-sources" in captured.err
 
     def test_landcover_list_sources(self, capsys):
         """Test list-sources command."""

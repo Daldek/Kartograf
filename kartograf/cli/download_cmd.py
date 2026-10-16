@@ -203,8 +203,9 @@ def run_with_plan_file(
     """Plan file cycle of a store command (spec 4.4).
 
     ``--upgrade --plan`` reads the plan before any work; ``--check-updates
-    --plan`` writes the plans collected by ``body`` as ONE file after it.
-    A plan that cannot be read = ``Error:``, code 1, no work.
+    --plan`` writes the plans collected by ``body`` as ONE file after it -
+    into an existing directory, checked before any request. A plan that
+    cannot be read = ``Error:``, code 1, no work.
     """
     ctx = _PlanContext()
     args.plan_ctx = ctx
@@ -221,6 +222,15 @@ def run_with_plan_file(
             return 1
         except ValidationError as e:
             print(f"Error: {e}", file=sys.stderr)
+            return 1
+    if getattr(args, "check_updates", False) and plan_file:
+        directory = Path(plan_file).parent
+        if not directory.is_dir():
+            print(
+                f"Error: --plan {plan_file}: katalog {directory} nie istnieje - "
+                "utworz go albo podaj inny plik planu",
+                file=sys.stderr,
+            )
             return 1
     rc = body(args)
     if getattr(args, "check_updates", False) and plan_file and ctx.plans:
@@ -518,7 +528,9 @@ def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> 
             or bool(getattr(args, "scale", None))
             or (args.sheet is None and not getattr(args, "cutout", False))
         )
-        if several and (report.files or args.product == "laz"):
+        # no files (the source or the index failed): the Error lines tell it
+        # all, a "Nowe: 0, ..., bledy: 0" summary would contradict them
+        if several and report.files:
             _print_version_summary(
                 [f.file.status for f in report.files],
                 sum(1 for f in report.failed if f.kind == "download"),

@@ -2,7 +2,7 @@
 
 Data: 2026-09-29. Galaz `develop`, HEAD 152c31e (repo Kartograf TYLKO DO ODCZYTU —
 zero zmian w kodzie/testach/dokumentacji, `git status` czysty przez cala sesje).
-Katalog roboczy: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L7-duzy-wycinek/`
+Katalog roboczy: `<workspace>/Kartograf/e2e-data/2026-09-29-live/L7-duzy-wycinek/`
 (gitignored). **Zadanie jest OFFLINE** — siec zablokowana w skrypcie pomiarowym
 straznikiem na `socket.socket.connect` (dowod: `network_attempts_blocked: []` w kazdym
 z 4 raportow JSON), zasady "kultury wobec uslug publicznych" z `LIVE-COMMON.md` (workers
@@ -11,7 +11,7 @@ dysku roboczym (dane lokalne, cache Hydrografu tylko do odczytu, zero ruchu siec
 
 ## Zakres
 
-**Zrodlo danych:** `/home/claude-agent/workspace/Hydrograf/cache/nmt/` (TYLKO DO
+**Zrodlo danych:** `<workspace>/Hydrograf/cache/nmt/` (TYLKO DO
 ODCZYTU, nic tam nie zmieniono). `nmt_5m/` = 1454 arkusze .asc, `nmt_1m/` = 523 pliki
 (TEZ 5 m — `cellsize 5.00` potwierdzone naglowkiem ASC; katalog ma mylaca nazwe).
 Wszystkie 1977 plikow maja tez `.prj` (sprawdzone: `find ... -name '*.prj' | wc -l`
@@ -274,7 +274,7 @@ przypietym) i dla obu warunkow deskryptorow (domyslny limit, limit 256 "jak na m
 
 ## Surowe artefakty (sciezki)
 
-Wszystko w `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L7-duzy-wycinek/`:
+Wszystko w `<workspace>/Kartograf/e2e-data/2026-09-29-live/L7-duzy-wycinek/`:
 
 - `index_cache.py`, `cache_index.json` — indeksacja 1652 arkuszy cache Hydrografu (bbox, godlo)
 - `setup_copy.py`, `setup_copy_report.json`, `wanted_sheets.json` — kopiowanie 732 arkuszy do wlasnego `data/`

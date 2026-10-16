@@ -100,12 +100,12 @@ Mutacje wykonywane pomocnikiem podmieniajacym DOKLADNIE jedno wystapienie fragme
 - Uwaga (nie zmieniane, tekst Zad. 4): docstring `mosaic_and_crop` mowi "i ``merge`` rzucal ``CRS mismatch``" — prawda o samym `merge`, ale w naszym przeplywie wczesniej odpalala wlasna kontrola `niezgodne CRS wejsc`.
 
 ## Pliki
-- `/home/claude-agent/workspace/Kartograf/kartograf/download/cutout.py`
-- `/home/claude-agent/workspace/Kartograf/kartograf/transport/mosaic.py` (tylko `f2cee75`)
-- `/home/claude-agent/workspace/Kartograf/tests/test_pl_cutout.py`
-- `/home/claude-agent/workspace/Kartograf/tests/test_transport_mosaic.py` (tylko `f2cee75`)
-- `/home/claude-agent/workspace/Kartograf/docs/CHANGELOG.md`
-- `/home/claude-agent/workspace/Kartograf/CLAUDE.md`
+- `<workspace>/Kartograf/kartograf/download/cutout.py`
+- `<workspace>/Kartograf/kartograf/transport/mosaic.py` (tylko `f2cee75`)
+- `<workspace>/Kartograf/tests/test_pl_cutout.py`
+- `<workspace>/Kartograf/tests/test_transport_mosaic.py` (tylko `f2cee75`)
+- `<workspace>/Kartograf/docs/CHANGELOG.md`
+- `<workspace>/Kartograf/CLAUDE.md`
 
 ## Bramka (HEAD `924157c`, drzewo czyste)
 - `.venv/bin/python -m pytest tests/ -q -m "not live"` -> **1831 passed, 8 deselected** (1817 + 9 z briefu + 3 pulapka blokow + 2 straznicy mutacji).
