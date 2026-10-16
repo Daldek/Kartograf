@@ -548,6 +548,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
+- Plan E, Task E1: `--check-updates` w `elevation`/`imagery download`
+  wypisuje dla jednostki z kilkoma plikami nazwe pliku zamiast powtorzonego
+  godla: kierunki orto ukosnej (`7.125.11.08_n.tif: aktualne ...`) i pliki
+  ortofoto CZ (`CTES96.jpg`, `CTES96.TM33N.jgw`, ...); jednostka z jednym
+  plikiem bez zmian. `elevation availability --product` przyjmuje nadal
+  tylko `nmt`, `nmpt`, `laz` (warstwice i NMT 100 m poza raportem, ADR-043).
+  Co zrobic: skrypt czytajacy linie `--check-updates` ortofoto CZ dopasowuje
+  nazwe pliku zamiast godla.
 - Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
   (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
   `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera

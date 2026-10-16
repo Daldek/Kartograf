@@ -276,6 +276,22 @@ def store_path_label(item: PlanItem) -> str:
     return "/".join(part for part in (item.segment, item.hierarchy, item.name) if part)
 
 
+def _file_name_label(plan: UpdatePlan) -> Callable[[PlanItem], str] | None:
+    """Plan line unit of a data request: the file name where one unit has
+    several files (the view directions of an oblique orthophotomap sheet,
+    the JPEG and world files of a CZ orthophoto sheet); ``None`` = the unit."""
+    names: dict[str, set[str]] = {}
+    for item in plan.items:
+        names.setdefault(item.unit, set()).add(item.name)
+    if all(len(found) == 1 for found in names.values()):
+        return None
+
+    def label(item: PlanItem) -> str:
+        return item.name if len(names[item.unit]) > 1 else item.unit
+
+    return label
+
+
 def _report_plan(
     args: argparse.Namespace,
     plan: UpdatePlan,
@@ -453,7 +469,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
     try:
         if getattr(args, "check_updates", False):
             plan = check_data(**arguments, on_notice=on_notice)
-            return _report_plan(args, plan)
+            return _report_plan(args, plan, _file_name_label(plan))
         workers = getattr(args, "workers", 4) or 1
         on_progress = create_progress_callback(quiet, workers)
         report = download_data(
