@@ -1479,9 +1479,11 @@ zapisuje rekord `{"source": ...}` lub potwierdzony `{"no_coverage": true}`;
 CLI i biblioteka uzywaja tego samego cache (Z6, ADR-037): parametr
 `cache: MetadataCache | bool = True` funkcji publicznych (`True` =
 `<cwd>/.kartograf_cache.db` przez `cache/defaults.py::open_cache`, `False` =
-bez cache); `update="force"` (CLI `--force`) otwiera go w trybie
-`MetadataCache(refresh=True)` — odczyt pominiety, swiezy rekord zapisany
-(E14); `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa: `force`
+bez cache); `update="force"` (CLI `--force`) i kazde sprawdzenie
+(`check_*`, `check_data`, CLI `--check-updates` - zawsze pyta zrodlo)
+otwieraja go w trybie `MetadataCache(refresh=True)` — odczyt pominiety,
+swiezy rekord zapisany (E14); domyslne pobieranie i `--upgrade` czytaja
+cache w TTL. `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa: `force`
 odswieza tylko cache otwierany przez funkcje (parametr `cache`, provider
 tworzony przez nia albo po nazwie); provider przekazany jako instancja
 (`DownloadManager`, `LandCoverManager`, `download_laz_area(provider=)`)
@@ -2252,9 +2254,11 @@ i CZ (warp kotwiczony w rogu NW zadania) nie sa wspolne.
 Przeplyw poza `DownloadManager` — jedno zadanie obszarowe daje wiele kafli.
 Logika jest w bibliotece (`download/laz.py`, ADR-029; wzor `cutout.py`):
 `download_laz_area(bbox, ...)` przyjmuje bbox w dowolnym obslugiwanym
-ukladzie (przeliczenie do EPSG:2180 w bibliotece, `area.bbox_to_2180`),
-`check_laz_area(...)` daje plan. Godlo (do 1:10000) i `--geometry`
-sprowadza do bboxa `download_data`; CLI tylko wypisuje wynik.
+ukladzie (przeliczenie do EPSG:2180 w bibliotece, `area.bbox_to_2180`)
+albo `sheet=` (godlo PL-1992/PL-2000: WFS pytany o obwiednie ramy, kafle
+wybierane dla ramy `sheet_frame_2180`, `select_tiles(frame=)`),
+`check_laz_area(...)` daje plan. `--geometry` sprowadza do bboxa
+`download_data`; CLI tylko wypisuje wynik.
 Discovery idzie przez
 **WFS** `GetFeature` (WMS skorowidzy LAZ zwraca 401 — ADR-021) na wspolnym
 transporcie `WfsIndex` (`providers/pl/skorowidz_wfs.py`, od 0.8.0 — ten
@@ -2299,8 +2303,15 @@ regula dziala na wybranych kaflach (jawne `newest` dozwolone).
 Pokrywa tylko kafel pelny (`czy_ark_wypelniony` !=
 `NIE`) i tylko rama albo tym samym godlem, nigdy obwiednia. Kafel, ktorego
 rama nie przecina obszaru (przecina go tylko obwiednia), jest pomijany.
+Kafel musi siegac w obszar glebiej niz `tolerance_m` (1 m; regula
+`overlaps_area` skorowidzy: rama kafla zwezona o tolerancje przecina
+obszar): sasiedni arkusz stykajacy sie z rama godla krawedzia albo
+naroznikiem (ramy GUGiK zaokraglone do 1 cm) jest `outside`; obszar
+wezszy niz 2 tolerancje bierze kazdy przecinajacy kafel.
 Pominiete kafle: `LazTileSelection.superseded` / `LazDownloadResult.superseded`
-(kafel + kafle pokrywajace), w CLI `Info:` na stderr takze z `-q`.
+(kafel + kafle pokrywajace; `outside` z pusta lista), w CLI `Info:` na
+stderr takze z `-q` - tylko kafle pokryte przez nowsze (`outside` nie
+naleza do obszaru i nie sa wypisywane).
 
 Z flaga roku `select_tiles` sprawdza pokrycie kafli referencyjnych,
 wybranych po WSZYSTKICH latach bez granic, kaflami z przedzialu
@@ -2690,8 +2701,9 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    (`sheet_frame_2180`: narozniki w ukladzie godla, krawedzie zageszczone;
    rama PL-2000 nie jest prostokatem w EPSG:2180), `bbox` = obwiednia
    `bbox_to_2180`, `geometry` = obwiednie obiektow warstwy
-   (`read_feature_bboxes`, jak arkusze `download_data`); LAZ = obwiednia
-   ramy arkusza albo calej geometrii (jak `download_laz_area`).
+   (`read_feature_bboxes`, jak arkusze `download_data`); LAZ `sheet` = rama
+   godla jak NMT, `geometry` = obwiednia calej warstwy (jak
+   `download_laz_area`).
 2. **Uslugi i typy:** uslugi WFS produktu z rejestru (`variants(product=)`
    -> `IndexRef`, jedna na uklad wysokosci), ich typy roczne
    (`WfsIndex.feature_types`) i wybor typow z zakresu lat; zaden typ
@@ -2978,9 +2990,9 @@ albo date wydania (`WRTO24.<rok>.<arkusz>.zip`,
 usuwane z drzewa) do `klucz -> AtomEntry`: `entry_pattern` szukany w id
 feedu zbioru, grupa `sheet` = klucz (bez niej feed ma jeden zbior,
 klucz `""`). Indeks lezy w `MetadataCache` (`atom_cache`) z `ETag`
-feedu: w TTL (7 dni) bez zapytania, starszy albo `refresh` (`--upgrade`,
-`--check-updates`) - warunkowy GET `If-None-Match` (304 = bez zmian);
-`--force` (cache w trybie odswiezania) czyta feed od nowa.
+feedu: w TTL (7 dni) bez zapytania, starszy albo `refresh` (`--upgrade`):
+warunkowy GET `If-None-Match` (304 = bez zmian); `--force`
+i `--check-updates` (cache w trybie odswiezania) czytaja feed od nowa.
 `resolve_atom_file` czyta feed zbioru zawsze swiezo (maly, niesie
 wydanie) i wybiera plik po kategorii ukladu (`check_atom_crs` - bez
 sieci); klucz brakujacy w indeksie z cache albo 404 feedu zbioru = JEDNO

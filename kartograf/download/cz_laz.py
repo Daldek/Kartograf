@@ -332,12 +332,13 @@ def check_cz_laz(
     """Update plan of ``download_cz_laz`` with the same selection, no download.
 
     One ``HEAD`` per file (plus the index query of an area); positions of
-    track ``cz_laz`` with the sheet code as ``unit``. Invalid choices raise
-    the same errors as the download.
+    track ``cz_laz`` with the sheet code as ``unit``. The source is always
+    asked: the metadata cache is refreshed, never read. Invalid choices
+    raise the same errors as the download.
     """
     _validate_selection(model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox)
     sink = NoticeSink(on_notice)
-    with open_cache(cache, force=False, on_notice=sink.add) as metadata:
+    with open_cache(cache, force=True, on_notice=sink.add) as metadata:
         provider = _provider(model, vertical_crs, metadata)
         return _check(provider, _select(provider, sheet, bbox), output_dir)
 

@@ -789,9 +789,9 @@ class TestCLICacheCommands:
     def test_cmd_cache_no_subcommand(self, capsys):
         """Test that 'cache' without subcommand shows usage."""
         result = main(["cache"])
-        assert result == 0
+        assert result == 2
         captured = capsys.readouterr()
-        assert "stats" in captured.out and "clear" in captured.out
+        assert "stats" in captured.err and "clear" in captured.err
 
 
 # =========================================================================

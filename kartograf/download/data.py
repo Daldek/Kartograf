@@ -205,6 +205,12 @@ class _Run:
             unverified_local=not reported_unverified,
         )
 
+    @property
+    def refresh(self) -> bool:
+        """Metadata cache refreshed, not read: ``force`` and the check
+        (``--check-updates`` always asks the source)."""
+        return self.update == "force" or self.check
+
     def add_stale(self, stale) -> int:
         self.stale.extend(stale)
         return 1 if stale else 0
@@ -545,9 +551,7 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
                 "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
             )
     if task.product == "laz" and task.sheet is not None:
-        return _download_pl_laz(
-            task, run, SheetParser(task.sheet).get_bbox(crs="EPSG:2180")
-        )
+        return _download_pl_laz(task, run, {"sheet": task.sheet})
     if task.geometry is not None:
         return _download_geometry(task, run)
     if task.bbox is not None:
@@ -692,7 +696,7 @@ def _dispatch_area(
                         country_task, run, bbox=part, parent_request=parent_request
                     )
             elif task.product == "laz":
-                rc = _download_pl_laz(country_task, run, part, parent_request)
+                rc = _download_pl_laz(country_task, run, {"bbox": part}, parent_request)
             elif filepath is not None:
                 rc = _download_pl_geometry(
                     country_task, run, filepath, parent_request, part
@@ -966,9 +970,7 @@ def _download_pl_sheet(task: SimpleNamespace, run: _Run) -> int:
     list; the view directions of an oblique sheet one after another."""
     if run.dry:
         return 0
-    with open_cache(
-        run.cache, force=run.update == "force", on_notice=run.sink.add
-    ) as metadata:
+    with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
         return max(
             _download_pl_code(task, run, manager)
             for manager in _managers(task, run, metadata)
@@ -1137,9 +1139,7 @@ def _download_pl_sheet_list(
     if run.dry:
         return 0
     _emit_sheet_list(run, task, sheets, f"w skali {target_scale}", what)
-    with open_cache(
-        run.cache, force=run.update == "force", on_notice=run.sink.add
-    ) as metadata:
+    with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
         try:
             managers = _managers(task, run, metadata, parent_request)
         except DownloadError as e:
@@ -1194,9 +1194,7 @@ def _download_pl_archive(
     """
     if run.dry:
         return 0
-    with open_cache(
-        run.cache, force=run.update == "force", on_notice=run.sink.add
-    ) as metadata:
+    with open_cache(run.cache, force=run.refresh, on_notice=run.sink.add) as metadata:
         try:
             (manager,) = _managers(task, run, metadata, parent_request)
             provider = cast(GugikProvider, manager.provider)
@@ -1967,10 +1965,12 @@ def _download_cz_contours(
 def _download_pl_laz(
     task: SimpleNamespace,
     run: _Run,
-    bbox: BBox,
+    area: dict,
     parent_request: dict | None = None,
 ) -> int:
-    """GUGiK LAZ tiles for the PL part of a sheet or area request (ADR-029)."""
+    """GUGiK LAZ tiles for the PL part of a sheet or area request (ADR-029);
+    ``area``: ``{"sheet": code}`` (tiles of the sheet frame) or
+    ``{"bbox": part}``."""
     from kartograf.download.laz import check_laz_area, download_laz_area
 
     resolve_pl_options(task)
@@ -1987,7 +1987,7 @@ def _download_pl_laz(
         "on_notice": run.sink.add,
     }
     if run.check:
-        run.plans.append(check_laz_area(bbox, **selection))
+        run.plans.append(check_laz_area(**area, **selection))
         return 0
     if run.on_progress is not None:
         _announcer(
@@ -2002,7 +2002,7 @@ def _download_pl_laz(
             on_progress(DownloadProgress(done, total, "", "tiles"))
 
     result = download_laz_area(
-        bbox,
+        **area,
         workers=run.workers,
         update=run.update,
         plan=run.loaded,
