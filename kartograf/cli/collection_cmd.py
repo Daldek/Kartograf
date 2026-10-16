@@ -49,6 +49,10 @@ def collection_task(args: argparse.Namespace) -> dict:
         "level": parse_per_country(getattr(args, "level", None), "--level"),
         "lod": getattr(args, "lod", None),
         "year": getattr(args, "year", None),
+        "format": getattr(args, "format", None),
+        "scale": getattr(args, "scale", None),
+        "sheet_system": getattr(args, "sheet_system", None),
+        "horizontal_crs": getattr(args, "horizontal_crs", None),
     }
 
 
