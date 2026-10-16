@@ -179,7 +179,11 @@ def _prepare_pl_cutout(
         )
     if wcs_variant(product, vertical_crs) is None:
         systems = sorted(
-            {v.vertical_crs for v in variants(product=product, country="PL")}
+            {
+                v.vertical_crs
+                for v in variants(product=product, country="PL")
+                if v.vertical_crs is not None
+            }
         )
         raise ValidationError(
             f"Uklad wysokosci {product.upper()} PL: {' albo '.join(systems)} "

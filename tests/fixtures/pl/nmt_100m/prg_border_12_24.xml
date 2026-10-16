@@ -1,0 +1,27 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver http://mapy.geoportal.gov.pl/wss/service/PZGIK/PRG/WFS/AdministrativeBoundaries?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:A02_Granice_powiatow&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T12:20:23" numberMatched="2" numberReturned="2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>238458.568747 511458.766878</gml:lowerCorner>
+      		<gml:upperCorner>266104.183471 545036.241792</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: No featureid defined for typename 'A02_Granice_powiatow'. Output will not validate. -->
+    <wfs:member>
+      <ms:A02_Granice_powiatow>
+        <ms:JPT_KOD_JE>2468</ms:JPT_KOD_JE>
+      </ms:A02_Granice_powiatow>
+    </wfs:member>
+    <wfs:member>
+      <ms:A02_Granice_powiatow>
+        <ms:JPT_KOD_JE>1203</ms:JPT_KOD_JE>
+      </ms:A02_Granice_powiatow>
+    </wfs:member>
+</wfs:FeatureCollection>
+

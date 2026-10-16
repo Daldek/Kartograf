@@ -578,6 +578,24 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E1 (czesc 2, ADR-043 D10): NMT 100 m GUGiK
+  (`pl.gugik.nmt_100m`, wariant rejestru bez ukladu wysokosci - decyzja P1):
+  `elevation download --product nmt --resolution 100m --bbox ... --country pl`
+  (takze `--sheet`, `--geometry`) pobiera pliki wojewodztw obszaru (wg PRG)
+  z feedu ATOM GUGiK do `nmt/pl_1992_100m/teryt/<woj>.zip` - ZIP z plikiem
+  XYZ 1:1, wersja = data `updated` wpisu feedu (sygnal `metadata`:
+  `--check-updates` czyta tylko feedy), sidecar z `vertical_crs: null`,
+  `extra.vertical_crs_note` ("GUGiK nie deklaruje ukladu wysokosci ...")
+  i `extra.source` (feed uslugi, feed zbioru, kod wojewodztwa, URL,
+  `length`). `--format` mozna pominac (`XYZ` - jedyna wartosc);
+  `--vertical-crs`, `--sheet-system`, `--scale`, flagi roku i lotow,
+  `--full-sheet`, `--cutout`, `--horizontal-crs`, `--min-density`
+  i `--country cz` = `Error:` przed siecia. Silnik `atom_files` dostaje
+  grupe `woj` w `AtomFilesParams.entry_pattern` (jednostki wojewodztw
+  obszaru) i `force_https` (linki `http://` feedow GUGiK pobierane przez
+  `https` tego samego hosta); plik ATOM jednostki ponad 100 MiB dostaje
+  `DOWNLOAD_SIZE` (krajowy - jak dotad `WHOLE_COUNTRY_SIZE`).
+
 - Plan E, Task E1 (czesc 1, ADR-043 D10): godla 8-czlonowe PL-1992
   w `SheetParser` (cwiartki arkusza 7-czlonowego, numeracja 1-4 jak wyzej:
   `N-34-50-A-c-3-2-3`; etykieta Kartografa `1:5000`, GUGiK: modul 1:2500);

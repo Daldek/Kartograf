@@ -669,16 +669,18 @@ otwarte. Fakty z nagrania i kodu dla kolejnego wykonawcy (korekta planu):
 - NMT 100 m: wpis ATOM ma `<id>` = URL feedu zbioru z
   `spatial_dataset_identifier_code=NMT100_<woj>`; linki feedu uslugi i zbioru
   sa `http://`, odpowiadaja przez `https` (feedy 0,1-0,4 s, plik 7,7 s);
-  etykieta `<updated>` wpisu zbioru 2019-05-14. Wariant z `format="XYZ"`
-  bylby archiwum (`FileFormat.source_file`) i wymagalby `--format` - do
-  rozstrzygniecia: archiwum = `source_file` z `index_ref`, a 100 m
-  (ATOM, `index_ref=None`) jako format produktu dla `--resolution 100m`
-  (`--format XYZ` dozwolone, jedyna wartosc). `ProductVariant.vertical_crs`
-  musi przyjac `None` (miejsca: `vertical_crs_text`, `labels_by_vertical_crs`,
-  `variant_error`, `cutout.py:182`, `elevation._source_choice`). Tor: czesc
-  kolekcji `CollectionPart` z kanalem ATOM (grupa `woj`) + `run_request`/
-  `plan_request` (tor `collection`); `UnitJob.atom_key`, `_fetch_atom`:
-  `WHOLE_COUNTRY_SIZE` tylko dla pliku krajowego.
+  etykieta `<updated>` wpisu zbioru 2019-05-14. **Rozstrzygniete przez
+  koordynatora 2026-10-16:** `--product nmt --resolution 100m` bez
+  `--format` (jeden format zrodla = wariant 100 m); `--format XYZ`
+  dozwolone jako jedyna wartosc dla 100 m; pozostale archiwa bez zmian
+  (`source_file` z indeksem WFS). W kodzie: `ProductVariant.source_file`
+  = format archiwum ORAZ `index_ref` (wariant 100 m z `format="XYZ"`,
+  `index_ref=None` jest formatem produktu). `ProductVariant.vertical_crs`
+  przyjmuje `None` (+ `vertical_note` do `extra.vertical_crs_note`). Tor:
+  `collections.atom_area_request` (czesc z kanalem ATOM, grupa `woj`) +
+  `run_request`/`plan_request` (tor `collection`); `UnitJob.atom_key`,
+  `_fetch_atom`: `WHOLE_COUNTRY_SIZE` tylko dla pliku krajowego,
+  `DOWNLOAD_SIZE` powyzej 100 MiB.
 - Intensywnosc: jedna warstwa `SkorowidzeOI` z rekordami PL-1992 (modul
   1:5000) i PL-2000 (1:2000) w tym samym punkcie; bez
   `calyArkuszWypelnionyTrescia` i bez `kolor`. True orto: warstwa
@@ -717,7 +719,8 @@ download_data(..., format: str | None = None,                          # contour
               direction: str | Sequence[str] | None = None) -> DataReport  # oblique-orto: subset of n,e,s,w; None = all
 # rejestr wariantow (A): ProductVariant(source="pl.gugik.nmt_100m", product="nmt", country="PL",
 #   resolution_m=Decimal("100"), vertical_crs=None (P1), format="XYZ", systems=("1992",),
-#   channel=TransportKind.DIRECT_FILES, index_ref=None)
+#   channel=TransportKind.DIRECT_FILES, index_ref=None, vertical_note=...)  # source_file=False:
+#   format produktu dla --resolution 100m; --format XYZ dozwolone (jedyna wartosc)
 # AtomFilesParams (D) + E1: service_feed=".../ATOM/httpauth/atom/GUGIK_NMT100",
 #   entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})" (id wpisu GUGiK to URL),
 #   crs=() (jeden plik), members=() (ZIP zostaje), force_https=True (nowe pole: linki GUGiK http -> https)
@@ -743,7 +746,7 @@ download_data(..., format: str | None = None,                          # contour
 
   Etykieta poziomu w schemacie Kartografa: `1:5000` (GUGiK: 1:2500).
   Docstring klasy dostaje to zdanie; backlog A1-8 bez zmian.
-- [ ] **Step 3: Wariant 100 m (P1: uklad nieznany) i tor jednostek.** Test RED w `tests/test_nmt_100m.py`:
+- [x] **Step 3: Wariant 100 m (P1: uklad nieznany) i tor jednostek.** Test RED w `tests/test_nmt_100m.py`:
   - `test_area_selects_voivodeships`: bbox Krakowa daje tylko `12`;
     bbox na granicy wojewodztw daje dwa pliki; `--sheet` daje wojewodztwa
     przecinajace arkusz;

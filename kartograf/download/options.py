@@ -23,6 +23,8 @@ from kartograf.sources.variants import (
     CZ_LAZ_VERTICAL_TEXT,
     CZ_VERTICAL_TEXT,
     FORMATS,
+    UNKNOWN_VERTICAL,
+    ProductVariant,
     cz_laz_error,
     cz_resolution_text,
     cz_variant_error,
@@ -98,8 +100,11 @@ def resolution_text(country: str = "PL") -> str:
 
 
 def vertical_crs_text(country: str = "PL") -> str:
-    """Height systems of the country's variants (``--vertical-crs``)."""
-    names = sorted({v.vertical_crs for v in variants(country=country)})
+    """Height systems of the country's variants (``--vertical-crs``; a
+    variant without one takes no flag)."""
+    names = sorted(
+        {v.vertical_crs for v in variants(country=country) if v.vertical_crs}
+    )
     return ", ".join(
         f"{name} ({_VERTICAL_CRS_TEXT[name]})" if name in _VERTICAL_CRS_TEXT else name
         for name in names
@@ -216,6 +221,62 @@ def _format_of(task: SimpleNamespace) -> str | None:
     return getattr(task, "format", None)
 
 
+def pl_file_variant(task: SimpleNamespace) -> ProductVariant | None:
+    """The PL variant of the request published as voivodeship files of an
+    ATOM feed (no sheet index: NMT 100 m, plan E1), ``None`` for the sheet
+    variants. Chosen by the product, the PL resolution and the format
+    (``None`` or the variant's own); nothing is validated here."""
+    resolution = country_value(task.resolution, "PL")
+    if task.product not in _SHEET_PRODUCTS or not isinstance(resolution, str):
+        return None
+    fmt = _format_of(task)
+    return next(
+        (
+            v
+            for v in variants(product=task.product, country="PL", resolution=resolution)
+            if v.index_ref is None and fmt in (None, v.format)
+        ),
+        None,
+    )
+
+
+# Choices of the sheet tracks a file variant has none of (flag, attribute).
+_SHEET_CHOICES = (
+    ("--sheet-system", "sheet_system"),
+    ("--scale", "scale"),
+    ("--year", "year"),
+    ("--min-year", "min_year"),
+    ("--max-year", "max_year"),
+    ("--all-campaigns", "all_campaigns"),
+    ("--full-sheet", "full_sheet"),
+    ("--cutout", "cutout"),
+    ("--horizontal-crs", "horizontal_crs"),
+    ("--min-density", "min_density"),
+)
+
+
+def _file_variant_error(task: SimpleNamespace, variant: ProductVariant) -> str | None:
+    """Error text of the choices a voivodeship file variant does not take."""
+    label = variant.label or ""
+    shown = f"{variant.product.upper()} {label.removesuffix('m')} m"
+    reason = f"{shown} to pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka"
+    for flag, name in _SHEET_CHOICES:
+        value = getattr(task, name)
+        if value is not None and value is not False:
+            return f"{flag} nie dotyczy --resolution {label}: {reason}"
+    if task.country == "cz":
+        return f"--country cz nie dotyczy --resolution {label} (tylko PL): {reason}"
+    if (
+        country_value(task.vertical_crs, "PL") is not None
+        and variant.vertical_crs is None
+    ):
+        return (
+            f"--vertical-crs nie dotyczy --resolution {label}: {UNKNOWN_VERTICAL} - "
+            f"GUGiK nie deklaruje ukladu wysokosci {shown}; pomin --vertical-crs"
+        )
+    return None
+
+
 def pl_option_error(
     task: SimpleNamespace,
     *,
@@ -228,8 +289,12 @@ def pl_option_error(
     ``code_system``/``code_scale`` describe a sheet request (sheet system and
     scale of the code); ``None`` = area request (bbox/geometry). NMT/NMPT
     choices are checked against the variant registry
-    (``kartograf.sources.variants``): format, resolution, height system.
+    (``kartograf.sources.variants``): format, resolution, height system. A
+    voivodeship file variant (``pl_file_variant``) was checked by
+    ``validate_request`` already.
     """
+    if pl_file_variant(task) is not None:
+        return None
     product = task.product
     resolution = country_value(task.resolution, "PL")
     vertical_crs = country_value(task.vertical_crs, "PL")
@@ -546,7 +611,8 @@ def validate_request(task: SimpleNamespace) -> None:
     Exactly one selection, explicit product/output, country for areas,
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
     LAZ-only and non-LAZ options, the orthophotomap cutout (``coverage``,
-    pixel, EPSG:2180 only, PL only). Narrows ``task.min_year``/``max_year``.
+    pixel, EPSG:2180 only, PL only), the choices a voivodeship file variant
+    (NMT 100 m) does not take. Narrows ``task.min_year``/``max_year``.
     Types of library arguments first (``year="2018"``, ``cutout="no"``:
     ``ValidationError``, no conversion; STANDARDS 11.2).
     """
@@ -597,6 +663,11 @@ def validate_request(task: SimpleNamespace) -> None:
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
+    file_variant = pl_file_variant(task)
+    if file_variant is not None:
+        error = _file_variant_error(task, file_variant)
+        if error is not None:
+            raise ValidationError(error)
     if task.model is not None and task.product != "laz":
         raise ValidationError("--model dotyczy tylko --product laz w CZ")
     if task.model is not None and task.country == "pl":

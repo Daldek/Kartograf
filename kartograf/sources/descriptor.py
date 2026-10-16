@@ -241,13 +241,15 @@ class FeatureBBoxParams:
 
 @dataclass(frozen=True)
 class AtomFilesParams:
-    """Engine ``atom_files`` (ADR-042 D12): files listed by a CUZK ATOM feed.
+    """Engine ``atom_files`` (ADR-042 D12): files listed by an ATOM feed.
 
     ``service_feed`` lists one entry per dataset, each linking its dataset
     feed, whose entries link the files. ``entry_pattern`` is searched in the
     dataset feed id of a service entry: its named group ``sheet`` keys the
-    index (one dataset per SM5 sheet), ``year`` is the release in the file
-    name; without ``sheet`` the feed has exactly one dataset. ``crs``: EPSG
+    index (one dataset per SM5 sheet), ``woj`` keys it by the TERYT code of a
+    voivodeship (one dataset per voivodeship: GUGiK NMT 100 m; an area is the
+    files of its voivodeships), ``year`` is the release in the file name;
+    without ``sheet``/``woj`` the feed has exactly one dataset. ``crs``: EPSG
     codes of the CRS categories of the files of one dataset (a national file
     in several CRSs); ``()`` = one file per dataset. ``members``: pairs (ZIP
     member suffix, stored suffix), the longest suffix matching first; ``()``
@@ -255,7 +257,10 @@ class AtomFilesParams:
     storage segment; the EPSG number of the chosen file is appended when the
     dataset has several CRSs. ``choice``: the option values selecting this
     channel when a product publishes one feed per value (ADR-043:
-    ``(("format", "GPKG"),)``).
+    ``(("format", "GPKG"),)``). ``force_https``: the feeds link their
+    dataset feeds and files with ``http://`` while the same host answers
+    over ``https`` (GUGiK ATOM, measured 2026-10-15/16): the links are
+    followed over ``https``.
     """
 
     service_feed: str
@@ -264,6 +269,7 @@ class AtomFilesParams:
     members: tuple[tuple[str, str], ...] = ()
     segment_tokens: tuple[str, ...] = ()
     choice: tuple[tuple[str, str], ...] = ()
+    force_https: bool = False
 
 
 ChannelParams = (

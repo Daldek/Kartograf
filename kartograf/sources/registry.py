@@ -847,6 +847,66 @@ _CZ_ORTOFOTO = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
+# --- plan E - E1 (PL) -------------------------------------------------------------
+# NMT 100 m (raport E, wiersz 1; feeds recorded 2026-10-16): one ATOM dataset per
+# voivodeship (dataset feed id ``...spatial_dataset_identifier_code=NMT100_<woj>``),
+# one ZIP with an XYZ text file each. The feeds link everything with http://, the
+# host answers over https. Neither the feeds nor the CSW record declare a height
+# system (decision P1 of 2026-10-15: unknown; no {vcrs} in the segment).
+_NMT100_FEED = (
+    "https://mapy.geoportal.gov.pl/wss/service/ATOM/httpauth/atom/GUGIK_NMT100"
+)
+_NMT100_NOTE = (
+    "GUGiK nie deklaruje ukladu wysokosci NMT 100 m (feed ATOM i rekord CSW bez "
+    "ukladu; model z NMT projektu LPIS) - uklad wysokosci nieznany"
+)
+_PL_NMT_100M = SourceDescriptor(
+    key="pl.gugik.nmt_100m",
+    country="PL",
+    product="nmt",
+    name="Numeryczny Model Terenu 100 m (XYZ, pliki wojewodztw; uklad wysokosci "
+    "nieznany)",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            update_signal="metadata",
+            horizontal_crs=PL_1992_CRS,
+            capabilities=frozenset({"admin_unit_files"}),
+            endpoint=_NMT100_FEED,
+            notes=(
+                "feed ATOM GUGiK: jeden ZIP z plikiem XYZ na wojewodztwo (wydanie "
+                "2019); wojewodztwa obszaru wg PRG; ZIP zapisywany 1:1"
+            ),
+            params=AtomFilesParams(
+                service_feed=_NMT100_FEED,
+                entry_pattern=r"spatial_dataset_identifier_code=NMT100_(?P<woj>[0-9]{2})",
+                force_https=True,
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="nmt/pl_1992_100m",
+    default_extension=".zip",
+    license=_GUGIK_LICENSE,
+    resolution="100m",
+    variants=(
+        ProductVariant(
+            source="pl.gugik.nmt_100m",
+            product="nmt",
+            country="PL",
+            resolution_m=Decimal("100"),
+            vertical_crs=None,
+            format="XYZ",
+            systems=("1992",),
+            channel=TransportKind.DIRECT_FILES,
+            index_ref=None,
+            vertical_note=_NMT100_NOTE,
+        ),
+    ),
+)
+_E1_PL_SOURCES = (_PL_NMT_100M,)
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -1130,6 +1190,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
             default_extension=".zip",
             license=_GUGIK_LICENSE,
         ),
+        # plan E - E1
+        *_E1_PL_SOURCES,
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",

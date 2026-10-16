@@ -425,8 +425,13 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         for v in variants(
             product=self.PRODUCT, country="PL", format=self.variant.format
         ):
-            if v.vertical_crs != self._vertical_crs and v.index_ref is not None:
-                found.setdefault(v.index_ref.endpoint, v.vertical_crs)
+            vertical_crs = v.vertical_crs
+            if (
+                vertical_crs is not None
+                and vertical_crs != self._vertical_crs
+                and v.index_ref is not None
+            ):
+                found.setdefault(v.index_ref.endpoint, vertical_crs)
         return list(found.items())
 
     def _variant_hints(self, parser: SheetParser) -> set[str]:

@@ -84,6 +84,9 @@ PL_ARCHIVE_KEYS = (
 PL_SHEET_KEYS = PL_GRID_KEYS + PL_ARCHIVE_KEYS
 # Grids with a WCS cutout channel (1 m only)
 PL_WCS_KEYS = ("pl.gugik.nmt_1m", "pl.gugik.nmpt")
+# PL elevation variants without a sheet index: the voivodeship files of the
+# GUGiK ATOM feed (plan E1, NMT 100 m; collection engine, no provider)
+PL_FILE_KEYS = ("pl.gugik.nmt_100m",)
 
 # CUZK sources (plan B): rasters of four models and the LAZ of each model.
 CZ_MODEL_KEYS = ("dmr5g", "dmr4g", "dmp1g", "dmpok")
@@ -113,6 +116,7 @@ _OPENZU_HEAD = {
 
 EXPECTED_KEYS = {
     *PL_SHEET_KEYS,
+    *PL_FILE_KEYS,
     "pl.gugik.orto",
     "pl.gugik.laz",
     "pl.gugik.bdot10k",
@@ -162,6 +166,7 @@ CHANNEL_SIGNALS = [
     ("cz.cuzk.hy_net", TransportKind.WFS, "none"),
     ("cz.cuzk.hy_net", TransportKind.DIRECT_FILES, "http"),
     ("cz.cuzk.ortofoto", TransportKind.DIRECT_FILES, "metadata"),
+    ("pl.gugik.nmt_100m", TransportKind.DIRECT_FILES, "metadata"),
 ]
 
 # Collection channels (ADR-042 D6) by their capability - a descriptor may have
@@ -181,9 +186,13 @@ COLLECTION_CHANNEL_SIGNALS = [
     ("cz.cuzk.hy_net", "bbox_vector", "none"),
     ("cz.cuzk.hy_net", "country_files", "http"),
     ("cz.cuzk.ortofoto", "sheet_files", "metadata"),
+    ("pl.gugik.nmt_100m", "admin_unit_files", "metadata"),
 ]
 
 PL_VARIANTS = variants(country="PL")
+# Variants a provider serves (sheet or tile index of the WFS); the voivodeship
+# files of the ATOM feed go through the collection engine (test_nmt_100m.py).
+PROVIDER_VARIANTS = tuple(v for v in PL_VARIANTS if v.index_ref is not None)
 
 
 def _variant_id(v: ProductVariant) -> str:
@@ -191,9 +200,11 @@ def _variant_id(v: ProductVariant) -> str:
 
 
 def _provider_for(variant: ProductVariant):
-    """The provider a CLI/API choice of ``variant`` builds."""
+    """The provider a CLI/API choice of ``variant`` builds (a variant of an
+    index always has a height system)."""
     from kartograf import GugikLazProvider, GugikNmptProvider, GugikProvider
 
+    assert variant.vertical_crs is not None
     if variant.product == "laz":
         return GugikLazProvider(vertical_crs=variant.vertical_crs)
     cls = GugikNmptProvider if variant.product == "nmpt" else GugikProvider
@@ -332,7 +343,7 @@ class TestRegistry:
         assert {d.key for d in pl} == {k for k in EXPECTED_KEYS if k.startswith("pl.")}
         nmt = sources_for(country="PL", product="nmt")
         assert {d.key for d in nmt} == {
-            k for k in PL_SHEET_KEYS if k.startswith("pl.gugik.nmt_")
+            k for k in (*PL_SHEET_KEYS, *PL_FILE_KEYS) if k.startswith("pl.gugik.nmt_")
         }
         nmpt = sources_for(country="PL", product="nmpt")
         assert {d.key for d in nmpt} == {
@@ -552,7 +563,7 @@ class TestRegistry:
 class TestDescriptorProviderConsistency:
     """Spec 6.12: the descriptor must agree with the provider's actual state."""
 
-    @pytest.mark.parametrize("variant", PL_VARIANTS, ids=_variant_id)
+    @pytest.mark.parametrize("variant", PROVIDER_VARIANTS, ids=_variant_id)
     def test_variant_matches_provider(self, variant, tmp_path):
         """Segment, extension and channels of a variant agree with the provider
         built from that variant (CLI/API choice -> files of the descriptor)."""

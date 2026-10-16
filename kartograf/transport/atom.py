@@ -1,31 +1,34 @@
 """
-Engine ``atom_files`` (ADR-042 D12): files listed by a CUZK ATOM feed.
+Engine ``atom_files`` (ADR-042 D12): files listed by an ATOM feed.
 
-A CUZK ATOM download service has two levels. The service feed has one entry
-per dataset (ORTOFOTO: one per SM5 sheet, 16 301 entries, 23.7 MB; ZABAGED:
-one dataset), each linking its dataset feed; the entries of a dataset feed
-link the files (``rel="alternate"`` with ``length``) and name their CRS
-(``category`` ``http://www.opengis.net/def/crs/EPSG/0/<code>``). The file
-names carry the release (``WRTO24.<rok>.<arkusz>.zip``,
-``ZABAGED-5514-gpkg-<data>.zip``), so the URL of a file exists only in the
-feeds - a URL template would have to guess the year.
+An ATOM download service (CUZK, GUGiK) has two levels. The service feed has
+one entry per dataset (ORTOFOTO: one per SM5 sheet, 16 301 entries, 23.7 MB;
+ZABAGED: one dataset; GUGiK NMT 100 m: one per voivodeship), each linking
+its dataset feed; the entries of a dataset feed link the files
+(``rel="alternate"`` with ``length``) and name their CRS (``category``
+``http://www.opengis.net/def/crs/EPSG/0/<code>``). The file names carry the
+release (``WRTO24.<rok>.<arkusz>.zip``, ``ZABAGED-5514-gpkg-<data>.zip``),
+so the URL of a file exists only in the feeds - a URL template would have
+to guess the year.
 
 ``atom_index`` reads the service feed into ``key -> AtomEntry``:
 ``AtomFilesParams.entry_pattern`` is searched in the dataset feed id of each
 entry (entries it does not match are not data of the channel); its named
-group ``sheet`` is the key, without it the feed has exactly one dataset (key
-``""``). The feed is parsed as a stream (``iterparse``, every parsed entry
-dropped from the tree) and the index is kept in the metadata cache with the
-feed ``ETag``: within the cache TTL no request is made; an older index or
-``refresh=True`` sends a conditional GET (``If-None-Match``) and ``304``
-keeps the stored index. ``resolve_atom_file`` reads the dataset feed of one
-key - always fresh: it is small and its entry carries the edition - and picks
-the file by its CRS category. A key missing from a cached index, or a
-dataset feed answering 404, refreshes the index once (a stale index must not
-hide a new release). The edition label is the date of the file entry's
-``updated``, prefixed by the ``year`` group when the pattern has one
-(``2024_2025-02-06``, ``2026-10-04``): the ``metadata`` freshness signal of
-the versioned store (D29).
+group ``sheet`` (or ``woj``: a voivodeship TERYT code) is the key, without
+them the feed has exactly one dataset (key ``""``). The feed is parsed as a
+stream (``iterparse``, every parsed entry dropped from the tree) and the
+index is kept in the metadata cache with the feed ``ETag``: within the cache
+TTL no request is made; an older index or ``refresh=True`` sends a
+conditional GET (``If-None-Match``) and ``304`` keeps the stored index.
+``resolve_atom_file`` reads the dataset feed of one key - always fresh: it
+is small and its entry carries the edition - and picks the file by its CRS
+category. A key missing from a cached index, or a dataset feed answering
+404, refreshes the index once (a stale index must not hide a new release).
+The edition label is the date of the file entry's ``updated``, prefixed by
+the ``year`` group when the pattern has one (``2024_2025-02-06``,
+``2026-10-04``): the ``metadata`` freshness signal of the versioned store
+(D29). A channel with ``force_https`` follows the ``http://`` links of its
+feeds over ``https`` of the same host (GUGiK).
 
 ``fetch_atom_file`` downloads a file atomically and checks its size against
 the feed ``length`` and ``Content-Length``; ``unpack_members`` stores the
@@ -69,13 +72,15 @@ _ENTRY = f"{_ATOM}entry"
 _CRS_TERM = re.compile(r"https?://www\.opengis\.net/def/crs/EPSG/[^/]+/([0-9]+)")
 _DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 _DIGITS = re.compile(r"[0-9]+")
+# Named groups of ``entry_pattern`` keying the index (one dataset per key).
+_KEY_GROUPS = ("sheet", "woj")
 
 
 @dataclass(frozen=True)
 class AtomEntry:
-    """One dataset of a service feed: ``key`` (the ``sheet`` group or
-    ``""``), the dataset feed URL, its ``updated``, the named groups of
-    ``entry_pattern`` and the CRSs of its files (``EPSG:<code>``)."""
+    """One dataset of a service feed: ``key`` (the ``sheet`` or ``woj``
+    group, or ``""``), the dataset feed URL, its ``updated``, the named
+    groups of ``entry_pattern`` and the CRSs of its files (``EPSG:<code>``)."""
 
     key: str
     dataset_feed: str
@@ -152,6 +157,14 @@ def _local(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
 
 
+def _link(params: AtomFilesParams, href: str) -> str:
+    """A link of a feed as it is followed: ``https`` for ``force_https``."""
+    href = href.strip()
+    if params.force_https and href.startswith("http://"):
+        return "https://" + href.removeprefix("http://")
+    return href
+
+
 def _crs_of(element: ET.Element) -> tuple[str, ...]:
     """EPSG codes of the CRS categories of an entry (other categories skipped)."""
     codes = []
@@ -212,7 +225,7 @@ def _parse_service(
             match = pattern.search(ident)
             if match is not None:
                 groups = {k: v for k, v in match.groupdict().items() if v is not None}
-                key = groups.get("sheet", "")
+                key = next((groups[g] for g in _KEY_GROUPS if g in groups), "")
                 if key in entries:
                     raise DownloadError(
                         f"{context}: dwa zbiory dla {key or 'jedynego zbioru'} "
@@ -220,7 +233,9 @@ def _parse_service(
                     )
                 entries[key] = AtomEntry(
                     key=key,
-                    dataset_feed=str(_alternate(element, context).get("href")).strip(),
+                    dataset_feed=_link(
+                        params, str(_alternate(element, context).get("href"))
+                    ),
                     updated=_updated(element, context),
                     groups=groups,
                     crs=_crs_of(element),
@@ -232,7 +247,7 @@ def _parse_service(
         raise DownloadError(
             f"{context}: feed nie ma zbiorow pasujacych do {params.entry_pattern!r}"
         )
-    if "sheet" not in pattern.groupindex and len(entries) != 1:
+    if not any(g in pattern.groupindex for g in _KEY_GROUPS) and len(entries) != 1:
         raise DownloadError(
             f"{context}: oczekiwano jednego zbioru, jest {len(entries)}"
         )
@@ -355,7 +370,11 @@ def _edition(entry: AtomEntry, updated: str, context: str) -> str:
 
 
 def _select(
-    entries: list[ET.Element], entry: AtomEntry, crs: str | None, context: str
+    entries: list[ET.Element],
+    entry: AtomEntry,
+    crs: str | None,
+    context: str,
+    params: AtomFilesParams,
 ) -> AtomFile:
     """The file of a dataset: the entry of the CRS category (or the only one)."""
     found = [(element, _crs_of(element)) for element in entries]
@@ -380,7 +399,7 @@ def _select(
     updated = _updated(element, context)
     codes = _crs_of(element)
     return AtomFile(
-        url=str(link.get("href")).strip(),
+        url=_link(params, str(link.get("href"))),
         length=int(length) if _DIGITS.fullmatch(length) else None,
         updated=updated,
         edition=_edition(entry, updated, context),
@@ -404,7 +423,8 @@ def resolve_atom_file(
 
     The index comes from ``atom_index`` (cache, ``refresh``); the dataset
     feed is always read. A key missing from a cached index or a dataset
-    feed answering 404 refreshes the index once.
+    feed answering 404 refreshes the index once. ``force_https``: the
+    dataset feed and the file are asked over ``https``.
 
     Raises
     ------
@@ -448,7 +468,7 @@ def resolve_atom_file(
         entry = renewed
         context = f"ATOM {entry.dataset_feed}"
         entries = _dataset_entries(session, entry.dataset_feed, timeout)
-    return _select(entries, entry, crs, context)
+    return _select(entries, entry, crs, context, params)
 
 
 def fetch_atom_file(

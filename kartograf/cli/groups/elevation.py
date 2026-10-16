@@ -32,7 +32,8 @@ from kartograf.sources.variants import CZ_VERTICAL_TEXT, cz_model_text
 
 def _source_choice(source: SourceDescriptor) -> str:
     """Flags selecting ``source`` in ``elevation download`` (variant registry);
-    ``--vertical-crs`` only when the source has one height system."""
+    ``--vertical-crs`` only when the source has one height system (a variant
+    without one takes none: NMT 100 m)."""
     flags = f"--product {source.product}"
     if source.country == "CZ":
         if source.product == "laz":
@@ -45,7 +46,7 @@ def _source_choice(source: SourceDescriptor) -> str:
         flags += f" --format {variant.format}"
     if variant.label is not None:
         flags += f" --resolution {variant.label}"
-    if len(source.variants) == 1:
+    if len(source.variants) == 1 and variant.vertical_crs is not None:
         flags += f" --vertical-crs {variant.vertical_crs}"
     return flags
 
