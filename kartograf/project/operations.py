@@ -19,6 +19,7 @@ from pathlib import Path, PurePosixPath
 from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
+from kartograf.download.arguments import require_int
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import PlanItem
@@ -29,6 +30,7 @@ from kartograf.project.commands import (
     TaskFiles,
     options_from_json,
     options_to_json,
+    project_command,
     task_command,
 )
 from kartograf.project.manifest import (
@@ -104,7 +106,9 @@ def _select(project: Project, names: Sequence[str] | None) -> tuple[ProjectTask,
     for name in names:
         task = by_name.get(name)
         if task is None:
-            known = ", ".join(by_name) or "brak (kartograf project add NAZWA ...)"
+            known = ", ".join(by_name) or (
+                f"brak ({project_command(project.directory, 'add', 'NAZWA ...')})"
+            )
             raise ValidationError(
                 f"nieznane zadanie {name!r}; zadania projektu: {known}"
             )
@@ -186,8 +190,9 @@ def add_project_task(
             f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})"
         )
     taken = (
-        f"zadanie {name} juz istnieje; usun je (kartograf project remove {name}) "
-        "albo wybierz inna nazwe"
+        f"zadanie {name} juz istnieje; usun je "
+        f"({project_command(project.directory, 'remove', name)}) albo wybierz "
+        "inna nazwe"
     )
     if name in state:
         raise ValidationError(taken)
@@ -350,6 +355,7 @@ def download_project(
     *,
     tasks: Sequence[str] | None = None,
     update: UpdateMode | None = None,
+    workers: int | None = None,
     cache: MetadataCache | bool = False,
     on_progress: Callable[[DownloadProgress], None] | None = None,
     on_notice: Callable[[Notice], None] | None = None,
@@ -367,27 +373,34 @@ def download_project(
     (``updated``, or ``unchanged`` when identical). A failure of a task
     (``failed``, library errors in ``TaskResult.errors``) leaves its pins
     as they were and the other tasks run. The manifest is written after
-    each task. ``cache=False`` by default: no SQLite in the project
+    each task. ``workers``: parallel file transfers within a task, for every
+    task (``None`` = the default of each command's library function:
+    ``elevation``/``imagery`` 4, the others 1; ``soil hsg`` has none - it is
+    not a task option). ``cache=False`` by default: no SQLite in the project
     directory (``True`` = the default cache in the current directory).
 
     Raises
     ------
     ValidationError
-        Invalid manifest, unknown task name, unknown mode or a missing store
-        directory (before any network access).
+        Invalid manifest, unknown task name, unknown mode, ``workers`` not an
+        integer >= 1 or a missing store directory (before any network access).
     """
     if update not in _UPDATE_MODES:
         raise ValidationError(
             f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', "
             "'force'); sprawdzenie bez pobierania: check_project"
         )
+    if workers is not None:
+        require_int(workers, "--workers")
+        if workers < 1:
+            raise ValidationError(f"--workers musi byc >= 1, podano {workers}")
     project, state = read_manifest(project_dir)
     _require_store(project)
     selected = _select(project, tasks)
     sink = NoticeSink(on_notice)
     results = tuple(
         _download_task(
-            project, task, state[task.name], update, cache, on_progress, sink
+            project, task, state[task.name], update, workers, cache, on_progress, sink
         )
         for task in selected
     )
@@ -404,6 +417,7 @@ def _download_task(
     task: ProjectTask,
     before: dict,
     update: UpdateMode | None,
+    workers: int | None,
     cache: MetadataCache | bool,
     on_progress: Callable[[DownloadProgress], None] | None,
     sink: NoticeSink,
@@ -417,7 +431,9 @@ def _download_task(
         states = {pin.version: pin_state(store, pin) for pin in task.files}
         corrupt = [pin for pin in task.files if states[pin.version] == "corrupt"]
         if corrupt:
-            return _failed(task, [_corrupt_text(task.name, pin) for pin in corrupt])
+            return _failed(
+                task, [_corrupt_text(project, task.name, pin) for pin in corrupt]
+            )
         restore = tuple(pin for pin in task.files if states[pin.version] == "missing")
         if not restore:
             return TaskResult(task.name, "unchanged", (), (), ())
@@ -434,8 +450,8 @@ def _download_task(
             task,
             [
                 f"plik geometrii {task.options['geometry']} zmienil sie od "
-                "przypiecia; przywroc go albo przyjmij nowy obszar: kartograf "
-                f"project download --upgrade {task.name}"
+                "przypiecia; przywroc go albo przyjmij nowy obszar: "
+                f"{_upgrade_hint(project, task.name)}"
             ],
         )
     try:
@@ -443,6 +459,7 @@ def _download_task(
             store,
             options,
             update=update,
+            workers=workers,
             cache=cache,
             on_progress=on_progress,
             on_notice=_prefixed(sink, task.name),
@@ -489,12 +506,18 @@ def _download_task(
     )
 
 
-def _corrupt_text(task: str, pin: PinnedFile) -> str:
+def _corrupt_text(project: Project, task: str, pin: PinnedFile) -> str:
     return (
         f"{pin.unit}: przypieta wersja {pin.version} ma inny rozmiar niz "
         "przypiety - przywroc katalog wersji z kopii magazynu albo usun "
-        f"uszkodzony katalog wersji i uruchom kartograf project download {task}"
+        "uszkodzony katalog wersji i uruchom "
+        f"{project_command(project.directory, 'download', task)}"
     )
+
+
+def _upgrade_hint(project: Project, task: str) -> str:
+    """The command that re-pins a task to a new version (``--upgrade``)."""
+    return project_command(project.directory, "download", "--upgrade", task)
 
 
 def _restore(
@@ -520,14 +543,14 @@ def _restore(
                 f"{pin.unit}: zrodlo ma inna tresc niz przypieta (przypieta "
                 f"{pin.label}, pobrana {candidates[0].label}); przypiecie bez "
                 "zmian - przywroc magazyn z kopii albo przyjmij nowa wersje: "
-                f"kartograf project download --upgrade {task.name}"
+                f"{_upgrade_hint(project, task.name)}"
             )
         else:
             problems.append(
                 f"{pin.unit}: przypietego pliku {pin.path} nie ma w wyniku "
                 "zadania; przypiecie bez zmian - przywroc magazyn z kopii albo "
-                f"przyjmij nowy wynik: kartograf project download --upgrade "
-                f"{task.name}"
+                "przyjmij nowy wynik: "
+                f"{_upgrade_hint(project, task.name)}"
             )
     files_after = tuple(restored.get(pin.version, pin) for pin in task.files)
     if files_after != task.files:
@@ -565,11 +588,13 @@ def _store_check(
             task,
             pin,
             "missing",
-            detail=f"brak przypietej wersji; przywroc kopie magazynu albo "
-            f"uruchom kartograf project download {task.name}",
+            detail="brak przypietej wersji; przywroc kopie magazynu albo "
+            f"uruchom {project_command(project.directory, 'download', task.name)}",
         )
     if state == "corrupt":
-        return _file_check(task, pin, "corrupt", detail=_corrupt_text(task.name, pin))
+        return _file_check(
+            task, pin, "corrupt", detail=_corrupt_text(project, task.name, pin)
+        )
     if not verify:
         return _file_check(task, pin, "ok")
     data = project.output_dir / pin.version
@@ -699,8 +724,15 @@ def _matched(
     return paired, tuple(unpaired)
 
 
+def _missing_detail(project: Project, task: ProjectTask) -> str:
+    return (
+        "brak przypietego pliku w magazynie; przywroc kopie albo uruchom "
+        f"{project_command(project.directory, 'download', task.name)}"
+    )
+
+
 def _checked_item(
-    task: ProjectTask, item: PlanItem, pin: PinnedFile | None, store: Path
+    project: Project, task: ProjectTask, item: PlanItem, pin: PinnedFile | None
 ) -> FileCheck:
     path = _plan_key(item)
     if pin is None:
@@ -723,14 +755,8 @@ def _checked_item(
             item.available_label,
             "nowy plik w wyniku zadania",
         )
-    if pin_state(store, pin) != "ok":
-        return _file_check(
-            task,
-            pin,
-            "missing",
-            detail=f"brak przypietego pliku w magazynie; przywroc kopie "
-            f"albo uruchom kartograf project download {task.name}",
-        )
+    if pin_state(project.output_dir, pin) != "ok":
+        return _file_check(task, pin, "missing", detail=_missing_detail(project, task))
     if item.status == "check_failed":
         return _file_check(
             task,
@@ -757,7 +783,7 @@ def _checked_item(
         "newer",
         available=item.available_label if item.status == "newer" else item.local_label,
         detail="nowsza wersja w magazynie albo u zrodla; uruchom "
-        f"kartograf project download --upgrade {task.name}",
+        f"{_upgrade_hint(project, task.name)}",
     )
 
 
@@ -808,18 +834,14 @@ def check_project(
             continue
         paired, unpaired = _matched(plan.items, task.files)
         checked.extend(
-            _checked_item(task, item, paired.get(index), project.output_dir)
+            _checked_item(project, task, item, paired.get(index))
             for index, item in enumerate(plan.items)
         )
         for pin in unpaired:
             if pin_state(project.output_dir, pin) != "ok":
                 checked.append(
                     _file_check(
-                        task,
-                        pin,
-                        "missing",
-                        detail=f"brak przypietego pliku w magazynie; przywroc kopie "
-                        f"albo uruchom kartograf project download {task.name}",
+                        task, pin, "missing", detail=_missing_detail(project, task)
                     )
                 )
             else:

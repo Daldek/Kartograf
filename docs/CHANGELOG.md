@@ -917,7 +917,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `ProjectCheck`, `FileCheck`. Zadania obejmuja kazda komende `download`
   grup danych i `soil hsg` z ich opcjami (m.in. `cutout`,
   `horizontal_crs`, `coverage`, `resolution` w `imagery download`;
-  `whole_country`, `horizontal_crs` w `landcover download`). Opis uzycia:
+  `whole_country`, `horizontal_crs` w `landcover download`).
+  `project download --workers N` (API `download_project(workers=)`) pobiera
+  pliki kazdego zadania rownolegle (domyslnie jak komenda danych); w `project
+  add` `--workers` i `soil hsg --stats` to `Error:` (opcje uruchomienia, nie
+  zadania). `status`/`verify`: zadanie nie pobrane to linia `NAZWA: nie
+  pobrane (pobierz: kartograf project download NAZWA)` i kod 1 (bez
+  `Error:`); podpowiedzi polecen `kartograf project ...` maja `--project
+  KATALOG`, gdy projekt nie jest biezacym katalogiem. Opis uzycia:
   `docs/USAGE.md` sekcja 8.
 - Biblioteka (ADR-037): `download_data`/`check_data` (`kartograf.download.data`)
   = komendy `kartograf elevation download` i `kartograf imagery download`:

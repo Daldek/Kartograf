@@ -47,7 +47,13 @@ KRAKOW_5514 = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
 
 def _run(command, out: Path, options: dict):
     return command.download(
-        out, options, update=None, cache=False, on_progress=None, on_notice=None
+        out,
+        options,
+        update=None,
+        workers=None,
+        cache=False,
+        on_progress=None,
+        on_notice=None,
     )
 
 

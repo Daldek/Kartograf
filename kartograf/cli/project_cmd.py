@@ -25,7 +25,7 @@ from kartograf.cli._parser import (
 from kartograf.cli.download_cmd import _print_notice, create_progress_callback
 from kartograf.download.fetch import UpdateMode
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import data_commands_text
+from kartograf.project.commands import data_commands_text, project_command
 
 
 def cmd_project_init(args: argparse.Namespace) -> int:
@@ -33,8 +33,22 @@ def cmd_project_init(args: argparse.Namespace) -> int:
     project = init_project(args.project, output_dir=args.output)
     print(f"Utworzono projekt: {project.directory / 'kartograf-project.json'}")
     print(f"Magazyn: {project.output_dir}")
-    print("Dodaj zadanie: kartograf project add NAZWA <grupa> download ...")
+    print(
+        "Dodaj zadanie: "
+        f"{project_command(args.project, 'add', 'NAZWA <grupa> download ...')}"
+    )
     return 0
+
+
+def _workers_given(tokens: list[str]) -> bool:
+    """``-w``/``--workers`` among the tokens of a data command (also ``-w8``,
+    ``--workers=8``): argparse cannot tell an explicit default."""
+    return any(
+        token in ("-w", "--workers")
+        or token.startswith("--workers=")
+        or (token.startswith("-w") and token[2:].isdigit())
+        for token in tokens
+    )
 
 
 def cmd_project_add(args: argparse.Namespace) -> int:
@@ -74,8 +88,19 @@ def cmd_project_add(args: argparse.Namespace) -> int:
         if enabled:
             raise ValidationError(
                 f"{flag} nie jest czescia zadania; aktualizacja projektu: "
-                f"kartograf project download --upgrade {args.name}"
+                f"{project_command(args.project, 'download', '--upgrade', args.name)}"
             )
+    if _workers_given(command_args):
+        raise ValidationError(
+            "--workers nie jest czescia zadania (opcja uruchomienia); rownolegle "
+            "pobieranie: "
+            f"{project_command(args.project, 'download', '--workers', 'N', args.name)}"
+        )
+    if getattr(parsed, "stats", False):
+        raise ValidationError(
+            "--stats nie jest czescia zadania (tylko wypisuje statystyki HSG po "
+            "obliczeniu); usun --stats"
+        )
     output = getattr(parsed, "output", None)
     if output is not None:
         store = open_project(args.project).output_dir
@@ -89,7 +114,7 @@ def cmd_project_add(args: argparse.Namespace) -> int:
     )
     print(
         f"Dodano zadanie {args.name} ({command}); pobierz: "
-        f"kartograf project download {args.name}"
+        f"{project_command(args.project, 'download', args.name)}"
     )
     return 0
 
@@ -160,10 +185,10 @@ def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) 
                     f"przypiete {task.pinned_at}"
                 )
     for name in report.not_downloaded:
-        if not checking_updates:
-            print(f"Error: {name}: zadanie nie pobrane", file=sys.stderr)
-        elif not quiet:
-            print(f"{name}: nie pobrane")
+        # a state, not an error: the exit code 1 says it (status -q || download)
+        if not quiet:
+            hint = project_command(report.project.directory, "download", name)
+            print(f"{name}: nie pobrane (pobierz: {hint})")
     for file in report.files:
         line = _check_line(file, checking_updates)
         if file.status in ("check_failed", "missing", "corrupt"):
@@ -183,11 +208,13 @@ def cmd_project_download(args: argparse.Namespace) -> int:
     mode: UpdateMode | None = (
         "upgrade" if args.upgrade else "force" if args.force else None
     )
-    progress = create_progress_callback(args.quiet, workers=4)
+    workers = args.workers if args.workers is not None else 4
+    progress = create_progress_callback(args.quiet, workers=workers)
     report = download_project(
         args.project,
         tasks=_selected_tasks(args),
         update=mode,
+        workers=args.workers,
         on_progress=progress,
         on_notice=_print_notice,
     )
