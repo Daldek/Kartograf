@@ -22,7 +22,10 @@ area are listed in a ``UNIT_LIST`` notice. ``whole_country`` -> the
 national file (one per theme; ``unit_package`` of the country or a file of
 a CUZK ATOM feed, ``atom_files``: edition = signal ``metadata``) after a
 ``WHOLE_COUNTRY_SIZE`` notice (K7). A unit file over 100 MiB is announced
-by ``DOWNLOAD_SIZE`` (``HEAD``) before its transfer (K9). The record of an
+by ``DOWNLOAD_SIZE`` (``HEAD``) before its transfer (K9). An area whose files
+to download number more than ``VOLUME_FILES`` or weigh more than
+``VOLUME_BYTES`` (``HEAD``/feed lengths) is refused before the first transfer
+(``ValidationError`` with the number, the size and the hint). The record of an
 index (GetFeatureInfo, WFS) gives the URL of a sheet or tile file and the
 label of its version: signal ``index`` compares that label with the local
 version without a transfer. Every file goes through
@@ -157,6 +160,18 @@ logger = logging.getLogger(__name__)
 SERVICE_TIMEOUT = 60
 PACKAGE_TIMEOUT = 120
 PROBE_TIMEOUT = 30
+# A HEAD asking for the size of a file: the GUGiK opendata server answers it
+# after 0.2-90 s, about 3.5 s per GB (3D tree packages of 0.3-25 GB, measured
+# 2026-10-16) - longer than a signal probe may wait.
+SIZE_TIMEOUT = 120
+# Volume of an area request (decision of 2026-10-15, ADR-043 errata 3): the
+# files an area would download - more than VOLUME_FILES of them or more than
+# VOLUME_BYTES - are refused before the first transfer; no option lifts it, a
+# smaller area, a unit choice or a plan of fewer positions does. Above
+# VOLUME_FILES the size in the message is estimated from VOLUME_SAMPLE files.
+VOLUME_FILES = 100
+VOLUME_BYTES = 10 * 10**9
+VOLUME_SAMPLE = 5
 
 _TRACK: Track = "collection"
 # Land cover products stay with LandCoverManager (ADR-039 D8, ADR-042 D10).
@@ -1249,7 +1264,10 @@ class UnitJob:
     time). ``request`` is the sidecar ``request`` (the user's choice in
     this unit), ``parent`` its ``extra.parent_request``, ``extra`` more
     ``extra`` of the sidecar, ``classes`` the classes kept from the package
-    (``layers``; ``()`` = the package as published).
+    (``layers``; ``()`` = the package as published). ``sized``: the size of
+    the file was asked before the transfer (the volume check of an area),
+    ``size`` = its bytes (``None``: not known), ``atom_file`` = the file of
+    the ATOM feed found then - the transfer asks for neither again.
     """
 
     descriptor: SourceDescriptor
@@ -1270,6 +1288,9 @@ class UnitJob:
     record: IndexRecord | None = None
     extra: dict = field(default_factory=dict)
     classes: tuple[str, ...] = ()
+    size: int | None = None
+    sized: bool = False
+    atom_file: AtomFile | None = None
 
     @property
     def key(self) -> _SLOT_KEY:
@@ -1887,7 +1908,11 @@ def _atom_file(
     refresh: bool,
 ) -> Callable[[], AtomFile]:
     """The file of an ATOM job from its feeds, asked at most once (the
-    edition and the URL of one run come from the same answer)."""
+    edition and the URL of one run come from the same answer); the file
+    found by the volume check of an area (``job.atom_file``) as it is."""
+    known = job.atom_file
+    if known is not None:
+        return lambda: known
     params = job.channel.params
     assert isinstance(params, AtomFilesParams)
     return functools.cache(
@@ -1972,17 +1997,24 @@ class _Source:
     value: dict = field(default_factory=dict)
 
 
+def _head_length(session: requests.Session, url: str) -> int | None:
+    """``Content-Length`` of a ``HEAD`` of ``url``; ``None``: not given or the
+    request failed (the transfer itself reports a failure)."""
+    try:
+        return head_signal(session, url, timeout=SIZE_TIMEOUT)["content_length"]
+    except DownloadError as e:
+        logger.debug("HEAD %s: %s", url, e)
+        return None
+
+
 def _announce_size(job: UnitJob, sink: NoticeSink, session: requests.Session) -> None:
     """The size of a package from ``HEAD`` before its transfer: always for a
     national file (``WHOLE_COUNTRY_SIZE``, K7), above ``LARGE_FILE_BYTES``
     for a unit file (``DOWNLOAD_SIZE``, K9; the GUGiK opendata server ignores
-    ``Range``: the file comes whole)."""
+    ``Range``: the file comes whole). A size asked by the volume check of an
+    area (``job.sized``) is not asked again."""
     assert job.url is not None
-    try:
-        length = head_signal(session, job.url, timeout=PROBE_TIMEOUT)["content_length"]
-    except DownloadError as e:
-        logger.debug("HEAD %s: %s", job.url, e)
-        length = None
+    length = job.size if job.sized else _head_length(session, job.url)
     what = subject(job.descriptor)
     if job.whole_country:
         sink.emit(
@@ -2373,7 +2405,10 @@ def download_collection(
     ValidationError
         Invalid or missing choice (before any request), a plan of another
         store or without ``update="upgrade"``; a CUZK sheet code missing
-        from its sheet index layer (after the index query).
+        from its sheet index layer (after the index query); an area over the
+        volume limits - more than ``VOLUME_FILES`` files or ``VOLUME_BYTES``
+        to download (after the unit query and the ``HEAD`` of its files,
+        before any transfer).
     NoCoverageError
         An area without any unit (powiat, sheet with an index record, tile,
         cadastral area).
@@ -2447,6 +2482,147 @@ def landcover_request(
     return _resolve(args, sink, {descriptor.country: descriptor})
 
 
+def _is_area(request: CollectionRequest) -> bool:
+    """A request of an area (``bbox``, ``sheet``, ``geometry``) whose files come
+    from the area; a unit choice (``teryt``, ``ku``) or ``whole_country``
+    names its files itself."""
+    return request.teryt is None and request.ku is None and not request.whole_country
+
+
+def _transfers(
+    jobs: Sequence[UnitJob], update: UpdateMode | None, planned: set[_SLOT_KEY] | None
+) -> list[UnitJob]:
+    """The jobs that would transfer their file: the positions of a plan to
+    execute, every job with ``update="force"``, otherwise the jobs without a
+    local version (a local version is used as it is; ``"upgrade"`` downloads
+    it again only when the signal of its channel shows newer content)."""
+    if planned is not None:
+        return [job for job in jobs if job.key in planned]
+    if update == "force":
+        return list(jobs)
+    return [job for job in jobs if local_version(job.slot) is None]
+
+
+def _spread(jobs: Sequence[UnitJob], count: int) -> list[UnitJob]:
+    """``count`` jobs evenly spread over ``jobs`` (the first and the last)."""
+    if len(jobs) <= count:
+        return list(jobs)
+    step = (len(jobs) - 1) / (count - 1)
+    return [jobs[round(i * step)] for i in range(count)]
+
+
+def _sized(job: UnitJob, cache: MetadataCache | None, refresh: bool) -> UnitJob:
+    """The job with the bytes of its file asked before the transfer: the
+    ``length`` of a file of an ATOM feed (the resolved file is kept for the
+    transfer), the ``Content-Length`` of a ``HEAD`` of a package; ``None``:
+    not known (the objects of an area, no length, a failed request - the
+    transfer itself reports a failure)."""
+    if job.atom:
+        try:
+            found = _atom_file(job, None, cache, refresh)()
+        except DownloadError as e:
+            logger.debug("%s %s: %s", job.descriptor.key, job.unit, e)
+            return replace(job, sized=True)
+        return replace(job, size=found.length, sized=True, atom_file=found)
+    if job.url is None:
+        return replace(job, sized=True)
+    return replace(job, size=_head_length(_session(), job.url), sized=True)
+
+
+def _bytes_text(length: int) -> str:
+    """Size in a message: ``ok. 5,7 GB`` from 1 GB up, else ``ok. 46 MB``."""
+    if length >= 10**9:
+        whole, tenth = divmod(round(length / 10**8), 10)
+        return f"ok. {whole},{tenth} GB"
+    return f"ok. {length / 1e6:.0f} MB"
+
+
+# A unit choice of a product (hint of a request over the volume limits).
+_UNIT_CHOICE = {"powiat": "--teryt <4 cyfry>", "woj": "--teryt <2 cyfry>", "ku": "--ku"}
+
+
+def _volume_error(
+    request: CollectionRequest, count: int, total: int | None, asked: int, known: int
+) -> ValidationError:
+    """The refusal of an area over the volume limits: the number of files, the
+    size (a sum, a lower bound or an estimate from ``asked`` files) and what
+    makes the request smaller."""
+    if total is None:
+        size = "rozmiar nieznany (serwer nie podal Content-Length)"
+    elif asked < count:
+        size = (
+            f"szacunkowo {_bytes_text(total)} (sredni rozmiar {known} z {count} "
+            "plikow wg HEAD)"
+        )
+    elif known < count:
+        size = (
+            f"co najmniej {_bytes_text(total)} (rozmiar znany dla {known} z {count} "
+            "plikow)"
+        )
+    else:
+        size = f"razem {_bytes_text(total)} wg HEAD"
+    units = _distinct(
+        _UNIT_CHOICE[channel.params.unit]
+        for part in request.parts
+        for channel in part.descriptor.channels
+        if isinstance(channel.params, UnitPackageParams)
+        and channel.params.unit in _UNIT_CHOICE
+    )
+    unit = f", wybierz jednostke ({', '.join(units)})" if units else ""
+    return ValidationError(
+        f"{request.product}: obszar daje {count} plikow do pobrania, {size} - limit "
+        f"jednego zadania to {VOLUME_FILES} plikow i {VOLUME_BYTES // 10**9} GB. "
+        f"Zawez obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan "
+        "z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan "
+        "PLIK)"
+    )
+
+
+def _within_volume(
+    request: CollectionRequest,
+    jobs: list[UnitJob],
+    *,
+    update: UpdateMode | None,
+    planned: set[_SLOT_KEY] | None,
+    cache: MetadataCache | None,
+    workers: int,
+) -> list[UnitJob]:
+    """The jobs of an area within the volume limits (ADR-043 errata 3).
+
+    Counted are the files the request would transfer (``_transfers``); their
+    size is the ``HEAD``/feed length of each of them - above ``VOLUME_FILES``
+    the mean of ``VOLUME_SAMPLE`` evenly spread files times their number. A
+    file whose size was asked keeps it for the size notice of its transfer
+    (no second ``HEAD``).
+
+    Raises
+    ------
+    ValidationError
+        More than ``VOLUME_FILES`` files or more than ``VOLUME_BYTES``.
+    """
+    todo = _transfers(jobs, update, planned)
+    count = len(todo)
+    if not count:
+        return jobs
+    asked = todo if count <= VOLUME_FILES else _spread(todo, VOLUME_SAMPLE)
+    size = functools.partial(_sized, cache=cache, refresh=update == "upgrade")
+    if workers > 1 and len(asked) > 1:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
+            sized = list(pool.map(size, asked))
+    else:
+        sized = [size(job) for job in asked]
+    known = [job.size for job in sized if job.size is not None]
+    total: int | None = None
+    if known:
+        total = sum(known)
+        if count > VOLUME_FILES:  # the mean of the sample for every file
+            total = total * count // len(known)
+    if count > VOLUME_FILES or (total is not None and total > VOLUME_BYTES):
+        raise _volume_error(request, count, total, len(asked), len(known))
+    by_key = {job.key: job for job in sized}
+    return [by_key.get(job.key, job) for job in jobs]
+
+
 def run_request(
     request: CollectionRequest,
     *,
@@ -2464,7 +2640,9 @@ def run_request(
     Raises
     ------
     ValidationError
-        A plan of another store or without ``update="upgrade"``, bad workers.
+        A plan of another store or without ``update="upgrade"``, bad workers;
+        an area whose files to download exceed ``VOLUME_FILES`` or
+        ``VOLUME_BYTES`` (``_within_volume``; before any transfer).
     NoCoverageError
         An area of a package product without any powiat (PRG).
     DownloadError
@@ -2487,6 +2665,15 @@ def run_request(
             todo, stale_items = select_planned(plan, current, track)
             planned = {(i.segment, i.hierarchy, i.name) for i in todo}
             stale = tuple(stale_items)
+        if _is_area(request):
+            jobs = _within_volume(
+                request,
+                jobs,
+                update=update,
+                planned=planned,
+                cache=metadata,
+                workers=workers,
+            )
 
         def one(job: UnitJob) -> VersionedFile | UnitFailure | None:
             try:
