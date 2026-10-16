@@ -1,13 +1,10 @@
 # Kartograf
 
 Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
-(Czechy), Copernicus i ISRIC: wybierasz obszar (godło arkusza, bbox albo plik
-geometrii), a Kartograf pobiera arkusze albo wycinek WCS NMT/NMPT
-i ortofotomapy PL (`--cutout --horizontal-crs`) — także granice, ewidencję
-i modele 3D budynków GUGiK oraz dane wektorowe CUZK (ZABAGED, RUIAN, HY-NET)
-— i zapisuje je w uporządkowanym katalogu `data/`
-razem z metadanymi każdego pliku. Działa
-jako narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
+(Czechy), Copernicus i ISRIC i zapisuje je w uporządkowanym katalogu `data/`
+razem z metadanymi każdego pliku. Obszar wybierasz godłem arkusza, bboxem,
+plikiem geometrii, kodem jednostki (TERYT) albo całym krajem. Działa jako
+narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
 
 Jest częścią toolchainu hydrologicznego: **Hydrograf** używa go jako źródła
 danych GIS (NMT, pokrycie terenu), **Hydrolog** opcjonalnie (grupy
@@ -16,37 +13,26 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 
 ## Obsługiwane dane
 
-- **NMT (PL)** — Numeryczny Model Terenu z GUGiK: siatki 0,15–10 m (np. 0,5 m, 1 m, 5 m), archiwa GUGiK jako pliki źródłowe i NMT 100 m (pliki XYZ województw)
-- **NMT (CZ)** — DMR 5G/4G z CUZK (2 m / 5 m)
-- **Warstwice (CZ)** — warstwice ZABAGED CUZK, arkusze SM5 (ZIP SHP albo DGN)
-- **NMPT** — Numeryczny Model Pokrycia Terenu (DSM) z GUGiK (0,5 m, 0,6 m, 1 m)
-- **Ortofotomapa (PL)** — zdjęcia lotnicze GUGiK (rozdzielczość wg kampanii, np. 25 cm, 10 cm): arkusze albo wycinek WCS Standard/High z wyborem piksela
-- **Ortofoto (CZ)** — arkusze SM5 CUZK (JPEG z plikami georeferencji JGW, aktualny rocznik)
-- **Obrazy GUGiK (PL)** — obrazy intensywności LIDAR, prawdziwa ortofotomapa (true orto) wybranych miast (arkusze i wycinek WCS) i ortofotomapa ukośna (cztery kierunki widoku)
-- **LAZ** — chmury punktów LIDAR (ALS) z GUGiK
-- **BDOT10k** — wektorowa baza obiektów topograficznych (pokrycie terenu, hydrografia)
-- **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu
-- **BDOO (PL)** — baza danych obiektów ogólnogeograficznych GUGiK (1:250 000): paczki GML województw, roczniki 2015 i 2021-2026, opcjonalnie tylko wybrane klasy
-- **Granice administracyjne (PRG)** — granice jednostek administracyjnych i ewidencyjnych z GUGiK
-- **EGiB** — mapa ewidencyjna z GUGiK (działki i budynki)
-- **Punkty adresowe i ulice (PRG)** — punkty adresowe i ulice obszaru (GeoPackage) albo paczka powiatu / plik krajowy z GUGiK
-- **Granice specjalne (PRG)** — 44 rodzaje granic specjalnych (sądy, policja, lasy, wody, obszary morskie) z OGC API PRG albo plik krajowy
-- **Ceny nieruchomości (RCN)** — eksporty transakcji z GUGiK (powiat, województwo; GeoPackage)
-- **Mapa katastralna (CZ)** — paczki katastrálního území CUZK (SHP, DXF, DGN, VFK)
-- **Jednostki geomorfologiczne (CZ)** — poziomy od subprovincie do části (obszar; CUZK)
-- **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
-- **Modele 3D drzew i mesh miast (PL)** — drzewa CityGML LoD1 (paczki powiatów) i modele siatkowe miast OBJ z teksturami (kafle indeksu GUGiK)
-- **Osnowy geodezyjne** — punkty osnowy poziomej, wysokościowej, grawimetrycznej i magnetycznej GUGiK (obszar, paczki powiatów, archiwa arkuszy) oraz Bodove pole CUZK
-- **Quasi-geoidy** — modele PL-geoid2021 (GUGiK) i QGZU-2013 (CUZK) jako pliki krajowe
-- **ZABAGED (CZ)** — 22 warstwy pokrycia terenu i wód CUZK (obszar) albo plik krajowy GPKG
-- **Data50 i Data250 (CZ)** — cyfrowe modele geograficzne CUZK 1:50 000 i 1:250 000: wszystkie warstwy obiektowe obszaru (GeoPackage) albo plik krajowy SHP
-- **Granice RUIAN (CZ)** — kraje, okresy, obce i katastralni uzemi z CUZK
-- **HY-NET (CZ)** — sieć hydrograficzna CUZK (odcinki cieków i węzły; plik krajowy)
-- **Nazwy geograficzne** — PRNG (Polska i polskie nazwy świata), Geonames CUZK: obiekty obszaru albo archiwum krajowe
-- **Mapy topograficzne** — gotowe arkusze wizualizacji BDOT10k (PL) i ZTM (CZ), TIFF/PDF oraz formaty ZTM
-- **CORINE Land Cover** — europejska klasyfikacja pokrycia terenu (Copernicus)
-- **SoilGrids** — globalne dane glebowe (ISRIC)
-- **HSG** — grupy hydrologiczne gleb dla metody SCS-CN, liczone z SoilGrids
+Komendy są pogrupowane wg typu danych (`kartograf <grupa> download`); produkt
+wybiera `--product` (w `landcover` — `--source`). Źródła grupy i wartości
+wyboru wypisuje `kartograf <grupa> list-sources`.
+
+| Grupa | Dane (wartość `--product`, w `landcover` — `--source`) |
+|---|---|
+| `elevation` | NMT (`nmt`): PL — siatki GUGiK 0,15–10 m, archiwa GUGiK jako pliki źródłowe, NMT 100 m (pliki XYZ województw); CZ — DMR 5G/4G (2 m / 5 m). NMPT (`nmpt`): PL — 0,5 / 0,6 / 1 m; CZ — DMP OK 0,5 m, DMP 1G 2 m. Chmury punktów LIDAR (`laz`): PL (GUGiK) i CZ (`--model` `dmr5g`, `dmr4g`, `dmp1g`, `dmpok`). Warstwice ZABAGED (`contours`, CZ): arkusze SM5, SHP albo DGN. Raport dostępności bez pobierania: `elevation availability` |
+| `imagery` | Ortofotomapa (`orto`): PL — arkusze GUGiK wg kampanii (np. 25 cm, 10 cm) albo wycinek WCS Standard/High; CZ — arkusze SM5 CUZK (JPEG z plikami JGW). PL: obrazy intensywności LIDAR (`intensity`), prawdziwa ortofotomapa wybranych miast (`true-orto`, arkusze i wycinek WCS), ortofotomapa ukośna (`oblique-orto`, cztery kierunki widoku) |
+| `landcover` | BDOT10k (`bdot10k`; także archiwum roczników 2014–2025, GML/SHP), BDOO 1:250 000 (`bdoo`, PL), CORINE Land Cover (`corine`, Copernicus), ZABAGED (`zabaged`), Data50 i Data250 (`data50`, `data250`) — CZ |
+| `soil` | SoilGrids (ISRIC; `soil download --property`), grupy hydrologiczne gleb HSG dla metody SCS-CN, liczone z SoilGrids (`soil hsg`) |
+| `boundaries` | Granice jednostek (`admin`): PRG (PL), RUIAN (CZ). PL: punkty adresowe i ulice (`addresses`), 44 rodzaje granic specjalnych (`special`). CZ: jednostki geomorfologiczne (`geomorphology`) |
+| `cadastre` | Mapa ewidencyjna (`map`): EGiB — działki i budynki (PL), mapa katastralna — SHP, DXF, DGN, VFK (CZ). Ceny nieruchomości RCN (`prices`, PL) |
+| `models3d` | PL: budynki CityGML LoD1/LoD2 (`buildings`), drzewa CityGML LoD1 (`trees`), mesh miast OBJ z teksturami (`mesh`) |
+| `hydro` | Sieć hydrograficzna HY-NET (`network`, CZ) |
+| `names` | Nazwy geograficzne (`geographic`): PRNG (PL), Geonames (CZ); polskie nazwy geograficzne świata (`world`) |
+| `maps` | Mapy topograficzne (`topographic`): wizualizacje BDOT10k (PL), ZTM (CZ); TIFF, PDF i formaty ZTM |
+| `geodesy` | Osnowy geodezyjne (`control`): pozioma, wysokościowa, grawimetryczna i magnetyczna GUGiK (także archiwa), Bodove pole CUZK. Quasi-geoidy (`geoid`): PL-geoid2021, QGZU-2013 |
+
+Poza grupami danych: `kartograf project` (projekt z przypiętymi wersjami,
+niżej), `kartograf parse` (godło arkusza) i `kartograf cache`.
 
 ## Instalacja
 
@@ -101,11 +87,15 @@ kartograf cadastre download --product map --teryt 1261 -o ./data
 kartograf models3d download --product buildings --lod 1 --year 2024 --teryt 1261 -o ./data
 kartograf landcover download --source bdot10k --teryt 1261 --year 2024 --format SHP -o ./data
 
-# Nazwy i gotowe arkusze map: jawny katalog danych poza repozytorium
-kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o <katalog-danych>
-kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o <katalog-danych>
-kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o <katalog-danych>
-kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o <katalog-danych>
+# Nazwy geograficzne i gotowe arkusze map (katalog danych poza repozytorium)
+kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o ~/kartograf-data
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o ~/kartograf-data
+kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o ~/kartograf-data
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o ~/kartograf-data
+
+# Osnowy geodezyjne (punkty sieci obszaru) i model quasi-geoidy
+kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 -o ./data
+kartograf geodesy download --product geoid --country pl --whole-country -o ./data
 ```
 
 Pełna lista opcji: `kartograf <grupa> <komenda> --help`. Więcej przykładów, wybór
@@ -157,9 +147,12 @@ path = result.files["N-34-130-D-d-2-4"][0].version_path
 
 ## Gdzie trafiają dane
 
-Pliki lądują w `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
-(np. `data/nmt/pl_1992_1m_evrf2007/`), a każdy ma obok sidecar
-`<plik>.meta.json` z układem, licencją i pochodzeniem danych — opis
+Pliki lądują w katalogu `--output` (niżej `data/`):
+`data/<produkt>/<kraj>_<układ albo źródło>[_<wariant>]/...` (np.
+`data/nmt/pl_1992_1m_evrf2007/`, `data/boundaries/pl_prg_gmina/bbox/`).
+Każdy plik ma obok sidecar `<plik>.meta.json` z układem, licencją
+i pochodzeniem danych; pobrana treść trafia jako wersja do `versions/`,
+a ścieżka standardowa jest dowiązaniem do najnowszej lokalnej wersji — opis
 w [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sekcja 3).
 
 ## Dokumentacja

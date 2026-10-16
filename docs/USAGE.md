@@ -25,26 +25,33 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
+   - [4.1 Wybór roku danych (`--year`, `--min-year`, `--max-year`)](#41-wybór-roku-danych---year---min-year---max-year)
+   - [4.2 Najnowszy pełny lot (`full_sheet/`, `--full-sheet`)](#42-najnowszy-pełny-lot-full_sheet---full-sheet)
+   - [4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)](#43-wersje-tryby-i-plan-aktualizacji---check-updates---upgrade---force)
 5. [Gleby i HSG](#5-gleby-i-hsg)
 6. [Konfiguracja CLMS API (CORINE GeoTIFF)](#6-konfiguracja-clms-api-corine-geotiff)
 7. [Znane problemy i ograniczenia](#7-znane-problemy-i-ograniczenia)
 8. [Projekt](#8-projekt)
+   - [8.1 Pierwsze pobranie i sprawdzenie](#81-pierwsze-pobranie-i-sprawdzenie)
+   - [8.2 Swiezosc i wariant danych](#82-swiezosc-i-wariant-danych)
+   - [8.3 Przenoszenie projektu i magazynu](#83-przenoszenie-projektu-i-magazynu)
+   - [8.4 Biblioteka Python](#84-biblioteka-python)
 
 Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 
 | Grupa | Komendy | Dane |
 |---|---|---|
-| `elevation` | `download`, `list-sources`, `availability` | NMT, NMPT i LAZ (PL, CZ); raport dostępności PL, CZ i `auto` |
-| `imagery` | `download`, `list-sources` | ortofotomapa: arkusze PL (GUGiK) i CZ (CUZK, SM5), wycinek WCS PL (`--cutout`) |
+| `elevation` | `download`, `list-sources`, `availability` | NMT (`nmt`), NMPT (`nmpt`) i chmury punktów LAZ (`laz`) — PL, CZ; warstwice ZABAGED (`contours`, CZ); raport dostępności PL, CZ i `auto` |
+| `imagery` | `download`, `list-sources` | ortofotomapa (`orto`): arkusze PL (GUGiK) i CZ (CUZK, SM5), wycinek WCS PL (`--cutout`); PL: obrazy intensywności LIDAR (`intensity`), prawdziwa ortofotomapa (`true-orto`) i ortofotomapa ukośna (`oblique-orto`) wybranych miast |
 | `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), BDOO (PL), CORINE, ZABAGED, Data50 i Data250 (CZ) (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
-| `boundaries` | `download`, `list-sources` | granice jednostek: PRG (PL), RUIAN (CZ) |
-| `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
-| `models3d` | `download`, `list-sources` | modele 3D (PL): budynki CityGML LoD1/LoD2, drzewa CityGML, mesh miast (OBJ) |
-| `hydro` | `download`, `list-sources` | sieć wód HY-NET (CZ) |
-| `names` | `download`, `list-sources` | PRNG RP, polskie nazwy świata (PL), Geonames (CZ) |
-| `maps` | `download`, `list-sources` | wizualizacje map BDOT10k (PL), ZTM (CZ) |
-| `geodesy` | `download`, `list-sources` | osnowy geodezyjne PL (GUGiK) i CZ (Bodove pole), quasi-geoidy PL-geoid2021 i QGZU-2013 |
+| `boundaries` | `download`, `list-sources` | granice jednostek (`admin`): PRG (PL), RUIAN (CZ); punkty adresowe i ulice (`addresses`) i granice specjalne (`special`) PRG (PL); jednostki geomorfologiczne (`geomorphology`, CZ) |
+| `cadastre` | `download`, `list-sources` | mapa ewidencyjna (`map`): EGiB — działki i budynki (PL), mapa katastralna (CZ, `--ku`); ceny nieruchomości RCN (`prices`, PL) |
+| `models3d` | `download`, `list-sources` | modele 3D (PL): budynki CityGML LoD1/LoD2 (`buildings`), drzewa CityGML (`trees`), mesh miast OBJ (`mesh`) |
+| `hydro` | `download`, `list-sources` | sieć wód HY-NET (`network`, CZ) |
+| `names` | `download`, `list-sources` | nazwy geograficzne (`geographic`): PRNG RP (PL), Geonames (CZ); polskie nazwy świata (`world`, PL) |
+| `maps` | `download`, `list-sources` | mapy topograficzne (`topographic`): wizualizacje BDOT10k (PL), ZTM (CZ) |
+| `geodesy` | `download`, `list-sources` | osnowy geodezyjne (`control`): PL (GUGiK) i CZ (Bodove pole); quasi-geoidy (`geoid`): PL-geoid2021 i QGZU-2013 |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
@@ -53,21 +60,25 @@ sieci). Dawne `kartograf download`, `kartograf soilgrids` i
 `landcover --source soilgrids` nie działają: kończą się błędem (kod 2)
 z nazwą nowej komendy (tabela: CHANGELOG 0.8.0).
 
-Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
-`--output` (także `landcover download`, `soil download` i `soil hsg`), `--country`
-(z `--bbox`/`--geometry`), `--vertical-crs` (NMT, NMPT, LAZ),
-`--resolution` (NMT i NMPT, gdy jest wybór; piksel wycinka ortofotomapy),
-`--sheet-system` (PL `--bbox`/`--geometry`
-bez `--cutout`), `--horizontal-crs` (z `--cutout`; plik krajowy ZABAGED,
-Data50, Data250), `--coverage` (wycinek ortofotomapy), `--scale` (PL-2000),
-`--level` (obszar `boundaries`; pod `auto` per kraj), `--lod` i `--year`
-(`models3d`, gdy wydań jest kilka; rocznik BDOO), `--network`
-(`geodesy --product control`) oraz `--format` z `--year`
-(archiwum BDOT10k)
-podaje się jawnie. Brak wartości to `Error:` z listą
-dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
-podaje też `kartograf <grupa> <komenda> --help`. Domyślne zostały tylko format,
-układ `--bbox-crs EPSG:2180`, przełączniki i parametry techniczne
+Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`
+(w `landcover` `--source`), `--output` (także `landcover download`,
+`soil download` i `soil hsg`), `--country` (z `--bbox`/`--geometry`),
+`--vertical-crs` (NMT, NMPT, LAZ), `--model` (LAZ CZ), `--resolution` (NMT
+i NMPT, gdy jest wybór; piksel wycinka ortofotomapy), `--sheet-system` (PL
+`--bbox`/`--geometry` bez `--cutout`; obszar ZTM CZ w `maps`),
+`--horizontal-crs` (z `--cutout`; pliki krajowe ZABAGED, Data50, Data250
+i Geonames), `--coverage` (wycinek ortofotomapy), `--scale` (PL-2000,
+`maps`), `--level` (obszar `boundaries`; pod `auto` per kraj), `--lod`
+i `--year` (`models3d`, gdy wydań jest kilka; rocznik BDOO i CORINE),
+`--network` (`geodesy --product control`), `--property`, `--depth`
+i `--stat` (`soil download`; `soil hsg` — `--depth`) oraz `--format`
+(warstwice CZ, `maps`, pliki krajowe `names`, punktów adresowych i granic
+specjalnych PRG, mapa katastralna CZ, archiwum BDOT10k z `--year`) podaje
+się jawnie. Brak wartości to `Error:` z listą dopuszczalnych wartości
+(kod 1, przed siecią); listy i znaczenia wartości podaje też `kartograf
+<grupa> <komenda> --help`. Domyślne zostały tylko format NMT i NMPT
+(siatka ASC; archiwum GUGiK wybiera `--format`) i bieżącego BDOT10k
+(GPKG), układ `--bbox-crs EPSG:2180`, przełączniki i parametry techniczne
 (`--workers`).
 
 ---
@@ -1162,7 +1173,7 @@ kartograf boundaries download --product addresses --country pl --bbox 566000,243
 #   boundaries/pl_prg_addresses/bbox/566000_243500_566500_244000.gpkg: nowa wersja 2026-10-16_f8981d39
 kartograf boundaries download --product addresses --teryt 1261 -o ./data
 #   boundaries/pl_prg_addresses_shp/teryt/1261.zip: nowa wersja 2026-10-16_ad2e3b66
-kartograf boundaries download --product addresses --country pl --whole-country --format SHP -o <katalog-danych>
+kartograf boundaries download --product addresses --country pl --whole-country --format SHP -o ~/kartograf-data
 #   Warning: addresses PL: plik krajowy https://opendata.geoportal.gov.pl/prg/adresy/PunktyAdresowe/POLSKA.zip - 563815148 B (ok. 564 MB)
 #   boundaries/pl_prg_addresses_shp/country/pl.zip: nowa wersja 2026-10-16_957a5138
 
@@ -1170,13 +1181,13 @@ kartograf boundaries download --product addresses --country pl --whole-country -
 kartograf boundaries download --product special --country pl --bbox 21.0,52.22,21.01,52.23 --bbox-crs EPSG:4326 -o ./data
 #   Info: special: wynik obszaru bez obwodow spisowych (kolekcja GranicaObwoduSpisowego: usluga odpowiada minutami) - sa w pliku krajowym: --whole-country --format SHP|GML
 #   boundaries/pl_prg_special/bbox/21_52.22_21.01_52.23.gpkg: nowa wersja 2026-10-16_07b97606
-kartograf boundaries download --product special --country pl --whole-country --format SHP -o <katalog-danych>
+kartograf boundaries download --product special --country pl --whole-country --format SHP -o ~/kartograf-data
 #   Warning: special PL: plik krajowy https://opendata.geoportal.gov.pl/prg/granice/00_granice_specjalne_shp.zip - 734171465 B (ok. 734 MB)
 
 # RCN (ceny nieruchomości): eksport powiatu (4 cyfry) albo województwa (2 cyfry)
 kartograf cadastre download --product prices --teryt 1201 -o ./data
 #   cadastre/pl_rcn/teryt/1201.gpkg: nowa wersja 2026-10-16_a612f064
-kartograf cadastre download --product prices --teryt 1261 -o <katalog-danych>
+kartograf cadastre download --product prices --teryt 1261 -o ~/kartograf-data
 #   Warning: prices PL 1261: duzy plik https://opendata.geoportal.gov.pl/InneDane/latest_exports/rcn_transakcje_ceny/GPKG/1261_transakcje_ceny.gpkg.zip - 301623607 B (ok. 302 MB)
 #   cadastre/pl_rcn/teryt/1261.gpkg: nowa wersja 2026-10-16_ed4cc8bb
 
@@ -1288,7 +1299,7 @@ dotyczy wszystkich kolekcji, także ZABAGED, BDOO, Data50 i Data250
 w `landcover` oraz NMT 100 m (pliki województw obszaru).
 
 ```bash
-kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 -o <katalog-danych>
+kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 -o ~/kartograf-data
 #   Info: trees: powiaty obszaru wg PRG (2): 1206, 1261
 #   Error: trees: obszar daje 2 plikow do pobrania, razem ok. 13,7 GB wg HEAD - limit jednego zadania to 100 plikow i 10 GB. Zawez obszar (--bbox, --sheet, --geometry), wybierz jednostke (--teryt <4 cyfry>) albo wykonaj plan z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan PLIK)
 ```
@@ -1310,7 +1321,7 @@ kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-
 #   -> landcover/cz_zabaged/bbox/-460000_-1120000_-450000_-1110000.gpkg
 kartograf landcover list-layers --source zabaged
 # plik krajowy ZABAGED (5,8 GB w EPSG:5514 albo 6,7 GB w EPSG:3045) — tylko świadomie
-kartograf landcover download --source zabaged --whole-country --horizontal-crs EPSG:5514 -o <katalog-danych>
+kartograf landcover download --source zabaged --whole-country --horizontal-crs EPSG:5514 -o ~/kartograf-data
 #   Warning: zabaged CZ: plik krajowy https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip - 5805826649 B (ok. 5806 MB)
 #   -> landcover/cz_zabaged_gpkg_5514/country/cz.zip (wersja 2026-10-04_<sha8>)
 
@@ -1469,13 +1480,13 @@ do kompletu danych użyj `--whole-country`. Wyniki obszaru nie mają taniego
 sygnału aktualizacji, do odświeżenia służy `--force`.
 
 ```bash
-kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o <katalog-danych>
-kartograf names download --product world --country pl --bbox=-74.02,40.69,-73.92,40.79 --bbox-crs EPSG:4326 -o <katalog-danych>
-kartograf names download --product geographic --country cz --bbox=-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 -o <katalog-danych>
-kartograf names download --product geographic --country pl --whole-country --format SHP -o <katalog-danych>
-kartograf names download --product world --country pl --whole-country --format GML -o <katalog-danych>
-kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o <katalog-danych>
-kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --check-updates -o <katalog-danych>
+kartograf names download --product geographic --country pl --bbox 19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o ~/kartograf-data
+kartograf names download --product world --country pl --bbox=-74.02,40.69,-73.92,40.79 --bbox-crs EPSG:4326 -o ~/kartograf-data
+kartograf names download --product geographic --country cz --bbox=-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 -o ~/kartograf-data
+kartograf names download --product geographic --country pl --whole-country --format SHP -o ~/kartograf-data
+kartograf names download --product world --country pl --whole-country --format GML -o ~/kartograf-data
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 -o ~/kartograf-data
+kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --check-updates -o ~/kartograf-data
 ```
 
 PRNG RP ma **dwa** pliki krajowe (`miejscowosci`, `obiekty-fizjograficzne`);
@@ -1499,11 +1510,11 @@ jest wymagany przy `--bbox`/`--geometry`. ZTM sprawdza `ETag`/`Last-Modified`
 z `HEAD` bez pobierania danych.
 
 ```bash
-kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o <katalog-danych>
-kartograf maps download --product topographic --country pl --sheet M-34-064 --scale 1:100000 --format PDF -o <katalog-danych>
-kartograf maps download --product topographic --country cz --sheet 0510-D-11 --scale 1:10000 --format TIFF -o <katalog-danych>
-kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o <katalog-danych>
-kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --check-updates -o <katalog-danych>
+kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o ~/kartograf-data
+kartograf maps download --product topographic --country pl --sheet M-34-064 --scale 1:100000 --format PDF -o ~/kartograf-data
+kartograf maps download --product topographic --country cz --sheet 0510-D-11 --scale 1:10000 --format TIFF -o ~/kartograf-data
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF -o ~/kartograf-data
+kartograf maps download --product topographic --country cz --sheet NM-34-07-1-D-15 --scale 1:10000 --format PDF --check-updates -o ~/kartograf-data
 kartograf maps list-sources
 kartograf names list-sources
 ```
@@ -1536,12 +1547,12 @@ wysokości): paczka powiatu (`--teryt`) albo paczki powiatów obszaru,
 `Error:`), nie każdy powiat ma paczkę (`Error: <TERYT>: ... (HTTP 404)`).
 
 ```bash
-kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 -o <katalog-danych>
+kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 -o ~/kartograf-data
 #   Info: mesh: kafle obszaru (1): s7/78944_6777_74230_55482
 #   models3d/pl_mesh/s7/78944_6777_74230_55482.zip: nowa wersja 2021-10-03_DFT.7201.043.2023_7950f585
-kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check-updates -o <katalog-danych>
+kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check-updates -o ~/kartograf-data
 #   s7/78944_6777_74230_55482: aktualne (2021-10-03_DFT.7201.043.2023)
-kartograf models3d download --product trees --teryt 3063 -o <katalog-danych>
+kartograf models3d download --product trees --teryt 3063 -o ~/kartograf-data
 #   Warning: trees PL 3063: duzy plik https://opendata.geoportal.gov.pl/InneDane/Drzewa3D/LOD1/2023/30/3063.zip - 324674789 B (ok. 325 MB)
 #   models3d/pl_trees_lod1_2023/teryt/3063.zip: nowa wersja 2023_25a77518
 ```
@@ -1574,23 +1585,23 @@ Bpv, 58 MB; data wydania z feedu ATOM jest etykietą i sygnałem
 i nie stosuje ich do innych danych.
 
 ```bash
-kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 -o <katalog-danych>
+kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 -o ~/kartograf-data
 #   geodesy/pl_control_vertical/bbox/560000_240000_575000_250000.gpkg: nowa wersja 2026-10-16_1272d195
-kartograf geodesy download --product control --network horizontal --teryt 1201 -o <katalog-danych>
+kartograf geodesy download --product control --network horizontal --teryt 1201 -o ~/kartograf-data
 #   geodesy/pl_control_horizontal_package/teryt/1201.zip: nowa wersja 2026-10-16_fa3dc40c
-kartograf geodesy download --product control --network gravity --teryt 1201 -o <katalog-danych>
+kartograf geodesy download --product control --network gravity --teryt 1201 -o ~/kartograf-data
 #   Error: --network gravity: control (PL) - dostepne tylko dla --bbox/--sheet/--geometry (obiekty obszaru); dla --teryt: horizontal, vertical
-kartograf geodesy download --product control --network archive-kronsztadt60 --sheet M-34-064-D -o <katalog-danych>
+kartograf geodesy download --product control --network archive-kronsztadt60 --sheet M-34-064-D -o ~/kartograf-data
 #   Info: control: arkusze (1): M-34-64
 #   geodesy/pl_control_archive-kronsztadt60/M-34/64/M-34-64.zip: nowa wersja 2026-10-16_8211a8dc
-kartograf geodesy download --product control --country cz --network vertical "--bbox=-452000,-1113000,-449000,-1110000" --bbox-crs EPSG:5514 -o <katalog-danych>
+kartograf geodesy download --product control --country cz --network vertical "--bbox=-452000,-1113000,-449000,-1110000" --bbox-crs EPSG:5514 -o ~/kartograf-data
 #   geodesy/cz_control_vertical/bbox/-452000_-1113000_-449000_-1110000.gpkg: nowa wersja 2026-10-16_b921641a
-kartograf geodesy download --product control --country auto --network vertical --bbox 18.55,49.70,18.70,49.78 --bbox-crs EPSG:4326 -o <katalog-danych>
-#   -> geodesy/cz_control_vertical/bbox/<EPSG:5514>.gpkg i geodesy/pl_control_vertical/bbox/<EPSG:2180>.gpkg
-kartograf geodesy download --product geoid --country pl --whole-country -o <katalog-danych>
+kartograf geodesy download --product control --country auto --network vertical --bbox 18.55,49.70,18.70,49.78 --bbox-crs EPSG:4326 -o ~/kartograf-data
+#   -> geodesy/cz_control_vertical/bbox/<coords>.gpkg i geodesy/pl_control_vertical/bbox/<coords>.gpkg (obszar w EPSG:5514 i EPSG:2180)
+kartograf geodesy download --product geoid --country pl --whole-country -o ~/kartograf-data
 #   Warning: geoid PL: plik krajowy https://opendata.geoportal.gov.pl/InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt - 42328086 B (ok. 42 MB)
 #   geodesy/pl_geoid2021_evrf2007/country/pl.txt: nowa wersja 2026-10-16_d695cf81
-kartograf geodesy download --product geoid --country cz --whole-country -o <katalog-danych>
+kartograf geodesy download --product geoid --country cz --whole-country -o ~/kartograf-data
 #   geodesy/cz_qgzu2013/country/cz.zip: nowa wersja 2021-02-22_aacfba6b
 kartograf geodesy list-sources
 ```
@@ -1612,7 +1623,7 @@ Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 `LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`,
 `elevation availability` = `check_availability`,
 `boundaries download`, `cadastre download`, `models3d download`, `hydro
-download`, `names download` i `maps download` =
+download`, `names download`, `maps download` i `geodesy download` =
 `download_collection`/`check_collection`. Błąd wejścia
 to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 (CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
@@ -2528,7 +2539,7 @@ Sciezka standardowa w magazynie moze wskazywac nowsza wersje, ale
 przypiecie pozostaje przy konkretnych bajtach. Plik manifestu mozna
 przechowywac razem ze skryptami projektu w systemie kontroli wersji.
 
-### Pierwsze pobranie i sprawdzenie
+### 8.1 Pierwsze pobranie i sprawdzenie
 
 ```bash
 mkdir -p ~/projekty/wisla
@@ -2548,8 +2559,8 @@ i flagi wyboru danych co zwykle `kartograf elevation download`,
 `imagery download` (takze ortofoto CZ i wycinek `--cutout`), `landcover
 download` (takze ZABAGED), `soil download`, `soil hsg`,
 `boundaries download`, `cadastre download`, `models3d download`,
-`hydro download`, `names download` i `maps download`; arkusz ortofoto CZ
-przypina cztery pliki (JPEG i trzy JGW);
+`hydro download`, `names download`, `maps download` i `geodesy download`;
+arkusz ortofoto CZ przypina cztery pliki (JPEG i trzy JGW);
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
 a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa
@@ -2572,7 +2583,7 @@ wybierz `--upgrade`. `status` bez sieci szybko sprawdza istnienie
 wersji i rozmiary; `verify` bez sieci czyta cale pliki i porownuje
 SHA-256 oraz sidecary wersji. Zaden z nich nie zmienia manifestu.
 
-### Swiezosc i wariant danych
+### 8.2 Swiezosc i wariant danych
 
 ```bash
 kartograf project download --check-updates
@@ -2606,7 +2617,7 @@ przypiete pliki sa aktualne dla wybranego wariantu*. Wybor
 `--year` pozostaje aktualny dla danego roku nawet po wydaniu
 nowszego rocznika.
 
-### Przenoszenie projektu i magazynu
+### 8.3 Przenoszenie projektu i magazynu
 
 Sciezki `output_dir` i `options.geometry` podane wzglednie sa zapisane
 wzgledem katalogu projektu (nie biezacego katalogu odczytu).
@@ -2631,7 +2642,7 @@ zmieniony obszar. Pozostale komendy wymagaja istniejacego katalogu
 magazynu (brak zamontowanego udzialu nie spowoduje pobrania do
 pustego katalogu).
 
-### Biblioteka Python
+### 8.4 Biblioteka Python
 
 ```python
 from pathlib import Path
