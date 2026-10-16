@@ -244,7 +244,11 @@ tlumaczy). Dodatkowo:
    z uslugi). Flagi roku tylko PL: `cz` (i godlo CZ) = `ValidationError`,
    `auto` z obszarem w obu krajach = `AUTO_NARROWED_TO_PL`, obszar tylko
    w CZ = `ValidationError`. CLI: `ok=False` = kod wyjscia 1 (raport czesci
-   PL drukowany).
+   PL drukowany). Po przegladzie: `uncovered_m2` mierzone w ukladzie
+   raportowanego obszaru (`area_m2`; rama kafla TM33 przeniesiona tam
+   wierzcholkami przypieta operacja - obwiednia obszaru w EPSG:3045 dawala
+   wiecej niz caly obszar), `size_bytes = None` bez zadnego pliku,
+   `CZ_SERVICE_ONLY` tylko dla czesci CZ z arkuszami indeksu.
 10. **Podpowiedzi CZ (bez `--output`):** raster SM5/TM33 - po jednej komendzie
     na arkusz (`elevation download --product nmpt --sheet CTES96 --resolution
     0.5m --vertical-crs Bpv`), CLI pokazuje 5 i liczbe pozostalych (jak
@@ -553,8 +557,8 @@ Sprawdz `git ls-tree develop kartograf/project/commands.py`.
 
 ### Task 9: Brama i E2E na zywo
 
-Dane: `<katalog-danych>/kartograf/e2e/2026-10-xx-plan-b/` (jawne `--output`).
-Raport: `docs/research/2026-10-xx-plan-b-e2e/raport.md`.
+Dane: `<katalog-danych>/kartograf/e2e/2026-10-16-plan-b/` (jawne `--output`).
+Raport: `docs/research/2026-10-16-plan-b-e2e/raport.md`.
 
 - [ ] **Brama** (liczby do raportu).
 - [ ] **E2E-1 DMP OK SM5:** `elevation download --product nmpt --sheet CTES96

@@ -52,6 +52,7 @@ from tests.conftest import (
 )
 from tests.test_cuzk_laz import (
     CIESZYN,
+    CIESZYN_3045,
     OPENZU,
     CuzkSession,
     _response,
@@ -748,6 +749,39 @@ def test_cz_missing_file_is_incomplete():
     assert s_jtsk.uncovered_m2 == 1_000_000.0
     assert s_jtsk.download_hint == () and s_jtsk.published is None
     assert tm33.complete and tm33.sheets_full == ("760_5516",)
+
+
+def test_cz_no_file_at_all():
+    """No sheet has a file: the size is unknown (``None``, as in PL), and a
+    TM33 tile is measured against the S-JTSK rectangle of the area - its
+    envelope in EPSG:3045 is larger, the uncovered part never is."""
+    report, _ = _cz("nmpt", CuzkSession(missing=(CTES86_DMPOK, TILE_DMPOK)))
+
+    (area,) = report.areas
+    s_jtsk, tm33 = report.combinations
+    for combo in (s_jtsk, tm33):
+        assert combo.sheets_full == () and combo.size_bytes is None
+        assert combo.published is None and not combo.complete
+    assert s_jtsk.uncovered_m2 == area.area_m2 == 1_000_000.0
+    # the NE corner of the area lies east of 760_5516, where CZ has no tile
+    assert 0.99 * area.area_m2 < tm33.uncovered_m2 < area.area_m2
+
+
+def test_cz_part_without_sheets_has_no_model_notice():
+    """A CZ area without any CUZK sheet (e.g. an ``auto`` part in PL inside
+    the CZ envelope) has no CZ data: no combinations and no notice about the
+    service-only models."""
+    empty = {"features": []}
+    session = CuzkSession(
+        envelopes={
+            (24, (CIESZYN.min_x, CIESZYN.min_y, CIESZYN.max_x, CIESZYN.max_y)): empty,
+            (26, CIESZYN_3045): empty,
+        }
+    )
+    report, _ = _cz("nmpt", session)
+
+    assert report.combinations == () and report.notices == ()
+    assert report.ok
 
 
 @pytest.mark.parametrize(

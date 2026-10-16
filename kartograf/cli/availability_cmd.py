@@ -227,7 +227,7 @@ def _print_cz(report: AvailabilityReport, area: AvailabilityArea) -> None:
                 c.format,
                 f"{len(c.sheets_full)}/{len(c.sheets_missing)}",
                 _span(c.published),
-                size_text(c.size_bytes) if c.sheets_full else "-",
+                size_text(c.size_bytes),
                 _complete(c),
             )
             for c in found

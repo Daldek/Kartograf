@@ -225,7 +225,9 @@ def test_cz_sheets_without_file(capsys):
     assert code == 0
     s_jtsk, tm33 = _table(out)[1:]
     assert s_jtsk[5:] == ["0/1", "-", "-", "nie: 1 bez pliku (1,00 km2)"]
-    assert tm33[5] == "0/1" and tm33[-1].startswith("nie: 1 bez pliku (")
+    # the tile is measured against the S-JTSK area (not its larger envelope in
+    # EPSG:3045); the NE corner of the area lies east of it
+    assert tm33[5:] == ["0/1", "-", "-", "nie: 1 bez pliku (99,26 ha)"]
     details = out.split("Szczegoly kombinacji:\n")[1]
     assert details.startswith(
         "  DMP OK S-JTSK 0.5m Bpv TIFF: nie: 1 bez pliku (1,00 km2)\n"
