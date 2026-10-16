@@ -137,6 +137,11 @@ from kartograf.download.laz import (
     download_laz_area,
 )
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
+from kartograf.download.orto_cutout import (
+    OrtoCutoutResult,
+    check_orto_cutout,
+    download_orto_cutout,
+)
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import VersionRef
@@ -242,6 +247,10 @@ __all__ = [
     "PlCutoutResult",
     "check_pl_cutout",
     "download_pl_cutout",
+    # Download (PL orthophotomap cutout: WCS Standard/High, ADR-042 D14)
+    "OrtoCutoutResult",
+    "check_orto_cutout",
+    "download_orto_cutout",
     # Download (CZ cutout, countries)
     "CountryPart",
     "countries_for_bbox",

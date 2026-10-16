@@ -327,14 +327,19 @@ class AtomFilesParams:
   `params`), `kartograf/sources/registry.py` (`pl.gugik.orto`: kanaly
   `WCS` Standard i High z `endpoint`, `update_signal="none"`,
   `capabilities={"bbox_raster"}`, `params=WcsCutoutParams(...)`),
-  `kartograf/providers/pl/gugik_orto.py` (`coverage=`, limity kawalkow,
-  timeout), `kartograf/download/options.py` (reguly wycinka orto),
-  `kartograf/download/data.py` (routing), `kartograf/notices.py`
-  (`CUTOUT_SIZE` z liczba zapytan)
+  `kartograf/providers/pl/gugik_orto.py` (`coverage=`, `resolution=`,
+  limity kawalkow, timeout), `kartograf/providers/pl/wcs.py` (budzet
+  kawalka GeoTIFF liczony w pikselach coverage jak ASC; NMT bez zmian),
+  `kartograf/download/options.py` (reguly wycinka orto),
+  `kartograf/download/area.py` (`pl_only_flags`: `coverage` i piksel
+  wycinka orto), `kartograf/download/data.py` (routing); `notices.py`
+  bez zmian (istniejace `CUTOUT_SIZE`, `ALL_NODATA`)
 - Create: `kartograf/download/orto_cutout.py`, `tests/test_orto_cutout.py`,
-  `tests/fixtures/pl/orto_wcs/` (prawdziwe `DescribeCoverage` obu
-  coverage; maly GeoTIFF 3x3 px z odpowiedzi `GetCoverage`;
-  `ExceptionReport` WCS)
+  `tests/fixtures/pl/orto_wcs/` (KOREKTA po nagraniu 2026-10-16:
+  `DescribeCoverage` obu coverage; GeoTIFF 4 x 4 px 0,25 m i jego
+  cwiartki 2 x 2 px; High 4 x 4 px 0,1 m i High bez danych 0,0,0;
+  odpowiedz na 3 x 3 px 0,25 m = zla siatka serwera, bo 7,5 piksela
+  coverage; `ExceptionReport` `ExtentError` HTTP 400)
 
 ```python
 @dataclass(frozen=True)
@@ -360,24 +365,34 @@ rozszerzany o orto.
   `coverage` i `resolution`, `extra.source` z endpointem, coverage id
   i `SCALEFACTOR`); `test_orto_cutout_grid_and_chunks` (siatka
   wyrownana do wielokrotnosci rozdzielczosci; kawalek <= 4 Mpx
-  natywnych 0,1 m, czyli 200 x 200 m; zszycie 1:1, 3 pasma uint8,
+  natywnych 0,1 m, czyli 200 x 200 m; kawalki kopiowane 1:1 - KOREKTA:
+  wynik z kawalkow NIE jest bit w bit z jednym zapytaniem, serwer
+  przeprobkowuje kazde zapytanie we wlasnym zasiegu; 3 pasma uint8,
   EPSG:2180); `test_orto_cutout_exception_report_is_download_error`
-  (bez wersji); `test_orto_cutout_local_reuse_and_force_unchanged`;
+  (bez wersji; takze GeoTIFF na innej siatce niz zapytanie);
+  `test_orto_cutout_local_reuse_and_force_unchanged`;
   `test_check_orto_cutout_unverifiable` (tor `pl_cutout`, bez pobrania);
+  `test_orto_cutout_all_black_is_kept_with_warning` (High poza
+  obszarami 10 cm: HTTP 200 z 0,0,0 -> wersja, `extra.all_nodata`,
+  `ALL_NODATA`);
   istniejace testy `GugikOrtoProvider.download_bbox` (plik poza
   magazynem - API surowe, D27 dla niego bez zmian) przechodza bez zmian.
 - [ ] **Step 2: Implementacja** - `GugikOrtoProvider(..., coverage:
-  Literal["standard", "high"] | None = None)` wybiera endpoint i
-  coverage id z kanalu deskryptora; `WCS_NATIVE_STEP = 0.1`
+  Literal["standard", "high"] | None = None, resolution: str | None =
+  None)` (KOREKTA: siatka wyniku zalezy od piksela) wybiera endpoint
+  i coverage id z kanalu deskryptora; `WCS_NATIVE_STEP = 0.1`
   (DescribeCoverage obu uslug), `WCS_GRID` = siatka wyniku z wybranej
   rozdzielczosci, limity kawalka liczone w pikselach natywnych (4 Mpx),
-  timeout odczytu kawalka 300 s (pomiar: 4 Mpx = 64 s, 2000 x 2000 px
-  przy `SCALEFACTOR=0.4` = 176 s). `orto_cutout.py`:
-  `download_orto_cutout(bbox, *, output_dir, coverage, resolution,
-  cache, update, plan, on_notice) -> OrtoCutoutResult(file, stale,
-  notices)` i `check_orto_cutout(...)` na `bbox_slot` +
-  `fetch_version(signal="none")` (wzorzec `download/cutout.py`, bez
-  maski i warpa); `CUTOUT_SIZE` z MiB i liczba zapytan WCS.
+  parzyste kawalki miksera zostaja (0,25 m: nieparzysta liczba pikseli =
+  ulamek piksela coverage -> zla siatka albo HTTP 400), timeout odczytu
+  kawalka 300 s (pomiar: 4 Mpx = 64 s, 2000 x 2000 px przy
+  `SCALEFACTOR=0.4` = 176 s). `orto_cutout.py`:
+  `download_orto_cutout(bbox, *, horizontal_crs, output_dir, coverage,
+  resolution, update, plan, parent_request, cache, on_notice) ->
+  OrtoCutoutResult(file, stale, notices)` i `check_orto_cutout(...)` na
+  `bbox_slot` + `fetch_version(signal="none")` (wzorzec
+  `download/cutout.py`, bez maski i warpa); `CUTOUT_SIZE` z MiB i liczba
+  zapytan WCS; wynik na innej siatce niz zapytanie = `DownloadError`.
   `validate_request`: usun `orto` z odrzucenia `--cutout`, dodaj reguly
   z uwagi (4) matrycy. `download_data(..., coverage: str | None = None)`
   - nowy parametr tylko dla orto.

@@ -16,7 +16,9 @@ from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_sheets import RESOLUTION_CZ, cz_sheet_resolution
+from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
 from kartograf.exceptions import ValidationError
+from kartograf.providers.pl.gugik_orto import coverage_choices
 from kartograf.sources.variants import (
     FORMATS,
     find_variant,
@@ -440,7 +442,8 @@ def validate_request(task: SimpleNamespace) -> None:
 
     Exactly one selection, explicit product/output, country for areas,
     per-country syntax, year bounds (``year`` = ``min_year = max_year``),
-    LAZ-only and non-LAZ options. Narrows ``task.min_year``/``max_year``.
+    LAZ-only and non-LAZ options, the orthophotomap cutout (``coverage``,
+    pixel, EPSG:2180 only, PL only). Narrows ``task.min_year``/``max_year``.
     Types of library arguments first (``year="2018"``, ``cutout="no"``:
     ``ValidationError``, no conversion; STANDARDS 11.2).
     """
@@ -479,7 +482,12 @@ def validate_request(task: SimpleNamespace) -> None:
             f"--sheet-system {task.sheet_system!r}: nieznana wartosc - dostepne: "
             f"{SHEET_SYSTEM_CHOICES}"
         )
-    if task.horizontal_crs is not None and task.horizontal_crs not in CUTOUT_CRS:
+    orto_cutout = task.cutout and task.product == "orto"
+    if (
+        task.horizontal_crs is not None
+        and not orto_cutout
+        and task.horizontal_crs not in CUTOUT_CRS
+    ):
         raise ValidationError(
             f"--horizontal-crs {task.horizontal_crs!r}: nieznana wartosc - "
             f"dostepne: {', '.join(CUTOUT_CRS)}"
@@ -504,12 +512,22 @@ def validate_request(task: SimpleNamespace) -> None:
                 "zasieg i uklad produktu (arkusz PL 1:1 w ukladzie arkusza, "
                 "arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce EPSG:3045)"
             )
-        if task.product in ("orto", "laz"):
+        if task.product == "laz":
             raise ValidationError(
-                "--cutout dziala tylko z --product nmt albo nmpt (wycinek "
-                "wysokosci); orto i laz - pobierz bez --cutout"
+                "--cutout dziala tylko z --product nmt, nmpt albo orto (wycinek "
+                "z WCS GUGiK); laz - pobierz bez --cutout"
             )
-        if task.horizontal_crs is None:
+        if orto_cutout:
+            if task.country == "cz":
+                raise ValidationError(ORTO_CUTOUT_PL_ONLY)
+            error = orto_cutout_error(
+                coverage=task.coverage,
+                resolution=country_value(task.resolution, "PL"),
+                horizontal_crs=task.horizontal_crs,
+            )
+            if error is not None:
+                raise ValidationError(error)
+        elif task.horizontal_crs is None:
             raise ValidationError(
                 f"--horizontal-crs wymagane z --cutout (uklad wycinka): "
                 f"{', '.join(CUTOUT_CRS)}"
@@ -519,6 +537,16 @@ def validate_request(task: SimpleNamespace) -> None:
             "--horizontal-crs dziala tylko z --cutout (uklad jednego wycinka); "
             "arkusze maja uklad z godla - dodaj --cutout albo pomin "
             "--horizontal-crs"
+        )
+    if task.coverage is not None and not orto_cutout:
+        raise ValidationError(
+            "--coverage dziala tylko z --cutout --product orto (wariant WCS "
+            f"wycinka ortofotomapy: {coverage_choices()}) - pomin --coverage"
+        )
+    if task.product == "orto" and not task.cutout and task.resolution is not None:
+        raise ValidationError(
+            "--resolution z --product orto dotyczy tylko wycinka (--cutout); "
+            "arkusze ortofotomapy maja piksel kampanii - pomin --resolution"
         )
 
 

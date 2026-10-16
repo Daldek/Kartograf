@@ -8,6 +8,7 @@ in the sidecar; managers do not enforce them.
 """
 
 import re
+from decimal import Decimal
 
 from kartograf.core.parser_2000 import ZONE_EPSG
 from kartograf.core.sheet_parser import BBox, SheetParser
@@ -25,6 +26,7 @@ from kartograf.sources.descriptor import (
     TileScheme,
     TransportKind,
     UnitPackageParams,
+    WcsCutoutParams,
 )
 from kartograf.sources.variants import (
     IndexRef,
@@ -540,6 +542,35 @@ _CZ_HY_NET = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
+# Orthophotomap WCS (DescribeCoverage 2.0.1, 2026-10-16): Standard and High
+# share one national grid with a 0.1 m step; the cutout pixel is a choice
+# (SCALEFACTOR). One GetCoverage reads at most 4 Mpx of coverage = 200 x 200 m
+# (64 s live 2026-10-15, docs/research/2026-10-15-plan-c-d/raport.md).
+_ORTO_WCS = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WCS"
+
+
+def _orto_wcs(
+    service: str, variant: str, coverage_id: str, notes: str
+) -> AccessChannel:
+    """WCS cutout channel of the orthophotomap (ADR-042 D14); ``notes`` = the
+    meaning of ``variant`` named in messages (abstract of the service)."""
+    return AccessChannel(
+        transport=TransportKind.WCS,
+        update_signal="none",
+        horizontal_crs=PL_1992_CRS,
+        capabilities=frozenset({"bbox_raster"}),
+        notes=notes,
+        endpoint=f"{_ORTO_WCS}/{service}",
+        params=WcsCutoutParams(
+            variant=variant,
+            coverage_id=coverage_id,
+            native_step=Decimal("0.1"),
+            resolutions=tuple(Decimal(v) for v in ("0.1", "0.25", "0.5", "1")),
+            max_native_pixels=4_000_000,
+        ),
+    )
+
+
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
     for d in (
@@ -548,7 +579,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             key="pl.gugik.orto",
             country="PL",
             product="orto",
-            name="Ortofotomapa Standard Resolution (25 cm)",
+            name="Ortofotomapa (arkusze wg kampanii; wycinek WCS Standard i High)",
             provider_name="GUGiK",
             channels=(
                 AccessChannel(
@@ -556,6 +587,18 @@ _SOURCES: dict[str, SourceDescriptor] = {
                     update_signal="index",
                     horizontal_crs="EPSG:2180",
                     capabilities=frozenset({"sheet_files"}),
+                ),
+                _orto_wcs(
+                    "StandardResolution",
+                    "standard",
+                    "Orthoimagery_StandardResolution",
+                    "najnowsze dostepne ortofotomapy",
+                ),
+                _orto_wcs(
+                    "HighResolution",
+                    "high",
+                    "Orthoimagery_High_Resolution",
+                    "ortofotomapy o pikselu 10 cm i mniejszym",
                 ),
             ),
             tile_scheme=None,

@@ -6,6 +6,11 @@ coordinate systems, licenses, tile scheme. The providers remain the source of
 truth for runtime logic; capabilities currently only drive channel selection
 in the sidecar (``build_metadata(capability=)``) and are not enforced in managers.
 
+A provider-driven channel may carry a typed configuration as well:
+``WcsCutoutParams`` describes a WCS coverage offered as a cutout in the store
+(the orthophotomap Standard and High coverages of ``pl.gugik.orto``, ADR-042
+D14) - a cutout of the provider, not a collection product.
+
 Collection channels (ADR-042) carry typed engine configuration in
 ``AccessChannel.params``: ``UnitPackageParams`` (one package per TERYT unit or
 the country, from a URL template), ``FeatureBBoxParams`` (features of an
@@ -15,6 +20,7 @@ descriptor entry, not a provider.
 """
 
 from dataclasses import dataclass
+from decimal import Decimal
 from enum import StrEnum
 from typing import TYPE_CHECKING, Literal
 
@@ -44,6 +50,29 @@ class TransportKind(StrEnum):
 # sheet index record (``index``), source metadata (``metadata``), HTTP
 # ``ETag``/``Last-Modified`` of the file (``http``) or none (``none``).
 SignalKind = Literal["index", "metadata", "http", "none"]
+
+
+@dataclass(frozen=True)
+class WcsCutoutParams:
+    """WCS channel offered as a cutout in the store (ADR-042 D14).
+
+    ``variant`` is the public choice (``coverage="standard"``, CLI
+    ``--coverage``; the channel ``notes`` say what it holds), ``coverage_id``
+    the ``COVERAGEID`` of the service, ``native_step`` the coverage pixel in
+    metres (DescribeCoverage) and ``resolutions`` the result pixels offered
+    (labels K2 via ``kartograf.sources.variants.resolution_label``); a pixel
+    other than ``native_step`` is requested with ``SCALEFACTOR``.
+    ``max_native_pixels`` is the budget of one GetCoverage request counted in
+    COVERAGE pixels: the server time grows with the coverage pixels it reads,
+    not with the result pixels.
+    """
+
+    variant: str
+    coverage_id: str
+    native_step: Decimal
+    resolutions: tuple[Decimal, ...]
+    max_native_pixels: int
+
 
 # URL template tokens of a unit package (ADR-042 D1): the TERYT code of the
 # unit and the voivodeship code (its first two digits).
@@ -150,7 +179,9 @@ class AtomFilesParams:
     segment_tokens: tuple[str, ...] = ()
 
 
-ChannelParams = UnitPackageParams | FeatureBBoxParams | AtomFilesParams
+ChannelParams = (
+    UnitPackageParams | FeatureBBoxParams | AtomFilesParams | WcsCutoutParams
+)
 
 
 @dataclass(frozen=True)
@@ -173,20 +204,24 @@ class AccessChannel:
     server_reprojection: bool = False
     capabilities: frozenset[str] = frozenset()
     # {"bbox_raster","bbox_vector","sheet_files","area_files","admin_unit_files",
-    #  "archive_unit_files","country_files"}; a collection channel (``params``)
-    # declares a capability no other channel of its descriptor has (sidecar
-    # channel selection, ``build_metadata(capability=)``)
+    #  "archive_unit_files","country_files"}; a collection channel (``params``
+    # of a collection engine) declares a capability no other channel of its
+    # descriptor has (sidecar channel selection, ``build_metadata(capability=)``);
+    # the WCS cutout channels of one descriptor share ``bbox_raster`` (same CRSs;
+    # the sidecar names the service in ``extra.source``)
     notes: str = ""
     endpoint: str = ""
     # Channel URL for descriptor-driven engines (stage 1: CuzkClient; ADR-042:
-    # the service of a feature_bbox channel, the directory of unit packages).
+    # the service of a feature_bbox channel, the directory of unit packages, the
+    # WCS service of a cutout channel).
     # PL sheet entries: "" - the provider constants remain the source of truth.
     update_signal: SignalKind = "none"
     # Freshness signal of THIS channel (one dataset may have several, e.g.
     # CZ DMR 4G: SM5 files with ETag, exportImage without a content signal).
     params: ChannelParams | None = None
-    # Typed configuration of a collection engine (ADR-042 D1); None = the
-    # channel is driven by a provider.
+    # Typed configuration of a collection engine (ADR-042 D1) or of a provider
+    # cutout (``WcsCutoutParams``, D14); None = the channel is driven by a
+    # provider alone.
 
 
 @dataclass(frozen=True)
