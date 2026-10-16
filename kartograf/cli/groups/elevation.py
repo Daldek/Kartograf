@@ -104,6 +104,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     selection.add_argument(
         "--country",
+        type=str.lower,
         choices=COUNTRIES,
         default=None,
         help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
@@ -162,8 +163,9 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         default=None,
         help="Uklad godel arkuszy PL - wymagany z --bbox/--geometry dla PL "
         f"(bez --cutout): {SHEET_SYSTEM_CHOICES}. Wycinek --cutout: tylko "
-        "1992 (mozna pominac). Nie dotyczy --sheet (uklad z godla), LAZ "
-        "(uklad kazdego kafla z WFS) ani CZ",
+        "1992 (mozna pominac). Z --sheet uklad wynika z godla (podana wartosc "
+        "musi sie z nim zgadzac). Nie dotyczy LAZ (uklad kazdego kafla z WFS) "
+        "ani CZ",
     )
     sheets.add_argument(
         "--scale",
@@ -195,6 +197,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--horizontal-crs",
         # the PL cutout set (download/cutout.py) also constrains the CZ path -
         # extending it on one side only requires per-country validation
+        type=str.upper,
         choices=list(CUTOUT_CRS),
         default=None,
         help="Uklad poziomy wycinka - wymagany z --cutout (bez --cutout blad); "
@@ -336,6 +339,7 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
     )
     selection.add_argument(
         "--country",
+        type=str.lower,
         choices=list(AVAILABILITY_COUNTRIES),
         default=None,
         help="Kraj - wymagany z --bbox/--geometry: "

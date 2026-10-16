@@ -87,6 +87,9 @@ from kartograf.download.fetch import (
 )
 from kartograf.download.options import (
     COUNTRY_CHOICES,
+    canonical_country,
+    canonical_crs,
+    canonical_format,
     check_layer,
     check_per_country,
     country_value,
@@ -199,6 +202,9 @@ _UNIT_TEXT = {
 # Option values that select a channel or a published variant (ADR-043); the
 # allowed values are read from the descriptors (K1).
 _OPTION_NAMES = ("format", "scale", "sheet_system", "network")
+# Options given per country (``--network pl=horizontal,cz=gnss``; UX-48), as
+# ``--level``: the survey networks of PL and CZ differ.
+_PER_COUNTRY_OPTIONS = ("network",)
 # CRSs ``find_sheets_for_bbox`` accepts as they are (PL-1992, WGS84, PL-2000).
 _PL_GRID_CRS = (
     "EPSG:2180",
@@ -766,6 +772,57 @@ def _check_other_selection(
         )
 
 
+def _source_options(descriptor: SourceDescriptor) -> set[str]:
+    """Option names any channel of a source offers (``format``, ``network``)."""
+    return {
+        key
+        for channel in descriptor.channels
+        for key in _channel_options(channel.params)
+    }
+
+
+def _country_options(
+    options: Mapping[str, str | Mapping[str, str] | None],
+    descriptor: SourceDescriptor,
+    descriptors: Mapping[str, SourceDescriptor],
+    *,
+    auto: bool,
+) -> dict[str, str | None]:
+    """The option values of the part of ``descriptor``'s country: a value per
+    country (``--network pl=...,cz=...``) of that country. An option only the
+    source of another country has (``--sheet-system`` of the ZTM maps, CZ)
+    applies to that country's part of an ``auto`` request; for this country
+    alone it is an error naming the country with it (UX-15).
+
+    Raises
+    ------
+    ValidationError
+        An option of another country's source in a request of this one.
+    """
+    values: dict[str, str | None] = {}
+    offered = _source_options(descriptor)
+    for name, raw in options.items():
+        value = country_value(raw, descriptor.country)
+        others = [
+            other
+            for other in descriptors.values()
+            if other is not descriptor and name in _source_options(other)
+        ]
+        if value is not None and name not in offered and others:
+            if auto:
+                value = None
+            else:
+                owner = others[0]
+                allowed = collection_choice_values(owner.product, name)
+                raise ValidationError(
+                    f"{cli_flag(name)} dotyczy tylko {_subject_flag(owner)} "
+                    f"({owner.country}: {', '.join(allowed.get(owner.country, ()))})"
+                    f" - dla {descriptor.country} pomin {cli_flag(name)}"
+                )
+        values[name] = value
+    return values
+
+
 def _channel_for(
     descriptor: SourceDescriptor,
     kind: str,
@@ -833,8 +890,9 @@ def _option_hint(
     descriptor: SourceDescriptor, key: str, countries: tuple[str, ...]
 ) -> str:
     """Hint of a request in PL and CZ (the message names the values of the
-    country of ``descriptor``): one value of the option ``key`` applies to
-    every country - the values of the other countries and those of all."""
+    country of ``descriptor``): the values of the other countries and those
+    of all; an option given per country (``--network``) names that syntax,
+    another one applies its one value to every country."""
     if len(countries) < 2:
         return ""
     values = collection_choice_values(descriptor.product, key)
@@ -848,10 +906,12 @@ def _option_hint(
         for value in values.get(countries[0], ())
         if all(value in values.get(code, ()) for code in countries[1:])
     ]
-    return (
-        f" (zadanie PL+CZ: jedna wartosc dla obu krajow - {others}; wspolne: "
-        f"{', '.join(common) or 'brak'})"
-    )
+    if key in _PER_COUNTRY_OPTIONS:
+        example = ",".join(f"{c}=..." for c in ("pl", "cz") if c.upper() in countries)
+        how = f"wartosc per kraj, np. {cli_flag(key)} {example}"
+    else:
+        how = "jedna wartosc dla obu krajow"
+    return f" (zadanie PL+CZ: {how} - {others}; wspolne: {', '.join(common) or 'brak'})"
 
 
 def _level_hint(level: str | Mapping[str, str] | None, product: str) -> str:
@@ -1156,7 +1216,7 @@ def validate_collection_request(
     format: str | None = None,
     scale: str | None = None,
     sheet_system: str | None = None,
-    network: str | None = None,
+    network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
 ) -> CollectionRequest:
     """Check a collection request without network (ADR-042 D2, ADR-043).
@@ -1170,11 +1230,16 @@ def validate_collection_request(
     the code with ``sheet``, ``pl`` with ``teryt``, ``cz`` with ``ku``; a
     channel for the kind of selection and the option values (``format``,
     ``scale``, ``sheet_system``, ``network`` - the values of the
-    descriptors); the variant (``lod``, ``year`` and those options)
-    required when the source publishes several, a level (``level``, per
-    country with ``auto``) for an area of a product with levels;
-    ``horizontal_crs`` only equal to the CRS of the file. Reads the
-    geometry file (its envelope) - never the network.
+    descriptors; ``network`` also per country with ``auto``:
+    ``{"pl": "horizontal", "cz": "gnss"}``); an option only the source of
+    the other country has applies to that country's part of ``auto`` and is
+    an error for this country alone; the variant (``lod``, ``year`` and those
+    options) required when the source publishes several, a level (``level``,
+    per country with ``auto``) for an area of a product with levels;
+    ``horizontal_crs`` only equal to the CRS of the file. ``country``,
+    ``format``, ``horizontal_crs`` and the ``bbox`` CRS are taken in any
+    case (``PL``, ``shp``, ``epsg:5514``). Reads the geometry file (its
+    envelope) - never the network.
 
     Raises
     ------
@@ -1193,15 +1258,21 @@ def _resolve(
     ``descriptors``: the sources by country (default: the collection
     descriptors of ``product``; a land cover source passes its own)."""
     if args["bbox"] is not None:  # the CLI parses --bbox first: the same first error
-        validate_request_bbox(args["bbox"])
+        args["bbox"] = validate_request_bbox(args["bbox"])
     # library calls only: the CLI parses its flags (STANDARDS 11.2)
     require_bool(args["whole_country"], "--whole-country")
     for name in ("lod", "year"):
         if args[name] is not None:
             require_int(args[name], cli_flag(name))
     for name in ("teryt", "ku", "sheet", *_OPTION_NAMES):
-        if args[name] is not None:
+        if name not in _PER_COUNTRY_OPTIONS and args[name] is not None:
             require_str(args[name], cli_flag(name))
+    for name in _PER_COUNTRY_OPTIONS:
+        check_per_country(args[name], cli_flag(name))
+    # enumerated values in any case: the spelling of the registry (UX-11)
+    args["country"] = canonical_country(args["country"])
+    args["format"] = canonical_format(args["format"])
+    args["horizontal_crs"] = canonical_crs(args["horizontal_crs"])
     # ``layers``: the classes of a land cover source (``landcover_request``)
     classes = args.get("layers")
     if classes is not None:
@@ -1217,6 +1288,7 @@ def _resolve(
     country = args["country"]
     if country is not None and country not in ("pl", "cz", "auto"):
         raise ValidationError(f"Nieznany kraj --country {country!r}: {COUNTRY_CHOICES}")
+    auto = country == "auto"
     options = {name: args[name] for name in _OPTION_NAMES}
     content = {
         "level": args["level"],
@@ -1238,8 +1310,15 @@ def _resolve(
                 f"--product {product} jest dostepny tylko dla "
                 f"{', '.join(sorted(descriptors))}"
             )
-        channel = _channel_for(descriptor, area_kind, teryt, options, countries)
-        return _content(code, descriptor, channel, countries=countries, **content)
+        here = _country_options(options, descriptor, descriptors, auto=auto)
+        channel = _channel_for(descriptor, area_kind, teryt, here, countries)
+        return _content(
+            code,
+            descriptor,
+            channel,
+            countries=countries,
+            **{**content, "options": here},
+        )
 
     if kind == "teryt":
         assert teryt is not None
@@ -2588,7 +2667,7 @@ def download_collection(
     format: str | None = None,
     scale: str | None = None,
     sheet_system: str | None = None,
-    network: str | None = None,
+    network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
@@ -2965,7 +3044,7 @@ def check_collection(
     format: str | None = None,
     scale: str | None = None,
     sheet_system: str | None = None,
-    network: str | None = None,
+    network: str | Mapping[str, str] | None = None,
     horizontal_crs: str | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,

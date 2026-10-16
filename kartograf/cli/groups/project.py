@@ -39,7 +39,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--output",
         "-o",
         metavar="KATALOG",
-        required=True,
+        default=None,
         help="Katalog magazynu projektu (wymagany; bez domyslnej sciezki)",
     )
     init.set_defaults(_handler=cmd_project_init)

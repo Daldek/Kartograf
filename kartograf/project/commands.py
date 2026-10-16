@@ -518,7 +518,7 @@ COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
             _collection_command(
                 "geodesy download",
                 "geodesy",
-                {**_COLLECTION, "whole_country": "flag", "network": "str"},
+                {**_COLLECTION, "whole_country": "flag", "network": "per_country"},
             ),
         )
     }

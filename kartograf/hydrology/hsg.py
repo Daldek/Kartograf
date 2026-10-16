@@ -614,8 +614,7 @@ class HSGCalculator:
         if geometry is not None:
             return _bbox_request(geometry_envelope_2180(geometry, layer, sink))
         assert bbox is not None
-        validate_request_bbox(bbox)
-        return _bbox_request(bbox_to_2180(bbox))
+        return _bbox_request(bbox_to_2180(validate_request_bbox(bbox)))
 
     # -------------------------------------------------------------------------
 

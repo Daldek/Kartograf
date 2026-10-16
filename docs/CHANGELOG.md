@@ -30,6 +30,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `--stat` w `soil hsg` nie znaczy `--stats`); `--plan` bez
     `--check-updates`/`--upgrade` to `Error:` z kodem 1 (dotad blad parsera,
     kod 2). Co zrobic: pisz pelne nazwy flag.
+  - `--sheet` z godlem PL i `--sheet-system` innym niz uklad godla
+    (`elevation`/`imagery download`, np. godlo PL-1992 z `--sheet-system
+    2000`) to `Error:`/`ValidationError` przed siecia (dotad flaga byla po
+    cichu pomijana); zgodna wartosc nadal wolno podac. Co zrobic: usun
+    `--sheet-system` (uklad arkuszy wynika z godla).
+  - `project init` bez `--output`: `Error:` z kodem 1 jak w komendach
+    danych (dotad blad parsera, kod 2); `init_project(output_dir=None)` to
+    `ValidationError`. Co zrobic: skrypt sprawdzajacy kod 2 - kod 1.
 
 - Limit obszaru kolekcji (plan E, E5; ADR-043 errata 3): `--bbox`/`--sheet`/
   `--geometry` w `boundaries`, `cadastre`, `models3d`, `hydro`, `names`,
@@ -621,6 +629,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Przeglad UX 0.8.0, wartosci wejscia: `--country`, `--format`,
+  `--vertical-crs` i kody ukladow (`--bbox-crs`, `--horizontal-crs`, uklad
+  `BBox`) w dowolnej wielkosci liter (`--country PL`, `--format shp`,
+  `--vertical-crs evrf2007`/`bpv`, `epsg:2180`) - CLI i biblioteka (komendy
+  danych i funkcje z `bbox`) przyjmuja zapis rejestru; wartosc nieznana
+  komunikat podaje tak, jak ja wpisano. `geodesy download --network`
+  w skladni per kraj jak `--level` (`pl=horizontal,cz=gnss`; API `network=
+  {"pl": ..., "cz": ...}`, manifest: napis albo obiekt per kraj). Opcja
+  zrodla jednego kraju (`maps --sheet-system sjtsk|etrs89`, ZTM CZ) dotyczy
+  pod `--country auto` czesci tego kraju; dla samego drugiego kraju jest
+  bledem z nazwa kraju, ktory ja ma (dotad "nie dotyczy" takze dla
+  obszaru przy granicy, ktorego nie dalo sie pobrac). Co zrobic: nic.
 - Plan E, Task E5 (ADR-043): `models3d download --product mesh` (modele
   siatkowe miast GUGiK: kafle indeksu WFS obszaru, ZIP OBJ+MTL+JPG 1:1
   w `models3d/pl_mesh/<strefa>/<plik rekordu>.zip`, uklad z rekordu,

@@ -83,6 +83,8 @@ from kartograf.download.arguments import require_bool
 from kartograf.download.campaigns import in_year_range, year_range_label
 from kartograf.download.countries import country_bbox, split_bbox_by_country
 from kartograf.download.options import (
+    canonical_bbox,
+    canonical_country,
     product_choices,
     validate_area_choice,
     year_bounds,
@@ -552,6 +554,8 @@ def _validated(
     """
     from kartograf.core.parser_registry import detect_system
 
+    country = canonical_country(country)
+    bbox = canonical_bbox(bbox)
     validate_area_choice(sheet, bbox, geometry, layer)
     choices = product_choices(AVAILABILITY_PRODUCTS)
     if product is None:

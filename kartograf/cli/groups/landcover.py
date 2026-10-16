@@ -120,6 +120,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     options.add_argument(
         "--format",
         "-f",
+        type=str.upper,
         choices=["GPKG", "SHP", "GML"],
         default=None,
         help="Tylko BDOT10k: biezace paczki GPKG (GeoPackage, domyslnie) lub SHP "
@@ -144,6 +145,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     options.add_argument(
         "--horizontal-crs",
+        type=str.upper,
         choices=_national_file_crs(),
         default=None,
         help="Tylko --whole-country (ZABAGED, Data50, Data250; wymagany): "

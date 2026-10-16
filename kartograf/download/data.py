@@ -76,6 +76,11 @@ from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notice
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
     campaign_opts_given,
+    canonical_bbox,
+    canonical_country,
+    canonical_crs,
+    canonical_format,
+    canonical_vertical_crs,
     country_value,
     cz_option_error,
     cz_orto_option_error,
@@ -232,6 +237,12 @@ def _task(**kwargs) -> SimpleNamespace:
     task = SimpleNamespace(**kwargs)
     task.output_dir = Path(task.output_dir) if task.output_dir is not None else None
     task.geometry = Path(task.geometry) if task.geometry is not None else None
+    # enumerated values in any case: the spelling of the registry (UX-11)
+    task.country = canonical_country(task.country)
+    task.format = canonical_format(task.format)
+    task.horizontal_crs = canonical_crs(task.horizontal_crs)
+    task.vertical_crs = canonical_vertical_crs(task.vertical_crs)
+    task.bbox = canonical_bbox(task.bbox)
     return task
 
 

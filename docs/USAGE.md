@@ -1494,7 +1494,9 @@ indeksu jest etykietą wersji i sygnałem aktualizacji. Dla ZTM `TIFF`, `DGN`
 i `SHP` pozostają oryginalnymi ZIP-ami, a `PDF` ma rozszerzenie `.pdf`.
 `S-JTSK` dopuszcza `TIFF`, `PDF`, `DGN`, `SHP`, `ETRS89` — tylko `TIFF` i
 `PDF`. Układ arkusza `sjtsk`/`etrs89` wynika z godła; `--sheet-system`
-jest wymagany przy `--bbox`/`--geometry`. ZTM sprawdza `ETag`/`Last-Modified`
+jest wymagany przy `--bbox`/`--geometry` ZTM i dotyczy tylko CZ (mapy
+BDOT10k mają arkusze PL-1992 — z `--country pl` flaga to `Error:`, pod
+`--country auto` dotyczy części CZ). ZTM sprawdza `ETag`/`Last-Modified`
 z `HEAD` bez pobierania danych.
 
 ```bash
@@ -1562,7 +1564,9 @@ arkusze 1:100 000 jego zasięgu (archiwum 1942 bywa ponad 1 GB — rozmiar
 w `Warning:` przed transferem). Sieć bez paczek powiatu z `--teryt` to
 `Error:` ze wskazaniem obszaru. Pod `--country auto` jedna wartość
 `--network` dotyczy obu krajów (wspólne: `horizontal`, `vertical`,
-`gravity`); błąd podaje wartości każdego kraju.
+`gravity`), a różne sieci podaje się per kraj jak `--level`:
+`--network pl=horizontal,cz=gnss` (biblioteka: `network={"pl":
+"horizontal", "cz": "gnss"}`); błąd podaje wartości każdego kraju.
 
 `geodesy download --product geoid` to model quasi-geoidy jako jeden plik
 krajowy, tylko z `--whole-country`: `--country pl` — PL-geoid2021 dla

@@ -71,7 +71,12 @@ from kartograf.download.fetch import (
     validate_update,
 )
 from kartograf.download.manager import DownloadProgress
-from kartograf.download.options import check_layer, validate_request_bbox
+from kartograf.download.options import (
+    canonical_crs,
+    canonical_format,
+    check_layer,
+    validate_request_bbox,
+)
 from kartograf.download.plan import (
     PlanItem,
     Track,
@@ -326,6 +331,15 @@ class _Job:
         if self.edition is not None:
             return VersionRef(self.edition().id, "edition")
         return VersionRef.downloaded()
+
+
+def _canonical_options(options: dict) -> None:
+    """``format`` and ``horizontal_crs`` in any case: the registry spelling
+    (``shp`` = ``SHP``, ``epsg:5514`` = ``EPSG:5514``; UX-11)."""
+    if "format" in options:
+        options["format"] = canonical_format(options["format"])
+    if "horizontal_crs" in options:
+        options["horizontal_crs"] = canonical_crs(options["horizontal_crs"])
 
 
 _PowiatOutcome = LandCoverResult | LandCoverFailure
@@ -700,6 +714,7 @@ class LandCoverManager:
         sink = NoticeSink(on_notice)
         validate_update(update)
         require_int(workers, "--workers")
+        _canonical_options(options)
         if self._collection is not None:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
@@ -770,6 +785,7 @@ class LandCoverManager:
         ``keep_raw`` adds the raw ZIP position of the same unit.
         """
         sink = NoticeSink(on_notice)
+        _canonical_options(options)
         if self._collection is not None:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
@@ -822,6 +838,7 @@ class LandCoverManager:
         TypeError
             An option that belongs to no source.
         """
+        _canonical_options(options)
         if self._collection is not None:
             self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, NoticeSink(None)
@@ -841,7 +858,7 @@ class LandCoverManager:
     ) -> tuple[str | None, str | None, BBox | None]:
         """The prologue of ``download``/``check``: options, then the selection."""
         if bbox is not None:  # the CLI parses --bbox first: the same first error
-            validate_request_bbox(bbox)
+            bbox = validate_request_bbox(bbox)
         self._check_options(options)
         return self._selection(teryt, sheet, bbox, geometry, layer, sink)
 
@@ -859,7 +876,7 @@ class LandCoverManager:
         Data250): bbox, options, the selection - the rules of
         ``download.collections`` (no network)."""
         if bbox is not None:  # the CLI parses --bbox first: the same first error
-            validate_request_bbox(bbox)
+            bbox = validate_request_bbox(bbox)
         source = self._provider_name
         assert source is not None and self._collection is not None
         allowed = _SOURCE_OPTIONS[source] | {"timeout"}
@@ -1155,7 +1172,7 @@ class LandCoverManager:
         if geometry is not None:
             bbox = geometry_envelope_2180(geometry, layer, sink)
         elif bbox is not None:
-            validate_request_bbox(bbox)
+            bbox = validate_request_bbox(bbox)
             if not isinstance(self._provider, Bdot10kProvider):
                 bbox = bbox_to_2180(bbox)
         return teryt, sheet, bbox
