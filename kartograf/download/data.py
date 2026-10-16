@@ -1308,6 +1308,7 @@ def _download_pl_files(
             workers=run.workers,
             cache=run.cache,
             sink=run.sink,
+            on_progress=run.on_progress,
         )
     except NoCoverageError as e:
         return run.fail("PL", "PL", str(e), "no_coverage")
