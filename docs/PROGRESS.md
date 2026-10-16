@@ -103,17 +103,16 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-15):**
+> **START NASTEPNEJ SESJI (stan 2026-10-16):**
 > 0. **Cykl 0.8.0 OTWARTY; cel: 0.8.0 z podprojektami 2 i 3.** Stan,
 >    decyzje uzytkownika, scalone i niescalone galezie oraz kolejnosc
->    krokow: sekcja "Sesja 2026-10-15 - przygotowanie 0.8.0" nizej.
->    Grupy CLI (ADR-039), manifest (ADR-040), plany A, C i D sa na
->    `develop`; plan B konczy sie na galezi (niezacommitowany krok
->    podpowiedzi raportu), plan E: E0 rozpoczety na galezi WIP, E1-E5
->    nierozpoczete. Praca PRZERWANA przez uzytkownika 2026-10-16 - wznowic
->    od listy "Wznowienie" w sekcji sesji. Push tylko za zgoda uzytkownika;
->    stan sprawdzaj `git log origin/develop..develop`. Hydrograf/Hydrolog:
->    nowe nazwy flag i argumentow (CHANGELOG [0.8.0], BREAKING).
+>    krokow: sekcja "Sesja 2026-10-15 - przygotowanie 0.8.0" nizej
+>    (punkt "Wznowienie"). Na `develop`: grupy CLI (ADR-039), manifest
+>    (ADR-040), plany A-D, plan E: E0 (ADR-043), E1, E2 i czesc E3 (PRG
+>    granice specjalne w bibliotece). Do zrobienia: reszta E3 (WIP), E4,
+>    E5, fala wydania. Push tylko za zgoda uzytkownika; stan sprawdzaj
+>    `git log origin/develop..develop`. Hydrograf/Hydrolog: nowe nazwy flag
+>    i argumentow (CHANGELOG [0.8.0], BREAKING).
 > 1. **Subagenci:** pracuja w git worktree w
 >    `/home/claude-agent/workspace/wt/<galaz>`, kazdy na wlasnej galezi od
 >    `develop`. Plik kontekstu `ctx-0.8.0.md` byl artefaktem sesji (w nowej
@@ -216,30 +215,43 @@
   wydanie, `_capability` bez wymogu unikalnosci - osnowy PL maja 4 kanaly,
   SheetGrid bez PL-2000, `choice` w `AtomFilesParams` - Geonames GPKG/FGDB
   to dwa feedy).
-- Wznowienie (kolejnosc):
-  1. Plan B: w worktree dokonczyc krok podpowiedzi (docs: USAGE 7 ok. l.
-     2017-2023, ARCHITECTURE 4.9 "Podpowiedz pobrania", CHANGELOG, dopisek
-     w raporcie E2E B; ruff), commit `fix(api): podpowiedz raportu PL bez
-     arkuszy bez rekordu GUGiK`, pelna brama, `git merge develop`,
-     fast-forward do `develop`.
-  2. Plan E: E0 od WIP (`c307f8f`) - 12 krokow w raporcie agenta: silnik
-     `unit_package` z URL z rekordu indeksu i tokenami `{sheet}`/`{ku}`/
-     `{theme}` + `file_kind`, sloty `unit_slot` (arkusze CZ, `ku/<kod>`,
-     kafle, tematy krajowe), sygnal `index`, parametry kolekcji (`ku`,
-     `format`, `scale`, `sheet_system`, `network`, `choice`,
-     `selection_key`), `transport/index_records.py`, OGC API w
-     `feature_bbox`, `SheetIndex.sheets_for_bbox`, `Notice` `DOWNLOAD_SIZE`,
-     fixtury i testy, ADR-043 (CRLF), CHANGELOG, korekta planu E; potem
-     E1-E5 wg planu.
-  3. Przeglad spojnosci dokumentacji i UX; AUDYT dokumentacji `docs/`
+- Wznowienie (stan 2026-10-16 ok. 15:00; plany B, E0, E1, E2 dokonczone
+  i scalone: `8bac38e`, `65c1f8c`, `62b37e0`, `3fd7217`; brama na E1:
+  4984 passed, ruff/format/mypy czyste; `develop` = `36df431`):
+  1. E3 (`feat/plan-e3` = `develop`; WIP `wip/feat/plan-e3` `6da6007`,
+     brama nieuruchomiona): deskryptory `pl.gugik.prg_addresses`,
+     `pl.gugik.rcn`, `cz.cuzk.geomorphology`, `cz.cuzk.cadastral_map`,
+     `UnitPackageParams.unpack_layers` (RCN: GPKG rozpakowany lokalnie,
+     kontrola warstw `sqlite3` read-only), CLI `boundaries --format`,
+     `cadastre --ku/--format`. Zostalo: `_CHOICES` w `tests/test_cli.py`
+     (boundaries: admin, addresses, special, geomorphology; cadastre: map,
+     prices), `test_cz_geomorphology.py` (bez `router.gets()==3`,
+     `pyogrio.read_dataframe` zamiast geopandas), lista czlonow
+     `POLSKA.zip` w fixturze adresow, testy `test_prg_addresses.py`,
+     `test_cz_cadastral_map.py`, parity E3 (5), niezmienniki rejestru,
+     `test_project_e3`, manifest (`format`; `ku`), README fixtur (takze
+     `prg_special`), docs + CHANGELOG, E2E i raport
+     `docs/research/2026-10-16-plan-e3-e2e/raport.md`, brama. Ryzyko: RCN
+     wojewodztwa wymaga ok. 1,8 GB lokalnego miejsca tymczasowego (`/tmp` to
+     tmpfs 2,6 GB). VKM: 15.10 404, 16.10 200 (KU 737950, 692450, 619116) -
+     rekomendacja agenta: dalej poza 0.8.0, oba fakty do backlogu (decyzja
+     uzytkownika P2 obowiazuje).
+  2. E4, E5 wg planu E (E5 mesh: limit >100 plikow albo >10 GB =
+     `ValidationError` przed pobraniem z liczba plikow, rozmiarem
+     i podpowiedzia, bez flagi obejscia - decyzja koordynatora).
+  3. Otwarte do testu wydania: orto ukosna (np. `7.125.11.08_N.tif`) - GDAL
+     widzi EPSG:32634, sidecar/godlo EPSG:2178, bez ostrzezenia.
+  4. Przeglad spojnosci dokumentacji i UX; AUDYT dokumentacji `docs/`
      i README (prosba uzytkownika); test na zywo calego wydania;
      przygotowanie wydania (wersja 0.8.0, data w CHANGELOG, PROGRESS) - bez
      merge do `main`, tagu i push.
-  4. Sprzatanie po integracji: usunac worktree i galezie scalone/zbedne
+  5. Sprzatanie po integracji: usunac worktree i galezie scalone/zbedne
      (`feat/plan-d-cz-orto`, `feat/plan-d-orto-cutout`, `feat/plan-d-cli`,
      `docs/plan-d`, `feat/plan-b-cz-laz`, `feat/plan-b-availability-cz`,
      `wip/plan-b-task3-raster`, `wip/plan-b-task5-cli`, galezie fali 1-2;
      `git worktree list`, `git branch --merged develop`).
+  - Od 2026-10-16 12:11 pracuje JEDEN subagent naraz (decyzja uzytkownika;
+    dodatkowy agent tylko za zgoda).
 - Ryzyka zgloszone przez agentow: `write_gpkg` trzyma cala warstwe w RAM
   (duze obszary ZABAGED); bajty GPKG powtarzalne tylko w obrebie jednej
   wersji GDAL; schemat pol HY-NET zalezy od tresci strony; WFS PRG
