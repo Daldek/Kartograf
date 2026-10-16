@@ -847,6 +847,112 @@ _CZ_ORTOFOTO = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
+# plan E - E3: special PRG boundaries, separate from administrative boundaries.
+_PRG_SPECIAL_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRG/apiFeatures"
+_PRG_SPECIAL_COLLECTIONS = (
+    "GranicaRejonuStatystycznego",
+    "GranicaObwoduSpisowego",
+    "SadApelacyjny",
+    "SadOkregowy",
+    "SadRejonowy",
+    "WojewodzkiSadAdministracyjny",
+    "ProkuraturaRegionalna",
+    "ProkuraturaOkregowa",
+    "ProkuraturaRejonowa",
+    "KomendaWojewodzkaPolicji",
+    "KomendaPowiatowaPolicji",
+    "KomendaStolecznaPolicji",
+    "KomendaRejonowaPolicji",
+    "KomisariatPolicji",
+    "KomendaWojewodzkaStrazyPozarnej",
+    "KomendaPowiatowaStrazyPozarnej",
+    "OddzialStrazyGranicznej",
+    "PlacowkaStrazyGranicznej",
+    "DywizjonStrazyGranicznej",
+    "ObszarDzialaniaSzefaObronyCywilnejWojewodztwa",
+    "ObszarDzialaniaSzefaObronyCywilnejPowiatu",
+    "ObszarDzialaniaSzefaObronyCywilnejGminy",
+    "ArchiwumPanstwowe",
+    "UrzadSkarbowy",
+    "WyspecjalizowanyUrzadSkarbowy",
+    "UrzadCelnoSkarbowy",
+    "IzbaAdministracjiSkarbowej",
+    "Nadlesnictwo",
+    "RegionalnaDyrekcjaLasowPanstwowych",
+    "ZarzadZlewniPanstwowegoGospodarstwaWodnegoWodyPolskie",
+    "RegionalnyZarzadGospodarkiWodnejPanstwowegoGospodarstwaWodnegoWodyPolskie",
+    "UrzadMorski",
+    "UrzadZeglugiSrodladowej",
+    "LiniaPodstawowaMorzaTerytorialnego",
+    "MorzeTerytorialneRP",
+    "MorskieWodyWewnetrzne",
+    "WylacznaStrefaEkonomiczna",
+    "StrefaPrzylegla",
+    "MorskaLiniaBrzegowa",
+    "PasNadbrzezny",
+    "PasOchronny",
+    "PasTechniczny",
+    "Reda",
+    "PortMorski",
+    "PrzystanMorska",
+)
+
+_PL_PRG_SPECIAL = SourceDescriptor(
+    key="pl.gugik.prg_special",
+    country="PL",
+    product="special",
+    name="PRG - granice specjalne",
+    provider_name="GUGiK",
+    channels=(
+        AccessChannel(
+            transport=TransportKind.OGC_API_FEATURES,
+            horizontal_crs="OGC:CRS84",
+            capabilities=frozenset({"bbox_vector"}),
+            endpoint=_PRG_SPECIAL_API,
+            update_signal="none",
+            params=FeatureBBoxParams(
+                protocol="ogcapi",
+                native_crs="OGC:CRS84",
+                axis_order="xy",
+                page_size=10000,
+                layers=tuple(
+                    FeatureLayer(code=name, source=name, name=name, id_field="id")
+                    for name in _PRG_SPECIAL_COLLECTIONS
+                ),
+                selection="all",
+            ),
+        ),
+        AccessChannel(
+            transport=TransportKind.DIRECT_FILES,
+            horizontal_crs="EPSG:2180",
+            capabilities=frozenset({"country_files"}),
+            endpoint=f"{_OPENDATA}/prg/granice/",
+            update_signal="none",
+            params=UnitPackageParams(
+                unit="country",
+                variants=tuple(
+                    PackageVariant(
+                        choice=(("format", fmt),),
+                        url_template=(
+                            f"{_OPENDATA}/prg/granice/00_granice_specjalne_{suffix}.zip"
+                        ),
+                        segment_tokens=(fmt.lower(),),
+                        members=(member,),
+                    )
+                    for fmt, suffix, member in (
+                        ("SHP", "shp", ".shp"),
+                        ("GML", "xml", ".gml"),
+                    )
+                ),
+            ),
+        ),
+    ),
+    tile_scheme=None,
+    storage_subdir="boundaries/pl_prg_special",
+    default_extension=".gpkg",
+    license=_GUGIK_LICENSE,
+)
+
 # plan E - E2: geographic names and published topographic map sheets.
 _PRNG_API = "https://ogcapi.geoportal.gov.pl/res/ims/maps/PRNG/apiFeatures"
 _BDOT10K_MAP_INDEX = IndexSource(
@@ -1385,6 +1491,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
             default_extension=".zip",
             license=_GUGIK_LICENSE,
         ),
+        # plan E - E3: PRG special boundaries.
+        _PL_PRG_SPECIAL,
         # plan E - E2: PL names and maps.
         _PL_PRNG,
         _PL_PRNG_WORLD,
