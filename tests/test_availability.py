@@ -204,6 +204,19 @@ def test_laz_full_tiles_only():
     assert _combo(krakow, 2025, "PL-1992", None, fmt="LAZ").complete
 
 
+def test_laz_sheet_reports_the_tiles_of_its_frame():
+    """Live test 0.8.0 (P2-1): like the download, a LAZ sheet is its frame -
+    not the envelope with the 8 neighbouring 1:2500 tiles and +2.5 % area."""
+    session = RecordedIndex(_areas("laz", "krakow"))
+    report = _check(session, product="laz", sheet="M-34-64-D-d-1-4-2")
+
+    newest = _combo(report, 2025, "PL-1992", None, fmt="LAZ")
+    assert newest.complete
+    assert newest.sheets_full == tuple(f"M-34-64-D-d-1-4-2-{i}" for i in range(1, 5))
+    (area,) = report.areas
+    assert 1_294_000 <= area.area_m2 <= 1_295_500  # the frame, envelope 1 326 743
+
+
 # =============================================================================
 # Contract
 # =============================================================================
