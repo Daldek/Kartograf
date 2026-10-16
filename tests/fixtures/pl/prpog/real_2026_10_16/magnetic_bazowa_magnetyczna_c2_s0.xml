@@ -1,0 +1,88 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaMagnetyczna?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:Bazowa_magnetyczna&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T20:03:40" numberMatched="unknown" numberReturned="2"
+   next="https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaMagnetyczna?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;TYPENAMES=ms%3ABazowa_magnetyczna&amp;SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;BBOX=200000%2C500000%2C300000%2C650000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;COUNT=2&amp;gahLaQu1eeYooCu=1747560640.37151.0000&amp;STARTINDEX=2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>214013.000000 551837.000000</gml:lowerCorner>
+      		<gml:upperCorner>227524.000000 567040.000000</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: FeatureId item 'ptid' not found in typename 'Bazowa_magnetyczna'. -->
+    <wfs:member>
+      <ms:Bazowa_magnetyczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>227524.000000 551837.000000</gml:lowerCorner>
+        		<gml:upperCorner>227524.000000 551837.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>227524.000000 551837.000000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>446</ms:ogc_fid>
+        <ms:nr_punktu>1437</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>227524.000</ms:x1992>
+        <ms:y1992>551837.000</ms:y1992>
+        <ms:MP>50.00</ms:MP>
+        <ms:h_plevrf2007nh></ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh></ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh></ms:h_plkron86nh>
+        <ms:mh_plkron86nh></ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Uszkodzony</ms:stan_znaku>
+        <ms:deklinacja>35000.0</ms:deklinacja>
+        <ms:blad_deklinacji>200.0</ms:blad_deklinacji>
+        <ms:inklinacja></ms:inklinacja>
+        <ms:blad_inklinacji></ms:blad_inklinacji>
+        <ms:natezenie_pola></ms:natezenie_pola>
+        <ms:blad_natezenia_pola></ms:blad_natezenia_pola>
+        <ms:epoka_wyznaczenia>2002.5</ms:epoka_wyznaczenia>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Magnetyczna/Opisy_BOM/1437.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_magnetyczna>
+    </wfs:member>
+    <wfs:member>
+      <ms:Bazowa_magnetyczna>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>214013.000000 567040.000000</gml:lowerCorner>
+        		<gml:upperCorner>214013.000000 567040.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:Point gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:pos>214013.000000 567040.000000</gml:pos>
+          </gml:Point>
+        </ms:msGeometry>
+        <ms:ogc_fid>447</ms:ogc_fid>
+        <ms:nr_punktu>1438</ms:nr_punktu>
+        <ms:klasa_osnowy>Bazowa</ms:klasa_osnowy>
+        <ms:x1992>214013.000</ms:x1992>
+        <ms:y1992>567040.000</ms:y1992>
+        <ms:MP>50.00</ms:MP>
+        <ms:h_plevrf2007nh></ms:h_plevrf2007nh>
+        <ms:mh_plevrf2007nh></ms:mh_plevrf2007nh>
+        <ms:h_plkron86nh></ms:h_plkron86nh>
+        <ms:mh_plkron86nh></ms:mh_plkron86nh>
+        <ms:typ_stabilizacji>Naziemny</ms:typ_stabilizacji>
+        <ms:stan_znaku>Uszkodzony</ms:stan_znaku>
+        <ms:deklinacja>31500.0</ms:deklinacja>
+        <ms:blad_deklinacji>200.0</ms:blad_deklinacji>
+        <ms:inklinacja></ms:inklinacja>
+        <ms:blad_inklinacji></ms:blad_inklinacji>
+        <ms:natezenie_pola></ms:natezenie_pola>
+        <ms:blad_natezenia_pola></ms:blad_natezenia_pola>
+        <ms:epoka_wyznaczenia>2002.5</ms:epoka_wyznaczenia>
+        <ms:opis_topograficzny>https://opendata.geoportal.gov.pl/bdpog/Magnetyczna/Opisy_BOM/1438.jpg</ms:opis_topograficzny>
+      </ms:Bazowa_magnetyczna>
+    </wfs:member>
+</wfs:FeatureCollection>
+

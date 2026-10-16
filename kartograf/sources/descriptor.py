@@ -147,18 +147,20 @@ class IndexSource:
     ``kind="wfs"``: the features of an area of the type
     ``PackageVariant.index_layer`` (WFS 2.0, EPSG:2180 N,E, pages by
     ``next``); every feature is a record of one unit (tile). ``unit_field``
-    names the unit, ``url_field`` the file URL (``None``: the parser gives one
-    link per format), ``label_fields`` the fields joined with ``_`` into the
-    version label (D29: date, request number), ``year_field`` the year of the
-    data (``year`` filter: the newest record of a unit unless a year is
-    chosen), ``zone_field`` the GUGiK CRS of a tile (``PL-2000:S7`` ->
-    slot directory ``s7``).
+    names the unit; ``None``: the unit is the name of the record's file
+    without its suffix (the index's own tile ids repeat across works - mesh
+    3D, measured 2026-10-16). ``url_field`` names the file URL (``None``: the
+    parser gives one link per format), ``label_fields`` the fields joined
+    with ``_`` into the version label (D29: date, request number),
+    ``year_field`` the year of the data (``year`` filter: the newest record
+    of a unit unless a year is chosen), ``zone_field`` the GUGiK CRS of a
+    tile (``PL-2000:S7`` -> slot directory ``s7``).
     """
 
     kind: Literal["wms_gfi", "wfs"]
     endpoint: str
     parser: Literal["map_links"] | None
-    unit_field: str
+    unit_field: str | None
     url_field: str | None
     label_fields: tuple[str, ...]
     year_field: str | None = None

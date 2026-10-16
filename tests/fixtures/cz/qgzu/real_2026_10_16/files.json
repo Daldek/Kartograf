@@ -1,0 +1,32 @@
+{
+  "kvazigeoid": {
+    "url": "https://openzu.cuzk.cz/opendata/QGZU/KVAZIGEOID.zip",
+    "headers": {
+      "Content-Type": "application/x-zip-compressed",
+      "Content-Length": "58190406",
+      "ETag": "\"0c74256a46dd71:0\"",
+      "Last-Modified": "Wed, 30 Jun 2021 11:37:42 GMT"
+    },
+    "sha256": "aacfba6bdd47a6b89a3bcb079f133c9d549520b56794b7ef72f46d9185c2dfa3",
+    "members": [
+      "KvaziGeoid/",
+      "KvaziGeoid/z1_1D_N49°E13°.txt",
+      "KvaziGeoid/z1_1D_N49°E14°.txt",
+      "KvaziGeoid/z1_1D_N49°E15°.txt",
+      "KvaziGeoid/z1_1D_N49°E16°.txt",
+      "KvaziGeoid/z1_1D_N49°E17°.txt",
+      "KvaziGeoid/z1_1D_N50°E12°.txt",
+      "KvaziGeoid/z1_1D_N50°E13°.txt",
+      "KvaziGeoid/z1_1D_N50°E14°.txt",
+      "KvaziGeoid/z1_1D_N50°E15°.txt",
+      "KvaziGeoid/z1_1D_N50°E16°.txt",
+      "KvaziGeoid/z1_1D_N50°E17°.txt",
+      "KvaziGeoid/z1_1D_N50°E18°.txt",
+      "KvaziGeoid/z2_1D_N51°E12°.txt",
+      "KvaziGeoid/z2_1D_N51°E14°.txt",
+      "KvaziGeoid/z2_1D_N51°E16°.txt",
+      "KvaziGeoid/z2_1D_N51°E18°.txt",
+      "KvaziGeoid/z2_1D_N52°E14°.txt"
+    ]
+  }
+}

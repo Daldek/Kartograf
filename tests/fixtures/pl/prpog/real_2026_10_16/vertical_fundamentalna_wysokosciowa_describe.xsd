@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<schema
+   targetNamespace="http://mapserver.gis.umn.edu/mapserver" 
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver" 
+   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2001/XMLSchema"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   elementFormDefault="qualified" version="0.1" >
+
+  <import namespace="http://www.opengis.net/gml/3.2"
+          schemaLocation="http://schemas.opengis.net/gml/3.2.1/gml.xsd" />
+
+  <element name="Fundamentalna_wysokosciowa" 
+           type="ms:Fundamentalna_wysokosciowaType" 
+           substitutionGroup="gml:AbstractFeature" />
+
+  <complexType name="Fundamentalna_wysokosciowaType">
+    <complexContent>
+      <extension base="gml:AbstractFeatureType">
+        <sequence>
+          <element name="msGeometry" type="gml:GeometryPropertyType" minOccurs="0" maxOccurs="1"/>
+          <element name="ogc_fid" minOccurs="0" type="integer"/>
+          <element name="nr_punktu" minOccurs="0" type="string"/>
+          <element name="klasa_osnowy" minOccurs="0" type="string"/>
+          <element name="x1992" minOccurs="0" type="double"/>
+          <element name="y1992" minOccurs="0" type="double"/>
+          <element name="MP" minOccurs="0" type="double"/>
+          <element name="h_plevrf2007nh" minOccurs="0" type="double"/>
+          <element name="mh_plevrf2007nh" minOccurs="0" type="double"/>
+          <element name="h_plkron86nh" minOccurs="0" type="double"/>
+          <element name="mh_plkron86nh" minOccurs="0" type="double"/>
+          <element name="typ_stabilizacji" minOccurs="0" type="string"/>
+          <element name="stan_znaku" minOccurs="0" type="string"/>
+          <element name="opis_topograficzny" minOccurs="0" type="string"/>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
+
+</schema>

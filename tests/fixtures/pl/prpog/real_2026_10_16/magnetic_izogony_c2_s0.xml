@@ -1,0 +1,66 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<wfs:FeatureCollection
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   xmlns:wfs="http://www.opengis.net/wfs/2.0"
+   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+   xsi:schemaLocation="http://mapserver.gis.umn.edu/mapserver https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaMagnetyczna?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=DescribeFeatureType&amp;TYPENAME=ms:izogony&amp;OUTPUTFORMAT=application%2Fgml%2Bxml%3B%20version%3D3.2 http://www.opengis.net/wfs/2.0 http://schemas.opengis.net/wfs/2.0/wfs.xsd http://www.opengis.net/gml/3.2 http://schemas.opengis.net/gml/3.2.1/gml.xsd"
+   timeStamp="2026-10-16T20:03:43" numberMatched="unknown" numberReturned="2"
+   next="https://mapy.geoportal.gov.pl/wss/service/PZGIK/OsnowaMagnetyczna?SERVICE=WFS&amp;VERSION=2.0.0&amp;REQUEST=GetFeature&amp;TYPENAMES=ms%3Aizogony&amp;SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;BBOX=200000%2C500000%2C300000%2C650000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&amp;COUNT=2&amp;gahLaQu1eeYooCu=1747560640.37151.0000&amp;STARTINDEX=2">
+      <wfs:boundedBy>
+      	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+      		<gml:lowerCorner>136681.580041 203001.920424</gml:lowerCorner>
+      		<gml:upperCorner>775019.148008 861895.762864</gml:upperCorner>
+      	</gml:Envelope>
+      </wfs:boundedBy>
+<!-- WARNING: FeatureId item 'ptid' not found in typename 'izogony'. -->
+    <wfs:member>
+      <ms:izogony>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>146221.787484 203001.920424</gml:lowerCorner>
+        		<gml:upperCorner>775019.148008 843303.000000</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:MultiSurface gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:surfaceMember>
+              <gml:Polygon gml:id=".1.1">
+                <gml:exterior>
+                  <gml:LinearRing>
+                    <gml:posList srsDimension="2">194096.298707 533549.649252 194068.448269 533408.091092 194048.711364 533309.714350 194096.298707 533549.649252</gml:posList>
+                  </gml:LinearRing>
+                </gml:exterior>
+              </gml:Polygon>
+            </gml:surfaceMember>
+          </gml:MultiSurface>
+        </ms:msGeometry>
+        <ms:zakres_wartosci_deklinacji>3.0 - 4.0</ms:zakres_wartosci_deklinacji>
+      </ms:izogony>
+    </wfs:member>
+    <wfs:member>
+      <ms:izogony>
+        <gml:boundedBy>
+        	<gml:Envelope srsName="urn:ogc:def:crs:EPSG::2180">
+        		<gml:lowerCorner>136681.580041 205887.527775</gml:lowerCorner>
+        		<gml:upperCorner>768667.135362 861895.762864</gml:upperCorner>
+        	</gml:Envelope>
+        </gml:boundedBy>
+        <ms:msGeometry>
+          <gml:MultiSurface gml:id=".1" srsName="urn:ogc:def:crs:EPSG::2180">
+            <gml:surfaceMember>
+              <gml:Polygon gml:id=".1.1">
+                <gml:exterior>
+                  <gml:LinearRing>
+                    <gml:posList srsDimension="2">263530.749982 358575.239950 263469.290064 358542.990036 263428.639958 358542.699991 263530.749982 358575.239950</gml:posList>
+                  </gml:LinearRing>
+                </gml:exterior>
+              </gml:Polygon>
+            </gml:surfaceMember>
+          </gml:MultiSurface>
+        </ms:msGeometry>
+        <ms:zakres_wartosci_deklinacji>4.0 - 5.0</ms:zakres_wartosci_deklinacji>
+      </ms:izogony>
+    </wfs:member>
+</wfs:FeatureCollection>
+

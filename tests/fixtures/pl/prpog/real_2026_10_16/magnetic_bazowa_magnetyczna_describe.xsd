@@ -1,0 +1,47 @@
+<?xml version='1.0' encoding="UTF-8" ?>
+<schema
+   targetNamespace="http://mapserver.gis.umn.edu/mapserver" 
+   xmlns:ms="http://mapserver.gis.umn.edu/mapserver" 
+   xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+   xmlns="http://www.w3.org/2001/XMLSchema"
+   xmlns:gml="http://www.opengis.net/gml/3.2"
+   elementFormDefault="qualified" version="0.1" >
+
+  <import namespace="http://www.opengis.net/gml/3.2"
+          schemaLocation="http://schemas.opengis.net/gml/3.2.1/gml.xsd" />
+
+  <element name="Bazowa_magnetyczna" 
+           type="ms:Bazowa_magnetycznaType" 
+           substitutionGroup="gml:AbstractFeature" />
+
+  <complexType name="Bazowa_magnetycznaType">
+    <complexContent>
+      <extension base="gml:AbstractFeatureType">
+        <sequence>
+          <element name="msGeometry" type="gml:GeometryPropertyType" minOccurs="0" maxOccurs="1"/>
+          <element name="ogc_fid" minOccurs="0" type="integer"/>
+          <element name="nr_punktu" minOccurs="0" type="string"/>
+          <element name="klasa_osnowy" minOccurs="0" type="string"/>
+          <element name="x1992" minOccurs="0" type="double"/>
+          <element name="y1992" minOccurs="0" type="double"/>
+          <element name="MP" minOccurs="0" type="double"/>
+          <element name="h_plevrf2007nh" minOccurs="0" type="double"/>
+          <element name="mh_plevrf2007nh" minOccurs="0" type="double"/>
+          <element name="h_plkron86nh" minOccurs="0" type="double"/>
+          <element name="mh_plkron86nh" minOccurs="0" type="double"/>
+          <element name="typ_stabilizacji" minOccurs="0" type="string"/>
+          <element name="stan_znaku" minOccurs="0" type="string"/>
+          <element name="deklinacja" minOccurs="0" type="double"/>
+          <element name="blad_deklinacji" minOccurs="0" type="double"/>
+          <element name="inklinacja" minOccurs="0" type="double"/>
+          <element name="blad_inklinacji" minOccurs="0" type="double"/>
+          <element name="natezenie_pola" minOccurs="0" type="double"/>
+          <element name="blad_natezenia_pola" minOccurs="0" type="double"/>
+          <element name="epoka_wyznaczenia" minOccurs="0" type="double"/>
+          <element name="opis_topograficzny" minOccurs="0" type="string"/>
+        </sequence>
+      </extension>
+    </complexContent>
+  </complexType>
+
+</schema>

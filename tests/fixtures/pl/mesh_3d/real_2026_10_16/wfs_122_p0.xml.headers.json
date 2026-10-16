@@ -1,0 +1,5 @@
+{
+  "url": "https://mapy.geoportal.gov.pl/wss/service/PZGIK/NMT/WFS/ModeleSiatkowe3D?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=gugik%3ASkorowidzModeleSiatkowe3D&SRSNAME=urn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&BBOX=244000%2C566000%2C246000%2C568000%2Curn%3Aogc%3Adef%3Acrs%3AEPSG%3A%3A2180&COUNT=1000",
+  "status": 200,
+  "Content-Type": "text/xml; subtype=\"gml/3.2.1\"; charset=UTF-8"
+}

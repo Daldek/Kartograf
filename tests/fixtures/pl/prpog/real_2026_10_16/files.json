@@ -1,0 +1,159 @@
+{
+  "horizontal_1201": {
+    "url": "https://opendata.geoportal.gov.pl/bdpog/Pozioma/1201_PodstawowaOsnowaPozioma.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "2883814"
+    },
+    "members": [
+      "OpisyTopograficzne/",
+      "OpisyTopograficzne/163401700.jpg",
+      "OpisyTopograficzne/173201100.jpg",
+      "OpisyTopograficzne/173201101.jpg",
+      "OpisyTopograficzne/173201200.jpg",
+      "OpisyTopograficzne/173201400.jpg",
+      "OpisyTopograficzne/173201700.jpg",
+      "OpisyTopograficzne/173201800.jpg",
+      "OpisyTopograficzne/173401000.jpg",
+      "wykaz_PL-ETRF2000-GRS80h_elipsoidalne.xls",
+      "wykaz_PL-ETRF89-1992.xls",
+      "wykaz_PL-ETRF89-2000.xls",
+      "wykaz_PL-ETRF89-GRS80h_elipsoidalne.xls",
+      "xy_PL-ETRF2000-1992.xls",
+      "xy_PL-ETRF2000-2000.xls",
+      "xy_PL-ETRF2000-GRS80H.xls",
+      "xy_PL-ETRF89-GRS80H.xls"
+    ]
+  },
+  "vertical_1201": {
+    "url": "https://opendata.geoportal.gov.pl/bdpog/Wysokosciowa/1201_PodstawowaOsnowaWysokosciowa.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "14190226"
+    },
+    "members": [
+      "OpisyTopograficzne/",
+      "OpisyTopograficzne/16340251.jpg",
+      "OpisyTopograficzne/16340252.jpg",
+      "OpisyTopograficzne/16340253.jpg",
+      "OpisyTopograficzne/16340400.jpg",
+      "OpisyTopograficzne/16340550.jpg",
+      "OpisyTopograficzne/16340551.jpg",
+      "OpisyTopograficzne/16340650.jpg",
+      "OpisyTopograficzne/16340653.jpg",
+      "OpisyTopograficzne/16340654.jpg",
+      "OpisyTopograficzne/16340700.jpg",
+      "OpisyTopograficzne/16340801.jpg",
+      "OpisyTopograficzne/17320027.jpg",
+      "OpisyTopograficzne/17320029.jpg",
+      "OpisyTopograficzne/17320030.jpg",
+      "OpisyTopograficzne/17320031.jpg",
+      "OpisyTopograficzne/17320032.jpg",
+      "OpisyTopograficzne/17320034.jpg",
+      "OpisyTopograficzne/17320035.jpg",
+      "OpisyTopograficzne/17320037.jpg",
+      "OpisyTopograficzne/17320038.jpg",
+      "OpisyTopograficzne/17320041.jpg",
+      "OpisyTopograficzne/17320042.jpg",
+      "OpisyTopograficzne/17320069.jpg",
+      "OpisyTopograficzne/17320070.jpg",
+      "OpisyTopograficzne/17320071.jpg",
+      "OpisyTopograficzne/17320072.jpg",
+      "OpisyTopograficzne/17320073.jpg",
+      "OpisyTopograficzne/17320074.jpg",
+      "OpisyTopograficzne/17320075.jpg",
+      "OpisyTopograficzne/17320076.jpg",
+      "OpisyTopograficzne/17320077.jpg",
+      "OpisyTopograficzne/17320150.jpg",
+      "OpisyTopograficzne/17320153.jpg",
+      "OpisyTopograficzne/17320154.jpg",
+      "OpisyTopograficzne/17320155.jpg",
+      "OpisyTopograficzne/17320250.jpg",
+      "OpisyTopograficzne/17320251.jpg",
+      "OpisyTopograficzne/17320253.jpg",
+      "OpisyTopograficzne/17320254.jpg",
+      "OpisyTopograficzne/17320550.jpg",
+      "OpisyTopograficzne/17320551.jpg",
+      "OpisyTopograficzne/17320602.jpg",
+      "OpisyTopograficzne/17320603.jpg",
+      "OpisyTopograficzne/17320604.jpg",
+      "OpisyTopograficzne/17320605.jpg",
+      "OpisyTopograficzne/17320606.jpg",
+      "OpisyTopograficzne/17320607.jpg",
+      "OpisyTopograficzne/17320650.jpg",
+      "OpisyTopograficzne/17320651.jpg",
+      "OpisyTopograficzne/17320652.jpg",
+      "OpisyTopograficzne/17320653.jpg",
+      "OpisyTopograficzne/17320654.jpg",
+      "OpisyTopograficzne/17320656.jpg",
+      "OpisyTopograficzne/17320657.jpg",
+      "OpisyTopograficzne/17320658.jpg",
+      "OpisyTopograficzne/17320659.jpg",
+      "OpisyTopograficzne/17320660.jpg",
+      "OpisyTopograficzne/17320661.jpg",
+      "OpisyTopograficzne/17320662.jpg",
+      "OpisyTopograficzne/17320663.jpg",
+      "OpisyTopograficzne/17320700.jpg",
+      "OpisyTopograficzne/17320701.jpg",
+      "OpisyTopograficzne/17320702.jpg",
+      "OpisyTopograficzne/17320800.jpg",
+      "OpisyTopograficzne/17320801.jpg",
+      "OpisyTopograficzne/17320802.jpg",
+      "OpisyTopograficzne/17320803.jpg",
+      "OpisyTopograficzne/17320804.jpg",
+      "OpisyTopograficzne/17320805.jpg",
+      "OpisyTopograficzne/17320806.jpg",
+      "OpisyTopograficzne/17320807.jpg",
+      "OpisyTopograficzne/17320808.jpg",
+      "OpisyTopograficzne/17320809.jpg",
+      "OpisyTopograficzne/17340150.jpg",
+      "OpisyTopograficzne/17340151.jpg",
+      "OpisyTopograficzne/17340152.jpg",
+      "OpisyTopograficzne/17340153.jpg",
+      "OpisyTopograficzne/17340154.jpg",
+      "OpisyTopograficzne/17340155.jpg",
+      "OpisyTopograficzne/17340250.jpg",
+      "OpisyTopograficzne/17340251.jpg",
+      "linie_PL-ETRF89-GRS80H_wys_PL-EVRF2007-NH.xls",
+      "Wykaz_PL-ETRF89-1992_wys_PL-EVRF2007-NH.xls",
+      "xy_PL-ETRF2000-2000_wys_PL-KRON86-NH_wys_PL-EVRF2007-NH.xls"
+    ]
+  },
+  "kronsztadt60_M-34-64": {
+    "url": "https://opendata.geoportal.gov.pl/bdpog/MaterialyArchiwalne/Katalogi_Kronsztadt60/M-34-64.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "26007952"
+    },
+    "members": [
+      "C.PL.1960.3_99_M-34-064.pdf",
+      "C.PL.1960.3_99_M-34-64.tif"
+    ]
+  },
+  "kartoteki1942_M-34-64": {
+    "url": "https://opendata.geoportal.gov.pl/bdpog/MaterialyArchiwalne/Katalogi_Kartoteki1942/M-34-64.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "1069061020"
+    }
+  },
+  "kartoteki1942_N-33-58": {
+    "url": "https://opendata.geoportal.gov.pl/bdpog/MaterialyArchiwalne/Katalogi_Kartoteki1942/N-33-58.zip",
+    "headers": {
+      "Content-Type": "application/octet-stream",
+      "Content-Length": "2764933"
+    },
+    "members": [
+      "kartoteki/",
+      "kartoteki/1104_D⌐bina_III.pdf",
+      "kartoteki/7_Wytowno_wybrze╛e.pdf"
+    ]
+  },
+  "kronsztadt60_M-34-064": {
+    "url": "https://opendata.geoportal.gov.pl/bdpog/MaterialyArchiwalne/Katalogi_Kronsztadt60/M-34-064.zip",
+    "status": 404,
+    "headers": {
+      "Content-Type": "text/html; charset=UTF-8"
+    }
+  }
+}
