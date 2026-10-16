@@ -29,7 +29,7 @@ Nie sprawdzono:
 ## Ustalenia
 
 ### A7-1 [Important] Spec etapu 1 twierdzi, ze `parent_request` NIE powstaje przy jawnym `--country` — odwrotnie niz ADR-023(f)(1) i kod
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/superpowers/specs/2026-08-11-etap1-cz-fundament-dmr-design.md`:495-498 oraz :580-581
+- Plik: `<workspace>/Kartograf/docs/superpowers/specs/2026-08-11-etap1-cz-fundament-dmr-design.md`:495-498 oraz :580-581
 - Twierdzenie: dwa miejsca specu opisuja brak `extra.parent_request` przy jawnym
   `--country pl|cz`, co zostalo uniewaznione decyzja z konsultacji 2026-08-11 (ADR-023,
   "Rozstrzygniecia", pkt f.1) i faktycznym zachowaniem 0.7.0, a naglowkowa errata
@@ -58,7 +58,7 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-2 [Important] Errata researchu CZ odwraca rekomendacje reprojekcji serwerowej tylko w 3 wskazanych miejscach — sekcja ZABAGED (`outSR=2180`) i tabela ograniczen zostaly bez adnotacji
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-10-czechy-dmr-zabaged.md`:216, :231, :365
+- Plik: `<workspace>/Kartograf/docs/research/2026-08-10-czechy-dmr-zabaged.md`:216, :231, :365
 - Twierdzenie: errata (l. 7-16) wylicza konkretnie "sekcja 4.2 ..., sekcja 9 ... i wniosek 3",
   wiec nieoznaczone rekomendacje reprojekcji serwerowej CUZK w sekcji 5.2 B (ZABAGED, etap 3)
   i w tabeli ograniczen (sekcja 8) czytaja sie jak zweryfikowane i nadal wazne — mimo ze
@@ -86,7 +86,7 @@ Nie sprawdzono:
 - Pewnosc: srednia
 
 ### A7-3 [Important] `2026-08-11-adr024-seam-report.md` nie ma zadnej adnotacji o naprawie — caly dokument opisuje w czasie terazniejszym blad usuniety w 0.7.0
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-11-adr024-seam-report.md`:12-17, :83, :312, :330-340
+- Plik: `<workspace>/Kartograf/docs/research/2026-08-11-adr024-seam-report.md`:12-17, :83, :312, :330-340
 - Twierdzenie: raport diagnostyczny stwierdza, ze `--target-crs EPSG:2180` dla CZ zwraca raster
   przesuniety o ~135 m i ze sidecar niesie `transform.horizontal="server:EPSG:2180"`; oba fakty
   sa nieaktualne od fixu ADR-024, a dokument nie zawiera ani erraty, ani jednego odwolania do
@@ -112,7 +112,7 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-4 [Important] `2026-08-11-adr024-bugfix-report.md` — nieaktualna liczba 1,25 m i zastrzezenie "fix nie zweryfikowany na zywo", bez erraty
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-11-adr024-bugfix-report.md`:10-11, :30-32, :197-203, :309-311
+- Plik: `<workspace>/Kartograf/docs/research/2026-08-11-adr024-bugfix-report.md`:10-11, :30-32, :197-203, :309-311
 - Twierdzenie: raport podaje blad sciezki godlowej jako stale "+1,25 m" i konczy sie
   zastrzezeniem, ze fix nie byl uruchomiony na zywych danych; oba twierdzenia zostaly
   uniewaznione przez `2026-08-11-adr024-verify-report.md` i przez ADR-024 (sekcje "Korekta
@@ -137,7 +137,7 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-5 [Important] Design PL-2000 opisuje moduly/klasy, ktore nigdy nie powstaly (`parser_1992.py`, `_Parser1992`, `_Parser2000`)
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/superpowers/plans/2026-02-24-pl2000-support-design.md`:17, :24-25
+- Plik: `<workspace>/Kartograf/docs/superpowers/plans/2026-02-24-pl2000-support-design.md`:17, :24-25
 - Twierdzenie: zatwierdzony design deklaruje ekstrakcje PL-1992 do `kartograf/core/parser_1992.py`
   i nazwy prywatne `_Parser1992`/`_Parser2000`; zrealizowano inaczej (ADR-017: publiczny
   `Parser2000` w `parser_2000.py`, logika PL-1992 zostaje w `SheetParser`) i dokument nie ma erraty.
@@ -164,7 +164,7 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-6 [Important] Spec etapu 0 dokumentuje `transform.horizontal = "server:EPSG:2180"` jako kontrakt sidecara etapu 1+ — errata naglowkowa tego punktu nie wymienia
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md`:341-342
+- Plik: `<workspace>/Kartograf/docs/superpowers/specs/2026-08-10-etap0-zrodla-wielokrajowe-design.md`:341-342
 - Twierdzenie: sekcja 6.3 (kontrakt `ResultMetadata`, jedyna zmiana obserwowalna etapu 0)
   pokazuje docelowa wartosc pola `transform.horizontal` w formacie `"server:EPSG:2180"`;
   CHANGELOG 0.7.0 wymienia zmiane tego formatu jako **Breaking Change**, a trzypunktowa errata
@@ -188,7 +188,7 @@ Nie sprawdzono:
 - Pewnosc: srednia
 
 ### A7-7 [Minor] Zerwany link wewnetrzny w planie PL-2000
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/superpowers/plans/2026-02-24-pl2000-implementation.md`:11
+- Plik: `<workspace>/Kartograf/docs/superpowers/plans/2026-02-24-pl2000-implementation.md`:11
 - Twierdzenie: odwolanie `docs/plans/2026-02-24-pl2000-support-design.md` wskazuje na katalog,
   ktory nie istnieje (dokument lezy w `docs/superpowers/plans/`).
 - Dowod: `**Design doc:** \`docs/plans/2026-02-24-pl2000-support-design.md\``
@@ -198,8 +198,8 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-8 [Minor] Plany v0.6 wskazuja sciezki providerow sprzed przenosin z etapu 0
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/superpowers/plans/2026-03-03-v06-implementation-plan.md`:615, 814, 1148, 1421, 1480, 1531, 1561, 1775, 1788 oraz
-  `/home/claude-agent/workspace/Kartograf/docs/superpowers/plans/2026-03-03-v06-parallel-cache-verification-design.md`:186, 195, 289, 298
+- Plik: `<workspace>/Kartograf/docs/superpowers/plans/2026-03-03-v06-implementation-plan.md`:615, 814, 1148, 1421, 1480, 1531, 1561, 1775, 1788 oraz
+  `<workspace>/Kartograf/docs/superpowers/plans/2026-03-03-v06-parallel-cache-verification-design.md`:186, 195, 289, 298
 - Twierdzenie: oba dokumenty odsylaja do `kartograf/providers/gugik.py`,
   `kartograf/providers/gugik_nmpt.py`, `kartograf/providers/gugik_orto.py`,
   `kartograf/providers/bdot10k.py` (oraz do `kartograf/cli/commands.py` jako miejsca funkcji
@@ -215,7 +215,7 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-9 [Minor] Design v0.6 opisuje tabele `bbox_cache`, ktora nigdy nie powstala
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/superpowers/plans/2026-03-03-v06-parallel-cache-verification-design.md`:254-263, :272
+- Plik: `<workspace>/Kartograf/docs/superpowers/plans/2026-03-03-v06-parallel-cache-verification-design.md`:254-263, :272
 - Twierdzenie: schema `MetadataCache` w designie zawiera trzecia tabele `bbox_cache` i metody
   `get_bbox()`/`set_bbox()`; zaimplementowano tylko `url_cache` i `teryt_cache` (a w etapie 1
   doszla `sheet_cache`, o innym przeznaczeniu).
@@ -230,8 +230,8 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-10 [Minor] Odwolania do niewersjonowanych raportow ze scratchpada bez wskazania odzyskanych kopii
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-11-etap1-e2e.md`:33 oraz
-  `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-11-adr024-bugfix-report.md`:4
+- Plik: `<workspace>/Kartograf/docs/research/2026-08-11-etap1-e2e.md`:33 oraz
+  `<workspace>/Kartograf/docs/research/2026-08-11-adr024-bugfix-report.md`:4
 - Twierdzenie: oba dokumenty odsylaja do `seam/verify/verify-report.md` i `seam-report.md`,
   ktore nie istnieja w repo (`seam/` jest w `.gitignore`, l. 70-71); kopie odzyskane
   2026-08-18 leza w `docs/research/2026-08-11-adr024-{verify,seam}-report.md`. W e2e.md
@@ -246,7 +246,7 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-11 [Minor] Zamkniete zastrzezenia w verify-report nie sa oznaczone jako zamkniete
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-11-adr024-verify-report.md`:289-295, :296-301
+- Plik: `<workspace>/Kartograf/docs/research/2026-08-11-adr024-verify-report.md`:289-295, :296-301
 - Twierdzenie: Zastrzezenie 3 ("warto dopisac jedno zdanie" o zmiennosci przestrzennej bledu)
   i Zastrzezenie 4 ("liczby w `docs/research/2026-08-11-etap1-e2e.md` ... warto odswiezyc")
   zostaly juz wykonane, ale dokument nie odnotowuje tego.
@@ -261,22 +261,22 @@ Nie sprawdzono:
 - Pewnosc: wysoka
 
 ### A7-12 [Minor] Bezwzgledne sciezki srodowiska wykonania i publiczny SHARE_ID w dokumentach
-- Plik: `/home/claude-agent/workspace/Kartograf/docs/research/2026-08-11-etap1-e2e.md`:47, 52, 205, 310;
+- Plik: `<workspace>/Kartograf/docs/research/2026-08-11-etap1-e2e.md`:47, 52, 205, 310;
   `.../2026-08-11-adr024-seam-report.md`:6, 36; `.../2026-08-11-adr024-verify-report.md`:4, 53, 149, 233;
   `.../2026-08-10-niemcy-dgm-atkis.md`:114, 326;
-  `/home/claude-agent/workspace/Kartograf/docs/superpowers/plans/2026-03-03-v06-implementation-plan.md`:88-91;
+  `<workspace>/Kartograf/docs/superpowers/plans/2026-03-03-v06-implementation-plan.md`:88-91;
   `.../2026-08-10-etap0-zrodla-wielokrajowe.md`:61; `.../2026-08-11-etap1-cz-fundament-dmr.md`:4299
-- Twierdzenie: dokumenty zawieraja bezwzgledne sciezki `/home/claude-agent/...` i sciezki
+- Twierdzenie: dokumenty zawieraja bezwzgledne sciezki `/home/<uzytkownik>/...` i sciezki
   scratchpada sesji (`/tmp/claude-1001/...-f27c5cce-.../scratchpad/seam`) oraz publiczny
   SHARE_ID Nextcloud Saksonii; **nie znaleziono zadnych credentiali, tokenow API, hasel ani
   adresow e-mail** — to jedynie szum srodowiskowy, nie wyciek.
-- Dowod: `K=/home/claude-agent/workspace/Kartograf/.venv/bin/kartograf` (e2e:47);
+- Dowod: `K=<workspace>/Kartograf/.venv/bin/kartograf` (e2e:47);
   `https://geocloud.landesvermessung.sachsen.de/public.php/dav/files/JCcXyifaNdLDnxZ/dgm1_33410_5654_2_sn_tiff.zip`
   (niemcy:326 — sam dokument ostrzega na l. 140, ze SHARE_ID sa rotowane).
 - Weryfikacja: `grep -rniE "bearer|token|secret|password|api[_-]?key|/Users/|/home/"` +
   regex adresow e-mail po calym obszarze A7 — zero trafien na credentiale/e-maile;
   nazwa `claude-agent` to konto agenta, nie tozsamosc uzytkownika.
-- Proponowana naprawa: opcjonalnie zamienic `/home/claude-agent/workspace/Kartograf` na
+- Proponowana naprawa: opcjonalnie zamienic `<workspace>/Kartograf` na
   `<repo>` / `$REPO` w cytowanych komendach; sciezki scratchpada (seam-report:6,
   verify-report:4) usunac lub zastapic "katalog roboczy sesji (poza repo)". Nie blokuje wydania.
 - Pewnosc: wysoka

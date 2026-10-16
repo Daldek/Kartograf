@@ -235,7 +235,7 @@ z kodem 0).
 
 ## 6. Surowe artefakty
 
-Katalog roboczy: `/home/claude-agent/workspace/Kartograf/e2e-data/2026-09-29-live/L2-wycinki-siatka/`
+Katalog roboczy: `<workspace>/Kartograf/e2e-data/2026-09-29-live/L2-wycinki-siatka/`
 - `logs/runs.txt` — polecenia, kody, czasy; `logs/<tag>.stdout|.stderr` — pelne wyjscia (tagi jak w
   tabelach: `d*`, `f_*`, `g_*`).
 - Weryfikacje: `logs/verify_*.txt`, `logs/verify2_*.txt`, `logs/cutouts_table.txt`,

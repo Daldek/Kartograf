@@ -180,7 +180,7 @@ Nie sprawdzono:
 - Dowod (wtyczka sledzaca `Path.mkdir`, pelny przebieg suite):
   ```
   File ".../tests/test_landcover.py", line 223, in test_init_default_provider
-  ### MKDIR /home/claude-agent/workspace/Kartograf/data/landcover
+  ### MKDIR <workspace>/Kartograf/data/landcover
   ...
   File ".../tests/test_soilgrids.py", line 298, in test_manager_soilgrids_provider
   ```

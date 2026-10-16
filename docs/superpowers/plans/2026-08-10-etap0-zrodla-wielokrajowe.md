@@ -58,7 +58,7 @@ ZMIENIONE: providers/base.py, providers/__init__.py, kartograf/__init__.py, exce
 - [ ] **Krok 0.1: Utworz galaz z develop**
 
 ```bash
-cd /home/claude-agent/workspace/Kartograf
+cd <workspace>/Kartograf
 git checkout develop && git pull origin develop
 git checkout -b feature/etap0-zrodla-wielokrajowe
 ```
