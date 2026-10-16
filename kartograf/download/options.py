@@ -16,6 +16,8 @@ from kartograf.core.sheet_parser import series_scale
 from kartograf.download.arguments import require_bool, require_int
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_contours import PRODUCT as CONTOURS
+from kartograf.download.cz_contours import contours_formats
 from kartograf.download.cz_orto import cz_orto_sheet
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
 from kartograf.exceptions import ValidationError
@@ -50,6 +52,7 @@ _PRODUCT_TEXT = {
     "nmpt": "Numeryczny Model Pokrycia Terenu; PL i CZ",
     "orto": "ortofotomapa RGB; PL i CZ",
     "laz": "chmura punktow LIDAR; PL i CZ",
+    CONTOURS: "warstwice ZABAGED - wektor 2D, arkusze SM5, SHP albo DGN; CZ",
     "intensity": "obrazy intensywnosci LIDAR, 1 pasmo 0,25 m; PL",
     "true-orto": "prawdziwa ortofotomapa (true orto) wybranych miast, 0,05 m; PL",
     "oblique-orto": (
@@ -67,7 +70,7 @@ def product_choices(products: Iterable[str] = tuple(_PRODUCT_TEXT)) -> str:
 PRODUCT_CHOICES = product_choices()
 # Products of the CLI groups (ADR-039): ``elevation download`` and ``imagery
 # download`` offer only these; a new product of a group is added here.
-ELEVATION_PRODUCTS: tuple[str, ...] = ("nmt", "nmpt", "laz")
+ELEVATION_PRODUCTS: tuple[str, ...] = ("nmt", "nmpt", "laz", CONTOURS)
 IMAGERY_PRODUCTS: tuple[str, ...] = ("orto", "intensity", "true-orto", "oblique-orto")
 
 
@@ -373,8 +376,8 @@ def pl_option_error(
                 return f"{error}{res_hint}"
     elif fmt is not None:
         return (
-            f"--format dotyczy tylko --product nmt i nmpt (PL), podano "
-            f"--product {product} - pomin --format"
+            f"--format dotyczy tylko --product nmt i nmpt (PL) oraz {CONTOURS} "
+            f"(CZ), podano --product {product} - pomin --format"
         )
 
     index = _image_index(product)
@@ -490,8 +493,9 @@ def cz_option_error(
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
     if _format_of(task) is not None:
         return (
-            "--format dotyczy tylko PL (siatki ASC i archiwa GUGiK) - dla CZ "
-            "pomin --format"
+            f"--format dotyczy w CZ tylko --product {CONTOURS} (warstwice); "
+            f"{task.product.upper()} CZ to pliki CUZK bez wyboru formatu - pomin "
+            "--format"
         )
     if task.product == "laz":
         if task.resolution is not None:
@@ -528,6 +532,45 @@ def cz_option_error(
         return f"{error}{vcrs_hint}"
     if "PL" not in countries and task.sheet_system is not None:
         return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+    return None
+
+
+def _contours_error(task: SimpleNamespace) -> str | None:
+    """Error text of a CZ contours request (``None`` = valid): vector SM5
+    sheets take ``--format`` (required, values of the registry) and the
+    height system of their files (one value: may be omitted); no grid,
+    flight, cutout or view choice."""
+    if task.product != CONTOURS:
+        return None
+    reason = "warstwice to arkusze SM5 (wektor) - bez rozdzielczosci, lotow i wycinka"
+    for flag, name in (
+        ("--resolution", "resolution"),
+        *_SHEET_CHOICES,
+        ("--coverage", "coverage"),
+        ("--direction", "direction"),
+    ):
+        value = getattr(task, name)
+        if value is not None and value is not False:
+            return f"{flag} nie dotyczy --product {CONTOURS}: {reason}"
+    formats = contours_formats()
+    fmt = _format_of(task)
+    if fmt is None:
+        return f"--format wymagane dla --product {CONTOURS}: {', '.join(formats)}"
+    if fmt not in formats:
+        return (
+            f"--format {fmt!r}: nieznana wartosc dla --product {CONTOURS} - "
+            f"dostepne: {', '.join(formats)}"
+        )
+    heights = sorted(
+        {v.vertical_crs for v in variants(product=CONTOURS) if v.vertical_crs}
+    )
+    vertical_crs = country_value(task.vertical_crs, "CZ")
+    if vertical_crs is not None and vertical_crs not in heights:
+        return (
+            f"--vertical-crs {vertical_crs} nie dotyczy --product {CONTOURS}: "
+            f"warstwice ZABAGED maja wysokosci {', '.join(heights)} (mozna pominac "
+            "--vertical-crs)"
+        )
     return None
 
 
@@ -595,7 +638,7 @@ def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None
     """CZ raster areas require cutout; CZ LAZ and orthophoto areas use the
     indexed sheets."""
     if (
-        task.product in ("laz", "orto")
+        task.product in ("laz", "orto", CONTOURS)
         or task.sheet is not None
         or "CZ" not in countries
         or task.cutout
@@ -736,6 +779,9 @@ def validate_request(task: SimpleNamespace) -> None:
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
+    error = _contours_error(task)
+    if error is not None:
+        raise ValidationError(error)
     file_variant = pl_file_variant(task)
     if file_variant is not None:
         error = _file_variant_error(task, file_variant)

@@ -578,6 +578,26 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E1 (czesc 4, ADR-043): warstwice ZABAGED CUZK w `elevation
+  download --product contours --country cz --format SHP|DGN` (`--sheet`
+  arkusza SM5, `--bbox`/`--geometry` = arkusze SM5 obszaru z indeksu
+  `KladyMapovychListu`): ZIP arkusza z openzu zapisany 1:1 (bez
+  rozpakowania i konwersji; czlony i CRC sprawdzane przed zapisem wersji)
+  w `contours/cz_zabaged_shp|dgn/<hierarchia SM5>/<godlo>.zip`, sidecar
+  z lista czlonow ZIP, `mapname`/`cz_share` z indeksu i `extra.http`;
+  sygnal `http` (lokalna wersja po jednym `HEAD`, `--check-updates` bez
+  pobrania, tor planu `cz_sheet`). Deskryptory
+  `cz.cuzk.zabaged_contours_shp` i `cz.cuzk.zabaged_contours_dgn` (jeden
+  format = jeden deskryptor, jak archiwa GUGiK); `--format` wymagane,
+  `--vertical-crs` tylko `Bpv` (mozna pominac); `--resolution`, `--cutout`,
+  `--horizontal-crs`, `--sheet-system`, `--scale`, flagi roku i lotow =
+  `Error:` ("warstwice to arkusze SM5 (wektor) ..."); kafel TM33 = `Error:`.
+  `--country auto` dla produktu jednego kraju zaweza obszar do tego kraju
+  (`Info:` `auto_narrowed_to_cz`/`auto_narrowed_to_pl`, jak w kolekcjach;
+  dotyczy tez intensywnosci, true orto i orto ukosnej, dotad `Error:`),
+  a `--country pl` z warstwicami to `Error:` "... dostepny tylko dla CZ".
+  Tekst bledu `--format` z innym produktem wymienia `contours (CZ)`.
+
 - Plan E, Task E1 (czesc 3, ADR-043): trzy produkty obrazow GUGiK
   w `imagery download` na torze arkuszy ortofotomapy (kampanie, wersje,
   `--year`/`--all-campaigns`, sygnal `index`): `--product intensity`
