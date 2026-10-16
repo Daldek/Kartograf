@@ -11,6 +11,8 @@ an unmounted share must not receive gigabytes in an empty mount point
 ``upgrade``/``force`` re-pin (the whole task).
 """
 
+import contextlib
+import json
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import replace
@@ -54,7 +56,7 @@ from kartograf.project.model import (
     ProjectTask,
     TaskResult,
 )
-from kartograf.sources.sidecar import file_digest
+from kartograf.sources.sidecar import file_digest, write_sidecar
 
 _UPDATE_MODES = (None, "upgrade", "force")
 _GEOMETRY_PARTS = (".shp", ".shx", ".dbf", ".prj")
@@ -360,8 +362,10 @@ def download_project(
     with its command's library function and pinned as a whole after a full
     success (``pinned``); a pinned task whose pinned versions are in the
     store is left without network (``unchanged``); missing pinned versions
-    are restored only with the same SHA-256 (``restored``; ``version`` and
-    ``label`` may change, the content never does). ``update="upgrade"``/
+    are restored only with the same SHA-256 (``restored``: the bytes back
+    under the pinned ``version`` path - the manifest keeps ``version`` and
+    ``label`` also when the download labels them anew, e.g. another
+    download date). ``update="upgrade"``/
     ``"force"`` (spec 4.7): the library function in that mode; after a full
     success the pins of the task are replaced by the result as a whole
     (``updated``, or ``unchanged`` when identical). A failure of a task
@@ -452,7 +456,7 @@ def _download_task(
     files = command.files(result)
     pins, pin_errors = _pins(store, files)
     if restore:
-        return _restore(project, task, before, restore, files, pins, pin_errors)
+        return _restore(project, task, restore, files, pins, pin_errors)
     errors = [*files.errors, *pin_errors]
     if not files.complete or errors or not pins:
         return _failed(
@@ -500,21 +504,30 @@ def _corrupt_text(task: str, pin: PinnedFile) -> str:
 def _restore(
     project: Project,
     task: ProjectTask,
-    before: dict,
     missing: tuple[PinnedFile, ...],
     files: TaskFiles,
     pins: list[PinnedFile],
     pin_errors: list[str],
 ) -> TaskResult:
     """Missing pinned versions back from the result - identical SHA-256 only
-    (spec 4.6 point 3); restored pins are written even if others failed."""
-    restored: dict[str, PinnedFile] = {}
+    (spec 4.6 point 3), also when other pins of the task fail. The bytes go
+    back under the pinned ``version`` path (``_repin_version``): the pins and
+    the manifest never change."""
+    restored: list[PinnedFile] = []
     problems: list[str] = []
     for pin in missing:
         candidates = [new for new in pins if new.path == pin.path]
         same = next((new for new in candidates if new.sha256 == pin.sha256), None)
         if same is not None:
-            restored[pin.version] = replace(pin, version=same.version, label=same.label)
+            try:
+                _repin_version(project.output_dir, pin, same)
+            except (OSError, ValueError, KeyError, TypeError) as e:
+                problems.append(
+                    f"{pin.unit}: nie udalo sie odtworzyc przypietej wersji "
+                    f"{pin.version}: {e}"
+                )
+                continue
+            restored.append(pin)
         elif candidates:
             problems.append(
                 f"{pin.unit}: zrodlo ma inna tresc niz przypieta (przypieta "
@@ -529,17 +542,43 @@ def _restore(
                 f"przyjmij nowy wynik: kartograf project download --upgrade "
                 f"{task.name}"
             )
-    files_after = tuple(restored.get(pin.version, pin) for pin in task.files)
-    if files_after != task.files:
-        error = _commit(project, before, replace(task, files=files_after))
-        if error is not None:
-            return _failed(task, [error])
-    back = tuple(restored.values())
-    replaced = tuple(pin for pin in missing if restored.get(pin.version, pin) != pin)
     if problems:
         errors = [*problems, *files.errors, *pin_errors]
-        return TaskResult(task.name, "failed", back, replaced, tuple(errors))
-    return TaskResult(task.name, "restored", back, replaced, ())
+        return TaskResult(task.name, "failed", tuple(restored), (), tuple(errors))
+    return TaskResult(task.name, "restored", tuple(restored), (), ())
+
+
+def _repin_version(store: Path, pin: PinnedFile, found: PinnedFile) -> None:
+    """The pinned version directory back for the same bytes the download
+    stored under another version (``found``; e.g. another download date): a
+    hardlink of its data and its sidecar with the pinned label, written once
+    (D18). Nothing to do when the download used the pinned version itself.
+
+    Raises
+    ------
+    OSError, ValueError, KeyError, TypeError
+        The found version or its sidecar cannot be read, the target holds
+        other bytes or the link fails.
+    """
+    if found.version == pin.version:
+        return
+    source = store / found.version
+    target = store / pin.version
+    meta = json.loads(
+        source.with_name(f"{source.name}.meta.json").read_text(encoding="utf-8")
+    )
+    if meta["sha256"] != pin.sha256:
+        raise ValueError(f"sidecar {found.version} ma inne sha256 niz przypiete")
+    meta["extra"]["version"]["label"] = pin.label
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        os.link(source, target)
+    except FileExistsError:
+        if file_digest(target) != (pin.sha256, pin.size_bytes):
+            raise ValueError(f"{pin.version} ma inne bajty niz przypiete") from None
+    # FileExistsError: another restore of the same pin published it first
+    with contextlib.suppress(FileExistsError):
+        write_sidecar(target, meta, exclusive=True)
 
 
 def _file_check(
