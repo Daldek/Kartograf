@@ -586,6 +586,22 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Plan E, Task E3 (ADR-043): grupy `boundaries` i `cadastre` dostaja
+  produkty `boundaries download --product addresses|special|geomorphology`
+  i `cadastre download --product map --country cz|prices`, flagi
+  `--format` (pliki krajowe i formaty mapy katastralnej) oraz `--ku`
+  (6 cyfr, tylko CZ). Adresy PRG: punkty i ulice obszaru (GPKG EPSG:2180),
+  paczka SHP powiatu (`--teryt` 4 cyfry) albo plik krajowy
+  (`--whole-country --format SHP|GML`). Granice specjalne PRG: 44 rodzaje
+  z OGC API PRG (GPKG OGC:CRS84) albo plik krajowy SHP/GML; obwody spisowe
+  (`GranicaObwoduSpisowego`) nie sa w wyniku obszaru - `Info`
+  (`AREA_OMITTED`) wskazuje plik krajowy. Geomorfologia CZ: jednostki
+  poziomu `--level` (`subprovincie`...`cast`). RCN: eksport powiatu albo
+  wojewodztwa (GPKG z trzema warstwami, rozpakowany z ZIP-a lokalnie,
+  kontrola warstw). Mapa katastralna CZ: paczka KU w SHP, DXF, DGN albo VFK
+  (KU obszaru z RUIAN; sygnal HTTP); VKM poza 0.8.0. Zadania manifestu
+  projektu dla obu grup przyjmuja `format` i `ku`. Przyklady i wyniki live:
+  USAGE 1.8 i 1.9, `docs/research/2026-10-16-plan-e3-e2e/raport.md`.
 - Plan E, Task E1 (czesc 4, ADR-043): warstwice ZABAGED CUZK w `elevation
   download --product contours --country cz --format SHP|DGN` (`--sheet`
   arkusza SM5, `--bbox`/`--geometry` = arkusze SM5 obszaru z indeksu

@@ -2922,6 +2922,30 @@ ZIP TIFF/DGN/SHP lub PDF (ETRS89 tylko TIFF/PDF). System arkusza
 wynika z jego godla, ale sprzeczny `sheet_system` jest bledem;
 `sheet_grid.crs` wariantu daje sidecar EPSG:5514 albo EPSG:3045.
 
+**Granice, ewidencja i CZ (E3).** `pl.gugik.prg_addresses` ma trzy
+kanaly: WFS KIN (`A07_Punkty_adresowe` i `A08_Ulice` do jednego GPKG
+EPSG:2180, osie N,E), paczki SHP powiatow (`unit="powiat"`) i dwa pliki
+krajowe (SHP, GML wybierane `--format`). `pl.gugik.prg_special` to OGC API
+PRG w CRS84 (44 kolekcje jawnie w deskryptorze) z limitem czasu kanalu
+120 s (`FeatureBBoxParams.timeout`; obszar to minuty, bo usluga pyta
+o kazda kolekcje osobno) i plikiem krajowym SHP/GML. Kolekcja
+`GranicaObwoduSpisowego` nie wchodzi do wyniku obszaru (odpowiedz po
+158 do ponad 400 s): `FeatureBBoxParams.area_omitted` niesie tekst, ktory
+silnik kolekcji zamienia w `Info` `AREA_OMITTED` przy kazdym zadaniu
+obszaru kanalu (obwody sa w pliku krajowym). `pl.gugik.rcn` ma kanaly
+`unit="powiat"` i `unit="woj"`; paczka ZIP jest rozpakowywana do jednego
+GPKG (`UnitPackageParams.unpack=".gpkg"`), a `unpack_layers` (tylko
+z `unpack=".gpkg"`; niezmiennik rejestru) wymusza obecnosc warstw
+`transakcje_dzialki`, `transakcje_budynki`, `transakcje_lokale`:
+rozpakowanie i kontrola ida w lokalnym katalogu roboczym (SQLite nie
+dziala na wolumenach sieciowych), brak warstwy = `DownloadError` i brak
+wersji. `cz.cuzk.cadastral_map` to `unit="ku"` z czterema wariantami
+(`--format SHP|DXF|DGN|VFK`, ZIP 1:1, sygnal `http`); KU obszaru wg
+warstwy RUIAN 7. `cz.cuzk.geomorphology` to ArcGIS REST
+(`GeomorfologickeJednotky`, EPSG:5514), jedna warstwa na poziom
+(`--level`, `selection="level"`). Mapa katastralna w formacie VKM jest
+poza 0.8.0 (adres pliku VKM odpowiada 404 dla KU 623164).
+
 ---
 
 ## 5. Jak dodac nowe zrodlo albo nowy kraj

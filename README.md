@@ -28,6 +28,11 @@ Kartograf nie wykonuje obliczeń hydrologicznych (poza klasyfikacją HSG).
 - **Archiwum BDOT10k** — roczniki 2014-2025 (GML/SHP), oryginalna paczka powiatu
 - **Granice administracyjne (PRG)** — granice jednostek administracyjnych i ewidencyjnych z GUGiK
 - **EGiB** — mapa ewidencyjna z GUGiK (działki i budynki)
+- **Punkty adresowe i ulice (PRG)** — punkty adresowe i ulice obszaru (GeoPackage) albo paczka powiatu / plik krajowy z GUGiK
+- **Granice specjalne (PRG)** — 44 rodzaje granic specjalnych (sądy, policja, lasy, wody, obszary morskie) z OGC API PRG albo plik krajowy
+- **Ceny nieruchomości (RCN)** — eksporty transakcji z GUGiK (powiat, województwo; GeoPackage)
+- **Mapa katastralna (CZ)** — paczki katastrálního území CUZK (SHP, DXF, DGN, VFK)
+- **Jednostki geomorfologiczne (CZ)** — poziomy od subprovincie do části (obszar; CUZK)
 - **Modele 3D budynków** — CityGML LoD1/LoD2 z GUGiK
 - **ZABAGED (CZ)** — 22 warstwy pokrycia terenu i wód CUZK (obszar) albo plik krajowy GPKG
 - **Granice RUIAN (CZ)** — kraje, okresy, obce i katastralni uzemi z CUZK

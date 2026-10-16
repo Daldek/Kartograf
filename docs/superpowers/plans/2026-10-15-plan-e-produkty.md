@@ -1055,10 +1055,11 @@ GPKG), D (RUIAN w `boundaries`).
 - `pl.gugik.prg_special`, product `special`.
   - `OGC_API_FEATURES`: `FeatureBBoxParams(protocol="ogcapi",
     native_crs="OGC:CRS84", selection="all")`, `ogcapi/PRG/apiFeatures`;
-    45 `FeatureLayer` wypisanych jawnie (wszystkie kolekcje poza 6
-    `Granica*` planu C; `/collections` 2026-10-16: 51 kolekcji, kazda
-    tylko CRS84; strona `items` ok. 3,5 s - domyslny limit odczytu
-    wystarcza);
+    44 `FeatureLayer` wypisanych jawnie (wszystkie kolekcje poza 6
+    `Granica*` planu C i poza `GranicaObwoduSpisowego`, ktora odpowiada
+    158 do ponad 400 s - jest tylko w pliku krajowym, a obszar dostaje
+    `Info` `AREA_OMITTED`; `/collections` 2026-10-16: 51 kolekcji, kazda
+    tylko CRS84; strona `items` zwykle kilka sekund, limit kanalu 120 s);
   - `UnitPackageParams(unit="country")`: warianty SHP i GML
     (`opendata/prg/granice/00_granice_specjalne_{shp,xml}.zip`).
 - `cz.cuzk.geomorphology`, product `geomorphology`.
@@ -1086,7 +1087,7 @@ GPKG), D (RUIAN w `boundaries`).
   - KU obszaru z RUIAN; sygnal `http`;
   - VKM poza 0.8.0 (P2).
 
-- [ ] **Step 1: Fixtury (live):**
+- [x] **Step 1: Fixtury (live):**
   - WFS KIN: dwie strony A07 (bbox Krakowa, `COUNT=2`) i jedna A08;
   - `/collections` OGC API PRG i strona jednej kolekcji (np. `SadRejonowy`);
   - REST geomorfologii: warstwa 39 i metadane uslugi;
@@ -1094,13 +1095,15 @@ GPKG), D (RUIAN w `boundaries`).
     z trzech warstw, ten sam schemat; `ogr2ogr -limit`), spakowany jak
     zrodlo;
   - RUIAN 7 dla bbox z 2 KU; `HEAD` KM 623164 w 4 formatach.
-- [ ] **Step 2: Test RED:**
+- [x] **Step 2: Test RED:**
   - `test_addresses_bbox_layers_ne`: zapytanie ma osie N,E (odwrocone daja
     0 obiektow w fixturze); GPKG ma dwie tabele.
   - `test_addresses_units`: `--teryt 1261` daje ZIP SHP 1:1; `--teryt 12`
-    = `Error:` "paczki punktow adresowych sa powiatowe"; `--whole-country
-    --format SHP` daje `Notice` 563 803 725 B przed `GET`.
-  - `test_special_collections_contract`: 45 kolekcji z deskryptora jest
+    = `Error:` z lista wyborow (paczek wojewodztw adresow nie ma;
+    wykonanie: komunikat ogolny zamiast tekstu "paczki punktow adresowych
+    sa powiatowe"); `--whole-country --format SHP` daje `Warning` 563 815 148 B
+    przed `GET`.
+  - `test_special_collections_contract`: 44 kolekcje z deskryptora sa
     w `/collections`; brak jednej = `DownloadError` z nazwa; kolekcja spoza
     deskryptora nie jest pytana (silnik E0 jej nie raportuje); kolekcje
     `Granica*` nigdy nie sa pytane.
@@ -1117,12 +1120,12 @@ GPKG), D (RUIAN w `boundaries`).
     = `Error:`; 404 jednego KU = blad tej jednostki, pozostale zapisane.
   - `test_cz_km_area_ku_discovery`: bbox daje KU z RUIAN; drugi przebieg
     porownuje `ETag`.
-- [ ] **Step 3: Implementacja.** Deskryptory, wybory i walidacja; grupy
+- [x] **Step 3: Implementacja.** Deskryptory, wybory i walidacja; grupy
   `boundaries` i `cadastre` dostaja produkty, `--format` i `--ku`. Handler
   ten sam co w C; parity po jednym scenariuszu na produkt.
-- [ ] **Step 4: Manifest (warunkowo).** Opcje `boundaries download`
+- [x] **Step 4: Manifest (warunkowo).** Opcje `boundaries download`
   i `cadastre download` (`format`, `ku`); test zadania projektu z RCN.
-- [ ] **Step 5: Live:**
+- [x] **Step 5: Live:**
   - adresy: bbox Krakowa, `--teryt 1261` (6 MB), kraj SHP (564 MB) i drugi
     plik krajowy (803 MB). Po `unzip -l` drugiego pliku dopisz jego wariant
     (`format` i token) z testem na fixturze listy ZIP, potem powtorz brame;
@@ -1134,7 +1137,18 @@ GPKG), D (RUIAN w `boundaries`).
   - mapa katastralna: 623164 w 4 formatach i bbox z kilkoma KU;
   - VKM: ponowne sprawdzenie odpowiedzi plikow (dowod do wpisu w backlogu
     PROGRESS, P2).
-- [ ] **Step 6: Brama i commit** - `feat(boundaries,cadastre): PRG adresy i granice specjalne, geomorfologia CZ, RCN, mapa katastralna CZ (plan E, E3)`.
+- [x] **Step 6: Brama i commit** - `feat(boundaries,cadastre): PRG adresy i granice specjalne, geomorfologia CZ, RCN, mapa katastralna CZ (plan E, E3)`.
+
+**Stan 2026-10-16 (E3 wykonane).** Wszystkie produkty E3 sa w kodzie,
+CLI, manifescie i dokumentacji; wyniki live: `docs/research/2026-10-16-plan-e3-e2e/raport.md`.
+Odstepstwa od planu: (1) `GranicaObwoduSpisowego` poza wynikiem obszaru
+(44 kolekcje, `FeatureBBoxParams.area_omitted`, ADR-043 errata 1);
+(2) komunikat `--teryt 12` dla adresow jest ogolny z lista wyborow;
+(3) komunikat `--ku` podaje tylko `--bbox/--geometry` (kolekcje CZ nie
+przyjmuja `--sheet`); (4) parity dla granic specjalnych to obszar z `Info`;
+(5) nowy niezmiennik rejestru: `unpack_layers` tylko z `unpack=".gpkg"`;
+(6) drugi plik krajowy adresow to GML (`--format GML`, 804 071 557 B).
+Ponizszy opis "pierwszego wycinka" jest historyczny (45 kolekcji, brak CLI).
 
 **Stan 2026-10-16 (pierwszy wycinek E3).** Biblioteka ma deskryptor
 `pl.gugik.prg_special`: 45 jawnie nazwanych kolekcji OGC API (bez szesciu
