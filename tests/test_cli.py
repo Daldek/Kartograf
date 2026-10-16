@@ -2329,6 +2329,55 @@ class TestRegistryVariantsCli:
             )
             assert provider.descriptor_key == variant.source, flags
 
+    def test_list_sources_cz_models_select_real_laz_variants(self, capsys, tmp_path):
+        from kartograf.cli.download_cmd import download_task_arguments
+        from kartograf.download.data import validate_data_request
+
+        assert main(["elevation", "list-sources"]) == 0
+        lines = capsys.readouterr().out.splitlines()
+        header = lines[1]
+        choice, country, key, name = (
+            header.index(column) for column in ("WYBOR", "KRAJ", "KLUCZ", "NAZWA")
+        )
+        rows = {
+            line[key:name].strip(): line[choice:country].strip()
+            for line in lines[2:]
+            if line[key:name].strip()
+        }
+        models = {v.source: v.model for v in variants(product="laz", country="CZ")}
+        assert set(models) == {
+            key for key in rows if key.endswith("_laz") and key.startswith("cz.")
+        }
+        for key, model in models.items():
+            assert rows[key] == f"--product laz --country cz --model {model}"
+            flags = rows[key].split()
+            args = create_parser().parse_args(
+                [
+                    "elevation",
+                    "download",
+                    *flags,
+                    "--sheet",
+                    "CTES96",
+                    "--vertical-crs",
+                    "Bpv",
+                ]
+            )
+            validate_data_request(
+                **download_task_arguments(args),
+                output_dir=tmp_path / key,
+            )
+
+    def test_help_cz_uses_variant_models(self, capsys):
+        from kartograf.sources.variants import cz_model_text, cz_resolution_text
+
+        with pytest.raises(SystemExit) as exc:
+            main(["elevation", "download", "--help"])
+        assert exc.value.code == 0
+        text = " ".join(capsys.readouterr().out.split())
+        assert f"NMT: {cz_resolution_text('nmt')}" in text
+        assert f"NMPT: {cz_resolution_text('nmpt')}" in text
+        assert cz_model_text() in text
+
 
 class TestPlCutoutOnly1m:
     """A PL cutout comes from the WCS channel, which only the 1 m grid variant
@@ -6690,62 +6739,120 @@ class TestCountryDispatch:
         assert result == 1
         assert "cos nie gra" in capsys.readouterr().err
 
-    # --- products other than nmt for CZ ---
+    # --- LAZ CZ selection is explicit; no model is silently chosen ---
 
-    def test_laz_with_country_cz_rejected(self, tmp_path, capsys):
+    def test_laz_cz_sheet_requires_model(self, tmp_path, capsys):
         result = main(
             [
                 "elevation",
                 "download",
                 "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
-                "--sheet",
-                "302_5550",
-                "--product",
                 "laz",
+                "--sheet",
+                "760_5518",
+                "--vertical-crs",
+                "EVRF2007",
                 "-o",
                 str(tmp_path),
             ]
         )
         assert result == 1
-        assert "etapie 2" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "Error: --model wymagane" in err and "dmpok" in err
+        assert not (tmp_path / "laz").exists()
 
-    def test_laz_bbox_with_country_cz_rejected(self, tmp_path, capsys):
+    def test_laz_cz_bbox_requires_model(self, tmp_path, capsys):
         result = main(
             [
                 "elevation",
                 "download",
                 "--product",
-                "nmt",
-                "-o",
-                "./data",
-                "--country",
-                "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
+                "laz",
                 "--bbox=-447000,-1114000,-446000,-1113000",
                 "--bbox-crs",
                 "EPSG:5514",
                 "--country",
                 "cz",
-                "--product",
-                "laz",
+                "--vertical-crs",
+                "Bpv",
                 "-o",
                 str(tmp_path),
             ]
         )
         assert result == 1
-        assert "etapie 2" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "Error: --model wymagane" in err and "dmr5g" in err
+        assert not (tmp_path / "laz").exists()
+
+    @pytest.mark.parametrize(
+        ("sheet", "product", "model", "vertical_crs", "resolution", "expected"),
+        [
+            (
+                "CTES96",
+                "nmpt",
+                "dmpok",
+                "Bpv",
+                "0.5m",
+                "--model dotyczy tylko --product laz",
+            ),
+            (
+                "N-34-130-D-d-2-4",
+                "laz",
+                "dmr4g",
+                "EVRF2007",
+                None,
+                "--model dotyczy tylko --product laz w CZ",
+            ),
+            (
+                "760_5518",
+                "laz",
+                "dmr4g",
+                "Bpv",
+                None,
+                "kafle TM33 (ETRS89) sa tylko w EVRF2007",
+            ),
+        ],
+    )
+    def test_model_rules(
+        self,
+        sheet,
+        product,
+        model,
+        vertical_crs,
+        resolution,
+        expected,
+        tmp_path,
+        capsys,
+    ):
+        args = [
+            "elevation",
+            "download",
+            "--sheet",
+            sheet,
+            "--product",
+            product,
+            "--model",
+            model,
+            "--vertical-crs",
+            vertical_crs,
+            "-o",
+            str(tmp_path),
+        ]
+        if resolution is not None:
+            args += ["--resolution", resolution]
+        assert main(args) == 1
+        with pytest.raises(ValidationError) as exc:
+            download_data(
+                product=product,
+                model=model,
+                output_dir=tmp_path,
+                sheet=sheet,
+                resolution=resolution,
+                vertical_crs=vertical_crs,
+            )
+        assert str(exc.value) == capsys.readouterr().err.removeprefix("Error: ").strip()
+        assert expected in str(exc.value)
+        assert not (tmp_path / "laz").exists() and not (tmp_path / "nmpt").exists()
 
     @patch("kartograf.download.data._download_cz")
     def test_orto_bbox_with_country_cz_rejected(self, mock_cz, tmp_path, capsys):
@@ -6754,7 +6861,9 @@ class TestCountryDispatch:
         from kartograf.download.data import download_data
 
         bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
-        with pytest.raises(ValidationError, match="etapie 2"):
+        with pytest.raises(
+            ValidationError, match="--product orto jest dostepny tylko dla PL"
+        ):
             download_data(product="orto", output_dir=tmp_path, bbox=bbox, country="cz")
         with pytest.raises(SystemExit) as exc:
             main(
@@ -7290,11 +7399,10 @@ class TestAutoSplitBBox:
         mock_manager_class.assert_not_called()
         assert mock_cz.call_args.kwargs["parent_request"]["countries"] == ["CZ"]
 
-    def test_cz_only_bbox_with_orto_rejected_as_stage_2(self, tmp_path, capsys):
-        """Country decided by the area - a stage 2 message, not about the choice."""
+    def test_cz_only_bbox_with_orto_reports_unavailable_product(self, tmp_path, capsys):
         result = main(self._orto("13.3,49.7,13.5,49.8", "-o", str(tmp_path)))
         assert result == 1
-        assert "etapie 2" in capsys.readouterr().err
+        assert "--product orto jest dostepny tylko dla PL" in capsys.readouterr().err
 
     def test_single_country_error_has_no_country_hint(self, tmp_path, capsys):
         """With a single country the --country hint would be empty."""
@@ -8023,39 +8131,31 @@ class TestAutoSplitBBox:
         assert result == 1
         assert "kraju" in capsys.readouterr().err
 
-    def test_laz_bbox_border_auto_rejected(self, tmp_path, capsys):
-        """LAZ (PL-only) + a bbox crossing CZ + auto => an error with a hint,
-        instead of quietly downloading only the PL part (spec 5.7: no silent
-        skipping of a country)."""
+    def test_laz_bbox_border_auto_requires_model(self, tmp_path, capsys):
         result = main(
             [
                 "elevation",
                 "download",
-                "--sheet-system",
-                "1992",
                 "--product",
-                "nmt",
-                "-o",
-                "./data",
+                "laz",
                 "--country",
                 "auto",
-                "--resolution",
-                "pl=1m,cz=2m",
-                "--vertical-crs",
-                "pl=EVRF2007,cz=Bpv",
                 "--bbox",
                 "18.4,49.55,18.8,49.75",
                 "--bbox-crs",
                 "EPSG:4326",
-                "--product",
-                "laz",
+                "--vertical-crs",
+                "EVRF2007",
                 "-o",
                 str(tmp_path),
                 "-q",
             ]
         )
         assert result == 1
-        assert "--country pl" in capsys.readouterr().err
+        err = capsys.readouterr().err
+        assert "obszar siega CZ: podaj --model" in err
+        assert "--country pl" in err
+        assert not (tmp_path / "laz").exists()
 
     def test_laz_sheet_untouched_by_guard(self, tmp_path, capsys):
         """The LAZ sheet code mode does not go through the cross-border guard.

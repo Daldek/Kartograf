@@ -135,15 +135,17 @@ def pl_only_flags(
     vertical_crs: object,
     resolution: object,
     format: object = None,
+    *,
+    year: int | None = None,
+    min_year: int | None = None,
+    max_year: int | None = None,
+    all_campaigns: bool = False,
+    min_density: int | None = None,
 ) -> list[str]:
-    """Choices with no CZ counterpart: they resolve ``country="auto"`` to PL.
+    """Choices without a CZ counterpart resolve ``country="auto"`` to PL.
 
-    ADR-023 point 5; DELIBERATELY narrow: LAZ has its own flow, per-country
-    values name both countries, ``sheet_system`` is required for every PL
-    sheet area, ``cutout`` and campaign options work with both countries.
-    PL-only is read from the registries: a product, height system or
-    resolution without a CZ source of the product, and ``--format`` (PL
-    files only).
+    Per-country values still name both countries. LAZ flight and density
+    choices are published only by GUGiK and narrow an area to PL.
     """
     from kartograf.sources.registry import sources_for
     from kartograf.sources.variants import variants
@@ -157,10 +159,26 @@ def pl_only_flags(
         flags.append(f"--product {product}")
     if isinstance(vertical_crs, str) and vertical_crs not in cz_vertical:
         flags.append(f"--vertical-crs {vertical_crs}")
-    if isinstance(resolution, str) and cz and resolution not in cz_labels:
+    if (
+        isinstance(resolution, str)
+        and cz
+        and resolution not in cz_labels
+        and product != "laz"
+    ):
         flags.append(f"--resolution {resolution}")
     if isinstance(format, str):
         flags.append(f"--format {format}")
+    if product == "laz":
+        if year is not None:
+            flags.append("--year")
+        elif min_year is not None:
+            flags.append("--min-year")
+        if max_year is not None and year is None:
+            flags.append("--max-year")
+        if all_campaigns:
+            flags.append("--all-campaigns")
+        if min_density is not None:
+            flags.append("--min-density")
     return flags
 
 
@@ -220,6 +238,7 @@ def emit_clipping_notices(
     *,
     pl_geometry_sheets: bool = False,
     pl_sheet_list: bool = False,
+    sheet_files: bool = False,
 ) -> None:
     """``AUTO_CLIPPED``/``AUTO_AREA_OUTSIDE`` for ``country="auto"`` (S3).
 
@@ -241,10 +260,15 @@ def emit_clipping_notices(
             for edge, attr, _is_min, unit in EDGES
             if edge in part.clipped
         )
-        if code == "PL" and pl_sheet_list:
+        if code == "PL" and pl_sheet_list and not sheet_files:
             result = (
                 "arkusze wyznaczono z przycietego bboxa, sidecar ma "
                 "request.sheet; oryginal w extra.parent_request.bbox"
+            )
+        elif sheet_files:
+            result = (
+                "arkusze/kafle wyznaczono z przycietego bboxa; oryginal "
+                "w extra.parent_request.bbox"
             )
         else:
             result = (

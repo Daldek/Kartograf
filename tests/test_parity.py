@@ -31,6 +31,7 @@ availability report ``--json``            test_availability_json
 
 import contextlib
 import io
+import json
 from dataclasses import replace
 from unittest.mock import Mock, patch
 
@@ -295,6 +296,256 @@ def test_cz_cutout(tmp_path):
             tmp_path,
         )
     _same(run, run.api_result, statuses=["new"])
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_cz_nmpt_sm5(tmp_path):
+    """DMP OK source, sheet hierarchy and sidecar are identical via CLI/API."""
+    from kartograf.providers.cuzk.sheets import SheetInfo
+
+    provider = _cz_provider_mock("0.5m")
+    provider.descriptor_key = "cz.cuzk.dmpok"
+    provider.product = "nmpt"
+    provider.sheet_index.sm5_sheet.return_value = SheetInfo(
+        sheet="CTES96",
+        name="Cesky Tesin 9-6",
+        bbox=BBox(-450000, -1114000, -447500, -1112000, "EPSG:5514"),
+        podil=0.99,
+        in_cz=None,
+    )
+    with patch(CZ_FACTORY, return_value=provider):
+        run = run_both(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmpt",
+                "--sheet",
+                "CTES96",
+                "--resolution",
+                "0.5m",
+                "--vertical-crs",
+                "Bpv",
+                "-q",
+            ],
+            lambda out: download_data(
+                product="nmpt",
+                output_dir=out,
+                sheet="CTES96",
+                resolution="0.5m",
+                vertical_crs="Bpv",
+            ),
+            tmp_path,
+        )
+    assert not run.api_result.failed, run.api_result.failed
+    _same(run, run.api_result, statuses=["new"])
+    assert (run.cli_store / "nmpt/cz_dmpok_bpv/CTES/96/CTES96.tif").exists()
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_cz_dmp1g_cutout(tmp_path):
+    """DMP 1G bbox extraction is available only with a cutout."""
+    provider = _cz_provider_mock("2m")
+    provider.descriptor_key = "cz.cuzk.dmp1g"
+    provider.product = "nmpt"
+    bbox = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
+    with patch(CZ_FACTORY, return_value=provider):
+        run = run_both(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "nmpt",
+                "--bbox=-447000,-1114000,-446000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "--country",
+                "cz",
+                "--resolution",
+                "2m",
+                "--vertical-crs",
+                "Bpv",
+                "--cutout",
+                "--horizontal-crs",
+                "EPSG:5514",
+                "-q",
+            ],
+            lambda out: download_data(
+                product="nmpt",
+                output_dir=out,
+                bbox=bbox,
+                country="cz",
+                resolution="2m",
+                vertical_crs="Bpv",
+                cutout=True,
+                horizontal_crs="EPSG:5514",
+            ),
+            tmp_path,
+        )
+    _same(run, run.api_result, statuses=["new"])
+    assert run.api_result.files[0].file.path.suffix == ".tif"
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_cz_laz_area(tmp_path):
+    """The recorded index and ZIP yield the same indexed LAZ and parent request."""
+    from tests.test_cuzk_laz import CTES96_URL, CUZK_FIXTURES, CuzkSession, zip_member
+    from tests.test_cz_laz import recorded, sidecar
+
+    bbox = BBox(-449000, -1113500, -448000, -1113000, "EPSG:5514")
+    answer = json.loads(
+        (CUZK_FIXTURES / "klady_sm5_where_ctes96.json").read_text(encoding="utf-8")
+    )
+    envelope = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    session = CuzkSession(envelopes={(24, envelope): answer})
+    with recorded(session):
+        run = run_both(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "laz",
+                "--country",
+                "cz",
+                "--model",
+                "dmr4g",
+                "--vertical-crs",
+                "Bpv",
+                "--bbox=-449000,-1113500,-448000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "-q",
+            ],
+            lambda out: download_data(
+                product="laz",
+                output_dir=out,
+                bbox=bbox,
+                country="cz",
+                model="dmr4g",
+                vertical_crs="Bpv",
+                cache=False,
+            ),
+            tmp_path,
+        )
+    assert not run.api_result.failed, run.api_result.failed
+    _same(run, run.api_result, statuses=["new"])
+    (file,) = (run.api_store / "laz/cz_dmr4g_bpv/CTES/96").glob("CTES96.laz")
+    assert file.read_bytes() == zip_member(CTES96_URL)
+    assert (
+        sidecar(run.api_result.files[0].file.version_path)["extra"]["parent_request"][
+            "bbox_crs"
+        ]
+        == "EPSG:5514"
+    )
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_auto_laz_split(tmp_path):
+    """One border-area request stores CZ sheets and PL tiles with shared origin."""
+    from kartograf.download.countries import country_bbox
+    from tests.test_cuzk_laz import CUZK_FIXTURES, CuzkSession
+    from tests.test_cz_laz import recorded, sidecar
+
+    bbox = BBox(-449000, -1113500, -448000, -1113000, "EPSG:5514")
+    cz = country_bbox(bbox, "CZ", auto=True, cz_crs="EPSG:5514").bbox
+    envelope = (cz.min_x, cz.min_y, cz.max_x, cz.max_y)
+    answer = json.loads(
+        (CUZK_FIXTURES / "klady_sm5_where_ctes96.json").read_text(encoding="utf-8")
+    )
+    session = CuzkSession(envelopes={(24, envelope): answer})
+    with (
+        recorded(session),
+        patch(
+            "kartograf.providers.pl.gugik_laz.GugikLazProvider",
+            side_effect=lambda **_kwargs: LazCliProvider(),
+        ),
+    ):
+        run = run_both(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "laz",
+                "--country",
+                "auto",
+                "--model",
+                "dmr4g",
+                "--vertical-crs",
+                "pl=EVRF2007,cz=Bpv",
+                "--bbox=-449000,-1113500,-448000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "-q",
+            ],
+            lambda out: download_data(
+                product="laz",
+                output_dir=out,
+                bbox=bbox,
+                country="auto",
+                model="dmr4g",
+                vertical_crs={"pl": "EVRF2007", "cz": "Bpv"},
+                cache=False,
+            ),
+            tmp_path,
+        )
+    assert not run.api_result.failed, run.api_result.failed
+    _same(run, run.api_result, statuses=["new", "new"])
+    assert {file.country for file in run.api_result.files} == {"CZ", "PL"}
+    parents = [
+        sidecar(file.file.version_path)["extra"]["parent_request"]
+        for file in run.api_result.files
+    ]
+    assert parents[0] == parents[1]
+    assert parents[0]["countries"] == ["CZ", "PL"]
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_auto_laz_year_narrows_to_pl(tmp_path):
+    """A year filter resolves cross-border LAZ to PL, never requesting CZ."""
+    from kartograf.notices import AUTO_NARROWED_TO_PL
+
+    bbox = BBox(-449000, -1113500, -448000, -1113000, "EPSG:5514")
+    with (
+        patch(
+            "kartograf.providers.pl.gugik_laz.GugikLazProvider",
+            side_effect=lambda **_kwargs: LazCliProvider(),
+        ),
+        patch(
+            "kartograf.providers.cuzk.laz.CuzkLazProvider",
+            side_effect=AssertionError("CUZK must not be contacted"),
+        ),
+    ):
+        run = run_both(
+            [
+                "elevation",
+                "download",
+                "--product",
+                "laz",
+                "--country",
+                "auto",
+                "--vertical-crs",
+                "EVRF2007",
+                "--min-year",
+                "2020",
+                "--bbox=-449000,-1113500,-448000,-1113000",
+                "--bbox-crs",
+                "EPSG:5514",
+                "-q",
+            ],
+            lambda out: download_data(
+                product="laz",
+                output_dir=out,
+                bbox=bbox,
+                country="auto",
+                vertical_crs="EVRF2007",
+                min_year=2020,
+                cache=False,
+            ),
+            tmp_path,
+        )
+    _same(run, run.api_result, statuses=["new"])
+    assert [file.country for file in run.api_result.files] == ["PL"]
+    assert any(notice.code == AUTO_NARROWED_TO_PL for notice in run.api_result.notices)
 
 
 @pytest.mark.usefixtures("frozen_clock")

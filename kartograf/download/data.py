@@ -65,7 +65,6 @@ from kartograf.download.countries import countries_for_bbox, country_bbox
 from kartograf.download.fetch import UpdateMode, VersionedFile, emit_file_notices
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
-    CZ_ONLY_NMT,
     campaign_opts_given,
     country_value,
     cz_option_error,
@@ -81,6 +80,7 @@ from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import (
     DownloadError,
     KartografError,
+    NoCoverageError,
     ValidationError,
 )
 from kartograf.notices import (
@@ -102,7 +102,7 @@ from kartograf.notices import (
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.sources.registry import horizontal_crs_for_sheet
-from kartograf.sources.variants import cz_sheet_system
+from kartograf.sources.variants import cz_model_text, cz_sheet_system, variants
 
 FailureKind = Literal["no_coverage", "download", "country"]
 MAX_HINT_LINES = 5
@@ -255,6 +255,7 @@ def download_data(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    model: str | None = None,
     format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
@@ -336,6 +337,7 @@ def check_data(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    model: str | None = None,
     format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
@@ -388,6 +390,7 @@ def validate_data_request(
     country: str | None = None,
     vertical_crs: str | Mapping[str, str] | None = None,
     resolution: str | Mapping[str, str] | None = None,
+    model: str | None = None,
     format: str | None = None,
     sheet_system: str | None = None,
     scale: str | None = None,
@@ -438,6 +441,7 @@ _SELECTION = (
     "layer",
     "country",
     "vertical_crs",
+    "model",
     "resolution",
     "format",
     "sheet_system",
@@ -477,16 +481,22 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
                 f"(kraj {system.country}), a podano --country {country}"
             )
         if system.country == "CZ":
-            if task.product != "nmt":
-                raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
             _reject_campaign_opts_without_pl(task, ("CZ",))
+            if task.product == "laz":
+                return _download_cz_laz(task, run)
             return _download_cz(task, run)
         parsed = SheetParser(task.sheet)
         resolve_pl_options(
             task, code_system=parsed.sheet_system, code_scale=parsed.scale
         )
-    if task.product == "laz":
-        return _download_laz(task, run)
+        if task.model is not None:
+            raise ValidationError(
+                "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
+            )
+    if task.product == "laz" and task.sheet is not None:
+        return _download_pl_laz(
+            task, run, SheetParser(task.sheet).get_bbox(crs="EPSG:2180")
+        )
     if task.geometry is not None:
         return _download_geometry(task, run)
     if task.bbox is not None:
@@ -536,7 +546,15 @@ def _dispatch_area(
     # ADR-023 point 5: a choice without a CZ counterpart decides the country
     if auto and len(countries) > 1 and "PL" in countries:
         pl_only = pl_only_flags(
-            task.product, task.vertical_crs, task.resolution, task.format
+            task.product,
+            task.vertical_crs,
+            task.resolution,
+            task.format,
+            year=task.year,
+            min_year=task.min_year,
+            max_year=task.max_year,
+            all_campaigns=task.all_campaigns,
+            min_density=task.min_density,
         )
         if pl_only:
             run.sink.emit(
@@ -546,16 +564,26 @@ def _dispatch_area(
             )
             auto = False
             countries = ("PL",)
-    if countries == ("CZ",) and task.product != "nmt":
-        raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
+    if countries == ("PL",) and task.model is not None:
+        raise ValidationError(
+            "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
+        )
     _reject_campaign_opts_without_pl(task, countries)
-    require_cz_cutout(task, countries)
     _validate_cross_country(task, countries)
+    require_cz_cutout(task, countries)
     if "PL" in countries:
         reject_campaign_opts_with_cutout(task)
 
     parent_request = parent_request_for(bbox, countries)
-    cz_crs = task.horizontal_crs or "EPSG:5514"
+    cz_crs = (
+        (
+            "EPSG:3045"
+            if country_value(task.vertical_crs, "CZ") == "EVRF2007"
+            else "EPSG:5514"
+        )
+        if task.product == "laz"
+        else task.horizontal_crs or "EPSG:5514"
+    )
     # per-country parts BEFORE any download (TransformError fails the request)
     parts = {
         code: country_bbox(bbox, code, auto=auto, cz_crs=cz_crs) for code in countries
@@ -566,8 +594,11 @@ def _dispatch_area(
             bbox,
             countries,
             parts,
-            pl_geometry_sheets=filepath is not None and not task.cutout,
+            pl_geometry_sheets=filepath is not None
+            and not task.cutout
+            and task.product != "laz",
             pl_sheet_list=filepath is None and not task.cutout,
+            sheet_files=task.product == "laz",
         )
 
     results: list[tuple[str, int]] = []
@@ -577,9 +608,16 @@ def _dispatch_area(
         country_task = SimpleNamespace(**vars(task))
         try:
             if code == "CZ":
-                rc = _download_cz(
-                    country_task, run, bbox=part, parent_request=parent_request
-                )
+                if task.product == "laz":
+                    rc = _download_cz_laz(
+                        country_task, run, bbox=part, parent_request=parent_request
+                    )
+                else:
+                    rc = _download_cz(
+                        country_task, run, bbox=part, parent_request=parent_request
+                    )
+            elif task.product == "laz":
+                rc = _download_pl_laz(country_task, run, part, parent_request)
             elif filepath is not None:
                 rc = _download_pl_geometry(
                     country_task, run, filepath, parent_request, part
@@ -616,9 +654,18 @@ def _dispatch_area(
 def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -> None:
     """Choices must be valid for EVERY country before any download."""
     hint = "; uzyj jawnie --country pl albo --country cz" if len(countries) > 1 else ""
-    if "CZ" in countries and task.product != "nmt":
+    if "CZ" in countries and not variants(product=task.product, country="CZ"):
         raise ValidationError(
             f"--product {task.product} jest dostepny tylko dla PL{hint}"
+        )
+    if (
+        task.product == "laz"
+        and task.model is None
+        and "CZ" in countries
+        and "PL" in countries
+    ):
+        raise ValidationError(
+            f"obszar siega CZ: podaj --model {cz_model_text()} albo --country pl"
         )
     for code in countries:
         if code == "PL":
@@ -632,9 +679,7 @@ def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -
 def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
     """Geometry request: explicit CZ (envelope in the CZ CRS) or country dispatch."""
     assert task.geometry is not None
-    if task.country == "cz":
-        if task.product != "nmt":
-            raise ValidationError(CZ_ONLY_NMT.format(product=task.product))
+    if task.country == "cz" and task.product != "laz":
         _reject_campaign_opts_without_pl(task, ("CZ",))
         require_cz_cutout(task, ("CZ",))
         task.layer = resolve_geometry_layer(task.geometry, task.layer, run.sink)
@@ -1428,37 +1473,80 @@ def _download_cz(
     return run.add_stale(cutout.stale)
 
 
-def _download_laz(task: SimpleNamespace, run: _Run) -> int:
-    """LAZ tiles of a sheet code, bbox or geometry (PL only, ADR-029)."""
-    from kartograf.core.geometry import get_overall_bbox
-    from kartograf.download.area import bbox_to_2180
+def _download_cz_laz(
+    task: SimpleNamespace,
+    run: _Run,
+    *,
+    bbox: BBox | None = None,
+    parent_request: dict | None = None,
+) -> int:
+    """CUZK LAZ files for an SM5/TM33 code or the index sheets of an area."""
+    from kartograf.download.cz_laz import check_cz_laz, download_cz_laz
+
+    system = cz_sheet_system(task.sheet) if bbox is None else None
+    countries = ("CZ",) if bbox is None or task.country == "cz" else ("CZ", "PL")
+    error = cz_option_error(task, system=system, countries=countries)
+    if error is not None:
+        raise ValidationError(error)
+    vertical_crs = country_value(task.vertical_crs, "CZ")
+    assert vertical_crs is not None
+    assert task.model is not None
+    if run.dry:
+        return 0
+    selection = {
+        "model": task.model,
+        "vertical_crs": vertical_crs,
+        "output_dir": task.output_dir,
+        "sheet": task.sheet if bbox is None else None,
+        "bbox": bbox,
+        "cache": run.cache,
+        "on_notice": run.sink.add,
+    }
+    try:
+        if run.check:
+            run.plans.append(check_cz_laz(**selection))
+            return 0
+        progress = run.on_progress
+
+        def on_progress(done: int, total: int) -> None:
+            if progress is not None:
+                progress(DownloadProgress(done, total, "", "tiles"))
+
+        result = download_cz_laz(
+            update=run.update,
+            plan=run.loaded,
+            workers=run.workers,
+            parent_request=parent_request,
+            on_progress=on_progress if progress is not None else None,
+            **selection,
+        )
+    except NoCoverageError as e:
+        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), "no_coverage")
+    except DownloadError as e:
+        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), "download")
+    for file in result.files:
+        run.add(file.path.stem, "CZ", file)
+    rc = run.add_stale(result.stale)
+    for failure in result.failed:
+        rc = run.fail(failure.sheet, "CZ", _error_text(failure.error), "download")
+    return rc
+
+
+def _download_pl_laz(
+    task: SimpleNamespace,
+    run: _Run,
+    bbox: BBox,
+    parent_request: dict | None = None,
+) -> int:
+    """GUGiK LAZ tiles for the PL part of a sheet or area request (ADR-029)."""
     from kartograf.download.laz import check_laz_area, download_laz_area
 
-    if task.country == "cz":
-        raise ValidationError(CZ_ONLY_NMT.format(product="laz"))
     resolve_pl_options(task)
-    if task.geometry is not None:
-        task.layer = resolve_geometry_layer(task.geometry, task.layer, run.sink)
-        bbox = get_overall_bbox(task.geometry, layer=task.layer, target_crs="EPSG:2180")
-    elif task.bbox is not None:
-        bbox = task.bbox
-    else:
-        bbox = SheetParser(task.sheet).get_bbox(crs="EPSG:2180")
-    # an area reaching into CZ would be downloaded only partially (spec 5.7)
-    if (
-        task.country == "auto"
-        and task.sheet is None
-        and "CZ" in countries_for_bbox(bbox_to_2180(bbox))
-    ):
-        raise ValidationError(
-            "--product laz jest dostepny tylko dla PL, a obszar "
-            "przecina CZ (LAZ dla CZ: etap 2); uzyj jawnie --country pl"
-        )
     if run.dry:
         return 0
     selection = {
         "output_dir": task.output_dir,
-        "vertical_crs": task.vertical_crs,
+        "vertical_crs": country_value(task.vertical_crs, "PL"),
         "min_density": task.min_density,
         "all_campaigns": task.all_campaigns,
         "min_year": task.min_year,
@@ -1470,7 +1558,9 @@ def _download_laz(task: SimpleNamespace, run: _Run) -> int:
         run.plans.append(check_laz_area(bbox, **selection))
         return 0
     if run.on_progress is not None:
-        _announcer(run, "kafle LAZ", f"WFS GUGiK, {task.vertical_crs}")()
+        _announcer(
+            run, "kafle LAZ", f"WFS GUGiK, {country_value(task.vertical_crs, 'PL')}"
+        )()
     on_progress = run.on_progress
 
     def tiles(done: int, total: int) -> None:
@@ -1483,9 +1573,7 @@ def _download_laz(task: SimpleNamespace, run: _Run) -> int:
         update=run.update,
         plan=run.loaded,
         on_progress=tiles,
-        parent_request=(
-            None if task.sheet is not None else parent_request_for(bbox, ("PL",))
-        ),
+        parent_request=parent_request,
         **selection,
     )
     for file in result.files:
