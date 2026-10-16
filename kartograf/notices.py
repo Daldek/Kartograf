@@ -35,6 +35,9 @@ AUTO_NARROWED_TO_CZ = "auto_narrowed_to_cz"
 # variant registry, format inconsistent with the file, sheet code outside
 # SheetParser).
 INDEX_UNSUPPORTED = "index_unsupported"
+# Availability report CZ: models without sheet files (DMR 5G, DMP 1G) - only
+# a cutout or a TM33 tile of the ImageServer, and their LAZ.
+CZ_SERVICE_ONLY = "cz_service_only"
 
 
 @dataclass(frozen=True)

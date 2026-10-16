@@ -1,10 +1,15 @@
-"""check_availability (spec 4, ADR-041) on recorded GUGiK answers.
+"""check_availability (spec 4, ADR-041; CZ and ``auto``: plan B, decisions
+9-10) on recorded GUGiK and CUZK answers.
 
 Index: the recorded WFS answers of 2026-10-15 (``tests/fixtures/gugik_wfs/
-real_2026_10_15``: areas of Krakow and Pomorze, sheets); ``RecordedIndex``
-answers a sheet query with a slice of the recorded area. Land mask: the PRG
-answers of ``tests/fixtures/gugik_prg/land_mask_2026_10_11`` (Krakow inland,
-Pomorze coast). Expected values: plan A, "Weryfikacja" point 9 and spec 4.4
+real_2026_10_15``: areas of Krakow, Pomorze and the PL part of Cieszyn,
+sheets); ``RecordedIndex`` answers a sheet query with a slice of the
+recorded area. Land mask: the PRG answers of
+``tests/fixtures/gugik_prg/land_mask_2026_10_11`` (Krakow and Cieszyn
+inland, Pomorze coast). CZ: the CUZK answers of 2026-10-15
+(``tests/fixtures/cuzk/real_2026_10_15``: ``KladyMapovychListu`` for the
+Cieszyn/Cesky Tesin border area, openzu ``HEAD`` headers) replayed by
+``CuzkSession``. Expected values: plan A, "Weryfikacja" point 9 and spec 4.4
 (measured 2026-10-15), with the archives downloaded since decision 13.
 """
 
@@ -22,13 +27,21 @@ from kartograf.cli.download_cmd import _download_arguments
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
     AVAILABILITY_SCHEMA,
+    AvailabilityArea,
     AvailabilityReport,
     check_availability,
 )
-from kartograf.download.data import check_data, download_data
+from kartograf.download.data import check_data, download_data, validate_data_request
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.notices import INDEX_UNSUPPORTED
+from kartograf.notices import (
+    AUTO_NARROWED_TO_PL,
+    CHECK_FAILED,
+    CZ_SERVICE_ONLY,
+    INDEX_UNSUPPORTED,
+)
+from kartograf.providers.cuzk.raster import bbox_to_crs
 from kartograf.sources.variants import variants
+from kartograf.transport.http import MAX_RETRIES
 from tests.conftest import (
     RecordedIndex,
     render_wfs_body,
@@ -36,6 +49,13 @@ from tests.conftest import (
     wfs_fixture,
     wfs_record,
     wfs_response,
+)
+from tests.test_cuzk_laz import (
+    CIESZYN,
+    OPENZU,
+    CuzkSession,
+    _response,
+    recorded_json,
 )
 
 KRAKOW = BBox(565000, 242000, 569000, 246000, "EPSG:2180")
@@ -300,14 +320,20 @@ def test_choices_of_the_report_are_validated_before_network():
         _check(session, product="orto", country="pl", bbox=KRAKOW)
     with pytest.raises(ValidationError, match="--product wymagane"):
         _check(session, product=None, country="pl", bbox=KRAKOW)
-    with pytest.raises(ValidationError, match=r"--country 'cz'.*pl \(GUGiK\)"):
-        _check(session, product="nmt", country="cz", bbox=KRAKOW)
+    with pytest.raises(
+        ValidationError, match=r"--country 'de'.*pl \(GUGiK\), cz \(CUZK\), auto"
+    ):
+        _check(session, product="nmt", country="de", bbox=KRAKOW)
     with pytest.raises(ValidationError, match="--country wymagane z --bbox"):
         _check(session, product="nmt", bbox=KRAKOW)
-    with pytest.raises(ValidationError, match="CZ"):
-        _check(session, product="nmt", sheet="302_5550")
+    with pytest.raises(
+        ValidationError, match=r"systemu cz_tm33 \(kraj CZ\), a podano --country pl"
+    ):
+        _check(session, product="nmt", country="pl", sheet="302_5550")
     with pytest.raises(ParseError):
         _check(session, product="nmt", sheet="N-34-999-X")
+    with pytest.raises(ParseError, match="parzyste"):
+        _check(session, product="nmt", sheet="301_5550")
     assert session.urls == []
 
 
@@ -582,3 +608,387 @@ def test_report_sheets_equal_download_selection(tmp_path):
         (item.available_label or "").startswith(str(newest.year)) for item in plan.items
     )
     assert not any("opendata" in url for url in session.urls)
+
+
+# =============================================================================
+# CZ and ``auto`` (plan B, decisions 9-10)
+# =============================================================================
+
+CTES86_DMPOK = f"{OPENZU}/DMPOK-TIFF/epsg-5514/CTES86.zip"
+TILE_DMPOK = f"{OPENZU}/DMPOK-TIFF/epsg-3045/760_5516.zip"
+CIESZYN_AREA = "--bbox=-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514"
+LAZ_MODELS = ("dmr5g", "dmr4g", "dmp1g", "dmpok")
+
+
+class _FailingHead(CuzkSession):
+    """``CuzkSession`` whose ``HEAD`` of ``url`` fails with an HTTP status or
+    an exception (a timeout); other requests are the recorded answers."""
+
+    def __init__(self, url: str, outcome: int | Exception = 503) -> None:
+        super().__init__()
+        self.failing = url
+        self.outcome = outcome
+
+    def head(self, url: str, timeout=None, allow_redirects=True, **kwargs):
+        if url != self.failing:
+            return super().head(url, timeout=timeout, allow_redirects=allow_redirects)
+        self._record("HEAD", url)
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return _response(self.outcome, {})
+
+
+class _Border:
+    """The GUGiK answers of the PL part of Cieszyn (``RecordedIndex``) and the
+    CUZK answers (``CuzkSession``) behind one session: ``country="auto"``."""
+
+    def __init__(self, product: str, cz: CuzkSession | None = None) -> None:
+        self.pl = RecordedIndex(_areas(product, "cieszyn"))
+        self.cz = cz if cz is not None else CuzkSession()
+
+    def get(self, url: str, **kwargs):
+        return (self.cz if "cuzk.gov.cz" in url else self.pl).get(url, **kwargs)
+
+    def head(self, url: str, **kwargs):
+        return self.cz.head(url, **kwargs)
+
+
+def _cz(
+    product: str, session: CuzkSession | None = None, **kwargs
+) -> tuple[AvailabilityReport, CuzkSession]:
+    """The report of the Cieszyn area with ``country="cz"`` (EPSG:5514)."""
+    session = session if session is not None else CuzkSession()
+    report = _check(session, product=product, country="cz", bbox=CIESZYN, **kwargs)
+    return report, session
+
+
+# Frame of the SM5 sheet CTES86 in the recorded index answer (EPSG:5514).
+_CTES86_RING = recorded_json("klady_24_where_ctes86.json")["features"][0]["geometry"][
+    "rings"
+][0]
+CTES86_FRAME = BBox(
+    min(x for x, _ in _CTES86_RING),
+    min(y for _, y in _CTES86_RING),
+    max(x for x, _ in _CTES86_RING),
+    max(y for _, y in _CTES86_RING),
+    "EPSG:5514",
+)
+
+
+def _code_report(product: str) -> tuple[AvailabilityReport, CuzkSession]:
+    """The report of the SM5 code ``CTES86``: its sheet by name (recorded),
+    the TM33 query of its frame answered with the recorded tile of the
+    border area (``760_5516`` lies in the frame)."""
+    envelope = bbox_to_crs(CTES86_FRAME, "EPSG:3045")
+    session = CuzkSession(
+        envelopes={
+            (26, tuple(envelope[:4])): recorded_json("klady_26_bbox_cieszyn.json")
+        }
+    )
+    return _check(session, product=product, sheet="CTES86"), session
+
+
+@functools.cache
+def _cz_hints() -> tuple[str, ...]:
+    """CZ hints of every shape: raster sheets (SM5, TM33), LAZ of an area
+    and LAZ of a sheet code."""
+    reports = [_cz(product)[0] for product in ("nmt", "nmpt", "laz")]
+    reports.append(_code_report("laz")[0])
+    return tuple(h for r in reports for c in r.combinations for h in c.download_hint)
+
+
+def test_cz_nmpt_combinations():
+    """DMP OK in both pairs of its files: the index sheets of the area
+    (``CTES86``; ``CTES87`` only touches it), dates and sizes from ``HEAD``."""
+    report, _ = _cz("nmpt")
+
+    s_jtsk, tm33 = report.combinations
+    assert (s_jtsk.source, s_jtsk.horizontal, s_jtsk.resolution) == (
+        "cz.cuzk.dmpok",
+        "S-JTSK",
+        "0.5m",
+    )
+    assert (s_jtsk.vertical_crs, s_jtsk.format) == ("Bpv", "TIFF")
+    assert s_jtsk.sheets_full == ("CTES86",) and s_jtsk.complete
+    assert s_jtsk.published == ("2025-10-10", "2025-10-10")
+    assert s_jtsk.size_bytes == 16_660_209
+    assert (tm33.horizontal, tm33.vertical_crs, tm33.sheets_full) == (
+        "ETRS89-TM33",
+        "EVRF2007",
+        ("760_5516",),
+    )
+    assert tm33.published == ("2026-08-20", "2026-08-20")
+    assert tm33.size_bytes == 29_625_401
+    for combo in report.combinations:
+        assert combo.country == "CZ" and combo.year is None
+        assert combo.acquisition_dates is None and combo.campaigns == ()
+        assert combo.sheets_missing == () and not combo.uncovered
+    (notice,) = report.notices
+    assert (notice.level, notice.code) == ("info", CZ_SERVICE_ONLY)
+    assert "DMP 1G (2m)" in notice.text and "--model dmp1g" in notice.text
+    assert report.areas == (
+        AvailabilityArea(
+            "CZ",
+            "EPSG:5514",
+            (-447000.0, -1114000.0, -446000.0, -1113000.0),
+            1_000_000.0,
+            1_000_000.0,
+        ),
+    )
+    assert report.ok and report.request["country"] == "cz"
+
+
+def test_cz_missing_file_is_incomplete():
+    report, _ = _cz("nmpt", CuzkSession(missing=(CTES86_DMPOK,)))
+
+    s_jtsk, tm33 = report.combinations
+    assert s_jtsk.sheets_full == () and s_jtsk.sheets_missing == ("CTES86",)
+    assert not s_jtsk.complete and s_jtsk.uncovered
+    # the whole area lies in the frame of CTES86
+    assert s_jtsk.uncovered_m2 == 1_000_000.0
+    assert s_jtsk.download_hint == () and s_jtsk.published is None
+    assert tm33.complete and tm33.sheets_full == ("760_5516",)
+
+
+@pytest.mark.parametrize(
+    ("outcome", "status", "attempts"),
+    [
+        pytest.param(503, 503, MAX_RETRIES, id="503"),
+        pytest.param(403, 403, 1, id="403"),
+        pytest.param(requests.Timeout("read timeout"), None, MAX_RETRIES, id="timeout"),
+    ],
+)
+def test_cz_server_error_is_error(outcome, status, attempts):
+    """Only 404 means "no file": any other failure is an error of the report,
+    retried as every request - never an incomplete combination."""
+    session = _FailingHead(CTES86_DMPOK, outcome)
+
+    with patch("time.sleep"), pytest.raises(DownloadError) as error:
+        _cz("nmpt", session)
+
+    assert error.value.status_code == status
+    assert session.of("HEAD").count(CTES86_DMPOK) == attempts
+
+
+def test_cz_laz_eight_combinations():
+    report, session = _cz("laz")
+
+    assert [
+        (c.source, c.horizontal, c.vertical_crs, c.sheets_full)
+        for c in report.combinations
+    ] == [
+        (f"cz.cuzk.{model}_laz", horizontal, vertical_crs, sheets)
+        for model in LAZ_MODELS
+        for horizontal, vertical_crs, sheets in (
+            ("S-JTSK", "Bpv", ("CTES86",)),
+            ("ETRS89-TM33", "EVRF2007", ("760_5516",)),
+        )
+    ]
+    assert all(
+        c.complete and c.format == "LAZ" and c.resolution is None
+        for c in report.combinations
+    )
+    dmr5g = report.combinations[0]
+    assert dmr5g.size_bytes == 698_424
+    assert dmr5g.published == ("2026-01-19", "2026-01-19")
+    # every model has LAZ files: no service-only notice
+    assert report.notices == ()
+    # one index query per sheet system, one HEAD per file
+    assert len(session.of("QUERY")) == 2 and len(session.of("HEAD")) == 8
+
+
+def test_cz_sheet_code_is_its_frame():
+    """An SM5 code: its own sheet by name from the index (no bbox query of
+    its system), the TM33 tiles of its frame, the frame as the area."""
+    report, session = _code_report("laz")
+
+    assert report.request == {
+        "product": "laz",
+        "country": "cz",
+        "sheet": "CTES86",
+        "min_year": None,
+        "max_year": None,
+    }
+    (area,) = report.areas
+    assert area.bounds == tuple(CTES86_FRAME[:4]) and area.area_m2 == 5_000_000.0
+    s_jtsk, tm33 = report.combinations[:2]
+    assert s_jtsk.sheets_full == ("CTES86",) and tm33.sheets_full == ("760_5516",)
+    assert [q for q in session.of("QUERY") if q.startswith("24:")] == [
+        "24:MAPNOM='CTES86'"
+    ]
+    # a code reaches only its own sheet system: commands per sheet
+    assert s_jtsk.download_hint == (
+        "elevation download --product laz --sheet CTES86 --model dmr5g "
+        "--vertical-crs Bpv",
+    )
+    assert tm33.download_hint == (
+        "elevation download --product laz --sheet 760_5516 --model dmr5g "
+        "--vertical-crs EVRF2007",
+    )
+
+
+def test_cz_availability_never_gets_files():
+    """Only index queries and ``HEAD`` of the openzu files; a ``GET`` of a
+    file would be recorded (``CuzkSession.get`` without query parameters)."""
+    for product in ("nmt", "nmpt", "laz"):
+        report, session = _cz(product)
+
+        assert report.combinations
+        assert session.of("GET") == []
+        assert {kind for kind, _ in session.calls} == {"QUERY", "HEAD"}
+        assert all(url.startswith(f"{OPENZU}/") for url in session.of("HEAD"))
+
+
+def test_cz_hints(tmp_path):
+    """Rasters: one command per sheet with a file; LAZ: one command of the
+    area of the request (``--country cz``, ``--model``); no ``--output``."""
+    nmt, _ = _cz("nmt")
+    nmpt, _ = _cz("nmpt")
+    laz, _ = _cz("laz")
+
+    assert [c.download_hint for c in nmt.combinations] == [
+        (
+            "elevation download --product nmt --sheet CTES86 --resolution 5m "
+            "--vertical-crs Bpv",
+        ),
+        (
+            "elevation download --product nmt --sheet 760_5516 --resolution 5m "
+            "--vertical-crs EVRF2007",
+        ),
+    ]
+    assert [c.download_hint for c in nmpt.combinations] == [
+        (
+            "elevation download --product nmpt --sheet CTES86 --resolution 0.5m "
+            "--vertical-crs Bpv",
+        ),
+        (
+            "elevation download --product nmpt --sheet 760_5516 --resolution 0.5m "
+            "--vertical-crs EVRF2007",
+        ),
+    ]
+    assert [c.download_hint for c in laz.combinations] == [
+        (
+            f"elevation download --product laz --country cz {CIESZYN_AREA} "
+            f"--model {model} --vertical-crs {vertical_crs}",
+        )
+        for model in LAZ_MODELS
+        for vertical_crs in ("Bpv", "EVRF2007")
+    ]
+    assert not any({"--output", "-o"} & set(shlex.split(h)) for h in _cz_hints())
+    # every command passes the checks of download_data before the network
+    for hint in _cz_hints():
+        args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
+        validate_data_request(**_download_arguments(args))
+
+
+def test_cz_hints_accepted_by_project_add(tmp_path, monkeypatch):
+    """Every CZ hint pasted after ``kartograf project add NAZWA`` is a
+    project task (validation without network, nothing written)."""
+    from kartograf import init_project, open_project
+    from kartograf.cli import main
+
+    monkeypatch.chdir(tmp_path)
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    hints = _cz_hints()
+    for number, hint in enumerate(hints):
+        add = ["project", "add", "--project", str(project), f"cz{number}"]
+        assert main([*add, *shlex.split(hint)]) == 0, hint
+    assert len(open_project(project).tasks) == len(hints)
+    assert list((project / "data").iterdir()) == []
+
+
+def test_cz_cache_and_force(tmp_path):
+    cache = MetadataCache(tmp_path / "cache.db")
+    first, session = _cz("nmpt", CuzkSession(missing=(CTES86_DMPOK,)), cache=cache)
+    assert session.of("QUERY") and session.of("HEAD")
+
+    # index sheets and HEAD answers (also a 404) come from the cache
+    again, offline = _cz("nmpt", cache=cache)
+    assert offline.calls == []
+    assert again.combinations == first.combinations
+
+    forced, refreshed = _cz("nmpt", cache=cache, force=True)
+    assert refreshed.of("QUERY") and refreshed.of("HEAD")
+    assert forced.combinations[0].sheets_full == ("CTES86",)
+    cache.close()
+
+
+def test_year_flags_are_pl_only():
+    """CUZK publishes no survey years: CZ alone rejects the year flags, an
+    ``auto`` area in both countries is narrowed to PL."""
+    session = CuzkSession()
+    plzen = BBox(13.37, 49.74, 13.39, 49.75, "EPSG:4326")  # outside PL envelope
+    for kwargs in (
+        {"country": "cz", "bbox": CIESZYN},
+        {"sheet": "CTES86"},
+        {"country": "auto", "bbox": plzen},
+    ):
+        with pytest.raises(ValidationError, match="nie publikuje lat nalotu"):
+            _check(session, product="nmt", year=2024, **kwargs)
+    assert session.calls == []
+
+    border = _Border("nmt")
+    report = _check(border, product="nmt", country="auto", bbox=CIESZYN, year=2024)
+
+    assert [area.country for area in report.areas] == ["PL"]
+    assert {c.year for c in report.combinations} == {2024}
+    (notice,) = report.notices
+    assert notice.code == AUTO_NARROWED_TO_PL
+    assert notice.text == "--country auto -> pl (--year 2024 dotyczy tylko PL)"
+    assert border.cz.calls == []
+
+
+def test_auto_both_countries():
+    """The border area of Cieszyn/Cesky Tesin: the PL part from the GUGiK
+    index (its land), the CZ part from the CUZK files, one report."""
+    report = _check(_Border("nmpt"), product="nmpt", country="auto", bbox=CIESZYN)
+
+    assert report.ok and report.request["country"] == "auto"
+    pl, cz = report.areas
+    assert (pl.country, pl.crs, cz.country, cz.crs) == (
+        "PL",
+        "EPSG:2180",
+        "CZ",
+        "EPSG:5514",
+    )
+    # the land of PL in the area; the CZ part = the whole bbox (rectangles)
+    assert 0 < pl.land_m2 < 1_000_000 and cz.area_m2 == 1_000_000.0
+    countries = [c.country for c in report.combinations]
+    assert countries == sorted(countries, key=["PL", "CZ"].index)
+    assert set(countries) == {"PL", "CZ"}
+    newest = report.combinations[0]
+    assert (newest.year, newest.horizontal, newest.resolution, newest.complete) == (
+        2024,
+        "PL-1992",
+        "0.5m",
+        True,
+    )
+    assert newest.download_hint == (
+        f"elevation download --product nmpt --country pl {CIESZYN_AREA} "
+        "--sheet-system 1992 --resolution 0.5m --vertical-crs EVRF2007 --year 2024",
+    )
+    s_jtsk = next(c for c in report.combinations if c.country == "CZ")
+    assert s_jtsk.sheets_full == ("CTES86",) and s_jtsk.complete
+    assert [n.code for n in report.notices] == [CZ_SERVICE_ONLY]
+
+
+def test_auto_one_country_failed():
+    """A country that could not be checked while the other one was: the
+    report of the other one, a warning and ``ok=False``; both = an error."""
+    session = _Border("nmpt", _FailingHead(TILE_DMPOK))
+    with patch("time.sleep"):
+        report = _check(session, product="nmpt", country="auto", bbox=CIESZYN)
+
+    assert not report.ok
+    assert [area.country for area in report.areas] == ["PL"]
+    assert {c.country for c in report.combinations} == {"PL"}
+    (failed,) = report.notices
+    assert (failed.level, failed.code) == ("warning", CHECK_FAILED)
+    assert failed.text.startswith("--country auto: nie udalo sie sprawdzic czesci CZ")
+    assert failed.text.endswith("raport obejmuje tylko PL")
+
+    both = _Border("nmpt", _FailingHead(TILE_DMPOK))
+    both.pl = RecordedIndex(fail={PRG: wfs_response("<html>blad</html>")})
+    with patch("time.sleep"), pytest.raises(DownloadError, match="PRG"):
+        _check(both, product="nmpt", country="auto", bbox=CIESZYN)

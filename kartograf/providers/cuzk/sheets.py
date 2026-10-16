@@ -135,6 +135,29 @@ class SheetIndex:
         )
         return _intersecting(bbox, [_tm33_info(f) for f in features])
 
+    def file_sheets(self, system: str, area: BBox) -> list[SheetInfo]:
+        """Sheets of the CUZK files of a sheet system intersecting ``area``.
+
+        ``system``: ``"sm5"`` (``area`` in EPSG:5514) or ``"tm33"`` (``area``
+        in EPSG:3045). SM5 keeps sheets with a part in CZ (``PODIL > 0``;
+        unknown kept), TM33 tiles not marked outside CZ - the sheets CUZK
+        publishes files for (LAZ download, availability report). Sorted by
+        sheet code.
+        """
+        if system == "sm5":
+            return [
+                info
+                for info in self.sm5_sheets_for_bbox(area)
+                if info.podil is None or info.podil > 0
+            ]
+        if system == "tm33":
+            return [
+                info
+                for info in self.tm33_tiles_for_bbox(area)
+                if info.in_cz is not False
+            ]
+        raise ValueError(f"Nieznany system arkuszy CZ: {system!r} (sm5, tm33)")
+
 
 def _validate_request_bbox(bbox: BBox, expected_crs: str, method: str) -> None:
     """The envelope must be in the layer CRS (the filter works in a single CRS)."""

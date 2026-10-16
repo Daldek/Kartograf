@@ -1,5 +1,6 @@
 """
-Availability report of elevation data per the GUGiK index (spec 4, ADR-041).
+Availability report of elevation data per the GUGiK index and the CUZK files
+(spec 4, ADR-041; CZ and ``country="auto"``: plan B, decisions 9-10).
 
 ``check_availability`` answers, before any download, for which years, sheet
 systems, resolutions, height systems and formats an area has a COMPLETE set
@@ -25,17 +26,32 @@ combination is ``complete`` when no target pixel lies outside the frames of
 its full (``TAK``) records, ``uncovered_m2`` = target pixels outside every
 frame of the combination. No threshold.
 
-The index answers, the feature types and the land mask go through the
-metadata cache (``index_area_cache``, TTL as the index records): a repeated
-report asks no service; ``force=True`` asks again and overwrites the entries.
+CZ (CUZK) has no surveys or completeness flags: a combination is a variant
+with a file channel in the native height system of its files (NMT: DMR 4G,
+NMPT: DMP OK, LAZ: four models; SM5 sheets in S-JTSK/Bpv, TM33 tiles in
+ETRS89/EVRF2007). Its sheets are those of the ``KladyMapovychListu`` index in
+the CZ part of the area (``SheetIndex.file_sheets`` - the rule of the LAZ
+download, in the CRS of the sheet system), each checked by one ``HEAD`` of its
+file: 200 = a file (``Last-Modified`` = publication date, ``Content-Length``
+= size), 404 = no file (``sheets_missing``; ``uncovered_m2`` = the area in
+their frames), anything else = ``DownloadError``. ``country="auto"`` reports
+the PL and CZ parts of the area (rectangular country envelopes,
+``split_bbox_by_country``) in one report.
+
+The index answers, the feature types, the land mask, the CZ sheets and the
+``HEAD`` answers go through the metadata cache (``index_area_cache``, TTL as
+the index records): a repeated report asks no service; ``force=True`` asks
+again and overwrites the entries.
 """
 
 import json
 import math
 import shlex
 from collections.abc import Callable, Sequence
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, field
 from decimal import Decimal
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 
 import numpy as np
@@ -54,16 +70,32 @@ from kartograf.core.coverage import (
     polygon_area,
     rectangle,
 )
+from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.download.area import bbox_to_2180, resolve_geometry_layer
+from kartograf.download.area import (
+    bbox_to_2180,
+    geometry_envelope,
+    resolve_geometry_layer,
+)
 from kartograf.download.campaigns import in_year_range, year_range_label
+from kartograf.download.countries import country_bbox, split_bbox_by_country
 from kartograf.download.options import (
     product_choices,
     validate_area_choice,
     year_bounds,
 )
-from kartograf.exceptions import ValidationError
-from kartograf.notices import INDEX_UNSUPPORTED, Notice, NoticeSink
+from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.notices import (
+    AUTO_NARROWED_TO_PL,
+    CHECK_FAILED,
+    CZ_SERVICE_ONLY,
+    INDEX_UNSUPPORTED,
+    Notice,
+    NoticeSink,
+)
+from kartograf.providers.cuzk.client import wkid
+from kartograf.providers.cuzk.raster import bbox_to_crs
+from kartograf.providers.cuzk.sheets import SheetIndex
 from kartograf.providers.pl.gugik_laz import laz_tile
 from kartograf.providers.pl.prg import ABROAD, LAND, LandMask, fetch_land_mask
 from kartograf.providers.pl.skorowidz import metres
@@ -81,26 +113,51 @@ from kartograf.providers.pl.skorowidz_wfs import (
     time_position,
     type_year,
 )
-from kartograf.sources.registry import parse_pl_system
+from kartograf.sources.descriptor import TransportKind
+from kartograf.sources.registry import (
+    CZ_SYSTEM_CRS,
+    channel_for,
+    parse_pl_system,
+    vertical_crs_code,
+)
 from kartograf.sources.variants import (
+    CZ_MODELS,
     FORMATS,
     IndexRef,
     ProductVariant,
+    cz_sheet_system,
     resolution_label,
     source_format,
     variants,
 )
-from kartograf.transport.http import MAX_RETRIES, SessionPerThread
+from kartograf.transport.http import MAX_RETRIES, SessionPerThread, head_signal
 
 AVAILABILITY_SCHEMA = "kartograf-availability/1"
 # Products of the report (the `elevation` group).
 AVAILABILITY_PRODUCTS = ("nmt", "nmpt", "laz")
-# Countries of the report (plan B adds cz and auto).
-AVAILABILITY_COUNTRIES = {"pl": "pl (GUGiK)"}
+# Countries of the report (`--country`; a sheet code names its country).
+AVAILABILITY_COUNTRIES = {
+    "pl": "pl (GUGiK)",
+    "cz": "cz (CUZK)",
+    "auto": "auto (czesci PL i CZ wg prostokatnych obwiedni krajow w jednym raporcie)",
+}
 COUNTRY_CHOICES = ", ".join(AVAILABILITY_COUNTRIES.values())
 
 # Timeout (s) of every index and PRG request (as the sheet providers).
 _TIMEOUT = 30
+# Timeout (s) of the CUZK file HEADs (as the CUZK providers and their index
+# client, ``CuzkClient``).
+_CZ_TIMEOUT = 60
+# Parallel HEAD requests of the CZ files (plan B, decision 9).
+_HEAD_WORKERS = 8
+# CRS of the CZ part of the report (``AvailabilityArea.crs``, ``auto`` split).
+_CZ_CRS = "EPSG:5514"
+_CZ_HORIZONTAL = {"sm5": "S-JTSK", "tm33": "ETRS89-TM33"}
+# Year bounds choose GUGiK index layers; CUZK files carry a publication date.
+_CZ_NO_YEARS = (
+    "CZ (CUZK) nie publikuje lat nalotu - --year/--min-year/--max-year dotycza "
+    "tylko PL (raport CZ podaje date publikacji plikow)"
+)
 # Pixels per row strip of the completeness grid (as LandMask.apply).
 _STRIP_PX = 4_000_000
 _HORIZONTAL = {"1992": "PL-1992", "2000": "PL-2000"}
@@ -122,7 +179,9 @@ class AvailabilityArea:
 
     ``bounds`` = envelope of the area in ``crs``; ``area_m2`` = the area
     inside the country, ``land_m2`` = its land (PL: PRG A00 minus the sea
-    W02/W03) - the part every combination is measured against.
+    W02/W03) - the part every combination is measured against. CZ: ``crs``
+    EPSG:5514, ``area_m2`` = the rectangle of the CZ part (a sheet code: its
+    frame), ``land_m2 = area_m2`` (no land mask).
     """
 
     country: str
@@ -144,7 +203,14 @@ class AvailabilityCombination:
     partial records). ``uncovered_m2``: land outside every sheet of the
     combination. ``download_hint``: commands to paste after ``kartograf ``
     or ``kartograf project add NAME `` (without ``--output``).
-    ``sheets_missing`` and ``size_bytes`` are CZ fields (plan B; PL: empty).
+    ``sheets_missing`` and ``size_bytes`` are CZ fields (PL: empty/``None``).
+
+    CZ: ``year``/``acquisition_dates`` ``None``, ``campaigns`` empty,
+    ``published`` = min/max ``Last-Modified`` of the files (``YYYY-MM-DD``),
+    ``sheets_full`` = index sheets with a file, ``sheets_missing`` = without
+    one (HTTP 404), ``complete`` = no sheet without a file,
+    ``uncovered_m2`` = the area in the frames of ``sheets_missing``,
+    ``size_bytes`` = sum of ``Content-Length`` (``None``: a file without it).
     """
 
     country: str
@@ -173,9 +239,11 @@ class AvailabilityCombination:
 class AvailabilityReport:
     """Outcome of ``check_availability`` (schema ``kartograf-availability/1``).
 
-    ``combinations`` newest year first, then sheet system, resolution,
-    height system and format; ``ok`` is ``False`` only when a part of the
-    request could not be checked (plan B, ``country="auto"``).
+    ``areas`` and ``combinations`` per country (``areas`` order); PL
+    combinations newest year first, then sheet system, resolution, height
+    system and format; CZ in registry order (model, then S-JTSK before
+    ETRS89-TM33). ``ok`` is ``False`` only when a part of the request could
+    not be checked (``country="auto"``: its ``CHECK_FAILED`` notice).
     """
 
     request: dict
@@ -228,12 +296,58 @@ class _Service:
 @dataclass(frozen=True)
 class _Request:
     product: str
-    sheet: SheetParser | None
+    country: str  # "pl" | "cz" | "auto"; with a sheet code: its country
+    sheet: SheetParser | None  # PL sheet code
+    cz_sheet: str | None  # CZ sheet code (SM5 sheet or TM33 tile)
     bbox: BBox | None
     geometry: Path | None
     layer: str | None
     min_year: int | None
     max_year: int | None
+    years: tuple[str, ...]  # the year flags as given ("--year 2025"), PL only
+
+
+@dataclass(frozen=True)
+class _CzPart:
+    """The CZ part of a request: the area as given (``bbox`` in its CRS: the
+    request bbox or the geometry envelope; ``clip``: ``auto`` clips it to the
+    CZ envelope) or a CZ sheet code (``bbox=None``)."""
+
+    bbox: BBox | None
+    sheet: str | None = None
+    clip: bool = False
+
+
+@dataclass(frozen=True)
+class _Parts:
+    """Countries of a request in report order and the area of each part:
+    PL - convex (E, N) polygons in EPSG:2180, CZ - ``_CzPart``."""
+
+    countries: tuple[str, ...]
+    pl: list[Polygon] | None
+    cz: _CzPart | None
+
+
+@dataclass(frozen=True)
+class _CzFile:
+    """A file channel of a CZ variant in the native height system of its
+    files; ``endpoint`` = openzu ``.../{sheet}.zip``."""
+
+    variant: ProductVariant
+    system: str  # "sm5" | "tm33"
+    endpoint: str
+
+    def url(self, sheet: str) -> str:
+        return self.endpoint.format(sheet=sheet)
+
+
+@dataclass(frozen=True)
+class _CzSheet:
+    """An index sheet of a CZ file channel (cached as JSON); ``frame`` in the
+    CRS of its sheet system."""
+
+    sheet: str
+    frame: tuple[float, float, float, float]
 
 
 @dataclass
@@ -262,29 +376,41 @@ def check_availability(
     force: bool = False,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> AvailabilityReport:
-    """Report which data the index has for an area - nothing is downloaded.
+    """Report which data the sources have for an area - nothing is downloaded.
 
     Parameter names and values are the ``elevation availability`` flags in
     ``snake_case``: ``product`` (``nmt``, ``nmpt``, ``laz``), one area choice
-    (``sheet``, ``bbox`` in any supported CRS, ``geometry`` SHP/GPKG with
-    ``layer``), ``country`` (``pl``; required with ``bbox``/``geometry``, a
-    sheet code names its country), year bounds as in ``download_data``
-    (``year`` = ``min_year = max_year``; the index layers outside them are
-    not queried). ``cache``: ``True`` = default metadata cache in the current
-    directory, a ``MetadataCache`` = that cache, ``False`` = none; ``force``
-    asks the services again (and overwrites the cache). ``on_notice``
-    receives each notice when it is emitted.
+    (``sheet`` - a PL or CZ sheet code, ``bbox`` in any supported CRS,
+    ``geometry`` SHP/GPKG with ``layer``), ``country`` (``pl``, ``cz`` or
+    ``auto``; required with ``bbox``/``geometry``, a sheet code names its
+    country), year bounds as in ``download_data`` (``year`` = ``min_year =
+    max_year``; the index layers outside them are not queried). ``cache``:
+    ``True`` = default metadata cache in the current directory, a
+    ``MetadataCache`` = that cache, ``False`` = none; ``force`` asks the
+    services again (and overwrites the cache). ``on_notice`` receives each
+    notice when it is emitted.
+
+    ``country="auto"`` reports the PL and CZ parts of the area (rectangular
+    country envelopes, ``split_bbox_by_country``; a geometry: PL its
+    features, CZ the part of its envelope); a part that cannot be checked
+    while the other one was is a ``CHECK_FAILED`` warning and ``ok=False``.
+    Year bounds are PL-only (CUZK publishes no survey years): with ``cz`` or
+    a CZ sheet code they are a ``ValidationError``; with ``auto`` they narrow
+    the request to PL (``AUTO_NARROWED_TO_PL``) or, for an area only in CZ,
+    are a ``ValidationError`` - as the PL-only choices of ``download_data``.
 
     Raises
     ------
     ValidationError
         Invalid or missing choice (before the network; texts name the CLI
-        flags as in ``download_data``), or year bounds without a layer in the
-        index (after GetCapabilities).
+        flags as in ``download_data``), year bounds without a layer in the
+        index (after GetCapabilities), or an SM5 code missing in the index.
     ParseError
         Malformed sheet code.
     DownloadError
-        An index or PRG request failed - never an empty report.
+        An index, PRG or CUZK request failed (``auto``: of every country) -
+        never an empty report. A CZ file answering 404 is a sheet without a
+        file, any other failure is this error.
     """
     request = _validated(
         product, country, sheet, bbox, geometry, layer, year, min_year, max_year
@@ -295,36 +421,77 @@ def check_availability(
         if request.geometry is not None
         else None
     )
-    areas = _area_polygons(request, layer_name)
-    envelope = area_envelope(areas)
+    parts = _parts(request, layer_name, sink)
     sessions = SessionPerThread(None)
+    areas: list[AvailabilityArea] = []
+    combinations: list[AvailabilityCombination] = []
+    failed: list[tuple[str, DownloadError]] = []
     with open_cache(cache, force=force, on_notice=sink.add) as metadata:
-        services = _services(request.product)
-        typed = [
-            (service, _feature_types(service, sessions, metadata))
-            for service in services
-        ]
-        selected = [
-            (
-                service,
-                [
-                    name
-                    for name in types
-                    if in_year_range(
-                        type_year(name), request.min_year, request.max_year
-                    )
-                ],
-            )
-            for service, types in typed
-        ]
-        if not any(chosen for _, chosen in selected):
-            raise ValidationError(_no_layer_text(request, typed))
-        answers = [
-            (service, _index_entries(service, chosen, envelope, sessions, metadata))
-            for service, chosen in selected
-            if chosen
-        ]
-        mask = _land_mask(envelope, sessions, metadata)
+        for code in parts.countries:
+            try:
+                if code == "CZ":
+                    assert parts.cz is not None
+                    area, found = _check_cz(request, parts.cz, sessions, metadata, sink)
+                else:
+                    assert parts.pl is not None
+                    area, found = _check_pl(request, parts.pl, sessions, metadata, sink)
+            except DownloadError as error:
+                if len(parts.countries) == 1:
+                    raise
+                failed.append((code, error))
+                continue
+            areas.append(area)
+            combinations.extend(found)
+    if failed and len(failed) == len(parts.countries):
+        raise failed[0][1]
+    for code, failure in failed:
+        text = (
+            f"--country auto: nie udalo sie sprawdzic czesci {code} ({failure}) - "
+            f"raport obejmuje tylko {', '.join(a.country for a in areas)}"
+        )
+        sink.emit("warning", CHECK_FAILED, text.encode("ascii", "replace").decode())
+    return AvailabilityReport(
+        request=_request_payload(request, layer_name),
+        checked_at=_clock.now().isoformat(timespec="seconds"),
+        areas=tuple(areas),
+        combinations=tuple(combinations),
+        notices=sink.notices,
+        ok=not failed,
+    )
+
+
+def _check_pl(
+    request: _Request,
+    areas: list[Polygon],
+    sessions: SessionPerThread,
+    metadata: MetadataCache | None,
+    sink: NoticeSink,
+) -> tuple[AvailabilityArea, list[AvailabilityCombination]]:
+    """The PL part: GUGiK WFS indexes of the product and the PRG land mask."""
+    envelope = area_envelope(areas)
+    services = _services(request.product)
+    typed = [
+        (service, _feature_types(service, sessions, metadata)) for service in services
+    ]
+    selected = [
+        (
+            service,
+            [
+                name
+                for name in types
+                if in_year_range(type_year(name), request.min_year, request.max_year)
+            ],
+        )
+        for service, types in typed
+    ]
+    if not any(chosen for _, chosen in selected):
+        raise ValidationError(_no_layer_text(request, typed))
+    answers = [
+        (service, _index_entries(service, chosen, envelope, sessions, metadata))
+        for service, chosen in selected
+        if chosen
+    ]
+    mask = _land_mask(envelope, sessions, metadata)
     groups, unsupported = _group(request.product, answers, areas)
     area_px, land_px, measured = _measure(
         areas,
@@ -335,31 +502,22 @@ def check_availability(
     )
     if unsupported:
         sink.emit("info", INDEX_UNSUPPORTED, _unsupported_text(unsupported))
-    combinations = tuple(
+    area = AvailabilityArea(
+        country="PL",
+        crs="EPSG:2180",
+        bounds=(
+            float(envelope.min_x),
+            float(envelope.min_y),
+            float(envelope.max_x),
+            float(envelope.max_y),
+        ),
+        area_m2=float(area_px),
+        land_m2=float(land_px),
+    )
+    return area, [
         _combination(request, group, missing, uncovered)
         for group, (missing, uncovered) in zip(groups, measured, strict=True)
-    )
-    return AvailabilityReport(
-        request=_request_payload(request, layer_name),
-        checked_at=_clock.now().isoformat(timespec="seconds"),
-        areas=(
-            AvailabilityArea(
-                country="PL",
-                crs="EPSG:2180",
-                bounds=(
-                    float(envelope.min_x),
-                    float(envelope.min_y),
-                    float(envelope.max_x),
-                    float(envelope.max_y),
-                ),
-                area_m2=float(area_px),
-                land_m2=float(land_px),
-            ),
-        ),
-        combinations=combinations,
-        notices=sink.notices,
-        ok=True,
-    )
+    ]
 
 
 # =============================================================================
@@ -378,7 +536,12 @@ def _validated(
     min_year: int | None,
     max_year: int | None,
 ) -> _Request:
-    """Checks before the network, with the texts of ``download_data``."""
+    """Checks before the network, with the texts of ``download_data``.
+
+    Year bounds are PL-only: with ``cz`` (or a CZ sheet code) they are a
+    ``ValidationError``; ``auto`` resolves them in ``_parts`` once the
+    countries of the area are known.
+    """
     from kartograf.core.parser_registry import detect_system
 
     validate_area_choice(sheet, bbox, geometry)
@@ -389,16 +552,7 @@ def _validated(
         raise ValidationError(
             f"--product {product!r}: nieznana wartosc - dostepne: {choices}"
         )
-    parsed = None
-    if sheet is not None:
-        system = detect_system(sheet)
-        if system.country != "PL":
-            raise ValidationError(
-                f"Godlo '{sheet}' nalezy do systemu {system.id} (kraj "
-                f"{system.country}) - raport dostepnosci obejmuje: {COUNTRY_CHOICES}"
-            )
-        parsed = SheetParser(sheet)
-    elif country is None:
+    if sheet is None and country is None:
         raise ValidationError(
             f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
         )
@@ -406,24 +560,57 @@ def _validated(
         raise ValidationError(
             f"--country {country!r}: raport dostepnosci obejmuje: {COUNTRY_CHOICES}"
         )
+    parsed = cz_sheet = None
+    if sheet is not None:
+        # the registry ends with the pl1992 fallback (always matches)
+        system = detect_system(sheet)
+        if country not in (None, "auto") and country != system.country.lower():
+            raise ValidationError(
+                f"Godlo '{sheet}' nalezy do systemu {system.id} (kraj "
+                f"{system.country}), a podano --country {country}"
+            )
+        country = system.country.lower()
+        if country == "pl":
+            parsed = SheetParser(sheet)
+        else:
+            cz_sheet = sheet.strip()
+            if cz_sheet_system(cz_sheet) == "tm33":
+                ParserTM33(cz_sheet)  # ParseError: odd kilometres
+    assert country is not None
     lo, hi = year_bounds(year, min_year, max_year)
+    years = tuple(
+        f"{flag} {value}"
+        for flag, value in (
+            ("--year", year),
+            ("--min-year", min_year),
+            ("--max-year", max_year),
+        )
+        if value is not None
+    )
+    if country == "cz" and years:
+        raise ValidationError(_CZ_NO_YEARS)
     return _Request(
         product=product,
+        country=country,
         sheet=parsed,
+        cz_sheet=cz_sheet,
         bbox=bbox,
         geometry=Path(geometry) if geometry is not None else None,
         layer=layer,
         min_year=lo,
         max_year=hi,
+        years=years,
     )
 
 
 def _request_payload(request: _Request, layer_name: str | None) -> dict:
-    """``AvailabilityReport.request``: product, country, area (as the sidecar
-    ``request``), year bounds."""
-    payload: dict = {"product": request.product, "country": "pl"}
+    """``AvailabilityReport.request``: product, country (a sheet code: its
+    country), area (as the sidecar ``request``), year bounds."""
+    payload: dict = {"product": request.product, "country": request.country}
     if request.sheet is not None:
         payload["sheet"] = request.sheet.sheet
+    elif request.cz_sheet is not None:
+        payload["sheet"] = request.cz_sheet
     elif request.bbox is not None:
         payload["bbox"] = bbox_coords(request.bbox)
         payload["bbox_crs"] = request.bbox.crs
@@ -435,11 +622,64 @@ def _request_payload(request: _Request, layer_name: str | None) -> dict:
     return payload
 
 
-def _area_polygons(request: _Request, layer_name: str | None) -> list[Polygon]:
-    """The area as convex (E, N) polygons in EPSG:2180 - the area a download
-    of the same choice covers: NMT/NMPT the sheet frame, the bbox envelope,
-    the feature envelopes of the geometry file (sheets per feature); LAZ the
-    envelope of the sheet frame or of the whole geometry (tiles of one bbox).
+def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Parts:
+    """Countries of the request and the area of each part (before the
+    network; a ``TransformError`` fails the request).
+
+    ``auto`` splits the bbox (a geometry: its envelope) by the rectangular
+    country envelopes as ``download_data`` does (``split_bbox_by_country``);
+    the PL part of a geometry stays its features, the CZ part is clipped per
+    sheet system in ``_cz_area``. ``cz`` takes the bbox or the geometry
+    envelope as given (the LAZ download of an area).
+    Year bounds narrow an area reaching both countries to PL
+    (``AUTO_NARROWED_TO_PL``, as the PL-only LAZ flags of ``download_data``).
+    """
+    if request.cz_sheet is not None:
+        return _Parts(("CZ",), None, _CzPart(None, request.cz_sheet))
+    if request.country == "pl":
+        return _Parts(("PL",), _area_polygons(request, layer_name), None)
+    if request.country == "cz":
+        if request.bbox is not None:
+            return _Parts(("CZ",), None, _CzPart(request.bbox))
+        assert request.geometry is not None
+        envelope = geometry_envelope(request.geometry, layer_name)
+        return _Parts(("CZ",), None, _CzPart(envelope))
+    if request.geometry is not None:
+        area = geometry_envelope(request.geometry, layer_name)
+    else:
+        assert request.bbox is not None
+        area = request.bbox
+    split = split_bbox_by_country(area, cz_crs=_CZ_CRS)
+    countries = tuple(code for code in ("PL", "CZ") if code in split)
+    if not countries:
+        raise ValidationError(
+            "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)"
+        )
+    if request.years and "CZ" in countries:
+        if "PL" not in countries:
+            raise ValidationError(_CZ_NO_YEARS)
+        sink.emit(
+            "info",
+            AUTO_NARROWED_TO_PL,
+            f"--country auto -> pl ({', '.join(request.years)} dotyczy tylko PL)",
+        )
+        countries = ("PL",)
+    pl = None
+    if "PL" in countries:
+        part = None if request.geometry is not None else split["PL"].bbox
+        pl = _area_polygons(request, layer_name, part)
+    cz = _CzPart(area, clip=True) if "CZ" in countries else None
+    return _Parts(countries, pl, cz)
+
+
+def _area_polygons(
+    request: _Request, layer_name: str | None, bbox: BBox | None = None
+) -> list[Polygon]:
+    """The PL area as convex (E, N) polygons in EPSG:2180 - the area a
+    download of the same choice covers: NMT/NMPT the sheet frame, the bbox
+    envelope (``bbox``: the PL part of ``auto``), the feature envelopes of the
+    geometry file (sheets per feature); LAZ the envelope of the sheet frame or
+    of the whole geometry (tiles of one bbox).
     """
     from kartograf.core.geometry import get_overall_bbox, read_feature_bboxes
 
@@ -449,8 +689,9 @@ def _area_polygons(request: _Request, layer_name: str | None) -> list[Polygon]:
             b = request.sheet.get_bbox(crs="EPSG:2180")
             return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y)]
         return [sheet_frame_2180(request.sheet.sheet)]
-    if request.bbox is not None:
-        b = bbox_to_2180(request.bbox)
+    area = bbox if bbox is not None else request.bbox
+    if area is not None:
+        b = bbox_to_2180(area)
         return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y)]
     assert request.geometry is not None
     boxes = read_feature_bboxes(request.geometry, layer_name, "EPSG:2180")
@@ -942,7 +1183,323 @@ def _unsupported_text(unsupported: dict[tuple, dict]) -> str:
 
 
 # =============================================================================
-# Download hint (decision 8 of plan A)
+# CZ: CUZK index sheets and files (plan B, decision 9)
+# =============================================================================
+
+
+@dataclass(frozen=True)
+class _Head:
+    """``HEAD`` of a CZ file (cached as JSON): ``found`` = HTTP 200 (``False``:
+    404 - the index sheet has no file), ``Last-Modified``, ``Content-Length``."""
+
+    found: bool
+    last_modified: str | None
+    content_length: int | None
+
+
+def _check_cz(
+    request: _Request,
+    part: _CzPart,
+    sessions: SessionPerThread,
+    metadata: MetadataCache | None,
+    sink: NoticeSink,
+) -> tuple[AvailabilityArea, list[AvailabilityCombination]]:
+    """The CZ part: index sheets of every file channel of the product and one
+    ``HEAD`` per file (in parallel) - nothing is downloaded.
+
+    The sheets of a sheet system are those of the area in the CRS of the
+    system (``_cz_area``; ``SheetIndex.file_sheets``, the rule of the LAZ
+    download of an area); a sheet code is its own only sheet in its system.
+    """
+    files = _cz_files(request.product)
+    index = SheetIndex(session=sessions.get(), cache=metadata)
+    own: str | None = None
+    own_sheets: tuple[_CzSheet, ...] = ()
+    if part.sheet is not None:
+        own = cz_sheet_system(part.sheet)
+        area, own_sheets = _cz_code_sheets(index, part.sheet, own)
+    else:
+        assert part.bbox is not None
+        area = part.bbox
+    bounds = _cz_area(part, area, _CZ_CRS)
+    # a sheet code: its frame; an area: the rectangle of the CZ part
+    area_m2 = _rect_area(area if part.sheet is not None else bounds)
+    local: dict[str, BBox] = {}
+    sheets: dict[str, tuple[_CzSheet, ...]] = {}
+    for system in dict.fromkeys(file.system for file in files):
+        local[system] = _cz_area(part, area, CZ_SYSTEM_CRS[system])
+        sheets[system] = (
+            own_sheets
+            if system == own
+            else _cz_index_sheets(index, system, local[system], metadata)
+        )
+    heads = _heads(
+        [file.url(s.sheet) for file in files for s in sheets[file.system]],
+        sessions,
+        metadata,
+    )
+    combinations = [
+        _cz_combination(request, file, sheets[file.system], heads, local[file.system])
+        for file in files
+        if sheets[file.system]
+    ]
+    service_only = _cz_service_only(request.product)
+    if service_only is not None:
+        sink.emit("info", CZ_SERVICE_ONLY, service_only)
+    area_cz = AvailabilityArea(
+        country="CZ",
+        crs=_CZ_CRS,
+        bounds=(
+            float(bounds.min_x),
+            float(bounds.min_y),
+            float(bounds.max_x),
+            float(bounds.max_y),
+        ),
+        area_m2=area_m2,
+        land_m2=area_m2,
+    )
+    return area_cz, combinations
+
+
+def _cz_files(product: str) -> list[_CzFile]:
+    """File channels of the CZ variants of ``product`` in the native height
+    system of their files (registry order) - the combinations of the report:
+    NMT DMR 4G, NMPT DMP OK (S-JTSK/Bpv and ETRS89-TM33/EVRF2007), LAZ every
+    model in both pairs."""
+    found = []
+    for variant in variants(product=product, country="CZ"):
+        if variant.channel != TransportKind.DIRECT_FILES:
+            continue
+        (system,) = variant.systems
+        channel = channel_for(
+            variant.source, TransportKind.DIRECT_FILES, CZ_SYSTEM_CRS[system]
+        )
+        native = vertical_crs_code(variant.vertical_crs) in channel.vertical_crs_options
+        if native and channel.endpoint is not None:
+            found.append(_CzFile(variant, system, channel.endpoint))
+    return found
+
+
+def _cz_service_only(product: str) -> str | None:
+    """``CZ_SERVICE_ONLY``: the CZ models of ``product`` without sheet files
+    (DMR 5G, DMP 1G) - outside the report, still downloadable; ``None`` when
+    every model has files (LAZ)."""
+    rows: dict[str, list[ProductVariant]] = {}
+    for variant in variants(product=product, country="CZ"):
+        if variant.model is not None:
+            rows.setdefault(variant.model, []).append(variant)
+    service = [
+        (model, found)
+        for model, found in rows.items()
+        if all(v.channel != TransportKind.DIRECT_FILES for v in found)
+    ]
+    if not service:
+        return None
+    names = " i ".join(
+        f"{CZ_MODELS[model][0]} ({found[0].label})" for model, found in service
+    )
+    have, are = ("nie ma", "jest") if len(service) == 1 else ("nie maja", "sa")
+    models = ", ".join(model for model, _ in service)
+    return (
+        f"{names} {have} plikow arkuszy CUZK (raport ich nie obejmuje) - {are} "
+        "dla calego CZ jako wycinek (--cutout), kafel TM33 z uslugi ImageServer "
+        f"(--sheet, np. 302_5550) i LAZ (--product laz --model {models})"
+    )
+
+
+def _cz_area(part: _CzPart, area: BBox, crs: str) -> BBox:
+    """The CZ part in ``crs`` as the LAZ download selects sheets: an ``auto``
+    area clipped to the CZ envelope straight into ``crs`` (``country_bbox``),
+    else the area (a sheet code: its frame) moved by ``_in_crs``."""
+    if part.clip:
+        return country_bbox(area, "CZ", auto=True, cz_crs=crs).bbox
+    return _in_crs(area, crs)
+
+
+def _in_crs(bbox: BBox, crs: str) -> BBox:
+    """``bbox`` in ``crs``: the same rectangle, or its envelope through the
+    pinned operation (``bbox_to_crs``, as the LAZ download of an area)."""
+    if wkid(bbox.crs) == wkid(crs):
+        return BBox(bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y, crs)
+    return bbox_to_crs(bbox, crs)
+
+
+def _rect_area(bbox: BBox) -> float:
+    """Area of a rectangle in whole square metres."""
+    return float(round((bbox.max_x - bbox.min_x) * (bbox.max_y - bbox.min_y)))
+
+
+def _cz_sheet(sheet: str, frame: BBox) -> _CzSheet:
+    return _CzSheet(sheet, (frame.min_x, frame.min_y, frame.max_x, frame.max_y))
+
+
+def _cz_code_sheets(
+    index: SheetIndex, code: str, system: str
+) -> tuple[BBox, tuple[_CzSheet, ...]]:
+    """Frame of a CZ sheet code and its file sheet: an SM5 sheet from the
+    index (``ValidationError``: a code missing in it; no file sheet with
+    ``PODIL`` 0), a TM33 tile computed from the code."""
+    if system == "sm5":
+        info = index.sm5_sheet(code)
+        files = info.podil is None or info.podil > 0
+        return info.bbox, ((_cz_sheet(info.sheet, info.bbox),) if files else ())
+    frame = ParserTM33(code).get_bbox()
+    return frame, (_cz_sheet(code, frame),)
+
+
+def _cz_index_sheets(
+    index: SheetIndex, system: str, area: BBox, cache: MetadataCache | None
+) -> tuple[_CzSheet, ...]:
+    """File sheets of a sheet system in ``area`` (its CRS): the index or the
+    cache (``cz-sheets|<system>|<area in mm>``)."""
+    key = f"cz-sheets|{system}|{_mm(area)}"
+    if cache is not None:
+        restored = _restore_cz_sheets(cache.get_index_area(key))
+        if restored is not None:
+            return restored
+    found = tuple(
+        _cz_sheet(info.sheet, info.bbox) for info in index.file_sheets(system, area)
+    )
+    if cache is not None:
+        cache.set_index_area(key, [asdict(sheet) for sheet in found])
+    return found
+
+
+def _restore_cz_sheets(payload: object) -> tuple[_CzSheet, ...] | None:
+    """Sheets of a cache payload; ``None`` (a miss) for an unreadable one."""
+    if not isinstance(payload, list):
+        return None
+    found = []
+    try:
+        for item in payload:
+            x0, y0, x1, y1 = (float(v) for v in item["frame"])
+            found.append(_CzSheet(str(item["sheet"]), (x0, y0, x1, y1)))
+    except (KeyError, TypeError, ValueError):
+        return None
+    return tuple(found)
+
+
+def _heads(
+    urls: list[str], sessions: SessionPerThread, cache: MetadataCache | None
+) -> dict[str, _Head]:
+    """``HEAD`` of every file, in parallel (``_HEAD_WORKERS``); the first
+    failure is raised after the running requests end (queued ones are
+    cancelled)."""
+
+    def one(url: str) -> _Head:
+        return _head(url, sessions, cache)
+
+    if len(urls) <= 1:
+        return {url: one(url) for url in urls}
+    pool = ThreadPoolExecutor(max_workers=_HEAD_WORKERS)
+    try:
+        found = list(pool.map(one, urls))
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+    return dict(zip(urls, found, strict=True))
+
+
+def _head(url: str, sessions: SessionPerThread, cache: MetadataCache | None) -> _Head:
+    """One file: the cache (``head|<url>``) or one ``HEAD`` (retry policy of
+    ``head_signal``). 404 = no file; any other failure (5xx, timeout, other
+    4xx) = ``DownloadError`` - never "no file"."""
+    key = f"head|{url}"
+    if cache is not None:
+        restored = _restore_head(cache.get_index_area(key))
+        if restored is not None:
+            return restored
+    try:
+        signal = head_signal(sessions.get(), url, timeout=_CZ_TIMEOUT)
+    except DownloadError as error:
+        if error.status_code != 404:
+            raise
+        found = _Head(False, None, None)
+    else:
+        found = _Head(True, signal["last_modified"], signal["content_length"])
+    if cache is not None:
+        cache.set_index_area(key, asdict(found))
+    return found
+
+
+def _restore_head(payload: object) -> _Head | None:
+    """``_Head`` of a cache payload; ``None`` (a miss) for an unreadable one."""
+    if not isinstance(payload, dict):
+        return None
+    found = payload.get("found")
+    modified = payload.get("last_modified")
+    length = payload.get("content_length")
+    if (
+        not isinstance(found, bool)
+        or not (modified is None or isinstance(modified, str))
+        or not (length is None or (isinstance(length, int) and length >= 0))
+    ):
+        return None
+    return _Head(found, modified, length)
+
+
+def _http_date(value: str | None) -> str | None:
+    """``YYYY-MM-DD`` of an HTTP date (``Last-Modified``, GMT); ``None`` when
+    absent or unreadable."""
+    if value is None:
+        return None
+    try:
+        return parsedate_to_datetime(value).date().isoformat()
+    except (TypeError, ValueError):
+        return None
+
+
+def _overlap(frame: tuple[float, float, float, float], area: BBox) -> float:
+    """Area of the intersection of a sheet frame with the area (one CRS)."""
+    x0, y0, x1, y1 = frame
+    width = min(x1, area.max_x) - max(x0, area.min_x)
+    height = min(y1, area.max_y) - max(y0, area.min_y)
+    return width * height if width > 0 and height > 0 else 0.0
+
+
+def _cz_combination(
+    request: _Request,
+    file: _CzFile,
+    sheets: tuple[_CzSheet, ...],
+    heads: dict[str, _Head],
+    area: BBox,
+) -> AvailabilityCombination:
+    """A CZ combination: index sheets with (``sheets_full``) and without
+    (``sheets_missing``) a file, publication dates and size of the files,
+    ``uncovered_m2`` = the area in the frames of the sheets without a file
+    (``area`` in the CRS of the sheet system)."""
+    found = [(sheet, heads[file.url(sheet.sheet)]) for sheet in sheets]
+    full = [sheet.sheet for sheet, head in found if head.found]
+    missing = [sheet for sheet, head in found if not head.found]
+    present = [head for _, head in found if head.found]
+    sizes = [head.content_length for head in present]
+    known = [size for size in sizes if size is not None]
+    variant = file.variant
+    return AvailabilityCombination(
+        country="CZ",
+        product=request.product,
+        source=variant.source,
+        year=None,
+        acquisition_dates=None,
+        published=_span([_http_date(head.last_modified) or "" for head in present]),
+        campaigns=(),
+        horizontal=_CZ_HORIZONTAL[file.system],
+        resolution=variant.label,
+        vertical_crs=variant.vertical_crs,
+        format=variant.format,
+        densities=(),
+        complete=not missing,
+        sheets_full=tuple(full),
+        sheets_partial=(),
+        sheets_missing=tuple(sheet.sheet for sheet in missing),
+        uncovered=bool(missing),
+        uncovered_m2=float(round(sum(_overlap(s.frame, area) for s in missing))),
+        size_bytes=sum(known) if len(known) == len(sizes) else None,
+        download_hint=_cz_hint(request, file, full),
+    )
+
+
+# =============================================================================
+# Download hint (decision 8 of plan A; CZ: decision 10 of plan B)
 # =============================================================================
 
 
@@ -955,17 +1512,18 @@ def _number(value: float) -> str:
     return format(float(value), ".15g")
 
 
-def _area_flags(request: _Request) -> list[str]:
-    """``--country pl`` and the bbox/geometry of the request."""
+def _area_flags(request: _Request, country: str) -> list[str]:
+    """``--country`` of the combination (``pl``/``cz``: an ``auto`` request
+    gives commands per country) and the bbox/geometry of the request."""
     if request.bbox is not None:
         b = request.bbox
         coords = ",".join(_number(v) for v in (b.min_x, b.min_y, b.max_x, b.max_y))
         bbox = [f"--bbox={coords}"] if coords.startswith("-") else ["--bbox", coords]
         crs = ["--bbox-crs", b.crs] if b.crs != "EPSG:2180" else []
-        return ["--country", "pl", *bbox, *crs]
+        return ["--country", country, *bbox, *crs]
     assert request.geometry is not None
     layer = ["--layer", request.layer] if request.layer is not None else []
-    return ["--country", "pl", "--geometry", str(request.geometry), *layer]
+    return ["--country", country, "--geometry", str(request.geometry), *layer]
 
 
 def _sheet_area(request: _Request, group: _Group, sheets: list[str]) -> list[list[str]]:
@@ -1000,9 +1558,9 @@ def _download_hint(
     if request.sheet is not None:
         areas = _sheet_area(request, group, sheets)
     elif request.product == "laz":
-        areas = [_area_flags(request)]
+        areas = [_area_flags(request, "pl")]
     else:
-        base = [*_area_flags(request), "--sheet-system", group.system]
+        base = [*_area_flags(request, "pl"), "--sheet-system", group.system]
         if group.system == "2000" and not group.variant.source_file:
             scales = sorted({SheetParser(s).scale for s in sheets}, key=_scale_order)
             areas = [[*base, "--scale", scale] for scale in scales]
@@ -1032,3 +1590,31 @@ def _needs_full_sheet(rows: list[_Entry]) -> bool:
     """The newest record of a sheet is not full while a full one exists."""
     newest = max(rows, key=lambda r: (r.date, r.published or "", r.url))
     return newest.full is not True and any(r.full is True for r in rows)
+
+
+def _cz_hint(request: _Request, file: _CzFile, sheets: list[str]) -> tuple[str, ...]:
+    """Commands downloading the files ``sheets`` of a CZ combination (after
+    ``kartograf ``, without ``--output``): a raster - one command per sheet
+    (``--sheet``, label, native height system); LAZ - one command for the
+    area of the request (``--country cz``, ``--model``), a sheet request -
+    one per sheet (a code reaches only its own sheet system)."""
+    if not sheets:
+        return ()
+    variant = file.variant
+    product = request.product
+    if product == "laz":
+        assert variant.model is not None
+        flags = ["--model", variant.model, "--vertical-crs", variant.vertical_crs]
+        areas = (
+            [["--sheet", sheet] for sheet in sheets]
+            if request.cz_sheet is not None
+            else [_area_flags(request, "cz")]
+        )
+    else:
+        assert variant.label is not None
+        flags = ["--resolution", variant.label, "--vertical-crs", variant.vertical_crs]
+        areas = [["--sheet", sheet] for sheet in sheets]
+    return tuple(
+        shlex.join(["elevation", "download", "--product", product, *area, *flags])
+        for area in areas
+    )

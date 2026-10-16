@@ -126,27 +126,14 @@ class CuzkLazProvider(BaseProvider):
         """Index sheets of the files intersecting ``area`` (any supported CRS).
 
         The area is carried to the index CRS of the system through the pinned
-        operation (``bbox_to_crs``). SM5 keeps sheets with a part in CZ
-        (``PODIL > 0``; unknown kept), TM33 tiles not marked outside CZ.
-        Sorted by sheet code.
+        operation (``bbox_to_crs``); the sheets are ``SheetIndex.file_sheets``
+        (SM5 with a part in CZ, TM33 tiles not marked outside CZ), sorted by
+        sheet code.
         """
         crs = self.horizontal_crs
         if wkid(area.crs) != wkid(crs):
             area = bbox_to_crs(area, crs)
-        index = self.sheet_index
-        if self._system == "sm5":
-            found = [
-                info
-                for info in index.sm5_sheets_for_bbox(area)
-                if info.podil is None or info.podil > 0
-            ]
-        else:
-            found = [
-                info
-                for info in index.tm33_tiles_for_bbox(area)
-                if info.in_cz is not False
-            ]
-        return sorted(found, key=lambda info: info.sheet)
+        return self.sheet_index.file_sheets(self._system, area)
 
     def file_url(self, sheet: str) -> str:
         """openzu ZIP of a sheet code of this provider's system.
