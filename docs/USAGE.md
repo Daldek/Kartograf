@@ -19,6 +19,7 @@ lista publicznego API: `kartograf/__init__.py` (`__all__`).
    - [1.6 Kiedy `--scale` jest wymagane](#16-kiedy---scale-jest-wymagane)
    - [1.7 Raport dostępności (`elevation availability`)](#17-raport-dostępności-elevation-availability)
    - [1.8 Granice, ewidencja, modele 3D budynków i archiwum BDOT10k](#18-granice-ewidencja-modele-3d-budynków-i-archiwum-bdot10k)
+   - [1.9 Dane CZ: ZABAGED, RUIAN i HY-NET](#19-dane-cz-zabaged-ruian-i-hy-net)
 2. [Biblioteka Python](#2-biblioteka-python)
 3. [Wynik pobrania](#3-wynik-pobrania)
 4. [Kampanie GUGiK](#4-kampanie-gugik)
@@ -32,12 +33,13 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | Grupa | Komendy | Dane |
 |---|---|---|
 | `elevation` | `download`, `list-sources`, `availability` | NMT, NMPT (PL, CZ), LAZ (PL); raport dostępności PL |
-| `imagery` | `download`, `list-sources` | ortofotomapa (PL) |
-| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), CORINE (`--source`) |
+| `imagery` | `download`, `list-sources` | ortofotomapa: arkusze PL (GUGiK) i CZ (CUZK, SM5), wycinek WCS PL (`--cutout`) |
+| `landcover` | `download`, `list-sources`, `list-layers` | BDOT10k (także archiwum roczników `--year`), CORINE, ZABAGED (CZ) (`--source`) |
 | `soil` | `download`, `hsg`, `list-sources`, `list-layers` | SoilGrids, HSG |
-| `boundaries` | `download`, `list-sources` | granice jednostek administracyjnych i ewidencyjnych PRG (PL) |
+| `boundaries` | `download`, `list-sources` | granice jednostek: PRG (PL), RUIAN (CZ) |
 | `cadastre` | `download`, `list-sources` | EGiB — działki i budynki (PL) |
 | `models3d` | `download`, `list-sources` | modele 3D budynków CityGML LoD1/LoD2 (PL) |
+| `hydro` | `download`, `list-sources` | sieć wód HY-NET (CZ) |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
@@ -49,10 +51,12 @@ z nazwą nowej komendy (tabela: CHANGELOG 0.8.0).
 Od 0.8.0 CLI nie ma wartości domyślnych wpływających na dane: `--product`,
 `--output` (także `landcover download`, `soil download` i `soil hsg`), `--country`
 (z `--bbox`/`--geometry`), `--vertical-crs` (NMT, NMPT, LAZ),
-`--resolution` (NMT i NMPT, gdy jest wybór), `--sheet-system` (PL `--bbox`/`--geometry`
-bez `--cutout`), `--horizontal-crs` (z `--cutout`), `--scale` (PL-2000),
-`--level` (obszar `boundaries`), `--lod` i `--year` (`models3d`, gdy wydań
-jest kilka) oraz `--format` z `--year` (archiwum BDOT10k)
+`--resolution` (NMT i NMPT, gdy jest wybór; piksel wycinka ortofotomapy),
+`--sheet-system` (PL `--bbox`/`--geometry`
+bez `--cutout`), `--horizontal-crs` (z `--cutout`; plik krajowy ZABAGED),
+`--coverage` (wycinek ortofotomapy), `--scale` (PL-2000),
+`--level` (obszar `boundaries`; pod `auto` per kraj), `--lod` i `--year`
+(`models3d`, gdy wydań jest kilka) oraz `--format` z `--year` (archiwum BDOT10k)
 podaje się jawnie. Brak wartości to `Error:` z listą
 dopuszczalnych wartości (kod 1, przed siecią); listy i znaczenia wartości
 podaje też `kartograf <grupa> <komenda> --help`. Domyślne zostały tylko format,
@@ -220,22 +224,26 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   51,06°N) trafia także do CUZK, a prostokąt PL (14,07–24,20°E,
   49,00–54,90°N) obejmuje większość Czech. Dla czystej Polski użyj
   `--country pl`.
-- Wartości bez odpowiednika czeskiego (`--product nmpt|orto`,
+- Wartości bez odpowiednika czeskiego (`--product nmpt`,
   `--vertical-crs KRON86`, rozdzielczość, której CUZK nie ma, np.
-  `--resolution 1m` albo `0.5m`, oraz `--format` — w zwykłej, nie per-krajowej
-  postaci) na obszarze objętym obwiedniami obu krajów same przełączają
+  `--resolution 1m` albo `0.5m`, `--format` — w zwykłej, nie per-krajowej
+  postaci — oraz `--coverage` i `--resolution` wycinka ortofotomapy)
+  na obszarze objętym obwiedniami obu krajów same przełączają
   `auto` na PL (komunikat `Info:`). W Pradze czy Brnie taka flaga kieruje
   więc zadanie do GUGiK, który nie ma tam danych (błąd pobrania); błąd
   przed siecią dostaje dopiero obszar poza prostokątem PL. LAZ na
   obszarze sięgającym CZ wymaga jawnego `--country pl`. `--sheet-system`
   jest wymagane dla części PL zadania (bez `--cutout`), więc nie wybiera
-  kraju.
-- Obszar sięgający CZ (`--country cz` albo `auto` z częścią CZ) wymaga
+  kraju. Ortofotomapa ma od 0.8.0 źródło CZ, więc samo `--product orto`
+  nie przełącza już `auto` na PL (sekcja 1.4).
+- Obszar NMT sięgający CZ (`--country cz` albo `auto` z częścią CZ) wymaga
   `--cutout --horizontal-crs <układ>`: CUZK nie ma trybu arkuszy dla
   obszaru ([ADR-038](DECISIONS.md)). Pod `auto` część PL jest wtedy też
   wycinkiem WCS (tylko 1 m, NMT/NMPT, bez wyboru kampanii); arkusze PL
   z takiego obszaru pobiera `--country pl`. Bez `--cutout` — `Error:`
-  przed siecią z tą podpowiedzią.
+  przed siecią z tą podpowiedzią. Ortofotomapa obszaru CZ to arkusze SM5
+  (bez `--cutout`, sekcja 1.4), a granice i sieć wód — jeden plik obszaru
+  na kraj (sekcja 1.9).
 - Pod `auto` przycięcie do obwiedni kraju jest komunikowane jako `Info:`;
   oryginalny bbox zachowuje `extra.parent_request`, cały bbox pobiera
   `--country pl`.
@@ -246,7 +254,8 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 
 `--cutout` przełącza `--bbox`/`--geometry` z listy arkuszy na **jeden**
 GeoTIFF obszaru; układ wyniku podaje wymagane `--horizontal-crs`
-(`EPSG:2180`, `EPSG:5514`, `EPSG:3045`). `--horizontal-crs` bez
+(`EPSG:2180`, `EPSG:5514`, `EPSG:3045`; ortofotomapa — tylko `EPSG:2180`,
+niżej). `--horizontal-crs` bez
 `--cutout` i `--cutout` z `--sheet` to `Error:` przed siecią.
 
 ```bash
@@ -289,7 +298,7 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   je ręcznie). `--workers` i `--scale` nie zmieniają wycinka WCS.
   `Info:` podaje liczbę żądań przy więcej niż jednym kawałku lub wyniku
   >= 1 GiB (tylko gdy wycinek będzie pobierany).
-- Wycinek jest **tylko 1 m** z siatki ASC: `--resolution 1m` albo bez
+- Wycinek NMT/NMPT jest **tylko 1 m** z siatki ASC: `--resolution 1m` albo bez
   `--resolution`. Inna rozdzielczość kończy się przed siecią (kod 1)
   komunikatem `Error: wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK);
   arkusze 0.5m: pomin --cutout (arkusze bez --cutout); wycinek:
@@ -298,9 +307,73 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   GUGiK); --format TBD to pliki zrodlowe arkuszy - pomin --cutout`.
 - Wybór roku (`--year`, `--min-year`, `--max-year`),
   `--all-campaigns` i `--full-sheet` z `--cutout` są
-  odrzucane (`Error:`). Podobnie `--cutout` dla orto/LAZ;
-  arkusze innych rozdzielczości pobieraj bez `--cutout`. Szczegóły:
+  odrzucane (`Error:`). Podobnie `--cutout` dla LAZ (ortofotomapa ma
+  własny wycinek — niżej); arkusze innych rozdzielczości pobieraj bez
+  `--cutout`. Szczegóły:
   [ADR-035](DECISIONS.md), [ADR-038](DECISIONS.md), ARCHITECTURE 4.3.
+
+**Wycinek ortofotomapy (`imagery download --cutout`, od 0.8.0).** Jeden
+GeoTIFF RGB obszaru PL z WCS GUGiK. Trzy wybory są wymagane, bez wartości
+domyślnych: `--horizontal-crs EPSG:2180` (obraz nie jest
+przepróbkowywany lokalnie, innego układu nie ma), `--coverage` (wariant
+usługi) i `--resolution` (piksel wyniku: `0.1m`, `0.25m`, `0.5m`, `1m`).
+
+```bash
+# Standard, piksel 0,25 m: 500 x 500 m = 2000 x 2000 px, 9 zapytań WCS
+kartograf imagery download --product orto --country pl --bbox 566000,243000,566500,243500 --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m -o ./data
+#   Info: wycinek 2000 x 2000 px RGB uint8 (~11 MiB), 9 zapytan WCS GUGiK (standard 0.25m) pobieranych po kolei
+#   -> orto/pl_1992_standard_0.25m/bbox/566000_243000_566500_243500.tif
+# High (piksel 10 cm i mniejszy), piksel 0,1 m: 200 x 200 m = jedno zapytanie
+kartograf imagery download --product orto --country pl --bbox 566000,243000,566200,243200 --cutout --horizontal-crs EPSG:2180 --coverage high --resolution 0.1m -o ./data
+#   -> orto/pl_1992_high_0.1m/bbox/566000_243000_566200_243200.tif
+# Ponownie: lokalna wersja bez zapytań; --force pobiera (ta sama treść = bez zmian)
+kartograf imagery download --product orto --country pl --bbox 566000,243000,566200,243200 --cutout --horizontal-crs EPSG:2180 --coverage high --resolution 0.1m -o ./data --force
+```
+
+- **`standard` czy `high`.** `standard` (`Orthoimagery_StandardResolution`)
+  to najnowsze dostępne ortofotomapy obszaru — kompozycja serwera z lotów
+  o różnym pikselu (np. 25 cm i 10 cm); `high`
+  (`Orthoimagery_High_Resolution`) zawiera tylko ortofotomapy o pikselu
+  10 cm i mniejszym. Poza obszarami lotów 10 cm `high` odpowiada obrazem
+  w całości czarnym (0,0,0, HTTP 200): plik powstaje, sidecar ma
+  `extra.all_nodata: true`, a CLI drukuje `Warning: wycinek w calosci bez
+  obrazu (piksele 0,0,0) - WCS GUGiK nie ma w tym obszarze ortofotomapy
+  high (...)` (kod 0) — tam użyj `standard`. W próbkach (Kraków,
+  2026-10-15/16) oba warianty dały nad tym samym obszarem te same bajty.
+  Wyboru roku i lotu nie ma (`--year`, `--min-year`, `--max-year`,
+  `--all-campaigns`, `--full-sheet` z `--cutout` = `Error:`); maski lądu
+  PRG też nie — piksele bez zdjęć zostają 0,0,0.
+- **Piksel i siatka.** Obie usługi mają krajową siatkę 0,1 m; inny piksel
+  wyniku serwer liczy z `SCALEFACTOR` (np. 0,4 dla 0,25 m). Obszar jest
+  rozszerzany na zewnątrz do wielokrotności piksela, a nazwa pliku niesie
+  tę siatkę (EPSG:2180). Wynik jest sprawdzany (rozmiar, piksel, narożnik
+  NW, 3 pasma uint8, EPSG:2180): odpowiedź na innej siatce to `Error:` bez
+  nowej wersji.
+- **Czas.** WCS ortofotomapy jest wolny: jedno zapytanie obejmuje
+  najwyżej 200 x 200 m terenu (4 Mpx pikseli 0,1 m) niezależnie od
+  piksela wyniku, więc obszar 1 x 1 km to 25 zapytań także przy `1m`.
+  Pomiar 2026-10-15: 200 x 200 m przy 0,1 m (Standard) — 64 s, 100 x 100 m
+  — 17 s (High 29 s); obszar 1 x 1 km to więc rząd pół godziny.
+  Kartograf czeka na każdy kawałek do 300 s, pobiera kawałki po kolei
+  i przed pierwszym zapytaniem drukuje `Info:` z liczbą zapytań; sprawdza
+  też wolne miejsce na dysku (2 x rozmiar wyniku). Usługa Standard bywa
+  przejściowo niedostępna (pomiar 2026-10-15 rano: przekroczenia czasu).
+- **Złożenie kawałków.** Wycinek z kilku zapytań NIE jest bit w bit równy
+  jednemu zapytaniu całego obszaru: serwer przepróbkowuje każde zapytanie
+  we własnym zasięgu (pomiar 2026-10-16: 75–93 % pikseli różnych, średnio
+  o 4 DN, maks. 89–120). To samo zadanie powtórzone daje te same bajty
+  (`--force` = `bez zmian`), ale dwa różne obszary mogą mieć we wspólnej
+  części piksele różne o kilka DN. NMT składa się bit w bit
+  ([ADR-034](DECISIONS.md), errata 1).
+- **Kraj.** Tylko PL: `--country cz` (albo obszar `auto` w całości w CZ)
+  z `--cutout` to `Error: --cutout z --product orto dziala tylko dla PL
+  ...`; pod `auto` obszar przy granicy zawęża się do PL (`Info: --country
+  auto -> pl (--resolution 0.25m, --coverage standard dotyczy tylko PL)`).
+  `--coverage` i `--resolution` bez `--cutout` to `Error:` (arkusze
+  ortofotomapy mają piksel źródła). Wycinek jest w magazynie wersji
+  (`orto/pl_1992_<coverage>_<res>/bbox/`); `--check-updates` raportuje
+  `nie da sie sprawdzic bez pobrania`, nowszą treść daje `--force`.
+  Szczegóły: ARCHITECTURE 4.3, [ADR-042](DECISIONS.md) D14 (errata 5).
 
 ### 1.4 Czechy (CUZK)
 
@@ -321,7 +394,10 @@ kartograf elevation download "--bbox=-447000,-1114000,-446000,-1113000" --bbox-c
 ```
 
 `kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
-(TM33, SM5) przyjmuje `kartograf elevation download`.
+(TM33, SM5) przyjmują `kartograf elevation download` i (SM5)
+`kartograf imagery download`. Od 0.8.0 działają też dwuliterowe godła SM5
+(99 arkuszy As, `AS22`…`AS94`, np. `AS91`) — wcześniej kończyły się
+błędem godła PL, także dla DMR.
 
 **Wartości per kraj.** `--resolution` i `--vertical-crs` przyjmują jedną
 wartość dla każdego kraju zadania (`--resolution 5m`) albo pary
@@ -340,9 +416,10 @@ w Polsce (część CZ bywa wtedy w całości nodata).
   i `--bbox`/`--geometry` (wycinek, `--cutout`) są wycinane z usługi:
   `--resolution` wymagane, `2m` (DMR 5G) albo `5m` (DMR 4G).
 
-- Obszar CZ (`--bbox`/`--geometry`) to zawsze jeden wycinek i wymaga
+- Obszar CZ NMT (`--bbox`/`--geometry`) to zawsze jeden wycinek i wymaga
   `--cutout --horizontal-crs` (natywnie `EPSG:5514`); bez `--cutout`
-  `Error:` przed siecią. PL bez `--cutout` daje listę arkuszy.
+  `Error:` przed siecią. PL bez `--cutout` daje listę arkuszy, ortofoto CZ
+  obszaru — arkusze SM5 (niżej).
 - Porażka jednego kraju pod `auto` (brak danych albo awaria źródła) przy
   sukcesie drugiego kończy się kodem 0: na stderr `Warning:` o częściowym
   sukcesie i `Error:` z przyczyną porażki; kod 1, gdy żaden kraj nie dał
@@ -358,6 +435,61 @@ w Polsce (część CZ bywa wtedy w całości nodata).
   `Warning:` i lokalna wersja (z `--upgrade` — błąd). Kafel TM33 i wycinek
   CZ (`exportImage`) nie mają taniego sygnału: lokalna wersja bez
   sieci, ponowne pobranie tylko `--force`.
+
+**Ortofoto CZ (`imagery download --country cz`, od 0.8.0).** Arkusz SM5
+z usługi ATOM CUZK to cztery pliki zapisane 1:1, bez konwersji pikseli:
+zdjęcie JPEG i trzy pliki georeferencji (world file JGW) w układach
+S-JTSK, ETRS89 / UTM 33N i ETRS89 / UTM 34N.
+
+```bash
+# arkusz SM5 (kraj z godła); godło As ma 2 litery
+kartograf imagery download --product orto --sheet CTES96 -o ./data
+#   -> orto/cz_sjtsk/CTES/96/: CTES96.jgw, CTES96.TM33N.jgw, CTES96.TM34N.jgw, CTES96.jpg
+#      (wersja <rok>_<wydanie>, np. 2024_2025-02-06_<sha8>; ZIP CUZK 16-64 MB)
+kartograf imagery download --product orto --country cz --sheet AS91 -o ./data
+# obszar = arkusze SM5 z indeksu CUZK (tu CTES86 i CTES96), bez --cutout
+kartograf imagery download --product orto --country cz "--bbox=-448500,-1113500,-446500,-1112500" --bbox-crs EPSG:5514 -o ./data
+# pogranicze pod auto: arkusze PL (--sheet-system dla części PL) i arkusze SM5 CZ
+kartograf imagery download --product orto --country auto --bbox 18.60,49.74,18.64,49.76 --bbox-crs EPSG:4326 --sheet-system 1992 -o ./data
+# nowszy rocznik bez pobierania zdjęć (wydanie z feedu ATOM)
+kartograf imagery download --product orto --sheet CTES96 --check-updates -o ./data
+kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuzk.ortofoto)
+```
+
+- **Układ w GIS.** Plik JGW nie niesie układu współrzędnych. GIS czyta
+  georeferencję JPEG z pliku o tej samej nazwie (`CTES96.jpg` +
+  `CTES96.jgw`) — przypisz warstwie układ **EPSG:5514** (S-JTSK /
+  Krovak East North). `CTES96.TM33N.jgw` georeferuje ten sam obraz
+  w EPSG:3045 (ETRS89 / UTM 33N), a `CTES96.TM34N.jgw` w EPSG:3046
+  (ETRS89 / UTM 34N); żeby ich użyć, skopiuj JPEG poza magazyn i nadaj
+  kopii pliku TM nazwę `<kopia>.jgw` (plików w magazynie nie zmieniaj —
+  to dowiązania twarde do wersji). Układ każdego pliku podaje jego
+  sidecar (`horizontal_crs`), a sidecar JPEG także mapę
+  `extra.world_files` (`.jgw` EPSG:5514, `.TM33N.jgw` EPSG:3045,
+  `.TM34N.jgw` EPSG:3046; pomiar 2026-10-16: zgodność do 3 cm). Piksel
+  arkuszy w próbkach: 0,125 m.
+- **Tylko aktualny rocznik.** CUZK publikuje bezpłatnie jedno, aktualne
+  wydanie arkusza (archiwalne ortofoto CUZK są płatne): `--year`,
+  `--min-year`, `--max-year`, `--all-campaigns`, `--full-sheet`,
+  `--sheet-system`, `--scale`, `--format` i `--resolution` z `--country cz`
+  to `Error:` (np. `--year dotyczy tylko PL - CUZK publikuje tylko
+  aktualny rocznik arkusza ortofoto CZ (archiwalne ortofoto CUZK sa
+  platne, poza zakresem)`); pod `auto` flagi roku i arkuszy dotyczą części
+  PL. Kafel TM33 jako `--sheet` to `Error: ortofoto CZ ma arkusze SM5 (np.
+  CTES96, AS91); kafle TM33 sa tylko dla NMT ...`; `--cutout` z CZ — `Error:`.
+- **Aktualność.** Etykieta wersji to rok i data wydania z feedu ATOM
+  (`2024_2025-02-06`). Domyślnie lokalne pliki są porównywane z feedem
+  (nowszy rocznik = dopisek `; dostepna nowsza ... (--upgrade)`),
+  `--check-updates` sprawdza wydanie bez pobierania zdjęć, `--upgrade`
+  pobiera nowy rocznik (stare wersje zostają w `versions/`), `--force`
+  pobiera ponownie (ta sama treść = `bez zmian`). Jeden arkusz to jedno
+  pobranie ZIP i jedno sprawdzenie wydania; nieudane sprawdzenie daje
+  jedno `Warning:` na arkusz. Pliki JGW są zapisywane przed JPEG, więc
+  wersja zdjęcia zawsze ma pliki georeferencji.
+- **Pogranicze.** Pod `--country auto` obszar przy granicy daje arkusze
+  PL i arkusze SM5 CZ (dotąd `auto` zawężało ortofotomapę do PL);
+  pliki obu krajów mają wspólne `extra.parent_request`. Szczegóły:
+  ARCHITECTURE 4.4, [ADR-042](DECISIONS.md) D13 (errata 4).
 
 ### 1.5 Pokrycie terenu, gleby, HSG, cache
 
@@ -398,6 +530,7 @@ kartograf soil hsg --bbox 626000,480000,628000,482000 --depth 0-5cm --stats -o .
 
 # Przegląd źródeł/warstw i cache metadanych
 kartograf landcover list-sources
+kartograf landcover list-layers --source zabaged   # 22 warstwy ZABAGED (sekcja 1.9)
 kartograf soil list-layers
 kartograf cache stats
 kartograf cache clear
@@ -414,7 +547,8 @@ w `Wpisy TERYT`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
 się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
 credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
-parametry SoilGrids i lata CORINE: PRD 3.5–3.7.
+parametry SoilGrids i lata CORINE: PRD 3.5–3.7. ZABAGED (`--source
+zabaged`, CZ: obszar albo plik krajowy): sekcja 1.9.
 
 ### 1.6 Kiedy `--scale` jest wymagane
 
@@ -718,8 +852,9 @@ jednostki), obszar `--bbox`/`--sheet`/`--geometry` (z `--country`) albo
 `--check-updates`/`--upgrade`/`--force`/`--plan`, `--workers` i `-q` jak
 w pozostałych grupach. Każda grupa ma tylko swoje flagi treści (`--level`
 w `boundaries`, `--lod`/`--year` w `models3d`; obca flaga to błąd parsera,
-kod 2). Dziś wyłącznie Polska (`--country pl`; dane CZ dla tych grup dojdą
-w kolejnym planie katalogu). Archiwum roczników BDOT10k jest w grupie
+kod 2). `cadastre` i `models3d` są tylko dla Polski (`--country pl`);
+`boundaries` ma też granice CZ (RUIAN), a sieć wód CZ — grupa `hydro`
+(sekcja 1.9). Archiwum roczników BDOT10k jest w grupie
 `landcover` (`--year`).
 
 ```bash
@@ -826,6 +961,108 @@ i EGiB — data pobrania. Sidecar wersji niesie wybór (`request`), źródło
 warstwy) i obszar zadania (`extra.parent_request`) — ARCHITECTURE 3.2
 i 4.10.
 
+### 1.9 Dane CZ: ZABAGED, RUIAN i HY-NET
+
+Dane wektorowe CUZK (od 0.8.0, ADR-042 D15–D17) mają kształt kolekcji
+z sekcji 1.8: obszar `--bbox`/`--geometry` daje jeden GeoPackage obiektów
+przecinających obszar, z pełnymi geometriami (bez przycinania), zawsze
+w układzie usługi **EPSG:5514** (S-JTSK); `--whole-country` zapisuje plik
+krajowy CUZK 1:1, a jego rozmiar pojawia się jako `Warning:` przed
+transferem. Godło jako obszar i `--teryt` dotyczą tylko PL — obszar CZ
+podaj prostokątem albo plikiem geometrii. Współrzędne EPSG:5514 są
+w Czechach ujemne: podawaj je jako `--bbox=...` (bez spacji).
+
+```bash
+# ZABAGED (landcover): 22 warstwy pokrycia terenu i wód obszaru, EPSG:5514
+kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o ./data
+#   -> landcover/cz_zabaged/bbox/-460000_-1120000_-450000_-1110000.gpkg
+kartograf landcover list-layers --source zabaged
+# plik krajowy ZABAGED (5,8 GB w EPSG:5514 albo 6,7 GB w EPSG:3045) — tylko świadomie
+kartograf landcover download --source zabaged --whole-country --horizontal-crs EPSG:5514 -o <katalog-danych>
+#   Warning: zabaged CZ: plik krajowy https://openzu.cuzk.gov.cz/opendata/ZABAGED-GPKG/epsg-5514/ZABAGED-5514-gpkg-20261004.zip - 5805826649 B (ok. 5806 MB)
+#   -> landcover/cz_zabaged_gpkg_5514/country/cz.zip (wersja 2026-10-04_<sha8>)
+
+# RUIAN (boundaries --country cz): jednostki poziomu --level przecinające obszar
+kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
+#   -> boundaries/cz_ruian_obec/bbox/-470000_-1130000_-440000_-1100000.gpkg (warstwa Obec)
+# pogranicze: osobne pliki PRG (EPSG:2180) i RUIAN (EPSG:5514), poziom per kraj
+kartograf boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox 18.5,49.6,18.8,49.9 --bbox-crs EPSG:4326 -o ./data
+#   -> boundaries/pl_prg_gmina/bbox/<współrzędne EPSG:2180>.gpkg i boundaries/cz_ruian_obec/bbox/<współrzędne EPSG:5514>.gpkg
+kartograf boundaries download --product admin --country cz --whole-country -o ./data
+#   -> boundaries/cz_ruian_shp/country/cz.zip (SHP, ok. 253 MB)
+
+# HY-NET (hydro): odcinki cieków i węzły obszaru, EPSG:5514
+kartograf hydro download --product network --country cz "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
+#   -> hydro/cz_hynet/bbox/-470000_-1130000_-440000_-1100000.gpkg (warstwy WatercourseLink, HydroNode)
+kartograf hydro download --product network --country cz --whole-country -o ./data
+#   -> hydro/cz_hynet_gpkg/country/cz.zip (HY-NET.gpkg w EPSG:3045, ok. 194 MB)
+kartograf hydro download --product network --country cz --whole-country --check-updates -o ./data
+kartograf hydro list-sources
+```
+
+**ZABAGED.** `--source zabaged` daje 22 warstwy pokrycia terenu
+i hydrografii usługi REST `ZABAGED_POLOHOPIS` (lista: `landcover
+list-layers --source zabaged`), m.in. `vodni_tok` i `brehova_cara`
+(linie), `vodni_plocha`, `orna_puda_a_ostatni_dale_nespecifikovane_plochy`,
+`trvaly_travni_porost`, `lesni_puda_se_stromy`,
+`budova_jednotliva_nebo_blok_budov_plocha` (poligony). Nazwa warstwy GPKG
+to nazwa warstwy usługi bez diakrytyków, małymi literami; opis warstwy
+(`gpkg_contents.description`) — nazwa usługi z id, np. `Vodní tok (93)`.
+Kartograf **nie przelicza klas ZABAGED na kody BDOT10k** (PT*, SW*):
+odpowiedniki ustala konsument (tabela odpowiedników z rekonesansu
+2026-08-10 ma błędy). `--whole-country` wymaga `--horizontal-crs
+EPSG:5514` albo `EPSG:3045` (plik jest publikowany w dwóch układach)
+i zapisuje krajowy ZIP CUZK 1:1 (w środku `ZABAGED_RESULTS.gpkg`;
+Kartograf go nie rozpakowuje). Warstwy pliku krajowego to pełna baza pod
+nazwami CUZK (np. `VodniPlocha_c`, `TrvalyTravniPorost_c`) — **inne niż
+nazwy warstw wyniku obszaru**. Wynik obszaru jest zawsze w EPSG:5514
+(`--horizontal-crs` z obszarem = `Error:`); `--teryt`, `--sheet`,
+`--format`, `--layers`, `--keep-raw` i `--year` z `--source zabaged` to
+`Error:`. Plik krajowy ma wydanie z feedu ATOM (etykieta np.
+`2026-10-04`): `--check-updates` porównuje je bez pobierania, `--upgrade`
+pobiera nowe wydanie.
+
+**RUIAN.** `boundaries download --product admin --country cz` wymaga dla
+obszaru `--level`: `kraj`, `okres`, `obec` albo `katastralni-uzemi`
+(warstwy GPKG `VyssiUzemneSamospravnyCelek`, `Okres`, `Obec`,
+`KatastralniUzemi`; m.in. pola `kod` i `nazev`). Pod `--country auto`
+obszar przy granicy daje dwa pliki (PRG i RUIAN) ze wspólnym
+`extra.parent_request`; poziomy krajów się różnią, więc podaj je per
+kraj (`--level pl=gmina,cz=obec`; biblioteka: `{"pl": "gmina", "cz":
+"obec"}`) — jedna wartość niedostępna w którymś kraju to `Error:`
+z podpowiedzią `--level pl=<poziom>,cz=<poziom>`. `--whole-country
+--country cz` to krajowy SHP (ok. 253 MB) z `ETag`: domyślnie jedno
+`HEAD` porównuje lokalną wersję, `--check-updates` raportuje `aktualne`
+albo `nowsza` bez pobierania.
+
+**HY-NET.** Grupa `hydro` (`--product network`; tylko CZ — `--country pl`
+to `Error:`, a `auto` zawęża się do CZ z `Info:`) pobiera sieć
+hydrograficzną INSPIRE z WFS CUZK. Wynik obszaru ma **2 warstwy**:
+`WatercourseLink` (odcinki cieków) i `HydroNode` (węzły sieci). Typu
+`WatercourseSeparatedCrossing` (skrzyżowania cieków) obszar nie
+obejmuje: w GML nie ma geometrii (to relacja dwóch odcinków), a usługa
+dla zapytania z BBOX podaje 0 obiektów, choć je zwraca (30 x 30 km:
+0 wobec 4) — kompletności nie da się sprawdzić; skrzyżowania są w pliku
+krajowym. Pola warstw pochodzą z treści odpowiedzi (schemat usługi to
+tylko odwołanie do zdalnego schematu INSPIRE), więc ten sam typ może
+mieć w innym obszarze inne pola (strona z jednym węzłem nie ma
+`hydroNodeCategory`); warstwa bez obiektów ma samo pole `gml_id`. Plik
+krajowy (`--whole-country --country cz`, ok. 194 MB) to ZIP z
+`HY-NET.gpkg` w **EPSG:3045** (ETRS89 / UTM 33N) — w innym układzie niż
+wynik obszaru (EPSG:5514); sidecar podaje faktyczny układ, a innego
+układu pliku nie ma (`--horizontal-crs` zbędne). Plik ma `ETag`:
+`--check-updates` raportuje `aktualne` albo `nowsza`. Usługa przekierowuje
+domyślny `User-Agent` programu `curl` na PDF z warunkami korzystania —
+Kartograf wysyła własny (`kartograf/<wersja>`).
+
+**Aktualność i rozmiar.** Obiekty obszaru (ZABAGED, RUIAN, HY-NET) nie
+mają taniego sygnału zmian: lokalna wersja bez zapytań, `--check-updates`
+= `nie da sie sprawdzic bez pobrania`, nowa treść — `--force`. Wynik
+obszaru jest składany w pamięci (cała warstwa naraz): obszar 30 x 30 km
+to tysiące obiektów na warstwę ZABAGED (rekonesans 2026-10-15: 4979
+odcinków cieków), dla całego kraju użyj pliku krajowego. Szczegóły:
+ARCHITECTURE 4.8 i 4.10, [ADR-042](DECISIONS.md) errata 2–3.
+
 ---
 
 ## 2. Biblioteka Python
@@ -836,8 +1073,8 @@ Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 `download_data`/`check_data`, `landcover download` i `soil download` =
 `LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`,
 `elevation availability` = `check_availability`,
-`boundaries download`, `cadastre download` i `models3d download` =
-`download_collection`/`check_collection`. Błąd wejścia
+`boundaries download`, `cadastre download`, `models3d download` i `hydro
+download` = `download_collection`/`check_collection`. Błąd wejścia
 to `ValidationError` z tekstem jak po `Error:` w CLI; komunikaty o danych
 (CLI: `Info:`/`Warning:`) to `Notice` w polu `notices` wyniku i przez
 `on_notice`.
@@ -915,7 +1152,7 @@ print([v.label for v in variants(product="nmt", vertical_crs="KRON86", format="A
 # ['0.5m', '1m']
 ```
 
-Kolekcje (`boundaries`, `cadastre`, `models3d`; sekcja 1.8) — wynik
+Kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`; sekcje 1.8 i 1.9) — wynik
 `CollectionReport(files, failed, stale, notices, ok)`, elementy `files`
 i `failed` jak w `DataReport`:
 
@@ -954,6 +1191,56 @@ Walidacja bez sieci (np. przed zapisaniem zadania):
 `kartograf.download.collections.validate_collection_request(...)` z tymi
 samymi wyborami (bez `update`, `plan`, `workers`, `cache`, `on_notice`).
 
+Ortofoto CZ, wycinek ortofotomapy PL i dane CZ (sekcje 1.3, 1.4 i 1.9):
+
+```python
+from kartograf import (
+    BBox, LandCoverManager, check_cz_orto_sheet, download_collection,
+    download_cz_orto_sheet, download_data, download_orto_cutout,
+)
+
+out = "./data"
+show = lambda notice: print(notice.level, notice.text)
+# = imagery download --product orto --country cz --sheet CTES96
+report = download_data(product="orto", country="cz", sheet="CTES96", output_dir=out)
+for item in report.files:  # cztery pliki arkusza: .jgw, .TM33N.jgw, .TM34N.jgw, .jpg
+    print(item.unit, item.file.path.name, item.file.label)  # CTES96 CTES96.jpg 2024_2025-02-06
+# = imagery download --product orto --country cz --bbox=-448500,-1113500,-446500,-1112500 --bbox-crs EPSG:5514
+download_data(product="orto", country="cz", output_dir=out,
+              bbox=BBox(-448500, -1113500, -446500, -1112500, "EPSG:5514"))
+# tor arkusza (CzOrtoResult: files, stale, notices) i plan bez pobierania zdjęć
+sheet = download_cz_orto_sheet("AS91", output_dir=out)
+plan = check_cz_orto_sheet("AS91", output_dir=out)  # tor "cz_orto", cztery pozycje
+# = imagery download --product orto --country pl --bbox 566000,243000,566500,243500
+#   --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m
+cut = download_data(product="orto", country="pl", output_dir=out,
+                    bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
+                    cutout=True, horizontal_crs="EPSG:2180",
+                    coverage="standard", resolution="0.25m", on_notice=show)
+# tor wycinka (OrtoCutoutResult: file, stale, notices); plan: check_orto_cutout
+high = download_orto_cutout(BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
+                            horizontal_crs="EPSG:2180", output_dir=out,
+                            coverage="high", resolution="0.1m")
+print(high.file.path)  # data/orto/pl_1992_high_0.1m/bbox/566000_243000_566200_243200.tif
+
+# = landcover download --source zabaged --bbox=-460000,-1120000,-450000,-1110000 --bbox-crs EPSG:5514
+zabaged = LandCoverManager(out, "zabaged")
+area = zabaged.download(bbox=BBox(-460000, -1120000, -450000, -1110000, "EPSG:5514"))
+print(area.files[0].file.path)  # data/landcover/cz_zabaged/bbox/-460000_-1120000_-450000_-1110000.gpkg
+print(zabaged.get_available_layers())  # 22 nazwy warstw obszaru
+# plik krajowy (5,8 GB): Notice whole_country_size przed transferem
+zabaged.download(whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)
+# = boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox ...
+download_collection(product="admin", output_dir=out, country="auto",
+                    level={"pl": "gmina", "cz": "obec"},
+                    bbox=BBox(18.5, 49.6, 18.8, 49.9, "EPSG:4326"), on_notice=show)
+# = hydro download --product network --country cz --bbox=... / --whole-country
+download_collection(product="network", output_dir=out, country="cz",
+                    bbox=BBox(-470000, -1130000, -440000, -1100000, "EPSG:5514"))
+download_collection(product="network", output_dir=out, country="cz",
+                    whole_country=True, on_notice=show)  # HY-NET.gpkg w EPSG:3045
+```
+
 Niższy poziom (tory) — te same pliki i sidecary co `download_data`:
 
 ```python
@@ -976,11 +1263,12 @@ path = result.files["N-34-130-D-d-2-4"][0].version_path
 # spoza rejestru, np. GugikProvider(resolution="5m", vertical_crs="KRON86"),
 # -> ValidationError z listą dostępnych etykiet. Archiwum: format="TBD" (sekcja 1.1)
 
-# Surowy WCS poza magazynem (np. ortofotomapa albo NMT KRON86 jako TIFF;
+# Surowy WCS poza magazynem (np. NMT KRON86 jako TIFF albo ortofotomapa;
 # NMT/NMPT tylko wariant 1 m — provider.is_wcs_available()):
-# provider.download_bbox(bbox, path) — jednopasmowy float32 GeoTIFF na
-# siatce 1 m EPSG:2180, bez maski PRG i bez wersji. Wycinek NMT/NMPT
-# w magazynie wersji: download_pl_cutout (niżej).
+# provider.download_bbox(bbox, path) — NMT/NMPT: jednopasmowy float32 GeoTIFF
+# na siatce 1 m EPSG:2180, ortofotomapa: RGB z jednego zapytania Standard;
+# bez maski PRG i bez wersji. Wycinek NMT/NMPT w magazynie wersji:
+# download_pl_cutout (niżej), ortofotomapy: download_orto_cutout (wyżej).
 area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:2180")
 kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
 path = kron.download_bbox(area, Path("my_area.tif"))
@@ -1367,9 +1655,10 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --max-year 20
 ### 4.3 Wersje, tryby i plan aktualizacji (`--check-updates`, `--upgrade`, `--force`)
 
 Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery download`: arkuszy PL NMT/NMPT/orto,
-kafli LAZ, arkuszy CZ (TM33, SM5), wycinków CZ i wycinków PL
-`--cutout`, a także `landcover download`, `soil download`, `soil hsg`
-oraz `boundaries download`, `cadastre download` i `models3d download`. Flagi
+kafli LAZ, arkuszy CZ (TM33, SM5; ortofoto CZ), wycinków CZ i wycinków PL
+`--cutout` (także ortofotomapy), a także `landcover download`, `soil download`, `soil hsg`
+oraz `boundaries download`, `cadastre download`, `models3d download`
+i `hydro download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
 skorowidz); pozostałe tory różnią się sygnałem:
 
@@ -1378,10 +1667,13 @@ skorowidz); pozostałe tory różnią się sygnałem:
 | arkusze PL | skorowidz GUGiK (`index`) | tabela niżej |
 | kafle LAZ | rekord WFS (`index`) | nowszy nalot to nowe pliki — pobierane domyślnie; kafel z lokalną wersją tylko `--force` (D26) |
 | arkusze SM5 (CZ) | `ETag`/`Last-Modified` (`http`) | jedno `HEAD` na plik; inny `ETag` = `nowsza`, `--upgrade` pobiera |
-| kafle TM33, wycinki CZ i PL | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
+| kafle TM33, wycinki CZ i PL (także ortofotomapy) | brak (`none`) | domyślnie `lokalna wersja ... (bez sprawdzania; --check-updates)`; `--check-updates` = `nie da sie sprawdzic bez pobrania`; `--upgrade` = lokalna + `Info:` o `--force` |
+| ortofoto CZ (arkusz SM5; tor planu `cz_orto`) | wydanie z feedu ATOM CUZK (`metadata`) | etykieta = `<rok>_<wydanie>` (`2024_2025-02-06`); jedno sprawdzenie wydania na arkusz (cztery pliki); nowszy rocznik = `dostepna nowsza ... (--upgrade)`, `--upgrade` pobiera |
 | SoilGrids, CORINE CLMS | wydanie źródła (`metadata`: GetCapabilities / katalog CLMS) | etykieta wersji = wydanie (`2.0`, `V2020_20u1`); nowsze wydanie = `dostepna nowsza ... (--upgrade)`; wydanie niedostępne: bez lokalnej wersji `Error:`, z lokalną `Warning:` (z `--upgrade` `Error:`) |
 | BDOT10k, podgląd CORINE | brak (`none`) | jak TM33; `--force` przy BDOT10k odświeża też cache PRG |
-| kolekcje (`boundaries`, `cadastre`, `models3d`; tor planu `collection`) i archiwum BDOT10k (`--year`) | brak (`none`) | jak TM33; etykieta = rocznik/rok wydania albo data pobrania (sekcja 1.8) |
+| kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`; tor planu `collection`), ZABAGED obszaru i archiwum BDOT10k (`--year`) | brak (`none`) | jak TM33; etykieta = rocznik/rok wydania albo data pobrania (sekcje 1.8, 1.9) |
+| pliki krajowe RUIAN i HY-NET | `ETag`/`Last-Modified` (`http`) | jak arkusze SM5 |
+| plik krajowy ZABAGED | wydanie z feedu ATOM (`metadata`) | etykieta = data wydania (`2026-10-04`); jak ortofoto CZ |
 | HSG (`soil hsg`) | sha256 wejść | ta sama treść wejść = `uzyta ponownie` (bez liczenia); w planie pozycja `hsg` obok trzech pozycji `landcover` |
 
 Pod `--country auto` `--check-updates --plan PLIK` zapisuje JEDEN plan
@@ -1437,12 +1729,14 @@ report = manager.download_sheets(
 )
 print(report.stale, report.files.get(godlo, ()))
 # LAZ: download_laz_area(..., update=, plan=) + check_laz_area (te same argumenty);
-# wycinki i arkusz CZ: download_pl_cutout / download_cz_cutout /
-# download_cz_sheet(..., update=, plan=) + check_pl_cutout / check_cz_cutout /
-# check_cz_sheet (te same argumenty); land cover: LandCoverManager.download(...,
-# update=, plan=) + check (te same argumenty); HSG: calculate_hsg(...,
-# update=, plan=) + check_hsg; kolekcje: download_collection(..., update=,
-# plan=) + check_collection; pozycje planu: item.track, item.unit
+# wycinki i arkusze CZ: download_pl_cutout / download_orto_cutout /
+# download_cz_cutout / download_cz_sheet / download_cz_orto_sheet(..., update=,
+# plan=) + check_pl_cutout / check_orto_cutout / check_cz_cutout /
+# check_cz_sheet / check_cz_orto_sheet (te same argumenty); land cover:
+# LandCoverManager.download(..., update=, plan=) + check (te same argumenty);
+# HSG: calculate_hsg(..., update=, plan=) + check_hsg; kolekcje:
+# download_collection(..., update=, plan=) + check_collection; pozycje
+# planu: item.track, item.unit
 ```
 
 ---
@@ -1540,9 +1834,23 @@ proxy).
 - Rozpoznawanie krajów używa prostokątnych obwiedni (ADR-023), nie wielokąta
   granic; `--country auto` może odpytać CUZK poza Czechami i GUGiK
   w Czechach (sekcja 1.2).
-- Wycinek `--cutout` jest tylko 1 m: NMT/NMPT w innych
+- Wycinek `--cutout` NMT/NMPT jest tylko 1 m: NMT/NMPT w innych
   rozdzielczościach (np. 0.5m, 5m) i archiwa pobieraj jako arkusze bez
-  tej flagi (sekcja 1.3).
+  tej flagi (sekcja 1.3). Wycinek ortofotomapy ma piksel do wyboru
+  (`0.1m`–`1m`), ale tylko w EPSG:2180 i tylko dla PL.
+- WCS ortofotomapy jest wolny (pomiar 2026-10-15: ok. 1 min na kawałek
+  200 x 200 m; obszar 1 x 1 km = 25 kawałków niezależnie od piksela),
+  a Standard bywa przejściowo niedostępny. Złożony z kawałków wycinek nie
+  jest bit w bit równy jednemu zapytaniu (różnice rzędu kilku DN na
+  stykach przepróbkowania serwera); `high` poza obszarami lotów 10 cm daje
+  plik czarny (`Warning:`, sekcja 1.3).
+- Ortofoto CZ: tylko aktualny rocznik arkusza (archiwalne zdjęcia CUZK
+  są płatne); pliki JGW nie niosą układu — w GIS przypisz EPSG:5514 do
+  `<godło>.jpg` z `<godło>.jgw` (sekcja 1.4).
+- ZABAGED: klasy nie są przeliczane na kody BDOT10k, a warstwy pliku
+  krajowego mają inne nazwy niż wynik obszaru; HY-NET: wynik obszaru bez
+  skrzyżowań cieków (tylko w pliku krajowym, EPSG:3045), pola warstw
+  zależą od treści obszaru (sekcja 1.9).
 - Archiwa GUGiK (`--format XYZ|ASCII-NMT|TBD|TIN|TTN|GRD|DXF|DGN`) są
   pobierane jako pliki źródłowe bez konwersji (ZIP, `.ttn`, `.grd`,
   `.dxf`, `.dgn`): Kartograf nie rozpakowuje ich, nie przelicza na
@@ -1566,14 +1874,16 @@ proxy).
   od wyboru kampanii arkusza.
 - Wycinki (PL, CZ) i kafle TM33 nie mają taniego sygnału świeżości:
   zmiana treści u źródła albo maski PRG jest niewidoczna bez `--force`.
-- Granice PRG, EGiB, modele 3D i archiwum BDOT10k (sekcja 1.8) nie mają
-  taniego sygnału świeżości: nowszą treść przynosi tylko `--force`.
+- Granice PRG, EGiB, modele 3D, archiwum BDOT10k i obiekty obszaru CZ
+  (ZABAGED, RUIAN, HY-NET; sekcje 1.8 i 1.9) nie mają taniego sygnału
+  świeżości: nowszą treść przynosi tylko `--force`.
 - Strony WFS GUGiK (obiekty obszaru PRG i EGiB) przychodzą po kilka
   sekund na stronę 1000 obiektów (na żywo 2026-10-15: 2–4 s; limit jednego
   zapytania 60 s), więc duży obszar EGiB to minuty. Wynik obszaru jest
   składany w pamięci (cała warstwa naraz) — dla całego powiatu wygodniej
   pobrać eksport (`cadastre download --teryt`), a granice województwa —
-  paczkę (`boundaries download --teryt <2 cyfry>`).
+  paczkę (`boundaries download --teryt <2 cyfry>`); dla całych Czech —
+  plik krajowy (`--whole-country`).
 - GeoPackage wyniku obszaru ma te same bajty dla tej samej treści tylko
   w obrębie jednej wersji GDAL (`pyogrio`): po aktualizacji GDAL `--force`
   może zapisać nową wersję tej samej treści.
@@ -1618,8 +1928,11 @@ kartograf project verify
 `init` wymaga jawnego `--output`; tworzy manifest i katalog magazynu,
 jesli ich nie ma. `add` przyjmuje po nazwie zadania te same komendy
 i flagi wyboru danych co zwykle `kartograf elevation download`,
-`imagery download`, `landcover download`, `soil download`, `soil hsg`,
-`boundaries download`, `cadastre download` i `models3d download`;
+`imagery download` (takze ortofoto CZ i wycinek `--cutout`), `landcover
+download` (takze ZABAGED), `soil download`, `soil hsg`,
+`boundaries download`, `cadastre download`, `models3d download`
+i `hydro download`; arkusz ortofoto CZ przypina cztery pliki (JPEG i trzy
+JGW);
 sprawdza wybory bez sieci i bez pobierania. W zadaniu nie zapisuje sie
 `--output` ani trybow `--upgrade`/`--force`: magazyn pochodzi z projektu,
 a tryb wybiera sie przy `project download`. `remove NAZWA` usuwa

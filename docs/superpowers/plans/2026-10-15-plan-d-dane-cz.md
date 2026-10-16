@@ -142,16 +142,16 @@ albo z `--sheet` = blad.
 - Test: `tests/test_parser_registry.py` (albo istniejacy plik testow
   `parser_registry`; `grep -rln CZ_SM5_PATTERN tests`), `tests/test_sources_registry.py`
 
-- [ ] **Step 1: Testy (RED)** - `test_sm5_two_letter_codes`
+- [x] **Step 1: Testy (RED)** - `test_sm5_two_letter_codes`
   (`detect_system("AS91").id == "cz_sm5"` - dzis `pl1992` przez fallback,
   wiec arkusz DMR/orto `AS91` konczy sie bledem godla PL;
   `path_parts("AS91") == ["AS", "91"]`; `CTES96` -> `["CTES", "96"]` bez
   zmian; `A91`, `ABCDE91`, `CTES9` nie sa SM5).
-- [ ] **Step 2: Implementacja** - `CZ_SM5_PATTERN =
+- [x] **Step 2: Implementacja** - `CZ_SM5_PATTERN =
   re.compile(r"^[A-Z]{2}(?:[A-Z]{2})?[0-9]{2}$")`, `path_parts=lambda
   sheet: [sheet[:-2], sheet[-2:]]`; docstring z liczba 99 godel `AS`;
   `dataset_keys` CZ liczone z `_SOURCES`.
-- [ ] **Step 3: Brama i commit** - `fix(core): godla SM5 z dwiema
+- [x] **Step 3: Brama i commit** - `fix(core): godla SM5 z dwiema
   literami (As) i lista zrodel CZ z rejestru`
 
 ### Task 2: Silnik `atom_files`
@@ -178,7 +178,7 @@ class AtomFilesParams:
     segment_tokens: tuple[str, ...] = ()  # ("gpkg",); EPSG number appended if len(crs) > 1
 ```
 
-- [ ] **Step 1: Testy (RED)** - `test_index_maps_sheet_to_dataset_feed`
+- [x] **Step 1: Testy (RED)** - `test_index_maps_sheet_to_dataset_feed`
   (wpisy z `entry_pattern` `...ORTOFOTO_WRTO24\.(?P<year>\d{4})\.(?P<sheet>[A-Z]{2,4}\d{2})\.xml$`:
   `CTES96` -> rok 2024, `AS91` -> 2025, `updated` z wpisu);
   `test_dataset_feed_link_and_length` (link `rel="alternate"`,
@@ -191,7 +191,7 @@ class AtomFilesParams:
   304 = indeks bez zmian, 200 = nowy indeks; sesja-atrapa liczy
   `If-None-Match`); `test_unknown_sheet_is_no_coverage`;
   `test_html_feed_is_download_error`.
-- [ ] **Step 2: Implementacja** - `kartograf/transport/atom.py`:
+- [x] **Step 2: Implementacja** - `kartograf/transport/atom.py`:
   `AtomEntry(key: str, dataset_feed: str, updated: str, groups:
   Mapping[str, str], crs: tuple[str, ...])` (wszystkie kategorie ukladu
   wpisu; ZABAGED ma dwie), `AtomFile(url, length, updated, edition: str,
@@ -217,7 +217,7 @@ class AtomFilesParams:
   `set_atom_entries(feed, etag, entries)` (klucz: feed + wzorzec; TTL
   domyslny 7 dni; starszy indeks zwracany z `fresh=False` do
   warunkowego GET, tryb `refresh` cache = brak odczytu).
-- [ ] **Step 3: Brama i commit** - `feat(transport): silnik atom_files
+- [x] **Step 3: Brama i commit** - `feat(transport): silnik atom_files
   (feed ATOM CUZK -> plik, wydanie z updated)`
 
 ### Task 3: ZABAGED, RUIAN i HY-NET na silnikach kolekcji
@@ -237,7 +237,7 @@ class AtomFilesParams:
   `DescribeFeatureType` WatercourseLink, `hits` + 2 strony `COUNT=2`
   (ostatnia z mylacym `next`))
 
-- [ ] **Step 1: Testy (RED)** - `test_zabaged_layers_config_matches_service`
+- [x] **Step 1: Testy (RED)** - `test_zabaged_layers_config_matches_service`
   (22 pary id -> kod z fixtury `?f=pjson`, typy geometrii zgodne);
   `test_zabaged_bbox_gpkg` (GPKG EPSG:5514, warstwy o kodach z tabeli,
   pusta warstwa = schemat bez obiektow, `description` z nazwa zrodla,
@@ -255,7 +255,7 @@ class AtomFilesParams:
   EPSG:3045); `test_auto_level_per_country` (`country="auto"`, bbox na
   granicy: `level` str -> blad z podpowiedzia `pl=...,cz=...`; mapa ->
   dwa pliki PL i CZ, `AUTO_CLIPPED` jak w `download_data`).
-- [ ] **Step 2: Implementacja** - deskryptory z matrycy (dane);
+- [x] **Step 2: Implementacja** - deskryptory z matrycy (dane);
   `LandCoverManager`: `COLLECTION_SOURCES = {"zabaged":
   "cz.cuzk.zabaged"}` w `landcover/manager.py`; konstruktor przyjmuje
   te nazwe (bez klasy providera), `_kind`/`_check_options` dla zrodla
@@ -270,7 +270,7 @@ class AtomFilesParams:
   (gdy kanal ma `AtomFilesParams`) albo `unit_package` country;
   `level: str | Mapping[str, str]` jak `PerCountry` w `download/options.py`
   (`check_per_country`, `country_value`).
-- [ ] **Step 3: Brama i commit** - `feat(download): ZABAGED, RUIAN
+- [x] **Step 3: Brama i commit** - `feat(download): ZABAGED, RUIAN
   i HY-NET (feature_bbox, pliki krajowe, atom_files)`
 
 ### Task 4: Ortofoto CZ w `imagery`
@@ -286,7 +286,7 @@ class AtomFilesParams:
   przyciety do kilku pikseli zapisany przez `rasterio`, JGW prawdziwe
   z probki)
 
-- [ ] **Step 1: Testy (RED)** - `test_cz_orto_sheet_files_and_sidecars`
+- [x] **Step 1: Testy (RED)** - `test_cz_orto_sheet_files_and_sidecars`
   (cztery pliki w `orto/cz_sjtsk/CTES/96/` przemianowane na `CTES96.*`,
   bajty JPEG = bajty czlonu ZIP (bez konwersji), sidecar JPEG:
   `horizontal_crs` EPSG:5514, `extra.world_files` = `{".jgw":
@@ -303,7 +303,7 @@ class AtomFilesParams:
   TM33 jako arkusz); `test_auto_orto_both_countries` (bbox na granicy
   -> arkusze PL i CZ, zamiast dzisiejszego `AUTO_NARROWED_TO_PL`);
   `test_two_letter_sm5_sheet` (`AS91`).
-- [ ] **Step 2: Implementacja** - `cz_orto.py`: `download_cz_orto_sheet(
+- [x] **Step 2: Implementacja** - `cz_orto.py`: `download_cz_orto_sheet(
   sheet, *, output_dir, cache, update, plan, on_notice) ->
   CzOrtoResult(files: tuple[VersionedFile, ...], stale, notices)`,
   `check_cz_orto_sheet(...) -> UpdatePlan`; sloty czlonow:
@@ -317,7 +317,7 @@ class AtomFilesParams:
   `orto` z krajem `cz` (arkusz SM5, obszar przez indeks, `auto` dzieli
   obszar) - `UnitFile` dla kazdego z czterech plikow arkusza (unit =
   godlo, country `cz`).
-- [ ] **Step 3: Brama i commit** - `feat(download): ortofoto CZ z ATOM
+- [x] **Step 3: Brama i commit** - `feat(download): ortofoto CZ z ATOM
   (arkusze SM5, JPEG + JGW bez konwersji)`
 
 ### Task 5: Wycinek ortofotomapy PL z WCS w magazynie
@@ -357,7 +357,7 @@ parse_resolution` (plan A, jedna funkcja etykiet K2); `ProductVariant`
 planu A (model wysokosci: `vertical_crs`, skorowidz) NIE jest
 rozszerzany o orto.
 
-- [ ] **Step 1: Testy (RED)** - `test_orto_cutout_requires_variant`
+- [x] **Step 1: Testy (RED)** - `test_orto_cutout_requires_variant`
   (bez `coverage`/`resolution`/`horizontal_crs` - `ValidationError`
   z listami; `EPSG:5514` - blad "tylko EPSG:2180"; `--sheet`, `cz`,
   `vertical_crs` - blad); `test_orto_cutout_slot_and_sidecar`
@@ -377,7 +377,7 @@ rozszerzany o orto.
   `ALL_NODATA`);
   istniejace testy `GugikOrtoProvider.download_bbox` (plik poza
   magazynem - API surowe, D27 dla niego bez zmian) przechodza bez zmian.
-- [ ] **Step 2: Implementacja** - `GugikOrtoProvider(..., coverage:
+- [x] **Step 2: Implementacja** - `GugikOrtoProvider(..., coverage:
   Literal["standard", "high"] | None = None, resolution: str | None =
   None)` (KOREKTA: siatka wyniku zalezy od piksela) wybiera endpoint
   i coverage id z kanalu deskryptora; `WCS_NATIVE_STEP = 0.1`
@@ -396,7 +396,7 @@ rozszerzany o orto.
   `validate_request`: usun `orto` z odrzucenia `--cutout`, dodaj reguly
   z uwagi (4) matrycy. `download_data(..., coverage: str | None = None)`
   - nowy parametr tylko dla orto.
-- [ ] **Step 3: Brama i commit** - `feat(download): wycinek
+- [x] **Step 3: Brama i commit** - `feat(download): wycinek
   ortofotomapy PL z WCS w magazynie (--cutout, standard/high)`
 
 ### Task 6: CLI - `hydro`, `imagery` CZ i wycinek, `landcover zabaged`, `boundaries` CZ, `_task`, projekt
@@ -468,15 +468,17 @@ rozszerzany o orto.
   `docs/SCOPE.md`, `docs/PRD.md`, `README.md`, `docs/CHANGELOG.md`
   `[0.8.0] - Unreleased` (Added; Changed: `imagery --country cz`,
   `--cutout` dla orto; Fixed: godla SM5 `AS..`), `docs/PROGRESS.md`,
-  NOWY `docs/research/2026-10-15-plan-d-live/raport.md`.
+  NOWY `docs/research/2026-10-15-plan-d-e2e/raport.md` (KOREKTA nazwy:
+  raporty E2E planow maja przyrostek `-e2e`, jak plan A).
 
-- [ ] **Step 1: Dokumentacja** wg listy.
+- [x] **Step 1: Dokumentacja** wg listy (bez `docs/PROGRESS.md` -
+  koordynator; odstepstwa nizej).
 - [ ] **Step 2: Live E2E** (`<katalog-danych>`, bez sciezki w repo):
   ```text
-  kartograf landcover download --source zabaged --bbox -460000,-1120000,-450000,-1110000 --bbox-crs EPSG:5514 -o <katalog-danych>
-  kartograf boundaries download --product admin --country cz --level obec --bbox -470000,-1130000,-440000,-1100000 --bbox-crs EPSG:5514 -o <katalog-danych>
+  kartograf landcover download --source zabaged "--bbox=-460000,-1120000,-450000,-1110000" --bbox-crs EPSG:5514 -o <katalog-danych>
+  kartograf boundaries download --product admin --country cz --level obec "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o <katalog-danych>
   kartograf boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox 18.5,49.6,18.8,49.9 --bbox-crs EPSG:4326 -o <katalog-danych>
-  kartograf hydro download --product network --country cz --bbox -470000,-1130000,-440000,-1100000 --bbox-crs EPSG:5514 -o <katalog-danych>
+  kartograf hydro download --product network --country cz "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o <katalog-danych>
   kartograf hydro download --product network --country cz --whole-country -o <katalog-danych>
   kartograf imagery download --product orto --country cz --sheet CTES96 -o <katalog-danych>
   kartograf imagery download --product orto --country cz --sheet AS91 -o <katalog-danych>
@@ -499,6 +501,29 @@ rozszerzany o orto.
   i API.
 - [ ] **Step 4: Commit** - `docs: plan D - dane CZ, ortofoto CZ i wycinek
   orto PL (ARCHITECTURE, USAGE, ADR-042)`
+
+## Odstepstwa od planu (stan 2026-10-16, Taski 1-6)
+
+1. HY-NET obszaru ma 2 warstwy (`WatercourseLink`, `HydroNode`), nie 3:
+   `WatercourseSeparatedCrossing` nie ma geometrii w GML (relacja dwoch
+   odcinkow `net:element`), a GeoServer dla zapytania z BBOX podaje
+   `hits` 0, choc strony daja obiekty (30 x 30 km: 0 wobec 4,
+   100 x 100 km: 0 wobec 24) - kompletnosci nie da sie sprawdzic;
+   skrzyzowania sa w pliku krajowym. ADR-042 errata 2.
+2. HY-NET: XSD `DescribeFeatureType` to tylko `xsd:include` schematu
+   INSPIRE - nie trafia do GDAL; pola z tresci stron (suma), pusty typ =
+   warstwa z samym `gml_id` (nie "schemat bez obiektow"). ADR-042 errata 2.
+3. Wycinek orto: zszyte kawalki NIE sa bit w bit rowne jednemu zapytaniu
+   (KOREKTA Taska 5); ADR-034 errata 1, ADR-042 errata 5.
+4. ZABAGED w `LandCoverManager`: blad pobrania jest wyjatkiem (jeden plik
+   na zapytanie), `--sheet` = blad (obszar CZ: `--bbox`/`--geometry`).
+5. Ortofoto CZ: `--resolution` z orto bez `--cutout` = blad takze dla PL;
+   jedno sprawdzenie wydania na arkusz (`check_failed` raz). ADR-042 errata 4.
+6. CLI (Task 6): ujemne wspolrzedne EPSG:5514 tylko jako `--bbox=...`
+   (argparse; komendy matrycy wyzej zapisane ze spacja nie przejda),
+   `hydro download` bez `--sheet` i `--teryt`.
+7. Raport live: `docs/research/2026-10-15-plan-d-e2e/raport.md` (nie
+   `...-plan-d-live/`).
 
 ## Kryteria akceptacji
 
