@@ -80,9 +80,14 @@ from kartograf.providers.pl.gugik_orto import (
     GugikOrtoProvider,
     OrtoCoverage,
     cutout_choice_error,
+    cutout_resolution_labels,
     wcs_cutout_channel,
+    wcs_cutout_channels,
 )
-from kartograf.sources.descriptor import AccessChannel
+
+# The ``--coverage`` text of ``--help`` for the CLI, which imports no providers (Z1)
+from kartograf.providers.pl.gugik_orto import coverage_choices as coverage_choices
+from kartograf.sources.descriptor import AccessChannel, WcsCutoutParams
 from kartograf.sources.registry import PL_1992_CRS, get_source
 from kartograf.sources.variants import parse_resolution
 from kartograf.transport.chunks import GridSpec, align_bbox
@@ -125,6 +130,20 @@ def orto_cutout_error(
             "obrazu)"
         )
     return None
+
+
+def cutout_resolution_choices() -> str:
+    """``standard: 0.1m, 0.25m, 0.5m, 1m; high: ...``: the cutout pixels of
+    every coverage, registry order (``--resolution`` in ``--help``)."""
+    variants = [
+        channel.params.variant
+        for channel in wcs_cutout_channels()
+        if isinstance(channel.params, WcsCutoutParams)
+    ]
+    return "; ".join(
+        f"{variant}: {', '.join(cutout_resolution_labels(variant))}"
+        for variant in variants
+    )
 
 
 @dataclass(frozen=True)

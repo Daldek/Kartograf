@@ -1,5 +1,7 @@
-"""``elevation download``/``imagery download`` only translate flags and print
-the report (Z1)."""
+"""Data commands only translate flags and print the report (Z1):
+``elevation download``/``imagery download`` -> ``download_data``,
+``landcover download`` -> ``LandCoverManager``, the collection groups ->
+``download_collection``."""
 
 import ast
 from pathlib import Path
@@ -9,14 +11,18 @@ import pytest
 
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
+from kartograf.download.collections import CollectionReport
 from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import ValidationError
+from kartograf.landcover.manager import LandCoverAreaResult
 from kartograf.notices import AUTO_CLIPPED, NO_COVERAGE_SOME, Notice
 
 _DOWNLOAD = "kartograf.cli.download_cmd.download_data"
 _CHECK = "kartograf.cli.download_cmd.check_data"
+_COLLECTION = "kartograf.cli.collection_cmd.download_collection"
+_LANDCOVER = "kartograf.cli.landcover_cmd.LandCoverManager"
 
 
 def _report(*, ok=True, failed=(), notices=()) -> DataReport:
@@ -113,6 +119,117 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --resolution: nieprawidlowa wartosc 'pl=1m,de=2m'")
+
+
+def test_imagery_new_flags_translation(tmp_path):
+    """The orthophotomap cutout flags and ``--country cz`` reach
+    ``download_data`` unchanged; flags not given stay unset."""
+    argv = ["imagery", "download", "--product", "orto", "-o", str(tmp_path)]
+    with patch(_DOWNLOAD, return_value=_report()) as download:
+        rc = main(
+            [
+                *argv,
+                "--country",
+                "pl",
+                "--bbox",
+                "566000,243000,566500,243500",
+                "--cutout",
+                "--horizontal-crs",
+                "EPSG:2180",
+                "--coverage",
+                "high",
+                "--resolution",
+                "0.5m",
+            ]
+        )
+    assert rc == 0
+    kwargs = download.call_args.kwargs
+    assert kwargs["bbox"] == BBox(566000, 243000, 566500, 243500, "EPSG:2180")
+    assert (kwargs["product"], kwargs["country"], kwargs["cutout"]) == (
+        "orto",
+        "pl",
+        True,
+    )
+    assert (kwargs["horizontal_crs"], kwargs["coverage"], kwargs["resolution"]) == (
+        "EPSG:2180",
+        "high",
+        "0.5m",
+    )
+    with patch(_DOWNLOAD, return_value=_report()) as download:
+        rc = main([*argv, "--country", "cz", "--sheet", "CTES96"])
+    assert rc == 0
+    kwargs = download.call_args.kwargs
+    assert (kwargs["country"], kwargs["sheet"], kwargs["bbox"]) == (
+        "cz",
+        "CTES96",
+        None,
+    )
+    assert kwargs["cutout"] is False
+    assert (kwargs["horizontal_crs"], kwargs["coverage"], kwargs["resolution"]) == (
+        None,
+        None,
+        None,
+    )
+
+
+def test_landcover_zabaged_translation(tmp_path):
+    """``--whole-country --horizontal-crs`` = ``download(whole_country=True,
+    horizontal_crs=...)`` of the ``zabaged`` source; an area passes neither."""
+    argv = ["landcover", "download", "--source", "zabaged", "-o", str(tmp_path)]
+    with patch(_LANDCOVER) as manager:
+        manager.return_value.download.return_value = LandCoverAreaResult(())
+        rc = main([*argv, "--whole-country", "--horizontal-crs", "EPSG:3045"])
+    assert rc == 0
+    assert manager.call_args.kwargs == {"output_dir": tmp_path, "provider": "zabaged"}
+    kwargs = manager.return_value.download.call_args.kwargs
+    assert (kwargs["whole_country"], kwargs["horizontal_crs"]) == (True, "EPSG:3045")
+    assert (kwargs["bbox"], kwargs["sheet"], kwargs["teryt"]) == (None, None, None)
+    with patch(_LANDCOVER) as manager:
+        manager.return_value.download.return_value = LandCoverAreaResult(())
+        rc = main(
+            [
+                *argv,
+                "--bbox=-451000,-1112000,-450500,-1111500",
+                "--bbox-crs",
+                "EPSG:5514",
+            ]
+        )
+    assert rc == 0
+    kwargs = manager.return_value.download.call_args.kwargs
+    assert kwargs["bbox"] == BBox(-451000, -1112000, -450500, -1111500, "EPSG:5514")
+    assert "whole_country" not in kwargs and "horizontal_crs" not in kwargs
+
+
+def test_level_per_country_syntax(tmp_path, capsys):
+    """``--level pl=gmina,cz=obec`` is a mapping for ``download_collection``;
+    a country outside PL/CZ is one error line before any request."""
+    argv = [
+        "boundaries",
+        "download",
+        "--product",
+        "admin",
+        "--country",
+        "auto",
+        "--bbox",
+        "18.5,49.6,18.8,49.9",
+        "--bbox-crs",
+        "EPSG:4326",
+        "-o",
+        str(tmp_path),
+    ]
+    report = CollectionReport((), (), (), (), True)
+    with patch(_COLLECTION, return_value=report) as download:
+        assert main([*argv, "--level", "pl=gmina,cz=obec"]) == 0
+    assert download.call_args.kwargs["level"] == {"pl": "gmina", "cz": "obec"}
+    with patch(_COLLECTION, return_value=report) as download:
+        assert main([*argv, "--level", "obec"]) == 0
+    assert download.call_args.kwargs["level"] == "obec"
+    capsys.readouterr()
+    with patch(_COLLECTION) as download:
+        assert main([*argv, "--level", "pl=gmina,de=obec"]) == 1
+    download.assert_not_called()
+    (line,) = capsys.readouterr().err.splitlines()
+    assert line.startswith("Error: --level: nieprawidlowa wartosc 'pl=gmina,de=obec'")
 
 
 def test_check_updates_calls_check_data_and_writes_plan(tmp_path, capsys):

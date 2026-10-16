@@ -42,6 +42,7 @@ IMAGERY = COMMANDS["imagery download"]
 LANDCOVER = COMMANDS["landcover download"]
 SOIL = COMMANDS["soil download"]
 HSG = COMMANDS["soil hsg"]
+HYDRO = COMMANDS["hydro download"]
 KRAKOW_5514 = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
 
 
@@ -120,7 +121,6 @@ def test_options_json_roundtrip(tmp_path):
     ("command", "options"),
     [
         (LANDCOVER, {"source": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"}),
-        (IMAGERY, {"product": "orto", "sheet": G, "resolution": "1m"}),
         (SOIL, {"sheet": HSG_SHEET, "timeout": 30}),
         (ELEVATION, {**PL_SHEET, "output_dir": "data"}),
         (ELEVATION, {**PL_SHEET, "update": "upgrade"}),
@@ -131,10 +131,10 @@ def test_options_json_roundtrip(tmp_path):
         (ELEVATION, {**PL_SHEET, "bbox": [1, 2, 3, 4]}),
         (ELEVATION, {**PL_SHEET, "resolution": {"pl": 1}}),
         (LANDCOVER, {"source": "bdot10k", "teryt": "1465", "layers": "SWRS"}),
+        (HYDRO, {"product": "network", "teryt": "1261"}),
     ],
     ids=[
         "flag-of-another-group",
-        "imagery-resolution",
         "timeout",
         "output-dir",
         "update",
@@ -145,6 +145,7 @@ def test_options_json_roundtrip(tmp_path):
         "bbox-list",
         "per-country-number",
         "layers-text",
+        "hydro-teryt",
     ],
 )
 def test_options_reject_unknown_and_foreign(command, options):
@@ -200,7 +201,8 @@ def test_task_command_lists_data_commands():
     assert str(error) == (
         "do projektu mozna dodac komendy zapisujace dane: elevation download, "
         "imagery download, landcover download, soil download, soil hsg, "
-        "boundaries download, cadastre download, models3d download"
+        "boundaries download, cadastre download, models3d download, "
+        "hydro download"
     )
 
 
@@ -251,6 +253,11 @@ VALIDATION = {
     "models3d download": (
         {"product": "buildings", "teryt": "1261", "lod": 2},
         {"product": "buildings", "teryt": "1261", "lod": 1},
+        lambda out, o: download_collection(output_dir=out, cache=False, **o),
+    ),
+    "hydro download": (
+        {"product": "network", "country": "cz", "whole_country": True},
+        {"product": "network", "country": "pl", "whole_country": True},
         lambda out, o: download_collection(output_dir=out, cache=False, **o),
     ),
 }

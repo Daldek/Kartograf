@@ -371,6 +371,23 @@ class TestLandCoverCLI:
         captured = capsys.readouterr()
         assert "2018" in captured.out  # Most recent available year
 
+    def test_landcover_list_layers_zabaged(self, capsys):
+        """ZABAGED (a source without a provider class): the 22 GPKG layer
+        names of an area result from the registry, without network."""
+        from kartograf.cli.commands import main
+        from kartograf.download.collections import collection_layers
+
+        result = main(["landcover", "list-layers", "--source", "zabaged"])
+        assert result == 0
+        listed = [
+            line.split()[0]
+            for line in capsys.readouterr().out.splitlines()
+            if line.startswith("    ")
+        ]
+        layers = collection_layers("cz.cuzk.zabaged")
+        assert len(listed) == 22
+        assert listed == [layer.name for layer in layers]
+
     def test_landcover_download_no_selection(self, capsys):
         """Test download without selection method."""
         from kartograf.cli.commands import main
@@ -1567,10 +1584,12 @@ class TestLandCoverNoSideEffectsOnInit:
             ["landcover", "list-sources"],
             ["landcover", "list-layers", "--source", "bdot10k"],
             ["landcover", "list-layers", "--source", "corine"],
+            ["landcover", "list-layers", "--source", "zabaged"],
             ["soil", "list-layers"],
             ["soil", "list-sources"],
             ["elevation", "list-sources"],
             ["imagery", "list-sources"],
+            ["hydro", "list-sources"],
         ],
     )
     def test_cli_list_commands_create_nothing(self, empty_cwd, argv, capsys):

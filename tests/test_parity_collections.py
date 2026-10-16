@@ -1,13 +1,14 @@
-"""CLI = API parity (ADR-037) for ``boundaries``, ``cadastre`` and ``models3d
-download``: the same request through ``kartograf.cli.main`` and through
-``download_collection``/``check_collection`` gives the same store (bytes of
-files and sidecars), statuses, plan, data notices and errors - frozen clock.
+"""CLI = API parity (ADR-037) for ``boundaries``, ``cadastre``, ``models3d``
+and ``hydro download``: the same request through ``kartograf.cli.main`` and
+through ``download_collection``/``check_collection`` gives the same store
+(bytes of files and sidecars), statuses, plan, data notices and errors -
+frozen clock.
 
 Scenarios: PRG objects of an area (``--level``), PRG national file (size
-notice), EGiB export of a powiat, 3D models of a powiat, 3D models of an
-area with a powiat without a package, ``--check-updates --plan`` +
-``--upgrade --plan``, input errors. BDOT10k ``--year``:
-``tests/test_parity_landcover.py``.
+notice), RUIAN objects of an area (CZ), HY-NET national file (HEAD and GET),
+EGiB export of a powiat, 3D models of a powiat, 3D models of an area with a
+powiat without a package, ``--check-updates --plan`` + ``--upgrade --plan``,
+input errors. BDOT10k ``--year`` and ZABAGED: ``tests/test_parity_landcover.py``.
 """
 
 import pytest
@@ -18,8 +19,14 @@ from kartograf.download.collections import check_collection, download_collection
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import UNIT_LIST, WHOLE_COUNTRY_SIZE
-from tests.fake_packages import FakePackageSession, package_route, recorded_head
+from tests.fake_packages import (
+    FakePackageSession,
+    package_route,
+    recorded_head,
+    zip_bytes,
+)
 from tests.parity import assert_notices_printed, assert_same_store, run_both
+from tests.test_collections_cz import FakeCuzk, _page_size
 from tests.test_collections_products import (
     TWO_POWIATS,
     _prg_route,
@@ -30,6 +37,7 @@ from tests.test_feature_bbox import PRG_BBOX
 pytestmark = pytest.mark.usefixtures("frozen_clock")
 
 LOD2 = "https://opendata.geoportal.gov.pl/InneDane/Budynki3D/LOD2/{teryt}_gml.zip"
+HY_NET = "https://openzu.cuzk.gov.cz/opendata/HY-NET/HY-NET.zip"
 
 
 def _serve(monkeypatch, *routes) -> FakePackageSession:
@@ -90,6 +98,66 @@ def test_prg_whole_country_reports_size(tmp_path, monkeypatch):
     )
     _same(run, statuses=["new"])
     assert [n.code for n in run.api_result.notices] == [WHOLE_COUNTRY_SIZE]
+
+
+def test_ruian_area_level(tmp_path, monkeypatch):
+    """RUIAN obce of a CZ area (recorded layer 12, pages of 2)."""
+    _page_size(monkeypatch, "cz.cuzk.ruian", 2)
+    monkeypatch.setattr(col, "_session", lambda: FakeCuzk())
+    run = run_both(
+        [
+            "boundaries",
+            "download",
+            "--product",
+            "admin",
+            "--country",
+            "cz",
+            "--level",
+            "obec",
+            "--bbox=-455000,-1115000,-450000,-1110000",
+            "--bbox-crs",
+            "EPSG:5514",
+        ],
+        lambda out: download_collection(
+            product="admin",
+            output_dir=out,
+            country="cz",
+            level="obec",
+            bbox=BBox(-455000, -1115000, -450000, -1110000, "EPSG:5514"),
+        ),
+        tmp_path,
+    )
+    _same(run, statuses=["new"])
+
+
+def test_hynet_whole_country_reports_size(tmp_path, monkeypatch):
+    """The national HY-NET file: its size from ``HEAD`` (194 208 037 B,
+    recorded, tests/fixtures/cz/feature_bbox/README.md) before the ``GET``
+    of a small ZIP with the real member name."""
+    body = zip_bytes(["HY-NET/", "HY-NET/HY-NET.gpkg"])
+    session = _serve(
+        monkeypatch, (HY_NET, (200, {"Content-Length": str(len(body))}, body))
+    )
+    session.heads[HY_NET] = {"Content-Length": "194208037"}
+    run = run_both(
+        [
+            "hydro",
+            "download",
+            "--product",
+            "network",
+            "--country",
+            "cz",
+            "--whole-country",
+        ],
+        lambda out: download_collection(
+            product="network", output_dir=out, country="cz", whole_country=True
+        ),
+        tmp_path,
+    )
+    _same(run, statuses=["new"])
+    assert [n.code for n in run.api_result.notices] == [WHOLE_COUNTRY_SIZE]
+    assert "194208037 B" in run.api_result.notices[0].text
+    assert session.calls == [("HEAD", HY_NET), ("GET", HY_NET)] * 2
 
 
 def test_egib_teryt_export(tmp_path, monkeypatch):

@@ -3,9 +3,10 @@ Arguments shared by the command groups of the CLI (ADR-039).
 
 Flags that mean the same in every group are defined once here: the area
 choice (``--sheet``/``--bbox``/``--bbox-crs``/``--geometry``/``--layer``), the
-update modes, ``--quiet`` and the ``--bbox`` text parser. A group adds them
-to its own parser (or to an argument group of it) and keeps the flags only
-it understands in its module (``kartograf/cli/groups/``).
+update modes, ``--quiet``, the ``--bbox`` text parser and the per-country
+value parser (``pl=..,cz=..``). A group adds them to its own parser (or to an
+argument group of it) and keeps the flags only it understands in its module
+(``kartograf/cli/groups/``).
 """
 
 import argparse
@@ -14,6 +15,7 @@ from kartograf.core.bbox import BBox
 from kartograf.download.options import (
     BBOX_CRS_CHOICES,
     BBOX_EXPECTED,
+    COUNTRY_KEYS,
     validate_request_bbox,
 )
 from kartograf.exceptions import ValidationError
@@ -21,7 +23,11 @@ from kartograf.exceptions import ValidationError
 # A parser or one of its argument groups (titled sections of --help).
 Container = argparse.ArgumentParser | argparse._ArgumentGroup
 
-BBOX_HELP = "Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180)"
+# argparse takes "-447000,..." after a space for a flag: negative numbers with "="
+BBOX_HELP = (
+    "Prostokat obszaru: min_x,min_y,max_x,max_y (domyslny uklad: EPSG:2180; "
+    "ujemne wspolrzedne, np. EPSG:5514, podaj bez spacji: --bbox=-447000,...)"
+)
 # Area groups (land cover, soil): a sheet code is an area like --bbox (ADR-039).
 SHEET_AREA_HELP = (
     "Obszar = zasieg arkusza o tym godle (np. N-34-130-D), jak --bbox z jego "
@@ -64,21 +70,25 @@ def add_bbox_crs(parser: Container) -> None:
 def add_area_flags(
     parser: Container,
     *,
-    sheet_help: str,
+    sheet_help: str | None,
     bbox_help: str = BBOX_HELP,
     geometry_help: str = GEOMETRY_HELP,
 ) -> None:
     """One area choice of a request: ``--sheet``, ``--bbox`` (+ ``--bbox-crs``),
-    ``--geometry`` (+ ``--layer``); exactly one is checked by the library."""
-    parser.add_argument(
-        "--sheet",
-        metavar="GODLO",
-        default=None,
-        # argparse does not strip whitespace; a sheet code with padding would reach
-        # the system registry and the file name (parser review 2026-10-07, K5)
-        type=str.strip,
-        help=sheet_help,
-    )
+    ``--geometry`` (+ ``--layer``); exactly one is checked by the library.
+    ``sheet_help=None``: no ``--sheet`` (a group whose sources take no sheet
+    code as an area)."""
+    if sheet_help is not None:
+        parser.add_argument(
+            "--sheet",
+            metavar="GODLO",
+            default=None,
+            # argparse does not strip whitespace; a sheet code with padding would
+            # reach the system registry and the file name (parser review
+            # 2026-10-07, K5)
+            type=str.strip,
+            help=sheet_help,
+        )
     parser.add_argument("--bbox", metavar="BBOX", help=bbox_help)
     add_bbox_crs(parser)
     parser.add_argument("--geometry", metavar="PLIK", help=geometry_help)
@@ -99,6 +109,31 @@ def add_quiet(parser: Container) -> None:
 def layer_codes(text: str) -> tuple[str, ...]:
     """``--layers SWRS,PTWP`` -> ``("SWRS", "PTWP")``; codes checked by the library."""
     return tuple(code.strip() for code in text.split(","))
+
+
+def parse_per_country(raw: str | None, flag: str) -> str | dict[str, str] | None:
+    """``5m`` (every country) or ``pl=1m,cz=2m`` (per country) as library value.
+
+    Raises
+    ------
+    ValidationError
+        An item without ``=``, a country other than PL/CZ, an empty value or
+        a country given twice (the text of the library's per-country check).
+    """
+    if raw is None or "=" not in raw:
+        return raw
+    values: dict[str, str] = {}
+    for item in raw.split(","):
+        key, sep, value = item.partition("=")
+        key = key.strip().lower()
+        if not sep or key not in COUNTRY_KEYS or not value.strip() or key in values:
+            raise ValidationError(
+                f"{flag}: nieprawidlowa wartosc {raw!r} - podaj jedna wartosc dla "
+                f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
+                f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=..."
+            )
+        values[key] = value.strip()
+    return values
 
 
 def parse_bbox_arg(text: str, crs: str) -> BBox:

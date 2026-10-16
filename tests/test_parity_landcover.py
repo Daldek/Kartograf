@@ -2,15 +2,18 @@
 and ``soil hsg``: same store bytes, statuses, plan and notices, frozen clock.
 
 Scenarios: BDOT10k ``teryt``, BDOT10k area of several powiats (one failing),
-BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, HSG
-``bbox`` and ``geometry``, ``--check-updates --plan`` + ``--upgrade --plan``.
+BDOT10k archive ``--year``, CORINE CLMS and WMS preview, SoilGrids, ZABAGED
+area (recorded CUZK REST answers), HSG ``bbox`` and ``geometry``,
+``--check-updates --plan`` + ``--upgrade --plan``.
 """
 
+import dataclasses
 from unittest.mock import patch
 
 import pytest
 
 from kartograf.core.bbox import BBox
+from kartograf.download import collections as col
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology import HSGCalculator
@@ -19,9 +22,12 @@ from kartograf.notices import CHECK_FAILED, Notice
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.sources import registry
+from kartograf.sources.descriptor import FeatureBBoxParams
 from tests.conftest import FakeCorine, FakeSoilGrids, tiny_geotiff, write_gpkg_layers
 from tests.fake_packages import FakePackageSession, package_route
 from tests.parity import assert_notices_printed, assert_same_store, run_both
+from tests.test_collections_cz import CZ, answer
 from tests.test_hsg import RasterSoilGrids
 from tests.test_landcover_output_params import FakePackages
 
@@ -29,8 +35,52 @@ BBOX = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
 BBOX_ARG = "770000,509000,772000,511000"
 CLAY = {"property": "clay", "depth": "0-5cm", "stat": "mean"}
 CLAY_ARGS = ["--property", "clay", "--depth", "0-5cm", "--stat", "mean"]
+# ZABAGED of Cesky Tesin, 500 x 500 m (tests/fixtures/cz/feature_bbox/README.md):
+# layers 93 (2 lines), 132 (no features) and 138 (3 polygons, pages of 2)
+ZABAGED = "https://ags.cuzk.gov.cz/arcgis/rest/services/ZABAGED_POLOHOPIS/MapServer"
+ZABAGED_AREA = BBox(-451000, -1112000, -450500, -1111500, "EPSG:5514")
+ZABAGED_ARGS = ["--bbox=-451000,-1112000,-450500,-1111500", "--bbox-crs", "EPSG:5514"]
 
 pytestmark = pytest.mark.usefixtures("frozen_clock")
+
+
+class FakeZabaged:
+    """``requests.Session`` stand-in for the ZABAGED REST service: the
+    recorded layer JSON, ``returnCountOnly`` and pages of ``ZABAGED_AREA``."""
+
+    def get(self, url, params=None, timeout=None, headers=None, stream=False):
+        params = dict(params or {})
+        layer = url.removeprefix(f"{ZABAGED}/").removesuffix("/query")
+        if not url.endswith("/query"):
+            return answer(CZ / f"zabaged_l{layer}_info.json")
+        assert params["geometry"] == "-451000,-1112000,-450500,-1111500"
+        if params.get("returnCountOnly") == "true":
+            return answer(CZ / f"zabaged_l{layer}_b5_count.json")
+        offset = params["resultOffset"]
+        return answer(CZ / f"zabaged_l{layer}_b5_r2_o{offset}.json.gz")
+
+
+def serve_zabaged(monkeypatch) -> None:
+    """ZABAGED of ``ZABAGED_AREA`` without network: the registry entry with
+    the recorded layers only, paging by 2 (as recorded), and ``FakeZabaged``."""
+    source = registry.get_source("cz.cuzk.zabaged")
+    channels = []
+    for channel in source.channels:
+        params = channel.params
+        if isinstance(params, FeatureBBoxParams):
+            recorded = tuple(
+                layer for layer in params.layers if layer.source in ("93", "132", "138")
+            )
+            params = dataclasses.replace(params, layers=recorded, page_size=2)
+            channel = dataclasses.replace(channel, params=params)
+        channels.append(channel)
+    monkeypatch.setitem(
+        registry._SOURCES,
+        source.key,
+        dataclasses.replace(source, channels=tuple(channels)),
+    )
+    fake = FakeZabaged()
+    monkeypatch.setattr(col, "_session", lambda: fake)
 
 
 def _same(run, notices: tuple[Notice, ...], ok: bool) -> None:
@@ -59,6 +109,7 @@ def _bdot(teryts, packages):
 _COMMAND = {
     "bdot10k": ["landcover", "download", "--source", "bdot10k"],
     "corine": ["landcover", "download", "--source", "corine"],
+    "zabaged": ["landcover", "download", "--source", "zabaged"],
     "soilgrids": ["soil", "download"],
 }
 
@@ -172,6 +223,16 @@ def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
     assert run.cli_stderr.count(f"Warning: {warning.text}\n") == 1
 
 
+def test_zabaged_area(tmp_path, monkeypatch):
+    """``landcover download --source zabaged --bbox`` = ``LandCoverManager(o,
+    "zabaged").download(bbox=...)``: one GeoPackage of the area, the same
+    bytes and sidecar in both stores."""
+    serve_zabaged(monkeypatch)
+    run = _landcover(tmp_path, "zabaged", ZABAGED_ARGS, bbox=ZABAGED_AREA)
+    _same(run, run.api_result.notices, run.api_result.ok)
+    assert [r.file.status for r in run.api_result.files] == ["new"]
+
+
 @pytest.mark.parametrize(
     ("source", "flags", "options"),
     [
@@ -197,6 +258,12 @@ def test_soilgrids_local_version_edition_failure_notice_once(tmp_path):
             {"year": 2018, "format": "GPKG"},
         ),
         ("bdot10k", ["--year", "2018"], {"year": 2018}),  # archive needs GML/SHP
+        ("zabaged", ["--year", "2018"], {"year": 2018}),  # BDOT10k/CORINE option
+        (  # an area of ZABAGED is always in the CRS of the service
+            "zabaged",
+            ["--horizontal-crs", "EPSG:3045"],
+            {"horizontal_crs": "EPSG:3045"},
+        ),
         (
             "bdot10k",
             ["--year", "2018", "--format", "GPKG"],
