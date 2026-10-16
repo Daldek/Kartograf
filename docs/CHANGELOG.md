@@ -9,6 +9,34 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmiany lamiace (BREAKING)
 
+- Tryb domyslny (bez `--check-updates`/`--upgrade`) nie pyta zrodla
+  o plik z lokalna wersja (test na zywo 2026-10-16, errata 3 ADR-036):
+  sygnal `http` (arkusze SM5, kafle TM33 DMR 4G, LAZ CZ, warstwice CZ,
+  ZTM, paczki KU, pliki krajowe RUIAN/HY-NET) bez `HEAD`, sygnal
+  `metadata` (SoilGrids, CORINE CLMS, ortofoto CZ, pliki z feedow ATOM)
+  bez sprawdzania wydania, arkusze map BDOT10k bez GetFeatureInfo.
+  Linia `lokalna wersja ... (bez sprawdzania; --check-updates)`, w API
+  `VersionedFile.unverified == "unchecked"` i `newer = None`. Dotad kazde
+  uruchomienie pytalo zrodlo (offline 3 proby i `Warning:`, do 19 s; maps
+  offline kod 1) i dopisywalo `dostepna nowsza`. Arkusze PL i kafle LAZ PL
+  pytaja skorowidz jak dotad (wybor plikow). Co zrobic: aktualnosc
+  sprawdzaj `--check-updates` (`check_*`), nowsza tresc pobieraj
+  `--upgrade`; kod czytajacy `VersionedFile.newer` w trybie domyslnym tych
+  torow dostaje `None`.
+- Linie statusu pobrania i linie `--check-updates` maja jeden podmiot:
+  sciezke pliku pod `--output` w kazdym torze (dotad godlo, nazwa pliku
+  jednostki z kilkoma plikami, `82707_..._N-34-...laz` w pobraniu LAZ, ale
+  godlo w checku, wspolrzedne bbox w checku kolekcji); tak samo linia
+  `Error: ... zrodlo zmienilo sie od planu`. Linie projektu: `zadanie:
+  jednostka (plik): stan` (dotad `orto_cz: CTES96: ok` cztery razy). Co
+  zrobic: skrypty czytajace te linie dopasuj do sciezki pod `--output`
+  (biblioteka bez zmian: `VersionedFile.path`, `PlanItem.segment`/
+  `hierarchy`/`name`).
+- `HSGCalculator.get_hsg_statistics()` zwraca obok grup `A`-`D` klucz
+  `nodata` (piksele bez danych, `percent` = udzial we wszystkich
+  pikselach); `percent` grup to udzial w pikselach z danymi (jak dotad).
+  Co zrobic: kod iterujacy po wyniku pomija klucz `nodata` albo iteruje
+  po `HSG_VALUES`.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -547,6 +575,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- `Info:` przed wolnymi uslugami (test na zywo 2026-10-16): wycinek PL
+  NMT/NMPT z kilku zapytan WCS podaje szacowany czas (`CUTOUT_SIZE`:
+  `... 16 zapytan WCS GUGiK pobieranych po kolei - ok. 7-11 min (25-40 s
+  na zapytanie wg pomiaru)`, stala `WCS_REQUEST_SECONDS`), zapytanie
+  obszaru PRNG (`names download --product geographic|world`) - zmierzony
+  czas odpowiedzi OGC API (`SLOW_SOURCE`, `FeatureBBoxParams.response_note`).
 - Mesh 3D, drzewa, osnowy i quasi-geoidy (ADR-043): `models3d download
   --product mesh` (modele siatkowe miast GUGiK: kafle indeksu WFS obszaru,
   ZIP OBJ+MTL+JPG 1:1
@@ -999,7 +1033,28 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   LAZ CZ, arkusze CZ i land cover odpowiadaly z cache (TTL 7 dni) - takze
   offline `aktualne`, a nowy lot opublikowany w tym czasie byl niewidoczny
   (test na zywo 2026-10-16). Bez sieci sprawdzenie konczy sie teraz
-  `Error:`. Domyslne pobieranie i `--upgrade` czytaja cache jak dotad.
+  `Error:`. `--upgrade` (`update="upgrade"`) pyta zrodlo tak samo (cache
+  w trybie odswiezania, `fetch.refreshes_cache`) - nowy lot jest widoczny
+  bez wczesniejszego `--check-updates`. Domyslne pobieranie czyta cache jak
+  dotad.
+- Wycinek PL `--cutout` w calosci poza ladem (maska PRG: morze, zagranica)
+  konczy sie `Error:` (kod 1, `NoCoverageError`) przed pierwszym zapytaniem
+  WCS, bez wersji w magazynie - jak tryb arkuszy. Dotad 6 zapytan WCS
+  (30 s), plik 16,8 MB samego nodata i kod 0 z `Warning:` (test na zywo
+  2026-10-16). `Warning: wycinek w calosci nodata` zostaje dla WCS bez
+  danych na ladzie.
+- HSG `--stats`: linia `Brak danych: <procent>% calego obszaru (<ha> ha)`
+  i naglowek `procent grupy: z pikseli z danymi`; dotad bbox 2 x 2 km
+  z 19 ze 104 pikseli z danymi dawal samo `Grupa B: 100.0%`.
+- Projekt: odtworzenie brakujacej przypietej wersji przy zgodnej SHA-256
+  zapisuje bajty pod przypieta wersja (`version`, `label`; dowiazanie
+  i sidecar z przypieta etykieta) - manifest sie nie zmienia. Dotad
+  odtworzenie innego dnia zmienialo `version`/`label` zadan z etykieta
+  daty pobrania (zmiana w manifescie bez zmiany danych).
+- Dokumentacja: USAGE 7 - koszt potwierdzania dowiazan na udziale SMB bez
+  `serverino` (pelny odczyt pliku przy kazdym uruchomieniu; bez skrotu
+  w kodzie) oraz zera SoilGrids w obszarach maskowanych (GeoTIFF bez tagu
+  NoData; HSG traktuje je jako brak danych).
 - Dokumentacja: USAGE 7 - orto ukosna Krakow 2021 ma w GeoTIFF wlasny opis
   ukladu bez kodu EPSG (GDAL zgaduje EPSG:32634); uklad pliku to EPSG:2178
   jak w sidecarze, z obejsciem bez zmiany pliku.

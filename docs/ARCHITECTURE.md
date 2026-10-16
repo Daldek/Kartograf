@@ -1482,12 +1482,14 @@ CLI i biblioteka uzywaja tego samego cache (Z6, ADR-037): parametr
 bez cache); `update="force"` (CLI `--force`) i kazde sprawdzenie
 (`check_*`, `check_data`, CLI `--check-updates` - zawsze pyta zrodlo)
 otwieraja go w trybie `MetadataCache(refresh=True)` — odczyt pominiety,
-swiezy rekord zapisany (E14); domyslne pobieranie i `--upgrade` czytaja
-cache w TTL. `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa: `force`
-odswieza tylko cache otwierany przez funkcje (parametr `cache`, provider
-tworzony przez nia albo po nazwie); provider przekazany jako instancja
-(`DownloadManager`, `LandCoverManager`, `download_laz_area(provider=)`)
-zachowuje wlasny cache, ktorego `force` nie omija — pelne odswiezenie:
+swiezy rekord zapisany (E14); `--upgrade` tak samo jak `--check-updates`
+(`fetch.refreshes_cache`: `upgrade` i `force`), domyslne pobieranie czyta
+cache w TTL. `kartograf cache stats` pokazuje `Wpisy rekordow`. Umowa:
+`force`/`upgrade` odswiezaja tylko cache otwierany przez funkcje (parametr
+`cache`, provider tworzony przez nia albo po nazwie); provider przekazany
+jako instancja (`DownloadManager`, `LandCoverManager`,
+`download_laz_area(provider=)`) zachowuje wlasny cache, ktorego `force`
+nie omija — pelne odswiezenie:
 provider z `MetadataCache(..., refresh=True)` (USAGE "Cache metadanych
 w bibliotece").
 Baza jest otwierana leniwie: plik `.kartograf_cache.db` powstaje dopiero przy
@@ -1674,11 +1676,15 @@ pobranie do `.incoming/`, `commit_version(signal=)`, hardlink — oraz
 Sygnal wg kanalu (`AccessChannel.update_signal`, `channel_signal`): LAZ
 `index` (kafel z lokalna wersja = `local`, nowszy nalot to nowe pliki,
 D26), pliki openzu — arkusz SM5, natywny kafel TM33 (plan B) i LAZ CZ —
-`http` (`probe` = `file_signal` providera, `HEAD` pliku `openzu`; rowne
-`ETag` = lokalna, rozne = `newer` domyslnie, pobranie przy `upgrade`;
-nieudane `HEAD` = `unverified="check_failed: ..."` domyslnie, blad przy
-`upgrade`), kafel TM33 z ImageServer i wycinki `none` (lokalna,
-`unverified="none"`). Wynik: `VersionedFile(path, status, label, sha256,
+`http` (`probe` = `file_signal` providera, `HEAD` pliku `openzu`).
+Tryb domyslny nie pyta zrodla o lokalna wersje (errata 3 ADR-036):
+`http` + `probe` i `metadata` + `edition` daja lokalna wersje
+`unverified="unchecked"` bez zapytania (linia `(bez sprawdzania;
+--check-updates)`); `upgrade` robi `HEAD` (rowne `ETag` = lokalna, rozne =
+pobranie, nieudane `HEAD` = blad), `--check-updates` = `inspect_version`.
+Etykieta rekordu indeksu (`index` + `edition`) jest znana z wyboru plikow,
+wiec porownanie zostaje w kazdym trybie. Kafel TM33 z ImageServer i
+wycinki `none` (lokalna, `unverified="none"`). Wynik: `VersionedFile(path, status, label, sha256,
 version_path, newer, unverified)`; `LazDownloadResult.files`,
 `CzLazResult.files`, `CzSheetResult`/`CzCutoutResult`/`PlCutoutResult.file`
 (`None` tylko z `plan=`, gdy plan nie wykonuje pliku i nie ma wersji
@@ -1896,7 +1902,10 @@ Przygotowanie (walidacja bez sieci) i wykonanie sa krokami wewnetrznymi
    Rasteryzacja bierze srodek piksela (`all_touched=False`), w tym
    nad rzekami granicznymi, zatokami i zalewami. Poza maska nodata
    `-9999`; na ladzie wartosci WCS, **takze 0,0**, pozostaja danymi
-   (Zulawy). Maska nie wypelnia zer wewnatrz ladu z arkuszy.
+   (Zulawy). Maska nie wypelnia zer wewnatrz ladu z arkuszy. Obszar bez
+   ani jednego srodka piksela na ladzie (`LandMask.has_land`: morze,
+   zagranica) konczy sie `NoCoverageError` przed WCS, bez wersji (CLI:
+   `Error:`, kod 1; jak tryb arkuszy).
 3. Provider pobiera przez `_download_wcs(bbox_source_2180, work,
    "GTiff")` na 1-metrowej siatce arkuszy
    `GridSpec(1.0, 0.5, 0.5)`, z bboxem wyrownanym NA ZEWNATRZ
@@ -1905,8 +1914,8 @@ Przygotowanie (walidacja bez sieci) i wykonanie sa krokami wewnetrznymi
    dla EPSG:5514/3045 `warp_to_grid` z przypieta operacja, nodata
    i siatka celu wykonuje lokalna reprojekcje. `PlCutoutResult`
    podaje `masked_pixels`, `zero_pixels` liczone przed warpem oraz
-   `all_nodata`. Cala powierzchnia poza ladem PL moze dac `all_nodata`
-   i `Warning:` (kod 0).
+   `all_nodata`. `all_nodata` z `Warning:` (kod 0) zostaje tylko dla WCS
+   bez danych na ladzie.
 4. Wynik jest w `nmt/pl_1992_1m_<vcrs>/bbox/` lub
    `nmpt/pl_1992_1m_<vcrs>/bbox/` jako
    dowiazanie `<coords>.tif` (bez daty, D15) do wersji
@@ -1923,8 +1932,9 @@ Przygotowanie (walidacja bez sieci) i wykonanie sa krokami wewnetrznymi
    Pliki `<coords>_<YYYYMMDD>.tif` z 0.7.x nie sa rozpoznawane. Sidecar z
    `capability="bbox_raster"`, `extra.source` WCS i `extra.mask`
    PRG opisano w sekcji 3.2. CLI wypisuje `Info:` z liczba zapytan
-   WCS dla > 1 kawalka lub wyniku >= 1 GiB (gdy wycinek bedzie
-   pobierany).
+   WCS i szacowanym czasem (`WCS_REQUEST_SECONDS` = 25-40 s na zapytanie,
+   pomiar 2026-10-16/17) dla > 1 kawalka lub wyniku >= 1 GiB (gdy wycinek
+   bedzie pobierany, po masce PRG).
 
 WCS oddaje kompozycje serwera (najnowszy lot obszaru bez doklejania
 starszych), **nie** najnowsza kampanie dokladnie 1 m wybrana dla arkusza
@@ -2095,7 +2105,7 @@ operacja). Kazdy arkusz: ZIP openzu z szablonu kanalu deskryptora formatu
 wersji czlony ZIP i ich CRC sa sprawdzane (strona HTML albo przeciety ZIP
 = `DownloadError`, brak wersji), sidecar: lista czlonow (`extra.members`),
 `mapname`/`cz_share` z indeksu, `extra.http`, uklad EPSG:5514, wysokosci
-Bpv. Sygnal `http` (jedno `HEAD` przy lokalnej wersji), tor planu
+Bpv. Sygnal `http` (`HEAD` przy lokalnej wersji tylko z `--upgrade`), tor planu
 `cz_sheet` (jednostka = godlo). `--resolution`, `--cutout`,
 `--horizontal-crs`, flagi arkuszy PL i lotow = blad przed siecia
 (`options._contours_error`).
@@ -2399,7 +2409,7 @@ bajt w bajt (`CuzkClient.fetch_file(..., unzip_single=".laz")`); 404 =
 error)`), pozostale zostaja (CLI: `Error:` na arkusz, kod 1). Magazyn:
 `laz/cz_<model>_<vcrs>/<hierarchia godla>/<godlo>.laz` (`CTES/96`,
 `760/5518`), wersje jak arkusz SM5 (etykieta = data pobrania, sygnal
-`http`: jedno `HEAD` ZIP-a przy lokalnej wersji przez `file_signal`), tor
+`http`: `HEAD` ZIP-a przy lokalnej wersji z `--upgrade` przez `file_signal`), tor
 planu `cz_laz` (`unit` = godlo). Sidecar: `dataset` `cz.cuzk.<model>_laz`,
 `request.sheet`, uklad poziomy pliku (EPSG:5514/3045), pionowy natywny
 (EPSG:8357/5621), `capability` `sheet_files`, `extra.http`, SM5
@@ -2990,8 +3000,8 @@ albo date wydania (`WRTO24.<rok>.<arkusz>.zip`,
 usuwane z drzewa) do `klucz -> AtomEntry`: `entry_pattern` szukany w id
 feedu zbioru, grupa `sheet` = klucz (bez niej feed ma jeden zbior,
 klucz `""`). Indeks lezy w `MetadataCache` (`atom_cache`) z `ETag`
-feedu: w TTL (7 dni) bez zapytania, starszy albo `refresh` (`--upgrade`):
-warunkowy GET `If-None-Match` (304 = bez zmian); `--force`
+feedu: w TTL (7 dni) bez zapytania, starszy: warunkowy GET
+`If-None-Match` (304 = bez zmian); `--force`, `--upgrade`
 i `--check-updates` (cache w trybie odswiezania) czytaja feed od nowa.
 `resolve_atom_file` czyta feed zbioru zawsze swiezo (maly, niesie
 wydanie) i wybiera plik po kategorii ukladu (`check_atom_crs` - bez
@@ -3072,12 +3082,14 @@ lokalna wersja jest uzywana bez zapytan, `--check-updates` = `unverifiable`
 (`nie da sie sprawdzic bez pobrania`), nowa tresc przynosi tylko
 `--force` (ta sama
 tresc = `unchanged`, inna = nowa wersja). Pliki krajowe CUZK z `ETag`
-(RUIAN, HY-NET) maja `http`: domyslnie jedno `HEAD` porownuje lokalna
-wersje (inny `ETag` = dopisek `dostepna nowsza`, `--upgrade` pobiera),
-`--check-updates` = `current`/`newer`. Plik z feedu ATOM (ZABAGED,
+(RUIAN, HY-NET) maja `http`: `--upgrade` porownuje lokalna wersje jednym
+`HEAD` (inny `ETag` = pobranie), `--check-updates` = `current`/`newer`,
+domyslnie lokalna wersja bez zapytania. Plik z feedu ATOM (ZABAGED,
 Geonames kraj, QGZU) ma `metadata`: wydanie z feedu przed pobraniem, inne
 wydanie = `newer`. Mapy BDOT10k maja `index` (data `Stan bazy` osobno
-dla skali z GetFeatureInfo), kafle mesh 3D tez (etykieta rekordu WFS:
+dla skali z GetFeatureInfo; arkusz z lokalna wersja domyslnie bez
+GetFeatureInfo - `_sheet_jobs(skip_local)`, `UnitJob.unchecked`), kafle
+mesh 3D tez (etykieta rekordu WFS:
 `Aktualnosc` i `Numer_zgloszenia_pracy`), arkusze ZTM `http` (`HEAD`).
 Etykieta = `edition` wariantu (rocznik
 BDOT10k, rok modeli 3D; `label_source="edition"`), wydanie z feedu ATOM
