@@ -30,10 +30,11 @@ from kartograf.notices import Notice, NoticeSink
 if TYPE_CHECKING:
     from kartograf.cache.metadata import MetadataCache
     from kartograf.core.bbox import BBox
+    from kartograf.download.data import UnitFailure, UnitFile
     from kartograf.download.fetch import FileSlot, UpdateMode, VersionedFile
     from kartograf.download.plan import ItemStatus, PlanItem, Track, UpdatePlan
     from kartograf.download.versions import LocalVersion
-    from kartograf.landcover.manager import LandCoverManager, LandCoverResult
+    from kartograf.landcover.manager import LandCoverManager
 logger = logging.getLogger(__name__)
 
 
@@ -371,7 +372,7 @@ def _write_hsg_geotiff(output_path: Path, hsg: np.ndarray, profile: dict) -> Non
         )
 
 
-# SoilGrids inputs of HSG, in the order of ``HsgResult.inputs``.
+# SoilGrids inputs of HSG, in the order of ``HsgReport.inputs``.
 HSG_INPUTS = ("clay", "sand", "silt")
 _HSG_CLASSES = "1=A, 2=B, 3=C, 4=D"
 _HSG_TRACK: "Track" = "hsg"
@@ -379,35 +380,45 @@ _HSG_TRACK: "Track" = "hsg"
 # ``soil/global_soilgrids_<prop>_<depth>_mean`` and
 # ``hsg/global_soilgrids_<depth>_mean`` and the sidecar ``stat`` stay as before.
 _HSG_STAT = "mean"
+# The source of the inputs and of the HSG sidecar.
+_SOILGRIDS = "global.isric.soilgrids"
+# ``calculate_hsg`` without a store.
+_OUTPUT_REQUIRED = (
+    "--output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
+    "HSG w <KATALOG>/hsg/...)"
+)
 
 
 @dataclass(frozen=True)
-class HsgResult:
-    """HSG of one selection (``unit``: bbox coordinates or the sheet).
+class HsgReport:
+    """Outcome of ``calculate_hsg`` (``soil hsg``).
 
-    ``file``: the HSG version (``new``/``unchanged``/``relabeled`` when
-    computed, ``reused`` when a version of the same input set exists,
-    ``local`` for a position left out of a plan; ``None`` only then, without
-    a local version). ``inputs``: clay, sand, silt in the store. ``stale``:
-    planned positions whose source changed since the plan. ``notices``: data
-    messages (e.g. the geometry layer choice). ``ok``: no stale position.
+    ``files``: the HSG raster (one ``UnitFile``, ``unit`` = bbox coordinates
+    or the sheet, ``country`` = ``GLOBAL``; status ``new``/``unchanged``/
+    ``relabeled`` when computed, ``reused`` when a version of the same input
+    set exists, ``local`` for a position left out of a plan; none when an
+    input failed, or out of a plan without a local version). ``inputs``:
+    clay, sand and silt in the store (``unit`` = ``"<property> <unit>"``,
+    e.g. ``"clay N-34-130-D"``). ``failed``: an input that failed (its unit
+    as in ``inputs``; no HSG is computed) or the store failure of the HSG.
+    ``stale``: planned positions whose source changed since the plan.
+    ``notices``: data messages (e.g. the geometry layer choice). ``ok``: no
+    failure and no stale position.
     """
 
-    unit: str
-    file: "VersionedFile | None"
-    inputs: "tuple[LandCoverResult, ...]"
-    stale: "tuple[PlanItem, ...]" = ()
-    notices: "tuple[Notice, ...]" = ()
-
-    @property
-    def ok(self) -> bool:
-        """True when no planned position went stale."""
-        return not self.stale
+    files: "tuple[UnitFile, ...]"
+    inputs: "tuple[UnitFile, ...]"
+    failed: "tuple[UnitFailure, ...]"
+    stale: "tuple[PlanItem, ...]"
+    notices: "tuple[Notice, ...]"
+    ok: bool
 
 
 class HSGCalculator:
     """
-    Hydrologic Soil Groups from SoilGrids clay/sand/silt in the version store.
+    Hydrologic Soil Groups from SoilGrids clay/sand/silt in the version
+    store (the layer below ``calculate_hsg``/``check_hsg``; not in the
+    public API).
 
     The inputs are SoilGrids ``mean`` versions of ``output_dir``
     (``soil/global_soilgrids_{clay,sand,silt}_<depth>_mean/``, labelled by
@@ -417,14 +428,6 @@ class HSGCalculator:
     ``extra.source_files`` has the same three input sha256 is used again
     (``reused``, nothing computed). Rasters outside the store:
     ``hsg_from_rasters``.
-
-    Examples
-    --------
-    >>> from kartograf.hydrology import HSGCalculator
-    >>> calc = HSGCalculator("./data")
-    >>> result = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
-    >>> result.file.path, result.file.status  # hsg/.../N-34-130-D.tif, "new"
-    >>> calc.get_hsg_statistics(result.file.path)
     """
 
     # SoilGrids conversion factors
@@ -476,61 +479,24 @@ class HSGCalculator:
         bbox: "BBox | None" = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
-        depth: str,
+        depth: str | None,
         update: "UpdateMode | None" = None,
         plan: "UpdatePlan | None" = None,
-        timeout: int = 120,
         on_notice: "Callable[[Notice], None] | None" = None,
-    ) -> HsgResult:
-        """
-        HSG of one selection: exactly one of ``sheet``, ``bbox``, ``geometry``.
-
-        Parameters
-        ----------
-        sheet : str, optional
-            Map sheet (canonical code, sheet hierarchy).
-        bbox : BBox, optional
-            Area in any supported CRS (``bbox/<coords>`` of its EPSG:2180
-            envelope; Czech CRSs via the pinned operation).
-        geometry : str or Path, optional
-            SHP/GPKG file; its EPSG:2180 envelope is the area (``layer`` of a
-            GPKG; default first layer with a ``GEOMETRY_LAYER_DEFAULT`` notice).
-        depth : str
-            Soil interval below surface: 0-5cm, 5-15cm, 15-30cm,
-            30-60cm, 60-100cm, or 100-200cm. The statistic is always ``mean``.
-        update : None, "upgrade" or "force", optional
-            Mode of the INPUTS (spec 4.2): ``None`` uses local versions,
-            ``"upgrade"`` downloads a newer SoilGrids edition, ``"force"``
-            downloads again. HSG is computed only for a new input set.
-        plan : UpdatePlan, optional
-            From ``check_hsg``; with ``update="upgrade"`` only the planned
-            positions execute.
-        timeout : int, optional
-            Request timeout in seconds (default: 120)
-        on_notice : callable, optional
-            Receives each data notice when emitted.
-
-        Returns
-        -------
-        HsgResult
+    ) -> HsgReport:
+        """HSG of one selection (see the module function ``calculate_hsg``).
 
         Raises
         ------
-        DownloadError
-            An input failed (no HSG is written) or a store failure.
         ValidationError
-            Not exactly one selection, bad mode, a plan of another store or
-            a ``timeout`` that is not a positive number (``"120"``).
+            Not exactly one selection, a missing or invalid depth, bad mode,
+            a plan of another store or without ``update="upgrade"``.
         """
-        from kartograf.download.arguments import require_timeout
-
-        require_timeout(timeout)
         sink = NoticeSink(on_notice)
         selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
-        result = self._calculate(
-            selection, depth, _HSG_STAT, update, plan, timeout, sink
-        )
-        return replace(result, notices=sink.notices)
+        assert depth is not None  # checked with the selection
+        report = self._calculate(selection, depth, _HSG_STAT, update, plan, sink)
+        return replace(report, notices=sink.notices)
 
     def check_hsg(
         self,
@@ -539,18 +505,15 @@ class HSGCalculator:
         bbox: "BBox | None" = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
-        depth: str,
-        timeout: int = 120,
+        depth: str | None,
         on_notice: "Callable[[Notice], None] | None" = None,
     ) -> "UpdatePlan":
         """Plan of ``calculate_hsg`` with the same selection, WITHOUT
         downloading or computing: 3 x ``landcover`` + 1 x ``hsg``."""
-        from kartograf.download.arguments import require_timeout
-
-        require_timeout(timeout)
         sink = NoticeSink(on_notice)
         selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
-        return self._check(selection, depth, _HSG_STAT, timeout, sink)
+        assert depth is not None  # checked with the selection
+        return self._check(selection, depth, _HSG_STAT, sink)
 
     def validate_request(
         self,
@@ -559,7 +522,7 @@ class HSGCalculator:
         bbox: "BBox | None" = None,
         geometry: str | Path | None = None,
         layer: str | None = None,
-        depth: str,
+        depth: str | None,
     ) -> None:
         """Every check of ``calculate_hsg``/``check_hsg`` before the first
         request: one selection and the input depth (no network, nothing
@@ -580,7 +543,7 @@ class HSGCalculator:
         bbox: "BBox | None",
         geometry: str | Path | None,
         layer: str | None,
-        depth: str,
+        depth: str | None,
         sink: NoticeSink,
     ) -> dict:
         """The selection, then the depth by the input manager's own checks."""
@@ -638,17 +601,17 @@ class HSGCalculator:
         )
 
     def _check(
-        self, selection: dict, depth: str, stat: str, timeout: int, sink: "NoticeSink"
+        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
     ) -> "UpdatePlan":
         from kartograf.download.plan import new_plan
 
-        inputs = self._input_items(selection, depth, stat, timeout, sink)
+        inputs = self._input_items(selection, depth, stat, sink)
         return new_plan(
             self._output_dir, [*inputs, self._hsg_item(selection, depth, stat, inputs)]
         )
 
     def _input_items(
-        self, selection: dict, depth: str, stat: str, timeout: int, sink: "NoticeSink"
+        self, selection: dict, depth: str, stat: str, sink: "NoticeSink"
     ) -> list:
         manager = self._manager()
         where = _where(selection)
@@ -656,12 +619,7 @@ class HSGCalculator:
             item
             for prop in HSG_INPUTS
             for item in manager.check(
-                **where,
-                property=prop,
-                depth=depth,
-                stat=stat,
-                timeout=timeout,
-                on_notice=sink.add,
+                **where, property=prop, depth=depth, stat=stat, on_notice=sink.add
             ).items
         ]
 
@@ -712,13 +670,17 @@ class HSGCalculator:
         stat: str,
         update: "UpdateMode | None",
         plan: "UpdatePlan | None",
-        timeout: int,
         sink: "NoticeSink",
-    ) -> HsgResult:
+    ) -> HsgReport:
+        """The inputs, then the HSG of their set (computed or reused). An
+        input that failed leaves the HSG out (its failure in ``failed``);
+        a plan without the HSG position keeps its local version."""
+        from kartograf.download.data import UnitFailure, UnitFile
         from kartograf.download.fetch import validate_update
         from kartograf.download.plan import require_store, select_planned, store_id
-        from kartograf.exceptions import ValidationError
+        from kartograf.exceptions import DownloadError, ValidationError
         from kartograf.landcover.store import selection_unit
+        from kartograf.sources.registry import get_source
 
         validate_update(update)
         slot = self._slot(selection, depth, stat)
@@ -736,42 +698,52 @@ class HSGCalculator:
                 selection,
                 depth,
                 stat,
-                self._input_items(selection, depth, stat, timeout, sink),
+                self._input_items(selection, depth, stat, sink),
             )
             todo, skipped = select_planned(plan, [fresh], _HSG_TRACK)
             planned_hsg, stale = bool(todo), list(skipped)
 
-        from kartograf.landcover.manager import LandCoverResult
-
         manager = self._manager()
         where = _where(selection)
-        areas = [
-            manager.download(
+        inputs: list[UnitFile] = []
+        failed: list[UnitFailure] = []
+        for prop in HSG_INPUTS:
+            report = manager.download(
                 **where,
                 update=update,
                 plan=_input_plan(plan, prop, depth, stat),
                 property=prop,
                 depth=depth,
                 stat=stat,
-                timeout=timeout,
                 on_notice=sink.add,
             )
-            for prop in HSG_INPUTS
-        ]
-        # one raster per input; a plan may leave it without a file
-        inputs = tuple(
-            area.files[0] if area.files else LandCoverResult(unit, None)
-            for area in areas
+            # one raster per input (a plan may leave it without a file); its
+            # unit names the property, as the inputs pinned by a project
+            inputs += [replace(i, unit=f"{prop} {i.unit}") for i in report.files]
+            failed += [replace(i, unit=f"{prop} {i.unit}") for i in report.failed]
+            stale.extend(report.stale)
+        country = get_source(_SOILGRIDS).country
+        hsg: VersionedFile | None = None
+        if not failed:  # no HSG of an incomplete input set
+            if not planned_hsg or len(inputs) != len(HSG_INPUTS):
+                hsg = _local_only(slot)
+            else:
+                try:
+                    hsg = self._reuse_or_compute(
+                        slot, selection, depth, stat, [i.file for i in inputs]
+                    )
+                except DownloadError as e:  # the store: a failure of the HSG
+                    logger.debug("HSG %s: %s", unit, e)
+                    failed.append(UnitFailure(unit, country, str(e), "download"))
+        files = (UnitFile(unit, country, hsg),) if hsg is not None else ()
+        return HsgReport(
+            files=files,
+            inputs=tuple(inputs),
+            failed=tuple(failed),
+            stale=tuple(stale),
+            notices=(),
+            ok=not failed and not stale,
         )
-        for area in areas:
-            stale.extend(area.stale)
-        files = [r.file for r in inputs]
-        if not planned_hsg or any(f is None for f in files):
-            return HsgResult(unit, _local_only(slot), inputs, tuple(stale))
-        hsg = self._reuse_or_compute(
-            slot, selection, depth, stat, [f for f in files if f is not None]
-        )
-        return HsgResult(unit, hsg, inputs, tuple(stale))
 
     def _reuse_or_compute(
         self,
@@ -842,7 +814,7 @@ class HSGCalculator:
 
         def write(data: Path, ref, dg, _http) -> None:
             emit_sidecar(
-                "global.isric.soilgrids",
+                _SOILGRIDS,
                 data,
                 request=request,
                 horizontal_crs=str(crs) if crs else None,
@@ -863,73 +835,208 @@ class HSGCalculator:
             signal="metadata",
         )
 
-    def get_hsg_statistics(self, hsg_path: Path) -> dict:
-        """
-        Calculate statistics for an HSG raster.
 
-        Parameters
-        ----------
-        hsg_path : Path
-            Path to HSG GeoTIFF
+def _calculator(
+    output_dir: str | Path | None, cache: "MetadataCache | bool"
+) -> HSGCalculator:
+    """The calculator of the store ``output_dir`` (checked first)."""
+    if output_dir is None:
+        raise ValidationError(_OUTPUT_REQUIRED)
+    return HSGCalculator(output_dir, cache=cache)
 
-        Returns
-        -------
-        dict
-            Per-group dict (``A``-``D``) with keys: count, area_m2, area_ha,
-            percent (share of the cells WITH data), description; plus
-            ``nodata`` - the cells without data (class 0: an input gap, e.g.
-            a SoilGrids cell with 0 in every input) with the same keys and
-            ``percent`` = share of ALL cells of the raster.
 
-        Notes
-        -----
-        Areas are in square metres / hectares regardless of the raster CRS:
-        for a geographic CRS (SoilGrids output is EPSG:4326) cell areas are
-        computed geodetically per raster row, not from the affine
-        determinant, which would give square degrees.
-        """
-        import rasterio
+def calculate_hsg(
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: "BBox | None" = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    depth: str | None = None,
+    update: "UpdateMode | None" = None,
+    plan: "UpdatePlan | None" = None,
+    cache: "MetadataCache | bool" = True,
+    on_notice: "Callable[[Notice], None] | None" = None,
+) -> HsgReport:
+    """Hydrologic Soil Groups of an area (``soil hsg``) in the version store
+    of ``output_dir``.
 
-        with rasterio.open(hsg_path) as src:
-            hsg = src.read(1)
-            if src.crs is not None and src.crs.is_geographic:
-                # transform[0]*transform[4] would be square DEGREES here
-                row_area = _geographic_row_cell_areas(src)
-            else:
-                row_area = np.full(
-                    src.height, abs(src.transform[0] * src.transform[4])
-                )  # m²
+    Parameter names and values are the flags of the command in
+    ``snake_case``. One area: ``sheet`` (canonical code, sheet hierarchy),
+    ``bbox`` (any supported CRS; ``bbox/<coords>`` of its EPSG:2180
+    envelope) or ``geometry`` (SHP/GPKG, ``layer`` of a GPKG); ``depth``
+    (required): 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm or 100-200cm, the
+    statistic is always ``mean``. The inputs are the SoilGrids clay, sand and
+    silt of the area in the store
+    (``soil/global_soilgrids_<property>_<depth>_mean/``, downloaded when
+    missing); the HSG raster ``hsg/global_soilgrids_<depth>_mean/`` (uint8,
+    1=A, 2=B, 3=C, 4=D, 0 = no data) is computed only for a new input set,
+    a version of the same inputs is used again (``reused``). ``update`` is
+    the mode of the INPUTS (spec 4.2); ``plan`` from ``check_hsg`` with
+    ``update="upgrade"``; ``cache``: SoilGrids metadata cache (``True``:
+    default file in the current directory, ``False``: none); ``on_notice``
+    receives each notice when emitted. Statistics of the result:
+    ``hsg_statistics``; rasters outside the store: ``hsg_from_rasters``.
 
-        # Count pixels for each HSG; the shares are of the cells with data,
-        # the cells without data (0) get their own entry (share of all cells)
-        total_valid = np.sum(hsg > 0)
-        stats = {}
+    Returns
+    -------
+    HsgReport
+        ``files`` (the HSG raster), ``inputs``, ``failed`` (an input that
+        failed - no HSG is computed - or the store failure of the HSG),
+        ``stale``, ``notices`` and ``ok``.
 
-        for name, value in HSG_VALUES.items():
-            per_row = np.sum(hsg == value, axis=1)
-            count = np.sum(per_row)
-            area_m2 = float(np.sum(per_row * row_area))
-            pct = (count / total_valid * 100) if total_valid > 0 else 0
+    Raises
+    ------
+    ValidationError
+        Missing store (or a ``.tif`` path - a file outside the store is
+        ``hsg_from_rasters``), not exactly one selection, a missing or
+        invalid depth, bad mode, a plan of another store or without
+        ``update="upgrade"`` - before any request.
 
-            stats[name] = {
-                "count": int(count),
-                "area_m2": float(area_m2),
-                "area_ha": float(area_m2 / 10000),
-                "percent": float(pct),
-                "description": HSG_DESCRIPTIONS[name],
-            }
+    Examples
+    --------
+    >>> report = calculate_hsg(
+    ...     output_dir="./data", sheet="N-34-130-D", depth="0-5cm"
+    ... )
+    >>> hsg = report.files[0].file
+    >>> hsg.path, hsg.status  # data/hsg/.../N-34-130-D.tif, "new"
+    >>> hsg_statistics(hsg.path)["B"]["percent"]
+    """
+    return _calculator(output_dir, cache).calculate_hsg(
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        depth=depth,
+        update=update,
+        plan=plan,
+        on_notice=on_notice,
+    )
 
-        empty = np.sum(hsg == 0, axis=1)
-        empty_m2 = float(np.sum(empty * row_area))
-        stats["nodata"] = {
-            "count": int(np.sum(empty)),
-            "area_m2": empty_m2,
-            "area_ha": empty_m2 / 10000,
-            "percent": float(np.sum(empty) / hsg.size * 100) if hsg.size else 0.0,
-            "description": "Brak danych: komorki bez wartosci wejsc (klasa 0)",
+
+def check_hsg(
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: "BBox | None" = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    depth: str | None = None,
+    cache: "MetadataCache | bool" = True,
+    on_notice: "Callable[[Notice], None] | None" = None,
+) -> "UpdatePlan":
+    """Update plan of ``calculate_hsg`` with the same choice, WITHOUT
+    downloading or computing: the three inputs (track ``landcover``,
+    compared with the SoilGrids edition) and the HSG (track ``hsg``:
+    ``current`` when a version of the current inputs exists, else
+    ``missing``).
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice (as ``calculate_hsg``).
+    """
+    return _calculator(output_dir, cache).check_hsg(
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        depth=depth,
+        on_notice=on_notice,
+    )
+
+
+def validate_hsg_request(
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: "BBox | None" = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    depth: str | None = None,
+) -> None:
+    """Every check of ``calculate_hsg``/``check_hsg`` before the first
+    request: the store, one selection and the input depth (no network,
+    nothing written; a ``geometry`` file is read for its envelope) - the
+    same exception type and text as ``calculate_hsg`` (``project add``,
+    ADR-040).
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice.
+    """
+    _calculator(output_dir, False).validate_request(
+        sheet=sheet, bbox=bbox, geometry=geometry, layer=layer, depth=depth
+    )
+
+
+def hsg_statistics(hsg_path: str | Path) -> dict:
+    """
+    Statistics of an HSG raster (``soil hsg --summary``).
+
+    Parameters
+    ----------
+    hsg_path : str or Path
+        Path to an HSG GeoTIFF (``calculate_hsg``, ``hsg_from_rasters``).
+
+    Returns
+    -------
+    dict
+        Per-group dict (``A``-``D``) with keys: count, area_m2, area_ha,
+        percent (share of the cells WITH data), description; plus
+        ``nodata`` - the cells without data (class 0: an input gap, e.g.
+        a SoilGrids cell with 0 in every input) with the same keys and
+        ``percent`` = share of ALL cells of the raster.
+
+    Notes
+    -----
+    Areas are in square metres / hectares regardless of the raster CRS:
+    for a geographic CRS (SoilGrids output is EPSG:4326) cell areas are
+    computed geodetically per raster row, not from the affine
+    determinant, which would give square degrees.
+    """
+    import rasterio
+
+    with rasterio.open(hsg_path) as src:
+        hsg = src.read(1)
+        if src.crs is not None and src.crs.is_geographic:
+            # transform[0]*transform[4] would be square DEGREES here
+            row_area = _geographic_row_cell_areas(src)
+        else:
+            row_area = np.full(
+                src.height, abs(src.transform[0] * src.transform[4])
+            )  # m²
+
+    # Count pixels for each HSG; the shares are of the cells with data,
+    # the cells without data (0) get their own entry (share of all cells)
+    total_valid = np.sum(hsg > 0)
+    stats = {}
+
+    for name, value in HSG_VALUES.items():
+        per_row = np.sum(hsg == value, axis=1)
+        count = np.sum(per_row)
+        area_m2 = float(np.sum(per_row * row_area))
+        pct = (count / total_valid * 100) if total_valid > 0 else 0
+
+        stats[name] = {
+            "count": int(count),
+            "area_m2": float(area_m2),
+            "area_ha": float(area_m2 / 10000),
+            "percent": float(pct),
+            "description": HSG_DESCRIPTIONS[name],
         }
-        return stats
 
+    empty = np.sum(hsg == 0, axis=1)
+    empty_m2 = float(np.sum(empty * row_area))
+    stats["nodata"] = {
+        "count": int(np.sum(empty)),
+        "area_m2": empty_m2,
+        "area_ha": empty_m2 / 10000,
+        "percent": float(np.sum(empty) / hsg.size * 100) if hsg.size else 0.0,
+        "description": "Brak danych: komorki bez wartosci wejsc (klasa 0)",
+    }
+    return stats
 
 def hsg_from_rasters(
     clay: Path,
@@ -1012,7 +1119,7 @@ def _write_rasters_sidecar(
     from kartograf.sources.sidecar import emit_sidecar, file_digest
 
     emit_sidecar(
-        "global.isric.soilgrids",
+        _SOILGRIDS,
         output_path,
         request={
             "bbox": bbox_coords(grid),
@@ -1055,7 +1162,7 @@ def _input_plan(
 
     from kartograf.download.storage import content_segment
 
-    segment = content_segment("global.isric.soilgrids", (prop, depth, stat))
+    segment = content_segment(_SOILGRIDS, (prop, depth, stat))
     return replace(plan, items=tuple(i for i in plan.items if i.segment == segment))
 
 

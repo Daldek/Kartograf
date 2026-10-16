@@ -142,8 +142,10 @@ MAX_HINT_LINES = 5
 
 @dataclass(frozen=True)
 class UnitFile:
-    """One file of the request: ``unit`` = sheet code, LAZ file name or the
-    cutout path relative to ``output_dir``; ``country`` = ``"PL"``/``"CZ"``."""
+    """One file of the request: ``unit`` = sheet code, LAZ file name, the
+    cutout path relative to ``output_dir``, TERYT or bbox coordinates;
+    ``country`` = ``"PL"``/``"CZ"`` (``"EU"`` CORINE, ``"GLOBAL"``
+    SoilGrids and HSG - the country of the source)."""
 
     unit: str
     country: str

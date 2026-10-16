@@ -1,21 +1,28 @@
 """
-Land Cover download manager on the versioned store (spec 3.4, D29-D32).
+Land cover and SoilGrids downloads on the versioned store (spec 3.4,
+D29-D32, ADR-044).
 
-``LandCoverManager`` downloads BDOT10k, BDOO, CORINE, SoilGrids, ZABAGED,
-Data50 and Data250 into the ``data/`` layout of its output directory (the
-store root, as ``--output``): every file is an immutable version with a
-hardlink at the standard path. SoilGrids and CORINE (CLMS) versions are
-labelled by the source edition (signal ``metadata``), the CORINE WMS preview
-and BDOT10k by the download date (signal ``none``), the BDOT10k yearly
-archive (``year``) and BDOO by their year (ADR-042 D11, ADR-043), the
-national files of ZABAGED, Data50 and Data250 by the edition of their ATOM
-feed. Files outside the store: ``provider.download_by_*``.
+``download_landcover``/``check_landcover`` (``landcover download``) and
+``download_soil``/``check_soil`` (``soil download``) are the command-level
+functions (ADR-037 S3, ADR-044 D5): keyword-only arguments named as the CLI
+flags, a report in the shape of ``CollectionReport`` (``LandCoverReport``,
+``SoilReport``: ``UnitFile``/``UnitFailure``). A file that fails lands in
+``failed`` and the other units still run (ADR-044 D6);
+``validate_landcover_request``/``validate_soil_request`` run every check of
+the download without network (``project add``).
 
-``download``/``check`` are command-level functions (S3, the CLI
-``landcover download`` is one call): BDOT10k by an area covers every powiat
-of it (in parallel with ``workers``), BDOO every voivodeship of it, the
-result is always a ``LandCoverAreaResult`` with data ``notices``. The
-BDOT10k archive runs on the unit jobs of the collection orchestrator
+``LandCoverManager`` is the layer below them (outside the public API): it
+downloads BDOT10k, BDOO, CORINE, SoilGrids, ZABAGED, Data50 and Data250 into
+the ``data/`` layout of its output directory (the store root, as
+``--output``): every file is an immutable version with a hardlink at the
+standard path. SoilGrids and CORINE (CLMS) versions are labelled by the
+source edition (signal ``metadata``), the CORINE WMS preview and BDOT10k by
+the download date (signal ``none``), the BDOT10k yearly archive (``year``)
+and BDOO by their year (ADR-042 D11, ADR-043), the national files of
+ZABAGED, Data50 and Data250 by the edition of their ATOM feed. Files outside
+the store: ``provider.download_by_*``. BDOT10k by an area covers every
+powiat of it (in parallel with ``workers``), BDOO every voivodeship of it.
+The BDOT10k archive runs on the unit jobs of the collection orchestrator
 (``download.collections``), the sources without a provider class (ZABAGED,
 BDOO, Data50, Data250) on its requests - both on the plan track
 ``landcover``.
@@ -35,12 +42,7 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import bbox_coords
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
-from kartograf.download.arguments import (
-    require_bool,
-    require_codes,
-    require_int,
-    require_timeout,
-)
+from kartograf.download.arguments import require_bool, require_codes, require_int
 from kartograf.download.collections import (
     CollectionRequest,
     UnitJob,
@@ -54,6 +56,7 @@ from kartograf.download.collections import (
     run_request,
     selection_choices,
 )
+from kartograf.download.data import FailureKind, UnitFailure, UnitFile
 from kartograf.download.fetch import (
     EditionLookup,
     FileSlot,
@@ -76,6 +79,7 @@ from kartograf.download.options import (
     canonical_crs,
     canonical_format,
     check_layer,
+    output_required,
     validate_request_bbox,
 )
 from kartograf.download.plan import (
@@ -156,11 +160,11 @@ _PRODUCT_OPTIONS: dict[str, frozenset[str]] = {
     "data250": frozenset({"whole_country", "horizontal_crs"}),
 }
 _OPTIONS: dict[type, frozenset[str]] = {
-    Bdot10kProvider: _PRODUCT_OPTIONS["bdot10k"] | {"timeout"},
-    CorineProvider: _PRODUCT_OPTIONS["corine"] | {"timeout"},
-    SoilGridsProvider: _PRODUCT_OPTIONS["soilgrids"] | {"timeout"},
+    Bdot10kProvider: _PRODUCT_OPTIONS["bdot10k"],
+    CorineProvider: _PRODUCT_OPTIONS["corine"],
+    SoilGridsProvider: _PRODUCT_OPTIONS["soilgrids"],
 }
-_KNOWN_OPTIONS = frozenset().union(*_PRODUCT_OPTIONS.values(), {"timeout"})
+_KNOWN_OPTIONS = frozenset().union(*_PRODUCT_OPTIONS.values())
 _REQUIRED: dict[type, tuple[str, ...]] = {
     Bdot10kProvider: (),
     CorineProvider: ("year",),
@@ -264,46 +268,79 @@ def _read_geotiff_nodata(path: Path) -> float | None:
 
 
 @dataclass(frozen=True)
-class LandCoverResult:
-    """One land cover file of a request (``unit``: TERYT, bbox coords, sheet).
+class LandCoverReport:
+    """Outcome of ``download_landcover`` (``landcover download``).
 
-    ``file`` is the store outcome (``path`` = standard path, ``status``,
-    ``label``, ``newer``/``unverified``); ``None`` only with ``plan=`` when
-    the position was not planned and there is no local version. ``raw``:
-    the original BDOT10k ZIP (``keep_raw``).
+    ``files``: one ``UnitFile`` per data file (``unit`` = TERYT, bbox
+    coordinates, the sheet or the country code of a national file;
+    ``country`` = ``PL``, ``CZ`` or ``EU``), in unit order (TERYT order of an
+    area); ``raw``: the original BDOT10k packages kept by ``keep_raw`` (the
+    same units); ``failed``: units that failed (``kind`` ``no_coverage`` - no
+    data of the unit at the source - or ``download``), the other units still
+    ran; ``stale``: planned positions changed since the plan; ``notices``;
+    ``ok`` = no failure and no stale position. A unit left out of a plan
+    without a local version has no file.
     """
+
+    files: tuple[UnitFile, ...]
+    raw: tuple[UnitFile, ...]
+    failed: tuple[UnitFailure, ...]
+    stale: tuple[PlanItem, ...]
+    notices: tuple[Notice, ...]
+    ok: bool
+
+
+@dataclass(frozen=True)
+class SoilReport:
+    """Outcome of ``download_soil`` (``soil download``).
+
+    ``files``: the SoilGrids raster of the area (one ``UnitFile``, ``unit`` =
+    bbox coordinates or the sheet, ``country`` = ``GLOBAL``; none when it
+    failed or a plan left it out without a local version); ``failed``,
+    ``stale``, ``notices`` and ``ok`` as in ``LandCoverReport``.
+    """
+
+    files: tuple[UnitFile, ...]
+    failed: tuple[UnitFailure, ...]
+    stale: tuple[PlanItem, ...]
+    notices: tuple[Notice, ...]
+    ok: bool
+
+
+@dataclass(frozen=True)
+class _UnitResult:
+    """The files of one unit: the data file and the original BDOT10k ZIP of
+    ``keep_raw`` (``None``: out of the plan without a local version)."""
 
     unit: str
     file: VersionedFile | None
     raw: VersionedFile | None = None
 
 
-@dataclass(frozen=True)
-class LandCoverFailure:
-    """A BDOT10k powiat of an area that failed (the others still ran)."""
+def _failure(unit: str, country: str, error: DownloadError) -> UnitFailure:
+    """A unit whose file failed (``no_coverage``: no data at the source)."""
+    kind: FailureKind = (
+        "no_coverage" if isinstance(error, NoCoverageError) else "download"
+    )
+    return UnitFailure(unit, country, str(error), kind)
 
-    unit: str
-    error: str
 
-
-@dataclass(frozen=True)
-class LandCoverAreaResult:
-    """Files of one request, failed powiats, stale plan positions, notices.
-
-    ``files`` holds the units with a file (TERYT order for BDOT10k areas);
-    a unit skipped by a plan without a local version is absent. ``ok`` is
-    the exit rule of the CLI: no failure and no stale position.
-    """
-
-    files: tuple[LandCoverResult, ...]
-    failed: tuple[LandCoverFailure, ...] = ()
-    stale: tuple[PlanItem, ...] = ()
-    notices: tuple[Notice, ...] = ()
-
-    @property
-    def ok(self) -> bool:
-        """True when no powiat failed and no planned position went stale."""
-        return not self.failed and not self.stale
+def _landcover_report(
+    files: Sequence[UnitFile],
+    raw: Sequence[UnitFile],
+    failed: Sequence[UnitFailure],
+    stale: Sequence[PlanItem],
+    sink: NoticeSink,
+) -> LandCoverReport:
+    """The report of one request: ``ok`` = no failure and no stale position."""
+    return LandCoverReport(
+        files=tuple(files),
+        raw=tuple(raw),
+        failed=tuple(failed),
+        stale=tuple(stale),
+        notices=sink.notices,
+        ok=not failed and not stale,
+    )
 
 
 @dataclass(frozen=True)
@@ -343,7 +380,7 @@ def _canonical_options(options: dict) -> None:
         options["horizontal_crs"] = canonical_crs(options["horizontal_crs"])
 
 
-_PowiatOutcome = LandCoverResult | LandCoverFailure
+_PowiatOutcome = _UnitResult | UnitFailure
 
 
 def _each_powiat(
@@ -359,7 +396,8 @@ def _each_powiat(
     ``one(teryt, started)`` calls ``started`` right before a transfer
     (sequential mode: ``downloading``; ``None`` in a pool). After each
     powiat, in completion order: ``completed``, ``skipped`` (no transfer:
-    local version or out of the plan) or ``failed``.
+    local version or out of the plan), ``no_coverage`` (no package at the
+    source) or ``failed``, as the units of ``download_collection``.
     """
     total = len(teryts)
 
@@ -368,8 +406,8 @@ def _each_powiat(
             on_progress(DownloadProgress(current, total, teryt, status))
 
     def status(outcome: _PowiatOutcome) -> str:
-        if isinstance(outcome, LandCoverFailure):
-            return "failed"
+        if isinstance(outcome, UnitFailure):
+            return "no_coverage" if outcome.kind == "no_coverage" else "failed"
         file = outcome.file
         return "skipped" if file is None or file.status == "local" else "completed"
 
@@ -400,7 +438,8 @@ _CACHED_PROVIDERS = ("bdot10k", "soilgrids")
 
 class LandCoverManager:
     """
-    Manager for downloading land cover data into the version store.
+    Land cover and SoilGrids downloads into the version store (the layer
+    below ``download_landcover``/``download_soil``; not in the public API).
 
     Every file lands in a segment of ``output_dir`` that carries its
     content parameters (spec 3.4): ``landcover/pl_bdot10k_gpkg[_<layers>]``,
@@ -418,6 +457,8 @@ class LandCoverManager:
     downloads again (same content = ``unchanged``). Checking without a
     download: ``check`` with the same selection (plan ``kartograf-plan/1``,
     track ``landcover``), executed with ``update="upgrade", plan=...``.
+    The catalogue of a source (``get_available_layers``,
+    ``get_supported_formats``) needs no network.
 
     Parameters
     ----------
@@ -435,34 +476,6 @@ class LandCoverManager:
         A provider instance keeps its own cache: ``update="force"`` skips
         reads only of the cache opened here, so an instance's cache is not
         refreshed (build it with ``MetadataCache(path, refresh=True)``).
-
-    Examples
-    --------
-    >>> manager = LandCoverManager("./data", "bdot10k")
-    >>> result = manager.download(teryt="1465")
-    >>> result.files[0].file.path  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
-    >>>
-    >>> # BDOT10k of every powiat of an area, selected layers only
-    >>> from kartograf import BBox
-    >>> bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
-    >>> area = manager.download(bbox=bbox, layers=["PTWP", "SWRS"], workers=4)
-    >>> [r.file.path for r in area.files], area.failed, area.ok
-    >>>
-    >>> # BDOO 2023 of a voivodeship, the files of two classes only
-    >>> bdoo = LandCoverManager("./data", "bdoo")
-    >>> bdoo.download(teryt="12", year=2023, layers=["PTWP", "SWRS"])
-    >>> # -> data/landcover/pl_bdoo_2023_ptwp-swrs/teryt/12.zip
-    >>>
-    >>> # SoilGrids: the version label is the SoilGrids edition (e.g. 2.0)
-    >>> manager.set_provider("soilgrids")
-    >>> manager.download(sheet="N-34-130-D", property="clay", depth="0-5cm",
-    ...                  stat="mean").files[0].file.label
-    >>>
-    >>> # Check without downloading, then execute the plan
-    >>> plan = manager.check(sheet="N-34-130-D", property="clay",
-    ...                      depth="0-5cm", stat="mean")
-    >>> manager.download(sheet="N-34-130-D", property="clay", depth="0-5cm",
-    ...                  stat="mean", update="upgrade", plan=plan)
     """
 
     def __init__(
@@ -611,106 +624,39 @@ class LandCoverManager:
         on_notice: Callable[[Notice], None] | None = None,
         on_progress: Callable[[DownloadProgress], None] | None = None,
         **options,
-    ) -> LandCoverAreaResult:
+    ) -> LandCoverReport:
         """
-        Download the land cover files of one request into the store.
+        Download the files of one request into the store.
 
-        Exactly one of ``teryt``, ``sheet``, ``bbox``, ``geometry``.
-        BDOT10k by ``sheet``/``bbox``/``geometry``: the package of EVERY
-        powiat intersecting the area (PRG), one file ``teryt/<T>`` each, in
-        TERYT order, with ``extra.parent_request`` (the area); a powiat
-        failing with ``DownloadError`` lands in ``failed``, the others still
-        run (``workers`` in parallel). BDOO by an area: the package of every
-        voivodeship of it (the first two digits of its PRG powiats), a
-        failing voivodeship lands in ``failed``. CORINE/SoilGrids, ZABAGED,
-        Data50, Data250: one file of the area.
-
-        Parameters
-        ----------
-        teryt : str, optional
-            TERYT code: a powiat (4 digits) of BDOT10k, a voivodeship
-            (2 digits) of BDOO
-        sheet : str, optional
-            Map sheet identifier (e.g., "N-34-130-D")
-        bbox : BBox, optional
-            Area in any supported CRS (rasters: converted to EPSG:2180 before
-            the store slot; Czech CRSs via the pinned operation)
-        geometry : str or Path, optional
-            SHP/GPKG file; its EPSG:2180 envelope is the area (``layer`` of a
-            GPKG; default first layer with a ``GEOMETRY_LAYER_DEFAULT`` notice)
-        update : None, "upgrade" or "force", optional
-            Download mode (spec 4.2); ``None`` = local versions are used.
-        plan : UpdatePlan, optional
-            From ``check``; with ``update="upgrade"`` only planned positions.
-        workers : int
-            Parallel BDOT10k powiats or BDOO voivodeships of an area
-            (1 = sequential).
-        on_notice : callable, optional
-            Receives each data notice when emitted (``CORINE_PREVIEW``
-            before a CORINE preview download, ``GEOMETRY_LAYER_DEFAULT``).
-        on_progress : callable, optional
-            BDOT10k by an area (current packages and the archive): one
-            ``DownloadProgress`` per powiat as for a sheet list (``sheet`` =
-            TERYT, ``total`` = powiats of the area): ``downloading`` right
-            before its transfer (``workers=1`` only), then ``completed``,
-            ``skipped`` (local version) or ``failed`` in completion order.
-            Not called for one ``teryt``, nor for CORINE/SoilGrids and the
-            sources on the collection engines (BDOO, ZABAGED, Data50, Data250).
-        **options
-            CORINE: required ``year`` 2018/2012/2006/2000 (CLMS with
-            credentials, else WMS preview), 1990 (WMS preview only).
-            SoilGrids: required ``property`` (bdod density, cec exchange
-            capacity, cfvo coarse fragments, clay, nitrogen, ocd organic
-            carbon density, ocs organic carbon stock, phh2o pH, sand, silt,
-            soc organic carbon), ``depth`` (0-5cm, 5-15cm, 15-30cm,
-            30-60cm, 60-100cm, 100-200cm below surface), ``stat`` (mean
-            average, Q0.05 5th percentile, Q0.5 median, Q0.95 95th
-            percentile, uncertainty). BDOT10k: ``format`` GPKG (default) or
-            SHP (ZIP), optional ``layers`` and ``keep_raw``; with ``year``
-            2014-2025 the yearly archive (state at the start of the year):
-            the original powiat package (ZIP) with a required ``format`` GML
-            or SHP, labelled by its year, identical years stored once
-            (``relabeled``, ADR-042 D7, D11). BDOO (PL): required ``year``
-            2015, 2021-2026 - the original GML package of each voivodeship
-            (``landcover/pl_bdoo_<year>/teryt/<woj>.zip``, labelled by its
-            year); optional ``layers`` - class codes of that release (e.g.
-            ``["ADJA", "PTWP"]``): a ZIP of the files of those classes only
-            (``landcover/pl_bdoo_<year>_<classes>``), a class without objects
-            in the voivodeship is reported (``CLASSES_ABSENT``), none of
-            them = ``NoCoverageError`` of the voivodeship. ZABAGED, Data50,
-            Data250 (CZ): an area (``bbox``/``geometry``) -> one GPKG of the
-            object layers of the service in EPSG:5514
-            (``landcover/cz_<source>/bbox/``; ZABAGED: 22 land cover and
-            hydrography layers, Data50: 69, Data250: 116),
-            ``whole_country=True`` with ``horizontal_crs`` ``EPSG:5514`` or
-            ``EPSG:3045`` -> the national ZIP of the ATOM feed 1:1 (ZABAGED:
-            GPKG, ``landcover/cz_zabaged_gpkg_<epsg>/country/cz.zip``;
-            Data50/Data250: SHP, ``landcover/cz_<source>_shp_<epsg>/...``),
-            labelled by its edition, size announced first. All: ``timeout``.
-
-        Returns
-        -------
-        LandCoverAreaResult
-            ``files`` (``file.path`` = standard path), ``failed``, ``stale``,
-            ``notices`` and ``ok``.
+        Exactly one of ``teryt``, ``sheet``, ``bbox``, ``geometry`` (the
+        collection sources also ``whole_country``); ``options`` are the
+        content choices of the source given (``None`` and ``False`` values
+        left out): see ``download_landcover`` and ``download_soil``.
+        BDOT10k by an area: the package of EVERY powiat intersecting it
+        (PRG), one file ``teryt/<T>`` each, in TERYT order, with
+        ``extra.parent_request`` (``workers`` in parallel); BDOO by an area:
+        the package of every voivodeship of it. A file that fails lands in
+        ``failed`` (``UnitFailure`` of its unit), the other units still run.
+        ``on_progress``: one ``DownloadProgress`` per unit of an area of
+        BDOT10k powiats or BDOO voivodeships (``sheet`` = TERYT) -
+        ``downloading`` right before its transfer (``workers=1`` only), then
+        ``completed``, ``skipped``, ``no_coverage`` or ``failed`` in
+        completion order.
 
         Raises
         ------
         ValidationError
             Not exactly one selection, invalid source options, an option of
-            a wrong type (``year="2018"``, ``layers="SWRS,PTWP"``,
-            ``timeout="120"``; never converted), a plan of another store or
-            without ``update="upgrade"``.
+            a wrong type (``year="2018"``, ``layers="SWRS,PTWP"``; never
+            converted), a plan of another store or without
+            ``update="upgrade"``, an area over the volume limits of the
+            collection engines.
         TypeError
-            An option that belongs to no source (e.g. ``output_path``).
+            An option that belongs to no source (e.g. ``timeout``).
         NoCoverageError
-            A BDOT10k or BDOO area intersecting no powiat; a powiat without
-            an archive package or a voivodeship without a BDOO package (or
-            without any of its ``layers``) of a ``teryt`` (in an area:
-            ``failed``).
+            A BDOT10k or BDOO area intersecting no powiat.
         DownloadError
-            Download, edition, PRG or store failure (BDOT10k and BDOO areas:
-            PRG only; unit failures land in ``failed``).
+            The PRG powiat query of an area failed.
         """
         sink = NoticeSink(on_notice)
         validate_update(update)
@@ -720,16 +666,23 @@ class LandCoverManager:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
             )
-            return self._download_collection(
-                request, options, update, plan, workers, sink, on_progress
+            unit_files, unit_failures, stale = run_request(
+                request,
+                update=update,
+                plan=plan,
+                workers=workers,
+                cache=self._cache,
+                sink=sink,
+                track=_TRACK,
+                on_progress=on_progress,
             )
+            return _landcover_report(unit_files, (), unit_failures, stale, sink)
         teryt, sheet, bbox = self._validated(
             teryt, sheet, bbox, geometry, layer, options, sink
         )
-        failed: tuple[LandCoverFailure, ...] = ()
         with self._session(force=refreshes_cache(update), sink=sink):
             if self._archive(options):
-                files, failed, stale = self._download_archive(
+                outcomes, stale = self._download_archive(
                     teryt,
                     bbox,
                     sheet,
@@ -741,7 +694,7 @@ class LandCoverManager:
                     on_progress,
                 )
             elif teryt is None and isinstance(self._provider, Bdot10kProvider):
-                files, failed, stale = self._download_counties(
+                outcomes, stale = self._download_counties(
                     bbox, sheet, options, update, plan, workers, on_progress
                 )
             else:
@@ -755,13 +708,39 @@ class LandCoverManager:
                     lambda: [self._inspect(job) for job in jobs], update, plan
                 )
                 self._corine_preview(options, sink)
-                result = self._run(jobs, options, update, planned, parent=parent)
-                files = (result,) if result.file is not None else ()
-        for item in files:
-            for file in (item.file, item.raw):
+                outcomes = [
+                    self._unit(
+                        jobs[0].unit,
+                        lambda: self._run(
+                            jobs, options, update, planned, parent=parent
+                        ),
+                    )
+                ]
+        return self._report(outcomes, stale, update, sink)
+
+    def _report(
+        self,
+        outcomes: Sequence[_PowiatOutcome],
+        stale: Sequence[PlanItem],
+        update: UpdateMode | None,
+        sink: NoticeSink,
+    ) -> LandCoverReport:
+        """The report of the units of a request in their order: the data
+        files, the raw ZIPs of ``keep_raw`` and the failures, with the signal
+        notices of each file."""
+        country = self._country()
+        files: list[UnitFile] = []
+        raw: list[UnitFile] = []
+        failed: list[UnitFailure] = []
+        for outcome in outcomes:
+            if isinstance(outcome, UnitFailure):
+                failed.append(outcome)
+                continue
+            for file, found in ((outcome.file, files), (outcome.raw, raw)):
                 if file is not None:
                     self._emit_file_notices(file, update, sink)
-        return LandCoverAreaResult(files, failed, stale, sink.notices)
+                    found.append(UnitFile(outcome.unit, country, file))
+        return _landcover_report(files, raw, failed, stale, sink)
 
     def check(
         self,
@@ -800,9 +779,7 @@ class LandCoverManager:
         with self._session(force=True, sink=sink):
             if self._archive(options):
                 teryts = (
-                    [teryt]
-                    if teryt is not None
-                    else self._area_teryts(bbox, sheet, options)[0]
+                    [teryt] if teryt is not None else self._area_teryts(bbox, sheet)[0]
                 )
                 archive = self._archive_jobs(teryts, options, parent=None)
                 return new_plan(
@@ -811,7 +788,7 @@ class LandCoverManager:
             if teryt is not None:
                 jobs = self._jobs(teryt=teryt, kwargs=options)
             elif isinstance(self._provider, Bdot10kProvider):
-                teryts, _ = self._area_teryts(bbox, sheet, options)
+                teryts, _ = self._area_teryts(bbox, sheet)
                 jobs = [j for t in teryts for j in self._jobs(teryt=t, kwargs=options)]
             else:
                 jobs, _ = self._area_jobs(bbox=bbox, sheet=sheet, kwargs=options)
@@ -882,7 +859,7 @@ class LandCoverManager:
             bbox = validate_request_bbox(bbox)
         source = self._provider_name
         assert source is not None and self._collection is not None
-        allowed = _PRODUCT_OPTIONS[source] | {"timeout"}
+        allowed = _PRODUCT_OPTIONS[source]
         unknown = sorted(set(options) - _KNOWN_OPTIONS)
         if unknown:
             raise TypeError(
@@ -898,8 +875,6 @@ class LandCoverManager:
                     f"{' albo '.join(owners)}"
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
-        if options.get("timeout") is not None:
-            require_timeout(options["timeout"])
         if options.get("year") is not None:
             require_int(options["year"], "--year")
         if options.get("layers") is not None:
@@ -931,48 +906,22 @@ class LandCoverManager:
             sink=sink,
         )
 
-    def _download_collection(
-        self,
-        request: CollectionRequest,
-        options: dict,
-        update: UpdateMode | None,
-        plan: UpdatePlan | None,
-        workers: int,
-        sink: NoticeSink,
-        on_progress: Callable[[DownloadProgress], None] | None,
-    ) -> LandCoverAreaResult:
-        """The files of a collection source on the track ``landcover``.
+    def _unit(
+        self, unit: str, run: Callable[[], _UnitResult]
+    ) -> _UnitResult | UnitFailure:
+        """The files of one unit (``run``); a ``DownloadError`` of its file
+        (download, edition, store) is a failure of the unit, not of the
+        request: the other units still run."""
+        try:
+            return run()
+        except DownloadError as e:
+            logger.debug("%s %s: %s", self.provider_name, unit, e)
+            return _failure(unit, self._country(), e)
 
-        An area of unit packages (BDOO voivodeships) keeps going past a
-        failing unit (``failed``, ``workers`` in parallel, as the BDOT10k
-        powiats); one file (``teryt``, a national file, the objects of an
-        area) raises its failure, as CORINE and SoilGrids. Progress per unit
-        as ``download_collection``.
-        """
-        files, failed, stale = run_request(
-            request,
-            update=update,
-            plan=plan,
-            workers=workers,
-            cache=self._cache,
-            sink=sink,
-            track=_TRACK,
-            timeout=options.get("timeout"),
-            on_progress=on_progress,
-        )
-        units = (
-            request.teryt is None
-            and not request.whole_country
-            and any(part.variant is not None for part in request.parts)
-        )
-        if not units:
-            for failure in failed:
-                if failure.kind == "no_coverage":
-                    raise NoCoverageError(failure.error)
-                raise DownloadError(failure.error)
-        results = tuple(LandCoverResult(item.unit, item.file) for item in files)
-        failures = tuple(LandCoverFailure(item.unit, item.error) for item in failed)
-        return LandCoverAreaResult(results, failures, stale, sink.notices)
+    def _country(self) -> str:
+        """Country code of the files of the provider's source
+        (``UnitFile.country``: ``PL``, ``EU``, ``GLOBAL``)."""
+        return get_source(self._descriptor_key()).country
 
     def _download_counties(
         self,
@@ -983,13 +932,9 @@ class LandCoverManager:
         plan: UpdatePlan | None,
         workers: int,
         on_progress: Callable[[DownloadProgress], None] | None,
-    ) -> tuple[
-        tuple[LandCoverResult, ...],
-        tuple[LandCoverFailure, ...],
-        tuple[PlanItem, ...],
-    ]:
+    ) -> tuple[list[_PowiatOutcome], tuple[PlanItem, ...]]:
         """BDOT10k packages of EVERY powiat of an area (PRG), TERYT order."""
-        teryts, parent = self._area_teryts(bbox, sheet, options)
+        teryts, parent = self._area_teryts(bbox, sheet)
         jobs = {t: self._jobs(teryt=t, kwargs=options) for t in teryts}
         planned, stale = self._planned(
             lambda: [self._inspect(job) for group in jobs.values() for job in group],
@@ -997,28 +942,20 @@ class LandCoverManager:
             plan,
         )
 
-        def one(
-            teryt: str, started: Callable[[], None] | None
-        ) -> LandCoverResult | LandCoverFailure:
-            try:
-                return self._run(
+        def one(teryt: str, started: Callable[[], None] | None) -> _PowiatOutcome:
+            return self._unit(
+                teryt,
+                lambda: self._run(
                     jobs[teryt],
                     options,
                     update,
                     planned,
                     parent=parent,
                     on_download=started,
-                )
-            except DownloadError as e:
-                logger.debug("BDOT10k %s: %s", teryt, e)
-                return LandCoverFailure(teryt, str(e))
+                ),
+            )
 
-        outcomes = _each_powiat(teryts, one, workers, on_progress)
-        files = tuple(
-            o for o in outcomes if isinstance(o, LandCoverResult) and o.file is not None
-        )
-        failed = tuple(o for o in outcomes if isinstance(o, LandCoverFailure))
-        return files, failed, stale
+        return _each_powiat(teryts, one, workers, on_progress), stale
 
     def _download_archive(
         self,
@@ -1031,61 +968,47 @@ class LandCoverManager:
         workers: int,
         sink: NoticeSink,
         on_progress: Callable[[DownloadProgress], None] | None,
-    ) -> tuple[
-        tuple[LandCoverResult, ...],
-        tuple[LandCoverFailure, ...],
-        tuple[PlanItem, ...],
-    ]:
+    ) -> tuple[list[_PowiatOutcome], tuple[PlanItem, ...]]:
         """BDOT10k archive packages (``year``) of one powiat or of every
         powiat of an area (PRG, TERYT order) through the collection unit jobs
         (ADR-042 D10-D11): the original ZIP 1:1, labelled by its year.
 
-        A failing powiat of an area lands in ``failed``; the package of a
-        ``teryt`` raises (as the current BDOT10k packages). Progress per
-        powiat of an area only (``_each_powiat``).
+        A failing powiat lands in ``failed``. Progress per powiat of an area
+        only (``_each_powiat``).
         """
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)
         if teryt is not None:
             teryts, parent = [teryt], None
         else:
-            teryts, parent = self._area_teryts(bbox, sheet, options)
+            teryts, parent = self._area_teryts(bbox, sheet)
         jobs = self._archive_jobs(teryts, options, parent=parent)
         planned, stale = self._planned(
             lambda: [self._inspect_archive(job) for job in jobs], update, plan
         )
-        timeout = options.get("timeout")
         by_unit = {job.unit: job for job in jobs}
 
-        def one(
-            unit: str, started: Callable[[], None] | None
-        ) -> LandCoverResult | LandCoverFailure:
+        def one(unit: str, started: Callable[[], None] | None) -> _PowiatOutcome:
             job = by_unit[unit]
-            try:
-                file = run_job(
-                    job,
-                    update,
-                    sink=sink,
-                    planned=planned,
-                    session=provider.session(),
-                    timeout=timeout,
-                    on_download=started,
-                )
-            except DownloadError as e:
-                if teryt is not None:
-                    raise
-                logger.debug("BDOT10k %s %s: %s", options["year"], job.unit, e)
-                return LandCoverFailure(job.unit, str(e))
-            return LandCoverResult(job.unit, file)
+            return self._unit(
+                unit,
+                lambda: _UnitResult(
+                    unit,
+                    run_job(
+                        job,
+                        update,
+                        sink=sink,
+                        planned=planned,
+                        session=provider.session(),
+                        on_download=started,
+                    ),
+                ),
+            )
 
         outcomes = _each_powiat(
             list(by_unit), one, workers, on_progress if teryt is None else None
         )
-        files = tuple(
-            o for o in outcomes if isinstance(o, LandCoverResult) and o.file is not None
-        )
-        failed = tuple(o for o in outcomes if isinstance(o, LandCoverFailure))
-        return files, failed, stale
+        return outcomes, stale
 
     def _archive(self, kwargs: dict) -> bool:
         """BDOT10k with ``year``: the yearly archive (ADR-042 D11)."""
@@ -1233,8 +1156,6 @@ class LandCoverManager:
                     f"{' albo '.join(products)}"
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
-        if kwargs.get("timeout") is not None:
-            require_timeout(kwargs["timeout"])
         if kwargs.get("year") is not None:
             require_int(kwargs["year"], "--year")
         if kwargs.get("layers") is not None:
@@ -1384,20 +1305,16 @@ class LandCoverManager:
         if isinstance(provider, SoilGridsProvider):
             soil = provider
             prop = kwargs["property"]
-            soil_timeout = kwargs.get("timeout", soil.DEFAULT_TIMEOUT)
             tokens = (prop, kwargs["depth"], kwargs["stat"])
             ext, transport = ".tif", TransportKind.WCS
-            edition = memoized_edition(lambda: soil.edition(prop, timeout=soil_timeout))
+            edition = memoized_edition(lambda: soil.edition(prop))
         else:
             assert isinstance(provider, CorineProvider)
             corine = provider
             year = kwargs["year"]
-            corine_timeout = kwargs.get("timeout", corine.DEFAULT_TIMEOUT)
             if corine.uses_clms(year):
                 tokens, ext, transport = (str(year),), ".tif", TransportKind.CLMS_API
-                edition = memoized_edition(
-                    lambda: corine.edition(year, timeout=corine_timeout)
-                )
+                edition = memoized_edition(lambda: corine.edition(year))
             else:
                 tokens, ext = (str(year), "preview"), ".png"
                 transport, edition = TransportKind.WMS, None
@@ -1421,13 +1338,14 @@ class LandCoverManager:
         return key
 
     def _area_teryts(
-        self, bbox: BBox | None, sheet: str | None, kwargs: dict
+        self, bbox: BBox | None, sheet: str | None
     ) -> tuple[list[str], dict]:
-        """Powiats of a BDOT10k area (PRG) and its ``extra.parent_request``."""
+        """Powiats of a BDOT10k area (PRG, its 30 s timeout - P7) and its
+        ``extra.parent_request``."""
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)  # callers: BDOT10k only
         parent, area = self._bdot_area(bbox, sheet)
-        teryts = provider.teryts_for_area(area, timeout=self._prg_timeout(kwargs))
+        teryts = provider.teryts_for_area(area)
         if not teryts:
             raise NoCoverageError("BDOT10k: obszar nie przecina zadnego powiatu (PRG)")
         return teryts, parent
@@ -1439,11 +1357,6 @@ class LandCoverManager:
         if sheet is not None:
             sheet = SheetParser(sheet).sheet  # one canonical code (A7)
         return self._jobs(bbox=bbox, sheet=sheet, kwargs=kwargs), None
-
-    @staticmethod
-    def _prg_timeout(kwargs: dict) -> int:
-        """PRG lookup timeout: the BDOT10k ``timeout`` option, else 30 s (P7)."""
-        return kwargs.get("timeout", 30)
 
     @staticmethod
     def _bdot_area(bbox: BBox | None, sheet: str | None) -> tuple[dict, BBox]:
@@ -1509,7 +1422,7 @@ class LandCoverManager:
         *,
         parent: dict | None,
         on_download: Callable[[], None] | None = None,
-    ) -> LandCoverResult:
+    ) -> _UnitResult:
         """Local versions or one download for the jobs of one unit (spec 4.2).
 
         A job out of the plan keeps its local version; the others go through
@@ -1536,7 +1449,7 @@ class LandCoverManager:
                 outcome = self._fetch_bdot(jobs, in_scope, outcome, kwargs, parent)
             else:
                 outcome = [self._fetch_raster(jobs[0], kwargs)]
-        return LandCoverResult(
+        return _UnitResult(
             jobs[0].unit,
             outcome[0],
             raw=outcome[1] if len(outcome) > 1 else None,
@@ -1616,7 +1529,7 @@ class LandCoverManager:
         version = VersionRef.downloaded()
         staged = new_staging(main.slot)
         staged_raw = new_staging(raw.slot) if raw is not None else None
-        options = {k: kwargs[k] for k in ("timeout", "format") if k in kwargs}
+        options = {"format": kwargs["format"]} if "format" in kwargs else {}
         try:
             package = provider.download_package(
                 teryt,
@@ -1725,3 +1638,380 @@ class LandCoverManager:
             f"provider={self.provider_name!r}, "
             f"output_dir={self._output_dir!r})"
         )
+
+
+# =============================================================================
+# Command-level functions (``landcover download``, ``soil download``; ADR-044)
+# =============================================================================
+
+# Content choices of ``landcover download`` and ``soil download``: the
+# ``LandCoverManager`` options of the product given.
+_LANDCOVER_CHOICES = (
+    "whole_country",
+    "year",
+    "format",
+    "layers",
+    "keep_raw",
+    "horizontal_crs",
+)
+_SOIL_CHOICES = ("property", "depth", "stat")
+
+
+def _given(arguments: dict, names: Sequence[str]) -> dict:
+    """The choices given (``None`` and ``False`` = not chosen)."""
+    return {
+        name: arguments[name]
+        for name in names
+        if arguments[name] is not None and arguments[name] is not False
+    }
+
+
+def _landcover_manager(
+    product: str | None, output_dir: str | Path | None, cache: MetadataCache | bool
+) -> LandCoverManager:
+    """The manager of ``product`` in the store ``output_dir`` (both checked
+    first, without network)."""
+    chosen = require_landcover_product(product)
+    if output_dir is None:
+        raise ValidationError(output_required("landcover"))
+    return LandCoverManager(output_dir, chosen, cache=cache)
+
+
+def _soil_manager(
+    output_dir: str | Path | None, cache: MetadataCache | bool
+) -> LandCoverManager:
+    """The SoilGrids manager of the store ``output_dir`` (checked first)."""
+    if output_dir is None:
+        raise ValidationError(output_required("soil"))
+    return LandCoverManager(output_dir, "soilgrids", cache=cache)
+
+
+def download_landcover(
+    *,
+    product: str | None,
+    output_dir: str | Path | None,
+    teryt: str | None = None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    whole_country: bool = False,
+    year: int | None = None,
+    format: str | None = None,
+    layers: Sequence[str] | None = None,
+    keep_raw: bool = False,
+    horizontal_crs: str | None = None,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    workers: int = 1,
+    cache: MetadataCache | bool = True,
+    on_progress: Callable[[DownloadProgress], None] | None = None,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> LandCoverReport:
+    """Download land cover data (``landcover download``) into the version
+    store of ``output_dir``.
+
+    Parameter names and values are the flags of the command in
+    ``snake_case``; every data choice is explicit. ``product``:
+    ``bdot10k``, ``bdoo``, ``corine``, ``zabaged``, ``data50``,
+    ``data250`` (``LANDCOVER_PRODUCTS``; SoilGrids: ``download_soil``).
+    Exactly one selection: ``teryt`` (BDOT10k: a powiat, 4 digits; BDOO: a
+    voivodeship, 2 digits), ``sheet``, ``bbox`` (any supported CRS),
+    ``geometry`` (SHP/GPKG; its envelope, ``layer`` of a GPKG) or
+    ``whole_country`` (ZABAGED, Data50, Data250).
+
+    - BDOT10k: ``format`` ``"GPKG"`` (default) or ``"SHP"`` (the ZIP of the
+      package), optional ``layers`` (layer codes, e.g. ``["PTWP", "SWRS"]``;
+      GPKG) and ``keep_raw`` (the original ZIP as a second file, ``raw``);
+      an area = the package of EVERY powiat of it (PRG), ``workers`` in
+      parallel. With ``year`` 2014-2025 the yearly archive (state at the
+      start of the year): the powiat package 1:1 with a required ``format``
+      ``"GML"`` or ``"SHP"``, labelled by its year, identical years stored
+      once (``relabeled``, ADR-042 D7, D11).
+    - BDOO (PL): required ``year`` 2015, 2021-2026 - the original GML
+      package of each voivodeship (of ``teryt`` or of the area); optional
+      ``layers`` - class codes of that release (``["ADJA", "PTWP"]``): a ZIP
+      of the files of those classes only (a class without objects in the
+      voivodeship: ``CLASSES_ABSENT``; none of them: a ``no_coverage``
+      failure of the voivodeship).
+    - CORINE: required ``year`` 2018/2012/2006/2000 (CLMS data with
+      ``CLMS_CREDENTIALS``, else the WMS preview: ``CORINE_PREVIEW``),
+      1990 (WMS preview only).
+    - ZABAGED, Data50, Data250 (CZ): an area (``bbox``/``geometry``) -> one
+      GPKG of the object layers of the service in EPSG:5514;
+      ``whole_country=True`` with ``horizontal_crs`` ``"EPSG:5514"`` or
+      ``"EPSG:3045"`` -> the national file of the ATOM feed 1:1, labelled by
+      its edition, size announced first (``WHOLE_COUNTRY_SIZE``).
+
+    Files: ``landcover/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|
+    <arkusz>|country/cz}`` with versions in ``versions/`` (spec 3.4).
+    ``update``/``plan`` as in every store command (``plan`` from
+    ``check_landcover`` with ``update="upgrade"``); ``cache``: metadata
+    cache of the PRG powiat query and of the ATOM feed index (``True``:
+    default file in the current directory, ``False``: none);
+    ``on_progress``: the units of an area of BDOT10k powiats or BDOO
+    voivodeships as for a sheet list; ``on_notice`` receives each notice
+    when emitted.
+
+    Returns
+    -------
+    LandCoverReport
+        ``files``, ``raw``, ``failed`` (a file that failed, the other units
+        still ran), ``stale``, ``notices`` and ``ok``.
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice or an argument of a wrong type
+        (``year="2018"``, ``layers="SWRS,PTWP"``; never converted) - before
+        any request; a plan of another store or without
+        ``update="upgrade"``; an area of a collection source over the volume
+        limits (before any transfer).
+    NoCoverageError
+        A BDOT10k or BDOO area intersecting no powiat.
+    DownloadError
+        The PRG powiat query of an area failed.
+
+    Examples
+    --------
+    >>> report = download_landcover(
+    ...     product="bdot10k", output_dir="./data", teryt="1465"
+    ... )
+    >>> report.files[0].file.path  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
+    >>> area = download_landcover(
+    ...     product="bdot10k", output_dir="./data", layers=["PTWP", "SWRS"],
+    ...     bbox=BBox(450000, 550000, 460000, 560000, "EPSG:2180"), workers=4,
+    ... )
+    >>> [item.unit for item in area.files], area.failed, area.ok
+    """
+    manager = _landcover_manager(product, output_dir, cache)
+    return manager.download(
+        teryt=teryt,
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        update=update,
+        plan=plan,
+        workers=workers,
+        on_notice=on_notice,
+        on_progress=on_progress,
+        **_given(locals(), _LANDCOVER_CHOICES),
+    )
+
+
+def check_landcover(
+    *,
+    product: str | None,
+    output_dir: str | Path | None,
+    teryt: str | None = None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    whole_country: bool = False,
+    year: int | None = None,
+    format: str | None = None,
+    layers: Sequence[str] | None = None,
+    keep_raw: bool = False,
+    horizontal_crs: str | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_landcover`` with the same choice; no data
+    is downloaded (``kartograf-plan/1``, track ``landcover``).
+
+    CORINE (CLMS) compares the local version with the CLMS catalogue, the
+    national files of ZABAGED, Data50 and Data250 with the edition of their
+    ATOM feed; BDOT10k (also the archive), BDOO, the CORINE preview and the
+    areas of the CZ sources have no cheap signal (``unverifiable``/
+    ``missing``). An area of BDOT10k or BDOO asks PRG for its units (every
+    powiat or voivodeship is a position); ``keep_raw`` adds the position of
+    the raw ZIP. The source is always asked: the metadata cache is
+    refreshed, never read.
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice (as ``download_landcover``).
+    NoCoverageError
+        A BDOT10k or BDOO area intersecting no powiat.
+    DownloadError
+        The PRG powiat query of an area failed.
+    """
+    manager = _landcover_manager(product, output_dir, cache)
+    return manager.check(
+        teryt=teryt,
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        on_notice=on_notice,
+        **_given(locals(), _LANDCOVER_CHOICES),
+    )
+
+
+def validate_landcover_request(
+    *,
+    product: str | None,
+    output_dir: str | Path | None,
+    teryt: str | None = None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    whole_country: bool = False,
+    year: int | None = None,
+    format: str | None = None,
+    layers: Sequence[str] | None = None,
+    keep_raw: bool = False,
+    horizontal_crs: str | None = None,
+) -> None:
+    """Every check ``download_landcover``/``check_landcover`` make before
+    their first request, without network and without writing (a
+    ``geometry`` file is read for its envelope): the same exception type and
+    text as the download (``project add``, ADR-040).
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice.
+    """
+    _landcover_manager(product, output_dir, False).validate_request(
+        teryt=teryt,
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        **_given(locals(), _LANDCOVER_CHOICES),
+    )
+
+
+def download_soil(
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    property: str | None = None,
+    depth: str | None = None,
+    stat: str | None = None,
+    update: UpdateMode | None = None,
+    plan: UpdatePlan | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> SoilReport:
+    """Download one SoilGrids layer (``soil download``) of an area into the
+    version store of ``output_dir``.
+
+    Parameter names and values are the flags of the command in
+    ``snake_case``; every choice is required: one area (``sheet``,
+    ``bbox`` in any supported CRS - the store slot is its EPSG:2180
+    envelope - or ``geometry`` with ``layer`` of a GPKG), ``property`` (bdod
+    density, cec exchange capacity, cfvo coarse fragments, clay, nitrogen,
+    ocd organic carbon density, ocs organic carbon stock, phh2o pH, sand,
+    silt, soc organic carbon), ``depth`` (0-5cm, 5-15cm, 15-30cm, 30-60cm,
+    60-100cm, 100-200cm below surface) and ``stat`` (mean, Q0.05, Q0.5,
+    Q0.95, uncertainty). File:
+    ``soil/global_soilgrids_<property>_<depth>_<stat>/{bbox/<coords>|<arkusz>}.tif``,
+    labelled by the SoilGrids edition (e.g. ``2.0``). ``update``/``plan``
+    (from ``check_soil``), ``cache`` (SoilGrids capabilities) and
+    ``on_notice`` as in ``download_landcover``.
+
+    Returns
+    -------
+    SoilReport
+        ``files`` (the raster), ``failed``, ``stale``, ``notices``, ``ok``.
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice - before any request; a plan of another
+        store or without ``update="upgrade"``.
+
+    Examples
+    --------
+    >>> report = download_soil(
+    ...     output_dir="./data", sheet="N-34-130-D",
+    ...     property="clay", depth="0-5cm", stat="mean",
+    ... )
+    >>> report.files[0].file.label  # the SoilGrids edition, e.g. 2.0
+    """
+    report = _soil_manager(output_dir, cache).download(
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        update=update,
+        plan=plan,
+        on_notice=on_notice,
+        **_given(locals(), _SOIL_CHOICES),
+    )
+    return SoilReport(
+        files=report.files,
+        failed=report.failed,
+        stale=report.stale,
+        notices=report.notices,
+        ok=report.ok,
+    )
+
+
+def check_soil(
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    property: str | None = None,
+    depth: str | None = None,
+    stat: str | None = None,
+    cache: MetadataCache | bool = True,
+    on_notice: Callable[[Notice], None] | None = None,
+) -> UpdatePlan:
+    """Update plan of ``download_soil`` with the same choice (track
+    ``landcover``): the local version compared with the SoilGrids edition
+    (GetCapabilities, cache refreshed); no data is downloaded.
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice (as ``download_soil``).
+    """
+    return _soil_manager(output_dir, cache).check(
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        on_notice=on_notice,
+        **_given(locals(), _SOIL_CHOICES),
+    )
+
+
+def validate_soil_request(
+    *,
+    output_dir: str | Path | None,
+    sheet: str | None = None,
+    bbox: BBox | None = None,
+    geometry: str | Path | None = None,
+    layer: str | None = None,
+    property: str | None = None,
+    depth: str | None = None,
+    stat: str | None = None,
+) -> None:
+    """Every check of ``download_soil``/``check_soil`` before the first
+    request, without network (``project add``, ADR-040).
+
+    Raises
+    ------
+    ValidationError
+        Invalid or missing choice.
+    """
+    _soil_manager(output_dir, False).validate_request(
+        sheet=sheet,
+        bbox=bbox,
+        geometry=geometry,
+        layer=layer,
+        **_given(locals(), _SOIL_CHOICES),
+    )
