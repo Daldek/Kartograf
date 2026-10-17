@@ -1,6 +1,6 @@
 """Data commands only translate flags and print the report (Z1):
 ``elevation download``/``imagery download`` -> ``download_data``,
-``landcover download`` -> ``LandCoverManager``, the collection groups ->
+``landcover download`` -> ``download_landcover``, collection groups ->
 ``download_collection``."""
 
 import ast
@@ -16,13 +16,11 @@ from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.laz import LazDownloadResult
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import ValidationError
-from kartograf.landcover.manager import LandCoverAreaResult
 from kartograf.notices import AUTO_CLIPPED, NO_COVERAGE_SOME, Notice
 
 _DOWNLOAD = "kartograf.cli.download_cmd.download_data"
 _CHECK = "kartograf.cli.download_cmd.check_data"
 _COLLECTION = "kartograf.cli.collection_cmd.download_collection"
-_LANDCOVER = "kartograf.cli.landcover_cmd.LandCoverManager"
 
 
 def _report(*, ok=True, failed=(), notices=()) -> DataReport:
@@ -170,34 +168,6 @@ def test_imagery_new_flags_translation(tmp_path):
         None,
         None,
     )
-
-
-def test_landcover_zabaged_translation(tmp_path):
-    """``--whole-country --horizontal-crs`` = ``download(whole_country=True,
-    horizontal_crs=...)`` of the ``zabaged`` source; an area passes neither."""
-    argv = ["landcover", "download", "--product", "zabaged", "-o", str(tmp_path)]
-    with patch(_LANDCOVER) as manager:
-        manager.return_value.download.return_value = LandCoverAreaResult(())
-        rc = main([*argv, "--whole-country", "--horizontal-crs", "EPSG:3045"])
-    assert rc == 0
-    assert manager.call_args.kwargs == {"output_dir": tmp_path, "provider": "zabaged"}
-    kwargs = manager.return_value.download.call_args.kwargs
-    assert (kwargs["whole_country"], kwargs["horizontal_crs"]) == (True, "EPSG:3045")
-    assert (kwargs["bbox"], kwargs["sheet"], kwargs["teryt"]) == (None, None, None)
-    with patch(_LANDCOVER) as manager:
-        manager.return_value.download.return_value = LandCoverAreaResult(())
-        rc = main(
-            [
-                *argv,
-                "--bbox=-451000,-1112000,-450500,-1111500",
-                "--bbox-crs",
-                "EPSG:5514",
-            ]
-        )
-    assert rc == 0
-    kwargs = manager.return_value.download.call_args.kwargs
-    assert kwargs["bbox"] == BBox(-451000, -1112000, -450500, -1111500, "EPSG:5514")
-    assert "whole_country" not in kwargs and "horizontal_crs" not in kwargs
 
 
 def test_level_per_country_syntax(tmp_path, capsys):

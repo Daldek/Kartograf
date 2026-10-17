@@ -297,7 +297,7 @@ def test_bdot10k_year_teryt_slot_and_sidecar(tmp_path, frozen_clock):
     assert result.ok
     (item,) = result.files
     file = item.file
-    assert file is not None and (item.unit, item.raw) == ("1261", None)
+    assert file is not None and item.unit == "1261" and result.raw == ()
     assert file.path == tmp_path / "landcover/pl_bdot10k_shp_2024/teryt/1261.zip"
     assert (file.status, file.label) == ("new", "2024")
     assert file.path.read_bytes() == response[2]
@@ -340,8 +340,9 @@ def test_bdot10k_year_area_powiats(tmp_path, frozen_clock):
         (1, 2, "0208", "downloading"),
         (1, 2, "0208", "completed"),
         (2, 2, "0224", "downloading"),
-        (2, 2, "0224", "failed"),
+        (2, 2, "0224", "no_coverage"),
     ]
+    assert result.failed[0].kind == "no_coverage"
     stored = result.files[0].file
     assert stored is not None
     assert stored.path == tmp_path / "landcover/pl_bdot10k_gml_2018/teryt/0208.zip"

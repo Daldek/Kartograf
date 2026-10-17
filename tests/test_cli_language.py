@@ -4,13 +4,13 @@ import argparse
 
 import pytest
 
+from kartograf import download_soil
 from kartograf.cli._parser import create_parser
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.data import download_data
 from kartograf.exceptions import KartografError
-from kartograf.landcover.manager import LandCoverManager
 
 
 def _all_parsers(parser: argparse.ArgumentParser):
@@ -59,8 +59,13 @@ def test_cli_error_paths_are_ascii_polish(argv, word, tmp_path, monkeypatch, cap
 def _library_errors():
     yield lambda: download_data(product="nmt", output_dir="o", sheet="X")
     yield lambda: download_data(product=None, output_dir="o", sheet="N-34-130-D")
-    yield lambda: LandCoverManager("o", "soilgrids", cache=False).download(
-        bbox=BBox(0, 0, 1, 1, "EPSG:2180"), property="x", depth="0-5cm", stat="mean"
+    yield lambda: download_soil(
+        output_dir="o",
+        bbox=BBox(0, 0, 1, 1, "EPSG:2180"),
+        property="x",
+        depth="0-5cm",
+        stat="mean",
+        cache=False,
     )
     yield lambda: SheetParser("Q-99")
     yield lambda: SheetParser("N-34-130-D").get_all_descendants("1:3")

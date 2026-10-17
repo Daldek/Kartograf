@@ -2536,7 +2536,6 @@ def run_job(
     sink: NoticeSink,
     planned: set[_SLOT_KEY] | None = None,
     session: requests.Session | None = None,
-    timeout: int | None = None,
     on_download: Callable[[], None] | None = None,
     cache: MetadataCache | None = None,
 ) -> VersionedFile | None:
@@ -2556,11 +2555,9 @@ def run_job(
     ``extra``; a tile record declaring its CRS (``uklad_xy``)
     names it as the CRS of the file. ``session``: HTTP session of the
     requests (``LandCoverManager``: its provider's; ``None``: one per thread
-    of this module); ``timeout``: seconds of one request (``None``:
-    ``PACKAGE_TIMEOUT`` for a file, the channel's ``timeout`` or
-    ``SERVICE_TIMEOUT`` for a page); ``on_download`` is called right before
-    the transfer starts (never for a local version); ``cache``: the metadata
-    cache of the ATOM feed index (revalidated with ``update="upgrade"``).
+    of this module); ``on_download`` is called right before the transfer
+    starts (never for a local version); ``cache``: the metadata cache of the
+    ATOM feed index (revalidated with ``update="upgrade"``).
 
     Raises
     ------
@@ -2594,7 +2591,7 @@ def run_job(
                     SLOW_SOURCE,
                     f"{subject(job.descriptor)}: {params.response_note}",
                 )
-            pages = timeout or params.timeout or SERVICE_TIMEOUT
+            pages = params.timeout or SERVICE_TIMEOUT
             _fetch_features(job, staged, source, _http(session), pages)
             return None
         if atom is not None:
@@ -2605,10 +2602,10 @@ def run_job(
                 sink,
                 atom(),
                 _http(session),
-                timeout or PACKAGE_TIMEOUT,
+                PACKAGE_TIMEOUT,
             )
         return _fetch_package(
-            job, staged, source, sink, _http(session), timeout or PACKAGE_TIMEOUT
+            job, staged, source, sink, _http(session), PACKAGE_TIMEOUT
         )
 
     def write(
@@ -3022,7 +3019,6 @@ def run_request(
     cache: MetadataCache | bool,
     sink: NoticeSink,
     track: Track = _TRACK,
-    timeout: int | None = None,
     on_progress: Callable[[DownloadProgress], None] | None = None,
 ) -> tuple[tuple[UnitFile, ...], tuple[UnitFailure, ...], tuple[PlanItem, ...]]:
     """Files, unit failures and stale plan positions of a validated request
@@ -3081,7 +3077,6 @@ def run_request(
                     update,
                     sink=sink,
                     planned=planned,
-                    timeout=timeout,
                     cache=metadata,
                 )
             except NoCoverageError as e:

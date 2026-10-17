@@ -1,14 +1,12 @@
-"""
-``soil download``, ``soil list-layers`` and ``soil hsg`` (Z1).
+"""``soil download``, ``soil list-layers`` and ``soil hsg`` (ADR-044).
 
-SoilGrids layers go through ``LandCoverManager`` (``run_land_cover``), the
-HSG through ``HSGCalculator``; the CLI translates flags and prints results.
+The CLI translates flags to the corresponding command-level API functions.
 """
 
 import argparse
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from kartograf.cli.download_cmd import (
     _plan_context,
@@ -20,26 +18,19 @@ from kartograf.cli.download_cmd import (
     _update_mode,
     run_with_plan_file,
 )
-from kartograf.cli.landcover_cmd import area_task_arguments, run_land_cover
-from kartograf.exceptions import DownloadError, ParseError, ValidationError
-from kartograf.landcover.manager import LandCoverManager
-
-if TYPE_CHECKING:
-    from kartograf.hydrology import HSGCalculator
-
-
-def _soil_download_options(args: argparse.Namespace) -> dict:
-    options: dict = {}
-    for name in ("property", "depth", "stat"):
-        value = getattr(args, name)
-        if value is not None:
-            options[name] = value
-    return options
+from kartograf.cli.landcover_cmd import area_task_arguments
+from kartograf.hydrology import calculate_hsg, check_hsg, hsg_statistics
+from kartograf.landcover.manager import LandCoverManager, check_soil, download_soil
 
 
 def soil_download_task_arguments(args: argparse.Namespace) -> dict:
     """Data options shared by ``soil download`` and a project task."""
-    return {**area_task_arguments(args), **_soil_download_options(args)}
+    return {
+        **area_task_arguments(args),
+        "property": args.property,
+        "depth": args.depth,
+        "stat": args.stat,
+    }
 
 
 def soil_hsg_task_arguments(args: argparse.Namespace) -> dict:
@@ -55,8 +46,27 @@ def cmd_soil_download(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 1
-    options = _soil_download_options(args)
-    return run_land_cover(args, "soilgrids", options)
+    return run_with_plan_file(args, _soil_download)
+
+
+def _soil_download(args: argparse.Namespace) -> int:
+    arguments = {**soil_download_task_arguments(args), "output_dir": Path(args.output)}
+    if args.check_updates:
+        return _report_plan(args, check_soil(**arguments, on_notice=_print_notice))
+    update = _update_mode(args)
+    report = download_soil(
+        **arguments,
+        update=update,
+        plan=_plan_context(args).loaded,
+        on_notice=_print_notice,
+    )
+    out = Path(args.output)
+    for item in report.files:
+        _report_file(args, _unit_of(item.file.path, out), item.file, update)
+    for failure in report.failed:
+        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
+    _report_stale(report.stale)
+    return 0 if report.ok else 1
 
 
 def cmd_soil_list_layers(args: argparse.Namespace) -> int:
@@ -103,44 +113,35 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
         )
         return 1
 
-    from kartograf.hydrology import HSGCalculator
-
     selection = soil_hsg_task_arguments(args)
-    calc = HSGCalculator(Path(args.output))
-
-    try:
-        return run_with_plan_file(args, lambda a: _hsg_task(a, calc, selection))
-    except (DownloadError, ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    return run_with_plan_file(args, lambda a: _hsg_task(a, selection))
 
 
-def _hsg_task(args: argparse.Namespace, calc: "HSGCalculator", selection: dict) -> int:
-    """One ``soil hsg`` request: a plan (``--check-updates``) or the inputs
-    and the HSG with one status line each (spec 4.5)."""
+def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
+    """One ``soil hsg`` request: plan or inputs plus the derived raster."""
+    arguments = {**selection, "output_dir": Path(args.output)}
     if args.check_updates:
-        plan = calc.check_hsg(**selection, on_notice=_print_notice)
+        plan = check_hsg(**arguments, on_notice=_print_notice)
         return _report_plan(args, plan)
     update = _update_mode(args)
-    result = calc.calculate_hsg(
-        **selection,
+    result = calculate_hsg(
+        **arguments,
         update=update,
         plan=_plan_context(args).loaded,
         on_notice=_print_notice,
     )
     out = Path(args.output)
-    for item in result.inputs:
-        if item.file is not None:
-            _report_file(args, _unit_of(item.file.path, out), item.file, update)
-    if result.file is not None:
-        _report_file(args, _unit_of(result.file.path, out), result.file, update)
+    for item in (*result.inputs, *result.files):
+        _report_file(args, _unit_of(item.file.path, out), item.file, update)
+    for failure in result.failed:
+        print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(result.stale)
     rc = 0 if result.ok else 1
 
-    if args.summary and result.file is not None:
+    if args.summary and result.files:
         print()
         print("Statystyki HSG (procent grupy: z pikseli z danymi):")
-        stats = calc.get_hsg_statistics(result.file.path)
+        stats = hsg_statistics(result.files[0].file.path)
         nodata = stats.pop("nodata")
         for group, data in stats.items():
             pct = data["percent"]

@@ -1,14 +1,14 @@
 """CLI and public API produce identical versioned stores for the E4 sources
 (``landcover download --product bdoo|data50|data250`` =
-``LandCoverManager(out, source).download``): BDOO of a voivodeship and of an
-area with ``--layers``, Data50 objects of an area, the Data250 national file,
-and the same first error for invalid choices (recorded answers of
-``tests/test_bdoo.py`` and ``tests/test_cz_data50_250.py``)."""
+``download_landcover(product=..., output_dir=...)``): BDOO of a
+voivodeship and of an area with ``--layers``, Data50 objects of an area,
+the Data250 national file, and the same input errors for invalid choices.
+"""
 
 import pytest
 
+from kartograf import download_landcover
 from kartograf.exceptions import ValidationError
-from kartograf.landcover.manager import LandCoverManager
 from kartograf.notices import CLASSES_ABSENT, UNIT_LIST, WHOLE_COUNTRY_SIZE
 from tests.fake_packages import zip_bytes
 from tests.parity import assert_notices_printed, assert_same_store, run_both
@@ -23,7 +23,7 @@ pytestmark = pytest.mark.usefixtures("frozen_clock")
 def _landcover(tmp_path, source: str, cli_args: list[str], **api_kwargs):
     return run_both(
         ["landcover", "download", "--product", source, *cli_args],
-        lambda out: LandCoverManager(out, source).download(**api_kwargs),
+        lambda out: download_landcover(product=source, output_dir=out, **api_kwargs),
         tmp_path,
     )
 

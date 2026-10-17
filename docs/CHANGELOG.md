@@ -32,11 +32,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zrobic: skrypty czytajace te linie dopasuj do sciezki pod `--output`
   (biblioteka bez zmian: `VersionedFile.path`, `PlanItem.segment`/
   `hierarchy`/`name`).
-- `HSGCalculator.get_hsg_statistics()` zwraca obok grup `A`-`D` klucz
-  `nodata` (piksele bez danych, `percent` = udzial we wszystkich
-  pikselach); `percent` grup to udzial w pikselach z danymi (jak dotad).
-  Co zrobic: kod iterujacy po wyniku pomija klucz `nodata` albo iteruje
-  po `HSG_VALUES`.
+- `hsg_statistics()` zwraca obok grup `A`-`D` klucz `nodata` (piksele
+  bez danych, `percent` = udzial we wszystkich pikselach); `percent`
+  grup to udzial w pikselach z danymi (jak dotad). Co zrobic: kod
+  iterujacy po wyniku pomija klucz `nodata` albo iteruje po `HSG_VALUES`.
 - Przeglad spojnosci UX 0.8.0 (bledy wejscia przed siecia, CLI = API):
   - `--layer` bez `--geometry` jest bledem w kazdej komendzie danych
     i w `project add` (dotad wartosc byla po cichu pomijana i zapisywana
@@ -94,6 +93,26 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     (ADR-044 D4; czasownik jak `init_project`, `verify_project`), bez
     aliasu; `kartograf project status` bez zmian. Co zrobic: zamien
     `project_status(...)` na `get_project_status(...)`.
+- Publiczne API pobran land cover, SoilGrids i HSG to teraz funkcje
+  `download_landcover`/`check_landcover`, `download_soil`/`check_soil`,
+  `calculate_hsg`/`check_hsg` i `hsg_statistics` z raportami
+  `LandCoverReport`, `SoilReport`, `HsgReport` (`files: tuple[UnitFile, ...]`,
+  `failed: tuple[UnitFailure, ...]`, `stale`, `notices`, `ok`).
+  `LandCoverManager`, `HSGCalculator`, `LandCoverResult`,
+  `LandCoverAreaResult`, `LandCoverFailure` i `HsgResult` nie sa eksportowane
+  z `kartograf.__all__`; nie ma aliasow. Bledy pojedynczych plikow ida do
+  `report.failed`, `ok=False`, ale bledy wejscia nadal daja
+  `ValidationError`. Nie ma parametru `timeout` funkcji komend ani
+  `collections.run_request` (limit providera/kanalu). Co zrobic:
+  `LandCoverManager(out, "bdot10k").download(teryt=t)` zamien na
+  `download_landcover(product="bdot10k", output_dir=out, teryt=t)`;
+  `LandCoverManager(out, "soilgrids").check(...)` na
+  `check_soil(output_dir=out, ...)`; `HSGCalculator(out).calculate_hsg(...)`
+  na `calculate_hsg(output_dir=out, ...)` (analogicznie `check_hsg`);
+  `calc.get_hsg_statistics(path)` na `hsg_statistics(path)`;
+  `result.file` na `report.files[0].file`, `result.files` na `report.files`
+  z polem `.file`, `keep_raw` w `report.raw`, wejscia HSG w `report.inputs`;
+  kontroluj `report.failed` i `report.ok`, usun przekazywanie `timeout`.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -191,8 +210,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   aktualizuj wywolania metod i odczyty plikow z `result.files`, a komunikaty
   wypisuj z `on_notice` bez ponownego przetwarzania `result.notices`.
 - Cache metadanych (Z6, ADR-037): funkcje publiczne (`download_data`,
-  `check_data`, tory `download_*`/`check_*`, `LandCoverManager`,
-  `HSGCalculator`) przyjmuja `cache: MetadataCache | bool = True` -
+  `check_data`, tory `download_*`/`check_*`, `download_landcover`/
+  `check_landcover`, `download_soil`/`check_soil`, `calculate_hsg`/
+  `check_hsg`) przyjmuja `cache: MetadataCache | bool = True` -
   domyslnie ten sam plik co CLI (`<cwd>/.kartograf_cache.db`), dotad
   biblioteka pracowala bez cache. `update="force"` pomija odczyty z cache
   (jak `--force`). Co zrobic: proces w katalogu bez prawa zapisu albo
@@ -254,35 +274,28 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `max_workers=` -> `workers=`; `check_laz_updates(selection, ...)` ->
   `check_laz_area(bbox, output_dir=..., vertical_crs=..., ...)`; plan
   wykonuj przez `download_laz_area(..., update="upgrade", plan=plan)`.
-- Land cover: `LandCoverManager.download(*, teryt, sheet, bbox, geometry,
-  layer, update, plan, workers, on_notice, **opcje)` i `check` z tym samym
-  wyborem sa funkcjami poziomu komendy (jedno wywolanie = `kartograf
-  landcover download`). `download` zawsze zwraca `LandCoverAreaResult`
-  (`files`, `failed`, `stale`, `notices`, `ok`); BDOT10k z `sheet`/`bbox`/
-  `geometry` pobiera kazdy powiat obszaru (rownolegle z `workers`);
-  `bbox` w dowolnym obslugiwanym CRS, `geometry` = obwiednia pliku;
-  komunikaty `corine_preview` i `geometry_layer_default` w `notices`.
-  `LandCoverManager(cache=True)` = domyslny cache w cwd. Brak wymaganych
-  opcji zrodla i opcje BDOT10k podane innemu zrodlu daja `ValidationError`.
-  Usuniete: `download_all_counties`, `check_all_counties`, `download_by_teryt`,
-  `download_by_bbox`, `download_by_sheet`, `download_batch`,
-  `LandCoverResult.stale`; wybor `teryt` dla CORINE/SoilGrids to
-  `ValidationError` (nie `NotImplementedError`). Co zrobic:
-  `download_*`/`download_all_counties` ->
-  `download(teryt=|sheet=|bbox=|geometry=)`; plik pojedynczego wyboru:
-  `result.files[0].file`; nieaktualne pozycje planu: `result.stale`;
-  `download_batch(items)` -> petla po `download` albo `workers=` dla
-  powiatow obszaru.
-- HSG: `HSGCalculator.calculate_hsg(*, sheet, bbox, geometry, layer, depth,
-  update, plan, timeout, on_notice)` i `check_hsg` z tym samym wyborem
-  zastepuja `calculate_hsg_by_sheet/bbox` i `check_hsg_by_sheet/bbox`.
-  Bez parametru `stat`: HSG zawsze ze statystyki `mean` (segmenty
-  `soil/global_soilgrids_<wlasciwosc>_<glebokosc>_mean` i
-  `hsg/global_soilgrids_<glebokosc>_mean` bez zmian - istniejace magazyny
-  dzialaja bez migracji). `bbox` w dowolnym CRS, `geometry` = obwiednia
-  pliku; `HsgResult.notices` i `ok`; `HSGCalculator(cache=True)`. Co
-  zrobic: `calculate_hsg_by_bbox(bbox, depth=..., stat="mean")` ->
-  `calculate_hsg(bbox=bbox, depth=...)`; analogicznie arkusz i `check_hsg`.
+- Land cover i gleby: `download_landcover(product=..., output_dir=...,
+  teryt=|sheet=|bbox=|geometry=, layer=, update=, plan=, workers=,
+  on_notice=, ...)` oraz `check_landcover` maja wybor zgodny z
+  `landcover download`; `download_soil(output_dir=..., sheet=|bbox=|
+  geometry=, property=, depth=, stat=, ...)` i `check_soil` odpowiadaja
+  `soil download`. Wyniki `LandCoverReport`/`SoilReport` podaja pliki
+  `UnitFile`, porazki `UnitFailure`, `stale`, `notices`, `ok`; BDOT10k
+  z obszaru pobiera kazdy powiat, `keep_raw` jest w `LandCoverReport.raw`.
+  Niepoprawne opcje koncza sie `ValidationError`. Co zrobic: dawne metody
+  `LandCoverManager.download/check` zamien na funkcje w `kartograf.__all__`,
+  podaj `product="bdot10k"` itp. tylko dla land cover i `output_dir=`;
+  plik z pojedynczej jednostki czytaj przez `report.files[0].file`,
+  osobne wersje oryginalnego ZIP przez `report.raw`; brak pokrycia
+  jednostki odczytaj z `report.failed`, nie z wyjatku obslugi pliku.
+- HSG: `calculate_hsg(output_dir=..., sheet=|bbox=|geometry=, depth=...)`
+  i `check_hsg` z takim samym wyborem zastepuja metody
+  `HSGCalculator.calculate_hsg/check_hsg`; HSG liczy tylko SoilGrids
+  `stat="mean"`. `HsgReport.files[0].file` to raster HSG, `inputs` to
+  pobrane clay/sand/silt, `failed` to bledy jednostek, `ok` odzwierciedla
+  komplet danych. Co zrobic: podaj `output_dir=`, usun `stat=` i
+  `timeout=`, czytaj wynik z `report.files[0].file`, wejscia z `inputs`,
+  statystyki oblicz przez `hsg_statistics(path)`.
 - CLI `elevation download` i `imagery download` tylko tlumacza flagi na
   `download_data`/`check_data` (opis w Dodane): bledy wejscia to
   `ValidationError` z tekstem jak w CLI, komunikaty o danych
@@ -444,17 +457,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `find_sheets_for_bbox(bbox, target_scale, sheet_system)`,
     `find_sheets_2000_for_bbox(bbox, target_scale)`,
     `find_sheets_for_geometry(filepath, target_scale, ..., *, sheet_system)`;
-    `LandCoverManager(output_dir, provider)`; `CorineProvider.download_by_bbox/
-    download_by_sheet(..., *, year)`; `SoilGridsProvider.download_by_bbox(...,
-    *, property, depth, stat)`; `HSGCalculator.calculate_hsg_by_bbox/
-    calculate_hsg_by_sheet(..., *, depth, stat)`.
+    `download_landcover(product=..., output_dir=...)`,
+    `download_soil(output_dir=..., property=..., depth=..., stat=...)`;
+    `CorineProvider.download_by_bbox/download_by_sheet(..., *, year)`;
+    `SoilGridsProvider.download_by_bbox(..., *, property, depth, stat)`;
+    `calculate_hsg(output_dir=..., depth=..., ...)`.
   Co zrobic: podaj jawnie wartosci, ktore dotad byly domyslne (CLI: `--product
   nmt -o ./data --resolution 1m --vertical-crs EVRF2007`, z obszarem
   `--country pl --sheet-system 1992`; CZ `--resolution 2m --vertical-crs Bpv`;
   pogranicze `--resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv`;
   usun `--scale` z zadan PL-1992). Biblioteka: przekaz provider
-  i katalog do `DownloadManager`/`LandCoverManager`, sciezke do
-  `MetadataCache` (CLI uzywa `.kartograf_cache.db` w katalogu biezacym).
+  i katalog do `DownloadManager`, `product` i `output_dir` do
+  `download_landcover`, sciezke do `MetadataCache` (CLI uzywa
+  `.kartograf_cache.db` w katalogu biezacym).
 - Magazyn wersjonowany dla arkuszy PL NMT/NMPT/orto (ADR-036;
   spec `docs/superpowers/specs/2026-10-08-versioned-store-design.md`):
   - Uklad: `<segment>/kampanie/<data>_<id>/...` -> `<segment>/versions/<hierarchia>/<data>_<id>_<sha8>/<godlo>.<ext>`
@@ -571,30 +586,31 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `hsg/global_soilgrids_<gl>_<stat>/...tif`; pod segmentem `teryt/<T>`,
     `bbox/<wsp>` (EPSG:2180, jak wycinki) albo hierarchia godla. Brak
     migracji. Co zrobic: pobierz ponownie do katalogu magazynu (`--output`)
-    i czytaj sciezke z linii statusu / `result.file.path`; stare pliki
-    usun recznie.
-  - `LandCoverManager` i `HSGCalculator` pisza wylacznie do magazynu:
-    `output_path` usuniety (`TypeError`), wynik `LandCoverResult` /
-    `LandCoverAreaResult` / `HsgResult` zamiast `Path`, `HSGCalculator(output_dir,
-    provider=None)` (katalog wymagany), `keep_intermediate` usuniety (wejscia
-    clay/sand/silt to wersje SoilGrids w magazynie). Co zrobic:
-    `LandCoverManager(<korzen magazynu>,
-    ...).download(teryt=|sheet=|bbox=|geometry=)` bez `output_path` i
-    `path = result.files[0].file.path` (dla wielu powiatow przejdz po
-    `result.files`); `HSGCalculator(<korzen>).calculate_hsg(bbox=bbox,
-    depth=...)` i `result.file.path`. Plik w wybranym miejscu poza magazynem:
-    `provider.download_by_*(..., output_path)` albo `hsg_from_rasters`.
-  - Land cover nie pobiera juz ponownie istniejacego pliku: domyslnie
-    lokalna wersja (SoilGrids/CORINE CLMS: jedno zapytanie o wydanie,
-    nowsze wydanie tylko zglaszane; BDOT10k i podglad CORINE bez taniego
-    sygnalu: `(bez sprawdzania; --check-updates)`). Wersje SoilGrids
-    i CORINE CLMS maja etykiete wydania zrodla (`2.0`, `V2020_20u1`), bez
-    wydania nie powstaja (blad). Co zrobic: ponowne pobranie — `--force` /
-    `update="force"`, nowsze wydanie — `--upgrade` / `update="upgrade"`.
-  - `download_all_counties` nie przerywa na pierwszym bledzie powiatu:
-    zwraca `LandCoverAreaResult(files, failed, stale)`; CLI wypisuje
+    i czytaj sciezke z linii statusu / `report.files[0].file.path`; stare
+    pliki usun recznie.
+  - Land cover, SoilGrids i HSG pisza wylacznie do magazynu:
+    `output_path` usuniety, `output_dir` wymagany, `keep_intermediate`
+    usuniety (wejscia clay/sand/silt to wersje SoilGrids w magazynie).
+    Wynik to raport `LandCoverReport`, `SoilReport` lub `HsgReport`
+    (wewnetrzne dawne `LandCoverResult`/`LandCoverAreaResult`/`HsgResult`
+    nie sa publiczne). Co zrobic: `download_landcover(product=...,
+    output_dir=<korzen magazynu>, teryt=|sheet=|bbox=|geometry=)` bez
+    `output_path`, pliki z `report.files`, surowy ZIP w `report.raw`;
+    `calculate_hsg(output_dir=<korzen magazynu>, bbox=bbox, depth=...)`
+    zwraca raster w `report.files[0].file`, wejscia w `report.inputs`.
+    Plik poza magazynem: `provider.download_by_*(..., output_path)`
+    albo `hsg_from_rasters`.
+  - Land cover i SoilGrids nie pobieraja ponownie istniejacego pliku:
+    tryb domyslny bierze lokalna wersje bez zapytania o wydanie; sygnal
+    bez taniego sprawdzenia daje `(bez sprawdzania; --check-updates)`.
+    `--check-updates`/`--upgrade` sprawdzaja wydanie SoilGrids i CORINE CLMS,
+    `--upgrade` pobiera nowsza tresc. Nowe wersje sa etykietowane wydaniem
+    (`2.0`, `V2020_20u1`), bez wydania nie powstaja. Co zrobic: ponowne
+    pobranie — `--force` / `update="force"`, nowsze wydanie — `--upgrade`.
+  - `download_landcover` nie przerywa na pierwszym bledzie powiatu:
+    `LandCoverReport.failed` zawiera jego `UnitFailure`; CLI wypisuje
     `Error: <TERYT>: ...` dla kazdego bledu i konczy kodem 1. Co zrobic:
-    sprawdzaj `result.failed` zamiast lapac wyjatek.
+    sprawdzaj `report.failed` i `report.ok` zamiast lapac wyjatek pliku.
   - `extra.source.raw_file` (BDOT10k `keep_raw`) zastapione
     `extra.source_files` (`name`, `file` = sciezka wersji ZIP wzgledem
     `--output`, `sha256`). Sidecar HSG: `extra.source_files` z `file`,
@@ -872,7 +888,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   5,8/6,7 GB, etykieta = data wydania, sygnal `metadata`; warstwy pod
   nazwami CUZK, innymi niz wynik obszaru - `Info` `AREA_OMITTED` przy
   kazdym pobraniu obszaru wskazuje plik krajowy). Biblioteka:
-  `LandCoverManager(output_dir, "zabaged")`.
+  `download_landcover(product="zabaged", output_dir=..., ...)`.
 - RUIAN w `boundaries download --product admin --country cz|auto`
   (ADR-042 D17): `--level kraj|okres|obec|katastralni-uzemi` ->
   `boundaries/cz_ruian_<poziom>/bbox/<coords>.gpkg` (EPSG:5514);
@@ -1058,8 +1074,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--upgrade`, `--force`, `--plan PLIK` (tory planu `landcover` i `hsg`);
   status `uzyta ponownie` (HSG z tych samych wejsc, bez liczenia).
 - Biblioteka: `UpdatePlan`, `PlanItem`, `UpdateMode`, `VersionRef`,
-  `VersionedFile`, `LandCoverResult`, `LandCoverAreaResult`,
-  `LandCoverFailure`, `HsgResult` i `Edition` w `__all__`;
+  `VersionedFile`, `LandCoverReport`, `SoilReport`, `HsgReport` i `Edition`
+  w `__all__` (typy wewnetrzne klas bez eksportu);
   `DownloadManager.check_sheets`, `FileStorage.get_versions_root`,
   `get_versions_base`, `has_legacy_campaigns`, `UpdatePlan.merge`/`items_for`.
   `kartograf.download.fetch` dostarcza `fetch_version`/`inspect_version`,

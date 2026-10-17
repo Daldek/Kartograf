@@ -1038,6 +1038,7 @@ def hsg_statistics(hsg_path: str | Path) -> dict:
     }
     return stats
 
+
 def hsg_from_rasters(
     clay: Path,
     sand: Path,

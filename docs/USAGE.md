@@ -283,8 +283,9 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
   używa pierwszej; biblioteka emituje jeden `Notice`
   `geometry_layer_default` z wybraną warstwą, listą pozostałych
   i podpowiedzią `--layer NAZWA` (CLI: `Info:`, również przy `-q`).
-  Dotyczy też `landcover download`, `soil download` i `soil hsg` (`LandCoverManager`,
-  `HSGCalculator`). Niskopoziomowe funkcje `kartograf.core.geometry`
+  Dotyczy też `landcover download`, `soil download` i `soil hsg`
+  (`download_landcover`, `download_soil`, `calculate_hsg`).
+  Niskopoziomowe funkcje `kartograf.core.geometry`
   (np. `find_sheets_for_geometry`) wywołane bez `layer=` logują
   ostrzeżenie (`logger.warning`) — podaj `layer=`, aby wskazać warstwę jawnie.
 - PL bez `--cutout` zapisuje **listę arkuszy** w hierarchii godeł;
@@ -1645,8 +1646,9 @@ nadają się do manifestu (`kartograf project add <nazwa> geodesy download
 Każda komenda CLI ma jedną funkcję biblioteki z tymi samymi wyborami
 (nazwy parametrów = nazwy flag w `snake_case`) i tym samym wynikiem
 (ADR-037): `kartograf elevation download` i `kartograf imagery download` =
-`download_data`/`check_data`, `landcover download` i `soil download` =
-`LandCoverManager.download`/`.check`, `soil hsg` = `HSGCalculator.calculate_hsg`/`.check_hsg`,
+`download_data`/`check_data`, `landcover download` =
+`download_landcover`/`check_landcover`, `soil download` =
+`download_soil`/`check_soil`, `soil hsg` = `calculate_hsg`/`check_hsg`,
 `elevation availability` = `check_availability`,
 `boundaries download`, `cadastre download`, `models3d download`, `hydro
 download`, `names download`, `maps download` i `geodesy download` =
@@ -1733,7 +1735,7 @@ Kolekcje (`boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`,
 notices, ok)`, elementy `files` i `failed` jak w `DataReport`:
 
 ```python
-from kartograf import BBox, LandCoverManager, check_collection, download_collection
+from kartograf import BBox, check_collection, download_collection, download_landcover
 
 out = "./data"
 show = lambda notice: print(notice.level, notice.text)  # = Info:/Warning: w CLI
@@ -1762,10 +1764,12 @@ for failure in lod2.failed:  # kind "no_coverage" = brak paczki powiatu (HTTP 40
 plan = check_collection(product="buildings", output_dir=out, teryt="1261", lod=1, year=2024)
 print([(i.track, i.unit, i.status) for i in plan.items])  # [("collection", "1261", "unverifiable")]
 # = landcover download --product bdot10k --teryt 1261 --year 2024 --format SHP
-LandCoverManager(out, "bdot10k").download(teryt="1261", year=2024, format="SHP")
+download_landcover(product="bdot10k", output_dir=out,
+                   teryt="1261", year=2024, format="SHP")
 # = landcover download --product bdoo --teryt 12 --year 2023 --layers PTWP,SWRS
-bdoo = LandCoverManager(out, "bdoo").download(
-    teryt="12", year=2023, layers=["PTWP", "SWRS"], on_notice=show
+bdoo = download_landcover(
+    product="bdoo", output_dir=out, teryt="12", year=2023,
+    layers=["PTWP", "SWRS"], on_notice=show
 )  # data/landcover/pl_bdoo_2023_ptwp-swrs/teryt/12.zip; Notice classes_absent,
 #    gdy paczka nie ma pliku którejś klasy
 # = names download --product world --country pl --bbox=-74.02,40.69,-73.92,40.79
@@ -1808,8 +1812,8 @@ Ortofoto CZ, wycinek ortofotomapy PL i dane CZ (sekcje 1.3, 1.4 i 1.9):
 
 ```python
 from kartograf import (
-    BBox, LandCoverManager, check_cz_orto_sheet, download_collection,
-    download_cz_orto_sheet, download_data, download_image_cutout,
+    BBox, check_cz_orto_sheet, download_collection, download_cz_orto_sheet,
+    download_data, download_image_cutout, download_landcover,
 )
 
 out = "./data"
@@ -1837,16 +1841,18 @@ high = download_image_cutout(BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
 print(high.file.path)  # data/orto/pl_1992_high_0.1m/bbox/566000_243000_566200_243200.tif
 
 # = landcover download --product zabaged --bbox=-460000,-1120000,-450000,-1110000 --bbox-crs EPSG:5514
-zabaged = LandCoverManager(out, "zabaged")
-area = zabaged.download(bbox=BBox(-460000, -1120000, -450000, -1110000, "EPSG:5514"))
+area = download_landcover(product="zabaged", output_dir=out,
+                          bbox=BBox(-460000, -1120000, -450000, -1110000, "EPSG:5514"))
 print(area.files[0].file.path)  # data/landcover/cz_zabaged/bbox/-460000_-1120000_-450000_-1110000.gpkg
-print(zabaged.get_available_layers())  # 22 nazwy warstw obszaru
+# Dostępne warstwy: kartograf landcover list-layers --product zabaged
 # plik krajowy (5,8 GB): Notice whole_country_size przed transferem
-zabaged.download(whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)
+download_landcover(product="zabaged", output_dir=out,
+                   whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)
 # = landcover download --product data50 --bbox 18.566,49.757,18.572,49.761 --bbox-crs EPSG:4326
-data50 = LandCoverManager(out, "data50")
-data50.download(bbox=BBox(18.566, 49.757, 18.572, 49.761, "EPSG:4326"))  # 69 warstw, EPSG:5514
-data50.download(whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)  # SHP, 516 MB
+download_landcover(product="data50", output_dir=out,
+                   bbox=BBox(18.566, 49.757, 18.572, 49.761, "EPSG:4326"))  # 69 warstw, EPSG:5514
+download_landcover(product="data50", output_dir=out,
+                   whole_country=True, horizontal_crs="EPSG:5514", on_notice=show)  # SHP, 516 MB
 # = boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox ...
 download_collection(product="admin", output_dir=out, country="auto",
                     level={"pl": "gmina", "cz": "obec"},
@@ -1890,41 +1896,41 @@ area = BBox(min_x=450000, min_y=550000, max_x=460000, max_y=560000, crs="EPSG:21
 kron = GugikProvider(vertical_crs="KRON86", resolution="1m")
 path = kron.download_bbox(area, Path("my_area.tif"))
 
-# Land Cover: BDOT10k / CORINE / SoilGrids do magazynu (output_dir = --output)
-from kartograf import LandCoverManager
-lc = LandCoverManager("./data", "bdot10k")
-result = lc.download(teryt="1465")         # BDOT10k (powiat) -> LandCoverAreaResult
+# Land Cover: BDOT10k / CORINE i SoilGrids do magazynu (output_dir = --output)
+from kartograf import (
+    calculate_hsg, check_hsg, check_soil, download_landcover, download_soil,
+    hsg_statistics,
+)
+result = download_landcover(product="bdot10k", output_dir="./data", teryt="1465")
 file = result.files[0].file
 print(file.path, file.status)  # data/landcover/pl_bdot10k_gpkg/teryt/1465.gpkg new
-# BDOT10k z KAŻDEGO powiatu obszaru (bbox w dowolnym układzie, sheet= albo
-# geometry=), powiaty równolegle (workers=), tylko wybrane warstwy ->
+# BDOT10k z KAZDEGO powiatu obszaru (bbox w dowolnym ukladzie, sheet= albo
+# geometry=), powiaty rownolegle (workers=), tylko wybrane warstwy ->
 # landcover/pl_bdot10k_gpkg_ptwp-swkn-swrm-swrs/teryt/<T>.gpkg;
-# keep_raw=True: oryginalny ZIP GUGiK jako osobna wersja
-# (landcover/pl_bdot10k_gpkg_zip/teryt/<T>.zip, pełny pakiet; tylko GPKG)
-area = lc.download(
+# keep_raw=True: oryginalny ZIP GUGiK jako osobna wersja w report.raw
+area = download_landcover(
+    product="bdot10k", output_dir="./data",
     bbox=BBox(340000, 290000, 350000, 300000, "EPSG:2180"),
-    layers=["SWRS", "SWKN", "SWRM", "PTWP"],
-    keep_raw=True,
-    workers=4,
+    layers=["SWRS", "SWKN", "SWRM", "PTWP"], keep_raw=True, workers=4,
 )
-paths = [r.file.path for r in area.files]  # area.failed: powiaty z błędem
-print(area.ok, area.notices)                 # ok = brak błędów i nieaktualnych pozycji
-# obszar bez powiatu: NoCoverageError
-lc.set_provider("corine")
-lc.download(sheet="N-34-130-D", year=2018)  # CORINE (CLMS albo podgląd _preview)
-lc.set_provider("soilgrids")
-plan = lc.check(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean")
-lc.download(sheet="N-34-130-D", property="clay", depth="0-5cm", stat="mean",
-            update="upgrade", plan=plan)    # tylko pozycje planu
+paths = [r.file.path for r in area.files]
+raw_paths = [r.file.path for r in area.raw]
+print(area.ok, area.failed, area.notices)  # failed: bledy pojedynczych powiatow
+download_landcover(product="corine", output_dir="./data",
+                   sheet="N-34-130-D", year=2018)  # CLMS albo podglad _preview
+soil = dict(output_dir="./data", sheet="N-34-130-D",
+            property="clay", depth="0-5cm", stat="mean")
+plan = check_soil(**soil)
+download_soil(**soil, update="upgrade", plan=plan)  # tylko pozycje planu
 
-# Hydrologic Soil Groups (wejścia = wersje SoilGrids "mean" w tym samym magazynie);
-# wybór: sheet=, bbox= (dowolny układ) albo geometry= (obwiednia pliku)
-from kartograf import HSGCalculator
-calc = HSGCalculator("./data")
-hsg = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
-print(hsg.file.status, hsg.file.label)      # new 2.0 (ponownie: reused 2.0)
-plan = calc.check_hsg(sheet="N-34-130-D", depth="0-5cm")  # bez pobierania
-stats = calc.get_hsg_statistics(hsg.file.path)
+# Hydrologic Soil Groups (wejscia = wersje SoilGrids "mean" w tym samym magazynie);
+# wybor: sheet=, bbox= (dowolny uklad) albo geometry= (obwiednia pliku)
+hsg = calculate_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
+if hsg.files:
+    print(hsg.files[0].file.status, hsg.files[0].file.label)
+    stats = hsg_statistics(hsg.files[0].file.path)
+print(hsg.inputs, hsg.failed, hsg.ok)
+plan = check_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
 
 # HSG z gotowych rastrow clay/sand/silt (g/kg) na jawnej siatce - bez pobierania
 from kartograf import BBox, hsg_from_rasters
@@ -2008,20 +2014,20 @@ clouds = download_cz_laz(**selection_cz, update="upgrade", plan=plan)
 
 **Cache metadanych w bibliotece.** Funkcje poziomu komendy i torów
 (`download_data`, `check_data`, `download_pl_cutout`, `download_cz_*`,
-`download_laz_area`, `LandCoverManager`, `HSGCalculator`) przyjmują
+`download_laz_area`, `download_landcover`/`check_landcover`,
+`download_soil`/`check_soil`, `calculate_hsg`/`check_hsg`) przyjmują
 `cache: MetadataCache | bool = True`: domyślnie ten sam plik co CLI
 (`<cwd>/.kartograf_cache.db`, TTL 7 dni), `False` = bez cache, własny
 `MetadataCache` = ten. `update="force"` pomija odczyty z cache w tym
-wywołaniu (jak `--force`), a funkcje sprawdzenia (`check_data`,
-`check_*`, `LandCoverManager.check`) pomijają je zawsze (jak
-`--check-updates`). Katalog tylko do odczytu: cache wyłączony
-z `Notice` `cache_disabled`, pobieranie idzie dalej. Provider tworzony
-ręcznie (niżej) bez `MetadataCache` pyta skorowidz GUGiK przy KAŻDYM
-`download_sheet`; przekaż mu cache, a zapytania o arkusz ograniczą się do
-raz na TTL:
+wywołaniu (jak `--force`), a funkcje sprawdzenia (`check_data`, `check_*`)
+pomijają je zawsze (jak `--check-updates`). Katalog tylko do odczytu:
+cache wyłączony z `Notice` `cache_disabled`, pobieranie idzie dalej.
+Provider tworzony ręcznie (niżej) bez `MetadataCache` pyta skorowidz
+GUGiK przy KAŻDYM `download_sheet`; przekaż mu cache, a zapytania o arkusz
+ograniczą się do raz na TTL:
 
 ```python
-from kartograf import DownloadManager, MetadataCache
+from kartograf import DownloadManager, MetadataCache, download_landcover
 from kartograf.providers.pl import create_nmt_provider
 
 manager = DownloadManager(
@@ -2031,20 +2037,21 @@ manager = DownloadManager(
     ),  # albo GugikProvider(..., cache=...)
 )
 # Land cover: cache dla providera tworzonego po nazwie (BDOT10k: odpowiedzi PRG)
-lc = LandCoverManager("./data", "bdot10k", cache=MetadataCache(".kartograf_cache.db"))
+report = download_landcover(product="bdot10k", output_dir="./data",
+                            teryt="1465", cache=MetadataCache(".kartograf_cache.db"))
 ```
 
 **`update="force"` a cache providera.** `force` pomija odczyty tylko
 z cache, który otwiera sama funkcja (parametr `cache` funkcji poziomu
-komendy; `LandCoverManager` z providerem po nazwie): rekord jest pobrany
-na nowo i zapisany. Provider przekazany jako gotowa instancja
-(`DownloadManager("./data", provider)`, `LandCoverManager("./data",
-Bdot10kProvider(cache=...))`, `download_laz_area(..., provider=...)`)
-zachowuje SWÓJ cache: `update="force"` pobiera pliki ponownie, ale rekordy
-skorowidza albo odpowiedzi PRG może wziąć z tego cache (do końca TTL).
-Pełne odświeżenie: utwórz provider z `MetadataCache(".kartograf_cache.db",
-refresh=True)` albo wywołaj `download_data(..., update="force")`, które
-tworzy provider samo.
+komendy, również `download_landcover`): rekord jest pobrany na nowo
+i zapisany. Provider przekazany jako gotowa instancja w API niższego
+poziomu (`DownloadManager("./data", provider)`, wewnętrzny
+`LandCoverManager("./data", Bdot10kProvider(cache=...))`,
+`download_laz_area(..., provider=...)`) zachowuje SWÓJ cache:
+`update="force"` pobiera pliki ponownie, ale rekordy skorowidza albo
+odpowiedzi PRG może wziąć z tego cache (do końca TTL). Pełne odświeżenie:
+utwórz provider z `MetadataCache(".kartograf_cache.db", refresh=True)`
+albo wywołaj `download_data(..., update="force")`, które tworzy provider samo.
 
 Pozostałe elementy publicznego API (m.in. `GugikNmptProvider` —
 od 0.8.0 z wymaganym `resolution=`, np. `GugikNmptProvider(vertical_crs="EVRF2007",
@@ -2123,11 +2130,13 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
   (`UnitFile(unit, country, file)`), `failed` (`UnitFailure(unit, country,
   error, kind)`), `stale`, `superseded`, `notices`, `ok` (kod wyjścia CLI:
   `True` = 0).
-- `LandCoverAreaResult` (`LandCoverManager.download`): `files`
-  (`LandCoverResult(unit, file, raw)`; `raw` = oryginalny ZIP przy
-  `keep_raw`), `failed` (`LandCoverFailure(unit, error)`), `stale`,
-  `notices`, `ok`; `HsgResult` (`HSGCalculator.calculate_hsg`): `unit`,
-  `file`, `inputs` (wejścia clay/sand/silt), `stale`, `notices`, `ok`.
+- `LandCoverReport` (`download_landcover`): `files`
+  (`UnitFile(unit, country, file)`), `raw` (oryginalny ZIP BDOT10k przy
+  `keep_raw`, również jako `UnitFile`), `failed` (`UnitFailure` ze wskazaniem
+  jednostki, kraju, tekstu i rodzaju błędu), `stale`, `notices`, `ok`.
+  `SoilReport` (`download_soil`) ma ten sam kontrakt bez `raw`.
+  `HsgReport` (`calculate_hsg`) dodaje `inputs` (wejścia clay/sand/silt),
+  a raster wynikowy umieszcza w `files`; awarie wejść w `failed`, `ok=False`.
 - `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
   (`new`/`unchanged`/`relabeled`/`local`, dla HSG także `reused`), `label`, `sha256`,
   `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
@@ -2435,8 +2444,9 @@ print(report.stale, report.files.get(godlo, ()))
 # download_cz_cutout / download_cz_sheet / download_cz_orto_sheet(..., update=,
 # plan=) + check_pl_cutout / check_image_cutout / check_cz_cutout /
 # check_cz_sheet / check_cz_orto_sheet (te same argumenty); land cover:
-# LandCoverManager.download(..., update=, plan=) + check (te same argumenty);
-# HSG: calculate_hsg(..., update=, plan=) + check_hsg; kolekcje:
+# download_landcover(..., update=, plan=) + check_landcover; SoilGrids:
+# download_soil(..., update=, plan=) + check_soil; HSG:
+# calculate_hsg(..., update=, plan=) + check_hsg; kolekcje:
 # download_collection(..., update=, plan=) + check_collection; pozycje
 # planu: item.track, item.unit
 ```
@@ -2448,11 +2458,11 @@ print(report.stale, report.files.get(godlo, ()))
 - SoilGrids (ISRIC): 11 parametrów, 6 głębokości, 5 statystyk,
   rozdzielczość 250 m — tabela parametrów i jednostek: PRD 3.7;
   `kartograf soil list-layers`.
-- HSG (`kartograf soil hsg`, `HSGCalculator(output_dir)`) bierze
+- HSG (`kartograf soil hsg`, `calculate_hsg(output_dir=...)`) bierze
   `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
   (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)
   i mapuje ją na grupy A–D; wynik to wersja GeoTIFF 1–4 (0 = nodata)
-  w `hsg/global_soilgrids_<głębokość>_<stat>/` z sidecarem
+  w `hsg/global_soilgrids_<głębokość>_mean/` z sidecarem
   (`extra.source_files`: ścieżki wersji i sha256 wejść; PRD 3.8). Te same
   wejścia = wersja użyta ponownie, bez liczenia.
 - `hsg_from_rasters(clay, sand, silt, *, bbox, crs, pixel_m, output_path)`
@@ -2472,7 +2482,7 @@ print(report.stale, report.files.get(godlo, ()))
   kwadratowych). Procent grupy to udział **w pikselach z danymi**; osobna
   linia `Brak danych: <procent>% calego obszaru (<ha> ha)` podaje piksele
   bez danych (klasa 0: wszystkie wejścia 0 albo nodata). W bibliotece
-  `get_hsg_statistics()` zwraca je pod kluczem `nodata` (procent liczony
+  `hsg_statistics(path)` zwraca je pod kluczem `nodata` (procent liczony
   od wszystkich pikseli). Skąd zera SoilGrids: sekcja 7.
 
 ---

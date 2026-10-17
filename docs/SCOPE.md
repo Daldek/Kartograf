@@ -280,7 +280,7 @@ i ZTM (2.15), Bodove pole i QGZU-2013 (2.16).
   zakresów bajtów)
 - Magazyn wersji (0.8.0): landcover/pl_bdot10k_gpkg[_<warstwy>]/teryt/<T>,
   sygnał: brak (lokalna wersja niesprawdzona, --force pobiera); keep_raw =
-  osobna wersja ZIP; obszar = każdy powiat (LandCoverAreaResult), błąd per powiat
+  osobna wersja ZIP; obszar = każdy powiat (`LandCoverReport`), błąd per powiat
 - Archiwum roczników (0.8.0, ADR-042 D11): `--year 2014..2025` (stan
   z początku roku) z wymaganym `--format GML|SHP` — oryginalna paczka
   powiatu ZIP 1:1 w landcover/pl_bdot10k_<format>_<rok>/teryt/<T>.zip
@@ -475,9 +475,9 @@ from kartograf import (
     CzLazResult, CzLazFailure, check_cz_laz, download_cz_laz,
     # Download (LAZ PL: WFS, kampanie)
     LazDownloadResult, LazTileFailure, check_laz_area, download_laz_area,
-    # Land Cover
-    LandCoverManager, LandCoverResult, LandCoverAreaResult, LandCoverFailure,
-    Edition,
+    # Land cover and soil (command level, ADR-044)
+    download_landcover, check_landcover, LandCoverReport,
+    download_soil, check_soil, SoilReport, Edition,
     # Providers
     BaseProvider, GugikProvider, GugikNmptProvider, GugikOrtoProvider,
     GugikLazProvider, LazTile, LazTileSelection, SupersededLazTile,
@@ -487,7 +487,7 @@ from kartograf import (
     # TERYT (PRG)
     discover_teryts_for_bbox, teryt_for_point,
     # Hydrology
-    HSGCalculator, HsgResult, hsg_from_rasters,
+    calculate_hsg, check_hsg, HsgReport, hsg_statistics, hsg_from_rasters,
     # Project manifest (kartograf-project/1, ADR-040)
     init_project, open_project, add_project_task, remove_project_task,
     download_project, check_project, get_project_status, verify_project,
@@ -553,9 +553,10 @@ from kartograf import (
   `geodesy/pl_control_vertical/bbox/<coords>.gpkg`,
   `landcover/pl_bdot10k_shp_2024/teryt/1261.zip`; różne treści nigdy
   nie dzielą slotu (pełne drzewo: ARCHITECTURE 3.3)
-- Każde udane pobranie (CLI, DownloadManager, LandCoverManager,
-  download_pl_cutout, download_laz_area, download_collection) i wynik HSG ma sidecar
-  `<plik>.meta.json` (schemat `kartograf-meta/1`, best-effort); sidecar
+- Każde udane pobranie (CLI, DownloadManager, download_landcover,
+  download_soil, calculate_hsg, download_pl_cutout, download_laz_area,
+  download_collection) ma sidecar `<plik>.meta.json` (schemat
+  `kartograf-meta/1`, best-effort); sidecar
   wersji jest obowiązkowy (porażka zapisu = brak wersji)
 
 ### 2.12 Kampanie GUGiK (ADR-030) - IN SCOPE
@@ -903,8 +904,9 @@ from kartograf import (
   SoilGridsProvider.DEFAULT_TIMEOUT (bbox; godło: domyślne 60 s
   z LandCoverProvider.download_by_sheet), Bdot10kProvider.DEFAULT_TIMEOUT
   (zapytanie TERYT w PRG, teryts_for_area: 30 s), _DEFAULT_TIMEOUT
-  w providers/cuzk/raster.py, HSGCalculator: parametr timeout=120
-  (grep -rn "_TIMEOUT =" kartograf/providers)
+  w providers/cuzk/raster.py, limit HSG wynika z limitow SoilGrids
+  (bez parametru `timeout` funkcji komendy ani `collections.run_request`;
+  kanal kolekcji moze deklarowac `FeatureBBoxParams.timeout`, ADR-044 D6).
 - Max 3 próby retry (nie konfigurowalne); ponawiane tylko błędy sieci,
   HTTP 429 i 5xx — inne 4xx (np. 404) kończą od razu z DownloadError.status_code;
   przerwa 2 s, potem 4 s, Retry-After wydłuża ją maks. do 60 s; jedno
@@ -1219,10 +1221,10 @@ kartograf/
 │   ├── updates.py            # Pozycje planu arkuszy PL
 │   └── versions.py           # Magazyn wersjonowany (ADR-036): zapis wyłączny, etykiety, lista wersji
 ├── landcover/             # Land Cover w magazynie wersji
-│   ├── manager.py            # LandCoverManager (download/check: teryt|sheet|bbox|geometry)
+│   ├── manager.py            # download_landcover/check_landcover, download_soil/check_soil; wewnętrzny LandCoverManager
 │   └── store.py              # segment HSG i wybór jednostki land cover (spec 3.4)
 ├── hydrology/             # Obliczenia hydrologiczne
-│   └── hsg.py                # HSGCalculator (calculate_hsg/check_hsg, wersje wejść, reused)
+│   └── hsg.py                # calculate_hsg/check_hsg, hsg_statistics; wewnętrzny HSGCalculator (wersje wejść, reused)
 ├── project/               # Manifest projektu kartograf-project/1 (ADR-040)
 │   ├── model.py              # Project, ProjectTask, PinnedFile, ProjectReport, TaskResult, ProjectCheck, FileCheck
 │   ├── commands.py           # COMMANDS: komendy danych w zadaniach (opcje JSON, walidacja bez sieci, pobranie, przypięcia)
@@ -1240,9 +1242,9 @@ kartograf/
     ├── parse_cmd.py           # `kartograf parse`
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
     ├── availability_cmd.py    # `elevation availability` -> check_availability (tabela, --details, --json)
-    ├── landcover_cmd.py       # `landcover download` -> LandCoverManager
+    ├── landcover_cmd.py       # `landcover download` -> download_landcover/check_landcover
     ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download` -> download_collection/check_collection
-    ├── soil_cmd.py            # `soil download`, `soil hsg`
+    ├── soil_cmd.py            # `soil download` -> download_soil/check_soil; `soil hsg` -> calculate_hsg/check_hsg
     ├── project_cmd.py         # `kartograf project` -> API projektu (ADR-040)
     ├── cache_cmd.py           # `kartograf cache`
     └── commands.py            # Fasada zgodności — re-eksport + entry point `main`
@@ -1313,7 +1315,7 @@ pyogrio >= 0.10        # GDAL wektorowy: zapis GPKG wyników obszaru kolekcji (A
 - LAZ: wybór kafli wg pokrycia obszaru (ADR-029), API download_laz_area
 - Granice PRG, EGiB i modele 3D budynków pobierają się przez TERYT
   i obszar (download_collection), archiwum BDOT10k przez TERYT i obszar
-  (--year, LandCoverManager); wersje w versions/ i sidecar każdego pliku
+  (`--year`, `download_landcover`); wersje w versions/ i sidecar każdego pliku
 - Produkty planów D i E (ortofoto CZ, wycinek ortofotomapy PL, obrazy
   GUGiK, warstwice CZ, NMT 100 m, BDOO, ZABAGED, Data50, Data250, RUIAN,
   HY-NET, geomorfologia, mapa katastralna CZ, adresy i granice specjalne

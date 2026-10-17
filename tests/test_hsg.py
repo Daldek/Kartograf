@@ -20,6 +20,7 @@ from kartograf.hydrology.hsg import (
     HSGCalculator,
     classify_usda_texture,
     classify_usda_texture_array,
+    hsg_statistics,
     texture_to_hsg,
     texture_to_hsg_array,
 )
@@ -438,15 +439,17 @@ class TestHSGCalculatorCalculateFull:
 
         calc = HSGCalculator(tmp_path, RasterSoilGrids())
         by_sheet = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")
-        assert by_sheet.file.path == tmp_path / HSG_SEG / "N-34/130/D/N-34-130-D.tif"
-        assert np.all(_hsg(by_sheet.file.path) == 2)  # loam -> B
+        assert by_sheet.files[0].file.path == (
+            tmp_path / HSG_SEG / "N-34/130/D/N-34-130-D.tif"
+        )
+        assert np.all(_hsg(by_sheet.files[0].file.path) == 2)  # loam -> B
         by_bbox = calc.calculate_hsg(bbox=BBOX, depth="0-5cm")
         shp = tmp_path / "area.shp"
         shp.touch()
         with patch("kartograf.core.geometry.get_overall_bbox", return_value=BBOX):
             by_geometry = calc.calculate_hsg(geometry=shp, depth="0-5cm")
-        assert by_geometry.file.path == by_bbox.file.path
-        assert by_geometry.file.status == "reused" and by_geometry.ok
+        assert by_geometry.files[0].file.path == by_bbox.files[0].file.path
+        assert by_geometry.files[0].file.status == "reused" and by_geometry.ok
 
     def test_stat_argument_rejected(self, tmp_path):
         calc = HSGCalculator(tmp_path, RasterSoilGrids())
@@ -461,16 +464,16 @@ class TestHSGCalculatorCalculateFull:
         first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        assert first.file.path == tmp_path / HSG_SEG / "bbox" / f"{COORDS}.tif"
+        assert first.files[0].file.path == tmp_path / HSG_SEG / "bbox" / f"{COORDS}.tif"
         assert [i.file.path.parent.parent.name for i in first.inputs] == [
             f"global_soilgrids_{p}_0-5cm_mean" for p in ("clay", "sand", "silt")
         ]
-        assert _meta(first.file)["extra"]["stat"] == "mean"
+        assert _meta(first.files[0].file)["extra"]["stat"] == "mean"
         again = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        assert again.file.status == "reused"
-        assert again.file.version_path == first.file.version_path
+        assert again.files[0].file.status == "reused"
+        assert again.files[0].file.version_path == first.files[0].file.version_path
 
     def test_bbox_any_crs(self, tmp_path):
         """A WGS84 bbox computes the HSG of its EPSG:2180 envelope."""
@@ -482,9 +485,9 @@ class TestHSGCalculatorCalculateFull:
             bbox=wgs, depth="0-5cm"
         )
         unit = selection_unit(bbox=transform_bbox(wgs, "EPSG:2180"))
-        assert result.unit == unit
-        assert result.file.path == tmp_path / HSG_SEG / "bbox" / f"{unit}.tif"
-        assert _meta(result.file)["request"]["bbox_crs"] == "EPSG:2180"
+        assert result.files[0].unit == unit
+        assert result.files[0].file.path == tmp_path / HSG_SEG / "bbox" / f"{unit}.tif"
+        assert _meta(result.files[0].file)["request"]["bbox_crs"] == "EPSG:2180"
 
     def test_check_hsg_items(self, tmp_path):
         calc = HSGCalculator(tmp_path, RasterSoilGrids())
@@ -518,7 +521,7 @@ class TestHSGCalculatorCalculateFull:
         result = HSGCalculator(tmp_path, RasterSoilGrids(rasters)).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        assert np.all(_hsg(result.file.path) == 1)  # sand -> A
+        assert np.all(_hsg(result.files[0].file.path) == 1)  # sand -> A
 
     def test_calculate_hsg_nodata_handling(self, tmp_path):
         """Cells with all-zero values -> nodata (0)."""
@@ -526,7 +529,7 @@ class TestHSGCalculatorCalculateFull:
         result = HSGCalculator(tmp_path, RasterSoilGrids(zeros)).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        assert np.all(_hsg(result.file.path) == 0)
+        assert np.all(_hsg(result.files[0].file.path) == 0)
 
     def test_calculate_hsg_masks_int16_nodata(self, tmp_path):
         """Cells flagged as nodata in the source rasters -> HSG 0, not B."""
@@ -540,7 +543,7 @@ class TestHSGCalculatorCalculateFull:
         result = HSGCalculator(tmp_path, RasterSoilGrids(rasters)).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        hsg = _hsg(result.file.path)
+        hsg = _hsg(result.files[0].file.path)
         assert hsg[0, 0] == 3  # clay_loam -> C
         assert hsg[1, 1] == 0
         assert hsg[2, 2] == 0
@@ -556,7 +559,7 @@ class TestHSGCalculatorCalculateFull:
         result = HSGCalculator(tmp_path, RasterSoilGrids(rasters)).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        hsg = _hsg(result.file.path)
+        hsg = _hsg(result.files[0].file.path)
         assert hsg[1, 1] == 0
         assert np.all(np.delete(hsg.reshape(-1), 4) > 0)
 
@@ -565,8 +568,8 @@ class TestHSGCalculatorCalculateFull:
         result = HSGCalculator(tmp_path, provider).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        file = result.file
-        assert result.unit == COORDS
+        file = result.files[0].file
+        assert result.files[0].unit == COORDS
         assert file.path == tmp_path / HSG_SEG / "bbox" / f"{COORDS}.tif"
         assert (file.status, file.label) == ("new", "2.0")
         assert file.version_path.parent.name == f"2.0_{file.sha256[:8]}"
@@ -606,9 +609,9 @@ class TestHSGCalculatorCalculateFull:
             )
         classify.assert_not_called()
         assert provider.downloads == []
-        assert (again.file.status, again.file.version_path) == (
+        assert (again.files[0].file.status, again.files[0].file.version_path) == (
             "reused",
-            first.file.version_path,
+            first.files[0].file.version_path,
         )
         assert [r.file.status for r in again.inputs] == ["local"] * 3
 
@@ -626,8 +629,8 @@ class TestHSGCalculatorCalculateFull:
             "unchanged",
             "unchanged",
         ]
-        assert result.file.status == "new"
-        assert len(list(result.file.version_path.parent.parent.iterdir())) == 2
+        assert result.files[0].file.status == "new"
+        assert len(list(result.files[0].file.version_path.parent.parent.iterdir())) == 2
 
     def test_hsg_force_same_inputs_is_reused(self, tmp_path):
         first = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
@@ -639,16 +642,18 @@ class TestHSGCalculatorCalculateFull:
         )
         assert provider.downloads == ["clay", "sand", "silt"]
         assert [r.file.status for r in again.inputs] == ["unchanged"] * 3
-        assert again.file.status == "reused"
-        assert again.file.version_path == first.file.version_path
+        assert again.files[0].file.status == "reused"
+        assert again.files[0].file.version_path == first.files[0].file.version_path
 
     def test_hsg_mixed_editions_label(self, tmp_path):
         provider = RasterSoilGrids(editions={"sand": "2.1"})
         result = HSGCalculator(tmp_path, provider).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
-        assert result.file.label == "2.0+2.1"
-        assert [f["label"] for f in _meta(result.file)["extra"]["source_files"]] == [
+        assert result.files[0].file.label == "2.0+2.1"
+        assert [
+            f["label"] for f in _meta(result.files[0].file)["extra"]["source_files"]
+        ] == [
             "2.0",
             "2.1",
             "2.0",
@@ -656,8 +661,14 @@ class TestHSGCalculatorCalculateFull:
 
     def test_hsg_input_error_no_result(self, tmp_path):
         provider = RasterSoilGrids({"silt": DownloadError("WCS 500")})
-        with pytest.raises(DownloadError, match="WCS 500"):
-            HSGCalculator(tmp_path, provider).calculate_hsg(bbox=BBOX, depth="0-5cm")
+        report = HSGCalculator(tmp_path, provider).calculate_hsg(
+            bbox=BBOX, depth="0-5cm"
+        )
+        assert not report.ok and report.files == ()
+        assert [(item.unit, item.kind) for item in report.failed] == [
+            (f"silt {COORDS}", "download")
+        ]
+        assert len(report.inputs) == 2
         assert not (tmp_path / "hsg").exists()
         assert not (tmp_path / "soil/global_soilgrids_silt_0-5cm_mean/bbox").exists()
 
@@ -693,20 +704,6 @@ class TestHSGCalculatorCalculateFull:
         assert failed.items[3].status == "check_failed"
         assert len(provider.downloads) == 3  # only the calculate call above
 
-    def test_check_hsg_uses_requested_timeout_for_source_status(self, tmp_path):
-        class TimeoutSoilGrids(RasterSoilGrids):
-            def edition(self, property, timeout=120):
-                if timeout == 17:
-                    raise DownloadError("limit 17 sekund")
-                return super().edition(property, timeout=timeout)
-
-        calc = HSGCalculator(tmp_path, TimeoutSoilGrids())
-        normal = calc.check_hsg(bbox=BBOX, depth="0-5cm")
-        short = calc.check_hsg(bbox=BBOX, depth="0-5cm", timeout=17)
-        assert [item.status for item in normal.items] == ["missing"] * 4
-        assert [item.status for item in short.items] == ["check_failed"] * 4
-        assert all(item.error == "limit 17 sekund" for item in short.items)
-
     def test_hsg_default_inputs_ask_no_source(self, tmp_path):
         """The default mode asks no source for local inputs (ADR-036 erratum
         3): an edition lookup that would fail changes nothing, no notice."""
@@ -716,7 +713,7 @@ class TestHSGCalculatorCalculateFull:
         provider.editions["clay"] = DownloadError("caps 503")
         observed = []
         result = calc.calculate_hsg(bbox=BBOX, depth="0-5cm", on_notice=observed.append)
-        assert result.file.status == "reused"
+        assert result.files[0].file.status == "reused"
         assert result.inputs[0].file.status == "local"
         assert result.inputs[0].file.unverified == "unchecked"
         assert result.notices == tuple(observed) == ()
@@ -732,7 +729,10 @@ class TestHSGCalculatorCalculateFull:
             bbox=BBOX, depth="0-5cm", update="upgrade", plan=plan
         )
         assert [r.file.status for r in result.inputs] == ["new", "local", "local"]
-        assert (result.file.status, result.file.label) == ("new", "2.0+2.1")
+        assert (result.files[0].file.status, result.files[0].file.label) == (
+            "new",
+            "2.0+2.1",
+        )
         assert result.stale == ()
 
     def test_hsg_sheet_and_bbox_distinct_paths(self, tmp_path):
@@ -743,10 +743,14 @@ class TestHSGCalculatorCalculateFull:
             bbox=BBox(450000, 550000, 455000, 555000, "EPSG:2180"),
             depth="0-5cm",
         )
-        paths = {by_sheet.file.path, by_bbox.file.path, other.file.path}
+        paths = {
+            by_sheet.files[0].file.path,
+            by_bbox.files[0].file.path,
+            other.files[0].file.path,
+        }
         assert len(paths) == 3
-        assert by_sheet.file.path.name == "M-33-36-A.tif"
-        assert _meta(by_sheet.file)["request"] == {"sheet": "M-33-36-A"}
+        assert by_sheet.files[0].file.path.name == "M-33-36-A.tif"
+        assert _meta(by_sheet.files[0].file)["request"] == {"sheet": "M-33-36-A"}
 
     def test_hsg_no_keep_intermediate(self, tmp_path):
         with pytest.raises(TypeError):
@@ -754,16 +758,15 @@ class TestHSGCalculatorCalculateFull:
                 bbox=BBOX, depth="0-5cm", keep_intermediate=True
             )
 
-    def test_get_hsg_statistics(self, tmp_path):
-        """get_hsg_statistics returns correct counts and areas."""
-        calc = HSGCalculator(tmp_path)
+    def test_hsg_statistics(self, tmp_path):
+        """Module function returns correct counts and areas."""
 
         # Create test HSG raster: 2x A, 1x B, 1x C
         data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
         hsg_path = tmp_path / "hsg.tif"
         _create_test_raster(hsg_path, data)
 
-        stats = calc.get_hsg_statistics(hsg_path)
+        stats = hsg_statistics(hsg_path)
 
         assert stats["A"]["count"] == 2
         assert stats["B"]["count"] == 1
@@ -772,28 +775,23 @@ class TestHSGCalculatorCalculateFull:
         assert abs(stats["A"]["percent"] - 50.0) < 0.1
         assert abs(stats["B"]["percent"] - 25.0) < 0.1
 
-    def test_get_hsg_statistics_no_data_entry(self, tmp_path):
-        """Live test 0.8.0: 19 of 104 SoilGrids cells had data and the groups
-        said 100 %. The groups are shares of the cells WITH data, the cells
-        without data (0) get ``nodata`` with the share of ALL cells."""
-        calc = HSGCalculator(tmp_path)
+    def test_hsg_statistics_no_data_entry(self, tmp_path):
+        """Classes use pixels with data; nodata uses all cells."""
         data = np.array([[2, 0, 0, 0], [2, 0, 0, 0]], dtype=np.uint8)
         hsg_path = tmp_path / "hsg.tif"
         _create_test_raster(hsg_path, data)
 
-        stats = calc.get_hsg_statistics(hsg_path)
+        stats = hsg_statistics(hsg_path)
 
         assert stats["B"]["percent"] == 100.0 and stats["B"]["count"] == 2
         assert stats["nodata"]["count"] == 6
         assert stats["nodata"]["percent"] == 75.0
         assert stats["nodata"]["area_ha"] == pytest.approx(3 * stats["B"]["area_ha"])
 
-    def test_get_hsg_statistics_geographic_crs_area_in_hectares(self, tmp_path):
+    def test_hsg_statistics_geographic_crs_area_in_hectares(self, tmp_path):
         """EPSG:4326 rasters get geodetic areas, not square degrees."""
         from pyproj import Geod
         from rasterio.transform import from_origin
-
-        calc = HSGCalculator(tmp_path)
 
         res = 0.0022457  # ~250 m in latitude
         transform = from_origin(22.7, 52.5, res, res)
@@ -809,22 +807,21 @@ class TestHSGCalculatorCalculateFull:
         )
         expected_ha = abs(area) / 10000
 
-        stats = calc.get_hsg_statistics(hsg_path)
+        stats = hsg_statistics(hsg_path)
 
         assert stats["B"]["count"] == 10000
         assert stats["B"]["area_ha"] == pytest.approx(expected_ha, rel=0.02)
         assert stats["B"]["percent"] == 100.0
 
-    def test_get_hsg_statistics_projected_crs_unchanged(self, tmp_path):
+    def test_hsg_statistics_projected_crs_unchanged(self, tmp_path):
         """Metric CRS keeps the plain width*height cell area."""
-        calc = HSGCalculator(tmp_path)
 
         # 2x2 raster over 10x10 km -> 5x5 km cells = 2500 ha each
         data = np.array([[1, 1], [2, 3]], dtype=np.uint8)
         hsg_path = tmp_path / "hsg_2180.tif"
         _create_test_raster(hsg_path, data)
 
-        stats = calc.get_hsg_statistics(hsg_path)
+        stats = hsg_statistics(hsg_path)
 
         assert stats["A"]["area_ha"] == pytest.approx(5000.0)
         assert stats["B"]["area_ha"] == pytest.approx(2500.0)
@@ -837,13 +834,16 @@ class TestHSGOutputDirOnWrite:
         HSGCalculator(tmp_path / "a" / "b", RasterSoilGrids())
         assert list(tmp_path.iterdir()) == []
 
-    def test_edition_failure_leaves_no_output_dir(self, tmp_path):
+    def test_edition_failure_records_failed_input_without_hsg(self, tmp_path):
         provider = RasterSoilGrids(editions={"clay": DownloadError("caps")})
-        with pytest.raises(DownloadError):
-            HSGCalculator(tmp_path / "a", provider).calculate_hsg(
-                bbox=BBOX, depth="0-5cm"
-            )
-        assert not (tmp_path / "a").exists()
+        report = HSGCalculator(tmp_path / "a", provider).calculate_hsg(
+            bbox=BBOX, depth="0-5cm"
+        )
+        assert not report.ok and not report.files
+        assert [(item.unit, item.kind) for item in report.failed] == [
+            (f"clay {COORDS}", "download")
+        ]
+        assert not (tmp_path / "a" / "hsg").exists()
 
 
 class TestHsgFromRasters:

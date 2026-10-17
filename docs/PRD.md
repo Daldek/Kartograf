@@ -365,18 +365,17 @@ działa także na udziałach sieciowych) albo SHP (archiwum `.zip`).
 
 #### Capabilities
 ```python
-from kartograf import LandCoverManager
+from kartograf import download_landcover
 
-# katalog magazynu ustawia KONSTRUKTOR (bez output_path; plik poza
-# magazynem: Bdot10kProvider.download_package)
-lc = LandCoverManager("./data", "bdot10k")
+# Pobieranie przez TERYT -> landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
+report = download_landcover(product="bdot10k", output_dir="./data", teryt="1465")
+for item in report.files:
+    print(item.unit, item.file.path, item.file.status)
+print(report.ok, report.failed)  # porazki pojedynczych powiatow w failed
 
-# Pobieranie przez TERYT (powiat) -> landcover/pl_bdot10k_gpkg/teryt/1465.gpkg
-result = lc.download(teryt="1465")          # LandCoverAreaResult
-print(result.files[0].file.path, result.files[0].file.status, result.ok)
-
-# Każdy powiat obszaru (sheet=, bbox= w dowolnym układzie, geometry=)
-lc.download(sheet="N-34-130-D", layers=["PTWP", "SWRS"], workers=4)
+# Kazdy powiat obszaru (sheet=, bbox= w dowolnym ukladzie, geometry=)
+download_landcover(product="bdot10k", output_dir="./data", sheet="N-34-130-D",
+                   layers=["PTWP", "SWRS"], workers=4)
 ```
 
 #### Warstwy (15 warstw — cały pakiet źródłowy; w wynikowym GPKG opcjonalny filtr `--layers`)
@@ -423,14 +422,13 @@ Pobieranie europejskiej klasyfikacji pokrycia terenu CORINE (44 klasy).
 
 #### Capabilities
 ```python
-from kartograf import LandCoverManager
-
-lc = LandCoverManager("./data", "corine")
+from kartograf import download_landcover
 
 # CLMS (CLMS_CREDENTIALS) -> landcover/eu_corine_2018/.../N-34-130-D.tif,
 # wersja z etykieta wydania (np. V2020_20u1); bez credentials podglad
 # landcover/eu_corine_2018_preview/.../N-34-130-D.png (etykieta = data)
-result = lc.download(sheet="N-34-130-D", year=2018)
+report = download_landcover(product="corine", output_dir="./data",
+                            sheet="N-34-130-D", year=2018)
 ```
 
 #### Dostępne lata
@@ -473,27 +471,21 @@ Pobieranie globalnych danych glebowych z ISRIC SoilGrids (rozdzielczość 250m).
 
 #### Capabilities
 ```python
-from kartograf import LandCoverManager
+from kartograf import download_soil
 
-lc = LandCoverManager("./data", "soilgrids")
-
-# Pobieranie węgla organicznego (selekcja: godło albo bbox — TERYT
-# w LandCoverManager nie jest obsługiwany i kończy się ValidationError)
+# Pobieranie wegla organicznego (godlo albo bbox; TERYT = ValidationError)
 # -> soil/global_soilgrids_soc_0-5cm_mean/N-34/130/D/N-34-130-D.tif,
-#    wersja z etykietą wydania SoilGrids (np. 2.0)
-lc.download(
-    sheet="N-34-130-D",
-    property="soc",
-    depth="0-5cm",
-    stat="mean",
+#    wersja z etykieta wydania SoilGrids (np. 2.0)
+report = download_soil(
+    output_dir="./data", sheet="N-34-130-D",
+    property="soc", depth="0-5cm", stat="mean",
 )
+print(report.files[0].file.path, report.failed, report.ok)
 
-# Pobieranie zawartości gliny
-lc.download(
-    sheet="N-34-130-D",
-    property="clay",
-    depth="15-30cm",
-    stat="mean",
+# Pobieranie zawartosci gliny
+download_soil(
+    output_dir="./data", sheet="N-34-130-D",
+    property="clay", depth="15-30cm", stat="mean",
 )
 ```
 
@@ -540,17 +532,16 @@ magazynie, wynik to wersja w `hsg/global_soilgrids_<głębokość>_<stat>/`
 
 #### Capabilities
 ```python
-from kartograf import HSGCalculator
+from kartograf import calculate_hsg, hsg_statistics
 
-calc = HSGCalculator("./data")
-
-# Oblicz HSG dla godła
-result = calc.calculate_hsg(sheet="N-34-130-D", depth="0-5cm")  # statystyka mean
-
-# Statystyki HSG
-stats = calc.get_hsg_statistics(result.file.path)
-for group, data in stats.items():
-    print(f"Grupa {group}: {data['percent']:.1f}%")
+# Oblicz HSG dla godla ze zgromadzonych lub pobranych wersji SoilGrids
+report = calculate_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
+if report.ok and report.files:
+    stats = hsg_statistics(report.files[0].file.path)
+    for group, data in stats.items():
+        print(f"Grupa {group}: {data['percent']:.1f}%")
+else:
+    print(report.failed)
 ```
 
 #### Grupy hydrologiczne
@@ -820,9 +811,9 @@ kartograf elevation download --sheet N-34-139-C-a-3-1 --full-sheet --product nmt
   i kolekcje `<grupa>/<kraj>_<źródło>[_<tokeny>]/{teryt|bbox|country|ku|...}`
   (ARCHITECTURE 3.3, reguła 9).
 - Każde udane pobranie przez CLI albo warstwę zarządzającą biblioteki
-  (`download_data`, `DownloadManager`, `LandCoverManager`, `download_pl_cutout`,
-  `download_laz_area`, `download_collection` i tory CZ) oraz wynik `HSGCalculator` dostaje
-  sidecar `<plik>.meta.json` (schemat
+  (`download_data`, `DownloadManager`, `download_landcover`, `download_soil`,
+  `download_pl_cutout`, `download_laz_area`, `download_collection`, tory CZ
+  i `calculate_hsg`) dostaje sidecar `<plik>.meta.json` (schemat
   `kartograf-meta/1`): zbiór, kraj, produkt, układy poziomy i pionowy,
   rozdzielczość, nodata, żądanie, licencja, wersja Kartografu, `extra`
   (pochodzenie rekordu `extra.source`, `extra.parent_request` itp.).
@@ -985,10 +976,10 @@ paczek z sekcji 3.5.
 
 #### Capabilities
 ```python
-from kartograf import LandCoverManager
+from kartograf import download_landcover
 
-lc = LandCoverManager("./data", "bdot10k")
-result = lc.download(teryt="1261", year=2024, format="SHP")  # LandCoverAreaResult
+report = download_landcover(product="bdot10k", output_dir="./data",
+                            teryt="1261", year=2024, format="SHP")
 # -> landcover/pl_bdot10k_shp_2024/teryt/1261.zip
 ```
 
@@ -1337,14 +1328,14 @@ kartograf geodesy list-sources
                │                                   │
                v                                   v
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                       Managers / API pobierania                         │
+│                        Funkcje komend / API                            │
 ├────────────────────────────────────┬────────────────────────────────────┤
-│ download_data (elevation, imagery) │ LandCoverManager (BDOT10k, BDOO,   │
-│ DownloadManager (arkusze PL,       │   CORINE, ZABAGED, Data50, Data250)│
-│   kampanie ADR-030)                │ HSGCalculator                      │
-│ download_pl_cutout (ADR-035)       │ download_collection (kolekcje:     │
-│ download_laz_area (ADR-029)        │   granice, ewidencja, modele 3D,   │
-│ tory CZ: arkusz, wycinek, LAZ      │   nazwy, mapy, osnowy; ADR-042)    │
+│ download_data (NMT, NMPT, imagery) │ download_landcover / download_soil │
+│ DownloadManager (arkusze PL,       │ calculate_hsg / check_hsg          │
+│   kampanie ADR-030)                │ download_collection (kolekcje:     │
+│ download_pl_cutout (ADR-035)       │   granice, ewidencja, modele 3D,   │
+│ download_laz_area (ADR-029)        │   nazwy, mapy, osnowy; ADR-042)    │
+│ tory CZ: arkusz, wycinek, LAZ      │                                    │
 └──────────────┬─────────────────────┴───────────────────┬────────────────┘
                │                                         │
                v                                         v
@@ -1375,11 +1366,11 @@ czytają parametry kanałów z deskryptorów (ADR-042, ADR-043).
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    HSGCalculator                            │
+│              calculate_hsg / check_hsg                      │
 ├─────────────────────────────────────────────────────────────┤
-│  calculate_hsg(sheet= | bbox= | geometry=)                  │
-│  check_hsg(...)                                             │
-│  get_hsg_statistics()                                       │
+│  HsgReport(files, inputs, failed, stale, notices, ok)        │
+│  hsg_statistics(path)                                        │
+│                                                             │
 └──────────────────────────┬──────────────────────────────────┘
                            │
                            v
@@ -1492,13 +1483,14 @@ from kartograf import (
     check_laz_area,
     download_laz_area,
 
-    # Land Cover
-    LandCoverManager,
-    LandCoverResult,
-    LandCoverAreaResult,
-    LandCoverFailure,
+    # Land cover and soil (command level, ADR-044)
+    download_landcover,
+    check_landcover,
+    LandCoverReport,
+    download_soil,
+    check_soil,
+    SoilReport,
     Edition,
-
     # Providers
     BaseProvider,
     GugikProvider,
@@ -1522,8 +1514,10 @@ from kartograf import (
     teryt_for_point,
 
     # Hydrology
-    HSGCalculator,
-    HsgResult,
+    calculate_hsg,
+    check_hsg,
+    HsgReport,
+    hsg_statistics,
     hsg_from_rasters,
 
     # Project manifest (kartograf-project/1, ADR-040)
@@ -1723,8 +1717,8 @@ HYDROGRAF (główna aplikacja)
 
 | Projekt | Używa z Kartograf |
 |---------|-------------------|
-| Hydrograf | DownloadManager, LandCoverManager |
-| Hydrolog | HSGCalculator, SoilGridsProvider |
+| Hydrograf | DownloadManager, download_landcover |
+| Hydrolog | calculate_hsg, download_soil, SoilGridsProvider |
 
 ---
 
