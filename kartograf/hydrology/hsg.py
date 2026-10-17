@@ -65,13 +65,16 @@ HSG_VALUES = {
     "D": 4,
 }
 
-# HSG Descriptions
+# HSG descriptions (user texts: Polish in ASCII, Z5)
 HSG_DESCRIPTIONS = {
-    "A": "High infiltration rate - sandy soils with low runoff potential",
-    "B": "Moderate infiltration rate - loamy soils with moderate runoff",
-    "C": "Slow infiltration rate - clay loam soils with high runoff",
-    "D": "Very slow infiltration rate - clay soils with very high runoff",
+    "A": "Duza infiltracja - gleby piaszczyste, maly potencjal splywu",
+    "B": "Umiarkowana infiltracja - gleby gliniaste, umiarkowany splyw",
+    "C": "Mala infiltracja - gliny ilaste, duzy splyw",
+    "D": "Bardzo mala infiltracja - gleby ilaste, bardzo duzy splyw",
 }
+# Statistics area: each cell split into _SUBCELLS x _SUBCELLS parts to
+# measure its share inside the request area (precision 1 % of a cell).
+_SUBCELLS = 10
 
 # Mapping from USDA texture class to HSG
 # Based on USDA-NRCS guidelines
@@ -382,6 +385,9 @@ _HSG_TRACK: "Track" = "hsg"
 _HSG_STAT = "mean"
 # The source of the inputs and of the HSG sidecar.
 _SOILGRIDS = "global.isric.soilgrids"
+# Sidecar ``product`` of the HSG raster: its command and store directory
+# (``soil hsg`` -> ``hsg/``; the inputs stay ``soil``).
+_HSG_PRODUCT = "hsg"
 # Where ``calculate_hsg`` writes (the ``--output`` help of ``soil hsg`` and
 # the error of a call without a store).
 HSG_OUTPUT_FILES = "wejscia w <KATALOG>/soil/..., HSG w <KATALOG>/hsg/..."
@@ -681,7 +687,7 @@ class HSGCalculator:
         from kartograf.landcover.store import selection_unit
         from kartograf.sources.registry import get_source
 
-        validate_update(update)
+        validate_update(update, check="check_hsg")
         slot = self._slot(selection, depth, stat)
         unit = selection_unit(
             bbox=selection.get("bbox_obj"), sheet=selection.get("sheet")
@@ -823,6 +829,7 @@ class HSGCalculator:
                 exclusive=True,
                 digest=(dg.sha256, dg.size_bytes),
                 version=ref.to_extra(),
+                product=_HSG_PRODUCT,
             )
 
         return store_file(
@@ -972,7 +979,14 @@ def validate_hsg_request(
 
 def hsg_statistics(hsg_path: str | Path) -> dict:
     """
-    Statistics of an HSG raster (``soil hsg --summary``).
+    Statistics of an HSG raster over its request area (``soil hsg
+    --summary``).
+
+    The area is the ``request`` of the raster's sidecar: the bbox
+    (``calculate_hsg``: the EPSG:2180 envelope of ``bbox``/``geometry``;
+    ``hsg_from_rasters``: its grid) or the sheet frame. The SoilGrids grid
+    reaches beyond the area, so each cell counts with its share inside it;
+    without a sidecar area the whole raster is counted.
 
     Parameters
     ----------
@@ -982,11 +996,13 @@ def hsg_statistics(hsg_path: str | Path) -> dict:
     Returns
     -------
     dict
-        Per-group dict (``A``-``D``) with keys: count, area_m2, area_ha,
-        percent (share of the cells WITH data), description; plus
+        Per-group dict (``A``-``D``) with keys: count (cells of the group
+        touching the area), area_m2, area_ha (the group's area inside the
+        area), percent (share of the area WITH data), description; plus
         ``nodata`` - the cells without data (class 0: an input gap, e.g.
         a SoilGrids cell with 0 in every input) with the same keys and
-        ``percent`` = share of ALL cells of the raster.
+        ``percent`` = share of the WHOLE area. The areas of all keys add up
+        to the area.
 
     Notes
     -----
@@ -997,6 +1013,7 @@ def hsg_statistics(hsg_path: str | Path) -> dict:
     """
     import rasterio
 
+    area = _request_area(Path(hsg_path))
     with rasterio.open(hsg_path) as src:
         hsg = src.read(1)
         if src.crs is not None and src.crs.is_geographic:
@@ -1006,36 +1023,107 @@ def hsg_statistics(hsg_path: str | Path) -> dict:
             row_area = np.full(
                 src.height, abs(src.transform[0] * src.transform[4])
             )  # m²
+        share = (
+            np.ones(hsg.shape)
+            if area is None or src.crs is None
+            else _area_shares(src, area)
+        )
 
-    # Count pixels for each HSG; the shares are of the cells with data,
-    # the cells without data (0) get their own entry (share of all cells)
-    total_valid = np.sum(hsg > 0)
+    # m2 of every cell inside the area; group shares of the area with data,
+    # the cells without data (0) get their own entry (share of the area)
+    cell_m2 = share * row_area[:, None]
+    total_m2 = float(np.sum(cell_m2))
+    valid_m2 = float(np.sum(cell_m2[hsg > 0]))
     stats = {}
 
     for name, value in HSG_VALUES.items():
-        per_row = np.sum(hsg == value, axis=1)
-        count = np.sum(per_row)
-        area_m2 = float(np.sum(per_row * row_area))
-        pct = (count / total_valid * 100) if total_valid > 0 else 0
-
+        group = hsg == value
+        area_m2 = float(np.sum(cell_m2[group]))
         stats[name] = {
-            "count": int(count),
-            "area_m2": float(area_m2),
-            "area_ha": float(area_m2 / 10000),
-            "percent": float(pct),
+            "count": int(np.sum(group & (share > 0))),
+            "area_m2": area_m2,
+            "area_ha": area_m2 / 10000,
+            "percent": area_m2 / valid_m2 * 100 if valid_m2 > 0 else 0.0,
             "description": HSG_DESCRIPTIONS[name],
         }
 
-    empty = np.sum(hsg == 0, axis=1)
-    empty_m2 = float(np.sum(empty * row_area))
+    empty = hsg == 0
+    empty_m2 = float(np.sum(cell_m2[empty]))
     stats["nodata"] = {
-        "count": int(np.sum(empty)),
+        "count": int(np.sum(empty & (share > 0))),
         "area_m2": empty_m2,
         "area_ha": empty_m2 / 10000,
-        "percent": float(np.sum(empty) / hsg.size * 100) if hsg.size else 0.0,
+        "percent": empty_m2 / total_m2 * 100 if total_m2 > 0 else 0.0,
         "description": "Brak danych: komorki bez wartosci wejsc (klasa 0)",
     }
     return stats
+
+
+def _request_area(hsg_path: Path) -> "BBox | None":
+    """The request area of an HSG raster from its sidecar: ``request.bbox``
+    in ``request.bbox_crs`` or the frame of ``request.sheet``; ``None``
+    without a readable sidecar or area."""
+    import json
+
+    from kartograf.core.bbox import BBox
+    from kartograf.core.sheet_parser import SheetParser
+
+    try:
+        meta = json.loads(
+            hsg_path.with_name(f"{hsg_path.name}.meta.json").read_text("utf-8")
+        )
+    except (OSError, ValueError):
+        return None
+    request = meta.get("request") if isinstance(meta, dict) else None
+    if not isinstance(request, dict):
+        return None
+    if request.get("bbox") and request.get("bbox_crs"):
+        min_x, min_y, max_x, max_y = request["bbox"]
+        return BBox(min_x, min_y, max_x, max_y, request["bbox_crs"])
+    if request.get("sheet"):
+        return SheetParser(request["sheet"]).get_bbox()
+    return None
+
+
+def _area_shares(src, area: "BBox") -> np.ndarray:
+    """Share (0-1) of every raster cell inside ``area``.
+
+    The area outline (densified edges) is transformed to the raster CRS and
+    rasterized on a grid ``_SUBCELLS`` times finer; a cell's share is the
+    part of its subcells inside.
+    """
+    from pyproj import Transformer
+    from rasterio.features import geometry_mask
+    from rasterio.transform import Affine
+
+    steps = np.linspace(0.0, 1.0, 64, endpoint=False)
+    dx, dy = area.max_x - area.min_x, area.max_y - area.min_y
+    xs = np.concatenate(
+        [
+            area.min_x + steps * dx,
+            np.full(steps.size, area.max_x),
+            area.max_x - steps * dx,
+            np.full(steps.size, area.min_x),
+        ]
+    )
+    ys = np.concatenate(
+        [
+            np.full(steps.size, area.min_y),
+            area.min_y + steps * dy,
+            np.full(steps.size, area.max_y),
+            area.max_y - steps * dy,
+        ]
+    )
+    to_raster = Transformer.from_crs(area.crs, src.crs.to_wkt(), always_xy=True)
+    rx, ry = to_raster.transform(xs, ys)
+    ring = [(float(x), float(y)) for x, y in zip(rx, ry, strict=True)]
+    inside = geometry_mask(
+        [{"type": "Polygon", "coordinates": [[*ring, ring[0]]]}],
+        out_shape=(src.height * _SUBCELLS, src.width * _SUBCELLS),
+        transform=src.transform * Affine.scale(1 / _SUBCELLS),
+        invert=True,
+    )
+    return inside.reshape(src.height, _SUBCELLS, src.width, _SUBCELLS).mean(axis=(1, 3))
 
 
 def hsg_from_rasters(
@@ -1137,6 +1225,7 @@ def _write_rasters_sidecar(
             ],
             "classes": "1=A, 2=B, 3=C, 4=D",
         },
+        product=_HSG_PRODUCT,
     )
 
 

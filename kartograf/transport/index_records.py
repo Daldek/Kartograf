@@ -23,13 +23,14 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from collections.abc import Callable, Iterable, Mapping
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from html.parser import HTMLParser
 from pathlib import PurePosixPath
 from urllib.parse import urlencode, urlparse
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.providers.pl.skorowidz_wfs import (
@@ -174,18 +175,62 @@ def wfs_records(
     bbox: BBox,
     *,
     timeout: float,
+    cache: MetadataCache | None = None,
 ) -> list[IndexRecord]:
     """Records of the features of type ``layer`` in an EPSG:2180 ``bbox``.
 
     ``WfsIndex`` reads every page (``next`` only, ``numberReturned`` and the
     host of ``next`` checked; ``ExceptionReport`` or non-XML at 200 ->
-    ``DownloadError``); ``records_from_wfs`` maps the features.
+    ``DownloadError``); ``records_from_wfs`` maps the features. ``cache``:
+    the records of the area are kept in the metadata cache
+    (``index_area_cache``, its TTL) like the records of the PL sheet
+    indexes - a repeated area asks no service; a refreshing cache
+    (``--check-updates``, ``--upgrade``, ``--force``) asks again.
     """
     _check_wfs_source(source)
+    key = f"wfs-records|{source.endpoint}|{layer}|{_mm(bbox)}"
+    if cache is not None:
+        restored = _restore_records(cache.get_index_area(key))
+        if restored is not None:
+            return restored
     index = WfsIndex(
         session_factory, source.endpoint, layer.rsplit(":", 1)[-1], timeout=timeout
     )
-    return records_from_wfs(index.features(bbox, [layer]), source=source)
+    records = records_from_wfs(index.features(bbox, [layer]), source=source)
+    if cache is not None:
+        cache.set_index_area(key, [asdict(record) for record in records])
+    return records
+
+
+def _mm(bbox: BBox) -> str:
+    """Cache key part: the envelope in whole millimetres."""
+    return ",".join(
+        str(round(value * 1000))
+        for value in (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
+    )
+
+
+def _restore_records(payload: object) -> list[IndexRecord] | None:
+    """Records of a cache payload; ``None`` (a miss) for an unreadable one."""
+    if not isinstance(payload, list):
+        return None
+    records = []
+    for item in payload:
+        try:
+            record = IndexRecord(**item)
+        except TypeError:
+            return None
+        if not (
+            isinstance(record.unit, str)
+            and isinstance(record.label, str)
+            and isinstance(record.urls, dict)
+            and isinstance(record.raw, dict)
+            and (record.year is None or isinstance(record.year, int))
+            and (record.zone is None or isinstance(record.zone, str))
+        ):
+            return None
+        records.append(record)
+    return records
 
 
 def records_from_wfs(

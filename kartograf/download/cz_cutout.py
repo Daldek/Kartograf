@@ -380,7 +380,7 @@ def download_cz_cutout(
     from kartograf.download.options import validate_request_bbox
 
     bbox = validate_request_bbox(bbox)
-    validate_update(update)
+    validate_update(update, check="check_cz_cutout")
     sink = NoticeSink(on_notice)
     with open_cache(
         cache, force=refreshes_cache(update), on_notice=sink.add

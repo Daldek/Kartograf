@@ -468,7 +468,9 @@ class TestHSGCalculatorCalculateFull:
         assert [i.file.path.parent.parent.name for i in first.inputs] == [
             f"global_soilgrids_{p}_0-5cm_mean" for p in ("clay", "sand", "silt")
         ]
-        assert _meta(first.files[0].file)["extra"]["stat"] == "mean"
+        meta = _meta(first.files[0].file)
+        assert (meta["extra"]["stat"], meta["product"]) == ("mean", "hsg")
+        assert {_meta(i.file)["product"] for i in first.inputs} == {"soil"}
         again = HSGCalculator(tmp_path, RasterSoilGrids()).calculate_hsg(
             bbox=BBOX, depth="0-5cm"
         )
@@ -825,6 +827,34 @@ class TestHSGCalculatorCalculateFull:
 
         assert stats["A"]["area_ha"] == pytest.approx(5000.0)
         assert stats["B"]["area_ha"] == pytest.approx(2500.0)
+
+    def test_hsg_statistics_count_request_area_only(self, tmp_path):
+        """The sidecar request bbox is the area: cells count with their share
+        inside it, the areas add up to the bbox, nodata is a share of it."""
+        import json
+
+        from rasterio.transform import from_origin
+
+        # 4 x 4 cells of 100 m; column 0 without data, one A cell (NE corner)
+        data = np.full((4, 4), 2, dtype=np.uint8)
+        data[:, 0] = 0
+        data[0, 3] = 1
+        hsg_path = tmp_path / "hsg.tif"
+        transform = from_origin(450000, 550400, 100, 100)
+        _create_test_raster(hsg_path, data, transform=transform)
+        # 300 x 300 m = 9 ha, cutting every edge cell in half
+        request = {"bbox": [450050, 550050, 450350, 550350], "bbox_crs": "EPSG:2180"}
+        Path(f"{hsg_path}.meta.json").write_text(json.dumps({"request": request}))
+
+        stats = hsg_statistics(hsg_path)
+
+        assert stats["nodata"]["area_ha"] == pytest.approx(1.5)  # 50 x 300 m
+        assert stats["A"]["area_ha"] == pytest.approx(0.25)  # 50 x 50 m
+        assert stats["B"]["area_ha"] == pytest.approx(7.25)
+        assert sum(s["area_ha"] for s in stats.values()) == pytest.approx(9.0)
+        assert stats["nodata"]["percent"] == pytest.approx(100 / 6)
+        assert stats["A"]["percent"] == pytest.approx(2500 / 75000 * 100)
+        assert (stats["A"]["count"], stats["B"]["count"]) == (1, 11)
 
 
 class TestHSGOutputDirOnWrite:

@@ -243,7 +243,7 @@ def test_download_image_cutout_rejects_choice_before_network(
         pytest.raises(ValidationError, match=fragment),
     ):
         download_image_cutout(
-            KRAKOW, output_dir=tmp_path, cache=False, **{**ORTO, **overrides}
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, **{**ORTO, **overrides}
         )
     factory.assert_not_called()
     assert not any(tmp_path.iterdir())
@@ -306,7 +306,7 @@ def test_orto_cutout_slot_and_sidecar(tmp_path, args, bbox, fixture, source):
     session = _session()
     with patch(SESSION_FACTORY, return_value=session):
         result = download_image_cutout(
-            bbox, product="orto", output_dir=tmp_path, cache=False, **args
+            bbox=bbox, product="orto", output_dir=tmp_path, cache=False, **args
         )
 
     coords = "_".join(
@@ -353,7 +353,7 @@ def test_orto_cutout_grid_and_chunks(tmp_path):
     request = BBox(566000.1, 243000.05, 566000.9, 243000.95, "EPSG:2180")
     with patch(PROVIDER_FACTORY, return_value=provider):
         result = download_image_cutout(
-            request,
+            bbox=request,
             output_dir=tmp_path,
             cache=False,
             on_notice=seen.append,
@@ -429,22 +429,26 @@ def test_orto_cutout_exception_report_is_download_error(tmp_path, answer):
         patch(SESSION_FACTORY, return_value=session),
         pytest.raises(DownloadError),
     ):
-        download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        download_image_cutout(bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     assert _left_behind(tmp_path) == []
-    plan = check_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+    plan = check_image_cutout(bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
     assert plan.items[0].status == "missing"
 
 
 def test_orto_cutout_local_reuse_and_force_unchanged(tmp_path):
     first_session = _session()
     with patch(SESSION_FACTORY, return_value=first_session):
-        first = download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        first = download_image_cutout(
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
+        )
     with patch(SESSION_FACTORY) as factory:
-        local = download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        local = download_image_cutout(
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
+        )
     forced_session = _session()
     with patch(SESSION_FACTORY, return_value=forced_session):
         forced = download_image_cutout(
-            KRAKOW, output_dir=tmp_path, cache=False, update="force", **ORTO
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, update="force", **ORTO
         )
 
     assert first.file.status == "new"
@@ -458,12 +462,18 @@ def test_orto_cutout_local_reuse_and_force_unchanged(tmp_path):
 
 def test_check_image_cutout_unverifiable(tmp_path):
     with patch(SESSION_FACTORY) as factory:
-        before = check_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        before = check_image_cutout(
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
+        )
     factory.assert_not_called()
     with patch(SESSION_FACTORY, return_value=_session()):
-        result = download_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        result = download_image_cutout(
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
+        )
     with patch(SESSION_FACTORY) as factory:
-        after = check_image_cutout(KRAKOW, output_dir=tmp_path, cache=False, **ORTO)
+        after = check_image_cutout(
+            bbox=KRAKOW, output_dir=tmp_path, cache=False, **ORTO
+        )
     factory.assert_not_called()
 
     (missing,) = before.items
@@ -485,10 +495,12 @@ def test_orto_cutout_all_black_is_kept_with_warning(tmp_path):
     seen: list[Notice] = []
     with patch(SESSION_FACTORY, return_value=_session()):
         result = download_image_cutout(
-            bbox, output_dir=tmp_path, cache=False, on_notice=seen.append, **args
+            bbox=bbox, output_dir=tmp_path, cache=False, on_notice=seen.append, **args
         )
     with patch(SESSION_FACTORY) as factory:
-        local = download_image_cutout(bbox, output_dir=tmp_path, cache=False, **args)
+        local = download_image_cutout(
+            bbox=bbox, output_dir=tmp_path, cache=False, **args
+        )
 
     assert result.file.status == "new"
     assert [(n.level, n.code) for n in seen] == [("warning", ALL_NODATA)]
@@ -532,7 +544,8 @@ def test_download_data_routes_orto_cutout(tmp_path, area):
     assert report.ok and report.failed == ()
     (unit_file,) = report.files
     assert unit_file.country == "PL"
-    assert unit_file.unit == f"{SEGMENT}/bbox/566000_243000_566001_243001.tif"
+    assert unit_file.unit == "566000_243000_566001_243001"
+    assert unit_file.file.path == output / SEGMENT / "bbox" / f"{unit_file.unit}.tif"
     assert _meta(unit_file.file.path)["extra"]["parent_request"]["countries"] == ["PL"]
     (item,) = plan.items
     assert (item.segment, item.status) == (SEGMENT, "unverifiable")

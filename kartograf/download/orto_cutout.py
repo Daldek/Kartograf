@@ -33,8 +33,8 @@ Example::
     from kartograf import BBox, download_image_cutout
 
     result = download_image_cutout(
-        BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
-        product="orto", horizontal_crs="EPSG:2180", output_dir="./data",
+        product="orto", bbox=BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
+        horizontal_crs="EPSG:2180", output_dir="./data",
         coverage="standard", resolution="0.25m",
     )
     print(result.file.path)
@@ -76,7 +76,7 @@ from kartograf.download.plan import (
 )
 from kartograf.download.storage import bbox_slot, token_segment
 from kartograf.download.versions import ContentDigest, VersionRef
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
@@ -415,8 +415,9 @@ def _run(
     ``stale``). A download checks disk space, announces a cutout of several
     requests (or >= 1 GiB) with ``CUTOUT_SIZE`` before the first one, fetches
     into the private staging directory, checks the grid of the result and
-    marks a cutout without any image pixel (``extra.all_nodata``,
-    ``ALL_NODATA``).
+    handles a cutout without any image pixel: the true orthophotomap (selected
+    cities only) raises ``NoCoverageError`` before the version is stored, the
+    orthophotomap gets a version with ``extra.all_nodata`` and ``ALL_NODATA``.
     """
     slot = cutout.slot
     signal = cutout.channel.update_signal
@@ -464,6 +465,13 @@ def _run(
         )
         _check_result(staged, cutout)
         all_nodata = not _has_image(staged)
+        if all_nodata and cutout.key != ORTO_KEY:
+            raise NoCoverageError(
+                "wycinek true orto: WCS GUGiK nie ma w tym obszarze prawdziwej "
+                "ortofotomapy - obejmuje tylko wybrane miasta, np. Gdansk, a "
+                "obraz obszaru jest w calosci 0,0,0; wersja nie powstala, "
+                "zmien --bbox"
+            )
 
     def write_sidecar(
         path: Path, version: VersionRef, digest: ContentDigest, http: dict | None
@@ -510,13 +518,13 @@ def _cutout_key(product: str) -> str:
 
 
 def check_image_cutout(
-    bbox: BBox,
     *,
     product: str,
+    bbox: BBox,
     horizontal_crs: str,
     output_dir: str | Path,
-    coverage: str | None,
     resolution: str,
+    coverage: str | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> UpdatePlan:
@@ -547,13 +555,13 @@ def check_image_cutout(
 
 
 def download_image_cutout(
-    bbox: BBox,
     *,
     product: str,
+    bbox: BBox,
     horizontal_crs: str,
     output_dir: str | Path,
-    coverage: str | None,
     resolution: str,
+    coverage: str | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     parent_request: dict | None = None,
@@ -568,8 +576,8 @@ def download_image_cutout(
     elsewhere), ``resolution`` a label K2 of the channel (``"0.1m"``,
     ``"0.25m"``, ``"0.5m"``, ``"1m"``); ``"true-orto"`` - the true
     orthophotomap, one channel (0.05 m coverage of selected cities:
-    ``coverage=None``; pixels ``"0.05m"``, ``"0.1m"``, ``"0.25m"``,
-    ``"0.5m"``, ``"1m"``; 0,0,0 outside the cities). ``horizontal_crs``:
+    ``coverage`` left out; pixels ``"0.05m"``, ``"0.1m"``, ``"0.25m"``,
+    ``"0.5m"``, ``"1m"``). ``horizontal_crs``:
     ``"EPSG:2180"`` only (the image is not resampled). ``bbox`` may be in any
     supported CRS (for a geometry pass its envelope); the result grid is
     ``bbox`` in EPSG:2180 aligned OUTWARD to multiples of the pixel. The
@@ -586,7 +594,9 @@ def download_image_cutout(
     -------
     ImageCutoutResult
         ``file`` - standard link and version status; ``notices`` -
-        ``CUTOUT_SIZE`` (before the first WCS request) and ``ALL_NODATA``.
+        ``CUTOUT_SIZE`` (before the first WCS request) and ``ALL_NODATA``
+        (orthophotomap without any image pixel, e.g. ``high`` outside the
+        10 cm areas: the version is stored with ``extra.all_nodata``).
 
     Raises
     ------
@@ -595,11 +605,14 @@ def download_image_cutout(
         mode (before any request), or too little disk space on download.
     TransformError
         No safe pinned operation from a Czech CRS of ``bbox`` to EPSG:2180.
+    NoCoverageError
+        True orthophotomap: the area has no image pixel (outside the
+        cities of the service); no version is stored.
     DownloadError
         WCS failure, an error document or a raster off the requested grid;
         no version is committed.
     """
-    validate_update(update)
+    validate_update(update, check="check_image_cutout")
     cutout = _prepare(
         bbox,
         key=_cutout_key(product),

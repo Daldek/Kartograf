@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 import pytest
 
+from kartograf.core.bbox import BBox
 from kartograf.download import versions as v
 from kartograf.download.fetch import (
     FileSlot,
@@ -225,6 +226,51 @@ def test_fetch_version_check_mode_is_validation_error(tmp_path):
     with pytest.raises(ValidationError, match="check"):
         run(make_slot(tmp_path), src, "check")
     assert src.downloads == 0
+
+
+_AREA = {"bbox": BBox(500000, 300000, 501000, 301000, "EPSG:2180")}
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "check"),
+    [
+        (
+            "download_landcover",
+            {"product": "bdot10k", "teryt": "1863"},
+            "check_landcover",
+        ),
+        (
+            "download_soil",
+            {**_AREA, "property": "clay", "depth": "0-5cm", "stat": "mean"},
+            "check_soil",
+        ),
+        ("calculate_hsg", {**_AREA, "depth": "0-5cm"}, "check_hsg"),
+        (
+            "download_image_cutout",
+            {**_AREA, "product": "true-orto", "horizontal_crs": "EPSG:2180"}
+            | {"resolution": "0.05m"},
+            "check_image_cutout",
+        ),
+        ("download_data", {**_AREA, "product": "nmt", "country": "pl"}, "check_data"),
+        (
+            "download_collection",
+            {**_AREA, "product": "admin", "country": "pl", "level": "gmina"},
+            "check_collection",
+        ),
+    ],
+)
+def test_check_mode_names_the_plan_function_of_the_track(
+    tmp_path, function, arguments, check
+):
+    """``update="check"`` in a download function names the plan function of
+    its own track, before any request or write."""
+    import kartograf
+
+    with pytest.raises(ValidationError, match=rf"uzyj {check}\(\)"):
+        getattr(kartograf, function)(
+            output_dir=tmp_path, update="check", cache=False, **arguments
+        )
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_fetch_version_legacy_plain_file_replaced_by_link(tmp_path):

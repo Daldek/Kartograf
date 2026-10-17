@@ -432,7 +432,8 @@ kartograf/
 ├── notices.py           # Notice(level, code, text), NoticeSink, kody komunikatow (Z3, ADR-037)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
 │                        # campaigns_cache, teryt_cache, teryt_bbox_cache, index_area_cache
-│                        # (raport dostepnosci), atom_cache (indeksy feedow ATOM z ETag;
+│                        # (raport dostepnosci; rekordy obszaru indeksu kafli WFS),
+│                        # atom_cache (indeksy feedow ATOM z ETag;
 │                        # TTL 7 d, DEFAULT_TTL_SECONDS)
 │                        # i sheet_cache (30 d, SHEET_TTL_SECONDS); plik bazy
 │                        # otwierany leniwie, powstaje przy pierwszym zapisie
@@ -540,7 +541,11 @@ kartograf/
 `country`, `product`, `name`, `provider_name`, krotke `channels`
 (`AccessChannel`), `tile_scheme`, `storage_subdir`, `default_extension`,
 `license`, `resolution`, `auth` i (od 0.8.0, ADR-041) krotke `variants`
-(`ProductVariant`, rejestr wariantow — nizej).
+(`ProductVariant`, rejestr wariantow — nizej). `product` = wartosc
+`--product` wybierajaca zrodlo (`nmt`, `admin`, `bdot10k`, `zabaged`;
+SoilGrids bez `--product` - `soil`) i pole `product` sidecara; grupe CLI
+zrodla wyznacza pierwszy czlon `storage_subdir` (np. produkty
+`landcover download` = deskryptory pod `landcover/`).
 
 Od 0.7.0 (ADR-026) `storage_subdir` jest **szablonem** z placeholderami
 `{system}` i `{vcrs}`, a nie literalna nazwa katalogu. Konsument zewnetrzny
@@ -788,7 +793,7 @@ providera sidecara nie pisze (sekcja 1).
 | Pole | Znaczenie |
 |---|---|
 | `dataset` | klucz deskryptora zrodla (np. `pl.gugik.nmt_1m`) |
-| `country`, `product`, `provider` | kraj, produkt i nazwa dostawcy z deskryptora |
+| `country`, `product`, `provider` | kraj, produkt i nazwa dostawcy z deskryptora; `product` = wartosc `--product` pliku (`nmt`, `true-orto`, `admin`, `bdot10k`, `zabaged`, ...), w grupie bez `--product` nazwa komendy i katalogu: `soil download` - `soil`, raster `soil hsg` - `hsg` (`build_metadata(product=)`, produkt pochodny) |
 | `horizontal_crs` | faktyczny uklad poziomy pliku: arkusz PL-1992 `EPSG:2180`, arkusz PL-2000 `EPSG:2176`–`EPSG:2179` wedlug strefy godla, CZ natywnie `EPSG:5514`, kafel TM33 `EPSG:3045`; wycinek `--cutout` w ukladzie `--horizontal-crs` (ortofotomapa PL tylko `EPSG:2180`); ortofoto CZ: JPEG i `.jgw` `EPSG:5514`, `.TM33N.jgw` `EPSG:3045`, `.TM34N.jgw` `EPSG:3046` (kazdy plik swoj uklad); kolekcje: wynik obszaru w ukladzie uslugi (PL `EPSG:2180`, CZ `EPSG:5514`), plik krajowy w ukladzie pliku (HY-NET `EPSG:3045`, ZABAGED wybrany `--horizontal-crs`). Dla arkusza PL uklad z godla jest SPRAWDZANY wspolrzednymi pliku (`sources/sidecar.py::pl_sheet_horizontal_crs`): plik opublikowany przez GUGiK w innym ukladzie niz wskazuje godlo (E17, np. arkusze PL-2000 strefy 7 jak `7.125.11.19` w EPSG:2180) dostaje uklad PLIKU, deklaracja rekordu skorowidza zostaje w `extra.source.declared_crs`, logger `kartograf.sources.sidecar` ostrzega, a CLI drukuje `Warning: N arkuszy GUGiK opublikowano w innym ukladzie niz wskazuje godlo: ...` (kod bez zmian; segment katalogu nadal wg godla, ADR-026) |
 | `vertical_crs` | kod realizacji ukladu pionowego: `EPSG:9651` (EVRF2007-PL), `EPSG:9650` (KRON86), `EPSG:8357` (Bpv), `EPSG:5621` (EVRF2007); `null` gdy produkt nie ma pionu (orto) |
 | `vertical_source` | `native` / `ellipsoidal` / `server` (z `AccessChannel`) |
@@ -1441,7 +1446,9 @@ z kodu; obszar: `--country`, `auto` z przycieciem, sekcja 4.6), wybiera tor
 z ortofoto CZ w 4.4, LAZ PL i CZ 4.7), buduje
 `parent_request` (`download/area.py`) i zbiera wynik
 `DataReport(files, failed, stale, superseded, notices, ok)`: `files` =
-`UnitFile(unit, country, file: VersionedFile)`, `failed` =
+`UnitFile(unit, country, file: VersionedFile)` (`unit` = godlo, nazwa
+pliku LAZ albo wspolrzedne siatki wycinka `<coords>`, jak jednostki
+obszaru kolekcji; linia projektu `zadanie: jednostka (plik)`), `failed` =
 `UnitFailure(unit, country, error, kind)`, `ok` = regula kodu wyjscia
 (czesciowy sukces `auto` = `True`). Komunikaty o danych sa `Notice`
 (`kartograf/notices.py`; lista kodow w docstringu `download/data.py`)
@@ -2026,8 +2033,8 @@ dwa pliki ze wspolnym `extra.parent_request`.
 EPSG:2180 --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` =
 `download_data(product="orto", cutout=True, horizontal_crs="EPSG:2180",
 coverage=..., resolution=...)` -> `download/orto_cutout.py::
-download_image_cutout(bbox, *, product, horizontal_crs, output_dir,
-coverage, resolution, update, plan, parent_request, cache, on_notice)` ->
+download_image_cutout(*, product, bbox, horizontal_crs, output_dir,
+resolution, coverage=None, update, plan, parent_request, cache, on_notice)` ->
 `ImageCutoutResult(file, stale, notices)` (ADR-044 D3: jedna para dla
 `product="orto"` i `"true-orto"`); `check_image_cutout(...)` z tym
 samym wyborem daje plan (tor `pl_cutout`; lokalna wersja =
@@ -2060,9 +2067,12 @@ samym wyborem daje plan (tor `pl_cutout`; lokalna wersja =
    miejsca na dysku (2 x rozmiar wyniku, inaczej `ValidationError`).
    Wynik jest sprawdzany (rozmiar, krok, naroznik NW, 3 pasma uint8,
    EPSG:2180): inna siatka = `DownloadError` bez wersji. Wynik bez
-   zadnego piksela obrazu (High poza obszarami pikseli 10 cm: HTTP 200
-   z obrazem 0,0,0) zostaje wersja z `extra.all_nodata: true` i `Notice`
-   `all_nodata` (ostrzezenie, kod 0).
+   zadnego piksela obrazu (HTTP 200 z obrazem 0,0,0): ortofotomapa (High
+   poza obszarami pikseli 10 cm) zostaje wersja z `extra.all_nodata: true`
+   i `Notice` `all_nodata` (ostrzezenie, kod 0); true orto (wybrane miasta,
+   usluga nie publikuje zasiegu wycinka) konczy sie `NoCoverageError` PRZED
+   zapisem wersji (staging usuniety; w `download_data` porazka
+   `no_coverage` PL, CLI `Error:` kod 1) - jak wycinek NMT/NMPT poza ladem.
 4. Magazyn: dowiazanie `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif`
    do wersji `versions/bbox/<RRRR-MM-DD>_<sha8>/`, sygnal `none`:
    domyslnie i z `--upgrade` lokalna wersja bez zapytan, `--force` pobiera
@@ -2687,10 +2697,18 @@ same trzy sha256 wejsc (kolejnosc clay, sand, silt), jest uzywana ponownie
 (`reused`, bez liczenia, dowiazanie na nia); inaczej klasyfikacja do `.incoming/`
 i `store_file` z etykieta = posortowane unikalne etykiety wejsc laczone `+`
 (`label_source = "edition"`). `--force` dotyczy wejsc. Sidecar wersji:
-deskryptor `global.isric.soilgrids`, `capability="bbox_raster"`, `request`
+deskryptor `global.isric.soilgrids`, `product: "hsg"` (`build_metadata(
+product=)`; wejscia maja `soil`), `capability="bbox_raster"`, `request`
 = wybor (`bbox`+`bbox_crs` albo `sheet`), `horizontal_crs` = uklad rastra,
 `nodata: 0`, `extra` = `{derived: "hsg", depth, stat, classes, source_layers,
 source_files: [{name, file (sciezka wersji wejscia), sha256, label}]}`.
+`hsg_statistics(path)` (`soil hsg --summary`) liczy obszar `request`
+sidecara (bbox albo rama arkusza; bez niego caly raster): obrys obszaru
+przeliczony do ukladu rastra rasteryzuje sie na siatce 10 x gestszej, wiec
+komorka SoilGrids na brzegu liczy sie udzialem w obszarze (powierzchnie
+komorek geodezyjnie dla EPSG:4326); grupy `A`-`D` i `nodata` sumuja sie do
+obszaru, `percent` grup = udzial powierzchni z danymi, `nodata.percent` =
+udzial obszaru; opisy grup po polsku (`HSG_DESCRIPTIONS`).
 `check_hsg(...)` = 3 pozycje `landcover` + pozycja `hsg`
 (`current`, gdy jest wersja HSG z sha256 biezacych lokalnych wejsc i kazde
 wejscie jest `current`; wejscie `check_failed` = `check_failed`; inaczej
@@ -2928,7 +2946,12 @@ przy godle po poleceniu na arkusz. Kazda podpowiedz przechodzi walidacje
 uslugi), `wfs|<endpoint>|<typy>|<obwiednia w mm>` (rekordy obwiedni
 z obrysami), `prg|<obwiednia w mm>` (maska ladu) oraz CZ
 `cz-sheets|<system>|<obszar w mm>` (arkusze indeksu) i `head|<url>`
-(wynik `HEAD` pliku, takze 404); godlo SM5 trafia do `sheet_cache` (TTL
+(wynik `HEAD` pliku, takze 404); kafle indeksu WFS kolekcji (mesh 3D,
+`transport/index_records.py::wfs_records(cache=)`) - klucz
+`wfs-records|<endpoint>|<typ>|<obwiednia w mm>` z rekordami obszaru, wiec
+ponowne pobranie obszaru z lokalnymi kaflami nie pyta indeksu
+(`--check-updates`/`--upgrade`/`--force` odswiezaja wpis);
+godlo SM5 trafia do `sheet_cache` (TTL
 30 dni). Cache otwiera
 `open_cache(cache, force=force)`; `force=True` (CLI `--force`) pomija
 odczyt i nadpisuje wpisy. Ponowny raport tego samego obszaru nie pyta
@@ -3160,7 +3183,11 @@ wydanie = `newer`. Mapy BDOT10k maja `index` (data `Stan bazy` osobno
 dla skali z GetFeatureInfo; arkusz z lokalna wersja domyslnie bez
 GetFeatureInfo - `_sheet_jobs(skip_local)`, `UnitJob.unchecked`), kafle
 mesh 3D tez (etykieta rekordu WFS:
-`Aktualnosc` i `Numer_zgloszenia_pracy`), arkusze ZTM `http` (`HEAD`).
+`Aktualnosc` i `Numer_zgloszenia_pracy`; kafle obszaru wybiera indeks WFS,
+ktorego rekordy obszaru leza w cache metadanych - `index_area_cache`,
+TTL 7 dni - wiec ponowny przebieg z lokalnymi kaflami nie pyta sieci, jak
+skorowidze arkuszy PL; tryby `--check-updates`/`--upgrade`/`--force` pytaja
+indeks), arkusze ZTM `http` (`HEAD`).
 Etykieta = `edition` wariantu (rocznik
 BDOT10k, rok modeli 3D; `label_source="edition"`), wydanie z feedu ATOM
 albo data pobrania (PRG, EGiB, RUIAN, HY-NET). Wydania tej samej tresci - warianty rozniace sie tylko wartoscia

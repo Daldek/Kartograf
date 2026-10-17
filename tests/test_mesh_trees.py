@@ -156,6 +156,29 @@ def test_mesh_tiles_from_bbox(tmp_path, router, monkeypatch):
     assert router.gets("https://opendata.geoportal.gov.pl/") == gets
 
 
+def test_mesh_area_again_without_network_uses_cached_index(tmp_path, monkeypatch):
+    """The index records of an area are kept in the metadata cache: the same
+    area again with local tiles asks no service (offline run); the check
+    asks the index again."""
+    from kartograf.cache.metadata import MetadataCache
+
+    online = Router()
+    monkeypatch.setattr(col, "_session", lambda: online)
+    _serve_pages(online, monkeypatch)
+    _serve_tiles(online)
+    cache = MetadataCache(tmp_path / "cache.db")
+    choice = {**_mesh(tmp_path / "out"), "cache": cache}
+    assert download_collection(**choice).ok
+
+    offline = Router()  # every request is an AssertionError
+    monkeypatch.setattr(col, "_session", lambda: offline)
+    again = download_collection(**choice)
+    assert again.ok and offline.calls == []
+    assert {item.file.status for item in again.files} == {"local"}
+    with pytest.raises(AssertionError, match="Nieoczekiwane zapytanie"):
+        check_collection(**choice)
+
+
 def _second_work(page: bytes) -> bytes:
     """The second page with its first record moved to another work of a
     later year over the tile ``74230_55482`` of page one (the index names
