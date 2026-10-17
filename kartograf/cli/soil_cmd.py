@@ -152,7 +152,7 @@ def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
             f"({nodata['area_ha']:.2f} ha)"
         )
 
-    if not args.quiet:
+    if result.files and not args.quiet:
         print()
         print("Legenda: 1=A (duza infiltracja), 2=B (umiarkowana),")
         print("         3=C (mala), 4=D (bardzo mala)")
