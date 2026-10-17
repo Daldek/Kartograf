@@ -103,3 +103,23 @@ def path_parts(sheet: str) -> list[str]:
     """Directory path parts for a sheet code (whitespace stripped), by system."""
     cleaned = sheet.strip()
     return detect_system(cleaned).path_parts(cleaned)
+
+
+# 1:1 000 000 sheet of an ETRS89 map sheet code of CUZK: letters before the
+# first hyphen ("NM" of "NM-34-07-1-D-15").
+_IMW_ROW = re.compile(r"[A-Za-z]+")
+
+
+def cuzk_map_path_parts(mapnom: str) -> list[str]:
+    """Directory path parts of a CUZK map sheet code (``MAPNOM`` of a
+    ``KladyMapovychListu`` layer: the ZTM sheets), whitespace stripped.
+
+    The same hierarchy as every sheet code (ADR-044 D7): each part between
+    hyphens is a directory, an ETRS89 code keeps its 1:1 000 000 sheet in one
+    directory as PL-1992 does (``N-34``): ``0510-D-11`` -> ``0510/D/11``,
+    ``NM-34-07-1-D-15`` -> ``NM-34/07/1/D/15``, ``0607`` -> ``0607``.
+    """
+    parts = mapnom.strip().split("-")
+    if len(parts) > 1 and _IMW_ROW.fullmatch(parts[0]):
+        return [f"{parts[0]}-{parts[1]}", *parts[2:]]
+    return parts

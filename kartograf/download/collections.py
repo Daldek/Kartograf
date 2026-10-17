@@ -1648,9 +1648,10 @@ def _related_roots(
 
 def _country_unit(country: str, theme: str | None) -> str:
     """Unit of a national file: the country code, with the theme of a
-    national product of several files (``pl-obiekty-fizjograficzne``)."""
+    national product of several files after ``_`` (``pl_obiekty-fizjograficzne``,
+    ADR-044 D7)."""
     code = country.lower()
-    return code if theme is None else f"{code}-{theme.lower().replace('_', '-')}"
+    return code if theme is None else f"{code}_{theme.lower().replace('_', '-')}"
 
 
 def package_job(

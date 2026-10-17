@@ -129,12 +129,12 @@ def test_prng_whole_country_two_themes(tmp_path, monkeypatch):
     )
     assert report.ok, report.failed
     assert {item.unit for item in report.files} == {
-        "pl-miejscowosci",
-        "pl-obiekty-fizjograficzne",
+        "pl_miejscowosci",
+        "pl_obiekty-fizjograficzne",
     }
     assert {item.file.path.name for item in report.files} == {
-        "pl-miejscowosci.zip",
-        "pl-obiekty-fizjograficzne.zip",
+        "pl_miejscowosci.zip",
+        "pl_obiekty-fizjograficzne.zip",
     }
     assert len([n for n in report.notices if n.code == WHOLE_COUNTRY_SIZE]) == 2
     assert [method for method, _ in session.calls] == ["HEAD", "GET"] * 2

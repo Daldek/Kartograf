@@ -133,20 +133,20 @@ def test_mesh_tiles_from_bbox(tmp_path, router, monkeypatch):
     report = download_collection(**_mesh(tmp_path), on_notice=notices.append)
     assert report.ok, report.failed
     assert sorted(item.unit for item in report.files) == [
-        f"s7/{name}" for name in sorted(bodies)
+        f"2000/7/{name}" for name in sorted(bodies)
     ]
     units = [n.text for n in notices if n.code == UNIT_LIST]
     assert len(units) == 1 and "kafle obszaru (4)" in units[0]
-    item = next(f for f in report.files if f.unit == "s7/78944_6777_74230_55482")
+    item = next(f for f in report.files if f.unit == "2000/7/78944_6777_74230_55482")
     path = item.file.path
-    assert path == tmp_path / "models3d/pl_mesh/s7/78944_6777_74230_55482.zip"
+    assert path == tmp_path / "models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip"
     assert path.read_bytes() == bodies["78944_6777_74230_55482"]
     with zipfile.ZipFile(path) as archive:
         assert archive.namelist() == _tile_members("74230_55482")
     meta = _meta(item.file.version_path)
-    assert meta["dataset"] == "pl.gugik.mesh_3d"
+    assert meta["dataset"] == "pl.gugik.mesh"
     assert (meta["horizontal_crs"], meta["vertical_crs"]) == ("EPSG:2178", "EPSG:9651")
-    assert meta["request"] == {"tile": "s7/78944_6777_74230_55482"}
+    assert meta["request"] == {"tile": "2000/7/78944_6777_74230_55482"}
     assert meta["extra"]["version"]["label"] == LABEL
     assert meta["extra"]["source"]["record"]["modul"] == "74230_55482"
 
@@ -181,14 +181,14 @@ def test_mesh_tile_of_two_works_and_year(tmp_path, router, monkeypatch):
     _serve_pages(router, monkeypatch, _second_work(page))
     plan = check_collection(**_mesh(tmp_path))
     assert sorted(i.unit for i in plan.items) == [
-        "s7/78944_6776_74228_55482",
-        "s7/78944_6777_74230_55482",
-        "s7/78944_6952_74228_55480",
-        "s7/80412_15_74230_55482",
+        "2000/7/78944_6776_74228_55482",
+        "2000/7/78944_6777_74230_55482",
+        "2000/7/78944_6952_74228_55480",
+        "2000/7/80412_15_74230_55482",
     ]
     (later,) = check_collection(**_mesh(tmp_path, year=2023)).items
     assert (later.unit, later.available_label) == (
-        "s7/80412_15_74230_55482",
+        "2000/7/80412_15_74230_55482",
         "2023-05-14_DFT.7201.043.2023",
     )
     with pytest.raises(NoCoverageError) as missing:

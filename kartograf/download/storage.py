@@ -731,16 +731,19 @@ def bbox_slot(
     )
 
 
-# Content token of a segment (spec 3.4, ADR-042 D8): lowercase, no separators.
-_SEGMENT_TOKEN = re.compile(r"[a-z0-9.-]+")
+# Content token of a segment (spec 3.4, ADR-042 D8, ADR-044 D7): lowercase
+# letters and digits, ``-`` between the words of one token (``0-5cm``,
+# ``ptwp-swrs``), ``.`` in a number (``0.5m``); ``_`` separates tokens.
+_SEGMENT_TOKEN = re.compile(r"[a-z0-9]+(?:[.-][a-z0-9]+)*")
 _TERYT = re.compile(r"[0-9]{2,7}")
-# Country code, with the theme of a national file of several themes (ADR-043:
-# ``pl-miejscowosci``).
-_COUNTRY = re.compile(r"[a-z]{2}(?:-[a-z0-9]+)*")
+# Country code, with the theme of a national file of several themes after
+# ``_`` (ADR-043, ADR-044 D7: ``pl_miejscowosci``, ``pl_obiekty-fizjograficzne``).
+_COUNTRY = re.compile(r"[a-z]{2}(?:_[a-z0-9]+(?:-[a-z0-9]+)*)?")
 _KU = re.compile(r"[0-9]{6}")
 _TILE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]*")
-_ZONE = re.compile(r"[a-z0-9-]+")
-_MAPNOM = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
+# Directory of the CRS of a tile: ``1992`` or ``2000/<zone>`` (ADR-044 D7).
+_ZONE = re.compile(r"[a-z0-9-]+(?:/[a-z0-9-]+)*")
+_MAPNOM = re.compile(r"[A-Za-z0-9]+(?:-[A-Za-z0-9]+)*")
 
 
 def token_segment(prefix: str, tokens: Sequence[str]) -> str:
@@ -749,13 +752,15 @@ def token_segment(prefix: str, tokens: Sequence[str]) -> str:
     Raises
     ------
     ValidationError
-        A token outside ``[a-z0-9.-]`` (after lowercasing).
+        A token outside the segment convention (after lowercasing): lowercase
+        letters and digits, ``-`` or ``.`` only between them.
     """
     lowered = [str(t).lower() for t in tokens]
     for token in lowered:
         if not _SEGMENT_TOKEN.fullmatch(token):
             raise ValidationError(
-                f"Niedozwolony element segmentu {token!r} (dozwolone [a-z0-9.-])"
+                f"Niedozwolony element segmentu {token!r} (dozwolone male litery "
+                "i cyfry, '-' i '.' tylko miedzy nimi)"
             )
     return "_".join([prefix, *lowered])
 
@@ -770,7 +775,7 @@ def content_segment(descriptor_key: str, tokens: Sequence[str]) -> str:
     Raises
     ------
     ValidationError
-        A token outside ``[a-z0-9.-]`` (after lowercasing).
+        A token outside the segment convention (``token_segment``).
     """
     return token_segment(get_source(descriptor_key).storage_subdir, tokens)
 
@@ -798,19 +803,21 @@ def unit_slot(
     the caller passes the CRS of the result); ``sheet`` ->
     ``<segment>/<path_parts>/<canonical sheet><ext>``; ``country`` ->
     ``<segment>/country/<code><ext>`` (lowercase ``pl``/``cz``, with the
-    theme of a national file of several themes: ``pl-miejscowosci``);
-    ``ku`` -> ``<segment>/ku/<code><ext>`` (CZ cadastral area, 6 digits);
-    ``tile`` -> ``<segment>/<zone>/<tile><ext>`` (a tile of an index; ``zone``
-    = the directory of its CRS, ``s7``; without a zone ``tile/``);
-    ``mapnom`` -> ``<segment>/<MAPNOM><ext>`` (a sheet of a CUZK sheet index
-    layer, flat). Versions live in ``<segment>/versions/<same hierarchy>/``;
-    ``related_roots`` as in ``FileSlot``.
+    theme of a national file of several themes after ``_``:
+    ``pl_miejscowosci``); ``ku`` -> ``<segment>/ku/<code><ext>`` (CZ
+    cadastral area, 6 digits); ``tile`` -> ``<segment>/<zone>/<tile><ext>``
+    (a tile of an index; ``zone`` = the directory of its CRS, ``1992`` or
+    ``2000/<zone number>``; without a zone ``tile/``); ``mapnom`` ->
+    ``<segment>/<hierarchy>/<MAPNOM><ext>`` (a sheet of a CUZK sheet index
+    layer, ``parser_registry.cuzk_map_path_parts``). Versions live in
+    ``<segment>/versions/<same hierarchy>/``; ``related_roots`` as in
+    ``FileSlot``.
 
     Raises
     ------
     ValidationError
         Not exactly one selection, a TERYT code that is not 2-7 digits, a
-        country code that is not two letters (optionally ``-<theme>``), a KU
+        country code that is not two letters (optionally ``_<theme>``), a KU
         code that is not 6 digits, a tile, zone or MAPNOM with other
         characters, a zone without a tile, or an invalid sheet code.
     """
@@ -853,11 +860,11 @@ def unit_slot(
             raise ValidationError(f"Nieprawidlowy identyfikator kafla: {tile!r}")
         if zone is not None and not _ZONE.fullmatch(zone):
             raise ValidationError(f"Nieprawidlowy katalog ukladu kafla: {zone!r}")
-        parts, name = [zone or "tile"], tile
+        parts, name = (zone.split("/") if zone else ["tile"]), tile
     elif mapnom is not None:
         if not _MAPNOM.fullmatch(mapnom):
             raise ValidationError(f"Nieprawidlowe godlo arkusza CUZK: {mapnom!r}")
-        parts, name = [], mapnom
+        parts, name = parser_registry.cuzk_map_path_parts(mapnom), mapnom
     else:
         assert sheet is not None
         name = SheetParser(sheet).sheet

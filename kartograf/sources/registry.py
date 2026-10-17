@@ -132,7 +132,7 @@ _BUILDINGS_3D_RELEASES = (
 )
 
 
-def _buildings_3d_variants() -> tuple[PackageVariant, ...]:
+def _buildings_variants() -> tuple[PackageVariant, ...]:
     return tuple(
         PackageVariant(
             choice=(("lod", lod), ("year", year)),
@@ -656,8 +656,8 @@ _CZ_RUIAN = SourceDescriptor(
     license=_CUZK_LICENSE,
 )
 
-_CZ_HY_NET = SourceDescriptor(
-    key="cz.cuzk.hy_net",
+_CZ_HYNET = SourceDescriptor(
+    key="cz.cuzk.hynet",
     country="CZ",
     product="network",
     name="HY-NET - siec hydrograficzna (INSPIRE Hydrography - Network)",
@@ -824,8 +824,8 @@ _CZ_SOURCES = (
 # ATOM feed (the release year is in the file name, so the URL exists only in
 # the feed); the JPEG and its three world files are stored 1:1.
 _ORTOFOTO_FEED = f"{_CUZK_ATOM}/ORTOFOTO/ORTOFOTO.xml"
-_CZ_ORTOFOTO = SourceDescriptor(
-    key="cz.cuzk.ortofoto",
+_CZ_ORTO = SourceDescriptor(
+    key="cz.cuzk.orto",
     country="CZ",
     product="orto",
     name="Ortofoto CR (JPEG, arkusze SM5)",
@@ -965,8 +965,8 @@ _PL_INTENSITY = SourceDescriptor(
     default_extension=".tif",
     license=_GUGIK_LICENSE,
 )
-_PL_ORTO_TRUE = SourceDescriptor(
-    key="pl.gugik.orto_true",
+_PL_TRUE_ORTO = SourceDescriptor(
+    key="pl.gugik.true_orto",
     country="PL",
     product="true-orto",
     name="Prawdziwa ortofotomapa (true orto) wybranych miast (arkusze; wycinek WCS)",
@@ -1000,13 +1000,13 @@ _PL_ORTO_TRUE = SourceDescriptor(
         ),
     ),
     tile_scheme=None,
-    storage_subdir="orto/pl_{system}_true",
+    storage_subdir="true-orto/pl_{system}",
     default_extension=".tif",
     license=_GUGIK_LICENSE,
 )
 _OBLIQUE_LAYER = "SkorowidzeOrtofotomapyUkosnej"
-_PL_ORTO_OBLIQUE = SourceDescriptor(
-    key="pl.gugik.orto_oblique",
+_PL_OBLIQUE_ORTO = SourceDescriptor(
+    key="pl.gugik.oblique_orto",
     country="PL",
     product="oblique-orto",
     name="Ortofotomapa ukosna wybranych miast (arkusze PL-2000, kierunki N, E, S, W)",
@@ -1044,11 +1044,11 @@ _PL_ORTO_OBLIQUE = SourceDescriptor(
         ),
     ),
     tile_scheme=None,
-    storage_subdir="orto/pl_{system}_oblique",
+    storage_subdir="oblique-orto/pl_{system}",
     default_extension=".tif",
     license=_GUGIK_LICENSE,
 )
-_E1_PL_SOURCES = (_PL_NMT_100M, _PL_INTENSITY, _PL_ORTO_TRUE, _PL_ORTO_OBLIQUE)
+_E1_PL_SOURCES = (_PL_NMT_100M, _PL_INTENSITY, _PL_TRUE_ORTO, _PL_OBLIQUE_ORTO)
 
 # --- plan E - E1 (CZ) -------------------------------------------------------------
 # ZABAGED 2D contours (raport E, wiersz 16; HEAD recorded 2026-10-16,
@@ -1730,7 +1730,7 @@ _CZ_CADASTRAL_MAP = SourceDescriptor(
         ),
     ),
     tile_scheme=None,
-    storage_subdir="cadastre/cz_km",
+    storage_subdir="cadastre/cz_cadastral-map",
     default_extension=".zip",
     license=_CUZK_LICENSE,
 )
@@ -2198,8 +2198,8 @@ _MESH_3D_INDEX = IndexSource(
     year_field="akt_rok",
     zone_field="uklad_xy",
 )
-_PL_MESH_3D = SourceDescriptor(
-    key="pl.gugik.mesh_3d",
+_PL_MESH = SourceDescriptor(
+    key="pl.gugik.mesh",
     country="PL",
     product="mesh",
     name="Modele siatkowe 3D miast (mesh OBJ z teksturami)",
@@ -2243,8 +2243,8 @@ _PL_MESH_3D = SourceDescriptor(
 # per powiat (0.3-25 GB; some powiats have none: 404), the GML files of
 # 1:500 sheets in EPSG:2180 without a vertical CRS; no LoD2, no other year.
 _TREES_3D = f"{_OPENDATA}/InneDane/Drzewa3D"
-_PL_TREES_3D = SourceDescriptor(
-    key="pl.gugik.trees_3d",
+_PL_TREES = SourceDescriptor(
+    key="pl.gugik.trees",
     country="PL",
     product="trees",
     name="Modele 3D drzew (CityGML LoD1)",
@@ -2348,8 +2348,8 @@ def _pl_control_wfs(
     )
 
 
-_PL_PRPOG = SourceDescriptor(
-    key="pl.gugik.prpog",
+_PL_CONTROL = SourceDescriptor(
+    key="pl.gugik.control",
     country="PL",
     product="control",
     name="Osnowy podstawowe: pozioma, wysokosciowa, grawimetryczna, magnetyczna "
@@ -2378,7 +2378,7 @@ _PL_PRPOG = SourceDescriptor(
                         url_template=(
                             f"{_BDPOG}/{folder}/{{teryt}}_PodstawowaOsnowa{folder}.zip"
                         ),
-                        segment_tokens=(network, "package"),
+                        segment_tokens=(network, "xls"),
                         members=(".xls",),
                     )
                     for network, folder in (
@@ -2429,8 +2429,8 @@ _PL_PRPOG = SourceDescriptor(
 # longitude, zeta on a 0.01 deg grid in ETRF2000-PL, 42 MB) of the quasi-geoid
 # of PL-EVRF2007-NH; the KRON86 variant is not published (404).
 _QUASIGEOID = f"{_OPENDATA}/InneDane/ModeleQuasiGeoidy"
-_PL_QUASIGEOID = SourceDescriptor(
-    key="pl.gugik.quasigeoid",
+_PL_GEOID2021 = SourceDescriptor(
+    key="pl.gugik.geoid2021",
     country="PL",
     product="geoid",
     name="Model quasi-geoidy PL-geoid2021 (PL-EVRF2007-NH)",
@@ -2467,7 +2467,7 @@ _PL_QUASIGEOID = SourceDescriptor(
     default_extension=".txt",
     license=_GUGIK_LICENSE,
 )
-_E5_PL_SOURCES = (_PL_MESH_3D, _PL_TREES_3D, _PL_PRPOG, _PL_QUASIGEOID)
+_E5_PL_SOURCES = (_PL_MESH, _PL_TREES, _PL_CONTROL, _PL_GEOID2021)
 
 # Survey control of CR (raport E, wiersz 23; service and layers recorded
 # 2026-10-16, tests/fixtures/cz/survey_control): --network -> the point layers
@@ -2505,8 +2505,8 @@ _BODOVA_POLE_NETWORKS = (
     ("vertical-detailed", (("46", "bod_pvbp"),)),
     ("gravity", (("48", "bod_ztbp"),)),
 )
-_CZ_SURVEY_CONTROL = SourceDescriptor(
-    key="cz.cuzk.survey_control",
+_CZ_CONTROL = SourceDescriptor(
+    key="cz.cuzk.control",
     country="CZ",
     product="control",
     name="Bodove pole - osnowy geodezyjne Czech (polohove, vyskove, tihove, CZEPOS)",
@@ -2547,8 +2547,8 @@ _CZ_SURVEY_CONTROL = SourceDescriptor(
 # tests/fixtures/cz/qgzu): one dataset of the ATOM feed QGZU, one ZIP of 17
 # text grids (ETRS89, EPSG:4258; the quasi-geoid of Bpv heights) stored 1:1.
 _QGZU_FEED = f"{_CUZK_ATOM}/QGZU/QGZU.xml"
-_CZ_QGZU = SourceDescriptor(
-    key="cz.cuzk.qgzu",
+_CZ_QGZU2013 = SourceDescriptor(
+    key="cz.cuzk.qgzu2013",
     country="CZ",
     product="geoid",
     name="Kvazigeoid QGZU-2013 (siatki TXT, Bpv)",
@@ -2567,6 +2567,7 @@ _CZ_QGZU = SourceDescriptor(
             params=AtomFilesParams(
                 service_feed=_QGZU_FEED,
                 entry_pattern=r"CUZK_QGZU_KVAZIGEOID\.xml$",
+                segment_tokens=("bpv",),
             ),
         ),
     ),
@@ -2575,7 +2576,7 @@ _CZ_QGZU = SourceDescriptor(
     default_extension=".zip",
     license=_CUZK_LICENSE,
 )
-_E5_CZ_SOURCES = (_CZ_SURVEY_CONTROL, _CZ_QGZU)
+_E5_CZ_SOURCES = (_CZ_CONTROL, _CZ_QGZU2013)
 
 _SOURCES: dict[str, SourceDescriptor] = {
     d.key: d
@@ -2844,7 +2845,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
             license=_GUGIK_LICENSE,
         ),
         SourceDescriptor(
-            key="pl.gugik.buildings_3d",
+            key="pl.gugik.buildings",
             country="PL",
             product="buildings",
             name="Modele 3D budynkow (CityGML LoD1, LoD2)",
@@ -2862,7 +2863,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
                         "brak danych); pliki krajowe (3,5-4,1 GB) poza zakresem"
                     ),
                     params=UnitPackageParams(
-                        unit="powiat", variants=_buildings_3d_variants()
+                        unit="powiat", variants=_buildings_variants()
                     ),
                 ),
             ),
@@ -2937,8 +2938,8 @@ _SOURCES: dict[str, SourceDescriptor] = {
         *_CZ_SOURCES,
         _CZ_ZABAGED,
         _CZ_RUIAN,
-        _CZ_HY_NET,
-        _CZ_ORTOFOTO,
+        _CZ_HYNET,
+        _CZ_ORTO,
         # plan E - E1: CZ contours.
         *_E1_CZ_SOURCES,
         # plan E - E2: CZ names and maps.

@@ -11,11 +11,11 @@ OUTWARD to multiples of the pixel and fetched by the image provider
 (``SCALEFACTOR``, chunks within the channel budget counted in coverage
 pixels, stitched without resampling). The true orthophotomap
 (``product="true-orto"``, plan E1) has one WCS channel (0.05 m coverage,
-``pl.gugik.orto_true``) and takes no ``coverage``.
+``pl.gugik.true_orto``) and takes no ``coverage``.
 
 The standard path ``<output>/orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif``
 (coords of the aligned grid in EPSG:2180; true orthophotomap:
-``orto/pl_1992_true_<res>``) links to an immutable version in
+``true-orto/pl_1992_<res>``) links to an immutable version in
 ``versions/bbox/``. The channel has no freshness signal (``none``): a local
 version is used without any request and ``update="force"`` downloads again
 (the same bytes = ``unchanged``; a repeated request gives the same bytes).
@@ -243,7 +243,7 @@ def _prepare(
         for v in (aligned.min_x, aligned.min_y, aligned.max_x, aligned.max_y)
     )
     grid = BBox(min_x, min_y, max_x, max_y, aligned.crs)
-    # one channel: its segment names the product (orto/pl_1992_true_<res>)
+    # one channel: its segment names the product (true-orto/pl_1992_<res>)
     tokens = (resolution,) if coverage is None else (coverage, resolution)
     segment = token_segment(get_source(key).resolve_subdir(system="1992"), tokens)
     return _OrtoCutout(

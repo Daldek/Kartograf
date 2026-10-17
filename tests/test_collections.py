@@ -299,7 +299,7 @@ def test_teryt_package_slot_sidecar_and_version(tmp_path, session, frozen_clock)
     assert (file.status, file.label) == ("new", "2024")
     assert os.stat(file.path).st_ino == os.stat(file.version_path).st_ino
     meta = _meta(file.version_path)
-    assert meta["dataset"] == "pl.gugik.buildings_3d"
+    assert meta["dataset"] == "pl.gugik.buildings"
     assert meta["request"] == {"teryt": "1261", "lod": 1, "year": 2024}
     assert (meta["horizontal_crs"], meta["vertical_crs"]) == ("EPSG:2180", "EPSG:9651")
     assert meta["extra"]["source"] == {"url": url, "edition": "2024"}

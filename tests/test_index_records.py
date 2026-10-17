@@ -174,7 +174,7 @@ def test_tile_units_from_wfs_pages(monkeypatch):
         "74228_55480",
     ]
     assert {(r.zone, r.label, r.year) for r in records} == {
-        ("s7", "2021-10-03_DFT.7201.043.2023", 2021)
+        ("2000/7", "2021-10-03_DFT.7201.043.2023", 2021)
     }
     first = records[0]
     assert dict(first.urls) == {
@@ -227,5 +227,5 @@ def test_file_name_is_the_unit_without_unit_field():
         "78944_6777_74230_55482",
         "78944_6776_74228_55482",
     ]
-    assert {r.zone for r in records} == {"s7"}
+    assert {r.zone for r in records} == {"2000/7"}
     assert {r.raw["modul"] for r in records} == {"74230_55482", "74228_55482"}
