@@ -843,6 +843,9 @@ class TestHSGOutputDirOnWrite:
         assert [(item.unit, item.kind) for item in report.failed] == [
             (f"clay {COORDS}", "download")
         ]
+        # the other inputs still ran and stay stored (like landcover units)
+        assert [item.unit.split()[0] for item in report.inputs] == ["sand", "silt"]
+        assert (tmp_path / "a" / "soil").exists()
         assert not (tmp_path / "a" / "hsg").exists()
 
 
