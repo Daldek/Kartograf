@@ -22,14 +22,13 @@ from kartograf.cli.soil_cmd import (
 )
 from kartograf.download.options import store_files
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
-from kartograf.providers.soilgrids import (
-    DEPTH_DESCRIPTION,
-    PROPERTY_DESCRIPTIONS,
-    STAT_DESCRIPTIONS,
-    SoilGridsProvider,
-)
+from kartograf.landcover.manager import soil_choices
 
-_DEPTHS = f"{', '.join(SoilGridsProvider.DEPTHS)} ({DEPTH_DESCRIPTION})"
+_CHOICES = soil_choices()
+_DEPTHS = (
+    f"{', '.join(_CHOICES['depth'])} "
+    f"({', '.join(dict.fromkeys(_CHOICES['depth'].values()))})"
+)
 
 
 def _described(descriptions: dict[str, str]) -> str:
@@ -68,7 +67,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "-p",
         metavar="WLASCIWOSC",
         default=None,
-        help=f"Wymagane: {_described(PROPERTY_DESCRIPTIONS)}",
+        help=f"Wymagane: {_described(_CHOICES['property'])}",
     )
     layer.add_argument(
         "--depth", "-d", metavar="GLEBOKOSC", default=None, help=f"Wymagane: {_DEPTHS}"
@@ -77,7 +76,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--stat",
         metavar="STATYSTYKA",
         default=None,
-        help=f"Wymagane: {_described(STAT_DESCRIPTIONS)}",
+        help=f"Wymagane: {_described(_CHOICES['stat'])}",
     )
     add_area_flags(layer, sheet_help=SHEET_AREA_HELP)
     output = download.add_argument_group(OUTPUT_TITLE)

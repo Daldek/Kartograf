@@ -99,7 +99,12 @@ from kartograf.notices import CORINE_PREVIEW, Notice, NoticeSink
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider, normalize_layers
-from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.providers.soilgrids import (
+    DEPTH_DESCRIPTION,
+    PROPERTY_DESCRIPTIONS,
+    STAT_DESCRIPTIONS,
+    SoilGridsProvider,
+)
 from kartograf.sources.descriptor import (
     AccessChannel,
     PackageVariant,
@@ -246,6 +251,22 @@ def bdoo_year_choices() -> str:
     params = _archive_channel(COLLECTION_SOURCES["bdoo"]).params
     assert isinstance(params, UnitPackageParams)
     return _spans({int(dict(variant.choice)["year"]) for variant in params.variants})
+
+
+def corine_year_choices() -> str:
+    """``2018, 2012, 2006, 2000, 1990``: the CORINE releases (``--year``;
+    ``--help`` and ``list-sources``)."""
+    return ", ".join(str(year) for year in CorineProvider.AVAILABLE_YEARS)
+
+
+def soil_choices() -> dict[str, dict[str, str]]:
+    """The ``property``, ``depth`` and ``stat`` values of ``download_soil``
+    with their descriptions for the user (``--help``, ``soil list-layers``)."""
+    return {
+        "property": dict(PROPERTY_DESCRIPTIONS),
+        "depth": {depth: DEPTH_DESCRIPTION for depth in SoilGridsProvider.DEPTHS},
+        "stat": dict(STAT_DESCRIPTIONS),
+    }
 
 
 def _read_geotiff_nodata(path: Path) -> float | None:

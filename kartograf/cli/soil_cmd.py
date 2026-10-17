@@ -22,8 +22,12 @@ from kartograf.cli.landcover_cmd import area_task_arguments
 from kartograf.download.options import output_required
 from kartograf.hydrology import calculate_hsg, check_hsg, hsg_statistics
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
-from kartograf.landcover.manager import LandCoverManager, check_soil, download_soil
-from kartograf.providers.soilgrids import DEPTH_DESCRIPTION, STAT_DESCRIPTIONS
+from kartograf.landcover.manager import (
+    LandCoverManager,
+    check_soil,
+    download_soil,
+    soil_choices,
+)
 
 
 def soil_download_task_arguments(args: argparse.Namespace) -> dict:
@@ -79,13 +83,14 @@ def cmd_soil_list_layers(args: argparse.Namespace) -> int:
     for prop in provider.get_available_properties():
         print(f"    {prop:11} - {provider.get_property_description(prop)}")
     print()
-    print(f"  Glebokosci ({DEPTH_DESCRIPTION}):")
-    for depth in provider.get_available_depths():
+    depths = soil_choices()["depth"]
+    print(f"  Glebokosci ({', '.join(dict.fromkeys(depths.values()))}):")
+    for depth in depths:
         print(f"    {depth}")
     print()
     print("  Statystyki:")
-    for stat in provider.get_available_stats():
-        print(f"    {stat:11} - {STAT_DESCRIPTIONS[stat]}")
+    for stat, text in soil_choices()["stat"].items():
+        print(f"    {stat:11} - {text}")
     print()
     print("  Wybor pobrania: --property, --depth, --stat.")
     return 0
