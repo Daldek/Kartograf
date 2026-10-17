@@ -545,7 +545,8 @@ kartograf/
 Od 0.7.0 (ADR-026) `storage_subdir` jest **szablonem** z placeholderami
 `{system}` i `{vcrs}`, a nie literalna nazwa katalogu. Konsument zewnetrzny
 czytajacy to pole wprost dostanie szablon — swiadomy trade-off; poprawna droga
-to `resolve_subdir()`.
+to `resolve_subdir()`. Klucz i `storage_subdir` kazdego deskryptora
+podlegaja konwencji nazw (sekcja 3.3, regula 10; ADR-044 D7).
 
 | Klucz deskryptora | `storage_subdir` | `default_extension` |
 |---|---|---|
@@ -553,11 +554,11 @@ to `resolve_subdir()`.
 | `pl.gugik.nmpt_0_5m`, `pl.gugik.nmpt_0_6m`, `pl.gugik.nmpt` (1 m) | `nmpt/pl_{system}_<etykieta>_{vcrs}`, np. `nmpt/pl_{system}_1m_{vcrs}` | `.asc` |
 | archiwa `pl.gugik.<produkt>_<format>[_<etykieta>]`, np. `pl.gugik.nmt_tbd_25m`, `pl.gugik.nmt_ascii_nmt_1m`, `pl.gugik.nmt_tin`, `pl.gugik.nmpt_xyz_0_5m` | `<produkt>/pl_{system}_<format>[_<etykieta>]_{vcrs}`, np. `nmt/pl_{system}_tbd_25m_{vcrs}`, `nmt/pl_{system}_ascii-nmt_1m_{vcrs}`, `nmt/pl_{system}_tin_{vcrs}` | wg formatu: `.zip` (XYZ, ASCII-NMT, TBD, TIN), `.ttn`, `.grd`, `.dxf`, `.dgn` |
 | `pl.gugik.orto` | `orto/pl_{system}` (+ `_<wariant>` dla CIR/B-W, regula 5); wycinek WCS `orto/pl_1992_<coverage>_<res>` (tokeny, regula 5) | `.tif` |
-| `cz.cuzk.ortofoto` | `orto/cz_sjtsk` (hierarchia SM5) | `.jpg` (+ `.jgw`, `.TM33N.jgw`, `.TM34N.jgw`) |
+| `cz.cuzk.orto` | `orto/cz_sjtsk` (hierarchia SM5) | `.jpg` (+ `.jgw`, `.TM33N.jgw`, `.TM34N.jgw`) |
 | `pl.gugik.nmt_100m` | `nmt/pl_1992_100m` (bez `{vcrs}`: uklad wysokosci nieznany, P1); slot `teryt/<woj>` | `.zip` |
 | `pl.gugik.intensity` | `intensity/pl_{system}` | `.tif` |
-| `pl.gugik.orto_true` | `orto/pl_{system}_true`; wycinek WCS `orto/pl_1992_true_<res>` | `.tif` |
-| `pl.gugik.orto_oblique` | `orto/pl_{system}_oblique`; plik `<godlo>_<kierunek>` (`FileStorage(suffix=)`) | `.tif` |
+| `pl.gugik.true_orto` | `true-orto/pl_{system}`; wycinek WCS `true-orto/pl_1992_<res>` | `.tif` |
+| `pl.gugik.oblique_orto` | `oblique-orto/pl_{system}`; plik `<godlo>_<kierunek>` (`FileStorage(suffix=)`) | `.tif` |
 | `cz.cuzk.zabaged_contours_shp`, `cz.cuzk.zabaged_contours_dgn` | `contours/cz_zabaged_shp`, `contours/cz_zabaged_dgn` (hierarchia SM5) | `.zip` |
 | `pl.gugik.laz` | `laz/pl_{system}_{vcrs}` | `.laz` |
 | `cz.cuzk.dmr5g` | `nmt/cz_dmr5g_{vcrs}` | `.tif` |
@@ -569,18 +570,19 @@ to `resolve_subdir()`.
 | `global.isric.soilgrids` | `soil/global_soilgrids` (prefiks + tokeny) | `.tif` |
 | `pl.gugik.prg` | `boundaries/pl_prg` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `pl.gugik.egib` | `cadastre/pl_egib` (prefiks + tokeny, regula 9) | `.gpkg` |
-| `pl.gugik.buildings_3d` | `models3d/pl_buildings` (prefiks + tokeny, regula 9) | `.zip` |
+| `pl.gugik.buildings` | `models3d/pl_buildings` (prefiks + tokeny, regula 9) | `.zip` |
 | `cz.cuzk.zabaged` | `landcover/cz_zabaged` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `cz.cuzk.ruian` | `boundaries/cz_ruian` (prefiks + tokeny, regula 9) | `.gpkg` |
-| `cz.cuzk.hy_net` | `hydro/cz_hynet` (prefiks + tokeny, regula 9) | `.gpkg` |
+| `cz.cuzk.hynet` | `hydro/cz_hynet` (prefiks + tokeny, regula 9) | `.gpkg` |
 | `pl.gugik.bdoo` | `landcover/pl_bdoo` (prefiks + tokeny: rocznik i klasy `--layers`, regula 9); slot `teryt/<woj>` | `.zip` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` | `landcover/cz_data50`, `landcover/cz_data250` (prefiks + tokeny, regula 9) | `.gpkg` (plik krajowy `.zip`) |
-| `pl.gugik.mesh_3d` | `models3d/pl_mesh` (prefiks, regula 9); slot `<strefa>/<plik kafla>` | `.zip` |
-| `pl.gugik.trees_3d` | `models3d/pl_trees` (prefiks + tokeny `lod1`, `2023`, regula 9) | `.zip` |
-| `pl.gugik.prpog` | `geodesy/pl_control` (prefiks + tokeny: siec, `package` paczki powiatu, regula 9) | `.gpkg` (paczka i archiwum `.zip`) |
-| `pl.gugik.quasigeoid` | `geodesy/pl_geoid2021` (prefiks + token `evrf2007`) | `.txt` |
-| `cz.cuzk.survey_control` | `geodesy/cz_control` (prefiks + token sieci) | `.gpkg` |
-| `cz.cuzk.qgzu` | `geodesy/cz_qgzu2013` | `.zip` |
+| `pl.gugik.mesh` | `models3d/pl_mesh` (prefiks, regula 9); slot `<uklad>[/<strefa>]/<plik kafla>` | `.zip` |
+| `pl.gugik.trees` | `models3d/pl_trees` (prefiks + tokeny `lod1`, `2023`, regula 9) | `.zip` |
+| `pl.gugik.control` | `geodesy/pl_control` (prefiks + tokeny: siec, `xls` paczki powiatu, regula 9) | `.gpkg` (paczka i archiwum `.zip`) |
+| `pl.gugik.geoid2021` | `geodesy/pl_geoid2021` (prefiks + token `evrf2007`) | `.txt` |
+| `cz.cuzk.control` | `geodesy/cz_control` (prefiks + token sieci) | `.gpkg` |
+| `cz.cuzk.qgzu2013` | `geodesy/cz_qgzu2013` (prefiks + token `bpv`) | `.zip` |
+| `cz.cuzk.cadastral_map` | `cadastre/cz_cadastral-map` (prefiks + token formatu, regula 9); slot `ku/<kod>` | `.zip` |
 
 Kanal arkuszy kazdego deskryptora NMT/NMPT PL to `WFS` (`sheet_files`,
 sygnal `index`; skorowidz WFS GUGiK, od 0.8.0 zamiast `WMS_SHEET_INDEX`,
@@ -682,11 +684,12 @@ niemutowalna konfiguracje silnika - dane bez IO:
 | `WcsCutoutParams` (plan D) | `variant` (`--coverage`: `standard`/`high`), `coverage_id`, `native_step` (krok coverage, 0,1 m), `resolutions` (piksele wyniku: 0.1, 0.25, 0.5, 1; etykiety K2), `max_native_pixels` (budzet zapytania w pikselach coverage, 4 Mpx) | `GugikOrtoProvider` + `download/orto_cutout.py` |
 
 Testy rejestru (`tests/test_sources_registry.py`) pilnuja: tokenow szablonu,
-tych samych kluczy `choice` w wariantach kanalu, `edition`/`segment_tokens`
-w `[a-z0-9.-]+`, protokolu zgodnego z transportem, `page_size > 0`
-i capability kanalu kolekcji unikalnej w deskryptorze (`archive_unit_files`,
-`country_files`, `bbox_vector`, `admin_unit_files`) - po niej
-`build_metadata(capability=)` wybiera kanal sidecara. Kanaly kolekcji PL:
+tych samych kluczy `choice` w wariantach kanalu, kluczy, katalogow
+i `edition`/`segment_tokens` wg konwencji nazw (sekcja 3.3, regula 10),
+protokolu zgodnego z transportem, `page_size > 0` i capability kanalu
+kolekcji unikalnej w deskryptorze (`archive_unit_files`, `country_files`,
+`bbox_vector`, `admin_unit_files`) - po niej `build_metadata(capability=)`
+wybiera kanal sidecara. Kanaly kolekcji PL:
 
 | Deskryptor (`--product`) | Kanal, capability | Parametry |
 |---|---|---|
@@ -696,14 +699,14 @@ i capability kanalu kolekcji unikalnej w deskryptorze (`archive_unit_files`,
 | jw. | `DIRECT_FILES`, `country_files` | kraj; `prg/granice/00_jednostki_administracyjne.zip` (ok. 377 MB), czlon `.shp`, token `shp` |
 | `pl.gugik.egib` (`map`) | `DIRECT_FILES`, `admin_unit_files` | powiat; `InneDane/latest_exports/eziudp_wfs/GPKG/{teryt}.gpkg.zip`, `unpack=".gpkg"`, token `gpkg` |
 | jw. | `WFS` `UslugaZbiorcza`, `bbox_vector` | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`: `dzialki`, `budynki`, id `gml_id`, `drop_fields=("DATA",)` |
-| `pl.gugik.buildings_3d` (`buildings`) | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `(lod, year)`: LoD1 2019 (`.../LOD1/2019/{woj}/{teryt}_gml.zip`, EPSG:9650), LoD1 2021/2022/2024 (`.../LOD1/<R>/{woj}/{teryt}.zip`, EPSG:9651), LoD2 2017 (`.../LOD2/{teryt}_gml.zip`, EPSG:9650); czlon `.gml`, `edition` = rok |
+| `pl.gugik.buildings` (`buildings`) | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `(lod, year)`: LoD1 2019 (`.../LOD1/2019/{woj}/{teryt}_gml.zip`, EPSG:9650), LoD1 2021/2022/2024 (`.../LOD1/<R>/{woj}/{teryt}.zip`, EPSG:9651), LoD2 2017 (`.../LOD2/{teryt}_gml.zip`, EPSG:9650); czlon `.gml`, `edition` = rok |
 | `pl.gugik.bdoo` (`landcover --product bdoo`, plan E4) | `DIRECT_FILES`, `admin_unit_files` | woj.; 7 wariantow `year` (2015, 2021-2026): `opendata/bdoo/<R>/PL.PZGiK.201.{woj}.zip`, czlon `.xml` (do 2023) albo `.gml` (od 2024), `edition` = rok; `classes` = suma klas 16 paczek rocznika (2015: 44, 2021-2023: 37, 2024-2026: 26), `class_pattern` `__OT_(?P<code>[A-Z]{4})_[A-Z]\.`; EPSG:2180; brak pliku krajowego |
-| `pl.gugik.mesh_3d` (`models3d --product mesh`, plan E5) | `DIRECT_FILES`, `area_files` | kafle obszaru z rekordow WFS `NMT/WFS/ModeleSiatkowe3D` (typ `gugik:SkorowidzModeleSiatkowe3D`, strony `next`); `IndexSource(unit_field=None)`: kafel = plik rekordu (`URL_do_pobrania`; pole `modul` powtarza sie w kilku pracach i miastach), etykieta `Aktualnosc_Numer_zgloszenia_pracy`, rok `akt_rok` (filtr `--year`), strefa `uklad_xy` (katalog slotu i uklad sidecara); czlon `.obj`, `vertical_crs` EPSG:9651; `index` |
-| `pl.gugik.trees_3d` (`models3d --product trees`, plan E5) | `DIRECT_FILES`, `admin_unit_files` | powiat; jeden wariant `(lod, year)` = (1, 2023): `InneDane/Drzewa3D/LOD1/2023/{woj}/{teryt}.zip` (0,3-25 GB; nie kazdy powiat ma paczke), czlon `.gml`, `edition` 2023, bez ukladu wysokosci (GML `srsName="EPSG:2180"`) |
-| `pl.gugik.prpog` (`geodesy --product control --country pl`, plan E5) | 4 x `WFS`, `bbox_vector` (wspolna capability, ADR-043 D6) | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`, `choice` `network`: `horizontal` (`PodstawowaOsnowaGeodezyjnaPozioma`: `Fundamentalna_pozioma`, `Bazowa_pozioma`), `vertical` (`PodstawowaOsnowaGeodezyjnaWysokosciowa`), `gravity` (`OsnowaGrawimetryczna`), `magnetic` (`OsnowaMagnetyczna`: punkty i `izogony`, bez `izogony_etykiety`); adres `.../PZGIK/<usluga>/WFS`; obiekty bez `gml:id`: id `nr_punktu` (izogony `zakres_wartosci_deklinacji`); warstwa GPKG = nazwa zrodla malymi literami |
-| jw. | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `network` `horizontal`/`vertical`: `bdpog/Pozioma/{teryt}_PodstawowaOsnowaPozioma.zip` (`Wysokosciowa`), czlon `.xls` (wykazy wspolrzednych; opisy JPG), tokeny `<siec>`, `package` |
+| `pl.gugik.mesh` (`models3d --product mesh`, plan E5) | `DIRECT_FILES`, `area_files` | kafle obszaru z rekordow WFS `NMT/WFS/ModeleSiatkowe3D` (typ `gugik:SkorowidzModeleSiatkowe3D`, strony `next`); `IndexSource(unit_field=None)`: kafel = plik rekordu (`URL_do_pobrania`; pole `modul` powtarza sie w kilku pracach i miastach), etykieta `Aktualnosc_Numer_zgloszenia_pracy`, rok `akt_rok` (filtr `--year`), strefa `uklad_xy` (katalog slotu `1992` albo `2000/<strefa>` i uklad sidecara); czlon `.obj`, `vertical_crs` EPSG:9651; `index` |
+| `pl.gugik.trees` (`models3d --product trees`, plan E5) | `DIRECT_FILES`, `admin_unit_files` | powiat; jeden wariant `(lod, year)` = (1, 2023): `InneDane/Drzewa3D/LOD1/2023/{woj}/{teryt}.zip` (0,3-25 GB; nie kazdy powiat ma paczke), czlon `.gml`, `edition` 2023, bez ukladu wysokosci (GML `srsName="EPSG:2180"`) |
+| `pl.gugik.control` (`geodesy --product control --country pl`, plan E5) | 4 x `WFS`, `bbox_vector` (wspolna capability, ADR-043 D6) | `wfs`, EPSG:2180, `yx`, strona 1000, `selection="all"`, `choice` `network`: `horizontal` (`PodstawowaOsnowaGeodezyjnaPozioma`: `Fundamentalna_pozioma`, `Bazowa_pozioma`), `vertical` (`PodstawowaOsnowaGeodezyjnaWysokosciowa`), `gravity` (`OsnowaGrawimetryczna`), `magnetic` (`OsnowaMagnetyczna`: punkty i `izogony`, bez `izogony_etykiety`); adres `.../PZGIK/<usluga>/WFS`; obiekty bez `gml:id`: id `nr_punktu` (izogony `zakres_wartosci_deklinacji`); warstwa GPKG = nazwa zrodla malymi literami |
+| jw. | `DIRECT_FILES`, `admin_unit_files` | powiat; warianty `network` `horizontal`/`vertical`: `bdpog/Pozioma/{teryt}_PodstawowaOsnowaPozioma.zip` (`Wysokosciowa`), czlon `.xls` (wykazy wspolrzednych; opisy JPG), tokeny `<siec>`, `xls` |
 | jw. | `DIRECT_FILES`, `sheet_files` | arkusz 1:100 000 (`SheetGrid(system="1992", parts=3)`); warianty `network` `archive-1942`, `archive-kronsztadt60`: `bdpog/MaterialyArchiwalne/Katalogi_<Kartoteki1942\|Kronsztadt60>/{sheet}.zip` (godlo bez zera wiodacego), czlon `.pdf` (skany katalogow; uklad w sidecarze = uklad siatki arkuszy) |
-| `pl.gugik.quasigeoid` (`geodesy --product geoid --country pl`, plan E5) | `DIRECT_FILES`, `country_files` | kraj; `InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt` (42 MB, siatka 0,01 st.), `file_kind="txt"`, token `evrf2007`, EPSG:9702 (ETRF2000-PL), `vertical_crs` brak (model nie jest wysokosciami) |
+| `pl.gugik.geoid2021` (`geodesy --product geoid --country pl`, plan E5) | `DIRECT_FILES`, `country_files` | kraj; `InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt` (42 MB, siatka 0,01 st.), `file_kind="txt"`, token `evrf2007`, EPSG:9702 (ETRF2000-PL), `vertical_crs` brak (model nie jest wysokosciami) |
 
 Kazdy z tych kanalow poza kaflami mesh 3D (`index`: etykieta rekordu
 indeksu) ma sygnal `none` (GUGiK nie podaje `ETag` ani `Last-Modified`;
@@ -716,13 +719,13 @@ zawsze w EPSG:5514 = DefaultCRS uslug):
 | jw. | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/ZABAGED-GPKG/ZABAGED-GPKG.xml` (jeden zbior), `crs` EPSG:5514 i EPSG:3045, ZIP 1:1, token `gpkg` + kod EPSG; `metadata` |
 | `cz.cuzk.ruian` (`admin`) | `ARCGIS_QUERY` `RUIAN/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 1000, `selection="level"`: `kraj`=17, `okres`=15, `obec`=12, `katastralni-uzemi`=7, `order_field="objectid"`, id `kod`; `none` |
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `services.cuzk.gov.cz/shp/stat/epsg-5514/1.zip` (ok. 253 MB), czlon `.shp`, token `shp`; `http` |
-| `cz.cuzk.hy_net` (`network`) | `WFS` `geoserver/hy-n/wfs`, `bbox_vector` | `wfs`, EPSG:5514, `xy`, strona 1000, `selection="all"`: `hy-n:WatercourseLink`, `hy-n:HydroNode` (warstwy GPKG bez prefiksu), id `gml_id`; `none` |
+| `cz.cuzk.hynet` (`network`) | `WFS` `geoserver/hy-n/wfs`, `bbox_vector` | `wfs`, EPSG:5514, `xy`, strona 1000, `selection="all"`: `hy-n:WatercourseLink`, `hy-n:HydroNode` (warstwy GPKG bez prefiksu), id `gml_id`; `none` |
 | jw. | `DIRECT_FILES` + `UnitPackageParams`, `country_files` | kraj; `openzu.cuzk.gov.cz/opendata/HY-NET/HY-NET.zip` (ok. 194 MB, EPSG:3045), czlon `.gpkg`, token `gpkg`; `http` |
 | `cz.cuzk.data50`, `cz.cuzk.data250` (`landcover --product data50\|data250`, plan E4) | `ARCGIS_QUERY` `DATA50/MapServer`, `DATA250/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 2000, `selection="all"`: 69 i 116 warstw obiektowych (`registry.py::_DATA50_LAYERS`, `_DATA250_LAYERS`, kod = nazwa warstwy ASCII jak ZABAGED; rastry reliefu 5 i 6 DATA250 pominiete), `order_field="OBJECTID"`, id `OBJECTID`; `none` |
 | jw. | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/Data50/Data50.xml` (`Data250/Data250.xml`; jeden zbior), `crs` EPSG:5514 i EPSG:3045, SHP ZIP 1:1 (Data50 516/757 MB, Data250 230/320 MB), token `shp` + kod EPSG; `metadata` |
-| `cz.cuzk.survey_control` (`geodesy --product control --country cz`, plan E5) | `ARCGIS_QUERY` `BodovaPole/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 1000, `selection="level"`, `selection_key="network"`: `gnss`=0, `horizontal`=18, 20, 2, 4, 6, 8, `densification`=38, 40, 22, 24, 26, 28, `horizontal-detailed`=42, `vertical`=44, `vertical-detailed`=46, `gravity`=48 (siec = suma warstw: punkty wyznaczone w ETRS89 nie sa podzbiorem warstw glownych; zniesione 10-17, 30-37 i etykiety pominiete), warstwa GPKG = nazwa CUZK ASCII (`bod_zvbp`), id `OBJECTID`; `none` |
-| `cz.cuzk.qgzu` (`geodesy --product geoid --country cz`, plan E5) | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/QGZU/QGZU.xml` (jeden zbior; feed zbioru i plik na hostach `atom.cuzk.cz`, `openzu.cuzk.cz`), EPSG:4258, ZIP 17 siatek TXT 1:1 (58 MB); `metadata` |
-| `cz.cuzk.ortofoto` (`imagery --product orto --country cz`) | `DIRECT_FILES` + `AtomFilesParams`, `sheet_files` | feed `atom.cuzk.gov.cz/ORTOFOTO/ORTOFOTO.xml`, wpis po godle SM5 (grupy `year`, `sheet`), czlony `.jpg`, `.jgw`, `.TM33N.jgw`, `.TM34N.jgw` 1:1; `metadata`; tor `download/cz_orto.py` (nie kolekcja) |
+| `cz.cuzk.control` (`geodesy --product control --country cz`, plan E5) | `ARCGIS_QUERY` `BodovaPole/MapServer`, `bbox_vector` | `arcgis`, EPSG:5514, `xy`, strona 1000, `selection="level"`, `selection_key="network"`: `gnss`=0, `horizontal`=18, 20, 2, 4, 6, 8, `densification`=38, 40, 22, 24, 26, 28, `horizontal-detailed`=42, `vertical`=44, `vertical-detailed`=46, `gravity`=48 (siec = suma warstw: punkty wyznaczone w ETRS89 nie sa podzbiorem warstw glownych; zniesione 10-17, 30-37 i etykiety pominiete), warstwa GPKG = nazwa CUZK ASCII (`bod_zvbp`), id `OBJECTID`; `none` |
+| `cz.cuzk.qgzu2013` (`geodesy --product geoid --country cz`, plan E5) | `DIRECT_FILES` + `AtomFilesParams`, `country_files` | feed `atom.cuzk.gov.cz/QGZU/QGZU.xml` (jeden zbior; feed zbioru i plik na hostach `atom.cuzk.cz`, `openzu.cuzk.cz`), EPSG:4258, ZIP 17 siatek TXT 1:1 (58 MB), token `bpv` (uklad wysokosci modelu); `metadata` |
+| `cz.cuzk.orto` (`imagery --product orto --country cz`) | `DIRECT_FILES` + `AtomFilesParams`, `sheet_files` | feed `atom.cuzk.gov.cz/ORTOFOTO/ORTOFOTO.xml`, wpis po godle SM5 (grupy `year`, `sheet`), czlony `.jpg`, `.jgw`, `.TM33N.jgw`, `.TM34N.jgw` 1:1; `metadata`; tor `download/cz_orto.py` (nie kolekcja) |
 
 Pliki krajowe CUZK z `ETag` maja sygnal `http`, pliki z feedu ATOM
 (rok albo data wydania w nazwie) - `metadata` (wydanie z `updated`).
@@ -737,8 +740,8 @@ Kanaly planu E1 (ADR-043; produkty `download_data`, nie kolekcje):
 |---|---|---|
 | `pl.gugik.nmt_100m` (`elevation --product nmt --resolution 100m`) | `DIRECT_FILES` + `AtomFilesParams`, `admin_unit_files` | feed `mapy.geoportal.gov.pl/.../ATOM/httpauth/atom/GUGIK_NMT100`, wpis zbioru po `NMT100_<woj>` (grupa `woj`), `force_https` (linki `http://` feedow GUGiK pobierane przez `https`), ZIP z plikiem XYZ 1:1; `metadata`; wariant rejestru bez ukladu wysokosci (`vertical_crs=None`, `vertical_note`, P1); tor `collection` (`collections.atom_area_request`) |
 | `pl.gugik.intensity` (`imagery --product intensity`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files` | `OI/WMS/SkorowidzeObrazowIntensywnosci`, warstwa `SkorowidzeOI`, arkusze PL-1992 (godla 7-czlonowe) i PL-2000, bez `calyArkuszWypelnionyTrescia` (`full_sheet=False`); `index` |
-| `pl.gugik.orto_true` (`imagery --product true-orto`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files`; `WCS` + `WcsCutoutParams`, `bbox_raster` | skorowidz `ORTO/WMS/TrueOrtho` (`Skorowidze`, godla 8-czlonowe PL-1992, `extent` = wybrane miasta); WCS `True_Orthoimagery` (siatka 0,05 m, piksele `0.05m`-`1m`, jedna usluga = bez `--coverage`); `index` / `none` |
-| `pl.gugik.orto_oblique` (`imagery --product oblique-orto`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files` | `ORTO/WMS/SkorowidzeOrtofotomapyUkosnej`, warstwa na kierunek (`directions`: `n`, `e`, `s`, `w`), arkusze PL-2000 1:2000 i 1:1000, `full_sheet=True`; plik `<godlo>_<kierunek>.tif`; `index` |
+| `pl.gugik.true_orto` (`imagery --product true-orto`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files`; `WCS` + `WcsCutoutParams`, `bbox_raster` | skorowidz `ORTO/WMS/TrueOrtho` (`Skorowidze`, godla 8-czlonowe PL-1992, `extent` = wybrane miasta); WCS `True_Orthoimagery` (siatka 0,05 m, piksele `0.05m`-`1m`, jedna usluga = bez `--coverage`); `index` / `none` |
+| `pl.gugik.oblique_orto` (`imagery --product oblique-orto`) | `WMS_SHEET_INDEX` + `SheetIndexParams`, `sheet_files` | `ORTO/WMS/SkorowidzeOrtofotomapyUkosnej`, warstwa na kierunek (`directions`: `n`, `e`, `s`, `w`), arkusze PL-2000 1:2000 i 1:1000, `full_sheet=True`; plik `<godlo>_<kierunek>.tif`; `index` |
 | `cz.cuzk.zabaged_contours_shp`, `cz.cuzk.zabaged_contours_dgn` (`elevation --product contours --country cz --format SHP\|DGN`) | `DIRECT_FILES`, `sheet_files` | `openzu.cuzk.gov.cz/opendata/ZABAGED-vyskopis{,-DGN}/epsg-5514/{sheet}.zip` (jeden format = jeden deskryptor, jak archiwa GUGiK), arkusze SM5, S-JTSK, Bpv, ZIP 1:1; `http`; tor `download/cz_contours.py` |
 
 `SheetIndexParams(layers, systems, sheet_parts, full_sheet, directions=(),
@@ -887,7 +890,7 @@ wyniku bez zadnego piksela obrazu (High poza obszarami 10 cm). Maski PRG
 i `zero_pixels` nie ma.
 
 **Ortofoto CZ w sidecarze (ADR-042 D13).** `download/cz_orto.py` pisze
-sidecar `cz.cuzk.ortofoto` (`capability="sheet_files"`, `request` =
+sidecar `cz.cuzk.orto` (`capability="sheet_files"`, `request` =
 `{"sheet": <godlo>}`) dla kazdego z czterech plikow arkusza:
 `horizontal_crs` = uklad pliku (JPEG i `.jgw` EPSG:5514, `.TM33N.jgw`
 EPSG:3045, `.TM34N.jgw` EPSG:3046), `extra.source` = `{url,
@@ -989,12 +992,13 @@ data/
 │   ├── pl_1992_cir/...                      # wariant CIR (B/W: pl_<uklad>_bw), E12
 │   ├── pl_1992_standard_0.25m/bbox/<coords>.tif   # DOWIAZANIE: wycinek WCS ortofotomapy (4.3, ADR-042 D14)
 │   ├── pl_1992_high_0.1m/versions/bbox/2026-10-16_<sha8>/<coords>.tif   # wersja wycinka High
-│   ├── pl_1992_true/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif   # true orto: arkusz 8-czlonowy (plan E1)
-│   ├── pl_1992_true_0.05m/bbox/<coords>.tif # DOWIAZANIE: wycinek WCS True_Orthoimagery
-│   ├── pl_2000_oblique/7/125/11/08/7.125.11.08_n.tif   # orto ukosna: plik na kierunek (_n, _e, _s, _w)
 │   ├── cz_sjtsk/CTES/96/CTES96.jpg          # DOWIAZANIE: ortofoto CZ, JPEG z ZIP CUZK 1:1 (4.4, ADR-042 D13)
 │   ├── cz_sjtsk/CTES/96/CTES96.jgw          # + CTES96.TM33N.jgw i CTES96.TM34N.jgw (pliki georeferencji)
 │   └── cz_sjtsk/versions/AS/91/2025_2026-02-24_<sha8>/AS91.jpg   # wersja (etykieta <rok>_<updated>); godlo As
+├── true-orto/
+│   ├── pl_1992/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif   # true orto: arkusz 8-czlonowy (plan E1)
+│   └── pl_1992_0.05m/bbox/<coords>.tif      # DOWIAZANIE: wycinek WCS True_Orthoimagery
+├── oblique-orto/pl_2000/7/125/11/08/7.125.11.08_n.tif   # orto ukosna: plik na kierunek (_n, _e, _s, _w)
 ├── laz/pl_2000_evrf2007/<hier>/<plik>.laz   # DOWIAZANIE; uklad poziomy per kafel (uklad_xy), pionowy z flagi
 ├── laz/pl_2000_evrf2007/versions/<hier>/<data>_<zgloszenie>_<sha8>/<plik>.laz   # wersja (D26)
 ├── laz/cz_dmr5g_bpv/CTES/96/CTES96.laz      # DOWIAZANIE: LAZ CZ (plan B) 1:1 z ZIP openzu; SM5 = EPSG:5514/Bpv
@@ -1032,30 +1036,31 @@ data/
 │   ├── pl_egib/bbox/<coords>.gpkg              # dzialki i budynki obszaru (WFS), bez tokenu
 │   ├── pl_egib_gpkg/teryt/1261.gpkg            # eksport powiatu (GPKG rozpakowany z ZIP)
 │   ├── pl_rcn/teryt/1261.gpkg                  # RCN: eksport powiatu (teryt/12.gpkg - wojewodztwa), GPKG z ZIP
-│   └── cz_km_shp/ku/623164.zip                 # mapa katastralna CZ: paczka KU 1:1 (+ _dxf, _dgn, _vfk; sygnal http)
+│   └── cz_cadastral-map_shp/ku/623164.zip      # mapa katastralna CZ: paczka KU 1:1 (+ _dxf, _dgn, _vfk; sygnal http)
 ├── models3d/
 │   ├── pl_buildings_lod1_2024/teryt/1261.zip   # CityGML 1:1; wersje 2024_<sha8> (rok wydania)
 │   ├── pl_trees_lod1_2023/teryt/3063.zip       # drzewa CityGML 1:1 (paczka 0,3-25 GB); wersje 2023_<sha8>
-│   └── pl_mesh/s7/78944_6777_74230_55482.zip   # kafel mesh = plik rekordu indeksu (OBJ+MTL+JPG 1:1),
-│                                               # katalog = uklad rekordu; wersje <Aktualnosc>_<zgloszenie>_<sha8>
+│   └── pl_mesh/2000/7/78944_6777_74230_55482.zip   # kafel mesh = plik rekordu indeksu (OBJ+MTL+JPG 1:1),
+│                                               # katalog = uklad rekordu: 1992 albo 2000/<strefa>;
+│                                               # wersje <Aktualnosc>_<zgloszenie>_<sha8>
 ├── hydro/
 │   ├── cz_hynet/bbox/<coords>.gpkg             # HY-NET obszaru (WFS: WatercourseLink, HydroNode), EPSG:5514
 │   └── cz_hynet_gpkg/country/cz.zip            # plik krajowy (GPKG w ZIP, EPSG:3045, sygnal http)
 ├── geodesy/
 │   ├── pl_control_horizontal/bbox/<coords>.gpkg      # punkty sieci obszaru (WFS sieci), EPSG:2180
-│   ├── pl_control_horizontal_package/teryt/1201.zip  # paczka powiatu (wykazy XLS, opisy JPG) 1:1
+│   ├── pl_control_horizontal_xls/teryt/1201.zip      # paczka powiatu (wykazy XLS, opisy JPG) 1:1
 │   ├── pl_control_archive-1942/N-33/58/N-33-58.zip   # archiwum arkusza 1:100 000 1:1
 │   ├── pl_geoid2021_evrf2007/country/pl.txt          # model quasi-geoidy PL-geoid2021 1:1 (TXT)
 │   ├── cz_control_vertical/bbox/<coords>.gpkg        # Bodove pole: warstwy sieci, EPSG:5514
-│   └── cz_qgzu2013/country/cz.zip                    # QGZU-2013 z feedu ATOM; wersje 2021-02-22_<sha8>
+│   └── cz_qgzu2013_bpv/country/cz.zip                # QGZU-2013 z feedu ATOM; wersje 2021-02-22_<sha8>
 ├── names/
 │   ├── pl_prng/bbox/<coords>.gpkg              # PRNG obszaru (OGC API), OGC:CRS84 (+ pl_prng_world/)
-│   ├── pl_prng_shp/country/pl-miejscowosci.zip # plik krajowy 1:1 (+ pl-obiekty-fizjograficzne.zip; _gml, _xlsx)
+│   ├── pl_prng_shp/country/pl_miejscowosci.zip # plik krajowy 1:1 (+ pl_obiekty-fizjograficzne.zip; _gml, _xlsx)
 │   ├── cz_geonames/bbox/<coords>.gpkg          # Geonames obszaru (REST, 25 warstw), EPSG:5514
 │   └── cz_geonames_gpkg_5514/country/cz.zip    # plik krajowy z feedu ATOM (+ _fgdb, _3045); etykieta = wydanie
 ├── maps/
 │   ├── pl_bdot10k_10000_tiff/M-34/64/D/d/1/M-34-64-D-d-1.tif   # wizualizacja BDOT10k; etykieta = data Stan bazy
-│   └── cz_ztm_10000_sjtsk_tiff/0510-D-11.zip   # ZTM: arkusz plasko w segmencie (PDF: .pdf; sygnal http)
+│   └── cz_ztm_10000_sjtsk_tiff/0510/D/11/0510-D-11.zip   # ZTM: hierarchia godla (PDF: .pdf; sygnal http)
 ├── soil/global_soilgrids_clay_0-5cm_mean/bbox/<coords>.tif   # wersje 2.0_<sha8> (wydanie)
 └── hsg/global_soilgrids_0-5cm_mean/bbox/<coords>.tif         # pochodna z wersji clay/sand/silt (D33)
 ```
@@ -1072,7 +1077,10 @@ data/
    EVRF2007 = kafle TM33), wiec `cz_<model>_<vcrs>` wskazuje je jednoznacznie.
    Ortofoto CZ (plan D) ma segment `orto/cz_sjtsk` (uklad JPEG i `.jgw`;
    `.TM33N.jgw` i `.TM34N.jgw` leza obok w tym samym katalogu), wycinek
-   ortofotomapy PL - `orto/pl_1992_<coverage>_<res>` (regula 5).
+   ortofotomapy PL - `orto/pl_1992_<coverage>_<res>` (regula 5). Obrazy
+   planu E1 maja wlasne katalogi produktu (regula 10) z segmentem
+   `pl_<uklad>`: `intensity/pl_1992`, `true-orto/pl_1992` (wycinek
+   `true-orto/pl_1992_<res>`), `oblique-orto/pl_2000`.
    Czlon NMT/NMPT PL miedzy ukladem a `<vcrs>` pochodzi z szablonu
    deskryptora (`registry.py::_pl_sheet_source`, sekcja 3.1; to nie
    `<wariant>` z reguly 5): siatka ASC — sama etykieta
@@ -1085,6 +1093,10 @@ data/
    a dwuliterowe godla SM5 (99 arkuszy As, `AS22`...`AS94`) `AS91` ->
    `AS/91` (`path_parts` = `[godlo[:-2], godlo[-2:]]`; od 0.8.0 - wczesniej
    wzorzec SM5 mial 4 litery i `AS91` trafial do fallbacku PL-1992).
+   Arkusze map CUZK (ZTM, `MAPNOM` warstwy `KladyMapovychListu`) maja te
+   sama hierarchie (`parser_registry.cuzk_map_path_parts`, ADR-044 D7):
+   S-JTSK `0510-D-11` -> `0510/D/11`, ETRS89 `NM-34-07-1-D-15` ->
+   `NM-34/07/1/D/15` (arkusz 1:1 000 000 w jednym katalogu jak `N-34`).
 3. Podkatalog `bbox/` wewnatrz segmentu trzyma dowiazania wycinkow PL WCS
    (`--cutout`; NMT/NMPT i ortofotomapa) i CZ: `<coords>.tif` bez daty
    (D15); wersje w `<segment>/versions/bbox/<RRRR-MM-DD>_<sha8>/<coords>.tif`.
@@ -1115,7 +1127,8 @@ data/
    `<coverage>_<res>` dopisane do segmentu PL-1992 (`token_segment`):
    `orto/pl_1992_standard_0.25m/`, `orto/pl_1992_high_0.1m/` - wariant WCS
    i piksel to rozne tresci; koloru w segmencie nie ma (wycinek jest tylko
-   RGB).
+   RGB). Wycinek true orto (jedna usluga WCS) ma sam piksel:
+   `true-orto/pl_1992_0.05m/`.
 
 6. **Wersje (ADR-036; dawniej `kampanie/`, ADR-030).** Prawdziwe pliki
    NMT/NMPT/orto PL leza WYLACZNIE w `<segment>/versions/<hierarchia
@@ -1176,7 +1189,7 @@ data/
    `storage_subdir` deskryptora (`landcover/pl_bdot10k`,
    `landcover/eu_corine`, `soil/global_soilgrids`; HSG: stala
    `HSG_SEGMENT_PREFIX = "hsg/global_soilgrids"`) + `_` + tokeny tresci
-   lowercase (`[a-z0-9.-]+`, `download/storage.py::content_segment`):
+   wg reguly 10 (`download/storage.py::content_segment`):
    BDOT10k `gpkg[_<warstwy>]`/`gpkg_zip`/`shp` (archiwum rocznikow -
    regula 9), CORINE `<rok>[_preview]`, SoilGrids
    `<wlasciwosc>_<glebokosc>_<stat>`, HSG `<glebokosc>_<stat>`.
@@ -1187,7 +1200,7 @@ data/
    hierarchia>/`).
 
 9. **Kolekcje (ADR-042 D8; rozszerzenie reguly 8).**
-   `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>|ku/<kod>|<hierarchia godla>|<strefa>/<plik>}<ext>`:
+   `<grupa>/<kraj>_<zrodlo>[_<tokeny>]/{teryt/<T>|bbox/<coords>|country/<kod>|ku/<kod>|<hierarchia godla>|<uklad>[/<strefa>]/<plik>}<ext>`:
    segment = prefiks `storage_subdir` + tokeny wariantu tresci
    (`content_segment`), pod nim `unit_slot`: `teryt/<T>` (paczka powiatu
    albo wojewodztwa - takze, gdy obszar rozlozono na powiaty z PRG; BDOO:
@@ -1210,32 +1223,83 @@ data/
    (tak samo `cz_data250`); plik krajowy CZ to `country/cz`, a
    `bbox/<coords>` CZ ma wspolrzedne EPSG:5514 (ujemne, np.
    `-460000_-1120000_-450000_-1110000.gpkg`). Plan E: kafel indeksu ma slot
-   `<strefa>/<plik>` (mesh: katalog ukladu rekordu `s5`-`s7` albo `pl1992`,
-   nazwa pliku rekordu, np. `models3d/pl_mesh/s7/78944_6777_74230_55482.zip`),
-   arkusz - hierarchie godla (`geodesy/pl_control_archive-1942/N-33/58/`),
-   a segmenty E5 to `models3d/pl_trees_lod1_2023`,
-   `geodesy/pl_control_<siec>` (obszar), `geodesy/pl_control_<siec>_package`
-   (paczka powiatu), `geodesy/pl_geoid2021_evrf2007`,
-   `geodesy/cz_control_<siec>` i `geodesy/cz_qgzu2013`.
-   KU mapy katastralnej CZ ma slot `ku/<kod>` (`cadastre/cz_km_<format>/ku/623164.zip`),
-   temat pliku krajowego - `country/<kraj>-<temat>`
-   (`names/pl_prng_shp/country/pl-miejscowosci.zip`), arkusz ZTM - plik
-   plasko w segmencie (`maps/cz_ztm_10000_sjtsk_tiff/0510-D-11.zip`), arkusz
-   wizualizacji BDOT10k - hierarchie godla. Segmenty E2 i E3:
+   `<uklad>[/<strefa>]/<plik>` (mesh: uklad rekordu `1992` albo `2000`
+   i strefa PL-2000 `5`-`8`, nazwa pliku rekordu, np.
+   `models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip`), arkusz -
+   hierarchie godla (`geodesy/pl_control_archive-1942/N-33/58/`, arkusz ZTM
+   `maps/cz_ztm_10000_sjtsk_tiff/0510/D/11/0510-D-11.zip`, arkusz
+   wizualizacji BDOT10k), a segmenty E5 to `models3d/pl_trees_lod1_2023`,
+   `geodesy/pl_control_<siec>` (obszar), `geodesy/pl_control_<siec>_xls`
+   (paczka powiatu: wykazy XLS i opisy JPG), `geodesy/pl_geoid2021_evrf2007`,
+   `geodesy/cz_control_<siec>` i `geodesy/cz_qgzu2013_bpv` (QGZU-2013 to
+   quasi-geoida wysokosci Bpv, jak PL-geoid2021 dla EVRF2007).
+   KU mapy katastralnej CZ ma slot `ku/<kod>`
+   (`cadastre/cz_cadastral-map_<format>/ku/623164.zip`), temat pliku
+   krajowego - `country/<kraj>_<temat>`
+   (`names/pl_prng_shp/country/pl_miejscowosci.zip`). Segmenty E2 i E3:
    `names/pl_prng[_<format>]`, `names/pl_prng_world[_<format>]`,
    `names/cz_geonames[_<format>_<epsg>]`, `maps/pl_bdot10k_<skala>_<format>`,
    `maps/cz_ztm_<skala>_<uklad>_<format>`, `boundaries/pl_prg_addresses[_<format>]`,
    `boundaries/pl_prg_special[_<format>]`, `boundaries/cz_geomorphology_<poziom>`,
-   `cadastre/pl_rcn` i `cadastre/cz_km_<format>`.
+   `cadastre/pl_rcn` i `cadastre/cz_cadastral-map_<format>`.
    Rozne tresci nigdy nie dziela slotu. Identyczna tresc innego wydania tej
    samej jednostki, formatu i LoD (`FileSlot.related_roots`, D7) nie zajmuje
    miejsca drugi raz: nowa wersja jest hardlinkiem do istniejacych danych
    (`relabeled`, `same_as` = etykieta znalezionej wersji).
 
+10. **Konwencja nazw kluczy i katalogow (ADR-044 D7).** Jedna konwencja dla
+    kluczy zrodel i nazw w `data/`. Spelniaja ja segmenty z wydan <= 0.7.2
+    (`nmt/pl_1992_1m_evrf2007`, `orto/pl_1992_cir`, `laz/pl_2000_kron86`,
+    `nmt/cz_dmr5g_bpv`) i regula 8; produkty nowe w 0.8.0 nazwano wg niej
+    przed wydaniem (bez migracji). Pilnuje jej test rejestru
+    `tests/test_sources_registry.py::TestNamingConvention`.
+    - **Klucz zrodla** = `<kraj>.<dostawca>.<nazwa>`: kraj deskryptora (`pl`,
+      `cz`, `eu`, `global`), dostawca (`gugik`, `cuzk`, `clms`, `isric`),
+      `<nazwa>` - slowa `[a-z0-9]` laczone `_` (w kluczu nie ma `-` ani
+      kropki: `0.5m` -> `0_5m`), zlozone z calych slow sciezki `data/`:
+      nazwy zbioru z segmentu (`hynet`, `geoid2021`, `cadastral-map` ->
+      `cadastral_map`) albo katalogu produktu, gdy segment zaczyna sie od
+      ukladu (`orto`, `true-orto` -> `true_orto`), z tokenami stalymi
+      deskryptora (`nmt_tbd_25m`, `zabaged_contours_shp`) i z katalogiem,
+      gdy zbior ma deskryptory w kilku katalogach (`dmr5g_laz`,
+      `bdot10k_maps`). Klucz to pole `dataset` sidecara; `pl.gugik.nmpt`
+      (NMPT 1 m bez `_1m`) zostaje z 0.7.
+    - **Katalog najwyzszego poziomu** = wartosc `--product` w `elevation`
+      i `imagery` (`nmt/`, `true-orto/`, `oblique-orto/`), nazwa grupy CLI
+      w pozostalych grupach (`landcover/`, `geodesy/`); `soil hsg` -> `hsg/`.
+    - **Segment** = `<kraj>_<token>[_<token>...]`, male litery; `_` wylacznie
+      miedzy tokenami; token to litery i cyfry, `-` miedzy slowami jednego
+      tokenu (`ascii-nmt`, `cadastral-map`, `horizontal-detailed`,
+      `archive-1942`, `0-5cm`, kody `ptwp-swrs`), `.` tylko w liczbie
+      (`0.5m`). Po kraju stoi uklad PL (regula 1) albo nazwa zbioru: skrot
+      dostawcy bez spacji i myslnikow (`dmr5g` z DMR 5G, `hynet` z HY-NET,
+      `qgzu2013` z QGZU-2013), a bez ustalonego skrotu slowa angielskie
+      (`buildings`, `control`, `cadastral-map`). Tokeny wariantu to wartosci
+      wyborow, ktore go wybieraja, malymi literami (`--level gmina`,
+      `--network horizontal-detailed`, `--format SHP` -> `shp`, `--year 2024`,
+      `--lod 1` -> `lod1`, `--scale 1:10000` -> `10000`, `--sheet-system
+      sjtsk`, `--horizontal-crs EPSG:3045` -> `3045`, `--resolution 0.5m`,
+      `--layers PTWP,SWRS` -> `ptwp-swrs`); tresc bez wyboru nazywa token
+      formatu pliku (`gpkg`, `xls`; regula 9) i uklad wysokosci danych
+      (`evrf2007`, `bpv`) - ten zawsze na koncu (regula 1). Kolejnosc
+      tokenow produktu ustala jego deskryptor (`segment_tokens`).
+    - **Uklad PL** wszedzie `1992`/`2000` (token segmentu albo katalog),
+      strefa PL-2000 - jej numer jako katalog pod `2000`, tak jak pierwszy
+      czlon godla PL-2000 (`nmt/pl_2000_1m_evrf2007/6/179/...`,
+      `models3d/pl_mesh/2000/7/<plik>`, `models3d/pl_mesh/1992/<plik>`);
+      nigdy `pl1992`, `s7` ani `PL-2000:S7`.
+    - **Hierarchia arkusza** = wszystkie czlony godla jako katalogi
+      (regula 2), plik = pelne godlo; takze arkusze ZTM, nigdy plasko.
+    - **Nazwa pliku** = kod jednostki (TERYT, `pl`/`cz`, kod KU, godlo,
+      `<coords>`, plik rekordu kafla), dopisek po `_`: temat pliku krajowego
+      (`country/pl_miejscowosci.zip`, `pl_obiekty-fizjograficzne.zip`),
+      kierunek orto ukosnej (`7.125.11.08_n.tif`). Czlony ZIP zapisywane 1:1
+      zachowuja nazwy zrodla (`CTES96.TM33N.jgw`).
+
 Nowe zrodlo rastrowe wymaga providera i toru dyspozycji (sekcja 5), ale
-jego `storage_subdir` (np. `nmt/de_bb_dgm1_dhhn2016/`) nie wymaga
-specjalnej reguly w kodzie sciezek; produkt kolekcji (regula 9) to sam
-wpis deskryptora z parametrami kanalu.
+jego `storage_subdir` (wg reguly 10, np. `nmt/de_bb_dgm1_dhhn2016/`) nie
+wymaga specjalnej reguly w kodzie sciezek; produkt kolekcji (regula 9) to
+sam wpis deskryptora z parametrami kanalu.
 
 **Katalogi najwyzszego poziomu** (grupa CLI i wybor produktu):
 
@@ -1245,7 +1309,9 @@ wpis deskryptora z parametrami kanalu.
 | `nmpt/` | `elevation` | `--product nmpt` |
 | `laz/` | `elevation` | `--product laz` |
 | `contours/` | `elevation` | `--product contours` (CZ) |
-| `orto/` | `imagery` | `--product orto`, `true-orto`, `oblique-orto` |
+| `orto/` | `imagery` | `--product orto` |
+| `true-orto/` | `imagery` | `--product true-orto` |
+| `oblique-orto/` | `imagery` | `--product oblique-orto` |
 | `intensity/` | `imagery` | `--product intensity` |
 | `landcover/` | `landcover` | `--product bdot10k`, `bdoo`, `corine`, `zabaged`, `data50`, `data250` |
 | `soil/` | `soil` | `soil download --property` |
@@ -2919,11 +2985,11 @@ jednego zbioru (QGZU; `atom.single_dataset`); feedy arkuszy i wojewodztw
 |---|---|---|---|
 | `teryt` (2 cyfry = woj., 4 = powiat; PL) | `unit_package` tej jednostki | `[teryt]` | `teryt/<T>` |
 | `ku` (6 cyfr; CZ) | `unit_package` KU | `[ku]` | `ku/<kod>` |
-| `sheet` albo arkusze przecinajace obszar | `unit_package` arkuszy z indeksem PL lub CUZK | `[godlo]`/arkusze obszaru | plasko `<MAPNOM>` w segmencie wariantu |
+| `sheet` albo arkusze przecinajace obszar | `unit_package` arkuszy z indeksem PL lub CUZK | `[godlo]`/arkusze obszaru | hierarchia godla (`<MAPNOM>` CUZK: `cuzk_map_path_parts`) w segmencie wariantu |
 | obszar produktu z kanalem `feature_bbox` | `feature_bbox` | jeden obszar w ukladzie natywnym uslugi | `bbox/<coords>.gpkg` |
-| obszar produktu z kanalem kafli (`unit="tile"`) | `unit_package` kafli z rekordow indeksu WFS | rekordy obszaru (strony `next`), `year` = filtr rekordow (`Notice` `unit_list`) | `<strefa>/<kafel>` |
+| obszar produktu z kanalem kafli (`unit="tile"`) | `unit_package` kafli z rekordow indeksu WFS | rekordy obszaru (strony `next`), `year` = filtr rekordow (`Notice` `unit_list`) | `<uklad>[/<strefa>]/<kafel>` |
 | obszar produktu bez `feature_bbox` (powiat) | `unit_package` powiatu | powiaty z PRG (`discover_teryts_for_bbox`, cache metadanych; `Notice` `unit_list`) | `teryt/<T>` kazdego powiatu |
-| `whole_country` | `unit_package` jednostki `country` albo `atom_files` (plik z feedu ATOM CUZK; `horizontal_crs` wymagany, gdy plik ma kilka ukladow) | `pl` albo `cz` (PRNG: tematy) | `country/<kod>` (PRNG: `pl-<temat>`) |
+| `whole_country` | `unit_package` jednostki `country` albo `atom_files` (plik z feedu ATOM CUZK; `horizontal_crs` wymagany, gdy plik ma kilka ukladow) | `pl` albo `cz` (PRNG: tematy) | `country/<kod>` (PRNG: `pl_<temat>`) |
 
 Obszar: `bbox` w ukladzie z listy `--bbox-crs`, `sheet` = zasieg godla
 PL albo CZ, `geometry` = obwiednia obiektow pliku (`--layer`).
@@ -3128,7 +3194,7 @@ o kazda kolekcje osobno) i plikiem krajowym SHP/GML. Kolekcja
 158 do ponad 400 s): `FeatureBBoxParams.area_omitted` niesie tekst, ktory
 silnik kolekcji zamienia w `Info` `AREA_OMITTED` (`<produkt>: <tekst>`)
 przy kazdym zadaniu obszaru kanalu (obwody sa
-w pliku krajowym). Ten sam mechanizm maja `cz.cuzk.hy_net` (typ
+w pliku krajowym). Ten sam mechanizm maja `cz.cuzk.hynet` (typ
 `WatercourseSeparatedCrossing` bez geometrii tylko w pliku krajowym)
 i `cz.cuzk.zabaged` (22 warstwy obszaru wobec pelnej bazy pliku
 krajowego). `pl.gugik.rcn` ma kanaly
@@ -3145,27 +3211,28 @@ warstwy RUIAN 7. `cz.cuzk.geomorphology` to ArcGIS REST
 (`--level`, `selection="level"`). Mapa katastralna w formacie VKM jest
 poza 0.8.0 (adres pliku VKM odpowiada 404 dla KU 623164).
 
-**Modele 3D, osnowy i quasi-geoidy (E5).** `pl.gugik.mesh_3d` ma kanal
+**Modele 3D, osnowy i quasi-geoidy (E5).** `pl.gugik.mesh` ma kanal
 `unit="tile"` z `IndexSource(kind="wfs", unit_field=None)`: indeks
 `ModeleSiatkowe3D` ma jeden rekord na plik, ale pole `modul` (`74230_55482`)
 nazywa kafle kilku prac i miast (26 633 wartosci w kilku miejscach kraju,
 138 miejsc z dwoma mesh jednego roku - ze zdjec i ze skaningu), wiec
 jednostka = nazwa pliku rekordu bez `.zip` (`78944_6777_74230_55482`),
 kazdy rekord obszaru to osobny plik, a `year` filtruje rekordy (regula
-"najnowszy rekord kafla" nie dotyczy mesh). Katalog slotu i uklad sidecara
-daje `uklad_xy` rekordu (OBJ we wspolrzednych tej strefy), wysokosci
-`EPSG:9651` z wariantu. `pl.gugik.trees_3d` to paczki powiatow jednego
+"najnowszy rekord kafla" nie dotyczy mesh). Katalog slotu (`1992` albo
+`2000/<strefa>`, regula 10) i uklad sidecara daje `uklad_xy` rekordu (OBJ
+we wspolrzednych tej strefy), wysokosci
+`EPSG:9651` z wariantu. `pl.gugik.trees` to paczki powiatow jednego
 wydania (LoD1 2023; flagi `--lod`/`--year` mozna pominac, inna wartosc =
 blad) - 0,3-25 GB, `Notice` `download_size` przed transferem, strumien do
 stagingu i kontrola ZIP na dysku; obszar prawie zawsze przekracza limit
-10 GB, `--teryt` nie ma limitu. `pl.gugik.prpog` ma cztery kanaly WFS
+10 GB, `--teryt` nie ma limitu. `pl.gugik.control` ma cztery kanaly WFS
 (jedna usluga na siec, wybor `choice` `network`, wspolna capability
 `bbox_vector`), paczki powiatu sieci poziomej i wysokosciowej
-(`unit="powiat"`, tokeny `<siec>`, `package`) i archiwa arkuszy 1:100 000
+(`unit="powiat"`, tokeny `<siec>`, `xls`) i archiwa arkuszy 1:100 000
 (`unit="sheet"`, `SheetGrid(system="1992", parts=3)`; `--sheet` dowolnej
 skali daje arkusze 1:100 000 jego zasiegu). Siec grawimetryczna,
 magnetyczna i archiwa nie maja paczek powiatu: `--teryt` z nimi = blad
-z podpowiedzia wyboru obszaru. `cz.cuzk.survey_control` to jeden kanal
+z podpowiedzia wyboru obszaru. `cz.cuzk.control` to jeden kanal
 ArcGIS z `selection_key="network"`, w ktorym jeden kod sieci nazywa kilka
 warstw (pozioma: 18, 20 i warstwy wyznaczone w ETRS89 2-8, ktore nie sa
 podzbiorem 18/20 - zero wspolnych punktow w kraju). Quasi-geoidy to jeden
@@ -3180,10 +3247,12 @@ Kartograf nie stosuje modeli do innych danych (ADR-043, pkt 7 planu E).
 
 Checklist na przykladzie DE (Brandenburgia, DGM1):
 
-1. **Deskryptor** w `kartograf/sources/registry.py`: `key="de.bb.dgm1"`,
-   `country="DE"`, `product="nmt"`, kanaly (`AccessChannel` z transportem,
-   ukladami, `capabilities`, `endpoint`), licencja,
-   `storage_subdir="nmt/de_bb_dgm1_{vcrs}"`, `default_extension`. Sam ten
+1. **Deskryptor** w `kartograf/sources/registry.py`: `key="de.lgb.dgm1"`,
+   `country="DE"`, `product="nmt"`, `provider_name="LGB"`, kanaly
+   (`AccessChannel` z transportem, ukladami, `capabilities`, `endpoint`),
+   licencja, `storage_subdir="nmt/de_bb_dgm1_{vcrs}"`, `default_extension`;
+   klucz i katalog wg konwencji nazw (sekcja 3.3, regula 10; pilnuje jej
+   test rejestru). Sam ten
    wpis wystarcza, zeby pliki wyladowaly we wlasciwym katalogu — **zero zmian
    w kodzie sciezek**. Jesli kraj wnosi nowy uklad pionowy, dopisz go do
    `_VERTICAL_CRS_CODES` (a przy rodzinie/realizacji takze do
@@ -3254,7 +3323,7 @@ wojewodztwo, plik krajowy), obiekty obszaru z WFS 2.0 / ArcGIS REST albo
 plik z feedu ATOM CUZK to wpis deskryptora z `AccessChannel.params`
 (`UnitPackageParams`, `FeatureBBoxParams` albo `AtomFilesParams`, sekcja
 3.1) - bez providera i bez kodu silnika:
-segment = `storage_subdir` + tokeny wariantu (sekcja 3.3 regula 9), kanal
+segment = `storage_subdir` + tokeny wariantu (sekcja 3.3 reguly 9 i 10), kanal
 wynika z rodzaju wyboru (sekcja 4.10), sidecar, wersje i plan sa wspolne.
 Kolejnosc osi BBOX (`axis_order`) potwierdz testem na prawdziwej
 odpowiedzi uslugi (zamiana osi daje pusty wynik bez bledu), kanal dopisz
