@@ -11,8 +11,8 @@ from kartograf.download.collections import download_collection
 from kartograf.download.cutout import PlCutoutResult
 from kartograf.download.data import download_data
 from kartograf.exceptions import DownloadError, KartografError, ValidationError
-from kartograf.hydrology import HSGCalculator
-from kartograf.landcover.manager import LandCoverManager
+from kartograf.hydrology import calculate_hsg
+from kartograf.landcover.manager import download_landcover, download_soil
 from kartograf.project.commands import (
     COMMANDS,
     check_options_json,
@@ -222,21 +222,17 @@ VALIDATION = {
     "landcover download": (
         {"product": "bdot10k", "teryt": "1465"},
         {"product": "corine", "bbox": _BBOX},
-        lambda out, o: LandCoverManager(out, o.pop("product"), cache=False).download(
-            **o
-        ),
+        lambda out, o: download_landcover(output_dir=out, cache=False, **o),
     ),
     "soil download": (
         {"bbox": _BBOX, **CLAY},
         {"bbox": _BBOX, "property": "clay", "depth": "0-5cm"},
-        lambda out, o: LandCoverManager(out, "soilgrids", cache=False).download(**o),
+        lambda out, o: download_soil(output_dir=out, cache=False, **o),
     ),
     "soil hsg": (
         {"sheet": HSG_SHEET, "depth": "0-5cm"},
         {"sheet": HSG_SHEET},
-        lambda out, o: HSGCalculator(out, cache=False).calculate_hsg(
-            **{"depth": None, **o}
-        ),
+        lambda out, o: calculate_hsg(output_dir=out, cache=False, **o),
     ),
     "boundaries download": (
         {"product": "admin", "teryt": "12"},

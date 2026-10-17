@@ -131,8 +131,10 @@ class TestSoilGridsStore:
 
     def test_soilgrids_edition_unavailable_without_local_is_error(self, tmp_path):
         session = FakeSoilGrids(404)
-        with pytest.raises(DownloadError, match="GetCapabilities"):
-            _soil(tmp_path, session).download(bbox=BBOX, **CLAY)
+        report = _soil(tmp_path, session).download(bbox=BBOX, **CLAY)
+        assert not report.ok and report.files == ()
+        assert len(report.failed) == 1
+        assert "GetCapabilities" in report.failed[0].error
         assert session.coverages == 0
         assert not (tmp_path / "soil").exists()
 
@@ -148,8 +150,8 @@ class TestSoilGridsStore:
         assert (file.status, file.unverified) == ("local", "unchecked")
         assert result.notices == () and observed == []
         assert session.capabilities == 0
-        with pytest.raises(DownloadError):
-            manager.download(bbox=BBOX, update="upgrade", **CLAY)
+        report = manager.download(bbox=BBOX, update="upgrade", **CLAY)
+        assert not report.ok and len(report.failed) == 1
         assert session.coverages == 0
 
     def test_soilgrids_force_same_content_unchanged(self, tmp_path):
@@ -418,7 +420,7 @@ class TestBdot10kStore:
         result = _bdot(tmp_path, FakePackages()).download(teryt="1465")
         (item,) = result.files
         file = item.file
-        assert item.unit == "1465" and item.raw is None
+        assert item.unit == "1465" and result.raw == ()
         assert file.path == tmp_path / "landcover/pl_bdot10k_gpkg/teryt/1465.gpkg"
         assert file.version_path.parent.parent == (
             tmp_path / "landcover/pl_bdot10k_gpkg/versions/teryt"
@@ -443,7 +445,7 @@ class TestBdot10kStore:
             teryt="1465", keep_raw=True, update="upgrade", on_notice=observed.append
         )
         assert result.notices == tuple(observed)
-        files = (result.files[0].file, result.files[0].raw)
+        files = (result.files[0].file, result.raw[0].file)
         assert result.notices == tuple(
             Notice(
                 "info",
@@ -489,8 +491,7 @@ class TestBdot10kStore:
             teryt="1465", keep_raw=True, layers=["PTWP"]
         )
         (item,) = result.files
-        raw = item.raw
-        assert raw is not None
+        raw = result.raw[0].file
         assert raw.path == tmp_path / "landcover/pl_bdot10k_gpkg_zip/teryt/1465.zip"
         assert raw.path.read_bytes() == b"zip 1465"
         raw_meta = _sidecar(raw.version_path)
@@ -513,7 +514,7 @@ class TestBdot10kStore:
         assert packages.calls == ["1465", "1465"]
         (item,) = result.files
         assert item.file.status == "unchanged"
-        assert item.raw is not None and item.raw.status == "new"
+        assert len(result.raw) == 1 and result.raw[0].file.status == "new"
 
     def test_bdot_default_local_without_package_request(self, tmp_path):
         packages = FakePackages()
@@ -523,7 +524,7 @@ class TestBdot10kStore:
         assert packages.calls == ["1465"]
         (item,) = result.files
         assert (item.file.status, item.file.unverified) == ("local", "none")
-        assert item.raw is not None and item.raw.status == "local"
+        assert len(result.raw) == 1 and result.raw[0].file.status == "local"
 
     def test_bdot_force_same_content_unchanged_next_day(self, tmp_path):
         manager = _bdot(tmp_path, FakePackages())
@@ -603,8 +604,9 @@ class TestBdot10kStore:
 
     def test_bdot_failure_leaves_no_version_and_no_staging(self, tmp_path):
         packages = FakePackages(fail={"1465"})
-        with pytest.raises(DownloadError):
-            _bdot(tmp_path, packages).download(teryt="1465", keep_raw=True)
+        result = _bdot(tmp_path, packages).download(teryt="1465", keep_raw=True)
+        assert not result.ok and result.files == () and result.raw == ()
+        assert len(result.failed) == 1
         assert list(tmp_path.iterdir()) == []
 
     def test_no_county_raises_no_coverage(self, tmp_path):
@@ -704,12 +706,10 @@ class TestCommandLevel:
         planned = {(i.segment, i.hierarchy, i.name) for i in plan.items}
         written = {
             (
-                f.path.parent.parent.relative_to(tmp_path).as_posix(),
-                f.path.parent.name,
-                f.path.name,
+                r.file.path.parent.parent.relative_to(tmp_path).as_posix(),
+                r.file.path.parent.name,
+                r.file.path.name,
             )
-            for r in area.files
-            for f in (r.file, r.raw)
-            if f is not None
+            for r in (*area.files, *area.raw)
         }
         assert planned == written and len(planned) == 4

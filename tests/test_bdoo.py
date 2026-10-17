@@ -18,7 +18,7 @@ from pathlib import Path
 import pytest
 
 from kartograf.download import collections as col
-from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.notices import CLASSES_ABSENT, UNIT_LIST
 from kartograf.providers.pl.prg import PRG_WFS_ENDPOINT
@@ -280,8 +280,10 @@ def test_bdoo_area_voivodeship_without_package_fails_alone(bdoo, monkeypatch, tm
 
 def test_bdoo_teryt_without_package_is_no_coverage(bdoo, monkeypatch, tmp_path):
     serve(monkeypatch, missing("bdoo_2023_12"))
-    with pytest.raises(NoCoverageError, match=r"\(HTTP 404\)"):
-        bdoo.download(teryt="12", year=2023)
+    result = bdoo.download(teryt="12", year=2023)
+    assert not result.ok and result.files == ()
+    assert [(f.unit, f.kind) for f in result.failed] == [("12", "no_coverage")]
+    assert "(HTTP 404)" in result.failed[0].error
     assert not (tmp_path / "landcover").exists()
 
 
@@ -290,8 +292,10 @@ def test_bdoo_package_without_class_files_is_not_data(bdoo, monkeypatch, tmp_pat
     BDOO data: nothing is stored."""
     names = [m for m in PACKAGES["bdoo_2023_12"]["members"] if "__OT_" not in m]
     serve(monkeypatch, route("bdoo_2023_12", zip_bytes(names)))
-    with pytest.raises(DownloadError, match="paczka bez plikow klas obiektow"):
-        bdoo.download(teryt="12", year=2023)
+    result = bdoo.download(teryt="12", year=2023)
+    assert not result.ok and result.files == ()
+    assert [(f.unit, f.kind) for f in result.failed] == [("12", "download")]
+    assert "paczka bez plikow klas obiektow" in result.failed[0].error
     assert not list(tmp_path.rglob("*.zip"))
 
 
@@ -361,8 +365,10 @@ def test_bdoo_layers_class_absent(bdoo, monkeypatch, tmp_path):
     assert "zapisano klasy KUIK" in notices[0].text
     assert _meta(file.version_path)["extra"]["source"]["classes"] == ["KUIK"]
 
-    with pytest.raises(NoCoverageError, match="nie ma plikow klas PTWP"):
-        bdoo.download(teryt="12", year=2023, layers=["PTWP"])
+    missing = bdoo.download(teryt="12", year=2023, layers=["PTWP"])
+    assert not missing.ok and missing.files == ()
+    assert [(f.unit, f.kind) for f in missing.failed] == [("12", "no_coverage")]
+    assert "nie ma plikow klas PTWP" in missing.failed[0].error
     assert not (tmp_path / "landcover/pl_bdoo_2023_ptwp").exists()
 
 

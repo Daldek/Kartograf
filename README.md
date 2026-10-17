@@ -123,7 +123,10 @@ aktualizacje i przenoszenie magazynu:
 ### Biblioteka Python
 
 ```python
-from kartograf import BBox, DownloadManager, GugikProvider, download_data
+from kartograf import (
+    BBox, DownloadManager, GugikProvider, calculate_hsg,
+    download_data, download_landcover,
+)
 
 # To samo co `kartograf elevation download ...` — te same pliki, sidecary, komunikaty
 # i błędy (każdy wybór danych jawny; od 0.8.0 bez wartości domyślnych)
@@ -138,6 +141,12 @@ report = download_data(
     vertical_crs="EVRF2007",
 )
 print([item.file.path for item in report.files], report.ok, report.notices)
+
+# Ten sam kontrakt dla landcover i HSG: files, failed, notices, ok
+powiat = download_landcover(product="bdot10k", output_dir="./data", teryt="1465")
+print([item.file.path for item in powiat.files], powiat.failed)
+hsg = calculate_hsg(output_dir="./data", sheet="N-34-130-D", depth="0-5cm")
+print([item.file.path for item in hsg.files], hsg.inputs, hsg.failed)
 
 # Niższy poziom: arkusz NMT po godle przez DownloadManager
 provider = GugikProvider(vertical_crs="EVRF2007", resolution="1m")

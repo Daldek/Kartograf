@@ -11,10 +11,10 @@ from unittest.mock import patch
 
 import pytest
 
+from kartograf import calculate_hsg, check_soil, download_landcover, download_soil
 from kartograf.core.bbox import BBox
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
-from kartograf.hydrology import HSGCalculator
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.notices import Notice
 from kartograf.providers.corine import CorineProvider
@@ -61,7 +61,7 @@ def _bdot(teryts, packages):
     )
 
 
-# The CLI command of each LandCoverManager source (ADR-039: SoilGrids in ``soil``).
+# The CLI command of each landcover source (ADR-039: SoilGrids in ``soil``).
 _COMMAND = {
     "bdot10k": ["landcover", "download", "--product", "bdot10k"],
     "corine": ["landcover", "download", "--product", "corine"],
@@ -73,7 +73,11 @@ _COMMAND = {
 def _landcover(tmp_path, source, cli_args, **api_kwargs):
     return run_both(
         [*_COMMAND[source], *cli_args],
-        lambda out: LandCoverManager(out, source).download(**api_kwargs),
+        lambda out: (
+            download_soil(output_dir=out, **api_kwargs)
+            if source == "soilgrids"
+            else download_landcover(product=source, output_dir=out, **api_kwargs)
+        ),
         tmp_path,
     )
 
@@ -104,8 +108,7 @@ def test_bdot_area_of_powiats_one_failing(tmp_path):
 
 
 def test_bdot_year_archive(tmp_path):
-    """``--year 2024 --format SHP`` = ``download(year=2024, format="SHP")``:
-    the archive package of the powiat 1:1, labelled by its year."""
+    """The archive package of the powiat 1:1, labelled by its year."""
     url, response = package_route("bdot10k_2024_shp_1261")
     session = FakePackageSession({url: response})
     with _providers(bdot10k=lambda: Bdot10kProvider(session=session)):
@@ -178,9 +181,7 @@ def test_soilgrids_local_version_asks_no_edition(tmp_path):
 
 
 def test_zabaged_area(tmp_path, monkeypatch):
-    """``landcover download --product zabaged --bbox`` = ``LandCoverManager(o,
-    "zabaged").download(bbox=...)``: one GeoPackage of the area, the same
-    bytes and sidecar in both stores."""
+    """One GeoPackage of the area, same bytes and sidecar via CLI and API."""
     serve_zabaged(monkeypatch)
     run = _landcover(tmp_path, "zabaged", ZABAGED_ARGS, bbox=ZABAGED_AREA)
     _same(run, run.api_result.notices, run.api_result.ok)
@@ -239,7 +240,7 @@ def _hsg(tmp_path, cli_args, **api_kwargs):
     with _providers(soilgrids=RasterSoilGrids):
         return run_both(
             ["soil", "hsg", "--depth", "0-5cm", "-q", *cli_args],
-            lambda out: HSGCalculator(out).calculate_hsg(depth="0-5cm", **api_kwargs),
+            lambda out: calculate_hsg(output_dir=out, depth="0-5cm", **api_kwargs),
             tmp_path,
         )
 
@@ -247,7 +248,7 @@ def _hsg(tmp_path, cli_args, **api_kwargs):
 def test_hsg_bbox(tmp_path):
     run = _hsg(tmp_path, ["--bbox", BBOX_ARG], bbox=BBOX)
     _same(run, run.api_result.notices, run.api_result.ok)
-    assert run.api_result.file.status == "new"
+    assert run.api_result.files[0].file.status == "new"
 
 
 def test_hsg_geometry(tmp_path):
@@ -267,7 +268,7 @@ def test_check_plan_upgrade(tmp_path):
     with soil:
         checked = run_both(
             ["soil", "download", *args, "--check-updates", "--plan", str(plan_file)],
-            lambda out: LandCoverManager(out, "soilgrids").check(bbox=BBOX, **CLAY),
+            lambda out: check_soil(output_dir=out, bbox=BBOX, **CLAY),
             tmp_path,
         )
         api_plan = checked.api_result
@@ -275,8 +276,8 @@ def test_check_plan_upgrade(tmp_path):
         assert cli_plan.items == api_plan.items
         upgraded = run_both(
             ["soil", "download", *args, "--upgrade", "--plan", str(plan_file)],
-            lambda out: LandCoverManager(out, "soilgrids").download(
-                bbox=BBOX, update="upgrade", plan=api_plan, **CLAY
+            lambda out: download_soil(
+                output_dir=out, bbox=BBOX, update="upgrade", plan=api_plan, **CLAY
             ),
             tmp_path,
         )

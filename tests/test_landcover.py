@@ -143,7 +143,7 @@ class TestBdot10kProvider:
 
 
 class TestBdot10kPrgTimeout:
-    """P7: the caller's ``timeout`` reaches the PRG powiat lookup too."""
+    """The provider accepts an explicit PRG timeout (store calls do not)."""
 
     BBOX = BBox(340000, 290000, 350000, 300000, "EPSG:2180")
     DISCOVER = "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox"
@@ -158,19 +158,6 @@ class TestBdot10kPrgTimeout:
             assert discover.call_args.kwargs["timeout"] == 7
             provider.download_by_sheet("N-34-130-D", tmp_path / "x.gpkg", timeout=9)
             assert discover.call_args.kwargs["timeout"] == 9
-
-    def test_manager_passes_timeout_option(self, tmp_path):
-        manager = LandCoverManager(output_dir=tmp_path, provider="bdot10k")
-        with (
-            patch(self.DISCOVER, return_value=["0208"]) as discover,
-            patch.object(manager, "_run"),
-        ):
-            manager.download(bbox=self.BBOX, timeout=7)
-            assert discover.call_args.kwargs["timeout"] == 7
-            manager.download(sheet="N-34-130-D", timeout=8)
-            assert discover.call_args.kwargs["timeout"] == 8
-            manager.download(bbox=self.BBOX)
-            assert discover.call_args.kwargs["timeout"] == 30
 
 
 class TestCorineProvider:
@@ -1650,19 +1637,20 @@ class TestLandCoverNoSideEffectsOnInit:
         session.get.return_value = response
         manager.provider._sessions.injected = session
 
-        with pytest.raises(DownloadError):
-            if source == "bdot10k":
-                manager.download(teryt="1465")
-            else:
-                options = (
-                    {"year": 2018}
-                    if source == "corine"
-                    else {"property": "soc", "depth": "0-5cm", "stat": "mean"}
-                )
-                manager.download(
-                    bbox=BBox(450000, 550000, 451000, 551000, "EPSG:2180"),
-                    **options,
-                )
+        if source == "bdot10k":
+            report = manager.download(teryt="1465")
+        else:
+            options = (
+                {"year": 2018}
+                if source == "corine"
+                else {"property": "soc", "depth": "0-5cm", "stat": "mean"}
+            )
+            report = manager.download(
+                bbox=BBox(450000, 550000, 451000, 551000, "EPSG:2180"),
+                **options,
+            )
+        assert not report.ok and report.files == ()
+        assert len(report.failed) == 1
 
         # the store root may stay (staging lives below it), never a file
         assert _tree(empty_cwd) in ([], ["out"])
@@ -1844,8 +1832,9 @@ class TestBdot10kSidecarSource:
             raise OSError(28, "No space left on device")
 
         monkeypatch.setattr(Path, "write_bytes", disk_full)
-        with pytest.raises(DownloadError, match="No space left"):
-            manager.download(teryt="0262", keep_raw=True, update="force")
+        report = manager.download(teryt="0262", keep_raw=True, update="force")
+        assert not report.ok and len(report.failed) == 1
+        assert "No space left" in report.failed[0].error
         assert gpkg.read_bytes() == before
         assert hashlib.sha256(before).hexdigest() == sidecar["sha256"]
         assert [p for p in out.rglob("*") if ".incoming" in p.parts[-2:]] == []
@@ -1878,8 +1867,9 @@ class TestBdot10kSidecarSource:
         manager = LandCoverManager(output_dir=tmp_path / "out", provider="bdot10k")
         manager.provider._sessions = SessionPerThread(self._session(body, {}))
         monkeypatch.setattr(Path, "write_bytes", disk_full)
-        with pytest.raises(DownloadError):
-            manager.download(teryt="0262", keep_raw=True)
+        report = manager.download(teryt="0262", keep_raw=True)
+        assert not report.ok and report.files == () and report.raw == ()
+        assert len(report.failed) == 1
         assert sorted(p.name for p in (tmp_path / "out").iterdir()) == []
 
     def test_extraction_os_error_is_download_error(self, tmp_path, monkeypatch):
@@ -1927,7 +1917,7 @@ class TestBdot10kSidecarSource:
             )
         assert rc == 1
         err = capsys.readouterr().err
-        assert "Error: Nie udalo sie rozpakowac" in err
+        assert "Error: 0262: Nie udalo sie rozpakowac" in err
         assert "Cannot allocate memory" in err
         assert "OSError" not in err
 

@@ -16,7 +16,6 @@ from kartograf.download.data import check_data, download_data
 from kartograf.download.laz import check_laz_area, download_laz_area
 from kartograf.download.manager import DownloadManager
 from kartograf.exceptions import ValidationError
-from kartograf.hydrology.hsg import HSGCalculator
 from kartograf.landcover.manager import LandCoverManager
 
 SHEET = "N-34-130-D-d-2-4"
@@ -66,8 +65,6 @@ def test_layers_text_is_not_read_character_by_character(tmp_path):
     ("source", "options", "match"),
     [
         ("corine", {"year": "2018"}, "--year .*'2018'"),
-        ("corine", {"year": 2018, "timeout": "120"}, "timeout .*'120'"),
-        ("corine", {"year": 2018, "timeout": 0}, "timeout musi byc wiekszy od 0"),
         ("bdot10k", {"keep_raw": "true"}, "--keep-raw"),
         ("bdot10k", {"layers": ["SWRS", 7]}, "kody musza byc napisami"),
     ],
@@ -79,18 +76,10 @@ def test_landcover_rejects_wrong_option_types(tmp_path, source, options, match):
         manager.download(**selection, **options)
 
 
-def test_landcover_accepts_float_timeout_and_rejects_text_workers(tmp_path):
+def test_landcover_rejects_text_workers(tmp_path):
     manager = LandCoverManager(tmp_path, "bdot10k", cache=False)
-    manager._check_options({"timeout": 2.5, "layers": ("PTWP",), "keep_raw": True})
     with pytest.raises(ValidationError, match="--workers"):
         manager.download(teryt="1465", workers="2")
-
-
-@pytest.mark.parametrize("method", ["calculate_hsg", "check_hsg"])
-def test_hsg_rejects_text_timeout(tmp_path, method):
-    calc = HSGCalculator(tmp_path)
-    with pytest.raises(ValidationError, match="timeout .*'120'"):
-        getattr(calc, method)(bbox=AREA, depth="0-5cm", timeout="120")
 
 
 @pytest.mark.parametrize(

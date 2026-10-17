@@ -1,8 +1,6 @@
-"""
-``landcover download`` and ``landcover list-layers`` (``LandCoverManager``, Z1).
+"""``landcover download`` and ``landcover list-layers`` (ADR-037, ADR-044).
 
-``run_land_cover`` is the store request of one land cover source with the
-area flags of a command; ``soil download`` runs SoilGrids through it.
+The CLI translates flags to ``download_landcover`` / ``check_landcover``.
 """
 
 import argparse
@@ -26,11 +24,13 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
 )
 from kartograf.download.collections import collection_classes, collection_layers
-from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
     LANDCOVER_PRODUCT_CHOICES,
     LandCoverManager,
+    check_landcover,
+    download_landcover,
+    require_landcover_product,
 )
 
 # Sources whose area is several TERYT unit packages (summary line).
@@ -116,35 +116,23 @@ def area_task_arguments(args: argparse.Namespace) -> dict:
     }
 
 
-def _landcover_options(args: argparse.Namespace) -> dict:
-    options: dict = {}
-    if args.year is not None:
-        options["year"] = args.year
-    if args.format is not None:
-        options["format"] = args.format
-    if args.layers is not None:
-        options["layers"] = args.layers
-    if args.keep_raw:
-        options["keep_raw"] = True
-    if args.whole_country:
-        options["whole_country"] = True
-    if args.horizontal_crs is not None:
-        options["horizontal_crs"] = args.horizontal_crs
-    return options
-
-
 def landcover_task_arguments(args: argparse.Namespace) -> dict:
     """Data options shared by ``landcover download`` and ``project add``."""
     return {
         "product": args.product,
         "teryt": args.teryt,
         **area_task_arguments(args),
-        **_landcover_options(args),
+        "year": args.year,
+        "format": args.format,
+        "layers": args.layers,
+        "keep_raw": args.keep_raw,
+        "whole_country": args.whole_country,
+        "horizontal_crs": args.horizontal_crs,
     }
 
 
 def cmd_landcover_download(args: argparse.Namespace) -> int:
-    """``landcover download``: flags -> ``LandCoverManager.download``/``.check``."""
+    """``landcover download``: flags -> ``download_landcover``/``check_landcover``."""
     missing = []
     if args.product is None:
         missing.append(f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}")
@@ -156,72 +144,34 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)
         return 1
-    options = _landcover_options(args)
-    return run_land_cover(
-        args, args.product, options, teryt=args.teryt, workers=args.workers
-    )
+    require_landcover_product(args.product)
+    return run_with_plan_file(args, _landcover_task)
 
 
-def run_land_cover(
-    args: argparse.Namespace,
-    source: str,
-    options: dict,
-    *,
-    teryt: str | None = None,
-    workers: int = 1,
-) -> int:
-    """One store request of ``source`` for the area flags of ``args``."""
-    selection = area_task_arguments(args)
-    selection["teryt"] = teryt
-    manager = LandCoverManager(output_dir=Path(args.output), provider=source)
-    try:
-        return run_with_plan_file(
-            args,
-            lambda a: _landcover_task(a, manager, source, selection, options, workers),
-        )
-    except (DownloadError, ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
-
-
-def _landcover_task(
-    args: argparse.Namespace,
-    manager: LandCoverManager,
-    source: str,
-    selection: dict,
-    options: dict,
-    workers: int,
-) -> int:
-    """One request: a plan (``--check-updates``) or the files with one status
-    line each (spec 4.5); BDOT10k by an area draws the powiat progress bar
-    first."""
+def _landcover_task(args: argparse.Namespace) -> int:
+    """Plan or download with a status line per file and errors per unit."""
+    arguments = {**landcover_task_arguments(args), "output_dir": Path(args.output)}
     if args.check_updates:
-        plan = manager.check(**selection, on_notice=_print_notice, **options)
-        return _report_plan(args, plan)
+        return _report_plan(args, check_landcover(**arguments, on_notice=_print_notice))
     update = _update_mode(args)
-    on_progress = create_progress_callback(args.quiet, workers)
-    result = manager.download(
-        **selection,
+    on_progress = create_progress_callback(args.quiet, args.workers)
+    result = download_landcover(
+        **arguments,
         update=update,
         plan=_plan_context(args).loaded,
-        workers=workers,
+        workers=args.workers,
         on_notice=_print_notice,
         on_progress=on_progress,
-        **options,
     )
-    out = manager.output_dir
     _end_progress(on_progress)
+    out = Path(args.output)
     statuses = []
-    for item in result.files:
-        for file in (item.file, item.raw):
-            if file is not None:
-                _report_file(args, _unit_of(file.path, out), file, update)
-                statuses.append(file.status)
+    for item in (*result.files, *result.raw):
+        _report_file(args, _unit_of(item.file.path, out), item.file, update)
+        statuses.append(item.file.status)
     for failure in result.failed:
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(result.stale)
-    # several files (an area of BDOT10k powiats or BDOO voivodeships): one
-    # summary line, as for sheet lists
-    if source in _UNIT_SOURCES and selection["teryt"] is None and not args.quiet:
+    if args.product in _UNIT_SOURCES and args.teryt is None and not args.quiet:
         _print_version_summary(statuses, len(result.failed), out)
     return 0 if result.ok else 1

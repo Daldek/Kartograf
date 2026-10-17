@@ -49,11 +49,21 @@ from kartograf.download.options import (
 )
 from kartograf.download.plan import UpdatePlan
 from kartograf.exceptions import ValidationError
-from kartograf.hydrology.hsg import HSG_INPUTS, HSGCalculator, HsgResult
+from kartograf.hydrology.hsg import (
+    HsgReport,
+    calculate_hsg,
+    check_hsg,
+    validate_hsg_request,
+)
 from kartograf.landcover.manager import (
-    LandCoverAreaResult,
-    LandCoverManager,
+    LandCoverReport,
+    check_landcover,
+    check_soil,
+    download_landcover,
+    download_soil,
     require_landcover_product,
+    validate_landcover_request,
+    validate_soil_request,
 )
 from kartograf.notices import Notice
 from kartograf.project.model import PinRole
@@ -166,39 +176,37 @@ def unit_report_files(report: UnitReport) -> TaskFiles:
     )
 
 
-def _landcover_files(result: LandCoverAreaResult) -> TaskFiles:
-    """Files of a ``LandCoverAreaResult``: the data files (``output``) and
-    the original BDOT10k packages of ``keep_raw`` (``raw``)."""
+def _landcover_files(result: LandCoverReport) -> TaskFiles:
+    """Data files and retained original packages, paired per unit."""
     files: list[tuple[PinRole, str, VersionedFile]] = []
+    raw = {item.unit: item.file for item in result.raw}
     for item in result.files:
-        if item.file is not None:
-            files.append(("output", item.unit, item.file))
-        if item.raw is not None:
-            files.append(("raw", item.unit, item.raw))
+        files.append(("output", item.unit, item.file))
+        if item.unit in raw:
+            files.append(("raw", item.unit, raw.pop(item.unit)))
+    files.extend(("raw", unit, file) for unit, file in raw.items())
     return TaskFiles(
-        complete=result.ok and all(item.file is not None for item in result.files),
+        complete=result.ok and not result.failed,
         files=tuple(files),
         errors=tuple(f"{failure.unit}: {failure.error}" for failure in result.failed),
     )
 
 
-def _hsg_files(result: HsgResult) -> TaskFiles:
-    """Files of an ``HsgResult``: the HSG raster (``output``) and its three
-    SoilGrids inputs (``input``, unit ``<property> <unit>``)."""
-    files: list[tuple[PinRole, str, VersionedFile]] = []
-    if result.file is not None:
-        files.append(("output", result.unit, result.file))
-    inputs = list(zip(HSG_INPUTS, result.inputs, strict=False))
-    for prop, item in inputs:
-        if item.file is not None:
-            files.append(("input", f"{prop} {item.unit}", item.file))
-    complete = (
-        result.ok
-        and result.file is not None
-        and len(inputs) == len(HSG_INPUTS)
-        and all(item.file is not None for _, item in inputs)
+def _hsg_files(result: HsgReport) -> TaskFiles:
+    """HSG raster and its SoilGrids inputs (``<property> <unit>``)."""
+    return TaskFiles(
+        complete=(
+            result.ok
+            and not result.failed
+            and bool(result.files)
+            and len(result.inputs) == 3
+        ),
+        files=(
+            *(("output", item.unit, item.file) for item in result.files),
+            *(("input", item.unit, item.file) for item in result.inputs),
+        ),
+        errors=tuple(f"{failure.unit}: {failure.error}" for failure in result.failed),
     )
-    return TaskFiles(complete=complete, files=tuple(files), errors=())
 
 
 # =============================================================================
@@ -278,23 +286,19 @@ def _data_command(
 def _landcover_command(
     name: str, product: str | None, options: dict[str, OptionKind]
 ) -> TaskCommand:
-    """``LandCoverManager.download``/``.check``: of the task's ``product``
-    (``landcover download``) or of a fixed product (``soil download``)."""
+    """The land cover or SoilGrids command-level function."""
 
-    def manager(
-        output_dir: Path, opts: Options, cache: MetadataCache | bool
-    ) -> tuple[LandCoverManager, Options]:
-        rest = dict(opts)
-        chosen = (
-            product
-            if product is not None
-            else require_landcover_product(rest.pop("product", None))
-        )
-        return LandCoverManager(output_dir, chosen, cache=cache), rest
+    def request(opts: Options) -> Options:
+        if product is None:
+            require_landcover_product(opts.get("product"))
+            return opts
+        return opts
 
     def validate(output_dir: Path, opts: Options) -> None:
-        lc, rest = manager(output_dir, opts, False)
-        lc.validate_request(**rest)
+        if product is None:
+            validate_landcover_request(output_dir=output_dir, **request(opts))
+        else:
+            validate_soil_request(output_dir=output_dir, **request(opts))
 
     def download(
         output_dir: Path,
@@ -306,13 +310,22 @@ def _landcover_command(
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
     ) -> object:
-        lc, rest = manager(output_dir, opts, cache)
-        return lc.download(
-            **rest,
-            **_run_options(workers),
+        if product is None:
+            return download_landcover(
+                output_dir=output_dir,
+                **request(opts),
+                **_run_options(workers),
+                cache=cache,
+                update=update,
+                on_notice=on_notice,
+                on_progress=on_progress,
+            )
+        return download_soil(
+            output_dir=output_dir,
+            **request(opts),
+            cache=cache,
             update=update,
             on_notice=on_notice,
-            on_progress=on_progress,
         )
 
     def check(
@@ -322,23 +335,29 @@ def _landcover_command(
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
-        lc, rest = manager(output_dir, opts, cache)
-        return lc.check(**rest, on_notice=on_notice)
+        if product is None:
+            return check_landcover(
+                output_dir=output_dir, **request(opts), cache=cache, on_notice=on_notice
+            )
+        return check_soil(
+            output_dir=output_dir, **request(opts), cache=cache, on_notice=on_notice
+        )
 
     return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, _landcover_files
+        name,
+        MappingProxyType(options),
+        validate,
+        download,
+        check,
+        _landcover_files if product is None else unit_report_files,
     )
 
 
 def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
-    """``HSGCalculator.calculate_hsg``/``.check_hsg``; a missing ``depth``
-    reaches the library as ``None`` (its own "--depth wymagane" error)."""
-
-    def request(opts: Options) -> Options:
-        return {"depth": None, **opts}
+    """Command-level ``calculate_hsg``/``check_hsg``."""
 
     def validate(output_dir: Path, opts: Options) -> None:
-        HSGCalculator(output_dir, cache=False).validate_request(**request(opts))
+        validate_hsg_request(output_dir=output_dir, **opts)
 
     def download(
         output_dir: Path,
@@ -350,8 +369,13 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
     ) -> object:
-        calc = HSGCalculator(output_dir, cache=cache)
-        return calc.calculate_hsg(**request(opts), update=update, on_notice=on_notice)
+        return calculate_hsg(
+            output_dir=output_dir,
+            **opts,
+            cache=cache,
+            update=update,
+            on_notice=on_notice,
+        )
 
     def check(
         output_dir: Path,
@@ -360,8 +384,9 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
         cache: MetadataCache | bool,
         on_notice: Callable[[Notice], None] | None,
     ) -> UpdatePlan:
-        calc = HSGCalculator(output_dir, cache=cache)
-        return calc.check_hsg(**request(opts), on_notice=on_notice)
+        return check_hsg(
+            output_dir=output_dir, **opts, cache=cache, on_notice=on_notice
+        )
 
     return TaskCommand(
         name, MappingProxyType(options), validate, download, check, _hsg_files

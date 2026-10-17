@@ -127,7 +127,8 @@ class Bdot10kProvider(LandCoverProvider):
     - By TERYT code: that powiat (``download_package``)
     - By bbox or sheet code: the ONE powiat intersecting the area;
       several powiats = ``ValidationError`` (use
-      ``LandCoverManager.download(bbox=...)`` or ``teryts_for_area``),
+      ``download_landcover(product="bdot10k", bbox=..., output_dir=...)`` or
+      ``teryts_for_area``),
       none = ``NoCoverageError``. The area may be in any supported CRS.
 
     Examples
@@ -384,8 +385,8 @@ class Bdot10kProvider(LandCoverProvider):
         if len(teryts) > 1:
             raise ValidationError(
                 f"{what}: obszar przecina {len(teryts)} powiaty ({', '.join(teryts)}); "
-                "uzyj LandCoverManager.download(bbox=...) albo pobierz kazdy "
-                "powiat przez --teryt"
+                "uzyj download_landcover(product='bdot10k', bbox=..., "
+                "output_dir=...) albo pobierz kazdy powiat przez --teryt"
             )
         return teryts[0]
 
@@ -402,7 +403,8 @@ class Bdot10kProvider(LandCoverProvider):
 
         Finds the ONE powiat (county) intersecting the sheet frame (PRG WFS)
         and downloads the entire county package. A sheet spanning several
-        powiats is an error - use ``LandCoverManager.download(sheet=...)``.
+        powiats is an error - use ``download_landcover(product="bdot10k",
+        sheet=..., output_dir=...)``.
 
         Parameters
         ----------
@@ -453,7 +455,8 @@ class Bdot10kProvider(LandCoverProvider):
 
         Finds the ONE powiat (county) intersecting the bbox (PRG WFS) and
         downloads the entire county package. A bbox spanning several powiats
-        is an error - use ``LandCoverManager.download(bbox=...)``.
+        is an error - use ``download_landcover(product="bdot10k",
+        bbox=..., output_dir=...)``.
 
         Note: The returned data covers the entire county, not just the bbox.
         Use GIS software to clip to the exact bbox if needed.

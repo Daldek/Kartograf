@@ -288,7 +288,7 @@ Uwagi, ktore latwo przeoczyc:
   silnik paczek.
 - `hydrology ──> core, download, landcover, cache` istnieje na poziomie
   modulu tylko pod `if TYPE_CHECKING:` (adnotacje `BBox`, `VersionedFile`,
-  `PlanItem`, `LandCoverResult`, `MetadataCache`...; wg reguly grafu to import
+  `PlanItem`, `MetadataCache`...; wg reguly grafu to import
   na poziomie modulu); `notices` jest importowane normalnie.
   W czasie wykonania reszta jest leniwa: `landcover.manager` (wejscia
   clay/sand/silt jako wersje), `download.fetch`/`plan`/`versions`
@@ -447,7 +447,7 @@ kartograf/
 │   │                    # (z rejestru wariantow), system, skala, lata, opcje LAZ,
 │   │                    # ortofoto CZ (cz_orto_option_error) i wycinek orto; teksty jak w --help
 │   ├── arguments.py     # Kontrola typow argumentow biblioteki (STANDARDS 11.2): require_int,
-│   │                    # require_str, require_timeout, require_bool, require_codes
+│   │                    # require_str, require_bool, require_codes
 │   ├── availability.py  # Raport dostepnosci (ADR-041, sekcja 4.9): check_availability (PL, CZ, auto),
 │   │                    # AvailabilityReport/AvailabilityCombination/AvailabilityArea
 │   ├── area.py          # Obszar zadania: bbox_to_2180, obwiednie geometrii,
@@ -494,14 +494,15 @@ kartograf/
 │   ├── updates.py       # Wewnetrzne pozycje planu PL (kartograf-plan/1, ADR-036)
 │   └── versions.py      # Magazyn wersjonowany (ADR-036): zapis wylaczny, etykiety,
 │                        # lista wersji, sprzatanie .incoming/
-├── landcover/manager.py # LandCoverManager — download/check (teryt|sheet|bbox|geometry,
-│                        # BDOT10k obszaru = kazdy powiat) -> LandCoverAreaResult (D29-D32);
-│                        # archiwum rocznikow BDOT10k (year=) przez zadania jednostek kolekcji,
-│                        # ZABAGED, BDOO, Data50 i Data250 (COLLECTION_SOURCES) przez
-│                        # silniki kolekcji
+├── landcover/manager.py # Publiczne download_landcover/check_landcover (LandCoverReport),
+│                        # download_soil/check_soil (SoilReport); wewnetrzny
+│                        # LandCoverManager, BDOT10k obszaru = kazdy powiat;
+│                        # roczniki BDOT10k oraz ZABAGED, BDOO, Data50 i Data250
+│                        # (COLLECTION_SOURCES) przez silniki kolekcji
 ├── landcover/store.py   # hsg_segment, HSG_SEGMENT_PREFIX, selection_unit (spec 3.4)
-├── hydrology/hsg.py     # HSGCalculator — calculate_hsg/check_hsg (sheet|bbox|geometry) z wersji
-│                        # wejsc SoilGrids (D33, reused), klasyfikacja USDA -> HSG (ADR-025),
+├── hydrology/hsg.py     # Publiczne calculate_hsg/check_hsg (HsgReport),
+│                        # hsg_statistics; wewnetrzny HSGCalculator z wersji
+│                        # clay/sand/silt (D33, reused), klasyfikacja USDA -> HSG,
 │                        # hsg_from_rasters
 ├── project/             # Manifest projektu (ADR-040):
 │   ├── model.py         # Project, ProjectTask, PinnedFile, ProjectReport,
@@ -772,10 +773,10 @@ klamra `{`, konczy sie `ValidationError` z nazwa brakujacego wymiaru
 ### 3.2 Schema sidecara `kartograf-meta/1`
 
 Kazde udane pobranie przez CLI albo warstwe zarzadzajaca biblioteki
-(`download_data`, `DownloadManager`, `LandCoverManager`, `download_pl_cutout`,
-`download_laz_area`, `download_cz_cutout`, `download_cz_sheet`,
-`download_cz_laz`, `download_cz_orto_sheet`, `download_image_cutout`,
-`download_collection`, `HSGCalculator`) zapisuje dane
+(`download_data`, `DownloadManager`, `download_landcover`, `download_soil`,
+`download_pl_cutout`, `download_laz_area`, `download_cz_cutout`,
+`download_cz_sheet`, `download_cz_laz`, `download_cz_orto_sheet`,
+`download_image_cutout`, `download_collection`, `calculate_hsg`) zapisuje dane
 i `<plik>.meta.json`: sidecar wersji w magazynie jest obowiazkowy,
 sidecar sciezki standardowej best-effort (sekcja 1). Poza magazynem
 `hsg_from_rasters` pisze sidecar best-effort. Bezposrednie wywolanie
@@ -1395,8 +1396,8 @@ D9) to `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`) - jeden orkiestrator dla paczek jednostek,
 obiektow obszaru i plikow krajowych (takze z feedu ATOM), sterowany
 parametrami kanalu deskryptora (sekcja 4.10); ZABAGED (`landcover
-download --product zabaged`) idzie przez te same silniki z
-`LandCoverManager` (sekcja 4.8).
+download --product zabaged`) idzie przez te same silniki z publicznym
+`download_landcover` i wewnetrznym `LandCoverManager` (sekcja 4.8).
 
 ### 4.1 Godlo PL (NMT/NMPT/Orto)
 
@@ -1747,8 +1748,8 @@ Gdy `--geometry` wskazuje GPKG z kilkoma warstwami i nie podano `--layer`,
 biblioteka wybiera pierwsza warstwe `gpkg_contents` i emituje RAZ przed
 praca `Notice` `GEOMETRY_LAYER_DEFAULT` z jej nazwa, pozostalymi warstwami
 i podpowiedzia `--layer NAZWA` (CLI: `Info:`, takze z `-q`). Dotyczy
-rowniez `LandCoverManager` i `HSGCalculator`; SHP i jednowarstwowy GPKG nie
-daja komunikatu.
+rowniez `download_landcover`, `download_soil` i `calculate_hsg`; SHP
+i jednowarstwowy GPKG nie daja komunikatu.
 
 Sidecar pobranego arkusza dostaje `extra.parent_request` i `extra.source`
 (URL, warstwa, data, rozdzielczosc). Ponowne wykorzystanie wersji nie
@@ -2418,15 +2419,17 @@ planu `cz_laz` (`unit` = godlo). Sidecar: `dataset` `cz.cuzk.<model>_laz`,
 
 ### 4.8 Land cover i gleby (BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250, SoilGrids)
 
-**Magazyn wersji (ADR-036 D29-D33, plan 3/3, od 0.8.0).** `LandCoverManager(
-output_dir, provider, cache=True)` pisze WYLACZNIE do magazynu
-`output_dir` (= `--output`; bez `output_path`, D32) w segmentach reguly 8
-sekcji 3.3; wynik to `LandCoverResult(unit, file: VersionedFile | None,
-raw, stale)` (`file` = `None` tylko z `plan=` dla pozycji spoza planu bez
-lokalnej wersji). Opcje sa sprawdzane przed siecia: nieznana opcja (np.
-`output_path`) = `TypeError`, brak wymaganej (`year`, `property`/`depth`/
-`stat`) = `TypeError`, zla wartosc = `ValueError`. Polityka plikow jest
-wspolna z innymi torami (`download/fetch.py`): `use_local` (decyzja bez
+**Magazyn wersji (ADR-036 D29-D33, ADR-044 D5-D6).** Publiczne funkcje
+`download_landcover(product=..., output_dir=..., ...)` i
+`download_soil(output_dir=..., ...)` pisza wylacznie do magazynu
+`output_dir` (= `--output`; bez `output_path`, D32), w segmentach reguly 8
+sekcji 3.3. Zwracaja `LandCoverReport`/`SoilReport` z `UnitFile` w `files`,
+porazkami jednostek w `failed`, `stale`, `notices` i `ok`; przy `keep_raw`
+oryginalne archiwa BDOT10k sa w `LandCoverReport.raw`. Wewnatrz uzywaja
+`LandCoverManager`. Bledy wyborow i opcji to `ValidationError` przed
+siecia; porazki pojedynczych plikow sa pozycjami `failed` (`ok=False`).
+Polityka plikow jest wspolna z innymi torami (`download/fetch.py`):
+`use_local` (decyzja bez
 pobierania danych), pobranie do `versions/.incoming/`, `store_file`
 (sha256 jednym odczytem, `commit_version`, sidecar wersji, hardlink).
 Sygnal per kanal (`AccessChannel.update_signal`):
@@ -2453,10 +2456,11 @@ inna = domyslnie `newer=<wydanie>` (CLI: `dostepna nowsza ... (--upgrade)`),
 nieporownywalna (`unverified="none"`). Ta sama tresc pod nowym wydaniem
 = `relabeled` (D23). `none`: lokalna wersja niesprawdzona; naglowki HTTP
 trafiaja do `extra.http`, ale nie sa sygnalem (ta sama tresc innego dnia
-= `unchanged`). `check(...)` buduje plan
+= `unchanged`). `check_landcover(...)`/`check_soil(...)` buduja plan
 `kartograf-plan/1` (tor `landcover`, `unit` = TERYT / wspolrzedne bbox /
 godlo) bez pobierania danych (dozwolone: GetCapabilities, katalog CLMS,
-PRG); `download(..., update="upgrade", plan=)` wykonuje tylko pozycje
+PRG); `download_landcover(..., update="upgrade", plan=)` lub
+`download_soil(..., update="upgrade", plan=)` wykonuje tylko pozycje
 planu, zmienione od planu wracaja w `stale`.
 
 Parametry tresci (`_content_params`, U3) niosa segment i `request`
@@ -2485,8 +2489,8 @@ pod nazwami CUZK, np. `VodniPlocha_c`), rozmiar z feedu w `Notice`
 `whole_country_size` przed transferem. `teryt`, `format`, `layers`,
 `keep_raw`, `year` = `ValidationError` z nazwa zrodla, `sheet` = blad,
 `horizontal_crs` z obszarem = blad (wynik zawsze EPSG:5514). Jeden plik
-na zapytanie: blad pobrania jest wyjatkiem (jak CORINE), nie pozycja
-`failed`. `get_available_layers()` zwraca 22 nazwy warstw wyniku obszaru,
+na zapytanie: blad pobrania trafia do `LandCoverReport.failed` (`ok=False`).
+Wewnetrzny `get_available_layers()` zwraca 22 nazwy warstw wyniku obszaru,
 `get_supported_formats()` - `["GPKG"]`.
 
 **BDOO (PL, plan E4, ADR-043).** `LandCoverManager(output_dir, "bdoo")`
@@ -2529,26 +2533,24 @@ tresc: `landcover/pl_bdot10k_<format>[_<warstwy>]/teryt/<TERYT>.<ext>`,
 `--bbox`/`--sheet`/`--geometry`.
 Obszar zadania idzie do `extra.parent_request`: `{bbox, bbox_crs,
 countries: ["PL"]}` albo `{sheet, countries: ["PL"]}`.
-`LandCoverManager.download(teryt=|sheet=|bbox=|geometry=, layer=, update=,
-plan=, workers=, on_notice=, format=, layers=, keep_raw=, timeout=)` dla
-obszaru BDOT10k pyta PRG (`Bdot10kProvider.teryts_for_area` ->
+`download_landcover(product="bdot10k", output_dir=..., teryt=|sheet=|bbox=|
+geometry=, layer=, update=, plan=, workers=, on_notice=, format=, layers=,
+keep_raw=)` dla obszaru pyta PRG (`Bdot10kProvider.teryts_for_area` ->
 `discover_teryts_for_bbox`, obszar w dowolnym obslugiwanym ukladzie) i
-pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow;
-zawsze wynik `LandCoverAreaResult(files, failed, stale, notices, ok)`
-(`teryt=` = jeden element; ADR-037 S3) — blad pakietu jednego
-powiatu (`DownloadError`) trafia do `failed` (`LandCoverFailure(unit,
-error)`), pozostale powiaty sa pobierane (spec 4.2); brak powiatu =
-`NoCoverageError`, awaria PRG = `DownloadError`; `workers` pobiera powiaty
-rownolegle. CLI `landcover download` (grupa `landcover`, ADR-039) jest jednym wywolaniem `download`
-(flagi `--layers`, `--keep-raw`, `--bbox-crs`, `--workers`, `--quiet`),
-wypisuje linie statusu, `Error: <TERYT>: ...` per powiat, podsumowanie
-i konczy kodem 1, gdy `ok` jest `False`. `Bdot10kProvider.download_by_bbox`/
+pobiera pakiet KAZDEGO powiatu przecinajacego obszar, w kolejnosci kodow.
+`LandCoverReport.files` zawiera udane pliki, `raw` osobne archiwa ZIP, a
+`failed` porazki powiatow (`UnitFailure`); reszta jest pobierana
+(spec 4.2); awaria odkrywania PRG jest bledem zadania, limit PRG wynosi
+30 s. `workers` pobiera powiaty rownolegle. CLI `landcover download`
+(ADR-039) jest jednym wywolaniem `download_landcover` (flagi `--layers`,
+`--keep-raw`, `--bbox-crs`, `--workers`, `--quiet`), wypisuje statusy
+plikow, `Error: <TERYT>: ...` dla porazek i konczy kodem 1 przy
+`ok=False`. Niskopoziomowe `Bdot10kProvider.download_by_bbox`/
 `download_by_sheet` (plik poza magazynem) pobieraja JEDEN powiat
-(`_single_teryt`): obszar z kilku powiatow konczy sie `ValidationError`
-z lista kodow i wskazaniem `LandCoverManager.download`. Opcja `timeout`
-(provider: domyslnie 120 s; menedzer: gdy nie podana, PRG 30 s) dziala od
-0.7.2 takze na zapytanie PRG, nie tylko na pobranie paczki. `layers=` (kody
-4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
+(`_single_teryt`): obszar kilku powiatow to `ValidationError` z lista
+kodow i podpowiedzia `download_landcover`. Provider stosuje swoj limit
+czasu pobrania i zapytania PRG, nie jawny `timeout` komendy. `layers=`
+(kody 4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
 wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
 `DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
 nosi token warstw w segmencie, bo nie jest juz pelnym pakietem. Scalanie
@@ -2583,7 +2585,8 @@ z tej samej paczki ma ten sam sha256 (live 2026-10-12: `--force` = `bez
 zmian`).
 
 **Archiwum rocznikow BDOT10k (ADR-042 D10-D11, od 0.8.0).**
-`LandCoverManager(..., "bdot10k").download(..., year=R, format="GML"|"SHP")`
+`download_landcover(product="bdot10k", output_dir=..., year=R,
+format="GML"|"SHP", teryt=|sheet=|bbox=|geometry=)`
 (CLI `landcover download --product bdot10k --year R --format GML|SHP`)
 pobiera roczniki 2014-2025 (stan z poczatku roku) z kanalu
 `archive_unit_files` deskryptora `pl.gugik.bdot10k`: paczka ZIP powiatu
@@ -2596,7 +2599,7 @@ i `validate_request`): wariant przez `transport.unit_package.select_variant`
 spoza listy = lista lat), `layers`/`keep_raw` z `year` = blad, a `GML`
 bez `year` = blad z podpowiedzia. Pobranie idzie zadaniami jednostek
 orkiestratora kolekcji (`package_job`/`run_job`/`inspect_job`, sekcja
-4.10) z sesja HTTP i opcja `timeout` dostawcy BDOT10k
+4.10) z sesja HTTP i limitem providera BDOT10k
 (`Bdot10kProvider.session()`), na torze planu `landcover`. Obszar =
 powiaty z PRG jak dla biezacych paczek (`extra.parent_request`, blad
 powiatu w `failed`); `teryt` bez paczki w roczniku (HTTP 404, np. po
@@ -2604,18 +2607,18 @@ zmianie kodu TERYT) = `NoCoverageError`. Identyczne roczniki tego samego
 powiatu i formatu zajmuja miejsce raz (D7: `relabeled`, hardlink; live
 2026-10-15: SHP 2023 powiatu 1261 = 2022).
 
-`HSGCalculator(output_dir, provider=None, cache=True)` (`hydrology/hsg.py`, D33):
-`calculate_hsg(*, sheet|bbox|geometry, layer, depth, update, plan,
-on_notice)` / `check_hsg(...)` (ADR-037 S4, statystyka zawsze `mean`)
-liczy grupy glebowe z wersji SoilGrids `clay`/`sand`/`silt` w tym samym
-magazynie (`LandCoverManager(output_dir, provider)`, ten sam wybor i
-`update`; blad wejscia = wyjatek, HSG nie powstaje) wg kanonicznego
-trojkata USDA (ADR-025). Wynik `HsgResult(unit, file, inputs, stale,
-notices, ok)` w
-`hsg/global_soilgrids_<gl>_<stat>/` (`bbox/<coords>` albo hierarchia
-godla). Wersja HSG, ktorej `extra.source_files` ma te same trzy sha256
-wejsc (kolejnosc clay, sand, silt), jest uzywana ponownie (`reused`,
-bez liczenia, dowiazanie na nia); inaczej klasyfikacja do `.incoming/`
+`calculate_hsg(output_dir=..., sheet=|bbox=|geometry=, layer=, depth=,
+update=, plan=, on_notice=)` i `check_hsg(...)` (`hydrology/hsg.py`,
+ADR-044 D5; statystyka zawsze `mean`) licza grupy glebowe z wersji
+SoilGrids `clay`/`sand`/`silt` w tym samym magazynie (wewnetrzny
+`HSGCalculator`; bledy wejscia to `ValidationError`, awarie pojedynczych
+plikow trafiaja do `HsgReport.failed` i nie powstaje HSG) wg kanonicznego
+trojkata USDA (ADR-025). Wynik `HsgReport(files, inputs, failed, stale,
+notices, ok)` w `hsg/global_soilgrids_<gl>_mean/` (`bbox/<coords>` albo
+hierarchia godla). Raster HSG jest w `files[0].file`, pobrane wersje
+clay/sand/silt w `inputs`. Wersja HSG, ktorej `extra.source_files` ma te
+same trzy sha256 wejsc (kolejnosc clay, sand, silt), jest uzywana ponownie
+(`reused`, bez liczenia, dowiazanie na nia); inaczej klasyfikacja do `.incoming/`
 i `store_file` z etykieta = posortowane unikalne etykiety wejsc laczone `+`
 (`label_source = "edition"`). `--force` dotyczy wejsc. Sidecar wersji:
 deskryptor `global.isric.soilgrids`, `capability="bbox_raster"`, `request`
@@ -2635,7 +2638,7 @@ i bez wartosci domyslnych: kazde wejscie jest reprojektowane przypieta
 operacja (`CONTENT_POLICY`, bilinear; `warp_to_grid`) na siatke `crs`/`pixel_m`
 zaczepiona w `bbox` (przeliczonym do `crs`), a klasyfikacja (`_classify_hsg`)
 i zapis GeoTIFF (`_write_hsg_geotiff`) sa wspolne z
-`HSGCalculator.calculate_hsg`. Nodata wejscia pochodzi wylacznie z
+`calculate_hsg`. Nodata wejscia pochodzi wylacznie z
 jego tagu (brak tagu = brak wartosci nodata, bez domyslnego `-32768`); piksele
 poza zasiegiem wejscia oraz trojki zerowe daja `0`. Sidecar jak wyzej
 (`extra.source_layers` = `["clay", "sand", "silt"]`, ten sam typ), plus

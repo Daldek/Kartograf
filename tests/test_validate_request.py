@@ -1,7 +1,7 @@
 """Validation without network shared with the download functions (ADR-040).
 
-``validate_data_request``, ``LandCoverManager.validate_request`` and
-``HSGCalculator.validate_request`` run the checks the download/check
+``validate_data_request``, ``validate_landcover_request``,
+``validate_soil_request`` and ``validate_hsg_request`` run the checks the
 functions make before their first request: an invalid choice gives the same
 exception type and text as the download, a valid one returns without any
 request (``tests/conftest.py::_block_network``) and without writing.
@@ -14,8 +14,15 @@ import pytest
 from kartograf.core.bbox import BBox
 from kartograf.download.data import download_data, validate_data_request
 from kartograf.exceptions import KartografError, ValidationError
-from kartograf.hydrology import HSGCalculator
-from kartograf.landcover.manager import LandCoverManager
+from kartograf.hydrology.hsg import calculate_hsg, check_hsg, validate_hsg_request
+from kartograf.landcover.manager import (
+    check_landcover,
+    check_soil,
+    download_landcover,
+    download_soil,
+    validate_landcover_request,
+    validate_soil_request,
+)
 from tests.test_geometry import _write_prj
 
 G = "N-34-139-C-a-3-1"
@@ -227,9 +234,16 @@ def test_landcover_validate_request_equals_download_error(
     tmp_path, source, kwargs, method
 ):
     out = tmp_path / "out"
-    manager = LandCoverManager(out, source, cache=False)
-    expected = _raised(lambda: getattr(manager, method)(**kwargs))
-    got = _raised(lambda: manager.validate_request(**kwargs))
+    if source == "soilgrids":
+        calls = {"download": download_soil, "check": check_soil}
+        validate = validate_soil_request
+        choices = kwargs
+    else:
+        calls = {"download": download_landcover, "check": check_landcover}
+        validate = validate_landcover_request
+        choices = {"product": source, **kwargs}
+    expected = _raised(lambda: calls[method](output_dir=out, cache=False, **choices))
+    got = _raised(lambda: validate(output_dir=out, **choices))
     assert type(got) is type(expected) and str(got) == str(expected)
     assert isinstance(got, ValidationError)
     assert not out.exists()
@@ -243,9 +257,21 @@ def test_landcover_validate_request_valid_reads_only_geometry(tmp_path):
         ("corine", {"year": 2018}),
         ("soilgrids", {"property": "clay", "depth": "0-5cm", "stat": "mean"}),
     ):
-        manager = LandCoverManager(out, source, cache=False)
-        assert manager.validate_request(geometry=area, **options) is None
-    assert LandCoverManager(out, "bdot10k").validate_request(teryt="1465") is None
+        if source == "soilgrids":
+            assert (
+                validate_soil_request(output_dir=out, geometry=area, **options) is None
+            )
+        else:
+            assert (
+                validate_landcover_request(
+                    product=source, output_dir=out, geometry=area, **options
+                )
+                is None
+            )
+    assert (
+        validate_landcover_request(product="bdot10k", output_dir=out, teryt="1465")
+        is None
+    )
     assert not out.exists()
 
 
@@ -261,10 +287,10 @@ HSG_INVALID = {
 @pytest.mark.parametrize("kwargs", HSG_INVALID.values(), ids=HSG_INVALID.keys())
 def test_hsg_validate_request_rejects_depth_and_selection(tmp_path, kwargs, method):
     out = tmp_path / "out"
-    calc = HSGCalculator(out, cache=False)
-    expected = _raised(lambda: getattr(calc, method)(**kwargs))
-    got = _raised(lambda: calc.validate_request(**kwargs))
+    calls = {"calculate_hsg": calculate_hsg, "check_hsg": check_hsg}
+    expected = _raised(lambda: calls[method](output_dir=out, cache=False, **kwargs))
+    got = _raised(lambda: validate_hsg_request(output_dir=out, **kwargs))
     assert type(got) is type(expected) and str(got) == str(expected)
     assert isinstance(got, ValidationError)
-    assert HSGCalculator(out).validate_request(bbox=BBOX_PL, depth="0-5cm") is None
+    assert validate_hsg_request(output_dir=out, bbox=BBOX_PL, depth="0-5cm") is None
     assert not out.exists()

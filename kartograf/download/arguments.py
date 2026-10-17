@@ -2,14 +2,14 @@
 
 The CLI parses its flags into numbers, switches and lists before calling the
 library, so these checks only ever fire for library callers. Values are
-never converted: ``year="2018"``, ``timeout="120"`` or ``layers="SWRS,PTWP"``
-are a ``ValidationError`` before anything else runs (no network, no file),
-instead of a late ``TypeError``/``ValueError`` from a provider or a string
-iterated character by character. Messages name the value as the called
-function does: the CLI flag for the command-level functions whose texts
-name flags (``download_data``, ``LandCoverManager``: ``--year``), the
-parameter elsewhere (``DownloadManager``, ``download_laz_area``,
-``timeout``). ``None`` (= "not given") is handled by the callers.
+never converted: ``year="2018"`` or ``layers="SWRS,PTWP"`` are a
+``ValidationError`` before anything else runs (no network, no file), instead
+of a late ``TypeError``/``ValueError`` from a provider or a string iterated
+character by character. Messages name the value as the called function does:
+the CLI flag for command-level functions (``download_data``,
+``download_landcover``: ``--year``), the parameter elsewhere
+(``DownloadManager``, ``download_laz_area``). ``None`` (= "not given") is
+handled by the callers.
 """
 
 from kartograf.exceptions import ValidationError
@@ -28,16 +28,6 @@ def require_str(value: object, name: str) -> None:
     ``teryt=1261`` would lose leading zeros, e.g. ``0208``)."""
     if not isinstance(value, str):
         raise ValidationError(f"{name} musi byc napisem (str), otrzymano {value!r}")
-
-
-def require_timeout(value: object, name: str = "timeout") -> None:
-    """``ValidationError`` unless ``value`` is a positive number of seconds."""
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise ValidationError(
-            f"{name} musi byc liczba sekund (int albo float), otrzymano {value!r}"
-        )
-    if not value > 0:
-        raise ValidationError(f"{name} musi byc wiekszy od 0, otrzymano {value!r}")
 
 
 def require_bool(value: object, name: str) -> None:

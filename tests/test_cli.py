@@ -578,15 +578,12 @@ class TestCommandGroups:
         (exit 2, like any unknown command) naming the new one; nothing runs."""
         with (
             patch("kartograf.cli.download_cmd.download_data") as download,
-            patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager,
-            patch("kartograf.hydrology.HSGCalculator") as calculator,
             pytest.raises(SystemExit) as exc,
         ):
             main([*argv, "-o", "out"])
         assert exc.value.code == 2
         assert replacement in capsys.readouterr().err
-        for mock in (download, manager, calculator):
-            mock.assert_not_called()
+        download.assert_not_called()
 
     @pytest.mark.parametrize(
         ("group", "listed", "absent"),
@@ -3193,50 +3190,8 @@ class TestProgressNoCoverage:
 # ===========================================================================
 
 
-def _lc_result(path: Path):
-    """A land cover result for a mocked ``LandCoverManager``."""
-    from kartograf.download.fetch import VersionedFile
-    from kartograf.landcover.manager import LandCoverResult
-
-    return LandCoverResult(
-        "u", VersionedFile(path, "new", "2026-10-12", "0" * 64, path)
-    )
-
-
-def _lc_area(path: Path):
-    from kartograf.landcover.manager import LandCoverAreaResult
-
-    return LandCoverAreaResult((_lc_result(path),))
-
-
 class TestCmdLandcoverDownload:
-    """Tests for landcover download CLI."""
-
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_by_teryt(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --teryt calls manager.download with teryt."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--product",
-                "bdot10k",
-                "--teryt",
-                "1465",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        mock_mgr.download.assert_called_once()
-        call_kwargs = mock_mgr.download.call_args
-        assert call_kwargs.kwargs.get("teryt") == "1465"
+    """Input errors of the land cover commands."""
 
     def test_soil_download_has_no_teryt(self, capsys, tmp_path):
         """SoilGrids has no powiat selection: ``soil download --teryt`` is an
@@ -3252,113 +3207,6 @@ class TestCmdLandcoverDownload:
             capsys.readouterr().err
         )
         assert not out.exists()
-
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_by_sheet(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --sheet (BDOT10k) downloads every powiat of the sheet."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--product",
-                "bdot10k",
-                "--sheet",
-                "N-34-130-D",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        mock_mgr.download.assert_called_once()
-        call_kwargs = mock_mgr.download.call_args
-        assert call_kwargs.kwargs.get("sheet") == "N-34-130-D"
-        assert "out.gpkg: nowa wersja " in capsys.readouterr().out
-
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_by_bbox_success(self, mock_mgr_cls, capsys, tmp_path):
-        """landcover download --bbox (BDOT10k) downloads every powiat of the bbox."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--product",
-                "bdot10k",
-                "--bbox",
-                "450000,550000,460000,560000",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        mock_mgr.download.assert_called_once()
-        assert mock_mgr.download.call_args.kwargs.get("bbox") is not None
-        captured = capsys.readouterr()
-        assert "out.gpkg: nowa wersja " in captured.out
-
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_product_corine(self, mock_mgr_cls, capsys, tmp_path):
-        """--product corine creates manager with corine provider."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "CORINE Land Cover"
-        mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_area(tmp_path / "out.png")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--product",
-                "corine",
-                "--sheet",
-                "N-34-130-D",
-                "--year",
-                "2018",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        # Manager was created with provider="corine"
-        mock_mgr_cls.assert_called_once()
-        call_kwargs = mock_mgr_cls.call_args
-        assert call_kwargs.kwargs.get("provider") == "corine"
-
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_download_error(self, mock_mgr_cls, capsys, tmp_path):
-        """DownloadError in download -> exit 1."""
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.download.side_effect = DownloadError("Network error")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--product",
-                "bdot10k",
-                "--teryt",
-                "1465",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Error" in captured.err
 
     def test_landcover_download_multiple_selection(self, capsys):
         """Multiple selection methods -> exit 1."""
@@ -3391,11 +3239,8 @@ class TestCmdLandcoverDownload:
     def test_missing_manager_argument_fails_before_download(
         self, flags, missing, choices, capsys
     ):
-        """CLI checks the arguments needed to construct the manager."""
-        with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
-            rc = main(["landcover", "download", "--sheet", "N-34-130-D", *flags])
+        rc = main(["landcover", "download", "--sheet", "N-34-130-D", *flags])
         assert rc == 1
-        manager.assert_not_called()
         err = capsys.readouterr().err
         assert err.startswith("Error: ")
         assert missing in err and choices in err
@@ -3413,14 +3258,6 @@ class TestCmdLandcoverDownload:
 # ===========================================================================
 
 
-def _hsg_result(path: Path):
-    """An HSG result for a mocked ``HSGCalculator``."""
-    from kartograf.download.fetch import VersionedFile
-    from kartograf.hydrology.hsg import HsgResult
-
-    return HsgResult("u", VersionedFile(path, "new", "2.0", "0" * 64, path), ())
-
-
 class TestCmdSoil:
     """Tests for soil HSG CLI behavior."""
 
@@ -3430,143 +3267,6 @@ class TestCmdSoil:
         assert result == 2
         captured = capsys.readouterr()
         assert all(name in captured.err for name in ("download", "hsg", "list-sources"))
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_success(self, mock_calc_cls, capsys, tmp_path):
-        """soil hsg --sheet -> success output."""
-        mock_calc = Mock()
-        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
-        mock_calc_cls.return_value = mock_calc
-
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--sheet",
-                "N-34-130-D",
-                "--depth",
-                "0-5cm",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "hsg.tif: nowa wersja" in captured.out
-        mock_calc.calculate_hsg.assert_called_once()
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_with_summary(self, mock_calc_cls, capsys, tmp_path):
-        """soil hsg --summary prints statistics."""
-        mock_calc = Mock()
-        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
-        mock_calc.get_hsg_statistics.return_value = {
-            "A": {
-                "count": 100,
-                "area_m2": 10000,
-                "area_ha": 1.0,
-                "percent": 50.0,
-                "description": "High infiltration",
-            },
-            "B": {
-                "count": 50,
-                "area_m2": 5000,
-                "area_ha": 0.5,
-                "percent": 25.0,
-                "description": "Moderate infiltration",
-            },
-            "C": {
-                "count": 30,
-                "area_m2": 3000,
-                "area_ha": 0.3,
-                "percent": 15.0,
-                "description": "Slow infiltration",
-            },
-            "D": {
-                "count": 20,
-                "area_m2": 2000,
-                "area_ha": 0.2,
-                "percent": 10.0,
-                "description": "Very slow infiltration",
-            },
-            "nodata": {
-                "count": 50,
-                "area_m2": 4000,
-                "area_ha": 0.4,
-                "percent": 20.0,
-                "description": "Brak danych",
-            },
-        }
-        mock_calc_cls.return_value = mock_calc
-
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--sheet",
-                "N-34-130-D",
-                "--depth",
-                "0-5cm",
-                "-o",
-                str(tmp_path),
-                "--summary",
-            ]
-        )
-        assert result == 0
-        captured = capsys.readouterr()
-        assert "Statystyki HSG" in captured.out
-        assert "Grupa A" in captured.out
-        assert "50.0%" in captured.out
-        assert "  Brak danych: 20.0% calego obszaru (0.40 ha)" in captured.out
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_error(self, mock_calc_cls, capsys, tmp_path):
-        """soil hsg raises DownloadError -> exit 1."""
-        mock_calc = Mock()
-        mock_calc.calculate_hsg.side_effect = DownloadError("Network error")
-        mock_calc_cls.return_value = mock_calc
-
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--sheet",
-                "N-34-130-D",
-                "--depth",
-                "0-5cm",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 1
-        captured = capsys.readouterr()
-        assert "Error" in captured.err
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_sheet_passed_to_library(self, mock_calc_cls, tmp_path):
-        """--sheet/--depth/-o go to the library as given (canonical code there)."""
-        mock_calc = mock_calc_cls.return_value
-        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
-        out = tmp_path / "out"
-
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--sheet",
-                "M-33-036-A",
-                "-o",
-                str(out),
-                "--depth",
-                "0-5cm",
-            ]
-        )
-
-        assert result == 0
-        assert mock_calc_cls.call_args.args[0] == out
-        kwargs = mock_calc.calculate_hsg.call_args.kwargs
-        assert (kwargs["sheet"], kwargs["depth"]) == ("M-33-036-A", "0-5cm")
-        assert "stat" not in kwargs
 
     def test_soilgrids_hsg_out_of_range_sheet(self, capsys, tmp_path):
         """A7: an out-of-range sheet -> Error on stderr, code 1, before network."""
@@ -3595,31 +3295,26 @@ class TestCmdSoil:
         "bbox", ["invalid", "10,10,5,5", "nan,1,2,3", "1,2,-inf,4", "1,2,3"]
     )
     def test_soilgrids_hsg_rejects_bad_bbox(self, bbox, capsys, tmp_path):
-        """K7a: bad --bbox -> Error on stderr, code 1, the calculator never starts."""
-        with patch("kartograf.hydrology.HSGCalculator") as calc_cls:
-            result = main(
-                [
-                    "soil",
-                    "hsg",
-                    f"--bbox={bbox}",
-                    "-o",
-                    str(tmp_path),
-                    "--depth",
-                    "0-5cm",
-                ]
-            )
+        result = main(
+            [
+                "soil",
+                "hsg",
+                f"--bbox={bbox}",
+                "-o",
+                str(tmp_path),
+                "--depth",
+                "0-5cm",
+            ]
+        )
         assert result == 1
-        calc_cls.return_value.calculate_hsg.assert_not_called()
         captured = capsys.readouterr()
         assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
         assert "Oczekiwano" not in captured.out
 
     def test_hsg_missing_output_fails_before_calculation(self, capsys):
-        with patch("kartograf.hydrology.HSGCalculator") as calculator:
-            rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
+        rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
         assert rc == 1
-        calculator.assert_not_called()
         assert "Error: --output" in capsys.readouterr().err
 
     def test_hsg_missing_depth_is_library_error(self, tmp_path, capsys):
@@ -3634,28 +3329,6 @@ class TestCmdSoil:
         assert result == 1
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_by_bbox(self, mock_calc_cls, capsys, tmp_path):
-        """soil hsg --bbox -> calculate_hsg_by_bbox called."""
-        mock_calc = Mock()
-        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
-        mock_calc_cls.return_value = mock_calc
-
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--bbox",
-                "450000,550000,460000,560000",
-                "--depth",
-                "0-5cm",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-        assert result == 0
-        mock_calc.calculate_hsg.assert_called_once()
 
 
 def test_landcover_download_no_selection(capsys):
@@ -4083,39 +3756,6 @@ class TestCmdDownloadGeometry:
 class TestCmdLandcoverDownloadGeometry:
     """Tests for landcover download command with --geometry option."""
 
-    @patch("kartograf.cli.landcover_cmd.LandCoverManager")
-    def test_landcover_geometry_basic(self, mock_mgr_cls, capsys, tmp_path):
-        """--geometry/--layer go to the library unchanged (envelope there)."""
-        shp_file = tmp_path / "area.shp"
-        shp_file.touch()
-
-        mock_mgr = Mock()
-        mock_mgr.provider_name = "BDOT10k"
-        mock_mgr.output_dir = tmp_path
-        mock_mgr.download.return_value = _lc_area(tmp_path / "out.gpkg")
-        mock_mgr_cls.return_value = mock_mgr
-
-        result = main(
-            [
-                "landcover",
-                "download",
-                "--product",
-                "bdot10k",
-                "--geometry",
-                str(shp_file),
-                "--layer",
-                "obszar",
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert result == 0
-        kwargs = mock_mgr.download.call_args.kwargs
-        assert kwargs["geometry"] == shp_file and kwargs["layer"] == "obszar"
-        assert kwargs["bbox"] is None
-        assert "out.gpkg: nowa wersja " in capsys.readouterr().out
-
     def test_landcover_geometry_and_teryt_error(self, capsys, tmp_path):
         """--geometry + --teryt -> mutual exclusivity error."""
         shp_file = tmp_path / "area.shp"
@@ -4168,34 +3808,6 @@ class TestCmdLandcoverDownloadGeometry:
 
 class TestCmdSoilgridsHsgGeometry:
     """Tests for soil hsg command with --geometry option."""
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_soilgrids_hsg_geometry(self, mock_calc_cls, capsys, tmp_path):
-        """--geometry/--layer go to calculate_hsg unchanged (envelope there)."""
-        shp_file = tmp_path / "area.shp"
-        shp_file.touch()
-
-        mock_calc = Mock()
-        mock_calc.calculate_hsg.return_value = _hsg_result(tmp_path / "hsg.tif")
-        mock_calc_cls.return_value = mock_calc
-
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--depth",
-                "0-5cm",
-                "--geometry",
-                str(shp_file),
-                "-o",
-                str(tmp_path),
-            ]
-        )
-
-        assert result == 0
-        kwargs = mock_calc.calculate_hsg.call_args.kwargs
-        assert kwargs["geometry"] == shp_file and kwargs["layer"] is None
-        assert kwargs["bbox"] is None and kwargs["sheet"] is None
 
     def test_soilgrids_hsg_geometry_and_sheet_error(self, capsys, tmp_path):
         """--geometry + --sheet -> mutual exclusivity error."""
@@ -11346,28 +10958,6 @@ class TestSoilgridsHsgNoEarlyMkdir:
         )
         assert result == 1
         assert "Error:" in capsys.readouterr().err
-        assert not (tmp_path / "out").exists()
-
-    @patch("kartograf.hydrology.HSGCalculator")
-    def test_calculation_error_leaves_no_dir(
-        self, mock_calc_cls, capsys, tmp_path, monkeypatch
-    ):
-        monkeypatch.chdir(tmp_path)
-        mock_calc_cls.return_value.calculate_hsg.side_effect = DownloadError("siec")
-        out = tmp_path / "out" / "hsg"
-        result = main(
-            [
-                "soil",
-                "hsg",
-                "--sheet",
-                "N-34-130-D",
-                "-o",
-                str(out),
-                "--depth",
-                "0-5cm",
-            ]
-        )
-        assert result == 1
         assert not (tmp_path / "out").exists()
 
 

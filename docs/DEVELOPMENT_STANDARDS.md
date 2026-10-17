@@ -452,9 +452,10 @@ same statusy, plan, komunikaty i bledy. Reguly:
 
 - **Z1:** komenda w `kartograf/cli/` zamienia flagi na argumenty jednej
   funkcji biblioteki poziomu komendy (`download_data`/`check_data`,
-  `LandCoverManager.download`/`.check`, `HSGCalculator.calculate_hsg`/
-  `.check_hsg`) i wypisuje jej wynik. W CLI nie wolno walidowac wartosci
-  danych, wybierac krajow, arkuszy, skali, kampanii ani powiatow, budowac
+  `download_landcover`/`check_landcover`, `download_soil`/`check_soil`,
+  `calculate_hsg`/`check_hsg`) i wypisuje jej wynik. W CLI nie wolno
+  walidowac wartosci danych, wybierac krajow, arkuszy, skali, kampanii ani
+  powiatow, budowac
   `parent_request` ani czytac sidecarow w celu decyzji. Wolno: parsowac
   tekst flag (`--bbox`, `pl=..,cz=..`, `--layers`), sprawdzac skladnie
   `--bbox` i wywolywac wspolna walidacje bbox z biblioteki, czytac
@@ -820,20 +821,21 @@ nie obejmuj `except ValueError` bledow wejscia. Nieznana nazwa parametru
 lub brak wymaganego argumentu funkcji pozostaje pythonowym `TypeError`.
 
 **Typy argumentow biblioteki (od 0.8.0).** Funkcje poziomu komendy
-(`download_data`/`check_data`, `LandCoverManager.download`/`check`,
-`HSGCalculator.calculate_hsg`/`check_hsg`, `download_collection`/
-`check_collection`/`validate_collection_request`, `check_availability`),
-`DownloadManager` i `download_laz_area`/`check_laz_area` (oraz kazda nowa
-funkcja publiczna)
-sprawdzaja typ argumentow liczbowych, przelacznikow i list kodow na wejsciu,
-przed siecia i zapisem (`kartograf/download/arguments.py`: `require_int`,
-`require_timeout`, `require_bool`, `require_codes`). Wartosc zlego typu to
+(`download_data`/`check_data`, `download_landcover`/`check_landcover`,
+`download_soil`/`check_soil`, `calculate_hsg`/`check_hsg`,
+`download_collection`/`check_collection`/`validate_collection_request`,
+`check_availability`), `DownloadManager` i `download_laz_area`/
+`check_laz_area` (oraz kazda nowa funkcja publiczna) sprawdzaja typ
+argumentow liczbowych, przelacznikow i list kodow na wejsciu, przed
+siecia i zapisem (`kartograf/download/arguments.py`: `require_int`,
+`require_str`, `require_bool`, `require_codes`). Wartosc zlego typu to
 `ValidationError` z nazwa flagi CLI (funkcje poziomu komendy) albo
 parametru, nigdy konwersja ani pozny `TypeError`/`ValueError` z providera:
-`year="2018"`, `timeout="120"`, `workers="4"`, `all_campaigns="no"` i
+`year="2018"`, `workers="4"`, `all_campaigns="no"` i
 `layers="SWRS,PTWP"` (napis zamiast listy) sa bledami; `bool` nie jest
-liczba; `timeout` przyjmuje `int` albo `float` > 0. CLI zamienia flagi na
-te typy sam (`argparse`), wiec zachowanie flag sie nie zmienia.
+liczba. CLI zamienia flagi na te typy sam (`argparse`), wiec zachowanie
+flag sie nie zmienia. Limity czasu sa stalymi providerow lub kanalow,
+bez `timeout` funkcji komendy i `collections.run_request` (ADR-044 D6).
 
 **Bez wartosci domyslnych wplywajacych na dane (od 0.8.0).** Parametr API
 i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,
