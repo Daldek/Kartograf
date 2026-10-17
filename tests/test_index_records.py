@@ -212,6 +212,25 @@ def test_unusable_tile_skipped(caplog):
     assert "SkorowidzModeleSiatkowe3D.6777" in caplog.text
 
 
+@pytest.mark.parametrize(
+    ("declared", "zone"),
+    [
+        ("PL-1992", "1992"),
+        ("PL-2000:S5", "2000/5"),
+        ("PL-2000:S7", "2000/7"),
+        ("PL-2000:S8", "2000/8"),
+    ],
+)
+def test_tile_zone_directory_names_pl_system(declared, zone):
+    """ADR-044 D7: the slot directory of a tile is the PL system of its
+    record as in the segments (``1992``), a PL-2000 zone below it as the
+    first part of a PL-2000 sheet code (``2000/7``) - never ``pl1992``/``s7``."""
+    page = (FIXTURES / "mesh_p1.xml").read_bytes()
+    root = ET.fromstring(page.replace(b"PL-2000:S7", declared.encode()))
+    features = [e for e in root.iter() if e.tag.endswith("}SkorowidzModeleSiatkowe3D")]
+    assert {r.zone for r in records_from_wfs(features, source=MESH)} == {zone}
+
+
 def test_file_name_is_the_unit_without_unit_field():
     """Without ``unit_field`` a record is the unit of its own file (the mesh
     ``modul`` names tiles of several works, measured 2026-10-16): the unit is
