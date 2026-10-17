@@ -111,11 +111,14 @@
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
 > **START NASTEPNEJ SESJI (stan 2026-10-17, po przygotowaniu wydania 0.8.0):**
-> 0. **Wydanie 0.8.0 przygotowane** (`__version__ = "0.8.0"`, CHANGELOG
->    `[0.8.0] - 2026-10-17`, statusy SCOPE/PRD; commit `chore(release):
->    0.8.0`, brama zielona). CZEKA NA ZGODE UZYTKOWNIKA: merge do `main`,
->    tag `v0.8.0` i push (`develop`, `main`, tag); stan sprawdzaj `git log
->    origin/develop..develop` i `git tag`. Po wydaniu: poczatek kolejnego
+> 0. **Wydanie 0.8.0 przygotowane na `develop`** (`3a1c426`; `__version__ =
+>    "0.8.0"`, CHANGELOG `[0.8.0] - 2026-10-17`, statusy SCOPE/PRD; brama
+>    zielona: 5214 passed, ruff/format/mypy czyste; dwa testy na zywo
+>    wydania - `docs/research/2026-10-17-release-0.8.0-live/raport.md`).
+>    Lokalny `develop` ma 194 commity ponad `origin/develop`. CZEKA NA ZGODE
+>    UZYTKOWNIKA: merge do `main`, tag `v0.8.0` i push (`develop`, `main`,
+>    tag); stan sprawdzaj `git log origin/develop..develop` i `git tag`. Po
+>    wydaniu: poczatek kolejnego
 >    cyklu (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased`
 >    w CHANGELOG, jak `chore(release): poczatek cyklu 0.8.0`). Przebieg
 >    i decyzje: sekcja "Sesja 2026-10-15/16/17" nizej. Hydrograf/Hydrolog
@@ -123,9 +126,12 @@
 > 1. **Nastepne kroki:** podprojekty 4 (wtyczka QGIS) i 5 (GUI webowe)
 >    roadmapy (`docs/SCOPE.md` 3.3) - kazdy od brainstormingu i specu;
 >    pozostale pozycje: backlog nizej (m.in. VKM CZ, CLMS na zywo).
->    Sprzatanie: worktree i galezie scalone/zbedne z cyklu 0.8.0
->    (`git worktree list`, `git branch --merged develop`) - usuwanie
->    galezi na `origin` tylko za zgoda uzytkownika.
+>    Sprzatanie (czeka na zgode uzytkownika): ok. 30 worktree i galezi
+>    roboczych cyklu 0.8.0 w `/home/claude-agent/workspace/wt/`
+>    (`feat/`, `fix/`, `docs/`, `wip/`, `release/0.8.0`; `git worktree list`,
+>    `git branch --merged develop`); wszystkie scalone do `develop` poza
+>    galeziami `wip/*` (ich tresc weszla przez pozniejsze commity).
+>    Usuwanie galezi na `origin` tylko za zgoda uzytkownika.
 > 2. **CLMS_CREDENTIALS odlozone** (decyzja uzytkownika 2026-10-12):
 >    pobranie CLMS niesprawdzone na zywo (backlog razem z CLMS 1990).
 >    Stara, rozjechana `feat/versioned-store` na `origin`: push
