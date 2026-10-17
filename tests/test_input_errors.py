@@ -23,7 +23,7 @@ def test_input_errors_are_kartograf_errors(case: str, tmp_path: Path) -> None:
     def invalid() -> object:
         if case == "laz_vertical_crs":
             return download_laz_area(
-                bbox_pl, output_dir=tmp_path, vertical_crs="bad", cache=False
+                bbox=bbox_pl, output_dir=tmp_path, vertical_crs="bad", cache=False
             )
         if case == "vertical_crs":
             return GugikProvider(resolution="1m", vertical_crs="bad")

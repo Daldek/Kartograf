@@ -61,7 +61,7 @@ TBD_25M_ARGV = ["--format", "TBD", "--resolution", "25m", "--vertical-crs", "KRO
 STANDARD = Path("nmt/pl_1992_tbd_25m_kron86/N-34/58/D/c/3/N-34-58-D-c-3.zip")
 SHEET_LISTED = (
     "Znaleziono arkuszy w skorowidzu GUGiK: 1 dla {what} (format: TBD, "
-    "resolution: 25m)\n  Arkusze: N-34-58-D-c-3"
+    "rozdzielczosc: 25m)\n  Arkusze: N-34-58-D-c-3"
 )
 # 500 x 200 m across the east edge of SHEET (about 240 m on each side)
 ACROSS_EAST_EDGE = BBox(747400, 727600, 747900, 727800, "EPSG:2180")

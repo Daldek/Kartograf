@@ -899,7 +899,7 @@ class TestLazDiscoveryOnRealWfs:
         provider.download_tile = MagicMock()  # type: ignore[method-assign]
         with pytest.raises(YearRangeError) as caught:
             download_laz_area(
-                W2_BBOX,
+                bbox=W2_BBOX,
                 output_dir=tmp_path,
                 provider=provider,
                 year=2024,

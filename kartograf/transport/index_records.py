@@ -35,6 +35,7 @@ from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.providers.pl.skorowidz_wfs import (
     GML_NS,
+    INCOMPLETE,
     QUERY_HALF_M,
     WfsIndex,
     localname,
@@ -46,7 +47,6 @@ from kartograf.transport.http import get_with_retry
 
 logger = logging.getLogger(__name__)
 
-INCOMPLETE = "wynik bylby niepelny"
 # Pixel grid of the GetFeatureInfo query (the point is the centre pixel).
 _GFI_SIZE = 100
 _OGC_REPORT = re.compile(r"<(?:\w+:)?(?:ServiceException|ExceptionReport)\b")

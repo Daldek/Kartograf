@@ -19,7 +19,7 @@ Example::
     from kartograf import BBox, download_pl_cutout
 
     result = download_pl_cutout(
-        BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
+        bbox=BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
         horizontal_crs="EPSG:5514",
         output_dir="./data", vertical_crs="EVRF2007", product="nmt",
     )
@@ -421,8 +421,8 @@ def _check_prepared(cutout: PlCutout) -> UpdatePlan:
 
 
 def check_pl_cutout(
-    bbox: BBox,
     *,
+    bbox: BBox,
     horizontal_crs: str,
     output_dir: str | Path,
     vertical_crs: str,
@@ -616,8 +616,8 @@ def _run_pl_wcs_cutout(
 
 
 def download_pl_cutout(
-    bbox: BBox,
     *,
+    bbox: BBox,
     horizontal_crs: str,
     output_dir: str | Path,
     vertical_crs: str,
@@ -653,9 +653,9 @@ def download_pl_cutout(
     -------
     PlCutoutResult
         ``file`` — standard link and version status; ``masked_pixels`` and
-        ``zero_pixels`` — land mask counts; ``all_nodata`` — outside PL land;
-        ``notices`` — ``CUTOUT_SIZE`` (before the first WCS request) and
-        ``ALL_NODATA``.
+        ``zero_pixels`` — land mask counts; ``all_nodata`` — no valid pixel
+        (WCS without data on land); ``notices`` — ``CUTOUT_SIZE`` (before
+        the first WCS request) and ``ALL_NODATA``.
 
     Raises
     ------
@@ -665,6 +665,9 @@ def download_pl_cutout(
     TransformError
         No safe pinned EPSG:2180 -> ``horizontal_crs`` operation (before any
         network).
+    NoCoverageError
+        The area lies entirely off PL land (PRG mask; before any WCS
+        request); no version is stored.
     DownloadError
         PRG or WCS failure; no new version is committed.
     """

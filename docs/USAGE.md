@@ -431,14 +431,18 @@ kartograf imagery download --product orto --country pl --bbox 566000,243000,5662
   o różnym pikselu (np. 25 cm i 10 cm); `high`
   (`Orthoimagery_High_Resolution`) zawiera tylko ortofotomapy o pikselu
   10 cm i mniejszym. Poza obszarami lotów 10 cm `high` odpowiada obrazem
-  w całości czarnym (0,0,0, HTTP 200): plik powstaje, sidecar ma
-  `extra.all_nodata: true`, a CLI drukuje `Warning: wycinek w calosci bez
-  obrazu (piksele 0,0,0) - WCS GUGiK nie ma w tym obszarze ortofotomapy
-  high (...)` (kod 0) — tam użyj `standard`. W próbkach (Kraków,
-  2026-10-15/16) oba warianty dały nad tym samym obszarem te same bajty.
+  w całości czarnym (0,0,0, HTTP 200): Kartograf kończy `Error: wycinek
+  ortofotomapy high: WCS GUGiK nie ma w tym obszarze ortofotomapy o pikselu
+  10 cm i mniejszym, a obraz obszaru jest w calosci 0,0,0; wersja nie
+  powstala, zmien --bbox albo uzyj --coverage standard` (kod 1, w API
+  `NoCoverageError`) bez wersji w magazynie — tam użyj `standard`. Tak samo
+  kończy się wycinek `standard` w całości czarny i true orto poza miastami
+  usługi: usługa nie publikuje zasięgu wycinka, więc obraz jest pobierany
+  i sprawdzany przed zapisem wersji. W próbkach (Kraków, 2026-10-15/16) oba
+  warianty dały nad tym samym obszarem te same bajty.
   Wyboru roku i lotu nie ma (`--year`, `--min-year`, `--max-year`,
   `--all-campaigns`, `--full-sheet` z `--cutout` = `Error:`); maski lądu
-  PRG też nie — piksele bez zdjęć zostają 0,0,0.
+  PRG też nie — piksele bez zdjęć w wycinku z obrazem zostają 0,0,0.
 - **Piksel i siatka.** Obie usługi mają krajową siatkę 0,1 m; inny piksel
   wyniku serwer liczy z `SCALEFACTOR` (np. 0,4 dla 0,25 m). Obszar jest
   rozszerzany na zewnątrz do wielokrotności piksela, a nazwa pliku niesie
@@ -1844,8 +1848,8 @@ for item in report.files:  # cztery pliki arkusza: .jgw, .TM33N.jgw, .TM34N.jgw,
 download_data(product="orto", country="cz", output_dir=out,
               bbox=BBox(-448500, -1113500, -446500, -1112500, "EPSG:5514"))
 # tor arkusza (CzOrtoResult: files, stale, notices) i plan bez pobierania zdjęć
-sheet = download_cz_orto_sheet("AS91", output_dir=out)
-plan = check_cz_orto_sheet("AS91", output_dir=out)  # tor "cz_orto", cztery pozycje
+sheet = download_cz_orto_sheet(sheet="AS91", output_dir=out)
+plan = check_cz_orto_sheet(sheet="AS91", output_dir=out)  # tor "cz_orto", cztery pozycje
 # = imagery download --product orto --country pl --bbox 566000,243000,566500,243500
 #   --cutout --horizontal-crs EPSG:2180 --coverage standard --resolution 0.25m
 cut = download_data(product="orto", country="pl", output_dir=out,
@@ -1966,13 +1970,13 @@ from kartograf import check_pl_cutout, download_pl_cutout
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 selection = dict(horizontal_crs="EPSG:5514", output_dir="./data",
                  vertical_crs="EVRF2007", product="nmpt")
-result = download_pl_cutout(bbox, **selection)
+result = download_pl_cutout(bbox=bbox, **selection)
 print(result.file.path, result.file.status, result.masked_pixels, result.all_nodata)
 for notice in result.notices:               # rozmiar wycinka, wycinek bez danych
     print(notice.level, notice.text)
 # domyślnie istniejąca wersja bez zapytań PRG/WCS; update="force" pobiera ponownie
-plan = check_pl_cutout(bbox, **selection)   # te same argumenty, bez pobierania
-result = download_pl_cutout(bbox, **selection, update="upgrade", plan=plan)
+plan = check_pl_cutout(bbox=bbox, **selection)   # te same argumenty, bez pobierania
+result = download_pl_cutout(bbox=bbox, **selection, update="upgrade", plan=plan)
 
 # Zlewnia przygraniczna PL/CZ: podział obszaru na kraje i wycinek CZ
 # w układzie PL (EPSG:2180 + EVRF2007); siatka CZ startuje od zadanego obszaru
@@ -1981,7 +1985,7 @@ from kartograf import download_cz_cutout, split_bbox_by_country
 area = BBox(16.19, 50.42, 16.25, 50.45, "EPSG:4326")  # Kudowa-Zdrój / Náchod
 parts = split_bbox_by_country(area, cz_crs="EPSG:2180")  # {"CZ": ..., "PL": ...}
 cz = download_cz_cutout(
-    parts["CZ"].bbox,
+    bbox=parts["CZ"].bbox,
     product="nmt",
     output_dir="./data",
     horizontal_crs="EPSG:2180",
@@ -1999,21 +2003,25 @@ print(cz.all_nodata)
 # product wymagany: "nmt" albo "nmpt"
 from kartograf import check_cz_sheet, download_cz_sheet
 
-sm5 = download_cz_sheet("CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv")
+sm5 = download_cz_sheet(sheet="CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv")
 tm33 = download_cz_sheet(
-    "302_5550", output_dir="./data", product="nmt", vertical_crs="EVRF2007", resolution="2m"
+    sheet="302_5550", output_dir="./data", product="nmt", vertical_crs="EVRF2007",
+    resolution="2m",
 )
 # DMP OK, kafel TM33 w EVRF2007: gotowy plik ETRS89 (EPSG:3045) bez transformacji
 dmp = download_cz_sheet(
-    "760_5518", output_dir="./data", product="nmpt", vertical_crs="EVRF2007", resolution="0.5m"
+    sheet="760_5518", output_dir="./data", product="nmpt", vertical_crs="EVRF2007",
+    resolution="0.5m",
 )
 
 # Sprawdzenie bez pobierania (plan kartograf-plan/1): blizniak check_* z tymi
 # samymi argumentami co pobranie; plan wykonuje pobranie z update="upgrade"
-plan = check_cz_sheet("CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv")
+plan = check_cz_sheet(
+    sheet="CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv"
+)
 print([(i.track, i.unit, i.status) for i in plan.items])
 sm5 = download_cz_sheet(
-    "CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv",
+    sheet="CTES96", output_dir="./data", product="nmt", vertical_crs="Bpv",
     update="upgrade", plan=plan,
 )
 
@@ -2101,7 +2109,7 @@ w SCOPE 2.10 i PRD 5.
 | `better_coverage`, `link_outside_range` | info | starszy lot z przedziału lat ma większe pokrycie; dowiązanie zostało na locie spoza przedziału | `elevation`, `imagery download` |
 | `sheet_crs_mismatch`, `incomplete_campaign` | warning | plik arkusza w innym układzie niż godło; najnowsza kampania deklaruje niepełny arkusz | `elevation`, `imagery download` |
 | `cutout_size` | info | wycinek PL: wiele zapytań WCS albo co najmniej 1 GiB, z szacowanym czasem (25–40 s na zapytanie) | `--cutout` (PL) |
-| `all_nodata` | warning | wycinek albo arkusz CZ bez danych (same nodata; wycinek PL w całości poza lądem to `Error:`) | `elevation`, `imagery download` |
+| `all_nodata` | warning | wycinek NMT/NMPT albo arkusz lub wycinek CZ bez danych (same nodata; wycinek PL w całości poza lądem i wycinek obrazu w całości 0,0,0 to `Error:`) | `elevation download` |
 | `slow_source` | info | wolna usługa: zmierzony czas odpowiedzi przed zapytaniem obszaru (OGC API PRNG) | `names download` |
 | `laz_superseded` | info | kafle LAZ pominięte jako pokryte przez nowsze | `elevation download --product laz` |
 | `download_size`, `whole_country_size` | warning | plik jednostki ponad 100 MiB albo plik krajowy: rozmiar przed transferem | kolekcje, `landcover --whole-country`, arkusze true orto i orto ukośnej |
@@ -2612,8 +2620,9 @@ proxy).
   200 x 200 m; obszar 1 x 1 km = 25 kawałków niezależnie od piksela),
   a Standard bywa przejściowo niedostępny. Złożony z kawałków wycinek nie
   jest bit w bit równy jednemu zapytaniu (różnice rzędu kilku DN na
-  stykach przepróbkowania serwera); `high` poza obszarami lotów 10 cm daje
-  plik czarny (`Warning:`, sekcja 1.3).
+  stykach przepróbkowania serwera); `high` poza obszarami lotów 10 cm
+  oddaje obraz czarny: Kartograf zgłasza `Error:` (bez wersji w magazynie)
+  dopiero po pobraniu, bo usługa nie publikuje zasięgu (sekcja 1.3).
 - Ortofoto CZ: tylko aktualny rocznik arkusza (archiwalne zdjęcia CUZK
   są płatne); pliki JGW nie niosą układu — w GIS przypisz EPSG:5514 do
   `<godło>.jpg` z `<godło>.jgw` (sekcja 1.4).

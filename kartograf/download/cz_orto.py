@@ -430,8 +430,8 @@ def _present(outcome: dict[str, VersionedFile | None]) -> tuple[VersionedFile, .
 
 
 def check_cz_orto_sheet(
-    sheet: str,
     *,
+    sheet: str,
     output_dir: str | Path,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
@@ -457,8 +457,8 @@ def check_cz_orto_sheet(
 
 
 def download_cz_orto_sheet(
-    sheet: str,
     *,
+    sheet: str,
     output_dir: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,

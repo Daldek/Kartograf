@@ -890,9 +890,9 @@ i High maja te same), `horizontal_crs` EPSG:2180, `transform=null`,
 zewnatrz do wielokrotnosci piksela, sekcja 4.3). `extra.source` =
 `service="WCS"`, faktyczny `endpoint` i `coverage` (id coverage wariantu),
 `format`, `scalefactor` (tylko gdy piksel inny niz 0,1 m, np. `0.4` dla
-0,25 m) i `composition="server"`; `extra.all_nodata: true` tylko dla
-wyniku bez zadnego piksela obrazu (High poza obszarami 10 cm). Maski PRG
-i `zero_pixels` nie ma.
+0,25 m) i `composition="server"`. Wynik bez zadnego piksela obrazu nie
+zostaje wersja (sekcja 4.3), wiec `extra.all_nodata` nie wystepuje. Maski
+PRG i `zero_pixels` nie ma.
 
 **Ortofoto CZ w sidecarze (ADR-042 D13).** `download/cz_orto.py` pisze
 sidecar `cz.cuzk.orto` (`capability="sheet_files"`, `request` =
@@ -1948,7 +1948,7 @@ biblioteczne `download_data(cutout=True, horizontal_crs=...)` i
 mozaikuja arkuszy (ortofotomapa ma wlasny tor wycinka - koniec sekcji).
 Tryb jest jawny: `--horizontal-crs` jest wymagane
 z `--cutout`, bez `--cutout` to `Error:`, `--cutout` z `--sheet` tez.
-Biblioteka: `download_pl_cutout(bbox, *, horizontal_crs,
+Biblioteka: `download_pl_cutout(*, bbox, horizontal_crs,
 output_dir, vertical_crs, product="nmt"|"nmpt", update, plan,
 parent_request, cache, on_notice)` -> `PlCutoutResult`;
 `check_pl_cutout(...)` z ta sama selekcja daje plan bez pobierania.
@@ -2050,7 +2050,7 @@ samym wyborem daje plan (tor `pl_cutout`; lokalna wersja =
    `auto` `--coverage`/`--resolution` zawezaja zadanie do PL), bez
    `--sheet`, roku i kampanii; `--coverage` albo `--resolution` orto bez
    `--cutout` = blad. Tylko kompozycja RGB. Maski ladu PRG nie ma: piksele
-   bez obrazu zostaja 0,0,0 jak z serwera.
+   bez obrazu w wycinku z obrazem zostaja 0,0,0 jak z serwera.
 2. Siatka: bbox (dowolny obslugiwany uklad, geometria = obwiednia)
    przeliczony do EPSG:2180 i wyrownany NA ZEWNATRZ do wielokrotnosci
    piksela; nazwa pliku niesie te siatke. `GugikOrtoProvider(color="RGB",
@@ -2067,12 +2067,14 @@ samym wyborem daje plan (tor `pl_cutout`; lokalna wersja =
    miejsca na dysku (2 x rozmiar wyniku, inaczej `ValidationError`).
    Wynik jest sprawdzany (rozmiar, krok, naroznik NW, 3 pasma uint8,
    EPSG:2180): inna siatka = `DownloadError` bez wersji. Wynik bez
-   zadnego piksela obrazu (HTTP 200 z obrazem 0,0,0): ortofotomapa (High
-   poza obszarami pikseli 10 cm) zostaje wersja z `extra.all_nodata: true`
-   i `Notice` `all_nodata` (ostrzezenie, kod 0); true orto (wybrane miasta,
-   usluga nie publikuje zasiegu wycinka) konczy sie `NoCoverageError` PRZED
-   zapisem wersji (staging usuniety; w `download_data` porazka
-   `no_coverage` PL, CLI `Error:` kod 1) - jak wycinek NMT/NMPT poza ladem.
+   zadnego piksela obrazu (HTTP 200 z obrazem 0,0,0: true orto poza
+   wybranymi miastami, High poza obszarami pikseli 10 cm, Standard poza
+   ortofotomapami) konczy sie `NoCoverageError` PRZED zapisem wersji
+   (`_no_image_error`, tresc z przyczyna i remedium kanalu, przy High
+   `--coverage standard`; usluga nie publikuje zasiegu wycinka, wiec obraz
+   jest sprawdzany po pobraniu; staging usuniety; w `download_data`
+   porazka `no_coverage` PL, CLI `Error:` kod 1) - jak wycinek NMT/NMPT
+   poza ladem.
 4. Magazyn: dowiazanie `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif`
    do wersji `versions/bbox/<RRRR-MM-DD>_<sha8>/`, sygnal `none`:
    domyslnie i z `--upgrade` lokalna wersja bez zapytan, `--force` pobiera
@@ -2150,7 +2152,7 @@ orto --country cz` (godlo SM5 - kraj takze z godla - albo obszar) =
 przez `cz_orto_sheet` (kafel TM33 = blad z podpowiedzia SM5), obszar ->
 arkusze SM5 z indeksu `KladyMapovychListu` (`cz_orto_area_sheets`; bbox
 przeliczony do EPSG:5514 przypieta operacja; `Notice` `sheet_list`),
-kazdy arkusz `download_cz_orto_sheet(sheet, *, output_dir, update, plan,
+kazdy arkusz `download_cz_orto_sheet(*, sheet, output_dir, update, plan,
 parent_request, cache, on_notice, on_download)` -> `CzOrtoResult(files,
 stale, notices)`; `check_cz_orto_sheet` daje cztery pozycje planu toru
 `cz_orto` (jednostka = godlo). Wydanie pochodzi z feedu ATOM ORTOFOTO
@@ -2212,7 +2214,7 @@ o <= 0,5 px (nazwa pliku i `request.bbox` niosa bbox sprzed snapu).
 Wycinek w calosci nodata daje `Warning:` i kod 0, nie pozorna cisze.
 
 Tor bbox CZ jest w bibliotece (`download/cz_cutout.py`):
-`download_cz_cutout(bbox, *, output_dir, product, horizontal_crs,
+`download_cz_cutout(*, bbox, output_dir, product, horizontal_crs,
 vertical_crs, resolution, update, plan, parent_request, cache, on_notice,
 on_download)` buduje providera (`create_cz_raster_provider(product,
 resolution, ...)`; trasa `route()` z operacjami przed siecia), normalizuje
@@ -2235,7 +2237,7 @@ Wynik: dowiazanie `data/<nmt|nmpt>/cz_<model>_<vcrs>/bbox/<coords>.tif`
 (np. `nmt/cz_dmr5g_bpv`, `nmpt/cz_dmp1g_bpv`) do wersji
 w `versions/bbox/<RRRR-MM-DD>_<sha8>/`. Arkusze CZ (TM33, SM5) maja
 od 0.8.0 publiczne API `download/cz_sheets.py` (`download_cz_sheet`/
-`check_cz_sheet(sheet, *, output_dir, product, vertical_crs,
+`check_cz_sheet(*, sheet, output_dir, product, vertical_crs,
 resolution=None, ...)` -> `CzSheetResult`; ADR-037): ta sama tresc
 sidecara co wczesniej w CLI (`mapname`, `cz_share`, `capability`,
 `horizontal_crs`); pliki openzu (SM5, od planu B tez kafel TM33
@@ -2341,7 +2343,7 @@ i CZ (warp kotwiczony w rogu NW zadania) nie sa wspolne.
 
 Przeplyw poza `DownloadManager` — jedno zadanie obszarowe daje wiele kafli.
 Logika jest w bibliotece (`download/laz.py`, ADR-029; wzor `cutout.py`):
-`download_laz_area(bbox, ...)` przyjmuje bbox w dowolnym obslugiwanym
+`download_laz_area(bbox=..., ...)` przyjmuje bbox w dowolnym obslugiwanym
 ukladzie (przeliczenie do EPSG:2180 w bibliotece, `area.bbox_to_2180`)
 albo `sheet=` (godlo PL-1992/PL-2000: WFS pytany o obwiednie ramy, kafle
 wybierane dla ramy `sheet_frame_2180`, `select_tiles(frame=)`),

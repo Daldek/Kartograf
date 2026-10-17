@@ -60,7 +60,9 @@ URN_2180 = "urn:ogc:def:crs:EPSG::2180"
 # Features per GetFeature page (COUNT); further pages only through `next`
 # (one type per query when an answer of several types needs more pages).
 PAGE_SIZE = 1000
-INCOMPLETE = "wynik bylby niepelny, ponow pobranie"
+# The fact only: the remedy depends on the caller (download summaries add
+# "ponow pobranie", a ``--check-updates`` line names no download).
+INCOMPLETE = "wynik bylby niepelny"
 # Half side (m) of the query square around a sheet centre (sheet lookup).
 QUERY_HALF_M = 10.0
 # A sheet frame overlaps an area only when it still does after its edges are

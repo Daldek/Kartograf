@@ -312,7 +312,7 @@ from kartograf import BBox, GugikLazProvider, download_laz_area
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 
 # Wybór i pobranie kafli z sidecarami (ADR-029) — jedno wywołanie
-result = download_laz_area(bbox, output_dir="./data", vertical_crs="EVRF2007", min_density=12)
+result = download_laz_area(bbox=bbox, output_dir="./data", vertical_crs="EVRF2007", min_density=12)
 result.files                        # VersionedFile per kafel (status new/local/...), hardlinki w data/laz/pl_<układ>_<vcrs>/
 result.superseded                   # SupersededLazTile — starsze kafle pokryte nowszymi
 result.failed                       # LazTileFailure — porażki pojedynczych kafli
@@ -710,9 +710,9 @@ from kartograf import BBox, check_pl_cutout, download_pl_cutout
 bbox = BBox(530000, 382000, 533000, 386000, "EPSG:2180")
 selection = dict(horizontal_crs="EPSG:5514", output_dir="./data",
                  vertical_crs="EVRF2007", product="nmpt")
-result = download_pl_cutout(bbox, **selection)
+result = download_pl_cutout(bbox=bbox, **selection)
 result.file.path, result.masked_pixels, result.zero_pixels, result.all_nodata
-plan = check_pl_cutout(bbox, **selection)   # bez pobierania
+plan = check_pl_cutout(bbox=bbox, **selection)   # bez pobierania
 ```
 
 #### CLI Commands
@@ -1018,7 +1018,7 @@ z WCS dla obszaru PL, oba w magazynie wersji.
 ```python
 from kartograf import BBox, download_cz_orto_sheet, download_image_cutout
 
-cz = download_cz_orto_sheet("CTES96", output_dir="./data")  # CzOrtoResult
+cz = download_cz_orto_sheet(sheet="CTES96", output_dir="./data")  # CzOrtoResult
 cut = download_image_cutout(
     product="orto", bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
     horizontal_crs="EPSG:2180", output_dir="./data",

@@ -20,8 +20,8 @@ from kartograf.core.bbox import BBox
 from kartograf.download.area import pl_only_flags
 from kartograf.download.data import check_data, download_data, validate_data_request
 from kartograf.download.orto_cutout import check_image_cutout, download_image_cutout
-from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.notices import ALL_NODATA, AUTO_NARROWED_TO_PL, CUTOUT_SIZE, Notice
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.notices import AUTO_NARROWED_TO_PL, CUTOUT_SIZE, Notice
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     GugikOrtoProvider,
@@ -488,26 +488,32 @@ def test_check_image_cutout_unverifiable(tmp_path):
     assert item.local_sha256 == result.file.sha256
 
 
-def test_orto_cutout_all_black_is_kept_with_warning(tmp_path):
-    """High outside its 10 cm areas answers 0,0,0: a version with a warning."""
+def test_orto_cutout_all_black_is_no_coverage(tmp_path):
+    """High outside its 10 cm areas answers 0,0,0 (recorded): no version, no
+    link and no staging left - ``NoCoverageError`` naming ``--coverage
+    standard``, in ``download_data`` a ``no_coverage`` failure of PL (as the
+    true orthophotomap outside its cities)."""
     bbox = BBox(738960, 626588, 738960.4, 626588.4, "EPSG:2180")
     args = {**ORTO, "coverage": "high", "resolution": "0.1m"}
-    seen: list[Notice] = []
-    with patch(SESSION_FACTORY, return_value=_session()):
-        result = download_image_cutout(
-            bbox=bbox, output_dir=tmp_path, cache=False, on_notice=seen.append, **args
-        )
-    with patch(SESSION_FACTORY) as factory:
-        local = download_image_cutout(
-            bbox=bbox, output_dir=tmp_path, cache=False, **args
-        )
+    with (
+        patch(SESSION_FACTORY, return_value=_session()),
+        pytest.raises(NoCoverageError, match="w calosci 0,0,0.*--coverage standard"),
+    ):
+        download_image_cutout(bbox=bbox, output_dir=tmp_path, cache=False, **args)
+    assert _left_behind(tmp_path) == []
 
-    assert result.file.status == "new"
-    assert [(n.level, n.code) for n in seen] == [("warning", ALL_NODATA)]
-    assert result.notices == tuple(seen)
-    assert _meta(result.file.path)["extra"]["all_nodata"] is True
-    assert local.file.status == "local" and local.notices == ()
-    factory.assert_not_called()
+    with patch(SESSION_FACTORY, return_value=_session()):
+        report = download_data(
+            country="pl",
+            cutout=True,
+            bbox=bbox,
+            output_dir=tmp_path,
+            cache=False,
+            **args,
+        )
+    assert report.files == ()
+    assert [(f.unit, f.kind) for f in report.failed] == [("PL", "no_coverage")]
+    assert _left_behind(tmp_path) == []
 
 
 # --- download_data ----------------------------------------------------------

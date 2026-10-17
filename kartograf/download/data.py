@@ -36,7 +36,7 @@ SHEET_CRS_MISMATCH     warning  sheet file CRS differs from the sheet code
 INCOMPLETE_CAMPAIGN    warning  newest campaign declares an incomplete sheet
 UNVERIFIED_LOCAL       info     ``upgrade``: local version without a signal
 CUTOUT_SIZE            info     (PL cutouts) several WCS requests or >= 1 GiB
-ALL_NODATA             warning  (cutouts, CZ sheet) raster without data
+ALL_NODATA             warning  (NMT/NMPT cutouts, CZ sheet) raster without data
 LAZ_SUPERSEDED         info     (download_laz_area) skipped LAZ tiles
 CACHE_DISABLED         warning  (open_cache) metadata cache unusable
 =====================  =======  ==============================================
@@ -828,15 +828,16 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
 
 
 def _product_label(product: str, resolution: str | None, fmt: str | None = None) -> str:
-    """Request label in messages: images have no resolution (K5), archives
-    name their format, the CZ contours only their format."""
+    """Request label in messages (``Pobieranie <godlo> (<label>)...``):
+    images have no resolution (K5), archives name their format, the CZ
+    contours only their format."""
     if image_source(product) is not None:
-        return f"product: {product}"
+        return f"produkt: {product}"
     if product == CONTOURS:
         return f"format: {fmt}"
     if fmt is not None and fmt != "ASC":
-        return f"format: {fmt}, resolution: {resolution or '-'}"
-    return f"resolution: {resolution}"
+        return f"format: {fmt}, rozdzielczosc: {resolution or '-'}"
+    return f"rozdzielczosc: {resolution}"
 
 
 def _create_provider_and_storage(
@@ -1035,7 +1036,7 @@ def _download_pl_code(
                 count = manager.count_sheets(task.sheet, task.scale)
                 on_progress(
                     DownloadProgress(
-                        0, count, f"{task.sheet} to {task.scale}", "start", label
+                        0, count, f"{task.sheet} w skali {task.scale}", "start", label
                     )
                 )
             result = manager.download_hierarchy(
@@ -1681,10 +1682,10 @@ def _download_pl_cutout(
                 "product": task.product,
             }
             if run.check:
-                run.plans.append(check_pl_cutout(bbox, **selection))
+                run.plans.append(check_pl_cutout(bbox=bbox, **selection))
                 return 0
             result = download_pl_cutout(
-                bbox,
+                bbox=bbox,
                 update=run.update,
                 plan=run.loaded,
                 parent_request=parent_request,
@@ -1746,17 +1747,17 @@ def _download_cz(
     try:
         if has_sheet:
             if run.check:
-                run.plans.append(check_cz_sheet(task.sheet, **common))
+                run.plans.append(check_cz_sheet(sheet=task.sheet, **common))
                 return 0
             label = cz_sheet_variant(
                 task.sheet, task.product, resolution, vertical_crs
             ).label
             sheet = download_cz_sheet(
-                task.sheet,
+                sheet=task.sheet,
                 update=run.update,
                 plan=run.loaded,
                 on_download=_announcer(
-                    run.on_progress, task.sheet, f"CZ, resolution: {label}"
+                    run.on_progress, task.sheet, f"CZ, rozdzielczosc: {label}"
                 ),
                 **common,
             )
@@ -1772,16 +1773,18 @@ def _download_cz(
         assert bbox is not None
         target = task.horizontal_crs
         if run.check:
-            run.plans.append(check_cz_cutout(bbox, horizontal_crs=target, **common))
+            run.plans.append(
+                check_cz_cutout(bbox=bbox, horizontal_crs=target, **common)
+            )
             return 0
         cutout = download_cz_cutout(
-            bbox,
+            bbox=bbox,
             horizontal_crs=target,
             update=run.update,
             plan=run.loaded,
             parent_request=parent_request,
             on_download=_announcer(
-                run.on_progress, "CZ bbox", f"{resolution}, {target}"
+                run.on_progress, "wycinka CZ", f"rozdzielczosc: {resolution}, {target}"
             ),
             **common,
         )
@@ -1900,10 +1903,10 @@ def _download_cz_orto(
         status = "completed"
         try:
             if run.check:
-                run.plans.append(check_cz_orto_sheet(sheet, **common))
+                run.plans.append(check_cz_orto_sheet(sheet=sheet, **common))
                 continue
             result = download_cz_orto_sheet(
-                sheet,
+                sheet=sheet,
                 update=run.update,
                 plan=run.loaded,
                 parent_request=parent_request,

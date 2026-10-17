@@ -176,7 +176,7 @@ def test_download_cz_cutout_builds_provider(tmp_path, monkeypatch):
     # looked up lazily inside download_cz_cutout - patch it at the source
     monkeypatch.setattr("kartograf.providers.cuzk.create_cz_raster_provider", factory)
     result = cz_cutout.download_cz_cutout(
-        B,
+        bbox=B,
         output_dir=tmp_path,
         product="nmt",
         horizontal_crs="EPSG:2180",
@@ -206,7 +206,7 @@ def test_native_horizontal_crs_gives_native_provider(tmp_path, monkeypatch):
     monkeypatch.setattr("kartograf.providers.cuzk.create_cz_raster_provider", factory)
     native = BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514")
     result = cz_cutout.download_cz_cutout(
-        native,
+        bbox=native,
         output_dir=tmp_path,
         product="nmt",
         horizontal_crs="EPSG:5514",
@@ -246,9 +246,9 @@ def test_check_cz_cutout_same_args_as_download(tmp_path, monkeypatch):
         "kartograf.providers.cuzk.create_cz_raster_provider", lambda **_kw: provider
     )
     selection = {"output_dir": tmp_path, "cache": False, **SELECTION}
-    before = check_cz_cutout(B, **selection)
-    result = download_cz_cutout(B, **selection)
-    after = check_cz_cutout(B, **selection)
+    before = check_cz_cutout(bbox=B, **selection)
+    result = download_cz_cutout(bbox=B, **selection)
+    after = check_cz_cutout(bbox=B, **selection)
     assert before.items[0].status == "missing"
     assert before.items[0].unit == result.file.path.stem == after.items[0].unit
     assert after.items[0].local_sha256 == result.file.sha256
@@ -261,14 +261,14 @@ def test_download_cz_cutout_plan(tmp_path, monkeypatch):
         "kartograf.providers.cuzk.create_cz_raster_provider", lambda **_kw: provider
     )
     selection = {"output_dir": tmp_path, "cache": False, **SELECTION}
-    plan = check_cz_cutout(B, **selection)
+    plan = check_cz_cutout(bbox=B, **selection)
     changed = replace(plan.items[0], available_label="different")
     stale = download_cz_cutout(
-        B, update="upgrade", plan=replace(plan, items=(changed,)), **selection
+        bbox=B, update="upgrade", plan=replace(plan, items=(changed,)), **selection
     )
     assert stale.file is None and stale.stale == (changed,)
     provider.download_bbox.assert_not_called()
-    done = download_cz_cutout(B, update="upgrade", plan=plan, **selection)
+    done = download_cz_cutout(bbox=B, update="upgrade", plan=plan, **selection)
     assert done.file is not None and done.file.status == "new"
     assert done.stale == ()
     provider.download_bbox.assert_called_once()
