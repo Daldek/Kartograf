@@ -545,10 +545,10 @@ from kartograf import (
   formatów albo także wynik obszaru. Przykłady:
   `boundaries/pl_prg_gmina/bbox/<coords>.gpkg`, `boundaries/pl_prg_gml/teryt/12.zip`,
   `boundaries/pl_prg_shp/country/pl.zip`, `cadastre/pl_egib_gpkg/teryt/1261.gpkg`,
-  `cadastre/pl_egib/bbox/<coords>.gpkg`, `cadastre/cz_km_shp/ku/623164.zip`,
+  `cadastre/pl_egib/bbox/<coords>.gpkg`, `cadastre/cz_cadastral-map_shp/ku/623164.zip`,
   `models3d/pl_buildings_lod1_2024/teryt/1261.zip`,
-  `models3d/pl_mesh/s7/78944_6777_74230_55482.zip`,
-  `names/pl_prng_shp/country/pl-miejscowosci.zip`,
+  `models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip`,
+  `names/pl_prng_shp/country/pl_miejscowosci.zip`,
   `maps/pl_bdot10k_10000_tiff/M-34/64/D/d/1/M-34-64-D-d-1.tif`,
   `geodesy/pl_control_vertical/bbox/<coords>.gpkg`,
   `landcover/pl_bdot10k_shp_2024/teryt/1261.zip`; różne treści nigdy
@@ -661,7 +661,7 @@ from kartograf import (
   z kontrolą warstw -> cadastre/pl_rcn/teryt/1261.gpkg; odświeżany co dobę
 
 # Modele 3D budynków (CityGML) — `models3d download --product buildings`
-# (pl.gugik.buildings_3d):
+# (pl.gugik.buildings):
 - --teryt <4 cyfry> albo obszar (--country pl): paczki każdego powiatu
   obszaru wg PRG; paczka powiatu ZIP 1:1
 - wydanie: --lod 1 --year 2019|2021|2022|2024 albo --lod 2 (jedyne wydanie
@@ -670,16 +670,16 @@ from kartograf import (
   (PL-KRON86-NH), LoD1 2021/2022/2024 = EPSG:9651 (PL-EVRF2007-NH)
 - LoD2 nie pokrywa kraju: brak paczki powiatu = błąd tego powiatu
 
-# Mesh 3D miast — `models3d download --product mesh` (pl.gugik.mesh_3d, 0.8.0):
+# Mesh 3D miast — `models3d download --product mesh` (pl.gugik.mesh, 0.8.0):
 - kafle indeksu WFS GUGiK przecinające obszar (--bbox/--sheet/--geometry),
   każdy jako oryginalny ZIP (OBJ, MTL, tekstury JPG, ok. 40-60 MB)
-  -> models3d/pl_mesh/<strefa>/<plik rekordu>.zip (katalog = układ rekordu
-  s5-s7 albo pl1992; wysokości EPSG:9651); kafel = plik jednego rekordu
+  -> models3d/pl_mesh/<układ>[/<strefa>]/<plik rekordu>.zip (katalog = układ
+  rekordu 1992 albo 2000/<strefa>; wysokości EPSG:9651); kafel = plik jednego rekordu
   (moduł z kilku prac = kilka plików), --year filtruje rekordy
 - etykieta wersji = data i numer zgłoszenia pracy z rekordu, sygnał index
   (--check-updates bez pobrania)
 
-# Modele 3D drzew — `models3d download --product trees` (pl.gugik.trees_3d, 0.8.0):
+# Modele 3D drzew — `models3d download --product trees` (pl.gugik.trees, 0.8.0):
 - CityGML LoD1 2023 (EPSG:2180, bez układu wysokości): paczka powiatu
   (--teryt) albo paczki powiatów obszaru, 0,3-25 GB każda (Warning
   z rozmiarem) -> models3d/pl_trees_lod1_2023/teryt/3063.zip; --lod 1
@@ -754,10 +754,10 @@ from kartograf import (
 # (cz.cuzk.cadastral_map, 0.8.0):
 - --ku <6 cyfr> (katastralni uzemi) albo obszar = KU obszaru wg RUIAN (Info
   z listą KU); --format SHP|DXF|DGN|VFK wymagane -> paczka KU ZIP 1:1
-  -> cadastre/cz_km_<format>/ku/623164.zip; sygnał http (ETag/Last-Modified)
+  -> cadastre/cz_cadastral-map_<format>/ku/623164.zip; sygnał http (ETag/Last-Modified)
 - format VKM poza 0.8.0 (sekcja 3.1)
 
-# HY-NET — grupa `hydro`, `download --product network --country cz` (cz.cuzk.hy_net):
+# HY-NET — grupa `hydro`, `download --product network --country cz` (cz.cuzk.hynet):
 - obszar -> hydro/cz_hynet/bbox/<coords>.gpkg: WatercourseLink i HydroNode
   (WatercourseSeparatedCrossing bez geometrii i z hits 0 - tylko plik krajowy)
 - --whole-country -> hydro/cz_hynet_gpkg/country/cz.zip (GPKG w EPSG:3045, http)
@@ -777,9 +777,9 @@ from kartograf import (
 - geographic --country pl (pl.gugik.prng, PRNG RP): obszar -> GPKG OGC:CRS84
   (OGC API Features; strona do 180 s) -> names/pl_prng/bbox/<coords>.gpkg;
   --whole-country --format GML|SHP|XLSX -> dwa pliki krajowe ZIP 1:1
-  (names/pl_prng_<format>/country/pl-miejscowosci.zip, pl-obiekty-fizjograficzne.zip)
+  (names/pl_prng_<format>/country/pl_miejscowosci.zip, pl_obiekty-fizjograficzne.zip)
 - world --country pl (pl.gugik.prng_world): polskie nazwy geograficzne
-  świata — obszar także poza Polską, plik krajowy jeden (pl-swiat.zip)
+  świata — obszar także poza Polską, plik krajowy jeden (pl_swiat.zip)
 - geographic --country cz (cz.cuzk.geonames, Geonames): obszar -> GPKG
   EPSG:5514 (25 warstw, REST) -> names/cz_geonames/bbox/<coords>.gpkg;
   --whole-country --format GPKG|FGDB --horizontal-crs EPSG:5514|EPSG:3045
@@ -795,7 +795,7 @@ from kartograf import (
 - --country cz (cz.cuzk.ztm): ZTM w skalach 1:5000-1:250000, układ arkuszy
   S-JTSK albo ETRS89 z godła (obszar: --sheet-system sjtsk|etrs89), formaty
   S-JTSK: TIFF, PDF, DGN, SHP, ETRS89: TIFF, PDF; ZIP 1:1 (PDF jako .pdf)
-  -> maps/cz_ztm_<skala>_<układ>_<format>/<godło>.zip; sygnał http
+  -> maps/cz_ztm_<skala>_<układ>_<format>/<hierarchia godła>/<godło>.zip; sygnał http
 
 # Źródło: GUGiK (PRNG, wizualizacje BDOT10k), CUZK (Geonames, ZTM)
 # API: OGC API Features, WMS GetFeatureInfo (indeks map), ArcGIS REST, ATOM, OpenData, openzu
@@ -808,15 +808,15 @@ from kartograf import (
 # projektu z opcją network).
 
 # Osnowy — `geodesy download --product control --network <sieć>` (--network wymagane):
-- PL (pl.gugik.prpog): horizontal|vertical|gravity|magnetic — obszar
+- PL (pl.gugik.control): horizontal|vertical|gravity|magnetic — obszar
   (--bbox/--sheet/--geometry) -> GPKG punktów sieci z WFS (warstwy
   fundamentalna_* i bazowa_*, EPSG:2180) -> geodesy/pl_control_<sieć>/bbox/<coords>.gpkg;
   --teryt <4 cyfry> z horizontal|vertical -> paczka powiatu (wykazy XLS,
-  opisy JPG) 1:1 -> geodesy/pl_control_<sieć>_package/teryt/<T>.zip;
+  opisy JPG) 1:1 -> geodesy/pl_control_<sieć>_xls/teryt/<T>.zip;
   archive-1942|archive-kronsztadt60 -> skany arkuszy 1:100 000 (PDF, TIFF;
   --sheet dowolnej skali albo arkusze obszaru)
   -> geodesy/pl_control_archive-1942/N-33/58/N-33-58.zip
-- CZ (cz.cuzk.survey_control, Bodove pole): gnss|horizontal|densification|
+- CZ (cz.cuzk.control, Bodove pole): gnss|horizontal|densification|
   horizontal-detailed|vertical|vertical-detailed|gravity, tylko obszar
   -> GPKG warstw sieci w EPSG:5514 (sieć = suma jej warstw)
   -> geodesy/cz_control_<sieć>/bbox/<coords>.gpkg
@@ -824,10 +824,10 @@ from kartograf import (
   horizontal, vertical, gravity); sygnał none (nowa treść: --force)
 
 # Quasi-geoidy — `geodesy download --product geoid --whole-country` (obszar = błąd):
-- PL (pl.gugik.quasigeoid): PL-geoid2021 dla PL-EVRF2007-NH (TXT 1:1, 42 MB)
+- PL (pl.gugik.geoid2021): PL-geoid2021 dla PL-EVRF2007-NH (TXT 1:1, 42 MB)
   -> geodesy/pl_geoid2021_evrf2007/country/pl.txt; sygnał none
-- CZ (cz.cuzk.qgzu): QGZU-2013 (ZIP 17 siatek TXT dla Bpv, 58 MB) z feedu
-  ATOM -> geodesy/cz_qgzu2013/country/cz.zip; wydanie = etykieta, sygnał metadata
+- CZ (cz.cuzk.qgzu2013): QGZU-2013 (ZIP 17 siatek TXT dla Bpv, 58 MB) z feedu
+  ATOM -> geodesy/cz_qgzu2013_bpv/country/cz.zip; wydanie = etykieta, sygnał metadata
 - modele są danymi: Kartograf nie stosuje ich do innych danych
 
 # Źródło: GUGiK (osnowy podstawowe, PL-geoid2021), CUZK (Bodove pole, QGZU-2013)

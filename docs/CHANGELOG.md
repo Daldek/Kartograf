@@ -802,13 +802,13 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--year`/`--all-campaigns`, sygnal `index`): `--product intensity`
   (obrazy intensywnosci LIDAR, `pl.gugik.intensity`, arkusze PL-1992
   i PL-2000, `intensity/pl_<uklad>/...`), `--product true-orto` (prawdziwa
-  ortofotomapa wybranych miast, `pl.gugik.orto_true`, arkusze 8-czlonowe
-  PL-1992 w `orto/pl_1992_true/...`; `--cutout --horizontal-crs EPSG:2180
+  ortofotomapa wybranych miast, `pl.gugik.true_orto`, arkusze 8-czlonowe
+  PL-1992 w `true-orto/pl_1992/...`; `--cutout --horizontal-crs EPSG:2180
   --resolution 0.05m|0.1m|0.25m|0.5m|1m` = wycinek z WCS `True_Orthoimagery`
-  w `orto/pl_1992_true_<piksel>/bbox/`, bez `--coverage`) i `--product
-  oblique-orto` (ortofotomapa ukosna, `pl.gugik.orto_oblique`, arkusze
+  w `true-orto/pl_1992_<piksel>/bbox/`, bez `--coverage`) i `--product
+  oblique-orto` (ortofotomapa ukosna, `pl.gugik.oblique_orto`, arkusze
   PL-2000; arkusz to cztery pliki kierunkow `<godlo>_n|e|s|w.tif`
-  w `orto/pl_2000_oblique/...`, nowa flaga `--direction n,e,s,w` /
+  w `oblique-orto/pl_2000/...`, nowa flaga `--direction n,e,s,w` /
   `direction=` w `download_data`/`check_data`, bez flagi wszystkie
   cztery). Produkt z jednym ukladem arkuszy (true orto, orto ukosna) moze
   pominac `--sheet-system`; `--full-sheet` tylko dla orto ukosnej (rekordy
@@ -861,10 +861,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `FeatureBBoxParams.choice`, `AtomFilesParams.choice`; albo wariantu
   paczki). Nowe jednostki silnika
   `unit_package`: arkusze (seria PL-1992 po liczbie czlonow godla albo warstwa
-  indeksu CUZK `KladyMapovychListu`, plik plasko `<segment>/<MAPNOM>`), kafle
-  z rekordow WFS (najnowszy rekord, `year` jako filtr, katalog strefy
-  `s7/`), KU (`ku/<kod>`) i tematy pliku krajowego
-  (`country/pl-<temat>`); adres pliku z szablonu (`{sheet}`, `{ku}`,
+  indeksu CUZK `KladyMapovychListu` w hierarchii godla), kafle
+  z rekordow WFS (najnowszy rekord, `year` jako filtr, katalog ukladu
+  `1992/` albo `2000/<strefa>/`), KU (`ku/<kod>`) i tematy pliku krajowego
+  (`country/pl_<temat>`); adres pliku z szablonu (`{sheet}`, `{ku}`,
   `{theme}`) albo z rekordu indeksu (GetFeatureInfo tabeli linkow,
   `transport/index_records.py`); pliki bez ZIP (`file_kind` TIFF, PDF, TXT)
   sprawdzane po zawartosci. Sygnal `index` porownuje etykiete rekordu
@@ -1008,7 +1008,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i `auto_narrowed_to_cz`; parametry kanalow `AccessChannel.params`
   (`UnitPackageParams`, `PackageVariant`, `FeatureBBoxParams`,
   `FeatureLayer` w `kartograf.sources.descriptor`) i deskryptory
-  `pl.gugik.prg`, `pl.gugik.egib`, `pl.gugik.buildings_3d` oraz kanal
+  `pl.gugik.prg`, `pl.gugik.egib`, `pl.gugik.buildings` oraz kanal
   `archive_unit_files` w `pl.gugik.bdot10k`. Projekt (ADR-040): zadania
   `boundaries download`, `cadastre download` i `models3d download`.
   Weryfikacja na zywo: `docs/research/2026-10-15-plan-c-live/raport.md`.
@@ -1103,6 +1103,34 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Zmienione
 
+- Jedna konwencja nazw kluczy zrodel i katalogow `data/` (przeglad UX
+  UX-35..40, ADR-044 D7, ARCHITECTURE 3.3 regula 10; pilnuje jej test
+  rejestru `TestNamingConvention`): klucz `<kraj>.<dostawca>.<nazwa>`
+  z calych slow sciezki `data/`, katalog = `--product` w `elevation`
+  i `imagery`, segment `<kraj>_<tokeny>` (`_` miedzy tokenami, `-` w tokenie
+  wielowyrazowym, `.` w liczbie), uklad PL `1992`/`2000` i strefa PL-2000
+  jako katalog jej numeru, arkusz zawsze w hierarchii godla. Produkty nowe
+  w 0.8.0 nazwano wg niej przed wydaniem; segmenty i klucze z wydan
+  <= 0.7.2 bez zmian. Zmienione wzgledem wersji deweloperskiej 0.8.0:
+  klucze `pl.gugik.true_orto` (bylo `orto_true`), `pl.gugik.oblique_orto`
+  (`orto_oblique`), `pl.gugik.buildings` (`buildings_3d`), `pl.gugik.mesh`
+  (`mesh_3d`), `pl.gugik.trees` (`trees_3d`), `pl.gugik.control`
+  (`prpog`), `pl.gugik.geoid2021` (`quasigeoid`), `cz.cuzk.hynet`
+  (`hy_net`), `cz.cuzk.orto` (`ortofoto`), `cz.cuzk.control`
+  (`survey_control`), `cz.cuzk.qgzu2013` (`qgzu`); katalogi
+  `true-orto/pl_<uklad>/` (bylo `orto/pl_<uklad>_true/`, wycinek
+  `true-orto/pl_1992_<piksel>/`), `oblique-orto/pl_2000/`
+  (`orto/pl_2000_oblique/`), `cadastre/cz_cadastral-map_<format>/`
+  (`cz_km_<format>`), `geodesy/pl_control_<siec>_xls/` (`_package`),
+  `geodesy/cz_qgzu2013_bpv/` (`cz_qgzu2013`); kafel mesh
+  `models3d/pl_mesh/2000/7/` (`s7/`) i `.../1992/` (`pl1992/`), arkusz ZTM
+  `maps/cz_ztm_<skala>_<uklad>_<format>/0510/D/11/0510-D-11.zip` (bylo
+  plasko w segmencie), temat pliku krajowego `country/pl_miejscowosci.zip`
+  (`pl-miejscowosci.zip`). `--output` w `imagery` opisuje katalog produktu.
+  Co zrobic: dane pobrane wersja deweloperska pod dawnymi nazwami nie sa
+  migrowane - nastepne pobranie trafia do nowych katalogow (stare usun
+  recznie); kod czytajacy `dataset` sidecara albo klucze rejestru uzywa
+  nowych kluczy.
 - Plan D (ADR-042 D13-D17): `imagery download --country` przyjmuje `cz`
   (ortofoto CZ), `boundaries download --country` - `cz` i `auto` (RUIAN),
   `--level` w skladni per kraj (`pl=gmina,cz=obec`; jedna definicja parsera

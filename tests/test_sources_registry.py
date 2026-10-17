@@ -964,7 +964,7 @@ _KEY = re.compile(
 # Values of the placeholders of a segment template (resolve_subdir).
 _FILLED = {"{system}": ("1992", "2000"), "{vcrs}": ("kron86", "evrf2007", "bpv")}
 # Land cover and soil choices whose values are the content tokens (rule 8).
-_CHOICE_TOKENS = {
+_CHOICE_TOKENS: dict[str, list[tuple[str, ...]]] = {
     "eu.clms.corine": [
         tokens
         for year in CorineProvider.AVAILABLE_YEARS

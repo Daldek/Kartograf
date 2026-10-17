@@ -1161,7 +1161,9 @@ wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
 `transform/gpkg.py`) i orkiestrator `download/collections.py`.
 
 ```python
-# 1. Wpis SourceDescriptor w kartograf/sources/registry.py (albo nowy kanal
+# 1. Wpis SourceDescriptor w kartograf/sources/registry.py (klucz i
+#    storage_subdir wg konwencji nazw ARCHITECTURE 3.3 regula 10, test
+#    TestNamingConvention; albo nowy kanal
 #    istniejacego deskryptora, jak archiwum BDOT10k) z AccessChannel.params:
 #    - UnitPackageParams(unit="powiat"|"woj"|"country"|"sheet"|"tile"|"ku",
 #      variants, unpack, themes, index, ku_layer, class_pattern):
@@ -1174,13 +1176,13 @@ wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
 #      "pdf"|"txt" (plik sprawdzany po pierwszych bajtach); class_pattern
 #      = wybor czlonow paczki po kodzie klasy (BDOO --layers);
 #      wszystkie warianty kanalu maja te same klucze choice (np. ("lod",
-#      "year")) i rozne wartosci; segment_tokens i edition pasuja do
-#      [a-z0-9.-]+; members = sufiksy wymaganych czlonow ZIP.
+#      "year")) i rozne wartosci; segment_tokens i edition wg konwencji
+#      nazw (ARCHITECTURE 3.3 regula 10); members = sufiksy czlonow ZIP.
 #    - FeatureBBoxParams(protocol="wfs"|"arcgis"|"ogcapi", native_crs,
 #      axis_order "xy"|"yx", page_size > 0, layers: FeatureLayer(code,
 #      source, name, id_field) z unikalnymi source/name (code unikalny poza
 #      selection "level", gdzie jeden code moze nazwac kilka warstw
-#      i pasuje do [a-z0-9.-]+), selection "level"|"all", selection_key,
+#      i jest tokenem wg reguly 10), selection "level"|"all", selection_key,
 #      order_field (wymagane dla arcgis), drop_fields, choice, timeout
 #      (wolna usluga), area_omitted (Info o warstwie poza wynikiem
 #      obszaru)); page_size nie wiekszy niz limit strony uslugi
