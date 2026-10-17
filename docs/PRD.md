@@ -921,7 +921,7 @@ kartograf cadastre list-sources
 **Status:** Production (0.8.0)
 
 #### Description
-Modele 3D budynków CityGML GUGiK (źródło `pl.gugik.buildings_3d`): paczka
+Modele 3D budynków CityGML GUGiK (źródło `pl.gugik.buildings`): paczka
 powiatu ZIP zapisywana 1:1 w magazynie wersji, wydanie wybierane jawnie
 (LoD i rok).
 
@@ -1001,7 +1001,7 @@ Ortofoto CUZK dla arkuszy SM5 oraz jeden wycinek ortofotomapy GUGiK
 z WCS dla obszaru PL, oba w magazynie wersji.
 
 #### Requirements
-- CZ (`--country cz`, `cz.cuzk.ortofoto`): arkusz SM5 albo arkusze SM5
+- CZ (`--country cz`, `cz.cuzk.orto`): arkusz SM5 albo arkusze SM5
   obszaru z indeksu CUZK; cztery pliki ZIP CUZK 1:1 w `orto/cz_sjtsk/`
   (`<godło>.jpg`, `.jgw` EPSG:5514, `.TM33N.jgw`, `.TM34N.jgw`); tylko
   aktualny rocznik (archiwalne ortofoto CUZK są płatne); wydanie z feedu
@@ -1046,13 +1046,13 @@ wersje, `--year`/`--all-campaigns`, sygnał `index`).
 #### Requirements
 - `--product intensity` (`pl.gugik.intensity`): obrazy intensywności
   LIDAR, 1 pasmo 0,25 m, arkusze PL-1992 i PL-2000 -> `intensity/pl_<układ>/`.
-- `--product true-orto` (`pl.gugik.orto_true`): prawdziwa ortofotomapa
-  wybranych miast, arkusze 8-członowe PL-1992 -> `orto/pl_1992_true/`;
+- `--product true-orto` (`pl.gugik.true_orto`): prawdziwa ortofotomapa
+  wybranych miast, arkusze 8-członowe PL-1992 -> `true-orto/pl_1992/`;
   wycinek z WCS `True_Orthoimagery` (`--cutout --horizontal-crs EPSG:2180
-  --resolution 0.05m`..`1m`, bez `--coverage`) -> `orto/pl_1992_true_<piksel>/bbox/`.
-- `--product oblique-orto` (`pl.gugik.orto_oblique`): ortofotomapa ukośna,
+  --resolution 0.05m`..`1m`, bez `--coverage`) -> `true-orto/pl_1992_<piksel>/bbox/`.
+- `--product oblique-orto` (`pl.gugik.oblique_orto`): ortofotomapa ukośna,
   arkusze PL-2000, arkusz = cztery pliki kierunków `<godło>_n|e|s|w.tif`
-  w `orto/pl_2000_oblique/`; `--direction` wybiera część.
+  w `oblique-orto/pl_2000/`; `--direction` wybiera część.
 - Produkt z jednym układem arkuszy może pominąć `--sheet-system`; arkusz
   ponad 100 MiB zapowiada `Notice` `download_size` (rozmiar z `HEAD`).
 
@@ -1207,7 +1207,7 @@ w magazynie wersji.
 #### Requirements
 - `--product map --country cz` z wymaganym `--format SHP|DXF|DGN|VFK`:
   `--ku <6 cyfr>` albo KU obszaru wg RUIAN (`Info:` z listą KU) ->
-  `cadastre/cz_km_<format>/ku/<KU>.zip`; sygnał `http`
+  `cadastre/cz_cadastral-map_<format>/ku/<KU>.zip`; sygnał `http`
   (`ETag`/`Last-Modified`); KU bez paczki = błąd tego KU.
 - Format VKM poza 0.8.0 (pilotaż CUZK, `docs/SCOPE.md` 3.1).
 
@@ -1229,12 +1229,12 @@ Modele siatkowe miast (OBJ z teksturami) i modele 3D drzew (CityGML LoD1)
 GUGiK, tylko PL.
 
 #### Requirements
-- Mesh (`--product mesh`, `pl.gugik.mesh_3d`): kafle indeksu WFS
+- Mesh (`--product mesh`, `pl.gugik.mesh`): kafle indeksu WFS
   przecinające obszar, każdy jako oryginalny ZIP (OBJ, MTL, JPG)
-  w `models3d/pl_mesh/<strefa>/<plik rekordu>.zip` (katalog = układ
-  rekordu, wysokości EPSG:9651); kafel = plik jednego rekordu, `--year`
+  w `models3d/pl_mesh/<układ>[/<strefa>]/<plik rekordu>.zip` (`1992` albo
+  `2000/<strefa>`, wysokości EPSG:9651); kafel = plik jednego rekordu, `--year`
   filtruje rekordy; etykieta = data i numer zgłoszenia pracy, sygnał `index`.
-- Drzewa (`--product trees`, `pl.gugik.trees_3d`): wydanie 2023, paczka
+- Drzewa (`--product trees`, `pl.gugik.trees`): wydanie 2023, paczka
   powiatu albo paczki powiatów obszaru (0,3-25 GB, rozmiar w `Warning:`),
   `models3d/pl_trees_lod1_2023/teryt/<T>.zip`.
 - Limit obszaru (wszystkie kolekcje): obszar, który pobrałby więcej niż

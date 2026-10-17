@@ -233,13 +233,13 @@ kartograf imagery download --product intensity --sheet M-34-64-D-d-1-4 -o ./data
 #   -> intensity/pl_1992/M-34/64/D/d/1/4/M-34-64-D-d-1-4.tif
 # true orto wybranych miast (np. Gdańsk): godła 8-członowe PL-1992, RGB 0,05 m (ok. 300 MB)
 kartograf imagery download --product true-orto --sheet N-34-50-A-c-3-2-3 -o ./data
-#   -> orto/pl_1992_true/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif
+#   -> true-orto/pl_1992/N-34/50/A/c/3/2/3/N-34-50-A-c-3-2-3.tif
 # wycinek true orto z WCS: piksel 0.05m-1m, tylko EPSG:2180, bez --coverage
 kartograf imagery download --product true-orto --country pl --bbox 470100,740100,470200,740200 --cutout --horizontal-crs EPSG:2180 --resolution 0.05m -o ./data
-#   -> orto/pl_1992_true_0.05m/bbox/470100_740100_470200_740200.tif
+#   -> true-orto/pl_1992_0.05m/bbox/470100_740100_470200_740200.tif
 # orto ukośna (Kraków, Gdańsk): arkusz = 4 pliki kierunków; --direction wybiera część
 kartograf imagery download --product oblique-orto --sheet 7.125.11.08 --direction n -o ./data
-#   -> orto/pl_2000_oblique/7/125/11/08/7.125.11.08_n.tif (bez flagi także _e, _s, _w)
+#   -> oblique-orto/pl_2000/7/125/11/08/7.125.11.08_n.tif (bez flagi także _e, _s, _w)
 ```
 
 - Produkt z jednym układem arkuszy (true orto: 1992, orto ukośna: 2000)
@@ -602,7 +602,7 @@ kartograf imagery download --product orto --country cz "--bbox=-448500,-1113500,
 kartograf imagery download --product orto --country auto --bbox 18.60,49.74,18.64,49.76 --bbox-crs EPSG:4326 --sheet-system 1992 -o ./data
 # nowszy rocznik bez pobierania zdjęć (wydanie z feedu ATOM)
 kartograf imagery download --product orto --sheet CTES96 --check-updates -o ./data
-kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuzk.ortofoto)
+kartograf imagery list-sources   # --product orto (PL: pl.gugik.orto, CZ: cz.cuzk.orto)
 ```
 
 - **Układ w GIS.** Plik JGW nie niesie układu współrzędnych. GIS czyta
@@ -1385,12 +1385,12 @@ kartograf boundaries download --product geomorphology --country cz --level celek
 
 # Mapa katastralna CZ: paczka katastralniho uzemi (--ku, 6 cyfr) albo KU obszaru
 kartograf cadastre download --product map --ku 623164 --format SHP -o ./data
-#   cadastre/cz_km_shp/ku/623164.zip: nowa wersja 2026-10-16_aaee5b70
+#   cadastre/cz_cadastral-map_shp/ku/623164.zip: nowa wersja 2026-10-16_aaee5b70
 kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 -o ./data
 #   Info: map: katastralni uzemi obszaru wg RUIAN (3): 652954, 696137, 753521
-#   cadastre/cz_km_shp/ku/652954.zip: nowa wersja 2026-10-16_223d7ce9 (i dwa kolejne KU)
+#   cadastre/cz_cadastral-map_shp/ku/652954.zip: nowa wersja 2026-10-16_223d7ce9 (i dwa kolejne KU)
 kartograf cadastre download --product map --country cz --format SHP "--bbox=-452000,-1112000,-450000,-1110500" --bbox-crs EPSG:5514 --check-updates -o ./data
-#   cadastre/cz_km_shp/ku/652954.zip: aktualne (2026-10-16)   (tak samo 696137 i 753521)
+#   cadastre/cz_cadastral-map_shp/ku/652954.zip: aktualne (2026-10-16)   (tak samo 696137 i 753521)
 kartograf hydro list-sources
 ```
 
@@ -1479,7 +1479,7 @@ Produkt nie ma pliku krajowego ani `--teryt`.
 **Mapa katastralna CZ.** `cadastre download --product map --country cz`
 pobiera paczkę katastrálního území (KU) CUZK w formacie `--format`
 (`SHP`, `DXF`, `DGN` albo `VFK`; ZIP zapisany 1:1, format = osobny segment
-magazynu `cadastre/cz_km_<format>/ku/`). `--ku` (6 cyfr) wybiera jedno KU
+magazynu `cadastre/cz_cadastral-map_<format>/ku/`). `--ku` (6 cyfr) wybiera jedno KU
 (z `--country pl` to `Error:`); obszar `--bbox`/`--geometry` daje paczkę
 każdego KU obszaru wg RUIAN (z `Info:` listą KU). Brak `--format` to
 `Error:` z listą formatów. KU bez paczki (np. 999999) kończy się
@@ -1520,8 +1520,9 @@ kartograf names download --product geographic --country cz --whole-country --for
 kartograf names download --product geographic --country cz --whole-country --format GPKG --horizontal-crs EPSG:5514 --check-updates -o ~/kartograf-data
 ```
 
-PRNG RP ma **dwa** pliki krajowe (`miejscowosci`, `obiekty-fizjograficzne`);
-polskie nazwy świata mają jeden (`swiat`). Formaty GUGiK: `GML`, `SHP`,
+PRNG RP ma **dwa** pliki krajowe (`miejscowosci`, `obiekty-fizjograficzne`:
+`country/pl_miejscowosci.zip`, `country/pl_obiekty-fizjograficzne.zip`);
+polskie nazwy świata mają jeden (`pl_swiat.zip`). Formaty GUGiK: `GML`, `SHP`,
 `XLSX` (oryginalne archiwa ZIP). Geonames: `GPKG` albo `FGDB` w
 `EPSG:5514`/`EPSG:3045`, wymagany jawny `--horizontal-crs`; plik krajowy to
 oryginalne ZIP z feedu ATOM CUZK, data wydania jest etykietą wersji i sygnałem
@@ -1540,7 +1541,9 @@ i `SHP` pozostają oryginalnymi ZIP-ami, a `PDF` ma rozszerzenie `.pdf`.
 jest wymagany przy `--bbox`/`--geometry` ZTM i dotyczy tylko CZ (mapy
 BDOT10k mają arkusze PL-1992 — z `--country pl` flaga to `Error:`, pod
 `--country auto` dotyczy części CZ). ZTM sprawdza `ETag`/`Last-Modified`
-z `HEAD` bez pobierania danych.
+z `HEAD` bez pobierania danych. Arkusz leży w hierarchii godła jak każdy
+arkusz w magazynie: `maps/cz_ztm_10000_sjtsk_tiff/0510/D/11/0510-D-11.zip`,
+`maps/cz_ztm_10000_etrs89_pdf/NM-34/07/1/D/15/NM-34-07-1-D-15.pdf`.
 
 ```bash
 kartograf maps download --product topographic --country pl --sheet M-34-064-D-d-1 --scale 1:10000 --format TIFF -o ~/kartograf-data
@@ -1567,7 +1570,8 @@ oryginalny ZIP (OBJ, MTL i tekstury JPG, ok. 40–60 MB). Kafel to plik
 jednego rekordu indeksu — ten sam moduł bywa w kilku pracach (np. mesh
 ze zdjęć i ze skaningu), więc obie wersje dostajesz jako osobne pliki;
 `--year R` zostawia kafle z danych roku R. Plik leży w katalogu układu
-rekordu (`s5`–`s7` = PL-2000 strefy 5–7, `pl1992`): OBJ ma współrzędne tej
+rekordu (`1992` albo `2000/<strefa>`, np. `2000/7` = PL-2000 strefa 7, jak
+pierwszy człon godła PL-2000): OBJ ma współrzędne tej
 strefy (E z prefiksem strefy) i wysokości PL-EVRF2007-NH (sidecar
 `horizontal_crs`, `vertical_crs` EPSG:9651). Etykieta wersji to data
 i numer zgłoszenia pracy z rekordu, więc `--check-updates` porównuje kafel
@@ -1581,10 +1585,10 @@ wysokości): paczka powiatu (`--teryt`) albo paczki powiatów obszaru,
 
 ```bash
 kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 -o ~/kartograf-data
-#   Info: mesh: kafle obszaru (1): s7/78944_6777_74230_55482
-#   models3d/pl_mesh/s7/78944_6777_74230_55482.zip: nowa wersja 2021-10-03_DFT.7201.043.2023_7950f585
+#   Info: mesh: kafle obszaru (1): 2000/7/78944_6777_74230_55482
+#   models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip: nowa wersja 2021-10-03_DFT.7201.043.2023_7950f585
 kartograf models3d download --product mesh --country pl --bbox 566200,244650,566250,244700 --check-updates -o ~/kartograf-data
-#   models3d/pl_mesh/s7/78944_6777_74230_55482.zip: aktualne (2021-10-03_DFT.7201.043.2023)
+#   models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip: aktualne (2021-10-03_DFT.7201.043.2023)
 kartograf models3d download --product trees --teryt 3063 -o ~/kartograf-data
 #   Warning: trees PL 3063: duzy plik https://opendata.geoportal.gov.pl/InneDane/Drzewa3D/LOD1/2023/30/3063.zip - 324674789 B (ok. 325 MB)
 #   models3d/pl_trees_lod1_2023/teryt/3063.zip: nowa wersja 2023_25a77518
@@ -1623,7 +1627,7 @@ i nie stosuje ich do innych danych.
 kartograf geodesy download --product control --country pl --network vertical --bbox 560000,240000,575000,250000 -o ~/kartograf-data
 #   geodesy/pl_control_vertical/bbox/560000_240000_575000_250000.gpkg: nowa wersja 2026-10-16_1272d195
 kartograf geodesy download --product control --network horizontal --teryt 1201 -o ~/kartograf-data
-#   geodesy/pl_control_horizontal_package/teryt/1201.zip: nowa wersja 2026-10-16_fa3dc40c
+#   geodesy/pl_control_horizontal_xls/teryt/1201.zip: nowa wersja 2026-10-16_fa3dc40c
 kartograf geodesy download --product control --network gravity --teryt 1201 -o ~/kartograf-data
 #   Error: --network gravity: control (PL) - dostepne tylko dla --bbox/--sheet/--geometry (obiekty obszaru); dla --teryt: horizontal, vertical
 kartograf geodesy download --product control --network archive-kronsztadt60 --sheet M-34-064-D -o ~/kartograf-data
@@ -1637,7 +1641,7 @@ kartograf geodesy download --product geoid --country pl --whole-country -o ~/kar
 #   Warning: geoid PL: plik krajowy https://opendata.geoportal.gov.pl/InneDane/ModeleQuasiGeoidy/PL-geoid2021/Model_quasi-geoidy-geoid2021-PL-EVRF2007-NH.txt - 42328086 B (ok. 42 MB)
 #   geodesy/pl_geoid2021_evrf2007/country/pl.txt: nowa wersja 2026-10-16_d695cf81
 kartograf geodesy download --product geoid --country cz --whole-country -o ~/kartograf-data
-#   geodesy/cz_qgzu2013/country/cz.zip: nowa wersja 2021-02-22_aacfba6b
+#   geodesy/cz_qgzu2013_bpv/country/cz.zip: nowa wersja 2021-02-22_aacfba6b
 kartograf geodesy list-sources
 ```
 
@@ -1798,7 +1802,7 @@ map_status = check_collection(
 mesh = download_collection(
     product="mesh", country="pl", output_dir=out,
     bbox=BBox(566200, 244650, 566250, 244700, "EPSG:2180"),
-)  # data/models3d/pl_mesh/s7/78944_6777_74230_55482.zip; year= filtruje kafle
+)  # data/models3d/pl_mesh/2000/7/78944_6777_74230_55482.zip; year= filtruje kafle
 # = geodesy download --product control --network horizontal --teryt 1201
 download_collection(product="control", output_dir=out, teryt="1201",
                     network="horizontal")
@@ -2164,8 +2168,19 @@ pochodzenie (`extra.source`), a dla zadań obszarowych `extra.parent_request`
 Bezpośrednie wywołanie providera (np. `CuzkRasterProvider` z biblioteki) zapisuje
 sam plik danych, bez sidecara.
 
-**Gdzie leżą pliki.** `data/<produkt>/<kraj>_<układ>[_<wariant>][_<vcrs>]/...`
-— kanoniczna tabela, przykłady i migracja z 0.6.x: ARCHITECTURE 3.3.
+**Gdzie leżą pliki.** `data/<katalog>/<segment>/<jednostka>`: katalog to
+wartość `--product` w `elevation` i `imagery` (`nmt/`, `true-orto/`,
+`oblique-orto/`), w pozostałych grupach nazwa grupy (`landcover/`,
+`geodesy/`). Segment to `<kraj>_<tokeny>` małymi literami: `_` rozdziela
+tokeny, `-` łączy słowa jednego tokenu (`cz_cadastral-map_shp`,
+`pl_control_archive-1942`), tokeny to wartości wyborów (`--format SHP` ->
+`shp`, `--year 2024`); układ PL to zawsze `1992`/`2000`, strefa PL-2000 —
+katalog jej numeru (`nmt/pl_2000_1m_evrf2007/6/...`,
+`models3d/pl_mesh/2000/7/...`), arkusz leży w hierarchii godła. Pole
+`dataset` sidecara to klucz źródła `<kraj>.<dostawca>.<nazwa>` (np.
+`pl.gugik.true_orto`; kolumna `KLUCZ` w `list-sources`). Kanoniczna
+tabela, reguły (konwencja nazw: reguła 10), przykłady i migracja z 0.6.x:
+ARCHITECTURE 3.3.
 
 **Pliki z 0.7.x.** Zwykły plik w ścieżce standardowej (bez sidecara
 dowiązania do wersji) nie jest wersją magazynu: pierwsze uruchomienie 0.8.0

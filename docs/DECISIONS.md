@@ -47,7 +47,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) | Silnik CUZK, polityka układów CZ i EVRF2007→5621 (etap 1) | 2026-08-11 | Przyjeta — czesciowo zastapiona przez [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) i [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (`--target-crs` wylacznie dla CZ; Ustalenia dodatkowe pkt 6) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (obszar CZ zawsze wycinkiem; teraz `--cutout`); uzupelniona przez [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) ((f).1 obejmuje LAZ) i [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalkowanie CUZK w `transport/chunks.py`); uzupelnia [ADR-022](#adr-022-architektura-zrodel-wielokrajowych--deskryptory-rejestry-sidecar-twarda-polityka-transformacji-etap-0); errata 2: `--country` wymagane z obszarem, wartosci per kraj (0.8.0) |
 | [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) | Reprojekcja tresci CZ wylacznie lokalnie (zakaz `imageSR` != natywny) | 2026-08-11 | Przyjeta — uzupelniona przez [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (wspolne planowanie kawalkow z kotwica NW); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (mechanizm pobrania TM33 w (c), Ustalenia dodatkowe pkt 1) |
 | [ADR-025](#adr-025-mapowanie-tekstura---hsg-i-kanoniczny-trojkat-usda-audyt-070) | Mapowanie tekstura -> HSG i kanoniczny trojkat USDA (audyt 0.7.0) | 2026-08-22 | Przyjeta |
-| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i [ADR-036](#adr-036-magazyn-wersjonowany) (`<segment>/versions/`; errata 3); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
+| [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) | Uklad data/ per produkt — segmenty i szablony w deskryptorach | 2026-08-28 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2), [ADR-036](#adr-036-magazyn-wersjonowany) (`<segment>/versions/`; errata 3) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D7: konwencja nazw kluczy i katalogow `data/`); zastepuje [ADR-013](#adr-013-zmiana-nazw-podkatalogow-storage-z-1m5m-na-nmt_1mnmt_5m) i realizacje ukladu z [ADR-005](#adr-005-struktura-katalogow-nmt-rozdzielona-wg-rozdzielczosci), uzupelnia [ADR-017](#adr-017-pl-2000-sheet-naming--composition-pattern-with-auto-detection) (domyka odroczenie) |
 | [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) | --target-crs dla PL — scalony wycinek bbox (mozaika + pinned warp) | 2026-08-28 | Przyjeta — czesciowo zastapiona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (zrodlo wycinka w CLI i `download_pl_cutout`; API arkuszowe usuniete w 0.8.0, errata 2 ADR-035) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwa `--target-crs`, wlaczanie wycinka flaga ukladu); uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (tylko przestarzaly tor arkuszowy); zastepuje czesc [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (`--target-crs` wylacznie dla CZ) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (bbox = WCS GeoTIFF) |
 | [ADR-028](#adr-028-wybor-rekordu-skorowidza-gugik-i-extrasource) | Wybor rekordu skorowidza GUGiK i `extra.source` | 2026-09-30 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (strategie kampanii `newest`/`all`, `--min-year`; regula wyboru `newest` bez zmian; awaria skorowidza: errata 2); czesciowo zastapiona przez [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (nazwy kluczy `extra.source`); zastepuje czesc [ADR-020](#adr-020-walidacja-warstw-wms-przez-getcapabilities) (zaszyte warstwy i fallback), uzupelnia [ADR-019](#adr-019-sqlite-wal-jako-metadata-cache) (`record_cache`) |
 | [ADR-029](#adr-029-wybor-kafli-laz-wg-pokrycia-obszaru-i-pobieranie-laz-w-bibliotece) | Wybor kafli LAZ wg pokrycia obszaru i pobieranie LAZ w bibliotece | 2026-10-07 | Przyjeta — uzupelniona przez [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`--campaigns all`/`--min-year` dla LAZ; errata 1) i [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (przedzial lat i pokrycie referencji; errata 2); zastepuje czesc [ADR-021](#adr-021-laz-chmury-punktów-lidar--discovery-przez-wfs-area-based) (regula newest-per-tile), uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) ((f).1 obejmuje LAZ) |
@@ -64,8 +64,8 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D2: nazwa `project_status`); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
 | [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - zamyka Ograniczenia, errata 4); errata 1-3: zakonczenie planu A, warianty CZ (plan B), zakonczenie planu B |
 | [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy; D6: jawny timeout wywolania kolekcji); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto) |
-| [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5) |
-| [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG) i [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) |
+| [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5) |
+| [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`) |
 
 ---
 
@@ -1215,7 +1215,7 @@ tabeli powyzej — policzone testem wprost na implementacji z punktu (a).
 ## ADR-026: Uklad data/ per produkt — segmenty i szablony w deskryptorach
 
 **Data:** 2026-08-28
-**Status:** Przyjeta — uzupelniona przez ADR-030 (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2) i ADR-036 (`<segment>/versions/`; errata 3); zastepuje ADR-013 i realizacje ukladu z ADR-005, uzupelnia ADR-017 (domyka odroczenie)
+**Status:** Przyjeta — uzupelniona przez ADR-030 (pliki w `<segment>/kampanie/`, sciezka standardowa = dowiazanie twarde albo kopia; errata 2), ADR-036 (`<segment>/versions/`; errata 3) i ADR-044 (D7: konwencja nazw kluczy i katalogow `data/`); zastepuje ADR-013 i realizacje ukladu z ADR-005, uzupelnia ADR-017 (domyka odroczenie)
 
 **Kontekst:** Plaski uklad `data/` nie kodowal kraju ani ukladow (`nmt_1m/`
 obok `cz_dmr5g/`; PL-2000 dzielil katalog z PL-1992; ten sam arkusz w KRON86
@@ -3530,7 +3530,7 @@ blad. API: `download_orto_cutout`/`check_orto_cutout`
 ## ADR-043: Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D
 
 **Data:** 2026-10-16
-**Status:** Przyjeta; czesciowo zastepuje ADR-042 (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez ADR-044 (D6: limit kanalu zamiast jawnego timeoutu wywolania); uzupelnia ADR-042 (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), ADR-039 (grupy `names`, `maps`, `geodesy`) i ADR-041 (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5)
+**Status:** Przyjeta; czesciowo zastepuje ADR-042 (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez ADR-044 (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez ADR-044 (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia ADR-042 (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), ADR-039 (grupy `names`, `maps`, `geodesy`) i ADR-041 (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5)
 
 **Kontekst:** Plan E (spec katalogu 6, 24 pozycje) dodaje produkty GUGiK
 i CUZK, ktorych plik nie jest paczka jednostki TERYT ani wynikiem obszaru
@@ -3694,7 +3694,7 @@ podmieniany bez sygnalu (`none`): nowa tresc daje dopiero `--force`.
 ## ADR-044: Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG
 
 **Data:** 2026-10-16
-**Status:** Przyjeta; czesciowo zastepuje ADR-039 (D1, D6: `landcover --source`, D5: metody klas w roli API), ADR-040 (D2: nazwa `project_status`), ADR-042 (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy), ADR-036 (D32: wyniki land cover i HSG) i ADR-037 (S3-S4: metody klas); uzupelnia ADR-043 (D7: timeout wywolania).
+**Status:** Przyjeta; czesciowo zastepuje ADR-039 (D1, D6: `landcover --source`, D5: metody klas w roli API), ADR-040 (D2: nazwa `project_status`), ADR-042 (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy), ADR-036 (D32: wyniki land cover i HSG), ADR-037 (S3-S4: metody klas) i ADR-043 (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia ADR-043 (D7: timeout wywolania) i ADR-026 (D7: konwencja nazw kluczy i katalogow `data/`).
 
 **Kontekst:** Przeglad UX wydania 0.8.0 (UX-08, UX-09, UX-21, UX-45):
 `landcover` jako jedyna z 11 grup danych wybiera dane flaga `--source`
@@ -3713,6 +3713,16 @@ grupach (bez aliasu; `--source` = blad z podpowiedzia), `soil hsg
 --summary`, pelne ujednolicenie API (funkcje w stylu `download_data`/
 `download_collection`, spojne typy wynikow i nazwy, bez zbednych
 aliasow), wszystko z "Co zrobic" w CHANGELOG.
+Ten sam przeglad (UX-35..40) pokazal nazwy kluczy zrodel i katalogow
+`data/` produktow nowych w 0.8.0 bez jednej konwencji: klucz
+`pl.gugik.orto_true` przy `--product true-orto` i katalogu
+`orto/pl_1992_true/`, `cz.cuzk.hy_net` przy segmencie `cz_hynet`,
+`cadastre/cz_km_<format>` (`km` czyta sie jak kilometry), token `package`
+zamiast tokenu formatu, `cz_qgzu2013` bez tokenu ukladu wysokosci (obok
+`pl_geoid2021_evrf2007`), katalogi stref mesh `s7`/`pl1992` obok tokenow
+`1992`/`2000` i tysiace arkuszy ZTM plasko w jednym katalogu. Decyzja
+uzytkownika 2026-10-16: jedna konwencja przed wydaniem, bez migracji
+(produkty nowe w 0.8.0).
 
 **Opcje:**
 - A) Zostawic `--source` i klasy; tylko celowane komunikaty pomylek.
@@ -3764,13 +3774,53 @@ aliasow), wszystko z "Co zrobic" w CHANGELOG.
   `timeout`: limity sa ustalone w providerach lub parametrach kanalow
   (ADR-043 D7); usunieto `require_timeout`, bez pozornego przekazywania
   czasu z komendy do silnika.
+- D7. Jedna konwencja nazw kluczy zrodel i katalogow `data/` (regula 10
+  sekcji 3.3 `docs/ARCHITECTURE.md`; test rejestru
+  `TestNamingConvention`), zgodna z segmentami wydan <= 0.7.2 i regula 8:
+  klucz `<kraj>.<dostawca>.<nazwa>` (slowa `[a-z0-9]` laczone `_`)
+  z calych slow sciezki `data/` - nazwa zbioru z segmentu albo katalog
+  produktu, gdy segment zaczyna sie od ukladu, z tokenami stalymi
+  deskryptora; katalog najwyzszego poziomu = `--product` w `elevation`
+  i `imagery`, grupa CLI w pozostalych; segment `<kraj>_<token>...`: `_`
+  tylko miedzy tokenami, `-` miedzy slowami jednego tokenu (jak `0-5cm`,
+  `ptwp-swrs`, `ascii-nmt`; nigdy `_` w tokenie), `.` tylko w liczbie;
+  tokeny wariantu = wartosci wyborow (`--format SHP` -> `shp`,
+  `--horizontal-crs EPSG:3045` -> `3045`), tresc bez wyboru - token
+  formatu pliku, uklad wysokosci na koncu; uklad PL `1992`/`2000`,
+  strefa PL-2000 = katalog jej numeru pod `2000` (jak pierwszy czlon
+  godla PL-2000); hierarchia arkusza = wszystkie czlony godla; dopisek
+  do kodu jednostki w nazwie pliku po `_`. Zmiany (produkty nowe
+  w 0.8.0, bez migracji): klucze `pl.gugik.orto_true` ->
+  `pl.gugik.true_orto`, `orto_oblique` -> `oblique_orto`, `buildings_3d`
+  -> `buildings`, `mesh_3d` -> `mesh`, `trees_3d` -> `trees`, `prpog` ->
+  `control`, `quasigeoid` -> `geoid2021`, `cz.cuzk.hy_net` ->
+  `cz.cuzk.hynet`, `ortofoto` -> `orto`, `survey_control` -> `control`,
+  `qgzu` -> `qgzu2013`; katalogi `orto/pl_<uklad>_true` ->
+  `true-orto/pl_<uklad>` (wycinek `true-orto/pl_1992_<res>`),
+  `orto/pl_<uklad>_oblique` -> `oblique-orto/pl_<uklad>`,
+  `cadastre/cz_km_<format>` -> `cadastre/cz_cadastral-map_<format>`,
+  `geodesy/pl_control_<siec>_package` -> `geodesy/pl_control_<siec>_xls`
+  (token formatu tresci jak `pl_prg_shp`, `pl_prng_xlsx`; nie `zip` -
+  kazda paczka jest ZIP-em), `geodesy/cz_qgzu2013` ->
+  `geodesy/cz_qgzu2013_bpv` (jak `pl_geoid2021_evrf2007`); sloty: kafel
+  mesh `s7/` -> `2000/7/`, `pl1992/` -> `1992/`, arkusz ZTM plasko ->
+  hierarchia godla (`0510/D/11/0510-D-11.zip`, `NM-34/07/1/D/15/...`;
+  `parser_registry.cuzk_map_path_parts`), temat pliku krajowego
+  `pl-<temat>` -> `pl_<temat>`. `token_segment` odrzuca token spoza
+  konwencji (`-` i `.` tylko miedzy literami i cyframi). Bez zmian:
+  segmenty i klucze wydan <= 0.7.2 (w tym `pl.gugik.nmpt` = NMPT 1 m bez
+  `_1m`, pole `dataset` sidecarow 0.7).
 
 **Konsekwencje:** Zmiana lamiaca CLI i API w 0.8.0 (CHANGELOG [0.8.0]
 "Co zrobic"): ten sam wybor `product` w kazdej grupie i w API, jeden
 raport `files`/`failed`/`stale` na typ komendy. Dotychczasowe metody i
 typy wyniku klas nie sa publicznym API; przy migracji kod czytajacy
-`result.file` wybiera `report.files[0].file`. Segmenty `data/` i sidecar
-`kartograf-meta/1` bez zmian.
+`result.file` wybiera `report.files[0].file`. Schemat sidecara
+`kartograf-meta/1` i segmenty wydan <= 0.7.2 bez zmian; D7 zmienia klucze
+(pole `dataset`) i katalogi tylko produktow nowych w 0.8.0 - pliki
+pobrane wersja deweloperska pod dawnymi nazwami nie sa migrowane
+(nastepne pobranie trafia do nowych katalogow). Nowy deskryptor przechodzi
+test konwencji albo nie wchodzi do rejestru.
 
 ---
 
