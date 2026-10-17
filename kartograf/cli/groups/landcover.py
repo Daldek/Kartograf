@@ -28,8 +28,8 @@ from kartograf.landcover.manager import (
     LANDCOVER_PRODUCTS,
     bdoo_year_choices,
     bdot10k_archive_choices,
+    corine_year_choices,
 )
-from kartograf.providers.corine import CorineProvider
 from kartograf.sources.descriptor import AtomFilesParams, SourceDescriptor
 from kartograf.sources.registry import get_source
 
@@ -40,7 +40,7 @@ def _product_flag(source: SourceDescriptor) -> str:
     product = source.key.rsplit(".", 1)[-1]
     years = {
         "bdoo": bdoo_year_choices().replace(", ", "|"),
-        "corine": "|".join(str(year) for year in CorineProvider.AVAILABLE_YEARS),
+        "corine": corine_year_choices().replace(", ", "|"),
     }.get(product)
     return f"--product {product}" + (f" --year {years}" if years else "")
 
