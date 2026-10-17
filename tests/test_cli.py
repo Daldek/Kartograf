@@ -10940,7 +10940,7 @@ class TestErrorWithoutBlankLine:
 
 
 class TestSoilgridsHsgNoEarlyMkdir:
-    """soil hsg does not leave an empty output directory after an error."""
+    """soil hsg does not leave an empty output directory after a validation error."""
 
     def test_missing_geometry_leaves_no_output_dir(self, capsys, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)

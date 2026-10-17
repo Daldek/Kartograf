@@ -347,3 +347,16 @@ def test_files_hsg_output_and_three_inputs(tmp_path):
         ("input", f"sand {HSG_SHEET}"),
         ("input", f"silt {HSG_SHEET}"),
     ]
+
+
+def test_files_hsg_failed_input_incomplete(tmp_path):
+    provider = RasterSoilGrids({"silt": DownloadError("WCS 500")})
+    with landcover_sources(soilgrids=lambda: provider):
+        result = _run(HSG, tmp_path, {"sheet": HSG_SHEET, "depth": "0-5cm"})
+    files = HSG.files(result)
+    assert not files.complete
+    assert _roles(files) == [
+        ("input", f"clay {HSG_SHEET}"),
+        ("input", f"sand {HSG_SHEET}"),
+    ]
+    assert files.errors == (f"silt {HSG_SHEET}: WCS 500",)
