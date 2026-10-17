@@ -45,6 +45,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--product world oznacza kraj zrodla, a nie granice pobrania. "
         "--whole-country wymaga --country pl/cz i --format; PRNG RP daje "
         "dwa pliki (miejscowosci i obiekty fizjograficzne).",
+        examples_of=(
+            "kartograf names download --product geographic --country pl --bbox "
+            "19.93,50.055,19.945,50.065 --bbox-crs EPSG:4326 -o ./data",
+            "kartograf names download --product geographic --country cz "
+            "--whole-country --format GPKG --horizontal-crs EPSG:5514 -o ./data",
+        ),
         area_result="obiekty geograficzne w GeoPackage (PL: OGC:CRS84; CZ: EPSG:5514)",
         whole_country_help="Oryginalne pliki krajowe, tylko z --country pl/cz "
         "i --format; Geonames wymaga takze --horizontal-crs",

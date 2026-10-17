@@ -4,10 +4,13 @@ import argparse
 
 from kartograf.cli._args import (
     OUTPUT_TITLE,
+    SELECTION_TITLE,
     SHEET_AREA_HELP,
     add_area_flags,
+    add_output,
     add_quiet,
     add_update_flags,
+    examples,
 )
 from kartograf.cli.groups import add_group, add_list_sources
 from kartograf.cli.soil_cmd import (
@@ -17,11 +20,23 @@ from kartograf.cli.soil_cmd import (
     soil_download_task_arguments,
     soil_hsg_task_arguments,
 )
-
-_DEPTHS = (
-    "0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm (przedzial glebokosci "
-    "ponizej powierzchni)"
+from kartograf.download.options import store_files
+from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
+from kartograf.providers.soilgrids import (
+    DEPTH_DESCRIPTION,
+    PROPERTY_DESCRIPTIONS,
+    STAT_DESCRIPTIONS,
+    SoilGridsProvider,
 )
+
+_DEPTHS = f"{', '.join(SoilGridsProvider.DEPTHS)} ({DEPTH_DESCRIPTION})"
+
+
+def _described(descriptions: dict[str, str]) -> str:
+    """``bdod: gestosc objetosciowa (kg/dm3); ...``: values with their texts
+    (``%`` escaped for argparse help)."""
+    text = "; ".join(f"{value}: {text}" for value, text in descriptions.items())
+    return text.replace("%", "%%")
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -38,19 +53,22 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "download",
         help="Pobierz warstwe SoilGrids (wlasciwosc, glebokosc, statystyka)",
         description="Pobierz jedna warstwe SoilGrids (--property, --depth, "
-        "--stat) dla jednego obszaru: --sheet, --bbox albo --geometry.",
+        "--stat; lista: kartograf soil list-layers) dla jednego obszaru: "
+        "--sheet, --bbox albo --geometry.",
+        epilog=examples(
+            "kartograf soil download --property clay --depth 0-5cm --stat mean "
+            "--bbox 626000,480000,628000,482000 -o ./data",
+            "kartograf soil download --property soc --depth 15-30cm --stat Q0.5 "
+            "--sheet N-34-130-D -o ./data",
+        ),
     )
-    add_area_flags(download.add_argument_group("Obszar"), sheet_help=SHEET_AREA_HELP)
-    layer = download.add_argument_group("Warstwa SoilGrids (lista: soil list-layers)")
+    layer = download.add_argument_group(SELECTION_TITLE)
     layer.add_argument(
         "--property",
         "-p",
         metavar="WLASCIWOSC",
         default=None,
-        help="Wymagane: bdod (gestosc objetosciowa), cec (pojemnosc sorpcyjna), "
-        "cfvo (frakcja szkieletowa), clay (il), nitrogen (azot), ocd (gestosc "
-        "wegla organicznego), ocs (zasob wegla organicznego), phh2o (pH), sand "
-        "(piasek), silt (pyl), soc (wegiel organiczny)",
+        help=f"Wymagane: {_described(PROPERTY_DESCRIPTIONS)}",
     )
     layer.add_argument(
         "--depth", "-d", metavar="GLEBOKOSC", default=None, help=f"Wymagane: {_DEPTHS}"
@@ -59,18 +77,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "--stat",
         metavar="STATYSTYKA",
         default=None,
-        help="Wymagane: mean (srednia), Q0.05 (5. percentyl), Q0.5 (mediana), "
-        "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)",
+        help=f"Wymagane: {_described(STAT_DESCRIPTIONS)}",
     )
+    add_area_flags(layer, sheet_help=SHEET_AREA_HELP)
     output = download.add_argument_group(OUTPUT_TITLE)
-    output.add_argument(
-        "--output",
-        "-o",
-        metavar="KATALOG",
-        default=None,
-        help="Wymagane: katalog magazynu; pliki trafiaja do <KATALOG>/soil/... "
-        "(wersje w versions/)",
-    )
+    add_output(output, store_files(["soil"]))
     add_update_flags(
         output,
         check_help="Porownaj lokalne wersje z wydaniem SoilGrids bez pobierania",
@@ -94,27 +105,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             "dla wybranej glebokosci; uzyj statystyki mean (srednia) "
             "i oblicz grupy hydrologiczne HSG dla metody SCS-CN."
         ),
+        epilog=examples(
+            "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
+            "--summary -o ./data",
+        ),
     )
-    add_area_flags(hsg.add_argument_group("Obszar"), sheet_help=SHEET_AREA_HELP)
-    params = hsg.add_argument_group("Parametry HSG")
+    params = hsg.add_argument_group(SELECTION_TITLE)
     params.add_argument(
         "--depth", "-d", metavar="GLEBOKOSC", default=None, help=f"Wymagane: {_DEPTHS}"
     )
-    params.add_argument(
-        "--summary",
-        action="store_true",
-        help="Wypisz podsumowanie HSG po obliczeniu: udzial i powierzchnia "
-        "grup A-D oraz brak danych",
-    )
+    add_area_flags(params, sheet_help=SHEET_AREA_HELP)
     output = hsg.add_argument_group(OUTPUT_TITLE)
-    output.add_argument(
-        "--output",
-        "-o",
-        metavar="KATALOG",
-        default=None,
-        help="Wymagane: katalog magazynu; wejscia w <KATALOG>/soil/..., HSG w "
-        "<KATALOG>/hsg/... (plik poza magazynem: hsg_from_rasters)",
-    )
+    add_output(output, HSG_OUTPUT_FILES)
     add_update_flags(
         output,
         check_help="Porownaj wejscia clay/sand/silt z wydaniem SoilGrids i HSG "
@@ -126,10 +128,21 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         plan_help="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
+    output.add_argument(
+        "--summary",
+        action="store_true",
+        help="Wypisz podsumowanie HSG po obliczeniu: udzial i powierzchnia "
+        "grup A-D oraz brak danych",
+    )
     add_quiet(output)
     hsg.set_defaults(_handler=cmd_soil_hsg, _task=soil_hsg_task_arguments)
 
-    add_list_sources(commands, "soil", ("soil",))
+    add_list_sources(
+        commands,
+        "soil",
+        ("soil",),
+        lambda _source: "--property WLASCIWOSC --depth GLEBOKOSC --stat STATYSTYKA",
+    )
 
     commands.add_parser(
         "list-layers",

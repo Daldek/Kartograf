@@ -1,12 +1,65 @@
 """
 ``kartograf parse`` command and its formatting helpers.
+
+PL sheet codes (PL-1992, PL-2000) are parsed by ``SheetParser`` (scale,
+parts, hierarchy); CZ codes - SM5 sheets, TM33 tiles (``parser_registry``)
+and ZTM map sheets - are recognised offline and described: system, CRS
+and the commands taking them in ``--sheet``.
 """
 
 import argparse
 import sys
 
+from kartograf.core.parser_registry import detect_system, ztm_sheet_system
+from kartograf.core.parser_tm33 import ParserTM33
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import ParseError, ValidationError
+
+_CZ_CODES = (
+    "Godla CZ: SM5 (np. CTES96), kafel TM33 (np. 302_5550), ZTM (np. 0510-D-11, "
+    "NM-34-07-1-D-15)."
+)
+_ZTM_CRS = {"sjtsk": "EPSG:5514 (S-JTSK)", "etrs89": "EPSG:3045 (ETRS89 / UTM 33N)"}
+
+
+def format_cz_sheet(sheet: str) -> str | None:
+    """Description of a CZ sheet code (SM5 sheet, TM33 tile, ZTM map sheet);
+    ``None`` for any other code (a PL code or an invalid one).
+
+    Raises
+    ------
+    ParseError
+        A TM33 tile code off the 2 km grid.
+    """
+    system = detect_system(sheet).id
+    ztm = ztm_sheet_system(sheet)
+    if system == "cz_tm33":
+        bbox = ParserTM33(sheet).get_bbox()
+        lines = [
+            "Uklad:     TM33 (CZ) - kafel 2 x 2 km",
+            f"CRS:       {bbox.crs} (ETRS89 / UTM 33N)",
+            f"Zasieg:    {bbox.min_x:.0f},{bbox.min_y:.0f},{bbox.max_x:.0f},"
+            f"{bbox.max_y:.0f}",
+            "Komendy:   --sheet w elevation download i elevation availability",
+        ]
+    elif system == "cz_sm5":
+        lines = [
+            "Uklad:     SM5 (CZ) - arkusz Statni mapy 1:5000",
+            "CRS:       EPSG:5514 (S-JTSK)",
+            "Zasieg:    rama z indeksu arkuszy CUZK (odczyt przy pobraniu)",
+            "Komendy:   --sheet w elevation download (takze warstwice), imagery "
+            "download i elevation availability",
+        ]
+    elif ztm is not None:
+        lines = [
+            f"Uklad:     ZTM (CZ) - arkusz mapy topograficznej (--sheet-system {ztm})",
+            f"CRS:       {_ZTM_CRS[ztm]}",
+            "Zasieg:    rama z indeksu arkuszy CUZK (odczyt przy pobraniu)",
+            "Komendy:   --sheet w maps download --country cz",
+        ]
+    else:
+        return None
+    return "\n".join([f"Godlo:     {sheet.strip()}", *lines])
 
 
 def format_sheet_info(parser: SheetParser) -> str:
@@ -155,9 +208,24 @@ def cmd_parse(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     try:
+        cz = format_cz_sheet(args.sheet)
+    except ParseError as e:
+        print(f"Error: {e}", file=sys.stderr)
+        return 1
+    if cz is not None:
+        if args.hierarchy or args.children or args.descendants:
+            print(
+                "Error: --hierarchy, --children i --descendants dotycza tylko "
+                "godel PL (PL-1992, PL-2000)",
+                file=sys.stderr,
+            )
+            return 1
+        print(cz)
+        return 0
+    try:
         parser = SheetParser(args.sheet)
     except (ParseError, ValidationError) as e:
-        print(f"Error: {e}", file=sys.stderr)
+        print(f"Error: {e} {_CZ_CODES}", file=sys.stderr)
         return 1
 
     # Always show basic info

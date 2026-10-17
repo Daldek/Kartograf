@@ -58,6 +58,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "powiat.",
         teryt_help="Kod TERYT powiatu (4 cyfry, np. 1261): paczka modeli "
         "powiatu (buildings, trees)",
+        examples_of=(
+            "kartograf models3d download --product buildings --lod 1 --year 2024 "
+            "--teryt 1261 -o ./data",
+            "kartograf models3d download --product mesh --country pl --bbox "
+            "566200,244650,566250,244700 -o ./data",
+        ),
         area_result="paczki powiatow przecinajacych obszar (PRG; buildings, "
         "trees) albo kafle mesh obszaru",
         check_help="Porownaj lokalne wersje ze zrodlem bez pobierania: kafel "

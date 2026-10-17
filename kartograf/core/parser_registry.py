@@ -24,6 +24,19 @@ CZ_TM33_PATTERN = re.compile(r"^([0-9]{3})_([0-9]{4})$")
 # ... AS94 of the 16 299 in the SM5 index) + 2 digits, e.g. CTES96, AS91.
 CZ_SM5_PATTERN = re.compile(r"^[A-Z]{2}(?:[A-Z]{2})?[0-9]{2}$")
 _PL2000_PATTERN = re.compile(r"^[5-8]\.[0-9]")
+# ZTM map sheet codes of CUZK (MAPNOM of the ZTM index layers): S-JTSK
+# `0510-D-11`, ETRS89 `NM-34-07-1-D-15` (two letters - a PL-1992 code has one).
+_ZTM_PATTERNS = (
+    ("sjtsk", re.compile(r"^[0-9]{4}-[A-Za-z0-9-]+$")),
+    ("etrs89", re.compile(r"^[A-Za-z]{2}-[0-9]{2}-[A-Za-z0-9-]+$")),
+)
+
+
+def ztm_sheet_system(sheet: str) -> str | None:
+    """``sjtsk``/``etrs89``: the sheet system (``--sheet-system``) of a ZTM map
+    sheet code; ``None`` for any other code (whitespace stripped)."""
+    cleaned = sheet.strip()
+    return next((name for name, p in _ZTM_PATTERNS if p.match(cleaned)), None)
 
 
 @dataclass(frozen=True)

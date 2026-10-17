@@ -8,9 +8,12 @@ from functools import partial
 
 from kartograf.cli._args import (
     OUTPUT_TITLE,
+    SELECTION_TITLE,
     add_area_flags,
+    add_output,
     add_quiet,
     add_update_flags,
+    examples,
     layer_codes,
 )
 from kartograf.cli.download_cmd import cmd_download, download_task_arguments
@@ -22,6 +25,8 @@ from kartograf.download.options import (
     SCALE_2000_CHOICES,
     SHEET_SYSTEM_CHOICES,
     product_choices,
+    product_directory,
+    store_files,
 )
 from kartograf.download.orto_cutout import (
     ORTO_CUTOUT_CRS,
@@ -32,12 +37,9 @@ from kartograf.sources.descriptor import SourceDescriptor
 
 
 def _source_choice(source: SourceDescriptor) -> str:
-    """Flags selecting ``source`` in ``imagery download`` (``--country`` of a
-    CZ source, as in ``elevation list-sources``)."""
-    flags = f"--product {source.product}"
-    if source.country == "CZ":
-        return f"{flags} --country cz"
-    return flags
+    """Flags selecting ``source`` in ``imagery download`` (``--country`` of
+    every source, as in ``elevation list-sources``)."""
+    return f"--product {source.product} --country {source.country.lower()}"
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -65,23 +67,24 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             "z plikami JGW w S-JTSK, TM33N i TM34N (--bbox/--geometry rozwija sie "
             "na arkusze SM5). Arkusze: pliki zrodlowe 1:1, piksel zrodla."
         ),
+        epilog=examples(
+            "kartograf imagery download --product orto --sheet N-34-130-D-d-2-4 "
+            "-o ./data",
+            "kartograf imagery download --product orto --country pl --bbox "
+            "566000,243000,566500,243500 --cutout --horizontal-crs EPSG:2180 "
+            "--coverage standard --resolution 0.25m -o ./data",
+            "kartograf imagery download --product oblique-orto --sheet 7.125.11.08 "
+            "--direction n -o ./data",
+            "kartograf imagery download --product orto --sheet CTES96 -o ./data",
+        ),
     )
 
-    selection = download.add_argument_group("Produkt i obszar")
+    selection = download.add_argument_group(SELECTION_TITLE)
     selection.add_argument(
         "--product",
         choices=IMAGERY_PRODUCTS,
         default=None,
         help=f"Produkt (wymagany): {product_choices(IMAGERY_PRODUCTS)}",
-    )
-    add_area_flags(
-        selection,
-        sheet_help="Godlo arkusza - pliki tego arkusza ze zrodla (grubsze godlo "
-        "PL rozwija sie na arkusze zrodla): PL-1992 (np. N-34-130-D-d-2-4), "
-        "PL-2000 (np. 6.129.30.25.3) albo CZ SM5 (np. CTES96, AS91; JPEG i trzy "
-        "pliki JGW)",
-        geometry_help="Plik geometrii obszaru (SHP albo GPKG): arkusze "
-        "przecinajace obiekty; wycinek (--cutout) - obwiednia geometrii",
     )
     selection.add_argument(
         "--country",
@@ -92,6 +95,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
         "musi sie z nim zgadzac). Wycinek (--cutout) tylko PL: z auto obejmuje "
         "czesc PL",
+    )
+    add_area_flags(
+        selection,
+        sheet_help="Godlo arkusza - pliki tego arkusza ze zrodla (grubsze godlo "
+        "PL rozwija sie na arkusze zrodla): PL-1992 (np. N-34-130-D-d-2-4), "
+        "PL-2000 (np. 6.129.30.25.3) albo CZ SM5 (np. CTES96, AS91; JPEG i trzy "
+        "pliki JGW)",
+        geometry_help="Plik geometrii obszaru (SHP albo GPKG): arkusze "
+        "przecinajace obiekty; wycinek (--cutout) - obwiednia geometrii",
     )
     selection.add_argument(
         "--direction",
@@ -160,7 +172,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     cutout.add_argument(
         "--resolution",
         "-r",
-        metavar="RES",
+        metavar="ROZDZIELCZOSC",
         default=None,
         help="Piksel wycinka - wymagany z --cutout (arkusze maja piksel zrodla: "
         f"bez --cutout blad): {cutout_resolution_choices(IMAGERY_PRODUCTS)}",
@@ -212,15 +224,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
 
     output = download.add_argument_group(OUTPUT_TITLE)
-    output.add_argument(
-        "--output",
-        "-o",
-        metavar="KATALOG",
-        default=None,
-        help="Katalog wyniku (wymagany); pliki trafiaja do "
-        "<KATALOG>/orto/<segment>/... (obrazy intensywnosci: "
-        "<KATALOG>/intensity/<segment>/...)",
-    )
+    add_output(output, store_files(product_directory(p) for p in IMAGERY_PRODUCTS))
     add_update_flags(
         output,
         check_help="Porownaj lokalne wersje ze zrodlem i wypisz raport (aktualne "

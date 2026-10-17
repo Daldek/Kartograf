@@ -66,6 +66,13 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         teryt_help="Kod TERYT: wojewodztwo (2 cyfry, np. 12) - paczka GML "
         "wszystkich poziomow PRG (admin); powiat (4 cyfry, np. 1261) - paczka "
         "SHP punktow adresowych (addresses)",
+        examples_of=(
+            "kartograf boundaries download --product admin --teryt 12 -o ./data",
+            "kartograf boundaries download --product admin --country pl --level "
+            "gmina --bbox 550000,220000,590000,270000 -o ./data",
+            "kartograf boundaries download --product addresses --country pl "
+            "--whole-country --format SHP -o ./data",
+        ),
         area_result="obiekty przecinajace obszar (GeoPackage; admin i "
         "geomorphology: jednostki poziomu --level)",
         whole_country_help="Plik krajowy jednego kraju (wymaga --country pl albo "
