@@ -87,4 +87,7 @@ def test_project_downloads_and_verifies_world_names_and_ztm_sheet(
     ]
     assert {path.suffix for path in files} == {".gpkg", ".zip"}
     assert len(files) == 2
-    assert {path.parent.name for path in files} == {"bbox", "cz_ztm_10000_sjtsk_tiff"}
+    assert {path.parent.relative_to(project / "data").as_posix() for path in files} == {
+        "names/pl_prng_world/bbox",
+        "maps/cz_ztm_10000_sjtsk_tiff/0510/D/11",
+    }

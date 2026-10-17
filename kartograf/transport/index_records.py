@@ -73,7 +73,7 @@ class IndexRecord:
     ``label``: version label (D29, ``edition_label``). ``year``: year of the
     data (``year_field``; ``map_links``: year of the base date). ``zone``:
     slot directory of a tile from ``zone_field`` (``"PL-2000:S7"`` ->
-    ``"s7"``, ``"PL-1992"`` -> ``"pl1992"``); ``None`` without
+    ``"2000/7"``, ``"PL-1992"`` -> ``"1992"``, ADR-044 D7); ``None`` without
     ``zone_field``. ``raw``: source fields as published (sidecar
     ``extra.source``).
     """
@@ -278,13 +278,15 @@ def _feature_fields(feature: ET.Element) -> dict[str, str]:
 
 
 def _zone_slot(value: str | None) -> str | None:
-    """Slot directory of a GUGiK CRS: ``PL-2000:S7`` -> ``s7``, ``PL-1992`` ->
-    ``pl1992``; ``None`` for an unknown value."""
+    """Slot directory of a GUGiK CRS (ADR-044 D7): the PL system as in the
+    segments, a PL-2000 zone below it as in the PL-2000 sheet codes
+    (``PL-2000:S7`` -> ``2000/7``, ``PL-1992`` -> ``1992``); ``None`` for an
+    unknown value."""
     parsed = parse_pl_system(value)
     if parsed is None:
         return None
     system, zone = parsed
-    return f"s{zone}" if zone is not None else f"pl{system}"
+    return f"{system}/{zone}" if zone is not None else system
 
 
 def _map_links_record(rows: list["_Row"], context: str) -> IndexRecord:

@@ -51,11 +51,11 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "wybieraja --lod i --year. Brak paczki powiatu (LoD2 budynkow, drzewa "
         "czesci powiatow) = blad tego powiatu. --product mesh: kafle indeksu "
         "GUGiK przecinajace obszar (--bbox/--sheet/--geometry), kazdy plik "
-        "kafla w katalogu swojego ukladu (pl1992, s5-s7); --year wybiera kafle "
-        "jednego roku. Paczki ZIP zapisywane 1:1, uklad wysokosci z danych "
-        "w sidecarze. Obszar, ktory dalby wiecej niz 100 plikow albo ponad "
-        "10 GB, konczy sie bledem przed pobraniem: zawez obszar albo wybierz "
-        "powiat.",
+        "kafla w katalogu swojego ukladu (1992 albo 2000/<strefa>, np. 2000/7); "
+        "--year wybiera kafle jednego roku. Paczki ZIP zapisywane 1:1, uklad "
+        "wysokosci z danych w sidecarze. Obszar, ktory dalby wiecej niz 100 "
+        "plikow albo ponad 10 GB, konczy sie bledem przed pobraniem: zawez "
+        "obszar albo wybierz powiat.",
         teryt_help="Kod TERYT powiatu (4 cyfry, np. 1261): paczka modeli "
         "powiatu (buildings, trees)",
         area_result="paczki powiatow przecinajacych obszar (PRG; buildings, "

@@ -216,7 +216,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
     assert report.ok
     assert sorted(f.unit for f in report.files) == _quarters()
     assert all(
-        "/orto/pl_1992_true/N-34/50/A/c/3/2/" in str(f.file.path) for f in report.files
+        "/true-orto/pl_1992/N-34/50/A/c/3/2/" in str(f.file.path) for f in report.files
     )
     assert gets_at_notice == [0, 1, 2, 3]  # each notice before its own GET
     size = [n.text for n in report.notices if n.code == DOWNLOAD_SIZE][0]
@@ -233,7 +233,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
 
 def test_true_orto_cutout_native_grid(tmp_path, images):
     """The true orto cutout asks coverage True_Orthoimagery on its 0.05 m grid
-    (no SCALEFACTOR) and lands in ``orto/pl_1992_true_0.05m``; it has one
+    (no SCALEFACTOR) and lands in ``true-orto/pl_1992_0.05m``; it has one
     service - no ``coverage`` - and pixels from the registry."""
     cutout = {
         "product": "true-orto",
@@ -248,7 +248,7 @@ def test_true_orto_cutout_native_grid(tmp_path, images):
 
     assert report.ok
     (unit,) = report.files
-    assert unit.unit.startswith("orto/pl_1992_true_0.05m/bbox/")
+    assert unit.unit.startswith("true-orto/pl_1992_0.05m/bbox/")
     with rasterio.open(unit.file.path) as src:
         assert (src.count, src.width, src.crs.to_epsg()) == (3, 20, 2180)
     (request,) = [u for u in images.calls if "GetCoverage" in u]
@@ -282,7 +282,7 @@ def test_oblique_directions_are_files(tmp_path, images):
     )
 
     assert every.ok and two.ok
-    base = out / "orto/pl_2000_oblique/7/125/11/08"
+    base = out / "oblique-orto/pl_2000/7/125/11/08"
     assert [f.file.path for f in every.files] == [
         base / f"{OBLIQUE_SHEET}_{code}.tif" for code in "nesw"
     ]

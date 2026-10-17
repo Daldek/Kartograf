@@ -154,7 +154,7 @@ class IndexSource:
     with ``_`` into the version label (D29: date, request number),
     ``year_field`` the year of the data (``year`` filter: the newest record
     of a unit unless a year is chosen), ``zone_field`` the GUGiK CRS of a
-    tile (``PL-2000:S7`` -> slot directory ``s7``).
+    tile (``PL-2000:S7`` -> slot directory ``2000/7``, ADR-044 D7).
     """
 
     kind: Literal["wms_gfi", "wfs"]

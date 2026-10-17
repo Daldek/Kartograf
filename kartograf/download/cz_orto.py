@@ -76,7 +76,7 @@ from kartograf.transport.http import SessionPerThread
 
 logger = logging.getLogger(__name__)
 
-_KEY = "cz.cuzk.ortofoto"
+_KEY = "cz.cuzk.orto"
 _TRACK: Track = "cz_orto"
 _SIGNAL: SignalKind = "metadata"
 # Read timeout of a sheet ZIP (16-64 MB; STANDARDS 13.4).

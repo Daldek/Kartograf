@@ -245,7 +245,7 @@ def test_cz_orto_sheet_files_and_sidecars(tmp_path, cuzk):
     }
     for suffix, unit_file in zip(SUFFIXES, report.files, strict=True):
         meta = _meta(unit_file.file)
-        assert meta["dataset"] == "cz.cuzk.ortofoto"
+        assert meta["dataset"] == "cz.cuzk.orto"
         assert (meta["country"], meta["product"]) == ("CZ", "orto")
         assert meta["request"] == {"sheet": "CTES96"}
         assert meta["vertical_crs"] is None

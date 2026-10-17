@@ -231,9 +231,9 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
     --------
     >>> provider = GugikImageProvider("pl.gugik.intensity")
     >>> provider.download("M-34-64-D-d-1-4", Path("./sheet.tif"))
-    >>> north = GugikImageProvider("pl.gugik.orto_oblique", direction="n")
+    >>> north = GugikImageProvider("pl.gugik.oblique_orto", direction="n")
     >>> north.download("7.125.11.08", Path("./7.125.11.08_n.tif"))
-    >>> cutout = GugikImageProvider("pl.gugik.orto_true", resolution="0.05m")
+    >>> cutout = GugikImageProvider("pl.gugik.true_orto", resolution="0.05m")
     >>> cutout.download_bbox(
     ...     BBox(470177, 740336, 470178, 740337, crs="EPSG:2180"), Path("./a.tif")
     ... )
@@ -277,8 +277,8 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         ----------
         source : str
             Descriptor key of the product (``pl.gugik.orto``,
-            ``pl.gugik.intensity``, ``pl.gugik.orto_true``,
-            ``pl.gugik.orto_oblique``).
+            ``pl.gugik.intensity``, ``pl.gugik.true_orto``,
+            ``pl.gugik.oblique_orto``).
         session : requests.Session, optional
             HTTP session to use for requests.
         cache : MetadataCache, optional

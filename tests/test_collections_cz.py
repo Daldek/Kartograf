@@ -401,7 +401,7 @@ def test_hynet_links_and_nodes_and_misleading_next(tmp_path, monkeypatch, frozen
     carries a ``next`` link (http, STARTINDEX=4) that is never followed; the
     area result is the geometric network (links and nodes) - the crossings
     without geometry are in the national file only (``AREA_OMITTED``)."""
-    _page_size(monkeypatch, "cz.cuzk.hy_net", 2)
+    _page_size(monkeypatch, "cz.cuzk.hynet", 2)
     fake = FakeCuzk()
     monkeypatch.setattr(col, "_session", lambda: fake)
 
@@ -439,7 +439,7 @@ def test_wfs_type_without_objects_is_empty_layer(tmp_path, monkeypatch, frozen_c
     WatercourseSeparatedCrossing - 0 hits, an empty page, no XSD schema) is an
     empty GPKG layer with the id field: the layers of the file do not depend
     on the area."""
-    source = registry.get_source("cz.cuzk.hy_net")
+    source = registry.get_source("cz.cuzk.hynet")
     empty = FeatureLayer(
         code="WatercourseSeparatedCrossing",
         source="hy-n:WatercourseSeparatedCrossing",
@@ -459,7 +459,7 @@ def test_wfs_type_without_objects_is_empty_layer(tmp_path, monkeypatch, frozen_c
     )
     monkeypatch.setitem(
         registry._SOURCES,
-        "cz.cuzk.hy_net",
+        "cz.cuzk.hynet",
         dataclasses.replace(source, channels=channels),
     )
     monkeypatch.setattr(col, "_session", lambda: FakeCuzk())

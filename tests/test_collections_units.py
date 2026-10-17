@@ -660,8 +660,9 @@ def test_sheet_without_record_is_not_a_unit(tmp_path, router, monkeypatch):
 
 def test_cuzk_layer_sheet_units(tmp_path, router, monkeypatch):
     """Sheets of a CUZK sheet index layer: the ``MAPNOM`` intersecting an area
-    (edge-touching ones dropped) in flat slots, or one given sheet checked
-    against the layer; an unknown sheet is a ``ValidationError``."""
+    (edge-touching ones dropped) in the hierarchy of their codes (ADR-044 D7),
+    or one given sheet checked against the layer; an unknown sheet is a
+    ``ValidationError``."""
     install(monkeypatch, ZTM)
     for name in (
         "klady_2_bbox_tesin.json",
@@ -678,7 +679,8 @@ def test_cuzk_layer_sheet_units(tmp_path, router, monkeypatch):
     )
     assert [i.unit for i in plan.items] == ["0510-C-15", "0510-D-11"]
     assert {(i.segment, i.hierarchy) for i in plan.items} == {
-        ("maps/cz_test_ztm_10000_sjtsk_tiff", ".")
+        ("maps/cz_test_ztm_10000_sjtsk_tiff", "0510/C/15"),
+        ("maps/cz_test_ztm_10000_sjtsk_tiff", "0510/D/11"),
     }
     assert plan.items[1].name == "0510-D-11.zip"
 
@@ -731,8 +733,8 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
         product="e0mesh", output_dir=tmp_path, country="pl", bbox=MESH_AREA, cache=False
     )
     tiles = ["74228_55480", "74228_55482", "74230_55480", "74230_55482"]
-    assert [i.unit for i in plan.items] == [f"s7/{t}" for t in tiles]
-    assert {i.hierarchy for i in plan.items} == {"s7"}
+    assert [i.unit for i in plan.items] == [f"2000/7/{t}" for t in tiles]
+    assert {i.hierarchy for i in plan.items} == {"2000/7"}
     assert {i.available_label for i in plan.items} == {"2021-10-03_DFT.7201.043.2023"}
 
     with pytest.raises(NoCoverageError) as missing:
@@ -747,7 +749,7 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
     assert "2021" in str(missing.value)
 
     url = next(
-        i.available_signal["url"] for i in plan.items if i.unit == "s7/74230_55482"
+        i.available_signal["url"] for i in plan.items if i.unit == "2000/7/74230_55482"
     )
     router.add(
         url,
@@ -759,7 +761,7 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
     )
     for tile in tiles[:3]:
         other = next(
-            i.available_signal["url"] for i in plan.items if i.unit == f"s7/{tile}"
+            i.available_signal["url"] for i in plan.items if i.unit == f"2000/7/{tile}"
         )
         router.add(
             other,
@@ -776,12 +778,12 @@ def test_tile_units_from_index_records(tmp_path, router, monkeypatch, frozen_clo
         cache=False,
     )
     assert report.ok, report.failed
-    file = next(f.file for f in report.files if f.unit == "s7/74230_55482")
-    assert file.path == tmp_path / "models3d/pl_test_mesh/s7/74230_55482.zip"
+    file = next(f.file for f in report.files if f.unit == "2000/7/74230_55482")
+    assert file.path == tmp_path / "models3d/pl_test_mesh/2000/7/74230_55482.zip"
     meta = _meta(file.version_path)
     assert meta["horizontal_crs"] == "EPSG:2178"
     assert meta["extra"]["version"]["label"] == "2021-10-03_DFT.7201.043.2023"
-    assert meta["request"] == {"tile": "s7/74230_55482", "year": 2021}
+    assert meta["request"] == {"tile": "2000/7/74230_55482", "year": 2021}
     assert meta["extra"]["parent_request"]["bbox"] == [
         566100.0,
         244500.0,
@@ -853,8 +855,8 @@ def test_national_file_of_several_themes(tmp_path, router, monkeypatch, frozen_c
     )
     assert report.ok, report.failed
     assert [f.file.path.relative_to(tmp_path).as_posix() for f in report.files] == [
-        "names/pl_test_gml/country/pl-miejscowosci.zip",
-        "names/pl_test_gml/country/pl-obiekty-fizjograficzne.zip",
+        "names/pl_test_gml/country/pl_miejscowosci.zip",
+        "names/pl_test_gml/country/pl_obiekty-fizjograficzne.zip",
     ]
     sizes = [n.text for n in notices if n.code == WHOLE_COUNTRY_SIZE]
     assert len(sizes) == 2 and "20358653 B" in sizes[0] and "26414682 B" in sizes[1]

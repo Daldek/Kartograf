@@ -142,14 +142,14 @@ CHANNEL_SIGNALS = [
     ("pl.gugik.prg", TransportKind.DIRECT_FILES, "none"),
     ("pl.gugik.egib", TransportKind.DIRECT_FILES, "none"),
     ("pl.gugik.egib", TransportKind.WFS, "none"),
-    ("pl.gugik.buildings_3d", TransportKind.DIRECT_FILES, "none"),
+    ("pl.gugik.buildings", TransportKind.DIRECT_FILES, "none"),
     ("cz.cuzk.zabaged", TransportKind.ARCGIS_QUERY, "none"),
     ("cz.cuzk.zabaged", TransportKind.DIRECT_FILES, "metadata"),
     ("cz.cuzk.ruian", TransportKind.ARCGIS_QUERY, "none"),
     ("cz.cuzk.ruian", TransportKind.DIRECT_FILES, "http"),
-    ("cz.cuzk.hy_net", TransportKind.WFS, "none"),
-    ("cz.cuzk.hy_net", TransportKind.DIRECT_FILES, "http"),
-    ("cz.cuzk.ortofoto", TransportKind.DIRECT_FILES, "metadata"),
+    ("cz.cuzk.hynet", TransportKind.WFS, "none"),
+    ("cz.cuzk.hynet", TransportKind.DIRECT_FILES, "http"),
+    ("cz.cuzk.orto", TransportKind.DIRECT_FILES, "metadata"),
     ("pl.gugik.nmt_100m", TransportKind.DIRECT_FILES, "metadata"),
 ]
 
@@ -394,7 +394,7 @@ class TestRegistry:
     def test_no_vertical_for_orto_and_landcover(self):
         for key in (
             "pl.gugik.orto",
-            "cz.cuzk.ortofoto",
+            "cz.cuzk.orto",
             "pl.gugik.bdot10k",
             "eu.clms.corine",
             "global.isric.soilgrids",
@@ -892,7 +892,7 @@ class TestCollectionChannels:
         expected = {
             "pl.gugik.prg": ("admin", "boundaries/pl_prg"),
             "pl.gugik.egib": ("map", "cadastre/pl_egib"),
-            "pl.gugik.buildings_3d": ("buildings", "models3d/pl_buildings"),
+            "pl.gugik.buildings": ("buildings", "models3d/pl_buildings"),
         }
         for key, (product, subdir) in expected.items():
             d = pl[key]
@@ -925,7 +925,7 @@ class TestCollectionChannels:
 
     def test_buildings_variants_declare_vertical_crs(self):
         """Every release declares the vertical CRS measured in its GML (srsName)."""
-        (channel,) = get_source("pl.gugik.buildings_3d").channels
+        (channel,) = get_source("pl.gugik.buildings").channels
         assert isinstance(channel.params, UnitPackageParams)
         measured = {
             (dict(v.choice)["lod"], dict(v.choice)["year"]): v.vertical_crs

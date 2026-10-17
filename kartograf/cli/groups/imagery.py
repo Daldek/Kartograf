@@ -218,8 +218,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         metavar="KATALOG",
         default=None,
         help="Katalog wyniku (wymagany); pliki trafiaja do "
-        "<KATALOG>/orto/<segment>/... (obrazy intensywnosci: "
-        "<KATALOG>/intensity/<segment>/...)",
+        "<KATALOG>/<produkt>/<segment>/...",
     )
     add_update_flags(
         output,

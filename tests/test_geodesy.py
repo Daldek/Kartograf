@@ -81,7 +81,7 @@ def _serve_recordings(router: Router, directory: Path) -> None:
 
 def _recorded_page_size(monkeypatch) -> None:
     """The WFS of the PL networks with the page size of the recordings (2)."""
-    descriptor = registry.get_source("pl.gugik.prpog")
+    descriptor = registry.get_source("pl.gugik.control")
     channels = tuple(
         dataclasses.replace(
             channel, params=dataclasses.replace(channel.params, page_size=2)
@@ -186,7 +186,7 @@ def test_pl_control_packages_and_archives(tmp_path, router):
         assert report.ok, report.failed
         (item,) = report.files
         assert item.file.path == (
-            tmp_path / f"geodesy/pl_control_{network}_package/teryt/1201.zip"
+            tmp_path / f"geodesy/pl_control_{network}_xls/teryt/1201.zip"
         )
         assert item.file.path.read_bytes() == body
         meta = _meta(item.file.version_path)
@@ -419,7 +419,7 @@ def test_geoid_whole_country_only(tmp_path, router):
     )
     assert cz.ok, cz.failed
     (item,) = cz.files
-    assert item.file.path == tmp_path / "geodesy/cz_qgzu2013/country/cz.zip"
+    assert item.file.path == tmp_path / "geodesy/cz_qgzu2013_bpv/country/cz.zip"
     assert item.file.path.read_bytes() == body
     assert item.file.label == "2021-02-22"
     meta = _meta(item.file.version_path)

@@ -54,7 +54,7 @@ def test_project_downloads_and_verifies_rcn_and_cz_cadastral_map(tmp_path, monke
     pinned = [file.path for task in open_project(project).tasks for file in task.files]
     assert pinned == [
         "cadastre/pl_rcn/teryt/1201.gpkg",
-        "cadastre/cz_km_shp/ku/623164.zip",
+        "cadastre/cz_cadastral-map_shp/ku/623164.zip",
     ]
     verified = verify_project(project)
     assert verified.ok, verified.errors

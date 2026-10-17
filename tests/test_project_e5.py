@@ -64,10 +64,10 @@ def test_project_downloads_and_verifies_control_geoid_and_mesh(tmp_path, monkeyp
         [file.path for file in task.files] for task in open_project(project).tasks
     ]
     assert pinned[:2] == [
-        ["geodesy/pl_control_horizontal_package/teryt/1201.zip"],
-        ["geodesy/cz_qgzu2013/country/cz.zip"],
+        ["geodesy/pl_control_horizontal_xls/teryt/1201.zip"],
+        ["geodesy/cz_qgzu2013_bpv/country/cz.zip"],
     ]
     assert len(pinned[2]) == 4
-    assert all(path.startswith("models3d/pl_mesh/s7/") for path in pinned[2])
+    assert all(path.startswith("models3d/pl_mesh/2000/7/") for path in pinned[2])
     verified = verify_project(project)
     assert verified.ok, verified.errors

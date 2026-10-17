@@ -62,7 +62,7 @@ def router(monkeypatch) -> Router:
 
 
 @pytest.mark.parametrize("fmt", ["SHP", "DXF", "DGN", "VFK"])
-def test_cz_km_ku_package_in_each_format(tmp_path, router, fmt):
+def test_cz_cadastral_map_ku_package_in_each_format(tmp_path, router, fmt):
     """``--ku 623164 --format F``: the package from the URL template of the
     format, stored 1:1 in the segment of the format (EPSG:5514 sidecar)."""
     key = f"km_{fmt.lower()}_623164"
@@ -74,7 +74,9 @@ def test_cz_km_ku_package_in_each_format(tmp_path, router, fmt):
 
     assert report.ok, report.failed
     (item,) = report.files
-    assert item.file.path == tmp_path / f"cadastre/cz_km_{fmt.lower()}/ku/623164.zip"
+    assert item.file.path == (
+        tmp_path / f"cadastre/cz_cadastral-map_{fmt.lower()}/ku/623164.zip"
+    )
     meta = _meta(item.file.version_path)
     assert meta["dataset"] == SOURCE.key
     assert meta["horizontal_crs"] == "EPSG:5514"
@@ -82,7 +84,7 @@ def test_cz_km_ku_package_in_each_format(tmp_path, router, fmt):
     assert [call for call in router.calls if call[0] == "GET"] == [("GET", url)]
 
 
-def test_cz_km_selection_checked_before_any_request(tmp_path):
+def test_cz_cadastral_map_selection_checked_before_any_request(tmp_path):
     """No ``--format`` names the four formats; ``--ku`` is CZ only and has
     six digits; a national file does not exist - the error names the
     selections of the CZ map (an area is a bbox or a geometry, CZ has no
@@ -113,7 +115,7 @@ def test_cz_km_selection_checked_before_any_request(tmp_path):
     )
 
 
-def test_cz_km_area_ku_discovery_and_etag(tmp_path, router):
+def test_cz_cadastral_map_area_ku_discovery_and_etag(tmp_path, router):
     """An area: its KU from RUIAN (``Info:`` with the codes), one package
     each with the area as ``extra.parent_request``; the second run compares
     the ``ETag`` by ``HEAD`` and downloads nothing."""
@@ -130,7 +132,7 @@ def test_cz_km_area_ku_discovery_and_etag(tmp_path, router):
 
     assert first.ok, first.failed
     assert [f.file.path.relative_to(tmp_path).as_posix() for f in first.files] == [
-        f"cadastre/cz_km_shp/ku/{code}.zip" for code in AREA_KU
+        f"cadastre/cz_cadastral-map_shp/ku/{code}.zip" for code in AREA_KU
     ]
     (listed,) = [n for n in first.notices if n.code == UNIT_LIST]
     assert listed.text == "map: katastralni uzemi obszaru wg RUIAN (3): " + ", ".join(
@@ -159,7 +161,7 @@ def test_cz_km_area_ku_discovery_and_etag(tmp_path, router):
     assert sum(router.gets(url) for url in urls) == 3
 
 
-def test_cz_km_missing_ku_fails_alone(tmp_path, router):
+def test_cz_cadastral_map_missing_ku_fails_alone(tmp_path, router):
     """One KU of the area without a package (HTTP 404): that unit fails as
     ``no_coverage``, the other packages are stored."""
     router.add_recorded(CUZK / "ruian_7_bbox_tesin.json")

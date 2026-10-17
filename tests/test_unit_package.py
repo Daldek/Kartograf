@@ -30,7 +30,7 @@ def _params(key: str, capability: str) -> UnitPackageParams:
 
 
 ARCHIVE = _params("pl.gugik.bdot10k", "archive_unit_files")
-BUILDINGS = _params("pl.gugik.buildings_3d", "admin_unit_files")
+BUILDINGS = _params("pl.gugik.buildings", "admin_unit_files")
 PRG_WOJ = _params("pl.gugik.prg", "admin_unit_files")
 EGIB = _params("pl.gugik.egib", "admin_unit_files")
 
