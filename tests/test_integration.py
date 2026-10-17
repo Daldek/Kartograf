@@ -46,7 +46,7 @@ class TestPublicAPIImports:
 
         semver_pattern = r"^\d+\.\d+\.\d+(-\w+)?$"
         assert re.match(semver_pattern, __version__), f"Invalid version: {__version__}"
-        assert __version__ == "0.8.0-dev"
+        assert __version__ == "0.8.0"
 
 
 class TestParserStorageIntegration:

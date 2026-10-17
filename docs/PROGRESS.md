@@ -27,9 +27,11 @@
 | Etap 1 — NMT Czechy (CUZK: DMR 5G/4G, --country/--target-crs/--vertical-crs) | ✅ Gotowy | ZMERGOWANY do develop 2026-08-12; tor CZ odmrozony w fali 2026-09-29/30 (D1): pin EPSG:1622 (K2; live: Karkonosze PL-CZ mediana -0,15 m, przesuniecie < 1 px), budzet 4 Mpx kafli (K6; live: 29,8 Mpx w 3 min 38 s), piksel dokladnie 2 m (N3), `Warning:` przy 100 % nodata (N2); wydany w v0.7.0 |
 | LAZ — wybor kafli (ADR-029) | ✅ Gotowy | `download_laz_area` / `select_tiles`: najnowszy kafel per obszar wg pokrycia, `--year`, `--min-density`, `extra.parent_request` w trybie `--bbox`/`--geometry` |
 | Kampanie GUGiK (ADR-030 + errata, ADR-032, ADR-033) | ✅ Gotowy | `--all-campaigns`, `--year`/`--min-year`/`--max-year`, `--full-sheet`; od 0.8.0 wersje w `<segment>/versions/`, sciezka standardowa i `full_sheet/` = hardlink; brak odczytu starych `kampanie/`; fallback przy niedostepnym skorowidzu wg ADR-030; weryfikacje na zywo: `docs/research/2026-10-07-adr030-live/`, `docs/research/2026-10-12-store-e2e/raport.md` |
-| Wycinek NMT/NMPT PL `--target-crs` (ADR-035), API `download_pl_cutout` | ✅ Gotowy | WCS 1 m z maska ladu PRG, NMT i NMPT; wersja w `versions/bbox/`, sciezka `bbox/<wsp>.tif` jako hardlink (od 0.8.0); NMPT `download_bbox` float32, kawalki ASC NMPT 4 Mpx coverage; arkuszowy tor ADR-027 usuniety; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-12-store-e2e/raport.md`) |
-
-| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekt 1 (magazyn wersjonowany): plany 1/3, 2/3 i 3/3 wykonane i scalone do `develop` (merge `423a664`, 2026-10-12; E2E na zywo PASS); podprojekty 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, spec `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`) wchodza do 0.8.0 (decyzja 2026-10-15): na `develop` manifest, grupy CLI (ADR-039), plany A i C; plany B i D w galeziach (worktree), plan E nierozpoczety; szczegoly: sekcja "Sesja 2026-10-15" |
+| Wycinek NMT/NMPT PL `--cutout` (ADR-035, ADR-038), API `download_pl_cutout` | ✅ Gotowy | WCS 1 m z maska ladu PRG, NMT i NMPT; wersja w `versions/bbox/`, sciezka `bbox/<wsp>.tif` jako hardlink (od 0.8.0); NMPT `download_bbox` float32, kawalki ASC NMPT 4 Mpx coverage; arkuszowy tor ADR-027 usuniety; zweryfikowany na zywo (`docs/research/2026-10-11-wcs-cutouts-live/raport.md`, `docs/research/2026-10-12-store-e2e/raport.md`) |
+| Grupy komend CLI (ADR-039, ADR-044) | ✅ Gotowy | v0.8.0; `elevation`, `imagery`, `landcover`, `soil`, `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`, `geodesy`, `project`; dane wybiera `--product` w kazdej grupie; CLI tylko tlumaczy na publiczne API (ADR-037) |
+| Manifest projektu (podprojekt 2, ADR-040) | ✅ Gotowy | v0.8.0; `kartograf-project.json`, grupa `kartograf project`, API `init_project`/`get_project_status`/`verify_project`; E2E `docs/research/2026-10-15-project-e2e/raport.md` |
+| Katalog GUGiK/CUZK (podprojekt 3, plany A-E, ADR-041-043) | ✅ Gotowy | v0.8.0; rejestr wariantow NMT/NMPT, raport `availability` PL/CZ, NMPT/LAZ/ortofoto/warstwice CZ, kolekcje (PRG, EGiB, modele 3D, ZABAGED, RUIAN, HY-NET, nazwy, mapy, osnowy, BDOO, Data50/250, RCN, mapa katastralna CZ), limit obszaru kolekcji 100 plikow / 10 GB; E2E `docs/research/2026-10-1[56]-plan-*-e2e/`; mapa katastralna CZ VKM poza 0.8.0 (backlog) |
+| Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekty 1 (magazyn wersjonowany, ADR-036), 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, plany A-E) wykonane w 0.8.0; nastepne: 4 (wtyczka QGIS) i 5 (GUI webowe) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
 ## Checkpointy
@@ -99,53 +101,56 @@
 - **Wersja:** v0.7.2
 - **Zakres:** wybor roku `--year`/`--min-year`/`--max-year` dla NMT/NMPT/orto/LAZ (ADR-032), drugie dowiazanie `full_sheet/` i `--full-sheet` (ADR-033), wycinki NMT/NMPT PL z WCS GUGiK z maska ladu PRG (ADR-035), kawalki zapytan obszarowych na siatce zrodla (ADR-034), `download_bbox` NMT EVRF2007 i NMPT z wysokosciami float32, `Info:` o cichych wartosciach domyslnych, podpowiedz wariantu NMT/NMPT, drobiazgi z review 0.7.1; pelna lista: `docs/CHANGELOG.md` [0.7.2]
 
+### CP14 — v0.8.0
+- **Data:** 2026-10-17
+- **Wersja:** v0.8.0
+- **Zakres:** magazyn wersjonowany dla wszystkich produktow (ADR-036, podprojekt 1), manifest projektu i grupa `kartograf project` (ADR-040, podprojekt 2), katalog GUGiK/CUZK - plany A-E (ADR-041-043, podprojekt 3: rejestr wariantow NMT/NMPT, raport `availability`, produkty CZ, kolekcje, limit obszaru 100 plikow / 10 GB), grupy komend CLI z `--product` w kazdej grupie (ADR-039, ADR-044), CLI = API (`download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg`; ADR-037, ADR-044), jawny wycinek `--cutout --horizontal-crs` (ADR-038), angielskie identyfikatory (ADR-031 errata 1), bez wartosci domyslnych wplywajacych na dane, konwencja nazw kluczy i katalogow `data/` (ADR-044 D7); pelna lista i "Co zrobic": `docs/CHANGELOG.md` [0.8.0]
+
 ## Ostatnia sesja
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-16):**
-> 0. **Cykl 0.8.0 OTWARTY; cel: 0.8.0 z podprojektami 2 i 3.** Stan,
->    decyzje uzytkownika, scalone i niescalone galezie oraz kolejnosc
->    krokow: sekcja "Sesja 2026-10-15 - przygotowanie 0.8.0" nizej
->    (punkt "Wznowienie"). Na `develop`: grupy CLI (ADR-039), manifest
->    (ADR-040), plany A-D, plan E: E0 (ADR-043), E1, E2 i czesc E3 (PRG
->    granice specjalne w bibliotece). Do zrobienia: reszta E3 (WIP), E4,
->    E5, fala wydania. Push tylko za zgoda uzytkownika; stan sprawdzaj
->    `git log origin/develop..develop`. Hydrograf/Hydrolog: nowe nazwy flag
->    i argumentow (CHANGELOG [0.8.0], BREAKING).
-> 1. **Subagenci:** pracuja w git worktree w
->    `/home/claude-agent/workspace/wt/<galaz>`, kazdy na wlasnej galezi od
->    `develop`. Plik kontekstu `ctx-0.8.0.md` byl artefaktem sesji (w nowej
->    sesji go nie ma): zasady dla subagentow trzeba przekazac od nowa
->    (cel wydania i decyzje - sekcja sesji 2026-10-15; zasada produktowa;
->    worktree; brama przed zgloszeniem gotowosci; commity autora `Daldek <git@debever.pl>` bez
->    `Co-Authored-By`, bez merge i push, tajny katalog danych na testy na
->    zywo - w repo tylko `<katalog-danych>`, decyzje koordynatora, zakaz
->    upraszczania, format raportu). Limit wspolbieznosci subagentow ustala
->    uzytkownik. Integracja i rozwiazywanie konfliktow: koordynator.
+> **START NASTEPNEJ SESJI (stan 2026-10-17, po przygotowaniu wydania 0.8.0):**
+> 0. **Wydanie 0.8.0 przygotowane** (`__version__ = "0.8.0"`, CHANGELOG
+>    `[0.8.0] - 2026-10-17`, statusy SCOPE/PRD; commit `chore(release):
+>    0.8.0`, brama zielona). CZEKA NA ZGODE UZYTKOWNIKA: merge do `main`,
+>    tag `v0.8.0` i push (`develop`, `main`, tag); stan sprawdzaj `git log
+>    origin/develop..develop` i `git tag`. Po wydaniu: poczatek kolejnego
+>    cyklu (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased`
+>    w CHANGELOG, jak `chore(release): poczatek cyklu 0.8.0`). Przebieg
+>    i decyzje: sekcja "Sesja 2026-10-15/16/17" nizej. Hydrograf/Hydrolog
+>    dostosuja sie same do zmian lamiacych (CHANGELOG [0.8.0], "Co zrobic").
+> 1. **Nastepne kroki:** podprojekty 4 (wtyczka QGIS) i 5 (GUI webowe)
+>    roadmapy (`docs/SCOPE.md` 3.3) - kazdy od brainstormingu i specu;
+>    pozostale pozycje: backlog nizej (m.in. VKM CZ, CLMS na zywo).
+>    Sprzatanie: worktree i galezie scalone/zbedne z cyklu 0.8.0
+>    (`git worktree list`, `git branch --merged develop`) - usuwanie
+>    galezi na `origin` tylko za zgoda uzytkownika.
 > 2. **CLMS_CREDENTIALS odlozone** (decyzja uzytkownika 2026-10-12):
 >    pobranie CLMS niesprawdzone na zywo (backlog razem z CLMS 1990).
 >    Stara, rozjechana `feat/versioned-store` na `origin`: push
 >    `--force-with-lease` albo usuniecie WYLACZNIE za zgoda uzytkownika.
-> 3. **Podprojekt 3:** spec
->    `docs/superpowers/specs/2026-10-13-katalog-produktow-design.md`,
->    plany `docs/superpowers/plans/2026-10-15-plan-*.md` i manifest
->    `2026-10-15-manifest-projektu.md`; inwentaryzacja:
->    `docs/research/2026-10-13-katalog-produktow/`.
+> 3. **Praca z subagentami:** kazdy w git worktree
+>    `/home/claude-agent/workspace/wt/<galaz>` na wlasnej galezi od
+>    `develop`, sciezki bezwzgledne; zasady trzeba przekazac w zadaniu
+>    (zasada produktowa, brama przed zgloszeniem gotowosci, autor commitow,
+>    bez merge i push, tajny katalog danych, zakaz upraszczania, format
+>    raportu). Integracja i konflikty: koordynator.
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
 > `origin`; szczegoly w sesjach nizej i w `docs/CHANGELOG.md` [0.7.2].
 > **Katalog danych testow na zywo:** poza repo, jawne `--output`
 > (`docs/DEVELOPMENT_STANDARDS.md` 6.4); sciezki uzytkownika nie zapisuj
-> w repo. **Commity:** autor `Daldek <git@debever.pl>`, bez
-> `Co-Authored-By`, przez straznik wzorcow.
-> **Kierunek do v1.0.0:** `docs/SCOPE.md` 3.3; podprojekt 1 wykonany.
+> w repo (w dokumentach `<katalog-danych>`). **Commity:** autor
+> `Daldek <git@debever.pl>`, bez `Co-Authored-By`, przez straznik wzorcow.
+> **Kierunek do v1.0.0:** `docs/SCOPE.md` 3.3; podprojekty 1-3 wykonane
+> w 0.8.0.
 > Brama: `.venv/bin/python -m pytest tests/ -m "not live"`,
 > `.venv/bin/python -m ruff check .`, `.venv/bin/python -m ruff format
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
 
-### Sesja 2026-10-15 - przygotowanie 0.8.0 (podprojekty 2 i 3 w wydaniu)
+### Sesja 2026-10-15/16/17 - przygotowanie i wydanie 0.8.0 (podprojekty 2 i 3)
 
 - Decyzje uzytkownika (cel wydania): do 0.8.0 wchodza, oprocz cyklu
   0.8.0-dev, podprojekt 2 roadmapy (manifest projektu, `docs/SCOPE.md`
@@ -186,80 +191,86 @@
 - Scalono pozniej (2026-10-15/16): plan D (`0260049`: `atom_files`,
   ZABAGED, RUIAN, HY-NET, grupa `hydro`, ortofoto CZ z ATOM, wycinek orto
   PL w magazynie `--cutout --coverage`, ADR-042 errata; E2E
-  `docs/research/2026-10-15-plan-d-e2e/raport.md`). Brama na `develop`
-  po planie D (raport agenta): pytest offline 4678 passed, ruff, ruff
-  format i mypy czyste.
-- Plan B (`feat/plan-b-elevation-cz`, worktree
-  `/home/claude-agent/workspace/wt/feat/plan-b-elevation-cz`): Zadania 1-9
-  zrobione i zacommitowane (DMP OK/1G, natywne kafle TM33, LAZ CZ, raport
-  dostepnosci CZ i `auto`, `--model`, manifest, docs, ADR-041 uzupelnienie,
-  E2E `docs/research/2026-10-16-plan-b-e2e/raport.md`); `develop` z planem D
-  scalony do galezi (`9d25bc1`, brama zielona 4827 passed); `26ae85d`
-  (`require_int(workers)` w `download_cz_laz`, teksty) bez pelnej bramy.
-  NIEZACOMMITOWANE w worktree: poprawka podpowiedzi raportu PL przy
-  granicy (decyzja koordynatora: podpowiedz nie moze planowac arkuszy bez
-  rekordu GUGiK - wtedy jedno `--sheet` na arkusz z rekordem;
-  `availability.py` `_selected_sheets`/`_grid_areas`, test
-  `test_border_hint_plans_only_sheets_with_records`, 53 testy availability
-  zielone). Uwaga: regula daje tez wiele `--sheet` dla niepelnych
-  kombinacji z dala od granicy (morze, brak rekordu roku).
-- Plan E: `feat/plan-e0-engines` = `develop` bez zmian; WIP na
-  `wip/feat/plan-e0-engines` (`c307f8f`, tylko `sources/descriptor.py`:
-  `SheetGrid`, `IndexSource`, `FileKind`, nowe pola kanalow; brama
-  nieuruchomiona, prawdopodobny blad mypy w `unit_package.package_url`).
-  Pomiary 2026-10-16: OGC API GUGiK (PRNG) odpowiada 73-93 s na zapytanie
-  (`SERVICE_TIMEOUT=60` za krotki - decyzja w E0/E2); GFI Mapy10k bez
-  charset (UTF-8); WFS mesh z przestrzenia nazw https; Klady warstwa 14
-  natywnie EPSG:3045; RUIAN 7 `returnGeometry=false` zwraca `kod`/`nazev`.
-  Plan E wymaga korekty wzgledem kodu C/D (sygnal `index` porownywany jak
-  wydanie, `_capability` bez wymogu unikalnosci - osnowy PL maja 4 kanaly,
-  SheetGrid bez PL-2000, `choice` w `AtomFilesParams` - Geonames GPKG/FGDB
-  to dwa feedy).
-- Wznowienie (stan 2026-10-16 ok. 15:00; plany B, E0, E1, E2 dokonczone
-  i scalone: `8bac38e`, `65c1f8c`, `62b37e0`, `3fd7217`; brama na E1:
-  4984 passed, ruff/format/mypy czyste; `develop` = `36df431`):
-  1. E3 (`feat/plan-e3` = `develop`; WIP `wip/feat/plan-e3` `6da6007`,
-     brama nieuruchomiona): deskryptory `pl.gugik.prg_addresses`,
-     `pl.gugik.rcn`, `cz.cuzk.geomorphology`, `cz.cuzk.cadastral_map`,
-     `UnitPackageParams.unpack_layers` (RCN: GPKG rozpakowany lokalnie,
-     kontrola warstw `sqlite3` read-only), CLI `boundaries --format`,
-     `cadastre --ku/--format`. Zostalo: `_CHOICES` w `tests/test_cli.py`
-     (boundaries: admin, addresses, special, geomorphology; cadastre: map,
-     prices), `test_cz_geomorphology.py` (bez `router.gets()==3`,
-     `pyogrio.read_dataframe` zamiast geopandas), lista czlonow
-     `POLSKA.zip` w fixturze adresow, testy `test_prg_addresses.py`,
-     `test_cz_cadastral_map.py`, parity E3 (5), niezmienniki rejestru,
-     `test_project_e3`, manifest (`format`; `ku`), README fixtur (takze
-     `prg_special`), docs + CHANGELOG, E2E i raport
-     `docs/research/2026-10-16-plan-e3-e2e/raport.md`, brama. Ryzyko: RCN
-     wojewodztwa wymaga ok. 1,8 GB lokalnego miejsca tymczasowego (`/tmp` to
-     tmpfs 2,6 GB). VKM: 15.10 404, 16.10 200 (KU 737950, 692450, 619116) -
-     rekomendacja agenta: dalej poza 0.8.0, oba fakty do backlogu (decyzja
-     uzytkownika P2 obowiazuje).
-  2. E4, E5 wg planu E (E5 mesh: limit >100 plikow albo >10 GB =
-     `ValidationError` przed pobraniem z liczba plikow, rozmiarem
-     i podpowiedzia, bez flagi obejscia - decyzja koordynatora).
-  3. Otwarte do testu wydania: orto ukosna (np. `7.125.11.08_N.tif`) - GDAL
-     widzi EPSG:32634, sidecar/godlo EPSG:2178, bez ostrzezenia.
-  4. Przeglad spojnosci dokumentacji i UX; AUDYT dokumentacji `docs/`
-     i README (prosba uzytkownika); test na zywo calego wydania;
-     przygotowanie wydania (wersja 0.8.0, data w CHANGELOG, PROGRESS) - bez
-     merge do `main`, tagu i push.
-  5. Sprzatanie po integracji: usunac worktree i galezie scalone/zbedne
-     (`feat/plan-d-cz-orto`, `feat/plan-d-orto-cutout`, `feat/plan-d-cli`,
-     `docs/plan-d`, `feat/plan-b-cz-laz`, `feat/plan-b-availability-cz`,
-     `wip/plan-b-task3-raster`, `wip/plan-b-task5-cli`, galezie fali 1-2;
-     `git worktree list`, `git branch --merged develop`).
-  - Od 2026-10-16 12:11 pracuje JEDEN subagent naraz (decyzja uzytkownika;
-    dodatkowy agent tylko za zgoda).
-- Ryzyka zgloszone przez agentow: `write_gpkg` trzyma cala warstwe w RAM
-  (duze obszary ZABAGED); bajty GPKG powtarzalne tylko w obrebie jednej
-  wersji GDAL; schemat pol HY-NET zalezy od tresci strony; WFS PRG
+  `docs/research/2026-10-15-plan-d-e2e/raport.md`); plan B (`8bac38e`:
+  DMP OK/1G, natywne kafle TM33, LAZ CZ, raport dostepnosci CZ i `auto`,
+  `--model`, uzupelnienie ADR-041; podpowiedz raportu PL przy granicy
+  planuje tylko arkusze z rekordem GUGiK - decyzja koordynatora po E2E
+  w Cieszynie; E2E `docs/research/2026-10-16-plan-b-e2e/raport.md`).
+- Plan E (ADR-043), pakiety kolejno, E1-E5 z E2E
+  `docs/research/2026-10-16-plan-e<N>-e2e/raport.md`: E0 (`65c1f8c`,
+  ADR-043, korekta planu E wzgledem kodu C/D, niezmienniki rejestru);
+  E1 (`62b37e0`: NMT 100 m z nieznanym ukladem wysokosci, warstwice CZ,
+  obrazy intensywnosci, true orto i orto ukosna); E2 (`3fd7217`: nazwy
+  geograficzne PL/CZ i swiata, mapy topograficzne BDOT10k i ZTM; OGC API
+  PRNG odpowiada 73-93 s - wlasny timeout); E3 (`9f0f25e`: adresy
+  i granice specjalne PRG, RCN, geomorfologia CZ, mapa katastralna CZ
+  SHP/DXF/DGN/VFK; VKM: 15.10 404, 16.10 200 dla 3 KU pilota - dalej poza
+  0.8.0, backlog); E4 (BDOO, Data50, Data250, ADR-043 errata 2); E5
+  (mesh 3D, drzewa, osnowy PL i CZ, quasi-geoidy, grupa `geodesy`,
+  ADR-043 errata 3).
+- Decyzja uzytkownika (limit wolumenu, E5): obszar kolekcji kaflowej,
+  ktory pobralby wiecej niz 100 plikow albo ponad 10 GB (wg HEAD/indeksu),
+  konczy sie bledem PRZED pobraniem z liczba plikow, szacowanym rozmiarem
+  i podpowiedzia zawezenia obszaru (albo `--plan`), bez flagi obejscia
+  (ADR-043 errata 3, USAGE "Limit obszaru").
+- Audyt dokumentacji (prosba uzytkownika, 2026-10-16): README i USAGE
+  (grupy i produkty 0.8.0, wymagane flagi w przykladach), SCOPE, PRD
+  (produkty planow D i E, pelna lista API), ARCHITECTURE (pelny uklad
+  `data/`), DECISIONS (relacje ADR-037/038/039, erraty ADR-041 i ADR-043
+  w statusach), STANDARDS 17.5 (wersja 3.4), CHANGELOG [0.8.0] (nazwy
+  komend grup, "Co zrobic" w kazdej zmianie lamiacej, bez duplikatow,
+  Dodane przed Zmienione), sciezki uzytkownika w starych raportach
+  zastapione `<workspace>`.
+- Przeglad UX wydania (UX-01..49; galaz `fix/ux-0.8.0`, merge `a54dde0`):
+  bledy wejscia przed siecia (m.in. `--layer` bez `--geometry`, flagi
+  pomijane po cichu, obszar poza krajem, `--sheet-system` niezgodny
+  z godlem), wartosci wejscia bez wzgledu na wielkosc liter, `Info`
+  `area_omitted` dla HY-NET i ZABAGED, tabela kodow `Notice` w USAGE 2,
+  postep jednostek kolekcji, stan niepobranego zadania projektu,
+  `kartograf parse` rozpoznaje godla CZ (SM5, TM33) bez sieci, pomoc CLI
+  (kolumny `KATALOG`/`WYBOR` w `list-sources`).
+- Test na zywo wydania (2026-10-16, `develop` `8160839`, swiezy magazyn
+  w `<katalog-danych>`): 18 polecen z 13 grup danych + `availability`,
+  drugi przebieg i `--check-updates` z kodem 0, manifest z odtworzeniem
+  na pustym magazynie OK; znaleziska P1: 0, P2: 2, P3: 19. Naprawione:
+  P2-1 (kafle LAZ arkusza z ramy godla, bez sasiadow), P2-2
+  (`--check-updates` zawsze pyta zrodlo, cache odswiezany), P3 (kod 2 bez
+  komendy, Ctrl-C jako `Error:`, `--plan` przed siecia, krotkie przyczyny
+  ponowien). Orto ukosna `7.125.11.08_N`: plik ma uklad PL-2000 strefy 7
+  bez kodu EPSG (GDAL zgaduje EPSG:32634 z pewnoscia 25 %), sidecar
+  `EPSG:2178` poprawny - opis w USAGE 7, bez ostrzezenia w kodzie.
+- Decyzje koordynatora po tescie na zywo (errata 3 ADR-036): bez
+  `--check-updates`/`--upgrade` przy lokalnej wersji zadnych zapytan
+  o sygnal (`HEAD`, wydanie, GetFeatureInfo); `--upgrade` pyta zrodlo jak
+  `--check-updates`; jedna linia statusu (sciezka pod `--output`,
+  w projekcie `jednostka (plik)`); wycinek PL w calosci poza ladem =
+  `Error:` przed WCS; HSG `Brak danych` i procenty z pikseli z danymi;
+  `Info:` z szacowanym czasem przed dluga seria WCS i zapytaniem PRNG;
+  odtworzenie projektu przy zgodnej SHA-256 zostawia przypieta
+  `version`/`label`.
+- Decyzje uzytkownika z przegladu UX (2026-10-16, ADR-044, bez aliasow,
+  "Co zrobic" w CHANGELOG): (1) `--product` we wszystkich grupach -
+  `landcover --source`/`-s` zastapione `--product` (dawna flaga = blad
+  z podpowiedzia); (2) `soil hsg --stats` -> `--summary`; (3) jedna
+  konwencja nazw kluczy zrodel i katalogow `data/` nowych produktow przed
+  wydaniem, bez migracji (ADR-044 D7, ARCHITECTURE 3.3 regula 10, test
+  niezmiennika rejestru); (4) pelne ujednolicenie API: `download_landcover`/
+  `check_landcover`, `download_soil`/`check_soil`, `calculate_hsg`/
+  `check_hsg`, `hsg_statistics` z raportami `LandCoverReport`/`SoilReport`/
+  `HsgReport` (D5/D6; `LandCoverManager` i `HSGCalculator` poza
+  `__all__`, bez parametru `timeout`), `download_image_cutout` (D3),
+  `get_project_status` (D4).
+- Przygotowanie wydania (2026-10-17, galaz `release/0.8.0`):
+  `__version__ = "0.8.0"`, CHANGELOG `[0.8.0] - 2026-10-17` i link
+  `v0.7.2...v0.8.0`, nazwy nowego API land cover/HSG w starszych wpisach
+  [0.8.0], statusy SCOPE i PRD, CP14, backlog. Merge do `main`, tag
+  `v0.8.0` i push czekaja na zgode uzytkownika.
+- Ryzyka (do obserwacji po wydaniu): `write_gpkg` trzyma cala warstwe
+  w RAM (duze obszary ZABAGED); bajty GPKG powtarzalne tylko w obrebie
+  jednej wersji GDAL; schemat pol HY-NET zalezy od tresci strony; WFS PRG
   sporadycznie HTTP 400 (Kartograf nie ponawia 4xx); WCS orto PL wolny;
-  rsync `-aH` na SMB/cifs czasem dubluje hardlinki (USAGE).
-- Subagenci: 3 przerwania limitami modeli (Codex `usage_limit_reached`,
-  Opus 429); kilka razy edycje sciezka wzgledna trafily do glownego repo
-  (cofniete) - w zadaniach wymagac sciezek bezwzglednych.
+  RCN wojewodztwa wymaga ok. 1,8 GB miejsca tymczasowego; rsync `-aH` na
+  SMB/cifs czasem dubluje hardlinki (USAGE).
 
 ### Sesja 2026-10-13 (druga) — katalog produktow GUGiK i CUZK, spec podprojektu 3
 
@@ -2419,7 +2430,7 @@ a implementacja dopiero po specu/planie i zatwierdzeniu.
   z `test_laz_coverage.py` zastapione/usuniete, bo prawdziwe odpowiedzi
   nie odtwarzaja ich scenariuszy.
 
-#### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08)
+#### Do 0.8.0 — zmiany lamiace CLI skonsolidowane w jednym wydaniu (2026-10-08) — ZAMKNIETE, wydane w v0.8.0
 
 0.8.0 lamie CLI przez magazyn wersjonowany (spec
 `docs/superpowers/specs/2026-10-08-versioned-store-design.md`, scalony
@@ -2586,10 +2597,13 @@ w tym samym wydaniu (decyzja uzytkownika).
   `HSGCalculator`, ADR-037); segmenty `data/` bez zmian. Zrobione:
   grupy `elevation`, `imagery`, `landcover`, `soil` (`cli/groups/`),
   testy CLI i zgodnosci, przyklady, CHANGELOG [0.8.0] BREAKING, ADR-039.
-  Zostaje: grupy dla nowych produktow razem z produktami i sprawdzenie
+  Zostawalo: grupy dla nowych produktow razem z produktami i sprawdzenie
   wywolan CLI w Hydrografie/Hydrologu przed wydaniem. Rozwiazuje kolizje znaczen `--year` (filtr lotow vs wydanie)
-  i `--sheet` (plik vs obszar) miedzy komendami. Hydrograf/Hydrolog:
-  sprawdzic wywolania CLI przed wydaniem.
+  i `--sheet` (plik vs obszar) miedzy komendami. **ZROBIONE (0.8.0):**
+  grupy nowych produktow powstaly w planach C-E (`boundaries`, `cadastre`,
+  `models3d`, `hydro`, `names`, `maps`, `geodesy`); Hydrograf/Hydrolog
+  dostosuja sie same (decyzja uzytkownika 2026-10-15, "Co zrobic"
+  w CHANGELOG [0.8.0]).
 
 #### Do v1.0.0 — roadmapa
 
@@ -2598,8 +2612,9 @@ zaczyna sie od brainstormingu i specu; implementacja dopiero po
 zatwierdzeniu specu i planu.
 
 - [x] 1. Magazyn wersjonowany (ADR-036; plany 1/3-3/3 scalone do `develop`)
-- [ ] 2. Manifest projektu
-- [ ] 3. Katalog GUGiK i gotowe dane (strumien produktow)
+- [x] 2. Manifest projektu (ADR-040, wydany w 0.8.0)
+- [x] 3. Katalog GUGiK i gotowe dane (plany A-E, ADR-041-043, wydany
+  w 0.8.0; kolejne produkty spoza planow - nastepne wydania)
 - [ ] 4. Wtyczka QGIS
 - [ ] 5. GUI webowe (lokalny manager danych)
 
@@ -2613,7 +2628,7 @@ Funkcje na przyszlosc (bez przypisanego wydania):
   i 619116 (942 517 B), z `ETag` i `Last-Modified` 2026-10-15; KU spoza
   pilota (623164) - 404. Do dodania jako piaty format `cadastre download
   --product map --country cz --format VKM`, gdy CUZK rozszerzy publikacje.
-- [ ] **NMT 0,5 m i wszystkie rozdzielczosci GUGiK (prosba uzytkownika
+- [x] **ZROBIONE (0.8.0, plan A, ADR-041): NMT 0,5 m i wszystkie rozdzielczosci GUGiK (prosba uzytkownika
   2026-10-13):** dodac pobieranie NMT 0,5 m (skorowidz GUGiK ma takie
   rekordy - `resolution_m=0.5`, fixtury w `tests/test_real_gugik_responses.py`;
   na zywo 2026-10-12 NMPT N-34-139-C-a-3-1 byl dostepny tylko w 0,5 m).
@@ -2632,7 +2647,7 @@ Funkcje na przyszlosc (bez przypisanego wydania):
   zachowanie wycinka WCS (siatka 0,5 m?) i NMPT 0,5 m. Zaczac od
   inwentaryzacji skorowidza na zywo (jakie rozdzielczosci, uklady,
   pokrycie) i specu.
-- [ ] **Sprawdzenie dostepnosci danych wysokosciowych dla obszaru przed
+- [x] **ZROBIONE (0.8.0, plany A i B, ADR-041): Sprawdzenie dostepnosci danych wysokosciowych dla obszaru przed
   pobraniem (prosba uzytkownika 2026-10-13; spec podprojektu 3, plan A,
   sekcja 4):** `kartograf elevation availability` / `check_availability`
   dla `--bbox`/`--geometry`/`--sheet` i produktu NMT/NMPT/LAZ, BEZ
@@ -2796,7 +2811,8 @@ liczony w strumieniu `download_to` zostaje w magazynie 0.8.0.
   0,1-0,15 m, bez komunikatu w runtime (tylko dokumentacja: ARCHITECTURE
   4.6, USAGE 1.4; sidecary oznaczaja uklad poprawnie). Do decyzji: `Info:`
   albo wspolny domyslny uklad.
-- [ ] **B1-B3 — rozbieznosci ze specem magazynu** (do rozstrzygniecia przed
+- [x] **ROZSTRZYGNIETE (magazyn wersjonowany ADR-036, spec 2026-10-08;
+  `verify` w manifescie ADR-040; wydane w 0.8.0): B1-B3 — rozbieznosci ze specem magazynu** (do rozstrzygniecia przed
   implementacja 0.8.0, nie teraz): wersja NMT = kampania + odcisk vs D1
   (sha256 tresci); `.lock` vs brak blokad; import plikow 0.6.1 vs D10 (bez
   migracji); dwa korzenie staging/archiwum, `copy_to`/`fsck`/
@@ -2832,7 +2848,9 @@ uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
 - [ ] **U1 — wyjscie `kartograf parse`:** dla PL-2000 naglowki po angielsku,
   skladowe po polsku, "Strefa" powtorzona, `Natywny CRS` pod `Components`;
   komunikaty raz z polskimi znakami, raz bez (takze `soilgrids hsg`
-  `Godlo:`). Godla CZ w `parse` — osobna pozycja nizej.
+  `Godlo:`). Godla CZ w `parse` — osobna pozycja nizej. Stan 0.8.0:
+  naglowki i komunikaty po polsku w ASCII (Z5), godla CZ obslugiwane;
+  zostaje PL-2000: "Strefa" powtorzona i `Natywny CRS` pod `Czlony`.
 
 #### Do naprawy — testy na zywych danych 2026-09-29 (przed wydaniem 0.7.0)
 
@@ -3061,9 +3079,12 @@ N = niski, H = hipoteza.
 - [ ] Etap 2 — DMP/Orto/LAZ CZ, wielokat granicy administracyjnej CZ
       (zamiast prostokatnej obwiedni), ujednolicenie
       `extra.parent_request.bbox_crs` miedzy trybami jawny/auto, scalanie
-      PL+CZ w jedna powierzchnie przygraniczna (R6, 2026-09-28)
-- [ ] Etap 3 — ZABAGED (wektorowa baza topograficzna CZ, 149 warstw)
-- [ ] `kartograf parse` nie obsluguje godel CZ (TM33/SM5) — `parse 302_5550`
+      PL+CZ w jedna powierzchnie przygraniczna (R6, 2026-09-28).
+      DMP, ortofoto i LAZ CZ zrobione w 0.8.0 (plany B i D); zostaje
+      reszta.
+- [x] Etap 3 — ZABAGED (wektorowa baza topograficzna CZ, 149 warstw) —
+      ZROBIONE w 0.8.0 (plan D, ADR-042 D15)
+- [x] `kartograf parse` nie obsluguje godel CZ (TM33/SM5) — ZROBIONE w 0.8.0 (UX-25, bez sieci); `parse 302_5550`
       i `parse CTES96` = `Error: Nieprawidłowe godło` (kod 1; sprawdzone
       2026-10-08); `kartograf download` obsluguje oba formaty
 
@@ -3089,16 +3110,16 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       (2856f41); zostaje weryfikacja zasiegu przy `FEATURE_COUNT>1` -> K4
       (wybor pliku arkusza, testy na zywo 2026-09-29).
       **ZROBIONE:** `_get_opendata_url` zwraca `_resolve_sheet(...).url` (dopasowanie calego tokenu godla, ADR-028); fallback `urls[0]` usuniety.
-- [ ] A5-4 — regula "5m => EVRF2007" zaimplementowana w 3 miejscach
+- [x] A5-4 — ZROBIONE w 0.8.0 (jeden rejestr wariantow, ADR-041): regula "5m => EVRF2007" zaimplementowana w 3 miejscach
       (walidacja w `GugikProvider`, cicha korekta w `DownloadManager`,
       fabryka `create_nmt_provider`) — swiadome warstwowanie z etapu 0;
       sprzatanie razem z A5-5.
-- [ ] A5-5 — hierarchia wyjatkow: providery PL rzucaja `ValueError`/
+- [x] A5-5 — ZROBIONE w 0.8.0 (bledy wejscia = `ValidationError`, CHANGELOG [0.8.0]): hierarchia wyjatkow: providery PL rzucaja `ValueError`/
       `KeyError` zamiast `ValidationError` (37 miejsc w kodzie, 30 asercji
       `pytest.raises(ValueError)` w 11 plikach testowych, CHANGELOG
       dokumentuje `ValueError` jako kontrakt publiczny) — BREAKING, osobna
       zmiana z przejsciowym `class ValidationError(KartografError, ValueError)`.
-- [ ] A5-7 — `GugikLazProvider.download(url, ...)` lamie LSP wzgledem
+- [x] A5-7 — ZROBIONE w 0.8.0 (`download_tile`, plan B): `GugikLazProvider.download(url, ...)` lamie LSP wzgledem
       `BaseProvider.download(godlo, ...)` (Minor — LAZ ma i tak osobny
       przeplyw CLI, omija ten kontrakt) — zmiana nazwy na `download_tile`
       razem z etapem 2 (LAZ CZ).
@@ -3145,14 +3166,14 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
 - [ ] A8-7 / CI — egzekwowanie progow warstwowych pokrycia (core >= 80%,
       patrz DEVELOPMENT_STANDARDS 10.1) + pipeline CI (GitHub Actions)
       uruchamiajacy testy z `-m "not live"`.
-- [ ] `_generate_output_path` w `LandCoverManager` nie roznicuje
+- [x] ZROBIONE w 0.8.0 (magazyn wersjonowany, segment z parametrami; funkcji juz nie ma): `_generate_output_path` w `LandCoverManager` nie roznicuje
       year/property/depth/format parametrow pobrania — ryzyko kolizji
       nazw plikow przy roznych parametrach tego samego zrodla/obszaru
       (pre-existing, poza rulingiem audytu, zebrane przy review).
-- [ ] Deskryptor `pl.gugik.nmpt` nie deklaruje kanalu WCS mimo dzialajacego
+- [x] ZROBIONE (kanal WCS w deskryptorze): Deskryptor `pl.gugik.nmpt` nie deklaruje kanalu WCS mimo dzialajacego
       `GugikNmptProvider.download_bbox` — rozjazd deskryptor/provider, do
       wyrownania.
-- [ ] `LandCoverManager` wola zdeprecjonowany alias `download_by_teryt`
+- [x] ZROBIONE w 0.8.0 (manager nie wola juz aliasu): `LandCoverManager` wola zdeprecjonowany alias `download_by_teryt`
       zamiast kanonicznego `download_by_admin_unit` — kosmetyka po A4-12
       (ktory jako niespojnosc funkcjonalna jest juz zamkniety, patrz
       raport zadania 26), ale nazwa wywolania w managerze wciaz wskazuje
@@ -3183,7 +3204,10 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
 
 - [ ] `find_downloaded(product=, bbox=, vertical_crs=)` — inwentarz pobran
       po sidecarach (klucz: `parent_request` / przeciecie bbox)
-- [ ] `--target-crs` dla `nmpt`/`orto` (razem z odpowiednikami CZ etapu 2)
+- [x] `--target-crs` dla `nmpt`/`orto` (razem z odpowiednikami CZ etapu 2) —
+      ZROBIONE: wycinek NMPT PL 1 m (0.7.2) i ortofotomapy PL (0.8.0,
+      ADR-042 D14), NMPT CZ (0.8.0, plan B); flaga od ADR-038 to
+      `--cutout --horizontal-crs`
 - [ ] Wycinek PL dla `--system 2000` (mozaika miedzystrefowa: warp per
       strefa 2176-2179 przed sklejeniem)
 - [ ] Ujednolicenie `parent_request.bbox_crs` miedzy trybami jawny/auto
