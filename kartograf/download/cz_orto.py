@@ -495,7 +495,7 @@ def download_cz_orto_sheet(
         (world files before the JPEG) stay, the failed one has no version.
     """
     sheet = cz_orto_sheet(sheet)
-    validate_update(update)
+    validate_update(update, check="check_cz_orto_sheet")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)

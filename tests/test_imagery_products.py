@@ -23,7 +23,8 @@ from rasterio.transform import from_origin
 from kartograf.core.bbox import BBox
 from kartograf.core.sheet_parser import SheetParser
 from kartograf.download.data import check_data, download_data, validate_data_request
-from kartograf.exceptions import ValidationError
+from kartograf.download.orto_cutout import download_image_cutout
+from kartograf.exceptions import NoCoverageError, ValidationError
 from kartograf.notices import DOWNLOAD_SIZE, NO_COVERAGE_HINT
 from kartograf.providers.pl.skorowidz import SkorowidzLayersMixin
 from tests.conftest import recorded_response
@@ -83,6 +84,7 @@ class FakeImages:
         self.outside = outside
         self.calls: list[str] = []
         self.heads: list[str] = []
+        self.coverage = "orto_true/true_0.05m_20x20.tif"
 
     def get(self, url, params=None, timeout=None, headers=None, stream=False):
         self.calls.append(url)
@@ -95,7 +97,7 @@ class FakeImages:
                     return recorded_response(FIXTURES / name)
             return recorded_response(FIXTURES / self.outside)
         if query.get("REQUEST") == ["GetCoverage"]:
-            return recorded_response(FIXTURES / "orto_true" / "true_0.05m_20x20.tif")
+            return recorded_response(FIXTURES / self.coverage)
         stem = Path(urlparse(url).path).stem
         if stem[-2] == "_" and stem[-1] in "NESW":
             stem = stem[:-2]
@@ -248,7 +250,10 @@ def test_true_orto_cutout_native_grid(tmp_path, images):
 
     assert report.ok
     (unit,) = report.files
-    assert unit.unit.startswith("true-orto/pl_1992_0.05m/bbox/")
+    assert unit.unit == "470177_740336_470178_740337"  # coords, as area units
+    assert unit.file.path == (
+        tmp_path / "data/true-orto/pl_1992_0.05m/bbox" / f"{unit.unit}.tif"
+    )
     with rasterio.open(unit.file.path) as src:
         assert (src.count, src.width, src.crs.to_epsg()) == (3, 20, 2180)
     (request,) = [u for u in images.calls if "GetCoverage" in u]
@@ -263,6 +268,39 @@ def test_true_orto_cutout_native_grid(tmp_path, images):
         )
     with pytest.raises(ValidationError, match="0.05m, 0.1m, 0.25m, 0.5m, 1m"):
         validate_data_request(**cutout, resolution="0.2m", output_dir=tmp_path)
+
+
+def test_true_orto_cutout_outside_cities_is_no_coverage(tmp_path, images):
+    """Outside the cities the true orto WCS answers 0,0,0 (recorded Krakow):
+    ``NoCoverageError`` and no version, no link and no staging left; in
+    ``download_data`` a ``no_coverage`` failure of PL."""
+    images.coverage = "orto_true/true_0.05m_krakow.tif"
+    krakow = BBox(566000, 243000, 566001, 243001, "EPSG:2180")
+    out = tmp_path / "data"
+    with pytest.raises(NoCoverageError, match="wybrane miasta"):
+        download_image_cutout(
+            product="true-orto",
+            bbox=krakow,
+            horizontal_crs="EPSG:2180",
+            output_dir=out,
+            resolution="0.05m",
+            cache=False,
+        )
+    assert [p for p in out.rglob("*") if p.is_file()] == []
+
+    report = download_data(
+        product="true-orto",
+        bbox=krakow,
+        country="pl",
+        cutout=True,
+        horizontal_crs="EPSG:2180",
+        resolution="0.05m",
+        output_dir=out,
+        **ARGS,
+    )
+    assert report.files == ()
+    assert [(f.unit, f.kind) for f in report.failed] == [("PL", "no_coverage")]
+    assert [p for p in out.rglob("*") if p.is_file()] == []
 
 
 def test_oblique_directions_are_files(tmp_path, images):

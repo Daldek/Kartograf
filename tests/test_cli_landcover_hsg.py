@@ -400,13 +400,55 @@ def test_hsg_cli_check_plan_tracks(tmp_path, capsys):
     assert "hsg/global_soilgrids_0-5cm_mean" in capsys.readouterr().out
 
 
+class _GridSoilGrids(RasterSoilGrids):
+    """SoilGrids loam on its own EPSG:4326 grid of 0.0025 deg cells, which
+    reaches beyond the request area as the real service does."""
+
+    LOAM = {"clay": 200, "sand": 400, "silt": 400}
+
+    def download_by_bbox(self, bbox, output_path, timeout=120, *, property, **kw):
+        import math
+
+        import numpy as np
+        import rasterio
+        from rasterio.transform import from_origin
+
+        from kartograf.core.bbox import transform_bbox
+
+        step = 0.0025
+        wgs = transform_bbox(bbox, "EPSG:4326")
+        west = math.floor(wgs.min_x / step) * step
+        north = math.ceil(wgs.max_y / step) * step
+        width = math.ceil((wgs.max_x - west) / step)
+        height = math.ceil((north - wgs.min_y) / step)
+        target = Path(output_path).with_suffix(".tif")
+        with rasterio.open(
+            target,
+            "w",
+            driver="GTiff",
+            dtype="float32",
+            width=width,
+            height=height,
+            count=1,
+            crs="EPSG:4326",
+            transform=from_origin(west, north, step, step),
+            nodata=0,
+        ) as dst:
+            dst.write(np.full((1, height, width), self.LOAM[property], "float32"))
+        return target
+
+
 def test_hsg_cli_summary_from_store_path(tmp_path, capsys):
-    with _session(FakeSoilGrids("2.0")):
+    """The summary covers the request area (bbox 2 x 2 km = 400 ha), not the
+    whole SoilGrids raster reaching beyond it."""
+    with landcover_sources(soilgrids=_GridSoilGrids):
         assert _hsg(tmp_path, "--summary") == 0
     out = capsys.readouterr().out
-    assert "Statystyki HSG (procent grupy: z pikseli z danymi):" in out
+    assert "Statystyki HSG obszaru zadania (grupy: % powierzchni z danymi):" in out
     assert "Grupa B: " in out or "Grupa A: " in out
-    assert "  Brak danych: " in out and "% calego obszaru (" in out
+    assert "  Brak danych: " in out and "% obszaru zadania (" in out
+    (total,) = [line for line in out.splitlines() if "Obszar zadania:" in line]
+    assert float(total.split()[-2]) == pytest.approx(400.0, rel=0.01)
     store = Path(tmp_path / "out" / "hsg/global_soilgrids_0-5cm_mean/bbox")
     assert (store / f"{COORDS}.tif").exists()
 

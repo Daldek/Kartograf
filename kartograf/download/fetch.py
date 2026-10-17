@@ -62,8 +62,13 @@ EditionLookup = Callable[[], Edition]
 WriteSidecar = Callable[[Path, VersionRef, ContentDigest, dict | None], None]
 
 
-def validate_update(update: object) -> None:
+def validate_update(update: object, *, check: str | None = None) -> None:
     """``update`` of the download functions: None, "upgrade" or "force".
+
+    ``check``: name of the matching plan function of the caller's track
+    (e.g. ``"check_landcover"``), named in the message of ``"check"``;
+    public download functions pass it, internal steps reached after them
+    leave the generic text.
 
     Raises
     ------
@@ -72,9 +77,10 @@ def validate_update(update: object) -> None:
         build the plan) or an unknown mode.
     """
     if update == "check":
+        hint = f"{check}()" if check else "check_*() danego toru"
         raise ValidationError(
-            "update='check' niczego nie pobiera - uzyj check_sheets() albo "
-            "check_*() danego toru (plan aktualizacji, kartograf-plan/1)"
+            f"update='check' niczego nie pobiera - uzyj {hint} "
+            "(plan aktualizacji, kartograf-plan/1)"
         )
     if update not in _UPDATE_MODES:
         raise ValidationError(

@@ -668,7 +668,7 @@ def download_pl_cutout(
     DownloadError
         PRG or WCS failure; no new version is committed.
     """
-    validate_update(update)
+    validate_update(update, check="check_pl_cutout")
     cutout = _prepare_pl_cutout(
         bbox,
         horizontal_crs,

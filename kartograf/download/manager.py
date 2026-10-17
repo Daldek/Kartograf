@@ -855,7 +855,7 @@ class DownloadManager:
         ``on_progress`` gets the list events and, for a sheet with several
         selected flights, ``campaigns``/``campaign`` (``DownloadProgress``).
         """
-        validate_update(update)
+        validate_update(update, check="check_sheets")
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         parser = SheetParser(sheet)
@@ -915,7 +915,7 @@ class DownloadManager:
         on_progress: ProgressCallback | None = None,
     ) -> DownloadResult:
         """Download every descendant to ``target_scale``; collect leaf failures."""
-        validate_update(update)
+        validate_update(update, check="check_sheets")
         descendants = SheetParser(sheet).get_all_descendants(target_scale)
         sheets = [descendant.sheet for descendant in descendants]
         logger.info(
@@ -982,7 +982,7 @@ class DownloadManager:
         Individual download errors are collected; a year-range preflight
         error aborts the whole unplanned request before the first download.
         """
-        validate_update(update)
+        validate_update(update, check="check_sheets")
         if plan is not None and update != "upgrade":
             raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
         if plan is not None:
