@@ -458,7 +458,7 @@ def download_cz_contours_sheet(
     """
     sheet = cz_contours_sheet(sheet)
     source = contours_source(format)
-    validate_update(update)
+    validate_update(update, check="check_cz_contours_sheet")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
     sink = NoticeSink(on_notice)

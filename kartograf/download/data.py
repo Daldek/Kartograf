@@ -142,8 +142,8 @@ MAX_HINT_LINES = 5
 
 @dataclass(frozen=True)
 class UnitFile:
-    """One file of the request: ``unit`` = sheet code, LAZ file name, the
-    cutout path relative to ``output_dir``, TERYT or bbox coordinates;
+    """One file of the request: ``unit`` = sheet code, LAZ file name, TERYT
+    or bbox coordinates (``<coords>`` of a cutout or of a collection area);
     ``country`` = ``"PL"``/``"CZ"`` (``"EU"`` CORINE, ``"GLOBAL"``
     SoilGrids and HSG - the country of the source)."""
 
@@ -275,7 +275,7 @@ def _start(
 ) -> tuple[_Run, int]:
     from kartograf.download.fetch import validate_update
 
-    validate_update(update)
+    validate_update(update, check="check_data")
     require_int(workers, "--workers")
     if plan is not None and update != "upgrade":
         raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
@@ -1625,12 +1625,10 @@ def _link_outside_range(
 # =============================================================================
 
 
-def _unit_of(path: Path, output_dir: Path) -> str:
-    """Unit of a cutout: its path below ``output_dir``."""
-    try:
-        return Path(path).relative_to(output_dir).as_posix()
-    except ValueError:
-        return str(path)
+def _cutout_unit(path: Path) -> str:
+    """Unit of a cutout: the coordinates of its grid (``bbox/<coords>.tif``),
+    as the area units of the other tracks."""
+    return Path(path).stem
 
 
 def _download_pl_cutout(
@@ -1667,10 +1665,10 @@ def _download_pl_cutout(
                 "resolution": task.resolution,
             }
             if run.check:
-                run.plans.append(check_image_cutout(bbox, **image))
+                run.plans.append(check_image_cutout(bbox=bbox, **image))
                 return 0
             result = download_image_cutout(
-                bbox,
+                bbox=bbox,
                 update=run.update,
                 plan=run.loaded,
                 parent_request=parent_request,
@@ -1699,7 +1697,7 @@ def _download_pl_cutout(
         )
         return run.fail("PL", "PL", _error_text(e), kind)
     if result.file is not None:
-        run.add(_unit_of(result.file.path, task.output_dir), "PL", result.file)
+        run.add(_cutout_unit(result.file.path), "PL", result.file)
     return run.add_stale(result.stale)
 
 
@@ -1790,7 +1788,7 @@ def _download_cz(
     except DownloadError as e:
         return run.fail(task.sheet or "CZ", "CZ", str(e), "download")
     if cutout.file is not None:
-        run.add(_unit_of(cutout.file.path, task.output_dir), "CZ", cutout.file)
+        run.add(_cutout_unit(cutout.file.path), "CZ", cutout.file)
     return run.add_stale(cutout.stale)
 
 

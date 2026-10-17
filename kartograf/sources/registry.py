@@ -539,7 +539,7 @@ _ZABAGED_LAYERS = (
 _CZ_ZABAGED = SourceDescriptor(
     key="cz.cuzk.zabaged",
     country="CZ",
-    product="landcover",
+    product="zabaged",
     name="ZABAGED - Zakladni baze geografickych dat CR (pokrycie terenu i wody)",
     provider_name="CUZK",
     channels=(
@@ -1876,7 +1876,7 @@ _BDOO_RELEASES = (
 _PL_BDOO = SourceDescriptor(
     key="pl.gugik.bdoo",
     country="PL",
-    product="landcover",
+    product="bdoo",
     name="BDOO - baza danych obiektow ogolnogeograficznych (1:250 000)",
     provider_name="GUGiK",
     channels=(
@@ -2121,7 +2121,7 @@ def _cz_data_source(
     return SourceDescriptor(
         key=f"cz.cuzk.{dataset.lower()}",
         country="CZ",
-        product="landcover",
+        product=dataset.lower(),
         name=f"{dataset} - cyfrowy model geograficzny Czech ({scale})",
         provider_name="CUZK",
         channels=(
@@ -2662,7 +2662,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
         SourceDescriptor(
             key="pl.gugik.bdot10k",
             country="PL",
-            product="landcover",
+            product="bdot10k",
             name="BDOT10k - baza danych obiektow topograficznych",
             provider_name="GUGiK",
             channels=(
@@ -2887,7 +2887,7 @@ _SOURCES: dict[str, SourceDescriptor] = {
         SourceDescriptor(
             key="eu.clms.corine",
             country="EU",
-            product="landcover",
+            product="corine",
             name="CORINE Land Cover",
             provider_name="Copernicus CLMS",
             channels=(

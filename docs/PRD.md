@@ -1020,8 +1020,8 @@ from kartograf import BBox, download_cz_orto_sheet, download_image_cutout
 
 cz = download_cz_orto_sheet("CTES96", output_dir="./data")  # CzOrtoResult
 cut = download_image_cutout(
-    BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
-    product="orto", horizontal_crs="EPSG:2180", output_dir="./data",
+    product="orto", bbox=BBox(566000, 243000, 566500, 243500, "EPSG:2180"),
+    horizontal_crs="EPSG:2180", output_dir="./data",
     coverage="standard", resolution="0.25m",
 )  # ImageCutoutResult
 ```

@@ -135,10 +135,14 @@ COLLECTION_SOURCES: dict[str, str] = {
     "data250": "cz.cuzk.data250",
 }
 # Products of ``landcover download`` (ADR-039, ADR-044; SoilGrids is ``soil
-# download``): the land cover descriptors of the registry in its order, named
-# by the last part of the key (``pl.gugik.bdot10k`` -> ``bdot10k``), and their
-# description in messages and --help texts.
-_LANDCOVER = {d.key.rsplit(".", 1)[-1]: d for d in sources_for(product="landcover")}
+# download``): the descriptors of the registry stored under ``landcover/``, in
+# registry order, named by their ``product`` (= ``--product`` and the sidecar
+# ``product``: ``bdot10k``), and their description in messages and --help texts.
+_LANDCOVER = {
+    d.product: d
+    for d in sources_for()
+    if d.storage_subdir.split("/", 1)[0] == "landcover"
+}
 LANDCOVER_PRODUCTS: tuple[str, ...] = tuple(_LANDCOVER)
 LANDCOVER_PRODUCT_CHOICES = ", ".join(
     f"{name} ({d.name}, {d.country})" for name, d in _LANDCOVER.items()
@@ -680,7 +684,15 @@ class LandCoverManager:
             The PRG powiat query of an area failed.
         """
         sink = NoticeSink(on_notice)
-        validate_update(update)
+        validate_update(
+            update,
+            check=(
+                "check_soil"
+                if self._collection is None
+                and isinstance(self._provider, SoilGridsProvider)
+                else "check_landcover"
+            ),
+        )
         require_int(workers, "--workers")
         _canonical_options(options)
         if self._collection is not None:

@@ -35,9 +35,9 @@ from kartograf.sources.registry import get_source
 
 
 def _product_flag(source: SourceDescriptor) -> str:
-    """``--product`` of a descriptor (the last part of its key: ``bdot10k``)
-    with the releases of a product requiring ``--year`` (BDOO, CORINE)."""
-    product = source.key.rsplit(".", 1)[-1]
+    """``--product`` of a descriptor (its ``product``: ``bdot10k``) with the
+    releases of a product requiring ``--year`` (BDOO, CORINE)."""
+    product = source.product
     years = {
         "bdoo": bdoo_year_choices().replace(", ", "|"),
         "corine": corine_year_choices().replace(", ", "|"),
@@ -204,7 +204,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         _handler=cmd_landcover_download, _task=landcover_task_arguments
     )
 
-    add_list_sources(commands, "landcover", ("landcover",), _product_flag)
+    add_list_sources(commands, "landcover", LANDCOVER_PRODUCTS, _product_flag)
 
     layers = commands.add_parser(
         "list-layers",

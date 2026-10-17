@@ -32,10 +32,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zrobic: skrypty czytajace te linie dopasuj do sciezki pod `--output`
   (biblioteka bez zmian: `VersionedFile.path`, `PlanItem.segment`/
   `hierarchy`/`name`).
-- `hsg_statistics()` zwraca obok grup `A`-`D` klucz `nodata` (piksele
-  bez danych, `percent` = udzial we wszystkich pikselach); `percent`
-  grup to udzial w pikselach z danymi (jak dotad). Co zrobic: kod
-  iterujacy po wyniku pomija klucz `nodata` albo iteruje po `HSG_VALUES`.
+- `hsg_statistics()` liczy powierzchnie i procenty dla obszaru zadania
+  (`request` sidecara HSG: bbox w EPSG:2180 - przy `--geometry` jej
+  obwiednia - albo rama arkusza), nie dla calego rastra: komorka SoilGrids
+  na brzegu liczy sie udzialem w obszarze, suma powierzchni = obszar
+  (test na zywo 2026-10-17: bbox 2 x 2 km dawal 420,91 ha). Obok grup
+  `A`-`D` klucz `nodata` (`percent` = udzial w obszarze); `percent` grup
+  to udzial powierzchni z danymi, `count` = komorki stykajace sie
+  z obszarem; opisy grup (`description`, `HSG_DESCRIPTIONS`) po polsku.
+  Plik bez sidecara z obszarem - caly raster. Co zrobic: kod iterujacy po
+  wyniku pomija klucz `nodata` albo iteruje po `HSG_VALUES`; procent liczony
+  dotad z pikseli rastra nie jest juz zwracany.
+- Pole `product` sidecara w land cover i HSG to wartosc `--product` jak
+  w pozostalych grupach (test na zywo 2026-10-17): `bdot10k`, `bdoo`,
+  `corine`, `zabaged`, `data50`, `data250` (dotad `landcover`), raster
+  `soil hsg` - `hsg` (dotad `soil`; nazwa komendy i katalogu `hsg/`).
+  `soil download` (bez `--product`) zostaje `soil`. Pole `product`
+  deskryptorow land cover = ta wartosc (grupe wyznacza katalog
+  `landcover/`). Co zrobic: kod rozpoznajacy plik po `product ==
+  "landcover"` sprawdza `dataset` albo nowa wartosc.
+- `UnitFile.unit` wycinka (`download_data(..., cutout=True)`, PL i CZ) to
+  wspolrzedne siatki (`<coords>`, jak jednostki obszaru kolekcji), nie
+  sciezka pod `output_dir`; linia projektu `zadanie: jednostka (plik)`
+  wycinka ma ten sam podmiot co inne zadania (dotad `trueorto:
+  true-orto/pl_1992_0.05m/bbox/...tif (...tif): ok`). Linie CLI pobrania
+  bez zmian (sciezka pod `--output`). Co zrobic: sciezke wycinka czytaj
+  z `UnitFile.file.path`.
 - Przeglad spojnosci UX 0.8.0 (bledy wejscia przed siecia, CLI = API):
   - `--layer` bez `--geometry` jest bledem w kazdej komendzie danych
     i w `project add` (dotad wartosc byla po cichu pomijana i zapisywana
@@ -84,10 +106,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     zamien `soil hsg ... --stats` na `--summary`.
   - Wycinek obrazu PL ma jedna pare funkcji dla ortofotomapy i true orto
     (ADR-044 D3): `download_image_cutout`/`check_image_cutout` (wynik
-    `ImageCutoutResult`) sa w `kartograf.__all__`; owijki 0.8.0-dev
+    `ImageCutoutResult`) sa w `kartograf.__all__`, wszystkie argumenty
+    nazwane (`bbox=` jak w `download_data`), `coverage` opcjonalne (`None`
+    dla true orto; ortofotomapa wymaga go jak dotad); owijki 0.8.0-dev
     `download_orto_cutout`/`check_orto_cutout` i nazwa `OrtoCutoutResult`
     usuniete bez aliasow. Co zrobic: `download_orto_cutout(bbox, ...)` ->
-    `download_image_cutout(bbox, product="orto", ...)` (tak samo
+    `download_image_cutout(product="orto", bbox=bbox, ...)` (tak samo
     `check_*`), `OrtoCutoutResult` -> `ImageCutoutResult`.
   - Stan projektu w API: `get_project_status` zamiast `project_status`
     (ADR-044 D4; czasownik jak `init_project`, `verify_project`), bez
@@ -1228,9 +1252,33 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (30 s), plik 16,8 MB samego nodata i kod 0 z `Warning:` (test na zywo
   2026-10-16). `Warning: wycinek w calosci nodata` zostaje dla WCS bez
   danych na ladzie.
-- HSG `--summary`: linia `Brak danych: <procent>% calego obszaru (<ha> ha)`
-  i naglowek `procent grupy: z pikseli z danymi`; dotad bbox 2 x 2 km
-  z 19 ze 104 pikseli z danymi dawal samo `Grupa B: 100.0%`.
+- HSG `--summary`: statystyki obszaru zadania - naglowek `Statystyki HSG
+  obszaru zadania (grupy: % powierzchni z danymi)`, linie grup z opisem po
+  polsku, `Brak danych: <procent>% obszaru zadania (<ha> ha)` i `Obszar
+  zadania: <ha> ha`; dotad bbox 2 x 2 km z 19 ze 104 pikseli z danymi
+  dawal samo `Grupa B: 100.0%`, a potem 420,91 ha "calego obszaru" (caly
+  raster SoilGrids siegajacy poza bbox, test na zywo 2026-10-17).
+- Wycinek true orto (`imagery download --product true-orto --cutout`,
+  `download_image_cutout(product="true-orto")`) poza miastami uslugi
+  (obraz WCS w calosci 0,0,0) konczy sie `Error:` (kod 1,
+  `NoCoverageError`, w `download_data` porazka `no_coverage` PL) bez
+  wersji w magazynie - jak wycinek PL poza ladem. Dotad czarny plik byl
+  nowa wersja z `extra.all_nodata` i `Warning:` z zagniezdzonym nawiasem
+  (test na zywo 2026-10-17, Krakow, 19 s). Usluga nie publikuje zasiegu
+  wycinka, wiec obraz jest pobierany i sprawdzany przed zapisem wersji;
+  ortofotomapa `high` poza obszarami 10 cm zostaje wersja z `Warning:`.
+- Mesh 3D `--bbox` (i kazdy produkt kafli indeksu WFS) bez `--check-updates`/
+  `--upgrade` drugi raz w tym samym obszarze nie pyta indeksu: rekordy
+  obszaru sa w cache metadanych (TTL jak skorowidze arkuszy PL), wiec
+  przebieg z lokalnymi kaflami dziala bez sieci. Dotad 3 proby WFS
+  `SkorowidzModeleSiatkowe3D` i kod 1 offline (test na zywo 2026-10-17).
+  `--check-updates`, `--upgrade` i `--force` pytaja indeks jak dotad.
+- `update="check"` w funkcji pobrania wskazuje funkcje planu tego toru
+  (`uzyj check_landcover()`, `check_soil()`, `check_hsg()`,
+  `check_image_cutout()`, `check_data()`, `check_collection()`, ...);
+  dotad zawsze `check_sheets() albo check_*()`.
+- `python -m kartograf.cli.commands` nie wypisuje `RuntimeWarning` modulu
+  `runpy` (pakiet `kartograf.cli` importuje `main` dopiero przy uzyciu).
 - Projekt: odtworzenie brakujacej przypietej wersji przy zgodnej SHA-256
   zapisuje bajty pod przypieta wersja (`version`, `label`; dowiazanie
   i sidecar z przypieta etykieta) - manifest sie nie zmienia. Dotad

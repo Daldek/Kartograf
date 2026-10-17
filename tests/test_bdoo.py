@@ -193,7 +193,7 @@ def test_bdoo_teryt_package_as_published(bdoo, monkeypatch, tmp_path):
     assert (file.status, file.label) == ("new", "2023")
     assert file.path.read_bytes() == answer[2]
     meta = _meta(file.version_path)
-    assert (meta["dataset"], meta["product"]) == ("pl.gugik.bdoo", "landcover")
+    assert (meta["dataset"], meta["product"]) == ("pl.gugik.bdoo", "bdoo")
     assert meta["request"] == {"teryt": "12", "year": 2023}
     assert meta["horizontal_crs"] == "EPSG:2180"
     assert meta["extra"]["source"] == {"url": url, "edition": "2023"}

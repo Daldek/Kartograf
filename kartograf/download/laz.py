@@ -609,7 +609,7 @@ def download_laz_area(
         (a ``DownloadError`` subclass) no tiles in any year for the area.
     """
     bbox = _validate_area(bbox, sheet)
-    validate_update(update)
+    validate_update(update, check="check_laz_area")
     require_int(workers, "workers")
     sink = NoticeSink(on_notice)
     with _selected(
