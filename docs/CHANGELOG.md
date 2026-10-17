@@ -130,26 +130,39 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     (ADR-044 D4; czasownik jak `init_project`, `verify_project`), bez
     aliasu; `kartograf project status` bez zmian. Co zrobic: zamien
     `project_status(...)` na `get_project_status(...)`.
-- Publiczne API pobran land cover, SoilGrids i HSG to teraz funkcje
-  `download_landcover`/`check_landcover`, `download_soil`/`check_soil`,
-  `calculate_hsg`/`check_hsg` i `hsg_statistics` z raportami
-  `LandCoverReport`, `SoilReport`, `HsgReport` (`files: tuple[UnitFile, ...]`,
-  `failed: tuple[UnitFailure, ...]`, `stale`, `notices`, `ok`).
-  `LandCoverManager`, `HSGCalculator`, `LandCoverResult`,
-  `LandCoverAreaResult`, `LandCoverFailure` i `HsgResult` nie sa eksportowane
-  z `kartograf.__all__`; nie ma aliasow. Bledy pojedynczych plikow ida do
-  `report.failed`, `ok=False`, ale bledy wejscia nadal daja
-  `ValidationError`. Nie ma parametru `timeout` funkcji komend ani
-  `collections.run_request` (limit providera/kanalu). Co zrobic:
-  `LandCoverManager(out, "bdot10k").download(teryt=t)` zamien na
-  `download_landcover(product="bdot10k", output_dir=out, teryt=t)`;
-  `LandCoverManager(out, "soilgrids").check(...)` na
-  `check_soil(output_dir=out, ...)`; `HSGCalculator(out).calculate_hsg(...)`
-  na `calculate_hsg(output_dir=out, ...)` (analogicznie `check_hsg`);
-  `calc.get_hsg_statistics(path)` na `hsg_statistics(path)`;
-  `result.file` na `report.files[0].file`, `result.files` na `report.files`
-  z polem `.file`, `keep_raw` w `report.raw`, wejscia HSG w `report.inputs`;
-  kontroluj `report.failed` i `report.ok`, usun przekazywanie `timeout`.
+- Publiczne API pobran land cover, SoilGrids i HSG to funkcje poziomu
+  komendy (ADR-044 D5), bez aliasow: `download_landcover(product=...,
+  output_dir=..., teryt=|sheet=|bbox=|geometry=, layer=, update=, plan=,
+  workers=, on_notice=, ...)` i `check_landcover` z wyborem zgodnym
+  z `landcover download`; `download_soil(output_dir=..., sheet=|bbox=|
+  geometry=, property=, depth=, stat=, ...)` i `check_soil` odpowiadajace
+  `soil download`; `calculate_hsg(output_dir=..., sheet=|bbox=|geometry=,
+  depth=...)` i `check_hsg` z takim samym wyborem (HSG liczy tylko
+  SoilGrids `stat="mean"`) oraz `hsg_statistics(path)`. Wyniki
+  `LandCoverReport`, `SoilReport` i `HsgReport` maja `files:
+  tuple[UnitFile, ...]`, `failed: tuple[UnitFailure, ...]` (bledy
+  pojedynczych plikow i jednostek, wtedy `ok=False`), `stale`, `notices`
+  i `ok` (komplet danych); `LandCoverReport.raw` to osobne wersje
+  oryginalnego ZIP (`keep_raw`), `HsgReport.files[0].file` - raster HSG,
+  `HsgReport.inputs` - pobrane clay/sand/silt. BDOT10k z obszaru pobiera
+  kazdy powiat. Bledy wejscia (niepoprawne opcje) nadal koncza sie
+  `ValidationError`. `LandCoverManager`, `HSGCalculator`,
+  `LandCoverResult`, `LandCoverAreaResult`, `LandCoverFailure`
+  i `HsgResult` nie sa eksportowane z `kartograf.__all__`. Nie ma
+  parametru `timeout` funkcji komend ani `collections.run_request` (limit
+  providera/kanalu). Co zrobic: dawne metody zamien na funkcje
+  z `kartograf.__all__` - `LandCoverManager(out,
+  "bdot10k").download(teryt=t)` -> `download_landcover(product="bdot10k",
+  output_dir=out, teryt=t)` (`product=` tylko w land cover; `check` ->
+  `check_landcover`), `LandCoverManager(out, "soilgrids").check(...)` ->
+  `check_soil(output_dir=out, ...)`, `HSGCalculator(out).calculate_hsg(...)`
+  -> `calculate_hsg(output_dir=out, ...)` bez `stat=` (analogicznie
+  `check_hsg`), `calc.get_hsg_statistics(path)` -> `hsg_statistics(path)`;
+  `result.file` -> `report.files[0].file`, `result.files` ->
+  `report.files` (pole `.file`), wersje oryginalnego ZIP z `report.raw`,
+  wejscia HSG z `report.inputs`; brak pokrycia jednostki i inne porazki
+  czytaj z `report.failed` i `report.ok`, nie z wyjatku obslugi pliku;
+  usun przekazywanie `timeout=`.
 - Ortofotomapa pod `--country auto` (plan D, ADR-042 D13): obszar przy
   granicy daje arkusze PL i arkusze SM5 CZ (CUZK) zamiast zawezenia do PL
   (`Notice` `auto_narrowed_to_pl` dla samego `--product orto` znika; pliki
@@ -313,28 +326,6 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `max_workers=` -> `workers=`; `check_laz_updates(selection, ...)` ->
   `check_laz_area(bbox=bbox, output_dir=..., vertical_crs=..., ...)`; plan
   wykonuj przez `download_laz_area(..., update="upgrade", plan=plan)`.
-- Land cover i gleby: `download_landcover(product=..., output_dir=...,
-  teryt=|sheet=|bbox=|geometry=, layer=, update=, plan=, workers=,
-  on_notice=, ...)` oraz `check_landcover` maja wybor zgodny z
-  `landcover download`; `download_soil(output_dir=..., sheet=|bbox=|
-  geometry=, property=, depth=, stat=, ...)` i `check_soil` odpowiadaja
-  `soil download`. Wyniki `LandCoverReport`/`SoilReport` podaja pliki
-  `UnitFile`, porazki `UnitFailure`, `stale`, `notices`, `ok`; BDOT10k
-  z obszaru pobiera kazdy powiat, `keep_raw` jest w `LandCoverReport.raw`.
-  Niepoprawne opcje koncza sie `ValidationError`. Co zrobic: dawne metody
-  `LandCoverManager.download/check` zamien na funkcje w `kartograf.__all__`,
-  podaj `product="bdot10k"` itp. tylko dla land cover i `output_dir=`;
-  plik z pojedynczej jednostki czytaj przez `report.files[0].file`,
-  osobne wersje oryginalnego ZIP przez `report.raw`; brak pokrycia
-  jednostki odczytaj z `report.failed`, nie z wyjatku obslugi pliku.
-- HSG: `calculate_hsg(output_dir=..., sheet=|bbox=|geometry=, depth=...)`
-  i `check_hsg` z takim samym wyborem zastepuja metody
-  `HSGCalculator.calculate_hsg/check_hsg`; HSG liczy tylko SoilGrids
-  `stat="mean"`. `HsgReport.files[0].file` to raster HSG, `inputs` to
-  pobrane clay/sand/silt, `failed` to bledy jednostek, `ok` odzwierciedla
-  komplet danych. Co zrobic: podaj `output_dir=`, usun `stat=` i
-  `timeout=`, czytaj wynik z `report.files[0].file`, wejscia z `inputs`,
-  statystyki oblicz przez `hsg_statistics(path)`.
 - CLI `elevation download` i `imagery download` tylko tlumacza flagi na
   `download_data`/`check_data` (opis w Dodane): bledy wejscia to
   `ValidationError` z tekstem jak w CLI, komunikaty o danych
