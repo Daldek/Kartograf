@@ -20,6 +20,8 @@ from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
 from tests.conftest import FakeCorine, FakeSoilGrids
+from tests.project_fixtures import landcover_sources
+from tests.test_hsg import RasterSoilGrids
 
 BBOX_ARG = "770000,509000,772000,511000"
 COORDS = "770000_509000_772000_511000"
@@ -467,3 +469,96 @@ def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
     ]
     assert main(argv) == 1
     assert f"Error: {flag} dziala tylko z --product bdot10k" in capsys.readouterr().err
+
+
+def _landcover_report():
+    from kartograf.landcover.manager import LandCoverReport
+
+    return LandCoverReport((), (), (), (), (), True)
+
+
+def test_landcover_flags_reach_the_api(tmp_path):
+    with patch(_LANDCOVER, return_value=_landcover_report()) as call:
+        assert main(_bdot(tmp_path, "--teryt", "1465")) == 0
+        assert call.call_args.kwargs["workers"] == 1
+        assert main(_bdot(tmp_path, "--teryt", "1465", "--workers", "3")) == 0
+        assert call.call_args.kwargs["workers"] == 3
+        argv = _bdot(tmp_path, "--geometry", "obszar.gpkg", "--layer", "obszar")
+        assert main(argv) == 0
+        assert call.call_args.kwargs["layer"] == "obszar"
+        argv = _bdot(tmp_path, "--bbox", "18.6,49.7,18.7,49.8")
+        assert main([*argv, "--bbox-crs", "EPSG:4326"]) == 0
+        assert call.call_args.kwargs["bbox"] == BBox(
+            18.6, 49.7, 18.7, 49.8, "EPSG:4326"
+        )
+
+
+def test_landcover_quiet_drops_status_lines_keeps_notices(tmp_path, capsys):
+    def package(code, output_path, **kwargs):
+        output_path.write_bytes(code.encode())
+        return Bdot10kPackage(path=output_path, teryt=code, url="u", format="GPKG")
+
+    def run(*flags):
+        out = tmp_path / ("quiet" if flags else "loud")
+        with (
+            patch(
+                "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",
+                return_value=["0208", "0224"],
+            ),
+            patch.object(Bdot10kProvider, "download_package", side_effect=package),
+        ):
+            rc = main(
+                ["landcover", "download", "--product", "bdot10k", "--bbox", BBOX_ARG]
+                + ["-o", str(out), *flags]
+            )
+        assert rc == 0
+        return capsys.readouterr()
+
+    loud = run()
+    assert "nowa wersja" in loud.out and "Nowe: 2" in loud.out
+    quiet = run("-q")
+    assert quiet.out == ""
+    assert quiet.err == loud.err
+
+
+def test_hsg_quiet_prints_nothing_on_stdout(tmp_path, capsys):
+    with _session(FakeSoilGrids("2.0")):
+        assert _hsg(tmp_path) == 0
+    assert "Legenda:" in capsys.readouterr().out
+    with _session(FakeSoilGrids("2.0")):
+        assert _hsg(tmp_path, "-q", "--upgrade") == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_hsg_bbox_crs_and_layer_reach_the_api(tmp_path):
+    from kartograf.hydrology.hsg import HsgReport
+
+    with patch(_HSG) as call:
+        call.return_value = HsgReport((), (), (), (), (), True)
+        argv = ["soil", "hsg", "--bbox", "18.6,49.7,18.7,49.8"]
+        argv += ["--bbox-crs", "EPSG:4326", "--depth", "0-5cm", "--layer", "x"]
+        assert main([*argv, "-o", str(tmp_path / "out")]) == 0
+    assert call.call_args.kwargs["bbox"] == BBox(18.6, 49.7, 18.7, 49.8, "EPSG:4326")
+    assert call.call_args.kwargs["layer"] == "x"
+
+
+def test_soil_download_failure_line_and_exit_code(tmp_path, capsys):
+    with _session(FakeSoilGrids(404)):
+        assert _soil(tmp_path, "--bbox", BBOX_ARG, *SOIL) == 1
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err.startswith(
+        f"Error: {COORDS}: SoilGrids GetCapabilities clay: HTTP 404"
+    )
+    assert not (tmp_path / "out").exists()
+
+
+def test_hsg_failed_input_no_legend_no_raster(tmp_path, capsys):
+    provider = RasterSoilGrids({"silt": DownloadError("WCS 500")})
+    with landcover_sources(soilgrids=lambda: provider):
+        assert _hsg(tmp_path, "--summary") == 1
+    captured = capsys.readouterr()
+    assert captured.err == f"Error: silt {COORDS}: WCS 500\n"
+    assert captured.out.count("nowa wersja") == 2
+    assert "Legenda" not in captured.out and "Statystyki" not in captured.out
+    assert not (tmp_path / "out" / "hsg").exists()

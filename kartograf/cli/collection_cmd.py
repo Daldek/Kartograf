@@ -75,12 +75,14 @@ def _collection_download(args: argparse.Namespace) -> int:
             args, check_collection(**arguments, on_notice=_print_notice)
         )
     update = _update_mode(args)
-    on_progress = create_progress_callback(args.quiet, args.workers)
+    # a group whose request is always one file (hydro) has no --workers
+    workers = getattr(args, "workers", 1)
+    on_progress = create_progress_callback(args.quiet, workers)
     report = download_collection(
         **arguments,
         update=update,
         plan=_plan_context(args).loaded,
-        workers=args.workers,
+        workers=workers,
         on_progress=on_progress,
         on_notice=_print_notice,
     )

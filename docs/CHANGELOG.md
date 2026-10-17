@@ -646,6 +646,18 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `TypeError`. Flagi CLI bez zmian. Co zrobic: przekazuj `int` (`timeout`
   takze `float`), `True`/`False`, kody jako `str` (`teryt="1261"`)
   i liste/krotke kodow (`layers=["SWRS", "PTWP"]`).
+- Przeglad UX 0.8.0, pomoc CLI: `hydro download` nie ma `--workers`/`-w`
+  (obszar to jeden GeoPackage, plik krajowy - jeden plik; flaga nic nie
+  zmieniala); `--country` kolekcji oferuje tylko kraje produktow grupy
+  i `auto` (`hydro`: `cz`, `auto`; `models3d`: `pl`, `auto`) - `hydro
+  --country pl` i `models3d --country cz` to blad parsera (kod 2) zamiast
+  bledu biblioteki. `list-sources` ma kolumne `KATALOG` (katalog plikow pod
+  `--output`), a `WYBOR` - komplet wymaganych flag zrodla (`--country`
+  takze dla PL w `elevation`/`imagery`, `--vertical-crs EVRF2007|KRON86`,
+  `landcover --year` BDOO i CORINE; `soil`: `--property --depth --stat`).
+  Co zrobic: usun `-w`/`--workers` z polecen `hydro download` (w projekcie:
+  `project download --workers` dziala jak dotad); skrypty czytajace
+  `list-sources` po kolumnach - uwzglednij `KATALOG` i nowe flagi `WYBOR`.
 
 ### Dodane
 
@@ -1118,6 +1130,28 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `force` odswieza cache otwierany przez sama funkcje; provider przekazany
   jako gotowa instancja zachowuje swoj cache (pelne odswiezenie:
   `MetadataCache(refresh=True)`). Zachowanie bez zmian. Co zrobic: nic.
+- Przeglad UX 0.8.0, pomoc CLI (UX-15, 23, 26-34, 44): kazde `download`,
+  `soil hsg` i `elevation availability` ma w `--help` przyklady polecen
+  (sprawdzane testem jak `project add`); `project init/add/remove/download/
+  status/verify` i `cache stats/clear/path` maja opisy. Jednolite sekcje
+  pomocy (`Produkt i obszar`, `Parametry produktu`, `Wynik i aktualizacja`),
+  `--country` zaraz po `--product`, metavary po polsku (`ROZDZIELCZOSC`,
+  `UKLAD`, `SKALA`), jeden tekst `--output` (`Katalog magazynu (wymagany):
+  pliki w <KATALOG>/<katalog>/...` z katalogiem z rejestru; ten sam w bledzie
+  braku `--output`). `maps`: opis i `--sheet-system` mowia, ze uklad arkuszy
+  dotyczy tylko ZTM (CZ). `soil list-layers` i pomoc `--property`/`--stat`
+  po polsku z jednostkami (jedna mapa opisow). `landcover list-layers` dla
+  ZABAGED/Data50/Data250: same nazwy warstw i zdanie, ze `--layers` dotyczy
+  tylko BDOT10k i BDOO; lata CORINE z rodzajem danych (1990 - tylko podglad
+  WMS). Glowne `kartograf --help` opisuje grupy bez twierdzenia, ze kazda
+  ma `download` i `list-sources`. Docstring `kartograf/__init__.py`:
+  wszystkie zrodla i grupy kolekcji. Co zrobic: nic.
+- `kartograf parse` rozpoznaje godla CZ bez sieci (UX-25): arkusz SM5
+  (`CTES96`), kafel TM33 (`302_5550`, z zasiegiem w EPSG:3045) i arkusz ZTM
+  (`0510-D-11`, `NM-34-07-1-D-15`) - system, uklad i komendy przyjmujace
+  godlo w `--sheet`; `--hierarchy`/`--children`/`--descendants` z godlem CZ
+  to `Error:`. Wzorce ZTM w `core.parser_registry.ztm_sheet_system` (jedno
+  zrodlo dla `parse` i `maps download --sheet`). Co zrobic: nic.
 
 ### Naprawione
 

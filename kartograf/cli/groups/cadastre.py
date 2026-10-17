@@ -51,6 +51,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "albo RCN (prices); wojewodztwo (2 cyfry, np. 12) - eksport RCN",
         ku_help="Kod katastralniho uzemi CZ (6 cyfr, np. 623164): paczka mapy "
         "katastralnej (--product map; wymaga --format)",
+        examples_of=(
+            "kartograf cadastre download --product map --teryt 1261 -o ./data",
+            "kartograf cadastre download --product map --ku 623164 --format SHP "
+            "-o ./data",
+            "kartograf cadastre download --product prices --teryt 1201 -o ./data",
+        ),
         area_result="dzialki i budynki EGiB (GeoPackage), paczki uzemi CZ albo "
         "eksporty RCN powiatow obszaru",
         check_help="Porownaj lokalne wersje ze zrodlem bez pobierania: paczka "
