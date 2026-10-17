@@ -113,6 +113,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     usuniete bez aliasow. Co zrobic: `download_orto_cutout(bbox, ...)` ->
     `download_image_cutout(product="orto", bbox=bbox, ...)` (tak samo
     `check_*`), `OrtoCutoutResult` -> `ImageCutoutResult`.
+  - Funkcje pobrania i sprawdzenia z `kartograf.__all__` przyjmuja
+    argumenty tylko nazwane, jak `download_data` (test na zywo
+    2026-10-17): `bbox=` w `download_pl_cutout`/`check_pl_cutout`,
+    `download_cz_cutout`/`check_cz_cutout` i `download_laz_area`/
+    `check_laz_area`, `sheet=` w `download_cz_sheet`/`check_cz_sheet`
+    i `download_cz_orto_sheet`/`check_cz_orto_sheet` (dotad pierwszy
+    argument pozycyjny); argument pozycyjny to `TypeError`. Funkcje
+    projektu (`download_project`, `check_project` i reszta rodziny) maja
+    pozycyjny tylko katalog projektu. Co zrobic: `download_pl_cutout(bbox,
+    ...)` -> `download_pl_cutout(bbox=bbox, ...)`, `download_laz_area(bbox,
+    ...)` -> `download_laz_area(bbox=bbox, ...)`,
+    `download_cz_sheet("CTES96", ...)` -> `download_cz_sheet(sheet="CTES96",
+    ...)`; tak samo pozostale funkcje i ich `check_*`.
   - Stan projektu w API: `get_project_status` zamiast `project_status`
     (ADR-044 D4; czasownik jak `init_project`, `verify_project`), bez
     aliasu; `kartograf project status` bez zmian. Co zrobic: zamien
@@ -241,31 +254,33 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   biblioteka pracowala bez cache. `update="force"` pomija odczyty z cache
   (jak `--force`). Co zrobic: proces w katalogu bez prawa zapisu albo
   testy bez stanu - `cache=False`; wlasny plik - `cache=MetadataCache(...)`.
-- Wycinek PL: `download_pl_cutout(bbox, *, horizontal_crs, ...)` i
-  `check_pl_cutout(bbox, *, horizontal_crs, ...)` przyjmuja te same argumenty
-  wyboru (`horizontal_crs` tylko jako nazwany), `download_pl_cutout` dostaje
+- Wycinek PL: `download_pl_cutout(*, bbox, horizontal_crs, ...)` i
+  `check_pl_cutout(*, bbox, horizontal_crs, ...)` przyjmuja te same
+  argumenty wyboru (wszystkie tylko nazwane), `download_pl_cutout` dostaje
   `plan=`, `cache=` (`True` = domyslny cache w cwd) i `on_notice=`;
   `PlCutoutResult.notices` niesie komunikaty o rozmiarze wycinka
   (`cutout_size`, przed pierwszym zapytaniem WCS) i wycinku bez danych
   (`all_nodata`). `prepare_pl_cutout` i `run_pl_wcs_cutout` usunieto,
   `PlCutout` jest krokiem wewnetrznym (poza `__all__`).
-  Co zrobic: podawaj `horizontal_crs=` nazwany; `check_pl_cutout(cutout)` ->
-  `check_pl_cutout(bbox, horizontal_crs=..., output_dir=..., vertical_crs=...,
-  product=...)`; plan wykonuj przez `download_pl_cutout(..., plan=plan)`.
-- CZ: arkusz CZ ma publiczne API `download_cz_sheet(sheet, *, output_dir,
+  Co zrobic: podawaj `bbox=` i `horizontal_crs=` nazwane;
+  `check_pl_cutout(cutout)` -> `check_pl_cutout(bbox=bbox,
+  horizontal_crs=..., output_dir=..., vertical_crs=..., product=...)`; plan
+  wykonuj przez `download_pl_cutout(..., plan=plan)`.
+- CZ: arkusz CZ ma publiczne API `download_cz_sheet(*, sheet, output_dir,
   product, vertical_crs, resolution=None, update, plan, cache, on_notice)`
   i `check_cz_sheet` z tymi samymi argumentami (`CzSheetResult`; arkusz SM5
   tylko NMT `5m` / NMPT `0.5m`, kafel TM33 wymaga etykiety; errata decyzji
   9 planu 2/3, `product` - plan B).
-  `check_cz_cutout(bbox, *, output_dir, product, horizontal_crs,
+  `check_cz_cutout(*, bbox, output_dir, product, horizontal_crs,
   vertical_crs, resolution)` przyjmuje argumenty `download_cz_cutout` (bez providera
   i `image_crs`); `download_cz_cutout` dostaje `plan=`, `on_notice=`,
   `cache=True` (domyslny cache w cwd). Wyniki CZ maja `notices`
   (`all_nodata` zamiast ostrzezenia w logu). `run_cz_cutout` poza API.
   Co zrobic: `run_cz_cutout(provider, bbox, ...)` ->
-  `download_cz_cutout(bbox, product="nmt", ...)`; `check_cz_cutout(provider, bbox,
-  output_dir=, image_crs=)` -> `check_cz_cutout(bbox, output_dir=,
-  product="nmt", horizontal_crs=, vertical_crs=, resolution=)`.
+  `download_cz_cutout(bbox=bbox, product="nmt", ...)`;
+  `check_cz_cutout(provider, bbox, output_dir=, image_crs=)` ->
+  `check_cz_cutout(bbox=bbox, output_dir=, product="nmt", horizontal_crs=,
+  vertical_crs=, resolution=)`.
 - CZ z rejestru wariantow (ADR-041, plan B): `CuzkDmrProvider`
   i `create_dmr_provider` usuniete bez aliasow - w ich miejsce
   `CuzkRasterProvider(product, resolution, session=None, cache=None,
@@ -296,7 +311,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   samymi argumentami. `on_progress` dostaje `(0, total)` przed pierwszym
   kaflem. `run_laz_download` i `check_laz_updates` poza API. Co zrobic:
   `max_workers=` -> `workers=`; `check_laz_updates(selection, ...)` ->
-  `check_laz_area(bbox, output_dir=..., vertical_crs=..., ...)`; plan
+  `check_laz_area(bbox=bbox, output_dir=..., vertical_crs=..., ...)`; plan
   wykonuj przez `download_laz_area(..., update="upgrade", plan=plan)`.
 - Land cover i gleby: `download_landcover(product=..., output_dir=...,
   teryt=|sheet=|bbox=|geometry=, layer=, update=, plan=, workers=,
@@ -349,7 +364,14 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Podaj dokladnie jeden wybor obszaru` (`download_data`),
   `File not found` -> `Brak pliku`, `Unsupported ...`/`Invalid ...` ->
   `Nieobslugiwany ...`/`Nieprawidlowy ...`, `Found N sheets ...` ->
-  `Znaleziono arkuszy w skali ...`, `Downloading ...` -> `Pobieranie ...`,
+  `Znaleziono arkuszy w skali ...`, `Downloading ...` -> `Pobieranie ...`;
+  etykiety tych linii `(resolution: 1m)`, `(CZ, resolution: 5m)`,
+  `(product: orto)`, `(format: TTN, resolution: -)` -> `(rozdzielczosc:
+  1m)`, `(CZ, rozdzielczosc: 5m)`, `(produkt: orto)`, `(format: TTN,
+  rozdzielczosc: -)`, hierarchia `Pobieranie 25 arkuszy z 7.171.21 to
+  1:2000` -> `... z 7.171.21 w skali 1:2000`, `Pobieranie CZ bbox (2m,
+  EPSG:5514)` -> `Pobieranie wycinka CZ (rozdzielczosc: 2m, EPSG:5514)`
+  (testy na zywo 2026-10-16/17);
   wyjscie `parse` (`Godlo:`, `Skala:`, `Uklad:`, `Czlony:`, `Hierarchia`,
   `Arkusze potomne`), `cache stats` (`Wpisy rekordow:` ...), komunikaty
   `sheet_parser` bez polskich znakow (`Nieprawidlowe godlo`), opisy warstw
@@ -474,9 +496,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     resolution)`, `CuzkRasterProvider(product, resolution, ...,
     *, vertical_crs)`, `create_cz_raster_provider(product, resolution,
     ..., *, vertical_crs)`;
-    `download_pl_cutout(bbox, *, horizontal_crs, output_dir,
+    `download_pl_cutout(*, bbox, horizontal_crs, output_dir,
     vertical_crs, product)` — parametr `resolution` usuniety (wycinek tylko
-    1 m), a `prepare_pl_cutout` usuniety; `download_laz_area(bbox, *,
+    1 m), a `prepare_pl_cutout` usuniety; `download_laz_area(*, bbox,
     output_dir, vertical_crs, ...)`; wewnetrzny `run_laz_download` usuniety;
     `find_sheets_for_bbox(bbox, target_scale, sheet_system)`,
     `find_sheets_2000_for_bbox(bbox, target_scale)`,
@@ -588,9 +610,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     importy z `kartograf.download.updates`/`manager` przestaw na
     `kartograf`.
   - `DownloadManager.download_bbox` usuniete (D27, errata 2 ADR-003). Co
-    zrobic: wycinek NMT/NMPT w magazynie — `download_pl_cutout(bbox,
-    "EPSG:2180", ...)`; surowy WCS (np. ortofotomapa) poza magazynem —
-    `provider.download_bbox(bbox, path)`.
+    zrobic: wycinek NMT/NMPT w magazynie — `download_pl_cutout(bbox=bbox,
+    horizontal_crs="EPSG:2180", ...)`; surowy WCS (np. ortofotomapa)
+    poza magazynem — `provider.download_bbox(bbox, path)`.
   - CLI `elevation download` (LAZ, CZ i wycinki): zamiast `Downloaded to ...`/`Skipped ...`
     jedna linia statusu na plik (`<arkusz|sciezka wycinka|plik LAZ>:
     nowa wersja ...` / `lokalna wersja ...`), dla LAZ podsumowanie
@@ -947,11 +969,11 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   EPSG:2180 --coverage standard|high --resolution 0.1m|0.25m|0.5m|1m` ->
   `orto/pl_1992_<coverage>_<res>/bbox/<coords>.tif` (RGB z WCS GUGiK, bez
   przeprobkowania, siatka wyrownana do piksela i sprawdzana, kawalki do
-  200 x 200 m, sygnal `none`; `high` poza obszarami 10 cm = obraz 0,0,0
-  z `extra.all_nodata` i `Warning:`). Biblioteka: `download_image_cutout`/
-  `check_image_cutout(..., product="orto", coverage=, resolution=)`
-  (`ImageCutoutResult`; ta sama para dla true orto), `download_data(...,
-  coverage=)`.
+  200 x 200 m, sygnal `none`; wycinek w calosci 0,0,0, np. `high` poza
+  obszarami 10 cm, to `Error:` bez wersji). Biblioteka:
+  `download_image_cutout`/`check_image_cutout(..., product="orto",
+  coverage=, resolution=)` (`ImageCutoutResult`; ta sama para dla true
+  orto), `download_data(..., coverage=)`.
 - Silnik `atom_files` (ADR-042 D12, `kartograf/transport/atom.py`):
   pliki wskazywane feedem ATOM CUZK (feed uslugi -> feed zbioru -> plik),
   wydanie z `updated`, indeks feedu w cache metadanych (`atom_cache`
@@ -1259,15 +1281,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   zadania: <ha> ha`; dotad bbox 2 x 2 km z 19 ze 104 pikseli z danymi
   dawal samo `Grupa B: 100.0%`, a potem 420,91 ha "calego obszaru" (caly
   raster SoilGrids siegajacy poza bbox, test na zywo 2026-10-17).
-- Wycinek true orto (`imagery download --product true-orto --cutout`,
-  `download_image_cutout(product="true-orto")`) poza miastami uslugi
-  (obraz WCS w calosci 0,0,0) konczy sie `Error:` (kod 1,
-  `NoCoverageError`, w `download_data` porazka `no_coverage` PL) bez
-  wersji w magazynie - jak wycinek PL poza ladem. Dotad czarny plik byl
-  nowa wersja z `extra.all_nodata` i `Warning:` z zagniezdzonym nawiasem
-  (test na zywo 2026-10-17, Krakow, 19 s). Usluga nie publikuje zasiegu
+- Wycinek obrazu PL w calosci 0,0,0 (`imagery download --cutout`,
+  `download_image_cutout`): true orto poza miastami uslugi, ortofotomapa
+  `high` poza obszarami 10 cm i `standard` bez ortofotomapy konczy sie
+  `Error:` (kod 1, `NoCoverageError`, w `download_data` porazka
+  `no_coverage` PL) bez wersji w magazynie - jak wycinek PL poza ladem;
+  tresc podaje przyczyne i remedium (`zmien --bbox`, przy `high` takze
+  `uzyj --coverage standard`). Dotad czarny plik byl nowa wersja
+  z `extra.all_nodata` i `Warning:` (true orto z zagniezdzonym nawiasem;
+  test na zywo 2026-10-17, Krakow, 19 s). Usluga nie publikuje zasiegu
   wycinka, wiec obraz jest pobierany i sprawdzany przed zapisem wersji;
-  ortofotomapa `high` poza obszarami 10 cm zostaje wersja z `Warning:`.
+  `ImageCutoutResult.notices` nie zawiera juz `all_nodata`.
 - Mesh 3D `--bbox` (i kazdy produkt kafli indeksu WFS) bez `--check-updates`/
   `--upgrade` drugi raz w tym samym obszarze nie pyta indeksu: rekordy
   obszaru sa w cache metadanych (TTL jak skorowidze arkuszy PL), wiec
@@ -1280,6 +1304,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   dotad zawsze `check_sheets() albo check_*()`.
 - `python -m kartograf.cli.commands` nie wypisuje `RuntimeWarning` modulu
   `runpy` (pakiet `kartograf.cli` importuje `main` dopiero przy uzyciu).
+- Awaria skorowidza WFS GUGiK w linii `--check-updates` konczy sie faktem
+  `- wynik bylby niepelny`, bez `ponow pobranie` (sprawdzenie niczego nie
+  pobiera; testy na zywo 2026-10-16/17). Remedium `ponow pobranie` dopisuja
+  tylko podsumowania pobrania; dotad podsumowanie kilku arkuszy mialo je
+  dwa razy, a ostrzezenie `skorowidz GUGiK niedostepny - uzyto lokalnej
+  wersji` radzilo ponowic pobranie, choc plik byl na miejscu.
 - Projekt: odtworzenie brakujacej przypietej wersji przy zgodnej SHA-256
   zapisuje bajty pod przypieta wersja (`version`, `label`; dowiazanie
   i sidecar z przypieta etykieta) - manifest sie nie zmienia. Dotad

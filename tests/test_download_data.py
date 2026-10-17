@@ -514,7 +514,7 @@ def test_cz_cutout_unknown_horizontal_crs_is_validation_error(tmp_path, operatio
         ),
     ):
         operation(
-            BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
+            bbox=BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
             output_dir=tmp_path,
             product="nmt",
             horizontal_crs="EPSG:9999",

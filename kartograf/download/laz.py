@@ -19,7 +19,7 @@ Example::
     from kartograf import BBox, download_laz_area
 
     result = download_laz_area(
-        BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
+        bbox=BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
         output_dir="./data", vertical_crs="EVRF2007",
         workers=4,
     )
@@ -472,8 +472,8 @@ def _emit_superseded(
 
 
 def check_laz_area(
-    bbox: BBox | None = None,
     *,
+    bbox: BBox | None = None,
     sheet: str | None = None,
     output_dir: str | Path,
     vertical_crs: str,
@@ -517,8 +517,8 @@ def check_laz_area(
 
 
 def download_laz_area(
-    bbox: BBox | None = None,
     *,
+    bbox: BBox | None = None,
     sheet: str | None = None,
     output_dir: str | Path,
     vertical_crs: str,

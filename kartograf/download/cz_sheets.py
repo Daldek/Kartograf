@@ -309,8 +309,8 @@ def _sheet_provider(
 
 
 def check_cz_sheet(
-    sheet: str,
     *,
+    sheet: str,
     output_dir: str | Path,
     product: str,
     vertical_crs: str,
@@ -338,8 +338,8 @@ def check_cz_sheet(
 
 
 def download_cz_sheet(
-    sheet: str,
     *,
+    sheet: str,
     output_dir: str | Path,
     product: str,
     vertical_crs: str,

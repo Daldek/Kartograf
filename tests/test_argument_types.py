@@ -106,13 +106,13 @@ def test_download_manager_rejects_wrong_types(tmp_path, argument, name):
 @pytest.mark.parametrize("call", [download_laz_area, check_laz_area])
 def test_laz_area_rejects_wrong_types_before_wfs(tmp_path, call, argument, name):
     with pytest.raises(ValidationError, match=name):
-        call(AREA, output_dir=tmp_path, vertical_crs="EVRF2007", **argument)
+        call(bbox=AREA, output_dir=tmp_path, vertical_crs="EVRF2007", **argument)
 
 
 def test_laz_area_rejects_text_workers(tmp_path):
     with pytest.raises(ValidationError, match="workers"):
         download_laz_area(
-            AREA, output_dir=tmp_path, vertical_crs="EVRF2007", workers="2"
+            bbox=AREA, output_dir=tmp_path, vertical_crs="EVRF2007", workers="2"
         )
 
 

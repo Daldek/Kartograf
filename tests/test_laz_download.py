@@ -543,7 +543,7 @@ class TestDownloadLazArea:
     def test_w2_downloads_only_the_newest_tile(self, tmp_path):
         session = wfs_session()
         result = download_laz_area(
-            W2_AREA,
+            bbox=W2_AREA,
             output_dir=tmp_path,
             provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
             parent_request=PARENT,
@@ -569,7 +569,7 @@ class TestDownloadLazArea:
     def test_year_downloads_that_year_only(self, tmp_path):
         session = wfs_session()
         result = download_laz_area(
-            W2_AREA,
+            bbox=W2_AREA,
             output_dir=tmp_path,
             year=2022,
             provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
@@ -582,7 +582,7 @@ class TestDownloadLazArea:
         session = wfs_session()
         with pytest.raises(YearRangeError) as caught:
             download_laz_area(
-                W2_AREA,
+                bbox=W2_AREA,
                 output_dir=tmp_path,
                 year=2026,  # the layer exists, but no tiles here
                 provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
@@ -596,7 +596,7 @@ class TestDownloadLazArea:
         session = wfs_session()
         with pytest.raises(ValidationError, match="check"):
             download_laz_area(
-                W2_AREA,
+                bbox=W2_AREA,
                 output_dir=tmp_path,
                 vertical_crs="EVRF2007",
                 provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
@@ -607,7 +607,7 @@ class TestDownloadLazArea:
     def test_vertical_crs_mismatch_with_provider_is_rejected(self, tmp_path):
         with pytest.raises(ValidationError, match="KRON86"):
             download_laz_area(
-                W2_AREA,
+                bbox=W2_AREA,
                 output_dir=tmp_path,
                 vertical_crs="KRON86",
                 provider=GugikLazProvider(
@@ -633,14 +633,14 @@ class TestDownloadLazArea:
         )
         args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
         from_wgs = check_laz_area(
-            wgs,
+            bbox=wgs,
             provider=GugikLazProvider(
                 session=wfs_session("wgs"), vertical_crs="EVRF2007"
             ),
             **args,
         )
         from_2180 = check_laz_area(
-            transform_bbox(wgs, "EPSG:2180"),
+            bbox=transform_bbox(wgs, "EPSG:2180"),
             provider=GugikLazProvider(
                 session=wfs_session("wgs"), vertical_crs="EVRF2007"
             ),
@@ -690,7 +690,7 @@ class TestDownloadLazArea:
             "kartograf.providers.cuzk.raster.bbox_to_crs", return_value=W2_AREA
         ) as pinned:
             plan = check_laz_area(
-                krovak,
+                bbox=krovak,
                 output_dir=tmp_path,
                 vertical_crs="EVRF2007",
                 cache=False,
@@ -715,7 +715,7 @@ class TestDownloadLazArea:
         ):
             by_sheet = check_laz_area(sheet="N-34-130-D-d-2-4", **args)
             envelope = SheetParser("N-34-130-D-d-2-4").get_bbox(crs="EPSG:2180")
-            by_bbox = check_laz_area(envelope, **args)
+            by_bbox = check_laz_area(bbox=envelope, **args)
         assert [i.unit for i in by_sheet.items] == SHEET4_TILES
         # the same window as a bbox: the neighbours overlap it, but not the
         # tile whose corner reaches 4.6 mm into it
@@ -725,7 +725,7 @@ class TestDownloadLazArea:
     def test_sheet_and_bbox_are_exclusive(self, tmp_path):
         with pytest.raises(ValidationError, match="dokladnie jedno"):
             check_laz_area(
-                W2_AREA,
+                bbox=W2_AREA,
                 sheet="N-34-130-D-d-2-4",
                 output_dir=tmp_path,
                 vertical_crs="EVRF2007",
@@ -742,9 +742,9 @@ class TestDownloadLazArea:
         def provider():
             return GugikLazProvider(session=wfs_session(), vertical_crs="EVRF2007")
 
-        before = check_laz_area(W2_AREA, provider=provider(), **args)
-        result = download_laz_area(W2_AREA, provider=provider(), **args)
-        after = check_laz_area(W2_AREA, provider=provider(), **args)
+        before = check_laz_area(bbox=W2_AREA, provider=provider(), **args)
+        result = download_laz_area(bbox=W2_AREA, provider=provider(), **args)
+        after = check_laz_area(bbox=W2_AREA, provider=provider(), **args)
         assert [(i.unit, i.status) for i in before.items] == [
             ("N-34-139-A-c-1-1-3-4", "missing")
         ]
@@ -754,14 +754,14 @@ class TestDownloadLazArea:
     def test_download_laz_area_plan_stale(self, tmp_path):
         args = {"output_dir": tmp_path, "vertical_crs": "EVRF2007", "cache": False}
         plan = check_laz_area(
-            W2_AREA,
+            bbox=W2_AREA,
             provider=GugikLazProvider(session=wfs_session(), vertical_crs="EVRF2007"),
             **args,
         )
         changed = replace(plan.items[0], available_label="different")
         session = wfs_session()
         result = download_laz_area(
-            W2_AREA,
+            bbox=W2_AREA,
             update="upgrade",
             plan=replace(plan, items=(changed,)),
             provider=GugikLazProvider(session=session, vertical_crs="EVRF2007"),
@@ -773,7 +773,7 @@ class TestDownloadLazArea:
     def test_superseded_notice(self, tmp_path):
         seen: list[Notice] = []
         result = download_laz_area(
-            W2_AREA,
+            bbox=W2_AREA,
             output_dir=tmp_path,
             vertical_crs="EVRF2007",
             cache=False,
@@ -798,7 +798,7 @@ class TestDownloadLazArea:
         provider.select_tiles.return_value = _selection()
         with pytest.raises(NoCoverageError) as caught:
             download_laz_area(
-                W2_AREA,
+                bbox=W2_AREA,
                 output_dir=tmp_path,
                 vertical_crs="EVRF2007",
                 cache=False,
@@ -812,7 +812,7 @@ class TestDownloadLazArea:
         provider = FakeProvider()
         provider.select_tiles = MagicMock(return_value=_selection(*tiles))
         result = download_laz_area(
-            W2_AREA,
+            bbox=W2_AREA,
             output_dir=tmp_path,
             vertical_crs="EVRF2007",
             workers=4,

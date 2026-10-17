@@ -71,14 +71,14 @@ Example usage::
 
     # LAZ tiles for an area: newest per area, sidecars, failures in result
     laz = download_laz_area(
-        BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
+        bbox=BBox(637400, 487000, 637450, 487050, "EPSG:2180"),
         output_dir="./data",
         vertical_crs="EVRF2007",
     )
 
     # One NMT GeoTIFF for an area (PL cutout from GUGiK WCS, ADR-035)
     result = download_pl_cutout(
-        BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
+        bbox=BBox(530000, 382000, 533000, 386000, "EPSG:2180"),
         horizontal_crs="EPSG:2180",
         output_dir="./data",
         vertical_crs="EVRF2007",

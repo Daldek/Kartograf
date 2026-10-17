@@ -379,7 +379,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.providers.pl.create_nmt_provider") as factory,
     ):
-        missing = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
+        missing = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
     assert missing.items[0].track == "pl_cutout"
     assert missing.items[0].unit == cut.target_path.stem
     assert missing.items[0].status == "missing"
@@ -399,7 +399,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
         patch(MASK) as mask,
         patch("kartograf.providers.pl.create_nmt_provider") as factory,
     ):
-        local = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
+        local = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
     assert local.items[0].status == "unverifiable"
     assert local.items[0].local_sha256
     mask.assert_not_called()
@@ -408,7 +408,7 @@ def test_check_pl_cutout_never_downloads(tmp_path):
 
 def test_pl_cutout_plan_skips_missing_or_stale_without_fetch(tmp_path):
     cut = _cutout(tmp_path)
-    missing = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
+    missing = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
     session = _recorded_session()
     provider = GugikProvider(session=session, vertical_crs="EVRF2007", resolution="1m")
     with patch(MASK) as mask:
@@ -634,7 +634,7 @@ def test_download_pl_cutout_writes_parent_request(tmp_path):
         patch(MASK, return_value=ALL_LAND),
     ):
         result = download_pl_cutout(
-            BBOX,
+            bbox=BBOX,
             output_dir=tmp_path,
             parent_request={"p": 1},
             cache=False,
@@ -656,32 +656,13 @@ def _factory(session):
     )
 
 
-def test_horizontal_crs_keyword_only(tmp_path):
-    with pytest.raises(TypeError):
-        download_pl_cutout(  # type: ignore[misc]
-            BBOX,
-            "EPSG:2180",
-            output_dir=tmp_path,
-            vertical_crs="EVRF2007",
-            product="nmt",
-        )
-    with pytest.raises(TypeError):
-        check_pl_cutout(  # type: ignore[misc]
-            BBOX,
-            "EPSG:2180",
-            output_dir=tmp_path,
-            vertical_crs="EVRF2007",
-            product="nmt",
-        )
-
-
 def test_check_pl_cutout_same_args_as_download(tmp_path):
     """The check takes the download's selection and plans exactly its file."""
     selection = {"output_dir": tmp_path, "cache": False, **ARGS}
-    before = check_pl_cutout(BBOX, **selection)
+    before = check_pl_cutout(bbox=BBOX, **selection)
     with _factory(_recorded_session()), patch(MASK, return_value=ALL_LAND):
-        result = download_pl_cutout(BBOX, **selection)
-    after = check_pl_cutout(BBOX, **selection)
+        result = download_pl_cutout(bbox=BBOX, **selection)
+    after = check_pl_cutout(bbox=BBOX, **selection)
 
     assert before.items[0].status == "missing"
     assert before.items[0].unit == result.file.path.stem == after.items[0].unit
@@ -690,12 +671,12 @@ def test_check_pl_cutout_same_args_as_download(tmp_path):
 
 
 def test_download_pl_cutout_plan_stale_no_download(tmp_path):
-    missing = check_pl_cutout(BBOX, output_dir=tmp_path, **ARGS)
+    missing = check_pl_cutout(bbox=BBOX, output_dir=tmp_path, **ARGS)
     changed = replace(missing.items[0], available_label="different")
     session = _recorded_session()
     with _factory(session), patch(MASK) as mask:
         result = download_pl_cutout(
-            BBOX,
+            bbox=BBOX,
             output_dir=tmp_path,
             update="upgrade",
             plan=replace(missing, items=(changed,)),
@@ -728,7 +709,7 @@ def test_cutout_size_notice_before_first_wcs_request(tmp_path):
         pytest.raises(DownloadError),
     ):
         download_pl_cutout(
-            BBOX, output_dir=tmp_path, cache=False, on_notice=events.append, **ARGS
+            bbox=BBOX, output_dir=tmp_path, cache=False, on_notice=events.append, **ARGS
         )
     assert events == [
         Notice(
@@ -743,7 +724,7 @@ def test_cutout_size_notice_before_first_wcs_request(tmp_path):
 
 def test_cutout_size_notice_absent_for_one_small_chunk(tmp_path):
     with _factory(_recorded_session()), patch(MASK, return_value=ALL_LAND):
-        result = download_pl_cutout(BBOX, output_dir=tmp_path, cache=False, **ARGS)
+        result = download_pl_cutout(bbox=BBOX, output_dir=tmp_path, cache=False, **ARGS)
     assert result.file.status == "new"
     assert result.notices == ()
 
@@ -755,7 +736,7 @@ def test_all_nodata_notice(tmp_path):
     session = _synthetic_session(lambda xs, ys: np.full_like(xs + ys, -9999.0))
     with _factory(session), patch(MASK, return_value=ALL_LAND):
         result = download_pl_cutout(
-            BBOX, output_dir=tmp_path, cache=False, on_notice=seen.append, **ARGS
+            bbox=BBOX, output_dir=tmp_path, cache=False, on_notice=seen.append, **ARGS
         )
     expected = Notice(
         "warning",
@@ -767,7 +748,7 @@ def test_all_nodata_notice(tmp_path):
     assert result.notices == (expected,)
     assert seen == [expected]
     with patch(MASK) as mask:
-        local = download_pl_cutout(BBOX, output_dir=tmp_path, cache=False, **ARGS)
+        local = download_pl_cutout(bbox=BBOX, output_dir=tmp_path, cache=False, **ARGS)
     assert local.file.status == "local" and local.all_nodata
     assert local.notices == ()
     mask.assert_not_called()

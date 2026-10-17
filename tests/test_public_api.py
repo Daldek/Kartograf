@@ -1,6 +1,41 @@
-"""A5: transport and mosaic helpers are part of the stable public API."""
+"""A5: transport and mosaic helpers are part of the stable public API;
+the download and check functions take their arguments by name."""
+
+import inspect
+
+import pytest
 
 import kartograf
+
+# Modules of the data and project tracks (``check_source_grid`` is a mosaic
+# helper, not a check of a download).
+_TRACK_MODULES = (
+    "kartograf.download.",
+    "kartograf.landcover.",
+    "kartograf.hydrology.",
+    "kartograf.project.",
+)
+
+
+def _download_and_check_functions() -> list[str]:
+    return sorted(
+        name
+        for name in kartograf.__all__
+        if name.startswith(("download_", "check_", "calculate_"))
+        and getattr(kartograf, name).__module__.startswith(_TRACK_MODULES)
+    )
+
+
+@pytest.mark.parametrize("name", _download_and_check_functions())
+def test_download_and_check_functions_are_keyword_only(name):
+    """Every download/check function of ``kartograf.__all__`` takes its
+    selection by name, as ``download_data`` (``download_pl_cutout(bbox, ...)``
+    is a ``TypeError``); a project function keeps only the project directory
+    positional - the handle shared by all project functions."""
+    params = inspect.signature(getattr(kartograf, name)).parameters.values()
+    positional = [p.name for p in params if p.kind is not p.KEYWORD_ONLY]
+    expected = ["project_dir"] if name.endswith("_project") else []
+    assert positional == expected
 
 
 def test_transport_and_mosaic_exported():

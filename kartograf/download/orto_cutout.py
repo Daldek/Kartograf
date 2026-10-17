@@ -6,8 +6,12 @@ with ``product="orto"`` or ``"true-orto"`` and ``cutout=True``): one RGB
 GeoTIFF of an area from the Standard or High WCS coverage of ``pl.gugik.orto``
 (``coverage``) with the chosen pixel (``resolution``, label K2), in EPSG:2180
 only - the image is never resampled locally (no warp; no land mask: pixels
-without imagery stay 0,0,0 as the service sends them). The request is aligned
-OUTWARD to multiples of the pixel and fetched by the image provider
+without imagery stay 0,0,0 as the service sends them). A cutout without any
+image pixel (every pixel 0,0,0: the true orthophotomap outside its cities,
+``high`` outside the 10 cm flights, the sea or an area abroad) is
+``NoCoverageError`` and never becomes a version - the service publishes no
+cutout extent, so the image is checked after the download. The request is
+aligned OUTWARD to multiples of the pixel and fetched by the image provider
 (``SCALEFACTOR``, chunks within the channel budget counted in coverage
 pixels, stitched without resampling). The true orthophotomap
 (``product="true-orto"``, plan E1) has one WCS channel (0.05 m coverage,
@@ -77,7 +81,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_slot, token_segment
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
-from kartograf.notices import ALL_NODATA, CUTOUT_SIZE, Notice, NoticeSink
+from kartograf.notices import CUTOUT_SIZE, Notice, NoticeSink
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     GugikImageProvider,
@@ -171,7 +175,7 @@ class ImageCutoutResult:
     available locally; otherwise it points to the standard bbox link.
     ``stale``: plan positions changed since the plan. ``notices``:
     ``CUTOUT_SIZE`` (several WCS requests or >= 1 GiB, before the first
-    request) and ``ALL_NODATA`` (a downloaded cutout without any image pixel).
+    request).
     """
 
     file: VersionedFile | None
@@ -344,6 +348,32 @@ def _has_image(path: Path) -> bool:
     return False
 
 
+def _no_image_error(cutout: _OrtoCutout) -> NoCoverageError:
+    """``NoCoverageError`` of a cutout whose every pixel is 0,0,0, with the
+    reason and the remedy of its WCS channel."""
+    if cutout.key != ORTO_KEY:
+        what = (
+            "wycinek true orto: WCS GUGiK nie ma w tym obszarze prawdziwej "
+            "ortofotomapy - obejmuje tylko wybrane miasta, np. Gdansk"
+        )
+        remedy = "zmien --bbox"
+    elif cutout.coverage == "high":
+        what = (
+            "wycinek ortofotomapy high: WCS GUGiK nie ma w tym obszarze "
+            "ortofotomapy o pikselu 10 cm i mniejszym"
+        )
+        remedy = "zmien --bbox albo uzyj --coverage standard"
+    else:
+        what = (
+            f"wycinek ortofotomapy {cutout.coverage}: WCS GUGiK nie ma w tym "
+            "obszarze ortofotomapy (np. morze albo obszar za granica)"
+        )
+        remedy = "zmien --bbox"
+    return NoCoverageError(
+        f"{what}, a obraz obszaru jest w calosci 0,0,0; wersja nie powstala, {remedy}"
+    )
+
+
 def _write_sidecar(
     cutout: _OrtoCutout,
     path: Path,
@@ -353,7 +383,6 @@ def _write_sidecar(
     digest: ContentDigest,
     http: dict | None,
     parent_request: dict | None,
-    all_nodata: bool,
 ) -> None:
     """The mandatory, exclusive sidecar of a cutout version.
 
@@ -379,8 +408,6 @@ def _write_sidecar(
     if parent_request:
         extra["parent_request"] = parent_request
     extra["source"] = source
-    if all_nodata:
-        extra["all_nodata"] = True
     if http is not None:
         extra["http"] = http
     request: dict = {"bbox": bbox_coords(cutout.grid), "bbox_crs": ORTO_CUTOUT_CRS}
@@ -414,10 +441,9 @@ def _run(
     A plan executes only its matching missing position (changed ones land in
     ``stale``). A download checks disk space, announces a cutout of several
     requests (or >= 1 GiB) with ``CUTOUT_SIZE`` before the first one, fetches
-    into the private staging directory, checks the grid of the result and
-    handles a cutout without any image pixel: the true orthophotomap (selected
-    cities only) raises ``NoCoverageError`` before the version is stored, the
-    orthophotomap gets a version with ``extra.all_nodata`` and ``ALL_NODATA``.
+    into the private staging directory and checks the grid of the result; a
+    cutout without any image pixel raises ``NoCoverageError`` before the
+    version is stored (``_no_image_error``).
     """
     slot = cutout.slot
     signal = cutout.channel.update_signal
@@ -438,10 +464,9 @@ def _run(
             )
 
     provider: GugikImageProvider | None = None
-    all_nodata = False
 
     def fetch(staged: Path) -> None:
-        nonlocal provider, all_nodata
+        nonlocal provider
         provider = _cutout_provider(cutout)
         chunks = len(provider.plan_wcs_chunks(cutout.grid))
         if chunks > 1 or cutout.estimated_bytes >= 2**30:
@@ -464,14 +489,8 @@ def _run(
             f"({grid.min_x:.0f},{grid.min_y:.0f})-({grid.max_x:.0f},{grid.max_y:.0f})",
         )
         _check_result(staged, cutout)
-        all_nodata = not _has_image(staged)
-        if all_nodata and cutout.key != ORTO_KEY:
-            raise NoCoverageError(
-                "wycinek true orto: WCS GUGiK nie ma w tym obszarze prawdziwej "
-                "ortofotomapy - obejmuje tylko wybrane miasta, np. Gdansk, a "
-                "obraz obszaru jest w calosci 0,0,0; wersja nie powstala, "
-                "zmien --bbox"
-            )
+        if not _has_image(staged):
+            raise _no_image_error(cutout)
 
     def write_sidecar(
         path: Path, version: VersionRef, digest: ContentDigest, http: dict | None
@@ -485,7 +504,6 @@ def _run(
             digest=digest,
             http=http,
             parent_request=parent_request,
-            all_nodata=all_nodata,
         )
 
     file = fetch_version(
@@ -496,13 +514,6 @@ def _run(
         version=VersionRef.downloaded(now),
         write_sidecar=write_sidecar,
     )
-    if all_nodata and file.status != "local":
-        sink.emit(
-            "warning",
-            ALL_NODATA,
-            "wycinek w calosci bez obrazu (piksele 0,0,0) - WCS GUGiK nie ma "
-            f"w tym obszarze ortofotomapy {cutout.variant} ({cutout.channel.notes})",
-        )
     return ImageCutoutResult(file, stale=stale)
 
 
@@ -594,9 +605,7 @@ def download_image_cutout(
     -------
     ImageCutoutResult
         ``file`` - standard link and version status; ``notices`` -
-        ``CUTOUT_SIZE`` (before the first WCS request) and ``ALL_NODATA``
-        (orthophotomap without any image pixel, e.g. ``high`` outside the
-        10 cm areas: the version is stored with ``extra.all_nodata``).
+        ``CUTOUT_SIZE`` (before the first WCS request).
 
     Raises
     ------
@@ -606,8 +615,9 @@ def download_image_cutout(
     TransformError
         No safe pinned operation from a Czech CRS of ``bbox`` to EPSG:2180.
     NoCoverageError
-        True orthophotomap: the area has no image pixel (outside the
-        cities of the service); no version is stored.
+        The area has no image pixel (every pixel 0,0,0: the true
+        orthophotomap outside the cities of the service, ``high`` outside
+        the 10 cm flights, the sea or an area abroad); no version is stored.
     DownloadError
         WCS failure, an error document or a raster off the requested grid;
         no version is committed.

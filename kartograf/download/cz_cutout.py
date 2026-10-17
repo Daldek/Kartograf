@@ -306,8 +306,8 @@ def _cz_provider(
 
 
 def check_cz_cutout(
-    bbox: BBox,
     *,
+    bbox: BBox,
     output_dir: str | Path,
     product: str,
     horizontal_crs: str,
@@ -340,8 +340,8 @@ def check_cz_cutout(
 
 
 def download_cz_cutout(
-    bbox: BBox,
     *,
+    bbox: BBox,
     output_dir: str | Path,
     product: str,
     horizontal_crs: str,

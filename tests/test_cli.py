@@ -983,6 +983,27 @@ class TestCmdDownload:
         mock_manager.download_hierarchy.assert_called_once()
 
     @patch("kartograf.download.data.DownloadManager")
+    def test_hierarchy_start_line_is_polish(self, mock_manager_class, capsys, tmp_path):
+        """Live test 0.8.0: the hierarchy line names the scale and the
+        resolution in Polish (was ``7.171.21 to 1:2000 (resolution: 1m)``)."""
+        mock_manager = Mock()
+        mock_manager.count_sheets.return_value = 25
+        mock_manager.download_hierarchy.return_value = DownloadResult()
+        mock_manager_class.return_value = mock_manager
+
+        main(
+            ["elevation", "download", "--product", "nmt", "--country", "pl"]
+            + ["--resolution", "1m", "--vertical-crs", "EVRF2007"]
+            + ["--sheet", "7.171.21", "--scale", "1:2000", "-o", str(tmp_path)]
+        )
+
+        out = capsys.readouterr().out
+        assert (
+            "Pobieranie 25 arkuszy z 7.171.21 w skali 1:2000 (rozdzielczosc: 1m)\n"
+            in out
+        )
+
+    @patch("kartograf.download.data.DownloadManager")
     def test_download_with_force(self, mock_manager_class, tmp_path):
         """Test downloading with --force flag."""
         mock_manager = Mock()
@@ -1644,7 +1665,8 @@ class TestCmdDownloadProduct:
     def test_orto_messages_do_not_claim_a_resolution(
         self, mock_manager_cls, mock_create, capsys, tmp_path
     ):
-        """Ortho has no resolution - the message must not say 'resolution: 1m'."""
+        """Ortho has no resolution - the message must not claim one (in Polish:
+        ``produkt:``, no English ``product:``/``resolution:``)."""
         mock_create.return_value = _mock_provider_and_storage(".tif")
         manager = _mock_manager(tmp_path / "test.tif")
         manager.download_sheet.side_effect = _starting_download(tmp_path / "test.tif")
@@ -1657,8 +1679,8 @@ class TestCmdDownloadProduct:
 
         assert result == 0
         out = capsys.readouterr().out
-        assert "Pobieranie N-34-130-D-d-2-4 (product: orto)" in out
-        assert "resolution" not in out
+        assert "Pobieranie N-34-130-D-d-2-4 (produkt: orto)" in out
+        assert "rozdzielczosc" not in out and "resolution" not in out
 
     # --- N6/E14: PL-path MetadataCache — --force/--upgrade = refresh mode ---
 
@@ -2594,7 +2616,8 @@ class TestCmdDownloadBBox:
         assert result == 0
         out = capsys.readouterr().out
         assert (
-            "Znaleziono arkuszy w skali 1:10000: 12 dla bbox (resolution: 1m)\n" in out
+            "Znaleziono arkuszy w skali 1:10000: 12 dla bbox (rozdzielczosc: 1m)\n"
+            in out
         )
         assert "  Arkusze: N-1, N-2, N-3, ..., N-11, N-12\n" in out
 
@@ -5240,7 +5263,7 @@ class TestCmdDownloadCz:
         assert factory.call_args.kwargs["resolution"] == "5m"
         provider.download.assert_called_once()
         captured = capsys.readouterr()
-        assert "Pobieranie CTES96 (CZ, resolution: 5m)..." in captured.out
+        assert "Pobieranie CTES96 (CZ, rozdzielczosc: 5m)..." in captured.out
         assert captured.err == ""
 
     def test_sm5_sheet_with_explicit_2m_is_error_without_network(
@@ -5697,7 +5720,7 @@ class TestCmdDownloadCz:
             assert _cmd_download_cz(_cz_args(tmp_path, quiet=False)) == 0
             second = capsys.readouterr().out
 
-        assert "Pobieranie 302_5550 (CZ, resolution: 2m)" in first
+        assert "Pobieranie 302_5550 (CZ, rozdzielczosc: 2m)" in first
         assert "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif: nowa wersja " in first
         assert "nmt/cz_dmr5g_bpv/302/5550/302_5550.tif: lokalna wersja " in second
         assert "(bez sprawdzania; --check-updates)" in second  # TM33: signal none
@@ -5714,7 +5737,7 @@ class TestCmdDownloadCz:
             assert _cmd_download_cz(args, bbox=bbox) == 0
             second = capsys.readouterr().out
 
-        assert "Pobieranie CZ bbox (2m, EPSG:5514)" in first
+        assert "Pobieranie wycinka CZ (rozdzielczosc: 2m, EPSG:5514)" in first
         unit = "nmt/cz_dmr5g_bpv/bbox/-447000_-1114000_-446000_-1113000.tif"
         assert f"{unit}: nowa wersja " in first
         assert f"{unit}: lokalna wersja " in second

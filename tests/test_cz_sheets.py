@@ -409,7 +409,11 @@ def test_download_cz_sheet_sm5_without_resolution(tmp_path):
     seen: dict = {}
     with _factory(SheetProvider(), seen):
         result = download_cz_sheet(
-            _SHEET, output_dir=tmp_path, product="nmt", vertical_crs="Bpv", cache=False
+            sheet=_SHEET,
+            output_dir=tmp_path,
+            product="nmt",
+            vertical_crs="Bpv",
+            cache=False,
         )
     assert seen["resolution"] == "5m" and seen["vertical_crs"] == "Bpv"
     assert result.file is not None and result.file.status == "new"
@@ -420,7 +424,7 @@ def test_download_cz_sheet_sm5_2m_is_validation_error(tmp_path):
     provider = SheetProvider()
     with _factory(provider), pytest.raises(ValidationError) as error:
         download_cz_sheet(
-            _SHEET,
+            sheet=_SHEET,
             output_dir=tmp_path,
             product="nmt",
             vertical_crs="Bpv",
@@ -438,13 +442,17 @@ def test_download_cz_sheet_tm33_requires_resolution(tmp_path):
     provider = SheetProvider(sm5=False)
     with _factory(provider), pytest.raises(ValidationError, match="wymagane"):
         download_cz_sheet(
-            _TM33, output_dir=tmp_path, product="nmt", vertical_crs="Bpv", cache=False
+            sheet=_TM33,
+            output_dir=tmp_path,
+            product="nmt",
+            vertical_crs="Bpv",
+            cache=False,
         )
     assert provider.fetches == 0
     seen: dict = {}
     with _factory(provider, seen):
         result = download_cz_sheet(
-            _TM33,
+            sheet=_TM33,
             output_dir=tmp_path,
             product="nmt",
             vertical_crs="Bpv",
@@ -465,14 +473,16 @@ def test_check_cz_sheet_plan_items(tmp_path):
         "cache": False,
     }
     with _factory(provider):
-        missing = check_cz_sheet(_SHEET, **selection)
+        missing = check_cz_sheet(sheet=_SHEET, **selection)
         assert [(i.track, i.unit, i.status) for i in missing.items] == [
             ("cz_sheet", _SHEET, "missing")
         ]
         assert provider.fetches == 0
-        done = download_cz_sheet(_SHEET, update="upgrade", plan=missing, **selection)
+        done = download_cz_sheet(
+            sheet=_SHEET, update="upgrade", plan=missing, **selection
+        )
         assert done.file is not None and done.file.status == "new"
-        assert check_cz_sheet(_SHEET, **selection).items[0].status == "current"
+        assert check_cz_sheet(sheet=_SHEET, **selection).items[0].status == "current"
 
 
 def test_cz_all_nodata_notice(tmp_path):
@@ -486,8 +496,8 @@ def test_cz_all_nodata_notice(tmp_path):
         "cache": False,
     }
     with _factory(provider):
-        result = download_cz_sheet(_TM33, on_notice=seen.append, **selection)
-        local = download_cz_sheet(_TM33, **selection)
+        result = download_cz_sheet(sheet=_TM33, on_notice=seen.append, **selection)
+        local = download_cz_sheet(sheet=_TM33, **selection)
     assert result.file is not None and result.all_nodata
     expected = Notice(
         "warning",
@@ -594,7 +604,7 @@ def test_route_table(product, resolution, vertical_crs, sheet, request_url, tmp_
         pytest.raises(_FirstRequest),
     ):
         download_cz_sheet(
-            sheet,
+            sheet=sheet,
             output_dir=tmp_path,
             product=product,
             resolution=resolution,
@@ -653,7 +663,7 @@ def test_route_table_rejected_before_network(
             pytest.raises(ValidationError) as caught,
         ):
             call(
-                sheet,
+                sheet=sheet,
                 output_dir=tmp_path,
                 product=product,
                 resolution=resolution,
@@ -679,7 +689,7 @@ def test_route_table_cutout_is_the_image_server(product, resolution, service, tm
     session = _StopSession()
     with _real_provider(session), pytest.raises(_FirstRequest):
         download_cz_cutout(
-            BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
+            bbox=BBox(-447000, -1114000, -446000, -1113000, "EPSG:5514"),
             output_dir=tmp_path,
             product=product,
             horizontal_crs="EPSG:5514",
@@ -712,7 +722,7 @@ def test_tm33_file_is_native_evrf2007(tmp_path):
         patch(_PINNED, side_effect=AssertionError("no operation on a native file")),
     ):
         result = download_cz_sheet(
-            _RAW_TM33,
+            sheet=_RAW_TM33,
             output_dir=tmp_path,
             product="nmt",
             resolution="5m",
@@ -834,10 +844,10 @@ def test_existing_tm33_warp_kept_locally(tmp_path):
     }
     session = CuzkSession()
     with _real_provider(session):
-        kept = download_cz_sheet(_RAW_TM33, **selection)
-        upgraded = download_cz_sheet(_RAW_TM33, update="upgrade", **selection)
+        kept = download_cz_sheet(sheet=_RAW_TM33, **selection)
+        upgraded = download_cz_sheet(sheet=_RAW_TM33, update="upgrade", **selection)
         assert session.of("GET") == []
-        forced = download_cz_sheet(_RAW_TM33, update="force", **selection)
+        forced = download_cz_sheet(sheet=_RAW_TM33, update="force", **selection)
 
     # the default mode asks nothing; upgrade compares and reports decision 12
     assert kept.file is not None and kept.file.status == "local"

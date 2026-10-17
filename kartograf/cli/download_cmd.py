@@ -54,7 +54,7 @@ class _ProgressPrinter:
                 self._campaign_line(progress)
             return
         if progress.status == "start":
-            if progress.total > 1:  # a sheet hierarchy: "<code> to <scale>"
+            if progress.total > 1:  # a sheet hierarchy: "<code> w skali <scale>"
                 print(
                     f"Pobieranie {progress.total} arkuszy z {progress.sheet} "
                     f"({progress.message})"

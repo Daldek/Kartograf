@@ -3,9 +3,10 @@
 
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
+import requests
 
 from kartograf.cli.commands import main
 from kartograf.download.cutout import PlCutoutResult
@@ -97,6 +98,27 @@ def test_check_updates_failure_is_partial_success_code(tmp_path, capsys):
     fake.resolve_error = _transport_error(G, 503)
     assert _run(fake, tmp_path, "--sheet", G, "--check-updates") == 1
     assert f"{G_PATH}: nie udalo sie sprawdzic: " in capsys.readouterr().out
+
+
+def test_check_updates_index_failure_names_no_download(tmp_path, capsys):
+    """Live test 0.8.0: an unreachable WFS index under ``--check-updates``
+    ends the line with the fact ("wynik bylby niepelny") - no "ponow
+    pobranie" of a download that never ran (download summaries add it)."""
+    offline = Mock(spec=requests.Session)
+    offline.get.side_effect = requests.ConnectionError("offline")
+    with (
+        patch("kartograf.transport.http.make_gugik_session", return_value=offline),
+        patch("kartograf.transport.http.time.sleep"),
+    ):
+        grid = ["--resolution", "1m", "--vertical-crs", "EVRF2007"]
+        argv = ["--sheet", G, "-o", str(tmp_path), "--check-updates"]
+        rc = main(["elevation", "download", "--product", "nmt", *grid, *argv])
+    assert rc == 1
+    line = next(
+        text for text in capsys.readouterr().out.splitlines() if text.startswith(G_PATH)
+    )
+    assert line.startswith(f"{G_PATH}: nie udalo sie sprawdzic: ")
+    assert line.endswith(" - wynik bylby niepelny")
 
 
 def test_check_updates_writes_plan_file_and_upgrade_executes_it(tmp_path, capsys):
@@ -361,6 +383,6 @@ def test_cz_sheet_cli_uses_library(tmp_path, flag, update):
         return_value=CzSheetResult(None, False),
     ) as run:
         assert _download(tmp_path, "--sheet", "302_5550", *CZ_2M, *flag) == 0
-    assert run.call_args.args[0] == "302_5550"
+    assert run.call_args.kwargs["sheet"] == "302_5550"
     assert run.call_args.kwargs["update"] == update
     assert run.call_args.kwargs["resolution"] == "2m"

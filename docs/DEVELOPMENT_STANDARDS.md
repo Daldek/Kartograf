@@ -466,6 +466,10 @@ same statusy, plan, komunikaty i bledy. Reguly:
   odpowiedniki `check_*` z tymi samymi argumentami wyboru danych (bez
   `update`, `plan`, `workers`, `on_progress`; `on_notice` jest dostepne
   rowniez przy sprawdzaniu); pobierajace przyjmuja `update=` i `plan=`.
+  Funkcje pobrania i sprawdzenia z `kartograf.__all__` przyjmuja argumenty
+  tylko nazwane (`*` na poczatku, jak `download_data`); funkcje projektu
+  maja pozycyjny tylko katalog projektu (`download_project("projekt")`, jak
+  `open_project`). Pilnuje tego `tests/test_public_api.py`.
 - **Z3:** komunikaty o danych powstaja w bibliotece jako `Notice` (pole
   `notices` wyniku i `on_notice`), z kodem z `kartograf/notices.py`; CLI
   wypisuje `Info:`/`Warning:` na stderr, z wyjatkiem `SHEET_LIST`
