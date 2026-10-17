@@ -412,7 +412,7 @@ def download_cz_laz(
     DownloadError
         Index or plan check failure.
     """
-    validate_update(update)
+    validate_update(update, check="check_cz_laz")
     require_int(workers, "workers")
     bbox = _validate_selection(
         model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox

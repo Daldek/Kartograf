@@ -246,6 +246,12 @@ kartograf imagery download --product oblique-orto --sheet 7.125.11.08 --directio
   może pominąć `--sheet-system`; orto ukośna ma arkusze 1:2000 i 1:1000,
   więc obszar wymaga `--scale`. `--full-sheet` tylko dla orto ukośnej
   (rekordy intensywności i true orto nie deklarują pełnego arkusza).
+- True orto obejmuje tylko wybrane miasta (np. Gdańsk; arkusz bez rekordu,
+  np. Kraków, to `Error:` z podpowiedzią). Wycinek poza nimi: WCS oddaje
+  obraz w całości 0,0,0, więc Kartograf kończy `Error: wycinek true orto:
+  WCS GUGiK nie ma w tym obszarze prawdziwej ortofotomapy ...` (kod 1) bez
+  wersji w magazynie; usługa nie publikuje zasięgu wycinka, więc obraz jest
+  pobierany i sprawdzany przed zapisem.
 - Linie wyniku i `--check-updates` jednostki z kilkoma plikami podają nazwę
   pliku (`7.125.11.08_e.tif: do pobrania ...`).
 - Pod `--country auto` produkt jednego kraju zawęża obszar do tego kraju
@@ -1847,9 +1853,11 @@ cut = download_data(product="orto", country="pl", output_dir=out,
                     cutout=True, horizontal_crs="EPSG:2180",
                     coverage="standard", resolution="0.25m", on_notice=show)
 # tor wycinka (ImageCutoutResult: file, stale, notices); plan: check_image_cutout
-high = download_image_cutout(BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
-                             product="orto", horizontal_crs="EPSG:2180",
-                             output_dir=out, coverage="high", resolution="0.1m")
+high = download_image_cutout(product="orto",
+                             bbox=BBox(566000, 243000, 566200, 243200, "EPSG:2180"),
+                             horizontal_crs="EPSG:2180", output_dir=out,
+                             coverage="high", resolution="0.1m")
+# true orto: bez coverage (jedna usługa); poza miastami NoCoverageError
 print(high.file.path)  # data/orto/pl_1992_high_0.1m/bbox/566000_243000_566200_243200.tif
 
 # = landcover download --product zabaged --bbox=-460000,-1120000,-450000,-1110000 --bbox-crs EPSG:5514
@@ -2178,7 +2186,9 @@ tokeny, `-` łączy słowa jednego tokenu (`cz_cadastral-map_shp`,
 katalog jej numeru (`nmt/pl_2000_1m_evrf2007/6/...`,
 `models3d/pl_mesh/2000/7/...`), arkusz leży w hierarchii godła. Pole
 `dataset` sidecara to klucz źródła `<kraj>.<dostawca>.<nazwa>` (np.
-`pl.gugik.true_orto`; kolumna `KLUCZ` w `list-sources`). Kanoniczna
+`pl.gugik.true_orto`; kolumna `KLUCZ` w `list-sources`), pole `product`
+to wartość `--product` (`true-orto`, `bdot10k`; `soil download` - `soil`,
+`soil hsg` - `hsg`). Kanoniczna
 tabela, reguły (konwencja nazw: reguła 10), przykłady i migracja z 0.6.x:
 ARCHITECTURE 3.3.
 
@@ -2500,13 +2510,18 @@ print(report.stale, report.files.get(godlo, ()))
   tabela TR-55: `sandy_loam` = **B** (nie A), `clay_loam`
   i `silty_clay_loam` = **C** (nie D) — to klasy przejściowe, których grupa
   zależy też od struktury gleby ([ADR-025](DECISIONS.md)).
-- `--summary` podaje powierzchnie grup w ha także dla rastrów w EPSG:4326
-  (pole komórki liczone geodezyjnie na elipsoidzie, nie w stopniach
-  kwadratowych). Procent grupy to udział **w pikselach z danymi**; osobna
-  linia `Brak danych: <procent>% calego obszaru (<ha> ha)` podaje piksele
+- `--summary` liczy **obszar zadania** (bbox; przy `--geometry` jej
+  obwiednia w EPSG:2180; przy `--sheet` rama arkusza), nie cały raster:
+  siatka SoilGrids (250 m, EPSG:4326) sięga poza obszar, więc komórka na
+  brzegu liczy się udziałem w obszarze, a suma powierzchni to obszar
+  (linia `Obszar zadania: <ha> ha`; bbox 2 x 2 km = ok. 400 ha). Pole
+  komórki jest liczone geodezyjnie na elipsoidzie, nie w stopniach
+  kwadratowych. Procent grupy to udział **w powierzchni z danymi**; linia
+  `Brak danych: <procent>% obszaru zadania (<ha> ha)` podaje część obszaru
   bez danych (klasa 0: wszystkie wejścia 0 albo nodata). W bibliotece
-  `hsg_statistics(path)` zwraca je pod kluczem `nodata` (procent liczony
-  od wszystkich pikseli). Skąd zera SoilGrids: sekcja 7.
+  `hsg_statistics(path)` czyta obszar z `request` sidecara (plik bez
+  niego: cały raster) i zwraca brak danych pod kluczem `nodata` (procent
+  od obszaru); opisy grup są po polsku. Skąd zera SoilGrids: sekcja 7.
 
 ---
 

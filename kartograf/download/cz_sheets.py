@@ -380,7 +380,7 @@ def download_cz_sheet(
     DownloadError
         CUZK service failure; no new version is committed.
     """
-    validate_update(update)
+    validate_update(update, check="check_cz_sheet")
     sink = NoticeSink(on_notice)
     with open_cache(
         cache, force=refreshes_cache(update), on_notice=sink.add

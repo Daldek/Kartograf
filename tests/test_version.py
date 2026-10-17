@@ -175,3 +175,16 @@ class TestVersionUsage:
             main(["--version"])
         assert exc_info.value.code == 0
         assert capsys.readouterr().out.strip() == "kartograf 9.9.9-dev+feed123"
+
+    def test_cli_module_runs_without_runpy_warning(self):
+        """``python -m kartograf.cli.commands`` (the documented way to run
+        the CLI from a checkout) prints no ``RuntimeWarning`` of ``runpy``."""
+        result = subprocess.run(
+            [__import__("sys").executable, "-m", "kartograf.cli.commands", "--help"],
+            cwd=TOPLEVEL,
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        assert result.returncode == 0, result.stderr
+        assert "RuntimeWarning" not in result.stderr

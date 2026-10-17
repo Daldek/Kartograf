@@ -303,7 +303,7 @@ def test_bdot10k_year_teryt_slot_and_sidecar(tmp_path, frozen_clock):
     assert file.path.read_bytes() == response[2]
     assert os.stat(file.path).st_ino == os.stat(file.version_path).st_ino
     meta = _meta(file.version_path)
-    assert (meta["dataset"], meta["product"]) == ("pl.gugik.bdot10k", "landcover")
+    assert (meta["dataset"], meta["product"]) == ("pl.gugik.bdot10k", "bdot10k")
     assert meta["request"] == {"teryt": "1261", "format": "SHP", "year": 2024}
     assert meta["horizontal_crs"] == "EPSG:2180"
     assert meta["extra"]["source"] == {"url": url, "edition": "2024"}

@@ -314,6 +314,7 @@ def test_zabaged_bbox_gpkg(tmp_path, monkeypatch, frozen_clock):
     }
     meta = _meta(path)
     assert (meta["dataset"], meta["horizontal_crs"]) == ("cz.cuzk.zabaged", "EPSG:5514")
+    assert meta["product"] == "zabaged"
 
     fake.calls.clear()
     (planned,) = manager.check(bbox=AREA).items

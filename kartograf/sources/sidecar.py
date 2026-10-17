@@ -198,6 +198,7 @@ def build_metadata(
     horizontal_crs: str | None = None,
     digest: tuple[str, int] | None = None,
     version: dict | None = None,
+    product: str | None = None,
 ) -> ResultMetadata:
     """Build metadata from the descriptor + the call context.
 
@@ -209,7 +210,9 @@ def build_metadata(
 
     ``digest`` — (sha256, size) computed by the store commit from the same
     read (D20); the file is then not hashed again. ``version`` becomes
-    ``extra.version`` (a version sidecar is written once, D12).
+    ``extra.version`` (a version sidecar is written once, D12). ``product``
+    names a product derived from the descriptor's data (``hsg`` from
+    SoilGrids); default: the descriptor's ``product``.
     """
     if capability is not None:
         channel = _select_channel_by_capability(descriptor, capability)
@@ -235,7 +238,7 @@ def build_metadata(
     return ResultMetadata(
         dataset=descriptor.key,
         country=descriptor.country,
-        product=descriptor.product,
+        product=product or descriptor.product,
         provider=descriptor.provider_name,
         horizontal_crs=horizontal_crs
         or _default_horizontal_crs(descriptor, channel, request, data_path),
@@ -330,6 +333,7 @@ def emit_sidecar(
     digest: tuple[str, int] | None = None,
     version: dict | None = None,
     exclusive: bool = False,
+    product: str | None = None,
 ) -> Path | None:
     """Best-effort result sidecar - the one place of the policy "a sidecar never
     aborts the download" (D7): any build/write exception ends in
@@ -350,8 +354,8 @@ def emit_sidecar(
     ``exclusive=True`` (version sidecar, implies ``required``): published with
     ``os.link`` (``write_sidecar(exclusive=True)``); ``FileExistsError``
     PROPAGATES unchanged - another writer published the sidecar first.
-    ``digest``/``version`` as in ``build_metadata``. A version must always
-    have a sidecar, so without a descriptor a BARE one is written: only
+    ``digest``/``version``/``product`` as in ``build_metadata``. A version
+    must always have a sidecar, so without a descriptor a BARE one is written: only
     ``request``, ``extra``, ``sha256``, ``size_bytes``, ``downloaded_at``
     and ``kartograf_version`` (a stub or foreign provider; plan 1/3 decision 7).
 
@@ -409,6 +413,7 @@ def emit_sidecar(
             horizontal_crs=horizontal_crs,
             digest=digest,
             version=version,
+            product=product,
         )
         return write_sidecar(data_path, meta, atomic=required, exclusive=exclusive)
     except Exception as e:  # noqa: BLE001 — failure policy in one place (D7)

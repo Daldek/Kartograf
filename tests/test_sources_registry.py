@@ -923,13 +923,18 @@ class TestCollectionChannels:
         assert current.params is None  # current packages: Bdot10kProvider
         assert isinstance(archive.params, UnitPackageParams)
         assert archive.params.unit == "powiat"
-        assert {d.key for d in sources_for(product="landcover")} == {
-            "pl.gugik.bdot10k",
-            "pl.gugik.bdoo",
-            "eu.clms.corine",
-            "cz.cuzk.zabaged",
-            "cz.cuzk.data50",
-            "cz.cuzk.data250",
+        # land cover sources: product = their --product (and sidecar product)
+        assert {
+            d.key: d.product
+            for d in sources_for()
+            if d.storage_subdir.startswith("landcover/")
+        } == {
+            "pl.gugik.bdot10k": "bdot10k",
+            "pl.gugik.bdoo": "bdoo",
+            "eu.clms.corine": "corine",
+            "cz.cuzk.zabaged": "zabaged",
+            "cz.cuzk.data50": "data50",
+            "cz.cuzk.data250": "data250",
         }
         published = {dict(v.choice)["year"] for v in archive.params.variants}
         assert published == {str(year) for year in range(2014, 2026)}

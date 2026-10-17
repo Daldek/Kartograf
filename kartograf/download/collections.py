@@ -627,7 +627,7 @@ def selection_choices(descriptor_key: str) -> str:
 def _subject_flag(descriptor: SourceDescriptor) -> str:
     """The flag choosing a source in messages: ``--product admin`` (a
     collection product), ``--product zabaged`` (a land cover product)."""
-    return f"--product {subject(descriptor)}"
+    return f"--product {descriptor.product}"
 
 
 def _choice_text(descriptors: Mapping[str, SourceDescriptor], country: object) -> str:
@@ -698,15 +698,6 @@ def _cuzk_sheet_channel(descriptor: SourceDescriptor) -> bool:
     )
 
 
-def subject(descriptor: SourceDescriptor) -> str:
-    """How messages name a source: the product of a collection group
-    (``admin``), the ``--product`` of a land cover source - the last part of
-    its key (``zabaged``)."""
-    if descriptor.storage_subdir.split("/", 1)[0] == _LANDCOVER_GROUP:
-        return descriptor.key.rsplit(".", 1)[-1]
-    return descriptor.product
-
-
 _SELECTION_TEXT = {
     "teryt": "--teryt",
     "ku": "--ku",
@@ -720,7 +711,7 @@ def _candidates(
 ) -> tuple[list[AccessChannel], str]:
     """Channels of a kind of selection (ADR-042 D2, ADR-043) and the text of
     their absence."""
-    product, country = subject(descriptor), descriptor.country
+    product, country = descriptor.product, descriptor.country
     if kind == "teryt":
         assert teryt is not None
         unit = "woj" if len(teryt) == 2 else "powiat"
@@ -784,7 +775,7 @@ def _check_other_selection(
         )
         here = f"; dla {_SELECTION_TEXT[kind]}: {', '.join(values)}" if values else ""
         raise ValidationError(
-            f"{cli_flag(key)} {value}: {subject(descriptor)} ({descriptor.country}) - "
+            f"{cli_flag(key)} {value}: {descriptor.product} ({descriptor.country}) - "
             f"dostepne tylko dla {elsewhere}{here}"
         )
 
@@ -863,7 +854,7 @@ def _channel_for(
     offered = [_selecting_options(channel.params) for channel in candidates]
     keys = _distinct(key for found in offered for key in found)
     given = {k: v for k, v in options.items() if v is not None and k in keys}
-    where = f"{_SELECTION_TEXT[kind]} {subject(descriptor)} ({descriptor.country})"
+    where = f"{_SELECTION_TEXT[kind]} {descriptor.product} ({descriptor.country})"
 
     def admits(found: dict[str, tuple[str, ...]], pairs: dict[str, str]) -> bool:
         return all(value in found.get(key, ()) for key, value in pairs.items())
@@ -962,7 +953,7 @@ def _content(
     area request (hint of the per-country ``--level`` syntax). ``classes``:
     the ``layers`` of a land cover source whose packages hold class files
     (BDOO; ``None`` = not given)."""
-    product = subject(descriptor)
+    product = descriptor.product
     params = channel.params
     level_value = country_value(level, code)
     given = {key: value for key, value in options.items() if value is not None}
@@ -1116,7 +1107,7 @@ def _feature_content(
 ) -> tuple[tuple[FeatureLayer, ...], tuple[str, ...], dict[str, object]]:
     """Layers, segment tokens and request values of a ``feature_bbox`` part:
     the values of the channel ``choice`` and of its ``selection_key``."""
-    product = subject(descriptor)
+    product = descriptor.product
     where = f"obszaru {product} ({descriptor.country})"
     for name, number in (("lod", lod), ("year", year)):
         if number is not None:
@@ -1438,7 +1429,7 @@ def _sheet_part(
         grid = base.variant.sheet_grid if base.variant is not None else None
         if grid is None or grid.system != "cuzk":
             raise ValidationError(
-                f"--sheet {sheet}: {subject(cz)} (CZ) w wybranym wariancie nie ma "
+                f"--sheet {sheet}: {cz.product} (CZ) w wybranym wariancie nie ma "
                 "arkuszy CUZK - podaj --bbox"
             )
         if not _MAPNOM.fullmatch(sheet):
@@ -1764,7 +1755,7 @@ def _area_voivodeships(
         The PRG query failed.
     """
     assert part.area is not None
-    what = subject(part.descriptor)
+    what = part.descriptor.product
     teryts = discover_teryts_for_bbox(
         part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
     )
@@ -2036,10 +2027,16 @@ def _sheet_jobs(
 
 
 def _tile_jobs(
-    out: Path, part: CollectionPart, product: str, sink: NoticeSink
+    out: Path,
+    part: CollectionPart,
+    product: str,
+    sink: NoticeSink,
+    metadata: MetadataCache | None,
 ) -> list[UnitJob]:
     """The files of the index tiles of an area: the newest record of each tile,
-    or the record of the requested year (ADR-028, ADR-043)."""
+    or the record of the requested year (ADR-028, ADR-043). The records of
+    the area come from the metadata cache when it has them (a repeated run
+    works offline, as the PL sheet indexes)."""
     params, variant = part.channel.params, part.variant
     assert isinstance(params, UnitPackageParams) and variant is not None
     index = params.index
@@ -2048,7 +2045,12 @@ def _tile_jobs(
     assert part.area is not None
     area = _to_crs(part.area, "EPSG:2180")
     found = wfs_records(
-        _session, index, variant.index_layer, area, timeout=SERVICE_TIMEOUT
+        _session,
+        index,
+        variant.index_layer,
+        area,
+        timeout=SERVICE_TIMEOUT,
+        cache=metadata,
     )
     if not found:
         raise NoCoverageError(
@@ -2154,7 +2156,7 @@ def _jobs(
                 sink.emit(
                     "info",
                     AREA_OMITTED,
-                    f"{subject(part.descriptor)}: {params.area_omitted}",
+                    f"{part.descriptor.product}: {params.area_omitted}",
                 )
             continue
         params = part.channel.params
@@ -2171,7 +2173,7 @@ def _jobs(
             )
             continue
         if params.unit == "tile":
-            jobs.extend(_tile_jobs(out, part, request.product, sink))
+            jobs.extend(_tile_jobs(out, part, request.product, sink, metadata))
             continue
         if params.unit == "ku":
             jobs.extend(_ku_jobs(out, part, request, sink))
@@ -2373,7 +2375,7 @@ def _announce_size(job: UnitJob, sink: NoticeSink, session: requests.Session) ->
     area (``job.sized``) is not asked again."""
     assert job.url is not None
     length = job.size if job.sized else _head_length(session, job.url)
-    what = subject(job.descriptor)
+    what = job.descriptor.product
     if job.whole_country:
         sink.emit(
             "warning",
@@ -2424,7 +2426,7 @@ def _fetch_package(
             sink.emit(
                 "info",
                 CLASSES_ABSENT,
-                f"{subject(job.descriptor)} {job.country} {job.unit}: paczka nie ma "
+                f"{job.descriptor.product} {job.country} {job.unit}: paczka nie ma "
                 f"plikow klas {', '.join(absent)} (brak takich obiektow); zapisano "
                 f"klasy {', '.join(package.classes)}",
             )
@@ -2451,7 +2453,7 @@ def _fetch_atom(
     the transfer - always for the national file (``WHOLE_COUNTRY_SIZE``,
     K7), above ``LARGE_FILE_BYTES`` for a voivodeship file
     (``DOWNLOAD_SIZE``, K9)."""
-    what = subject(job.descriptor)
+    what = job.descriptor.product
     if job.whole_country:
         sink.emit(
             "warning",
@@ -2599,7 +2601,7 @@ def run_job(
                 sink.emit(
                     "info",
                     SLOW_SOURCE,
-                    f"{subject(job.descriptor)}: {params.response_note}",
+                    f"{job.descriptor.product}: {params.response_note}",
                 )
             pages = params.timeout or SERVICE_TIMEOUT
             _fetch_features(job, staged, source, _http(session), pages)
@@ -2801,7 +2803,7 @@ def download_collection(
         unit failures land in ``failed``).
     """
     sink = NoticeSink(on_notice)
-    validate_update(update)
+    validate_update(update, check="check_collection")
     request = _resolve(_choices(locals()), sink)
     files, failed, stale = run_request(
         request,

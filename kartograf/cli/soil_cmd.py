@@ -144,7 +144,7 @@ def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
 
     if args.summary and result.files:
         print()
-        print("Statystyki HSG (procent grupy: z pikseli z danymi):")
+        print("Statystyki HSG obszaru zadania (grupy: % powierzchni z danymi):")
         stats = hsg_statistics(result.files[0].file.path)
         nodata = stats.pop("nodata")
         for group, data in stats.items():
@@ -153,9 +153,11 @@ def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
             print(f"  Grupa {group}: {pct:.1f}% ({area:.2f} ha)")
             print(f"           {data['description']}")
         print(
-            f"  Brak danych: {nodata['percent']:.1f}% calego obszaru "
+            f"  Brak danych: {nodata['percent']:.1f}% obszaru zadania "
             f"({nodata['area_ha']:.2f} ha)"
         )
+        total = nodata["area_ha"] + sum(data["area_ha"] for data in stats.values())
+        print(f"  Obszar zadania: {total:.2f} ha")
 
     if result.files and not args.quiet:
         print()
