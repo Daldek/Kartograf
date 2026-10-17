@@ -265,6 +265,17 @@
   `v0.7.2...v0.8.0`, nazwy nowego API land cover/HSG w starszych wpisach
   [0.8.0], statusy SCOPE i PRD, CP14, backlog. Merge do `main`, tag
   `v0.8.0` i push czekaja na zgode uzytkownika.
+- Testy na zywo wydania (2026-10-16 pelny, 2026-10-17 krotki po zmianach
+  API i nazw) i weryfikacja poprawek na `release/0.8.0`: raport
+  `docs/research/2026-10-17-release-0.8.0-live/raport.md` (polecenia,
+  wyniki, stan kazdego znaleziska). Po merge `develop` (poprawki P3 testu
+  2, `15e0441`) na `release/0.8.0`: czarny wycinek ortofotomapy
+  `high`/`standard` = `NoCoverageError` jak true orto (errata 6 ADR-042),
+  argumenty tylko nazwane w funkcjach pobrania i sprawdzenia z `__all__`
+  (errata 1 ADR-044, STANDARDS 7.3 Z2), linie `Pobieranie` po polsku,
+  `--check-updates` bez `ponow pobranie` (`e1516f7`); jeden wpis BREAKING
+  o API land cover/HSG w CHANGELOG. Otwarte P3 testow: backlog "Po testach
+  na zywo 0.8.0" nizej.
 - Ryzyka (do obserwacji po wydaniu): `write_gpkg` trzyma cala warstwe
   w RAM (duze obszary ZABAGED); bajty GPKG powtarzalne tylko w obrebie
   jednej wersji GDAL; schemat pol HY-NET zalezy od tresci strony; WFS PRG
@@ -2842,9 +2853,10 @@ uzytkownika: U3 i U4 poprawione przed 0.7.0, reszta do 0.7.1).
   (`landcover_cmd.py`, `LandCoverManager`) tworzy `Bdot10kProvider()` bez
   `cache=`, wiec `teryt_cache` nie jest uzywany. (Task 6 planu
   hydrograf-0.7.1: `LandCoverManager(cache=)`, CLI przekazuje cache z cwd.)
-- [ ] **SoilGrids `nodata` w sidecarze:** GeoTIFF z WCS ISRIC nie ma tagu
-  NoData, wiec sidecar zapisuje `nodata: null`; wg dokumentacji ISRIC brak
-  danych = -32768 — zdecydowac, czy wpisywac wartosc z dokumentacji.
+- [x] **SoilGrids `nodata` w sidecarze:** ZAMKNIETE (decyzja koordynatora
+  2026-10-16): WCS ISRIC oddaje w obszarach maskowanych 0, nie -32768,
+  wiec sidecar zostaje zgodny z plikiem; HSG traktuje trojke zer jako brak
+  danych, opis w USAGE 7 (raport `docs/research/2026-10-17-release-0.8.0-live/raport.md`).
 - [ ] **U1 — wyjscie `kartograf parse`:** dla PL-2000 naglowki po angielsku,
   skladowe po polsku, "Strefa" powtorzona, `Natywny CRS` pod `Components`;
   komunikaty raz z polskimi znakami, raz bez (takze `soilgrids hsg`
@@ -3088,6 +3100,14 @@ N = niski, H = hipoteza.
       i `parse CTES96` = `Error: Nieprawidłowe godło` (kod 1; sprawdzone
       2026-10-08); `kartograf download` obsluguje oba formaty
 
+#### Po testach na zywo 0.8.0 (2026-10-16/17; raport `docs/research/2026-10-17-release-0.8.0-live/raport.md` sekcja 4)
+
+- [ ] Pasek postepu bez TTY (linie `\r[===---]` w logach) i ikony bez legendy (P3-3).
+- [ ] `--teryt 9999`: `Dostepne kody: ['02', ...]` zamiast `02, 04, ...` (P3-4).
+- [ ] Bledy parsera po angielsku (`invalid choice ... (choose from ...)`) (P3-7).
+- [ ] Offline: LAZ PL `--bbox` (WFS bez cache) i zadania projektu z PRG/skorowidzem (projekt bez cache metadanych) - kod 1 (P3-8).
+- [ ] Podpowiedz `Skorowidz GUGiK ma ten arkusz ...` powtarzana dla kazdego arkusza - jedna linia z liczba arkuszy (P3-19).
+
 #### Backlog po audycie 0.7.0
 
 Wpisy swiadomie odlozone rulingiem audytu przedwydaniowego 0.7.0
@@ -3178,9 +3198,9 @@ ktore ustalenie trafilo do ktorego zadania albo zostalo odlozone).
       (ktory jako niespojnosc funkcjonalna jest juz zamkniety, patrz
       raport zadania 26), ale nazwa wywolania w managerze wciaz wskazuje
       na alias, nie kanoniczna metode.
-- [ ] `percent` w `get_hsg_statistics` liczony w pikselach, `area_ha`
-      geodezyjnie — niespojne dla rastrow w ukladach geograficznych
-      (rozny rozmiar piksela na siatce vs w metrach).
+- [x] `percent` w `get_hsg_statistics` liczony w pikselach — ZAMKNIETE
+      (0.8.0, `15e0441`): `hsg_statistics` liczy powierzchnie geodezyjnie
+      dla obszaru zadania, `percent` = udzial powierzchni z danymi.
 - [ ] Blokada sieci w `tests/conftest.py` nie obejmuje `socket.getaddrinfo`
       ani sieci PROJ (`pyproj.network`) — hartowanie izolacji offline
       (~10 linii w `conftest.py`, do zrobienia razem z A8-7/CI; dzis brak
