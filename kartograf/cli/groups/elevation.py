@@ -5,9 +5,13 @@ from functools import partial
 
 from kartograf.cli._args import (
     OUTPUT_TITLE,
+    PRODUCT_TITLE,
+    SELECTION_TITLE,
     add_area_flags,
+    add_output,
     add_quiet,
     add_update_flags,
+    examples,
 )
 from kartograf.cli.availability_cmd import cmd_availability
 from kartograf.cli.download_cmd import cmd_download, download_task_arguments
@@ -27,7 +31,9 @@ from kartograf.download.options import (
     cz_resolution_help,
     format_text,
     product_choices,
+    product_directory,
     resolution_text,
+    store_files,
     vertical_crs_text,
 )
 from kartograf.sources.descriptor import SourceDescriptor
@@ -35,26 +41,30 @@ from kartograf.sources.variants import CZ_VERTICAL_TEXT, cz_model_text
 
 
 def _source_choice(source: SourceDescriptor) -> str:
-    """Flags selecting ``source`` in ``elevation download`` (variant registry);
-    ``--vertical-crs`` only when the source has one height system (a variant
-    without one takes none: NMT 100 m)."""
-    flags = f"--product {source.product}"
+    """Flags selecting ``source`` in ``elevation download`` (variant registry):
+    every required choice - ``--country``, ``--resolution``/``--format``/
+    ``--model`` and ``--vertical-crs`` with the height systems of the source
+    (``EVRF2007|KRON86``; none for NMT 100 m, contours take only Bpv - may
+    be omitted)."""
+    flags = f"--product {source.product} --country {source.country.lower()}"
     variant = source.variants[0] if source.variants else None
-    if source.country == "CZ":
-        if source.product == "laz" and variant is not None:
-            return f"{flags} --country cz --model {variant.model}"
-        if variant is not None and variant.label is None:  # one format each
-            return f"{flags} --country cz --format {variant.format}"
-        return f"{flags} --country cz --resolution {source.resolution}"
-    if variant is None or source.product == "laz":
+    systems = "|".join(
+        dict.fromkeys(v.vertical_crs for v in source.variants if v.vertical_crs)
+    )
+    vertical = f" --vertical-crs {systems}" if systems else ""
+    if variant is None:
         return flags
-    if variant.source_file:
+    if source.country == "CZ":
+        if source.product == "laz":
+            return f"{flags} --model {variant.model}{vertical}"
+        if variant.label is None:  # contours: one format each
+            return f"{flags} --format {variant.format}"
+        return f"{flags} --resolution {source.resolution}{vertical}"
+    if variant.source_file and source.product != "laz":
         flags += f" --format {variant.format}"
     if variant.label is not None:
         flags += f" --resolution {variant.label}"
-    if len(source.variants) == 1 and variant.vertical_crs is not None:
-        flags += f" --vertical-crs {variant.vertical_crs}"
-    return flags
+    return flags + vertical
 
 
 def register(subparsers: argparse._SubParsersAction) -> None:
@@ -81,14 +91,34 @@ def register(subparsers: argparse._SubParsersAction) -> None:
             "Warstwice CZ (--product contours --format SHP|DGN): ZIP arkusza SM5 "
             "1:1, obszar = arkusze SM5 z indeksu, bez --cutout."
         ),
+        epilog=examples(
+            "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
+            "--resolution 1m --vertical-crs EVRF2007 -o ./data",
+            "kartograf elevation download --product laz --country pl --bbox "
+            "530000,382000,533000,386000 --vertical-crs KRON86 -o ./data",
+            "kartograf elevation download --product nmt --sheet CTES96 "
+            "--resolution 5m --vertical-crs Bpv -o ./data",
+            "kartograf elevation download --product nmt --country cz --bbox "
+            "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --cutout "
+            "--horizontal-crs EPSG:5514 --resolution 5m --vertical-crs Bpv -o ./data",
+        ),
     )
 
-    selection = download.add_argument_group("Produkt i obszar")
+    selection = download.add_argument_group(SELECTION_TITLE)
     selection.add_argument(
         "--product",
         choices=ELEVATION_PRODUCTS,
         default=None,
         help=f"Produkt (wymagany): {product_choices(ELEVATION_PRODUCTS)}",
+    )
+    selection.add_argument(
+        "--country",
+        type=str.lower,
+        choices=COUNTRIES,
+        default=None,
+        help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
+        f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
+        "musi sie z nim zgadzac)",
     )
     add_area_flags(
         selection,
@@ -102,21 +132,12 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "przecinajace obwiednie geometrii; wycinek (--cutout) - obwiednia "
         "geometrii",
     )
-    selection.add_argument(
-        "--country",
-        type=str.lower,
-        choices=COUNTRIES,
-        default=None,
-        help="Kraj zrodla danych - wymagany z --bbox/--geometry: "
-        f"{COUNTRY_CHOICES}. Z --sheet kraj wynika z godla (podana wartosc "
-        "musi sie z nim zgadzac)",
-    )
 
-    product = download.add_argument_group("Parametry produktu")
+    product = download.add_argument_group(PRODUCT_TITLE)
     product.add_argument(
         "--resolution",
         "-r",
-        metavar="RES",
+        metavar="ROZDZIELCZOSC",
         default=None,
         help="Rozdzielczosc siatki - wymagana tam, gdzie jest wybor. PL "
         f"(siatki ASC; NMT 100m - pliki XYZ wojewodztw): {resolution_text()}; "
@@ -135,7 +156,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     product.add_argument(
         "--vertical-crs",
-        metavar="VCRS",
+        metavar="UKLAD",
         default=None,
         help=f"Uklad wysokosci (wymagany). PL: {vertical_crs_text()}; NMT 100 m: "
         "pomin (GUGiK nie deklaruje ukladu). CZ: "
@@ -255,14 +276,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
 
     output = download.add_argument_group(OUTPUT_TITLE)
-    output.add_argument(
-        "--output",
-        "-o",
-        metavar="KATALOG",
-        default=None,
-        help="Katalog wyniku (wymagany); pliki trafiaja do "
-        "<KATALOG>/<produkt>/<segment>/...",
-    )
+    add_output(output, store_files(product_directory(p) for p in ELEVATION_PRODUCTS))
     add_update_flags(
         output,
         check_help="Porownaj lokalne wersje ze zrodlem i wypisz raport (aktualne / "
@@ -321,21 +335,20 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
             "w jednym raporcie. Stopka podaje polecenia pobrania kompletnych "
             "kombinacji (PL: najnowszej)."
         ),
+        epilog=examples(
+            "kartograf elevation availability --product nmt --country pl --bbox "
+            "565000,242000,569000,246000",
+            "kartograf elevation availability --product nmpt --sheet CTES96",
+            "kartograf elevation availability --product laz --country pl "
+            "--geometry zlewnia.gpkg --min-year 2020 --details",
+        ),
     )
-    selection = report.add_argument_group("Produkt i obszar")
+    selection = report.add_argument_group(SELECTION_TITLE)
     selection.add_argument(
         "--product",
         choices=AVAILABILITY_PRODUCTS,
         default=None,
         help=f"Produkt (wymagany): {product_choices(AVAILABILITY_PRODUCTS)}",
-    )
-    add_area_flags(
-        selection,
-        sheet_help="Godlo arkusza: PL (PL-1992 albo PL-2000), CZ SM5 (np. CTES96) "
-        "albo kafel TM33 (np. 760_5518); obszar = rama arkusza",
-        geometry_help="Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie "
-        "obiektow (LAZ: obwiednia calej warstwy; CZ: obwiednia geometrii) - jak "
-        "w elevation download",
     )
     selection.add_argument(
         "--country",
@@ -345,6 +358,14 @@ def _register_availability(commands: argparse._SubParsersAction) -> None:
         help="Kraj - wymagany z --bbox/--geometry: "
         f"{', '.join(AVAILABILITY_COUNTRIES.values())}. Z --sheet kraj wynika "
         "z godla",
+    )
+    add_area_flags(
+        selection,
+        sheet_help="Godlo arkusza: PL (PL-1992 albo PL-2000), CZ SM5 (np. CTES96) "
+        "albo kafel TM33 (np. 760_5518); obszar = rama arkusza",
+        geometry_help="Plik geometrii obszaru (SHP albo GPKG): obszar = obwiednie "
+        "obiektow (LAZ: obwiednia calej warstwy; CZ: obwiednia geometrii) - jak "
+        "w elevation download",
     )
     years = report.add_argument_group(
         "Rok danych (tylko PL - CUZK nie publikuje lat nalotu: z --country cz "

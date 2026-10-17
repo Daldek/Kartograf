@@ -2,7 +2,7 @@
 
 import argparse
 
-from kartograf.cli._args import add_quiet, add_update_flags
+from kartograf.cli._args import add_quiet, add_update_flags, examples
 from kartograf.cli.groups import add_group
 from kartograf.cli.project_cmd import (
     cmd_project_add,
@@ -33,7 +33,15 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "w jednym magazynie.",
     )
 
-    init = commands.add_parser("init", help="Utworz manifest projektu i magazyn")
+    init = commands.add_parser(
+        "init",
+        help="Utworz manifest projektu i magazyn",
+        description="Utworz manifest projektu (kartograf-project.json "
+        "w katalogu --project) wskazujacy magazyn --output; tworzy katalogi, "
+        "ktorych nie ma. Jeden projekt = jeden magazyn; wiele projektow moze "
+        "dzielic magazyn.",
+        epilog=examples("kartograf project init --output ~/dane/kartograf"),
+    )
     _project_flag(init)
     init.add_argument(
         "--output",
@@ -48,7 +56,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "add",
         help="Dodaj zadanie z komendy danych (bez pobierania)",
         description="Dodaj zadanie: NAZWA <grupa> <komenda> [opcje komendy]. "
-        "--project podaj przed NAZWA; opcje po NAZWA naleza do komendy danych.",
+        "--project podaj przed NAZWA; opcje po NAZWA naleza do komendy danych "
+        "(bez --output i trybow aktualizacji). Wybory sprawdzane bez sieci, "
+        "nic nie jest pobierane.",
+        epilog=examples(
+            "kartograf project add teren elevation download --product nmt "
+            "--sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007",
+            "kartograf project add gleby soil hsg --sheet N-34-130-D --depth 0-5cm",
+        ),
     )
     _project_flag(add)
     add.add_argument("name", metavar="NAZWA", help="Unikalna nazwa zadania")
@@ -60,13 +75,28 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     add.set_defaults(_handler=cmd_project_add)
 
-    remove = commands.add_parser("remove", help="Usun zadanie (nie pliki magazynu)")
+    remove = commands.add_parser(
+        "remove",
+        help="Usun zadanie (nie pliki magazynu)",
+        description="Usun zadanie i jego przypiecia z manifestu; pliki "
+        "w magazynie zostaja.",
+    )
     _project_flag(remove)
     remove.add_argument("name", metavar="NAZWA", help="Nazwa zadania")
     remove.set_defaults(_handler=cmd_project_remove)
 
     download = commands.add_parser(
-        "download", help="Pobierz, odtworz lub zaktualizuj zadania projektu"
+        "download",
+        help="Pobierz, odtworz lub zaktualizuj zadania projektu",
+        description="Pobierz zadania projektu do magazynu i przypnij ich pliki "
+        "(SHA-256). Zadanie z obecnymi przypietymi plikami zostaje bez zmian i "
+        "bez zapytan do zrodla; brakujace pliki sa odtwarzane tylko przy "
+        "zgodnej SHA-256. Zmiana przypiec: --upgrade albo --force.",
+        epilog=examples(
+            "kartograf project download",
+            "kartograf project download --check-updates",
+            "kartograf project download --upgrade teren",
+        ),
     )
     _project_flag(download)
     add_update_flags(
@@ -94,11 +124,26 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
     download.set_defaults(_handler=cmd_project_download)
 
-    for name, handler, help_text in (
-        ("status", cmd_project_status, "Sprawdz obecnosc i rozmiar przypietych plikow"),
-        ("verify", cmd_project_verify, "Sprawdz SHA-256 i sidecary przypietych plikow"),
+    for name, handler, help_text, description in (
+        (
+            "status",
+            cmd_project_status,
+            "Sprawdz obecnosc i rozmiar przypietych plikow",
+            "Sprawdz bez sieci, czy przypiete pliki zadan sa w magazynie i maja "
+            "przypiety rozmiar (szybko, bez czytania tresci); manifest bez "
+            "zmian. Kod 1, gdy ktores zadanie nie jest pobrane albo brakuje "
+            "przypietego pliku.",
+        ),
+        (
+            "verify",
+            cmd_project_verify,
+            "Sprawdz SHA-256 i sidecary przypietych plikow",
+            "Sprawdz bez sieci tresc przypietych plikow: czyta cale pliki "
+            "i porownuje SHA-256 oraz sidecary wersji; manifest bez zmian. "
+            "Kod 1 przy niezgodnosci.",
+        ),
     ):
-        command = commands.add_parser(name, help=help_text)
+        command = commands.add_parser(name, help=help_text, description=description)
         _project_flag(command)
         add_quiet(command)
         command.add_argument(

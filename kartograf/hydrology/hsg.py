@@ -382,11 +382,10 @@ _HSG_TRACK: "Track" = "hsg"
 _HSG_STAT = "mean"
 # The source of the inputs and of the HSG sidecar.
 _SOILGRIDS = "global.isric.soilgrids"
-# ``calculate_hsg`` without a store.
-_OUTPUT_REQUIRED = (
-    "--output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
-    "HSG w <KATALOG>/hsg/...)"
-)
+# Where ``calculate_hsg`` writes (the ``--output`` help of ``soil hsg`` and
+# the error of a call without a store).
+HSG_OUTPUT_FILES = "wejscia w <KATALOG>/soil/..., HSG w <KATALOG>/hsg/..."
+_OUTPUT_REQUIRED = f"--output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})"
 
 
 @dataclass(frozen=True)

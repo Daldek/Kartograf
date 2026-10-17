@@ -4,37 +4,49 @@
 ADR-042 D9).
 
 Every collection group has the same command shape: ``--product`` and
-``--country`` like ``elevation``/``imagery``, one selection (``--teryt``,
-in ``cadastre`` ``--ku``, ``--sheet``/``--bbox``/``--geometry``, in some
-groups ``--whole-country``), the content flags of the group only
-(``--level``, ``--lod``/``--year``, ``--format``, ``--network``, ...), the
-store flags and ``--workers`` (default 1). ``--teryt`` and ``--sheet``
-select PL units and sheet codes: a group without PL sources (``hydro``) has
-neither; ``--ku`` selects a CZ cadastral area. The choices in ``--help``
-come from the source registry through the library.
+``--country`` like ``elevation``/``imagery`` (the countries of the group's
+products plus ``auto``), one selection (``--teryt``, in ``cadastre``
+``--ku``, ``--sheet``/``--bbox``/``--geometry``, in some groups
+``--whole-country``), the content flags of the group only (``--level``,
+``--lod``/``--year``, ``--format``, ``--network``, ...), the store flags
+and ``--workers`` (default 1; not in a group whose request is always one
+file - ``hydro``). ``--teryt`` and ``--sheet`` select PL units and sheet
+codes: a group without PL sources (``hydro``) has neither; ``--ku`` selects
+a CZ cadastral area. The choices in ``--help`` come from the source registry
+through the library; ``examples`` are the ``epilog`` of ``download --help``.
 """
 
 import argparse
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from functools import partial
 
 from kartograf.cli._args import (
     BBOX_HELP,
     GEOMETRY_HELP,
     OUTPUT_TITLE,
+    PRODUCT_TITLE,
+    SELECTION_TITLE,
     SHEET_AREA_HELP,
     add_area_flags,
+    add_output,
     add_quiet,
     add_update_flags,
+    examples,
 )
 from kartograf.cli.collection_cmd import cmd_collection_download, collection_task
 from kartograf.cli.groups import add_list_sources
 from kartograf.download.collections import (
+    collection_countries,
     collection_product_choices,
     collection_products,
 )
-from kartograf.download.options import COUNTRIES, COUNTRY_CHOICES
+from kartograf.download.options import country_choices, store_files
 from kartograf.sources.descriptor import SourceDescriptor
+
+WORKERS_HELP = (
+    "Liczba rownoleglych pobran plikow, gdy zadanie ma ich kilka (paczki "
+    "jednostek obszaru, arkusze, kraje --country auto; domyslnie 1)"
+)
 
 
 def _source_choice(source: SourceDescriptor) -> str:
@@ -49,29 +61,38 @@ def add_collection_commands(
     help: str,
     description: str,
     area_result: str,
+    examples_of: Sequence[str],
     teryt_help: str | None = None,
     ku_help: str | None = None,
     sheet: bool = True,
     sheet_help: str = SHEET_AREA_HELP,
     whole_country_help: str | None = None,
     check_help: str | None = None,
+    workers_help: str | None = WORKERS_HELP,
     content: Callable[[argparse._ArgumentGroup, tuple[str, ...]], None] | None = None,
 ) -> None:
     """``<group> download`` and ``<group> list-sources``.
 
     ``area_result``: what an area gives (help of the area flags);
+    ``examples_of``: example commands (``epilog`` of ``download --help``);
     ``teryt_help``: the group has ``--teryt``; ``ku_help``: the group has
     ``--ku`` (CZ cadastral area); ``sheet``: the group has
     ``--sheet`` (``False``: no PL sheet area); ``sheet_help`` overrides its
     help for groups with CZ map sheets; ``whole_country_help``: the group has
     ``--whole-country``; ``check_help``: the source signals in --check-updates;
-    ``content`` adds the content flags of the group (it gets the group's
-    products).
+    ``workers_help``: ``None`` for a group whose request is one file (no
+    ``--workers``); ``content`` adds the content flags of the group (it gets
+    the group's products).
     """
     products = collection_products(group)
-    download = commands.add_parser("download", help=help, description=description)
+    download = commands.add_parser(
+        "download",
+        help=help,
+        description=description,
+        epilog=examples(*examples_of),
+    )
 
-    selection = download.add_argument_group("Produkt i wybor")
+    selection = download.add_argument_group(SELECTION_TITLE)
     selection.add_argument(
         "--product",
         choices=products,
@@ -87,14 +108,15 @@ def add_collection_commands(
         )
         if given
     ]
+    countries = (*collection_countries(products), "auto")
     selection.add_argument(
         "--country",
         type=str.lower,
-        choices=COUNTRIES,
+        choices=countries,
         default=None,
         help="Kraj zrodla - wymagany z --bbox/--geometry"
         + (" i --whole-country (bez auto)" if whole_country_help else "")
-        + f": {COUNTRY_CHOICES}"
+        + f": {country_choices(countries)}"
         + "".join(f". {text}" for text in unit_countries),
     )
     if teryt_help is not None:
@@ -112,17 +134,10 @@ def add_collection_commands(
             "--whole-country", action="store_true", help=whole_country_help
         )
     if content is not None:
-        content(download.add_argument_group("Zawartosc"), products)
+        content(download.add_argument_group(PRODUCT_TITLE), products)
 
     output = download.add_argument_group(OUTPUT_TITLE)
-    output.add_argument(
-        "--output",
-        "-o",
-        metavar="KATALOG",
-        default=None,
-        help=f"Wymagane: katalog magazynu; pliki trafiaja do <KATALOG>/{group}/... "
-        "(wersje w versions/)",
-    )
+    add_output(output, store_files([group]))
     add_update_flags(
         output,
         check_help=check_help
@@ -140,14 +155,10 @@ def add_collection_commands(
         plan_help="Z --check-updates: zapisz plan aktualizacji (kartograf-plan/1); "
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     )
-    output.add_argument(
-        "--workers",
-        "-w",
-        type=int,
-        metavar="N",
-        default=1,
-        help="Liczba rownoleglych pobran jednostek (wiele paczek obszaru; domyslnie 1)",
-    )
+    if workers_help is not None:
+        output.add_argument(
+            "--workers", "-w", type=int, metavar="N", default=1, help=workers_help
+        )
     add_quiet(output)
     download.set_defaults(
         _handler=partial(cmd_collection_download, group=group), _task=collection_task

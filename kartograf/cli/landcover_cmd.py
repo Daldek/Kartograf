@@ -24,6 +24,7 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
 )
 from kartograf.download.collections import collection_classes, collection_layers
+from kartograf.download.options import output_required
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
     LANDCOVER_PRODUCT_CHOICES,
@@ -56,11 +57,18 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
             _print_classes(classes)
             return 0
         for layer in collection_layers(key):
-            print(f"    {layer.name}  - warstwa uslugi {layer.source}")
+            print(f"    {layer.name}")
         print()
         print(
-            "  Nazwy = warstwy GeoPackage obszaru (--bbox/--geometry); plik "
-            "krajowy (--whole-country) ma warstwy pelnej bazy pod nazwami CUZK."
+            textwrap.fill(
+                "Nazwy = warstwy GeoPackage obszaru (--bbox/--geometry); wynik "
+                "obszaru ma zawsze wszystkie te warstwy (--layers dziala tylko "
+                "z --product bdot10k albo bdoo). Plik krajowy (--whole-country) "
+                "ma warstwy pelnej bazy pod nazwami CUZK.",
+                width=78,
+                initial_indent="  ",
+                subsequent_indent="  ",
+            )
         )
         return 0
     provider: Any = manager.provider
@@ -70,11 +78,14 @@ def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
             print(f"    {layer}  - {desc}")
     else:
         print("  CORINE: jedna klasyfikacja pokrycia terenu.")
-        print("  Dostepne lata:")
+        print("  Dostepne lata (--year, rok referencyjny):")
         for year in provider.get_available_years():
-            print(f"    {year}")
-        print()
-        print("  Rok referencyjny: --year.")
+            kind = (
+                "dane CLMS z CLMS_CREDENTIALS, bez nich podglad WMS"
+                if year in provider.CLMS_YEARS
+                else "tylko podglad WMS"
+            )
+            print(f"    {year}  ({kind})")
     return 0
 
 
@@ -137,9 +148,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
     if args.product is None:
         missing.append(f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}")
     if args.output is None:
-        missing.append(
-            "--output wymagane: katalog magazynu (pliki w <KATALOG>/landcover/...)"
-        )
+        missing.append(output_required("landcover"))
     if missing:
         for error in missing:
             print(f"Error: {error}", file=sys.stderr)

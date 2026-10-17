@@ -19,8 +19,11 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
 )
 from kartograf.cli.landcover_cmd import area_task_arguments
+from kartograf.download.options import output_required
 from kartograf.hydrology import calculate_hsg, check_hsg, hsg_statistics
+from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
 from kartograf.landcover.manager import LandCoverManager, check_soil, download_soil
+from kartograf.providers.soilgrids import DEPTH_DESCRIPTION, STAT_DESCRIPTIONS
 
 
 def soil_download_task_arguments(args: argparse.Namespace) -> dict:
@@ -41,10 +44,7 @@ def soil_hsg_task_arguments(args: argparse.Namespace) -> dict:
 def cmd_soil_download(args: argparse.Namespace) -> int:
     """``soil download``: one SoilGrids layer (property, depth, stat) of an area."""
     if args.output is None:
-        print(
-            "Error: --output wymagane: katalog magazynu (pliki w <KATALOG>/soil/...)",
-            file=sys.stderr,
-        )
+        print(f"Error: {output_required('soil')}", file=sys.stderr)
         return 1
     return run_with_plan_file(args, _soil_download)
 
@@ -77,15 +77,15 @@ def cmd_soil_list_layers(args: argparse.Namespace) -> int:
     print()
     print("  Wlasciwosci gleb:")
     for prop in provider.get_available_properties():
-        print(f"    {prop:10} - {provider.get_property_description(prop)}")
+        print(f"    {prop:11} - {provider.get_property_description(prop)}")
     print()
-    print("  Glebokosci:")
+    print(f"  Glebokosci ({DEPTH_DESCRIPTION}):")
     for depth in provider.get_available_depths():
         print(f"    {depth}")
     print()
     print("  Statystyki:")
     for stat in provider.get_available_stats():
-        print(f"    {stat}")
+        print(f"    {stat:11} - {STAT_DESCRIPTIONS[stat]}")
     print()
     print("  Wybor pobrania: --property, --depth, --stat.")
     return 0
@@ -107,8 +107,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
     """
     if args.output is None:
         print(
-            "Error: --output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
-            "HSG w <KATALOG>/hsg/...)",
+            f"Error: --output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})",
             file=sys.stderr,
         )
         return 1

@@ -55,8 +55,11 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
 Poza grupami zostają `kartograf parse` i `kartograf cache`. `kartograf <grupa>
---help` wypisuje komendy grupy, `list-sources` — źródła grupy z rejestru (bez
-sieci). Dawne `kartograf download`, `kartograf soilgrids` i
+--help` wypisuje komendy grupy, `<grupa> <komenda> --help` — opcje i przykłady
+poleceń, `list-sources` — źródła grupy z rejestru (bez sieci): `WYBOR` (komplet
+wymaganych flag wyboru źródła; `a|b` = jedna z wartości), `KRAJ`, `DOSTAWCA`,
+`KATALOG` (katalog plików pod `--output`, np. `boundaries/pl_prg`) i `KLUCZ`
+(pole `dataset` sidecara). Dawne `kartograf download`, `kartograf soilgrids` i
 `landcover --source soilgrids` nie działają: kończą się błędem (kod 2)
 z nazwą nowej komendy (tabela: CHANGELOG 0.8.0). `landcover` wybiera dane
 przez `--product`, jak każda grupa; dawne `--source`/`-s` kończy się błędem
@@ -507,9 +510,14 @@ kartograf elevation download "--bbox=-447000,-1114000,-444000,-1113000" --bbox-c
 kartograf elevation download --bbox 18.615,49.740,18.640,49.755 --bbox-crs EPSG:4326 --country auto --product laz --model dmr4g --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
 ```
 
-`kartograf parse` obsługuje tylko godła PL (PL-1992/PL-2000); godła CZ
-(TM33, SM5) przyjmują `kartograf elevation download` i (SM5)
-`kartograf imagery download`. Od 0.8.0 działają też dwuliterowe godła SM5
+`kartograf parse` rozpoznaje godła PL (PL-1992/PL-2000: skala, człony,
+hierarchia) i CZ bez sieci: arkusz SM5 (`CTES96`), kafel TM33 (`302_5550`,
+z zasięgiem w EPSG:3045) i arkusz ZTM (`0510-D-11`, `NM-34-07-1-D-15`) — system,
+układ i komendy, które przyjmują godło w `--sheet`; `--hierarchy`,
+`--children` i `--descendants` dotyczą tylko godeł PL. Godła CZ (TM33, SM5)
+przyjmują `kartograf elevation download` i (SM5) `kartograf imagery
+download`, godła ZTM — `kartograf maps download --country cz`. Od 0.8.0
+działają też dwuliterowe godła SM5
 (99 arkuszy As, `AS22`…`AS94`, np. `AS91`) — wcześniej kończyły się
 błędem godła PL, także dla DMR.
 
