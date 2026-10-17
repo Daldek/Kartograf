@@ -19,8 +19,15 @@ from kartograf.cli.download_cmd import (
     run_with_plan_file,
 )
 from kartograf.cli.landcover_cmd import area_task_arguments
+from kartograf.download.options import output_required
 from kartograf.hydrology import calculate_hsg, check_hsg, hsg_statistics
-from kartograf.landcover.manager import LandCoverManager, check_soil, download_soil
+from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
+from kartograf.landcover.manager import (
+    LandCoverManager,
+    check_soil,
+    download_soil,
+    soil_choices,
+)
 
 
 def soil_download_task_arguments(args: argparse.Namespace) -> dict:
@@ -41,10 +48,7 @@ def soil_hsg_task_arguments(args: argparse.Namespace) -> dict:
 def cmd_soil_download(args: argparse.Namespace) -> int:
     """``soil download``: one SoilGrids layer (property, depth, stat) of an area."""
     if args.output is None:
-        print(
-            "Error: --output wymagane: katalog magazynu (pliki w <KATALOG>/soil/...)",
-            file=sys.stderr,
-        )
+        print(f"Error: {output_required('soil')}", file=sys.stderr)
         return 1
     return run_with_plan_file(args, _soil_download)
 
@@ -77,15 +81,16 @@ def cmd_soil_list_layers(args: argparse.Namespace) -> int:
     print()
     print("  Wlasciwosci gleb:")
     for prop in provider.get_available_properties():
-        print(f"    {prop:10} - {provider.get_property_description(prop)}")
+        print(f"    {prop:11} - {provider.get_property_description(prop)}")
     print()
-    print("  Glebokosci:")
-    for depth in provider.get_available_depths():
+    depths = soil_choices()["depth"]
+    print(f"  Glebokosci ({', '.join(dict.fromkeys(depths.values()))}):")
+    for depth in depths:
         print(f"    {depth}")
     print()
     print("  Statystyki:")
-    for stat in provider.get_available_stats():
-        print(f"    {stat}")
+    for stat, text in soil_choices()["stat"].items():
+        print(f"    {stat:11} - {text}")
     print()
     print("  Wybor pobrania: --property, --depth, --stat.")
     return 0
@@ -107,8 +112,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
     """
     if args.output is None:
         print(
-            "Error: --output wymagane: katalog magazynu (wejscia w <KATALOG>/soil/..., "
-            "HSG w <KATALOG>/hsg/...)",
+            f"Error: --output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})",
             file=sys.stderr,
         )
         return 1
@@ -153,7 +157,7 @@ def _hsg_task(args: argparse.Namespace, selection: dict) -> int:
             f"({nodata['area_ha']:.2f} ha)"
         )
 
-    if not args.quiet:
+    if result.files and not args.quiet:
         print()
         print("Legenda: 1=A (duza infiltracja), 2=B (umiarkowana),")
         print("         3=C (mala), 4=D (bardzo mala)")

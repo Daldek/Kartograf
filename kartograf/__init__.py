@@ -1,6 +1,12 @@
 """
-Kartograf - download spatial data: NMT/NMPT/orthophoto/LAZ from GUGiK (PL),
-DMR 5G/4G from CUZK (CZ), BDOT10k, CORINE (Copernicus) and SoilGrids (ISRIC).
+Kartograf - download spatial data of Poland and Czechia into a versioned store:
+elevation (NMT/NMPT grids and archives, LAZ point clouds, CZ contours),
+imagery (orthophotomaps, intensity, true and oblique orthophotomaps), land
+cover (BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250), soil (SoilGrids,
+HSG), boundaries and addresses (PRG, RUIAN, geomorphology), cadastre (EGiB,
+RCN, CZ cadastral map), 3D models, hydrography (HY-NET), geographic names,
+topographic maps and geodesy (control networks, quasi-geoids) from GUGiK,
+CUZK, Copernicus and ISRIC.
 
 Every CLI command has one library function with the same choices and the same
 result (ADR-037, ADR-044): ``elevation download`` and ``imagery download`` =
@@ -249,7 +255,8 @@ __all__ = [
     "DataReport",
     "UnitFile",
     "UnitFailure",
-    # Download (collections: `boundaries`/`cadastre`/`models3d download`, ADR-042)
+    # Download (collections: `boundaries`, `cadastre`, `models3d`, `hydro`,
+    # `names`, `maps`, `geodesy download`; ADR-042)
     "download_collection",
     "check_collection",
     "CollectionReport",

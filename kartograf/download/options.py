@@ -106,10 +106,21 @@ def product_directory(product: str) -> str:
     return "|".join(tops) or product
 
 
-COUNTRY_CHOICES = (
-    "pl (GUGiK), cz (CUZK), auto (kraje wg prostokatnych obwiedni PL i CZ; "
-    "obszar w obu krajach daje osobne pliki per kraj)"
-)
+_COUNTRY_TEXT = {
+    "pl": "pl (GUGiK)",
+    "cz": "cz (CUZK)",
+    "auto": "auto (kraje wg prostokatnych obwiedni PL i CZ; obszar w obu krajach "
+    "daje osobne pliki per kraj)",
+}
+
+
+def country_choices(codes: Iterable[str] = tuple(_COUNTRY_TEXT)) -> str:
+    """``pl (GUGiK), cz (CUZK), auto (...)``: the ``--country`` values of a
+    command (a CLI group names only the countries of its products)."""
+    return ", ".join(_COUNTRY_TEXT[code] for code in codes)
+
+
+COUNTRY_CHOICES = country_choices()
 _VERTICAL_CRS_TEXT = {
     "EVRF2007": "PL-EVRF2007-NH, uklad obowiazujacy",
     "KRON86": "PL-KRON86-NH, uklad historyczny",
@@ -835,10 +846,18 @@ def check_layer(layer: object, geometry: object, *, landcover: bool = False) -> 
         )
 
 
+def store_files(directories: Iterable[str]) -> str:
+    """``pliki w <KATALOG>/nmt|nmpt/...``: where a store command writes, by the
+    top directories of its files (``nmt``, ``boundaries``; ``a|b`` values are
+    split) - one text for the ``--output`` help and its missing-value error."""
+    tops = dict.fromkeys(top for found in directories for top in found.split("|"))
+    return f"pliki w <KATALOG>/{'|'.join(tops)}/..."
+
+
 def output_required(directory: str) -> str:
     """Error text of a request without ``output_dir`` (every store command):
     ``directory`` = the top directory of its files (``nmt``, ``boundaries``)."""
-    return f"--output wymagane: katalog magazynu (pliki w <KATALOG>/{directory}/...)"
+    return f"--output wymagane: katalog magazynu ({store_files([directory])})"
 
 
 def year_bounds(

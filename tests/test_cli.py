@@ -652,8 +652,6 @@ class TestCommandGroups:
             "--upgrade",
             "--force",
             "--plan",
-            "--workers",
-            "-w",
             "--quiet",
             "-q",
         }
@@ -2007,6 +2005,19 @@ def _grid_labels(product: str, vertical_crs: str | None = None) -> list[str]:
     return [by_value[value] for value in sorted(by_value)]
 
 
+def _choose_vertical_crs(wybor: str, vertical_crs: str | None) -> list[str]:
+    """The WYBOR flags of ``list-sources`` with one height system of the
+    ``--vertical-crs A|B`` alternatives (it must be one of them)."""
+    flags = wybor.split()
+    if "--vertical-crs" in flags:
+        at = flags.index("--vertical-crs") + 1
+        assert vertical_crs is not None and vertical_crs in flags[at].split("|"), wybor
+        flags[at] = vertical_crs
+    else:
+        assert vertical_crs is None, wybor
+    return flags
+
+
 def _registry_grids(product: str) -> set[tuple[str, str]]:
     """``{(vertical CRS, label)}`` of the product's PL variants in the product
     format (registry): the ASC grids and the voivodeship files without a
@@ -2349,7 +2360,9 @@ class TestRegistryVariantsCli:
             main(["elevation", "download", "--help"])
         assert exc.value.code == 0
         out = capsys.readouterr().out
-        block = out.split("--resolution, -r RES", 1)[1].split("--vertical-crs VCRS")[0]
+        block = out.split("--resolution, -r ROZDZIELCZOSC", 1)[1].split(
+            "--vertical-crs UKLAD"
+        )[0]
         text = " ".join(block.split())
 
         listed = {
@@ -2385,15 +2398,15 @@ class TestRegistryVariantsCli:
         assert {k for k in rows if k.startswith("pl.")} == {
             v.source for v in pl_variants
         }
-        assert rows["pl.gugik.nmpt_0_5m"] == "--product nmpt --resolution 0.5m"
         parser = create_parser()
         for variant in pl_variants:
-            flags = rows[variant.source]
-            args = parser.parse_args(["elevation", "download", *flags.split()])
+            flags = _choose_vertical_crs(rows[variant.source], variant.vertical_crs)
+            args = parser.parse_args(["elevation", "download", *flags])
             assert args.product == variant.product, flags
+            assert args.country == "pl", flags
+            assert args.vertical_crs == variant.vertical_crs, flags
             if variant.product == "laz":
                 continue
-            assert args.vertical_crs in (None, variant.vertical_crs), flags
             if variant.index_ref is None:  # voivodeship files (ATOM, NMT 100 m)
                 assert pl_file_variant(args) == variant, flags
                 continue
@@ -2425,19 +2438,11 @@ class TestRegistryVariantsCli:
             key for key in rows if key.endswith("_laz") and key.startswith("cz.")
         }
         for key, model in models.items():
-            assert rows[key] == f"--product laz --country cz --model {model}"
-            flags = rows[key].split()
+            flags = _choose_vertical_crs(rows[key], "Bpv")
             args = create_parser().parse_args(
-                [
-                    "elevation",
-                    "download",
-                    *flags,
-                    "--sheet",
-                    "CTES96",
-                    "--vertical-crs",
-                    "Bpv",
-                ]
+                ["elevation", "download", *flags, "--sheet", "CTES96"]
             )
+            assert (args.product, args.country, args.model) == ("laz", "cz", model)
             validate_data_request(
                 **download_task_arguments(args),
                 output_dir=tmp_path / key,
@@ -10940,7 +10945,7 @@ class TestErrorWithoutBlankLine:
 
 
 class TestSoilgridsHsgNoEarlyMkdir:
-    """soil hsg does not leave an empty output directory after an error."""
+    """soil hsg does not leave an empty output directory after a validation error."""
 
     def test_missing_geometry_leaves_no_output_dir(self, capsys, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)

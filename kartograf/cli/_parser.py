@@ -17,14 +17,31 @@ from kartograf._version import build_version
 from kartograf.cli.groups import register_groups
 
 
+class _HelpFormatter(argparse.HelpFormatter):
+    """Help text wrapped by paragraph (a line break starts a new one); lines
+    indented by two spaces - the commands of an ``epilog`` with examples -
+    stay as written, so an example can be copied whole."""
+
+    def _fill_text(self, text: str, width: int, indent: str) -> str:
+        lines = []
+        for line in text.split("\n"):
+            if line.startswith("  "):
+                lines.append(indent + line)
+            else:
+                lines.append(super()._fill_text(line, width, indent))
+        return "\n".join(lines)
+
+
 class _Parser(argparse.ArgumentParser):
     """``ArgumentParser`` without prefix abbreviations of long flags: a command
     line keeps its meaning when a group gains a flag (``--out`` is never read
     as ``--output``, ``--lay`` is no ambiguous prefix). Every subparser of the
-    CLI is of this class (``add_subparsers`` uses the class of its parser)."""
+    CLI is of this class (``add_subparsers`` uses the class of its parser) and
+    formats its help with ``_HelpFormatter`` (examples in ``epilog``)."""
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         kwargs.setdefault("allow_abbrev", False)
+        kwargs.setdefault("formatter_class", _HelpFormatter)
         super().__init__(*args, **kwargs)
 
 
@@ -230,12 +247,18 @@ def create_parser() -> argparse.ArgumentParser:
         prog="kartograf",
         description=(
             "Pobieranie danych przestrzennych z GUGiK (PL), CUZK (CZ), Copernicus "
-            "i ISRIC. Komendy danych sa w grupach wg typu danych: kazda grupa ma "
-            "podkomendy download i list-sources."
+            "i ISRIC. Komendy danych sa w grupach wg typu danych: grupa danych ma "
+            "download (pobranie do magazynu) i list-sources (zrodla z rejestru, "
+            "bez sieci), czesc grup takze list-layers, availability albo hsg. "
+            "project zarzadza zadaniami projektu, parse rozpoznaje godlo "
+            "arkusza, cache - lokalny cache metadanych."
         ),
         epilog=(
-            "Przyklad: kartograf elevation download --product nmt --sheet "
-            "N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./data. "
+            "Przyklady:\n"
+            "  kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
+            "--resolution 1m --vertical-crs EVRF2007 -o ./data\n"
+            "  kartograf boundaries download --product admin --teryt 12 -o ./data\n"
+            "  kartograf elevation list-sources\n"
             "Opcje komendy: kartograf <grupa> <komenda> --help"
         ),
     )
@@ -251,29 +274,40 @@ def create_parser() -> argparse.ArgumentParser:
     # Parse command
     parse_parser = subparsers.add_parser(
         "parse",
-        help="Rozpoznaj godlo arkusza i pokaz jego wlasciwosci",
-        description="Rozpoznaj godlo arkusza i pokaz jego wlasciwosci",
+        help="Rozpoznaj godlo arkusza (PL albo CZ) i pokaz jego wlasciwosci",
+        description="Rozpoznaj godlo arkusza i pokaz jego wlasciwosci (bez "
+        "sieci): PL-1992 i PL-2000 - skala, czlony, uklad i hierarchia arkuszy; "
+        "CZ - system (SM5, kafel TM33, ZTM), uklad wspolrzednych i komendy, "
+        "ktore przyjmuja godlo w --sheet.",
+        epilog="Przyklady:\n"
+        "  kartograf parse N-34-130-D-d-2-4\n"
+        "  kartograf parse N-34-130-D --descendants 1:10000\n"
+        "  kartograf parse 6.179.12.20\n"
+        "  kartograf parse CTES96",
     )
     parse_parser.add_argument(
         "sheet",
         metavar="GODLO",
         type=str.strip,
-        help="Godlo arkusza (np. N-34-130-D, N-34-130-D-d-2-4)",
+        help="Godlo arkusza: PL-1992 (np. N-34-130-D-d-2-4), PL-2000 (np. "
+        "6.179.12.20), SM5 (np. CTES96), kafel TM33 (np. 302_5550) albo ZTM "
+        "(np. 0510-D-11, NM-34-07-1-D-15)",
     )
     parse_parser.add_argument(
         "--hierarchy",
         action="store_true",
-        help="Pokaz hierarchie od arkusza do skali 1:1000000",
+        help="Pokaz hierarchie od arkusza do skali 1:1000000 (tylko godla PL)",
     )
     parse_parser.add_argument(
         "--children",
         action="store_true",
-        help="Pokaz bezposrednie arkusze potomne",
+        help="Pokaz bezposrednie arkusze potomne (tylko godla PL)",
     )
     parse_parser.add_argument(
         "--descendants",
         metavar="SKALA",
-        help="Pokaz wszystkie arkusze potomne do skali docelowej (np. 1:10000)",
+        help="Pokaz wszystkie arkusze potomne do skali docelowej (np. 1:10000; "
+        "tylko godla PL)",
     )
 
     register_groups(subparsers)
@@ -284,7 +318,8 @@ def create_parser() -> argparse.ArgumentParser:
         help="Zarzadzaj cache metadanych",
         description=(
             "Lokalny cache metadanych SQLite (odpowiedzi WMS, TERYT, indeks "
-            "arkuszy CUZK)"
+            "arkuszy CUZK) w pliku w biezacym katalogu; dane w magazynie "
+            "(--output) nie sa czescia cache"
         ),
     )
     cache_parser.set_defaults(_group_parser=cache_parser)
@@ -294,19 +329,26 @@ def create_parser() -> argparse.ArgumentParser:
         metavar="KOMENDA",
     )
 
-    cache_subparsers.add_parser(
-        "stats",
-        help="Pokaz statystyki cache (liczby wpisow, rozmiar bazy)",
-    )
-
-    cache_subparsers.add_parser(
-        "clear",
-        help="Usun wszystkie wpisy cache",
-    )
-
-    cache_subparsers.add_parser(
-        "path",
-        help="Pokaz sciezke pliku bazy cache",
-    )
+    for name, help_text, description in (
+        (
+            "stats",
+            "Pokaz statystyki cache (liczby wpisow, rozmiar bazy)",
+            "Wypisz liczby wpisow cache metadanych wg rodzaju (rekordy, "
+            "kampanie, TERYT, arkusze, feedy ATOM), rozmiar i sciezke bazy",
+        ),
+        (
+            "clear",
+            "Usun wszystkie wpisy cache",
+            "Usun wszystkie wpisy cache metadanych (nastepne komendy odpytaja "
+            "zrodla ponownie); nieczytelny plik bazy jest usuwany. Pliki "
+            "magazynu danych zostaja",
+        ),
+        (
+            "path",
+            "Pokaz sciezke pliku bazy cache",
+            "Wypisz sciezke pliku bazy cache metadanych (w biezacym katalogu)",
+        ),
+    ):
+        cache_subparsers.add_parser(name, help=help_text, description=description)
 
     return parser

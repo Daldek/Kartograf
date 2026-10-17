@@ -5,10 +5,14 @@ import argparse
 
 from kartograf.cli._args import (
     OUTPUT_TITLE,
+    PRODUCT_TITLE,
+    SELECTION_TITLE,
     SHEET_AREA_HELP,
     add_area_flags,
+    add_output,
     add_quiet,
     add_update_flags,
+    examples,
     layer_codes,
 )
 from kartograf.cli.groups import add_group, add_list_sources
@@ -17,20 +21,28 @@ from kartograf.cli.landcover_cmd import (
     cmd_landcover_list_layers,
     landcover_task_arguments,
 )
+from kartograf.download.options import store_files
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
     LANDCOVER_PRODUCT_CHOICES,
     LANDCOVER_PRODUCTS,
     bdoo_year_choices,
     bdot10k_archive_choices,
+    corine_year_choices,
 )
 from kartograf.sources.descriptor import AtomFilesParams, SourceDescriptor
 from kartograf.sources.registry import get_source
 
 
 def _product_flag(source: SourceDescriptor) -> str:
-    """``--product`` of a descriptor: the last part of its key (``bdot10k``)."""
-    return f"--product {source.key.rsplit('.', 1)[-1]}"
+    """``--product`` of a descriptor (the last part of its key: ``bdot10k``)
+    with the releases of a product requiring ``--year`` (BDOO, CORINE)."""
+    product = source.key.rsplit(".", 1)[-1]
+    years = {
+        "bdoo": bdoo_year_choices().replace(", ", "|"),
+        "corine": corine_year_choices().replace(", ", "|"),
+    }.get(product)
+    return f"--product {product}" + (f" --year {years}" if years else "")
 
 
 def _national_file_crs() -> list[str]:
@@ -74,9 +86,18 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "BDOT10k; lista: landcover list-layers), --whole-country = plik "
         "krajowy z feedu ATOM CUZK (ZABAGED: GPKG, Data50/Data250: SHP; zapis "
         "1:1).",
+        epilog=examples(
+            "kartograf landcover download --product bdot10k --teryt 1465 -o ./data",
+            "kartograf landcover download --product bdoo --teryt 12 --year 2023 "
+            "-o ./data",
+            "kartograf landcover download --product corine --year 2018 --sheet "
+            "N-34-130-D -o ./data",
+            "kartograf landcover download --product zabaged --bbox "
+            "-460000,-1120000,-450000,-1110000 --bbox-crs EPSG:5514 -o ./data",
+        ),
     )
 
-    selection = download.add_argument_group("Produkt i obszar")
+    selection = download.add_argument_group(SELECTION_TITLE)
     selection.add_argument(
         "--product",
         choices=LANDCOVER_PRODUCTS,
@@ -103,7 +124,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "Warning przed pobraniem",
     )
 
-    options = download.add_argument_group("Parametry produktu")
+    options = download.add_argument_group(PRODUCT_TITLE)
     options.add_argument(
         "--year",
         type=int,
@@ -153,14 +174,7 @@ def register(subparsers: argparse._SubParsersAction) -> None:
     )
 
     output = download.add_argument_group(OUTPUT_TITLE)
-    output.add_argument(
-        "--output",
-        "-o",
-        metavar="KATALOG",
-        default=None,
-        help="Wymagane: katalog magazynu; pliki trafiaja do "
-        "<KATALOG>/landcover/... (wersje w versions/)",
-    )
+    add_output(output, store_files(["landcover"]))
     add_update_flags(
         output,
         check_help="Porownaj lokalne wersje ze zrodlem bez pobierania: CORINE "

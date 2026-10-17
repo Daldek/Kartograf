@@ -37,7 +37,28 @@ GEOMETRY_HELP = "Plik geometrii (SHP albo GPKG); obszar = obwiednia obiektow"
 LAYER_HELP = (
     "Warstwa GPKG (domyslnie pierwsza; przy wielu warstwach Info z lista pozostalych)"
 )
+# Titles of the --help sections of every data command (UX-27).
+SELECTION_TITLE = "Produkt i obszar"
+PRODUCT_TITLE = "Parametry produktu"
 OUTPUT_TITLE = "Wynik i aktualizacja"
+
+
+def add_output(parser: Container, files: str) -> None:
+    """``--output``/``-o``: the store directory of a data command; ``files``
+    says where its files go (``store_files``: ``pliki w <KATALOG>/nmt/...``)."""
+    parser.add_argument(
+        "--output",
+        "-o",
+        metavar="KATALOG",
+        default=None,
+        help=f"Katalog magazynu (wymagany): {files} (wersje w versions/)",
+    )
+
+
+def examples(*commands: str) -> str:
+    """``epilog`` of a command: ``Przyklady:`` and one command per line (kept
+    unwrapped by the help formatter, ready to copy)."""
+    return "Przyklady:\n" + "\n".join(f"  {command}" for command in commands)
 
 
 def add_update_flags(

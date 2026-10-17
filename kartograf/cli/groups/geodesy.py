@@ -52,6 +52,14 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         "zapisywane 1:1; Kartograf nie stosuje modeli do innych danych.",
         teryt_help="Kod TERYT powiatu (4 cyfry, np. 1201): paczka sieci "
         "poziomej albo wysokosciowej (--network horizontal|vertical)",
+        examples_of=(
+            "kartograf geodesy download --product control --network horizontal "
+            "--teryt 1201 -o ./data",
+            "kartograf geodesy download --product control --country pl --network "
+            "vertical --bbox 560000,240000,575000,250000 -o ./data",
+            "kartograf geodesy download --product geoid --country cz "
+            "--whole-country -o ./data",
+        ),
         area_result="punkty sieci obszaru (GeoPackage) albo archiwa arkuszy "
         "1:100 000 obszaru",
         whole_country_help="Model quasi-geoidy kraju (--product geoid; wymaga "

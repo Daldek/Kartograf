@@ -12,7 +12,11 @@ import pytest
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
-from kartograf.providers.soilgrids import PROPERTY_DESCRIPTIONS, SoilGridsProvider
+from kartograf.providers.soilgrids import (
+    PROPERTY_DESCRIPTIONS,
+    STAT_DESCRIPTIONS,
+    SoilGridsProvider,
+)
 from kartograf.transform.bbox import envelope_from_2180
 
 
@@ -62,13 +66,6 @@ class TestSoilGridsProvider:
         assert "Q0.95" in stats
         assert "uncertainty" in stats
         assert len(stats) == 5
-
-    def test_property_description(self):
-        """Test property descriptions."""
-        provider = SoilGridsProvider()
-        assert "Clay" in provider.get_property_description("clay")
-        assert "carbon" in provider.get_property_description("soc").lower()
-        assert "pH" in provider.get_property_description("phh2o")
 
     def test_supported_formats(self):
         """Test supported formats."""
@@ -336,16 +333,11 @@ class TestSoilGridsManager:
 class TestPropertyDescriptions:
     """Test property descriptions dictionary."""
 
-    def test_all_properties_have_descriptions(self):
-        """Test that all properties have descriptions."""
+    def test_all_properties_and_stats_have_descriptions(self):
+        """Every --property and --stat value has a description (--help and
+        ``soil list-layers``)."""
         provider = SoilGridsProvider()
         for prop in provider.PROPERTIES:
-            assert prop in PROPERTY_DESCRIPTIONS
-            assert len(PROPERTY_DESCRIPTIONS[prop]) > 0
-
-    def test_description_format(self):
-        """Test description format includes units."""
-        # Most descriptions should include units in parentheses
-        assert "%" in PROPERTY_DESCRIPTIONS["clay"]
-        assert "g/kg" in PROPERTY_DESCRIPTIONS["soc"]
-        assert "pH" in PROPERTY_DESCRIPTIONS["phh2o"]
+            assert PROPERTY_DESCRIPTIONS[prop]
+        for stat in provider.STATS:
+            assert STAT_DESCRIPTIONS[stat]

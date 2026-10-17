@@ -90,6 +90,7 @@ from kartograf.download.fetch import (
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.options import (
     COUNTRY_CHOICES,
+    COUNTRY_KEYS,
     canonical_country,
     canonical_crs,
     canonical_format,
@@ -278,6 +279,19 @@ def collection_product_choices(products: Sequence[str] | None = None) -> str:
         sources = "; ".join(f"{d.name}, {d.country}" for d in descriptors)
         texts.append(f"{product} ({sources})")
     return ", ".join(texts)
+
+
+def collection_countries(products: Sequence[str]) -> tuple[str, ...]:
+    """``("pl", "cz")``: the countries (``--country`` values) of the sources of
+    collection ``products``, in ``COUNTRY_KEYS`` order (``--help`` of a group
+    offers only these, plus ``auto``)."""
+    found = {
+        descriptor.country.lower()
+        for product in products
+        for descriptor in sources_for(product=product)
+        if _is_collection(descriptor)
+    }
+    return tuple(code for code in COUNTRY_KEYS if code in found)
 
 
 def _distinct(values: Iterable[str]) -> tuple[str, ...]:
@@ -1400,7 +1414,7 @@ def _sheet_part(
     a CUZK sheet index layer (``MAPNOM``, checked against the layer when the
     units are built).
     """
-    from kartograf.core.parser_registry import detect_system
+    from kartograf.core.parser_registry import detect_system, ztm_sheet_system
 
     sheet, country = args["sheet"].strip(), args["country"]
     cz = descriptors.get("CZ")
@@ -1411,12 +1425,7 @@ def _sheet_part(
         and _cuzk_sheet_channel(cz)
     ):
         if cz.key == "cz.cuzk.ztm":
-            if re.fullmatch(r"[0-9]{4}-[A-Za-z0-9-]+", sheet):
-                inferred = "sjtsk"
-            elif re.fullmatch(r"[A-Za-z]{2}-[0-9]{2}-[A-Za-z0-9-]+", sheet):
-                inferred = "etrs89"
-            else:
-                inferred = None
+            inferred = ztm_sheet_system(sheet)
             selected = options["sheet_system"]
             if inferred is not None and selected is not None and selected != inferred:
                 raise ValidationError(

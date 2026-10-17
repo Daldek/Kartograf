@@ -59,20 +59,29 @@ _OWS_TITLE = f"{_OWS}ServiceIdentification/{_OWS}Title"
 _EDITION_RE = re.compile(r"^SoilGrids250m (\S+) - ")
 
 
-# Soil property descriptions
+# Descriptions of the soil properties and statistics for the user (Polish,
+# ASCII; one text for --help and `soil list-layers`, UX-23)
 PROPERTY_DESCRIPTIONS = {
-    "bdod": "Bulk density (kg/dm3)",
-    "cec": "Cation exchange capacity (cmol/kg)",
-    "cfvo": "Coarse fragments (%)",
-    "clay": "Clay content (%)",
-    "nitrogen": "Total nitrogen (g/kg)",
-    "ocd": "Organic carbon density (kg/m3)",
-    "ocs": "Organic carbon stock (t/ha)",
-    "phh2o": "pH in H2O",
-    "sand": "Sand content (%)",
-    "silt": "Silt content (%)",
-    "soc": "Soil organic carbon (g/kg)",
+    "bdod": "gestosc objetosciowa (kg/dm3)",
+    "cec": "pojemnosc sorpcyjna (cmol/kg)",
+    "cfvo": "frakcja szkieletowa (%)",
+    "clay": "il (%)",
+    "nitrogen": "azot calkowity (g/kg)",
+    "ocd": "gestosc wegla organicznego (kg/m3)",
+    "ocs": "zasob wegla organicznego (t/ha)",
+    "phh2o": "pH w wodzie (H2O)",
+    "sand": "piasek (%)",
+    "silt": "pyl (%)",
+    "soc": "wegiel organiczny (g/kg)",
 }
+STAT_DESCRIPTIONS = {
+    "mean": "srednia",
+    "Q0.05": "5. percentyl",
+    "Q0.5": "mediana",
+    "Q0.95": "95. percentyl",
+    "uncertainty": "niepewnosc predykcji",
+}
+DEPTH_DESCRIPTION = "przedzial glebokosci ponizej powierzchni"
 
 
 class SoilGridsProvider(LandCoverProvider):
