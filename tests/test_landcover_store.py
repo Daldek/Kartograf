@@ -1,5 +1,5 @@
 """Segments and unit slots of land cover, HSG and collections (spec 3.4,
-ADR-042 D8)."""
+ADR-042 D8, ADR-044 D7)."""
 
 from pathlib import Path
 
@@ -112,6 +112,38 @@ def test_sheet_slot_uses_sheet_hierarchy(tmp_path, sheet, canonical, parts):
     assert slot.versions_root == tmp_path.joinpath(segment, "versions", *parts)
     assert slot.hierarchy == "/".join(parts)
     assert selection_unit(sheet=sheet) == canonical
+
+
+@pytest.mark.parametrize(
+    ("mapnom", "parts"),
+    [
+        ("0301-B-07-4", ("0301", "B", "07", "4")),  # ZTM5 S-JTSK
+        ("0510-D-11", ("0510", "D", "11")),  # ZTM10
+        ("0104-B-c", ("0104", "B", "c")),  # ZTM25
+        ("0607-D", ("0607", "D")),  # ZTM50
+        ("0607", ("0607",)),  # ZTM100
+        ("11", ("11",)),  # ZTM250
+        ("NM-33-11-4-A-20-2", ("NM-33", "11", "4", "A", "20", "2")),  # ZTM5 ETRS89
+        ("NM-34-07-1-D-15", ("NM-34", "07", "1", "D", "15")),  # ZTM10
+        ("NM-33-02", ("NM-33", "02")),  # ZTM250
+    ],
+)
+def test_cuzk_map_sheet_slot_uses_sheet_hierarchy(tmp_path, mapnom, parts):
+    """ADR-044 D7: a ZTM sheet lies in the hierarchy of its code like every
+    sheet - each part a directory, the 1:1 000 000 sheet of an ETRS89 code
+    in one (as ``N-34`` of PL-1992) - not flat among thousands of sheets."""
+    segment = "maps/cz_ztm_10000_sjtsk_tiff"
+    slot = unit_slot(tmp_path, segment, ".zip", mapnom=mapnom)
+    assert slot.std == tmp_path.joinpath(segment, *parts, f"{mapnom}.zip")
+    assert slot.versions_root == tmp_path.joinpath(segment, "versions", *parts)
+    assert slot.hierarchy == "/".join(parts)
+
+
+@pytest.mark.parametrize("mapnom", ["0510--11", "-0510", "0510-", "0510 D 11"])
+def test_cuzk_map_sheet_slot_rejects_empty_parts(tmp_path, mapnom):
+    """A code with an empty part would give an empty directory name."""
+    with pytest.raises(ValidationError):
+        unit_slot(tmp_path, "maps/cz_ztm_10000_sjtsk_tiff", ".zip", mapnom=mapnom)
 
 
 @pytest.mark.parametrize(

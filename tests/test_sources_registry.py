@@ -5,16 +5,27 @@ variant registry (ADR-041), sheet records from the GUGiK WFS index.
 """
 
 import dataclasses
+import itertools
 import json
+import pkgutil
 import re
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
+from kartograf.cli import groups as cli_groups
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.collections import _capability
+from kartograf.download.options import ELEVATION_PRODUCTS, IMAGERY_PRODUCTS
 from kartograf.exceptions import ValidationError
+from kartograf.landcover.store import hsg_segment
+from kartograf.providers.corine import CorineProvider
+from kartograf.providers.pl.gugik_orto import (
+    cutout_resolution_labels,
+    wcs_cutout_channels,
+)
+from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.descriptor import (
     PACKAGE_URL_TOKENS,
     AccessChannel,
@@ -31,6 +42,7 @@ from kartograf.sources.descriptor import (
 )
 from kartograf.sources.registry import (
     all_countries,
+    all_sources,
     channel_for,
     channel_signal,
     get_country,
@@ -43,6 +55,7 @@ from kartograf.sources.registry import (
 )
 from kartograf.sources.sidecar import _select_channel_by_capability
 from kartograf.sources.variants import ProductVariant, resolution_label, variants
+from kartograf.transport.atom import atom_segment_tokens
 
 # Sidecar `dataset` keys of the PL NMT/NMPT sheet sources (ADR-041): ASC grids
 # (`pl.gugik.nmt_1m`, `pl.gugik.nmt_5m` and `pl.gugik.nmpt` = NMPT 1 m keep the
@@ -717,7 +730,9 @@ class TestResolveSubdir:
             d.resolve_subdir(**kwargs)
 
 
-_SEGMENT_TOKEN = re.compile(r"[a-z0-9.-]+")
+# A segment token (ADR-044 D7): lowercase letters and digits, "-" between the
+# words of one token (ascii-nmt, 0-5cm, ptwp-swrs), "." in a number (0.5m).
+_SEGMENT_TOKEN = re.compile(r"[a-z0-9]+(?:[.-][a-z0-9]+)*")
 
 
 class TestCollectionChannels:
@@ -939,3 +954,158 @@ class TestCollectionChannels:
             ("2", "2017"): "EPSG:9650",
         }
         assert set(measured.values()) <= set(channel.vertical_crs_options)
+
+
+# ADR-044 D7 (ARCHITECTURE 3.3, rule 10): a source key is
+# <country>.<provider>.<name>, the name in words joined by "_".
+_KEY = re.compile(
+    r"(?P<country>[a-z]+)\.(?P<provider>[a-z]+)\.(?P<name>[a-z0-9]+(?:_[a-z0-9]+)*)"
+)
+# Values of the placeholders of a segment template (resolve_subdir).
+_FILLED = {"{system}": ("1992", "2000"), "{vcrs}": ("kron86", "evrf2007", "bpv")}
+# Land cover and soil choices whose values are the content tokens (rule 8).
+_CHOICE_TOKENS = {
+    "eu.clms.corine": [
+        tokens
+        for year in CorineProvider.AVAILABLE_YEARS
+        for tokens in ((str(year),), (str(year), "preview"))
+    ],
+    "global.isric.soilgrids": list(
+        itertools.product(
+            SoilGridsProvider.PROPERTIES,
+            SoilGridsProvider.DEPTHS,
+            SoilGridsProvider.STATS,
+        )
+    ),
+}
+
+
+def _content_tokens(d: SourceDescriptor) -> list[tuple[str, ...]]:
+    """Content tokens of every variant ``d`` declares (none: the prefix):
+    unit package variants (with the classes of a release), the EPSG of each
+    CRS of an ATOM file, feature choices and levels, the WCS cutout variant
+    and pixel, the land cover and soil choices."""
+    found: list[tuple[str, ...]] = [(), *_CHOICE_TOKENS.get(d.key, ())]
+    cutouts = wcs_cutout_channels(d.key)
+    for channel in d.channels:
+        params = channel.params
+        if isinstance(params, UnitPackageParams):
+            for v in params.variants:
+                found.append(v.segment_tokens)
+                if v.classes:
+                    found.append((*v.segment_tokens, "-".join(v.classes)))
+        elif isinstance(params, AtomFilesParams):
+            found.extend(
+                atom_segment_tokens(params, crs) for crs in params.crs or (None,)
+            )
+        elif isinstance(params, FeatureBBoxParams):
+            chosen = tuple(value for _, value in params.choice)
+            if params.selection == "level":
+                found.extend((*chosen, layer.code) for layer in params.layers)
+            else:
+                found.append(chosen)
+        elif isinstance(params, WcsCutoutParams):
+            coverage = params.variant if len(cutouts) > 1 else None
+            found.extend(
+                (label,) if coverage is None else (coverage, label)
+                for label in cutout_resolution_labels(d.key, coverage)
+            )
+    return found
+
+
+def _segments(d: SourceDescriptor) -> set[str]:
+    """Every ``<directory>/<segment>`` of ``d``: its template with each system
+    and height system, completed by each content of ``_content_tokens``."""
+    subdirs = [d.storage_subdir]
+    for placeholder, values in _FILLED.items():
+        if placeholder in d.storage_subdir:
+            subdirs = [s.replace(placeholder, v) for s in subdirs for v in values]
+    return {
+        "_".join([subdir, *(str(t).lower() for t in tokens)])
+        for subdir in subdirs
+        for tokens in _content_tokens(d)
+    }
+
+
+def _key_tokens(d: SourceDescriptor) -> frozenset[str]:
+    """Words a key may name: the directory and the segment tokens after the
+    country (no placeholders), ``-`` and ``.`` written as ``_``."""
+    directory, segment = d.storage_subdir.split("/")
+    return frozenset(
+        re.sub(r"[.-]", "_", token)
+        for token in (directory, *segment.split("_")[1:])
+        if not token.startswith("{")
+    )
+
+
+def _composed(name: str, tokens: frozenset[str]) -> bool:
+    """``name`` = distinct whole ``tokens`` joined by ``_``, in any order."""
+    return any(
+        name == token
+        or (
+            name.startswith(f"{token}_")
+            and _composed(name[len(token) + 1 :], tokens - {token})
+        )
+        for token in tokens
+    )
+
+
+class TestNamingConvention:
+    """ADR-044 D7: one convention of source keys and ``data/`` names, kept by
+    every descriptor (ARCHITECTURE 3.3, rule 10)."""
+
+    def test_keys_name_country_provider_and_storage_path(self):
+        """``<country>.<provider>.<name>``: the country of the descriptor, its
+        provider, and a name made of whole words of its ``data/`` path - the
+        directory or the dataset token, fixed tokens of the descriptor
+        (``nmt_tbd_25m``, ``zabaged_contours_shp``) - never another name of
+        the same data (``orto_true`` for ``true-orto/``, ``hy_net`` for
+        ``cz_hynet``)."""
+        for d in all_sources():
+            match = _KEY.fullmatch(d.key)
+            assert match is not None, d.key
+            assert match["country"] == d.country.lower(), d.key
+            assert match["provider"] in d.provider_name.lower().split(), d.key
+            assert _composed(match["name"], _key_tokens(d)), (d.key, d.storage_subdir)
+
+    def test_directory_is_product_or_group(self):
+        """``elevation`` and ``imagery`` store a product in the directory of
+        its ``--product`` (``true-orto/``), the other groups in the directory
+        of the group (``geodesy/``)."""
+        groups = {
+            module.name
+            for module in pkgutil.iter_modules(cli_groups.__path__)
+            if not module.name.startswith("_")
+        } - {"elevation", "imagery", "project"}
+        for d in all_sources():
+            directory = d.storage_subdir.split("/")[0]
+            if d.product in (*ELEVATION_PRODUCTS, *IMAGERY_PRODUCTS):
+                assert directory == d.product, d.key
+            else:
+                assert directory in groups, d.key
+
+    def test_every_segment_follows_convention(self):
+        """Each segment a descriptor can produce: the country first, then
+        tokens of lowercase letters and digits (``-`` between words of one
+        token, ``.`` in a number) separated by ``_``; a PL product of
+        ``elevation``/``imagery`` names its PL system next (``1992``/``2000``,
+        rule 1)."""
+        directories = (*ELEVATION_PRODUCTS, *IMAGERY_PRODUCTS)
+        for d in all_sources():
+            for path in sorted(_segments(d)):
+                directory, segment = path.split("/")
+                tokens = segment.split("_")
+                assert tokens[0] == d.country.lower(), path
+                assert all(_SEGMENT_TOKEN.fullmatch(t) for t in tokens[1:]), path
+                if d.country == "PL" and directory in directories:
+                    assert tokens[1] in ("1992", "2000"), path
+
+    def test_hsg_segments_follow_convention(self):
+        """HSG (no descriptor): ``hsg/global_soilgrids_<depth>_<stat>``."""
+        for depth, stat in itertools.product(
+            SoilGridsProvider.DEPTHS, SoilGridsProvider.STATS
+        ):
+            directory, segment = hsg_segment(depth, stat).split("/")
+            assert directory == "hsg"
+            assert segment.startswith("global_soilgrids_")
+            assert all(_SEGMENT_TOKEN.fullmatch(t) for t in segment.split("_"))
