@@ -123,9 +123,24 @@
 >    w CHANGELOG, jak `chore(release): poczatek cyklu 0.8.0`). Przebieg
 >    i decyzje: sekcja "Sesja 2026-10-15/16/17" nizej. Hydrograf/Hydrolog
 >    dostosuja sie same do zmian lamiacych (CHANGELOG [0.8.0], "Co zrobic").
-> 1. **Nastepne kroki:** podprojekty 4 (wtyczka QGIS) i 5 (GUI webowe)
->    roadmapy (`docs/SCOPE.md` 3.3) - kazdy od brainstormingu i specu;
->    pozostale pozycje: backlog nizej (m.in. VKM CZ, CLMS na zywo).
+> 1. **Nastepne kroki:** podprojekt 4 (wtyczka QGIS) roadmapy
+>    (`docs/SCOPE.md` 3.3) - od brainstormingu i specu. Podprojekt 5 (GUI
+>    webowe) ZASTAPIONY osobnym projektem **Archiwista**
+>    (`/home/claude-agent/workspace/Archiwista`, osobne repo; decyzja
+>    uzytkownika 2026-10-17): spec `docs/SPEC.md`, decyzje A-ADR-001..024,
+>    mockup `mockup/`; Kartograf to jego wymagana zaleznosc, IMGWTools -
+>    opcjonalna (`archiwista[imgw]`, A-ADR-024). ROADMAPY KARTOGRAFA
+>    (SCOPE 3.3) jeszcze NIE aktualizowac - czeka na decyzje uzytkownika.
+>    Wymagania Archiwisty wobec Kartografa: SPEC Archiwisty sekcja 12 -
+>    najpilniejsze KA-1..KA-6 (odczyt magazynu: `iter_store`,
+>    `read_sidecar`, `describe_segment`, `file_footprint`, `link_target`,
+>    `pinned_transform`; blokuja v0.1 Archiwisty), potem KD-1/KD-2
+>    (szczegoly arkuszy i kampanii, `full_m2` w raporcie dostepnosci),
+>    KB/KC/KH (katalog komend, `cancel`, jednolity `on_progress`, rozmiar
+>    pozycji planu), KD-3/KD-4, KE/KF/KG (mozaika, PL+CZ, porownanie
+>    wersji). Propozycja na kolejna sesje: spec i plan pakietu KA + KD-1/KD-2
+>    jako cykl 0.9.0 (po zgodzie uzytkownika). Pozostale pozycje: backlog
+>    nizej (m.in. VKM CZ, CLMS na zywo).
 >    Sprzatanie (czeka na zgode uzytkownika): ok. 30 worktree i galezi
 >    roboczych cyklu 0.8.0 w `/home/claude-agent/workspace/wt/`
 >    (`feat/`, `fix/`, `docs/`, `wip/`, `release/0.8.0`; `git worktree list`,
