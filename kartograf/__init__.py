@@ -231,7 +231,7 @@ from kartograf.sources.edition import Edition
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
-__version__ = "0.8.0-dev"
+__version__ = "0.8.0"
 
 __all__ = [
     # Cache

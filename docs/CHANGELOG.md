@@ -5,7 +5,7 @@ Wszystkie istotne zmiany w projekcie sa dokumentowane w tym pliku.
 Format oparty na [Keep a Changelog](https://keepachangelog.com/pl/1.1.0/),
 projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [0.8.0] - Unreleased
+## [0.8.0] - 2026-10-17
 
 ### Zmiany lamiace (BREAKING)
 
@@ -628,8 +628,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     z katalogu CLMS. Co zrobic: nic.
 - Typy argumentow biblioteki sprawdzane na wejsciu, bez konwersji
   (STANDARDS 11.2, `kartograf/download/arguments.py`): `download_data`/
-  `check_data`, `LandCoverManager.download`/`check` (takze `year`
-  archiwum BDOT10k), `HSGCalculator.calculate_hsg`/`check_hsg`,
+  `check_data`, `download_landcover`/`check_landcover` (takze `year`
+  archiwum BDOT10k), `calculate_hsg`/`check_hsg`,
   `download_collection`/`check_collection`, `check_availability`,
   `DownloadManager` i `download_laz_area`/`check_laz_area` daja
   `ValidationError` przed siecia dla liczby podanej jako napis
@@ -1002,7 +1002,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i `CollectionReport(files, failed, stale, notices, ok)` w `__all__` (=
   `boundaries`/`cadastre`/`models3d download`, tor planu `collection`),
   walidacja bez sieci `kartograf.download.collections.validate_collection_request`,
-  `LandCoverManager.download/check(year=, format="GML"|"SHP")` dla archiwum
+  `download_landcover`/`check_landcover(year=, format="GML"|"SHP")` dla archiwum
   BDOT10k; kody `Notice` `unit_list` (powiaty obszaru wg PRG),
   `whole_country_size` (rozmiar pliku krajowego przed transferem)
   i `auto_narrowed_to_cz`; parametry kanalow `AccessChannel.params`
@@ -1056,9 +1056,10 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   i uklad z listy `--bbox-crs`, nieznany uklad = `ValidationError`) takze
   w `download_pl_cutout`/`check_pl_cutout`, `download_cz_cutout`/
   `check_cz_cutout`, `download_laz_area`/`check_laz_area`,
-  `LandCoverManager` i `HSGCalculator` (katalog `.tif` odrzucony jak
-  w CLI); `resolution`/`vertical_crs` innego typu niz tekst albo slownik
-  = `ValidationError`; kod TERYT sprawdzany takze w `check`. Bledy wejscia
+  `download_landcover`/`check_landcover` i `calculate_hsg`/`check_hsg`
+  (katalog `.tif` odrzucony jak w CLI); `resolution`/`vertical_crs`
+  innego typu niz tekst albo slownik = `ValidationError`; kod TERYT
+  sprawdzany takze w `check`. Bledy wejscia
   wewnatrz czesci kraju sa `ValidationError`, nie pozycja `failed`.
   Komunikaty `nie udalo sie sprawdzic zrodla` i
   `lokalna wersja ... niesprawdzona` land cover i HSG sa `Notice`
@@ -1211,7 +1212,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   EPSG:2180, `select_all_intersecting(tolerance_m=)`. `Info:` o pominietych
   kaflach wymienia tylko kafle pokryte przez nowsze; kafle spoza obszaru
   zostaja w `superseded` z powodem `outside`.
-- `--check-updates` (oraz `check_data`, `check_*`, `LandCoverManager.check`)
+- `--check-updates` (oraz `check_data`, `check_*`, `check_landcover`)
   zawsze pyta zrodlo: cache metadanych jest otwierany w trybie
   odswiezania (odczyt pominiety, wpisy zapisane od nowa) w kazdym torze.
   Dotad arkusze PL (NMT/NMPT/orto), archiwa, pliki NMT 100 m, kolekcje,
@@ -1275,8 +1276,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `Error: FileNotFoundError: ...` z podpowiedzia `KARTOGRAF_DEBUG`
   (weryfikacja na zywo 2026-10-12).
 - `landcover download --format` z innym zrodlem niz bdot10k konczy sie
-  bledem (dotad byl po cichu pomijany); `LandCoverManager` bez wymaganej
-  opcji zrodla (`year` CORINE, `property`/`depth`/`stat` SoilGrids) albo
+  bledem (dotad byl po cichu pomijany); `download_landcover`/`download_soil`
+  bez wymaganej opcji zrodla (`year` CORINE, `property`/`depth`/`stat`
+  SoilGrids) albo
   z opcja tylko BDOT10k (`format`, `layers`, `keep_raw`) dla innego zrodla
   daje `ValidationError` z tekstem CLI (dotad `TypeError`). Bez
   angielskich i podwojnych linii logu na stderr (`No data for ...`,
@@ -1311,7 +1313,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `--upgrade --plan` arkuszy PL raportuje postep jak zwykle pobieranie.
 - Postep pobierania powiatow BDOT10k obszaru (`landcover download --bbox/
   --sheet/--geometry`, takze archiwum `--year`): dotad brak jakiegokolwiek
-  postepu do konca zadania. `LandCoverManager.download(on_progress=)`
+  postepu do konca zadania. `download_landcover(on_progress=)`
   zglasza `DownloadProgress` per powiat jak lista arkuszy (`sheet` = TERYT:
   `downloading` tuz przed transferem przy `--workers 1`, potem `completed`/
   `skipped`/`failed` w kolejnosci ukonczenia); CLI i `project download`
@@ -3494,7 +3496,7 @@ provider = CorineProvider(clms_credentials={...}, use_proxy=False)
 - Project structure follows src layout
 - Configured with black, flake8, pytest
 
-[0.8.0]: https://github.com/Daldek/Kartograf/compare/v0.7.2...develop
+[0.8.0]: https://github.com/Daldek/Kartograf/compare/v0.7.2...v0.8.0
 [0.7.2]: https://github.com/Daldek/Kartograf/compare/v0.7.1...v0.7.2
 [0.7.1]: https://github.com/Daldek/Kartograf/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/Daldek/Kartograf/compare/v0.6.1...v0.7.0

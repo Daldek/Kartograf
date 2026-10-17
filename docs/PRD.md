@@ -1,13 +1,13 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.6
-**Data:** 2026-10-16
+**Wersja:** 4.7
+**Data:** 2026-10-17
 **Product Owner:** Piotr
-**Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu)
+**Status:** Wydanie v0.8.0 (2026-10-17)
 
 > Dokument opisuje wymagania produktowe w postaci zrealizowanej w kodzie
-> v0.8.0-dev, w tym magazyn wersjonowany ADR-036 i spójność CLI/API ADR-037.
+> wydania v0.8.0, w tym magazyn wersjonowany ADR-036 i spójność CLI/API ADR-037.
 > Szczegóły zachowania (komunikaty, kody wyjścia, przypadki brzegowe) —
 > `docs/SCOPE.md` i `docs/ARCHITECTURE.md`; uzasadnienia decyzji —
 > `docs/DECISIONS.md`; historia zmian — `docs/CHANGELOG.md`. Pełna lista
@@ -1553,7 +1553,7 @@ from kartograf import (
     CacheError,
 
     # Version
-    __version__,
+    __version__,            # "0.8.0"
 )
 ```
 
@@ -1722,6 +1722,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 4.6
-**Data ostatniej aktualizacji:** 2026-10-16
-**Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu)
+**Wersja dokumentu:** 4.7
+**Data ostatniej aktualizacji:** 2026-10-17
+**Status:** Wydanie v0.8.0 (2026-10-17)

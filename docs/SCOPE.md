@@ -1,9 +1,9 @@
 # SCOPE.md - Zakres Projektu Kartograf
 **Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 3.27
-**Data:** 2026-10-16
-**Status:** Kod v0.8.0-dev (wydanie 0.8.0 w przygotowaniu; ostatnie wydanie v0.7.2, 2026-10-11)
+**Wersja:** 3.28
+**Data:** 2026-10-17
+**Status:** Wydanie v0.8.0 (2026-10-17)
 
 ---
 
@@ -1374,9 +1374,10 @@ pyogrio >= 0.10        # GDAL wektorowy: zapis GPKG wyników obszaru kolekcji (A
 | 2026-10-15 | 3.25 | Plan C podprojektu 3 (ADR-042): granice PRG, EGiB i modele 3D budynków (grupy `boundaries`, `cadastre`, `models3d`, sekcja 2.13), archiwum roczników BDOT10k (2.6), `download_collection`/`check_collection`, układ segmentów kolekcji (2.11), ograniczenia (3.1, 3.2), moduły i `pyogrio` (4), źródła (5) |
 | 2026-10-16 | 3.26 | Plan D (ADR-042 D12-D17): ortofoto CZ i wycinek ortofotomapy PL (2.4), dane CZ ZABAGED, RUIAN, HY-NET i grupa `hydro` (2.14), CLI i API (2.9, 2.10), ograniczenia (3.1, 3.2), moduły (4.1) |
 | 2026-10-16 | 3.27 | Plany B i E (ADR-041, ADR-043) i przegląd przed wydaniem 0.8.0: cel (1), BDOO (2.6), adresy i granice specjalne PRG, RCN, mesh, drzewa i limit obszaru (2.13), Data50/250, geomorfologia i mapa katastralna CZ (2.14), nazwy i mapy (2.15), osnowy i quasi-geoidy (2.16), CLI (2.9), układ kolekcji (2.11), VKM i nieaktualne zadania (3.1), sumy kontrolne, godła 8-członowe i ograniczenia kolekcji (3.2), roadmapa (3.3), moduły, źródła i kryteria (4-6); bloki list jako `text` |
+| 2026-10-17 | 3.28 | Wydanie v0.8.0: magazyn wersjonowany (ADR-036), manifest projektu (ADR-040), katalog GUGiK/ČÚZK — plany A–E (ADR-041–043), grupy CLI i ujednolicone API (ADR-039, ADR-044), status |
 
 ---
 
-**Wersja dokumentu:** 3.27
-**Data ostatniej aktualizacji:** 2026-10-16
-**Status:** Kod v0.8.0-dev (ostatnie wydanie v0.7.2, 2026-10-11)
+**Wersja dokumentu:** 3.28
+**Data ostatniej aktualizacji:** 2026-10-17
+**Status:** Wydanie v0.8.0 (2026-10-17)
