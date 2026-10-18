@@ -56,7 +56,14 @@ from kartograf.download.collections import (
     run_request,
     selection_choices,
 )
-from kartograf.download.data import FailureKind, UnitFailure, UnitFile
+from kartograf.download.data import (
+    DOWNLOAD_FILL,
+    DOWNLOAD_KEYS,
+    DOWNLOAD_SCHEMA,
+    FailureKind,
+    UnitFailure,
+    UnitFile,
+)
 from kartograf.download.fetch import (
     EditionLookup,
     FileSlot,
@@ -105,6 +112,7 @@ from kartograf.providers.soilgrids import (
     STAT_DESCRIPTIONS,
     SoilGridsProvider,
 )
+from kartograf.serialization import Document
 from kartograf.sources.descriptor import (
     AccessChannel,
     PackageVariant,
@@ -308,8 +316,9 @@ def _read_geotiff_nodata(path: Path) -> float | None:
 
 
 @dataclass(frozen=True)
-class LandCoverReport:
-    """Outcome of ``download_landcover`` (``landcover download``).
+class LandCoverReport(Document):
+    """Outcome of ``download_landcover`` (``landcover download``;
+    ``kartograf-download/1``).
 
     ``files``: one ``UnitFile`` per data file (``unit`` = TERYT, bbox
     coordinates, the sheet or the country code of a national file;
@@ -322,6 +331,10 @@ class LandCoverReport:
     without a local version has no file.
     """
 
+    SCHEMA = DOWNLOAD_SCHEMA
+    JSON_KEYS = DOWNLOAD_KEYS
+    JSON_FILL = {key: DOWNLOAD_FILL[key] for key in ("inputs", "superseded", "summary")}
+
     files: tuple[UnitFile, ...]
     raw: tuple[UnitFile, ...]
     failed: tuple[UnitFailure, ...]
@@ -331,14 +344,20 @@ class LandCoverReport:
 
 
 @dataclass(frozen=True)
-class SoilReport:
-    """Outcome of ``download_soil`` (``soil download``).
+class SoilReport(Document):
+    """Outcome of ``download_soil`` (``soil download``; ``kartograf-download/1``).
 
     ``files``: the SoilGrids raster of the area (one ``UnitFile``, ``unit`` =
     bbox coordinates or the sheet, ``country`` = ``GLOBAL``; none when it
     failed or a plan left it out without a local version); ``failed``,
     ``stale``, ``notices`` and ``ok`` as in ``LandCoverReport``.
     """
+
+    SCHEMA = DOWNLOAD_SCHEMA
+    JSON_KEYS = DOWNLOAD_KEYS
+    JSON_FILL = {
+        key: DOWNLOAD_FILL[key] for key in ("raw", "inputs", "superseded", "summary")
+    }
 
     files: tuple[UnitFile, ...]
     failed: tuple[UnitFailure, ...]

@@ -13,6 +13,18 @@ import pytest
 
 import kartograf
 from kartograf.core.bbox import BBox
+from kartograf.download.collections import CollectionReport
+from kartograf.download.data import (
+    DOWNLOAD_KEYS,
+    DataReport,
+    UnitFailure,
+    UnitFile,
+)
+from kartograf.download.fetch import VersionedFile
+from kartograf.hydrology.hsg import HsgReport
+from kartograf.landcover.manager import LandCoverReport, SoilReport
+from kartograf.notices import Notice
+from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
 
 
@@ -389,3 +401,202 @@ def test_serializer_imports_nothing_from_the_package():
     )
 
     assert json.loads(done.stdout) == ["kartograf", "kartograf.serialization"]
+
+
+# --- the five command reports share kartograf-download/1 (spec 5.4.1) ----------
+
+_DOWNLOAD_REPORTS = {
+    "DataReport": lambda: DataReport(
+        files=(), failed=(), stale=(), superseded=(), notices=(), ok=True
+    ),
+    "CollectionReport": lambda: CollectionReport(
+        files=(), failed=(), stale=(), notices=(), ok=True
+    ),
+    "LandCoverReport": lambda: LandCoverReport(
+        files=(), raw=(), failed=(), stale=(), notices=(), ok=True
+    ),
+    "SoilReport": lambda: SoilReport(
+        files=(), failed=(), stale=(), notices=(), ok=True
+    ),
+    "HsgReport": lambda: HsgReport(
+        files=(), inputs=(), failed=(), stale=(), notices=(), ok=True
+    ),
+}
+
+
+@pytest.mark.parametrize("name", list(_DOWNLOAD_REPORTS))
+def test_download_family_has_one_key_set(name):
+    """A consumer reads the five reports with one schema: the same keys in the
+    same order, a key the class has no field for is ``[]`` (``summary``: null)."""
+    report = _DOWNLOAD_REPORTS[name]()
+
+    data = report.to_dict()
+
+    assert list(data) == ["schema", *DOWNLOAD_KEYS]
+    assert data["schema"] == "kartograf-download/1" == report.schema
+    assert data["summary"] is None and data["ok"] is True
+    for key in ("files", "raw", "inputs", "failed", "stale", "superseded", "notices"):
+        assert data[key] == []
+
+
+def test_download_family_is_registered_under_one_schema():
+    registered = {cls.__name__ for cls in SCHEMAS["kartograf-download/1"]}
+    assert registered == set(_DOWNLOAD_REPORTS)
+
+
+_SPEC_SHA256 = "10be475e6b5c43d54b8dc832ab9816367e3dad4c1bd59bbba25c2b296a2824c6"
+
+
+def _spec_file() -> VersionedFile:
+    store = Path("/data/kartograf/nmt/pl_1992_1m_evrf2007")
+    version = "2022-05-10_83233_10be475e"
+    name = "N-34-130-D-d-2-4.asc"
+    return VersionedFile(
+        path=store / "N-34/130/D/d/2/4" / name,
+        status="new",
+        label="2022-05-10_83233",
+        sha256=_SPEC_SHA256,
+        version_path=store / "versions/N-34/130/D/d/2/4" / version / name,
+    )
+
+
+def test_download_report_equals_the_spec_example():
+    """The example of spec 5.4.1: absolute paths, a ``Notice`` as an object."""
+    sheet_list = Notice(
+        "info",
+        "sheet_list",
+        "Znaleziono arkuszy wg godla: 1 dla N-34-130-D-d-2-4 (NMT 1 m)\n"
+        "  Arkusze: N-34-130-D-d-2-4",
+    )
+    report = DataReport(
+        files=(UnitFile("N-34-130-D-d-2-4", "PL", _spec_file()),),
+        failed=(),
+        stale=(),
+        superseded=(),
+        notices=(sheet_list,),
+        ok=True,
+    )
+
+    assert report.to_dict() == {
+        "schema": "kartograf-download/1",
+        "files": [
+            {
+                "unit": "N-34-130-D-d-2-4",
+                "country": "PL",
+                "file": {
+                    "path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/"
+                    "N-34-130-D-d-2-4.asc",
+                    "status": "new",
+                    "label": "2022-05-10_83233",
+                    "sha256": _SPEC_SHA256,
+                    "version_path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/versions/"
+                    "N-34/130/D/d/2/4/2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc",
+                    "newer": None,
+                    "unverified": None,
+                    "same_as": None,
+                },
+            }
+        ],
+        "raw": [],
+        "inputs": [],
+        "failed": [],
+        "stale": [],
+        "superseded": [],
+        "summary": None,
+        "notices": [{"level": "info", "code": "sheet_list", "text": sheet_list.text}],
+        "ok": True,
+    }
+
+
+def _tile(sheet: str, **fields) -> LazTile:
+    values: dict[str, object] = {
+        "sheet": sheet,
+        "url": f"https://example.test/{sheet}.laz",
+        "year": 2022,
+        "density": 12,
+        "crs": "PL-1992",
+        "min_x": 500000.0,
+        "min_y": 250000.0,
+        "max_x": 501000.0,
+        "max_y": 251000.0,
+        "footprint": ((500000.0, 250000.0), (501000.0, 250000.0), (501000.0, 251000.0)),
+        "date": "2022-05-10",
+        "full_sheet": True,
+    }
+    return LazTile(**{**values, **fields})  # type: ignore[arg-type]
+
+
+def test_superseded_encodes_tile_and_covered_by():
+    older = _tile("N-34-139-C-a-3-1", year=2018, full_sheet=None)
+    newer = _tile("N-34-139-C-a-3-1-n")
+    # a covering tile the WFS gave no geometry for: its extent is NaN in memory
+    # and ``null`` in the document (NaN is no JSON value)
+    unknown = _tile(
+        "N-34-139-C-a-3-2", min_x=float("nan"), min_y=float("nan"),
+        max_x=float("nan"), max_y=float("nan"), footprint=None, date=None,
+    )  # fmt: skip
+    report = DataReport(
+        files=(),
+        failed=(),
+        stale=(),
+        superseded=(
+            SupersededLazTile(older, (newer, unknown)),
+            SupersededLazTile(_tile("N-34-139-C-b-1-1"), ()),
+        ),
+        notices=(),
+        ok=True,
+    )
+
+    data = report.to_dict()
+
+    first, second = data["superseded"]
+    assert list(first) == ["tile", "covered_by"]
+    assert list(first["tile"]) == [
+        "sheet",
+        "url",
+        "year",
+        "density",
+        "crs",
+        "min_x",
+        "min_y",
+        "max_x",
+        "max_y",
+        "footprint",
+        "date",
+        "full_sheet",
+    ]
+    assert first["tile"]["year"] == 2018 and first["tile"]["full_sheet"] is None
+    assert first["tile"]["footprint"] == [
+        [500000.0, 250000.0],
+        [501000.0, 250000.0],
+        [501000.0, 251000.0],
+    ]
+    covering, no_geometry = first["covered_by"]
+    assert covering["sheet"] == "N-34-139-C-a-3-1-n"
+    assert [no_geometry[k] for k in ("min_x", "min_y", "max_x", "max_y")] == [None] * 4
+    assert no_geometry["footprint"] is None and no_geometry["date"] is None
+    assert second["covered_by"] == []
+    json.dumps(data, allow_nan=False)  # the whole document is plain JSON
+
+
+def test_unit_failure_and_unit_file_keys():
+    failure = UnitFailure("1465", "PL", "HTTP 500", "download")
+    unit_file = UnitFile("1465", "PL", _spec_file())
+
+    assert encode(failure) == {
+        "unit": "1465",
+        "country": "PL",
+        "error": "HTTP 500",
+        "kind": "download",
+    }
+    assert list(encode(unit_file)) == ["unit", "country", "file"]
+    assert list(encode(unit_file.file)) == [  # type: ignore[call-overload]
+        "path",
+        "status",
+        "label",
+        "sha256",
+        "version_path",
+        "newer",
+        "unverified",
+        "same_as",
+    ]
