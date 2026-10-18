@@ -96,7 +96,7 @@ def _words(command: Command, param: Param, value: object, *, short: bool) -> lis
             raise ValueError(f"{param.name}: a flag is true or false, got {value!r}")
         return [param.short if short and param.short else flag]
     if param.positional:
-        values = value if param.nargs is not None else [value]
+        values = value if param.nargs in ("*", "REMAINDER") else [value]
         if isinstance(values, str) or not isinstance(values, Sequence):
             raise ValueError(f"{param.name}: expected a list of words, got {value!r}")
         return [shlex.quote(_text(param, item)) for item in values]
