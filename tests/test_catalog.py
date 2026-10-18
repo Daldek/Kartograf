@@ -4,6 +4,7 @@ example, the completeness of the declarations) come last."""
 
 import argparse
 import dataclasses
+import json
 import shlex
 import subprocess
 import sys
@@ -183,10 +184,9 @@ def declared_catalog(monkeypatch):
 
 
 def test_catalog_document_keys():
-    catalog = _build()
-
-    assert list(catalog.to_dict()) == [
+    keys = [
         "schema",
+        "view",
         "kartograf_version",
         "language",
         "groups",
@@ -195,9 +195,33 @@ def test_catalog_document_keys():
         "errors",
         "schemas",
     ]
+
+    # every view has the same keys: the overview shortens the records, not the document
+    for catalog in (_build(), _build(group="elevation"), _build(command="parse")):
+        assert list(catalog.to_dict()) == keys
     assert catalog.schema == "kartograf-catalog/1"
     assert catalog.language == "pl"
     assert SCHEMAS["kartograf-catalog/1"] == (Catalog,)
+
+
+def test_view_is_the_overview_until_something_is_selected_or_asked_for():
+    assert _build().view == "overview"
+    assert _build(params=False).view == "overview"
+    assert _build(tables=True).view == "overview"
+    for view in (
+        {"group": "elevation"},
+        {"command": "parse"},
+        {"params": True},
+        {"group": "elevation", "params": False},
+    ):
+        assert _build(**view).view == "full", view
+
+
+def test_a_catalog_of_an_unknown_view_is_rejected():
+    full = _build()
+
+    with pytest.raises(ValueError, match="unknown catalog view 'short'"):
+        dataclasses.replace(full, view="short")
 
 
 def test_version_is_the_package_version():
@@ -206,7 +230,9 @@ def test_version_is_the_package_version():
     assert _build().kartograf_version == kartograf.__version__
 
 
-def test_default_view_has_no_params():
+def test_overview_objects_are_complete_and_without_params():
+    """The objects of the overview have every field but the parameters: a caller
+    of the library reads a description without asking again."""
     catalog = _build()
 
     assert [c.id for c in catalog.commands] == [
@@ -220,11 +246,100 @@ def test_default_view_has_no_params():
         c.params is None and c.constraints is None and c.examples is None
         for c in catalog.commands
     )
+    assert all(c.description and c.kind for c in catalog.commands)
+    assert catalog.groups[0].description
+    assert catalog.groups[0].products[0].sources is not None
+
+
+def test_overview_document_is_a_short_projection():
+    catalog = _build()
+
     document = catalog.to_dict()
-    assert all(
-        c["params"] is None and c["constraints"] is None and c["examples"] is None
-        for c in document["commands"]
+
+    assert document["view"] == "overview"
+    assert [list(g) for g in document["groups"]] == [
+        ["name", "summary", "products"]
+    ] * 2
+    assert document["groups"][0]["products"] == ["nmt", "nmpt"]
+    assert document["groups"][1]["products"] == []
+    assert [list(c) for c in document["commands"]] == [
+        ["id", "summary", "tool", "supports_check"]
+    ] * 5
+    by_id = {c["id"]: c for c in document["commands"]}
+    assert by_id["elevation download"]["supports_check"] is True
+    assert by_id["cache stats"]["supports_check"] is False
+    assert by_id["cache stats"]["tool"] is None
+    assert by_id["parse"]["tool"] == "parse_sheet"
+    # the tables are asked for
+    assert (document["exit_codes"], document["errors"], document["schemas"]) == (
+        None,
+        None,
+        None,
     )
+
+
+def test_overview_text_is_one_record_per_line_and_the_same_document():
+    catalog = _build()
+
+    text = catalog.to_json()
+    compact = catalog.to_json(indent=None)
+
+    assert json.loads(text) == json.loads(compact) == catalog.to_dict()
+    assert text.endswith("}\n") and "\n" not in compact
+    lines = text.splitlines()
+    for command in catalog.to_dict()["commands"]:
+        record = json.dumps(command, ensure_ascii=False, separators=(",", ":"))
+        assert f"    {record}," in lines or f"    {record}" in lines
+    assert max(len(line) for line in lines) < 250
+    assert lines[:3] == [
+        "{",
+        '  "schema": "kartograf-catalog/1",',
+        '  "view": "overview",',
+    ]
+
+
+def test_overview_text_with_tables_has_a_record_per_line_for_them_too():
+    catalog = _build(tables=True)
+
+    text = catalog.to_json()
+
+    assert json.loads(text) == catalog.to_dict()
+    assert len(text.splitlines()) > len(_build().to_json().splitlines()) + len(
+        catalog.exit_codes or ()
+    )
+
+
+def test_other_views_are_printed_like_any_document():
+    catalog = _build(command="elevation download")
+
+    assert (
+        catalog.to_json()
+        == json.dumps(catalog.to_dict(), ensure_ascii=False, indent=2) + "\n"
+    )
+    assert catalog.to_json(indent=None) == json.dumps(
+        catalog.to_dict(), ensure_ascii=False, separators=(",", ":")
+    )
+
+
+def test_a_full_view_document_has_every_field_of_its_objects():
+    document = _build(group="elevation").to_dict()
+
+    assert document["view"] == "full"
+    assert list(document["groups"][0]) == [
+        "name",
+        "summary",
+        "description",
+        "products",
+        "commands",
+    ]
+    assert list(document["groups"][0]["products"][0]) == [
+        "name",
+        "summary",
+        "countries",
+        "sources",
+    ]
+    assert "description" in document["commands"][0]
+    assert document["commands"][0]["params"] is None
 
 
 def test_command_view_has_params_constraints_examples():
@@ -382,7 +497,7 @@ def test_supports_check_is_derived():
 
 
 def test_exit_codes_and_errors_are_the_library_tables():
-    catalog = _build()
+    catalog = _build(tables=True)
 
     assert [(r.code, r.name, r.meaning) for r in catalog.exit_codes] == [
         (r.code, r.name, r.meaning) for r in EXIT_CODES
@@ -390,6 +505,26 @@ def test_exit_codes_and_errors_are_the_library_tables():
     assert [(r.code, r.exception, r.exit_code, r.meaning) for r in catalog.errors] == [
         (r.code, r.exception, r.exit_code, r.meaning) for r in ERROR_CODES
     ]
+
+
+def test_tables_are_on_request_and_in_the_whole_catalog():
+    nothing = (None, None, None)
+
+    def tables(catalog: Catalog) -> tuple[object, object, object]:
+        return catalog.exit_codes, catalog.errors, catalog.schemas
+
+    assert tables(_build()) == tables(_build(group="elevation")) == nothing
+    assert tables(_build(command="parse")) == tables(_build(params=False)) == nothing
+    asked = _build(tables=True)
+    # the overview with the tables: the tables do not make it a full view
+    assert asked.view == "overview" and all(tables(asked))
+    assert all(tables(_build(command="parse", tables=True)))
+    # the whole catalog (every parameter of every command) has everything ...
+    whole = _build(params=True)
+    assert whole.view == "full" and all(tables(whole))
+    # ... unless it is told not to; a group with parameters is not the whole catalog
+    assert tables(_build(params=True, tables=False)) == nothing
+    assert tables(_build(group="elevation", params=True)) == nothing
 
 
 def test_schemas_list_follows_the_registry_and_names_the_producers(monkeypatch):
@@ -409,7 +544,7 @@ def test_schemas_list_follows_the_registry_and_names_the_producers(monkeypatch):
     monkeypatch.setattr(build, "SCHEMAS", registry)
     monkeypatch.setattr(build, "SCHEMA_DESCRIPTIONS", descriptions)
 
-    catalog = _build()
+    catalog = _build(tables=True)
 
     # registry order; a schema without a description is not part of the catalog
     assert [(s.schema, s.description, s.produced_by) for s in catalog.schemas] == [
@@ -422,7 +557,7 @@ def test_schemas_list_follows_the_registry_and_names_the_producers(monkeypatch):
 
 
 def test_every_library_schema_has_a_description():
-    described = {s.schema for s in _build().schemas}
+    described = {s.schema for s in _build(tables=True).schemas}
 
     library = {s for s in SCHEMAS if not s.startswith("kartograf-test-")}
     assert library <= described
@@ -771,6 +906,37 @@ def test_catalog_has_every_group_and_command():
         )
 
 
+def test_overview_is_a_short_and_complete_list_of_groups_products_and_commands():
+    """What an agent reads first is under 8000 characters (it was 47 807; the CLI
+    prints the same document, indented: it was 62 389), and nothing is lost: every
+    group, product and command is in it, the rest is one query away."""
+    catalog = get_catalog()
+    document = catalog.to_dict()
+    everything = get_catalog(params=True)
+
+    assert len(catalog.to_json(indent=None)) <= 8000
+    assert len(catalog.to_json()) <= 8000
+    assert [g["name"] for g in document["groups"]] == list(_GROUPS)
+    for group, row in zip(catalog.groups, document["groups"], strict=True):
+        assert row["products"] == [p.name for p in group.products]
+        assert row["summary"] == group.summary
+    assert [c["id"] for c in document["commands"]] == [
+        c.id for c in everything.commands
+    ]
+    for row in document["commands"]:
+        full = get_catalog(command=row["id"]).commands[0]
+        assert (row["summary"], row["tool"], row["supports_check"]) == (
+            full.summary,
+            full.tool,
+            full.supports_check,
+        )
+        # what left the overview: the description and the parameters
+        assert full.description and full.params is not None
+    for group in catalog.groups:
+        detail = get_catalog(group=group.name).groups[0]
+        assert detail.description and detail.products == group.products
+
+
 def test_catalog_filters_and_errors():
     soil = get_catalog(group="soil")
     one = {i: get_catalog(command=i).commands[0] for i in ("parse", "find_sheets")}
@@ -791,12 +957,13 @@ def test_catalog_filters_and_errors():
     assert one["parse"].group is None and one["parse"].params
     assert one["find_sheets"].cli is None and one["find_sheets"].params
     assert get_catalog(command="parse", params=False).commands[0].params is None
-    # the tables are in every view
+    # the tables only on request: not in a group, a command or the overview
+    for view in (soil, get_catalog(command="parse"), get_catalog()):
+        assert (view.exit_codes, view.errors, view.schemas) == (None, None, None)
+    tables = get_catalog(group="soil", tables=True)
+    assert [r.code for r in tables.exit_codes] == [0, 1, 2, 130]
+    assert tables.errors and tables.schemas
     short = get_catalog()
-    for view in (soil, get_catalog(command="parse")):
-        assert view.exit_codes == short.exit_codes
-        assert view.errors == short.errors and view.schemas == short.schemas
-    assert [r.code for r in short.exit_codes] == [0, 1, 2, 130]
 
     with pytest.raises(ValidationError) as group:
         get_catalog(group="nope")
