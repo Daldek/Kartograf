@@ -67,7 +67,7 @@ from kartograf.download.area import (
     pl_only_flags,
     resolve_geometry_layer,
 )
-from kartograf.download.arguments import require_int
+from kartograf.download.arguments import option_error, require_int
 from kartograf.download.countries import (
     countries_for_bbox,
     country_bbox,
@@ -83,7 +83,7 @@ from kartograf.download.fetch import (
 )
 from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
 from kartograf.download.options import (
-    campaign_opts_given,
+    campaign_option_names,
     canonical_bbox,
     canonical_country,
     canonical_crs,
@@ -136,7 +136,7 @@ from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.providers.pl.gugik_orto import image_directions, image_source
 from kartograf.serialization import Document
 from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
-from kartograf.sources.variants import cz_model_text, cz_sheet_system
+from kartograf.sources.variants import cz_model_text, cz_models, cz_sheet_system
 
 FailureKind = Literal["no_coverage", "download", "country"]
 MAX_HINT_LINES = 5
@@ -307,7 +307,9 @@ def _start(
     validate_update(update, check="check_data")
     require_int(workers, "--workers")
     if plan is not None and update != "upgrade":
-        raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+        raise ValidationError(
+            "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
+        )
     run = _Run(
         sink=NoticeSink(on_notice),
         update=update,
@@ -578,13 +580,15 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
         if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
                 f"Godlo '{task.sheet}' nalezy do systemu {system.name} "
-                f"(kraj {system.country}), a podano --country {country}"
+                f"(kraj {system.country}), a podano --country {country}",
+                options=("sheet", "country"),
             )
         if not sources_for(country=system.country, product=task.product):
             raise ValidationError(
                 f"--product {task.product} nie ma danych {system.country} - godlo "
                 f"'{task.sheet}' nalezy do systemu {system.name} (kraj "
-                f"{system.country}); podaj godlo kraju produktu"
+                f"{system.country}); podaj godlo kraju produktu",
+                options=("product", "sheet"),
             )
         if system.country == "CZ":
             if task.product == "orto":  # SM5 sheets, own rules (ADR-042 D13)
@@ -606,7 +610,8 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
         )
         if task.model is not None:
             raise ValidationError(
-                "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
+                "--model dotyczy tylko --product laz w CZ - pomin --model dla PL",
+                options=("model", "sheet"),
             )
     if task.product == "laz" and task.sheet is not None:
         return _download_pl_laz(task, run, {"sheet": task.sheet})
@@ -632,11 +637,13 @@ def _reject_campaign_opts_without_pl(
 ) -> None:
     """PL-only campaign/year choices are rejected for a CZ-only request (a
     PL+CZ area is a cutout, which rejects them itself, ADR-038)."""
-    if campaign_opts_given(task) and "PL" not in countries:
-        raise ValidationError(
+    names = campaign_option_names(task)
+    if names and "PL" not in countries:
+        raise option_error(
             "CZ (CUZK) nie ma kampanii - "
             "--all-campaigns/--min-year/--max-year/--year/--full-sheet dotycza "
-            "tylko PL"
+            "tylko PL",
+            *names,
         )
 
 
@@ -654,7 +661,8 @@ def _dispatch_area(
     )
     if not countries:
         raise ValidationError(
-            "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)"
+            "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
+            option="bbox" if filepath is None else "geometry",
         )
     if auto:
         # a product of one country keeps that country (as the collections)
@@ -665,7 +673,8 @@ def _dispatch_area(
             raise ValidationError(
                 f"--product {task.product} jest dostepny tylko dla "
                 f"{_product_countries(task.product)}, a obszar lezy w "
-                f"{', '.join(countries)}"
+                f"{', '.join(countries)}",
+                options=("product", "country"),
             )
         if own != countries:
             run.sink.emit(
@@ -700,10 +709,11 @@ def _dispatch_area(
             countries = ("PL",)
     if countries == ("PL",) and task.model is not None:
         raise ValidationError(
-            "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
+            "--model dotyczy tylko --product laz w CZ - pomin --model dla PL",
+            options=("model", "country"),
         )
     if task.product == "orto" and task.cutout and "PL" not in countries:
-        raise ValidationError(ORTO_CUTOUT_PL_ONLY)
+        raise option_error(ORTO_CUTOUT_PL_ONLY, "cutout", "country")
     if task.product != "orto":  # CZ orthophoto: its own year rules (ADR-042 D13)
         _reject_campaign_opts_without_pl(task, countries)
     _validate_cross_country(task, countries)
@@ -711,10 +721,10 @@ def _dispatch_area(
     if "PL" in countries:
         reject_campaign_opts_with_cutout(task)
     if task.country != "auto":
-        flag = "--bbox" if filepath is None else "--geometry"
-        error = outside_country(bbox, countries[0], flag=flag)
+        option = "bbox" if filepath is None else "geometry"
+        error = outside_country(bbox, countries[0], flag=f"--{option}")
         if error is not None:
-            raise ValidationError(error)
+            raise ValidationError(error, option=option)
 
     parent_request = parent_request_for(bbox, countries)
     cz_crs = (
@@ -805,7 +815,8 @@ def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -
         if not sources_for(country=code, product=task.product):
             raise ValidationError(
                 f"--product {task.product} jest dostepny tylko dla "
-                f"{_product_countries(task.product)}{hint}"
+                f"{_product_countries(task.product)}{hint}",
+                options=("product", "country"),
             )
     if (
         task.product == "laz"
@@ -814,7 +825,9 @@ def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -
         and "PL" in countries
     ):
         raise ValidationError(
-            f"obszar siega CZ: podaj --model {cz_model_text()} albo --country pl"
+            f"obszar siega CZ: podaj --model {cz_model_text()} albo --country pl",
+            option="model",
+            allowed=cz_models(),
         )
     for code in countries:
         if code == "PL":
@@ -842,7 +855,7 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
         )
         error = outside_country(bbox, "CZ", flag="--geometry")
         if error is not None:
-            raise ValidationError(error)
+            raise ValidationError(error, option="geometry")
         return _download_cz(
             task, run, bbox=bbox, parent_request=parent_request_for(bbox, ("CZ",))
         )

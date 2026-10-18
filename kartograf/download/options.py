@@ -1278,23 +1278,19 @@ def _direction_error(task: SimpleNamespace) -> ValidationError | None:
 
 
 def campaign_option_names(task: SimpleNamespace) -> tuple[str, ...]:
-    """The PL-only campaign/year choices of the request, by argument name."""
+    """The PL-only campaign/year choices of the request, by argument name
+    (``year`` was narrowed into both bounds: it counts once)."""
     return tuple(
         name
         for name, given in (
             ("all_campaigns", task.all_campaigns),
-            ("min_year", task.min_year is not None),
-            ("max_year", task.max_year is not None),
+            ("min_year", task.year is None and task.min_year is not None),
+            ("max_year", task.year is None and task.max_year is not None),
             ("year", task.year is not None),
             ("full_sheet", task.full_sheet),
         )
         if given
     )
-
-
-def campaign_opts_given(task: SimpleNamespace) -> bool:
-    """Any PL-only campaign/year choice of the request."""
-    return bool(campaign_option_names(task))
 
 
 def reject_campaign_opts_with_cutout(task: SimpleNamespace) -> None:
