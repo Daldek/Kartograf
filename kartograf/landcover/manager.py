@@ -151,6 +151,7 @@ LANDCOVER_PRODUCT_CHOICES = ", ".join(
 _TERYT_PRODUCTS = "--product bdot10k (powiat, 4 cyfry) albo bdoo (wojewodztwo, 2 cyfry)"
 # The area selections of a product without TERYT units (CORINE, SoilGrids).
 _AREA_CHOICES = "--sheet, --bbox albo --geometry"
+_AREA_ARGUMENTS = ("sheet", "bbox", "geometry")
 
 # Options belonging to a different product are input errors; options not
 # belonging to any product are programming errors (e.g. removed output_path).
@@ -194,6 +195,14 @@ _REQUIRED_MESSAGES = {
     "Q0.05 (5. percentyl), Q0.5 (mediana), "
     "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)",
 }
+# Values the required options of a product may take (``_REQUIRED_MESSAGES``;
+# the checks of ``_check_options`` use the same provider constants).
+_REQUIRED_ALLOWED: dict[str, tuple[str, ...]] = {
+    "year": tuple(str(year) for year in CorineProvider.AVAILABLE_YEARS),
+    "property": tuple(SoilGridsProvider.PROPERTIES),
+    "depth": tuple(SoilGridsProvider.DEPTHS),
+    "stat": tuple(SoilGridsProvider.STATS),
+}
 _PREVIEW_NOTE = {"fallback": "wms_png", "note": "podglad WMS, nie dane"}
 _TRACK: Track = "landcover"
 # Plan position key of a slot (segment, hierarchy, name).
@@ -209,11 +218,17 @@ def require_landcover_product(product: object) -> str:
         Missing product or a product of another command (SoilGrids).
     """
     if product is None:
-        raise ValidationError(f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}")
+        raise ValidationError(
+            f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}",
+            option="product",
+            allowed=LANDCOVER_PRODUCTS,
+        )
     if not isinstance(product, str) or product not in LANDCOVER_PRODUCTS:
         raise ValidationError(
             f"--product {product!r}: nieznana wartosc - dostepne: "
-            f"{LANDCOVER_PRODUCT_CHOICES}"
+            f"{LANDCOVER_PRODUCT_CHOICES}",
+            option="product",
+            allowed=LANDCOVER_PRODUCTS,
         )
     return product
 
@@ -550,7 +565,9 @@ class LandCoverManager:
         if name_lower not in PROVIDERS:
             raise ValidationError(
                 f"Nieznane zrodlo: {name}. Dostepne: "
-                f"{[*PROVIDERS, *COLLECTION_SOURCES]}"
+                f"{[*PROVIDERS, *COLLECTION_SOURCES]}",
+                option="provider",
+                allowed=(*PROVIDERS, *COLLECTION_SOURCES),
             )
         if name_lower == "bdot10k":
             return Bdot10kProvider(cache=cache)
@@ -908,7 +925,8 @@ class LandCoverManager:
                 owners = [s for s, names in _PRODUCT_OPTIONS.items() if name in names]
                 raise ValidationError(
                     f"--{name.replace('_', '-')} dziala tylko z --product "
-                    f"{' albo '.join(owners)}"
+                    f"{' albo '.join(owners)}",
+                    option=name,
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
         if options.get("year") is not None:
@@ -920,12 +938,14 @@ class LandCoverManager:
         if horizontal_crs is not None and not isinstance(horizontal_crs, str):
             raise ValidationError(
                 f"--horizontal-crs: oczekiwano napisu (np. 'EPSG:5514'), podano "
-                f"{horizontal_crs!r}"
+                f"{horizontal_crs!r}",
+                option="horizontal_crs",
             )
         if teryt is not None and get_source(self._collection).country != "PL":
             raise ValidationError(
                 f"--teryt dziala tylko z {_TERYT_PRODUCTS}; --product {source}: "
-                "podaj --bbox, --geometry albo --whole-country"
+                "podaj --bbox, --geometry albo --whole-country",
+                option="teryt",
             )
         return landcover_request(
             self._collection,
@@ -1104,14 +1124,27 @@ class LandCoverManager:
         bdot = isinstance(provider, Bdot10kProvider)
         corine = isinstance(provider, CorineProvider)  # else SoilGrids (soil group)
         if len(given) != 1:
+            chosen = tuple(
+                name
+                for name, value in (
+                    ("teryt", teryt),
+                    ("sheet", sheet),
+                    ("bbox", bbox),
+                    ("geometry", geometry),
+                )
+                if value is not None
+            )
+            offered = ("teryt", *_AREA_ARGUMENTS) if bdot else _AREA_ARGUMENTS
             if bdot:
                 raise ValidationError(
                     "Podaj dokladnie jeden wybor dla --product bdot10k: "
-                    f"{selection_choices(self._descriptor_key())}"
+                    f"{selection_choices(self._descriptor_key())}",
+                    options=chosen if len(chosen) > 1 else offered,
                 )
             where = " dla --product corine" if corine else ""
             raise ValidationError(
-                f"Podaj dokladnie jeden wybor{where}: {_AREA_CHOICES}"
+                f"Podaj dokladnie jeden wybor{where}: {_AREA_CHOICES}",
+                options=chosen if len(chosen) > 1 else offered,
             )
         check_layer(layer, geometry, landcover=bdot)
         if teryt is not None:
@@ -1119,18 +1152,21 @@ class LandCoverManager:
                 name = "--product corine" if corine else "SoilGrids"
                 raise ValidationError(
                     f"--teryt dziala tylko z {_TERYT_PRODUCTS}; {name}: podaj "
-                    f"{_AREA_CHOICES}"
+                    f"{_AREA_CHOICES}",
+                    option="teryt",
                 )
             if not provider.validate_admin_unit(teryt):
                 if re.fullmatch(r"[0-9]{2}", teryt):
                     raise ValidationError(
                         f"--teryt {teryt}: BDOT10k jest publikowany per powiat - "
                         "podaj --teryt <4 cyfry> (np. 1465); dostepne: "
-                        f"{selection_choices(self._descriptor_key())}"
+                        f"{selection_choices(self._descriptor_key())}",
+                        option="teryt",
                     )
                 raise ValidationError(
                     f"Nieprawidlowy kod TERYT {teryt!r}: powiat BDOT10k (4 cyfry, "
-                    "np. 1465)"
+                    "np. 1465)",
+                    option="teryt",
                 )
         if sheet is not None:
             SheetParser(sheet)  # a malformed code: ParseError before any request
@@ -1177,7 +1213,11 @@ class LandCoverManager:
             )
         for name in _REQUIRED[kind]:
             if kwargs.get(name) is None:
-                raise ValidationError(_REQUIRED_MESSAGES[name])
+                raise ValidationError(
+                    _REQUIRED_MESSAGES[name],
+                    option=name,
+                    allowed=_REQUIRED_ALLOWED[name],
+                )
         for name in kwargs:
             if name not in _OPTIONS[kind] and kwargs[name] is not None:
                 if name in ("keep_raw", "whole_country") and not kwargs[name]:
@@ -1189,7 +1229,8 @@ class LandCoverManager:
                 ]
                 raise ValidationError(
                     f"--{name.replace('_', '-')} dziala tylko z --product "
-                    f"{' albo '.join(products)}"
+                    f"{' albo '.join(products)}",
+                    option=name,
                 )
         # library calls only: the CLI parses its flags (STANDARDS 11.2)
         if kwargs.get("year") is not None:
@@ -1208,13 +1249,17 @@ class LandCoverManager:
                 if kwargs[name] not in allowed:
                     raise ValidationError(
                         f"Nieprawidlowa {label}: {kwargs[name]}. "
-                        f"Dostepne: {', '.join(allowed)}"
+                        f"Dostepne: {', '.join(allowed)}",
+                        option=name,
+                        allowed=tuple(allowed),
                     )
         elif isinstance(provider, CorineProvider):
             if kwargs["year"] not in provider.AVAILABLE_YEARS:
                 raise ValidationError(
                     f"Nieprawidlowy rok: {kwargs['year']}. "
-                    f"Dostepne lata: {provider.AVAILABLE_YEARS}"
+                    f"Dostepne lata: {provider.AVAILABLE_YEARS}",
+                    option="year",
+                    allowed=tuple(str(year) for year in provider.AVAILABLE_YEARS),
                 )
         else:
             self._check_bdot10k(kwargs)
@@ -1228,7 +1273,8 @@ class LandCoverManager:
                 if kwargs.get(name) not in (None, False):
                     raise ValidationError(
                         f"--{name.replace('_', '-')} nie dotyczy archiwum BDOT10k "
-                        "(--year: paczka powiatu GML albo SHP zapisywana 1:1)"
+                        "(--year: paczka powiatu GML albo SHP zapisywana 1:1)",
+                        option=name,
                     )
             self._archive_variant(kwargs)
             return
@@ -1236,18 +1282,22 @@ class LandCoverManager:
         if fmt not in ("GPKG", "SHP"):
             raise ValidationError(
                 f"--format {fmt}: biezace paczki BDOT10k to GPKG albo SHP; GML "
-                "tylko z --year (archiwum rocznikow)"
+                "tylko z --year (archiwum rocznikow)",
+                option="format",
+                allowed=("GPKG", "SHP"),
             )
         if kwargs.get("layers") is not None:
             normalize_layers(kwargs["layers"])
             if fmt != "GPKG":
                 raise ValidationError(
                     "--layers dotyczy tylko --format GPKG (SHP to oryginalny ZIP "
-                    "paczki)"
+                    "paczki)",
+                    options=("layers", "format"),
                 )
         if kwargs.get("keep_raw") and fmt != "GPKG":
             raise ValidationError(
-                "--keep-raw dotyczy tylko --format GPKG (SHP to juz oryginalny ZIP)"
+                "--keep-raw dotyczy tylko --format GPKG (SHP to juz oryginalny ZIP)",
+                options=("keep_raw", "format"),
             )
 
     def _archive_variant(self, kwargs: dict) -> PackageVariant:
@@ -1435,7 +1485,9 @@ class LandCoverManager:
         if plan is None:
             return None, ()
         if update != "upgrade":
-            raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+            raise ValidationError(
+                "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
+            )
         require_store(plan, store_id(self._output_dir))
         todo, stale = select_planned(plan, inspect(), _TRACK)
         return {(i.segment, i.hierarchy, i.name) for i in todo}, tuple(stale)
@@ -1709,7 +1761,7 @@ def _landcover_manager(
     first, without network)."""
     chosen = require_landcover_product(product)
     if output_dir is None:
-        raise ValidationError(output_required("landcover"))
+        raise ValidationError(output_required("landcover"), option="output_dir")
     return LandCoverManager(output_dir, chosen, cache=cache)
 
 
@@ -1718,7 +1770,7 @@ def _soil_manager(
 ) -> LandCoverManager:
     """The SoilGrids manager of the store ``output_dir`` (checked first)."""
     if output_dir is None:
-        raise ValidationError(output_required("soil"))
+        raise ValidationError(output_required("soil"), option="output_dir")
     return LandCoverManager(output_dir, "soilgrids", cache=cache)
 
 
