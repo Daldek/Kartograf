@@ -66,7 +66,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy; D6: jawny timeout wywolania kolekcji); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto); errata 6: wycinek obrazu w calosci 0,0,0 = `NoCoverageError` bez wersji (test na zywo 0.8.0) |
 | [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5) |
 | [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`); errata 1: argumenty tylko nazwane wszystkich funkcji pobrania i sprawdzenia (test na zywo 0.8.0) |
-| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta |
+| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta; errata 1: czesci segmentu (`list_partitions`, `partition`) i mapowanie `skip_versions` bez listingu znanych katalogow wersji (luzuje widocznosc zmian w nich) |
 
 ---
 
@@ -3922,6 +3922,42 @@ gdy brak bboxa/godla; `link_target` moze odczytac caly plik na CIFS bez
 `serverino` — nie wolac dla kazdej wersji przy pelnym skanie. Wersja
 `kartograf-meta/1` na dysku pozostaje bez zmian. Opis kontraktu: ARCH 3.3.1;
 plan: ARCH 3.3.2. Zadna czesc KD/KB ani pobieranie nie sa w tym cyklu.
+
+**Errata 1 (2026-10-19, pomiar Archiwisty v0.1 `docs/raporty/v0.1-pomiary.md`,
+decyzja koordynatora; nadal 0.8.0):** skan przyrostowy magazynu 50 tys.
+slotow na udziale SMB trwal 342 s (cel 180 s): najwiekszy segment
+(`nmt/pl_1992_1m_evrf2007`, 43% wpisow) czytal jeden watek, a odswiezenie
+widoku listowalo kazdy znany katalog wersji plaskiego slotu (`bbox/`: 4850).
+(1) Rownoleglosc wewnatrz segmentu: `list_partitions(output_dir, segment, *,
+target=32)` zwraca rozlaczne klucze czesci - `"."` (poziom segmentu: jego
+problemy i pliki bezposrednio w katalogu segmentu i w `full_sheet/`),
+`"<katalog>[/<katalog>...]"` (slot i wszystkie sloty pod nim, jednoczesnie
+w sciezce standardowej, `full_sheet/` i `versions/`) i `"<katalog>/."` (sam
+slot katalogu dzielonego dalej). Katalogi pierwszego poziomu sa dzielone
+poziomami na podkatalogi, dopoki czesci jest mniej niz `target`.
+`iter_store(..., segment=..., partition=...)` czyta jedna czesc; suma czesci
+to skan segmentu (te same wpisy, zaden dwa razy, problemy segmentu raz).
+Klucz jest napisem: czytelny w logach i przenosny miedzy watkami i
+procesami. Odrzucone: parametr glebokosci (ksztalty segmentow sa rozne - dwa
+katalogi pierwszego poziomu w NMT PL-1992, 714 w ortofotomapie CZ) i podzial
+plikow slotu plaskiego po nazwach (kazda czesc listowalaby caly katalog).
+(2) `skip_versions` przyjmuje takze mapowanie `katalog wersji -> nazwy plikow
+danych`: katalog z mapowania nie jest listowany, a jego wpisy (te same co
+z listingu) powstaja z podanych nazw. To LUZUJE gwarancje decyzji: plik
+usuniety z takiego katalogu albo do niego dopisany (Kartograf dopisuje plik
+do istniejacego `<etykieta>_<sha8>` przy tej samej etykiecie i tym samym
+`sha8` innego pliku slotu) nie jest widoczny do skanu bez mapowania. Zbior
+katalogow dziala jak dotad (listing, `missing_sidecar`). Wywolujacy mapuje
+tylko katalogi, ktorych wszystkie pliki byly przy ostatnim odczycie
+poprawnymi wersjami, i okresowo skanuje bez mapowania (Archiwista:
+codziennie i na zadanie pelnego skanu, z czasem ostatniego takiego skanu
+w widoku magazynu). Zysk: ok. 80 tys. z 201 tys. listingow skanu
+przyrostowego, jeden listing zamiast 4850 przy odswiezeniu jednostek
+`bbox/`. (3) Petla skanu dziala na napisach (`Path` tylko w `StoreEntry`),
+a typowanie sidecara liczy pola wyliczone leniwie: magazyn 50 tys. slotow,
+SSD, skan przyrostowy 12,4 -> 6,3 s (z mapowaniem 5,2 s), pelny 20,3 ->
+10,1 s, wynik bez zmian (skrot wszystkich wpisow). Kontrakt i koszt: ARCH
+3.3.1.
 
 ---
 

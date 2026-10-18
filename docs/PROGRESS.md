@@ -31,7 +31,7 @@
 | Grupy komend CLI (ADR-039, ADR-044) | ✅ Gotowy | v0.8.0; `elevation`, `imagery`, `landcover`, `soil`, `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`, `geodesy`, `project`; dane wybiera `--product` w kazdej grupie; CLI tylko tlumaczy na publiczne API (ADR-037) |
 | Manifest projektu (podprojekt 2, ADR-040) | ✅ Gotowy | v0.8.0; `kartograf-project.json`, grupa `kartograf project`, API `init_project`/`get_project_status`/`verify_project`; E2E `docs/research/2026-10-15-project-e2e/raport.md` |
 | Katalog GUGiK/CUZK (podprojekt 3, plany A-E, ADR-041-043) | ✅ Gotowy | v0.8.0; rejestr wariantow NMT/NMPT, raport `availability` PL/CZ, NMPT/LAZ/ortofoto/warstwice CZ, kolekcje (PRG, EGiB, modele 3D, ZABAGED, RUIAN, HY-NET, nazwy, mapy, osnowy, BDOO, Data50/250, RCN, mapa katastralna CZ), limit obszaru kolekcji 100 plikow / 10 GB; E2E `docs/research/2026-10-1[56]-plan-*-e2e/`; mapa katastralna CZ VKM poza 0.8.0 (backlog) |
-| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony na galezi `feat/archiwista-store-api` (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1); czeka na zgode uzytkownika na merge do `develop` |
+| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony na galezi `feat/archiwista-store-api` (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1); 2026-10-19: czesci segmentu (`list_partitions`, `partition`), mapowanie `skip_versions`, skan ok. 2x szybszy (ADR-045 errata 1); czeka na zgode uzytkownika na merge do `develop` |
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekty 1 (magazyn wersjonowany, ADR-036), 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, plany A-E) wykonane w 0.8.0; nastepne: 4 (wtyczka QGIS) i 5 (GUI webowe) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -175,6 +175,40 @@
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
+
+### Sesja 2026-10-19 - czesci segmentu i szybszy skan magazynu (ADR-045 errata 1)
+
+- Zrodlo: pomiary Archiwisty v0.1 (`docs/raporty/v0.1-pomiary.md`
+  w Archiwiscie): skan przyrostowy magazynu 50 tys. slotow na udziale SMB
+  342 s przy celu 180 s - najwiekszy segment (`nmt/pl_1992_1m_evrf2007`,
+  43% wpisow) czytal jeden watek; na SSD samo `iter_store` ok. 12,4 s
+  z ok. 20 s celu. Galaz `feat/archiwista-store-api` (bez merge do
+  `develop` - decyzja uzytkownika), `__version__` zostaje 0.8.0.
+- Wynik: `list_partitions(output_dir, segment, *, target=32)` i
+  `iter_store(..., partition=...)` - rozlaczne czesci segmentu (`"."`,
+  `"<katalog>[/...]"`, `"<katalog>/."`), suma = skan segmentu; mapowanie
+  `skip_versions` katalog -> nazwy plikow bez listingu znanych katalogow
+  wersji (decyzja koordynatora: luzuje widocznosc zmian w nich, Archiwista
+  skanuje okresowo bez mapowania); petla skanu na napisach zamiast
+  `pathlib`, `_slot_version` (regula `_version_of_link` przy znanym slocie),
+  leniwe typowanie sidecara, szybkie odrzucanie nazw niebedacych
+  katalogami wersji. Skan `units` pomija ukryte katalogi wersji jak pelny
+  skan (wczesniej je czytal).
+- Pomiar (magazyn testowy Archiwisty `store-50k`, SSD, 131 111 wpisow,
+  wynik identyczny - skrot wszystkich wpisow z sidecarami): przyrostowy
+  12,4 -> 6,3 s (mapowanie 5,2 s), pelny 20,3 -> 10,1 s; przeplatany A/B
+  pod obciazeniem maszyny: 14,3 -> 8,3 s, 21,8 -> 12,2 s. Czesci:
+  `nmt/pl_1992_1m_evrf2007` 75, `nmpt` 110, `orto/pl_1992` 109, `laz` 77,
+  `orto/cz_sjtsk` 715; `list_partitions` wszystkich segmentow 0,05 s na
+  SSD. Na SSD watki nie pomagaja (GIL: 1 watek 6,1 s, 8 watkow 11,8 s) -
+  czesci sa dla udzialu SMB.
+- Testy: test wlasnosci (16 losowych magazynow x 4 progi `target` x bez
+  i z mapowaniem, czesci w watkach: suma = skan segmentu), podzial
+  z wlasnymi plikami katalogu dzielonego, problemy segmentu tylko w `"."`,
+  czesc listuje tylko swoje poddrzewo, dowiazania symboliczne, walidacja
+  kluczy, `target` i nazw mapowania; mutacje kodu czesci wykrywane.
+- Dokumentacja: ADR-045 errata 1 (CRLF zachowane), ARCHITECTURE 3.3.1
+  (kontrakt, koszt, watki, CPU), USAGE, CHANGELOG [0.8.0], SCOPE, CLAUDE.md.
 
 ### Sesja 2026-10-18 - API odczytu magazynu dla Archiwisty (KA-1..KA-6, ADR-045)
 
