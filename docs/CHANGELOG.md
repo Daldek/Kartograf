@@ -789,7 +789,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wynik narzedzia to dokument `--json`, `is_error` = kod wyjscia CLI != 0, schematy
   wejscia z katalogu, sciezki bezwzgledne, bez wartosci domyslnych wplywajacych na
   dane (`output_dir` jawny, `bbox` z `bbox_crs`), postep przez notyfikacje MCP,
-  opcje `--tools`, `--allow-dir`, `--cache-file`, `--no-cache`; `tools/list` ma
+  opcje `--tools`, `--allow-dir`, `--cache-file`, `--no-cache` (katalog cache, ktorego nie
+  da sie utworzyc, daje ostrzezenie i prace bez cache, jak w CLI); `tools/list` ma
   ok. 28,6 tys. znakow. `import kartograf` i CLI nie wymagaja `mcp`; `dev` zawiera
   `mcp`.
 

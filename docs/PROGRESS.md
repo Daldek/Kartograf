@@ -32,7 +32,7 @@
 | Manifest projektu (podprojekt 2, ADR-040) | ✅ Gotowy | v0.8.0; `kartograf-project.json`, grupa `kartograf project`, API `init_project`/`get_project_status`/`verify_project`; E2E `docs/research/2026-10-15-project-e2e/raport.md` |
 | Katalog GUGiK/CUZK (podprojekt 3, plany A-E, ADR-041-043) | ✅ Gotowy | v0.8.0; rejestr wariantow NMT/NMPT, raport `availability` PL/CZ, NMPT/LAZ/ortofoto/warstwice CZ, kolekcje (PRG, EGiB, modele 3D, ZABAGED, RUIAN, HY-NET, nazwy, mapy, osnowy, BDOO, Data50/250, RCN, mapa katastralna CZ), limit obszaru kolekcji 100 plikow / 10 GB; E2E `docs/research/2026-10-1[56]-plan-*-e2e/`; mapa katastralna CZ VKM poza 0.8.0 (backlog) |
 | Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1): API z galezi `feat/archiwista-store-api` i 7 poprawek przegladu z `fix/archiwista-store-review` sa w `feat/agent-interface`; czeka na zgode uzytkownika na merge do `develop` |
-| Interfejs dla agentow AI (ADR-046, USAGE 9) | 🔧 W trakcie | gotowy i zielony na galezi `feat/agent-interface` (wchodzi do wydania 0.8.0): `--json` w kazdej komendzie, dokumenty `kartograf-*/1`, kody bledow i wyjscia (blad wejscia = 2), katalog komend, warstwa komend KB-2..KB-5, serwer MCP `kartograf-mcp` (29 narzedzi), `llms.txt`, `py.typed`, `scripts/gate.sh`; weryfikacja na zywo (T9) w toku; czeka na zgode uzytkownika na merge do `develop` |
+| Interfejs dla agentow AI (ADR-046, USAGE 9) | 🔧 W trakcie | gotowy i zielony na galezi `feat/agent-interface` (wchodzi do wydania 0.8.0): `--json` w kazdej komendzie, dokumenty `kartograf-*/1`, kody bledow i wyjscia (blad wejscia = 2), katalog komend, warstwa komend KB-2..KB-5, serwer MCP `kartograf-mcp` (29 narzedzi), `llms.txt`, `py.typed`, `scripts/gate.sh`; weryfikacja na zywo (T9) wykonana (`docs/research/2026-10-18-agent-interface-e2e/raport.md`: kod gotowy, jeden blad naprawiony); czeka na zgode uzytkownika na merge do `develop` |
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekty 1 (magazyn wersjonowany, ADR-036), 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, plany A-E) wykonane w 0.8.0; nastepne: 4 (wtyczka QGIS) i 5 (GUI webowe) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -146,9 +146,23 @@
 >    stan: `git log develop..feat/agent-interface`. Galezie robocze scalone do
 >    niej: `feat/agent-interface-a` (tor A: dokumenty, bledy), `-b` (tor B:
 >    katalog komend), `-mcp` (serwer MCP), `-llms` (`llms.txt`); osobno
->    `feat/agent-interface-e2e` (T9, weryfikacja na zywo, raport w
->    `docs/research/`). Sprzatanie tych worktree i galezi razem z pozostalymi
->    (pkt 1) - po zgodzie uzytkownika.
+>    `feat/agent-interface-e2e` (T9, weryfikacja na zywo; scalona, raport
+>    `docs/research/2026-10-18-agent-interface-e2e/raport.md`).
+>    **Weryfikacja na zywo WYKONANA (2026-10-18), werdykt: gotowe do
+>    wydania 0.8.0, bez blokerow.** Wheel i sdist z `py.typed`, `--json` w
+>    37 komendach-lisciach, availability na zywo (Krakow, Pomorze, Cieszyn),
+>    pobranie i sprawdzenie, serwer MCP przez stdio (SDK i drut), zgodnosc
+>    CLI = biblioteka = MCP, Claude Code (Haiku) - wszystko zgodne ze specem;
+>    jedyny blad (B1: `kartograf-mcp` konczyl sie tracebackiem, gdy nie dalo
+>    sie utworzyc katalogu cache) naprawiony w `a7ba1336` z testem regresji.
+>    Brama: 7070 passed (przed dokumentacja), ruff/format/mypy czyste.
+>    **STAN: galaz `feat/agent-interface` GOTOWA; CZEKA NA ZGODE UZYTKOWNIKA**
+>    na `git merge --no-ff` do `develop`, potem do `main`, tag `v0.8.0` i
+>    push (`develop`, `main`, tag); przed tagiem przeglad
+>    `git log develop..feat/agent-interface` i `scripts/gate.sh`. Do
+>    sprzatniecia po merge (usuwanie TYLKO za zgoda uzytkownika): worktree
+>    i galezie `wt/feat/agent-interface`, `-a`, `-b`, `-mcp`, `-llms`,
+>    `-e2e` oraz `wt/fix/archiwista-store-review`; pozostale w pkt 1.
 > 1. **Nastepne kroki:** podprojekt 4 (wtyczka QGIS) roadmapy
 >    (`docs/SCOPE.md` 3.3) - od brainstormingu i specu. Podprojekt 5 (GUI
 >    webowe) ZASTAPIONY osobnym projektem **Archiwista**
@@ -255,10 +269,16 @@
   (live), 153 s; `ruff check` czysty, `ruff format --check` 306 plikow, `mypy
   kartograf/ tests/` 304 pliki bez bledow (stan sprawdzaj komenda, nie ta liczba).
   Zielone byly tez wszystkie wczesniejsze bramy torow i integracji.
-- Otwarte: weryfikacja na zywo (T9: availability PL, jedno male pobranie i
-  sprawdzenie, serwer MCP przez stdio, wheel z `py.typed`, zgodnosc trzech drog) -
-  worktree `feat/agent-interface-e2e`, raport w `docs/research/` po scaleniu;
-  `structuredContent` powtarza `content` (klient podajacy modelowi oba placi dwa
+- Weryfikacja na zywo (T9) WYKONANA: `docs/research/2026-10-18-agent-interface-e2e/raport.md`
+  (availability PL na zywo, pobranie arkusza Krakowa i sprawdzenie, serwer MCP przez
+  stdio, wheel z `py.typed`, zgodnosc trzech drog, Claude Code). Wynik: gotowe do
+  wydania; jeden blad (B1, `kartograf-mcp` bez katalogu cache konczyl sie tracebackiem)
+  naprawiony w `a7ba1336` z testem regresji; brama w E2E 7070 passed. Poprawki
+  planu T9 (30 parametrow `elevation download`, arkusz Krakowa, status `local`):
+  errata 2 ADR-046, plan oznaczony jako wykonany. Drobiazgi do decyzji (`hint` null dla
+  bledow z `options`, `parse_command` odrzuca prefiks `kartograf `, narzedzie
+  `project_check_updates` niewidoczne w katalogu): raport, sekcja "Uwagi".
+- Otwarte: `structuredContent` powtarza `content` (klient podajacy modelowi oba placi dwa
   razy); `output_schema` narzedzi MCP, transport HTTP, KC i KH poza zakresem.
 
 ### Sesja 2026-10-18 - API odczytu magazynu dla Archiwisty (KA-1..KA-6, ADR-045)
