@@ -224,7 +224,7 @@ _DOWNLOAD_CONSTRAINTS = (
 COMMANDS = (
     Command(
         "landcover download",
-        "Pobierz dane wybranego produktu (--product)",
+        "Pobierz dane wybranego produktu pokrycia terenu",
         "data",
         "download_landcover",
         "kartograf-download/1",
