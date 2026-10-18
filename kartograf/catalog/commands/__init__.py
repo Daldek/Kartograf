@@ -12,7 +12,7 @@ from importlib import import_module
 from pkgutil import iter_modules
 from typing import NamedTuple
 
-from kartograf.catalog.spec import Command, Group
+from kartograf.catalog.spec import Command, Group, check_declarations, sorted_groups
 
 # Order of the modules - and so of the commands of the catalog: the data
 # commands of the project manifest in the order of ``COMMANDS`` (elevation
@@ -69,21 +69,5 @@ def declared() -> Declared:
         module = import_module(f"{__name__}.{name}")
         commands.extend(module.COMMANDS)
         groups.extend(getattr(module, "GROUPS", ()))
-    ids = [command.id for command in commands]
-    for duplicate in sorted({i for i in ids if ids.count(i) > 1}):
-        raise ValueError(f"command {duplicate!r} is declared twice")
-    names = [group.name for group in groups]
-    for duplicate in sorted({n for n in names if names.count(n) > 1}):
-        raise ValueError(f"group {duplicate!r} is declared twice")
-    owned = {
-        command.group
-        for command in commands
-        if command.cli is not None and command.group is not None
-    }
-    for missing in sorted(owned - set(names)):
-        raise ValueError(f"group {missing!r} has commands but no declaration")
-    for group in groups:
-        if group.name not in owned:
-            raise ValueError(f"group {group.name!r} has no commands")
-    ordered = sorted(groups, key=lambda group: (group.position, group.name))
-    return Declared(tuple(commands), tuple(ordered))
+    check_declarations(commands, groups)
+    return Declared(tuple(commands), sorted_groups(groups))
