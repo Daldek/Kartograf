@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
+    "Typing :: Typed",
 ]
 dependencies = [
     "requests>=2.31.0",
@@ -45,6 +46,9 @@ Issues = "https://github.com/Daldek/Kartograf/issues"
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["kartograf*"]
+
+[tool.setuptools.package-data]
+kartograf = ["py.typed"]
 
 [tool.setuptools.dynamic]
 version = {attr = "kartograf.__version__"}
