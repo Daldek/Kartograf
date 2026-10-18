@@ -660,22 +660,24 @@ PinnedFile[], errors: string[]}`, `notices`, `ok`.
 
 #### 5.4.9 `kartograf-cache/1` - cache metadanych (`cache stats|path|clear`)
 
-Nowy typ `CacheInfo`; funkcje `get_cache_info() -> CacheInfo` (`stats` i `path`: ta
-sama funkcja; nie tworzy brakujacej bazy) i `clear_cache() -> CacheInfo` (logika dzis
-w `cli/cache_cmd.py`; baze nieczytelna usuwa razem z `-wal` i `-shm`; baze zablokowana
-przez inny proces zglasza jako `CacheError`, nigdy jej nie usuwa). Cache to
-`<cwd>/.kartograf_cache.db` (Z6).
+Nowy typ `CacheInfo`; funkcje `get_cache_info() -> CacheInfo` (`stats`; nie tworzy
+brakujacej bazy), `get_cache_path() -> CacheInfo` (`path`: patrzy na plik, nigdy go nie
+otwiera ani nie tworzy, wiec podaje sciezke tez wtedy, gdy `get_cache_info` jest
+`CacheError`, czyli gdy sciezka jest potrzebna do naprawy) i `clear_cache() ->
+CacheInfo` (logika dzis w `cli/cache_cmd.py`; baze nieczytelna usuwa razem z `-wal` i
+`-shm`; baze zablokowana przez inny proces zglasza jako `CacheError`, nigdy jej nie
+usuwa). Cache to `<cwd>/.kartograf_cache.db` (Z6).
 
 | Klucz | Typ | Znaczenie |
 |---|---|---|
 | `schema` | string | `kartograf-cache/1` |
-| `action` | string | `info` albo `clear` |
+| `action` | string | `info`, `path` albo `clear` |
 | `path` | string | bezwzgledna sciezka pliku bazy |
 | `exists` | bool | czy plik istnieje |
 | `size_bytes` | int albo `null` | rozmiar bazy; `null` bez pliku |
-| `entries` | obiekt albo `null` | `records`, `campaigns`, `teryt`, `sheets`, `index_areas`, `atom_feeds` (liczby wpisow); `null` dla `clear` i bez pliku |
-| `cleared` | bool albo `null` | `true` po `clear`; `null` dla `info` |
-| `removed_unreadable` | bool albo `null` | `clear`: usunieto nieczytelny plik; `null` dla `info` |
+| `entries` | obiekt albo `null` | `records`, `campaigns`, `teryt`, `sheets`, `index_areas`, `atom_feeds` (liczby wpisow); `null` dla `clear`, `path` (baza nie jest otwierana) i bez pliku |
+| `cleared` | bool albo `null` | `true` po `clear`; `null` dla `info` i `path` |
+| `removed_unreadable` | bool albo `null` | `clear`: usunieto nieczytelny plik; `null` w pozostalych |
 
 #### 5.4.10 Dokumenty odczytu magazynu (API i MCP; ADR-045)
 
@@ -722,7 +724,7 @@ to `ValidationError` (z `option`, 6.1), brak albo niedostepny `output_dir` to `O
 | `Project` | `kartograf-project-state/1` | `init_project`, `add_project_task`, `remove_project_task`, `open_project` | `project init`, `add`, `remove` |
 | `ProjectReport` | `kartograf-project-report/1` | `download_project` | `project download` |
 | `ProjectCheck` | `kartograf-project-check/1` | `get_project_status`, `verify_project`, `check_project` | `project status`, `verify`, `download --check-updates` |
-| `CacheInfo` (nowy) | `kartograf-cache/1` | `get_cache_info`, `clear_cache` | `cache stats`, `path`, `clear` |
+| `CacheInfo` (nowy) | `kartograf-cache/1` | `get_cache_info`, `get_cache_path`, `clear_cache` | `cache stats`, `path`, `clear` |
 | `Catalog` (nowy) | `kartograf-catalog/1` | `get_catalog` | `catalog` |
 | `ErrorReport` (nowy) | `kartograf-error/1` | `error_report` | kazda komenda przy bledzie |
 | `StoreOverview`, `StoreEntries`, `StoreSidecar` (nowe) | `kartograf-store-overview/1`, `-store-entries/1`, `-store-sidecar/1` | `describe_store`, `list_store_entries`, `read_store_sidecar` | - |
@@ -733,7 +735,7 @@ identyfikujacy obiekt jest pozycyjny, jak w `read_sidecar(path)`,
 `list_segments(output_dir)` i `open_project(project_dir)` - `describe_sheet(sheet,
 *, ...)`, `describe_store(output_dir)`, `list_store_entries(output_dir, *, ...)`,
 `read_store_sidecar(path)`; reszta (`find_sheets`, `list_sources`, `list_layers`,
-`get_catalog`, `get_cache_info`, `clear_cache`) jest w calosci nazwana.
+`get_catalog`, `get_cache_info`, `get_cache_path`, `clear_cache`) jest w calosci nazwana.
 
 ## 6. Bledy: kody, podpowiedzi, kody wyjscia
 
@@ -761,6 +763,11 @@ pozwala modelowi poprawic dokladnie jeden argument.
 Nowa klasa `UsageError(ValidationError)`: bledne uzycie komendy (nieznana flaga albo
 komenda, brak argumentu pozycyjnego, wartosc spoza `choices` parsera). Zglasza ja
 parser katalogu (`parse_command`, CLI w trybie `--json`); `code = "usage_error"`.
+Atrybut `command` (opcjonalny) to id komendy z katalogu, gdy linia nazwala znana komende:
+ustawia go parser tej komendy, a `parse_command` dla `--help`/`--version` w linii znanej
+komendy; parser grupy i korzenia go nie ma. `command` nie jest w `DETAIL_FIELDS`
+(dokument ma wlasny klucz `command`); `error_report` bierze z niego komende i przyklad
+podpowiedzi (6.3).
 
 Pozostale klasy: `DownloadError.DETAIL_FIELDS = ("sheet", "status_code")`;
 `NoCoverageError`: `+ "hints"`; `YearRangeError`: `("sheets", "min_year",
@@ -790,7 +797,7 @@ zostaje: informacje dla wywolujacego sa atrybutami, nigdy wyciagnietymi z tekstu
 |---|---|---|---|---|
 | `KartografError` (sama klasa bazowa) | `kartograf_error` | 1 | blad pakietu bez dokladniejszej klasy | - |
 | `ValidationError` | `invalid_input` | 2 | bledna wartosc albo kombinacja argumentow, brak wymaganego argumentu, bledny plik wejsciowy (plan, manifest, geometria) | `exc.hint`; inaczej z `option`/`allowed` i katalogu: `Dozwolone wartosci --<flaga>: a, b, c. Przyklad: kartograf <komenda> ...` |
-| `UsageError` (nowa, `ValidationError`) | `usage_error` | 2 | nieznana komenda/flaga, brak argumentu pozycyjnego, wartosc spoza `choices` | `kartograf catalog <grupa> <komenda> --params` |
+| `UsageError` (nowa, `ValidationError`) | `usage_error` | 2 | nieznana komenda/flaga, brak argumentu pozycyjnego, wartosc spoza `choices` | znana komenda (`exc.command`, a bez niej komenda wywolania): `Parametry komendy: kartograf catalog <id>. Przyklad: kartograf <komenda> ...`; inaczej `kartograf catalog <grupa> <komenda> --params` |
 | `ParseError` (`ValidationError`) | `invalid_sheet_code` | 2 | godlo nie jest godlem PL ani CZ albo jest poza nomenklatura | formaty godel: PL-1992 `N-34-130-D-d-2-4`, PL-2000 `6.179.12.20`, SM5 `CTES96`, TM33 `302_5550`; `kartograf parse --help` |
 | `DownloadError` | `download_failed` | 1 | siec, HTTP, timeout, odpowiedz zrodla | `exc.hint`; inaczej - |
 | `NoCoverageError` (`DownloadError`) | `no_coverage` | 1 | zrodlo nie ma danych dla arkusza (stan danych, ponowienie nie pomoze) | `hints` wyjatku (te same teksty co po kropce w komunikacie) |
@@ -821,7 +828,7 @@ katalog dociaga leniwie): dataclass `ErrorReport(Document)` i funkcja
 | `hint` | string albo `null` | podpowiedz (wynik algorytmu ponizej) |
 | `exception` | string | nazwa klasy wyjatku (`type(exc).__name__`) |
 | `exit_code` | int | kod wyjscia z 6.5 |
-| `command` | string albo `null` | id komendy katalogu, w ktorej wystapil blad (CLI i MCP znaja ja z kontekstu; biblioteka bez kontekstu: `null`) |
+| `command` | string albo `null` | id komendy katalogu, w ktorej wystapil blad (CLI i MCP znaja ja z kontekstu, `UsageError` ze znana komenda niesie ja sam; biblioteka bez kontekstu: `null`) |
 | `details` | obiekt | `exc.details()`; `{}` gdy brak atrybutow; dla `OSError` `{"errno": "ENOENT", "path": "<exc.filename>"}` (tylko niepuste pola; `errno` jako nazwa symboliczna) |
 
 Algorytm `hint` (deterministyczny, jedna linia ASCII, najwyzej 400 znakow):
@@ -830,7 +837,11 @@ Algorytm `hint` (deterministyczny, jedna linia ASCII, najwyzej 400 znakow):
 2. `DEFAULT_HINT` klasy, a dla `NoCoverageError`/`YearRangeError` - `hints` wyjatku
    polaczone `"; "`, dla `TransformUnavailableError` - `remedy`, dla `OSError` - `Sprawdz
    sciezke i uprawnienia: <exc.filename>` (bez nazwy pliku: `Sprawdz sciezki i
-   uprawnienia katalogow z argumentow`);
+   uprawnienia katalogow z argumentow`), a dla `UsageError` ze znana komenda -
+   `Parametry komendy: kartograf catalog <id>. Przyklad: <pierwszy przyklad komendy>`
+   (komenda, ktorej linia byla zla - `exc.command`, w `project add` wewnetrzna - a bez niej
+   komenda wywolania; przyklad pomijany, gdy tekst przekroczylby 400 znakow; nieznane
+   id zostawia `DEFAULT_HINT`);
 3. dla `ValidationError` z `option`: skladniki (a) `Dozwolone wartosci <flaga>: a, b,
    c.` (z `allowed`, najwyzej 40 wartosci i `...`; flaga z katalogu, gdy `command` znana
    i parametr istnieje, inaczej nazwa `option`), (b) `Przyklad: <command_line>` -
@@ -946,7 +957,8 @@ Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (36 dzisiejszych 
 | `project download` | `download_project` | `kartograf-project-report/1` | `ok: false` |
 | `project download --check-updates` | `check_project` | `kartograf-project-check/1` | `ok: false` |
 | `project status`, `project verify` | `get_project_status`, `verify_project` | `kartograf-project-check/1` | `ok: false` |
-| `cache stats`, `cache path` | `get_cache_info` | `kartograf-cache/1` | - |
+| `cache stats` | `get_cache_info` | `kartograf-cache/1` | - |
+| `cache path` | `get_cache_path` (nie otwiera bazy) | `kartograf-cache/1` | - |
 | `cache clear` | `clear_cache` | `kartograf-cache/1` | - |
 | `catalog` | `get_catalog` | `kartograf-catalog/1` | - |
 
@@ -961,7 +973,7 @@ sa i przechodza do biblioteki: opis godla (`describe_sheet`: `format_cz_sheet`,
 hierarchia, potomkowie), tabele zrodel i wybor flag per grupa (`list_sources`:
 `_source_choice`, `_product_flag` z `cli/groups/*.py`), warstwy produktow
 (`list_layers`: provider przez `LandCoverManager`), obsluga cache (`get_cache_info`,
-`clear_cache`), statystyki HSG po obliczeniu (parametr `summary`). W `cli/` zostaje:
+`get_cache_path`, `clear_cache`), statystyki HSG po obliczeniu (parametr `summary`). W `cli/` zostaje:
 parsowanie flag, odczyt/zapis pliku planu, wyliczenie kodu wyjscia, renderowanie
 tekstu z dokumentow (tabele, linie statusu, pasek postepu) i wybor trybu JSON.
 `tests/test_cli_translation.py::test_cli_imports_no_data_logic` dopuszcza import
@@ -1188,7 +1200,7 @@ kartograf/commands.py  # warstwa komend KB-2..KB-5 (8.7): importuje catalog i pr
 Moduly biblioteki dodane poza `catalog/` (katalog korzysta z rejestru i funkcji
 biblioteki, nie odwrotnie; A6): w T3 `kartograf/source_info.py` (`list_sources`,
 `list_layers`: rejestr zrodel i wybor flag per grupa, przeniesione z `cli/groups`),
-`kartograf/cache_info.py` (`get_cache_info`, `clear_cache`) i
+`kartograf/cache_info.py` (`get_cache_info`, `get_cache_path`, `clear_cache`) i
 `kartograf/store_documents.py` (`describe_store`, `list_store_entries`,
 `read_store_sidecar`); w T4d `kartograf/sheet_info.py` (`describe_sheet`, `find_sheets`).
 
@@ -1380,8 +1392,12 @@ def check_command(command: str, options: Mapping[str, object], *, output_dir: st
   `EPSG:2180` flagi CLI), `run` - pozostale podane flagi (`output_dir`, `upgrade`,
   `force`, `check_updates`, `plan`, `workers`, `quiet`, `json`, `summary`); komenda
   spoza `COMMANDS` (np. `parse`, `elevation availability`) to `ValidationError`
-  z lista komend danych (jak `project add`); blad skladni to `UsageError`. To usuwa
-  obejscie `_workers_given` w `project add` (parser odroznia flage podana od domyslnej);
+  z lista komend danych (jak `project add`); blad skladni to `UsageError` (z `command`,
+  gdy linia nazwala znana komende); samotne `--bbox-crs` (bez `--bbox`) to
+  `ValidationError(option="bbox_crs", options=("bbox", "bbox_crs"))` - jak postac JSON w
+  `convert_arguments`, zamiast cichego pominiecia (parser CLI ma domyslny uklad, wiec
+  tam samotnej flagi nie da sie odroznic). To usuwa obejscie `_workers_given` w
+  `project add` (parser odroznia flage podana od domyslnej);
 - `validate_command`: ta sama walidacja bez sieci i bez zapisu co `add_project_task`
   (`TaskCommand.validate`); `output_dir=None` podstawia `Path(".")` (walidatory nie
   otwieraja katalogu; plik `geometry` jest czytany jak dotad); `ValidationError` z
@@ -1390,7 +1406,11 @@ def check_command(command: str, options: Mapping[str, object], *, output_dir: st
   kolejnosci deklaracji; `flag` -> sama flaga; `bbox` -> `--bbox a,b,c,d`, a
   `--bbox-crs X` pomijane, gdy `X == cli_default`; `per_country` -> `v` albo
   `pl=v,cz=w`; `str_list` -> po przecinku; `path` -> cytowanie `shlex.quote`;
-  `run` dopisuje flagi uruchomienia (`output_dir` jako `-o`); `parse_command(
+  `run` dopisuje flagi uruchomienia (`output_dir` jako `-o`; `output_dir` i `plan` to
+  sciezki, `workers` liczba calkowita, reszta `true`): `run` jest walidowane jak `options`
+  (`convert_arguments` z rodzajami flag uruchomienia: polskie teksty, `option` =
+  nazwa), a opcja zadania w `run` albo argument `update` (nie ma flagi; sa `--upgrade` i
+  `--force`) to `ValidationError("nieznana opcja ...")`; `parse_command(
   format_command(c, o, run=r)[len("kartograf "):])` zwraca `(c, o, r)` dla kazdego
   przykladu katalogu (test);
 - `run_command` = `COMMANDS[command].download(...)` z nowym argumentem `plan`
@@ -1871,7 +1891,7 @@ Zmiany:
 | 4 | Parser CLI budowany z katalogu; `kartograf/cli/groups/*.py`, `cli/_args.py` (flagi), `*_task_arguments` znikaja; `create_parser`, `main`, `parse_command_line`, `removed_command_error`, `_subparsers` zostaja jako fasada | testy i kod importujacy wnetrznosci CLI (`cli.groups`, `download_task_arguments`, `_download_arguments`) | uzyc `parse_command(...).options` albo `create_parser()`; testy w repozytorium przepisac (T5) |
 | 5 | `calculate_hsg(..., summary=False)`, `HsgReport.summary`; `--summary` wola API zamiast `hsg_statistics` w CLI | Hydrograf (`HSGCalculator` wewnetrznie) - brak wplywu | - |
 | 6 | Wyjatki: nowe atrybuty (`code`, `exit_code`, `hint`, `DETAIL_FIELDS`, `ValidationError.option`/`options`/`allowed`), nowa klasa `UsageError`; konstruktory przyjmuja opcjonalne argumenty nazwane | konsumenci biblioteki | addytywne; `except ValidationError` lapie tez `UsageError` |
-| 7 | Nowe funkcje i typy w `kartograf.__all__`: `get_catalog`, `data_commands`, `Catalog`, `CommandInfo`, `ParamInfo`, `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`, `CommandCall`, `describe_sheet`, `SheetInfo`, `find_sheets`, `SheetList`, `list_sources`, `SourceList`, `list_layers`, `LayerList`, `get_cache_info`, `clear_cache`, `CacheInfo`, `describe_store`, `list_store_entries`, `read_store_sidecar`, `StoreOverview`, `StoreEntries`, `StoreSidecar`, `ErrorReport`, `error_report`, `UsageError` | - | addytywne |
+| 7 | Nowe funkcje i typy w `kartograf.__all__`: `get_catalog`, `data_commands`, `Catalog`, `CommandInfo`, `ParamInfo`, `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`, `CommandCall`, `describe_sheet`, `SheetInfo`, `find_sheets`, `SheetList`, `list_sources`, `SourceList`, `list_layers`, `LayerList`, `get_cache_info`, `get_cache_path`, `clear_cache`, `CacheInfo`, `describe_store`, `list_store_entries`, `read_store_sidecar`, `StoreOverview`, `StoreEntries`, `StoreSidecar`, `ErrorReport`, `error_report`, `UsageError` | - | addytywne |
 | 8 | `TaskDownload.__call__` (`project/commands.py`) dostaje `plan`; `TaskCommand.options` pochodzi z katalogu (kolejnosc kluczy opcji nowych manifestow: `country` zaraz po `product`) | kod rozszerzajacy `COMMANDS` | dodac deklaracje katalogu (STANDARDS 17.2 po zmianie) |
 | 9 | `python -m kartograf`; skrypt `kartograf-mcp`; extra `mcp`; `dev` zawiera `mcp` | srodowiska deweloperskie | `pip install -e ".[dev]"` |
 
@@ -2072,5 +2092,21 @@ nietagowane, wiec to nie sa zmiany lamiace wzgledem 0.7.x; trafiaja do dokumenta
    argumentow i znaczeniem `ok=false` (9.9).
 5. Podsumowanie komendy `landcover download` bez flagi CLI (`Pobierz dane wybranego
    produktu pokrycia terenu`).
-6. Do sprawdzenia przy scalaniu z torem CLI: `_FOOTER` w `cli/catalog_cmd.py` (mowi, ze
-   tabele daje `kartograf catalog --json`; teraz `kartograf catalog --params --json`).
+6. `_FOOTER` w `cli/catalog_cmd.py` (stopka tekstu `kartograf catalog`) kieruje po caly
+   katalog z tabelami do `kartograf catalog --params --json` (przeglad: `catalog --json`);
+   sprawdzone przy scaleniu z torem CLI (16.4).
+
+### 16.4 Domkniecie integracji (scalenie torow CLI, MCP i llms; 2026-10-18)
+
+Po scaleniu torow T5d, T6/T6opt i T7 brama byla zielona, ale cztery uwagi przegladu T5
+(P3) i opisy zalezne od widoku przegladu wymagaly poprawek (zmiany zachowania dla
+dokumentacji T8):
+
+| Zmiana | Dawniej | Teraz |
+|---|---|---|
+| `cache path --json` | wolal `get_cache_info`: nieczytelna albo zablokowana baza dawala `kartograf-error/1` (kod 1) zamiast sciezki | `get_cache_path()` (5.4.9): `action: "path"`, `exists`, `size_bytes` z `stat`, `entries: null`; baza nie jest otwierana; tekst drukuje `path` z tego samego dokumentu |
+| `format_command(..., run=...)` | zla wartosc flagi uruchomienia (`workers="4"`) to `ValidationError` z angielskim tekstem i bez `option` | `run` przechodzi przez `convert_arguments` (rodzaje flag uruchomienia; `plan` na linii to sciezka): polskie teksty, `option`; opcja zadania w `run` i argument `update` to `nieznana opcja` |
+| `parse_command` z samotnym `--bbox-crs` | flaga znikala po cichu (`project add` zapisywal zadanie bez sladu) | `ValidationError(option="bbox_crs", options=("bbox", "bbox_crs"))` (tylko dla parsera tylko-podanych flag; parser CLI ma domyslny uklad) |
+| `UsageError` znanej komendy (`elevation download --product foo --json`) | `command: null`, ogolny `DEFAULT_HINT` | `UsageError.command` (parser komendy; `parse_command` dla `--help`/`--version`), `command` w `kartograf-error/1` i podpowiedz `Parametry komendy: kartograf catalog <id>. Przyklad: ...` (6.3); w `project add` podpowiedz dotyczy wewnetrznej komendy, `command` pozostaje `project add` |
+| stopka tekstu `kartograf catalog` | tabele kodow od `catalog --json` | przeglad `catalog --json`, caly katalog z tabelami `catalog --params --json` |
+| `llms.txt` | opis katalogu sprzed przegladu; opcje `kartograf-mcp` nieweryfikowane | rozmiary widokow, rodziny `--tools` po nazwach, krotkie opisy narzedzi (`get_catalog` z `command` i `tables`); test 12.9 porownuje opcje, rodziny, skrypt i extra z `kartograf-mcp` i `pyproject.toml` |
