@@ -79,7 +79,8 @@ _CATALOG_PARAMS = (
     Param(
         "group",
         "str",
-        "Grupa komend, np. elevation albo project (domyslnie wszystkie grupy)",
+        "Grupa komend, np. elevation albo project: opisy jej komend i produkty "
+        "ze zrodlami (domyslnie przeglad wszystkich grup)",
         positional=True,
         nargs="?",
         metavar="GRUPA",
@@ -99,8 +100,16 @@ _CATALOG_PARAMS = (
     Param(
         "params",
         "flag",
-        "Dodaj parametry, ograniczenia i przyklady do widoku grupy i calego "
-        "katalogu (opis jednej komendy zawsze je ma)",
+        "Dodaj parametry, ograniczenia i przyklady do widoku grupy albo calego "
+        "katalogu (opis jednej komendy zawsze je ma; caly katalog z parametrami "
+        "to ok. 200 tys. znakow)",
+    ),
+    Param(
+        "tables",
+        "flag",
+        "Dodaj tabele: kody wyjscia CLI, kody bledow i schematy dokumentow "
+        "(caly katalog z parametrami ma je zawsze)",
+        flag=None,
     ),
     shared.JSON,
 )
@@ -230,10 +239,14 @@ COMMANDS = (
         "parametry (flaga, argument API, rodzaj, wymagany, dozwolone wartosci, "
         "opis) i przyklady; --params dodaje parametry do widoku grupy i "
         "calosci. --json: dokument kartograf-catalog/1 - wejscie dla agentow "
-        "i skryptow.",
+        "i skryptow; bez GRUPY zwiezly przeglad (grupy, nazwy produktow, "
+        "komendy: identyfikator, podsumowanie, narzedzie MCP, sprawdzenie "
+        "aktualnosci), reszta z GRUPA, KOMENDA i --params; tabele kodow "
+        "wyjscia i bledow oraz schematy dokumentow: tables=True w API albo "
+        "caly katalog z parametrami.",
         tool="get_catalog",
         examples=(
-            Example({}, title="Skrocony katalog: grupy, komendy, tabele kodow"),
+            Example({}, title="Przeglad: grupy, produkty i komendy"),
             Example(
                 {"group": "elevation"},
                 title="Opis komendy: parametry, ograniczenia i przyklady",
@@ -243,7 +256,7 @@ COMMANDS = (
                 {"group": "soil", "params": True},
                 title="Komendy grupy z parametrami",
             ),
-            Example({}, title="Katalog jako dokument JSON", run={"json": True}),
+            Example({}, title="Przeglad jako dokument JSON", run={"json": True}),
         ),
     ),
     Command(
