@@ -20,6 +20,8 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, Literal, cast, get_args
 
+from kartograf.serialization import SCHEMA_PATTERN
+
 # Value kinds of a parameter: the kinds of the project manifest options plus
 # ``plan`` (an update plan: a file on the CLI, a document in the API) and
 # ``options`` (the options object of a project task).
@@ -61,7 +63,7 @@ SHEET_SYSTEMS: Final[tuple[str, ...]] = (
     "cz_ztm",
 )
 # ``Document`` schema names (``kartograf-<kind>/<version>``).
-SCHEMA_NAME: Final = re.compile(r"kartograf-[a-z][a-z0-9-]*/[1-9][0-9]*")
+_SCHEMA_NAME = re.compile(SCHEMA_PATTERN)
 
 _PARAM_NAME = re.compile(r"[a-z][a-z0-9_]*")
 _FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
@@ -339,7 +341,7 @@ class Command:
         if unknown:
             raise ValueError(f"Command {name}: unknown effects {unknown}")
         for schema in (self.result_schema, self.check_result_schema):
-            if schema is not None and not SCHEMA_NAME.fullmatch(schema):
+            if schema is not None and not _SCHEMA_NAME.fullmatch(schema):
                 raise ValueError(f"Command {name}: schema {schema!r} is malformed")
         if (self.check_function is None) != (self.check_result_schema is None):
             raise ValueError(
