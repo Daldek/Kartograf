@@ -98,6 +98,8 @@ Example usage::
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info
+from kartograf.catalog import data_commands, get_catalog
+from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
 from kartograf.core.bbox import transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
@@ -234,6 +236,7 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.sheet_info import SheetInfo, SheetList, describe_sheet, find_sheets
 from kartograf.source_info import (
     LayerList,
     SourceList,
@@ -436,6 +439,16 @@ __all__ = [
     "get_cache_info",
     "clear_cache",
     "CacheInfo",
+    # Sheet codes and the catalog of the commands as data (spec 5.4.4, 5.4.5, 8.5)
+    "describe_sheet",
+    "SheetInfo",
+    "find_sheets",
+    "SheetList",
+    "get_catalog",
+    "data_commands",
+    "Catalog",
+    "CommandInfo",
+    "ParamInfo",
     # Errors as data (`kartograf-error/1`, spec 6)
     "ErrorReport",
     "error_report",

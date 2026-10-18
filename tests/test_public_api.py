@@ -48,6 +48,9 @@ _DOCUMENT_FUNCTIONS = {
     "describe_store": ["output_dir"],
     "list_store_entries": ["output_dir"],
     "read_store_sidecar": ["path"],
+    "describe_sheet": ["sheet"],
+    "find_sheets": [],
+    "get_catalog": [],
 }
 
 
