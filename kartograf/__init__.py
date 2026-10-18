@@ -27,6 +27,18 @@ The store is read without writing to it (ADR-045): ``list_segments``,
 ``iter_store``, ``read_sidecar``, ``describe_segment``, ``file_footprint``,
 ``link_target`` and ``pinned_transform``.
 
+Every result is a JSON document (ADR-046): ``to_dict()``/``to_json()`` of a
+report give the same ``kartograf-<kind>/1`` document as the CLI ``--json``
+output and the MCP server ``kartograf-mcp``; an exception becomes a
+``kartograf-error/1`` document with ``error_report`` (every ``KartografError``
+has a stable ``code``, an ``exit_code`` and a ``hint``). ``get_catalog`` and
+``data_commands`` describe every command, its parameters and allowed values;
+``parse_command``, ``validate_command``, ``format_command``, ``run_command``
+and ``check_command`` work on a data command as data. Other reports of the
+document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
+``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
+``describe_store``, ``list_store_entries`` and ``read_store_sidecar``.
+
 Example usage::
 
     from kartograf import (
