@@ -142,8 +142,18 @@ def default_cache_file() -> Path:
 
 def _open_cache(path: Path) -> MetadataCache:
     """The cache at ``path``: its directory is made here, the file by the first
-    write of the library."""
-    path.parent.mkdir(parents=True, exist_ok=True)
+    write of the library. A directory that cannot be made (a read-only home, a
+    file in the way) does not stop the server: like the CLI and the library with
+    a cache they cannot open, it warns and works without the cache."""
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+    except OSError as error:
+        logger.warning(
+            "Cache metadanych: nie mozna utworzyc katalogu %s: %s - praca bez cache "
+            "(--cache-file z zapisywalnej sciezki albo --no-cache)",
+            path.parent,
+            error,
+        )
     return MetadataCache(path)
 
 
