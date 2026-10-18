@@ -21,7 +21,9 @@ from kartograf.catalog.spec import (
     Param,
     resolve,
 )
+from kartograf.core.parser_2000 import SCALE_HIERARCHY_2000
 from kartograf.core.parser_registry import SYSTEMS, detect_system, ztm_sheet_system
+from kartograf.core.sheet_parser import PL_BBOX_CRS, SheetParser
 from kartograf.download.availability import (
     AVAILABILITY_COUNTRIES,
     AVAILABILITY_PRODUCTS,
@@ -277,6 +279,129 @@ def test_elevation_and_imagery_commands_are_declared():
     } <= set(_IDS)
 
 
+_PROJECT_COMMANDS = (
+    "project init",
+    "project add",
+    "project remove",
+    "project download",
+    "project status",
+    "project verify",
+)
+_API_ONLY = ("find_sheets", "store_overview", "store_entries", "store_sidecar")
+
+
+def test_project_cache_parse_catalog_and_api_only_commands_are_declared():
+    assert {
+        *_PROJECT_COMMANDS,
+        "cache stats",
+        "cache path",
+        "cache clear",
+        "parse",
+        "catalog",
+        *_API_ONLY,
+    } <= set(_IDS)
+    # only the API has these four: no CLI words, no flag, no parser
+    assert [c.id for c in _DECLARED.commands if c.cli is None] == list(_API_ONLY)
+    assert [g.name for g in _DECLARED.groups if g.name in ("project", "cache")] == [
+        "project",
+        "cache",
+    ]
+    assert next(g for g in _DECLARED.groups if g.name == "cache").position == 2
+
+
+@pytest.mark.parametrize("command_id", _PROJECT_COMMANDS)
+def test_project_commands_take_the_project_directory_like_the_cli_did(command_id):
+    params = {p.name: p for p in _COMMAND_BY_ID[command_id].params}
+
+    project_dir = params["project_dir"]
+    assert (project_dir.cli_flag, project_dir.cli_dest) == ("--project", "project")
+    assert (project_dir.cli_default, project_dir.default) == (".", None)
+    assert (project_dir.kind, project_dir.required) == ("path", True)
+    assert project_dir.section is None  # the help of a project command has no sections
+
+
+def test_project_add_takes_a_data_command_of_the_manifest_and_its_options():
+    params = {p.name: p for p in _COMMAND_BY_ID["project add"].params}
+
+    assert resolve(params["command"].allowed) == list(COMMANDS)
+    assert callable(params["command"].allowed)  # read from the declarations, no copy
+    assert (params["command"].cli_flag, params["command"].required) == (None, True)
+    assert (params["options"].kind, params["options"].required) == ("options", True)
+    assert (params["options"].cli_flag, params["options"].task) == (None, False)
+    # the CLI words after the name are the command and its options
+    assert (params["name"].positional, params["name"].required) == (True, True)
+    assert (params["arguments"].nargs, params["arguments"].argument) == (
+        "REMAINDER",
+        None,
+    )
+
+
+def test_project_download_has_the_update_modes_but_no_plan():
+    download = _COMMAND_BY_ID["project download"]
+    params = {p.name: p for p in download.params}
+
+    assert (download.check_function, download.check_result_schema) == (
+        "check_project",
+        "kartograf-project-check/1",
+    )
+    assert download.supports_check and not download.project_task
+    assert "plan" not in params
+    assert {
+        name: params[name].exclusive for name in ("check_updates", "upgrade", "force")
+    } == {
+        "check_updates": "update",
+        "upgrade": "update",
+        "force": "update",
+    }
+    assert (params["update"].cli_flag, resolve(params["update"].allowed)) == (
+        None,
+        ["upgrade", "force"],
+    )
+    assert (params["workers"].default, params["workers"].cli_default) == (None, None)
+    assert (params["tasks"].positional, params["tasks"].nargs) == (True, "*")
+
+
+def test_catalog_command_offers_the_groups_and_the_commands_of_the_catalog():
+    params = {p.name: p for p in _COMMAND_BY_ID["catalog"].params}
+
+    groups = resolve(params["group"].allowed)
+    assert groups == [g.name for g in _DECLARED.groups]
+    assert groups[-1] == "cache" and "project" in groups
+    assert resolve(params["command"].allowed) == _IDS
+    assert (params["group"].positional, params["group"].nargs) == (True, "?")
+    assert (params["command"].positional, params["command"].nargs) == (True, "?")
+    assert (params["params"].kind, params["params"].default) == ("flag", None)
+
+
+def test_the_sheet_search_requires_the_choice_of_sheets_and_one_area():
+    find = _COMMAND_BY_ID["find_sheets"]
+    params = {p.name: p for p in find.params}
+
+    assert {name for name, p in params.items() if p.required} == {
+        "scale",
+        "sheet_system",
+    }
+    assert [(c.type, c.params) for c in find.constraints] == [
+        ("one_of", ("bbox", "geometry")),
+        ("requires", ("geometry",)),
+    ]
+    assert (params["bbox"].kind, params["bbox_crs"].kind) == ("bbox", "bbox_crs")
+    assert find.cli is None and not find.examples
+
+
+def test_the_store_reads_require_what_the_spec_requires():
+    required = {
+        command_id: {p.name for p in _COMMAND_BY_ID[command_id].params if p.required}
+        for command_id in ("store_overview", "store_entries", "store_sidecar")
+    }
+
+    assert required == {
+        "store_overview": {"output_dir"},
+        "store_entries": {"output_dir", "segment", "limit"},
+        "store_sidecar": {"path"},
+    }
+
+
 def test_sheet_systems_are_those_of_the_parser_registry():
     assert set(SHEET_SYSTEMS) == {system.id for system in SYSTEMS} | {"cz_ztm"}
 
@@ -342,6 +467,7 @@ def test_examples_cover_pl_and_cz(command):
         assert any(country in found for found in targeted), country
 
 
+_SCALES_1992 = list(SheetParser.SCALE_HIERARCHY)
 _COMMAND_BY_ID = {command.id: command for command in _DECLARED.commands}
 _COLLECTION_GROUPS = (
     "boundaries",
@@ -381,6 +507,13 @@ def _collected(group: str, key: str) -> set[str]:
 def _expected_allowed(command_id: str, name: str) -> list[str] | set[str]:
     """The allowed values of a registry parameter, read from the registry in
     another way than the declaration does (a set: the order is the registry's)."""
+    if command_id == "find_sheets":  # the sheet search takes the Polish CRSs
+        scales_2000 = [s for s in SCALE_HIERARCHY_2000 if s not in _SCALES_1992]
+        return {
+            "bbox_crs": list(PL_BBOX_CRS),
+            "scale": [*_SCALES_1992, *scales_2000],
+            "sheet_system": list(SheetParser.VALID_SYSTEMS),
+        }[name]
     group = command_id.split()[0]
     collection = group in _COLLECTION_GROUPS
     if name == "bbox_crs":
