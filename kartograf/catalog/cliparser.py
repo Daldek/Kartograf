@@ -302,18 +302,23 @@ def _type(param: Param) -> Callable[[str], Any] | None:
     return None
 
 
-def _argument_kwargs(param: Param) -> dict[str, Any]:
-    """The keyword arguments of ``add_argument`` of a parameter."""
+def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
+    """The keyword arguments of ``add_argument`` of a parameter (``given_only``:
+    no default, so the namespace has the flags of the line only)."""
     kwargs: dict[str, Any] = {"help": _help(resolve(param.description))}
     if not param.positional:
         kwargs["dest"] = param.cli_dest
     if param.kind == "flag":
         kwargs["action"] = "store_true"
+        if given_only:
+            kwargs["default"] = argparse.SUPPRESS
         return kwargs
     if param.metavar is not None:
         kwargs["metavar"] = param.metavar
     default = param.cli_default if param.cli_default is not None else param.default
-    if default is not None:
+    if given_only:
+        kwargs["default"] = argparse.SUPPRESS
+    elif default is not None:
         kwargs["default"] = default
     converter = _type(param)
     if converter is not None:
@@ -327,7 +332,9 @@ def _argument_kwargs(param: Param) -> dict[str, Any]:
     return kwargs
 
 
-def _add_params(parser: argparse.ArgumentParser, command: Command) -> None:
+def _add_params(
+    parser: argparse.ArgumentParser, command: Command, given_only: bool
+) -> None:
     """The flags and arguments of ``command`` in declaration order: the sections
     of ``--help`` in order of first use, the exclusive groups inside them."""
     sections: dict[str, argparse._ArgumentGroup] = {}
@@ -341,7 +348,7 @@ def _add_params(parser: argparse.ArgumentParser, command: Command) -> None:
             if param.section not in sections:
                 sections[param.section] = parser.add_argument_group(param.section)
             container = sections[param.section]
-        kwargs = _argument_kwargs(param)
+        kwargs = _argument_kwargs(param, given_only)
         if flag is None:
             container.add_argument(param.name, **kwargs)
             continue
@@ -354,7 +361,10 @@ def _add_params(parser: argparse.ArgumentParser, command: Command) -> None:
 
 
 def _add_command(
-    subparsers: argparse._SubParsersAction, command: Command, usage_errors: bool
+    subparsers: argparse._SubParsersAction,
+    command: Command,
+    usage_errors: bool,
+    given_only: bool,
 ) -> None:
     parser = subparsers.add_parser(
         command.name,
@@ -364,7 +374,7 @@ def _add_command(
         usage_errors=usage_errors,
     )
     parser.set_defaults(_command_id=command.id)
-    _add_params(parser, command)
+    _add_params(parser, command, given_only)
 
 
 def build_parser(
@@ -373,6 +383,7 @@ def build_parser(
     *,
     prog: str = "kartograf",
     usage_errors: bool = False,
+    given_only: bool = False,
 ) -> argparse.ArgumentParser:
     """The parser of ``kartograf`` for the declared commands.
 
@@ -390,6 +401,11 @@ def build_parser(
         The program name of the usage lines.
     usage_errors : bool
         Raise ``UsageError`` instead of printing ``usage:`` and exiting.
+    given_only : bool
+        The flags have no defaults: a parsed line has an attribute for each flag
+        that was written and for no other (``parse_command`` tells a flag given
+        with its default value from one that was not given). The help differs
+        from the CLI's only in that it shows no defaults.
     """
     parser = _Parser(
         prog=prog,
@@ -406,7 +422,7 @@ def build_parser(
     cli = [command for command in commands if command.cli is not None]
     for command in cli:
         if command.group is None:
-            _add_command(subparsers, command, usage_errors)
+            _add_command(subparsers, command, usage_errors, given_only)
     for group in sorted_groups(groups):
         group_parser = subparsers.add_parser(
             group.name,
@@ -420,5 +436,5 @@ def build_parser(
         )
         for command in cli:
             if command.group == group.name:
-                _add_command(group_commands, command, usage_errors)
+                _add_command(group_commands, command, usage_errors, given_only)
     return parser
