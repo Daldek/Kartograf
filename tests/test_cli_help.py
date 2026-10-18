@@ -101,14 +101,14 @@ def test_parse_describes_cz_sheet_codes(sheet, lines, capsys):
 
 def test_parse_cz_code_without_pl_hierarchy(capsys):
     """The PL sheet hierarchy flags are an input error for a CZ code."""
-    assert main(["parse", "CTES96", "--children"]) == 1
+    assert main(["parse", "CTES96", "--children"]) == 2
     assert "tylko godel PL" in capsys.readouterr().err
 
 
 def test_parse_off_grid_tm33_tile_and_unknown_code(capsys):
-    assert main(["parse", "303_5550"]) == 1
+    assert main(["parse", "303_5550"]) == 2
     assert "TM33" in capsys.readouterr().err
-    assert main(["parse", "XYZ"]) == 1
+    assert main(["parse", "XYZ"]) == 2
     assert "Godla CZ: SM5" in capsys.readouterr().err
 
 
@@ -136,7 +136,7 @@ def test_country_offers_only_countries_of_the_group(group, product, country, cap
 def test_output_help_and_error_name_the_store_directory(argv, directory, capsys):
     """The ``--output`` help and the error of a missing ``--output`` name the
     same directory of the store - the one of the group, no placeholder."""
-    assert main(argv) == 1
+    assert main(argv) == 2
     error = capsys.readouterr().err
     with pytest.raises(SystemExit):
         main([argv[0], argv[1], "--help"])

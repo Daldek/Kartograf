@@ -74,7 +74,7 @@ def test_landcover_update_flags_exclusive(tmp_path, flags, capsys):
 @pytest.mark.parametrize("command", [["landcover", "download"], ["soil", "hsg"]])
 def test_plan_without_mode_is_error(tmp_path, command, capsys):
     rc = main([*command, "--plan", str(tmp_path / "p.json"), "-o", str(tmp_path)])
-    assert rc == 1
+    assert rc == 2
     assert "Error: --plan wymaga --check-updates albo --upgrade" in (
         capsys.readouterr().err
     )
@@ -221,7 +221,7 @@ def test_corine_preview_not_emitted_for_invalid_sheet(tmp_path, capsys):
             manager.download(sheet="XYZ", year=2018)
         assert (
             _lc(tmp_path, "--product", "corine", "--sheet", "XYZ", "--year", "2018")
-            == 1
+            == 2
         )
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -246,7 +246,7 @@ def test_hsg_invalid_sheet_has_no_header(tmp_path, capsys):
                 str(tmp_path / "cli"),
             ]
         )
-        == 1
+        == 2
     )
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -263,7 +263,7 @@ def test_invalid_teryt_matches_cli_and_api(tmp_path, capsys, mode):
     ) as exc:
         getattr(manager, mode)(teryt="14")
     flags = ["--check-updates"] if mode == "check" else []
-    assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "14", *flags) == 1
+    assert _lc(tmp_path, "--product", "bdot10k", "--teryt", "14", *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == f"Error: {exc.value}\n"
@@ -284,7 +284,7 @@ def test_invalid_landcover_bbox_matches_cli_and_api(
     with pytest.raises(ValidationError) as exc:
         getattr(manager, mode)(bbox=bbox)
     flags = ["--check-updates"] if mode == "check" else []
-    assert _lc(tmp_path, "--product", "bdot10k", "--bbox", coordinates, *flags) == 1
+    assert _lc(tmp_path, "--product", "bdot10k", "--bbox", coordinates, *flags) == 2
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == f"Error: {exc.value}\n"
@@ -319,7 +319,7 @@ def test_invalid_hsg_bbox_matches_cli_and_api(
                 *flags,
             ]
         )
-        == 1
+        == 2
     )
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -352,7 +352,7 @@ def test_hsg_cli_output_tif_rejected(tmp_path, capsys):
             ["soil", "hsg", "--bbox", BBOX_ARG, "--depth", "0-5cm"]
             + ["-o", str(tmp_path / "hsg.tif")]
         )
-    assert rc == 1
+    assert rc == 2
     assert fake.capabilities == 0
     with pytest.raises(ValidationError) as error:
         HSGCalculator(tmp_path / "hsg.tif")
@@ -487,7 +487,7 @@ def test_layers_bad_code_is_library_error_before_network(tmp_path, capsys):
         "kartograf.providers.pl.bdot10k.Bdot10kProvider.download_package"
     ) as get:
         rc = main(_bdot(tmp_path, "--teryt", "1465", "--layers", "SWRS,swrs1"))
-    assert rc == 1
+    assert rc == 2
     get.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: ") and "SWRS1" in line
@@ -509,7 +509,7 @@ def test_bdot_only_flags_rejected_for_other_sources(tmp_path, capsys, flag):
         flag,
         *(["SWRS"] if flag == "--layers" else []),
     ]
-    assert main(argv) == 1
+    assert main(argv) == 2
     assert f"Error: {flag} dziala tylko z --product bdot10k" in capsys.readouterr().err
 
 

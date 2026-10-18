@@ -231,7 +231,7 @@ def test_invalid_landcover_options_match_cli_and_api(tmp_path, source, flags, op
     run = _landcover(
         tmp_path, source, ["--bbox", BBOX_ARG, *flags], bbox=BBOX, **options
     )
-    assert run.cli_code == 1 and isinstance(run.api_error, ValidationError)
+    assert run.cli_code == 2 and isinstance(run.api_error, ValidationError)
     assert run.cli_stderr == f"Error: {run.api_error}\n"
     assert not run.cli_store.exists() and not run.api_store.exists()
 

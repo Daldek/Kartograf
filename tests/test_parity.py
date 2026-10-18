@@ -777,7 +777,7 @@ def test_input_errors_same_type_and_text(tmp_path, argv, kwargs):
         lambda out: download_data(product="nmt", output_dir=out, **kwargs),
         tmp_path,
     )
-    assert run.cli_code == 1
+    assert run.cli_code == 2
     assert type(run.api_error).__name__ == "ValidationError"
     assert run.cli_stderr.strip() == f"Error: {run.api_error}"
     assert not run.cli_store.exists() and not run.api_store.exists()
@@ -824,7 +824,7 @@ def test_bbox_input_errors_match_cli_and_api(tmp_path, check, bbox_text, bbox):
         argv.append("--check-updates")
     operation = check_data if check else download_data
     run = run_both(argv, lambda out: operation(output_dir=out, **options), tmp_path)
-    assert run.cli_code == 1
+    assert run.cli_code == 2
     assert type(run.api_error) is ValidationError
     assert run.cli_stderr == f"Error: {run.api_error}\n"
     assert run.cli_stdout == ""

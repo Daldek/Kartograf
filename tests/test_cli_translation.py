@@ -113,7 +113,7 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
                 str(tmp_path),
             ]
         )
-    assert rc == 1
+    assert rc == 2
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --resolution: nieprawidlowa wartosc 'pl=1m,de=2m'")
@@ -196,7 +196,7 @@ def test_level_per_country_syntax(tmp_path, capsys):
     assert download.call_args.kwargs["level"] == "obec"
     capsys.readouterr()
     with patch(_COLLECTION) as download:
-        assert main([*argv, "--level", "pl=gmina,de=obec"]) == 1
+        assert main([*argv, "--level", "pl=gmina,de=obec"]) == 2
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --level: nieprawidlowa wartosc 'pl=gmina,de=obec'")
@@ -283,7 +283,7 @@ def test_validation_error_single_error_line(tmp_path, capsys):
             ["elevation", "download", "--product", "nmt", "--sheet", "X"]
             + ["-o", str(tmp_path)]
         )
-    assert rc == 1
+    assert rc == 2
     assert capsys.readouterr().err.splitlines() == ["Error: --vertical-crs wymagane: x"]
 
 
@@ -311,7 +311,7 @@ def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check)
             return_value=new_plan(tmp_path, []),
         ),
     ):
-        assert main(argv) == 1
+        assert main(argv) == 2
         invalid = capsys.readouterr()
         assert invalid.out == ""
         assert invalid.err.startswith("Error: --vertical-crs wymagane")
@@ -376,6 +376,6 @@ def test_missing_choice_is_error_before_network(flag, tmp_path, capsys):
     for name, values in argv.items():
         if name != flag:
             args += values
-    assert main(args) == 1
+    assert main(args) == 2
     err = capsys.readouterr().err
     assert err.startswith("Error: ") and "wymagane" in err

@@ -20,6 +20,7 @@ from kartograf.cli.download_cmd import (
 )
 from kartograf.cli.landcover_cmd import area_task_arguments
 from kartograf.download.options import output_required
+from kartograf.exceptions import ValidationError
 from kartograf.hydrology import calculate_hsg, check_hsg, hsg_statistics
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
 from kartograf.landcover.manager import (
@@ -48,8 +49,7 @@ def soil_hsg_task_arguments(args: argparse.Namespace) -> dict:
 def cmd_soil_download(args: argparse.Namespace) -> int:
     """``soil download``: one SoilGrids layer (property, depth, stat) of an area."""
     if args.output is None:
-        print(f"Error: {output_required('soil')}", file=sys.stderr)
-        return 1
+        raise ValidationError(output_required("soil"), option="output_dir")
     return run_with_plan_file(args, _soil_download)
 
 
@@ -111,11 +111,10 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
         Exit code (0 for success, 1 for error)
     """
     if args.output is None:
-        print(
-            f"Error: --output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})",
-            file=sys.stderr,
+        raise ValidationError(
+            f"--output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})",
+            option="output_dir",
         )
-        return 1
 
     selection = soil_hsg_task_arguments(args)
     return run_with_plan_file(args, lambda a: _hsg_task(a, selection))

@@ -25,9 +25,9 @@ from kartograf.cli.download_cmd import (
 )
 from kartograf.download.collections import collection_classes, collection_layers
 from kartograf.download.options import output_required
+from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
-    LANDCOVER_PRODUCT_CHOICES,
     LandCoverManager,
     check_landcover,
     download_landcover,
@@ -41,11 +41,7 @@ _UNIT_SOURCES = ("bdot10k", "bdoo")
 def cmd_landcover_list_layers(args: argparse.Namespace) -> int:
     """``landcover list-layers``: BDOT10k, ZABAGED, Data50 or Data250 layers,
     BDOO classes per release, CORINE years."""
-    if args.product is None:
-        print(
-            f"Error: --product wymagane: {LANDCOVER_PRODUCT_CHOICES}", file=sys.stderr
-        )
-        return 1
+    require_landcover_product(args.product)
     # the catalogue of the product (no network, nothing written)
     manager = LandCoverManager(".", args.product, cache=False)
     print(f"Warstwy zrodla {manager.provider_name}:")
@@ -144,16 +140,9 @@ def landcover_task_arguments(args: argparse.Namespace) -> dict:
 
 def cmd_landcover_download(args: argparse.Namespace) -> int:
     """``landcover download``: flags -> ``download_landcover``/``check_landcover``."""
-    missing = []
-    if args.product is None:
-        missing.append(f"--product wymagane: {LANDCOVER_PRODUCT_CHOICES}")
-    if args.output is None:
-        missing.append(output_required("landcover"))
-    if missing:
-        for error in missing:
-            print(f"Error: {error}", file=sys.stderr)
-        return 1
     require_landcover_product(args.product)
+    if args.output is None:
+        raise ValidationError(output_required("landcover"), option="output_dir")
     return run_with_plan_file(args, _landcover_task)
 
 

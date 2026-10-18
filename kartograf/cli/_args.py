@@ -165,8 +165,8 @@ def parse_bbox_arg(text: str, crs: str) -> BBox:
 
     One message for every input defect - callers do not catch the exception:
     ``ValidationError`` is a ``KartografError``, so ``main`` prints
-    ``Error: ...`` to stderr and returns 1 (the hint comes with the error,
-    not on stdout).
+    ``Error: ...`` to stderr and returns 2 (input error; the hint comes with the
+    error, not on stdout).
 
     Parameters
     ----------
