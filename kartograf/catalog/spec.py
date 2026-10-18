@@ -38,7 +38,7 @@ Kind = Literal[
     "options",
 ]
 Normalize = Literal["lower", "upper", "strip"]
-Nargs = Literal["*", "REMAINDER"]
+Nargs = Literal["?", "*", "REMAINDER"]
 CommandKind = Literal["data", "query", "manage"]
 Effect = Literal[
     "network", "store_write", "project_write", "cache_write", "cache_delete"
