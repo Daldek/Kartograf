@@ -569,8 +569,10 @@ def test_help_wraps_paragraphs_and_keeps_example_lines(monkeypatch):
 # migration, O6). The old parser and this part go away with it in T5.
 # =============================================================================
 
-# Examples of an old ``epilog`` that the canonical command line writes with the
-# flags in another order (the order of the declaration; the same call).
+# Examples of an old ``epilog`` that the canonical command line writes another
+# way: with the flags in the order of the declaration (the same call), and the
+# project store written ``-o ./data`` like every example (``shlex.quote`` would
+# quote the ``~`` of the old text and so change its meaning).
 _REORDERED_EXAMPLES = {
     "kartograf elevation download --product nmt --country cz --bbox "
     "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --cutout "
@@ -615,6 +617,9 @@ _REORDERED_EXAMPLES = {
     "--summary -o ./data": (
         "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
         "-o ./data --summary"
+    ),
+    "kartograf project init --output ~/dane/kartograf": (
+        "kartograf project init -o ./data"
     ),
 }
 # Examples the catalog adds to an old ``epilog``: every data command shows an
