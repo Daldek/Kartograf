@@ -550,6 +550,12 @@ def test_check_updates_tool_names_come_from_the_schema_enum():
             "resolution",
             "elevation download",
         ),
+        (
+            "elevation_download",
+            {"product": "nmt", "output_dir": "ABS", "plan": {"schema": "other/1"}},
+            "plan",
+            "elevation download",
+        ),
         ("parse_sheet", {"sheet": 5}, "sheet", "parse"),
         ("list_sources", {"group": "nope"}, "group", None),
         (
@@ -572,6 +578,26 @@ def test_input_errors_are_error_documents(tmp_path, tool, arguments, option, com
     assert report["details"].get("option") == option
     assert report["message"].isascii() and (report["hint"] or "").isascii()
     assert list(tmp_path.iterdir()) == []  # nothing was written
+
+
+@needs_mcp
+@pytest.mark.parametrize("spec", tool_specs(("data",)), ids=lambda s: s.name)
+def test_every_data_tool_runs_its_own_command(tmp_path, spec):
+    """Without an area the library refuses every data command: the answer names
+    the command the tool stands for, for the tool and for ``check_updates``."""
+    arguments = {"output_dir": str(tmp_path)}
+    if "product" in spec.input_schema["properties"]:
+        arguments["product"] = spec.input_schema["properties"]["product"]["enum"][0]
+    if "depth" in spec.input_schema["required"]:
+        arguments["depth"] = spec.input_schema["properties"]["depth"]["enum"][0]
+
+    run = error_of(call(spec.name, arguments))
+    check = error_of(call("check_updates", {"tool": spec.name, "arguments": arguments}))
+
+    assert run["command"] == check["command"] == spec.commands[0]
+    assert run["exit_code"] == check["exit_code"] == 2
+    assert run["details"] and run["details"] == check["details"]
+    assert list(tmp_path.iterdir()) == []  # no network, nothing written
 
 
 @needs_mcp
