@@ -695,8 +695,110 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Co zrobic: usun `-w`/`--workers` z polecen `hydro download` (w projekcie:
   `project download --workers` dziala jak dotad); skrypty czytajace
   `list-sources` po kolumnach - uwzglednij `KATALOG` i nowe flagi `WYBOR`.
+- Bledy wejscia koncza CLI kodem 2, nie 1 (interfejs dla agentow AI, ADR-046;
+  dopisane do przygotowanego wydania 0.8.0 przed tagowaniem):
+  `ValidationError`, `ParseError`, `UsageError` i blad skladni parsera (argparse
+  konczyl sie 2 juz wczesniej). Kody wyjscia: 0 = ok, 1 = awaria zrodla, sieci
+  albo dysku lub `ok: false`, 2 = bledne dane wejsciowe i uzycie, 130 = Ctrl-C.
+  Handlery nie drukuja wlasnych `Error:` ani nie zwracaja 1 za brak `--output`,
+  `--product` i podobne: zglaszaja `ValidationError` z `option`, a `main` je
+  tlumaczy. Tekst bledow bez zmian poza trzema szczegolami: `Remedium:` pod
+  bledem przeliczenia ukladow drukuje `main` dla kazdej komendy (dotad tylko
+  `elevation`/`imagery download`), nieczytelny plik `--plan` to blad wejscia
+  (`option: plan`, kod 2), a blad zapisu planu to `Error: <Typ>: <tekst>` (kod 1).
+  Co zrobic: skrypty sprawdzajace `== 1` testuj `!= 0`; 2 oznacza "popraw dane
+  wejsciowe", 1 - awarie albo `ok: false` (tabela kodow: USAGE 9.3).
+- `AvailabilityReport.to_json()` i `UpdatePlan.to_json()` (plik `--plan`,
+  `--check-updates --json`) maja `schema` jako pierwszy klucz (dotad ostatni);
+  pole dataclass `schema` obu typow zastapila stala klasy (`AvailabilityReport(
+  schema=...)` i `dataclasses.replace(plan, schema=...)` nie dzialaja);
+  `UpdatePlan` dostal pola `notices` (komunikaty emitowane przy sprawdzeniu)
+  i `ok` (dwa nowe klucze `kartograf-plan/1`), a `UpdatePlan.from_dict` odrzuca
+  nieznany schemat. Plany zapisane przez 0.8.0-dev nadal sie wczytuja. Co
+  zrobic: czytaj pliki JSON po kluczach, nie po pozycji; nie buduj tych
+  raportow z `schema=`.
+- `--json` wycisza `Info:` i `Warning:` na stderr: komunikaty sa w polu
+  `notices` dokumentu, a `elevation availability --json` przestaje je powielac
+  (stderr jest pusty poza wierszami ponowien HTTP). Co zrobic: agenci i skrypty
+  czytajace stderr czytaja `notices` z dokumentu.
+- Parser CLI powstaje z katalogu komend (`kartograf/catalog/commands/`): znikaja
+  moduly `kartograf/cli/groups/*.py`, flagi w `cli/_args.py` oraz funkcje
+  `download_task_arguments`, `_download_arguments`, `collection_task`,
+  `area_task_arguments`, `landcover_task_arguments`,
+  `soil_download_task_arguments` i `soil_hsg_task_arguments`;
+  `kartograf.cli.commands` nie eksportuje `format_sheet_info`,
+  `format_hierarchy`, `format_children` ani `format_descendants` (jest
+  `format_sheet(describe_sheet(...))`), `cmd_cache` przyjmuje `action`, a
+  `cmd_landcover_list_layers` i `cmd_soil_list_layers` zastapilo
+  `cmd_list_layers`. Zostaja `create_parser`, `main`, `parse_command_line`,
+  `removed_command_error` i `_subparsers` (fasada). Co zrobic: kod i testy
+  importujace wnetrznosci CLI uzywaja `parse_command(...).options` albo
+  `create_parser()`; reczny `argparse.Namespace` handlera musi niesc
+  `_command_id`; nowa komenda to deklaracja w katalogu (STANDARDS 17.2).
 
 ### Dodane
+
+- Interfejs dla agentow AI, dokumenty JSON (ADR-046, USAGE 9; dopisane do
+  przygotowanego wydania 0.8.0 przed tagowaniem): `--json` w kazdej komendzie
+  CLI (36 komend-lisci i `catalog`) - stdout to dokladnie jeden dokument
+  `kartograf-<rodzaj>/1` (16 schematow, pierwszy klucz `schema`), bez paska
+  postepu i linii statusu; blad to `kartograf-error/1` na stdout (takze blad
+  skladni), stderr pusty. Dokumenty tworzy biblioteka: kazdy raport ma
+  `to_dict()` i `to_json()` (mixin `Document` w `kartograf.serialization`, poza
+  `__all__`), a CLI i serwer MCP je tylko drukuja; w obrebie `/1` zmiany sa
+  addytywne. Nowe w `kartograf.__all__` (logika `parse`, `list-sources`,
+  `list-layers` i `cache` przeniesiona z CLI do biblioteki): `describe_sheet`/
+  `SheetInfo`, `find_sheets`/`SheetList`, `list_sources`/`SourceList`,
+  `list_layers`/`LayerList`, `get_cache_info`, `get_cache_path` (nie otwiera
+  bazy), `clear_cache`/`CacheInfo`, `describe_store`/`StoreOverview`,
+  `list_store_entries`/`StoreEntries`, `read_store_sidecar`/`StoreSidecar`,
+  `ErrorReport`/`error_report`.
+
+- Stabilne kody bledow z podpowiedzia (ADR-046): kazdy `KartografError` ma
+  `code` (snake_case, unikalny), `exit_code`, `hint` i `DETAIL_FIELDS`/
+  `details()`; `ValidationError` niesie `option`, `options` i `allowed` (nazwa
+  argumentu API, nie flaga); nowa klasa `UsageError` (podklasa `ValidationError`,
+  atrybut `command`) to bledne uzycie komendy; `OSError` (brak, uprawnienia,
+  odlaczony udzial) ma nowy kod `io_error`, a `KeyboardInterrupt` i inne wyjatki
+  `interrupted` i `internal_error` (buduje je `error_report`). `hint` zawiera
+  dozwolone wartosci i przyklad komendy z katalogu. Jedna tabela kodow wyjscia
+  i bledow: USAGE 9.3 (`tests/test_docs_tables.py` pilnuje jej rownosci z
+  katalogiem). Atrybuty sa addytywne: `except ValidationError` lapie tez
+  `UsageError`, konstruktory przyjmuja nowe argumenty tylko nazwane.
+
+- Katalog komend (ADR-046): `kartograf catalog [GRUPA [KOMENDA]] [--params]
+  [--json]` i `get_catalog(group=, command=, params=, tables=)`
+  (`kartograf-catalog/1`): grupy, produkty, komendy, parametry (flaga, argument
+  API, rodzaj, wymagalnosc, dozwolone wartosci, zaleznosci), ograniczenia i
+  przyklady; domyslnie zwiezly przeglad (ok. 7,6 tys. znakow), reszta na
+  zadanie (grupa, komenda, `--params`, `tables=True`). `data_commands()` zwraca
+  12 komend danych; typy `Catalog`, `CommandInfo`, `ParamInfo`. Katalog jest
+  jedynym zrodlem prawdy: z deklaracji w `kartograf/catalog/commands/` powstaja
+  parser CLI, opcje komend danych projektu i schematy narzedzi MCP, a testy
+  kontraktowe pilnuja zgodnosci flag, sygnatur, `COMMANDS` i przykladow.
+
+- Warstwa komend dla Archiwisty (KB-2..KB-5, ADR-046): `parse_command`,
+  `validate_command`, `format_command`, `run_command`, `check_command` i
+  `CommandCall` - komenda danych jako dane (opcje w postaci JSON opcji zadania
+  projektu), walidacja bez sieci i zapisu, wykonanie funkcja komendy i sprawdzenie
+  aktualnosci.
+
+- Serwer MCP `kartograf-mcp` (ADR-046, USAGE 9.6): opcjonalny extra
+  `kartograf[mcp]` (`mcp>=2.3.0,<3`, stdio, takze `python -m kartograf.mcp_server`),
+  29 narzedzi 1:1 z komendami katalogu i jedno `check_updates` dla 12 komend danych;
+  wynik narzedzia to dokument `--json`, `is_error` = kod wyjscia CLI != 0, schematy
+  wejscia z katalogu, sciezki bezwzgledne, bez wartosci domyslnych wplywajacych na
+  dane (`output_dir` jawny, `bbox` z `bbox_crs`), postep przez notyfikacje MCP,
+  opcje `--tools`, `--allow-dir`, `--cache-file`, `--no-cache`; `tools/list` ma
+  ok. 28,6 tys. znakow. `import kartograf` i CLI nie wymagaja `mcp`; `dev` zawiera
+  `mcp`.
+
+- Pliki dla agentow (ADR-046): `kartograf/py.typed` (PEP 561, `Typing :: Typed`;
+  `mypy` konsumenta widzi typy biblioteki), `llms.txt` (spis dla agentow, format
+  llmstxt.org), `scripts/gate.sh` (jedna komenda bramy: ruff check, ruff format
+  --check, mypy, pytest offline; dziala tez z worktree), `python -m kartograf`
+  oraz regula dla agentow z innych repozytoriow w `CLAUDE.md` (galaz od `develop`,
+  bez merge, tagow i wpisow wydania bez zgody, przeglad przed tagiem).
 
 - Publiczne API odczytu magazynu dla Archiwisty (KA-1..KA-6, ADR-045;
   dopisane do przygotowanego wydania 0.8.0 przed tagowaniem, ARCHITECTURE
@@ -1166,6 +1268,26 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wersji, w CLI `(plik identyczny z <etykieta>)`).
 
 ### Zmienione
+
+- Interfejs dla agentow AI (ADR-046), zmiany istniejacych API i zachowan:
+  `calculate_hsg(..., summary=False)` i `HsgReport.summary` (statystyki HSG po
+  obliczeniu); `--summary` wola API zamiast `hsg_statistics` w CLI (tekst bez
+  zmian, `soil hsg --json --summary` zwraca `summary` w dokumencie).
+  `TaskDownload.__call__` (`project/commands.py`) dostaje `plan`, a
+  `TaskCommand.options` pochodzi z katalogu: w nowych manifestach klucze opcji
+  maja kolejnosc deklaracji (np. `country` zaraz po `product`), a zapis zadania
+  przepisuje w niej takze starszy manifest. Handlery CLI nie przekazuja
+  nieustawionych flag (`None`, `False`) do funkcji biblioteki (obowiazuja ich
+  wartosci domyslne); puste `--bbox ''` i `--geometry ''` to blad wejscia (kod 2),
+  jak w `parse_command` i `project add` (dotad ignorowane); `parse` zglasza blad
+  przed drukiem godla; `project add` zglasza bledy skladni komendy zadania jako
+  `UsageError` (`Error: ...`, kod 2, bez bloku `usage:`); `cache path` w trybie
+  tekstowym drukuje sama sciezke bez otwierania bazy, a `cache path --json` to
+  `kartograf-cache/1` z `action: "path"`. Tabele `list-sources` i `list-layers`
+  oraz wydruk `parse` sa renderowane z dokumentow biblioteki, bez zmian tekstu.
+  Co zrobic: testy podmieniajace funkcje biblioteki i czytajace ich `kwargs`
+  uwzgledniaja brak nieustawionych flag; nowa komenda to deklaracja w katalogu
+  (STANDARDS 17.2).
 
 - Jedna konwencja nazw kluczy zrodel i katalogow `data/` (przeglad UX
   UX-35..40, ADR-044 D7, ARCHITECTURE 3.3 regula 10; pilnuje jej test
