@@ -4060,6 +4060,27 @@ ustalone w implementacji (specyfikacja: 9.4, 16.2-16.4):
 - Instalacja `mcp` w `.venv` (O7) podniosla `idna` 3.11 -> 3.20 (wymaganie `httpx2`), wiec nie
   byla czysto addytywna: zgoda koordynatora; pozostale 20 pakietow doszlo bez aktualizacji.
 
+**Errata 2 (2026-10-18, weryfikacja na zywo T9):** raport
+`docs/research/2026-10-18-agent-interface-e2e/raport.md` (wheel i sdist z `py.typed`, `--json`
+w 37 komendach-lisciach, availability, pobranie, serwer MCP przez stdio, Claude Code):
+- Wynik: kod gotowy do wydania 0.8.0, bez blokerow; kryteria 1-12 specu spelnione
+  (po scaleniu dokumentacji tabela kodow w USAGE, regula w `CLAUDE.md` i wpisy dokumentacji
+  weszly na galaz). Zgodnosc trzech drog (CLI `--json`, biblioteka `to_dict()`, narzedzie MCP)
+  potwierdzona poza `checked_at`, etykieta statusu i sciezka magazynu. Brama: 7070 passed,
+  18 deselected; ruff i format czyste, mypy bez bledow.
+- Jeden blad, naprawiony (`a7ba1336`): `kartograf-mcp` konczyl sie tracebackiem, gdy nie dalo
+  sie utworzyc katalogu cache (`HOME` tylko do odczytu, `--cache-file` pod zwyklym plikiem),
+  podczas gdy CLI i biblioteka ostrzegaja i pracuja bez cache. `_open_cache` lapie `OSError`,
+  loguje jedno ostrzezenie i serwer dziala bez cache; test regresji w `tests/test_mcp_server.py`.
+- Rozbieznosci planu wzgledem uslug (kod zgodny ze specem): `elevation download` ma 30 parametrow
+  (29 z flaga CLI i `update`), nie 28; arkusz `N-34-130-D-d-2-4` nie ma NMT 5 m; status
+  ponownego przebiegu to `local`; brak obszaru jest zglaszany przed brakiem `output_dir`
+  (`details.options`); `--help` roznie sie od odniesienia przykladami z katalogu i kodem
+  wyjscia 2 dla `parse` z blednym godlem (zamierzone, decyzje O2 i D7).
+- Znane drobiazgi bez zmiany decyzji: `hint` bledow z `options` jest `null`; `parse_command`
+  odrzuca wiersz z poczatkowym `kartograf ` (prefiks trzeba obciac); `project_check_updates`
+  nie jest nazwane w katalogu; `--allow-dir` wzgledny jest akceptowany.
+
 ---
 
 ## Szablon nowego ADR
