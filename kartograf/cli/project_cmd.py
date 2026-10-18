@@ -3,6 +3,7 @@
 import argparse
 import sys
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 
 from kartograf import (
@@ -22,10 +23,39 @@ from kartograf.cli._parser import (
     parse_command_line,
     removed_command_error,
 )
-from kartograf.cli.download_cmd import _print_notice, create_progress_callback
+from kartograf.cli.collection_cmd import collection_task
+from kartograf.cli.download_cmd import (
+    _print_notice,
+    create_progress_callback,
+    download_task_arguments,
+)
+from kartograf.cli.landcover_cmd import landcover_task_arguments
+from kartograf.cli.soil_cmd import soil_download_task_arguments, soil_hsg_task_arguments
 from kartograf.download.fetch import UpdateMode
 from kartograf.exceptions import ValidationError
 from kartograf.project.commands import data_commands_text, project_command
+
+# The task options of a data command, read from its parsed line (the data
+# commands of ``project.commands.COMMANDS``).
+_TASK_OPTIONS: dict[str, Callable[[argparse.Namespace], dict]] = {
+    "elevation download": download_task_arguments,
+    "imagery download": download_task_arguments,
+    "landcover download": landcover_task_arguments,
+    "soil download": soil_download_task_arguments,
+    "soil hsg": soil_hsg_task_arguments,
+    **{
+        f"{group} download": collection_task
+        for group in (
+            "boundaries",
+            "cadastre",
+            "models3d",
+            "hydro",
+            "names",
+            "maps",
+            "geodesy",
+        )
+    },
+}
 
 
 def cmd_project_init(args: argparse.Namespace) -> int:
@@ -73,12 +103,12 @@ def cmd_project_add(args: argparse.Namespace) -> int:
             f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
         )
     parsed = parse_command_line(parser, command_args)
-    task = getattr(parsed, "_task", None)
+    command: str = getattr(parsed, "_command_id", "")
+    task = _TASK_OPTIONS.get(command)
     if task is None:
         raise ValidationError(
             f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
         )
-    command = f"{parsed.command} {getattr(parsed, f'{parsed.command}_command')}"
     for flag, enabled in (
         ("--check-updates", getattr(parsed, "check_updates", False)),
         ("--upgrade", getattr(parsed, "upgrade", False)),

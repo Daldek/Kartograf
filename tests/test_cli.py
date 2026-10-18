@@ -17,6 +17,7 @@ import requests
 import shapefile
 from pyproj import CRS
 
+from kartograf.cli._handlers import HANDLERS
 from kartograf.cli.commands import (
     create_parser,
     create_progress_callback,
@@ -394,6 +395,12 @@ class TestCmdParse:
         assert "Error" in captured.err
 
 
+def _parse_fails(error):
+    """``kartograf parse`` fails with ``error``: its handler in the registry of
+    the CLI is replaced for the length of the ``with`` block."""
+    return patch.dict(HANDLERS, {"parse": Mock(side_effect=error)})
+
+
 class TestMain:
     """Tests for main() function."""
 
@@ -408,7 +415,7 @@ class TestMain:
 
     def test_ctrl_c_is_an_error_line_and_exit_130(self, capsys):
         """Ctrl-C mid-command: one Error line, exit 130 - no traceback."""
-        with patch("kartograf.cli.commands.cmd_parse", side_effect=KeyboardInterrupt):
+        with _parse_fails(KeyboardInterrupt):
             result = main(["parse", "N-34-130-D"])
         assert result == 130
         assert capsys.readouterr().err == "Error: przerwano (Ctrl-C)\n"
@@ -439,49 +446,42 @@ class TestMain:
         captured = capsys.readouterr()
         assert "N-34" in captured.out
 
-    @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
-    def test_unexpected_exception_is_reported_not_raised(self, mock_cmd_parse, capsys):
+    def test_unexpected_exception_is_reported_not_raised(self, capsys):
         """A non-KartografError exception gives a message and code 1, no traceback."""
-        result = main(["parse", "N-34"])
+        with _parse_fails(RuntimeError("boom")):
+            result = main(["parse", "N-34"])
 
         assert result == 1
         captured = capsys.readouterr()
         assert "RuntimeError: boom" in captured.err
         assert "KARTOGRAF_DEBUG" in captured.err
 
-    @patch(
-        "kartograf.cli.commands.cmd_parse",
-        side_effect=ValidationError("zly godlo"),
-    )
-    def test_kartograf_error_is_reported_with_message(self, mock_cmd_parse, capsys):
+    def test_kartograf_error_is_reported_with_message(self, capsys):
         """KartografError gives a message without the class name."""
-        result = main(["parse", "N-34"])
+        with _parse_fails(ValidationError("zly godlo")):
+            result = main(["parse", "N-34"])
 
         assert result == 1
         captured = capsys.readouterr()
         assert "Error: zly godlo" in captured.err
         assert "ValidationError" not in captured.err
 
-    @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
-    def test_debug_env_reraises(self, mock_cmd_parse, capsys, monkeypatch):
+    def test_debug_env_reraises(self, capsys, monkeypatch):
         """KARTOGRAF_DEBUG=1 lets the full traceback through."""
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
 
-        with pytest.raises(RuntimeError):
+        with _parse_fails(RuntimeError("boom")), pytest.raises(RuntimeError):
             main(["parse", "N-34"])
 
-    @patch(
-        "kartograf.cli.commands.cmd_parse",
-        side_effect=ValidationError("zly godlo"),
-    )
-    def test_debug_env_reraises_kartograf_error(
-        self, mock_cmd_parse, capsys, monkeypatch
-    ):
+    def test_debug_env_reraises_kartograf_error(self, capsys, monkeypatch):
         """N17: KARTOGRAF_DEBUG=1 gives a traceback also for a KartografError
         reaching the ``main`` barrier."""
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
 
-        with pytest.raises(ValidationError, match="zly godlo"):
+        with (
+            _parse_fails(ValidationError("zly godlo")),
+            pytest.raises(ValidationError, match="zly godlo"),
+        ):
             main(["parse", "N-34"])
 
 
@@ -654,6 +654,7 @@ class TestCommandGroups:
             "--plan",
             "--quiet",
             "-q",
+            "--json",
         }
 
 

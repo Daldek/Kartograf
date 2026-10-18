@@ -2,12 +2,12 @@
 CLI entry point of Kartograf and a facade of its public names.
 
 ``main`` is the entry point (pyproject: kartograf = "kartograf.cli.commands:main").
-Commands live in ``_parser`` (``parse``, ``cache``) and in the data groups of
-``kartograf/cli/groups/`` (ADR-039), which set the handler of each command;
-the translation to the library is in the ``*_cmd`` modules. This module
-re-exports public names only (``create_parser``, ``cmd_*``, formatters);
-private helpers are imported from the target module (e.g.
-``kartograf.cli.download_cmd``).
+The parser is built from the declarations of the command catalog
+(``_parser.create_parser``, ADR-039/ADR-046); ``_handlers.HANDLERS`` maps the id
+of the parsed command to its handler, and the translation to the library is in
+the ``*_cmd`` modules. This module re-exports public names only
+(``create_parser``, ``cmd_*``, formatters); private helpers are imported from
+the target module (e.g. ``kartograf.cli.download_cmd``).
 """
 
 import argparse
@@ -15,6 +15,7 @@ import logging
 import os
 import sys
 
+from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._parser import (
     create_parser,
     parse_command_line,
@@ -46,17 +47,12 @@ __all__ = [
 
 
 def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) -> int:
-    """Dispatch the parsed arguments to the right command."""
-    if parsed_args.command == "parse":
-        return cmd_parse(parsed_args)
-    if parsed_args.command == "cache" and parsed_args.cache_command is not None:
-        return cmd_cache(parsed_args)
-
-    handler = getattr(parsed_args, "_handler", None)
-    if handler is None:
-        # no command, or a data group without its command: that level's help
-        # on stderr and exit 2, like any other missing argument (a script
-        # with a typo must not "pass")
+    """Dispatch the parsed arguments to the handler of their command."""
+    command = getattr(parsed_args, "_command_id", None)
+    if command is None:
+        # no command, or a group without its command: that level's help on
+        # stderr and exit 2, like any other missing argument (a script with a
+        # typo must not "pass")
         getattr(parsed_args, "_group_parser", parser).print_help(sys.stderr)
         return 2
     # --plan needs a mode in every store command
@@ -64,7 +60,7 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
         parsed_args.check_updates or parsed_args.upgrade
     ):
         raise ValidationError("--plan wymaga --check-updates albo --upgrade")
-    return handler(parsed_args)
+    return HANDLERS[command](parsed_args)
 
 
 class _StderrLines(logging.Handler):
