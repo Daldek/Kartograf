@@ -13,6 +13,7 @@ import kartograf
 from kartograf.catalog import commands as commands_package
 from kartograf.catalog import shared
 from kartograf.catalog.commands import declared, elevation
+from kartograf.catalog.kinds import check_options_json, options_from_json
 from kartograf.catalog.spec import (
     SHEET_SYSTEMS,
     Command,
@@ -45,7 +46,7 @@ from kartograf.download.options import (
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_CRS
 from kartograf.landcover.manager import LANDCOVER_PRODUCTS
-from kartograf.project.commands import COMMANDS, check_options_json, options_from_json
+from kartograf.project.commands import COMMANDS
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     cutout_resolution_labels,
@@ -424,8 +425,8 @@ def test_examples_pass_task_validation(command, index, tmp_path):
     options = dict(command.examples[index].options)
     task = COMMANDS[command.id]
 
-    assert check_options_json(task, options) is None
-    task.validate(tmp_path, options_from_json(task, options, project_dir=tmp_path))
+    assert check_options_json(task.options, options) is None
+    task.validate(tmp_path, options_from_json(task.options, options, base_dir=tmp_path))
 
 
 def _countries_of(command: Command) -> set[str]:

@@ -15,6 +15,7 @@ from kartograf.catalog.build import build_catalog, data_commands, get_catalog
 from kartograf.catalog.cliparser import build_parser, parse_command_line
 from kartograf.catalog.commands import Declared, declared
 from kartograf.catalog.hints import example_for
+from kartograf.catalog.kinds import check_options_json, options_from_json
 from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
 from kartograf.catalog.spec import (
     Command,
@@ -27,7 +28,7 @@ from kartograf.catalog.spec import (
 from kartograf.cli import _parser as old_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import COMMANDS, check_options_json, options_from_json
+from kartograf.project.commands import COMMANDS
 from kartograf.serialization import SCHEMAS
 from kartograf.sources.registry import sources_for
 
@@ -967,9 +968,9 @@ def test_constraint_violations_raise_validation_error_naming_the_option(
     task = COMMANDS[command.id]
 
     def validate(call: _Call) -> None:
-        assert check_options_json(task, call.options) is None, call.options
+        assert check_options_json(task.options, call.options) is None, call.options
         task.validate(
-            tmp_path, options_from_json(task, call.options, project_dir=tmp_path)
+            tmp_path, options_from_json(task.options, call.options, base_dir=tmp_path)
         )
 
     validate(base)

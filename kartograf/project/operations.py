@@ -21,6 +21,7 @@ from pathlib import Path, PurePosixPath
 from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
+from kartograf.catalog.kinds import options_from_json, options_to_json
 from kartograf.download.arguments import require_int
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -28,13 +29,7 @@ from kartograf.download.plan import PlanItem
 from kartograf.download.versions import read_version
 from kartograf.exceptions import KartografError, ValidationError
 from kartograf.notices import PROJECT_GEOMETRY_CHANGED, Notice, NoticeSink
-from kartograf.project.commands import (
-    TaskFiles,
-    options_from_json,
-    options_to_json,
-    project_command,
-    task_command,
-)
+from kartograf.project.commands import TaskFiles, project_command, task_command
 from kartograf.project.manifest import (
     MANIFEST_NAME,
     TASK_NAME,
@@ -201,12 +196,12 @@ def add_project_task(
     if name in state:
         raise ValidationError(taken, option="name")
     entry = task_command(command)
-    data = options_to_json(entry, options)
+    data = options_to_json(entry.options, options, command=entry.name)
     if "geometry" in data:
         data["geometry"] = _saved_path(str(data["geometry"]), project.directory)
     entry.validate(
         project.output_dir,
-        options_from_json(entry, data, project_dir=project.directory),
+        options_from_json(entry.options, data, base_dir=project.directory),
     )
     task = ProjectTask(name, command, data, None, None, None, ())
     if commit_tasks(project.directory, {name: (None, task_to_json(task))}):
@@ -435,7 +430,9 @@ def _download_task(
     """One task of ``download_project``."""
     command = task_command(task.command)
     store = project.output_dir
-    options = options_from_json(command, task.options, project_dir=project.directory)
+    options = options_from_json(
+        command.options, task.options, base_dir=project.directory
+    )
     restore: tuple[PinnedFile, ...] = ()
     if task.files and update is None:
         states = {pin.version: pin_state(store, pin) for pin in task.files}
@@ -853,7 +850,7 @@ def check_project(
             continue
         command = task_command(task.command)
         options = options_from_json(
-            command, task.options, project_dir=project.directory
+            command.options, task.options, base_dir=project.directory
         )
         if task.geometry_sha256 is not None and geometry_digest(options) != dict(
             task.geometry_sha256

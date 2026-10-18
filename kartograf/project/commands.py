@@ -11,22 +11,20 @@ data command (a new group) adds one entry - plus ``_task`` in its CLI
 parser and a project task test.
 
 Options exist in two forms: library arguments (``BBox``, ``Path``, per
-country mappings, sequences) and the JSON form of ``tasks[].options``.
-``options_to_json`` / ``options_from_json`` convert between them;
-``check_options_json`` validates the JSON form read from a manifest.
+country mappings, sequences) and the JSON form of ``tasks[].options``; the
+conversion between them (``options_to_json``, ``options_from_json``,
+``check_options_json``) is in ``kartograf.catalog.kinds``.
 """
 
-import math
-import os
 import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox
+from kartograf.catalog.spec import Kind
 from kartograf.download.collections import (
     check_collection,
     download_collection,
@@ -68,13 +66,12 @@ from kartograf.landcover.manager import (
 from kartograf.notices import Notice
 from kartograf.project.model import PinRole
 
-# JSON kind of a task option: ``bbox`` is a list of 4 numbers whose CRS is the
-# ``bbox_crs`` option (one ``BBox`` argument of the library); ``path`` is a
-# string resolved against the project directory; ``per_country`` is a string
-# or ``{"pl": ..., "cz": ...}``; ``flag`` is ``true`` (``false`` is omitted).
-OptionKind = Literal[
-    "str", "int", "flag", "bbox", "bbox_crs", "path", "per_country", "str_list"
-]
+# JSON kind of a task option (the kinds of the catalog parameters): ``bbox`` is
+# a list of 4 numbers whose CRS is the ``bbox_crs`` option (one ``BBox``
+# argument of the library); ``path`` is a string resolved against the project
+# directory; ``per_country`` is a string or ``{"pl": ..., "cz": ...}``;
+# ``flag`` is ``true`` (``false`` is omitted).
+OptionKind = Kind
 # Library arguments of a task (without ``output_dir`` and run options).
 Options = dict[str, Any]
 
@@ -610,163 +607,3 @@ def task_command(name: str) -> TaskCommand:
             allowed=tuple(COMMANDS),
         )
     return command
-
-
-# =============================================================================
-# Options: library arguments <-> JSON form
-# =============================================================================
-
-_KIND_TEXT: dict[OptionKind, str] = {
-    "str": "napis",
-    "int": "liczba calkowita",
-    "flag": "true",
-    "bbox": "lista 4 liczb [min_x, min_y, max_x, max_y] z bbox_crs",
-    "bbox_crs": "napis (uklad bbox) razem z bbox",
-    "path": "niepusta sciezka (napis)",
-    "per_country": 'napis albo obiekt {"pl": napis, "cz": napis}',
-    "str_list": "lista napisow",
-}
-
-
-def _argument_names(command: TaskCommand) -> list[str]:
-    """Library argument names of a command (``bbox_crs`` is part of ``bbox``)."""
-    return [name for name, kind in command.options.items() if kind != "bbox_crs"]
-
-
-def _is_number(value: object) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
-
-
-def _json_value(kind: OptionKind, value: object) -> object | None:
-    """The JSON form of one library argument; ``None`` = wrong type."""
-    if kind == "str":
-        return value if isinstance(value, str) else None
-    if kind == "int":
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
-    if kind == "flag":
-        return True if value is True else None
-    if kind == "path":
-        if isinstance(value, str | os.PathLike) and os.fspath(value):
-            return PurePath(os.fspath(value)).as_posix()
-        return None
-    if kind == "per_country":
-        if isinstance(value, str):
-            return value
-        if isinstance(value, Mapping) and all(
-            isinstance(k, str) and isinstance(v, str) for k, v in value.items()
-        ):
-            return dict(value)
-        return None
-    if kind == "str_list":
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            items = list(value)
-            return items if all(isinstance(item, str) for item in items) else None
-        return None
-    return None
-
-
-def options_to_json(command: TaskCommand, options: Mapping[str, object]) -> dict:
-    """Library arguments of ``command`` -> ``tasks[].options`` (spec 3.3).
-
-    ``None`` and ``False`` are omitted (only chosen values are recorded);
-    keys follow the order of ``command.options``; a ``BBox`` becomes
-    ``bbox`` (4 numbers) and ``bbox_crs``, a path a string with ``/``.
-
-    Raises
-    ------
-    ValidationError
-        An option of another command or not a library argument (e.g.
-        ``output_dir``, ``update``, ``timeout``), or a value of a wrong type.
-    """
-    given = {
-        name: value
-        for name, value in options.items()
-        if value is not None and value is not False
-    }
-    names = _argument_names(command)
-    for name in given:
-        if name not in names:
-            raise ValidationError(
-                f"opcja {name!r} nie nalezy do zadania komendy {command.name} "
-                f"(opcje: {', '.join(names)})"
-            )
-    data: dict = {}
-    for name in names:
-        if name not in given:
-            continue
-        value = given[name]
-        kind = command.options[name]
-        if kind == "bbox":
-            if not isinstance(value, BBox):
-                raise ValidationError(f"opcja bbox: oczekiwano BBox, podano {value!r}")
-            data["bbox"] = [value.min_x, value.min_y, value.max_x, value.max_y]
-            data["bbox_crs"] = value.crs
-            continue
-        converted = _json_value(kind, value)
-        if converted is None:
-            raise ValidationError(
-                f"opcja {name}: oczekiwano {_KIND_TEXT[kind]}, podano {value!r}"
-            )
-        data[name] = converted
-    return data
-
-
-def check_options_json(command: TaskCommand, data: object) -> str | None:
-    """Error text of ``tasks[].options`` read from a manifest (``None`` = valid).
-
-    Keys of ``command.options`` only, values of their kind; ``null`` and
-    ``false`` are not written by Kartograf (an omitted key means "not
-    chosen"); ``bbox`` and ``bbox_crs`` come together.
-    """
-    if not isinstance(data, dict):
-        return "options: oczekiwano obiektu"
-    for name, value in data.items():
-        kind = command.options.get(name)
-        if kind is None:
-            return (
-                f"options: opcja {name!r} nie nalezy do komendy {command.name} "
-                f"(opcje: {', '.join(command.options)})"
-            )
-        if kind == "bbox":
-            valid = (
-                isinstance(value, list)
-                and len(value) == 4
-                and all(_is_number(v) and math.isfinite(v) for v in value)
-                and "bbox_crs" in data
-            )
-        elif kind == "bbox_crs":
-            valid = isinstance(value, str) and "bbox" in data
-        elif kind == "path":
-            valid = isinstance(value, str) and bool(value)
-        else:
-            valid = value is not False and _json_value(kind, value) is not None
-        if not valid:
-            return f"options.{name}: oczekiwano {_KIND_TEXT[kind]}"
-    return None
-
-
-def options_from_json(
-    command: TaskCommand, data: Mapping[str, Any], *, project_dir: Path
-) -> Options:
-    """``tasks[].options`` (validated by ``check_options_json``) -> library
-    arguments; a relative path is resolved against ``project_dir``."""
-    options: Options = {}
-    for name, value in data.items():
-        kind = command.options[name]
-        if kind == "bbox":
-            x0, y0, x1, y1 = value
-            options["bbox"] = BBox(x0, y0, x1, y1, str(data["bbox_crs"]))
-        elif kind == "bbox_crs":
-            continue
-        elif kind == "path":
-            path = Path(str(value))
-            if not path.is_absolute():
-                path = Path(os.path.abspath(project_dir / path))
-            options[name] = path
-        elif kind == "str_list":
-            options[name] = tuple(value)
-        elif kind == "per_country" and isinstance(value, Mapping):
-            options[name] = dict(value)
-        else:
-            options[name] = value
-    return options
