@@ -84,13 +84,19 @@ def _data(
 
 
 def _version(
-    root: Path, segment: str, hierarchy: str, label: str, name: str, body=BODY
+    root: Path,
+    segment: str,
+    hierarchy: str,
+    label: str,
+    name: str,
+    body=BODY,
+    request=None,
 ) -> Path:
     """A version as the store keeps it: ``<label>_<sha8>/<name>`` + sidecar."""
     sha8 = hashlib.sha256(body).hexdigest()[:8]
     path = root / segment / "versions" / hierarchy / f"{label}_{sha8}" / name
     version = {"label": label, "label_source": "edition"}
-    return _data(path, body=body, extra={"version": version})
+    return _data(path, body=body, extra={"version": version}, request=request)
 
 
 def _linked(link: Path, version: Path) -> Path:
@@ -824,6 +830,104 @@ def test_scoped_unit_does_not_follow_hierarchy_symlink(tmp_path, monkeypatch):
         list(iter_store(root, segment="landcover/pl_bdot10k_gpkg", units=["1465"]))
         == []
     )
+
+
+@pytest.mark.parametrize(
+    ("segment", "stem", "req"),
+    [
+        ("names/pl_prng_shp", "pl_miejscowosci", {"whole_country": True}),
+        (
+            "names/pl_prng_shp",
+            "pl_miejscowosci",
+            {"whole_country": True, "country": "pl"},
+        ),
+        ("boundaries/pl_prg_gml", "pl", {"whole_country": True, "country": "pl"}),
+    ],
+)
+def test_unit_of_a_national_file_round_trips_into_scoped_scan(
+    tmp_path, segment, stem, req
+):
+    """The unit read from a sidecar finds the file again (a themed national
+    file is named ``<code>_<theme>``; the theme is not in the request)."""
+    root = tmp_path / "data"
+    version = _version(root, segment, "country", "2026", f"{stem}.zip", request=req)
+    link = root / segment / "country" / f"{stem}.zip"
+    _linked(link, version)
+    other = _version(root, segment, "country", "2026", "pl_other.zip", b"other")
+    _meta(link, request=req)
+
+    unit = read_sidecar(link).unit
+    assert unit == stem
+    found = list(iter_store(root, segment=segment, units=[unit]))
+    assert {(e.kind, e.path) for e in found} == {("link", link), ("version", version)}
+    assert other not in {e.path for e in found}
+
+
+@pytest.mark.parametrize("unit", ["versions", "full_sheet", "kampanie", "x" * 300])
+def test_reserved_and_overlong_units_are_rejected_at_call_time(tmp_path, unit):
+    (tmp_path / "data").mkdir()
+    with pytest.raises(ValidationError):
+        iter_store(tmp_path / "data", segment=SEGMENT, units=[unit])
+
+
+def test_entries_and_sidecars_are_explicitly_unhashable(tmp_path):
+    root = tmp_path / "data"
+    _data(root / SEGMENT / HIERARCHY / f"{SHEET}.asc")
+    entry = next(e for e in iter_store(root) if e.kind == "link")
+    for record in (entry, entry.sidecar):
+        with pytest.raises(TypeError, match="unhashable"):
+            hash(record)
+
+
+def test_bare_version_sidecar_of_a_provider_without_descriptor_is_readable(tmp_path):
+    """``emit_sidecar`` writes no ``schema`` for such a provider; the version
+    is valid for ``read_version``, so it is for the reader too."""
+    root = tmp_path / "data"
+    segment = "custom/xx_provider"
+    data = root / segment / "versions" / "teryt" / f"2025_{SHA[:8]}" / "1465.bin"
+    data.parent.mkdir(parents=True)
+    data.write_bytes(BODY)
+    emit_sidecar(
+        None,
+        data,
+        request={"teryt": "1465"},
+        digest=(SHA, len(BODY)),
+        version={"label": "2025", "label_source": "edition"},
+        exclusive=True,
+    )
+    assert "schema" not in json.loads(
+        data.with_name("1465.bin.meta.json").read_text(encoding="utf-8")
+    )
+    link = _linked(root / segment / "teryt" / "1465.bin", data)
+
+    sidecar = read_sidecar(data)
+    assert (sidecar.schema, sidecar.sha256, sidecar.unit) == (
+        "kartograf-meta/1",
+        SHA,
+        "1465",
+    )
+    entries = list(iter_store(root, segment=segment))
+    # The custom segment itself is unknown to the registry; its files are fine.
+    assert {(e.kind, e.path, e.problem) for e in entries} == {
+        ("link", link, None),
+        ("version", data, None),
+        ("problem", root / segment, "unknown_segment"),
+    }
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"sha256": SHA},  # no extra: not a meta object
+        {"schema": "kartograf-meta/2", "sha256": SHA, "extra": {}},
+        {"schema": 1, "sha256": SHA, "extra": {}},
+    ],
+)
+def test_sidecar_without_valid_schema_or_meta_shape_is_rejected(tmp_path, body):
+    data = tmp_path / "x.bin"
+    data.with_name("x.bin.meta.json").write_text(json.dumps(body), encoding="utf-8")
+    with pytest.raises(InvalidSidecarError):
+        read_sidecar(data)
 
 
 # --- streaming, cost and threads -----------------------------------------------------
