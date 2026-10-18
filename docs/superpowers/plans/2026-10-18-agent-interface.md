@@ -4,6 +4,12 @@
 
 **Data:** 2026-10-18
 
+**Status:** WYKONANY 2026-10-18 na galezi `feat/agent-interface` (T0-T9; raport E2E:
+`docs/research/2026-10-18-agent-interface-e2e/raport.md`; odstepstwa i pomiary: errata 1 ADR-046 i sesja
+2026-10-18 w `docs/PROGRESS.md`; plan liczyl 16 komend w T4d, jest 15, razem 41 deklaracji; E2E poprawilo
+liczby i przyklady planu T9: 30 parametrow `elevation download`, arkusz Krakowa `M-34-64-D-d-1-2`, status
+ponownego przebiegu `local`).
+
 **Goal:** To samo zadanie wykonane przez CLI z `--json`, przez biblioteke (`to_dict()`)
 i przez serwer MCP daje ten sam dokument `kartograf-<rodzaj>/1`; blad ma
 stabilny `code`, `exit_code` i `hint` (`kartograf-error/1`); katalog komend
@@ -578,7 +584,7 @@ galaz `feat/agent-interface-a`.
 - Modify: `pyproject.toml`, `MANIFEST.in`
 - Poza repo: zrzut odniesienia (Dodatek A)
 
-- [ ] **Step 1: Zrzut odniesienia (poza repo, bez commita).** Zapisz skrypt z Dodatku A
+- [x] **Step 1: Zrzut odniesienia (poza repo, bez commita).** Zapisz skrypt z Dodatku A
   poza repo (`<katalog-danych>/kartograf/agent-interface/baseline_dump.py`) i uruchom z
   korzenia worktree PRZED zmiana kodu:
   `$PY <katalog-danych>/kartograf/agent-interface/baseline_dump.py <katalog-danych>/kartograf/agent-interface/before`.
@@ -586,7 +592,7 @@ galaz `feat/agent-interface-a`.
   do `before-2`: `diff -r before before-2` pusty (determinizm). Skrypt nic nie
   pobiera (siec zablokowana w skrypcie). Katalog `before` przekaz koordynatorowi:
   korzystaja z niego T4 (kontrola `--help` i `list-sources`) i T5 (porownanie przed/po).
-- [ ] **Step 2: `py.typed` i pakowanie (D17).** `kartograf/py.typed` (pusty plik);
+- [x] **Step 2: `py.typed` i pakowanie (D17).** `kartograf/py.typed` (pusty plik);
   `pyproject.toml`: `[tool.setuptools.package-data]` z `kartograf = ["py.typed"]` i
   klasyfikator `"Typing :: Typed"`; `MANIFEST.in`: `include kartograf/py.typed`. Brak testu
   stalego (plik jest w drzewie zrodel, wiec test nie dowodzi pakowania - spec 10.1).
@@ -598,7 +604,7 @@ galaz `feat/agent-interface-a`.
   ```
   Usun `build/` i `*.egg-info` z korzenia worktree (sa w `.gitignore`).
   Commit: `build(packaging): py.typed (PEP 561), package-data i klasyfikator Typing :: Typed`
-- [ ] **Step 3: `scripts/gate.sh` (D19).** Zapisz skrypt z Dodatku B (implementacja
+- [x] **Step 3: `scripts/gate.sh` (D19).** Zapisz skrypt z Dodatku B (implementacja
   referencyjna, sprawdzona 2026-10-18), `chmod +x`, konce linii LF (`.editorconfig`).
   Weryfikacja (wszystkie wyniki do raportu):
   - `bash -n scripts/gate.sh`; `scripts/gate.sh -x -k test_version` -> kod 0, ostatnia
@@ -609,7 +615,7 @@ galaz `feat/agent-interface-a`.
     i uruchom z `KARTOGRAF_PYTHON=$PY` -> kod 2 i komunikat `brama sprawdza inny checkout`;
   - pelny przebieg `scripts/gate.sh` w worktree: `GATE OK` (czas ok. 2 min).
   Commit: `build(dev): scripts/gate.sh - jedna komenda bramy (ruff, format, mypy, pytest offline)`
-- [ ] **Step 4: `python -m kartograf` (D20).**
+- [x] **Step 4: `python -m kartograf` (D20).**
   - Test RED (`tests/test_main_module.py`): `test_python_dash_m_kartograf_runs_the_cli`:
     `subprocess.run([sys.executable, "-m", "kartograf", "--version"], cwd=<korzen repo =
     Path(kartograf.__file__).resolve().parents[1]>, capture_output=True, text=True,
@@ -621,7 +627,7 @@ galaz `feat/agent-interface-a`.
   - Weryfikacja: test zielony; `$PY -m kartograf parse N-34-130-D` drukuje opis godla;
     `$PY -m kartograf.cli.commands --version` dziala jak dotad.
   Commit: `feat(cli): python -m kartograf`
-- [ ] **Step 5: Brama zadania** (`scripts/gate.sh`) - zielona.
+- [x] **Step 5: Brama zadania** (`scripts/gate.sh`) - zielona.
 
 ### Task T1: serializacja i dokumenty JSON (D1, D2, spec 5)
 
@@ -631,7 +637,7 @@ galaz `feat/agent-interface-a`.
   `kartograf/landcover/manager.py`, `kartograf/hydrology/hsg.py`, `kartograf/project/model.py`,
   `tests/test_plan.py`, `tests/test_updates.py`, `tests/test_availability.py`
 
-- [ ] **Step 1: `Document` i koder (K1, czesc 1).**
+- [x] **Step 1: `Document` i koder (K1, czesc 1).**
   - Test RED (`tests/test_serialization.py`; przyklady `Document` definiowane w pliku
     testu; RED = `ModuleNotFoundError: kartograf.serialization`):
     `test_scalars_and_finite_floats` (`NaN` i `inf` = `ValueError`);
@@ -660,7 +666,7 @@ galaz `feat/agent-interface-a`.
     kartograf.serialization"` w czystym procesie nie ladowal `kartograf.cli`, `kartograf.catalog`).
   - Weryfikacja: `$PY -m pytest tests/test_serialization.py -q`; brama kroku.
   Commit: `feat(serialization): mixin Document, koder JSON i rejestr schematow (D1)`
-- [ ] **Step 2: `UpdatePlan` i `AvailabilityReport` na `Document` (`kartograf-plan/1`,
+- [x] **Step 2: `UpdatePlan` i `AvailabilityReport` na `Document` (`kartograf-plan/1`,
   `kartograf-availability/1`).**
   - Test RED (`tests/test_plan.py`, `tests/test_availability.py`, `tests/test_updates.py`):
     `test_plan_to_dict_schema_first` (RED: `AttributeError: ... no attribute 'to_dict'`; klucze
@@ -688,7 +694,7 @@ galaz `feat/agent-interface-a`.
   w tresci: `BREAKING: pole dataclass schema zastapione ClassVar i wlasciwoscia; kod budujacy
   AvailabilityReport(schema=...) i dataclasses.replace(plan, schema=...) przestaje dzialac; plany
   0.8.0-dev nadal sie wczytuja`
-- [ ] **Step 3: pieciu raportow komend danych na `kartograf-download/1` i `HsgReport.summary` (D2).**
+- [x] **Step 3: pieciu raportow komend danych na `kartograf-download/1` i `HsgReport.summary` (D2).**
   - Test RED (`tests/test_serialization.py`, `tests/test_hsg*.py`): `test_download_family_has_one_key_set`
     (po jednym minimalnym raporcie z `DataReport`, `CollectionReport`, `LandCoverReport`,
     `SoilReport`, `HsgReport`: `list(report.to_dict()) == ["schema", *DOWNLOAD_KEYS]`; klucze
@@ -705,7 +711,7 @@ galaz `feat/agent-interface-a`.
   - Weryfikacja: `$PY -m pytest tests/test_serialization.py tests/test_hsg*.py
     tests/test_parity_landcover.py tests/test_download_data.py -q`; brama kroku.
   Commit: `feat(api): kartograf-download/1 dla DataReport, CollectionReport, LandCoverReport, SoilReport i HsgReport; calculate_hsg(summary=)`
-- [ ] **Step 4: `Project`, `ProjectReport`, `ProjectCheck` jako dokumenty projektu.**
+- [x] **Step 4: `Project`, `ProjectReport`, `ProjectCheck` jako dokumenty projektu.**
   - Test RED (`tests/test_serialization.py`): `test_project_state_document` (klucze
     `schema` = `kartograf-project-state/1`, `directory`, `output_dir`, `tasks`; zadanie:
     `name, command, options, pinned_at, kartograf_version, geometry_sha256, files`; `PinnedFile`:
@@ -723,7 +729,7 @@ galaz `feat/agent-interface-a`.
     ogolne dataclass.
   - Weryfikacja: `$PY -m pytest tests/test_serialization.py tests/test_project_*.py -q`; brama kroku.
   Commit: `feat(project): Project, ProjectReport i ProjectCheck jako dokumenty JSON (sciezki pinow bezwzgledne)`
-- [ ] **Step 5: kontrakt kluczy dokumentow (spec 12.2).**
+- [x] **Step 5: kontrakt kluczy dokumentow (spec 12.2).**
   - `tests/test_json_contract.py`: tabela `CONTRACT = {schemat: [dokladna lista kluczy w
     kolejnosci]}` dla dokumentow istniejacych po T1 (plan, availability, download, project-state,
     project-report, project-check) oraz kluczy typow zagniezdzonych (`UnitFile`, `VersionedFile`,
@@ -744,7 +750,7 @@ galaz `feat/agent-interface-a`.
   `kartograf/landcover/manager.py`, `kartograf/hydrology/hsg.py`, `kartograf/core/bbox.py`,
   `kartograf/store.py`, `kartograf/project/operations.py`
 
-- [ ] **Step 1: atrybuty wyjatkow i `error_report` (K1, czesc 2).**
+- [x] **Step 1: atrybuty wyjatkow i `error_report` (K1, czesc 2).**
   - Test RED (`tests/test_errors.py`): `test_every_kartograf_error_class_has_its_own_code`
     (import wszystkich modulow pakietu przez `pkgutil.walk_packages`; kazda podklasa
     `KartografError`: `"code" in cls.__dict__`, wzorzec `^[a-z][a-z0-9_]*$`, kody unikalne;
@@ -793,7 +799,7 @@ galaz `feat/agent-interface-a`.
     kroku; pelny `pytest` (nowe atrybuty nie zmieniaja zachowania istniejacych wywolan).
   Commit: `feat(errors): stabilne kody bledow, exit_code, hint i UsageError; ErrorReport i error_report (D3)`
   **-> K1 gotowy: zglos koordynatorowi hash tego commita i commita T1 Step 1.**
-- [ ] **Step 2: `option`/`allowed` we wspolnych walidatorach opcji.** Pliki:
+- [x] **Step 2: `option`/`allowed` we wspolnych walidatorach opcji.** Pliki:
   `download/options.py`, `download/area.py`, `download/arguments.py`, `core/bbox.py`.
   - Test RED (`tests/test_errors.py::test_input_error_names_the_option`, tabela
     `OPTION_SCENARIOS` - lista minimalna; implementator dopisuje wiersz dla kazdego miejsca,
@@ -827,24 +833,24 @@ galaz `feat/agent-interface-a`.
   - Weryfikacja: `$PY -m pytest tests/test_errors.py tests/test_input_errors.py tests/test_ux_messages.py
     tests/test_download_data.py tests/test_cli_language.py -q`; brama kroku.
   Commit: `feat(errors): option i allowed w walidatorach opcji danych (options, area, arguments, bbox)`
-- [ ] **Step 3: `download/data.py` i `download/availability.py`.** Test RED: wiersze tabeli dla
+- [x] **Step 3: `download/data.py` i `download/availability.py`.** Test RED: wiersze tabeli dla
   `download_data`/`check_data` (pozostale walidatory `validate_data_request`) i
   `check_availability` (zly `product`: `allowed == ("nmt", "nmpt", "laz")`; `country`; obszar;
   `min_year`/`max_year` w przedziale roku warstw). Implementacja jak Step 2.
   Commit: `feat(errors): option i allowed w download_data, check_data i check_availability`
-- [ ] **Step 4: `download/collections.py`** (44 miejsca `raise ValidationError`):
+- [x] **Step 4: `download/collections.py`** (44 miejsca `raise ValidationError`):
   `require_collection_product`, `validate_collection_request` (wymagane i niedozwolone opcje:
   `product`, `country`, `teryt`/`ku`/`sheet`/`bbox`/`geometry`, `level`, `format`, `network`,
   `lod`, `year`, `scale`, `sheet_system`, `horizontal_crs`). Test RED: wiersz na kazda klase
   komunikatu (min. brak `product` grupy z `allowed` = produkty grupy, zly `format` z `allowed`
   formatow produktu, opcja niedozwolona dla produktu -> `option` tej opcji, `one_of` obszaru ->
   `options`). Commit: `feat(errors): option i allowed w download_collection i check_collection`
-- [ ] **Step 5: `landcover/manager.py` i `hydrology/hsg.py`:** `require_landcover_product`
+- [x] **Step 5: `landcover/manager.py` i `hydrology/hsg.py`:** `require_landcover_product`
   (`allowed == LANDCOVER_PRODUCTS`), `validate_landcover_request`, `validate_soil_request`
   (`property`, `depth`, `stat`, `output_dir`, obszar), `validate_hsg_request` (`depth` z
   `allowed` = przedzialy glebokosci, obszar). Test RED: wiersze dla `download_landcover`,
   `download_soil`, `calculate_hsg`. Commit: `feat(errors): option i allowed w land cover, SoilGrids i HSG`
-- [ ] **Step 6: odczyt magazynu i projekt.**
+- [x] **Step 6: odczyt magazynu i projekt.**
   - `kartograf/store.py`: `_validated_segment` -> `option="segment"`; `_unit_slot` i bledy
     zarezerwowanych i zbyt dlugich nazw -> `option="units"`; `units wymaga segment` ->
     `option="units"`; `skip_versions` jako napis -> `option="skip_versions"`.
@@ -856,7 +862,7 @@ galaz `feat/agent-interface-a`.
     -> `command`, `allowed` = 12 komend. `tests/test_store_api.py` i `tests/test_project_api.py`
     zostaja zielone (tekst bez zmian).
   Commit: `feat(errors): option w walidatorach odczytu magazynu i operacji projektu`
-- [ ] **Step 7: brama zadania** (pelna); raport: liczba miejsc z `option` (`git grep -c "option="`
+- [x] **Step 7: brama zadania** (pelna); raport: liczba miejsc z `option` (`git grep -c "option="`
   przed/po), lista miejsc `ValidationError` pozostawionych bez `option` z uzasadnieniem
   (dozwolone przez spec 6.1 - bledy pliku wejsciowego i niezmienniki).
 
@@ -869,7 +875,7 @@ galaz `feat/agent-interface-a`.
 - NIE zmieniaj `kartograf/cli/**` (cutover w T5); logika zostaje w CLI do T5 i jest
   zdublowana tylko na ten czas.
 
-- [ ] **Step 1: `list_sources` i `list_layers` (`kartograf-sources/1`, `kartograf-layers/1`).**
+- [x] **Step 1: `list_sources` i `list_layers` (`kartograf-sources/1`, `kartograf-layers/1`).**
   - Test RED (`tests/test_source_info.py`; RED = `ModuleNotFoundError`):
     `test_every_registered_source_of_a_group_is_listed_once` (suma `sources[].key` po 11
     grupach = klucze rejestru dla produktow tych grup, bez powtorzen);
@@ -899,7 +905,7 @@ galaz `feat/agent-interface-a`.
     prawdziwym CLI.
   - Weryfikacja: `$PY -m pytest tests/test_source_info.py -q`; brama kroku.
   Commit: `feat(api): list_sources i list_layers - zrodla i warstwy jako dokumenty (kartograf-sources/1, -layers/1)`
-- [ ] **Step 2: `get_cache_info` i `clear_cache` (`kartograf-cache/1`).**
+- [x] **Step 2: `get_cache_info` i `clear_cache` (`kartograf-cache/1`).**
   - Test RED (`tests/test_cache_info.py`; `monkeypatch.chdir(tmp_path)`):
     `test_info_without_a_database_does_not_create_it` (`exists False`, `size_bytes None`,
     `entries None`, `action == "info"`, `cleared None`, `path == <cwd>/.kartograf_cache.db`
@@ -915,7 +921,7 @@ galaz `feat/agent-interface-a`.
     bledy jako `CacheError` z tekstem dzisiejszych linii `Error:` (bez prefiksu).
   - Weryfikacja: `$PY -m pytest tests/test_cache_info.py tests/test_metadata_cache.py -q`.
   Commit: `feat(api): get_cache_info i clear_cache jako dokument kartograf-cache/1`
-- [ ] **Step 3: dokumenty odczytu magazynu (`kartograf-store-overview/1`, `-store-entries/1`,
+- [x] **Step 3: dokumenty odczytu magazynu (`kartograf-store-overview/1`, `-store-entries/1`,
   `-store-sidecar/1`).**
   - Test RED (`tests/test_store_documents.py`; magazyn budowany jak w `tests/test_store_api.py`):
     `test_describe_store_lists_segments_with_info`; `test_describe_store_missing_output_dir_is_oserror`
@@ -938,7 +944,7 @@ galaz `feat/agent-interface-a`.
     jest wystawione).
   - Weryfikacja: `$PY -m pytest tests/test_store_documents.py tests/test_store_api.py -q`.
   Commit: `feat(api): describe_store, list_store_entries i read_store_sidecar - dokumenty odczytu magazynu`
-- [ ] **Step 4: eksporty, kontrakt, brama.**
+- [x] **Step 4: eksporty, kontrakt, brama.**
   - `kartograf/__init__.py`: nowe nazwy (`list_sources`, `SourceList`, `list_layers`, `LayerList`,
     `get_cache_info`, `clear_cache`, `CacheInfo`, `describe_store`, `list_store_entries`,
     `read_store_sidecar`, `StoreOverview`, `StoreEntries`, `StoreSidecar`) w `__all__` (docstring
@@ -970,7 +976,7 @@ zamrozone (stary parser jest wzorcem porownania, stage 1 migracji D7).
   `kartograf/catalog/commands/__init__.py`, `tests/test_catalog.py`, `tests/test_catalog_parser.py`,
   `tests/test_catalog_declarations.py`, `tests/test_catalog_formatting.py`
 
-- [ ] **Step 1: typy deklaracji, parametry wspolne, rodzaje (bez K1).**
+- [x] **Step 1: typy deklaracji, parametry wspolne, rodzaje (bez K1).**
   - Test RED (`tests/test_catalog_declarations.py`, `tests/test_catalog_formatting.py`; RED =
     `ModuleNotFoundError: kartograf.catalog`): `test_param_derives_flag_and_argument_from_name`
     (`Param("vertical_crs", "str")` -> flaga `--vertical-crs`, argument `vertical_crs`; `flag=None` =
@@ -994,7 +1000,7 @@ zamrozone (stary parser jest wzorcem porownania, stage 1 migracji D7).
   - Weryfikacja: `$PY -m pytest tests/test_catalog_declarations.py tests/test_catalog_formatting.py -q`;
     brama kroku.
   Commit: `feat(catalog): typy deklaracji komend i parametry wspolne (D7)`
-- [ ] **Step 2: kanoniczna linia komendy (`formatting.py`).**
+- [x] **Step 2: kanoniczna linia komendy (`formatting.py`).**
   - Test RED (`tests/test_catalog_formatting.py`, deklaracje syntetyczne):
     `test_flags_follow_declaration_order`; `test_bbox_omits_the_default_crs_flag` (`--bbox-crs X`
     pomijane, gdy `X == cli_default`; inny uklad zostaje); `test_per_country_forms` (`v` albo
@@ -1004,7 +1010,7 @@ zamrozone (stary parser jest wzorcem porownania, stage 1 migracji D7).
   - Implementacja: `format_command_line(command, options, run=None) -> str` (spec 8.7:
     `kartograf <grupa> <komenda> ...`).
   Commit: `feat(catalog): format_command_line - kanoniczna linia komendy z opcji`
-- [ ] **Step 3: dokument katalogu (`model.py`, `build.py`) - PO K1.**
+- [x] **Step 3: dokument katalogu (`model.py`, `build.py`) - PO K1.**
   - Test RED (`tests/test_catalog.py`, deklaracje syntetyczne przez `build_catalog`):
     `test_catalog_document_keys` (klucze `schema, kartograf_version, language, groups, commands,
     exit_codes, errors, schemas` - dokladna kolejnosc; `kartograf-catalog/1` jest w `SCHEMAS`);
@@ -1026,7 +1032,7 @@ zamrozone (stary parser jest wzorcem porownania, stage 1 migracji D7).
     parametrami); `ProductInfo` liczone z rejestru (`sources_for`), nie z `list_sources`.
   - Weryfikacja: `$PY -m pytest tests/test_catalog.py -q`; brama kroku.
   Commit: `feat(catalog): dokument kartograf-catalog/1 i get_catalog (D7, D9)`
-- [ ] **Step 4: parser z deklaracji (`cliparser.py`) - PO K1.**
+- [x] **Step 4: parser z deklaracji (`cliparser.py`) - PO K1.**
   - Test RED (`tests/test_catalog_parser.py`, deklaracje syntetyczne): `test_actions_follow_params`
     (flagi, `dest`, `type`, `choices` tylko gdy `choices=True`, `default`, `nargs`);
     `test_flags_are_never_required` (brak flagi nie konczy parsowania - brak zglasza biblioteka);
@@ -1056,8 +1062,8 @@ DOSLOWNIE z `kartograf/cli/groups/{elevation,imagery}.py` (komendy `download`, `
 dostawcy (`allowed`, teksty z `download/options.py`: `resolution_text`, `vertical_crs_text`,
 `format_text`, `product_choices`, `country_choices`, `cz_resolution_help`), nigdy kopie list.
 
-- [ ] **Step 1: deklaracje i testy deklaracji (bez K1 - korzystaja tylko z `spec.py`, `COMMANDS` i
-  istniejacego kodu).** `elevation download` (28 parametrow, w kolejnosci flag `--help`; `task: true`
+- [x] **Step 1: deklaracje i testy deklaracji (bez K1 - korzystaja tylko z `spec.py`, `COMMANDS` i
+  istniejacego kodu).** `elevation download` (30 parametrow: 29 z flaga CLI i `update`, w kolejnosci flag `--help`; `task: true`
   dla opcji, ktore sa kluczami `COMMANDS["elevation download"].options`; `argument` wg sygnatury
   `download_data`; ograniczenia: `one_of` (`sheet`, `bbox`, `geometry`), `requires` (`cutout` ->
   `horizontal_crs`), `applies_to` dla opcji ograniczonych do produktow; przyklady PL i CZ jako opcje
@@ -1083,7 +1089,7 @@ dostawcy (`allowed`, teksty z `download/options.py`: `resolution_text`, `vertica
     zbieraja sie dopiero po dodaniu modulow `commands/elevation.py` i `commands/imagery.py`).
   - Weryfikacja: `$PY -m pytest tests/test_catalog_declarations.py -q`; brama kroku.
   Commit: `feat(catalog): deklaracje komend elevation i imagery z testami deklaracji (D7)`
-- [ ] **Step 2: testy rownowaznosci parsera (PO K1; parametryzowane po `declared()`, wiec obejmuja tez T4c i T4d).**
+- [x] **Step 2: testy rownowaznosci parsera (PO K1; parametryzowane po `declared()`, wiec obejmuja tez T4c i T4d).**
   - Test RED (`tests/test_catalog_parser.py`, stary parser z `kartograf.cli._parser.create_parser()`):
     `test_new_parser_equals_old_parser[<komenda>]` - dla kazdej zadeklarowanej komendy-liscia
     parser z `build_parser(...)` zbudowany z deklaracji BEZ parametru `json` (z wyjatkiem
@@ -1107,7 +1113,7 @@ Zrodlo tekstow: `kartograf/cli/groups/{landcover,soil,_collection,boundaries,cad
 budujaca `Command`y w `catalog/commands/_collection.py` - modul pomocniczy z prefiksem `_`, pomijany
 przez `declared()`).
 
-- [ ] **Step 1: testy (RED).** (`tests/test_catalog_declarations.py`)
+- [x] **Step 1: testy (RED).** (`tests/test_catalog_declarations.py`)
   `test_landcover_soil_and_collection_commands_are_declared` (zbior zadeklarowanych id zawiera
   `landcover download|list-sources|list-layers`, `soil download|hsg|list-sources|list-layers` oraz
   `<grupa> download|list-sources` dla `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`,
@@ -1117,7 +1123,7 @@ przez `declared()`).
   `test_soil_hsg_summary_is_cli_and_api` (`summary`: flaga `--summary`, argument `summary`).
   Parametryzowane testy z T4b (Step 1 i Step 2) obejmuja nowe komendy bez edycji (`declared()`).
   RED: pierwszy z powyzszych (brak modulow).
-- [ ] **Step 2: deklaracje** wszystkich komend tych grup; `function`/`check_function`:
+- [x] **Step 2: deklaracje** wszystkich komend tych grup; `function`/`check_function`:
   `download_landcover`/`check_landcover`, `download_soil`/`check_soil`, `calculate_hsg`/`check_hsg`
   (`soil hsg`: dodatkowy parametr tylko CLI `summary` i jego odpowiednik API `summary`),
   `download_collection`/`check_collection`; `list-sources` -> `list_sources` (parametr `group` tylko API z
@@ -1136,9 +1142,9 @@ przez `declared()`).
 - Modify: `kartograf/catalog/__init__.py` (eksport `get_catalog`, `data_commands`),
   `tests/test_catalog.py`, `tests/test_catalog_declarations.py`
 
-- [ ] **Step 0: S2.** `git merge feat/agent-interface` (po komunikacie koordynatora, ze A jest scalone).
+- [x] **Step 0: S2.** `git merge feat/agent-interface` (po komunikacie koordynatora, ze A jest scalone).
   Brama zielona na wyniku przed dalsza praca.
-- [ ] **Step 1: `describe_sheet` i `find_sheets` (`kartograf-sheet/1`, `kartograf-sheets/1`).**
+- [x] **Step 1: `describe_sheet` i `find_sheets` (`kartograf-sheet/1`, `kartograf-sheets/1`).**
   - Test RED (`tests/test_sheet_info.py`; RED = `ModuleNotFoundError: kartograf.sheet_info`):
     `test_describe_pl1992_sheet` (`N-34-130-D-d-2-4`: `system == "pl1992"`, `country == "PL"`,
     `scale == "1:10000"`, `components`, `crs == "EPSG:2180"`, `bounds` = `SheetParser(...).get_bbox`);
@@ -1160,7 +1166,7 @@ przez `declared()`).
     `format_hierarchy` :99, `format_children` :125, `format_descendants` :158 - tu jako dane, nie
     tekst); `SheetInfo.commands` z `get_catalog(params=True)` (`ParamInfo.accepts` parametru `sheet`).
   Commit: `feat(api): describe_sheet i find_sheets - godla jako dokumenty (kartograf-sheet/1, -sheets/1)`
-- [ ] **Step 2: deklaracje `project`, `cache`, `parse`, `catalog` i komend tylko-API.**
+- [x] **Step 2: deklaracje `project`, `cache`, `parse`, `catalog` i komend tylko-API.**
   Test RED (`tests/test_catalog_declarations.py`): `test_project_cache_parse_catalog_and_api_only_commands_are_declared`
   (zbior id zawiera `project init|add|remove|download|status|verify`, `cache stats|path|clear`, `parse`,
   `catalog`, `find_sheets`, `store_overview`, `store_entries`, `store_sidecar`: 16 komend; RED: brak modulow
@@ -1179,7 +1185,7 @@ przez `declared()`).
   wymagane). Parametr `check_updates` komendy `project download` nalezy do deklaracji jak w
   `kartograf/cli/groups/project.py`. Testy parametryzowane po `declared()` (T4b) obejmuja je od razu.
   Commit: `feat(catalog): deklaracje project, cache, parse, catalog i komend tylko-API`
-- [ ] **Step 3: `hints.py` (skladnik (b) hintu bledu).**
+- [x] **Step 3: `hints.py` (skladnik (b) hintu bledu).**
   - Test RED (`tests/test_catalog.py`): `test_example_for_prefers_an_example_using_the_option`
     (`example_for("elevation download", "vertical_crs")` -> `("--vertical-crs", <command_line
     przykladu z vertical_crs>)`); `test_example_for_falls_back_to_the_first_example`;
@@ -1189,7 +1195,7 @@ przez `declared()`).
     gdy parametr istnieje; `command_line` = `format_command_line` przykladu). Wpiecie w
     `error_report` robi T5.
   Commit: `feat(catalog): example_for - skladnik (b) podpowiedzi bledu z przykladow katalogu`
-- [ ] **Step 4: testy zamykajace tor (PO S2).**
+- [x] **Step 4: testy zamykajace tor (PO S2).**
   - `tests/test_catalog.py`: `test_every_old_leaf_command_is_declared` (36 lisci starego parsera =
     zadeklarowane komendy z `cli`; plus `catalog`; razem 37 lisci nowego parsera);
     `test_data_commands_are_the_twelve_in_COMMANDS_order` (KB-1, `data_commands()` = klucze
@@ -1228,7 +1234,7 @@ i Step 10.
   `kartograf/__init__.py`, istniejace testy z 12.10-12.11
 - Delete (Step 9): `kartograf/cli/groups/**`, flagi w `kartograf/cli/_args.py`, `*_task_arguments`
 
-- [ ] **Step 0: integracja i kontrola kontraktu K2.** Po scaleniu A i B: `scripts/gate.sh` w calosci;
+- [x] **Step 0: integracja i kontrola kontraktu K2.** Po scaleniu A i B: `scripts/gate.sh` w calosci;
   wszystkie roznice integracyjne naprawiaj commitami `fix(...)` (tresc opisuje przyczyne).
   - Test RED (`tests/test_catalog.py`): `test_catalog_functions_exist_and_match_signatures` (spec 12.5 c:
     kazda nazwa `function` i `check_function` jest w `kartograf.__all__` i wywoluje sie; kazdy `argument`
@@ -1240,7 +1246,7 @@ i Step 10.
     `CommandInfo`, `ParamInfo`, `describe_sheet`, `SheetInfo`, `find_sheets`, `SheetList`); popraw
     rozbieznosci deklaracji i sygnatur ujawnione przez test.
   Commit: `feat(api): eksporty katalogu i sheet_info; test kontraktowy katalog <-> funkcje API (spec 12.5 c)`
-- [ ] **Step 1: konwersja rodzajow w `catalog/kinds.py` (bez zmiany zachowania).**
+- [x] **Step 1: konwersja rodzajow w `catalog/kinds.py` (bez zmiany zachowania).**
   - Test RED (`tests/test_catalog_kinds.py`): `test_convert_arguments_by_kind` (`bbox` + `bbox_crs` ->
     `BBox`; `path` -> `Path` wzgledem `base_dir`; `per_country` napis albo `{pl, cz}`; `str_list` ->
     krotka; `flag` `True`; klucz spoza deklaracji = `ValidationError(option=klucz)`);
@@ -1257,7 +1263,7 @@ i Step 10.
   - Weryfikacja: `$PY -m pytest tests/test_catalog_kinds.py tests/test_catalog_declarations.py
     tests/test_project_*.py -q`; brama kroku.
   Commit: `refactor(catalog): konwersja opcji zadania (options_from_json, options_to_json, check_options_json) w catalog/kinds.py`
-- [ ] **Step 2: warstwa komend `kartograf/commands.py` (KB-2..KB-5, O5) i podpowiedz bledu.**
+- [x] **Step 2: warstwa komend `kartograf/commands.py` (KB-2..KB-5, O5) i podpowiedz bledu.**
   - Test RED (`tests/test_commands_layer.py`, spec 12.6; RED: `ImportError: cannot import name
     'parse_command'`): `test_parse_command_returns_only_given_options` (`"elevation download --product
     nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./data"` ->
@@ -1291,7 +1297,7 @@ i Step 10.
     -q`; brama kroku.
   Commit: `feat(api): parse_command, validate_command, format_command, run_command i check_command (KB-2..KB-5)`
   oraz `feat(errors): podpowiedz bledu z flaga i przykladem z katalogu (spec 6.3)`
-- [ ] **Step 3: komenda `kartograf catalog` (handler).**
+- [x] **Step 3: komenda `kartograf catalog` (handler).**
   - Test RED (`tests/test_cli_handlers.py`, test jednostkowy handlera z `argparse.Namespace`; RED:
     `ModuleNotFoundError: kartograf.cli.catalog_cmd`): `test_catalog_text_lists_groups_commands_summaries`
     (jedna linia na komende: id, rodzaj, podsumowanie; grupy z produktami); `test_catalog_group_and_command_views`
@@ -1302,7 +1308,7 @@ i Step 10.
   - Implementacja: `cli/catalog_cmd.py` (`cmd_catalog`; tekst z dokumentu, spec 7.4; komenda jest
     zapytaniem: bez sieci i zapisu).
   Commit: `feat(cli): kartograf catalog [GRUPA [KOMENDA]] [--params] [--json]`
-- [ ] **Step 4: przelaczenie `create_parser()` na parser z katalogu (D7, stage 2).**
+- [x] **Step 4: przelaczenie `create_parser()` na parser z katalogu (D7, stage 2).**
   - Test RED (`tests/test_cli_handlers.py`): `test_every_catalog_cli_command_has_a_handler` (37 lisci:
     36 dzisiejszych i `catalog`; kazde `_command_id` ma wpis w `HANDLERS`) i
     `test_no_handler_without_a_catalog_command`. RED: `ModuleNotFoundError: kartograf.cli._handlers`.
@@ -1325,7 +1331,7 @@ i Step 10.
     pliki `catalog`; reszta (36 helpow lisci, helpy grup, akcje, 33 przebiegi tekstowe) bajtowo
     identyczna. Wynik `diff` do opisu commita.
   Commit: `refactor(cli): create_parser() z katalogu komend; handlery wybierane po id komendy (D7, stage 2)`
-- [ ] **Step 5: `main()` - dokument bledu, kody wyjscia, tryb JSON (D4, D5, O2).**
+- [x] **Step 5: `main()` - dokument bledu, kody wyjscia, tryb JSON (D4, D5, O2).**
   - Test RED (`tests/test_cli_errors.py`, `main([...])` z przechwyceniem stdout/stderr):
     `test_input_error_exits_2_in_text_mode` (brak `--output`: `Error: --output wymagane...` na stderr,
     kod 2); `test_source_failure_exits_1` (`DownloadError`); `test_ok_false_exits_1`;
@@ -1350,7 +1356,7 @@ i Step 10.
   - Weryfikacja: `$PY -m pytest tests/test_cli_errors.py -q`; **testy dotychczasowe z `== 1` dla
     bledow wejscia beda czerwone do Step 6** - nie commituj tego kroku osobno: Step 5 i Step 6 to
     jeden commit zielony (patrz Step 6).
-- [ ] **Step 6: handlery nie drukuja wlasnych `Error:` za bledy wejscia (O2).** W `kartograf/cli/*.py` jest
+- [x] **Step 6: handlery nie drukuja wlasnych `Error:` za bledy wejscia (O2).** W `kartograf/cli/*.py` jest
   ok. 40 wystapien `Error:` i 20 `return 1` (`download_cmd.py` 12/7, `cache_cmd.py` 5/3,
   `parse_cmd.py` 4/4, `soil_cmd.py` 4/2, `landcover_cmd.py` 3/2, `availability_cmd.py`,
   `collection_cmd.py`, `project_cmd.py`; `_args.py` i `commands.py` zglaszaja juz wyjatki): kazdy blad
@@ -1366,7 +1372,7 @@ i Step 10.
   Commit (Step 5 + 6 razem): `feat(cli)!: dokument kartograf-error/1 i kody wyjscia 0/1/2/130; bledy wejscia koncza CLI kodem 2` z trescia
   `BREAKING: bledy wejscia (ValidationError, ParseError, UsageError) koncza CLI kodem 2 (dzis 1);
   skrypty sprawdzajace == 1: testuj != 0 (2 = popraw dane, 1 = awaria albo ok: false)`
-- [ ] **Step 7: `--json` w komendach danych.**
+- [x] **Step 7: `--json` w komendach danych.**
   - Test RED (`tests/test_cli_json.py`; wspolne fixtury z `tests/test_parity*.py`):
     scenariusze zgodnosci CLI `--json` == API `to_dict()` przy zamrozonym zegarze, po normalizacji
     katalogow magazynow (`run_both`): `test_json_pl_sheet` (arkusz PL), `test_json_pl_area` (bbox),
@@ -1383,7 +1389,7 @@ i Step 10.
     `calculate_hsg(..., summary=args.summary)` zamiast `hsg_statistics` w CLI (tekst: statystyki z
     `report.summary`); cykl pliku planu bez zmian poza brakiem linii `Info:` w trybie JSON.
   Commit: `feat(cli): --json w komendach danych i availability (kartograf-download/1, -plan/1, -availability/1)`
-- [ ] **Step 8: `--json` w komendach zapytan i zarzadzania; tekst renderowany z dokumentow.**
+- [x] **Step 8: `--json` w komendach zapytan i zarzadzania; tekst renderowany z dokumentow.**
   - Test RED (`tests/test_cli_json.py`): test na kazda komende-lisc, ktora da sie uruchomic offline
     (parametryzowany po katalogu: `list-sources` x11, `list-layers` x2, `parse`, `cache stats|path|clear`,
     `catalog`, `project init|add|remove|status|verify|download` na projekcie w `tmp_path` z atrapa
@@ -1402,7 +1408,7 @@ i Step 10.
   - Weryfikacja: pelny `pytest`; zrzut `after`: `diff -r <...>/before/text <...>/after/text` PUSTY
     (tabele `list-sources`, `list-layers`, `parse`, `cache` bajtowo jak dzis).
   Commit: `feat(cli): --json w parse, list-sources, list-layers, cache i komendach projektu; tekst z dokumentow biblioteki`
-- [ ] **Step 9: opcje `COMMANDS` z katalogu i usuniecie starego kodu (D7, stage 3).**
+- [x] **Step 9: opcje `COMMANDS` z katalogu i usuniecie starego kodu (D7, stage 3).**
   - `project/commands.py`: `TaskCommand.options` = `{p.name: p.kind for p in command.params if p.task}` z
     katalogu (kolejnosc nowych manifestow: `country` zaraz po `product` - zmiana kosmetyczna, testy
     kolejnosci aktualizowane); usun `*_task_arguments` (`download_cmd.py`, `landcover_cmd.py`
@@ -1422,7 +1428,7 @@ i Step 10.
   Commit: `refactor(cli)!: parser i opcje projektu z katalogu; usuniete kartograf/cli/groups, flagi w _args.py i *_task_arguments (D7, stage 3)`
   z trescia `BREAKING: kod i testy importujace wnetrznosci CLI (cli.groups, download_task_arguments,
   _download_arguments) uzywaja parse_command(...).options albo create_parser()`
-- [ ] **Step 10: zamkniecie T5.** Eksporty `kartograf/__init__.py`: `CommandCall`, `parse_command`,
+- [x] **Step 10: zamkniecie T5.** Eksporty `kartograf/__init__.py`: `CommandCall`, `parse_command`,
   `validate_command`, `format_command`, `run_command`, `check_command`; `tests/test_public_api.py`
   (nowe nazwy, argumenty tylko nazwane); zrzut `after` ostatni raz (jak Step 4: dozwolone tylko
   `--json` we wszystkich komendach-lisciach poza `availability` i komenda `catalog`: uruchom bez
@@ -1446,7 +1452,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
   `tests/test_mcp_server.py`
 - Modify: `pyproject.toml` (extra `mcp`, `dev`, skrypt `kartograf-mcp`, ewentualny override mypy)
 
-- [ ] **Step 0: instalacja `mcp` w `.venv` (O7) i sprawdzenie API (bez commita).**
+- [x] **Step 0: instalacja `mcp` w `.venv` (O7) i sprawdzenie API (bez commita).**
   ```
   $PY -m pip install --dry-run "mcp>=2.3.0,<3"   # 2026-10-18: 21 nowych pakietow, zero aktualizacji
   $PY -m pip install "mcp>=2.3.0,<3"
@@ -1458,7 +1464,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
   `mcp.Client` przyjmuje `Server` i `raise_exceptions`; `mcp_types.CallToolResult` ma
   `structured_content`, `is_error`; `mcp.shared.exceptions.MCPError`. Roznica wzgledem specu =
   zatrzymaj sie i opisz koordynatorowi (nie dostosowuj po cichu).
-- [ ] **Step 1: `catalog/tools.py` (czyste dane, bez `mcp`; spec 9.3-9.4).**
+- [x] **Step 1: `catalog/tools.py` (czyste dane, bez `mcp`; spec 9.3-9.4).**
   - Test RED (`tests/test_mcp_tools.py`; `jsonschema` przez `pytest.importorskip`; RED:
     `ModuleNotFoundError: kartograf.catalog.tools`): `test_tool_names_are_unique_snake_case`;
     `test_there_are_29_tools_in_six_families` (5 `discovery`, 1 `availability`, 12 `data`, 1 `check`,
@@ -1486,7 +1492,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
     commita i raportu T9 (spec 15: pomiar zastepuje szacunek 20-25 tys. dla 40 narzedzi).
   - Weryfikacja: `$PY -m pytest tests/test_mcp_tools.py -q`; brama kroku.
   Commit: `feat(mcp): specyfikacje narzedzi z katalogu (29 narzedzi, schematy wejscia, adnotacje)`
-- [ ] **Step 2: szkielet serwera, `ImportError`, `instructions`, `pyproject.toml`.**
+- [x] **Step 2: szkielet serwera, `ImportError`, `instructions`, `pyproject.toml`.**
   - Rozstrzygniecie sprzecznosci specu 9.2 (modul rzuca `ImportError` przy imporcie vs `main()`
     drukuje komunikat i konczy kodem 1): `kartograf.mcp_server` importuje sie BEZ `mcp` (importy SDK
     leniwie, w `create_server`; typy tylko pod `TYPE_CHECKING`); `create_server` rzuca
@@ -1502,7 +1508,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
     cache, allow_dirs)`, `main(argv=None) -> int`); `pyproject.toml`: `mcp = ["mcp>=2.3.0,<3"]`,
     `dev` + `"mcp>=2.3.0,<3"`, `kartograf-mcp = "kartograf.mcp_server:main"`.
   Commit: `build(mcp): extra mcp, skrypt kartograf-mcp i mcp w dev; szkielet kartograf/mcp_server.py`
-- [ ] **Step 3: obsluga wywolan, wyniki, bledy, postep, sciezki (spec 9.4-9.7).**
+- [x] **Step 3: obsluga wywolan, wyniki, bledy, postep, sciezki (spec 9.4-9.7).**
   - Test RED (`tests/test_mcp_server.py`, `pytest.importorskip("mcp")`, `Client(server,
     raise_exceptions=True)` w pamieci; fixtury jak w `tests/test_parity.py`):
     `test_list_tools_equals_tool_specs`; `test_discovery_tools_return_library_documents` (`get_catalog`,
@@ -1530,7 +1536,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
     `ctx.session.report_progress`, brak `output_schema`.
   - Weryfikacja: `$PY -m pytest tests/test_mcp_server.py -q`; brama kroku.
   Commit: `feat(mcp): obsluga wywolan narzedzi - wyniki jak --json, bledy kartograf-error/1, postep, sciezki`
-- [ ] **Step 4: argumenty serwera i test stdio.**
+- [x] **Step 4: argumenty serwera i test stdio.**
   - Test RED: `test_tools_flag_selects_families` (`--tools discovery,availability,data,check` = 19
     narzedzi); `test_unknown_family_is_a_usage_error` (kod 2); `test_default_cache_file_is_in_the_user_cache_dir`
     (`XDG_CACHE_HOME`; plik `kartograf/metadata.db` powstaje przy pierwszym uzyciu; nie
@@ -1541,7 +1547,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
   - Implementacja: `main(argv)` z `--tools`, `--cache-file`/`--no-cache` (wzajemnie wykluczajace),
     `--allow-dir` (powtarzalne), `--version`; `anyio.run` + `stdio_server()` + `server.run(...)`.
   Commit: `feat(mcp): kartograf-mcp --tools, --cache-file, --no-cache, --allow-dir i transport stdio`
-- [ ] **Step 5: brama zadania.** `scripts/gate.sh` (z `mcp` w `.venv`: `mypy` widzi SDK; jesli brakuje
+- [x] **Step 5: brama zadania.** `scripts/gate.sh` (z `mcp` w `.venv`: `mypy` widzi SDK; jesli brakuje
   stubow `jsonschema`, dodaj `jsonschema.*` do `[[tool.mypy.overrides]]` z `ignore_missing_imports`).
   Raport: hashe, liczby bramy, wynik pomiaru kontekstu narzedzi, wersja zainstalowanego `mcp`.
 
@@ -1549,7 +1555,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
 
 **Files:** Create: `llms.txt`, `tests/test_llms_txt.py`; Modify: `MANIFEST.in` (`include llms.txt`)
 
-- [ ] **Step 1: Test RED** (`tests/test_llms_txt.py`; RED: brak pliku): `test_file_is_ascii_and_short` (ASCII,
+- [x] **Step 1: Test RED** (`tests/test_llms_txt.py`; RED: brak pliku): `test_file_is_ascii_and_short` (ASCII,
   < 150 linii); `test_starts_with_title_and_quote` (`# Kartograf`, potem cytat `>`);
   `test_every_cli_example_parses_with_the_real_parser` (kazda linia bloku kodu zaczynajaca sie od
   `kartograf ` i bez `...` i `<` parsuje sie `parse_command_line`/`create_parser()`; polecenia z
@@ -1557,7 +1563,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
   -> plik lokalny istnieje; linki bezwzgledne); `test_error_codes_are_the_catalog_codes` (kody z sekcji
   "Kody bledow" naleza do `get_catalog().errors`, a kazdy kod katalogu z kodem wyjscia jest wymieniony);
   `test_sections_follow_llmstxt_format` (sekcje `##`, listy `- [tytul](url): opis`, sekcja `## Optional`).
-- [ ] **Step 2: tresc.** Projekt tresci ze specu 10.2 (czym jest Kartograf; zasady dla agentow: katalog
+- [x] **Step 2: tresc.** Projekt tresci ze specu 10.2 (czym jest Kartograf; zasady dla agentow: katalog
   `kartograf catalog --json`, `--json`, `kartograf elevation availability`, `--output` bezwzgledne poza
   repo i `/tmp`, kody wyjscia 0/1/2/130; instalacja z `kartograf[mcp]`; typowe zadania CLI z prawdziwymi
   poleceniami (availability, NMT arkusza, bbox z `--bbox-crs`, land cover, `soil hsg --summary`,
@@ -1565,7 +1571,7 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
   `check_availability`, `to_dict()`/`to_json()`, `get_catalog`, `error_report`); serwer MCP (konfiguracja,
   rodziny, `check_updates`, postep, `is_error`); kody bledow z tabeli 6.2; linki do dokumentacji).
   Polecenia sprawdz recznie na prawdziwym parserze przed commitem.
-- [ ] **Step 3: pakowanie i brama.** `MANIFEST.in`: `include llms.txt`; `python -m build --sdist` (jak T0
+- [x] **Step 3: pakowanie i brama.** `MANIFEST.in`: `include llms.txt`; `python -m build --sdist` (jak T0
   Step 2) zawiera `llms.txt`; brama kroku i zadania.
   Commit: `docs(agents): llms.txt (llmstxt.org) i test zgodnosci polecen z parserem`
 
@@ -1579,32 +1585,32 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
 `docs/PRD.md`, `docs/CHANGELOG.md`, `docs/PROGRESS.md`, `docs/DECISIONS.md` (CRLF), `README.md`,
 `CLAUDE.md`, `kartograf/__init__.py` (docstring), `tests/test_docs_tables.py`
 
-- [ ] **Step 1: test RED** (`tests/test_docs_tables.py`): `test_usage_error_and_exit_code_tables_equal_the_catalog`
+- [x] **Step 1: test RED** (`tests/test_docs_tables.py`): `test_usage_error_and_exit_code_tables_equal_the_catalog`
   (tabele kodow bledow i kodow wyjscia w `docs/USAGE.md` - jedyne w dokumentacji - maja te same kody,
   wyjatki i kody wyjscia co `get_catalog().errors` i `exit_codes`); `test_claude_md_has_the_agent_rule_and_no_agents_md`
   (sekcja "Agenci z innych repozytoriow" wymienia `scripts/gate.sh` i `llms.txt`; brak `AGENTS.md`).
-- [ ] **Step 2: `docs/USAGE.md`** - nowa sekcja "Interfejs dla agentow": `--json` per komenda (tabela
+- [x] **Step 2: `docs/USAGE.md`** - nowa sekcja "Interfejs dla agentow": `--json` per komenda (tabela
   specu 7.2), jedna tabela kodow wyjscia (6.5) i bledow (6.2), `kartograf catalog`, serwer MCP i konfiguracja
   klientow (9.8, `claude mcp add kartograf -- kartograf-mcp`), `llms.txt`; poprawka opisu `--json` raportu
   dostepnosci (`schema` pierwszym kluczem, `notices` bez echa na stderr). Przyklady z prawdziwych wydrukow
   (offline: `kartograf catalog --json`, `parse`, `list-sources`; availability z T9 jesli jest).
-- [ ] **Step 3: `docs/ARCHITECTURE.md`** - sekcja 2 (graf: `serialization`, `error_report`, `sheet_info`,
+- [x] **Step 3: `docs/ARCHITECTURE.md`** - sekcja 2 (graf: `serialization`, `error_report`, `sheet_info`,
   `source_info`, `cache_info`, `store_documents`, `catalog`, `commands`, `mcp_server`; krawedzie `cli -> catalog`,
   `project -> catalog`, `mcp_server -> catalog, commands, kartograf`; `catalog -> sources, download, landcover,
   hydrology`), drzewo modulow, 3.6 "Dokumenty JSON `kartograf-*/1`" (lista schematow z `SCHEMAS`), 4.11
   "Interfejs dla agentow" (katalog, tabele, MCP), poprawka opisu `AvailabilityReport` (3017: bez pola
   `schema`), reguly Z1 i rejestr komend.
-- [ ] **Step 4: `docs/DEVELOPMENT_STANDARDS.md`** - 7.3: Z8 (CLI i MCP drukuja `to_json()`/`to_dict()`), Z9
+- [x] **Step 4: `docs/DEVELOPMENT_STANDARDS.md`** - 7.3: Z8 (CLI i MCP drukuja `to_json()`/`to_dict()`), Z9
   (nowa komenda = deklaracja w `catalog/commands/`, nie flagi w `cli/`), Z10 (wyjatek ma `code`/`exit_code`,
   walidator ustawia `option`), Z11 (schematy `/1` addytywne; nowy dokument = `Document` + test kluczy);
   6.3: `scripts/gate.sh`; 11.1: kody bledow; 17.2: przepis na nowa komende przez katalog (zastepuje wpis
   `COMMANDS` i `*_task_arguments`).
-- [ ] **Step 5: `docs/SCOPE.md`, `docs/PRD.md`, `README.md`, `CLAUDE.md`** - zakres 0.8.0 i poza zakresem
+- [x] **Step 5: `docs/SCOPE.md`, `docs/PRD.md`, `README.md`, `CLAUDE.md`** - zakres 0.8.0 i poza zakresem
   (HTTP MCP, KC, KH); README: sekcja "Dla agentow AI"; `CLAUDE.md` wg specu 10.4 (punkt bramy ->
   `scripts/gate.sh`; sekcja "Agenci z innych repozytoriow": galaz od `develop`, bez merge/push/tagow, bez
   wpisow wydania bez zgody, obowiazkowy przeglad przed tagiem, `llms.txt`, `kartograf catalog --json`,
   serwer `kartograf-mcp`; wiersze mapy dokumentacji; NIE tworzyc `AGENTS.md`).
-- [ ] **Step 6: `docs/CHANGELOG.md` `[0.8.0]`** wg specu 11.1: w "Dodane" - `--json` w kazdej komendzie i
+- [x] **Step 6: `docs/CHANGELOG.md` `[0.8.0]`** wg specu 11.1: w "Dodane" - `--json` w kazdej komendzie i
   dokumenty `kartograf-*/1`, katalog komend (`kartograf catalog`, `get_catalog`), warstwa komend KB-2..KB-5,
   kody bledow z `hint`, serwer MCP (`kartograf[mcp]`, 29 narzedzi), `py.typed`, `llms.txt`,
   `scripts/gate.sh`, `python -m kartograf`; w "Zmiany lamiace (BREAKING)" - pozycje 1-4 z kolumna "Co
@@ -1612,12 +1618,12 @@ oczekiwany brak (T6 dotyka `pyproject.toml`, T7 `MANIFEST.in`).
   `Info:`/`Warning:`; parser z katalogu: usuniete `cli.groups`, `*_task_arguments`); w "Zmienione" -
   pozycje 5-8 (`calculate_hsg(summary=)`, `TaskDownload.plan`, opcje `COMMANDS` z katalogu); nowy kod
   `io_error`.
-- [ ] **Step 7: `docs/DECISIONS.md` (CRLF) i `docs/PROGRESS.md`.** ADR-046: errata 1 (wyniki T9, pomiar
+- [x] **Step 7: `docs/DECISIONS.md` (CRLF) i `docs/PROGRESS.md`.** ADR-046: errata 1 (wyniki T9, pomiar
   kontekstu narzedzi, rozstrzygniecie importu `mcp_server`, nazwy modulow); sprawdz relacje po obu
   stronach w ADR-037, ADR-039, ADR-040, ADR-045 (indeks i status). `docs/PROGRESS.md`: wpis konca sesji
   wg STANDARDS 15 (struktury PROGRESS nie ruszac). Po edycji: `file docs/DECISIONS.md` i zliczenie CRLF
   (liczba `\r\n` = liczbie `\n`).
-- [ ] **Step 8: brama zadania** (`scripts/gate.sh`, w tym `tests/test_docs_tables.py`).
+- [x] **Step 8: brama zadania** (`scripts/gate.sh`, w tym `tests/test_docs_tables.py`).
   Commity (osobne): `docs(usage): sekcja Interfejs dla agentow, tabela kodow bledow i wyjscia`,
   `docs(architecture): dokumenty JSON, katalog komend i serwer MCP`, `docs(standards): reguly Z8-Z11,
   scripts/gate.sh, przepis na nowa komende przez katalog`, `docs(agents): CLAUDE.md, README i zakres
@@ -1634,34 +1640,37 @@ Dane live wylacznie do `<katalog-danych>/kartograf/agent-interface-e2e/` (jawne 
 metadanych w korzeniu worktree; raport `docs/research/2026-10-xx-agent-interface-e2e/raport.md` bez
 sciezki katalogu danych.
 
-- [ ] **Brama:** `scripts/gate.sh` (pelny `pytest`, `ruff`, `ruff format --check`, `mypy`) - liczby do raportu.
-- [ ] **E2E-1 katalog i JSON offline:** `kartograf catalog --json | $PY -m json.tool`;
-  `kartograf catalog elevation download --json` ma 28 parametrow i przyklady; po jednym wywolaniu z
+- [x] **Brama:** `scripts/gate.sh` (pelny `pytest`, `ruff`, `ruff format --check`, `mypy`) - liczby do raportu.
+- [x] **E2E-1 katalog i JSON offline:** `kartograf catalog --json | $PY -m json.tool`;
+  `kartograf catalog elevation download --json` ma 30 parametrow (29 z flaga CLI, w tym `--json`, oraz `update`) i przyklady; po jednym wywolaniu z
   `--json` dla kazdej grupy (`list-sources` x11, `list-layers` x2, `parse`, `cache path`, `cache stats`,
-  `project init|add|status` w projekcie w katalogu danych): stdout = jeden dokument, stderr pusty, kod 0.
+  `project init|add|status` w projekcie w katalogu danych): stdout = jeden dokument, stderr pusty, kod 0
+  (wyjatek: `project status` przed pierwszym pobraniem to `ok: false`, kod 1, spec 6.5; po `project download` 0).
   Blad: `kartograf elevation download --product nmt --json` -> `kartograf-error/1`, kod 2,
-  `details.option == "output_dir"`.
-- [ ] **E2E-2 availability na zywo:** `kartograf elevation availability --product nmt --country pl --bbox
+  `details.options` = `sheet, bbox, geometry` (brak obszaru jest zglaszany przed `output_dir`); z obszarem i
+  bez `-o` `details.option == "output_dir"`.
+- [x] **E2E-2 availability na zywo:** `kartograf elevation availability --product nmt --country pl --bbox
   565000,242000,569000,246000 --json` (Krakow) i Pomorze (E 339000-343000, N 744800-747000): dokument
   rowny `check_availability(...).to_json()` z tego samego cache (poza `checked_at`); wyniki zgodne z
   planem A (kompletne kombinacje Krakowa; Pomorze: 2025 0.5m niekompletna) albo opisz nowe fakty GUGiK.
-- [ ] **E2E-3 jedno male pobranie i sprawdzenie:** `kartograf elevation download --product nmt --sheet
-  N-34-130-D-d-2-4 --resolution 5m --vertical-crs EVRF2007 -o <katalog-danych>/... --json`
-  (status `new`, `ok: true`), ponownie (`unchanged`), potem `--check-updates --json` (`kartograf-plan/1`,
+- [x] **E2E-3 jedno male pobranie i sprawdzenie:** `kartograf elevation download --product nmt --sheet
+  M-34-64-D-d-1-2 --resolution 5m --vertical-crs EVRF2007 -o <katalog-danych>/... --json`
+  (arkusz Krakowa; `N-34-130-D-d-2-4` ma NMT tylko 1 m, wiec 5 m daje `ok: false`; status `new`, `ok: true`),
+  ponownie (`local`), potem `--check-updates --json` (`kartograf-plan/1`,
   pozycje `current`).
-- [ ] **E2E-4 serwer MCP przez stdio:** skrypt z SDK (`StdioServerParameters`, `kartograf-mcp --allow-dir
+- [x] **E2E-4 serwer MCP przez stdio:** skrypt z SDK (`StdioServerParameters`, `kartograf-mcp --allow-dir
   <katalog-danych>`): `list_tools` = 29 narzedzi; `parse_sheet` offline; `elevation_availability` na zywo
   (dokument jak E2E-2); `check_updates` z `tool: elevation_download` na magazynie z E2E-3 (`current`);
   `store_overview` i `store_entries` na tym magazynie (`truncated` falsz); wywolanie z bledem
   (wzgledna sciezka) -> `is_error: true` i `kartograf-error/1`.
-- [ ] **E2E-5 wheel z `py.typed`:** `$PY -m build --wheel --outdir <katalog-danych>/.../dist .`;
+- [x] **E2E-5 wheel z `py.typed`:** `$PY -m build --wheel --outdir <katalog-danych>/.../dist .`;
   `$PY -m zipfile -l <wheel>` zawiera `kartograf/py.typed`; czyste venv (`python -m venv`), instalacja
   wheel, skrypt konsumenta `from kartograf import download_data, get_catalog` z `reveal_type(download_data)`
   sprawdzony `mypy`: brak `import-untyped`, sygnatura zamiast `Any`.
-- [ ] **E2E-6 parzystosc trzech drog:** to samo zadanie (arkusz z E2E-3, `--check-updates`) przez CLI
+- [x] **E2E-6 parzystosc trzech drog:** to samo zadanie (arkusz z E2E-3, `--check-updates`) przez CLI
   `--json`, biblioteke `check_data(...).to_dict()` i narzedzie MCP `check_updates`: identyczne dokumenty
   poza `checked_at`.
-- [ ] **Raport i commit:** `docs(research): E2E interfejsu dla agentow (JSON, katalog, MCP)`; raport
+- [x] **Raport i commit:** `docs(research): E2E interfejsu dla agentow (JSON, katalog, MCP)`; raport
   koncowy do koordynatora (hashe wszystkich fal, liczby bram, wyniki E2E, otwarte kwestie).
 
 ## Review Focus
@@ -1673,8 +1682,11 @@ sciezki katalogu danych.
    sprawdzaja flagi w obie strony, `task` wobec `COMMANDS`, `function` wobec `__all__`, przyklady przez
    `validate_command` i okrazenie `parse_command(format_command(...))`.
 3. **Tekst CLI bez zmian:** zrzut przed/po (Dodatek A) po T5 Step 4, 8 i 10: 36 helpow lisci, helpy grup,
-   akcje i 33 przebiegi tekstowe bajtowo identyczne; roznice dozwolone tylko: nowa komenda `catalog` i flaga
-   `--json`.
+   akcje i 33 przebiegi tekstowe bajtowo identyczne; roznice dozwolone tylko: nowa komenda `catalog`, flaga
+   `--json`, przyklady w liniach `Przyklady` brane z katalogu (kolejnosc flag, dodatkowy przyklad CZ w
+   `boundaries download`, spec 7.5), opis `landcover download` w pomocy grupy (spec 16.3 pkt 5), dluzszy opis
+   `cache path` (spec 16.4) i kod wyjscia 2 dla `parse` z blednym albo brakujacym godlem (O2); zrzut akcji
+   parsera rozni sie wylacznie komenda `catalog` (E2E U6).
 4. **Kody wyjscia i `ok`:** bledy wejscia -> 2, awarie i `ok: false` -> 1, Ctrl-C -> 130; dokument bledu
    zawsze na stdout w trybie JSON, stderr pusty (poza wierszami ponowien HTTP); `OSError` -> `io_error`.
 5. **Rozlacznosc torow:** zaden plik nie jest edytowany przez dwa tory fali 1; `git diff --stat` kazdego

@@ -1110,7 +1110,7 @@ gdy podano `param`, zaden z `params`; `applies_to` - `param` tylko gdy `when`;
 manifestu), `command_line` (`kartograf ... -o ./data`, wyliczona z `options` przez
 `format_command`).
 
-Przyklad (skrocony do 5 z 28 parametrow `elevation download`):
+Przyklad (skrocony do 5 z 30 parametrow `elevation download`):
 
 ```json
 {
