@@ -169,6 +169,7 @@ from kartograf.download.orto_cutout import (
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import VersionRef
+from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
     DownloadError,
@@ -176,6 +177,7 @@ from kartograf.exceptions import (
     KartografError,
     NoCoverageError,
     ParseError,
+    UsageError,
     ValidationError,
     YearRangeError,
 )
@@ -399,11 +401,15 @@ __all__ = [
     "KartografError",
     "ParseError",
     "ValidationError",
+    "UsageError",
     "DownloadError",
     "NoCoverageError",
     "YearRangeError",
     "CacheError",
     "InvalidSidecarError",
+    # Errors as data (`kartograf-error/1`, spec 6)
+    "ErrorReport",
+    "error_report",
     # Version
     "__version__",
 ]
