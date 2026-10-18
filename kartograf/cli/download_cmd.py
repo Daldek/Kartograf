@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from kartograf.cli._args import parse_bbox_arg, parse_per_country
+from kartograf.cli._json import emit_document, wants_json
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -27,6 +28,7 @@ from kartograf.download.options import require_product
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
+from kartograf.serialization import Document
 
 
 class _ProgressPrinter:
@@ -162,6 +164,18 @@ def _print_notice(notice: Notice) -> None:
     print(f"{prefix}: {notice.text}", file=sys.stderr)
 
 
+def notice_printer(args: argparse.Namespace) -> Callable[[Notice], None] | None:
+    """The ``on_notice`` of a command: it prints each data notice on stderr. With
+    ``--json`` there is none - the notices are in the document (``notices``)."""
+    return None if wants_json(args) else _print_notice
+
+
+def progress_printer(args: argparse.Namespace, workers: int = 1):
+    """The ``on_progress`` of a command: the bar of ``create_progress_callback``
+    (none under ``--quiet`` and ``--json``)."""
+    return create_progress_callback(args.quiet or wants_json(args), workers)
+
+
 # =============================================================================
 # Plan file and status lines (shared by every store command)
 # =============================================================================
@@ -171,10 +185,12 @@ def _print_notice(notice: Notice) -> None:
 class _PlanContext:
     """Update plan of one run: ``--check-updates`` collects one plan per
     request (``plans``, written as ONE file); ``--upgrade --plan`` reads the
-    file once (``loaded``)."""
+    file once (``loaded``). ``--json``: the document of the run waits in
+    ``document`` until the plan file is written, then it is printed."""
 
     plans: list[UpdatePlan] = field(default_factory=list)
     loaded: UpdatePlan | None = None
+    document: Document | None = None
 
 
 def _plan_context(args: argparse.Namespace) -> _PlanContext:
@@ -184,6 +200,18 @@ def _plan_context(args: argparse.Namespace) -> _PlanContext:
         ctx = _PlanContext()
         args.plan_ctx = ctx
     return ctx
+
+
+def _present(
+    args: argparse.Namespace, document: Document, render: Callable[[], int]
+) -> int:
+    """The outcome of a command: its text (``render`` prints it and gives the exit
+    code) or, with ``--json``, the document - kept until ``run_with_plan_file`` has
+    written the plan file, so that a failed write is the only thing reported."""
+    if wants_json(args):
+        _plan_context(args).document = document
+        return 0
+    return render()
 
 
 def run_with_plan_file(
@@ -197,6 +225,10 @@ def run_with_plan_file(
     cannot be read and a directory that does not exist are input errors
     (``ValidationError`` of the option ``plan``, no work done); a plan that
     cannot be written is the ``OSError`` of the write (``main`` reports it).
+
+    With ``--json`` the body keeps its document (``_present``): the plan file is
+    written first, the document printed after it and the ``Info:`` line is not
+    (the file is the same document as stdout).
     """
     ctx = _PlanContext()
     args.plan_ctx = ctx
@@ -222,11 +254,18 @@ def run_with_plan_file(
                 option="plan",
             )
     rc = body(args)
+    wrote_plan = False
     if getattr(args, "check_updates", False) and plan_file and ctx.plans:
         plan = ctx.plans[0]
         for other in ctx.plans[1:]:
             plan = plan.merge(other)
         Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
+        wrote_plan = True
+    if wants_json(args):
+        if ctx.document is None:
+            raise RuntimeError("--json: the command left no document to print")
+        return emit_document(ctx.document)
+    if wrote_plan:
         print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
     return rc
 
@@ -272,10 +311,14 @@ def _plan_line(item: PlanItem) -> str:
 def _report_plan(args: argparse.Namespace, plan: UpdatePlan) -> int:
     """``--check-updates``: print the positions (stdout, also with ``-q``) and
     keep the plan for ``--plan``. A position that could not be checked = 1."""
-    for item in plan.items:
-        print(_plan_line(item))
     _plan_context(args).plans.append(plan)
-    return 1 if any(i.status == "check_failed" for i in plan.items) else 0
+
+    def render() -> int:
+        for item in plan.items:
+            print(_plan_line(item))
+        return 0 if plan.ok else 1
+
+    return _present(args, plan, render)
 
 
 def _report_stale(stale: Sequence[PlanItem]) -> int:
@@ -424,14 +467,15 @@ def cmd_download(
     return run_with_plan_file(args, _cmd_download)
 
 
-def _cmd_download(args: argparse.Namespace) -> int:
-    """One ``download_data``/``check_data`` call after the plan file is read."""
-    _cache_warnings_shown.clear()
-    arguments = _download_arguments(args)
+def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
+    """The ``on_notice`` of ``elevation download``/``imagery download``: the data
+    notices on stderr, the sheet list header as the preamble of the result on
+    stdout (D15); none with ``--json`` (every notice is in the document)."""
+    if wants_json(args):
+        return None
     quiet = args.quiet
 
     def on_notice(notice: Notice) -> None:
-        # the sheet list header is the result's preamble on stdout (D15)
         if notice.code == SHEET_LIST:
             if not quiet:
                 print(notice.text)
@@ -439,11 +483,18 @@ def _cmd_download(args: argparse.Namespace) -> int:
             return
         _print_notice(notice)
 
+    return on_notice
+
+
+def _cmd_download(args: argparse.Namespace) -> int:
+    """One ``download_data``/``check_data`` call after the plan file is read."""
+    _cache_warnings_shown.clear()
+    arguments = _download_arguments(args)
+    on_notice = _data_notices(args)
     if getattr(args, "check_updates", False):
-        plan = check_data(**arguments, on_notice=on_notice)
-        return _report_plan(args, plan)
+        return _report_plan(args, check_data(**arguments, on_notice=on_notice))
     workers = getattr(args, "workers", 4) or 1
-    on_progress = create_progress_callback(quiet, workers)
+    on_progress = progress_printer(args, workers)
     report = download_data(
         **arguments,
         update=_update_mode(args),
@@ -452,11 +503,10 @@ def _cmd_download(args: argparse.Namespace) -> int:
         on_progress=on_progress,
         on_notice=on_notice,
     )
-    _print_report(args, report, on_progress)
-    return 0 if report.ok else 1
+    return _present(args, report, lambda: _print_report(args, report, on_progress))
 
 
-def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> None:
+def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> int:
     """Status lines (the path of each file below ``--output``), summary,
     failures and stale positions of a report."""
     update = _update_mode(args)
@@ -488,3 +538,4 @@ def _print_report(args: argparse.Namespace, report: DataReport, on_progress) -> 
     for failure in report.failed:
         print(f"Error: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)
+    return 0 if report.ok else 1
