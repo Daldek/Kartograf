@@ -2784,6 +2784,15 @@ na stdout (zamiast `Info:` na stderr); pozostale komunikaty danych
 `Notice` ida na stderr, rowniez przy `--quiet`. Dodatkowy komunikat
 CLI o zapisaniu pliku `--plan` dotyczy operacji na pliku planu, nie danych.
 
+**Errata 2 (2026-10-18, ADR-046):** wynik komendy jest dokumentem biblioteki
+(`Document`: `to_dict()`/`to_json()`), a CLI w trybie `--json` drukuje `to_json()`
+zamiast tekstu (Z1 rozszerzone na JSON; regula Z8 w STANDARDS 7.3). Z3: w trybie
+`--json` komunikaty `Notice` sa tylko w polu `notices` dokumentu (stderr pusty), nie
+jako `Info:`/`Warning:` na stderr, a zapis pliku `--plan` nie drukuje linii `Info:`.
+Bledy wejscia (`ValidationError`, `ParseError`, `UsageError`) koncza CLI kodem 2, nie 1
+(jedna tabela kodow wyjscia i bledow: USAGE 9.3). Test importow CLI dopuszcza
+`kartograf.catalog` i `kartograf.serialization`.
+
 ---
 
 ## ADR-038: Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system)
@@ -2921,6 +2930,13 @@ galezie z nowymi grupami musza uzyc `cli/groups/<grupa>.py` oraz
 `kartograf.cli._args`. Skrypty wolajace stare komendy (takze
 Hydrograf/Hydrolog) trzeba zaktualizowac.
 
+**Errata 1 (2026-10-18, ADR-046 D4):** moduly `kartograf/cli/groups/*`, funkcje
+`add_group`/`add_list_sources` i flagi w `kartograf/cli/_args.py` zastapila deklaracja
+komend w `kartograf/catalog/commands/<grupa>.py` (parser: `catalog/cliparser.py`,
+`cli/_parser.py::create_parser` jest fasada; nowa grupa = jeden nowy modul deklaracji,
+STANDARDS 17.2); `parse_bbox_arg` jest w `kartograf.catalog.kinds`. Nazwy grup, komend i
+flag oraz tresc `--help` bez zmian poza nowa flaga `--json` i komenda `catalog`.
+
 ---
 
 ## ADR-040: Manifest projektu i przypiete wersje
@@ -2993,6 +3009,12 @@ i `rename`; magazyn nadal wymaga dowiazan twardych (ADR-036). Kazda
 nowa komenda danych wymaga pozycji w tabeli projektu i `_task` (test
 zgodnosci). Implementacja:
 `docs/superpowers/plans/2026-10-15-manifest-projektu.md`.
+
+**Errata 1 (2026-10-18, ADR-046 D4):** `_task` w parserze komendy zastapily parametry
+`task=True` deklaracji komendy w katalogu (`Command.task_options`); `TaskCommand.options`
+pochodzi z katalogu, a `project add` parsuje komende przez `parse_command`. D8 obowiazuje
+dalej (jedna pozycja `COMMANDS` na komende danych). Klucze opcji nowych manifestow maja
+kolejnosc deklaracji (`country` zaraz po `product`).
 
 ---
 
@@ -3929,6 +3951,14 @@ gdy brak bboxa/godla; `link_target` moze odczytac caly plik na CIFS bez
 `kartograf-meta/1` na dysku pozostaje bez zmian. Opis kontraktu: ARCH 3.3.1;
 plan: ARCH 3.3.2. Zadna czesc KD/KB ani pobieranie nie sa w tym cyklu.
 
+**Errata 1 (2026-10-18, ADR-046):** odczyt magazynu ma tez postac dokumentow
+(`describe_store`, `list_store_entries`, `read_store_sidecar`; `kartograf-store-overview/1`,
+`-store-entries/1`, `-store-sidecar/1`) i narzedzi MCP `store_overview`, `store_entries`,
+`store_sidecar`; strumieniowe `list_segments`, `iter_store` i `read_sidecar` bez zmian.
+Brak albo niedostepny `output_dir` to `OSError` (kod bledu `io_error`, kod wyjscia 1),
+`InvalidSidecarError` to `invalid_sidecar`, bledne argumenty to `ValidationError` z
+`option` (`segment`, `units`).
+
 ---
 
 ## ADR-046: Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP
@@ -3996,6 +4026,39 @@ Rozszerzenie regul DEVELOPMENT_STANDARDS: 7.3 (Z8-Z11), 6.3 (`scripts/gate.sh`),
 (kody bledow), 17.2 (nowa komenda przez katalog). Kwestie O1-O9 specyfikacji rozstrzygnal
 koordynator 2026-10-18 (sekcja 16 specyfikacji: m.in. jedno narzedzie `check_updates`,
 `CommandInfo.supports_check` zamiast `check_tool`, kod wyjscia 2 dla bledow wejscia).
+
+**Errata 1 (2026-10-18, wdrozenie i integracja):** rozbieznosci wzgledem decyzji i pomiary
+ustalone w implementacji (specyfikacja: 9.4, 16.2-16.4):
+- D22. Budzet kontekstu agenta (decyzja koordynatora w trakcie wdrozenia): pierwsza wersja
+  narzedzi dawala `tools/list` 65 893 znakow i `get_catalog()` 47 807 znakow. Teraz
+  `get_catalog()` zwraca przeglad (`view: "overview"`: 7 315 znakow, CLI `kartograf catalog
+  --json` 7 629), a parametry, ograniczenia i przyklady na zadanie (`group=`, `command=`,
+  `params=True`); tabele `exit_codes`, `errors` i `schemas` sa `null`, dopoki nie zazadano
+  (`tables=True`; caly katalog z parametrami je ma); `view` jest drugim kluczem
+  `kartograf-catalog/1`. Opisy narzedzi sa pisane na wywolanie (kilka slow), wspolne
+  znaczenia argumentow sa raz w `instructions` serwera (cztery akapity, 1 447 znakow),
+  narzedzia nie maja `title` ani `$ref`; `tools/list` ma 28 607 znakow (budzet 30 000
+  pilnuja testy).
+- Moduly: raporty z logika przeniesiona z CLI leza poza `catalog/`: `source_info.py`
+  (`list_sources`, `list_layers`), `cache_info.py`, `store_documents.py` i `sheet_info.py`
+  (`describe_sheet`, `find_sheets`; `SheetInfo.commands` wylicza sie z katalogu); wspolny kod
+  parsera, `format_command` i podpowiedzi to `catalog/kinds.py`, `formatting.py` i
+  `hints.py`; `ErrorReport` i tabele kodow: `kartograf/error_report.py`; `Document`, koder i
+  `SCHEMAS` (poza `__all__`): `kartograf/serialization.py`.
+- `kartograf.mcp_server` importuje sie bez `mcp`: SDK ladowany leniwie w `create_server`, ktory
+  bez pakietu rzuca `ImportError` z komunikatem instalacji; `main()` drukuje go na stderr i
+  konczy kodem 1 (skrypt `kartograf-mcp` jest instalowany zawsze).
+- Postep MCP: `on_progress` biblioteki bywa wolany z watkow roboczych (`workers > 1`), gdzie
+  `anyio.from_thread.run` nie dziala; serwer uzywa `BlockingPortal`, a licznik zdarzen rosnie
+  scisle pod blokada (`total` to `None`).
+- Domkniecie integracji: `cache path` ma wlasna funkcje `get_cache_path` (baza nie jest
+  otwierana, wiec nieczytelny cache nie psuje wskazania sciezki; `cache path --json` to
+  `kartograf-cache/1` z `action: "path"`); `UsageError` znanej komendy niesie jej id
+  (`command` w `kartograf-error/1`, podpowiedz `Parametry komendy: kartograf catalog <id>.
+  Przyklad: ...`); `format_command(run=)` waliduje flagi uruchomienia, a `parse_command`
+  odrzuca samotne `--bbox-crs`.
+- Instalacja `mcp` w `.venv` (O7) podniosla `idna` 3.11 -> 3.20 (wymaganie `httpx2`), wiec nie
+  byla czysto addytywna: zgoda koordynatora; pozostale 20 pakietow doszlo bez aktualizacji.
 
 ---
 
