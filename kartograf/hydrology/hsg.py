@@ -463,7 +463,8 @@ class HSGCalculator:
         if self._output_dir.suffix.lower() in (".tif", ".tiff"):
             raise ValidationError(
                 "--output to katalog magazynu (od 0.8.0); plik poza "
-                "magazynem: hsg_from_rasters"
+                "magazynem: hsg_from_rasters",
+                option="output_dir",
             )
         self._provider = provider
         self._cache = cache
@@ -575,7 +576,8 @@ class HSGCalculator:
 
         if sum(v is not None for v in (sheet, bbox, geometry)) != 1:
             raise ValidationError(
-                "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry"
+                "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry",
+                options=("sheet", "bbox", "geometry"),
             )
         check_layer(layer, geometry)
         if sheet is not None:
@@ -697,7 +699,10 @@ class HSGCalculator:
         stale: list = []
         if plan is not None:
             if update != "upgrade":
-                raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+                raise ValidationError(
+                    "Plan aktualizacji wymaga update='upgrade'",
+                    options=("plan", "update"),
+                )
             require_store(plan, store_id(self._output_dir))
             # The HSG position is checked BEFORE the inputs change.
             fresh = self._hsg_item(
@@ -848,7 +853,7 @@ def _calculator(
 ) -> HSGCalculator:
     """The calculator of the store ``output_dir`` (checked first)."""
     if output_dir is None:
-        raise ValidationError(_OUTPUT_REQUIRED)
+        raise ValidationError(_OUTPUT_REQUIRED, option="output_dir")
     return HSGCalculator(output_dir, cache=cache)
 
 
@@ -1160,7 +1165,9 @@ def hsg_from_rasters(
     from kartograf.transform.raster import warp_to_grid
 
     if pixel_m <= 0:
-        raise ValidationError(f"pixel_m musi byc dodatni (podano {pixel_m})")
+        raise ValidationError(
+            f"pixel_m musi byc dodatni (podano {pixel_m})", option="pixel_m"
+        )
     grid = bbox if bbox.crs == crs else transform_bbox(bbox, crs)
     layers = {"clay": Path(clay), "sand": Path(sand), "silt": Path(silt)}
     arrays: dict[str, np.ndarray] = {}
