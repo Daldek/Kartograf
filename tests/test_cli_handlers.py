@@ -2,6 +2,8 @@
 what a command prints and returns, without the parser and ``main``."""
 
 import argparse
+import json
+import re
 
 import pytest
 
@@ -10,6 +12,7 @@ from kartograf.catalog.cliparser import _subparsers
 from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._parser import create_parser
 from kartograf.cli.catalog_cmd import cmd_catalog
+from kartograf.cli.commands import main
 from kartograf.exceptions import ValidationError
 
 
@@ -117,6 +120,22 @@ def test_catalog_json_is_the_library_document(capsys, given):
     printed = _catalog_text(capsys, json=True, **given)
 
     assert printed == get_catalog(**view).to_json()
+
+
+def test_text_footer_commands_run_and_one_of_them_gives_the_tables(capsys):
+    """The text ends with the commands of the documents it advertises: each one
+    runs, and the whole catalog with the code tables and schemas is among them
+    (the overview ``catalog --json`` has no tables)."""
+    footer = _catalog_text(capsys).replace("\n", " ")
+    lines = re.findall(r"kartograf catalog((?: --[a-z]+)+)", footer)
+
+    assert lines
+    documents = []
+    for flags in lines:
+        assert main(["catalog", *flags.split()]) == 0
+        documents.append(json.loads(capsys.readouterr().out))
+    assert any(document["errors"] for document in documents)
+    assert any(document["exit_codes"] and document["schemas"] for document in documents)
 
 
 @pytest.mark.parametrize(

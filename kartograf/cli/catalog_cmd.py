@@ -21,8 +21,9 @@ from kartograf.exceptions import ValidationError
 _WIDTH = 78
 _FOOTER = (
     "Opis komendy z parametrami i przykladami: kartograf catalog <grupa> <komenda>. "
-    "Caly katalog jako dokument JSON (kody wyjscia i bledow, schematy wyniku): "
-    "kartograf catalog --json"
+    "Przeglad jako dokument JSON: kartograf catalog --json. Caly katalog z "
+    "parametrami, kodami wyjscia i bledow oraz schematami wyniku: "
+    "kartograf catalog --params --json"
 )
 
 
