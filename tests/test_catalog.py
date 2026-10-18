@@ -1,13 +1,17 @@
 """The catalog document ``kartograf-catalog/1`` and ``get_catalog`` (spec 8.1, 8.5),
-built from synthetic declarations."""
+built from synthetic declarations; the parts on the real declarations (the hint
+example, the completeness of the declarations) come last."""
 
 import dataclasses
+import shlex
 
 import pytest
 
 from kartograf.catalog import build
 from kartograf.catalog.build import build_catalog, data_commands, get_catalog
-from kartograf.catalog.commands import Declared
+from kartograf.catalog.cliparser import build_parser, parse_command_line
+from kartograf.catalog.commands import Declared, declared
+from kartograf.catalog.hints import example_for
 from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
 from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
@@ -499,3 +503,107 @@ def test_constraints_must_reference_declared_params():
 def test_declarations_of_a_group_without_commands_are_refused():
     with pytest.raises(ValueError, match="cache"):
         build_catalog(_commands()[:1], _groups())
+
+
+# =============================================================================
+# example_for: the example of an error hint (spec 6.3, part (b))
+# =============================================================================
+
+_DECLARED = declared()
+_CLI_WITH_EXAMPLES = [
+    (command, param)
+    for command in _DECLARED.commands
+    if command.cli is not None and command.examples
+    for param in command.params
+]
+
+
+def _lines(command_id: str) -> list[str]:
+    """The command lines of the examples of a command, as the catalog gives them."""
+    (command,) = get_catalog(command=command_id).commands
+    assert command.examples is not None
+    return [example.command_line for example in command.examples]
+
+
+def test_example_for_prefers_an_example_using_the_option():
+    lines = _lines("elevation download")
+
+    cutout = example_for("elevation download", "cutout")
+    vertical = example_for("elevation download", "vertical_crs")
+    crs = example_for("elevation download", "bbox_crs")
+
+    assert vertical == ("--vertical-crs", lines[0])
+    # the first example that uses the option, not the first example
+    assert cutout[0] == "--cutout"
+    assert cutout[1] in lines[1:] and "--cutout --horizontal-crs" in str(cutout[1])
+    # an example that leaves the CRS out (the default of the flag) does not show it
+    assert "--bbox " in lines[1] and "--bbox-crs" not in lines[1]
+    assert crs[0] == "--bbox-crs"
+    assert "--bbox-crs EPSG:5514" in str(crs[1])
+
+
+def test_example_for_falls_back_to_the_first_example():
+    lines = _lines("elevation download")
+
+    unused = example_for("elevation download", "min_density")
+    api_only = example_for("elevation download", "update")
+    store = example_for("elevation download", "output_dir")
+
+    assert all("--min-density" not in line for line in lines)
+    assert unused == ("--min-density", lines[0])
+    # an argument only the API has: no flag, but the example is still shown
+    assert api_only == (None, lines[0])
+    assert store == ("--output", lines[0]) and lines[0].endswith(" -o ./data")
+
+
+def test_example_for_unknown_command_or_option():
+    first = _lines("elevation download")[0]
+
+    assert example_for("no such command", "product") == (None, None)
+    assert example_for(None, "product") == (None, None)
+    assert example_for(None, None) == (None, None)
+    # an unknown argument of a known command: no flag, the first example
+    assert example_for("elevation download", "nope") == (None, first)
+    assert example_for("elevation download", None) == (None, first)
+
+
+def test_example_for_positional_api_only_and_example_less_commands():
+    # a positional argument has no flag; its example shows the value
+    assert example_for("parse", "sheet") == (None, "kartograf parse N-34-130-D-d-2-4")
+    # a command only the API has: no flag and no command line
+    assert example_for("find_sheets", "scale") == (None, None)
+    assert example_for("find_sheets", "nope") == (None, None)
+    # a command without examples: the flag only
+    assert example_for("project status", "project_dir") == ("--project", None)
+
+
+@pytest.mark.parametrize(
+    ("command", "param"),
+    _CLI_WITH_EXAMPLES,
+    ids=[f"{c.id}:{p.name}" for c, p in _CLI_WITH_EXAMPLES],
+)
+def test_example_for_every_declared_option(command, param):
+    lines = _lines(command.id)
+
+    flag, line = example_for(command.id, param.name)
+
+    assert flag == param.cli_flag
+    assert line in lines
+    words = {w for w in (param.cli_flag, param.short) if w}
+    if words:
+        shown = [text for text in lines if words & set(shlex.split(text))]
+        assert line == (shown[0] if shown else lines[0])
+
+
+def test_example_command_line_is_valid():
+    """Every line ``example_for`` can return parses with the real parser as the
+    command it was asked for."""
+    parser = build_parser(_DECLARED.commands, _DECLARED.groups, usage_errors=True)
+
+    for command, param in _CLI_WITH_EXAMPLES:
+        _, line = example_for(command.id, param.name)
+        assert line is not None
+        words = shlex.split(line)
+        parsed = parse_command_line(parser, words[1:])
+        assert words[0] == "kartograf"
+        assert parsed._command_id == command.id
