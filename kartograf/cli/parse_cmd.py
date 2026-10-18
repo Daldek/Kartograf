@@ -8,7 +8,6 @@ and the commands taking them in ``--sheet``.
 """
 
 import argparse
-import sys
 
 from kartograf.core.parser_registry import detect_system, ztm_sheet_system
 from kartograf.core.parser_tm33 import ParserTM33
@@ -205,28 +204,35 @@ def cmd_parse(args: argparse.Namespace) -> int:
     Returns
     -------
     int
-        Exit code (0 for success, 1 for error)
+        Exit code (0 for success); a wrong sheet code or option is the
+        ``ParseError``/``ValidationError`` ``main`` reports (exit code 2).
     """
-    try:
-        cz = format_cz_sheet(args.sheet)
-    except ParseError as e:
-        print(f"Error: {e}", file=sys.stderr)
-        return 1
+    cz = format_cz_sheet(args.sheet)
     if cz is not None:
-        if args.hierarchy or args.children or args.descendants:
-            print(
-                "Error: --hierarchy, --children i --descendants dotycza tylko "
+        asked = [
+            name
+            for name in ("hierarchy", "children", "descendants")
+            if getattr(args, name)
+        ]
+        if asked:
+            raise ValidationError(
+                "--hierarchy, --children i --descendants dotycza tylko "
                 "godel PL (PL-1992, PL-2000)",
-                file=sys.stderr,
+                option=asked[0],
+                options=asked if len(asked) > 1 else None,
             )
-            return 1
         print(cz)
         return 0
     try:
         parser = SheetParser(args.sheet)
-    except (ParseError, ValidationError) as e:
-        print(f"Error: {e} {_CZ_CODES}", file=sys.stderr)
-        return 1
+    except ParseError as error:
+        raise ParseError(
+            f"{error} {_CZ_CODES}", option="sheet", hint=error.hint
+        ) from error
+    except ValidationError as error:
+        raise ValidationError(
+            f"{error} {_CZ_CODES}", option="sheet", hint=error.hint
+        ) from error
 
     # Always show basic info
     print(format_sheet_info(parser))
@@ -244,10 +250,11 @@ def cmd_parse(args: argparse.Namespace) -> int:
     # Show descendants if requested
     if args.descendants:
         try:
-            print()
-            print(format_descendants(parser, args.descendants))
-        except ValidationError as e:
-            print(f"\nError: {e}", file=sys.stderr)
-            return 1
+            descendants = format_descendants(parser, args.descendants)
+        except ValidationError as error:
+            error.option = "descendants"
+            raise
+        print()
+        print(descendants)
 
     return 0

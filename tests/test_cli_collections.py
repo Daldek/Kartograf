@@ -122,7 +122,7 @@ def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
 def test_missing_product_names_only_the_group_products(tmp_path, capsys):
     with patch(_DOWNLOAD) as download:
         rc = main(["models3d", "download", "--teryt", "1261", "-o", str(tmp_path)])
-    assert rc == 1
+    assert rc == 2
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --product wymagane: buildings (")

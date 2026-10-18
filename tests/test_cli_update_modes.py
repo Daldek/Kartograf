@@ -59,7 +59,7 @@ def test_flags_mutually_exclusive(tmp_path, flags, capsys):
 
 def test_plan_requires_check_or_upgrade(tmp_path, capsys):
     rc = _run(FakeCampaignProvider(C14), tmp_path, "--sheet", G, "--plan", "p.json")
-    assert rc == 1
+    assert rc == 2
     assert "Error: --plan wymaga" in capsys.readouterr().err
 
 
@@ -153,7 +153,7 @@ def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
         "--plan",
         str(plan),
     )
-    assert rc == 1
+    assert rc == 2
     err = capsys.readouterr().err
     assert err == (
         f"Error: --plan {plan}: katalog {plan.parent} nie istnieje - utworz go "
@@ -168,7 +168,7 @@ def test_upgrade_plan_of_other_store_is_error(tmp_path, capsys):
     _run(fake, tmp_path / "a", "--sheet", G, "--check-updates", "--plan", str(plan))
     capsys.readouterr()
     rc = _run(fake, tmp_path / "b", "--sheet", G, "--upgrade", "--plan", str(plan))
-    assert rc == 1
+    assert rc == 2
     assert "innego magazynu" in capsys.readouterr().err
     assert fake.downloads == []
 

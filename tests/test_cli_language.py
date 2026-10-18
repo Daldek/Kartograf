@@ -51,7 +51,7 @@ _CLI_ERRORS = [
 @pytest.mark.parametrize(("argv", "word"), _CLI_ERRORS)
 def test_cli_error_paths_are_ascii_polish(argv, word, tmp_path, monkeypatch, capsys):
     monkeypatch.chdir(tmp_path)
-    assert main(argv) == 1
+    assert main(argv) == 2
     err = capsys.readouterr().err
     assert err.startswith("Error: ") and err.isascii() and word in err
 

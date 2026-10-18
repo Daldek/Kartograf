@@ -27,7 +27,6 @@ from kartograf.download.options import require_product
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import CACHE_DISABLED, SHEET_LIST, Notice
-from kartograf.transform.crs import TransformError
 
 
 class _ProgressPrinter:
@@ -163,16 +162,6 @@ def _print_notice(notice: Notice) -> None:
     print(f"{prefix}: {notice.text}", file=sys.stderr)
 
 
-def _print_transform_error(error: Exception) -> int:
-    """``Error: <error> Remedium: <remedy>`` of a transformation error; returns 1."""
-    remedy = getattr(error, "remedy", None)
-    print(
-        f"Error: {error}" + (f" Remedium: {remedy}" if remedy else ""),
-        file=sys.stderr,
-    )
-    return 1
-
-
 # =============================================================================
 # Plan file and status lines (shared by every store command)
 # =============================================================================
@@ -205,7 +194,9 @@ def run_with_plan_file(
     ``--upgrade --plan`` reads the plan before any work; ``--check-updates
     --plan`` writes the plans collected by ``body`` as ONE file after it -
     into an existing directory, checked before any request. A plan that
-    cannot be read = ``Error:``, code 1, no work.
+    cannot be read and a directory that does not exist are input errors
+    (``ValidationError`` of the option ``plan``, no work done); a plan that
+    cannot be written is the ``OSError`` of the write (``main`` reports it).
     """
     ctx = _PlanContext()
     args.plan_ctx = ctx
@@ -216,34 +207,26 @@ def run_with_plan_file(
                 Path(plan_file).read_text(encoding="utf-8")
             )
         except OSError as e:
-            print(
-                f"Error: nie udalo sie odczytac planu {plan_file}: {e}", file=sys.stderr
-            )
-            return 1
+            raise ValidationError(
+                f"nie udalo sie odczytac planu {plan_file}: {e}", option="plan"
+            ) from e
         except ValidationError as e:
-            print(f"Error: {e}", file=sys.stderr)
-            return 1
+            e.option = "plan"
+            raise
     if getattr(args, "check_updates", False) and plan_file:
         directory = Path(plan_file).parent
         if not directory.is_dir():
-            print(
-                f"Error: --plan {plan_file}: katalog {directory} nie istnieje - "
+            raise ValidationError(
+                f"--plan {plan_file}: katalog {directory} nie istnieje - "
                 "utworz go albo podaj inny plik planu",
-                file=sys.stderr,
+                option="plan",
             )
-            return 1
     rc = body(args)
     if getattr(args, "check_updates", False) and plan_file and ctx.plans:
         plan = ctx.plans[0]
         for other in ctx.plans[1:]:
             plan = plan.merge(other)
-        try:
-            Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
-        except OSError as e:
-            print(
-                f"Error: nie udalo sie zapisac planu {plan_file}: {e}", file=sys.stderr
-            )
-            return 1
+        Path(plan_file).write_text(plan.to_json(), encoding="utf-8")
         print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
     return rc
 
@@ -456,22 +439,19 @@ def _cmd_download(args: argparse.Namespace) -> int:
             return
         _print_notice(notice)
 
-    try:
-        if getattr(args, "check_updates", False):
-            plan = check_data(**arguments, on_notice=on_notice)
-            return _report_plan(args, plan)
-        workers = getattr(args, "workers", 4) or 1
-        on_progress = create_progress_callback(quiet, workers)
-        report = download_data(
-            **arguments,
-            update=_update_mode(args),
-            plan=_plan_context(args).loaded,
-            workers=workers,
-            on_progress=on_progress,
-            on_notice=on_notice,
-        )
-    except TransformError as e:
-        return _print_transform_error(e)
+    if getattr(args, "check_updates", False):
+        plan = check_data(**arguments, on_notice=on_notice)
+        return _report_plan(args, plan)
+    workers = getattr(args, "workers", 4) or 1
+    on_progress = create_progress_callback(quiet, workers)
+    report = download_data(
+        **arguments,
+        update=_update_mode(args),
+        plan=_plan_context(args).loaded,
+        workers=workers,
+        on_progress=on_progress,
+        on_notice=on_notice,
+    )
     _print_report(args, report, on_progress)
     return 0 if report.ok else 1
 

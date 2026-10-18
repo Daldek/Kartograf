@@ -179,6 +179,8 @@ _UNKNOWN_HINTS = {
     ("kartograf hydro download", "--sheet"): "obszar CZ: --bbox (np. z --bbox-crs "
     "EPSG:5514) albo --geometry",
 }
+_JSON_FLAG = "--json"
+_JSON_HINT = "podaj ja za komenda, np. kartograf elevation list-sources --json"
 
 
 def _join_bbox_values(argv: Sequence[str]) -> list[str]:
@@ -252,6 +254,8 @@ def _unknown_text(
     if not flag.startswith("-"):
         return f"nieznany argument {first}. {options}"
     hint = _UNKNOWN_HINTS.get((command.prog, flag))
+    if hint is None and flag == _JSON_FLAG:
+        hint = _JSON_HINT  # every command has it: the listing of owners says nothing
     if hint is None:
         owners = _flag_owners(root, flag)
         hint = f"maja ja: {owners}" if owners else None
