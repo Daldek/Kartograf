@@ -16,11 +16,18 @@ from kartograf.catalog.cliparser import build_parser, parse_command_line
 from kartograf.catalog.commands import Declared, declared
 from kartograf.catalog.hints import example_for
 from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
-from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
+from kartograf.catalog.spec import (
+    Command,
+    Constraint,
+    Example,
+    Group,
+    Param,
+    resolve,
+)
 from kartograf.cli import _parser as old_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import COMMANDS
+from kartograf.project.commands import COMMANDS, check_options_json, options_from_json
 from kartograf.serialization import SCHEMAS
 from kartograf.sources.registry import sources_for
 
@@ -779,3 +786,201 @@ def test_catalog_does_not_import_cli_or_mcp():
     )
 
     assert done.returncode == 0, done.stdout + done.stderr
+
+
+# =============================================================================
+# The constraints of the declarations are enforced by the library (spec 8.4)
+# =============================================================================
+
+_SAMPLES: dict[str, object] = {
+    "sheet": "N-34-130-D-d-2-4",
+    "teryt": "1465",
+    "ku": "623164",
+    "geometry": "area.gpkg",
+    "whole_country": True,
+    "bbox": [500000, 500000, 501000, 501000],
+    "year": 2020,
+    "horizontal_crs": "EPSG:5514",
+}
+
+
+def _sample(param: Param) -> object:
+    """A value of a parameter that is valid on its own (the call fails for the
+    constraint under test, not for the value)."""
+    if param.name in _SAMPLES:
+        return _SAMPLES[param.name]
+    allowed = resolve(param.allowed)
+    if allowed:
+        return [allowed[0]] if param.kind == "str_list" else allowed[0]
+    return {"flag": True, "int": 1, "path": "x.gpkg", "str_list": ["A"]}.get(
+        param.kind, "1m" if param.kind == "per_country" else "x"
+    )
+
+
+def _holds(when: object, options: dict[str, object]) -> bool:
+    """The ``when`` of a constraint holds for a call: a parameter given
+    (``True``) or having one of the listed values."""
+    assert isinstance(when, dict)
+    for name, wanted in when.items():
+        value = options.get(name)
+        if wanted is True and value in (None, False):
+            return False
+        if isinstance(wanted, list) and value not in wanted:
+            return False
+    return True
+
+
+class _Call:
+    """The task options of a call derived from an example, with the edits that
+    keep it consistent: a parameter of an area choice replaces the other areas
+    (a ``bbox`` carries its ``bbox_crs``) and brings what it requires."""
+
+    def __init__(self, command: Command, example: Example) -> None:
+        self.command = command
+        self.options: dict[str, object] = dict(example.options)
+        self.params = {p.name: p for p in command.params}
+        self.touched: set[str] = set()
+
+    def drop(self, *names: str) -> None:
+        for name in names:
+            self.options.pop(name, None)
+            self.touched.add(name)
+
+    def add(self, name: str) -> None:
+        self.options[name] = _sample(self.params[name])
+        self.touched.add(name)
+        for constraint in self.command.constraints:
+            if constraint.type == "one_of" and name in constraint.params:
+                for other in constraint.params:
+                    if other != name:
+                        self.options.pop(other, None)
+            if constraint.type == "requires" and constraint.param == name:
+                for needed in constraint.params:
+                    if needed not in self.options:
+                        self.add(needed)
+        self.settle()
+
+    def settle(self) -> None:
+        if "bbox" in self.options:
+            self.options.setdefault("bbox_crs", "EPSG:2180")
+        else:
+            self.options.pop("bbox_crs", None)
+
+
+def _base(command: Command, name: str, *, applies: bool) -> _Call:
+    """A call of the command to add ``name`` to: from the first example that has
+    it (``applies``) or lacks it and where its ``applies_to`` condition fails
+    (``not applies``), else from an example where the condition holds."""
+    conditions = [
+        c.when
+        for c in command.constraints
+        if c.type == "applies_to" and c.param == name and c.when
+    ]
+    for example in command.examples:
+        options = dict(example.options)
+        if (name in options) == applies and all(
+            _holds(when, options) == applies for when in conditions
+        ):
+            return _Call(command, example)
+    for example in command.examples:
+        if all(_holds(when, dict(example.options)) for when in conditions):
+            return _Call(command, example)
+    raise AssertionError(f"{command.id}: no example to derive a call with {name}")
+
+
+def _violations(command: Command, constraint: Constraint):
+    """``(label, base, violation)`` calls of a constraint: ``base`` satisfies it
+    (the library accepts it) and ``violation`` differs from it only by the edit
+    that breaks the constraint; the edits are recorded in ``touched``."""
+    first = _Call(command, command.examples[0])
+    if constraint.type == "one_of":
+        stripped = _Call(command, command.examples[0])
+        stripped.drop(*constraint.params)
+        stripped.settle()
+        yield "none", first, stripped
+        pair = _Call(command, command.examples[0])
+        pair.drop(*constraint.params)
+        pair.touched.clear()
+        for name in constraint.params[:2]:
+            pair.options[name] = _sample(pair.params[name])
+            pair.touched.add(name)
+        pair.settle()
+        yield "two", first, pair
+    elif constraint.type == "requires":
+        assert constraint.param is not None
+        base = _base(command, constraint.param, applies=True)
+        if constraint.param not in base.options:
+            base.add(constraint.param)
+        violation = _Call(command, Example(dict(base.options)))
+        violation.drop(*constraint.params)
+        yield "missing", base, violation
+    elif constraint.type == "excludes":
+        assert constraint.param is not None
+        base = _base(command, constraint.param, applies=True)
+        if constraint.param not in base.options:
+            base.add(constraint.param)
+        violation = _Call(command, Example(dict(base.options)))
+        for name in constraint.params:
+            violation.add(name)
+        yield "both", base, violation
+    elif constraint.type == "applies_to":
+        assert constraint.param is not None
+        base = _base(command, constraint.param, applies=False)
+        violation = _Call(command, Example(dict(base.options)))
+        violation.add(constraint.param)
+        yield "outside", base, violation
+
+
+_CASES = [
+    (command, constraint, label, base, violation)
+    for command in _DECLARED.commands
+    if command.project_task
+    for constraint in command.constraints
+    if constraint.type in ("one_of", "requires", "excludes", "applies_to")
+    for label, base, violation in _violations(command, constraint)
+]
+
+
+# Track A names the whole area group (``sheet``, ``bbox``, ``geometry``) when a
+# request has no area (``_selection_names`` of ``download/collections.py``), also
+# for a product that takes no sheet code: ``hydro`` declares ``bbox``, ``geometry``
+# and ``whole_country``. Known and tolerated here; the entry goes when Track A
+# lists only what the product takes.
+_AREA_GROUP_EXTRA = {("hydro download", "one_of"): {"sheet"}}
+
+
+def _named(error: ValidationError) -> set[str]:
+    return set(error.options or ()) | ({error.option} if error.option else set())
+
+
+@pytest.mark.parametrize(
+    ("command", "constraint", "base", "violation"),
+    [case[:2] + case[3:] for case in _CASES],
+    ids=[f"{c.id}:{k.type}:{label}" for c, k, label, _, _ in _CASES],
+)
+def test_constraint_violations_raise_validation_error_naming_the_option(
+    command, constraint, base, violation, tmp_path
+):
+    """A call derived from an example that breaks one declared constraint is
+    refused by ``validate`` without network, and the error names an option of
+    the constraint that the edit touched; the call before the edit passes."""
+    task = COMMANDS[command.id]
+
+    def validate(call: _Call) -> None:
+        assert check_options_json(task, call.options) is None, call.options
+        task.validate(
+            tmp_path, options_from_json(task, call.options, project_dir=tmp_path)
+        )
+
+    validate(base)
+    with pytest.raises(ValidationError) as error:
+        validate(violation)
+
+    names = {constraint.param, *constraint.params, *(constraint.when or {})}
+    names -= {None}
+    named = _named(error.value) - _AREA_GROUP_EXTRA.get(
+        (command.id, constraint.type), set()
+    )
+    assert named, f"{command.id}: the error names no option: {error.value}"
+    assert named <= names, (named, names, str(error.value))
+    assert named & violation.touched, (named, violation.touched, str(error.value))
