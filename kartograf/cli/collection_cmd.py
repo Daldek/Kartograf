@@ -19,21 +19,24 @@ from kartograf.cli._args import parse_bbox_arg, parse_per_country
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
-    _print_notice,
+    _present,
     _print_version_summary,
     _report_plan,
     _report_stale,
     _status_line,
     _unit_of,
     _update_mode,
-    create_progress_callback,
+    notice_printer,
+    progress_printer,
     run_with_plan_file,
 )
 from kartograf.download.collections import (
+    CollectionReport,
     check_collection,
     download_collection,
     require_collection_product,
 )
+from kartograf.download.fetch import UpdateMode
 
 
 def collection_task(args: argparse.Namespace) -> dict:
@@ -70,22 +73,34 @@ def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
 
 def _collection_download(args: argparse.Namespace) -> int:
     arguments = {**collection_task(args), "output_dir": args.output}
+    on_notice = notice_printer(args)
     if args.check_updates:
-        return _report_plan(
-            args, check_collection(**arguments, on_notice=_print_notice)
-        )
+        return _report_plan(args, check_collection(**arguments, on_notice=on_notice))
     update = _update_mode(args)
     # a group whose request is always one file (hydro) has no --workers
     workers = getattr(args, "workers", 1)
-    on_progress = create_progress_callback(args.quiet, workers)
+    on_progress = progress_printer(args, workers)
     report = download_collection(
         **arguments,
         update=update,
         plan=_plan_context(args).loaded,
         workers=workers,
         on_progress=on_progress,
-        on_notice=_print_notice,
+        on_notice=on_notice,
     )
+    return _present(
+        args, report, lambda: _print_collection(args, report, on_progress, update)
+    )
+
+
+def _print_collection(
+    args: argparse.Namespace,
+    report: CollectionReport,
+    on_progress,
+    update: UpdateMode | None,
+) -> int:
+    """Status lines, summary, failures and stale positions of a collection
+    report; the exit code."""
     _end_progress(on_progress)
     output = Path(args.output)
     if not args.quiet:

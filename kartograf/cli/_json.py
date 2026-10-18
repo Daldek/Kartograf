@@ -3,11 +3,12 @@ The ``--json`` mode of the CLI (spec 6.6, 7.1).
 
 ``json_mode`` tells from the tokens of a command line whether the mode is on; it
 is asked before the parsing, so that a mistake of the line itself is reported in
-the mode of the line. ``emit_document`` prints the one document of stdout and
-gives the exit code it stands for. Nothing else is written to stdout in this
-mode.
+the mode of the line. ``wants_json`` tells it of a parsed command (the handlers
+ask it), ``emit_document`` prints the one document of stdout and gives the exit
+code it stands for. Nothing else is written to stdout in this mode.
 """
 
+import argparse
 import sys
 from collections.abc import Sequence
 
@@ -20,6 +21,12 @@ JSON_FLAG = "--json"
 def json_mode(argv: Sequence[str]) -> bool:
     """Whether ``--json`` is among the tokens of the command line."""
     return JSON_FLAG in argv
+
+
+def wants_json(args: argparse.Namespace) -> bool:
+    """Whether the parsed command was given ``--json`` (a bare ``Namespace`` of a
+    unit test has no such flag: text)."""
+    return bool(getattr(args, "json", False))
 
 
 def use_utf8_stdout() -> None:

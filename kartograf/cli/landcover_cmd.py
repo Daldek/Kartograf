@@ -13,22 +13,25 @@ from kartograf.cli._args import parse_bbox_arg
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
-    _print_notice,
+    _present,
     _print_version_summary,
     _report_file,
     _report_plan,
     _report_stale,
     _unit_of,
     _update_mode,
-    create_progress_callback,
+    notice_printer,
+    progress_printer,
     run_with_plan_file,
 )
 from kartograf.download.collections import collection_classes, collection_layers
+from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import output_required
 from kartograf.exceptions import ValidationError
 from kartograf.landcover.manager import (
     COLLECTION_SOURCES,
     LandCoverManager,
+    LandCoverReport,
     check_landcover,
     download_landcover,
     require_landcover_product,
@@ -147,20 +150,34 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
 
 
 def _landcover_task(args: argparse.Namespace) -> int:
-    """Plan or download with a status line per file and errors per unit."""
+    """Plan or download: the report as text or, with ``--json``, as a document."""
     arguments = {**landcover_task_arguments(args), "output_dir": Path(args.output)}
+    on_notice = notice_printer(args)
     if args.check_updates:
-        return _report_plan(args, check_landcover(**arguments, on_notice=_print_notice))
+        return _report_plan(args, check_landcover(**arguments, on_notice=on_notice))
     update = _update_mode(args)
-    on_progress = create_progress_callback(args.quiet, args.workers)
+    on_progress = progress_printer(args, args.workers)
     result = download_landcover(
         **arguments,
         update=update,
         plan=_plan_context(args).loaded,
         workers=args.workers,
-        on_notice=_print_notice,
+        on_notice=on_notice,
         on_progress=on_progress,
     )
+    return _present(
+        args, result, lambda: _print_landcover(args, result, on_progress, update)
+    )
+
+
+def _print_landcover(
+    args: argparse.Namespace,
+    result: LandCoverReport,
+    on_progress,
+    update: UpdateMode | None,
+) -> int:
+    """A status line per file, the errors per unit and the summary of a land cover
+    report; the exit code."""
     _end_progress(on_progress)
     out = Path(args.output)
     statuses = []
