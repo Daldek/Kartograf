@@ -2,8 +2,8 @@
 ``elevation download`` and ``imagery download``: flags -> ``download_data``/
 ``check_data`` (Z1).
 
-The CLI only translates flags into the library arguments (``--bbox`` text,
-``pl=..,cz=..`` per-country values), reads and writes the plan file, prints
+The CLI only translates flags into the library arguments (``library_arguments``:
+the catalog says what each flag is), reads and writes the plan file, prints
 the ``DataReport`` (status lines, summary, ``Error:`` of failed parts),
 prints data notices (``Info:``/``Warning:``) when the library emits them and
 draws the progress bar. Every data decision is in ``kartograf.download``.
@@ -19,7 +19,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kartograf.cli._args import parse_bbox_arg, parse_per_country
+from kartograf.cli._args import library_arguments
 from kartograf.cli._json import emit_document, wants_json
 from kartograf.download.data import DataReport, check_data, download_data
 from kartograf.download.fetch import UpdateMode, VersionedFile
@@ -413,43 +413,6 @@ def _print_version_summary(
 # =============================================================================
 
 
-def download_task_arguments(args: argparse.Namespace) -> dict:
-    """Data options shared by a group download and a project task."""
-    return {
-        "product": args.product,
-        "sheet": args.sheet,
-        "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
-        "geometry": Path(args.geometry) if getattr(args, "geometry", None) else None,
-        "layer": getattr(args, "layer", None),
-        "country": args.country,
-        "vertical_crs": parse_per_country(
-            getattr(args, "vertical_crs", None), "--vertical-crs"
-        ),
-        "resolution": parse_per_country(
-            getattr(args, "resolution", None), "--resolution"
-        ),
-        "model": getattr(args, "model", None),
-        "format": getattr(args, "format", None),
-        "sheet_system": getattr(args, "sheet_system", None),
-        "scale": getattr(args, "scale", None),
-        "cutout": getattr(args, "cutout", False),
-        "horizontal_crs": getattr(args, "horizontal_crs", None),
-        "coverage": getattr(args, "coverage", None),
-        "direction": getattr(args, "direction", None),
-        "year": getattr(args, "year", None),
-        "min_year": getattr(args, "min_year", None),
-        "max_year": getattr(args, "max_year", None),
-        "all_campaigns": getattr(args, "all_campaigns", False),
-        "full_sheet": getattr(args, "full_sheet", False),
-        "min_density": getattr(args, "min_density", None),
-    }
-
-
-def _download_arguments(args: argparse.Namespace) -> dict:
-    """Library request, including the store, from the same task translation."""
-    return {**download_task_arguments(args), "output_dir": args.output}
-
-
 def cmd_download(
     args: argparse.Namespace, products: Sequence[str] | None = None
 ) -> int:
@@ -489,7 +452,7 @@ def _data_notices(args: argparse.Namespace) -> Callable[[Notice], None] | None:
 def _cmd_download(args: argparse.Namespace) -> int:
     """One ``download_data``/``check_data`` call after the plan file is read."""
     _cache_warnings_shown.clear()
-    arguments = _download_arguments(args)
+    arguments = {**library_arguments(args), "output_dir": args.output}
     on_notice = _data_notices(args)
     if getattr(args, "check_updates", False):
         return _report_plan(args, check_data(**arguments, on_notice=on_notice))

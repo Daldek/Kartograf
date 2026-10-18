@@ -409,15 +409,16 @@ def test_sheet_systems_are_those_of_the_parser_registry():
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
-def test_task_options_equal_manifest_options(command):
-    """The task parameters of a data command are the options of its manifest
-    entry (the order is not compared: spec 8.3 item 7)."""
+def test_task_options_come_from_the_catalog(command):
+    """The options of a project task are the task parameters of the declaration of
+    its command, in the order of the declaration (the order of a manifest)."""
     if not command.project_task:
         assert command.id not in COMMANDS
         assert [p.name for p in command.params if p.task] == []
         return
-    declared_options = {p.name: p.kind for p in command.params if p.task}
-    assert declared_options == dict(COMMANDS[command.id].options)
+    assert list(COMMANDS[command.id].options.items()) == [
+        (p.name, p.kind) for p in command.params if p.task
+    ]
 
 
 @pytest.mark.parametrize(("command", "index"), _EXAMPLES, ids=_EXAMPLE_IDS)

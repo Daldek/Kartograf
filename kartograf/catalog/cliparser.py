@@ -11,17 +11,21 @@ value in its own words (rule Z1); only positional arguments are.
 ``usage:`` and exiting with 2 (``parse_command``, the ``--json`` mode of the
 CLI). The module needs only the standard library, the library's exceptions and
 the declarations; it never imports ``kartograf.cli``.
+
+``parsed_options`` is the way back: the flags of a parsed line, read by the
+declarations, as the JSON form of the options (what ``parse_command`` returns and
+what the handlers of the CLI convert to library arguments).
 """
 
 import argparse
 import re
 import sys
 from collections.abc import Callable, Sequence
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
 from kartograf._version import build_version
 from kartograf.catalog.formatting import example_command_line
-from kartograf.catalog.kinds import layer_codes
+from kartograf.catalog.kinds import layer_codes, parse_bbox_arg, parse_per_country
 from kartograf.catalog.spec import Command, Group, Param, resolve, sorted_groups
 from kartograf.exceptions import UsageError
 
@@ -278,6 +282,71 @@ def parse_command_line(
         command = _command_parser(parser, parsed)
         command.error(_unknown_text(parser, command, extras))
     return parsed
+
+
+def _json_value(param: Param, value: object) -> object:
+    """The JSON form of the text or number a flag was given."""
+    if param.kind == "per_country":
+        return parse_per_country(str(value), param.cli_flag or param.name)
+    if param.kind == "str_list":
+        return list(cast(Sequence[str], value))
+    if param.kind in ("path", "plan"):
+        return str(value)
+    return value
+
+
+def parsed_options(
+    command: Command, parsed: argparse.Namespace
+) -> tuple[dict[str, object], dict[str, object]]:
+    """The flags of a parsed command line as the JSON form of the options.
+
+    Parameters
+    ----------
+    command : Command
+        The declaration of the parsed command (``parsed._command_id``).
+    parsed : argparse.Namespace
+        The result of the parser of ``command``. A parameter counts when the
+        namespace has a value for it that is not ``None`` and not ``False``: with
+        the parser of ``given_only`` that is a flag the line wrote, with the parser
+        of the CLI (which has defaults) a flag the line wrote or a default.
+
+    Returns
+    -------
+    tuple of dict
+        ``(options, run)``: the task options (``Param.task``) and the other flags
+        (``--output``, ``--workers``, ``--quiet``, ...), by parameter name, in the
+        JSON form: ``--bbox`` is four numbers with ``bbox_crs`` (the CRS of
+        ``--bbox-crs``, else the default of the flag), a per-country value a text
+        or a ``{"pl": ..., "cz": ...}`` mapping, a path a text, a list of codes a
+        list.
+
+    Raises
+    ------
+    ValidationError
+        A ``--bbox`` that is not four numbers or a per-country value that is
+        not a text or ``pl=..,cz=..`` pairs.
+    """
+    crs = next((param for param in command.params if param.kind == "bbox_crs"), None)
+    options: dict[str, object] = {}
+    run: dict[str, object] = {}
+    for param in command.params:
+        if param.kind == "bbox_crs" or (
+            param.cli_flag is None and not param.positional
+        ):
+            continue
+        attribute = param.name if param.positional else param.cli_dest
+        value = getattr(parsed, attribute, None)
+        if value is None or value is False:
+            continue
+        if param.kind == "bbox":
+            assert crs is not None, f"{command.id}: bbox without bbox_crs"
+            given = getattr(parsed, crs.cli_dest, None) or crs.cli_default
+            box = parse_bbox_arg(str(value), str(given))
+            options[param.name] = [box.min_x, box.min_y, box.max_x, box.max_y]
+            options[crs.name] = box.crs
+            continue
+        (options if param.task else run)[param.name] = _json_value(param, value)
+    return options, run
 
 
 def _help(text: str) -> str:

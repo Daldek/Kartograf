@@ -8,6 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from kartograf.cli._args import library_arguments
 from kartograf.cli.download_cmd import (
     _plan_context,
     _present,
@@ -19,28 +20,12 @@ from kartograf.cli.download_cmd import (
     notice_printer,
     run_with_plan_file,
 )
-from kartograf.cli.landcover_cmd import area_task_arguments
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import output_required
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology import calculate_hsg, check_hsg
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES, HsgReport
 from kartograf.landcover.manager import SoilReport, check_soil, download_soil
-
-
-def soil_download_task_arguments(args: argparse.Namespace) -> dict:
-    """Data options shared by ``soil download`` and a project task."""
-    return {
-        **area_task_arguments(args),
-        "property": args.property,
-        "depth": args.depth,
-        "stat": args.stat,
-    }
-
-
-def soil_hsg_task_arguments(args: argparse.Namespace) -> dict:
-    """Data options shared by ``soil hsg`` and a project task."""
-    return {**area_task_arguments(args), "depth": args.depth}
 
 
 def cmd_soil_download(args: argparse.Namespace) -> int:
@@ -51,7 +36,7 @@ def cmd_soil_download(args: argparse.Namespace) -> int:
 
 
 def _soil_download(args: argparse.Namespace) -> int:
-    arguments = {**soil_download_task_arguments(args), "output_dir": Path(args.output)}
+    arguments = {**library_arguments(args), "output_dir": Path(args.output)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_soil(**arguments, on_notice=on_notice))
@@ -99,7 +84,7 @@ def cmd_soil_hsg(args: argparse.Namespace) -> int:
             option="output_dir",
         )
 
-    selection = soil_hsg_task_arguments(args)
+    selection = library_arguments(args)
     return run_with_plan_file(args, lambda a: _hsg_task(a, selection))
 
 

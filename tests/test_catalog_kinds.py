@@ -9,8 +9,10 @@ import pytest
 from kartograf.catalog.kinds import (
     check_options_json,
     convert_arguments,
+    layer_codes,
     options_from_json,
     options_to_json,
+    parse_per_country,
 )
 from kartograf.catalog.spec import Kind
 from kartograf.core.bbox import BBox
@@ -143,9 +145,9 @@ def test_options_round_trip(tmp_path):
     data = options_to_json(ELEVATION, elevation)
     assert list(data.items()) == [
         ("product", "nmt"),
+        ("country", "auto"),
         ("bbox", [-447000, -1114000, -446000, -1113000]),
         ("bbox_crs", "EPSG:5514"),
-        ("country", "auto"),
         ("resolution", {"pl": "1m", "cz": "2m"}),
         ("vertical_crs", "EVRF2007"),
         ("cutout", True),
@@ -249,3 +251,38 @@ def test_check_options_json_names_the_command():
 
     assert text is not None and "elevation download" in text
     assert "keep_raw" in text
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, None),
+        ("5m", "5m"),
+        ("pl=1m", {"pl": "1m"}),
+        ("pl=1m,cz=2m", {"pl": "1m", "cz": "2m"}),
+        (" PL = 1m , cz=2m ", {"pl": "1m", "cz": "2m"}),
+    ],
+)
+def test_parse_per_country_reads_one_value_or_country_pairs(raw, expected):
+    assert parse_per_country(raw, "--resolution") == expected
+
+
+@pytest.mark.parametrize(
+    "raw", ["pl=1m,pl=2m", "pl=1m,xx=2m", "pl=", "pl=1m,cz", "=1m"]
+)
+def test_parse_per_country_names_the_flag_of_a_malformed_value(raw):
+    with pytest.raises(ValidationError) as caught:
+        parse_per_country(raw, "--vertical-crs")
+
+    assert str(caught.value).startswith(
+        f"--vertical-crs: nieprawidlowa wartosc {raw!r}"
+    )
+    assert "--vertical-crs pl=...,cz=..." in str(caught.value)
+
+
+@pytest.mark.parametrize(
+    ("text", "codes"),
+    [("SWRS", ("SWRS",)), ("SWRS,PTWP", ("SWRS", "PTWP")), (" n , e ", ("n", "e"))],
+)
+def test_layer_codes_split_on_commas(text, codes):
+    assert layer_codes(text) == codes

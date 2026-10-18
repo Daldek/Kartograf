@@ -12,6 +12,7 @@ renders that document as text, or with ``--json`` prints it
 import argparse
 from collections.abc import Sequence
 
+from kartograf.catalog.commands import declared_commands
 from kartograf.cli._json import emit_document, wants_json
 from kartograf.sheet_info import (
     SheetDescendants,
@@ -22,30 +23,36 @@ from kartograf.sheet_info import (
 
 # Longer lists of descendants are shortened in the text (the document has all).
 _DESCENDANTS_SHOWN = 20
-# The line ``Uklad:`` and the phrase of ``Komendy:`` of each CZ system: the text
-# around the commands that take the code in ``--sheet`` (``SheetInfo.commands``).
-_CZ_TEXT = {
-    "cz_tm33": (
-        "TM33 (CZ) - kafel 2 x 2 km",
-        "--sheet w elevation download i elevation availability",
-    ),
-    "cz_sm5": (
-        "SM5 (CZ) - arkusz Statni mapy 1:5000",
-        "--sheet w elevation download (takze warstwice), imagery download i "
-        "elevation availability",
-    ),
-    "cz_ztm": (
-        "ZTM (CZ) - arkusz mapy topograficznej (--sheet-system {sheet_system})",
-        "--sheet w maps download --country cz",
-    ),
+# The wording of the line ``Uklad:`` of each CZ system.
+_CZ_SYSTEM = {
+    "cz_tm33": "TM33 (CZ) - kafel 2 x 2 km",
+    "cz_sm5": "SM5 (CZ) - arkusz Statni mapy 1:5000",
+    "cz_ztm": "ZTM (CZ) - arkusz mapy topograficznej (--sheet-system {sheet_system})",
+}
+# What the line ``Komendy:`` adds after the name of a command for a system. Which
+# commands take the code is the document's (``SheetInfo.commands``).
+_CZ_NOTES = {
+    ("cz_sm5", "elevation download"): " (takze warstwice)",
+    ("cz_ztm", "maps download"): " --country cz",
 }
 _CRS_NAMES = {"EPSG:5514": "S-JTSK", "EPSG:3045": "ETRS89 / UTM 33N"}
+
+
+def _commands_text(info: SheetInfo) -> str:
+    """``--sheet w <komendy>``: the commands that take the code, from the document
+    (the commands that download first, then the report; each with its note)."""
+    ordered = sorted(
+        info.commands, key=lambda command: declared_commands()[command].kind != "data"
+    )
+    names = [command + _CZ_NOTES.get((info.system, command), "") for command in ordered]
+    listed = names[0] if len(names) == 1 else f"{', '.join(names[:-1])} i {names[-1]}"
+    return f"--sheet w {listed}"
 
 
 def _format_cz(info: SheetInfo) -> str:
     """A CZ code: the system, CRS and extent (the frame of an SM5 or ZTM sheet is
     in the CUZK index, read at the download) and the commands."""
-    system, commands = _CZ_TEXT[info.system]
+    system = _CZ_SYSTEM[info.system].format(sheet_system=info.sheet_system)
     if info.bounds is None:
         extent = "rama z indeksu arkuszy CUZK (odczyt przy pobraniu)"
     else:
@@ -54,10 +61,10 @@ def _format_cz(info: SheetInfo) -> str:
     return "\n".join(
         [
             f"Godlo:     {info.sheet}",
-            f"Uklad:     {system.format(sheet_system=info.sheet_system)}",
+            f"Uklad:     {system}",
             f"CRS:       {info.crs} ({_CRS_NAMES[info.crs]})",
             f"Zasieg:    {extent}",
-            f"Komendy:   {commands}",
+            f"Komendy:   {_commands_text(info)}",
         ]
     )
 

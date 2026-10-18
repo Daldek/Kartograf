@@ -23,8 +23,8 @@ import pytest
 import requests
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.cli._args import library_arguments
 from kartograf.cli._parser import create_parser
-from kartograf.cli.download_cmd import _download_arguments
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
     AVAILABILITY_SCHEMA,
@@ -409,8 +409,13 @@ class _Validated(Exception):
     """The request passed every check of download_data before the network."""
 
 
-def _validated(hint: str, output) -> None:
+def _arguments(hint: str, output) -> dict:
+    """The library arguments of a hint command, as ``kartograf`` reads its flags."""
     args = create_parser().parse_args([*shlex.split(hint), "-o", str(output)])
+    return {**library_arguments(args), "output_dir": args.output}
+
+
+def _validated(hint: str, output) -> None:
     with (
         patch(
             "kartograf.download.data._create_provider_and_storage",
@@ -419,7 +424,7 @@ def _validated(hint: str, output) -> None:
         patch("kartograf.download.laz.download_laz_area", side_effect=_Validated),
         pytest.raises(_Validated),
     ):
-        download_data(**_download_arguments(args))
+        download_data(**_arguments(hint, output))
 
 
 @functools.cache
@@ -670,8 +675,7 @@ def test_report_sheets_equal_download_selection(tmp_path):
     report = _report("nmt", "krakow")
     newest = next(c for c in report.combinations if c.complete)
     (hint,) = newest.download_hint
-    args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
-    kwargs = _download_arguments(args)
+    kwargs = _arguments(hint, tmp_path)
     session = RecordedIndex(_areas("nmt", "krakow"))
 
     with patch(SESSION, return_value=session):
@@ -691,9 +695,8 @@ def test_check_asks_the_index_despite_cached_records(tmp_path):
     report = _report("nmt", "krakow")
     newest = next(c for c in report.combinations if c.complete)
     (hint,) = newest.download_hint
-    args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
     kwargs = {
-        **_download_arguments(args),
+        **_arguments(hint, tmp_path),
         "cache": MetadataCache(tmp_path / "cache.db"),
     }
     asked = []
@@ -1006,8 +1009,7 @@ def test_cz_hints(tmp_path):
     assert not any({"--output", "-o"} & set(shlex.split(h)) for h in _cz_hints())
     # every command passes the checks of download_data before the network
     for hint in _cz_hints():
-        args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
-        validate_data_request(**_download_arguments(args))
+        validate_data_request(**_arguments(hint, tmp_path))
 
 
 def test_cz_hints_accepted_by_project_add(tmp_path, monkeypatch):
@@ -1114,10 +1116,9 @@ def test_border_hint_plans_only_sheets_with_records(tmp_path):
     newest = report.combinations[0]
     planned = []
     for hint in newest.download_hint:
-        args = create_parser().parse_args([*shlex.split(hint), "-o", str(tmp_path)])
         session = RecordedIndex(_areas("nmpt", "cieszyn"))
         with patch(SESSION, return_value=session):
-            plan = check_data(**{**_download_arguments(args), "cache": False})
+            plan = check_data(**{**_arguments(hint, tmp_path), "cache": False})
         planned += [(item.unit, item.status) for item in plan.items]
 
     assert sorted(planned) == [(sheet, "missing") for sheet in newest.sheets_full]

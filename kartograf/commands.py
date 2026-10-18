@@ -34,22 +34,17 @@ import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import cast
 
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.cliparser import (
     build_parser,
     parse_command_line,
+    parsed_options,
     removed_command_error,
 )
-from kartograf.catalog.commands import declared
+from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import format_command_line
-from kartograf.catalog.kinds import (
-    convert_arguments,
-    parse_bbox_arg,
-    parse_per_country,
-)
-from kartograf.catalog.spec import Command, Param
+from kartograf.catalog.kinds import convert_arguments
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
@@ -87,11 +82,6 @@ class CommandCall:
 
 
 @functools.cache
-def _commands() -> dict[str, Command]:
-    return {command.id: command for command in declared().commands}
-
-
-@functools.cache
 def _parser() -> argparse.ArgumentParser:
     """The parser of ``kartograf`` that raises ``UsageError`` and keeps no
     defaults: a parsed line has the flags that were written and no others."""
@@ -106,7 +96,7 @@ def _parser() -> argparse.ArgumentParser:
 
 def _words(tokens: Sequence[str]) -> str | None:
     """The id of the command the first words of a line name, if they do."""
-    ids = _commands()
+    ids = declared_commands()
     if tokens and tokens[0] in ids:
         return tokens[0]
     if len(tokens) > 1 and f"{tokens[0]} {tokens[1]}" in ids:
@@ -114,40 +104,10 @@ def _words(tokens: Sequence[str]) -> str | None:
     return None
 
 
-def _json_value(param: Param, value: object) -> object:
-    """The JSON form of the text or number a flag was given."""
-    if param.kind == "per_country":
-        return parse_per_country(str(value), param.cli_flag or param.name)
-    if param.kind == "str_list":
-        return list(cast(Sequence[str], value))
-    if param.kind in ("path", "plan"):
-        return str(value)
-    return value
-
-
 def _call(parsed: argparse.Namespace) -> CommandCall:
     """A ``CommandCall`` of the namespace of a parsed line."""
-    command = _commands()[parsed._command_id]
-    crs = next((param for param in command.params if param.kind == "bbox_crs"), None)
-    options: dict[str, object] = {}
-    run: dict[str, object] = {}
-    for param in command.params:
-        if param.kind == "bbox_crs" or (
-            param.cli_flag is None and not param.positional
-        ):
-            continue
-        attribute = param.name if param.positional else param.cli_dest
-        if not hasattr(parsed, attribute):
-            continue
-        value = getattr(parsed, attribute)
-        if param.kind == "bbox":
-            assert crs is not None, f"{command.id}: bbox without bbox_crs"
-            given = getattr(parsed, crs.cli_dest, None) or crs.cli_default
-            box = parse_bbox_arg(str(value), str(given))
-            options[param.name] = [box.min_x, box.min_y, box.max_x, box.max_y]
-            options[crs.name] = box.crs
-            continue
-        (options if param.task else run)[param.name] = _json_value(param, value)
+    command = declared_commands()[parsed._command_id]
+    options, run = parsed_options(command, parsed)
     return CommandCall(command.id, options, run)
 
 
@@ -265,7 +225,7 @@ def format_command(
         ``options`` and ``run``, or a value of a wrong form.
     """
     entry = task_command(command)
-    declaration = _commands()[command]
+    declaration = declared_commands()[command]
     given_run = {} if run is None else run
     names = {param.name for param in declaration.params}
     for name in (*options, *given_run):
