@@ -23,6 +23,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 
 from kartograf.exceptions import ValidationError
+from kartograf.serialization import EncodeContext
 
 # Number of points per edge (as in corine/soilgrids `transform_bounds`).
 _DENSIFY = 21
@@ -41,6 +42,14 @@ class BBox(NamedTuple):
     max_x: float
     max_y: float
     crs: str
+
+    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        """JSON form (``kartograf.serialization`` hook): ``{"bbox": [...], "crs"}``.
+
+        Coordinates are floats (``BBox(1, ...)`` and ``BBox(1.0, ...)`` give the
+        same document, like ``bbox_coords`` for the sidecar).
+        """
+        return {"bbox": bbox_coords(self), "crs": self.crs}
 
 
 def _norm_label(crs: str) -> str:
