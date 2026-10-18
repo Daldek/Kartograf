@@ -125,6 +125,15 @@
 >    w CHANGELOG, jak `chore(release): poczatek cyklu 0.8.0`). Przebieg
 >    i decyzje: sekcja "Sesja 2026-10-15/16/17" nizej. Hydrograf/Hydrolog
 >    dostosuja sie same do zmian lamiacych (CHANGELOG [0.8.0], "Co zrobic").
+>    **BLOKADA WYDANIA (decyzja uzytkownika 2026-10-18):** przed merge do
+>    `main` i tagiem `v0.8.0` OBOWIAZKOWO zweryfikowac WSZYSTKIE zmiany
+>    wprowadzone do Kartografa przez agenta pracujacego na Archiwiscie:
+>    commity `a96b541..2fd87f2` na `feat/archiwista-store-api`
+>    (`git log develop..feat/archiwista-store-api`; spec, `store.py`,
+>    `store_geometry.py`, `__all__`, ARCHITECTURE 3.3.1, ADR-045, USAGE,
+>    CHANGELOG, SCOPE, CLAUDE.md) oraz `62d46ac` na `develop`. Przeglad
+>    kodu i dokumentow, brama, smoke na realnym magazynie; bez tego brak
+>    merge i tagu.
 > 1. **Nastepne kroki:** podprojekt 4 (wtyczka QGIS) roadmapy
 >    (`docs/SCOPE.md` 3.3) - od brainstormingu i specu. Podprojekt 5 (GUI
 >    webowe) ZASTAPIONY osobnym projektem **Archiwista**
