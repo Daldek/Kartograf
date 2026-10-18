@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import kartograf
+from kartograf.commands import parse_command
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import contours_formats
 from kartograf.download.options import BBOX_CRS_CHOICES, require_product
@@ -214,7 +215,9 @@ def test_error_report_document():
         "schema": "kartograf-error/1",
         "code": "invalid_input",
         "message": "--vertical-crs wymagane",
-        "hint": "Dozwolone wartosci vertical_crs: EVRF2007, KRON86.",
+        "hint": "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: "
+        "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
+        "--resolution 1m --vertical-crs EVRF2007 -o ./data",
         "exception": "ValidationError",
         "exit_code": 2,
         "command": "elevation download",
@@ -271,6 +274,47 @@ def test_validation_hint_lists_allowed_values_with_option_name():
     assert error_report(many).hint == f"Dozwolone wartosci layer: {shown}, ..."
     assert error_report(without_allowed).hint is None
     assert error_report(without_option).hint is None
+
+
+def test_validation_hint_has_flag_and_example_from_the_catalog():
+    exc = ValidationError("m", option="vertical_crs", allowed=("EVRF2007", "KRON86"))
+
+    hint = error_report(exc, command="elevation download").hint
+
+    assert hint is not None and hint.startswith(
+        "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: "
+        "kartograf elevation download "
+    )
+    example = parse_command(hint.split("Przyklad: kartograf ", 1)[1])
+    assert example.command == "elevation download"
+    assert "vertical_crs" in example.options
+    # without the command the flag is the name of the argument, with no example
+    bare = "Dozwolone wartosci vertical_crs: EVRF2007, KRON86."
+    assert error_report(exc).hint == bare
+    assert error_report(exc, command="no such command").hint == bare
+    assert error_report(exc, command="parse").hint == (
+        f"{bare} Przyklad: kartograf parse N-34-130-D-d-2-4"
+    )
+
+
+def test_validation_hint_has_an_example_without_allowed_values():
+    hint = error_report(
+        ValidationError("m", option="output_dir"), command="elevation download"
+    ).hint
+
+    assert hint is not None and hint.startswith("Przyklad: kartograf elevation ")
+    assert hint.endswith("-o ./data")
+
+
+def test_validation_hint_drops_the_example_that_would_not_fit():
+    long_values = tuple(f"wartosc-{i:02d}-dluga" for i in range(40))
+    exc = ValidationError("m", option="product", allowed=long_values)
+
+    hint = error_report(exc, command="elevation download").hint
+
+    assert hint is not None and len(hint) <= 400
+    assert hint.startswith("Dozwolone wartosci --product: wartosc-00-dluga")
+    assert "Przyklad" not in hint
 
 
 def test_oserror_is_io_error():

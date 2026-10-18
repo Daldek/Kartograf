@@ -226,7 +226,29 @@ def _ascii(text: str) -> str:
     return text.encode("ascii", "backslashreplace").decode("ascii")
 
 
-def _library_hint(exc: KartografError) -> str | None:
+def _option_hint(
+    option: str, allowed: Sequence[str] | None, command: str | None
+) -> str | None:
+    """The hint of a ``ValidationError`` that names an argument (spec 6.3, step
+    3): the allowed values with the CLI flag of the argument and an example
+    command line of the catalog that uses it.
+
+    The flag and the example need the command (``command``); without it the flag
+    is the name of the argument and there is no example. The example is left
+    out when the hint would pass ``HINT_MAX_CHARS`` with it.
+    """
+    from kartograf.catalog.hints import example_for  # loads the declarations
+
+    flag, line = example_for(command, option)
+    text = allowed_values_hint(flag or option, allowed) if allowed else ""
+    if line:
+        candidate = f"{text} Przyklad: {line}".strip()
+        if len(candidate) <= HINT_MAX_CHARS:
+            return candidate
+    return text or None
+
+
+def _library_hint(exc: KartografError, command: str | None) -> str | None:
     """The hint of an exception of the package hierarchy (spec 6.3, steps 1-3)."""
     if exc.hint:
         return exc.hint
@@ -236,8 +258,8 @@ def _library_hint(exc: KartografError) -> str | None:
         return exc.remedy
     if exc.DEFAULT_HINT:
         return exc.DEFAULT_HINT
-    if isinstance(exc, ValidationError) and exc.option and exc.allowed:
-        return allowed_values_hint(exc.option, exc.allowed)
+    if isinstance(exc, ValidationError) and exc.option:
+        return _option_hint(exc.option, exc.allowed, command)
     return None
 
 
@@ -278,7 +300,7 @@ def error_report(exc: BaseException, *, command: str | None = None) -> ErrorRepo
         return ErrorReport(
             code=exc.code,
             message=str(exc),
-            hint=_hint_or_none(_library_hint(exc)),
+            hint=_hint_or_none(_library_hint(exc, command)),
             exception=type(exc).__name__,
             exit_code=exc.exit_code,
             command=command,
