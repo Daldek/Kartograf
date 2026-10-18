@@ -855,6 +855,7 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "result_schema",
             "check_result_schema",
             "supports_check",
+            "check_tool",
             "cli",
             "tool",
             "params",

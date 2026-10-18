@@ -3146,7 +3146,8 @@ Dokument `kartograf-error/1` ma klucze `code`, `message`, `hint`, `exception`, `
 - `hint` to jedna linia (do 400 znakow) albo `null`: podpowiedz ustawiona przez wyjatek,
   inaczej z kodu bledu (tabela wyzej), a dla `ValidationError` z `option` skladniki
   `Dozwolone wartosci <flaga>: ...` (z `allowed`, najwyzej 40 wartosci) i `Przyklad: <linia
-  polecenia>` z katalogu;
+  polecenia>` z katalogu, a z `options` (np. brak obszaru) `Opcje: <flagi>.` i `Przyklad:
+  <linia polecenia>` z katalogu;
 - `command` to identyfikator komendy katalogu (`elevation download`), w ktorej wystapil blad
   (CLI i serwer MCP go znaja; wywolanie biblioteki bez kontekstu daje `null`);
 - `details` to atrybuty wyjatku: `option` (nazwa argumentu **API**, np. `vertical_crs`, nie
@@ -3229,8 +3230,11 @@ Opis komendy (`kartograf catalog soil hsg --json`, skrocony) niesie m.in.: `id`,
 (`network`, `store_write`, `project_write`, `cache_write`, `cache_delete`), `idempotent`,
 `destructive`, `project_task` (czy komenda jest zadaniem projektu), `function` i
 `check_function` (funkcje biblioteki z `kartograf.__all__`), `result_schema` i
-`check_result_schema` (dokumenty), `supports_check`, `cli` (komenda CLI albo `null` dla
-komendy tylko-API), `tool` (narzedzie MCP albo `null`), `params`, `constraints`, `examples`:
+`check_result_schema` (dokumenty), `supports_check`, `check_tool` (narzedzie MCP, ktore
+sprawdza komende bez pobierania: `check_updates` dla komend danych,
+`project_check_updates` dla `project download`; `null` bez sprawdzenia; tylko w widoku
+`full`), `cli` (komenda CLI albo `null` dla komendy tylko-API), `tool` (narzedzie MCP albo
+`null`), `params`, `constraints`, `examples`:
 
 ```json
 {
@@ -3270,7 +3274,7 @@ znajomosci funkcji per produkt:
 
 | Funkcja | Rola |
 |---|---|
-| `parse_command(argv)` | linia polecenia (lista slow albo napis) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to flagi uruchomienia (`output_dir`, `update`..., `workers`, `plan`, `json`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
+| `parse_command(argv)` | linia polecenia (lista slow albo napis, takze z poczatkowym `kartograf`, tak jak ja pisze `format_command`) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to flagi uruchomienia (`output_dir`, `update`..., `workers`, `plan`, `json`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
 | `validate_command(command, options, output_dir=None)` | walidacja bez sieci i bez zapisu tymi samymi regulami co pobranie: `ValidationError` z `option`/`allowed` |
 | `format_command(command, options, run=None)` | kanoniczna linia `kartograf <grupa> <komenda> --flaga ...` (odwrotnosc `parse_command`) |
 | `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | wywoluje funkcje komendy (`download_data`, ...), wynik jak ta funkcja: `kartograf-download/1` |
@@ -3351,7 +3355,7 @@ i `"args": ["-m", "kartograf.mcp_server", ...]`.
 | Opcja | Znaczenie |
 |---|---|
 | `--tools RODZINY` | rodziny narzedzi po przecinku: `discovery`, `availability`, `data`, `check`, `project`, `store` (domyslnie wszystkie 29; klienty z limitem liczby narzedzi zawezaja np. do `discovery,availability,data,check`); nieznana rodzina to blad uruchomienia |
-| `--allow-dir KATALOG` | powtarzalna; gdy podana, kazda sciezka argumentu (`output_dir`, `geometry`, `project_dir`, `path`) po `Path.resolve()` musi lezec w ktoryms z katalogow, inaczej `invalid_input` z `option` i `hint` |
+| `--allow-dir KATALOG` | powtarzalna; katalog bezwzgledny (albo z `~`; wzgledny konczy start bledem uzycia, kod 2: zalezalby od katalogu roboczego, ktory wybiera klient); gdy podana, kazda sciezka argumentu (`output_dir`, `geometry`, `project_dir`, `path`) po `Path.resolve()` musi lezec w ktoryms z katalogow, inaczej `invalid_input` z `option` i `hint` |
 | `--cache-file PLIK` | plik cache metadanych; domyslnie `<katalog cache uzytkownika>/kartograf/metadata.db` (`$XDG_CACHE_HOME` albo `~/.cache`; Windows `%LOCALAPPDATA%`), a nie `<cwd>/.kartograf_cache.db`: katalog roboczy serwera wybiera klient |
 | `--no-cache` | bez cache metadanych (wylaczne z `--cache-file`) |
 | `--version` | wersja |

@@ -105,6 +105,26 @@ def test_every_catalog_tool_name_has_a_spec_and_only_check_updates_has_no_comman
     assert project_check.check and CATALOG["project download"].supports_check
 
 
+def test_the_catalog_names_the_tool_that_checks_each_command():
+    """``check_tool`` of a command is a tool that exists and checks that command: a
+    data command by ``check_updates`` (it is in its ``tool`` enum), ``project
+    download`` by ``project_check_updates``."""
+    enum = SPECS["check_updates"].input_schema["properties"]["tool"]["enum"]
+    checked = {c.id: c for c in CATALOG.values() if c.supports_check}
+
+    assert {c.id for c in checked.values() if c.check_tool == "check_updates"} == {
+        c.id for c in data_commands() if c.supports_check
+    }
+    assert [c.tool for c in checked.values() if c.check_tool == "check_updates"] == enum
+    assert checked["project download"].check_tool == "project_check_updates"
+    assert SPECS["project_check_updates"].commands == ("project download",)
+    assert all(c.check_tool in SPECS for c in checked.values())
+    # a command without a check has no tool for it
+    assert [c.id for c in CATALOG.values() if c.check_tool is None] == [
+        c.id for c in CATALOG.values() if not c.supports_check
+    ]
+
+
 def test_check_updates_enum_is_the_twelve_data_tools():
     enum = SPECS["check_updates"].input_schema["properties"]["tool"]["enum"]
     checkable = [c.tool for c in data_commands() if c.supports_check]

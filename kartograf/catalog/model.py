@@ -111,6 +111,9 @@ class CommandInfo:
 
     ``params``, ``constraints`` and ``examples`` are ``None`` unless a command or
     ``params=True`` was asked for (``get_catalog()``, ``group=`` alone).
+    ``check_tool`` is the MCP tool that checks the command (``check_updates`` for
+    a data command, ``project_check_updates`` for ``project download``; ``None``
+    without a check), left out of the document of the overview.
     """
 
     id: str
@@ -128,6 +131,7 @@ class CommandInfo:
     result_schema: str
     check_result_schema: str | None
     supports_check: bool
+    check_tool: str | None
     cli: str | None
     tool: str | None
     params: tuple[ParamInfo, ...] | None

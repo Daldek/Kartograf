@@ -183,6 +183,37 @@ def test_cache_flags_exclude_each_other():
     assert caught.value.code == 2
 
 
+@pytest.mark.parametrize("directory", ["data", ".", "../data", "./a/b"])
+def test_a_relative_allow_dir_stops_the_start_with_a_usage_error(directory, capsys):
+    """A relative directory would stand for the working directory the client chose
+    for the server; the paths of the calls are absolute, so the flag is too."""
+    with pytest.raises(SystemExit) as caught:
+        main(["--no-cache", "--allow-dir", directory])
+
+    assert caught.value.code == 2
+    error = capsys.readouterr().err
+    assert "--allow-dir wymaga sciezki bezwzglednej" in error
+    assert repr(directory) in error
+
+
+def test_allow_dir_takes_an_absolute_directory_and_the_home_shortcut(tmp_path):
+    args = _parser().parse_args(["--allow-dir", str(tmp_path), "--allow-dir", "~/dane"])
+
+    assert args.allow_dir == [tmp_path.resolve(), Path("~/dane").expanduser().resolve()]
+
+
+@needs_mcp
+def test_create_server_refuses_a_relative_allow_dir_before_it_opens_the_cache(tmp_path):
+    from kartograf.mcp_server import create_server
+
+    database = tmp_path / "cache.db"
+
+    with pytest.raises(ValueError, match="sciezki bezwzglednej"):
+        create_server(cache=database, allow_dirs=["data"])
+
+    assert not database.exists()
+
+
 def test_default_cache_file_is_in_the_user_cache_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "xdg"))
     assert default_cache_file() == tmp_path / "xdg" / "kartograf" / "metadata.db"

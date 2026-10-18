@@ -564,15 +564,15 @@ def create_server(
         (the server closes the cache it opened), ``False`` for none; by default
         ``default_cache_file()``.
     allow_dirs : sequence of path, optional
-        When given, every path of a tool call must lie in one of these
-        directories (after ``Path.resolve()``).
+        Absolute directories (``~`` allowed); when given, every path of a tool
+        call must lie in one of them (after ``Path.resolve()``).
 
     Raises
     ------
     ImportError
         The ``mcp`` package is not installed.
     ValueError
-        An unknown family or ``cache=True``.
+        An unknown family, ``cache=True`` or a relative directory in ``allow_dirs``.
     """
     try:
         import anyio
@@ -584,6 +584,7 @@ def create_server(
         raise ImportError(INSTALL_HINT) from error
     if cache is True:
         raise ValueError("cache=True: podaj MetadataCache, plik cache albo False")
+    allowed = [_allowed_directory(directory) for directory in allow_dirs]
     specs = tool_specs(families)
     owned: MetadataCache | None = None
     library_cache: MetadataCache | bool
@@ -595,7 +596,7 @@ def create_server(
     toolbox = _Toolbox(
         specs,
         cache=library_cache,
-        allow_dirs=[Path(d).expanduser().resolve() for d in allow_dirs],
+        allow_dirs=allowed,
         validator_class=Draft202012Validator,
     )
     tools = [_wire_tool(spec) for spec in specs]
@@ -651,6 +652,33 @@ def _families(text: str) -> list[str]:
     return names
 
 
+def _allowed_directory(directory: str | Path) -> Path:
+    """A directory of ``--allow-dir`` as an absolute path (``~`` expanded): a
+    relative one would stand for the working directory the client chose for the
+    server, which the paths of the calls (always absolute) do not share.
+
+    Raises
+    ------
+    ValueError
+        The directory is not absolute.
+    """
+    path = Path(directory).expanduser()
+    if not path.is_absolute():
+        raise ValueError(
+            f"--allow-dir wymaga sciezki bezwzglednej, jest {str(directory)!r} "
+            "(wzgledna zalezalaby od katalogu roboczego serwera)"
+        )
+    return path.resolve()
+
+
+def _allow_dir_argument(text: str) -> Path:
+    """The type of ``--allow-dir``: a usage error for a relative directory."""
+    try:
+        return _allowed_directory(text)
+    except ValueError as error:
+        raise argparse.ArgumentTypeError(str(error)) from error
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="kartograf-mcp",
@@ -678,10 +706,10 @@ def _parser() -> argparse.ArgumentParser:
         "--allow-dir",
         action="append",
         default=[],
-        type=Path,
+        type=_allow_dir_argument,
         metavar="KATALOG",
-        help="katalog, w ktorym musza lezec sciezki narzedzi (powtarzalne; bez "
-        "tej flagi: dowolna sciezka bezwzgledna)",
+        help="katalog bezwzgledny (albo z ~), w ktorym musza lezec sciezki narzedzi "
+        "(powtarzalne; bez tej flagi: dowolna sciezka bezwzgledna)",
     )
     parser.add_argument(
         "--version", action="version", version=f"kartograf-mcp {kartograf.__version__}"

@@ -250,6 +250,26 @@ def _option_hint(
     return text or None
 
 
+def _options_hint(options: Sequence[str], command: str | None) -> str | None:
+    """The hint of a ``ValidationError`` that names several arguments (the area
+    is missing: ``sheet``, ``bbox``, ``geometry``; two arguments exclude each
+    other): their CLI flags and an example command line of the catalog that
+    uses the first of them.
+
+    Without the command (or for an argument it does not have) the name of the
+    argument stands for the flag and there is no example; the example is left
+    out when the hint would pass ``HINT_MAX_CHARS`` with it.
+    """
+    from kartograf.catalog.hints import example_for  # loads the declarations
+
+    flags = [example_for(command, name)[0] or name for name in options]
+    text = f"Opcje: {', '.join(flags)}."
+    _, line = example_for(command, options[0])
+    if line and len(candidate := f"{text} Przyklad: {line}") <= HINT_MAX_CHARS:
+        return candidate
+    return text
+
+
 def _usage_hint(command: str | None) -> str | None:
     """The hint of a ``UsageError`` about a command of the catalog: where its
     parameters are and an example line (``None`` for an unknown command)."""
@@ -273,8 +293,11 @@ def _library_hint(exc: KartografError, command: str | None) -> str | None:
             return usage
     if exc.DEFAULT_HINT:
         return exc.DEFAULT_HINT
-    if isinstance(exc, ValidationError) and exc.option:
-        return _option_hint(exc.option, exc.allowed, command)
+    if isinstance(exc, ValidationError):
+        if exc.option:
+            return _option_hint(exc.option, exc.allowed, command)
+        if exc.options:
+            return _options_hint(exc.options, command)
     return None
 
 

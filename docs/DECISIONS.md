@@ -4077,9 +4077,15 @@ w 37 komendach-lisciach, availability, pobranie, serwer MCP przez stdio, Claude 
   ponownego przebiegu to `local`; brak obszaru jest zglaszany przed brakiem `output_dir`
   (`details.options`); `--help` roznie sie od odniesienia przykladami z katalogu i kodem
   wyjscia 2 dla `parse` z blednym godlem (zamierzone, decyzje O2 i D7).
-- Znane drobiazgi bez zmiany decyzji: `hint` bledow z `options` jest `null`; `parse_command`
-  odrzuca wiersz z poczatkowym `kartograf ` (prefiks trzeba obciac); `project_check_updates`
-  nie jest nazwane w katalogu; `--allow-dir` wzgledny jest akceptowany.
+- Drobiazgi O1-O5 z raportu (decyzja koordynatora: poprawione w 0.8.0, bo to ergonomia dla
+  agentow): `hint` bledu z `options` (np. brak obszaru) to `Opcje: <flagi>.` i `Przyklad:
+  <linia polecenia>` z katalogu zamiast `null`; `parse_command` przyjmuje wiersz z
+  poczatkowym `kartograf ` (okrazenie `parse_command(format_command(...))` dziala bez
+  obcinania); `project_check_updates` jest nazwany w katalogu (`CommandInfo.check_tool`,
+  widok `full`; `check_updates` dla komend danych), a `supports_check` i `tool` zostaja bez
+  zmian; plan innego magazynu to `ValidationError` z `option="plan"`; `--allow-dir`
+  wzgledny konczy start bledem uzycia (kod 2: sciezki wywolan sa bezwzgledne, wzgledny
+  katalog zalezalby od katalogu roboczego serwera wybranego przez klienta).
 
 ---
 
