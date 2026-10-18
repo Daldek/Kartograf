@@ -1,4 +1,5 @@
-"""``soil download``, ``soil list-layers`` and ``soil hsg`` (ADR-044).
+"""``soil download`` and ``soil hsg`` (ADR-044); ``soil list-layers`` is in
+``layers_cmd``.
 
 The CLI translates flags to the corresponding command-level API functions.
 """
@@ -6,7 +7,6 @@ The CLI translates flags to the corresponding command-level API functions.
 import argparse
 import sys
 from pathlib import Path
-from typing import Any
 
 from kartograf.cli.download_cmd import (
     _plan_context,
@@ -25,13 +25,7 @@ from kartograf.download.options import output_required
 from kartograf.exceptions import ValidationError
 from kartograf.hydrology import calculate_hsg, check_hsg
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES, HsgReport
-from kartograf.landcover.manager import (
-    LandCoverManager,
-    SoilReport,
-    check_soil,
-    download_soil,
-    soil_choices,
-)
+from kartograf.landcover.manager import SoilReport, check_soil, download_soil
 
 
 def soil_download_task_arguments(args: argparse.Namespace) -> dict:
@@ -83,29 +77,6 @@ def _print_soil(
         print(f"Error: {failure.unit}: {failure.error}", file=sys.stderr)
     _report_stale(report.stale)
     return 0 if report.ok else 1
-
-
-def cmd_soil_list_layers(args: argparse.Namespace) -> int:
-    """``soil list-layers``: properties, depths and statistics of SoilGrids."""
-    # the catalogue of the source (no network, nothing written)
-    provider: Any = LandCoverManager(".", "soilgrids", cache=False).provider
-    print(f"Warstwy zrodla {provider.name}:")
-    print()
-    print("  Wlasciwosci gleb:")
-    for prop in provider.get_available_properties():
-        print(f"    {prop:11} - {provider.get_property_description(prop)}")
-    print()
-    depths = soil_choices()["depth"]
-    print(f"  Glebokosci ({', '.join(dict.fromkeys(depths.values()))}):")
-    for depth in depths:
-        print(f"    {depth}")
-    print()
-    print("  Statystyki:")
-    for stat, text in soil_choices()["stat"].items():
-        print(f"    {stat:11} - {text}")
-    print()
-    print("  Wybor pobrania: --property, --depth, --stat.")
-    return 0
 
 
 def cmd_soil_hsg(args: argparse.Namespace) -> int:

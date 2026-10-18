@@ -286,6 +286,7 @@ def test_http_retry_lines_stay_on_stderr(capsys):
         (["soil", "hsg"], "output_dir"),
         (["parse", "NIE-GODLO"], "sheet"),
         (["parse", "CTES96", "--hierarchy"], "hierarchy"),
+        (["parse", "N-34-130-D", "--descendants", "1:77"], "descendants"),
         (["catalog", "nie-ma-takiej-grupy"], "group"),
     ],
 )

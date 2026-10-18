@@ -462,7 +462,6 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
     "invalid",
     [
         ["parse"],
-        ["cache"],
         ["soil", "list-layers"],
         ["elevation", "list-sources"],
         # the report writes nothing: not a data command (no ``_task``)
@@ -485,6 +484,16 @@ def test_add_rejects_commands_without_data(tmp_path, capsys, invalid):
     assert (
         "Error: do projektu mozna dodac komendy zapisujace dane:"
         in capsys.readouterr().err
+    )
+    assert open_project(project).tasks == ()
+
+
+def test_add_rejects_a_group_without_its_command(tmp_path, capsys):
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    assert main(_add(project, "teren", "cache")) == 2
+    assert (
+        "Error: cache: podaj komende grupy (komendy danych:" in capsys.readouterr().err
     )
     assert open_project(project).tasks == ()
 
@@ -513,9 +522,7 @@ def test_add_misplaced_project_flag_explains_position(tmp_path, capsys):
 def test_nested_removed_command_and_help(tmp_path, capsys):
     project = tmp_path / "projekt"
     init_project(project, output_dir=project / "data")
-    with pytest.raises(SystemExit) as removed:
-        main(_add(project, "teren", "download", *SHEET_FLAGS))
-    assert removed.value.code == 2
+    assert main(_add(project, "teren", "download", *SHEET_FLAGS)) == 2
     assert "usunieta w 0.8.0" in capsys.readouterr().err
     for args, phrase in (
         (["project", "--help"], "download"),
