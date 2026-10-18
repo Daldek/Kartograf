@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+import kartograf
 from kartograf.catalog import commands as commands_package
 from kartograf.catalog import shared
 from kartograf.catalog.commands import declared, elevation
@@ -489,9 +490,6 @@ _PRODUCTS_OF = {
     "landcover list-layers": LANDCOVER_PRODUCTS,
     "soil list-sources": ("soil",),
 }
-# Arguments a command declares that its library function gets from the other
-# track of this work (``calculate_hsg(summary=)``); removed when it is merged.
-_PENDING_ARGUMENTS = {("calculate_hsg", "summary")}
 
 
 def _collected(group: str, key: str) -> set[str]:
@@ -649,16 +647,11 @@ def test_constraints_reference_declared_params(command):
 
 
 def _library_function(name: str):
-    """A function of the library by name: the package, the sheet module, the
-    catalog (the places the declared functions live in)."""
-    for module in ("kartograf", "kartograf.sheet_info", "kartograf.catalog"):
-        try:
-            found = getattr(importlib.import_module(module), name, None)
-        except ImportError:
-            continue
-        if found is not None:
-            return found
-    return None
+    """The function of a command: exported by ``kartograf`` (spec 12.5 c)."""
+    assert name in kartograf.__all__, f"{name} is not in kartograf.__all__"
+    function = getattr(kartograf, name)
+    assert callable(function), name
+    return function
 
 
 def _default(parameter: inspect.Parameter) -> object:
@@ -679,8 +672,6 @@ def test_arguments_match_the_signature_of_the_function(command):
         if name is None:
             continue
         function = _library_function(name)
-        if function is None:
-            pytest.skip(f"{name} is not part of the library yet")
         parameters = inspect.signature(function).parameters
         # the check twin takes the task options and the store, not the run options
         wanted = {
@@ -689,8 +680,6 @@ def test_arguments_match_the_signature_of_the_function(command):
             if name == command.function or param.task or argument == "output_dir"
         }
         for argument, param in wanted.items():
-            if (name, argument) in _PENDING_ARGUMENTS:
-                continue
             assert argument in parameters, f"{name} has no argument {argument}"
             assert param.default == _default(parameters[argument]), (name, argument)
         for position, (argument, parameter) in enumerate(parameters.items()):
@@ -703,6 +692,31 @@ def test_arguments_match_the_signature_of_the_function(command):
                     name,
                     argument,
                 )
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_result_schemas_are_registered(command):
+    """The schema a command names is that of a document class of the library, and
+    the catalog describes it and lists the command among its producers."""
+    from kartograf.catalog import get_catalog
+    from kartograf.serialization import SCHEMAS
+
+    described = {info.schema: info for info in get_catalog().schemas}
+    for schema in (command.result_schema, command.check_result_schema):
+        if schema is None:
+            continue
+        assert schema in SCHEMAS, f"{command.id}: {schema} is not registered"
+        assert schema in described, f"{command.id}: {schema} has no description"
+        assert command.id in described[schema].produced_by
+
+
+def test_every_described_schema_has_a_producer_but_the_error_document():
+    """A document nobody returns is a dead type or a missing command."""
+    from kartograf.catalog import get_catalog
+
+    unproduced = {info.schema for info in get_catalog().schemas if not info.produced_by}
+
+    assert unproduced == {"kartograf-error/1"}
 
 
 def test_declaration_modules_do_not_call_providers_at_import(monkeypatch):
