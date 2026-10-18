@@ -433,7 +433,7 @@ class TestLandCoverCLI:
         """Inverted/NaN/inf/wrong value count -> Error on stderr, code 2 (K7a)."""
         from kartograf.cli.commands import main
 
-        with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
+        with patch("kartograf.landcover.manager.LandCoverManager") as manager:
             result = main(
                 [
                     "landcover",

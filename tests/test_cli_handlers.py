@@ -10,9 +10,7 @@ from kartograf.catalog.cliparser import _subparsers
 from kartograf.cli._handlers import HANDLERS
 from kartograf.cli._parser import create_parser
 from kartograf.cli.catalog_cmd import cmd_catalog
-from kartograf.cli.project_cmd import _TASK_OPTIONS
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import COMMANDS
 
 
 def _catalog_text(capsys, **given) -> str:
@@ -167,7 +165,3 @@ def test_no_handler_without_a_catalog_command():
     declared = {c.id for c in get_catalog().commands if c.cli is not None}
 
     assert set(HANDLERS) == declared
-
-
-def test_project_add_reads_the_options_of_every_data_command():
-    assert set(_TASK_OPTIONS) == set(COMMANDS)

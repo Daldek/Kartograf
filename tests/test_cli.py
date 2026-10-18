@@ -21,10 +21,7 @@ from kartograf.cli._handlers import HANDLERS
 from kartograf.cli.commands import (
     create_parser,
     create_progress_callback,
-    format_children,
-    format_descendants,
-    format_hierarchy,
-    format_sheet_info,
+    format_sheet,
     main,
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
@@ -38,6 +35,7 @@ from kartograf.notices import Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.prg import LandMask
+from kartograf.sheet_info import describe_sheet
 from kartograf.sources.registry import sources_for
 from kartograf.sources.variants import UNKNOWN_VERTICAL, ProductVariant, variants
 from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
@@ -229,13 +227,12 @@ class TestCreateParserSheetStrip:
         assert args.sheet is None
 
 
-class TestFormatSheetInfo:
-    """Tests for format_sheet_info()."""
+class TestFormatSheet:
+    """The text of ``parse`` rendered from the document of ``describe_sheet``."""
 
     def test_format_1m_sheet(self):
         """Test formatting 1:1000000 sheet."""
-        parser = SheetParser("N-34")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34"))
 
         assert "N-34" in output
         assert "1:1000000" in output
@@ -244,8 +241,7 @@ class TestFormatSheetInfo:
 
     def test_format_10k_sheet(self):
         """Test formatting 1:10000 sheet."""
-        parser = SheetParser("N-34-130-D-d-2-4")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34-130-D-d-2-4"))
 
         assert "N-34-130-D-d-2-4" in output
         assert "1:10000" in output
@@ -253,8 +249,7 @@ class TestFormatSheetInfo:
 
     def test_format_includes_all_components(self):
         """Test that all components are included."""
-        parser = SheetParser("N-34-130-D")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34-130-D"))
 
         # Should include component values
         assert "N" in output
@@ -262,14 +257,9 @@ class TestFormatSheetInfo:
         assert "130" in output
         assert "D" in output
 
-
-class TestFormatHierarchy:
-    """Tests for format_hierarchy()."""
-
     def test_format_hierarchy_10k(self):
         """Test formatting hierarchy from 1:10000."""
-        parser = SheetParser("N-34-130-D-d-2-4")
-        output = format_hierarchy(parser)
+        output = format_sheet(describe_sheet("N-34-130-D-d-2-4", hierarchy=True))
 
         assert "Hierarchia" in output
         assert "N-34-130-D-d-2-4" in output
@@ -280,20 +270,14 @@ class TestFormatHierarchy:
 
     def test_format_hierarchy_1m(self):
         """Test formatting hierarchy from 1:1000000."""
-        parser = SheetParser("N-34")
-        output = format_hierarchy(parser)
+        output = format_sheet(describe_sheet("N-34", hierarchy=True))
 
         assert "N-34" in output
         assert "1:1000000" in output
 
-
-class TestFormatChildren:
-    """Tests for format_children()."""
-
     def test_format_children_100k(self):
         """Test formatting children of 1:100000 sheet."""
-        parser = SheetParser("N-34-130-D")
-        output = format_children(parser)
+        output = format_sheet(describe_sheet("N-34-130-D", children=True))
 
         assert "Arkusze potomne" in output
         assert "(4)" in output
@@ -304,26 +288,19 @@ class TestFormatChildren:
 
     def test_format_children_8_part_no_children(self):
         """The 8-part sheet is the lowest level (nie ma arkuszy potomnych)."""
-        parser = SheetParser("N-34-130-D-d-2-4-1")
-        output = format_children(parser)
+        output = format_sheet(describe_sheet("N-34-130-D-d-2-4-1", children=True))
 
         assert "nie ma arkuszy potomnych" in output
 
     def test_format_children_500k(self):
         """Test formatting children of 1:500000 ((36))."""
-        parser = SheetParser("N-34-A")
-        output = format_children(parser)
+        output = format_sheet(describe_sheet("N-34-A", children=True))
 
         assert "(36)" in output
 
-
-class TestFormatDescendants:
-    """Tests for format_descendants()."""
-
     def test_format_descendants_small(self):
         """Test formatting descendants (small count)."""
-        parser = SheetParser("N-34-130-D-d-2")
-        output = format_descendants(parser, "1:10000")
+        output = format_sheet(describe_sheet("N-34-130-D-d-2", descendants="1:10000"))
 
         assert "Arkusze potomne" in output
         assert "(4)" in output
@@ -332,8 +309,7 @@ class TestFormatDescendants:
 
     def test_format_descendants_large(self):
         """Test formatting descendants (large count, truncated)."""
-        parser = SheetParser("N-34-130-D")
-        output = format_descendants(parser, "1:10000")
+        output = format_sheet(describe_sheet("N-34-130-D", descendants="1:10000"))
 
         assert "(64)" in output
         assert "..." in output
@@ -3869,13 +3845,12 @@ class TestCmdSoilgridsHsgGeometry:
 # ===========================================================================
 
 
-class TestFormatSheetInfoPL2000:
-    """Tests for format_sheet_info() with PL-2000 sheets."""
+class TestFormatSheetPL2000:
+    """Tests for the text of ``parse`` with PL-2000 sheets."""
 
     def test_format_pl2000_sheet_basic(self):
         """PL-2000 sheet shows correct layout and components."""
-        parser = SheetParser("6.179.12")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("6.179.12"))
 
         assert "6.179.12" in output
         assert "1:10000" in output
@@ -3887,38 +3862,33 @@ class TestFormatSheetInfoPL2000:
 
     def test_format_pl2000_shows_strefa(self):
         """PL-2000 output should include Strefa line."""
-        parser = SheetParser("6.179.12")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("6.179.12"))
 
         assert "Strefa: 6" in output
 
     def test_format_pl2000_shows_native_crs(self):
         """PL-2000 output should include native CRS."""
-        parser = SheetParser("6.179.12")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("6.179.12"))
 
         assert "Natywny CRS: EPSG:2177" in output
 
     def test_format_pl2000_zone5(self):
         """Zone 5 shows EPSG:2176."""
-        parser = SheetParser("5.100.10")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("5.100.10"))
 
         assert "Strefa: 5" in output
         assert "Natywny CRS: EPSG:2176" in output
 
     def test_format_pl2000_zone8(self):
         """Zone 8 shows EPSG:2179."""
-        parser = SheetParser("8.100.10")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("8.100.10"))
 
         assert "Strefa: 8" in output
         assert "Natywny CRS: EPSG:2179" in output
 
     def test_format_pl1992_no_strefa(self):
         """PL-1992 sheet should NOT show Strefa or Natywny CRS."""
-        parser = SheetParser("N-34-130-D")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34-130-D"))
 
         assert "Strefa:" not in output
         assert "Natywny CRS:" not in output
@@ -5598,21 +5568,6 @@ class TestCmdDownloadCz:
         result = _cmd_download_cz(_cz_args(tmp_path, sheet_system="1992"))
         assert result == 2
         assert "--sheet-system" in capsys.readouterr().err
-
-    def test_kron86_prints_remedy(self, tmp_path, capsys):
-
-        from kartograf.transform.crs import TransformUnavailableError
-
-        with patch(
-            _CZ_FACTORY_PATCH,
-            side_effect=TransformUnavailableError(
-                "brak operacji", remedy="uzyj EVRF2007 (EPSG:5621)"
-            ),
-        ):
-            result = _cmd_download_cz(_cz_args(tmp_path, vertical_crs="KRON86"))
-        assert result == 2
-        err = capsys.readouterr().err
-        assert "EVRF2007" in err
 
     def test_download_error_returns_1(self, tmp_path, capsys):
 

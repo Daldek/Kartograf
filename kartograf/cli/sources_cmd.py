@@ -2,7 +2,8 @@
 ``<group> list-sources``: the registered sources of a group as a table.
 
 The table is rendered from the library document ``list_sources`` (spec 5.4.6):
-no network and no second catalogue. WYBOR is the options that choose a source in
+no network and no second catalogue; with ``--json`` the CLI prints that
+document (``kartograf-sources/1``). WYBOR is the options that choose a source in
 ``<group> download`` written as flags (``--product nmt --country pl --resolution
 1m --vertical-crs EVRF2007|KRON86``), KATALOG the segment of the files below
 ``--output``, KLUCZ the ``dataset`` field of their sidecar.
@@ -13,6 +14,7 @@ import textwrap
 from collections.abc import Sequence
 
 from kartograf.catalog.commands import declared
+from kartograf.cli._json import emit_document, wants_json
 from kartograf.source_info import SelectValue, list_sources
 
 _HEADER = ("WYBOR", "KRAJ", "DOSTAWCA", "KATALOG", "KLUCZ", "NAZWA")
@@ -60,8 +62,11 @@ def _choice(select: dict[str, SelectValue], metavars: dict[str, str]) -> str:
 
 
 def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
-    """Print the sources of ``group`` (``--json`` is the document of
+    """Print the sources of ``group`` (``--json``: the document of
     ``list_sources``)."""
+    sources = list_sources(group=group)
+    if wants_json(args):
+        return emit_document(sources)
     metavars = _metavars(group)
     rows = [
         (
@@ -72,7 +77,7 @@ def cmd_list_sources(args: argparse.Namespace, group: str) -> int:
             source.key,
             source.name,
         )
-        for source in list_sources(group=group).sources
+        for source in sources.sources
     ]
     widths = [max(len(row[i]) for row in (_HEADER, *rows)) for i in range(len(_HEADER))]
     print(f"Zrodla grupy {group}:")

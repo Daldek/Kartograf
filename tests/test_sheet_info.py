@@ -3,7 +3,6 @@
 functions and the facts the CLI text gave."""
 
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -366,103 +365,6 @@ def test_the_json_text_is_repeatable_and_ascii():
     assert first == second
     assert first.isascii()
     assert first.endswith("}\n")
-
-
-# =============================================================================
-# The CLI text of today (kartograf.cli.parse_cmd) says the same things.
-# Transitional: T5 renders the text from the document and removes these.
-# =============================================================================
-
-
-def _facts(text: str) -> dict[str, str]:
-    """``Key:  value`` lines of a ``parse`` text; the indented ones of the
-    ``Czlony:`` block as ``name: value`` pairs under the key ``part:<name>``."""
-    facts: dict[str, str] = {}
-    for line in text.splitlines():
-        head = re.fullmatch(r"(\w+):\s+(.+)", line)
-        part = re.fullmatch(r"  ([\w ]+): (.+)", line)
-        if part:
-            facts[f"part:{part.group(1)}"] = part.group(2)
-        elif head:
-            facts[head.group(1)] = head.group(2)
-    return facts
-
-
-@pytest.mark.parametrize("code", [PL1992, PL2000, "N-34", "N-34-130-D", "6.179.12"])
-def test_describe_matches_the_cli_text_facts_of_pl_codes(code):
-    from kartograf.cli.parse_cmd import format_sheet_info
-
-    facts = _facts(format_sheet_info(SheetParser(code)))
-    info = describe_sheet(code)
-
-    assert info.sheet == facts["Godlo"]
-    assert info.scale == facts["Skala"]
-    assert info.sheet_system == facts["Uklad"]
-    parts = {
-        k.removeprefix("part:"): v for k, v in facts.items() if k.startswith("part:")
-    }
-    assert dict(info.components or {}) == {
-        k: v for k, v in parts.items() if k not in ("Strefa", "Natywny CRS")
-    }
-    if info.zone is None:
-        assert "Strefa" not in parts
-    else:
-        assert str(info.zone) == parts["Strefa"]
-        assert info.crs == parts["Natywny CRS"]
-
-
-def test_describe_matches_the_cli_text_facts_of_hierarchy_children_descendants():
-    from kartograf.cli.parse_cmd import (
-        format_children,
-        format_descendants,
-        format_hierarchy,
-    )
-
-    parser = SheetParser("N-34-130-D-d")
-    info = describe_sheet("N-34-130-D-d", hierarchy=True, children=True)
-    wide = describe_sheet("N-34-130-D", descendants="1:10000")
-
-    hierarchy = [
-        re.sub(r"^[ ]*`- ", "", line)
-        for line in format_hierarchy(parser).splitlines()[2:]
-    ]
-    assert info.hierarchy is not None
-    assert hierarchy == [f"{level.sheet} ({level.scale})" for level in info.hierarchy]
-    children = [line.strip() for line in format_children(parser).splitlines()[2:]]
-    assert info.children is not None
-    assert children == [f"{child.sheet} ({child.scale})" for child in info.children]
-    text = format_descendants(SheetParser("N-34-130-D"), "1:10000")
-    shown = [line.strip() for line in text.splitlines()[2:] if line.strip() != "..."]
-    assert wide.descendants is not None
-    assert f"({wide.descendants.count})" in text.splitlines()[0]
-    # the text shows the first and the last two of more than 20, the document all
-    assert shown == [*wide.descendants.sheets[:2], *wide.descendants.sheets[-2:]]
-
-
-@pytest.mark.parametrize("code", [SM5, TM33, ZTM_SJTSK, ZTM_ETRS89])
-def test_describe_matches_the_cli_text_facts_of_cz_codes(code):
-    from kartograf.cli.parse_cmd import format_cz_sheet
-
-    text = format_cz_sheet(code)
-    assert text is not None
-    facts = _facts(text)
-    info = describe_sheet(code)
-
-    assert info.sheet == facts["Godlo"]
-    assert facts["CRS"].startswith(info.crs)
-    if info.bounds is not None:
-        b = info.bounds
-        assert (
-            facts["Zasieg"]
-            == f"{b.min_x:.0f},{b.min_y:.0f},{b.max_x:.0f},{b.max_y:.0f}"
-        )
-    else:
-        assert "indeksu arkuszy CUZK" in facts["Zasieg"]
-    if info.sheet_system is not None:
-        assert f"--sheet-system {info.sheet_system}" in facts["Uklad"]
-    ids = [c.id for c in declared().commands if c.cli is not None]
-    mentioned = [i for i in ids if i in facts["Komendy"]]
-    assert list(info.commands) == mentioned
 
 
 # =============================================================================
