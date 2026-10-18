@@ -205,7 +205,7 @@ pol dataclass, kolejnosc wyniku biblioteki); przy zamrozonym zegarze
 | D6 | `--json` wycisza `Info:`/`Warning:` (sa w `notices`); logi ponowien transportu HTTP zostaja na stderr jako diagnostyka spoza kontraktu | notice'y na stderr i w dokumencie: dubel; calkowite wyciszenie stderr: gubi diagnostyke sieci |
 | D7 | Deklaracje komend w bibliotece (`kartograf/catalog/`), argparse budowany z deklaracji (`kartograf/catalog/cliparser.py`), test kontraktowy jako dodatkowa bariera; migracja etapami z porownaniem `--help` przed/po (sekcja 13) | sam test kontraktowy: kazdy tekst `--help` w dwoch miejscach; introspekcja argparse w `get_catalog()`: biblioteka importowalaby `kartograf.cli`; katalog w `cli/`: MCP i Archiwista importowalyby CLI |
 | D8 | Jeden model komendy dla CLI i API: komenda tylko-API (`find_sheets`, `store_*`) to wpis z `cli: null` | dwa katalogi (CLI, API): rozjazd i dwa formaty |
-| D9 | `get_catalog()` zwraca widok skrocony (grupy, komendy bez parametrow, kody); parametry na zadanie (`command=`, `params=True`) | zawsze pelny: ok. 25-30 tys. tokenow (szacunek) na kazde wywolanie przez model |
+| D9 | `get_catalog()` zwraca przeglad (`view: "overview"`: grupy z nazwami produktow, komendy: id, podsumowanie, narzedzie, `supports_check`; ok. 7 tys. znakow); reszta na zadanie: `group=`, `command=`, `params=True`, `tables=True` (D22) | zawsze pelny: ok. 25-30 tys. tokenow (szacunek) na kazde wywolanie przez model; widok skrocony 0.8.0-dev (kazda komenda z opisem i polami, grupy ze zrodlami produktow, tabele kodow): zmierzone 47 807 znakow (62 389 w CLI), czyli nadal ok. 12 tys. tokenow |
 | D10 | Warstwa komend w bibliotece: `parse_command` (KB-2), `validate_command` (KB-3), `format_command` (KB-4), `run_command`/`check_command` (KB-5); `data_commands()` = filtr katalogu (KB-1) | tylko katalog: MCP i Archiwista pisza wlasny dispatch po 12 funkcjach; patrz O5 |
 | D11 | MCP na niskopoziomowym `mcp.server.Server` z jawnymi schematami z katalogu; wynik `CallToolResult(content, structured_content, is_error)` budowany przez serwer | `MCPServer`: schemat z sygnatur Pythona (artefakty pydantic, `title`), do modelu dociera tylko tresc `ToolError`, brak `structured_content` przy bledzie; `mcp run`/`mcp dev` dzialaja tylko z `MCPServer` (nieistotne: skrypt `kartograf-mcp`) |
 | D12 | Narzedzie na komende katalogu (`elevation_download`, `boundaries_download`, ...) plus jedno narzedzie `check_updates` (tylko odczyt; parametry `tool` = nazwa narzedzia danych i `arguments` = jego argumenty) zamiast blizniaka per komenda; nazwy narzedzi z katalogu (`CommandInfo.tool`) | narzedzie na funkcje API (`download_data` dla elevation i imagery, `download_collection` dla 7 grup): 5 narzedzi danych zamiast 12, ale `collection` to zargon biblioteki, schemat to suma 17 parametrow roznych produktow; 12 blizniakow `<narzedzie>_check_updates`: 12 dodatkowych narzedzi (kontekst, gorszy wybor narzedzia przez agenta); jedno narzedzie danych z trybem `check`: `readOnlyHint` nie moze zalezec od argumentu; patrz O4 |
@@ -218,6 +218,7 @@ pol dataclass, kolejnosc wyniku biblioteki); przy zamrozonym zegarze
 | D19 | `scripts/gate.sh`: ruff check, ruff format --check, mypy, pytest `-m "not live"`; Python z `.venv` repozytorium albo glownego checkoutu (worktree) | `make`/`nox`: nowa zaleznosc; skrypt w Pythonie: potrzebuje Pythona do znalezienia Pythona |
 | D20 | `kartograf/__main__.py` (`python -m kartograf`) wola `kartograf.cli.commands.main` | tylko skrypt `kartograf`: agent w srodowisku bez `PATH` skryptow (worktree, `uvx`) nie uruchomi CLI z kodu worktree |
 | D21 | `OSError` (brak, uprawnienia, odlaczony udzial; kontrakt odczytu magazynu ADR-045 mowi o `OSError`, nie o pustym magazynie) = kod bledu `io_error`, kod wyjscia 1; budowany przez `error_report` obok `interrupted` i `internal_error`, bez nowej klasy w hierarchii `KartografError` | `internal_error` dla `OSError`: model dostaje "blad programu" za literowke w `output_dir`; klasa `StoreError(KartografError)` opakowujaca `OSError`: `OSError` leci tez z zapisu pobran, cache i projektu, wiec kazde miejsce wymagaloby opakowania; `ValidationError(option="output_dir")` tylko w nowych funkcjach: gubi odlaczony udzial (zawsze `invalid_input`, kod 2) |
+| D22 | Budzet kontekstu agenta (decyzja koordynatora): `tools/list` <= 30 000 znakow (bylo 65 883), `get_catalog()` i `kartograf catalog --json` bez argumentow <= 8 000 (bylo 47 807 i 62 389). Opisy narzedzi i argumentow pisane dla wywolania (tabela `_BRIEF` w `tools.py`: kilka slow, bez flag CLI i bez powtarzania `enum`), wspolne znaczenia argumentow (obszar, sciezki, `update`, `plan`) raz w `instructions` serwera, dlugi opis (tekst `--help`) w `get_catalog(command=)`; narzedzie bez `title`; `$ref` nie jest uzywane; przeglad katalogu zapisywany jako rekord na linie (9.4, 8.1) | `$defs`/`$ref` dla powtarzanych struktur (`bbox`, `bbox_crs`, obszar): klienty nie rozwiazuja `$ref` jednolicie (Claude Code anthropics/claude-code#18260: parametr z `$ref` trafia do serwera jako napis; Codex openai/codex#3152, #13746: model widzi napis zamiast schematu) - ryzyko wiekszego kosztu niz zysk (ok. 4-6 tys. znakow); opisy z katalogu (tekst `--help`): 35 tys. znakow samych opisow parametrow; `title` obok `description`: 1,6 tys. znakow dubla pierwszego zdania; zawezanie rodzin narzedzi zamiast skracania (`--tools`): zostaje jako dodatkowe, nie zastepuje skracania |
 
 ## 5. Serializacja i dokumenty JSON
 
@@ -904,7 +905,8 @@ Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (36 dzisiejszych 
 (`kartograf elevation availability --json ...`); `kartograf --json ...` nie istnieje.
 
 1. **stdout** = dokladnie jeden dokument JSON (`to_json()`: wciecie 2 spacje,
-   `\n` na koncu), nic wiecej: ani pasek postepu, ani linie statusu, ani naglowek
+   `\n` na koncu; wyjatek: przeglad katalogu, 8.1 - rekord grupy i komendy w jednej
+   linii), nic wiecej: ani pasek postepu, ani linie statusu, ani naglowek
    `SHEET_LIST` (jest w `notices`). CLI ustawia kodowanie stdout na UTF-8
    (`sys.stdout.reconfigure(encoding="utf-8")`), niezaleznie od lokalizacji.
 2. **stderr** jest pusty z dwoma wyjatkami spoza kontraktu: linie ponowien
@@ -973,8 +975,13 @@ command=, params=)` (8.5). Bez `--json` drukuje tekst: grupy z produktami i
 komendami (jedna linia na komende: id, rodzaj, podsumowanie); z `GRUPA` komendy
 grupy; z `GRUPA KOMENDA` opis i parametry (tabela: flaga, argument API, rodzaj,
 wymagany, dozwolone wartosci, opis) i przyklady; `--params` dodaje parametry do widoku
-grupy i calosci. Komenda jest zapytaniem (bez sieci, bez zapisu), nie komenda danych
-projektu (bez `_task`).
+grupy i calosci. Z `--json` bez `GRUPY` i `KOMENDY`: przeglad (`view: "overview"`,
+do 8000 znakow; D9, D22); z `GRUPA`, `KOMENDA` albo `--params`: widok pelny (8.1).
+Tabele kodow (`tables=True`) ma `get_catalog` w API i MCP oraz caly katalog z
+parametrami (`--params --json` bez `GRUPY`); osobnej flagi `--tables` CLI nie ma
+(mozliwe rozszerzenie: parametr `tables` bez `flag=None`, a w `cmd_catalog`
+`tables=True if args.tables else None`). Komenda jest zapytaniem (bez sieci, bez
+zapisu), nie komenda danych projektu (bez `_task`).
 
 ### 7.5 Pozostale zmiany CLI
 
@@ -991,11 +998,35 @@ Typy (`kartograf/catalog/model.py`, `Document`): `Catalog`, `GroupInfo`,
 `ProductInfo`, `CommandInfo`, `ParamInfo`, `ConstraintInfo`, `ExampleInfo`,
 `ExitCodeInfo`, `ErrorCodeInfo`, `SchemaInfo`. Wszystkie teksty po polsku, ASCII.
 
-`Catalog` - klucze: `schema` (`kartograf-catalog/1`), `kartograf_version`,
-`language` (`pl`), `groups` (`GroupInfo[]`), `commands` (`CommandInfo[]`),
-`exit_codes` (`{code, name, meaning}[]`, tabela 6.5), `errors` (`{code, exception,
-exit_code, meaning}[]`, tabela 6.2), `schemas` (`{schema, description, produced_by}[]`;
-`produced_by` = id komend, kolejnosc jak w `SCHEMAS`).
+`Catalog` - klucze: `schema` (`kartograf-catalog/1`), `view` (`overview` albo `full`),
+`kartograf_version`, `language` (`pl`), `groups` (`GroupInfo[]`), `commands`
+(`CommandInfo[]`), `exit_codes` (`{code, name, meaning}[]`, tabela 6.5), `errors`
+(`{code, exception, exit_code, meaning}[]`, tabela 6.2), `schemas` (`{schema,
+description, produced_by}[]`; `produced_by` = id komend, kolejnosc jak w `SCHEMAS`).
+Zestaw kluczy jest ten sam w kazdym widoku (5.2 punkt 1); tabele `exit_codes`,
+`errors`, `schemas` sa `null`, dopoki nie zostana zazadane (`tables=True`, 8.5).
+
+**Widoki** (`Catalog.view`; D9, D22). Przeglad (`overview`) to to, co agent czyta
+najpierw, wiec jego dokument jest krotkim rzutem tych samych obiektow (do 8000 znakow;
+bylo 47 807):
+
+- `groups[]`: `{name, summary, products}`, gdzie `products` to tablica nazw produktow
+  (nie `ProductInfo`);
+- `commands[]`: `{id, summary, tool, supports_check}` (`tool`: `null`, gdy komenda nie
+  jest narzedziem MCP);
+- pozostale pola `GroupInfo`, `ProductInfo` i `CommandInfo` oraz parametry, ograniczenia,
+  przyklady i tabele sa pod zapytaniem szczegolowym: `group=` (opis grupy, produkty z
+  `summary`, `countries`, `sources`, komendy grupy z opisem i polami), `command=`
+  (komenda z `params`, `constraints`, `examples`), `params=True`, `tables=True`.
+
+Widok pelny (`full`: wybrano grupe albo komende albo `params=True`) ma kazde pole
+obiektow. Obiekty w pamieci (`get_catalog().groups[0].description`) maja ZAWSZE
+wszystkie pola - rzut dotyczy tylko dokumentu (`to_dict()`, `to_json()`), wiec
+wywolujacy biblioteke nie pyta drugi raz, a tekst CLI (`kartograf catalog`) drukuje
+z tych samych obiektow. `to_json()` przegladu zapisuje rekord grupy i komendy w jednej
+linii (wciecie 2 spacje poziomu listy; `to_json(indent=None)` jak zawsze zwarty): ten
+sam dokument, ok. jedna czwarta krocej niz wciecie kazdego klucza (CLI: 7 629 znakow,
+z wcieciem 9 870).
 
 `GroupInfo`: `name` (`elevation`...), `summary`, `description`, `products`
 (`ProductInfo[]`), `commands` (id komend grupy). `GroupInfo` istnieje tylko dla grup
@@ -1102,6 +1133,30 @@ Przyklad (skrocony do 5 z 28 parametrow `elevation download`):
   "examples": [
     {"title": null, "options": {"product": "nmt", "sheet": "N-34-130-D-d-2-4", "resolution": "1m", "vertical_crs": "EVRF2007"}, "command_line": "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./data"}
   ]
+}
+```
+
+Przyklad przegladu (`get_catalog()`; skrocony do dwoch grup i trzech komend z 13 grup i
+41 komend; w pliku rekordy sa po jednym w linii):
+
+```json
+{
+  "schema": "kartograf-catalog/1",
+  "view": "overview",
+  "kartograf_version": "0.8.0",
+  "language": "pl",
+  "groups": [
+    {"name":"elevation","summary":"Wysokosci: NMT, NMPT i chmury LAZ (PL i CZ), warstwice (CZ)","products":["nmt","nmpt","laz","contours"]},
+    {"name":"soil","summary":"Gleby: SoilGrids i grupy hydrologiczne HSG","products":["soil"]}
+  ],
+  "commands": [
+    {"id":"elevation download","summary":"Pobierz NMT, NMPT, LAZ albo warstwice (arkusze, kafle albo wycinek)","tool":"elevation_download","supports_check":true},
+    {"id":"elevation list-sources","summary":"Wypisz zrodla danych grupy (rejestr zrodel, bez sieci)","tool":"list_sources","supports_check":false},
+    {"id":"cache stats","summary":"Pokaz statystyki cache (liczby wpisow, rozmiar bazy)","tool":null,"supports_check":false}
+  ],
+  "exit_codes": null,
+  "errors": null,
+  "schemas": null
 }
 ```
 
@@ -1247,20 +1302,26 @@ CLI, ktore nie trafiaja do JSON: `dest` (domyslnie `name`), `metavar` (po polsku
 
 ```python
 def get_catalog(*, group: str | None = None, command: str | None = None,
-                params: bool | None = None) -> Catalog
+                params: bool | None = None, tables: bool | None = None) -> Catalog
 def data_commands() -> tuple[CommandInfo, ...]    # KB-1: komendy z project_task=True, z parametrami
 ```
 
-- bez argumentow: widok skrocony (D9): `groups`, `commands` bez `params`,
-  `constraints`, `examples` (`null`), `exit_codes`, `errors`, `schemas`;
-- `group`: tylko ta grupa i jej komendy (nieznana: `ValidationError`, `option="group"`,
-  `allowed` = grupy); `command`: tylko ta komenda, z `params`, `constraints` i
-  `examples` (`params=None` oznacza wtedy `True`); nieznana: `ValidationError`,
-  `option="command"`;
-- `params=True`: parametry, ograniczenia i przyklady wszystkich wybranych komend;
-  `params=False`: nigdy; `None`: tylko gdy podano `command`;
-- `exit_codes`, `errors`, `schemas` sa zawsze; wynik pelnego katalogu jest budowany raz na
-  proces i niemutowalny, filtry tworza widoki;
+- bez argumentow: przeglad (`view: "overview"`, 8.1, D9): grupy z nazwami produktow i
+  komendy (id, podsumowanie, narzedzie, `supports_check`); `params`, `constraints`,
+  `examples` obiektow sa `None`, tabele `None`;
+- `group`: tylko ta grupa i jej komendy, z produktami i ich zrodlami (widok `full`;
+  nieznana: `ValidationError`, `option="group"`, `allowed` = grupy); `command`: tylko ta
+  komenda, z `params`, `constraints` i `examples` (`params=None` oznacza wtedy `True`);
+  nieznana: `ValidationError`, `option="command"`;
+- `params=True`: parametry, ograniczenia i przyklady wszystkich wybranych komend (bez
+  `group` i `command`: caly katalog, ok. 200 tys. znakow); `params=False`: nigdy;
+  `None`: tylko gdy podano `command`;
+- `tables`: `True` dodaje `exit_codes`, `errors` i `schemas` do kazdego widoku (przeglad
+  z tabelami zostaje przegladem); `False`: nigdy; `None`: tylko dla calego katalogu
+  (`params=True` bez `group` i `command`: jak przed zmiana D22);
+- `view` jest `overview`, gdy nic nie wybrano i nie zazadano parametrow, inaczej `full`;
+  wynik pelnego katalogu jest budowany raz na proces i niemutowalny, widoki sa jego
+  filtrami (ten sam obiekt dla tych samych argumentow);
 - `data_commands()` zwraca `CommandInfo` z wypelnionymi `params` komend z
   `project_task: true` (12 komend; kolejnosc `COMMANDS`); parametry zawieraja zarowno
   opcje zadania (`task: true`), jak i flagi uruchomienia (`output_dir`, `workers`,
@@ -1410,7 +1471,8 @@ Adnotacje (`ToolAnnotations`, wylacznie wskazowki): `RO` = `read_only_hint`, `D`
 `destructive_hint`, `I` = `idempotent_hint`, `OW` = `open_world_hint`. Wyliczane z
 `kind`/`effects`/`idempotent`/`destructive` komendy; **`destructive_hint=false`
 ustawiane jawnie dla narzedzi zapisujacych** (domyslna wartosc protokolu to `true`):
-magazyn jest niezmienny, nic nie jest nadpisywane (ADR-036). `title` = `summary` komendy.
+magazyn jest niezmienny, nic nie jest nadpisywane (ADR-036). Narzedzie nie ma `title`:
+pierwsze zdanie `description` to `summary` komendy (D22).
 
 | Rodzina | Narzedzie | Komenda katalogu | Funkcja (przez) | Dokument | Adnotacje |
 |---|---|---|---|---|---|
@@ -1475,35 +1537,51 @@ drut; klucze protokolu w drucie sa camelCase: `inputSchema`, `readOnlyHint`):
    `check_updates`, `upgrade`, `force`), a z flag uruchomienia: `update` (`enum`
    `upgrade`, `force`), `plan`, `workers` (`integer`, `minimum` 1); bez `cache`,
    `on_progress`, `on_notice`;
-4. `description` wlasciwosci = `ParamInfo.description` (polski, ASCII); `title` narzedzia =
-   `summary` komendy; `description` narzedzia = `summary` + jedno zdanie o wyniku
-   (dokument i znaczenie `ok`); `check_updates` ma tylko dwie wlasciwosci (`tool`,
-   `arguments`) - opisy parametrow zadania daje `get_catalog` z `command=`;
+4. opisy (D22): `description` narzedzia = `summary` komendy (bez `title`: dublowalby
+   pierwsze zdanie) + odeslanie do `get_catalog(command="<id>")` dla narzedzi danych
+   (`project_add`: `command=<command>`) + `Wynik: <dokument>.` (bez zdania o `ok` i bez
+   dokumentu dla narzedzi danych: to jest w `instructions`, 9.9). `description`
+   wlasciwosci to NIE `ParamInfo.description` (tekst `--help`: flagi, kazda dozwolona
+   wartosc), tylko kilka slow z tabel `_BRIEF` i `_BRIEF_FOR` w `tools.py` (`None` =
+   sama nazwa, typ i `enum`; znaczenia wspolne dla wielu narzedzi - obszar, sciezki,
+   `update`, `plan` - sa w `instructions`). Kazdy argument kazdego narzedzia ma wpis:
+   nowy parametr katalogu nie zbuduje narzedzi, dopoki go nie dostanie. Test pilnuje: brak
+   flag CLI, najwyzej jedna wartosc `enum` w opisie, najwyzej 80 znakow, brak
+   przestarzalych wpisow. `get_catalog` ma `group`, `command` (bez `enum`: 41 id jest w
+   przegladzie), `params` i `tables`; `check_updates` ma tylko dwie wlasciwosci (`tool`,
+   `arguments`) - parametry zadania daje `get_catalog` z `command=`;
 5. narzedzia wspoldzielone (`list_sources`, `list_layers`) maja dodatkowy wymagany
    parametr `group` (`enum` grup komend, ktore dziela narzedzie), `product` - opcjonalny
-   `enum`; `project_add` ma `command` (`enum` 12 komend danych) i `options` (`object`);
-   `check_updates` ma `tool` (`enum` 12 narzedzi danych) i `arguments` (`object`; schemat
-   korzenia nie zawiera schematow 12 narzedzi - serwer wybiera schemat po `tool`);
+   napis (wartosci zaleza od grupy: nieznana wartosc to blad biblioteki z lista
+   `allowed`); `project_add` ma `command` (`enum` 12 komend danych) i `options`
+   (`object`); `check_updates` ma `tool` (`enum` 12 narzedzi danych) i `arguments`
+   (`object`; schemat korzenia nie zawiera schematow 12 narzedzi - serwer wybiera
+   schemat po `tool`);
 6. ograniczenia katalogu (8.4) nie sa kodowane w schemacie (poza `dependentRequired`
-   dla `bbox` i `required`): wykonuje je `validate_command` i zwraca `option`.
+   dla `bbox` i `required`): wykonuje je `validate_command` i zwraca `option`;
+7. bez `$ref` i `$defs` (D22): klienty nie rozwiazuja ich jednolicie, a powtarzane
+   struktury (`bbox`, `bbox_crs`) sa male po skroceniu opisow;
+8. budzet kontekstu (D22): `tools/list` z 29 narzedziami ma najwyzej 30 000 znakow
+   (zmierzone 28 607, bylo 65 893), czyli ok. 7 tys. tokenow zamiast 16,5 tys.; pilnuja
+   go `test_tools_list_is_small` (specyfikacje) i test na prawdziwym kliencie SDK (drut).
 
 Skrocony przyklad (`elevation_download`):
 
 ```json
 {
   "name": "elevation_download",
-  "title": "Pobierz NMT, NMPT, LAZ albo warstwice (arkusze, kafle albo wycinek)",
-  "description": "Pobierz NMT, NMPT, LAZ albo warstwice do magazynu wersji (output_dir). Wynik: kartograf-download/1; ok=false oznacza, ze czesc jednostek sie nie powiodla (failed).",
+  "description": "Pobierz NMT, NMPT, LAZ albo warstwice (arkusze, kafle albo wycinek). Parametry: get_catalog(command=\"elevation download\").",
   "inputSchema": {
     "type": "object",
     "properties": {
-      "product": {"type": "string", "enum": ["nmt", "nmpt", "laz", "contours"], "description": "Produkt (wymagany): nmt (Numeryczny Model Terenu; PL i CZ), ..."},
-      "sheet": {"type": "string", "description": "Godlo arkusza ..."},
-      "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "Prostokat obszaru: min_x, min_y, max_x, max_y w ukladzie bbox_crs"},
-      "bbox_crs": {"type": "string", "enum": ["EPSG:2180", "EPSG:4326", "EPSG:2176", "EPSG:2177", "EPSG:2178", "EPSG:2179", "EPSG:5514", "EPSG:3045"], "description": "Uklad wspolrzednych bbox"},
-      "output_dir": {"type": "string", "description": "Bezwzgledna sciezka katalogu magazynu"},
-      "update": {"type": "string", "enum": ["upgrade", "force"], "description": "Tryb aktualizacji (pominiety: lokalne wersje, brakujace sa pobierane)"},
-      "workers": {"type": "integer", "minimum": 1, "description": "Liczba rownoleglych pobran"}
+      "product": {"type": "string", "enum": ["nmt", "nmpt", "laz", "contours"]},
+      "sheet": {"type": "string"},
+      "bbox": {"type": "array", "items": {"type": "number"}, "minItems": 4, "maxItems": 4, "description": "[min_x, min_y, max_x, max_y]"},
+      "bbox_crs": {"type": "string", "enum": ["EPSG:2180", "EPSG:4326", "EPSG:2176", "EPSG:2177", "EPSG:2178", "EPSG:2179", "EPSG:5514", "EPSG:3045"]},
+      "resolution": {"anyOf": [{"type": "string"}, {"type": "object", "properties": {"pl": {"type": "string"}, "cz": {"type": "string"}}, "additionalProperties": false}], "description": "Rozdzielczosc siatki, np. 1m; wartosci zaleza od produktu i kraju"},
+      "output_dir": {"type": "string"},
+      "update": {"type": "string", "enum": ["upgrade", "force"]},
+      "workers": {"type": "integer", "minimum": 1}
     },
     "required": ["product", "output_dir"],
     "dependentRequired": {"bbox": ["bbox_crs"]},
@@ -1513,20 +1591,19 @@ Skrocony przyklad (`elevation_download`):
 }
 ```
 
-(w przykladzie pominieto 22 pozostale wlasciwosci `elevation download`).
+(w przykladzie pominieto 17 pozostalych wlasciwosci `elevation download`).
 
 Schemat `check_updates` (caly; `enum` w kolejnosci `COMMANDS`):
 
 ```json
 {
   "name": "check_updates",
-  "title": "Sprawdz, czy lokalne wersje danych sa aktualne (bez pobierania)",
-  "description": "Porownaj magazyn (output_dir w arguments) z sygnalami zrodel dla zadania narzedzia danych (tool) i jego argumentow (arguments, bez update, plan i workers). Nic nie jest pobierane. Wynik: kartograf-plan/1; ok=false oznacza, ze czesci pozycji nie dalo sie sprawdzic (check_failed).",
+  "description": "Porownaj magazyn z sygnalami zrodel dla zadania narzedzia danych (tool) i jego argumentow (arguments: te same, bez update, plan, workers i summary; output_dir wymagany). Nic nie jest pobierane. Wynik: kartograf-plan/1.",
   "inputSchema": {
     "type": "object",
     "properties": {
       "tool": {"type": "string", "enum": ["elevation_download", "imagery_download", "landcover_download", "soil_download", "soil_hsg", "boundaries_download", "cadastre_download", "models3d_download", "hydro_download", "names_download", "maps_download", "geodesy_download"], "description": "Narzedzie danych, ktorego zadanie sprawdzasz"},
-      "arguments": {"type": "object", "description": "Argumenty tego narzedzia danych bez update, plan i workers (parametry: get_catalog z command=); wymagany output_dir"}
+      "arguments": {"type": "object", "description": "Argumenty tego narzedzia danych, z output_dir"}
     },
     "required": ["tool", "arguments"],
     "additionalProperties": false
@@ -1536,7 +1613,7 @@ Schemat `check_updates` (caly; `enum` w kolejnosci `COMMANDS`):
 ```
 
 `check_arguments_schema(tool)` (`catalog/tools.py`) zwraca schemat wejscia narzedzia
-danych `tool` bez wlasciwosci `update`, `plan` i `workers`.
+danych `tool` bez wlasciwosci `update`, `plan`, `workers` i `summary`.
 
 Kolejnosc walidacji wywolania: (1) nieznana nazwa narzedzia -> blad protokolu
 `INVALID_PARAMS` (jedyny przypadek bledu protokolu); (2) argumenty wobec
@@ -1565,7 +1642,9 @@ nazwa wlasciwosci wewnatrz `arguments`; `tool` spoza `enum` = `option="tool"`);
   Kontrakt dokumentow opisuje sekcja 5, katalog (`schemas`) i testy. Generowanie
   `output_schema` z adnotacji dataclass jest mozliwym rozszerzeniem (addytywnym).
 - Zawartosc dokumentu nie jest ucinana poza tym, co zapowiedziano (`store_entries`:
-  `limit`/`truncated`; `get_catalog`: widok skrocony, 8.5).
+  `limit`/`truncated`; `get_catalog`: przeglad, 8.5). Tekst wyniku (`content`) jest
+  zwartym JSON (bez wciec), a `structured_content` niesie ten sam dokument: klient, ktory
+  podaje modelowi oba, placi dwa razy (przeglad: 2 x 7 315 znakow).
 
 ### 9.6 Postep
 
@@ -1619,17 +1698,16 @@ Inni klienci (`mcpServers`):
 
 ### 9.9 Instrukcje serwera (`instructions`)
 
-Tekst konstruktora `Server(..., instructions=...)` (polski, ASCII, <= 8 linii):
+Tekst konstruktora `Server(..., instructions=...)` (polski, ASCII, cztery akapity, do
+2000 znakow; Claude Code laduje go na poczatku kazdej sesji i ucina po 4096 znakach).
+Narzedzia nie powtarzaja tego, co jest wspolne dla wielu z nich (obszar, sciezki,
+tryb aktualizacji, dokument wyniku): mowi o tym `instructions`, raz (D22):
 
 ```text
-Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC)
-do magazynu wersji w katalogu output_dir. Zacznij od get_catalog (komendy, produkty,
-dozwolone wartosci; get_catalog z command= daje parametry jednej komendy) i od
-elevation_availability (jakie lata i uklady ma obszar). Wszystkie sciezki podawaj
-bezwzglednie; bbox zawsze z bbox_crs. Dane wybierasz jawnie (product, resolution,
-vertical_crs...): Kartograf nie zgaduje. Pobranie nie nadpisuje danych; check_updates
-(tool=<narzedzie danych>, arguments=jego argumenty) sprawdza aktualnosc bez pobierania.
-Wynik to dokument kartograf-*/1 z polem ok; blad to kartograf-error/1 z code, hint i details.option.
+Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od get_catalog (przeglad: grupy, produkty, komendy); parametry komendy: get_catalog(command="elevation download"); kody wyjscia, kody bledow i schematy dokumentow: get_catalog(tables=true). Jakie lata i uklady ma obszar: elevation_availability.
+Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] w ukladzie bbox_crs, ktory jest wymagany: bez wartosci domyslnej) albo geometry (plik SHP albo GPKG, obwiednia obiektow; layer: warstwa GPKG) - dokladnie jeden; czesc komend ma tez teryt, ku albo whole_country. country: pl, cz albo auto (wymagany z bbox i geometry, z sheet wynika z godla).
+Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety - tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) sprawdza aktualnosc bez pobierania; jego plan (kartograf-plan/1) wykonasz z update=upgrade i plan.
+Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: kartograf-download/1); ok=false: czesc jednostek sie nie powiodla (is_error=true, lista failed). Blad to kartograf-error/1 z code, hint i details.option.
 ```
 
 ### 9.10 Testy serwera
@@ -1837,6 +1915,7 @@ Wszystkie offline (`-m "not live"`); frozen clock jak w `tests/parity.py`; testy
 | 12.10 | `tests/test_cli_translation.py`, `tests/test_public_api.py`, `tests/test_cli_help.py`, `tests/test_cli_language.py` | aktualizacja: dozwolony import `kartograf.catalog`/`serialization`; nowe funkcje w `__all__` i ich sygnatury (argumenty nazwane); przyklady `--help` z katalogu; ASCII calego parsera |
 | 12.11 | zachowane | `tests/test_parity*.py`, `test_project_*`, `test_availability.py`, `test_cli*.py` przechodza po przepisaniu parsera bez zmiany asercji o zachowaniu (zmieniaja sie tylko importy wnetrznosci i kod wyjscia bledow wejscia) |
 | 12.12 | `tests/test_sheet_info.py` (T4d), `tests/test_source_info.py`, `tests/test_cache_info.py`, `tests/test_store_documents.py` (T3) | nowe funkcje biblioteki: `describe_sheet`, `list_sources` i `list_layers` daja te same informacje co dzisiejszy tekst CLI (tabela, hierarchia, potomkowie; kontrola jednorazowa przed/po + testy na fixturach), `SheetInfo.commands` zgodne z `accepts` katalogu, bledy z `option`, brak sieci (atrapa transportu odrzuca kazde zapytanie) i brak zapisu poza `clear_cache`; odczyt magazynu: `limit`/`truncated`, `sidecar.unit` -> `units` (plik krajowy z motywem), zarezerwowana jednostka -> `ValidationError` z `option="units"`, nieistniejacy `output_dir` -> `OSError`, `read_store_sidecar` (`raw` obecne; w `StoreEntries` pominiete), `InvalidSidecarError` dla braku pliku |
+| 12.13 | `tests/test_catalog.py`, `tests/test_mcp_tools.py`, `tests/test_mcp_server.py` | budzet kontekstu (D22): przeglad `get_catalog()` <= 8000 znakow zwarty i z wcieciem (CLI), kazda grupa, produkt i komenda w przegladzie, reszta pod `group=`/`command=`/`tables=True`; ten sam zestaw kluczy w kazdym widoku, rzut przegladu, rekord w linii, `view`; `tools/list` <= 30 000 znakow (specyfikacje i drut prawdziwego klienta SDK); kazdy argument ma wpis w `_BRIEF`/`_BRIEF_FOR`, brak przestarzalych wpisow, opisy bez flag CLI i bez powtorzonych wartosci `enum`, najwyzej 80 znakow; narzedzie bez `title`; `instructions` <= 2000 znakow z glosariuszem wspolnych argumentow |
 
 Poza testami stalymi (skrypty jednorazowe, poza repozytorium): zrzut `format_help()` i akcji
 argparse kazdej komendy PRZED etapem 2 migracji i porownanie PO (8.2); tekst `list-sources`
@@ -1907,7 +1986,7 @@ T7 rownolegle, T8, T9.
 |---|---|---|
 | Przepisanie parsera (T5) psuje `--help` albo zachowanie flag (10 tys. linii `test_cli.py`) | regresje CLI tuz przed wydaniem | etapy z porownaniem `format_help()` i zrzutu akcji przed/po; stary parser zostaje do zielonych testow rownowaznosci; `choices` i brak `required` odtwarzane wprost |
 | SDK `mcp` 2.x zmienia API podwersjami (3 wydania w 6 tygodni) | zlamany serwer po aktualizacji | pin `<3`, kontakt z SDK w jednym module, testy in-memory i stdio w bramie |
-| 29 narzedzi = koszt kontekstu (12 blizniakow `_check_updates` zastapionych jednym narzedziem `check_updates`, O4; pomiar `len(json.dumps(tools))` w T6; przed zmiana szacunek ok. 20-25 tys. tokenow dla 40 narzedzi) i limity klientow | gorsza selekcja narzedzi | `--tools`, `get_catalog` w widoku skroconym, jedno narzedzie sprawdzajace |
+| 29 narzedzi = koszt kontekstu: 65 893 znakow `tools/list` (ok. 16,5 tys. tokenow) i 47 807 znakow `get_catalog()` w pierwszej wersji; 12 blizniakow `_check_updates` zastapionych jednym narzedziem `check_updates` (O4), potem skrocenie opisow i widok przegladowy (D22: 28 607 i 7 315 znakow); limity klientow | gorsza selekcja narzedzi, droga pierwsza rozmowa | `--tools`, `get_catalog` jako przeglad (8.1), opisy na wywolanie (9.4), wspolne znaczenia w `instructions` (9.9); budzety w testach: 30 000, 8 000 |
 | Kod wyjscia 2 dla bledow wejscia (D4) zaskakuje skrypty | falszywe alarmy | jawny wpis BREAKING z "Co zrobic"; O2 |
 | Rozjazd katalogu z walidatorami biblioteki (ograniczenia) | agent dostaje bledna wiedze | testy naruszen z przykladow (8.4); zrodlem zachowania jest biblioteka |
 | Biblioteka drukuje na stdout w trakcie wywolania | psuje ramki MCP / dokument `--json` | test czystosci stdout w obu trybach; SDK przekierowuje zrzuty na stderr, ale to ostatnia linia obrony |
@@ -1958,3 +2037,40 @@ juz zgodna z nimi):
 | `describe_sheet` i `find_sheets` w `kartograf/sheet_info.py`, zadanie T4d | `SheetInfo.commands` wylicza sie z `ParamInfo.accepts` katalogu | 5.4.4, 8.2, 13 |
 | nowe moduly katalogu `kinds.py`, `formatting.py`, `hints.py`; skladnik (b) hintu bledu wpina T5 | wspolny kod parsera, `format_command` i `ExampleInfo.command_line` bez cyklu `catalog` <-> `commands`; `error_report.py` ma jednego wlasciciela na raz | 8.2, 6.3, 13 |
 | `kartograf.mcp_server` importuje sie bez `mcp`; `create_server` rzuca `ImportError`, `main()` drukuje komunikat | poprzednie sformulowanie ("import rzuca `ImportError`" i "`main()` go drukuje") bylo sprzeczne | 9.2 |
+
+### 16.3 Koszt kontekstu agenta (D22; pomiar 2026-10-18)
+
+Pomiar na prawdziwej sesji stdio (`initialize`, `tools/list`, `tools/call`; dlugosc w
+znakach, JSON zwarty), przed = `0bb7702e`, po = `86168139`:
+
+| Wielkosc | przed | po |
+|---|---|---|
+| `tools/list` (29 narzedzi) | 65 893 | 28 607 |
+| `instructions` serwera | 686 | 1 447 |
+| `get_catalog()` (tekst wyniku; `structured_content` ma tyle samo) | 47 807 | 7 315 |
+| `get_catalog(group="elevation")` | 10 761 | 4 796 |
+| `get_catalog(command="elevation download")` | 26 312 | 20 347 |
+| `get_catalog(tables=True)` | (tabele w kazdym widoku) | 13 294 |
+| `kartograf catalog --json` | 62 389 | 7 629 |
+| `kartograf catalog elevation download --json` | 37 546 | 29 717 |
+
+Zmiany kontraktu wzgledem wersji narzedzi i katalogu z T6 (wydanie 0.8.0 jest
+nietagowane, wiec to nie sa zmiany lamiace wzgledem 0.7.x; trafiaja do dokumentacji T8):
+
+1. `kartograf-catalog/1`: nowy klucz `view` (drugi), tabele `exit_codes`, `errors`,
+   `schemas` sa `null` dopoki nie zazadano (`tables=True`; caly katalog z parametrami ma je
+   nadal); dokument przegladu ma rekordy `{name, summary, products[]}` i `{id, summary,
+   tool, supports_check}` (8.1).
+2. `get_catalog(*, group, command, params, tables)`: domyslny widok to przeglad (8.5);
+   `kartograf catalog --json` bez grupy ma 7,6 tys. znakow, tabele daje `--params --json`
+   (bez `GRUPY`) - osobnej flagi `--tables` nie ma (8.4, 7.4).
+3. Narzedzia MCP: te same 29 nazw; bez `title`; opisy skrocone (9.4); `get_catalog` ma
+   argumenty `group`, `command`, `params`, `tables`; `command` w `get_catalog` oraz
+   `product` w `list_sources` i `list_layers` bez `enum`; narzedzia danych odsylaja do
+   `get_catalog(command="...")`.
+4. `instructions` serwera: cztery akapity (<= 2000 znakow) z glosariuszem wspolnych
+   argumentow i znaczeniem `ok=false` (9.9).
+5. Podsumowanie komendy `landcover download` bez flagi CLI (`Pobierz dane wybranego
+   produktu pokrycia terenu`).
+6. Do sprawdzenia przy scalaniu z torem CLI: `_FOOTER` w `cli/catalog_cmd.py` (mowi, ze
+   tabele daje `kartograf catalog --json`; teraz `kartograf catalog --params --json`).

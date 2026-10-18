@@ -472,6 +472,10 @@ def _catalog() -> Document:
     return get_catalog(command="elevation download")
 
 
+def _catalog_overview() -> Document:
+    return get_catalog()
+
+
 def _catalog_command() -> object:
     return get_catalog(command="elevation download").commands[0]
 
@@ -511,7 +515,7 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-store-sidecar/1": (_store_sidecar,),
     "kartograf-sheet/1": (_sheet_info,),
     "kartograf-sheets/1": (_sheets,),
-    "kartograf-catalog/1": (_catalog,),
+    "kartograf-catalog/1": (_catalog, _catalog_overview),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -619,6 +623,7 @@ CONTRACT: dict[str, list[str]] = {
     "kartograf-sheets/1": ["schema", "request", "sheets", "count"],
     "kartograf-catalog/1": [
         "schema",
+        "view",
         "kartograf_version",
         "language",
         "groups",
@@ -882,15 +887,15 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "ExampleInfo": (_catalog_example, ["title", "options", "command_line"]),
     "ExitCodeInfo": (
-        lambda: get_catalog().exit_codes[0],
+        lambda: get_catalog(tables=True).exit_codes[0],  # type: ignore[index]
         ["code", "name", "meaning"],
     ),
     "ErrorCodeInfo": (
-        lambda: get_catalog().errors[0],
+        lambda: get_catalog(tables=True).errors[0],  # type: ignore[index]
         ["code", "exception", "exit_code", "meaning"],
     ),
     "SchemaInfo": (
-        lambda: get_catalog().schemas[0],
+        lambda: get_catalog(tables=True).schemas[0],  # type: ignore[index]
         ["schema", "description", "produced_by"],
     ),
 }

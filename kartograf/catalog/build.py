@@ -16,6 +16,8 @@ from types import MappingProxyType
 from kartograf.catalog.commands import declared
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.model import (
+    FULL,
+    OVERVIEW,
     Catalog,
     CommandInfo,
     ConstraintInfo,
@@ -217,11 +219,13 @@ def _schema_infos(commands: Sequence[Command]) -> tuple[SchemaInfo, ...]:
 
 
 def _build_full(commands: Sequence[Command], groups: Sequence[Group]) -> Catalog:
-    """The catalog of every command, with parameters, constraints and examples."""
+    """The catalog of every command, with parameters, constraints, examples and
+    the tables: the source of every view."""
     from kartograf import __version__  # the package imports the catalog
 
     check_declarations(commands, groups)
     return Catalog(
+        view=FULL,
         kartograf_version=__version__,
         language=LANGUAGE,
         groups=tuple(_group_info(g, commands) for g in sorted_groups(groups)),
@@ -238,9 +242,15 @@ def _build_full(commands: Sequence[Command], groups: Sequence[Group]) -> Catalog
 
 
 def _select(
-    full: Catalog, *, group: str | None, command: str | None, params: bool | None
+    full: Catalog,
+    *,
+    group: str | None,
+    command: str | None,
+    params: bool | None,
+    tables: bool | None,
 ) -> Catalog:
-    """A view of the full catalog (spec 8.5)."""
+    """A view of the full catalog (spec 8.5): the overview when nothing is
+    selected and no parameters are asked for, else the full view."""
     groups, commands = full.groups, full.commands
     if group is not None:
         names = tuple(g.name for g in groups)
@@ -264,18 +274,23 @@ def _select(
         commands = tuple(c for c in commands if c.id == command)
         owners = {c.group for c in commands}
         groups = tuple(g for g in groups if g.name in owners)
-    if not (params if params is not None else command is not None):
+    selected = group is not None or command is not None
+    with_params = params if params is not None else command is not None
+    if not with_params:
         commands = tuple(
             replace(c, params=None, constraints=None, examples=None) for c in commands
         )
+    if tables is None:
+        tables = with_params and not selected  # the whole catalog: everything
     return Catalog(
+        view=FULL if selected or with_params else OVERVIEW,
         kartograf_version=full.kartograf_version,
         language=full.language,
         groups=groups,
         commands=commands,
-        exit_codes=full.exit_codes,
-        errors=full.errors,
-        schemas=full.schemas,
+        exit_codes=full.exit_codes if tables else None,
+        errors=full.errors if tables else None,
+        schemas=full.schemas if tables else None,
     )
 
 
@@ -286,6 +301,7 @@ def build_catalog(
     params: bool | None = None,
     group: str | None = None,
     command: str | None = None,
+    tables: bool | None = None,
 ) -> Catalog:
     """The catalog of the given declarations (the view arguments are those of
     ``get_catalog``); nothing is cached.
@@ -300,7 +316,7 @@ def build_catalog(
         ``allowed`` the known values).
     """
     full = _build_full(commands, groups)
-    return _select(full, group=group, command=command, params=params)
+    return _select(full, group=group, command=command, params=params, tables=tables)
 
 
 @functools.cache
@@ -310,8 +326,12 @@ def _full_catalog() -> Catalog:
 
 
 @functools.cache
-def _view(group: str | None, command: str | None, params: bool | None) -> Catalog:
-    return _select(_full_catalog(), group=group, command=command, params=params)
+def _view(
+    group: str | None, command: str | None, params: bool | None, tables: bool | None
+) -> Catalog:
+    return _select(
+        _full_catalog(), group=group, command=command, params=params, tables=tables
+    )
 
 
 def clear_caches() -> None:
@@ -325,33 +345,43 @@ def get_catalog(
     group: str | None = None,
     command: str | None = None,
     params: bool | None = None,
+    tables: bool | None = None,
 ) -> Catalog:
     """The catalog of the commands: ``kartograf catalog --json``.
+
+    Without arguments the *overview*: every group (summary, product names) and
+    every command (id, summary, MCP tool, whether it can check for updates) -
+    a short document an agent reads first. Everything else is asked for.
 
     Parameters
     ----------
     group : str, optional
-        Only this group and its commands.
+        Only this group and its commands, with the products and their sources.
     command : str, optional
         Only this command (its id: ``elevation download``, ``parse``,
         ``find_sheets``); the view has its parameters, constraints and examples.
     params : bool, optional
-        ``True``: parameters, constraints and examples of every selected command;
-        ``False``: never; ``None``: only when ``command`` is given.
+        ``True``: parameters, constraints and examples of every selected command
+        (without ``group`` and ``command``: of all of them, the whole catalog,
+        about 200 thousand characters); ``False``: never; ``None``: only when
+        ``command`` is given.
+    tables : bool, optional
+        ``True``: the exit code and error code tables and the document schemas;
+        ``False``: never; ``None``: only for the whole catalog (``params=True``
+        without ``group`` and ``command``).
 
     Returns
     -------
     Catalog
-        The short view (without parameters) of every group and command by
-        default; the exit code and error code tables and the document schemas
-        always. The same object for the same arguments.
+        ``view`` is ``overview`` when nothing is selected and no parameters are
+        asked for, else ``full``. The same object for the same arguments.
 
     Raises
     ------
     ValidationError
         An unknown ``group`` or ``command``.
     """
-    return _view(group, command, params)
+    return _view(group, command, params, tables)
 
 
 def data_commands() -> tuple[CommandInfo, ...]:
