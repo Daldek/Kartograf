@@ -1205,7 +1205,9 @@ def _unit_slot(
     """``(slot directory below the segment, file stem)`` of one unit; a stem
     ``None`` = every file of the directory (the slot of one sheet)."""
     if not isinstance(unit, str) or any(c in unit for c in ("\\", "\x00", ":")):
-        raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
+        raise ValidationError(
+            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
+        )
     *directory, code = unit.split("/")
     if (
         any(
@@ -1215,7 +1217,9 @@ def _unit_slot(
         or (directory and directory[0] in _RESERVED)
         or code in _RESERVED
     ):
-        raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
+        raise ValidationError(
+            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
+        )
     if directory:
         if tuple(directory) == _sheet_parts(code):
             return tuple(directory), None
@@ -1234,7 +1238,9 @@ def _unit_slot(
         or len(part.encode()) > _NAME_MAX
         for part in parts
     ):
-        raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
+        raise ValidationError(
+            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
+        )
     return parts, None
 
 
@@ -1245,7 +1251,8 @@ def _unit_groups(
     (``None``: the whole directory), in the order of the units."""
     if isinstance(units, str):
         raise ValidationError(
-            f"units: podaj kolekcje nazw jednostek, nie napis ({units!r})"
+            f"units: podaj kolekcje nazw jednostek, nie napis ({units!r})",
+            option="units",
         )
     kinds = _unit_kinds(segment)
     groups: dict[tuple[str, ...], set[str] | None] = {}
@@ -1282,7 +1289,8 @@ def _real_directory(
             except OSError as exc:
                 if exc.errno == errno.ENAMETOOLONG:
                     raise ValidationError(
-                        f"Jednostka magazynu daje zbyt dluga sciezke: {path}"
+                        f"Jednostka magazynu daje zbyt dluga sciezke: {path}",
+                        option="units",
                     ) from exc
                 raise
             known[path] = real
@@ -1336,7 +1344,8 @@ def _validated_segment(segment: str) -> tuple[str, str]:
     ):
         raise ValidationError(
             f"Nieprawidlowy segment magazynu: {segment!r} (oczekiwano "
-            "<produkt>/<wariant>, np. nmt/pl_1992_1m_evrf2007)"
+            "<produkt>/<wariant>, np. nmt/pl_1992_1m_evrf2007)",
+            option="segment",
         )
     return parts[0], parts[1]
 
@@ -1346,7 +1355,8 @@ def _skip_set(skip_versions: Collection[str] | None) -> Set[str] | None:
         return None
     if isinstance(skip_versions, str):
         raise ValidationError(
-            "skip_versions: podaj kolekcje sciezek katalogow wersji, nie napis"
+            "skip_versions: podaj kolekcje sciezek katalogow wersji, nie napis",
+            option="skip_versions",
         )
     return skip_versions if isinstance(skip_versions, Set) else frozenset(skip_versions)
 
@@ -1419,7 +1429,9 @@ def iter_store(
     skip = _skip_set(skip_versions)
     if segment is None:
         if units is not None:
-            raise ValidationError("units wymaga segment (jednostki jednego segmentu)")
+            raise ValidationError(
+                "units wymaga segment (jednostki jednego segmentu)", option="units"
+            )
         return _scan_store(root, list_segments(root), skip)
     product, variant = _validated_segment(segment)
     groups = _unit_groups(segment, units) if units is not None else None
@@ -1430,7 +1442,9 @@ def iter_store(
         except (FileNotFoundError, NotADirectoryError):
             return iter(())
         if stat.S_ISLNK(mode):
-            raise ValidationError(f"Segment magazynu jest dowiazaniem: {path}")
+            raise ValidationError(
+                f"Segment magazynu jest dowiazaniem: {path}", option="segment"
+            )
         if not stat.S_ISDIR(mode):
             return iter(())
     if groups is not None:
