@@ -3896,13 +3896,18 @@ jest kodem przydatnym do indeksowania.
 surowe wartosci i odrebnie wystawia rozpoznany klucz deskryptora oraz
 znormalizowane daty, rok danych i jednostke. Brak danych w starym sidecarze
 pozostaje brakiem: data pobrania nie jest rokiem danych; bledny JSON/nieznany
-schemat to blad odczytu, ktory skan zamienia w wpis problemowy. Normalizacja
+schemat to blad odczytu, ktory skan zamienia w wpis problemowy; brak pola
+`schema` akceptowany jest tylko w ksztalcie bare-sidecara `emit_sidecar`
+(provider bez deskryptora), zgodnie z `read_version`. `Sidecar.unit` pliku
+krajowego z motywem to nazwa pliku slotu (`pl_miejscowosci`), dzieki czemu
+daje sie podac do `iter_store(units=...)`. Normalizacja
 historycznych kluczy (w tym z 0.8.0-dev) nie mutuje magazynu.
 `describe_segment(segment)` rozpoznaje wzorce rejestru i warianty tresci
 odwracajac `resolve_subdir`/`content_segment`, z bezpiecznym wynikiem
 `known=False` dla reszty. `file_footprint(entry, *, network=False, cache=None)`
 ma kolejnosc: bbox zadania, parsowalne godlo PL/TM33, naglowek pliku,
-jednostka z indeksu sieciowego, wreszcie brak obrysu; `Footprint` niesie
+jednostka z indeksu sieciowego (nieznana indeksowi = brak obrysu),
+wreszcie brak obrysu; `Footprint` niesie
 `native` i `wgs84` jako `BBox` oraz `source`. Siec do PRG/RUIAN/SM5
 jest opt-in, a cache jest lokalna pamiecia wywolujacego (czytana takze bez
 sieci); pliki krajowe nie otrzymuja zmyslonego obrysu. `link_target(path)`
@@ -3912,7 +3917,7 @@ a na CIFS z odczytu skrotu pliku (bez stabilnego inode).
 sieciowych siatek i bez ballpark (obiekt per watek - operacje pyproj nie sa
 bezpieczne watkowo); nie udostepniamy domyslnej transformacji pyproj.
 
-**Konsekwencje:** Wyłącznie odczyt magazynu (takze zamontowanego read-only);
+**Konsekwencje:** Wylacznie odczyt magazynu (takze zamontowanego read-only);
 wyniki problemowe zamiast zgubionych plikow. Koszt pelnego skanu to listowanie
 katalogow + jeden odczyt sidecara na plik, bez `stat`/`open` tresci kazdej
 wersji; skan z `skip_versions` - listowanie + sidecary dowiazan i nowych

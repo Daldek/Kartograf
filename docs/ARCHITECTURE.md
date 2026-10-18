@@ -152,7 +152,8 @@ transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
 cache ──> core (TYPE_CHECKING), notices
 _version ──> kartograf (l, __version__)
 store ──> core, download, sources, providers (l)
-store_geometry ──> core, transform, store (TYPE_CHECKING), providers (l),
+store_geometry ──> core, transform, store (typy pod TYPE_CHECKING; w czasie
+        dzialania takze leniwy import `read_sidecar`), providers (l),
         transport (l)
 _clock, notices, auth ──> (nic wewnetrznego)
 core ──> (nic poza exceptions)
@@ -1404,7 +1405,13 @@ WSZYSTKIMI plikami arkusza: nazwy plikow LAZ z URL, kierunki orto ukosnej,
 pliki georeferencji), `teryt/<kod>`, `bbox/<coords>`, `country/<kod>`,
 `ku/<kod>` albo `<katalog>/<nazwa pliku bez rozszerzenia>` (kafel mesh
 `2000/7/<plik>`); sam kod TERYT, `<coords>` i kraju tez dziala (6 cyfr =
-KU w segmencie, ktorego kanal paczek ma jednostke `ku`). Hierarchie licza
+KU w segmencie, ktorego kanal paczek ma jednostke `ku`). Plik krajowy
+z motywem to `<kraj>_<motyw>` (`pl_miejscowosci`) - dokladnie ta nazwa,
+ktora zwraca `Sidecar.unit` (wyprowadzona z nazwy pliku slotu, bo motywu
+nie ma w `request`), wiec `unit` z indeksu zamyka petle odswiezania
+`iter_store(units=[unit])`. Nazwy zarezerwowane (`versions`, `full_sheet`,
+`kampanie`, takze jako sama jednostka) i nazwy dluzsze niz 255 bajtow to
+`ValidationError`. Hierarchie licza
 te same funkcje co zapis (`SheetParser`, `path_parts`,
 `cuzk_map_path_parts`); skan nie listuje innych katalogow segmentu i nie
 zglasza problemow poziomu segmentu. `skip_versions` to znane wywolujacemu
@@ -1447,7 +1454,9 @@ jeden iterator nalezy do jednego watku. To samo dotyczy `read_sidecar`,
 
 `read_sidecar(path)` przyjmuje plik danych albo sidecar i nie otwiera pliku
 danych: waliduje schemat (`InvalidSidecarError`: brak pliku, zly JSON, inny
-schemat); stare brakujace pola zostaja puste, klucze sprzed ADR-031 i klucze
+schemat; sidecar bez pola `schema` jest przyjmowany tylko w ksztalcie, jaki
+zapisuje `emit_sidecar` dla providera bez `descriptor_key` - obiekt z
+`sha256` i `extra`, tak jak akceptuje go `download.versions.read_version`); stare brakujace pola zostaja puste, klucze sprzed ADR-031 i klucze
 `dataset` z 0.8.0-dev (ADR-044 D7) sa rozpoznawane przez jawne mapowanie
 w czytniku, bez zmiany `raw`. `data_date`/`data_year` pochodza z kampanii,
 rekordu skorowidza, kafla LAZ albo wydania (data `updated` feedu ATOM
@@ -1468,6 +1477,15 @@ jednostki TERYT (PRG), KU (RUIAN) albo arkusza SM5 (indeks CUZK); nie udaje
 obrysu kraju. Obrys jednostki z `cache` (`(rodzaj, kod) -> BBox`, pamiec
 wywolujacego) jest uzywany takze bez sieci; zapytanie do indeksu tylko przy
 `network=True`. Wpis bez `sidecar` (np. `skipped`) najpierw czyta sidecar.
+Arkusz SM5 albo jednostka nieznane indeksowi nie maja obrysu (`None`, nie
+blad). Wyjatki: `TransformUnavailableError`/`TransformError` (brak
+bezpiecznej operacji CRS albo obwiednia poza obszarem operacji),
+`DownloadError` (indeks niedostepny) i `ParseError` (cecha KU bez
+geometrii) - dwa ostatnie tylko przy `network=True`. Zapytanie PRG
+przedstawia sie jak reszta zapytan GUGiK (`make_gugik_session`).
+
+`StoreEntry` i `Sidecar` sa niehashowalne (pola slownikowe; `__hash__ =
+None`): kluczem jest `StoreEntry.path` albo `(kind, path)`.
 Naglowek rastra GDAL czyta bez listowania katalogu
 (`GDAL_DISABLE_READDIR_ON_OPEN=TRUE`). Obwiednie liczy densyfikowanymi
 krawedziami (`transform_bbox`) przez `pinned_transform`, nigdy przez
