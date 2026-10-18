@@ -1356,6 +1356,66 @@ wlasna uzytkownika albo re-download. Kartograf nie migruje istniejacego
 widziane jako pobrane (nastepne zadanie pobierze je ponownie do nowego
 segmentu).
 
+### 3.3.1 Publiczny odczyt magazynu (ADR-045, v0.9.0)
+
+Szesciu operacjom odczytu `kartograf.__all__` odpowiada jeden kontrakt
+`data/`, opisany w 3.2-3.3: `iter_store`, `read_sidecar`,
+`describe_segment`, `file_footprint`, `link_target` i `pinned_transform`.
+Nie tworza katalogow, cache na udziale ani plikow w magazynie; powolujacy
+moze trzymac indeks i cache w pamieci/dysku lokalnym. Publiczne rekordy:
+
+| Rekord | Pola i semantyka |
+|---|---|
+| `StoreEntry` | `kind`: `version`, `link`, `full_sheet`, `problem`; `segment` (`produkt/wariant`), `hierarchy` (sciezka wzgledna), `name`, `path`, `version_path` (wskazany cel, gdy znany), `label`, `sha8`, `sidecar` (`Sidecar` albo `None`) i `problem` (kod, np. `missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`). |
+| `Sidecar` | Typowane pola z 3.2 (`schema`, `dataset` surowy, `dataset_key` z rejestru albo `None`, `country`, `product`, `provider`, `horizontal_crs`, `vertical_crs`, `vertical_source`, `resolution`, `nodata`, `request`, `license`, `downloaded_at`, `kartograf_version`, `transform`, `extra`, `sha256`, `size_bytes`) i pola wyliczone `data_year`, `data_date`, `campaign`, `survey_work_id`, `edition`, `full_sheet`, `coverage`, `unit`, `raw`. Brak wartosci to `None`, a oryginalny JSON pozostaje dostepny bez zmian. |
+| `SegmentInfo` | `segment`, `product`, `country`, `dataset_key`, `name`, `known`. Nazwa jest ludzka, z wariantami ukladu/formatu/rocznika/LoD/poziomu; brak dopasowania do rejestru = `known=False`, nigdy przypuszczalny deskryptor. |
+| `Footprint` | `native: BBox`, `wgs84: BBox`, `source`: `request`, `sheet`, `header`, `unit`. Brak sprawdzonego obrysu = `None` (w tym paczki krajowe). |
+
+`iter_store(output_dir, *, segment=None, units=None)` przechodzi drzewo
+strumieniowo (`Iterator`, bez listy wszystkich slotow), odroznia wersje od
+obu dowiazan i raportuje rowniez nierozpoznane segmenty oraz pozostalosci.
+`units` wymaga `segment` i oznacza konkretne nazwy jednostek, nie prefiksy:
+`teryt/<kod>`, `bbox/<coords>`, `country/<kod>`, `ku/<kod>`, godlo
+PL-1992/2000/TM33/SM5 lub sciezka hierarchii (`models3d` i arkusze map);
+sciezki katalogow oblicza przez ten sam rejestr/parser co zapis. Czytnik
+otwiera sidecar danej sciezki raz, nie czyta pliku danych i nie robi
+`stat` kazdego pliku; tylko osierocony katalog `.incoming` wymaga sprawdzenia
+wieku (> 24 h). Skan kierowany `units` nie listuje calego segmentu ani
+innych hierarchii. `read_sidecar(path)` obsluguje plik danych lub sidecar:
+waliduje schemat; stare brakujace pola zostaja puste, historyczne nazwy
+kluczy rekordow nie sa obowiazkowe, klucze z 0.8.0-dev sa rozpoznawane
+przez jawne mapowanie w czytniku. `data_year` nigdy nie pochodzi
+z `downloaded_at`. Niespojne/nieczytelne metadane podczas skanu daja
+problem wpisu, bez wypierania pozostalych wersji slotu.
+
+`file_footprint` wybiera pierwsze WIARYGODNE zrodlo: bbox zadania
+(z `bbox_crs`), parsowalne godlo PL/TM33, obrys z naglowka GeoTIFF/ASC,
+JPG/JGW/GPKG/LAS(LAZ), obrys jednostki z PRG/RUIAN/indeksu SM5 (tylko
+przy `network=True` z pamiecia cache); nie udaje obrysu kraju.
+Przelicza obwiednie densyfikowanymi krawedziami (`transform_bbox`) przez
+`pinned_transform`, nigdy przez domyslny `Transformer.from_crs`.
+`link_target(path)` uzywa istniejacego `download.links.linked_version`,
+w tym potwierdzenia SHA-256 na SMB bez stabilnych i-wezlow. Odczyt wszystkich
+celow przy pelnym skanie moze kosztowac wiele gigabajtow — zwykly skan
+przypisuje wersje ze sciezki sidecara bez haszowania zawartosci, a
+`link_target` wywolywane na zadanie potwierdza zgodnosc. Wszystkie funkcje
+sa tylko do odczytu; blad operacji transformacji jest jawny.
+
+### 3.3.2 Plan realizacji odczytu v0.9.0
+
+1. Ustalic typy i format problemow (ADR-045), uzyc wzorcow deskryptorow
+   i parserow hierarchii, przejsc drzewa generatorem; osobno scenariusz
+   bez segmentu i wybór `units` bez skanu calej galezi.
+2. Znormalizowac sidecary starych i aktualnych wydan bez zapisu; polaczyc
+   linki z istniejaca weryfikacja SMB i odwrocic warianty segmentow.
+3. Wyznaczyc obrys wg priorytetu, naglowki czytac tylko dla brakujacych
+   bboxow/godel, podlaczyc przypieta transformacje i opcjonalne indeksy
+   jednostek.
+4. Dodac testy offline na sztucznym magazynie, API `__all__`, dokumentacje,
+   CHANGELOG i wersje 0.9.0; uruchomic brame offline pytest/ruff/mypy.
+5. Zaktualizowac PROGRESS, wykonac logiczne commity i merge `--no-ff`
+   do `develop`; bez pobran danych ani zmian w CLI.
+
 ### 3.4 `extra.parent_request`
 
 W trybie `--bbox`/`--geometry` sidecary zadania dostaja `extra.parent_request`
