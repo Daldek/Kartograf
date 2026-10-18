@@ -1907,7 +1907,7 @@ nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
 po jego wygasnieciu zapytanie do skorowidza) i stosuje tryb `update`
 (ponizej, "Tryby i plan aktualizacji"). `--cutout` w trybie godlowym jest
-**odrzucane** (kod 1) — godlo PL dostarcza arkusz natywny 1:1.
+**odrzucane** (`ValidationError`, kod 2) — godlo PL dostarcza arkusz natywny 1:1.
 
 **Niepelna najnowsza kampania (E13).** Rekord z `full_sheet: false`
 (skorowidz deklaruje arkusz nie w calosci wypelniony) nadal wygrywa, gdy
@@ -2619,7 +2619,7 @@ arkusze PL wyznacza sama geometria (cala), wiec nie ma komunikatu
 o przycieciu PL ani o obszarze poza prostokatami; czesc CZ nadal jest
 przycinana i komunikowana. Jawny
 `--country pl` nie przycina; bbox w calosci poza prostokatami =
-`ValidationError` (CLI `Error:`, kod 1) bez sieci. Poza obwiednia CZ przy granicach
+`ValidationError` (CLI `Error:`, kod 2) bez sieci. Poza obwiednia CZ przy granicach
 DE/SK/UA/BY/LT/RU `auto` odpytuje tylko PL; w prostokacie CZ
 dochodzi CUZK nawet nad Polska/Saksonia, bo obwiednia nie jest
 wielokatem granicy. Wynik calkowicie nodata (CZ albo wycinek PL
@@ -2640,7 +2640,7 @@ tylko arkuszy i kafli LAZ PL; `download_data` sprawdza wszystkie wejscia: zadani
 flaga roku = `ValidationError` (`CZ (CUZK) nie ma kampanii -
 --all-campaigns/--min-year/--max-year/--year dotycza tylko PL`; ortofoto
 CZ: `--year dotyczy tylko PL - CUZK publikuje tylko aktualny rocznik
-arkusza ortofoto CZ ...`), kod 1 bez sieci (LAZ CZ z `--min-density`:
+arkusza ortofoto CZ ...`), kod 2 bez sieci (LAZ CZ z `--min-density`:
 `--min-density dotyczy tylko LAZ PL`). Obszar rastra NMT/NMPT PL+CZ pod
 `auto` wymaga `--cutout`, a wycinek odrzuca te
 flagi (4.3) - arkusze PL z kampaniami daje tylko `--country pl` (od

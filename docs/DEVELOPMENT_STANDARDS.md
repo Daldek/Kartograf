@@ -900,9 +900,9 @@ i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,
 rozdzielczosc, wybor arkuszy albo miejsce zapisu, sa wymagane — brak
 argumentu wymaganego w sygnaturze to `TypeError` (API), a brak wymaganej
 wartosci danych przekazanej jako `None` to `ValidationError`. CLI wypisuje
-`Error:` z lista dopuszczalnych wartosci (kod 1) dla brakujacych danych
-sprawdzanych w bibliotece; bledy skladni/wyborow przechwycone przez
-`argparse` maja kod 2. Domyslne zostaja tylko: format danych
+`Error:` z lista dopuszczalnych wartosci (kod 2, jak bledy skladni/wyborow
+przechwycone przez `argparse`) dla brakujacych danych sprawdzanych
+w bibliotece (`ValidationError`, `ParseError`, `UsageError`: Z10, 11.1). Domyslne zostaja tylko: format danych
 (`format="GTiff"`/`"GPKG"`), uklad poziomy PL `EPSG:2180` i natywny
 `EPSG:5514` wyniku CZ, przelaczniki wylaczone (`force`, `full_sheet`,
 `all_campaigns`, ...), `None` = "nie podano", parametry z jedna
