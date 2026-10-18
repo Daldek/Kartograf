@@ -168,16 +168,16 @@ class TestCreateParser:
 
 
 class TestParseBboxArg:
-    """K7a: cli._args.parse_bbox_arg — a single --bbox parser."""
+    """K7a: catalog.kinds.parse_bbox_arg - a single --bbox parser."""
 
     def test_valid_with_spaces(self):
-        from kartograf.cli._args import parse_bbox_arg
+        from kartograf.catalog.kinds import parse_bbox_arg
 
         bbox = parse_bbox_arg(" 1, 2 ,3,4", "EPSG:2180")
         assert tuple(bbox) == (1.0, 2.0, 3.0, 4.0, "EPSG:2180")
 
     def test_point_allowed(self):
-        from kartograf.cli._args import parse_bbox_arg
+        from kartograf.catalog.kinds import parse_bbox_arg
 
         assert parse_bbox_arg("5,5,5,5", "EPSG:4326").crs == "EPSG:4326"
 
@@ -195,7 +195,7 @@ class TestParseBboxArg:
         ],
     )
     def test_invalid(self, text, reason):
-        from kartograf.cli._args import parse_bbox_arg
+        from kartograf.catalog.kinds import parse_bbox_arg
 
         with pytest.raises(ValidationError) as exc:
             parse_bbox_arg(text, "EPSG:2180")
@@ -2418,7 +2418,7 @@ class TestRegistryVariantsCli:
             assert provider.descriptor_key == variant.source, flags
 
     def test_list_sources_cz_models_select_real_laz_variants(self, capsys, tmp_path):
-        from kartograf.cli.download_cmd import download_task_arguments
+        from kartograf.cli._args import library_arguments
         from kartograf.download.data import validate_data_request
 
         assert main(["elevation", "list-sources"]) == 0
@@ -2443,7 +2443,7 @@ class TestRegistryVariantsCli:
             )
             assert (args.product, args.country, args.model) == ("laz", "cz", model)
             validate_data_request(
-                **download_task_arguments(args),
+                **library_arguments(args),
                 output_dir=tmp_path / key,
             )
 
@@ -10337,6 +10337,7 @@ class TestCampaignOptions:
 
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         args = argparse.Namespace(
+            _command_id="elevation download",
             sheet="N-34-130-D-d-2-4",
             bbox=None,
             output=str(tmp_path),

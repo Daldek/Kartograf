@@ -8,8 +8,10 @@ shared file to edit. Modules starting with ``_`` are helpers, not groups.
 """
 
 import functools
+from collections.abc import Mapping
 from importlib import import_module
 from pkgutil import iter_modules
+from types import MappingProxyType
 from typing import NamedTuple
 
 from kartograf.catalog.spec import Command, Group, check_declarations, sorted_groups
@@ -71,3 +73,10 @@ def declared() -> Declared:
         groups.extend(getattr(module, "GROUPS", ()))
     check_declarations(commands, groups)
     return Declared(tuple(commands), sorted_groups(groups))
+
+
+@functools.cache
+def declared_commands() -> Mapping[str, Command]:
+    """The declared commands by id (``elevation download``), in the order of
+    ``declared().commands``."""
+    return MappingProxyType({command.id: command for command in declared().commands})

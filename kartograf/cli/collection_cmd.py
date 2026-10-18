@@ -3,11 +3,11 @@
 ``models3d``, ``hydro``, ``names``, ``maps``, ``geodesy``): flags ->
 ``download_collection``/``check_collection`` (ADR-037, ADR-042 D9).
 
-The CLI only translates: ``collection_task`` turns the flags of a group
-into library arguments (the same translation for the handler and for
-``project add``), ``cmd_collection_download`` runs the plan file cycle and
-prints one status line per file (its path below ``--output``), the
-failures and the data notices. Every data decision is in
+The CLI only translates: ``library_arguments`` turns the flags of a group into
+library arguments (the same conversion for every data command, from the
+declaration of the command in the catalog), ``cmd_collection_download`` runs the
+plan file cycle and prints one status line per file (its path below
+``--output``), the failures and the data notices. Every data decision is in
 ``kartograf.download.collections``.
 """
 
@@ -15,7 +15,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from kartograf.cli._args import parse_bbox_arg, parse_per_country
+from kartograf.cli._args import library_arguments
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -39,30 +39,6 @@ from kartograf.download.collections import (
 from kartograf.download.fetch import UpdateMode
 
 
-def collection_task(args: argparse.Namespace) -> dict:
-    """Data options of a collection download: the library arguments of the
-    handler and of a project task (flags a group does not have stay unset)."""
-    return {
-        "product": args.product,
-        "country": args.country,
-        "teryt": getattr(args, "teryt", None),
-        "ku": getattr(args, "ku", None),
-        "sheet": getattr(args, "sheet", None),
-        "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
-        "geometry": Path(args.geometry) if args.geometry is not None else None,
-        "layer": args.layer,
-        "whole_country": getattr(args, "whole_country", False),
-        "level": parse_per_country(getattr(args, "level", None), "--level"),
-        "lod": getattr(args, "lod", None),
-        "year": getattr(args, "year", None),
-        "format": getattr(args, "format", None),
-        "scale": getattr(args, "scale", None),
-        "sheet_system": getattr(args, "sheet_system", None),
-        "network": parse_per_country(getattr(args, "network", None), "--network"),
-        "horizontal_crs": getattr(args, "horizontal_crs", None),
-    }
-
-
 def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
     """``<group> download``: the group's ``--product`` (a missing one names
     only the group's products), then the plan file cycle around one
@@ -72,7 +48,7 @@ def cmd_collection_download(args: argparse.Namespace, group: str) -> int:
 
 
 def _collection_download(args: argparse.Namespace) -> int:
-    arguments = {**collection_task(args), "output_dir": args.output}
+    arguments = {**library_arguments(args), "output_dir": args.output}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_collection(**arguments, on_notice=on_notice))

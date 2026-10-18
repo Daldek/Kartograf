@@ -384,6 +384,12 @@ class Command:
         """The command has a check of the update state (``check_function``)."""
         return self.check_function is not None
 
+    @property
+    def task_options(self) -> dict[str, Kind]:
+        """The keys of ``tasks[].options`` of a project task with their kinds, in
+        the order of the parameters (the order of the keys of a manifest)."""
+        return {param.name: param.kind for param in self.params if param.task}
+
 
 @dataclass(frozen=True)
 class Group:

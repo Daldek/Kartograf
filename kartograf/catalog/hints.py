@@ -9,17 +9,11 @@ function is a lookup in the declarations: no catalog is built, nothing is
 raised for an unknown command or option.
 """
 
-import functools
 import shlex
 
-from kartograf.catalog.commands import declared
+from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.spec import Command, Example, Param
-
-
-@functools.cache
-def _commands() -> dict[str, Command]:
-    return {command.id: command for command in declared().commands}
 
 
 def _shows(command: Command, param: Param, example: Example) -> bool:
@@ -54,7 +48,7 @@ def example_for(
         command that shows the argument, else its first example (``None`` for a
         command without examples or without a CLI).
     """
-    found = _commands().get(command) if command is not None else None
+    found = declared_commands().get(command) if command is not None else None
     if found is None:
         return None, None
     param = None

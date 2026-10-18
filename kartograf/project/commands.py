@@ -1,14 +1,15 @@
 """Data commands of project tasks (ADR-040; spec 5 of the project manifest).
 
 ``COMMANDS`` has one entry per data command of the CLI (``kartograf <grupa>
-download``, ``soil hsg``): the option names of a task (the data flags of the
-command in ``snake_case``; ``bbox`` as 4 numbers plus ``bbox_crs``) with
-their JSON kinds, the validation without network that the download function
+download``, ``soil hsg``): the option names of a task with their JSON kinds -
+the parameters of the declaration of the command in ``kartograf.catalog`` that
+are task options (``Command.task_options``; ``bbox`` as 4 numbers plus
+``bbox_crs``) - the validation without network that the download function
 itself runs first, the download and ``check_*`` calls and the adapter of
 the result family to the files a task pins. The project has no per-product
 logic: a new product of an existing command changes nothing here, a new
-data command (a new group) adds one entry - plus ``_task`` in its CLI
-parser and a project task test.
+data command (a new group) adds its declaration to the catalog and one entry
+here.
 
 Options exist in two forms: library arguments (``BBox``, ``Path``, per
 country mappings, sequences) and the JSON form of ``tasks[].options``; the
@@ -24,6 +25,7 @@ from types import MappingProxyType
 from typing import Any, Protocol
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.catalog.commands import declared_commands
 from kartograf.catalog.spec import Kind
 from kartograf.download.collections import (
     check_collection,
@@ -222,25 +224,13 @@ def _run_options(workers: int | None) -> Options:
     return {} if workers is None else {"workers": workers}
 
 
-_AREA: dict[str, OptionKind] = {
-    "sheet": "str",
-    "bbox": "bbox",
-    "bbox_crs": "bbox_crs",
-    "geometry": "path",
-    "layer": "str",
-}
-_CAMPAIGNS: dict[str, OptionKind] = {
-    "year": "int",
-    "min_year": "int",
-    "max_year": "int",
-    "all_campaigns": "flag",
-    "full_sheet": "flag",
-}
+def _options(name: str) -> Mapping[str, OptionKind]:
+    """The options of a task of a data command: the parameters of its declaration
+    in the catalog that are task options, in the order of the manifest."""
+    return MappingProxyType(declared_commands()[name].task_options)
 
 
-def _data_command(
-    name: str, products: tuple[str, ...], options: dict[str, OptionKind]
-) -> TaskCommand:
+def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
     """``download_data``/``check_data`` limited to the products of a group."""
 
     def validate(output_dir: Path, opts: Options) -> None:
@@ -284,13 +274,11 @@ def _data_command(
         )
 
     return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, unit_report_files
+        name, _options(name), validate, download, check, unit_report_files
     )
 
 
-def _landcover_command(
-    name: str, product: str | None, options: dict[str, OptionKind]
-) -> TaskCommand:
+def _landcover_command(name: str, product: str | None) -> TaskCommand:
     """The land cover or SoilGrids command-level function."""
 
     def request(opts: Options) -> Options:
@@ -354,7 +342,7 @@ def _landcover_command(
 
     return TaskCommand(
         name,
-        MappingProxyType(options),
+        _options(name),
         validate,
         download,
         check,
@@ -362,7 +350,7 @@ def _landcover_command(
     )
 
 
-def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
+def _hsg_command(name: str) -> TaskCommand:
     """Command-level ``calculate_hsg``/``check_hsg``."""
 
     def validate(output_dir: Path, opts: Options) -> None:
@@ -401,14 +389,10 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
             output_dir=output_dir, **opts, cache=cache, on_notice=on_notice
         )
 
-    return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, _hsg_files
-    )
+    return TaskCommand(name, _options(name), validate, download, check, _hsg_files)
 
 
-def _collection_command(
-    name: str, group: str, options: dict[str, OptionKind]
-) -> TaskCommand:
+def _collection_command(name: str, group: str) -> TaskCommand:
     """``download_collection``/``check_collection`` limited to the products of
     a collection group (``boundaries``, ``cadastre``, ``models3d``, ``hydro``,
     ``names``, ``maps``, ``geodesy``; ADR-042); the result family is
@@ -455,137 +439,26 @@ def _collection_command(
         )
 
     return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, unit_report_files
+        name, _options(name), validate, download, check, unit_report_files
     )
-
-
-# The selection of a collection group (ADR-042 D9): product, country, unit
-# or area; each group adds only its own content flags.
-_COLLECTION: dict[str, OptionKind] = {
-    "product": "str",
-    "country": "str",
-    "teryt": "str",
-    **_AREA,
-}
-# A group without PL sources (``hydro``): no TERYT and no sheet code (both
-# select PL units and sheets).
-_CZ_COLLECTION: dict[str, OptionKind] = {
-    name: kind for name, kind in _COLLECTION.items() if name not in ("teryt", "sheet")
-}
-_SHEET_COLLECTION: dict[str, OptionKind] = {
-    name: kind for name, kind in _COLLECTION.items() if name != "teryt"
-}
 
 
 COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
     {
         command.name: command
         for command in (
-            _data_command(
-                "elevation download",
-                ELEVATION_PRODUCTS,
-                {
-                    "product": "str",
-                    **_AREA,
-                    "country": "str",
-                    "resolution": "per_country",
-                    "vertical_crs": "per_country",
-                    "model": "str",
-                    "format": "str",
-                    "sheet_system": "str",
-                    "scale": "str",
-                    "cutout": "flag",
-                    "horizontal_crs": "str",
-                    **_CAMPAIGNS,
-                    "min_density": "int",
-                },
-            ),
-            _data_command(
-                "imagery download",
-                IMAGERY_PRODUCTS,
-                {
-                    "product": "str",
-                    **_AREA,
-                    "country": "str",
-                    "sheet_system": "str",
-                    "scale": "str",
-                    "cutout": "flag",
-                    "horizontal_crs": "str",
-                    "coverage": "str",
-                    "direction": "str_list",
-                    "resolution": "per_country",
-                    **_CAMPAIGNS,
-                },
-            ),
-            _landcover_command(
-                "landcover download",
-                None,
-                {
-                    "product": "str",
-                    "teryt": "str",
-                    **_AREA,
-                    "whole_country": "flag",
-                    "year": "int",
-                    "format": "str",
-                    "layers": "str_list",
-                    "keep_raw": "flag",
-                    "horizontal_crs": "str",
-                },
-            ),
-            _landcover_command(
-                "soil download",
-                "soilgrids",
-                {**_AREA, "property": "str", "depth": "str", "stat": "str"},
-            ),
-            _hsg_command("soil hsg", {**_AREA, "depth": "str"}),
-            _collection_command(
-                "boundaries download",
-                "boundaries",
-                {
-                    **_COLLECTION,
-                    "whole_country": "flag",
-                    "level": "per_country",
-                    "format": "str",
-                },
-            ),
-            _collection_command(
-                "cadastre download",
-                "cadastre",
-                {**_COLLECTION, "ku": "str", "format": "str"},
-            ),
-            _collection_command(
-                "models3d download",
-                "models3d",
-                {**_COLLECTION, "lod": "int", "year": "int"},
-            ),
-            _collection_command(
-                "hydro download", "hydro", {**_CZ_COLLECTION, "whole_country": "flag"}
-            ),
-            _collection_command(
-                "names download",
-                "names",
-                {
-                    **_SHEET_COLLECTION,
-                    "whole_country": "flag",
-                    "format": "str",
-                    "horizontal_crs": "str",
-                },
-            ),
-            _collection_command(
-                "maps download",
-                "maps",
-                {
-                    **_SHEET_COLLECTION,
-                    "scale": "str",
-                    "format": "str",
-                    "sheet_system": "str",
-                },
-            ),
-            _collection_command(
-                "geodesy download",
-                "geodesy",
-                {**_COLLECTION, "whole_country": "flag", "network": "per_country"},
-            ),
+            _data_command("elevation download", ELEVATION_PRODUCTS),
+            _data_command("imagery download", IMAGERY_PRODUCTS),
+            _landcover_command("landcover download", None),
+            _landcover_command("soil download", "soilgrids"),
+            _hsg_command("soil hsg"),
+            _collection_command("boundaries download", "boundaries"),
+            _collection_command("cadastre download", "cadastre"),
+            _collection_command("models3d download", "models3d"),
+            _collection_command("hydro download", "hydro"),
+            _collection_command("names download", "names"),
+            _collection_command("maps download", "maps"),
+            _collection_command("geodesy download", "geodesy"),
         )
     }
 )

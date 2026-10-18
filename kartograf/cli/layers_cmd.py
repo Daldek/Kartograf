@@ -12,6 +12,7 @@ import argparse
 import textwrap
 
 from kartograf.cli._json import emit_document, wants_json
+from kartograf.landcover.manager import soil_choices
 from kartograf.source_info import LayerList, list_layers
 
 _WIDTH = 78
@@ -26,8 +27,12 @@ _AREA_LAYERS_NOTE = (
     "z --product bdot10k albo bdoo). Plik krajowy (--whole-country) "
     "ma warstwy pelnej bazy pod nazwami CUZK."
 )
-# The explanation of the depth codes (every SoilGrids depth is such an interval).
-_DEPTH_TEXT = "przedzial glebokosci ponizej powierzchni"
+
+
+def _depth_note() -> str:
+    """The explanation of the depth codes: the description the library gives the
+    depths of SoilGrids (every depth is a depth interval below the surface)."""
+    return "; ".join(dict.fromkeys(soil_choices()["depth"].values()))
 
 
 def _wrapped(text: str, indent: str) -> str:
@@ -60,7 +65,7 @@ def _soil(layers: LayerList) -> list[str]:
             for item in layers.properties or ()
         ),
         "",
-        f"  Glebokosci ({_DEPTH_TEXT}):",
+        f"  Glebokosci ({_depth_note()}):",
         *(f"    {depth}" for depth in layers.depths or ()),
         "",
         "  Statystyki:",

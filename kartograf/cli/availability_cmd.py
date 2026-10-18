@@ -17,7 +17,7 @@ a failure), a report with a part that could not be checked (``auto``,
 
 import argparse
 
-from kartograf.cli._args import parse_bbox_arg
+from kartograf.catalog.kinds import parse_bbox_arg
 from kartograf.cli._json import emit_document
 from kartograf.cli.download_cmd import notice_printer
 from kartograf.download.availability import (

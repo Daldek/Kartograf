@@ -8,7 +8,7 @@ import argparse
 import sys
 from pathlib import Path
 
-from kartograf.cli._args import parse_bbox_arg
+from kartograf.cli._args import library_arguments
 from kartograf.cli.download_cmd import (
     _end_progress,
     _plan_context,
@@ -37,31 +37,6 @@ from kartograf.landcover.manager import (
 _UNIT_SOURCES = ("bdot10k", "bdoo")
 
 
-def area_task_arguments(args: argparse.Namespace) -> dict:
-    """Shared area selection for land cover, SoilGrids and HSG tasks."""
-    return {
-        "sheet": args.sheet,
-        "bbox": parse_bbox_arg(args.bbox, args.bbox_crs) if args.bbox else None,
-        "geometry": Path(args.geometry) if args.geometry is not None else None,
-        "layer": args.layer,
-    }
-
-
-def landcover_task_arguments(args: argparse.Namespace) -> dict:
-    """Data options shared by ``landcover download`` and ``project add``."""
-    return {
-        "product": args.product,
-        "teryt": args.teryt,
-        **area_task_arguments(args),
-        "year": args.year,
-        "format": args.format,
-        "layers": args.layers,
-        "keep_raw": args.keep_raw,
-        "whole_country": args.whole_country,
-        "horizontal_crs": args.horizontal_crs,
-    }
-
-
 def cmd_landcover_download(args: argparse.Namespace) -> int:
     """``landcover download``: flags -> ``download_landcover``/``check_landcover``."""
     require_landcover_product(args.product)
@@ -72,7 +47,7 @@ def cmd_landcover_download(args: argparse.Namespace) -> int:
 
 def _landcover_task(args: argparse.Namespace) -> int:
     """Plan or download: the report as text or, with ``--json``, as a document."""
-    arguments = {**landcover_task_arguments(args), "output_dir": Path(args.output)}
+    arguments = {**library_arguments(args), "output_dir": Path(args.output)}
     on_notice = notice_printer(args)
     if args.check_updates:
         return _report_plan(args, check_landcover(**arguments, on_notice=on_notice))
