@@ -1127,6 +1127,30 @@ def test_cache_file_flag(tmp_path, monkeypatch):
 
 
 @needs_mcp
+def test_a_cache_directory_that_cannot_be_made_does_not_stop_the_server(
+    tmp_path, monkeypatch, caplog
+):
+    """A read-only home or a file in the way: the library works without a cache it
+    cannot open (CLI and library warn and go on), and so does the server - it used
+    to end at startup with a traceback."""
+    (tmp_path / "file").write_text("in the way")
+    database = tmp_path / "file" / "sub" / "cache.db"
+    seen = []
+
+    server = capture_server(["--cache-file", str(database)], monkeypatch)
+    with patch("kartograf.mcp_server.run_command", _cache_probe(seen)):
+        result = call_on(
+            server,
+            "elevation_download",
+            {**PL_SHEET, "output_dir": str(tmp_path / "s")},
+        )
+
+    assert result.is_error is False
+    assert seen[0].db_path == database and not database.exists()
+    assert "nie mozna utworzyc katalogu" in caplog.text
+
+
+@needs_mcp
 def test_no_cache_flag(tmp_path, monkeypatch):
     seen = []
 
