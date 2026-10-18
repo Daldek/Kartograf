@@ -20,6 +20,7 @@ from dataclasses import dataclass, field
 from kartograf.exceptions import (
     KartografError,
     NoCoverageError,
+    UsageError,
     ValidationError,
     YearRangeError,
 )
@@ -180,9 +181,10 @@ class ErrorReport(Document):
     ``message`` is what the CLI prints after ``Error: ``; ``hint`` is one ASCII
     line of at most 400 characters or ``None``; ``exception`` is the class
     name; ``command`` is the catalog id of the failed command (known to the
-    CLI and the MCP server, ``None`` for a plain library call); ``details`` is
-    ``exc.details()`` (for ``OSError``: ``errno`` as a symbolic name and
-    ``path``), ``{}`` when there is nothing to tell.
+    CLI and the MCP server, ``None`` for a plain library call, or the command a
+    ``UsageError`` names); ``details`` is ``exc.details()`` (for ``OSError``:
+    ``errno`` as a symbolic name and ``path``), ``{}`` when there is nothing to
+    tell.
     """
 
     SCHEMA = "kartograf-error/1"
@@ -248,6 +250,14 @@ def _option_hint(
     return text or None
 
 
+def _usage_hint(command: str | None) -> str | None:
+    """The hint of a ``UsageError`` about a command of the catalog: where its
+    parameters are and an example line (``None`` for an unknown command)."""
+    from kartograf.catalog.hints import usage_hint  # loads the declarations
+
+    return usage_hint(command, max_chars=HINT_MAX_CHARS)
+
+
 def _library_hint(exc: KartografError, command: str | None) -> str | None:
     """The hint of an exception of the package hierarchy (spec 6.3, steps 1-3)."""
     if exc.hint:
@@ -256,6 +266,11 @@ def _library_hint(exc: KartografError, command: str | None) -> str | None:
         return "; ".join(exc.hints)
     if isinstance(exc, TransformUnavailableError) and exc.remedy:
         return exc.remedy
+    if isinstance(exc, UsageError):
+        # the command whose line was wrong, else the command that was run
+        usage = _usage_hint(exc.command or command)
+        if usage:
+            return usage
     if exc.DEFAULT_HINT:
         return exc.DEFAULT_HINT
     if isinstance(exc, ValidationError) and exc.option:
@@ -294,16 +309,20 @@ def error_report(exc: BaseException, *, command: str | None = None) -> ErrorRepo
         (130), ``OSError`` is ``io_error`` and every other exception is
         ``internal_error`` (a program error; both exit with 1).
     command : str, optional
-        Catalog id of the command that failed (``elevation download``).
+        Catalog id of the command that failed (``elevation download``); without
+        it the command a ``UsageError`` names. The hint of a ``UsageError`` is
+        about the command whose line was wrong (``exc.command``), else about this
+        one.
     """
     if isinstance(exc, KartografError):
+        named = exc.command if isinstance(exc, UsageError) else None
         return ErrorReport(
             code=exc.code,
             message=str(exc),
             hint=_hint_or_none(_library_hint(exc, command)),
             exception=type(exc).__name__,
             exit_code=exc.exit_code,
-            command=command,
+            command=command if command is not None else named,
             details=exc.details(),
         )
     if isinstance(exc, KeyboardInterrupt):

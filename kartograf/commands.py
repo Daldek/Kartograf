@@ -138,7 +138,8 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     UsageError
         A mistake of the line: an unknown command or flag, a flag without its
         value, a value outside the choices of a flag, ``--help``/``--version``,
-        a removed command, an empty line, a group without a command.
+        a removed command, an empty line, a group without a command
+        (``command`` is the id of the command the line named, when it did).
     ValidationError
         A command that is not a data command (``parse``, ``catalog``,
         ``elevation availability``, ``project ...``; ``option="command"``,
@@ -157,12 +158,13 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     removed = removed_command_error(tokens)
     if removed is not None:
         raise UsageError(removed)
+    named = _words(tokens)
     if any(token in _EXITING_FLAGS for token in tokens):
         raise UsageError(
             "--help i --version nie sa czescia komendy danych; opis komendy: "
-            "kartograf catalog <grupa> <komenda> --params"
+            "kartograf catalog <grupa> <komenda> --params",
+            command=named,
         )
-    named = _words(tokens)
     if named is not None:
         task_command(named)  # before the parser asks for the flags of the command
     parsed = parse_command_line(_parser(), tokens)

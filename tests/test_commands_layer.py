@@ -176,6 +176,27 @@ def test_parse_command_syntax_error_is_usage_error(line):
 
 
 @pytest.mark.parametrize(
+    ("line", "command"),
+    [
+        ("elevation download --nope", "elevation download"),
+        ("elevation download --product", "elevation download"),
+        ("soil hsg --depth 0-5cm --stats", "soil hsg"),
+        (f"{NMT} --help", "elevation download"),
+        ("elevation download 'unclosed", None),
+        ("elevation frobnicate", None),
+        ("elevation", None),
+        ("download --product nmt", None),
+        ("", None),
+    ],
+)
+def test_usage_error_names_the_command_the_line_named(line, command):
+    with pytest.raises(UsageError) as caught:
+        parse_command(line)
+
+    assert caught.value.command == command
+
+
+@pytest.mark.parametrize(
     "line",
     [
         "parse N-34",
