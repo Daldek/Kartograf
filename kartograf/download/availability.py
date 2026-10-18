@@ -45,7 +45,6 @@ again and overwrites the entries.
 """
 
 import functools
-import json
 import math
 import shlex
 from collections.abc import Callable, Sequence
@@ -118,6 +117,7 @@ from kartograf.providers.pl.skorowidz_wfs import (
     time_position,
     type_year,
 )
+from kartograf.serialization import Document
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import (
     CZ_SYSTEM_CRS,
@@ -242,8 +242,9 @@ class AvailabilityCombination:
 
 
 @dataclass(frozen=True)
-class AvailabilityReport:
-    """Outcome of ``check_availability`` (schema ``kartograf-availability/1``).
+class AvailabilityReport(Document):
+    """Outcome of ``check_availability`` (``kartograf-availability/1``; the CLI
+    ``--json`` prints exactly ``to_json()``).
 
     ``areas`` and ``combinations`` per country (``areas`` order); PL
     combinations newest year first, then sheet system, resolution, height
@@ -252,17 +253,15 @@ class AvailabilityReport:
     not be checked (``country="auto"``: its ``CHECK_FAILED`` notice).
     """
 
+    SCHEMA = AVAILABILITY_SCHEMA
+    JSON_KEYS = ("request", "checked_at", "areas", "combinations", "notices", "ok")
+
     request: dict
     checked_at: str
     areas: tuple[AvailabilityArea, ...]
     combinations: tuple[AvailabilityCombination, ...]
     notices: tuple[Notice, ...]
     ok: bool
-    schema: str = AVAILABILITY_SCHEMA
-
-    def to_json(self) -> str:
-        """The report as JSON (the CLI ``--json`` prints exactly this text)."""
-        return json.dumps(asdict(self), ensure_ascii=False, indent=2) + "\n"
 
 
 @dataclass(frozen=True)

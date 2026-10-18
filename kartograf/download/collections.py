@@ -3190,4 +3190,5 @@ def check_collection(
     """
     sink = NoticeSink(on_notice)
     request = _resolve(_choices(locals()), sink)
-    return plan_request(request, cache=cache, sink=sink)
+    plan = plan_request(request, cache=cache, sink=sink)
+    return replace(plan, notices=sink.notices)

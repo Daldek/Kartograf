@@ -2,12 +2,26 @@
 
 import dataclasses
 import json
+from unittest.mock import patch
 
 import pytest
 
+from kartograf.core.bbox import BBox
+from kartograf.download import collections
+from kartograf.download.collections import check_collection
+from kartograf.download.data import check_data
 from kartograf.download.manager import DownloadManager
 from kartograf.download.plan import PLAN_SCHEMA, UpdatePlan
 from kartograf.exceptions import ValidationError
+from kartograf.hydrology.hsg import check_hsg
+from kartograf.landcover.manager import check_landcover, check_soil
+from kartograf.notices import GEOMETRY_LAYER_DEFAULT, UNIT_LIST, Notice
+from kartograf.providers.soilgrids import SoilGridsProvider
+from tests.conftest import FakeSoilGrids, write_gpkg_layers
+from tests.fake_packages import FakePackageSession
+from tests.test_collections import AREA, _prg_route
+from tests.test_hsg import RasterSoilGrids
+from tests.test_landcover_output_params import FakePackages
 from tests.test_manager_campaigns import (
     C14,
     REC,
@@ -17,6 +31,9 @@ from tests.test_manager_campaigns import (
     c14_fake,
     std_path,
 )
+from tests.test_nmt_100m import CHOICE as NMT_100M
+from tests.test_nmt_100m import KRAKOW, FakeGugik
+from tests.test_parity_landcover import CLAY, _bdot, _providers
 
 G2 = "N-34-139-C-a-3-2"
 
@@ -141,3 +158,107 @@ def test_upgrade_all_strategy_only_planned_campaigns(tmp_path):
         [G], update="upgrade", plan=dataclasses.replace(plan, items=tuple(keep))
     )
     assert fake.downloads == [REC["78047"].url]
+
+
+# --- the plan of a command carries the notices of its call ---------------------
+
+
+def _geometry(tmp_path):
+    """A multi-layer GPKG without ``layer``: ``GEOMETRY_LAYER_DEFAULT``."""
+    return write_gpkg_layers(tmp_path / "area.gpkg", ["zlewnia", "inna"])
+
+
+_ENVELOPE = BBox(770000, 509000, 772000, 511000, "EPSG:2180")
+
+
+def _plan_of_data(tmp_path, monkeypatch, on_notice):
+    monkeypatch.setattr(collections, "_session", lambda: FakeGugik())
+    return check_data(
+        output_dir=tmp_path, bbox=KRAKOW, country="pl", on_notice=on_notice, **NMT_100M
+    )
+
+
+def _plan_of_collection(tmp_path, monkeypatch, on_notice):
+    session = FakePackageSession({})
+    session.routes.update([_prg_route()])
+    monkeypatch.setattr(collections, "_session", lambda: session)
+    return check_collection(
+        product="buildings",
+        output_dir=tmp_path,
+        bbox=AREA,
+        country="pl",
+        lod=1,
+        year=2024,
+        cache=False,
+        on_notice=on_notice,
+    )
+
+
+def _plan_of_landcover(tmp_path, monkeypatch, on_notice):
+    download, teryts = _bdot(["1465"], FakePackages())
+    with download, teryts, patch_envelope():
+        return check_landcover(
+            product="bdot10k",
+            output_dir=tmp_path / "store",
+            geometry=_geometry(tmp_path),
+            cache=False,
+            on_notice=on_notice,
+        )
+
+
+def _plan_of_soil(tmp_path, monkeypatch, on_notice):
+    soil = _providers(soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids()))
+    with soil, patch_envelope():
+        return check_soil(
+            output_dir=tmp_path / "store",
+            geometry=_geometry(tmp_path),
+            cache=False,
+            on_notice=on_notice,
+            **CLAY,
+        )
+
+
+def _plan_of_hsg(tmp_path, monkeypatch, on_notice):
+    with _providers(soilgrids=RasterSoilGrids), patch_envelope():
+        return check_hsg(
+            output_dir=tmp_path / "store",
+            geometry=_geometry(tmp_path),
+            depth="0-5cm",
+            cache=False,
+            on_notice=on_notice,
+        )
+
+
+def patch_envelope():
+    """The geometry readers stay out of it: the file only has to name layers."""
+    return patch("kartograf.core.geometry.get_overall_bbox", return_value=_ENVELOPE)
+
+
+@pytest.mark.parametrize(
+    ("scenario", "code"),
+    [
+        (_plan_of_data, UNIT_LIST),
+        (_plan_of_collection, UNIT_LIST),
+        (_plan_of_landcover, GEOMETRY_LAYER_DEFAULT),
+        (_plan_of_soil, GEOMETRY_LAYER_DEFAULT),
+        (_plan_of_hsg, GEOMETRY_LAYER_DEFAULT),
+    ],
+    ids=[
+        "check_data",
+        "check_collection",
+        "check_landcover",
+        "check_soil",
+        "check_hsg",
+    ],
+)
+def test_check_plan_carries_the_notices_of_the_call(
+    tmp_path, monkeypatch, scenario, code
+):
+    """``on_notice`` is not the only place the messages of a check are: the
+    plan has them too (``--json`` prints them), in the order they were emitted."""
+    received: list[Notice] = []
+
+    plan = scenario(tmp_path, monkeypatch, received.append)
+
+    assert code in [notice.code for notice in received]
+    assert plan.notices == tuple(received)

@@ -13,6 +13,7 @@ Cieszyn/Cesky Tesin border area, openzu ``HEAD`` headers) replayed by
 (measured 2026-10-15), with the archives downloaded since decision 13.
 """
 
+import dataclasses
 import functools
 import json
 import shlex
@@ -487,6 +488,29 @@ def test_json_round_trip_and_order():
     assert years == sorted(years, reverse=True)
     first = payload["combinations"][0]
     assert first["sheets_missing"] == [] and first["size_bytes"] is None
+
+
+@pytest.mark.usefixtures("frozen_clock")
+def test_availability_json_has_schema_first_and_same_content():
+    """The shared encoder writes the document of 0.8.0-dev; only ``schema`` moves
+    from the last key to the first."""
+    report, _ = _krakow()
+
+    payload = json.loads(report.to_json())
+
+    assert list(payload) == [
+        "schema",
+        "request",
+        "checked_at",
+        "areas",
+        "combinations",
+        "notices",
+        "ok",
+    ]
+    previous = json.loads(json.dumps(dataclasses.asdict(report)))  # the 0.8.0-dev text
+    assert payload == {**previous, "schema": AVAILABILITY_SCHEMA}
+    assert report.to_dict() == payload
+    assert report.schema == AVAILABILITY_SCHEMA
 
 
 # =============================================================================

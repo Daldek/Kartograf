@@ -34,7 +34,7 @@ import os
 import re
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from kartograf.cache.defaults import open_cache
@@ -805,7 +805,8 @@ class LandCoverManager:
             request = self._collection_request(
                 teryt, sheet, bbox, geometry, layer, options, sink
             )
-            return plan_request(request, cache=self._cache, sink=sink, track=_TRACK)
+            plan = plan_request(request, cache=self._cache, sink=sink, track=_TRACK)
+            return replace(plan, notices=sink.notices)
         teryt, sheet, bbox = self._validated(
             teryt, sheet, bbox, geometry, layer, options, sink
         )
@@ -815,9 +816,10 @@ class LandCoverManager:
                     [teryt] if teryt is not None else self._area_teryts(bbox, sheet)[0]
                 )
                 archive = self._archive_jobs(teryts, options, parent=None)
-                return new_plan(
+                plan = new_plan(
                     self._output_dir, [self._inspect_archive(job) for job in archive]
                 )
+                return replace(plan, notices=sink.notices)
             if teryt is not None:
                 jobs = self._jobs(teryt=teryt, kwargs=options)
             elif isinstance(self._provider, Bdot10kProvider):
@@ -825,7 +827,8 @@ class LandCoverManager:
                 jobs = [j for t in teryts for j in self._jobs(teryt=t, kwargs=options)]
             else:
                 jobs, _ = self._area_jobs(bbox=bbox, sheet=sheet, kwargs=options)
-            return new_plan(self._output_dir, [self._inspect(job) for job in jobs])
+            plan = new_plan(self._output_dir, [self._inspect(job) for job in jobs])
+            return replace(plan, notices=sink.notices)
 
     def validate_request(
         self,
