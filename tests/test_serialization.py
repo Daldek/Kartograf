@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
@@ -24,8 +25,18 @@ from kartograf.download.fetch import VersionedFile
 from kartograf.hydrology.hsg import HsgReport
 from kartograf.landcover.manager import LandCoverReport, SoilReport
 from kartograf.notices import Notice
+from kartograf.project.model import (
+    FileCheck,
+    PinnedFile,
+    Project,
+    ProjectCheck,
+    ProjectReport,
+    ProjectTask,
+    TaskResult,
+)
 from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
+from tests.test_validate_request import _shapefile
 
 
 @dataclass(frozen=True)
@@ -600,3 +611,217 @@ def test_unit_failure_and_unit_file_keys():
         "unverified",
         "same_as",
     ]
+
+
+# --- the project documents (spec 5.4.8) ----------------------------------------
+
+_PIN_PATH = "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc"
+_PIN_VERSION = (
+    "nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/"
+    "2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc"
+)
+_STORE = Path("/srv/dane/kartograf")
+_NMT_OPTIONS = {
+    "product": "nmt",
+    "sheet": "N-34-130-D-d-2-4",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
+
+
+def _pin(role="output") -> PinnedFile:
+    return PinnedFile(
+        role,
+        "N-34-130-D-d-2-4",
+        _PIN_PATH,
+        _PIN_VERSION,
+        "2022-05-10_83233",
+        _SPEC_SHA256,
+        41029733,
+    )
+
+
+def _project() -> Project:
+    task = ProjectTask(
+        name="teren",
+        command="elevation download",
+        options=MappingProxyType(_NMT_OPTIONS),
+        pinned_at="2026-10-20T08:15:02+00:00",
+        kartograf_version="0.8.0",
+        geometry_sha256=None,
+        files=(_pin(),),
+    )
+    return Project(Path("/home/ola/projekty/wisla"), _STORE, (task,))
+
+
+_PROJECT_DOCUMENT = {
+    "directory": "/home/ola/projekty/wisla",
+    "output_dir": "/srv/dane/kartograf",
+    "tasks": [
+        {
+            "name": "teren",
+            "command": "elevation download",
+            "options": _NMT_OPTIONS,
+            "pinned_at": "2026-10-20T08:15:02+00:00",
+            "kartograf_version": "0.8.0",
+            "geometry_sha256": None,
+            "files": [
+                {
+                    "role": "output",
+                    "unit": "N-34-130-D-d-2-4",
+                    "path": f"/srv/dane/kartograf/{_PIN_PATH}",
+                    "version": f"/srv/dane/kartograf/{_PIN_VERSION}",
+                    "label": "2022-05-10_83233",
+                    "sha256": _SPEC_SHA256,
+                    "size_bytes": 41029733,
+                }
+            ],
+        }
+    ],
+}
+
+
+def test_project_state_document():
+    """The pins of the manifest are relative to the store; the document has
+    absolute paths (``output_dir`` + the manifest value)."""
+    project = _project()
+
+    data = project.to_dict()
+
+    assert data == {"schema": "kartograf-project-state/1", **_PROJECT_DOCUMENT}
+    assert list(data) == ["schema", "directory", "output_dir", "tasks"]
+    assert list(data["tasks"][0]) == [  # type: ignore[index]
+        "name",
+        "command",
+        "options",
+        "pinned_at",
+        "kartograf_version",
+        "geometry_sha256",
+        "files",
+    ]
+    assert project.schema == "kartograf-project-state/1"
+
+
+def test_project_report_nests_project_without_schema():
+    replaced = _pin("raw")
+    report = ProjectReport(
+        project=_project(),
+        tasks=(
+            TaskResult("teren", "updated", (_pin(),), (replaced,), ()),
+            TaskResult("gleby", "failed", (), (), ("brak danych: N-34-130-D",)),
+        ),
+        notices=(Notice("info", "newer_available", "teren: nowsza wersja"),),
+        ok=False,
+    )
+
+    data = report.to_dict()
+
+    assert list(data) == ["schema", "project", "tasks", "notices", "ok"]
+    assert data["schema"] == "kartograf-project-report/1"
+    assert data["project"] == _PROJECT_DOCUMENT  # no ``schema`` key when nested
+    updated, failed = data["tasks"]  # type: ignore[misc]
+    assert list(updated) == ["name", "outcome", "pinned", "unpinned", "errors"]
+    # the pins of a result are encoded with the store of the project, too
+    assert updated["pinned"][0]["path"] == f"/srv/dane/kartograf/{_PIN_PATH}"
+    assert updated["unpinned"][0]["role"] == "raw"
+    assert updated["unpinned"][0]["version"] == f"/srv/dane/kartograf/{_PIN_VERSION}"
+    assert failed["errors"] == ["brak danych: N-34-130-D"]
+    assert data["notices"] == [
+        {"level": "info", "code": "newer_available", "text": "teren: nowsza wersja"}
+    ]
+    assert data["ok"] is False
+
+
+def test_project_check_document():
+    """The example of spec 5.4.8: ``FileCheck.path`` is absolute."""
+    check = ProjectCheck(
+        project=_project(),
+        files=(
+            FileCheck(
+                "teren",
+                "N-34-130-D-d-2-4",
+                _PIN_PATH,
+                "ok",
+                "2022-05-10_83233",
+                None,
+                None,
+            ),
+        ),
+        not_downloaded=(),
+        notices=(),
+        ok=True,
+    )
+
+    assert check.to_dict() == {
+        "schema": "kartograf-project-check/1",
+        "project": _PROJECT_DOCUMENT,
+        "files": [
+            {
+                "task": "teren",
+                "unit": "N-34-130-D-d-2-4",
+                "path": f"/srv/dane/kartograf/{_PIN_PATH}",
+                "status": "ok",
+                "pinned_label": "2022-05-10_83233",
+                "available_label": None,
+                "detail": None,
+            }
+        ],
+        "not_downloaded": [],
+        "notices": [],
+        "ok": True,
+    }
+
+
+def test_pinned_file_outside_a_project_document_is_an_error():
+    """A pin holds a path relative to the store: without the store of a
+    project document it has no absolute form, and the encoder does not guess."""
+    file_check = FileCheck("teren", "u", _PIN_PATH, "ok", None, None, None)
+
+    with pytest.raises(ValueError, match="project document"):
+        encode(_pin())
+    with pytest.raises(ValueError, match="project document"):
+        encode(file_check)
+    # the same values inside a document: the store is known
+    assert encode(_pin(), EncodeContext(store=_STORE))["path"].endswith(  # type: ignore[call-overload]
+        _PIN_PATH
+    )
+
+
+def test_task_options_keep_manifest_form(tmp_path, monkeypatch):
+    """``tasks[].options`` is the manifest form: a path relative to the
+    project directory stays relative (not made absolute like the other paths of
+    the document), ``bbox`` is four numbers + ``bbox_crs``."""
+    work = tmp_path / "praca"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    _shapefile(work)
+    kartograf.init_project("../projekt", output_dir="../magazyn")
+    kartograf.add_project_task(
+        "../projekt",
+        name="teren",
+        command="elevation download",
+        options={
+            "product": "nmt",
+            "bbox": BBox(566000, 243000, 569000, 246000, "EPSG:2180"),
+            "country": "pl",
+            "sheet_system": "1992",
+            "resolution": "1m",
+            "vertical_crs": "EVRF2007",
+        },
+    )
+    project = kartograf.add_project_task(
+        "../projekt",
+        name="gleby",
+        command="soil hsg",
+        options={"geometry": Path("area.shp"), "depth": "0-5cm"},
+    )
+
+    data = project.to_dict()
+
+    terrain, soils = data["tasks"]  # type: ignore[misc]
+    assert terrain["options"]["bbox"] == [566000, 243000, 569000, 246000]
+    assert terrain["options"]["bbox_crs"] == "EPSG:2180"
+    assert soils["options"] == {"geometry": "../praca/area.shp", "depth": "0-5cm"}
+    assert data["directory"] == (tmp_path / "projekt").as_posix()
+    assert data["output_dir"] == (tmp_path / "magazyn").as_posix()
+    assert soils["files"] == [] and soils["pinned_at"] is None
