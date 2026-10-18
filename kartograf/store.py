@@ -3,10 +3,12 @@
 The scan works from directory listings: every link, ``full_sheet`` link and
 version opens only its own sidecar, once; a data file is never opened, hashed
 or statted, and a sidecar missing from a listing is reported without an
-``open``. A version directory named in ``skip_versions`` is only listed.
-Confirming a hardlink by content is the separate, on-demand ``link_target``.
-Nothing here writes to the store, so every function works on a store mounted
-read-only and may run in several threads at once.
+``open``. A version directory named in ``skip_versions`` is only listed, or -
+named with its file names - not even listed. ``list_partitions`` splits one
+segment into disjoint parts for parallel scans. Confirming a hardlink by
+content is the separate, on-demand ``link_target``. Nothing here writes to
+the store, so every function works on a store mounted read-only and may run
+in several threads at once.
 """
 
 from __future__ import annotations
@@ -17,7 +19,7 @@ import os
 import re
 import stat
 import time
-from collections.abc import Collection, Generator, Iterable, Iterator, Set
+from collections.abc import Collection, Generator, Iterable, Iterator, Mapping, Set
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path, PurePath
@@ -180,6 +182,12 @@ _LINK_DIRS: tuple[tuple[tuple[str, ...], EntryKind], ...] = (
     ((FULL_SHEET_DIR,), "full_sheet"),
 )
 _READ_CHUNK = 65536
+# Characters that make a name more than one directory entry (partition keys,
+# ``skip_versions`` file names).
+_SEPARATORS = ("/", "\x00", os.sep, os.altsep or "/")
+# ``skip_versions`` as the scan uses it: known version directories, listed
+# only (a set) or not even listed (a mapping to their data file names).
+_Skip = Set[str] | Mapping[str, Collection[str]] | None
 
 # Dataset keys renamed in the unpublished 0.8.0 development tree (ADR-044 D7).
 # Keep the raw value in Sidecar.dataset; only dataset_key is normalized.
@@ -239,7 +247,7 @@ def _renamed(
     value: dict[str, Any] | None, names: dict[str, str]
 ) -> dict[str, Any] | None:
     """Historical keys under current names; never changes the raw JSON."""
-    if value is None or not any(old in value for old in names):
+    if value is None or names.keys().isdisjoint(value):
         return value
     result = value.copy()
     for old, current in names.items():
@@ -262,7 +270,7 @@ def _normalized_extra(extra: dict[str, Any] | None) -> dict[str, Any] | None:
             result[key] = new
     sheets = extra.get("sheet_sources")
     if isinstance(sheets, list) and any(
-        isinstance(sheet, dict) and any(old in sheet for old in _SHEET_SOURCE_KEYS)
+        isinstance(sheet, dict) and not _SHEET_SOURCE_KEYS.keys().isdisjoint(sheet)
         for sheet in sheets
     ):
         result = result.copy() if result is extra else result
@@ -288,7 +296,10 @@ def _number(value: Any) -> float | None:
 
 
 def _pick(*values: Any) -> str | None:
-    return next((v for v in values if isinstance(v, str) and v), None)
+    for value in values:
+        if isinstance(value, str) and value:
+            return value
+    return None
 
 
 def _date(value: Any) -> str | None:
@@ -330,6 +341,15 @@ def _unit(
     return None
 
 
+@lru_cache(maxsize=256)
+def _dataset_key(dataset: str) -> str | None:
+    """Registered key of a sidecar ``dataset`` (0.8.0-dev keys mapped)."""
+    try:
+        return get_source(_DEV_DATASETS.get(dataset, dataset)).key
+    except KeyError:
+        return None
+
+
 def _typed(raw: dict[str, Any]) -> Sidecar:
     """The typed view of a ``kartograf-meta/1`` object; raw stays untouched."""
     extra = _normalized_extra(_dict(raw.get("extra")))
@@ -347,67 +367,47 @@ def _typed(raw: dict[str, Any]) -> Sidecar:
         edition = label
     # When the data were acquired or published - never ``downloaded_at``
     # (a "downloaded" label is the download date as well).
-    date = next(
-        (
-            found
-            for found in (
-                _date(campaign_data.get("date")),
-                _date(source.get("acquisition_date")),
-                _date(extra_data.get("acquisition_date")),
-            )
-            if found is not None
-        ),
-        None,
-    )
+    date: str | None = None
+    for value in (
+        campaign_data.get("date"),
+        source.get("acquisition_date"),
+        extra_data.get("acquisition_date"),
+    ):
+        if (date := _date(value)) is not None:
+            break
     if date is None and label is not None and label_source == "campaign":
         date = _date(label[:10])
     if date is None and edition is not None:
         date = _date(edition)
-    year = (
-        int(date[:4])
-        if date is not None
-        else next(
-            (
-                found
-                for found in (
-                    _year(campaign_data.get("year")),
-                    _year(extra_data.get("year")),
-                    _year(source.get("acquisition_year")),
-                    _year(source.get("year")),
-                    _year(request_data.get("year")),
-                    _year(edition),
-                )
-                if found is not None
-            ),
-            None,
-        )
-    )
+    year = int(date[:4]) if date is not None else None
+    if year is None:
+        for value in (
+            campaign_data.get("year"),
+            extra_data.get("year"),
+            source.get("acquisition_year"),
+            source.get("year"),
+            request_data.get("year"),
+            edition,
+        ):
+            if (year := _year(value)) is not None:
+                break
     dataset = _text(raw.get("dataset"))
-    try:
-        dataset_key = (
-            get_source(_DEV_DATASETS.get(dataset, dataset)).key if dataset else None
-        )
-    except KeyError:
-        dataset_key = None
     sha256 = _text(raw.get("sha256"))
     size = raw.get("size_bytes")
     country = _text(raw.get("country"))
-    full_sheet = next(
-        (
-            value
-            for value in (
-                campaign_data.get("full_sheet"),
-                extra_data.get("full_sheet"),
-                source.get("full_sheet"),
-            )
-            if isinstance(value, bool)
-        ),
-        None,
-    )
+    full_sheet: bool | None = None
+    for value in (
+        campaign_data.get("full_sheet"),
+        extra_data.get("full_sheet"),
+        source.get("full_sheet"),
+    ):
+        if isinstance(value, bool):
+            full_sheet = value
+            break
     return Sidecar(
         schema=_SCHEMA,
         dataset=dataset,
-        dataset_key=dataset_key,
+        dataset_key=_dataset_key(dataset) if dataset else None,
         country=country,
         product=_text(raw.get("product")),
         provider=_text(raw.get("provider")),
@@ -454,18 +454,18 @@ def _read_bytes(path: str) -> bytes:
     return b"".join(chunks)
 
 
-def _load(side: Path) -> Sidecar:
+def _load(side: str | Path) -> Sidecar:
     try:
         raw = json.loads(_read_bytes(os.fspath(side)))
     except (OSError, ValueError) as exc:
         raise InvalidSidecarError(
-            f"Nie mozna odczytac sidecara {side}: {exc}", path=side
+            f"Nie mozna odczytac sidecara {side}: {exc}", path=Path(side)
         ) from exc
     if not isinstance(raw, dict) or raw.get("schema") != _SCHEMA:
         schema = raw.get("schema") if isinstance(raw, dict) else None
         raise InvalidSidecarError(
             f"Nieznany schemat sidecara {schema!r} (oczekiwano {_SCHEMA}): {side}",
-            path=side,
+            path=Path(side),
         )
     return _typed(raw)
 
@@ -902,56 +902,75 @@ def _version_of_link(link: Path, rel: str) -> Path | None:
     return None
 
 
+def _slot_version(
+    directory: str, name: str, rel: str, slot: str
+) -> re.Match[str] | None:
+    """``_version_of_link`` of the link ``<directory>/<name>`` when the scan
+    knows its versions ``slot``: the ``<label>_<sha8>`` match of the version
+    directory of ``slot`` that ``rel`` names, else ``None``.
+
+    The same lexical rule on normalized strings, without ``pathlib``: an
+    absolute ``rel`` of a relative store is compared absolutely.
+    """
+    if not rel:
+        return None
+    head, file = os.path.split(os.path.normpath(os.path.join(directory, rel)))
+    if file != name:
+        return None
+    parent, version = os.path.split(head)
+    if parent != slot and not (
+        os.path.isabs(parent)
+        and not os.path.isabs(slot)
+        and parent == os.path.abspath(slot)
+    ):
+        return None
+    return _VERSION_DIR.fullmatch(version)
+
+
 def _link_entry(
-    kind: EntryKind,
-    segment: str,
-    hierarchy: str,
-    path: Path,
-    versions_slot: Path,
+    kind: EntryKind, segment: str, level: str, directory: str, name: str, slot: str
 ) -> StoreEntry:
+    file = os.path.join(directory, name)
+    path = Path(file)
     try:
-        meta = _load(path.with_name(path.name + _META_SUFFIX))
+        meta = _load(file + _META_SUFFIX)
     except InvalidSidecarError as exc:
-        return _problem(_read_problem(exc), segment, hierarchy, path)
+        return _problem(_read_problem(exc), segment, level, path)
     extra = meta.extra or {}
     rel = extra.get("link_target")
-    target = None
-    if extra.get("link") == "hardlink" and isinstance(rel, str):
-        found = _version_of_link(path, rel)
-        if found is not None and found.parent.parent == versions_slot:
-            target = found
-    if target is not None:
-        match = _VERSION_DIR.fullmatch(target.parent.name)
-        assert match is not None  # _version_of_link
+    match = None
+    if level and extra.get("link") == "hardlink" and isinstance(rel, str):
+        match = _slot_version(directory, name, rel, slot)
+    if match is not None:
+        target: Path | None = Path(slot, match[0], name)
         label, sha8 = match[1], match[2]
     else:
+        target = None
         version = _dict(extra.get("version")) or {}
         label = _text(version.get("label"))
         sha8 = meta.sha256[:8] if meta.sha256 is not None else None
-    return StoreEntry(
-        kind, segment, hierarchy, path.name, path, target, label, sha8, meta, None
-    )
+    return StoreEntry(kind, segment, level, name, path, target, label, sha8, meta, None)
 
 
 def _link_files(
     directory: str,
     segment: str,
-    hierarchy: tuple[str, ...],
+    level: str,
+    slot: str,
     kind: EntryKind,
     listing: list[tuple[str, bool]],
-    versions_slot: Path,
     wanted: Set[str] | None = None,
 ) -> Iterator[StoreEntry]:
+    """Links of one directory of hierarchy ``level`` (``slot``: its
+    ``versions/`` directory, the only place its links may point at)."""
     names = {name for name, _ in listing}
-    level = "/".join(hierarchy)
     for name in _data_names(listing):
         if wanted is not None and not _matches(name, wanted):
             continue
-        path = Path(directory, name)
-        if name + _META_SUFFIX not in names:
-            yield _problem("missing_sidecar", segment, level, path)
+        if name + _META_SUFFIX in names:
+            yield _link_entry(kind, segment, level, directory, name, slot)
         else:
-            yield _link_entry(kind, segment, level, path, versions_slot)
+            yield _problem("missing_sidecar", segment, level, Path(directory, name))
 
 
 def _valid_version(raw: dict[str, Any], sha8: str) -> bool:
@@ -970,49 +989,54 @@ def _valid_version(raw: dict[str, Any], sha8: str) -> bool:
     )
 
 
+def _skipped(
+    segment: str, level: str, name: str, path: Path, label: str, sha8: str
+) -> StoreEntry:
+    return StoreEntry(
+        "version", segment, level, name, path, path, label, sha8, None, None, True
+    )
+
+
 def _version_files(
     directory: str,
     segment: str,
-    hierarchy: tuple[str, ...],
-    label: str,
-    sha8: str,
-    skip: Set[str] | None,
+    level: str,
+    match: re.Match[str],
+    skip: _Skip,
     wanted: Set[str] | None = None,
 ) -> Iterator[StoreEntry]:
+    """Files of the version directory ``<level>/<label>_<sha8>`` (``match``)."""
+    label, sha8 = match[1], match[2]
+    skipped = False
+    if skip is not None:
+        key = f"{segment}/{VERSIONS_DIR}/{level}/{match[0]}"
+        if isinstance(skip, Set):
+            skipped = key in skip
+        elif key in skip:  # a mapping: the caller's names, without a listing
+            for name in _known_names(key, skip[key]):
+                if wanted is None or _matches(name, wanted):
+                    path = Path(directory, name)
+                    yield _skipped(segment, level, name, path, label, sha8)
+            return
     listing = _listing(directory)
     if listing is None:
         return
     names = {name for name, _ in listing}
-    level = "/".join(hierarchy)
-    skipped = skip is not None and (
-        f"{segment}/{VERSIONS_DIR}/{level}/{os.path.basename(directory)}" in skip
-    )
     for name in _data_names(listing):
         if wanted is not None and not _matches(name, wanted):
             continue
-        path = Path(directory, name)
+        file = os.path.join(directory, name)
+        path = Path(file)
         if name + _META_SUFFIX not in names:
             yield _problem(
                 "missing_sidecar", segment, level, path, label=label, sha8=sha8
             )
             continue
         if skipped:
-            yield StoreEntry(
-                "version",
-                segment,
-                level,
-                name,
-                path,
-                path,
-                label,
-                sha8,
-                None,
-                None,
-                skipped=True,
-            )
+            yield _skipped(segment, level, name, path, label, sha8)
             continue
         try:
-            meta = _load(path.with_name(name + _META_SUFFIX))
+            meta = _load(file + _META_SUFFIX)
         except InvalidSidecarError as exc:
             yield _problem(
                 _read_problem(exc), segment, level, path, label=label, sha8=sha8
@@ -1034,31 +1058,51 @@ def _version_files(
         )
 
 
+def _version_match(name: str) -> re.Match[str] | None:
+    """``<label>_<sha8>`` of a version directory name; most hierarchy names
+    (``130``, ``D``, ``teryt``) are rejected without the regex."""
+    if len(name) < 10 or name[-9] != "_":
+        return None
+    return _VERSION_DIR.fullmatch(name)
+
+
+def _version_dirs(
+    listing: list[tuple[str, bool]],
+) -> Iterator[tuple[str, re.Match[str]]]:
+    """Version directories of a hierarchy directory below ``versions/``."""
+    for name, is_dir in listing:
+        if is_dir and not name.startswith("."):
+            match = _version_match(name)
+            if match is not None:
+                yield name, match
+
+
+def _child(level: str, name: str) -> str:
+    return f"{level}/{name}" if level else name
+
+
 def _walk_links(
-    directory: str,
-    base: str,
-    segment: str,
-    hierarchy: tuple[str, ...],
-    kind: EntryKind,
+    directory: str, segment: str, level: str, slot: str, kind: EntryKind
 ) -> Iterator[StoreEntry]:
-    """Depth first; files of a directory before its subdirectories."""
+    """Depth first; files of a directory before its subdirectories (``slot``:
+    the ``versions/`` directory of ``level``)."""
     listing = _listing(directory)
     if listing is None:
         return
-    slot = Path(base, VERSIONS_DIR, *hierarchy)
-    yield from _link_files(directory, segment, hierarchy, kind, listing, slot)
+    yield from _link_files(directory, segment, level, slot, kind, listing)
     for name, is_dir in listing:
         if is_dir and not name.startswith("."):
             yield from _walk_links(
-                os.path.join(directory, name), base, segment, (*hierarchy, name), kind
+                os.path.join(directory, name),
+                segment,
+                _child(level, name),
+                os.path.join(slot, name),
+                kind,
             )
 
 
 def _walk_versions(
-    directory: str,
-    segment: str,
-    hierarchy: tuple[str, ...],
-    skip: Set[str] | None,
+    directory: str, segment: str, level: str, skip: _Skip
 ) -> Generator[StoreEntry, None, bool]:
     """Version directories below ``versions/``; returns whether the staging
     directory ``.incoming`` exists (seen in the listing of the root)."""
@@ -1070,16 +1114,14 @@ def _walk_versions(
         if not is_dir:
             continue  # files outside version directories are not versions
         if name.startswith("."):
-            incoming = incoming or (not hierarchy and name == INCOMING_DIR)
+            incoming = incoming or (not level and name == INCOMING_DIR)
             continue
         path = os.path.join(directory, name)
-        match = _VERSION_DIR.fullmatch(name)
-        if match is not None and hierarchy:
-            yield from _version_files(
-                path, segment, hierarchy, match[1], match[2], skip
-            )
+        match = _version_match(name) if level else None
+        if match is not None:
+            yield from _version_files(path, segment, level, match, skip)
         else:
-            yield from _walk_versions(path, segment, (*hierarchy, name), skip)
+            yield from _walk_versions(path, segment, _child(level, name), skip)
     return incoming
 
 
@@ -1108,36 +1150,125 @@ def _stale_incoming(base: str, segment: str) -> Iterator[StoreEntry]:
             yield _problem("stale_incoming", segment, "", Path(incoming, name))
 
 
-def _segment_entries(
-    root: str, segment: str, skip: Set[str] | None
-) -> Iterator[StoreEntry]:
+def _segment_entries(base: str, segment: str, skip: _Skip) -> Iterator[StoreEntry]:
     """Every entry of one segment: links, ``full_sheet``, versions, leftovers."""
-    base = os.path.join(root, *segment.split("/"))
     listing = _listing(base)
     if listing is None:
         return
     if not describe_segment(segment).known:
         yield _problem("unknown_segment", segment, "", Path(base))
-    yield from _link_files(base, segment, (), "link", listing, Path(base, VERSIONS_DIR))
+    versions = os.path.join(base, VERSIONS_DIR)
+    yield from _link_files(base, segment, "", versions, "link", listing)
     directories = [name for name, is_dir in listing if is_dir]
     for name in directories:
         if name not in _RESERVED and not name.startswith("."):
             yield from _walk_links(
-                os.path.join(base, name), base, segment, (name,), "link"
+                os.path.join(base, name),
+                segment,
+                name,
+                os.path.join(versions, name),
+                "link",
             )
     if FULL_SHEET_DIR in directories:
         yield from _walk_links(
-            os.path.join(base, FULL_SHEET_DIR), base, segment, (), "full_sheet"
+            os.path.join(base, FULL_SHEET_DIR), segment, "", versions, "full_sheet"
         )
     incoming = False
     if VERSIONS_DIR in directories:
-        incoming = yield from _walk_versions(
-            os.path.join(base, VERSIONS_DIR), segment, (), skip
-        )
+        incoming = yield from _walk_versions(versions, segment, "", skip)
     if _LEGACY_DIR in directories:
         yield _problem("legacy_campaigns", segment, "", Path(base, _LEGACY_DIR))
     if incoming:
         yield from _stale_incoming(base, segment)
+
+
+def _segment_level(base: str, segment: str) -> Iterator[StoreEntry]:
+    """Partition ``"."``: the segment's own problems and the files directly
+    in the segment directory and in ``full_sheet/`` (hierarchy ``""``)."""
+    listing = _listing(base)
+    if listing is None:
+        return
+    if not describe_segment(segment).known:
+        yield _problem("unknown_segment", segment, "", Path(base))
+    versions = os.path.join(base, VERSIONS_DIR)
+    yield from _link_files(base, segment, "", versions, "link", listing)
+    directories = {name for name, is_dir in listing if is_dir}
+    if FULL_SHEET_DIR in directories:
+        full = os.path.join(base, FULL_SHEET_DIR)
+        found = _listing(full)
+        if found is not None:
+            yield from _link_files(full, segment, "", versions, "full_sheet", found)
+    if _LEGACY_DIR in directories:
+        yield _problem("legacy_campaigns", segment, "", Path(base, _LEGACY_DIR))
+    if VERSIONS_DIR in directories and (INCOMING_DIR, True) in (
+        _listing(versions) or ()
+    ):
+        yield from _stale_incoming(base, segment)
+
+
+def _partition_entries(
+    base: str, segment: str, parts: tuple[str, ...], exact: bool, skip: _Skip
+) -> Iterator[StoreEntry]:
+    """Entries of one partition of ``list_partitions``: the slot ``parts``
+    (``exact``) or the slot and every slot below it, in the three trees."""
+    if not parts:
+        yield from _segment_level(base, segment)
+        return
+    level = "/".join(parts)
+    slot = os.path.join(base, VERSIONS_DIR, *parts)
+    known: dict[str, bool] = {}
+    for prefix, kind in _LINK_DIRS:
+        if not prefix and parts[0] in _RESERVED:
+            continue  # versions/, full_sheet/, kampanie/: not a hierarchy
+        directory = _real_directory(base, (*prefix, *parts), known)
+        if directory is None:
+            continue
+        if not exact:
+            yield from _walk_links(directory, segment, level, slot, kind)
+            continue
+        listing = _listing(directory)
+        if listing is not None:
+            yield from _link_files(directory, segment, level, slot, kind, listing)
+    if any(_version_match(part) is not None for part in parts[1:]):
+        return  # below the first level such a name is a version directory
+    versions = _real_directory(base, (VERSIONS_DIR, *parts), known)
+    if versions is None:
+        return
+    if not exact:
+        yield from _walk_versions(versions, segment, level, skip)
+        return
+    for name, match in _version_dirs(_listing(versions) or []):
+        yield from _version_files(
+            os.path.join(versions, name), segment, level, match, skip
+        )
+
+
+# A directory of the hierarchy while ``list_partitions`` splits: its names
+# below the segment and its directories in the link, ``full_sheet/`` and
+# ``versions/`` trees (``None`` where absent).
+_Node = tuple[tuple[str, ...], list[str | None]]
+
+
+def _split(dirs: list[str | None]) -> tuple[dict[str, list[str | None]], bool]:
+    """Subdirectories of one hierarchy directory in the three trees (link,
+    ``full_sheet/``, ``versions/``) and whether its own slot has entries."""
+    children: dict[str, list[str | None]] = {}
+    own = False
+    for tree, directory in enumerate(dirs):
+        if directory is None:
+            continue
+        for name, is_dir in _listing(directory) or []:
+            if name.startswith("."):
+                continue
+            if not is_dir:
+                own = own or (tree < 2 and not name.endswith(_META_SUFFIX))
+            elif tree == 2 and _version_match(name) is not None:
+                own = True
+            else:
+                children.setdefault(name, [None, None, None])[tree] = os.path.join(
+                    directory, name
+                )
+    return children, own
 
 
 def _sheet_parts(code: str) -> tuple[str, ...]:
@@ -1240,39 +1371,31 @@ def _real_directory(
 
 
 def _unit_entries(
-    root: str,
+    base: str,
     segment: str,
     groups: dict[tuple[str, ...], frozenset[str] | None],
-    skip: Set[str] | None,
+    skip: _Skip,
 ) -> Iterator[StoreEntry]:
     """Entries of the units' slots only; no other directory is listed."""
-    base = os.path.join(root, *segment.split("/"))
     known: dict[str, bool] = {}
     for hierarchy, wanted in groups.items():
-        slot = Path(base, VERSIONS_DIR, *hierarchy)
+        level = "/".join(hierarchy)
+        slot = os.path.join(base, VERSIONS_DIR, *hierarchy)
         for prefix, kind in _LINK_DIRS:
             directory = _real_directory(base, (*prefix, *hierarchy), known)
             listing = _listing(directory) if directory is not None else None
             if directory is not None and listing is not None:
                 yield from _link_files(
-                    directory, segment, hierarchy, kind, listing, slot, wanted
+                    directory, segment, level, slot, kind, listing, wanted
                 )
         versions = _real_directory(base, (VERSIONS_DIR, *hierarchy), known)
         listing = _listing(versions) if versions is not None else None
         if versions is None or listing is None:
             continue
-        for name, is_dir in listing:
-            match = _VERSION_DIR.fullmatch(name) if is_dir else None
-            if match is not None:
-                yield from _version_files(
-                    os.path.join(versions, name),
-                    segment,
-                    hierarchy,
-                    match[1],
-                    match[2],
-                    skip,
-                    wanted,
-                )
+        for name, match in _version_dirs(listing):
+            yield from _version_files(
+                os.path.join(versions, name), segment, level, match, skip, wanted
+            )
 
 
 def _validated_segment(segment: str) -> tuple[str, str]:
@@ -1289,21 +1412,174 @@ def _validated_segment(segment: str) -> tuple[str, str]:
     return parts[0], parts[1]
 
 
-def _skip_set(skip_versions: Collection[str] | None) -> Set[str] | None:
+def _single_name(name: object) -> bool:
+    """One non-hidden directory entry name: never a path or a drive."""
+    return (
+        isinstance(name, str)
+        and name != ""
+        and not name.startswith(".")
+        and not any(separator in name for separator in _SEPARATORS)
+        and not os.path.splitdrive(name)[0]
+    )
+
+
+def _partition_scope(partition: str) -> tuple[tuple[str, ...], bool]:
+    """``(hierarchy directories, exact)`` of a ``list_partitions`` key;
+    ``((), True)`` for the segment level ``"."``."""
+    if partition == ".":
+        return (), True
+    exact = isinstance(partition, str) and partition.endswith("/.")
+    parts = (
+        tuple((partition[:-2] if exact else partition).split("/"))
+        if isinstance(partition, str)
+        else ()
+    )
+    if not parts or not all(_single_name(part) for part in parts):
+        raise ValidationError(
+            f"Nieprawidlowa czesc segmentu: {partition!r} (oczekiwano klucza "
+            'z list_partitions: ".", "<katalog>[/<katalog>...]" albo '
+            '"<katalog>[/<katalog>...]/.")'
+        )
+    return parts, exact
+
+
+def _known_versions(
+    skip_versions: Collection[str] | Mapping[str, Collection[str]] | None,
+) -> _Skip:
     if skip_versions is None:
         return None
     if isinstance(skip_versions, str):
         raise ValidationError(
             "skip_versions: podaj kolekcje sciezek katalogow wersji, nie napis"
         )
-    return skip_versions if isinstance(skip_versions, Set) else frozenset(skip_versions)
+    if isinstance(skip_versions, (Set, Mapping)):
+        return skip_versions
+    return frozenset(skip_versions)
 
 
-def _scan_store(
-    root: str, segments: list[str], skip: Set[str] | None
-) -> Iterator[StoreEntry]:
+def _known_names(key: str, names: Collection[str]) -> list[str]:
+    """File names a ``skip_versions`` mapping gives for one version
+    directory, in listing order; only plain names of data files."""
+    if (
+        isinstance(names, str)
+        or not isinstance(names, Collection)
+        or not all(
+            _single_name(name) and not name.endswith(_META_SUFFIX) for name in names
+        )
+    ):
+        raise ValidationError(
+            f"skip_versions[{key!r}]: podaj nazwy plikow danych wersji (bez "
+            f"sidecarow, sciezek i nazw ukrytych), nie {names!r}"
+        )
+    return sorted(names)
+
+
+def _segment_dir(root: str, segment: str) -> str | None:
+    """The segment directory, ``None`` when absent; a missing ``root`` is
+    ``OSError``, a symlinked product or segment ``ValidationError``."""
+    os.stat(root)  # a missing store is an error, a missing segment is not
+    path = root
+    for part in segment.split("/"):
+        path = os.path.join(path, part)
+        try:
+            mode = os.lstat(path).st_mode
+        except (FileNotFoundError, NotADirectoryError):
+            return None
+        if stat.S_ISLNK(mode):
+            raise ValidationError(f"Segment magazynu jest dowiazaniem: {path}")
+        if not stat.S_ISDIR(mode):
+            return None
+    return os.path.normpath(path)
+
+
+def _scan_store(root: str, segments: list[str], skip: _Skip) -> Iterator[StoreEntry]:
     for segment in segments:
-        yield from _segment_entries(root, segment, skip)
+        base = os.path.normpath(os.path.join(root, *segment.split("/")))
+        yield from _segment_entries(base, segment, skip)
+
+
+def list_partitions(
+    output_dir: str | Path, segment: str, *, target: int = 32
+) -> list[str]:
+    """Disjoint parts of one segment for parallel ``iter_store`` calls.
+
+    The union of ``iter_store(output_dir, segment=segment, partition=key)``
+    over the returned keys is exactly ``iter_store(output_dir,
+    segment=segment)``: the same entries, none twice. A part covers the same
+    hierarchy under the standard path, ``full_sheet/`` and ``versions/``.
+    The first-level hierarchy directories are split level by level into
+    their subdirectories while there are fewer than ``target`` parts and a
+    directory to split. Cost: one listing of the segment, ``full_sheet/``
+    and ``versions/`` plus at most three listings per directory examined
+    for a split (its own directory in each of the three trees).
+
+    Parameters
+    ----------
+    output_dir : str or Path
+        The ``data/`` directory (not its parent).
+    segment : str
+        A ``<product>/<variant>`` segment (``list_segments``).
+    target : int, default 32
+        Number of parts to aim at (e.g. a few times the threads); a segment
+        with fewer hierarchy directories gives fewer parts.
+
+    Returns
+    -------
+    list of str
+        ``"."`` first - the segment level: ``unknown_segment``,
+        ``legacy_campaigns``, ``stale_incoming`` and the files directly in
+        the segment directory and ``full_sheet/``; then, sorted by
+        hierarchy, ``"<dir>[/<dir>...]"`` - that slot and every slot below
+        it - and ``"<dir>[/<dir>...]/."`` - only that slot's own files and
+        versions, when its subdirectories are parts of their own. Empty for
+        a missing segment.
+
+    Raises
+    ------
+    ValidationError
+        A malformed segment or ``target``, a segment directory that is a
+        symlink.
+    OSError
+        ``output_dir`` cannot be read (missing, a disconnected share).
+    """
+    root = os.path.normpath(os.fspath(output_dir))
+    _validated_segment(segment)
+    if isinstance(target, bool) or not isinstance(target, int) or target < 1:
+        raise ValidationError(f"target: podaj dodatnia liczbe czesci, nie {target!r}")
+    base = _segment_dir(root, segment)
+    listing = _listing(base) if base is not None else None
+    if base is None or listing is None:
+        return []
+    real = {name for name, is_dir in listing if is_dir and not name.startswith(".")}
+    nodes: dict[str, list[str | None]] = {
+        name: [os.path.join(base, name), None, None] for name in real - _RESERVED
+    }
+    for tree, top in ((1, FULL_SHEET_DIR), (2, VERSIONS_DIR)):
+        if top not in real:
+            continue
+        directory = os.path.join(base, top)
+        for name, is_dir in _listing(directory) or []:
+            if is_dir and not name.startswith("."):
+                path = os.path.join(directory, name)
+                nodes.setdefault(name, [None, None, None])[tree] = path
+    keys = ["."]
+    frontier: list[_Node] = [((name,), dirs) for name, dirs in sorted(nodes.items())]
+    while frontier and len(keys) + len(frontier) < target:
+        deeper: list[_Node] = []
+        for parts, dirs in frontier:
+            children, own = _split(dirs)
+            key = "/".join(parts)
+            if not children:
+                keys.append(key)  # nothing to split: the whole subtree
+                continue
+            if own:
+                keys.append(f"{key}/.")
+            deeper.extend(
+                ((*parts, name), found) for name, found in sorted(children.items())
+            )
+        frontier = deeper
+    keys.extend("/".join(parts) for parts, _ in frontier)
+    return [".", *sorted(keys[1:], key=lambda key: key.split("/"))]
 
 
 def iter_store(
@@ -1311,7 +1587,8 @@ def iter_store(
     *,
     segment: str | None = None,
     units: Iterable[str] | None = None,
-    skip_versions: Collection[str] | None = None,
+    skip_versions: Collection[str] | Mapping[str, Collection[str]] | None = None,
+    partition: str | None = None,
 ) -> Iterator[StoreEntry]:
     """Stream the files of the store and the problems found in it.
 
@@ -1322,7 +1599,7 @@ def iter_store(
     sidecar (``extra.link_target``) without reading the data; confirm it
     on demand with ``link_target``. Cost (ARCHITECTURE 3.3.1): one listing
     per directory and one read per sidecar of a link or version; data files
-    are never opened or statted.
+    are never opened or statted, known versions are not read.
 
     Parameters
     ----------
@@ -1330,8 +1607,8 @@ def iter_store(
         The ``data/`` directory (not its parent).
     segment : str, optional
         Only this ``<product>/<variant>`` segment (``list_segments``). Calls
-        for different segments, or for units of one segment, may run in
-        parallel threads; each iterator belongs to one thread.
+        for different segments, for units or for partitions of one segment
+        may run in parallel threads; each iterator belongs to one thread.
     units : iterable of str, optional
         Only the slots of these units of ``segment`` (required), without
         listing the rest of the segment: a sheet code (PL-1992/2000, TM33,
@@ -1340,12 +1617,19 @@ def iter_store(
         (``2000/7/<tile>`` of a mesh). A bare TERYT, ``<coords>`` or
         country code works too. Exact names, not prefixes; segment-level
         problems are not reported.
-    skip_versions : collection of str, optional
+    skip_versions : collection of str or mapping of str to names, optional
         Version directories already known to the caller, relative to
         ``output_dir`` with ``/`` (``<segment>/versions/<hierarchy>/<label>_
         <sha8>``). Their files are yielded with ``skipped=True`` and
-        ``sidecar=None`` from the directory listing alone (version
-        directories never change). Pass a set for large collections.
+        ``sidecar=None`` without reading their sidecars: from the directory
+        listing for a collection (pass a set for large ones), or - for a
+        mapping to the directory's data file names - from those names,
+        without even listing the directory (the caller vouches for its
+        content: a file removed from or added to it is not seen).
+    partition : str, optional
+        Only this part of ``segment`` (required; not with ``units``), a key
+        of ``list_partitions``. Parts of one call are disjoint and together
+        give the whole segment; they may run in parallel threads.
 
     Returns
     -------
@@ -1356,34 +1640,37 @@ def iter_store(
     Raises
     ------
     ValidationError
-        ``units`` without ``segment``, a malformed segment or unit (never a
-        path out of the store), a segment directory that is a symlink.
+        ``units`` or ``partition`` without ``segment`` or together, a
+        malformed segment, unit or partition (never a path out of the
+        store), a segment directory that is a symlink, a ``skip_versions``
+        name that is not a plain data file name (when its directory is
+        reached).
     OSError
         ``output_dir`` cannot be listed, or the store becomes unreadable
         during the scan (e.g. a disconnected share) - a vanished file or
         directory is not an error.
     """
     root = os.path.normpath(os.fspath(output_dir))
-    skip = _skip_set(skip_versions)
+    skip = _known_versions(skip_versions)
     if segment is None:
         if units is not None:
             raise ValidationError("units wymaga segment (jednostki jednego segmentu)")
+        if partition is not None:
+            raise ValidationError("partition wymaga segment (czesc jednego segmentu)")
         return _scan_store(root, list_segments(root), skip)
-    product, variant = _validated_segment(segment)
+    _validated_segment(segment)
+    if units is not None and partition is not None:
+        raise ValidationError("units albo partition, nie oba naraz")
     groups = _unit_groups(segment, units) if units is not None else None
-    os.stat(root)  # a missing store is an error, a missing segment is not
-    for path in (os.path.join(root, product), os.path.join(root, product, variant)):
-        try:
-            mode = os.lstat(path).st_mode
-        except (FileNotFoundError, NotADirectoryError):
-            return iter(())
-        if stat.S_ISLNK(mode):
-            raise ValidationError(f"Segment magazynu jest dowiazaniem: {path}")
-        if not stat.S_ISDIR(mode):
-            return iter(())
+    scope = _partition_scope(partition) if partition is not None else None
+    base = _segment_dir(root, segment)
+    if base is None:
+        return iter(())
     if groups is not None:
-        return _unit_entries(root, segment, groups, skip)
-    return _segment_entries(root, segment, skip)
+        return _unit_entries(base, segment, groups, skip)
+    if scope is not None:
+        return _partition_entries(base, segment, *scope, skip)
+    return _segment_entries(base, segment, skip)
 
 
 def link_target(path: str | Path) -> Path | None:
