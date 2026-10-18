@@ -579,6 +579,52 @@ _REORDERED_EXAMPLES = {
         "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --resolution 5m "
         "--vertical-crs Bpv --cutout --horizontal-crs EPSG:5514 -o ./data"
     ),
+    "kartograf boundaries download --product admin --country pl --level gmina "
+    "--bbox 550000,220000,590000,270000 -o ./data": (
+        "kartograf boundaries download --product admin --country pl --bbox "
+        "550000,220000,590000,270000 --level gmina -o ./data"
+    ),
+    "kartograf geodesy download --product control --network horizontal "
+    "--teryt 1201 -o ./data": (
+        "kartograf geodesy download --product control --teryt 1201 "
+        "--network horizontal -o ./data"
+    ),
+    "kartograf geodesy download --product control --country pl --network "
+    "vertical --bbox 560000,240000,575000,250000 -o ./data": (
+        "kartograf geodesy download --product control --country pl --bbox "
+        "560000,240000,575000,250000 --network vertical -o ./data"
+    ),
+    "kartograf landcover download --product corine --year 2018 --sheet "
+    "N-34-130-D -o ./data": (
+        "kartograf landcover download --product corine --sheet N-34-130-D "
+        "--year 2018 -o ./data"
+    ),
+    "kartograf maps download --product topographic --country cz --bbox "
+    "-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 --scale 1:10000 "
+    "--sheet-system sjtsk --format PDF -o ./data": (
+        "kartograf maps download --product topographic --country cz --bbox "
+        "-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 --scale 1:10000 "
+        "--format PDF --sheet-system sjtsk -o ./data"
+    ),
+    "kartograf models3d download --product buildings --lod 1 --year 2024 "
+    "--teryt 1261 -o ./data": (
+        "kartograf models3d download --product buildings --teryt 1261 --lod 1 "
+        "--year 2024 -o ./data"
+    ),
+    "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
+    "--summary -o ./data": (
+        "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
+        "-o ./data --summary"
+    ),
+}
+# Examples the catalog adds to an old ``epilog``: every data command shows an
+# example of each country its products have (``boundaries`` had only PL ones).
+_ADDED_EXAMPLES = {
+    "kartograf boundaries download": (
+        "kartograf boundaries download --product admin --country cz --bbox "
+        "-470000,-1130000,-440000,-1100000 --bbox-crs EPSG:5514 --level obec "
+        "-o ./data",
+    ),
 }
 
 
@@ -666,11 +712,14 @@ def _dump(parser: argparse.ArgumentParser) -> list[dict]:
 
 def _old_help(parser: argparse.ArgumentParser) -> str:
     """The help of an old parser with its re-ordered examples written the way the
-    declarations write them."""
+    declarations write them and the examples the catalog adds (the epilog is the
+    last block of a help)."""
     text = parser.format_help()
     for old, new in _REORDERED_EXAMPLES.items():
         text = text.replace(f"  {old}\n", f"  {new}\n")
-    return text
+    return text + "".join(
+        f"  {line}\n" for line in _ADDED_EXAMPLES.get(parser.prog, ())
+    )
 
 
 @pytest.mark.parametrize("command", _CLI_COMMANDS, ids=[c.id for c in _CLI_COMMANDS])
