@@ -14,7 +14,7 @@
 | HSG | ✅ Gotowy | v0.3.0+ |
 | bbox → godla | ✅ Gotowy | find_sheets_for_bbox(), CLI --bbox |
 | geometry → godla | ✅ Gotowy | find_sheets_for_geometry(), CLI --geometry |
-| CLI | ✅ Gotowy | pelna lista komend i flag: `kartograf --help`, `kartograf <grupa> download --help` (zrodlo prawdy: `kartograf/cli/groups/`) |
+| CLI | ✅ Gotowy | pelna lista komend i flag: `kartograf --help`, `kartograf <grupa> download --help`, maszynowo `kartograf catalog --json` (zrodlo prawdy: deklaracje w `kartograf/catalog/commands/`, parser CLI z katalogu, ADR-046) |
 | Auth Proxy (CLMS) | ✅ Gotowy | v0.3.0+ |
 | PL-2000 (godlowanie) | ✅ Gotowy | Parser2000, auto-detekcja, CLI, storage; godlo PL-2000 bez pliku PL-2000 = `NoCoverageError` z podpowiedzia `--scale` (K4), sidecar EPSG:2176-2179 (N8) |
 | Pokrycie testami | ✅ Gotowy | liczba testow: `.venv/bin/python -m pytest tests/ --collect-only -q -m "not live"`; prog pokrycia `fail_under` w `pyproject.toml`; brama: patrz "START NASTEPNEJ SESJI" |
@@ -31,7 +31,8 @@
 | Grupy komend CLI (ADR-039, ADR-044) | ✅ Gotowy | v0.8.0; `elevation`, `imagery`, `landcover`, `soil`, `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`, `geodesy`, `project`; dane wybiera `--product` w kazdej grupie; CLI tylko tlumaczy na publiczne API (ADR-037) |
 | Manifest projektu (podprojekt 2, ADR-040) | ✅ Gotowy | v0.8.0; `kartograf-project.json`, grupa `kartograf project`, API `init_project`/`get_project_status`/`verify_project`; E2E `docs/research/2026-10-15-project-e2e/raport.md` |
 | Katalog GUGiK/CUZK (podprojekt 3, plany A-E, ADR-041-043) | ✅ Gotowy | v0.8.0; rejestr wariantow NMT/NMPT, raport `availability` PL/CZ, NMPT/LAZ/ortofoto/warstwice CZ, kolekcje (PRG, EGiB, modele 3D, ZABAGED, RUIAN, HY-NET, nazwy, mapy, osnowy, BDOO, Data50/250, RCN, mapa katastralna CZ), limit obszaru kolekcji 100 plikow / 10 GB; E2E `docs/research/2026-10-1[56]-plan-*-e2e/`; mapa katastralna CZ VKM poza 0.8.0 (backlog) |
-| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony na galezi `feat/archiwista-store-api` (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1); czeka na zgode uzytkownika na merge do `develop` |
+| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1): API z galezi `feat/archiwista-store-api` i 7 poprawek przegladu z `fix/archiwista-store-review` sa w `feat/agent-interface`; czeka na zgode uzytkownika na merge do `develop` |
+| Interfejs dla agentow AI (ADR-046, USAGE 9) | 🔧 W trakcie | gotowy i zielony na galezi `feat/agent-interface` (wchodzi do wydania 0.8.0): `--json` w kazdej komendzie, dokumenty `kartograf-*/1`, kody bledow i wyjscia (blad wejscia = 2), katalog komend, warstwa komend KB-2..KB-5, serwer MCP `kartograf-mcp` (29 narzedzi), `llms.txt`, `py.typed`, `scripts/gate.sh`; weryfikacja na zywo (T9) w toku; czeka na zgode uzytkownika na merge do `develop` |
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekty 1 (magazyn wersjonowany, ADR-036), 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, plany A-E) wykonane w 0.8.0; nastepne: 4 (wtyczka QGIS) i 5 (GUI webowe) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -111,8 +112,8 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-18, wydanie 0.8.0 przygotowane, API
-> odczytu magazynu na galezi `feat/archiwista-store-api` - pkt 1):**
+> **START NASTEPNEJ SESJI (stan 2026-10-18, wydanie 0.8.0 przygotowane; API
+> odczytu magazynu i interfejs dla agentow na galezi `feat/agent-interface` - pkt 0-1):**
 > 0. **Wydanie 0.8.0 przygotowane na `develop`** (`3a1c426`; `__version__ =
 >    "0.8.0"`, CHANGELOG `[0.8.0] - 2026-10-17`, statusy SCOPE/PRD; brama
 >    zielona: 5214 passed, ruff/format/mypy czyste; dwa testy na zywo
@@ -125,15 +126,29 @@
 >    w CHANGELOG, jak `chore(release): poczatek cyklu 0.8.0`). Przebieg
 >    i decyzje: sekcja "Sesja 2026-10-15/16/17" nizej. Hydrograf/Hydrolog
 >    dostosuja sie same do zmian lamiacych (CHANGELOG [0.8.0], "Co zrobic").
->    **BLOKADA WYDANIA (decyzja uzytkownika 2026-10-18):** przed merge do
->    `main` i tagiem `v0.8.0` OBOWIAZKOWO zweryfikowac WSZYSTKIE zmiany
->    wprowadzone do Kartografa przez agenta pracujacego na Archiwiscie:
->    commity `a96b541..2fd87f2` na `feat/archiwista-store-api`
->    (`git log develop..feat/archiwista-store-api`; spec, `store.py`,
->    `store_geometry.py`, `__all__`, ARCHITECTURE 3.3.1, ADR-045, USAGE,
->    CHANGELOG, SCOPE, CLAUDE.md) oraz `62d46ac` na `develop`. Przeglad
->    kodu i dokumentow, brama, smoke na realnym magazynie; bez tego brak
->    merge i tagu.
+>    **BLOKADA WYDANIA - warunek spelniony (2026-10-18):** weryfikacja zmian
+>    agenta Archiwisty WYKONANA. Przeglad commitow `a96b541..2fd87f2` (API
+>    odczytu magazynu: `store.py`, `store_geometry.py`, `__all__`, ARCHITECTURE
+>    3.3.1, ADR-045) dal 7 poprawek (obrys SM5 nieznany indeksowi, sidecar bez
+>    `schema`, `Sidecar.unit` = nazwa slotu, niehashowalne `Sidecar` i
+>    `StoreEntry`, jednostki zarezerwowane i za dlugie jako `ValidationError`,
+>    zapytanie PRG przez sesje GUGiK, sekcja `Raises` `file_footprint`) na galezi
+>    `fix/archiwista-store-review` (`f33f037`, `a189f25`), scalonej do
+>    `feat/agent-interface` (`8c65f4e`). Wydanie 0.8.0 nadal CZEKA NA ZGODE
+>    UZYTKOWNIKA na merge do `develop`/`main`, tag `v0.8.0` i push; przed tagiem
+>    obowiazkowy przeglad `git log develop..feat/agent-interface` i diffu przez
+>    uzytkownika oraz `scripts/gate.sh` zielony (CLAUDE.md, sekcja "Agenci
+>    z innych repozytoriow").
+>    **Stan galezi i worktree tej pracy:** `feat/agent-interface` (worktree
+>    `wt/feat/agent-interface`) to galaz integracyjna: zawiera
+>    `feat/archiwista-store-api` (5 commitow API odczytu magazynu),
+>    `fix/archiwista-store-review` i caly interfejs dla agentow (ADR-046);
+>    stan: `git log develop..feat/agent-interface`. Galezie robocze scalone do
+>    niej: `feat/agent-interface-a` (tor A: dokumenty, bledy), `-b` (tor B:
+>    katalog komend), `-mcp` (serwer MCP), `-llms` (`llms.txt`); osobno
+>    `feat/agent-interface-e2e` (T9, weryfikacja na zywo, raport w
+>    `docs/research/`). Sprzatanie tych worktree i galezi razem z pozostalymi
+>    (pkt 1) - po zgodzie uzytkownika.
 > 1. **Nastepne kroki:** podprojekt 4 (wtyczka QGIS) roadmapy
 >    (`docs/SCOPE.md` 3.3) - od brainstormingu i specu. Podprojekt 5 (GUI
 >    webowe) ZASTAPIONY osobnym projektem **Archiwista**
@@ -149,10 +164,12 @@
 >    (szczegoly arkuszy i kampanii, `full_m2` w raporcie dostepnosci),
 >    KB/KC/KH (katalog komend, `cancel`, jednolity `on_progress`, rozmiar
 >    pozycji planu), KD-3/KD-4, KE/KF/KG (mozaika, PL+CZ, porownanie
->    wersji). KA-1..KA-6 wykonane 2026-10-18 na galezi
->    `feat/archiwista-store-api` (w wydaniu 0.8.0; sesja 2026-10-18 nizej) -
->    CZEKA NA ZGODE UZYTKOWNIKA na merge `--no-ff` do `develop` przed
->    tagiem `v0.8.0`. Propozycja na kolejna sesje: spec i plan KD-1/KD-2
+>    wersji). KA-1..KA-6 i KB-1..KB-5 (katalog komend, `parse_command`,
+>    `validate_command`, `format_command`, `run_command`, `check_command`;
+>    ADR-046) wykonane 2026-10-18 na galezi `feat/agent-interface`
+>    (w wydaniu 0.8.0; sesje 2026-10-18 nizej); zostaja KB-6/KB-7, KC i KH.
+>    CZEKA NA ZGODE UZYTKOWNIKA na merge do `develop` przed tagiem
+>    `v0.8.0`. Propozycja na kolejna sesje: spec i plan KD-1/KD-2
 >    (po zgodzie uzytkownika). Pozostale pozycje: backlog
 >    nizej (m.in. VKM CZ, CLMS na zywo).
 >    Sprzatanie (czeka na zgode uzytkownika): ok. 30 worktree i galezi
@@ -184,6 +201,65 @@
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
+
+### Sesja 2026-10-18 - interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend, serwer MCP (ADR-046)
+
+- Zakres (cel uzytkownika: Kartograf latwy w uzyciu dla agentow AI; 8 pozycji ustalil
+  koordynator 2026-10-18; w przygotowanym, nieotagowanym wydaniu 0.8.0, bez wydania
+  posredniego): `py.typed`; `--json` w kazdej komendzie CLI
+  (dokumenty `kartograf-<rodzaj>/1`, blad `kartograf-error/1`); stabilne kody bledow i
+  kody wyjscia z jednej tabeli; katalog komend (`kartograf catalog`, `get_catalog()`)
+  i warstwa komend KB-2..KB-5; serwer MCP `kartograf[mcp]`; `llms.txt`;
+  `scripts/gate.sh`; regula dla agentow z innych repozytoriow w `CLAUDE.md` (bez
+  `AGENTS.md`). Poza zakresem: archiwizacja dziennika PROGRESS, transport HTTP
+  serwera MCP, KC, KH, KB-6/KB-7. Spec:
+  `docs/superpowers/specs/2026-10-18-agent-interface-design.md` (D1-D22, O1-O9
+  rozstrzygniete przez koordynatora); plan:
+  `docs/superpowers/plans/2026-10-18-agent-interface.md`; ADR-046 (`Przyjeta`,
+  errata 1).
+- Wynik (galaz `feat/agent-interface`; fale: tory A i B rownolegle, integracja CLI na
+  katalogu, serwer MCP i `llms.txt` rownolegle, domkniecie integracji,
+  dokumentacja): moduly `serialization` (mixin `Document`, koder, rejestr 16
+  schematow), `error_report`, `source_info`, `cache_info`, `store_documents`,
+  `sheet_info`, pakiet `catalog/` (41 komend w 13 grupach: 37 CLI i 4 tylko-API,
+  parser CLI z deklaracji, `tools.py`), `commands` (KB-2..KB-5), `mcp_server`; CLI
+  przepisane na parser z katalogu (usuniete `cli/groups` i `*_task_arguments`),
+  `main` zamienia wyjatki na `kartograf-error/1` i kody 0/1/2/130. Dokumentacja:
+  USAGE 9, ARCHITECTURE 2, 3.6 i 4.11, STANDARDS 6.3, 7.3 (Z8-Z11), 11.1, 17.2,
+  SCOPE 2.17, PRD 3.27, README, CLAUDE.md, ADR-046 errata 1 (oraz erraty ADR-037,
+  039, 040, 045), CHANGELOG [0.8.0], test `tests/test_docs_tables.py` (tabele kodow
+  bledow i wyjscia w USAGE rowne katalogowi i jedyne w dokumentacji; schematy i
+  narzedzia MCP w tabelach rowne rejestrom; `instructions` serwera cytowane doslownie).
+- Decyzje wiazace koordynatora (O1-O9 specu): klucz tekstu komunikatu `text` (blad:
+  `message`); kod wyjscia 2 dla bledow wejscia (BREAKING); `is_error` MCP = kod
+  wyjscia CLI != 0; jedno narzedzie `check_updates` zamiast 12 blizniakow (29
+  narzedzi); KB-2..KB-5 w 0.8.0; parser CLI z deklaracji katalogu (zrzut `--help`
+  przed i po poza repo); `mcp>=2.3.0,<3` w `.venv` i w extra `dev`; cache serwera
+  w katalogu cache uzytkownika; ADR-046 `Przyjeta`.
+- Pomiary (zywa sesja stdio, znaki): budzet kontekstu D22 - `tools/list` 65 893 ->
+  28 607 (limit 30 000), `get_catalog()` 47 807 -> 7 315 (limit 8 000), `kartograf
+  catalog --json` 62 389 -> 7 629; `kartograf catalog elevation download --json`
+  29 717. Zrzut CLI przed i po (poza repo): 36 helpow lisci, helpy grup i 33
+  przebiegi tekstowe bajtowo identyczne poza nowa flaga `--json`, komenda
+  `catalog`, 8 epilogow z kolejnoscia flag przykladow i nowym przykladem CZ w
+  `boundaries download`.
+- Zmiany lamiace i "Co zrobic": CHANGELOG [0.8.0] (kod wyjscia 2, `schema` pierwszym
+  kluczem planu i raportu dostepnosci, `--json` bez `Info:`/`Warning:` na stderr,
+  parser z katalogu). Hydrograf bez wplywu (biblioteka, atrybuty wyjatkow
+  addytywne); Archiwista dostaje KB-1..KB-5 i zachowuje `Notice(level, code, text)`.
+- Odstepstwa i rozstrzygniecia implementacyjne: ADR-046 errata 1 (budzet kontekstu,
+  nazwy modulow, import `mcp_server` bez `mcp`, postep przez `BlockingPortal`,
+  `get_cache_path`, `UsageError.command`, instalacja `mcp` podnosi `idna`); plan
+  liczyl 16 komend w T4d, jest 15 (razem 41 deklaracji).
+- Brama (`scripts/gate.sh` w worktree, po dokumentacji): 7075 passed, 18 deselected
+  (live), 153 s; `ruff check` czysty, `ruff format --check` 306 plikow, `mypy
+  kartograf/ tests/` 304 pliki bez bledow (stan sprawdzaj komenda, nie ta liczba).
+  Zielone byly tez wszystkie wczesniejsze bramy torow i integracji.
+- Otwarte: weryfikacja na zywo (T9: availability PL, jedno male pobranie i
+  sprawdzenie, serwer MCP przez stdio, wheel z `py.typed`, zgodnosc trzech drog) -
+  worktree `feat/agent-interface-e2e`, raport w `docs/research/` po scaleniu;
+  `structuredContent` powtarza `content` (klient podajacy modelowi oba placi dwa
+  razy); `output_schema` narzedzi MCP, transport HTTP, KC i KH poza zakresem.
 
 ### Sesja 2026-10-18 - API odczytu magazynu dla Archiwisty (KA-1..KA-6, ADR-045)
 
