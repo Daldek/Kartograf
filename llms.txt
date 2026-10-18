@@ -92,13 +92,14 @@ print(result.to_json())
 ```
 
 Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)` daje dokument
-`kartograf-error/1`. Wiersz polecenia na dane: `parse_command`, `validate_command`, `run_command`.
+`kartograf-error/1`. Wiersz polecenia na dane (takze z poczatkowym `kartograf`): `parse_command`,
+`validate_command`, `run_command`.
 
 ## Serwer MCP
 - Dodanie do Claude Code: `claude mcp add kartograf -- kartograf-mcp` (potrzebny extra `mcp`).
   Inni klienci: `{"mcpServers": {"kartograf": {"command": "kartograf-mcp"}}}`.
 - Opcje serwera: `--tools` (rodziny narzedzi po przecinku: discovery, availability, data, check, project, store),
-  `--allow-dir` (katalog, w ktorym musza lezec sciezki narzedzi; mozna powtorzyc),
+  `--allow-dir` (katalog bezwzgledny, w ktorym musza lezec sciezki narzedzi; mozna powtorzyc),
   `--cache-file` / `--no-cache` (plik cache metadanych albo jego brak).
 - Opisy narzedzi sa krotkie: parametry komendy, dozwolone wartosci i przyklady daje `get_catalog`
   z argumentem `command` (np. `elevation download`), kody wyjscia i bledow z argumentem `tables`.
@@ -106,7 +107,8 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
   `list_sources`, `list_layers`; dostepnosc `elevation_availability`; dane
   `elevation_download`, `imagery_download`, `landcover_download`, `soil_download`,
   `soil_hsg`; aktualnosc `check_updates` (parametry `tool` i `arguments`); projekt
-  `project_status`, `project_download`; magazyn `store_overview`, `store_entries`.
+  `project_status`, `project_download`, `project_check_updates` (aktualnosc projektu);
+  magazyn `store_overview`, `store_entries`.
 - Wynik narzedzia to ten sam dokument co `--json`; `is_error` jest prawda, gdy CLI zwrocilby
   kod wyjscia != 0 (blad albo `ok: false`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
 - Dlugie pobrania zglaszaja postep notyfikacjami MCP.

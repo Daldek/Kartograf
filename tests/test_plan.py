@@ -187,8 +187,10 @@ def test_merge_rejects_other_store():
 def test_require_store_rejects_other_store(tmp_path):
     plan = _plan(_item(), store=store_id(tmp_path))
     require_store(plan, store_id(tmp_path / "." / ""))
-    with pytest.raises(ValidationError, match="innego magazynu"):
+    with pytest.raises(ValidationError, match="innego magazynu") as caught:
         require_store(plan, store_id(tmp_path / "b"))
+    # the error names the argument like the other errors of a plan do
+    assert caught.value.option == "plan"
 
 
 def test_select_planned_stale_and_removed():

@@ -213,7 +213,8 @@ def require_store(plan: UpdatePlan, store: str) -> None:
     """
     if plan.store != store:
         raise ValidationError(
-            f"Plan dotyczy innego magazynu ({plan.store}), nie {store}"
+            f"Plan dotyczy innego magazynu ({plan.store}), nie {store}",
+            option="plan",
         )
 
 

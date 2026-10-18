@@ -385,6 +385,17 @@ class Command:
         return self.check_function is not None
 
     @property
+    def check_tool(self) -> str | None:
+        """The MCP tool that runs the check twin of the command: ``check_updates``
+        for a data command (a project task), ``<group>_check_updates`` for the
+        others (``project_check_updates``); ``None`` without a check or a tool."""
+        if self.check_function is None or self.tool is None:
+            return None
+        if self.project_task:
+            return "check_updates"
+        return f"{self.group}_check_updates" if self.group else "check_updates"
+
+    @property
     def task_options(self) -> dict[str, Kind]:
         """The keys of ``tasks[].options`` of a project task with their kinds, in
         the order of the parameters (the order of the keys of a manifest)."""

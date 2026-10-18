@@ -56,6 +56,7 @@ from kartograf.serialization import Document
 
 # Flags that print and exit: no part of a command that can be called.
 _EXITING_FLAGS = ("-h", "--help", "--version")
+_PROGRAM = "kartograf"
 # The only command with a ``summary`` (statistics of the HSG raster).
 _SUMMARY_COMMAND = "soil hsg"
 
@@ -123,8 +124,9 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     Parameters
     ----------
     argv : sequence of str or str
-        The words after ``kartograf`` (``["elevation", "download", "--product",
-        "nmt"]``); a text is split like a shell line (``shlex.split``).
+        The words of a line, with or without the leading ``kartograf``
+        (``["elevation", "download", "--product", "nmt"]``); a text is split like a
+        shell line (``shlex.split``).
 
     Returns
     -------
@@ -150,6 +152,8 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
         tokens = shlex.split(argv) if isinstance(argv, str) else list(argv)
     except ValueError as error:
         raise UsageError(f"nieprawidlowy zapis komendy: {error}") from error
+    if tokens and tokens[0] == _PROGRAM:
+        del tokens[0]  # a whole line, as ``format_command`` writes it
     if not tokens:
         raise UsageError(
             f"podaj komende danych (grupa i komenda, np. elevation download): "

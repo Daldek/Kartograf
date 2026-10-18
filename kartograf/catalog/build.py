@@ -173,6 +173,7 @@ def _command_info(command: Command) -> CommandInfo:
         result_schema=command.result_schema,
         check_result_schema=command.check_result_schema,
         supports_check=command.supports_check,
+        check_tool=command.check_tool,
         cli=command.cli_words,
         tool=command.tool,
         params=tuple(_param_info(param) for param in command.params),

@@ -275,9 +275,10 @@
   wydania; jeden blad (B1, `kartograf-mcp` bez katalogu cache konczyl sie tracebackiem)
   naprawiony w `a7ba1336` z testem regresji; brama w E2E 7070 passed. Poprawki
   planu T9 (30 parametrow `elevation download`, arkusz Krakowa, status `local`):
-  errata 2 ADR-046, plan oznaczony jako wykonany. Drobiazgi do decyzji (`hint` null dla
-  bledow z `options`, `parse_command` odrzuca prefiks `kartograf `, narzedzie
-  `project_check_updates` niewidoczne w katalogu): raport, sekcja "Uwagi".
+  errata 2 ADR-046, plan oznaczony jako wykonany. Drobiazgi O1-O5 z raportu poprawione
+  w 0.8.0 (decyzja koordynatora): `hint` z `options`, `parse_command` z prefiksem
+  `kartograf `, `CommandInfo.check_tool` (`project_check_updates` w katalogu), plan
+  innego magazynu z `option="plan"`, `--allow-dir` wzgledny jako blad startu.
 - Otwarte: `structuredContent` powtarza `content` (klient podajacy modelowi oba placi dwa
   razy); `output_schema` narzedzi MCP, transport HTTP, KC i KH poza zakresem.
 

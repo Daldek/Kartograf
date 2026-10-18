@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import kartograf
-from kartograf.commands import parse_command
+from kartograf.commands import parse_command, validate_command
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import contours_formats
 from kartograf.download.options import BBOX_CRS_CHOICES, require_product
@@ -351,6 +351,36 @@ def test_validation_hint_drops_the_example_that_would_not_fit():
     assert hint is not None and len(hint) <= 400
     assert hint.startswith("Dozwolone wartosci --product: wartosc-00-dluga")
     assert "Przyklad" not in hint
+
+
+def test_validation_hint_of_several_options_has_their_flags_and_an_example():
+    exc = ValidationError("m", options=("sheet", "bbox", "geometry"))
+
+    hint = error_report(exc, command="elevation download").hint
+
+    assert hint is not None and hint.startswith(
+        "Opcje: --sheet, --bbox, --geometry. Przyklad: kartograf elevation download "
+    )
+    example = parse_command(hint.split("Przyklad: kartograf ", 1)[1])
+    assert example.command == "elevation download" and "sheet" in example.options
+    # without the command the names of the arguments stand for the flags
+    assert error_report(exc).hint == "Opcje: sheet, bbox, geometry."
+    assert error_report(exc, command="no such command").hint == (
+        "Opcje: sheet, bbox, geometry."
+    )
+    # one argument named is the hint of that argument, not of the group
+    single = ValidationError("m", option="sheet", options=("sheet", "bbox"))
+    assert error_report(single).hint is None
+
+
+def test_the_missing_area_of_a_command_line_has_a_hint_with_an_example(tmp_path):
+    with pytest.raises(ValidationError) as caught:
+        validate_command("elevation download", {"product": "nmt"}, output_dir=tmp_path)
+
+    assert caught.value.options == ("sheet", "bbox", "geometry")
+    hint = error_report(caught.value, command="elevation download").hint
+    assert hint is not None and hint.startswith("Opcje: --sheet, --bbox, --geometry.")
+    assert "Przyklad: kartograf elevation download " in hint
 
 
 def test_oserror_is_io_error():

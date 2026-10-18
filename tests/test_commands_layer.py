@@ -59,6 +59,22 @@ def test_parse_command_returns_only_given_options():
     assert parse_command(shlex.split(LINE)) == expected
 
 
+def test_parse_command_takes_the_whole_line_with_its_program_name():
+    """``format_command`` writes ``kartograf ...``; an agent gives it back as it is."""
+    expected = parse_command(LINE)
+
+    assert parse_command(f"kartograf {LINE}") == expected
+    assert parse_command(["kartograf", *shlex.split(LINE)]) == expected
+    call = format_command(expected.command, expected.options, run=expected.run)
+    assert call.startswith("kartograf ")
+    assert parse_command(call) == expected
+
+
+def test_parse_command_with_only_the_program_name_is_an_empty_line():
+    with pytest.raises(UsageError, match="podaj komende danych"):
+        parse_command("kartograf")
+
+
 def test_parse_command_writes_the_json_form_of_every_kind():
     area = parse_command(
         f"{NMT} --resolution pl=1m,cz=2m --cutout --year 2024 --geometry rel/a.gpkg"

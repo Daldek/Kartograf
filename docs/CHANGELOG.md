@@ -761,7 +761,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   atrybut `command`) to bledne uzycie komendy; `OSError` (brak, uprawnienia,
   odlaczony udzial) ma nowy kod `io_error`, a `KeyboardInterrupt` i inne wyjatki
   `interrupted` i `internal_error` (buduje je `error_report`). `hint` zawiera
-  dozwolone wartosci i przyklad komendy z katalogu. Jedna tabela kodow wyjscia
+  dozwolone wartosci i przyklad komendy z katalogu, a dla bledu z `options` (np. brak
+  obszaru) flagi tych opcji i przyklad; plan innego magazynu to `ValidationError` z
+  `option="plan"`. Jedna tabela kodow wyjscia
   i bledow: USAGE 9.3 (`tests/test_docs_tables.py` pilnuje jej rownosci z
   katalogiem). Atrybuty sa addytywne: `except ValidationError` lapie tez
   `UsageError`, konstruktory przyjmuja nowe argumenty tylko nazwane.
@@ -772,7 +774,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   API, rodzaj, wymagalnosc, dozwolone wartosci, zaleznosci), ograniczenia i
   przyklady; domyslnie zwiezly przeglad (ok. 7,6 tys. znakow), reszta na
   zadanie (grupa, komenda, `--params`, `tables=True`). `data_commands()` zwraca
-  12 komend danych; typy `Catalog`, `CommandInfo`, `ParamInfo`. Katalog jest
+  12 komend danych; typy `Catalog`, `CommandInfo`, `ParamInfo`; `CommandInfo.check_tool`
+  (widok `full`) wskazuje narzedzie MCP sprawdzajace komende (`check_updates` albo
+  `project_check_updates`). Katalog jest
   jedynym zrodlem prawdy: z deklaracji w `kartograf/catalog/commands/` powstaja
   parser CLI, opcje komend danych projektu i schematy narzedzi MCP, a testy
   kontraktowe pilnuja zgodnosci flag, sygnatur, `COMMANDS` i przykladow.
@@ -781,7 +785,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `validate_command`, `format_command`, `run_command`, `check_command` i
   `CommandCall` - komenda danych jako dane (opcje w postaci JSON opcji zadania
   projektu), walidacja bez sieci i zapisu, wykonanie funkcja komendy i sprawdzenie
-  aktualnosci.
+  aktualnosci. `parse_command` przyjmuje tez wiersz z poczatkowym `kartograf ` (tak, jak go
+  pisze `format_command`).
 
 - Serwer MCP `kartograf-mcp` (ADR-046, USAGE 9.6): opcjonalny extra
   `kartograf[mcp]` (`mcp>=2.3.0,<3`, stdio, takze `python -m kartograf.mcp_server`),
@@ -789,7 +794,8 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   wynik narzedzia to dokument `--json`, `is_error` = kod wyjscia CLI != 0, schematy
   wejscia z katalogu, sciezki bezwzgledne, bez wartosci domyslnych wplywajacych na
   dane (`output_dir` jawny, `bbox` z `bbox_crs`), postep przez notyfikacje MCP,
-  opcje `--tools`, `--allow-dir`, `--cache-file`, `--no-cache` (katalog cache, ktorego nie
+  opcje `--tools`, `--allow-dir` (katalog bezwzgledny; wzgledny konczy start bledem uzycia,
+  kod 2), `--cache-file`, `--no-cache` (katalog cache, ktorego nie
   da sie utworzyc, daje ostrzezenie i prace bez cache, jak w CLI); `tools/list` ma
   ok. 28,6 tys. znakow. `import kartograf` i CLI nie wymagaja `mcp`; `dev` zawiera
   `mcp`.
