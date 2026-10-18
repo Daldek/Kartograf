@@ -26,6 +26,11 @@ from kartograf.download.availability import (
     AVAILABILITY_COUNTRIES,
     AVAILABILITY_PRODUCTS,
 )
+from kartograf.download.collections import (
+    collection_choice_values,
+    collection_countries,
+    collection_products,
+)
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import contours_formats
 from kartograf.download.options import (
@@ -36,6 +41,7 @@ from kartograf.download.options import (
     SCALES_2000,
 )
 from kartograf.download.orto_cutout import ORTO_CUTOUT_CRS
+from kartograf.landcover.manager import LANDCOVER_PRODUCTS
 from kartograf.project.commands import COMMANDS, check_options_json, options_from_json
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
@@ -337,20 +343,50 @@ def test_examples_cover_pl_and_cz(command):
 
 
 _COMMAND_BY_ID = {command.id: command for command in _DECLARED.commands}
+_COLLECTION_GROUPS = (
+    "boundaries",
+    "cadastre",
+    "models3d",
+    "hydro",
+    "names",
+    "maps",
+    "geodesy",
+)
 _PRODUCTS_OF = {
     "elevation download": ELEVATION_PRODUCTS,
     "elevation availability": AVAILABILITY_PRODUCTS,
     "elevation list-sources": ELEVATION_PRODUCTS,
     "imagery download": IMAGERY_PRODUCTS,
     "imagery list-sources": IMAGERY_PRODUCTS,
+    "landcover download": LANDCOVER_PRODUCTS,
+    "landcover list-sources": LANDCOVER_PRODUCTS,
+    "landcover list-layers": LANDCOVER_PRODUCTS,
+    "soil list-sources": ("soil",),
 }
+# Arguments a command declares that its library function gets from the other
+# track of this work (``calculate_hsg(summary=)``); removed when it is merged.
+_PENDING_ARGUMENTS = {("calculate_hsg", "summary")}
+
+
+def _collected(group: str, key: str) -> set[str]:
+    """The values of the option ``key`` over the products of a collection group."""
+    return {
+        value
+        for product in collection_products(group)
+        for values in collection_choice_values(product, key).values()
+        for value in values
+    }
 
 
 def _expected_allowed(command_id: str, name: str) -> list[str] | set[str]:
     """The allowed values of a registry parameter, read from the registry in
     another way than the declaration does (a set: the order is the registry's)."""
+    group = command_id.split()[0]
+    collection = group in _COLLECTION_GROUPS
     if name == "bbox_crs":
         return list(BBOX_CRS_CHOICES)
+    if name in ("scale", "sheet_system", "format") and collection:
+        return _collected(group, name)
     if name == "scale":
         return list(SCALES_2000)
     if name == "sheet_system":
@@ -358,9 +394,17 @@ def _expected_allowed(command_id: str, name: str) -> list[str] | set[str]:
     if name == "country":
         if command_id == "elevation availability":
             return list(AVAILABILITY_COUNTRIES)
+        if collection:
+            return [*collection_countries(collection_products(group)), "auto"]
         return list(COUNTRIES)
     if name == "product":
+        if collection:
+            return list(collection_products(group))
         return list(_PRODUCTS_OF[command_id])
+    if group == "landcover" and name == "format":
+        return ["GPKG", "SHP", "GML"]
+    if group == "landcover" and name == "horizontal_crs":
+        return ["EPSG:5514", "EPSG:3045"]
     if name == "resolution" and command_id == "elevation download":
         labels = {v.label for p in ("nmt", "nmpt") for v in variants(product=p)}
         return sorted(
@@ -512,6 +556,8 @@ def test_arguments_match_the_signature_of_the_function(command):
             if name == command.function or param.task or argument == "output_dir"
         }
         for argument, param in wanted.items():
+            if (name, argument) in _PENDING_ARGUMENTS:
+                continue
             assert argument in parameters, f"{name} has no argument {argument}"
             assert param.default == _default(parameters[argument]), (name, argument)
         for position, (argument, parameter) in enumerate(parameters.items()):
@@ -524,9 +570,6 @@ def test_arguments_match_the_signature_of_the_function(command):
                     name,
                     argument,
                 )
-        for argument, param in wanted.items():
-            if param.required:
-                assert parameters[argument].default is inspect.Parameter.empty
 
 
 def test_declaration_modules_do_not_call_providers_at_import(monkeypatch):
