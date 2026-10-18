@@ -8,7 +8,10 @@ a network.
 """
 
 import importlib
+import json
 import pkgutil
+import subprocess
+import sys
 from collections.abc import Callable
 from pathlib import Path
 from types import MappingProxyType
@@ -16,6 +19,7 @@ from types import MappingProxyType
 import pytest
 
 import kartograf
+from kartograf.cache_info import CacheEntries, CacheInfo
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
     AvailabilityArea,
@@ -42,6 +46,16 @@ from kartograf.project.model import (
 )
 from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
+from kartograf.source_info import (
+    LayerInfo,
+    LayerList,
+    SourceInfo,
+    SourceLicense,
+    SourceList,
+    YearInfo,
+)
+from kartograf.store import Sidecar, StoreEntry, describe_segment
+from kartograf.store_documents import StoreEntries, StoreOverview, StoreSidecar
 
 STORE = Path("/srv/dane/kartograf")
 SHA256 = "10be475e6b5c43d54b8dc832ab9816367e3dad4c1bd59bbba25c2b296a2824c6"
@@ -288,6 +302,133 @@ def _project_check() -> Document:
     )
 
 
+def _license() -> SourceLicense:
+    return SourceLicense("pl-gugik", "Dane GUGiK", "https://example.org/licencja")
+
+
+def _source() -> SourceInfo:
+    return SourceInfo(
+        key="pl.gugik.nmt_1m",
+        name="Numeryczny Model Terenu 1 m",
+        country="PL",
+        provider="GUGiK",
+        product="nmt",
+        directory="nmt/<uklad>_1m_<uklad-wys>",
+        select={
+            "product": "nmt",
+            "country": "pl",
+            "vertical_crs": ("EVRF2007", "KRON86"),
+        },
+        license=_license(),
+        auth="none",
+        update_signals=("index", "none"),
+    )
+
+
+def _sources() -> Document:
+    return SourceList("elevation", ("nmt", "nmpt"), (_source(),))
+
+
+def _layer() -> LayerInfo:
+    return LayerInfo("BUBD", "Budynki")
+
+
+def _year() -> YearInfo:
+    return YearInfo(2018, "clms", "CORINE Land Cover 2018")
+
+
+def _layers() -> Document:
+    return LayerList(
+        group="landcover",
+        product="corine",
+        source="global.copernicus.corine",
+        layers=(_layer(),),
+        classes={"2021": ("BUBD",)},
+        years=(_year(),),
+        properties=(_layer(),),
+        depths=("0-5cm",),
+        statistics=(_layer(),),
+    )
+
+
+def _cache_entries() -> CacheEntries:
+    return CacheEntries(1, 2, 3, 4, 5, 6)
+
+
+def _cache() -> Document:
+    return CacheInfo(
+        "clear",
+        Path("/srv/praca/.kartograf_cache.db"),
+        True,
+        4096,
+        _cache_entries(),
+        True,
+        False,
+    )
+
+
+def _sidecar() -> Sidecar:
+    raw = {"schema": "kartograf-meta/1", "dataset": "pl.gugik.nmt_1m", "sha256": SHA256}
+    return Sidecar(
+        schema="kartograf-meta/1",
+        dataset="pl.gugik.nmt_1m",
+        dataset_key="pl.gugik.nmt_1m",
+        country="PL",
+        product="nmt",
+        provider="GUGiK",
+        horizontal_crs="EPSG:2180",
+        vertical_crs="EVRF2007",
+        vertical_source="geoid",
+        resolution="1 m",
+        nodata=-9999.0,
+        request={"sheet": SHEET},
+        license={"id": "pl-gugik"},
+        downloaded_at="2026-10-18T10:20:30+00:00",
+        kartograf_version="0.8.0",
+        transform={"pipeline": "x"},
+        extra={"version": {"label": "2022"}},
+        sha256=SHA256,
+        size_bytes=48,
+        data_year=2022,
+        data_date="2022-05-10",
+        campaign={"year": 2022},
+        survey_work_id="P.1234",
+        edition="2022",
+        full_sheet=False,
+        coverage=1.0,
+        unit=SHEET,
+        raw=raw,
+    )
+
+
+def _store_entry() -> StoreEntry:
+    path = STORE / SEGMENT / "N-34/130/D/d/2/4" / f"{SHEET}.asc"
+    return StoreEntry(
+        kind="link",
+        segment=SEGMENT,
+        hierarchy="N-34/130/D/d/2/4",
+        name=f"{SHEET}.asc",
+        path=path,
+        version_path=STORE / SEGMENT / "versions" / f"{SHEET}.asc",
+        label="2022",
+        sha8=SHA256[:8],
+        sidecar=_sidecar(),
+        problem=None,
+    )
+
+
+def _store_overview() -> Document:
+    return StoreOverview(STORE, (describe_segment(SEGMENT),))
+
+
+def _store_entries() -> Document:
+    return StoreEntries(STORE, SEGMENT, (SHEET,), 10, False, (_store_entry(),))
+
+
+def _store_sidecar() -> Document:
+    return StoreSidecar(STORE / SEGMENT / f"{SHEET}.asc", _sidecar())
+
+
 # schema -> a document of every class of that schema, built without a network
 DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-error/1": (_error_document,),
@@ -303,6 +444,12 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-project-state/1": (_project,),
     "kartograf-project-report/1": (_project_report,),
     "kartograf-project-check/1": (_project_check,),
+    "kartograf-sources/1": (_sources,),
+    "kartograf-layers/1": (_layers,),
+    "kartograf-cache/1": (_cache,),
+    "kartograf-store-overview/1": (_store_overview,),
+    "kartograf-store-entries/1": (_store_entries,),
+    "kartograf-store-sidecar/1": (_store_sidecar,),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -357,6 +504,40 @@ CONTRACT: dict[str, list[str]] = {
         "notices",
         "ok",
     ],
+    "kartograf-sources/1": ["schema", "group", "products", "sources"],
+    "kartograf-layers/1": [
+        "schema",
+        "group",
+        "product",
+        "source",
+        "layers",
+        "classes",
+        "years",
+        "properties",
+        "depths",
+        "statistics",
+    ],
+    "kartograf-cache/1": [
+        "schema",
+        "action",
+        "path",
+        "exists",
+        "size_bytes",
+        "entries",
+        "cleared",
+        "removed_unreadable",
+    ],
+    "kartograf-store-overview/1": ["schema", "output_dir", "segments"],
+    "kartograf-store-entries/1": [
+        "schema",
+        "output_dir",
+        "segment",
+        "units",
+        "limit",
+        "truncated",
+        "entries",
+    ],
+    "kartograf-store-sidecar/1": ["schema", "path", "sidecar"],
 }
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4
@@ -473,6 +654,81 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
         _task_result,
         ["name", "outcome", "pinned", "unpinned", "errors"],
     ),
+    "SourceInfo": (
+        _source,
+        [
+            "key",
+            "name",
+            "country",
+            "provider",
+            "product",
+            "directory",
+            "select",
+            "license",
+            "auth",
+            "update_signals",
+        ],
+    ),
+    "SourceLicense": (_license, ["id", "attribution", "url"]),
+    "LayerInfo": (_layer, ["code", "description"]),
+    "YearInfo": (_year, ["year", "data", "description"]),
+    "CacheEntries": (
+        _cache_entries,
+        ["records", "campaigns", "teryt", "sheets", "index_areas", "atom_feeds"],
+    ),
+    "SegmentInfo": (
+        lambda: describe_segment(SEGMENT),
+        ["segment", "product", "country", "dataset_key", "name", "known"],
+    ),
+    "StoreEntry": (
+        _store_entry,
+        [
+            "kind",
+            "segment",
+            "hierarchy",
+            "name",
+            "path",
+            "version_path",
+            "label",
+            "sha8",
+            "sidecar",
+            "problem",
+            "skipped",
+        ],
+    ),
+    "Sidecar": (
+        _sidecar,
+        [
+            "schema",
+            "dataset",
+            "dataset_key",
+            "country",
+            "product",
+            "provider",
+            "horizontal_crs",
+            "vertical_crs",
+            "vertical_source",
+            "resolution",
+            "nodata",
+            "request",
+            "license",
+            "downloaded_at",
+            "kartograf_version",
+            "transform",
+            "extra",
+            "sha256",
+            "size_bytes",
+            "data_year",
+            "data_date",
+            "campaign",
+            "survey_work_id",
+            "edition",
+            "full_sheet",
+            "coverage",
+            "unit",
+            "raw",
+        ],
+    ),
 }
 
 _CASES = [
@@ -543,5 +799,27 @@ def test_every_document_class_is_registered(cls):
     assert cls in SCHEMAS[cls.SCHEMA]
 
 
-def test_every_contract_schema_is_registered_by_the_package():
-    assert set(CONTRACT) <= {cls.SCHEMA for cls in DOCUMENT_CLASSES}
+def test_contract_equals_the_schemas_of_every_document_class():
+    """Both ways: a document class without a contract row, and a row of a
+    schema no class produces, fail here."""
+    assert set(CONTRACT) == {cls.SCHEMA for cls in DOCUMENT_CLASSES}
+
+
+def test_importing_the_package_registers_every_schema():
+    """A consumer (the catalog, MCP) that only does ``import kartograf`` finds
+    every document in ``SCHEMAS``; checked in a fresh interpreter, where no
+    submodule was imported by something else."""
+    code = (
+        "import json, kartograf\n"
+        "from kartograf.serialization import SCHEMAS\n"
+        "print(json.dumps(sorted(SCHEMAS)))"
+    )
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=Path(__file__).resolve().parent.parent,
+    )
+
+    assert json.loads(done.stdout) == sorted(CONTRACT)
