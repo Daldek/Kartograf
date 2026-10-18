@@ -97,6 +97,7 @@ Example usage::
 """
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info
 from kartograf.core.bbox import transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
@@ -233,6 +234,12 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.source_info import (
+    LayerList,
+    SourceList,
+    list_layers,
+    list_sources,
+)
 from kartograf.sources.edition import Edition
 from kartograf.store import (
     SegmentInfo,
@@ -243,6 +250,14 @@ from kartograf.store import (
     link_target,
     list_segments,
     read_sidecar,
+)
+from kartograf.store_documents import (
+    StoreEntries,
+    StoreOverview,
+    StoreSidecar,
+    describe_store,
+    list_store_entries,
+    read_store_sidecar,
 )
 from kartograf.store_geometry import Footprint, file_footprint, pinned_transform
 from kartograf.transform.crs import PinnedTransform
@@ -392,6 +407,12 @@ __all__ = [
     "Sidecar",
     "describe_segment",
     "SegmentInfo",
+    "describe_store",
+    "StoreOverview",
+    "list_store_entries",
+    "StoreEntries",
+    "read_store_sidecar",
+    "StoreSidecar",
     "file_footprint",
     "Footprint",
     "link_target",
@@ -407,6 +428,14 @@ __all__ = [
     "YearRangeError",
     "CacheError",
     "InvalidSidecarError",
+    # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)
+    "list_sources",
+    "SourceList",
+    "list_layers",
+    "LayerList",
+    "get_cache_info",
+    "clear_cache",
+    "CacheInfo",
     # Errors as data (`kartograf-error/1`, spec 6)
     "ErrorReport",
     "error_report",
