@@ -405,14 +405,12 @@ def _header_bbox(entry: StoreEntry, meta: Sidecar | None) -> BBox | None:
 
 
 def _teryt_bbox(code: str) -> BBox | None:
-    import requests
-
     from kartograf.providers.pl.prg import (
         POWIAT_LAYER,
         PRG_WFS_ENDPOINT,
         _feature_collection,
     )
-    from kartograf.transport.http import get_with_retry
+    from kartograf.transport.http import get_with_retry, make_gugik_session
 
     layer = POWIAT_LAYER if len(code) == 4 else "ms:A01_Granice_wojewodztw"
     filter_xml = (
@@ -420,7 +418,7 @@ def _teryt_bbox(code: str) -> BBox | None:
         f"<fes:ValueReference>JPT_KOD_JE</fes:ValueReference>"
         f"<fes:Literal>{code}</fes:Literal></fes:PropertyIsEqualTo></fes:Filter>"
     )
-    with requests.Session() as session:
+    with make_gugik_session() as session:
         response = get_with_retry(
             session,
             PRG_WFS_ENDPOINT,
@@ -482,7 +480,10 @@ def _ku_bbox(code: str) -> BBox | None:
 def _sm5_bbox(code: str) -> BBox | None:
     from kartograf.providers.cuzk.sheets import SheetIndex
 
-    return SheetIndex().sm5_sheet(code).bbox
+    try:
+        return SheetIndex().sm5_sheet(code).bbox
+    except ValidationError:  # not in the index (like an unknown TERYT or KU)
+        return None
 
 
 def _unit_key(entry: StoreEntry, meta: Sidecar | None) -> tuple[str, str] | None:
@@ -574,6 +575,11 @@ def file_footprint(
         No safe operation from the file's CRS to WGS84 (never approximated).
     DownloadError
         A unit index failed (only with ``network=True``).
+    ParseError
+        A unit index feature without usable geometry (only with
+        ``network=True``).
+    TransformError
+        A source envelope lies outside the area of the pinned operation.
     """
     meta = _sidecar_of(entry)
     request = meta.request if meta is not None else None

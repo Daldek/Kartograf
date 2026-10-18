@@ -12,6 +12,7 @@ read-only and may run in several threads at once.
 from __future__ import annotations
 
 import contextlib
+import errno
 import json
 import os
 import re
@@ -66,7 +67,13 @@ class Sidecar:
     download timestamp), ``campaign`` (``extra.campaign``),
     ``survey_work_id``, ``edition``, ``full_sheet`` (declared full sheet),
     ``coverage`` (valid-cell share 0..1) and ``unit`` (the unit of the
-    request: TERYT, KU, sheet, tile, ``<coords>`` or the country code).
+    request: TERYT, KU, sheet, tile, ``<coords>`` or the country code; for
+    a national file of a theme the file stem ``<code>_<theme>``, e.g.
+    ``pl_miejscowosci``). ``unit`` can be passed to ``iter_store(units=...)``
+    of the file's segment.
+
+    Not hashable (``request``/``extra``/``raw`` are dicts); compare with
+    ``==`` or key by ``StoreEntry.path``.
     """
 
     schema: str
@@ -97,6 +104,8 @@ class Sidecar:
     coverage: float | None
     unit: str | None
     raw: dict[str, Any]
+
+    __hash__ = None  # type: ignore[assignment]  # dict fields: explicit, not generated
 
 
 @dataclass(frozen=True)
@@ -136,6 +145,9 @@ class StoreEntry:
     skipped : bool
         ``True`` for a version whose directory was listed in
         ``skip_versions``: its sidecar was not read.
+
+    Not hashable (the sidecar holds dicts); key by ``path`` (or ``(kind,
+    path)``).
     """
 
     kind: EntryKind
@@ -149,6 +161,8 @@ class StoreEntry:
     sidecar: Sidecar | None
     problem: ProblemCode | None
     skipped: bool = False
+
+    __hash__ = None  # type: ignore[assignment]  # dict fields: explicit, not generated
 
 
 @dataclass(frozen=True)
@@ -174,6 +188,8 @@ _META_SUFFIX = ".meta.json"
 # 0.7.x campaign directory (download/storage.py, ``has_legacy_campaigns``).
 _LEGACY_DIR = "kampanie"
 _RESERVED = frozenset({VERSIONS_DIR, FULL_SHEET_DIR, _LEGACY_DIR})
+# Longest file name component accepted in a unit (NAME_MAX of common file systems).
+_NAME_MAX = 255
 # Link trees of a slot: the standard path and the second link (ADR-033).
 _LINK_DIRS: tuple[tuple[tuple[str, ...], EntryKind], ...] = (
     ((), "link"),
@@ -304,7 +320,10 @@ def _year(value: Any) -> int | None:
 
 
 def _unit(
-    request: dict[str, Any] | None, source: dict[str, Any], country: str | None
+    request: dict[str, Any] | None,
+    source: dict[str, Any],
+    country: str | None,
+    stem: str | None,
 ) -> str | None:
     if request is None:
         return None
@@ -326,12 +345,18 @@ def _unit(
         # The same %.10g naming as the bbox slot (download/storage.py).
         return "_".join(format(v, ".10g") for v in bbox)
     if request.get("whole_country") is True:
+        # The slot of a national file is named ``<code>[_<theme>]`` by
+        # ``unit_slot``; the theme is not in the request.
+        if stem is not None and _COUNTRY.fullmatch(stem):
+            return stem
         return _pick(request.get("country"), country.lower() if country else None)
     return None
 
 
-def _typed(raw: dict[str, Any]) -> Sidecar:
-    """The typed view of a ``kartograf-meta/1`` object; raw stays untouched."""
+def _typed(raw: dict[str, Any], stem: str | None) -> Sidecar:
+    """The typed view of a ``kartograf-meta/1`` object; raw stays untouched.
+
+    ``stem`` is the stem of the data file the sidecar belongs to."""
     extra = _normalized_extra(_dict(raw.get("extra")))
     request = _renamed(_dict(raw.get("request")), _REQUEST_KEYS)
     extra_data = extra or {}
@@ -437,7 +462,7 @@ def _typed(raw: dict[str, Any]) -> Sidecar:
         edition=edition,
         full_sheet=full_sheet,
         coverage=_number(extra_data.get("coverage")),
-        unit=_unit(request, source, country),
+        unit=_unit(request, source, country, stem),
         raw=raw,
     )
 
@@ -454,6 +479,16 @@ def _read_bytes(path: str) -> bytes:
     return b"".join(chunks)
 
 
+def _is_meta(raw: dict[str, Any]) -> bool:
+    """``kartograf-meta/1``; a missing ``schema`` only for the bare version
+    sidecar of a provider without a descriptor (``emit_sidecar``): the same
+    object with ``sha256`` and ``extra``, accepted by ``read_version``."""
+    schema = raw.get("schema")
+    if schema is None:
+        return isinstance(raw.get("sha256"), str) and isinstance(raw.get("extra"), dict)
+    return schema == _SCHEMA
+
+
 def _load(side: Path) -> Sidecar:
     try:
         raw = json.loads(_read_bytes(os.fspath(side)))
@@ -461,13 +496,13 @@ def _load(side: Path) -> Sidecar:
         raise InvalidSidecarError(
             f"Nie mozna odczytac sidecara {side}: {exc}", path=side
         ) from exc
-    if not isinstance(raw, dict) or raw.get("schema") != _SCHEMA:
+    if not isinstance(raw, dict) or not _is_meta(raw):
         schema = raw.get("schema") if isinstance(raw, dict) else None
         raise InvalidSidecarError(
             f"Nieznany schemat sidecara {schema!r} (oczekiwano {_SCHEMA}): {side}",
             path=side,
         )
-    return _typed(raw)
+    return _typed(raw, side.name.removesuffix(_META_SUFFIX).split(".", 1)[0])
 
 
 def read_sidecar(path: str | Path) -> Sidecar:
@@ -1172,8 +1207,13 @@ def _unit_slot(
     if not isinstance(unit, str) or any(c in unit for c in ("\\", "\x00", ":")):
         raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
     *directory, code = unit.split("/")
-    if any(not part or part.startswith(".") for part in (*directory, code)) or (
-        directory and directory[0] in _RESERVED
+    if (
+        any(
+            not part or part.startswith(".") or len(part.encode()) > _NAME_MAX
+            for part in (*directory, code)
+        )
+        or (directory and directory[0] in _RESERVED)
+        or code in _RESERVED
     ):
         raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
     if directory:
@@ -1187,7 +1227,13 @@ def _unit_slot(
     if _COUNTRY.fullmatch(code):
         return ("country",), code
     parts = _sheet_parts(code)
-    if any(not part or part.startswith(".") or "/" in part for part in parts):
+    if any(
+        not part
+        or part.startswith(".")
+        or "/" in part
+        or len(part.encode()) > _NAME_MAX
+        for part in parts
+    ):
         raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
     return parts, None
 
@@ -1233,6 +1279,12 @@ def _real_directory(
                 real = stat.S_ISDIR(os.lstat(path).st_mode)
             except (FileNotFoundError, NotADirectoryError):
                 real = False
+            except OSError as exc:
+                if exc.errno == errno.ENAMETOOLONG:
+                    raise ValidationError(
+                        f"Jednostka magazynu daje zbyt dluga sciezke: {path}"
+                    ) from exc
+                raise
             known[path] = real
         if not real:
             return None
