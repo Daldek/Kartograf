@@ -662,6 +662,9 @@ def _without_json(commands):
 _DECLARED = declared()
 _OLD = dict(_walk(old_parser.create_parser()))
 _NEW = dict(_walk(build_parser(_without_json(_DECLARED.commands), _DECLARED.groups)))
+_OLD_TOP = old_parser._subparsers(_OLD[()])
+_NEW_TOP = old_parser._subparsers(_NEW[()])
+assert _OLD_TOP is not None and _NEW_TOP is not None
 _CLI_COMMANDS = [
     command
     for command in _DECLARED.commands
@@ -752,6 +755,111 @@ def test_group_help_equals_old(group, monkeypatch):
         words[-1] for words in _OLD if len(words) == 2 and words[0] == group.name
     }
     assert declared_names == old_names
+
+
+def test_root_help_equals_old(monkeypatch):
+    """The root of the declarations - without ``catalog`` and ``--json``, which the
+    old parser does not have - lists the same commands in the same order with
+    the same texts."""
+    monkeypatch.setenv("COLUMNS", "100")
+    old, new = _OLD[()], _NEW[()]
+
+    assert new.format_help() == old.format_help()
+    assert _dump(new) == _dump(old)
+    assert new.description == old.description and new.epilog == old.epilog
+    assert list(_NEW_TOP.choices) == list(_OLD_TOP.choices)
+
+
+def test_root_of_the_full_parser_lists_catalog_after_parse():
+    """With ``catalog`` the root is the old one plus one command, right after
+    ``parse`` (the commands without a group come first), ``cache`` last."""
+    full = build_parser(_DECLARED.commands, _DECLARED.groups)
+    top = old_parser._subparsers(full)
+    assert top is not None
+
+    names = list(top.choices)
+    assert names[:2] == ["parse", "catalog"] and names[-1] == "cache"
+    assert [n for n in names if n != "catalog"] == list(_OLD_TOP.choices)
+
+
+_FOREIGN_FLAGS = (
+    "--nope",
+    "--nope=1",
+    "--product",
+    "--bbox",
+    "--output",
+    "-o",
+    "--hierarchy",
+    "--source",
+    "-s",
+    "--stats",
+    "--sheet",
+    "--country",
+    "--teryt",
+    "--json",
+    "--check-updates",
+    "--summary",
+)
+
+
+def _outcome(parse, parser, argv, capsys):
+    """How a parser takes a command line: ``("ok",)`` or the exit code and the
+    text on stderr (the usage line and the message)."""
+    try:
+        parse(parser, argv)
+    except SystemExit as exit_info:
+        return ("exit", exit_info.code, capsys.readouterr().err)
+    return ("ok",)
+
+
+@pytest.mark.parametrize("command", _CLI_COMMANDS, ids=[c.id for c in _CLI_COMMANDS])
+def test_unknown_argument_texts_equal_the_old_parser(command, monkeypatch, capsys):
+    """An unknown flag, a flag of another command and a stray word give the same
+    error text - the usage of the command, the commands that have the flag and
+    the hints of the usual mix-ups - as the old parser over the whole tree."""
+    monkeypatch.setenv("COLUMNS", "100")
+    words = command.id.split()
+    needs = {"parse": ["N-34-130-D"], "project add": ["task"]}.get(command.id, [])
+
+    for extra in (*_FOREIGN_FLAGS, "stray"):
+        for argv in ([*words, extra], [*words, *needs, extra]):
+            old = _outcome(old_parser.parse_command_line, _OLD[()], argv, capsys)
+            new = _outcome(parse_command_line, _NEW[()], argv, capsys)
+            assert new == old, argv
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["--nope"],
+        ["nope"],
+        ["elevation"],
+        ["elevation", "nope"],
+        ["elevation", "--nope"],
+        ["cache"],
+        ["cache", "nope", "--json"],
+        ["project", "--hierarchy"],
+        ["--version"],
+        ["--bbox", "-447000,-1100000,-437000,-1090000", "elevation"],
+        ["elevation", "download", "--bbox", "-447000,-1100000,-437000,-1090000"],
+        ["elevation", "download", "--bbox", "-447000,-1100000,-437000", "--nope"],
+        ["landcover", "download", "--source", "bdot10k"],
+        ["landcover", "list-layers", "-s", "bdot10k"],
+        ["landcover", "download", "--country", "cz"],
+        ["soil", "download", "--product", "clay"],
+        ["soil", "hsg", "--stats"],
+        ["hydro", "download", "--sheet", "N-34-130-D"],
+    ],
+)
+def test_group_and_root_command_lines_read_like_the_old_parser(
+    argv, monkeypatch, capsys
+):
+    monkeypatch.setenv("COLUMNS", "100")
+    old = _outcome(old_parser.parse_command_line, _OLD[()], argv, capsys)
+    new = _outcome(parse_command_line, _NEW[()], argv, capsys)
+
+    assert new == old
 
 
 def test_every_reordered_example_is_still_an_old_example():

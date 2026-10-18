@@ -4,6 +4,9 @@ example, the completeness of the declarations) come last."""
 
 import dataclasses
 import shlex
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -14,8 +17,10 @@ from kartograf.catalog.commands import Declared, declared
 from kartograf.catalog.hints import example_for
 from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
 from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
+from kartograf.cli import _parser as old_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
+from kartograf.project.commands import COMMANDS
 from kartograf.serialization import SCHEMAS
 from kartograf.sources.registry import sources_for
 
@@ -607,3 +612,170 @@ def test_example_command_line_is_valid():
         parsed = parse_command_line(parser, words[1:])
         assert words[0] == "kartograf"
         assert parsed._command_id == command.id
+
+
+# =============================================================================
+# The real declarations as a whole (spec 8.5, 12.5)
+# =============================================================================
+
+_GROUPS = (
+    "boundaries",
+    "cadastre",
+    "elevation",
+    "geodesy",
+    "hydro",
+    "imagery",
+    "landcover",
+    "maps",
+    "models3d",
+    "names",
+    "project",
+    "soil",
+    "cache",
+)
+_NO_GROUP = (
+    "parse",
+    "catalog",
+    "find_sheets",
+    "store_overview",
+    "store_entries",
+    "store_sidecar",
+)
+
+
+def _leaf_words(parser, path=()):
+    """The words of every command (a parser without commands) of an argparse tree."""
+    action = old_parser._subparsers(parser)
+    if action is None:
+        yield path
+        return
+    for name, child in action.choices.items():
+        yield from _leaf_words(child, (*path, name))
+
+
+def test_every_old_leaf_command_is_declared():
+    """Transitional (the old parser goes away in T5): the 36 commands of the old
+    CLI are declared, and with ``catalog`` they are the 37 of the new one."""
+    old = {" ".join(words) for words in _leaf_words(old_parser.create_parser())}
+    declared_cli = {c.cli_words for c in _DECLARED.commands if c.cli_words is not None}
+    new = build_parser(_DECLARED.commands, _DECLARED.groups)
+
+    assert len(old) == 36
+    assert declared_cli == old | {"catalog"}
+    assert len(declared_cli) == 37
+    assert {" ".join(words) for words in _leaf_words(new)} == declared_cli
+
+
+def test_data_commands_are_the_twelve_in_COMMANDS_order():
+    commands = data_commands()
+
+    assert [c.id for c in commands] == list(COMMANDS)
+    assert len(commands) == 12
+    assert [c.id for c in get_catalog().commands if c.project_task] == list(COMMANDS)
+    for command in commands:
+        assert command.project_task and command.params is not None
+        names = {p.name for p in command.params}
+        # the options of a task and the flags of a run
+        assert {"output_dir", "update"} <= names
+        assert {p.name for p in command.params if p.task} == set(
+            COMMANDS[command.id].options
+        )
+        assert command.examples
+
+
+def test_catalog_has_every_group_and_command():
+    short = get_catalog()
+    full = get_catalog(params=True)
+
+    assert [g.name for g in short.groups] == list(_GROUPS)
+    assert len(short.commands) == len(full.commands) == 41
+    assert [c.id for c in short.commands if c.group is None] == list(_NO_GROUP)
+    assert [c.id for c in short.commands if c.cli is None] == list(_NO_GROUP[2:])
+    assert all(c.params is None for c in short.commands)
+    assert all(
+        c.params is not None and c.constraints is not None and c.examples is not None
+        for c in full.commands
+    )
+    # the commands of a group are those whose id starts with it, none of the others
+    for group in short.groups:
+        assert group.commands == tuple(
+            c.id for c in short.commands if c.group == group.name
+        )
+
+
+def test_catalog_filters_and_errors():
+    soil = get_catalog(group="soil")
+    one = {i: get_catalog(command=i).commands[0] for i in ("parse", "find_sheets")}
+
+    assert [g.name for g in soil.groups] == ["soil"]
+    assert [c.id for c in soil.commands] == [
+        "soil download",
+        "soil hsg",
+        "soil list-sources",
+        "soil list-layers",
+    ]
+    assert all(c.params is None for c in soil.commands)
+    assert [c.id for c in get_catalog(group="soil", params=True).commands] == [
+        c.id for c in soil.commands
+    ]
+    assert all(c.params for c in get_catalog(group="soil", params=True).commands)
+    # one command: with its parameters, whether it has a group or a CLI or not
+    assert one["parse"].group is None and one["parse"].params
+    assert one["find_sheets"].cli is None and one["find_sheets"].params
+    assert get_catalog(command="parse", params=False).commands[0].params is None
+    # the tables are in every view
+    short = get_catalog()
+    for view in (soil, get_catalog(command="parse")):
+        assert view.exit_codes == short.exit_codes
+        assert view.errors == short.errors and view.schemas == short.schemas
+    assert [r.code for r in short.exit_codes] == [0, 1, 2, 130]
+
+    with pytest.raises(ValidationError) as group:
+        get_catalog(group="nope")
+    with pytest.raises(ValidationError) as command:
+        get_catalog(command="nope")
+    with pytest.raises(ValidationError) as other_group:
+        get_catalog(group="soil", command="elevation download")
+    with pytest.raises(ValidationError) as api_only:
+        get_catalog(group="soil", command="find_sheets")
+
+    assert (group.value.option, group.value.allowed) == ("group", _GROUPS)
+    assert command.value.option == "command"
+    assert command.value.allowed == tuple(c.id for c in short.commands)
+    assert other_group.value.option == "command"
+    assert api_only.value.option == "command"
+    assert api_only.value.allowed == tuple(c.id for c in soil.commands)
+
+
+def test_catalog_does_not_import_cli_or_mcp():
+    """In a clean process the catalog - declarations, parser, hints, the sheet
+    documents that read it - loads neither ``kartograf.cli`` nor ``mcp``."""
+    code = (
+        "import sys\n"
+        "import kartograf.catalog, kartograf.catalog.build, "
+        "kartograf.catalog.cliparser, kartograf.catalog.hints, "
+        "kartograf.catalog.formatting, kartograf.catalog.kinds, "
+        "kartograf.catalog.model, kartograf.catalog.shared, "
+        "kartograf.catalog.spec, kartograf.sheet_info\n"
+        "from kartograf.catalog.commands import declared\n"
+        "declared()\n"
+        "kartograf.catalog.get_catalog(params=True)\n"
+        "kartograf.catalog.hints.example_for('elevation download', 'cutout')\n"
+        "kartograf.sheet_info.describe_sheet('N-34-130-D-d-2-4')\n"
+        "loaded = sorted(\n"
+        "    name for name in sys.modules\n"
+        "    if name.split('.')[0] == 'mcp' or name.startswith('kartograf.cli')\n"
+        ")\n"
+        "print(loaded)\n"
+        "sys.exit(1 if loaded else 0)\n"
+    )
+
+    done = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert done.returncode == 0, done.stdout + done.stderr
