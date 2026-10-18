@@ -91,8 +91,9 @@ pytest 9.0.2, ruff 0.15.0, mypy 2.3.0), `ruff check`, `ruff format --check` i
    `create_server` rzuca `ImportError` z napisem, a `main()` go drukuje (stare
    sformulowanie "import rzuca ImportError" i "main() drukuje" bylo sprzeczne).
 6. **Skala przepisywania testow (O2, kod wyjscia 2 dla bledow wejscia):**
-   23 asercje `main([...]) == 1` i 156 asercji `rc/code/exit_code == 1` w
-   `tests/` (`test_cli.py` ok. 127); T5 klasyfikuje kazda: blad wejscia -> 2,
+   23 asercje `main([...]) == 1` i ok. 156 asercji `rc`/`code`/`exit_code`/`result == 1`
+   w `tests/` (liczone wyrazeniem regularnym: czesc nie dotyczy kodow wyjscia;
+   `test_cli.py` ok. 127); T5 klasyfikuje kazda czerwona: blad wejscia -> 2,
    awaria zrodla i `ok: false` -> 1.
 7. **Schemat jako pole dataclass:** `UpdatePlan.schema` i
    `AvailabilityReport.schema` sa dzis polami (`kartograf/download/plan.py:80`,
@@ -1356,8 +1357,9 @@ i Step 10.
   wejscia (brak `--output`, `--product`, zly plik planu, zle godlo, brak sciezki katalogu planu)
   zamien na `raise ValidationError(..., option=...)` (tekst bez zmian), awarie zrodla i zapisu planu
   na wyjatki bibliotek (`OSError` -> `io_error`).
-  - Klasyfikacja testow (23 asercje `main([...]) == 1` i 156 asercji `rc/code/exit_code == 1`; `test_cli.py` ok. 127,
-    `test_project_cli.py` 9, `test_cli_help.py` 4, `test_cli_translation.py` 6): uruchom pelny `pytest`,
+  - Klasyfikacja testow (23 asercje `main([...]) == 1` i ok. 156 asercji `rc`/`code`/`exit_code`/`result == 1`,
+    liczone regexem; `test_cli.py` ok. 127, `test_project_cli.py` 9, `test_cli_help.py` 4,
+    `test_cli_translation.py` 6): uruchom pelny `pytest`,
     dla kazdej czerwonej asercji zdecyduj: blad wejscia (`ValidationError`, `ParseError`,
     `UsageError`) -> oczekiwany kod 2; awaria zrodla, `ok: false`, blad zapisu -> zostaje 1. Liczby
     (ile zmieniono na 2, ile zostalo 1) do opisu commita.
