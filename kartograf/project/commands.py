@@ -605,7 +605,9 @@ def task_command(name: str) -> TaskCommand:
     command = COMMANDS.get(name)
     if command is None:
         raise ValidationError(
-            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
+            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}",
+            option="command",
+            allowed=tuple(COMMANDS),
         )
     return command
 

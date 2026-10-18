@@ -8,12 +8,35 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
+from types import MappingProxyType
 
 import pytest
 
 import kartograf
 from kartograf.core.bbox import BBox
+from kartograf.download.collections import CollectionReport
+from kartograf.download.data import (
+    DOWNLOAD_KEYS,
+    DataReport,
+    UnitFailure,
+    UnitFile,
+)
+from kartograf.download.fetch import VersionedFile
+from kartograf.hydrology.hsg import HsgReport
+from kartograf.landcover.manager import LandCoverReport, SoilReport
+from kartograf.notices import Notice
+from kartograf.project.model import (
+    FileCheck,
+    PinnedFile,
+    Project,
+    ProjectCheck,
+    ProjectReport,
+    ProjectTask,
+    TaskResult,
+)
+from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
+from tests.test_validate_request import _shapefile
 
 
 @dataclass(frozen=True)
@@ -389,3 +412,416 @@ def test_serializer_imports_nothing_from_the_package():
     )
 
     assert json.loads(done.stdout) == ["kartograf", "kartograf.serialization"]
+
+
+# --- the five command reports share kartograf-download/1 (spec 5.4.1) ----------
+
+_DOWNLOAD_REPORTS = {
+    "DataReport": lambda: DataReport(
+        files=(), failed=(), stale=(), superseded=(), notices=(), ok=True
+    ),
+    "CollectionReport": lambda: CollectionReport(
+        files=(), failed=(), stale=(), notices=(), ok=True
+    ),
+    "LandCoverReport": lambda: LandCoverReport(
+        files=(), raw=(), failed=(), stale=(), notices=(), ok=True
+    ),
+    "SoilReport": lambda: SoilReport(
+        files=(), failed=(), stale=(), notices=(), ok=True
+    ),
+    "HsgReport": lambda: HsgReport(
+        files=(), inputs=(), failed=(), stale=(), notices=(), ok=True
+    ),
+}
+
+
+@pytest.mark.parametrize("name", list(_DOWNLOAD_REPORTS))
+def test_download_family_has_one_key_set(name):
+    """A consumer reads the five reports with one schema: the same keys in the
+    same order, a key the class has no field for is ``[]`` (``summary``: null)."""
+    report = _DOWNLOAD_REPORTS[name]()
+
+    data = report.to_dict()
+
+    assert list(data) == ["schema", *DOWNLOAD_KEYS]
+    assert data["schema"] == "kartograf-download/1" == report.schema
+    assert data["summary"] is None and data["ok"] is True
+    for key in ("files", "raw", "inputs", "failed", "stale", "superseded", "notices"):
+        assert data[key] == []
+
+
+def test_download_family_is_registered_under_one_schema():
+    registered = {cls.__name__ for cls in SCHEMAS["kartograf-download/1"]}
+    assert registered == set(_DOWNLOAD_REPORTS)
+
+
+_SPEC_SHA256 = "10be475e6b5c43d54b8dc832ab9816367e3dad4c1bd59bbba25c2b296a2824c6"
+
+
+def _spec_file() -> VersionedFile:
+    store = Path("/data/kartograf/nmt/pl_1992_1m_evrf2007")
+    version = "2022-05-10_83233_10be475e"
+    name = "N-34-130-D-d-2-4.asc"
+    return VersionedFile(
+        path=store / "N-34/130/D/d/2/4" / name,
+        status="new",
+        label="2022-05-10_83233",
+        sha256=_SPEC_SHA256,
+        version_path=store / "versions/N-34/130/D/d/2/4" / version / name,
+    )
+
+
+def test_download_report_equals_the_spec_example():
+    """The example of spec 5.4.1: absolute paths, a ``Notice`` as an object."""
+    sheet_list = Notice(
+        "info",
+        "sheet_list",
+        "Znaleziono arkuszy wg godla: 1 dla N-34-130-D-d-2-4 (NMT 1 m)\n"
+        "  Arkusze: N-34-130-D-d-2-4",
+    )
+    report = DataReport(
+        files=(UnitFile("N-34-130-D-d-2-4", "PL", _spec_file()),),
+        failed=(),
+        stale=(),
+        superseded=(),
+        notices=(sheet_list,),
+        ok=True,
+    )
+
+    assert report.to_dict() == {
+        "schema": "kartograf-download/1",
+        "files": [
+            {
+                "unit": "N-34-130-D-d-2-4",
+                "country": "PL",
+                "file": {
+                    "path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/"
+                    "N-34-130-D-d-2-4.asc",
+                    "status": "new",
+                    "label": "2022-05-10_83233",
+                    "sha256": _SPEC_SHA256,
+                    "version_path": "/data/kartograf/nmt/pl_1992_1m_evrf2007/versions/"
+                    "N-34/130/D/d/2/4/2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc",
+                    "newer": None,
+                    "unverified": None,
+                    "same_as": None,
+                },
+            }
+        ],
+        "raw": [],
+        "inputs": [],
+        "failed": [],
+        "stale": [],
+        "superseded": [],
+        "summary": None,
+        "notices": [{"level": "info", "code": "sheet_list", "text": sheet_list.text}],
+        "ok": True,
+    }
+
+
+def _tile(sheet: str, **fields) -> LazTile:
+    values: dict[str, object] = {
+        "sheet": sheet,
+        "url": f"https://example.test/{sheet}.laz",
+        "year": 2022,
+        "density": 12,
+        "crs": "PL-1992",
+        "min_x": 500000.0,
+        "min_y": 250000.0,
+        "max_x": 501000.0,
+        "max_y": 251000.0,
+        "footprint": ((500000.0, 250000.0), (501000.0, 250000.0), (501000.0, 251000.0)),
+        "date": "2022-05-10",
+        "full_sheet": True,
+    }
+    return LazTile(**{**values, **fields})  # type: ignore[arg-type]
+
+
+def test_superseded_encodes_tile_and_covered_by():
+    older = _tile("N-34-139-C-a-3-1", year=2018, full_sheet=None)
+    newer = _tile("N-34-139-C-a-3-1-n")
+    # a covering tile the WFS gave no geometry for: its extent is NaN in memory
+    # and ``null`` in the document (NaN is no JSON value)
+    unknown = _tile(
+        "N-34-139-C-a-3-2", min_x=float("nan"), min_y=float("nan"),
+        max_x=float("nan"), max_y=float("nan"), footprint=None, date=None,
+    )  # fmt: skip
+    report = DataReport(
+        files=(),
+        failed=(),
+        stale=(),
+        superseded=(
+            SupersededLazTile(older, (newer, unknown)),
+            SupersededLazTile(_tile("N-34-139-C-b-1-1"), ()),
+        ),
+        notices=(),
+        ok=True,
+    )
+
+    data = report.to_dict()
+
+    first, second = data["superseded"]
+    assert list(first) == ["tile", "covered_by"]
+    assert list(first["tile"]) == [
+        "sheet",
+        "url",
+        "year",
+        "density",
+        "crs",
+        "min_x",
+        "min_y",
+        "max_x",
+        "max_y",
+        "footprint",
+        "date",
+        "full_sheet",
+    ]
+    assert first["tile"]["year"] == 2018 and first["tile"]["full_sheet"] is None
+    assert first["tile"]["footprint"] == [
+        [500000.0, 250000.0],
+        [501000.0, 250000.0],
+        [501000.0, 251000.0],
+    ]
+    covering, no_geometry = first["covered_by"]
+    assert covering["sheet"] == "N-34-139-C-a-3-1-n"
+    assert [no_geometry[k] for k in ("min_x", "min_y", "max_x", "max_y")] == [None] * 4
+    assert no_geometry["footprint"] is None and no_geometry["date"] is None
+    assert second["covered_by"] == []
+    json.dumps(data, allow_nan=False)  # the whole document is plain JSON
+
+
+def test_unit_failure_and_unit_file_keys():
+    failure = UnitFailure("1465", "PL", "HTTP 500", "download")
+    unit_file = UnitFile("1465", "PL", _spec_file())
+
+    assert encode(failure) == {
+        "unit": "1465",
+        "country": "PL",
+        "error": "HTTP 500",
+        "kind": "download",
+    }
+    assert list(encode(unit_file)) == ["unit", "country", "file"]
+    assert list(encode(unit_file.file)) == [  # type: ignore[call-overload]
+        "path",
+        "status",
+        "label",
+        "sha256",
+        "version_path",
+        "newer",
+        "unverified",
+        "same_as",
+    ]
+
+
+# --- the project documents (spec 5.4.8) ----------------------------------------
+
+_PIN_PATH = "nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc"
+_PIN_VERSION = (
+    "nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/"
+    "2022-05-10_83233_10be475e/N-34-130-D-d-2-4.asc"
+)
+_STORE = Path("/srv/dane/kartograf")
+_NMT_OPTIONS = {
+    "product": "nmt",
+    "sheet": "N-34-130-D-d-2-4",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
+
+
+def _pin(role="output") -> PinnedFile:
+    return PinnedFile(
+        role,
+        "N-34-130-D-d-2-4",
+        _PIN_PATH,
+        _PIN_VERSION,
+        "2022-05-10_83233",
+        _SPEC_SHA256,
+        41029733,
+    )
+
+
+def _project() -> Project:
+    task = ProjectTask(
+        name="teren",
+        command="elevation download",
+        options=MappingProxyType(_NMT_OPTIONS),
+        pinned_at="2026-10-20T08:15:02+00:00",
+        kartograf_version="0.8.0",
+        geometry_sha256=None,
+        files=(_pin(),),
+    )
+    return Project(Path("/home/ola/projekty/wisla"), _STORE, (task,))
+
+
+_PROJECT_DOCUMENT = {
+    "directory": "/home/ola/projekty/wisla",
+    "output_dir": "/srv/dane/kartograf",
+    "tasks": [
+        {
+            "name": "teren",
+            "command": "elevation download",
+            "options": _NMT_OPTIONS,
+            "pinned_at": "2026-10-20T08:15:02+00:00",
+            "kartograf_version": "0.8.0",
+            "geometry_sha256": None,
+            "files": [
+                {
+                    "role": "output",
+                    "unit": "N-34-130-D-d-2-4",
+                    "path": f"/srv/dane/kartograf/{_PIN_PATH}",
+                    "version": f"/srv/dane/kartograf/{_PIN_VERSION}",
+                    "label": "2022-05-10_83233",
+                    "sha256": _SPEC_SHA256,
+                    "size_bytes": 41029733,
+                }
+            ],
+        }
+    ],
+}
+
+
+def test_project_state_document():
+    """The pins of the manifest are relative to the store; the document has
+    absolute paths (``output_dir`` + the manifest value)."""
+    project = _project()
+
+    data = project.to_dict()
+
+    assert data == {"schema": "kartograf-project-state/1", **_PROJECT_DOCUMENT}
+    assert list(data) == ["schema", "directory", "output_dir", "tasks"]
+    assert list(data["tasks"][0]) == [  # type: ignore[index]
+        "name",
+        "command",
+        "options",
+        "pinned_at",
+        "kartograf_version",
+        "geometry_sha256",
+        "files",
+    ]
+    assert project.schema == "kartograf-project-state/1"
+
+
+def test_project_report_nests_project_without_schema():
+    replaced = _pin("raw")
+    report = ProjectReport(
+        project=_project(),
+        tasks=(
+            TaskResult("teren", "updated", (_pin(),), (replaced,), ()),
+            TaskResult("gleby", "failed", (), (), ("brak danych: N-34-130-D",)),
+        ),
+        notices=(Notice("info", "newer_available", "teren: nowsza wersja"),),
+        ok=False,
+    )
+
+    data = report.to_dict()
+
+    assert list(data) == ["schema", "project", "tasks", "notices", "ok"]
+    assert data["schema"] == "kartograf-project-report/1"
+    assert data["project"] == _PROJECT_DOCUMENT  # no ``schema`` key when nested
+    updated, failed = data["tasks"]  # type: ignore[misc]
+    assert list(updated) == ["name", "outcome", "pinned", "unpinned", "errors"]
+    # the pins of a result are encoded with the store of the project, too
+    assert updated["pinned"][0]["path"] == f"/srv/dane/kartograf/{_PIN_PATH}"
+    assert updated["unpinned"][0]["role"] == "raw"
+    assert updated["unpinned"][0]["version"] == f"/srv/dane/kartograf/{_PIN_VERSION}"
+    assert failed["errors"] == ["brak danych: N-34-130-D"]
+    assert data["notices"] == [
+        {"level": "info", "code": "newer_available", "text": "teren: nowsza wersja"}
+    ]
+    assert data["ok"] is False
+
+
+def test_project_check_document():
+    """The example of spec 5.4.8: ``FileCheck.path`` is absolute."""
+    check = ProjectCheck(
+        project=_project(),
+        files=(
+            FileCheck(
+                "teren",
+                "N-34-130-D-d-2-4",
+                _PIN_PATH,
+                "ok",
+                "2022-05-10_83233",
+                None,
+                None,
+            ),
+        ),
+        not_downloaded=(),
+        notices=(),
+        ok=True,
+    )
+
+    assert check.to_dict() == {
+        "schema": "kartograf-project-check/1",
+        "project": _PROJECT_DOCUMENT,
+        "files": [
+            {
+                "task": "teren",
+                "unit": "N-34-130-D-d-2-4",
+                "path": f"/srv/dane/kartograf/{_PIN_PATH}",
+                "status": "ok",
+                "pinned_label": "2022-05-10_83233",
+                "available_label": None,
+                "detail": None,
+            }
+        ],
+        "not_downloaded": [],
+        "notices": [],
+        "ok": True,
+    }
+
+
+def test_pinned_file_outside_a_project_document_is_an_error():
+    """A pin holds a path relative to the store: without the store of a
+    project document it has no absolute form, and the encoder does not guess."""
+    file_check = FileCheck("teren", "u", _PIN_PATH, "ok", None, None, None)
+
+    with pytest.raises(ValueError, match="project document"):
+        encode(_pin())
+    with pytest.raises(ValueError, match="project document"):
+        encode(file_check)
+    # the same values inside a document: the store is known
+    assert encode(_pin(), EncodeContext(store=_STORE))["path"].endswith(  # type: ignore[call-overload]
+        _PIN_PATH
+    )
+
+
+def test_task_options_keep_manifest_form(tmp_path, monkeypatch):
+    """``tasks[].options`` is the manifest form: a path relative to the
+    project directory stays relative (not made absolute like the other paths of
+    the document), ``bbox`` is four numbers + ``bbox_crs``."""
+    work = tmp_path / "praca"
+    work.mkdir()
+    monkeypatch.chdir(work)
+    _shapefile(work)
+    kartograf.init_project("../projekt", output_dir="../magazyn")
+    kartograf.add_project_task(
+        "../projekt",
+        name="teren",
+        command="elevation download",
+        options={
+            "product": "nmt",
+            "bbox": BBox(566000, 243000, 569000, 246000, "EPSG:2180"),
+            "country": "pl",
+            "sheet_system": "1992",
+            "resolution": "1m",
+            "vertical_crs": "EVRF2007",
+        },
+    )
+    project = kartograf.add_project_task(
+        "../projekt",
+        name="gleby",
+        command="soil hsg",
+        options={"geometry": Path("area.shp"), "depth": "0-5cm"},
+    )
+
+    data = project.to_dict()
+
+    terrain, soils = data["tasks"]  # type: ignore[misc]
+    assert terrain["options"]["bbox"] == [566000, 243000, 569000, 246000]
+    assert terrain["options"]["bbox_crs"] == "EPSG:2180"
+    assert soils["options"] == {"geometry": "../praca/area.shp", "depth": "0-5cm"}
+    assert data["directory"] == (tmp_path / "projekt").as_posix()
+    assert data["output_dir"] == (tmp_path / "magazyn").as_posix()
+    assert soils["files"] == [] and soils["pinned_at"] is None

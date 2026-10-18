@@ -45,7 +45,6 @@ again and overwrites the entries.
 """
 
 import functools
-import json
 import math
 import shlex
 from collections.abc import Callable, Sequence
@@ -79,17 +78,18 @@ from kartograf.download.area import (
     geometry_envelope,
     resolve_geometry_layer,
 )
-from kartograf.download.arguments import require_bool
+from kartograf.download.arguments import option_error, option_name, require_bool
 from kartograf.download.campaigns import in_year_range, year_range_label
 from kartograf.download.countries import country_bbox, split_bbox_by_country
 from kartograf.download.options import (
     canonical_bbox,
     canonical_country,
+    parse_sheet,
     product_choices,
     validate_area_choice,
     year_bounds,
 )
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, ParseError, ValidationError
 from kartograf.notices import (
     AUTO_NARROWED_TO_PL,
     CHECK_FAILED,
@@ -118,6 +118,7 @@ from kartograf.providers.pl.skorowidz_wfs import (
     time_position,
     type_year,
 )
+from kartograf.serialization import Document
 from kartograf.sources.descriptor import TransportKind
 from kartograf.sources.registry import (
     CZ_SYSTEM_CRS,
@@ -242,8 +243,9 @@ class AvailabilityCombination:
 
 
 @dataclass(frozen=True)
-class AvailabilityReport:
-    """Outcome of ``check_availability`` (schema ``kartograf-availability/1``).
+class AvailabilityReport(Document):
+    """Outcome of ``check_availability`` (``kartograf-availability/1``; the CLI
+    ``--json`` prints exactly ``to_json()``).
 
     ``areas`` and ``combinations`` per country (``areas`` order); PL
     combinations newest year first, then sheet system, resolution, height
@@ -252,17 +254,15 @@ class AvailabilityReport:
     not be checked (``country="auto"``: its ``CHECK_FAILED`` notice).
     """
 
+    SCHEMA = AVAILABILITY_SCHEMA
+    JSON_KEYS = ("request", "checked_at", "areas", "combinations", "notices", "ok")
+
     request: dict
     checked_at: str
     areas: tuple[AvailabilityArea, ...]
     combinations: tuple[AvailabilityCombination, ...]
     notices: tuple[Notice, ...]
     ok: bool
-    schema: str = AVAILABILITY_SCHEMA
-
-    def to_json(self) -> str:
-        """The report as JSON (the CLI ``--json`` prints exactly this text)."""
-        return json.dumps(asdict(self), ensure_ascii=False, indent=2) + "\n"
 
 
 @dataclass(frozen=True)
@@ -493,7 +493,7 @@ def _check_pl(
         for service, types in typed
     ]
     if not any(chosen for _, chosen in selected):
-        raise ValidationError(_no_layer_text(request, typed))
+        raise _no_layer_error(request, typed)
     answers = [
         (service, _index_entries(service, chosen, envelope, sessions, metadata))
         for service, chosen in selected
@@ -559,18 +559,28 @@ def _validated(
     validate_area_choice(sheet, bbox, geometry, layer)
     choices = product_choices(AVAILABILITY_PRODUCTS)
     if product is None:
-        raise ValidationError(f"--product wymagane: {choices}")
+        raise ValidationError(
+            f"--product wymagane: {choices}",
+            option="product",
+            allowed=AVAILABILITY_PRODUCTS,
+        )
     if product not in AVAILABILITY_PRODUCTS:
         raise ValidationError(
-            f"--product {product!r}: nieznana wartosc - dostepne: {choices}"
+            f"--product {product!r}: nieznana wartosc - dostepne: {choices}",
+            option="product",
+            allowed=AVAILABILITY_PRODUCTS,
         )
     if sheet is None and country is None:
         raise ValidationError(
-            f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
+            f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}",
+            option="country",
+            allowed=tuple(AVAILABILITY_COUNTRIES),
         )
     if country is not None and country not in AVAILABILITY_COUNTRIES:
         raise ValidationError(
-            f"--country {country!r}: raport dostepnosci obejmuje: {COUNTRY_CHOICES}"
+            f"--country {country!r}: raport dostepnosci obejmuje: {COUNTRY_CHOICES}",
+            option="country",
+            allowed=tuple(AVAILABILITY_COUNTRIES),
         )
     parsed = cz_sheet = None
     if sheet is not None:
@@ -579,28 +589,34 @@ def _validated(
         if country not in (None, "auto") and country != system.country.lower():
             raise ValidationError(
                 f"Godlo '{sheet}' nalezy do systemu {system.name} (kraj "
-                f"{system.country}), a podano --country {country}"
+                f"{system.country}), a podano --country {country}",
+                options=("sheet", "country"),
             )
         country = system.country.lower()
         if country == "pl":
-            parsed = SheetParser(sheet)
+            parsed = parse_sheet(sheet)
         else:
             cz_sheet = sheet.strip()
             if cz_sheet_system(cz_sheet) == "tm33":
-                ParserTM33(cz_sheet)  # ParseError: odd kilometres
+                try:
+                    ParserTM33(cz_sheet)  # ParseError: odd kilometres
+                except ParseError as e:
+                    e.option = "sheet"
+                    raise
     assert country is not None
     lo, hi = year_bounds(year, min_year, max_year)
+    year_args = (
+        ("year", "--year", year),
+        ("min_year", "--min-year", min_year),
+        ("max_year", "--max-year", max_year),
+    )
     years = tuple(
-        f"{flag} {value}"
-        for flag, value in (
-            ("--year", year),
-            ("--min-year", min_year),
-            ("--max-year", max_year),
-        )
-        if value is not None
+        f"{flag} {value}" for _, flag, value in year_args if value is not None
     )
     if country == "cz" and years:
-        raise ValidationError(_CZ_NO_YEARS)
+        raise option_error(
+            _CZ_NO_YEARS, *(name for name, _, value in year_args if value is not None)
+        )
     return _Request(
         product=product,
         country=country,
@@ -665,11 +681,14 @@ def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Part
     countries = tuple(code for code in ("PL", "CZ") if code in split)
     if not countries:
         raise ValidationError(
-            "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)"
+            "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
+            option="bbox" if request.geometry is None else "geometry",
         )
     if request.years and "CZ" in countries:
         if "PL" not in countries:
-            raise ValidationError(_CZ_NO_YEARS)
+            raise option_error(
+                _CZ_NO_YEARS, *(option_name(text.split()[0]) for text in request.years)
+            )
         sink.emit(
             "info",
             AUTO_NARROWED_TO_PL,
@@ -705,7 +724,9 @@ def _area_polygons(
     assert request.geometry is not None
     boxes = read_feature_bboxes(request.geometry, layer_name, "EPSG:2180")
     if not boxes:
-        raise ValidationError(f"{request.geometry.name}: warstwa bez obiektow")
+        raise ValidationError(
+            f"{request.geometry.name}: warstwa bez obiektow", option="geometry"
+        )
     if laz:
         b = get_overall_bbox(request.geometry, layer=layer_name, target_crs="EPSG:2180")
         return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y)]
@@ -758,7 +779,9 @@ def _feature_types(
     return types
 
 
-def _no_layer_text(request: _Request, typed: list[tuple[_Service, list[str]]]) -> str:
+def _no_layer_error(
+    request: _Request, typed: list[tuple[_Service, list[str]]]
+) -> ValidationError:
     """Year bounds outside every layer of the product's services."""
     name = request.product.upper()
     available = "; ".join(
@@ -766,15 +789,13 @@ def _no_layer_text(request: _Request, typed: list[tuple[_Service, list[str]]]) -
         + ", ".join(str(y) for y in sorted({type_year(t) for t in types}, reverse=True))
         for service, types in typed
     )
-    flags = (
-        f"--year {request.min_year}"
-        if request.min_year is not None and request.min_year == request.max_year
-        else "--min-year/--max-year"
-    )
-    return (
+    one_year = request.min_year is not None and request.min_year == request.max_year
+    flags = f"--year {request.min_year}" if one_year else "--min-year/--max-year"
+    return option_error(
         f"{flags}: skorowidz GUGiK {name} nie ma rocznika "
         f"{year_range_label(request.min_year, request.max_year)} - dostepne "
-        f"roczniki: {available}"
+        f"roczniki: {available}",
+        *(("year",) if one_year else ("min_year", "max_year")),
     )
 
 

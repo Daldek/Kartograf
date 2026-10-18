@@ -91,7 +91,9 @@ def _concurrent(name: str) -> str:
     )
 
 
-def _select(project: Project, names: Sequence[str] | None) -> tuple[ProjectTask, ...]:
+def _select(
+    project: Project, names: Sequence[str] | None, option: str = "tasks"
+) -> tuple[ProjectTask, ...]:
     """Tasks by name in the given order (``None`` = all, in manifest order).
 
     Raises
@@ -112,7 +114,7 @@ def _select(project: Project, names: Sequence[str] | None) -> tuple[ProjectTask,
                 f"brak ({project_command(project.directory, 'add', 'NAZWA ...')})"
             )
             raise ValidationError(
-                f"nieznane zadanie {name!r}; zadania projektu: {known}"
+                f"nieznane zadanie {name!r}; zadania projektu: {known}", option=option
             )
         if task not in selected:
             selected.append(task)
@@ -189,7 +191,7 @@ def add_project_task(
     _require_store(project)
     if not isinstance(name, str) or TASK_NAME.fullmatch(name) is None:
         raise ValidationError(
-            f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})"
+            f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})", option="name"
         )
     taken = (
         f"zadanie {name} juz istnieje; usun je "
@@ -197,7 +199,7 @@ def add_project_task(
         "inna nazwe"
     )
     if name in state:
-        raise ValidationError(taken)
+        raise ValidationError(taken, option="name")
     entry = task_command(command)
     data = options_to_json(entry, options)
     if "geometry" in data:
@@ -208,7 +210,7 @@ def add_project_task(
     )
     task = ProjectTask(name, command, data, None, None, None, ())
     if commit_tasks(project.directory, {name: (None, task_to_json(task))}):
-        raise ValidationError(taken)
+        raise ValidationError(taken, option="name")
     return open_project(project.directory)
 
 
@@ -224,7 +226,7 @@ def remove_project_task(project_dir: str | Path, *, name: str) -> Project:
     """
     project, state = read_manifest(project_dir)
     _require_store(project)
-    _select(project, (name,))
+    _select(project, (name,), option="name")
     if commit_tasks(project.directory, {name: (state[name], None)}):
         raise ValidationError(_concurrent(name))
     return open_project(project.directory)
@@ -392,12 +394,16 @@ def download_project(
     if update not in _UPDATE_MODES:
         raise ValidationError(
             f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', "
-            "'force'); sprawdzenie bez pobierania: check_project"
+            "'force'); sprawdzenie bez pobierania: check_project",
+            option="update",
+            allowed=("upgrade", "force"),
         )
     if workers is not None:
         require_int(workers, "--workers")
         if workers < 1:
-            raise ValidationError(f"--workers musi byc >= 1, podano {workers}")
+            raise ValidationError(
+                f"--workers musi byc >= 1, podano {workers}", option="workers"
+            )
     project, state = read_manifest(project_dir)
     _require_store(project)
     selected = _select(project, tasks)

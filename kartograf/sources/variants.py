@@ -361,21 +361,26 @@ def variant_error(
     resolution: str | None,
     vertical_crs: str | None,
     format: str | None = None,
-) -> str | None:
-    """Error text for a variant choice (``None`` = the choice fits a variant).
+) -> ValidationError | None:
+    """The error of a variant choice (``None`` = the choice fits a variant).
 
     ``format=None`` = the product format (PL: ``ASC`` grids); a source-file
     format must be named (``--format``). ``resolution=None`` is valid when
     the format and height system leave one label (or the format has no
     resolution, TIN/TTN). ``vertical_crs=None`` checks only what does not
-    depend on the height system (format, resolution in any system) - the
-    caller reports a missing ``--vertical-crs`` itself. Texts name the CLI
-    flags (the CLI passes them 1:1, STANDARDS 11).
+    depend on the height system - the caller reports a missing
+    ``--vertical-crs`` itself. Texts name the CLI flags (the CLI passes them
+    1:1, STANDARDS 11); ``option`` and ``allowed`` of the error are the
+    argument and the registry values the text lists (STANDARDS 11.1).
     """
     name = _PRODUCT_NAMES.get(product, product.upper())
     found = variants(product=product, country=country)
     if not found:
-        return f"--product {product} nie ma wariantow w {country}"
+        return ValidationError(
+            f"--product {product} nie ma wariantow w {country}",
+            option="product",
+            allowed=tuple(dict.fromkeys(v.product for v in variants(country=country))),
+        )
     if format is None:
         chosen = _primary(found)
         shown = name
@@ -383,9 +388,12 @@ def variant_error(
         chosen = tuple(v for v in found if v.format == format)
         shown = f"{name} {format}"
         if not chosen:
-            return (
+            tokens = format_tokens(found)
+            return ValidationError(
                 f"--format {format}: niedostepny dla {name} {country} - dostepne: "
-                f"{', '.join(format_tokens(found))}"
+                f"{', '.join(tokens)}",
+                option="format",
+                allowed=tuple(tokens),
             )
     if vertical_crs is None:
         in_crs = chosen
@@ -394,26 +402,32 @@ def variant_error(
         if not in_crs:
             named = _named_systems(chosen)
             if not named:
-                return (
+                return ValidationError(
                     f"{shown} ({country}): {UNKNOWN_VERTICAL} (zrodlo go nie "
-                    "deklaruje) - pomin --vertical-crs"
+                    "deklaruje) - pomin --vertical-crs",
+                    option="vertical_crs",
                 )
-            return (
+            return ValidationError(
                 f"{shown} ({country}) jest dostepny tylko w {', '.join(named)} - "
-                f"podano --vertical-crs {vertical_crs}"
+                f"podano --vertical-crs {vertical_crs}",
+                option="vertical_crs",
+                allowed=tuple(named),
             )
     labels = _sorted_labels(in_crs)
     if resolution is None:
         if len({v.label for v in in_crs}) <= 1:
             return None
-        return (
+        return ValidationError(
             f"--resolution wymagane dla {shown} {country}: "
-            f"{labels_by_vertical_crs(chosen)}"
+            f"{labels_by_vertical_crs(chosen)}",
+            option="resolution",
+            allowed=tuple(labels),
         )
     if not labels:
-        return (
+        return ValidationError(
             f"--resolution nie dotyczy {shown} (skorowidz nie podaje "
-            "rozdzielczosci) - pomin --resolution"
+            "rozdzielczosci) - pomin --resolution",
+            option="resolution",
         )
     if resolution in labels:
         return None
@@ -422,18 +436,22 @@ def variant_error(
         of_label = tuple(v for v in chosen if v.label == resolution)
         named = _named_systems(of_label)
         if not named:
-            return (
+            return ValidationError(
                 f"{shown} {resolution} ({country}): {UNKNOWN_VERTICAL} (zrodlo go "
-                "nie deklaruje) - pomin --vertical-crs"
+                "nie deklaruje) - pomin --vertical-crs",
+                option="vertical_crs",
             )
-        return (
+        return ValidationError(
             f"{shown} {resolution} ({country}) jest dostepny tylko w "
             f"{', '.join(named)} - podano --vertical-crs {vertical_crs}; "
-            f"dostepne w {vertical_crs}: {', '.join(labels)}"
+            f"dostepne w {vertical_crs}: {', '.join(labels)}",
+            options=("resolution", "vertical_crs"),
         )
-    return (
+    return ValidationError(
         f"{country} nie ma rozdzielczosci {resolution} dla {shown} - dostepne: "
-        f"{labels_by_vertical_crs(chosen)}"
+        f"{labels_by_vertical_crs(chosen)}",
+        option="resolution",
+        allowed=tuple(everywhere),
     )
 
 
@@ -445,7 +463,7 @@ def find_variant(
     vertical_crs: str | None,
     format: str | None = None,
 ) -> ProductVariant:
-    """The one variant of a choice; ``ValidationError`` with ``variant_error``.
+    """The one variant of a choice; the ``variant_error`` of the choice is raised.
 
     ``resolution=None`` selects the only variant of the format and height
     system (``GRD``: 5m, ``TIN``: none); ``format=None`` = product format;
@@ -459,7 +477,7 @@ def find_variant(
         format=format,
     )
     if error is not None:
-        raise ValidationError(error)
+        raise error
     found = variants(product=product, country=country)
     candidates = tuple(
         v
@@ -472,7 +490,9 @@ def find_variant(
         name = _PRODUCT_NAMES.get(product, product.upper())
         raise ValidationError(
             f"--vertical-crs wymagane dla {name} {country}: "
-            f"{', '.join(_named_systems(found))}"
+            f"{', '.join(_named_systems(found))}",
+            option="vertical_crs",
+            allowed=tuple(_named_systems(found)),
         )
     return candidates[0]
 
@@ -501,7 +521,8 @@ def cz_sheet_system(sheet: str) -> str:
     if system is None:
         raise ValidationError(
             f"Godlo '{sheet}' nie nalezy do zadnego systemu CZ (arkusz SM5, "
-            "np. CTES96, albo kafel TM33, np. 302_5550)"
+            "np. CTES96, albo kafel TM33, np. 302_5550)",
+            option="sheet",
         )
     return system
 
@@ -525,12 +546,20 @@ def cz_resolution_text(product: str) -> str:
     return _cz_labels(variants(product=product, country="CZ"))
 
 
+def cz_models() -> tuple[str, ...]:
+    """The models of LAZ CZ (``--model``), registry order."""
+    return tuple(
+        dict.fromkeys(
+            v.model
+            for v in variants(product="laz", country="CZ")
+            if v.model is not None
+        )
+    )
+
+
 def cz_model_text() -> str:
     """``dmr5g (teren, DMR 5G), ...``: the models of LAZ CZ (``--model``)."""
-    models = dict.fromkeys(
-        v.model for v in variants(product="laz", country="CZ") if v.model is not None
-    )
-    return ", ".join(f"{model} ({CZ_MODELS[model][1]})" for model in models)
+    return ", ".join(f"{model} ({CZ_MODELS[model][1]})" for model in cz_models())
 
 
 def cz_variant_error(
@@ -539,40 +568,61 @@ def cz_variant_error(
     resolution: str | None,
     vertical_crs: str | None,
     system: str | None = None,
-) -> str | None:
-    """Error text of a CZ raster choice (``None`` = the choice has a variant).
+) -> ValidationError | None:
+    """The error of a CZ raster choice (``None`` = the choice has a variant).
 
     ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` for an area
     (a cutout of the ImageServer: any label of the product). An SM5 sheet
     may omit ``resolution`` when one label of the product has SM5 files.
     ``vertical_crs=None`` checks only what does not depend on the height
     system (the caller reports a missing ``--vertical-crs`` itself).
+    ``option`` and ``allowed`` of the error: see ``variant_error``.
     """
     name = _PRODUCT_NAMES.get(product, product.upper())
     found = tuple(
         v for v in variants(product=product, country="CZ") if v.product != "laz"
     )
     if not found:
-        return f"--product {product} nie ma wariantow rastrowych w CZ"
+        return ValidationError(
+            f"--product {product} nie ma wariantow rastrowych w CZ",
+            option="product",
+            allowed=tuple(
+                dict.fromkeys(
+                    v.product for v in variants(country="CZ") if v.product != "laz"
+                )
+            ),
+        )
     on_sm5 = tuple(v for v in found if "sm5" in v.systems)
     sm5_labels = {v.label for v in on_sm5 if v.label is not None}
     if resolution is None:
         if system != "sm5" or len(sm5_labels) != 1:
-            return f"--resolution wymagane dla {name} CZ: {_cz_labels(found)}"
+            return ValidationError(
+                f"--resolution wymagane dla {name} CZ: {_cz_labels(found)}",
+                option="resolution",
+                allowed=tuple(_sorted_labels(found)),
+            )
     elif resolution not in {v.label for v in found}:
-        return (
+        return ValidationError(
             f"CZ nie ma rozdzielczosci {resolution} dla {name} - dostepne: "
-            f"{_cz_labels(found)}"
+            f"{_cz_labels(found)}",
+            option="resolution",
+            allowed=tuple(_sorted_labels(found)),
         )
     elif system == "sm5" and resolution not in sm5_labels:
-        return (
+        return ValidationError(
             f"Arkusze SM5 {name} CZ sa tylko w {_cz_labels(on_sm5)} - pomin "
             f"--resolution albo podaj {', '.join(_sorted_labels(on_sm5))}; "
             f"{resolution}: kafel "
-            "TM33 (np. 302_5550) albo --bbox z --cutout"
+            "TM33 (np. 302_5550) albo --bbox z --cutout",
+            option="resolution",
+            allowed=tuple(_sorted_labels(on_sm5)),
         )
     if vertical_crs is not None and vertical_crs not in {v.vertical_crs for v in found}:
-        return f"{vertical_crs} nie jest dostepny dla CZ - dostepne: {CZ_VERTICAL_TEXT}"
+        return ValidationError(
+            f"{vertical_crs} nie jest dostepny dla CZ - dostepne: {CZ_VERTICAL_TEXT}",
+            option="vertical_crs",
+            allowed=tuple(_named_systems(found)),
+        )
     return None
 
 
@@ -590,7 +640,7 @@ def find_cz_variant(
     Raises
     ------
     ValidationError
-        ``cz_variant_error`` of the choice.
+        The ``cz_variant_error`` of the choice.
     """
     error = cz_variant_error(
         product=product,
@@ -599,7 +649,7 @@ def find_cz_variant(
         system=system,
     )
     if error is not None:
-        raise ValidationError(error)
+        raise error
     return next(
         v
         for v in variants(
@@ -611,37 +661,49 @@ def find_cz_variant(
 
 def cz_laz_error(
     *, model: str | None, vertical_crs: str | None, system: str | None = None
-) -> str | None:
-    """Error text of a LAZ CZ choice (``None`` = the choice has a variant).
+) -> ValidationError | None:
+    """The error of a LAZ CZ choice (``None`` = the choice has a variant).
 
     ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` for an area
     (the height system decides the files). The files exist only in the pairs
     S-JTSK + Bpv and ETRS89 + EVRF2007; a point cloud is never transformed.
-    ``vertical_crs=None`` checks only the model.
+    ``vertical_crs=None`` checks only the model. ``option`` and ``allowed`` of
+    the error: see ``variant_error``.
     """
     if model is None:
-        return f"--model wymagane dla --product laz w CZ: {cz_model_text()}"
+        return ValidationError(
+            f"--model wymagane dla --product laz w CZ: {cz_model_text()}",
+            option="model",
+            allowed=cz_models(),
+        )
     rows = variants(product="laz", country="CZ", model=model)
     if not rows:
-        return f"--model {model!r}: nieznana wartosc - dostepne: {cz_model_text()}"
+        return ValidationError(
+            f"--model {model!r}: nieznana wartosc - dostepne: {cz_model_text()}",
+            option="model",
+            allowed=cz_models(),
+        )
     if vertical_crs is None:
         return None
     chosen = tuple(v for v in rows if v.vertical_crs == vertical_crs)
     if not chosen:
-        return (
+        return ValidationError(
             f"{vertical_crs} nie jest dostepny dla LAZ CZ - dostepne: "
-            f"{CZ_LAZ_VERTICAL_TEXT}"
+            f"{CZ_LAZ_VERTICAL_TEXT}",
+            option="vertical_crs",
+            allowed=tuple(_named_systems(rows)),
         )
     if system is not None and not any(system in v.systems for v in chosen):
         native = _named_systems(tuple(v for v in rows if system in v.systems))
         other = chosen[0].systems[0]
         shown, _example = _CZ_SYSTEM_TEXT[system]
         alternative, example = _CZ_SYSTEM_TEXT[other]
-        return (
+        return ValidationError(
             f"LAZ CZ - {shown} sa tylko w {', '.join(native)}, podano "
             f"--vertical-crs {vertical_crs} (chmury punktow bez transformacji); "
             f"{vertical_crs}: {alternative}, np. {example}, albo obszar "
-            "(--bbox/--geometry)"
+            "(--bbox/--geometry)",
+            options=("vertical_crs", "sheet"),
         )
     return None
 
@@ -654,11 +716,11 @@ def find_cz_laz_variant(
     Raises
     ------
     ValidationError
-        ``cz_laz_error`` of the choice.
+        The ``cz_laz_error`` of the choice.
     """
     error = cz_laz_error(model=model, vertical_crs=vertical_crs, system=system)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     return variants(
         product="laz", country="CZ", model=model, vertical_crs=vertical_crs
     )[0]

@@ -146,13 +146,10 @@ class CuzkLazProvider(BaseProvider):
         sheet = sheet.strip()
         system = cz_sheet_system(sheet)
         if system != self._system:
-            raise ValidationError(
-                cz_laz_error(
-                    model=self._model,
-                    vertical_crs=self._vertical_crs,
-                    system=system,
-                )
-                or f"Godlo '{sheet}' spoza systemu {self._system}"
+            raise cz_laz_error(
+                model=self._model, vertical_crs=self._vertical_crs, system=system
+            ) or ValidationError(
+                f"Godlo '{sheet}' spoza systemu {self._system}", option="sheet"
             )
         return self._endpoint.format(sheet=sheet)
 

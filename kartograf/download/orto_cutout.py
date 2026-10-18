@@ -116,27 +116,32 @@ _GRID_TOL_PX = 1e-6
 
 def orto_cutout_error(
     *, key: str, coverage: object, resolution: object, horizontal_crs: object
-) -> str | None:
-    """Error text of the cutout choice of image source ``key`` (``None`` =
+) -> ValidationError | None:
+    """The error of the cutout choice of image source ``key`` (``None`` =
     valid).
 
     Texts name the CLI flags (``download_data`` passes them 1:1, STANDARDS
-    11); the coverages and pixels are listed from the registry.
+    11); the coverages and pixels are listed from the registry; ``option`` and
+    ``allowed`` name the argument and its values.
     """
     error = cutout_choice_error(key, coverage, resolution)
     if error is not None:
         return error
     product = get_source(key).product
     if horizontal_crs is None:
-        return (
+        return ValidationError(
             f"--horizontal-crs wymagane z --cutout --product {product}: tylko "
-            f"{ORTO_CUTOUT_CRS} (bez przeprobkowania obrazu)"
+            f"{ORTO_CUTOUT_CRS} (bez przeprobkowania obrazu)",
+            option="horizontal_crs",
+            allowed=(ORTO_CUTOUT_CRS,),
         )
     if horizontal_crs != ORTO_CUTOUT_CRS:
-        return (
+        return ValidationError(
             f"--horizontal-crs {horizontal_crs} nie dziala z --product {product}: "
             f"wycinek ortofotomapy tylko {ORTO_CUTOUT_CRS} (bez przeprobkowania "
-            "obrazu)"
+            "obrazu)",
+            option="horizontal_crs",
+            allowed=(ORTO_CUTOUT_CRS,),
         )
     return None
 
@@ -236,7 +241,7 @@ def _prepare(
         horizontal_crs=horizontal_crs,
     )
     if error is not None:
-        raise ValidationError(error)
+        raise error
     step = parse_resolution(resolution)
     assert step is not None  # a label of the channel (orto_cutout_error)
     pixel = float(step)

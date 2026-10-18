@@ -15,15 +15,20 @@ from types import SimpleNamespace
 from typing import cast
 
 from kartograf.core.bbox import BBox, validate_bbox
-from kartograf.core.sheet_parser import series_scale
-from kartograf.download.arguments import require_bool, require_int
+from kartograf.core.sheet_parser import SheetParser, series_scale
+from kartograf.download.arguments import (
+    option_error,
+    option_name,
+    require_bool,
+    require_int,
+)
 from kartograf.download.campaigns import validate_year_bounds
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import PRODUCT as CONTOURS
 from kartograf.download.cz_contours import contours_formats
 from kartograf.download.cz_orto import cz_orto_sheet
 from kartograf.download.orto_cutout import ORTO_CUTOUT_PL_ONLY, orto_cutout_error
-from kartograf.exceptions import ValidationError
+from kartograf.exceptions import ParseError, ValidationError
 from kartograf.providers.pl.gugik_orto import (
     ORTO_KEY,
     coverage_choices,
@@ -88,11 +93,17 @@ def require_product(product: str | None, products: Sequence[str]) -> None:
         product of another group.
     """
     if product is None:
-        raise ValidationError(f"--product wymagane: {product_choices(products)}")
+        raise ValidationError(
+            f"--product wymagane: {product_choices(products)}",
+            option="product",
+            allowed=tuple(products),
+        )
     if product not in products:
         raise ValidationError(
             f"--product {product!r}: nieznana wartosc - dostepne: "
-            f"{product_choices(products)}"
+            f"{product_choices(products)}",
+            option="product",
+            allowed=tuple(products),
         )
 
 
@@ -171,15 +182,28 @@ def resolution_text(country: str = "PL") -> str:
     return ", ".join(parts)
 
 
+def vertical_crs_values(
+    country: str = "PL", product: str | None = None
+) -> tuple[str, ...]:
+    """Height systems of the variants of a country (``--vertical-crs`` values),
+    sorted; a variant without one takes no flag."""
+    return tuple(
+        sorted(
+            {
+                v.vertical_crs
+                for v in variants(country=country, product=product)
+                if v.vertical_crs
+            }
+        )
+    )
+
+
 def vertical_crs_text(country: str = "PL") -> str:
     """Height systems of the country's variants (``--vertical-crs``; a
     variant without one takes no flag)."""
-    names = sorted(
-        {v.vertical_crs for v in variants(country=country) if v.vertical_crs}
-    )
     return ", ".join(
         f"{name} ({_VERTICAL_CRS_TEXT[name]})" if name in _VERTICAL_CRS_TEXT else name
-        for name in names
+        for name in vertical_crs_values(country)
     )
 
 
@@ -277,7 +301,8 @@ def check_per_country(raw: PerCountry, flag: str) -> None:
         raise ValidationError(
             f"{flag}: nieprawidlowa wartosc {shown!r} - podaj jedna wartosc dla "
             f"kazdego kraju zadania albo pary kraj=wartosc rozdzielone "
-            f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=..."
+            f"przecinkami (kraje: pl, cz), np. {flag} pl=...,cz=...",
+            option=option_name(flag),
         )
 
 
@@ -327,24 +352,47 @@ _SHEET_CHOICES = (
 )
 
 
-def _file_variant_error(task: SimpleNamespace, variant: ProductVariant) -> str | None:
-    """Error text of the choices a voivodeship file variant does not take."""
+def _with_suffix(error: ValidationError, suffix: str) -> ValidationError:
+    """``error`` with ``suffix`` (the per-country hint) after its text."""
+    if not suffix:
+        return error
+    return ValidationError(
+        f"{error}{suffix}",
+        option=error.option,
+        options=error.options,
+        allowed=error.allowed,
+        hint=error.hint,
+    )
+
+
+def _file_variant_error(
+    task: SimpleNamespace, variant: ProductVariant
+) -> ValidationError | None:
+    """The error of the choices a voivodeship file variant does not take."""
     label = variant.label or ""
     shown = f"{variant.product.upper()} {label.removesuffix('m')} m"
     reason = f"{shown} to pliki wojewodztw z ATOM - bez arkuszy, lotow i wycinka"
     for flag, name in _SHEET_CHOICES:
         value = getattr(task, name)
         if value is not None and value is not False:
-            return f"{flag} nie dotyczy --resolution {label}: {reason}"
+            return option_error(
+                f"{flag} nie dotyczy --resolution {label}: {reason}", name, "resolution"
+            )
     if task.country == "cz":
-        return f"--country cz nie dotyczy --resolution {label} (tylko PL): {reason}"
+        return option_error(
+            f"--country cz nie dotyczy --resolution {label} (tylko PL): {reason}",
+            "country",
+            "resolution",
+        )
     if (
         country_value(task.vertical_crs, "PL") is not None
         and variant.vertical_crs is None
     ):
-        return (
+        return option_error(
             f"--vertical-crs nie dotyczy --resolution {label}: {UNKNOWN_VERTICAL} - "
-            f"GUGiK nie deklaruje ukladu wysokosci {shown}; pomin --vertical-crs"
+            f"GUGiK nie deklaruje ukladu wysokosci {shown}; pomin --vertical-crs",
+            "vertical_crs",
+            "resolution",
         )
     return None
 
@@ -355,15 +403,16 @@ def pl_option_error(
     code_system: str | None = None,
     code_scale: str | None = None,
     countries: tuple[str, ...] = ("PL",),
-) -> str | None:
-    """Error text for the PL data choices of the request (``None`` = valid).
+) -> ValidationError | None:
+    """The error of the PL data choices of the request (``None`` = valid).
 
     ``code_system``/``code_scale`` describe a sheet request (sheet system and
     scale of the code); ``None`` = area request (bbox/geometry). NMT/NMPT
     choices are checked against the variant registry
     (``kartograf.sources.variants``): format, resolution, height system. A
     voivodeship file variant (``pl_file_variant``) was checked by
-    ``validate_request`` already.
+    ``validate_request`` already. ``option``, ``options`` and ``allowed`` of
+    the error name the arguments and the values the text lists.
     """
     if pl_file_variant(task) is not None:
         return None
@@ -376,23 +425,28 @@ def pl_option_error(
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
     source_file = fmt is not None and fmt != "ASC"
     if product == "laz" and resolution is not None:
-        return (
+        return option_error(
             "--resolution nie dotyczy LAZ - chmura punktow nie ma siatki; pomin "
-            "--resolution"
+            "--resolution",
+            "resolution",
         )
 
     if product in _SHEET_PRODUCTS:
         if cutout:
             if source_file:
-                return (
+                return option_error(
                     f"--cutout dziala tylko z siatka ASC 1m (wycinek z WCS GUGiK); "
-                    f"--format {fmt} to pliki zrodlowe arkuszy - pomin --cutout"
+                    f"--format {fmt} to pliki zrodlowe arkuszy - pomin --cutout",
+                    "cutout",
+                    "format",
                 )
             if resolution not in (None, "1m"):
-                return (
+                return option_error(
                     f"wycinki PL (--cutout) sa tylko 1 m (WCS GUGiK); arkusze "
                     f"{resolution}: pomin --cutout (arkusze bez --cutout); "
-                    "wycinek: --resolution 1m albo pomin --resolution"
+                    "wycinek: --resolution 1m albo pomin --resolution",
+                    "cutout",
+                    "resolution",
                 )
         else:
             error = variant_error(
@@ -403,30 +457,36 @@ def pl_option_error(
                 format=fmt,
             )
             if error is not None:
-                return f"{error}{res_hint}"
+                return _with_suffix(error, res_hint)
     elif fmt is not None:
-        return (
+        return option_error(
             f"--format dotyczy tylko --product nmt i nmpt (PL) oraz {CONTOURS} "
-            f"(CZ), podano --product {product} - pomin --format"
+            f"(CZ), podano --product {product} - pomin --format",
+            "format",
         )
 
     index = _image_index(product)
     if index is not None:
         if vertical_crs is not None:
             noun = "ortofotomapa" if product == "orto" else "obraz"
-            return (
+            return option_error(
                 f"--vertical-crs nie dotyczy --product {product} "
-                f"({noun} nie ma ukladu pionowego)"
+                f"({noun} nie ma ukladu pionowego)",
+                "vertical_crs",
             )
     elif vertical_crs is None:
-        return (
+        return ValidationError(
             f"--vertical-crs wymagane dla --product {product} (PL): "
-            f"{vertical_crs_text()}{vcrs_hint}"
+            f"{vertical_crs_text()}{vcrs_hint}",
+            option="vertical_crs",
+            allowed=vertical_crs_values(),
         )
-    elif vertical_crs not in {v.vertical_crs for v in variants(country="PL")}:
-        return (
+    elif vertical_crs not in vertical_crs_values():
+        return ValidationError(
             f"{vertical_crs} nie jest ukladem wysokosci PL - dostepne: "
-            f"{vertical_crs_text()}{vcrs_hint}"
+            f"{vertical_crs_text()}{vcrs_hint}",
+            option="vertical_crs",
+            allowed=vertical_crs_values(),
         )
     elif product in _SHEET_PRODUCTS:
         error = variant_error(
@@ -437,22 +497,24 @@ def pl_option_error(
             format=fmt,
         )
         if error is not None:
-            return f"{error}{vcrs_hint}"
+            return _with_suffix(error, vcrs_hint)
 
     if product == "laz":  # per-tile system from WFS, no sheet scale
-        flags = [
-            flag
-            for flag, value in (
-                ("--sheet-system", task.sheet_system),
-                ("--scale", task.scale),
+        given = [
+            (flag, name)
+            for flag, name, value in (
+                ("--sheet-system", "sheet_system", task.sheet_system),
+                ("--scale", "scale", task.scale),
             )
             if value is not None
         ]
-        if flags:
-            verb = "nie dotycza" if len(flags) > 1 else "nie dotyczy"
-            return (
-                f"{' i '.join(flags)} {verb} LAZ PL - uklad kazdego kafla pochodzi "
-                f"z WFS GUGiK; pomin {' i '.join(flags)}"
+        if given:
+            shown = " i ".join(flag for flag, _ in given)
+            verb = "nie dotycza" if len(given) > 1 else "nie dotyczy"
+            return option_error(
+                f"{shown} {verb} LAZ PL - uklad kazdego kafla pochodzi "
+                f"z WFS GUGiK; pomin {shown}",
+                *(name for _, name in given),
             )
         return None
     sheet_system = task.sheet_system
@@ -460,16 +522,20 @@ def pl_option_error(
     systems = index.systems if index is not None else _SHEET_SYSTEMS
     if cutout:
         if sheet_system not in (None, "1992"):
-            return (
+            return option_error(
                 "--cutout nie dziala z --sheet-system 2000 - bbox wielostrefowy "
                 "dalby arkusze w roznych CRS (2176-2179); wycinek: --sheet-system "
-                "1992 albo pomin --sheet-system"
+                "1992 albo pomin --sheet-system",
+                "cutout",
+                "sheet_system",
             )
         return None
     if source_file and scale is not None:
-        return (
+        return option_error(
             f"--scale nie dotyczy --format {fmt}: arkusze archiwum (rozne skale) "
-            "wynikaja ze skorowidza GUGiK - pomin --scale"
+            "wynikaja ze skorowidza GUGiK - pomin --scale",
+            "scale",
+            "format",
         )
     only = ", ".join(f"PL-{system}" for system in systems)
     if code_system is None:
@@ -482,27 +548,35 @@ def pl_option_error(
                     if product in cutout_products()
                     else ""
                 )
-                return (
+                return ValidationError(
                     f"--sheet-system wymagane dla --bbox/--geometry w PL: "
-                    f"{SHEET_SYSTEM_CHOICES}{cutout_hint}"
+                    f"{SHEET_SYSTEM_CHOICES}{cutout_hint}",
+                    option="sheet_system",
+                    allowed=tuple(systems),
                 )
         elif sheet_system not in systems:
-            return (
+            return ValidationError(
                 f"--sheet-system {sheet_system} nie dotyczy --product {product}: "
-                f"GUGiK publikuje arkusze tylko {only} - pomin --sheet-system"
+                f"GUGiK publikuje arkusze tylko {only} - pomin --sheet-system",
+                option="sheet_system",
+                allowed=tuple(systems),
             )
         else:
             effective = sheet_system
     elif code_system not in systems:
-        return (
+        return option_error(
             f"--product {product}: GUGiK publikuje arkusze tylko {only} - godlo "
-            f"{task.sheet} to PL-{code_system}"
+            f"{task.sheet} to PL-{code_system}",
+            "product",
+            "sheet",
         )
     elif sheet_system is not None and sheet_system != code_system:
-        return (
+        return option_error(
             f"--sheet-system {sheet_system} nie zgadza sie z godlem {task.sheet} "
             f"(PL-{code_system}): uklad arkuszy wynika z godla - pomin "
-            "--sheet-system"
+            "--sheet-system",
+            "sheet_system",
+            "sheet",
         )
     else:
         effective = code_system
@@ -512,16 +586,25 @@ def pl_option_error(
         if scale is not None:
             parts = index.sheet_parts if index is not None else 7
             label = series_scale(parts)
-            return (
+            return option_error(
                 "--scale nie dotyczy PL-1992: GUGiK publikuje arkusze PL-1992 "
                 f"tylko w {label} (godlo {parts}-czlonowe), a grubsze godlo rozwija "
-                f"sie do {label} samo - pomin --scale"
+                f"sie do {label} samo - pomin --scale",
+                "scale",
             )
         return None
     if scale is None and (code_system is None or code_scale == "1:10000"):
-        return f"--scale wymagane dla arkuszy PL-2000: {SCALE_2000_CHOICES}"
+        return ValidationError(
+            f"--scale wymagane dla arkuszy PL-2000: {SCALE_2000_CHOICES}",
+            option="scale",
+            allowed=SCALES_2000,
+        )
     if scale is not None and scale not in SCALES_2000:
-        return f"Nieznana skala PL-2000 {scale} - dostepne: {SCALE_2000_CHOICES}"
+        return ValidationError(
+            f"Nieznana skala PL-2000 {scale} - dostepne: {SCALE_2000_CHOICES}",
+            option="scale",
+            allowed=SCALES_2000,
+        )
     return None
 
 
@@ -530,8 +613,8 @@ def cz_option_error(
     *,
     system: str | None = None,
     countries: tuple[str, ...] = ("CZ",),
-) -> str | None:
-    """Error text for the CZ data choices (``None`` = valid), from the variant
+) -> ValidationError | None:
+    """The error of the CZ data choices (``None`` = valid), from the variant
     registry (``cz_variant_error``).
 
     ``system``: ``"sm5"``/``"tm33"`` of a sheet code, ``None`` = an area (a
@@ -542,35 +625,49 @@ def cz_option_error(
     res_hint = _per_country_hint(task.resolution, "--resolution", countries)
     vcrs_hint = _per_country_hint(task.vertical_crs, "--vertical-crs", countries)
     if _format_of(task) is not None:
-        return (
+        return option_error(
             f"--format dotyczy w CZ tylko --product {CONTOURS} (warstwice); "
             f"{task.product.upper()} CZ to pliki CUZK bez wyboru formatu - pomin "
-            "--format"
+            "--format",
+            "format",
         )
     if task.product == "laz":
         if task.resolution is not None:
-            return "--resolution nie dotyczy LAZ CZ - pomin --resolution"
+            return option_error(
+                "--resolution nie dotyczy LAZ CZ - pomin --resolution", "resolution"
+            )
         if task.min_density is not None:
-            return "--min-density dotyczy tylko LAZ PL - pomin --min-density"
+            return option_error(
+                "--min-density dotyczy tylko LAZ PL - pomin --min-density",
+                "min_density",
+            )
         if task.sheet_system is not None and "PL" not in countries:
-            return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+            return option_error(
+                "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)",
+                "sheet_system",
+            )
         error = cz_laz_error(model=task.model, vertical_crs=vertical_crs, system=system)
         if error is not None:
-            return f"{error}{vcrs_hint}"
+            return _with_suffix(error, vcrs_hint)
         if vertical_crs is None:
-            return (
-                f"--vertical-crs wymagane dla LAZ CZ: {CZ_LAZ_VERTICAL_TEXT}{vcrs_hint}"
+            return ValidationError(
+                f"--vertical-crs wymagane dla LAZ CZ: "
+                f"{CZ_LAZ_VERTICAL_TEXT}{vcrs_hint}",
+                option="vertical_crs",
+                allowed=vertical_crs_values("CZ", "laz"),
             )
         return None
     error = cz_variant_error(
         product=task.product, resolution=resolution, vertical_crs=None, system=system
     )
     if error is not None:
-        return f"{error}{res_hint}"
+        return _with_suffix(error, res_hint)
     if vertical_crs is None:
-        return (
+        return ValidationError(
             f"--vertical-crs wymagane dla {task.product.upper()} CZ: "
-            f"{CZ_VERTICAL_TEXT}{vcrs_hint}"
+            f"{CZ_VERTICAL_TEXT}{vcrs_hint}",
+            option="vertical_crs",
+            allowed=vertical_crs_values("CZ", task.product),
         )
     error = cz_variant_error(
         product=task.product,
@@ -579,14 +676,17 @@ def cz_option_error(
         system=system,
     )
     if error is not None:
-        return f"{error}{vcrs_hint}"
+        return _with_suffix(error, vcrs_hint)
     if "PL" not in countries and task.sheet_system is not None:
-        return "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)"
+        return option_error(
+            "--sheet-system dotyczy tylko PL (godla CZ wykrywane wzorcem)",
+            "sheet_system",
+        )
     return None
 
 
-def _contours_error(task: SimpleNamespace) -> str | None:
-    """Error text of a CZ contours request (``None`` = valid): vector SM5
+def _contours_error(task: SimpleNamespace) -> ValidationError | None:
+    """The error of a CZ contours request (``None`` = valid): vector SM5
     sheets take ``--format`` (required, values of the registry) and the
     height system of their files (one value: may be omitted); no grid,
     flight, cutout or view choice."""
@@ -601,33 +701,41 @@ def _contours_error(task: SimpleNamespace) -> str | None:
     ):
         value = getattr(task, name)
         if value is not None and value is not False:
-            return f"{flag} nie dotyczy --product {CONTOURS}: {reason}"
+            return option_error(
+                f"{flag} nie dotyczy --product {CONTOURS}: {reason}", name
+            )
     formats = contours_formats()
     fmt = _format_of(task)
     if fmt is None:
-        return f"--format wymagane dla --product {CONTOURS}: {', '.join(formats)}"
-    if fmt not in formats:
-        return (
-            f"--format {fmt!r}: nieznana wartosc dla --product {CONTOURS} - "
-            f"dostepne: {', '.join(formats)}"
+        return ValidationError(
+            f"--format wymagane dla --product {CONTOURS}: {', '.join(formats)}",
+            option="format",
+            allowed=formats,
         )
-    heights = sorted(
-        {v.vertical_crs for v in variants(product=CONTOURS) if v.vertical_crs}
-    )
+    if fmt not in formats:
+        return ValidationError(
+            f"--format {fmt!r}: nieznana wartosc dla --product {CONTOURS} - "
+            f"dostepne: {', '.join(formats)}",
+            option="format",
+            allowed=formats,
+        )
+    heights = vertical_crs_values("CZ", CONTOURS)
     vertical_crs = country_value(task.vertical_crs, "CZ")
     if vertical_crs is not None and vertical_crs not in heights:
-        return (
+        return ValidationError(
             f"--vertical-crs {vertical_crs} nie dotyczy --product {CONTOURS}: "
             f"warstwice ZABAGED maja wysokosci {', '.join(heights)} (mozna pominac "
-            "--vertical-crs)"
+            "--vertical-crs)",
+            option="vertical_crs",
+            allowed=heights,
         )
     return None
 
 
 def cz_orto_option_error(
     task: SimpleNamespace, *, countries: tuple[str, ...] = ("CZ",)
-) -> str | None:
-    """Error text for the CZ orthophoto choices (``None`` = valid; ADR-042 D13).
+) -> ValidationError | None:
+    """The error of the CZ orthophoto choices (``None`` = valid; ADR-042 D13).
 
     CUZK publishes only the current release of an SM5 sheet (archival
     orthophotos are paid - out of scope) as a JPEG with world files: no
@@ -639,7 +747,7 @@ def cz_orto_option_error(
         try:
             cz_orto_sheet(task.sheet)
         except ValidationError as e:
-            return str(e)
+            return e
     if "PL" not in countries:
         flag = next(
             (
@@ -656,30 +764,35 @@ def cz_orto_option_error(
             None,
         )
         if flag is not None:
-            return (
+            return option_error(
                 f"{flag} dotyczy tylko PL - CUZK publikuje tylko aktualny rocznik "
                 "arkusza ortofoto CZ (archiwalne ortofoto CUZK sa platne, poza "
-                "zakresem)"
+                "zakresem)",
+                option_name(flag),
             )
         if task.sheet_system is not None:
-            return (
+            return option_error(
                 "--sheet-system dotyczy tylko PL - ortofoto CZ to arkusze SM5 "
-                "(godlo rozpoznawane wzorcem, arkusze obszaru z indeksu SM5)"
+                "(godlo rozpoznawane wzorcem, arkusze obszaru z indeksu SM5)",
+                "sheet_system",
             )
         if task.scale is not None:
-            return (
+            return option_error(
                 "--scale dotyczy tylko PL - ortofoto CZ to arkusze SM5 w jednej "
-                "skali (1:5000)"
+                "skali (1:5000)",
+                "scale",
             )
     if country_value(task.vertical_crs, "CZ") is not None:
-        return (
+        return option_error(
             "--vertical-crs nie dotyczy --product orto "
-            "(ortofotomapa nie ma ukladu pionowego)"
+            "(ortofotomapa nie ma ukladu pionowego)",
+            "vertical_crs",
         )
     if _format_of(task) is not None:
-        return (
+        return option_error(
             "--format nie dotyczy ortofoto CZ (pliki CUZK: JPEG i JGW bez "
-            "konwersji) - pomin --format"
+            "konwersji) - pomin --format",
+            "format",
         )
     return None
 
@@ -695,14 +808,18 @@ def require_cz_cutout(task: SimpleNamespace, countries: tuple[str, ...]) -> None
     ):
         return
     if "PL" in countries:
-        raise ValidationError(
+        raise option_error(
             "obszar siega CZ, a CUZK daje dla obszaru tylko jeden wycinek - "
             "dodaj --cutout --horizontal-crs <uklad> (czesc PL tez bedzie "
-            "wycinkiem z WCS GUGiK) albo uzyj --country pl (tylko arkusze PL)"
+            "wycinkiem z WCS GUGiK) albo uzyj --country pl (tylko arkusze PL)",
+            "cutout",
+            "horizontal_crs",
         )
-    raise ValidationError(
+    raise option_error(
         "obszar CZ (CUZK) jest pobierany tylko jako jeden wycinek - dodaj "
-        "--cutout --horizontal-crs <uklad> (np. EPSG:5514, uklad natywny CUZK)"
+        "--cutout --horizontal-crs <uklad> (np. EPSG:5514, uklad natywny CUZK)",
+        "cutout",
+        "horizontal_crs",
     )
 
 
@@ -790,7 +907,9 @@ def validate_request_bbox(bbox: BBox) -> BBox:
     if bbox.crs not in BBOX_CRS_CHOICES:
         raise ValidationError(
             f"Nieprawidlowy bbox: nieobslugiwany uklad {bbox.crs!r} - dostepne: "
-            f"{', '.join(BBOX_CRS_CHOICES)}"
+            f"{', '.join(BBOX_CRS_CHOICES)}",
+            option="bbox",
+            allowed=BBOX_CRS_CHOICES,
         )
     # CLI numbers are floats; library callers may use ints for the same bbox.
     normalized = BBox(
@@ -803,7 +922,9 @@ def validate_request_bbox(bbox: BBox) -> BBox:
     try:
         validate_bbox(normalized)
     except ValidationError as e:
-        raise ValidationError(f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}") from e
+        raise ValidationError(
+            f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}", option="bbox"
+        ) from e
     return bbox
 
 
@@ -819,13 +940,21 @@ def validate_area_choice(
     # the CLI parses --bbox before anything else: the same first error
     if bbox is not None:
         validate_request_bbox(bbox)
-    provided = sum(v is not None for v in (sheet, bbox, geometry))
-    if provided > 1:
+    given = tuple(
+        name
+        for name, value in (("sheet", sheet), ("bbox", bbox), ("geometry", geometry))
+        if value is not None
+    )
+    if len(given) > 1:
         raise ValidationError(
-            "Podaj dokladnie jeden wybor obszaru: --sheet, --bbox albo --geometry"
+            "Podaj dokladnie jeden wybor obszaru: --sheet, --bbox albo --geometry",
+            options=given,
         )
-    if provided == 0:
-        raise ValidationError("Podaj wybor obszaru: --sheet, --bbox albo --geometry")
+    if not given:
+        raise ValidationError(
+            "Podaj wybor obszaru: --sheet, --bbox albo --geometry",
+            options=("sheet", "bbox", "geometry"),
+        )
     check_layer(layer, geometry)
 
 
@@ -842,8 +971,24 @@ def check_layer(layer: object, geometry: object, *, landcover: bool = False) -> 
     if layer is not None and geometry is None:
         hint = "; warstwy danych BDOT10k i BDOO wybiera --layers" if landcover else ""
         raise ValidationError(
-            f"--layer dotyczy tylko --geometry (warstwa pliku GPKG z obszarem){hint}"
+            f"--layer dotyczy tylko --geometry (warstwa pliku GPKG z obszarem){hint}",
+            options=("layer", "geometry"),
         )
+
+
+def parse_sheet(sheet: str) -> SheetParser:
+    """``SheetParser`` of the ``sheet`` argument of a command-level function.
+
+    Raises
+    ------
+    ParseError
+        A malformed code; its ``option`` is ``"sheet"``.
+    """
+    try:
+        return SheetParser(sheet)
+    except ParseError as e:
+        e.option = "sheet"
+        raise
 
 
 def store_files(directories: Iterable[str]) -> str:
@@ -868,17 +1013,29 @@ def year_bounds(
     if year is not None and (min_year is not None or max_year is not None):
         raise ValidationError(
             "--year wyklucza sie z --min-year/--max-year "
-            "(--year Y to skrot --min-year Y --max-year Y)"
+            "(--year Y to skrot --min-year Y --max-year Y)",
+            options=(
+                "year",
+                *(
+                    name
+                    for name, value in (("min_year", min_year), ("max_year", max_year))
+                    if value is not None
+                ),
+            ),
         )
     if year is not None:
         min_year = max_year = year
     try:
         validate_year_bounds(min_year, max_year)
     except ValidationError as e:
+        # ``year`` stands for both bounds: its error is about ``year``
+        rename = {"min_year": "year"} if year is not None else {}
         raise ValidationError(
             str(e)
             .replace("min_year", "--year" if year is not None else "--min-year")
-            .replace("max_year", "--max-year")
+            .replace("max_year", "--max-year"),
+            option=rename.get(e.option, e.option) if e.option else None,
+            options=tuple(rename.get(name, name) for name in e.options or ()) or None,
         ) from None
     return min_year, max_year
 
@@ -907,27 +1064,41 @@ def validate_request(task: SimpleNamespace) -> None:
     if task.min_density is not None:
         require_int(task.min_density, "--min-density")
     if task.product is None:
-        raise ValidationError(f"--product wymagane: {PRODUCT_CHOICES}")
+        raise ValidationError(
+            f"--product wymagane: {PRODUCT_CHOICES}",
+            option="product",
+            allowed=_PRODUCTS,
+        )
     if task.product not in _PRODUCTS:
         raise ValidationError(
             f"--product {task.product!r}: nieznana wartosc - dostepne: "
-            f"{PRODUCT_CHOICES}"
+            f"{PRODUCT_CHOICES}",
+            option="product",
+            allowed=_PRODUCTS,
         )
     if task.output_dir is None:
-        raise ValidationError(output_required(product_directory(task.product)))
+        raise ValidationError(
+            output_required(product_directory(task.product)), option="output_dir"
+        )
     if task.sheet is None and task.country is None:
         raise ValidationError(
-            f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}"
+            f"--country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}",
+            option="country",
+            allowed=COUNTRIES,
         )
     if task.country is not None and task.country not in COUNTRIES:
         raise ValidationError(
             f"--country {task.country!r}: nieznana wartosc - dostepne: "
-            f"{COUNTRY_CHOICES}"
+            f"{COUNTRY_CHOICES}",
+            option="country",
+            allowed=COUNTRIES,
         )
     if task.sheet_system is not None and task.sheet_system not in _SHEET_SYSTEMS:
         raise ValidationError(
             f"--sheet-system {task.sheet_system!r}: nieznana wartosc - dostepne: "
-            f"{SHEET_SYSTEM_CHOICES}"
+            f"{SHEET_SYSTEM_CHOICES}",
+            option="sheet_system",
+            allowed=_SHEET_SYSTEMS,
         )
     cutout_key = image_cutout_key(task.product)
     image_cutout = task.cutout and cutout_key is not None
@@ -938,61 +1109,78 @@ def validate_request(task: SimpleNamespace) -> None:
     ):
         raise ValidationError(
             f"--horizontal-crs {task.horizontal_crs!r}: nieznana wartosc - "
-            f"dostepne: {', '.join(CUTOUT_CRS)}"
+            f"dostepne: {', '.join(CUTOUT_CRS)}",
+            option="horizontal_crs",
+            allowed=CUTOUT_CRS,
         )
     check_per_country(task.resolution, "--resolution")
     check_per_country(task.vertical_crs, "--vertical-crs")
     error = _contours_error(task)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     file_variant = pl_file_variant(task)
     if file_variant is not None:
         error = _file_variant_error(task, file_variant)
         if error is not None:
-            raise ValidationError(error)
+            raise error
     if task.model is not None and task.product != "laz":
-        raise ValidationError("--model dotyczy tylko --product laz w CZ")
+        raise option_error(
+            "--model dotyczy tylko --product laz w CZ", "model", "product"
+        )
     if task.model is not None and task.country == "pl":
-        raise ValidationError(
-            "--model dotyczy tylko --product laz w CZ - pomin --model dla PL"
+        raise option_error(
+            "--model dotyczy tylko --product laz w CZ - pomin --model dla PL",
+            "model",
+            "country",
         )
     task.min_year, task.max_year = year_bounds(task.year, task.min_year, task.max_year)
     if task.product != "laz" and task.min_density is not None:
-        raise ValidationError(
+        raise option_error(
             f"--min-density dziala tylko z --product laz (podano "
-            f"{task.product}); pomin --min-density"
+            f"{task.product}); pomin --min-density",
+            "min_density",
+            "product",
         )
     if task.product == "laz" and task.full_sheet:
-        raise ValidationError(
+        raise option_error(
             "--full-sheet dziala tylko z NMT/NMPT i obrazami (podano laz) - LAZ "
-            "nie ma sciezki standardowej ani dowiazania full_sheet/; pomin --full-sheet"
+            "nie ma sciezki standardowej ani dowiazania full_sheet/; "
+            "pomin --full-sheet",
+            "full_sheet",
+            "product",
         )
     index = _image_index(task.product)
     if task.full_sheet and index is not None and not index.full_sheet:
-        raise ValidationError(
+        raise option_error(
             f"--full-sheet nie dotyczy --product {task.product}: rekordy skorowidza "
             "GUGiK nie deklaruja pelnego arkusza (bez calyArkuszWypelnionyTrescia) "
-            "- pomin --full-sheet"
+            "- pomin --full-sheet",
+            "full_sheet",
+            "product",
         )
     error = _direction_error(task)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     if task.cutout:
         if task.sheet is not None:
-            raise ValidationError(
+            raise option_error(
                 "--cutout dziala tylko z --bbox/--geometry; --sheet wyznacza "
                 "zasieg i uklad produktu (arkusz PL 1:1 w ukladzie arkusza, "
-                "arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce EPSG:3045)"
+                "arkusz SM5 1:1 w EPSG:5514, kafel TM33 na siatce EPSG:3045)",
+                "cutout",
+                "sheet",
             )
         if task.product not in cutout_products():
-            raise ValidationError(
+            raise option_error(
                 f"--cutout dziala tylko z --product {_or_list(cutout_products())} "
-                f"(wycinek z WCS GUGiK); {task.product} - pobierz bez --cutout"
+                f"(wycinek z WCS GUGiK); {task.product} - pobierz bez --cutout",
+                "cutout",
+                "product",
             )
         if image_cutout:
             assert cutout_key is not None  # image_cutout
             if task.product == "orto" and task.country == "cz":
-                raise ValidationError(ORTO_CUTOUT_PL_ONLY)
+                raise option_error(ORTO_CUTOUT_PL_ONLY, "cutout", "country")
             error = orto_cutout_error(
                 key=cutout_key,
                 coverage=task.coverage,
@@ -1000,26 +1188,32 @@ def validate_request(task: SimpleNamespace) -> None:
                 horizontal_crs=task.horizontal_crs,
             )
             if error is not None:
-                raise ValidationError(error)
+                raise error
         elif task.horizontal_crs is None:
             raise ValidationError(
                 f"--horizontal-crs wymagane z --cutout (uklad wycinka): "
-                f"{', '.join(CUTOUT_CRS)}"
+                f"{', '.join(CUTOUT_CRS)}",
+                option="horizontal_crs",
+                allowed=CUTOUT_CRS,
             )
     elif task.horizontal_crs is not None:
-        raise ValidationError(
+        raise option_error(
             "--horizontal-crs dziala tylko z --cutout (uklad jednego wycinka); "
             "arkusze maja uklad z godla - dodaj --cutout albo pomin "
-            "--horizontal-crs"
+            "--horizontal-crs",
+            "horizontal_crs",
+            "cutout",
         )
     if task.coverage is not None and not image_cutout:
         if cutout_key is not None and len(wcs_cutout_channels(cutout_key)) == 1:
             error = cutout_choice_error(cutout_key, task.coverage, None)
             assert error is not None  # a coverage of a one-channel cutout
-            raise ValidationError(error)
-        raise ValidationError(
+            raise error
+        raise option_error(
             "--coverage dziala tylko z --cutout --product orto (wariant WCS "
-            f"wycinka ortofotomapy: {coverage_choices(ORTO_KEY)}) - pomin --coverage"
+            f"wycinka ortofotomapy: {coverage_choices(ORTO_KEY)}) - pomin --coverage",
+            "coverage",
+            "cutout",
         )
     if (
         image_source(task.product) is not None
@@ -1027,20 +1221,24 @@ def validate_request(task: SimpleNamespace) -> None:
         and task.resolution is not None
     ):
         if task.product == "orto":
-            raise ValidationError(
+            raise option_error(
                 "--resolution z --product orto dotyczy tylko wycinka (--cutout); "
                 "arkusze ortofotomapy maja piksel zrodla (PL: kampanii, CZ: arkusza "
-                "SM5 w pliku JGW) - pomin --resolution"
+                "SM5 w pliku JGW) - pomin --resolution",
+                "resolution",
+                "cutout",
             )
         where = "dotyczy tylko wycinka (--cutout)" if cutout_key else "nie dotyczy"
-        raise ValidationError(
+        raise option_error(
             f"--resolution z --product {task.product} {where}; arkusze maja "
-            "piksel zrodla (rekordu skorowidza GUGiK) - pomin --resolution"
+            "piksel zrodla (rekordu skorowidza GUGiK) - pomin --resolution",
+            "resolution",
+            "cutout",
         )
 
 
-def _direction_error(task: SimpleNamespace) -> str | None:
-    """Error text of ``direction`` (``None`` = valid); a valid choice is
+def _direction_error(task: SimpleNamespace) -> ValidationError | None:
+    """The error of ``direction`` (``None`` = valid); a valid choice is
     narrowed to the tuple of its codes in registry order (``None`` stays:
     every direction of the product)."""
     direction = task.direction
@@ -1049,9 +1247,11 @@ def _direction_error(task: SimpleNamespace) -> str | None:
     codes = image_directions(task.product)
     if not codes:
         products = [p for p in IMAGERY_PRODUCTS if image_directions(p)]
-        return (
+        return option_error(
             f"--direction dotyczy tylko --product {_or_list(products)} (kierunki "
-            "widoku orto ukosnej) - pomin --direction"
+            "widoku orto ukosnej) - pomin --direction",
+            "direction",
+            "product",
         )
     values = (direction,) if isinstance(direction, str) else direction
     if (
@@ -1059,28 +1259,37 @@ def _direction_error(task: SimpleNamespace) -> str | None:
         or not values
         or not all(isinstance(value, str) for value in values)
     ):
-        return (
+        return ValidationError(
             f"--direction {direction!r}: podaj kierunek albo liste kierunkow: "
-            f"{', '.join(codes)}"
+            f"{', '.join(codes)}",
+            option="direction",
+            allowed=codes,
         )
     for value in values:
         if value not in codes:
-            return (
+            return ValidationError(
                 f"--direction {value!r}: nieznana wartosc - dostepne: "
-                f"{', '.join(codes)} (polnoc, wschod, poludnie, zachod)"
+                f"{', '.join(codes)} (polnoc, wschod, poludnie, zachod)",
+                option="direction",
+                allowed=codes,
             )
     task.direction = tuple(code for code in codes if code in values)
     return None
 
 
-def campaign_opts_given(task: SimpleNamespace) -> bool:
-    """Any PL-only campaign/year choice of the request."""
-    return bool(
-        task.all_campaigns
-        or task.min_year is not None
-        or task.max_year is not None
-        or task.year is not None
-        or task.full_sheet
+def campaign_option_names(task: SimpleNamespace) -> tuple[str, ...]:
+    """The PL-only campaign/year choices of the request, by argument name
+    (``year`` was narrowed into both bounds: it counts once)."""
+    return tuple(
+        name
+        for name, given in (
+            ("all_campaigns", task.all_campaigns),
+            ("min_year", task.year is None and task.min_year is not None),
+            ("max_year", task.year is None and task.max_year is not None),
+            ("year", task.year is not None),
+            ("full_sheet", task.full_sheet),
+        )
+        if given
     )
 
 
@@ -1101,21 +1310,27 @@ def reject_campaign_opts_with_cutout(task: SimpleNamespace) -> None:
         None,
     )
     if flag is not None:
-        raise ValidationError(
+        raise option_error(
             f"{flag} nie dziala z --cutout - wycinek z WCS GUGiK ma "
             "kompozycje lotow serwera (bez wyboru roku); rok danych: pobierz "
-            "arkusze bez --cutout"
+            "arkusze bez --cutout",
+            option_name(flag),
+            "cutout",
         )
     if task.all_campaigns:
-        raise ValidationError(
+        raise option_error(
             "--all-campaigns nie dziala z --cutout - wycinek z WCS "
             "GUGiK ma jedna kompozycje lotow serwera; wszystkie kampanie: "
-            "pobierz arkusze bez --cutout"
+            "pobierz arkusze bez --cutout",
+            "all_campaigns",
+            "cutout",
         )
     if task.full_sheet:
-        raise ValidationError(
+        raise option_error(
             "--full-sheet nie dziala z --cutout - wycinek pochodzi "
-            "z WCS GUGiK, nie z arkuszy"
+            "z WCS GUGiK, nie z arkuszy",
+            "full_sheet",
+            "cutout",
         )
 
 
@@ -1136,7 +1351,7 @@ def resolve_pl_options(
     """
     error = pl_option_error(task, code_system=code_system, code_scale=code_scale)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     resolution = country_value(task.resolution, "PL")
     vertical_crs = country_value(task.vertical_crs, "PL")
     if task.product in _SHEET_PRODUCTS and resolution is None:
