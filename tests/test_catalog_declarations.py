@@ -703,7 +703,7 @@ def test_result_schemas_are_registered(command):
     from kartograf.catalog import get_catalog
     from kartograf.serialization import SCHEMAS
 
-    described = {info.schema: info for info in get_catalog().schemas}
+    described = {info.schema: info for info in get_catalog(tables=True).schemas}
     for schema in (command.result_schema, command.check_result_schema):
         if schema is None:
             continue
@@ -716,7 +716,9 @@ def test_every_described_schema_has_a_producer_but_the_error_document():
     """A document nobody returns is a dead type or a missing command."""
     from kartograf.catalog import get_catalog
 
-    unproduced = {info.schema for info in get_catalog().schemas if not info.produced_by}
+    unproduced = {
+        info.schema for info in get_catalog(tables=True).schemas if not info.produced_by
+    }
 
     assert unproduced == {"kartograf-error/1"}
 
