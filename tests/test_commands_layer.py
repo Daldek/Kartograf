@@ -104,8 +104,14 @@ def test_parse_command_bbox_always_comes_with_crs():
     assert degrees.options["bbox_crs"] == "EPSG:4326"
     assert negative.options["bbox"] == [-447000, -1114000, -446000, -1113000]
     assert negative.options["bbox_crs"] == "EPSG:5514"
-    # a crs without an area is not an option of the task
-    assert "bbox_crs" not in parse_command(f"{NMT} --bbox-crs EPSG:4326").options
+    # a crs without an area is a mistake, not an option of the task
+    with pytest.raises(ValidationError) as lone:
+        parse_command(f"{NMT} --sheet {G} --bbox-crs EPSG:4326")
+
+    assert not isinstance(lone.value, UsageError)
+    assert lone.value.option == "bbox_crs"
+    assert lone.value.options == ("bbox", "bbox_crs")
+    assert "--bbox-crs" in str(lone.value) and "--bbox" in str(lone.value)
 
 
 def test_parse_command_bbox_with_a_wrong_number_of_values_is_a_validation_error():
@@ -252,6 +258,80 @@ def test_format_command_rejects_options_that_do_not_belong():
 
     assert foreign.value.option == "teryt"
     assert twice.value.option == "workers"
+
+
+@pytest.mark.parametrize(
+    ("run", "option", "text"),
+    [
+        (
+            {"workers": "4"},
+            "workers",
+            "opcja workers: oczekiwano liczba calkowita, podano '4'",
+        ),
+        (
+            {"workers": True},
+            "workers",
+            "opcja workers: oczekiwano liczba calkowita, podano True",
+        ),
+        (
+            {"upgrade": "tak"},
+            "upgrade",
+            "opcja upgrade: oczekiwano true, podano 'tak'",
+        ),
+        (
+            {"output_dir": 5},
+            "output_dir",
+            "opcja output_dir: oczekiwano niepusta sciezka (napis), podano 5",
+        ),
+        (
+            {"plan": {"items": []}},
+            "plan",
+            "opcja plan: oczekiwano niepusta sciezka (napis), podano {'items': []}",
+        ),
+        # the library argument ``update`` has no flag: the flags are --upgrade
+        # and --force; a task option does not belong among the flags of a run
+        ({"update": "upgrade"}, "update", "nieznana opcja 'update'"),
+        ({"sheet": G}, "sheet", "nieznana opcja 'sheet'"),
+    ],
+    ids=[
+        "workers-text",
+        "workers-bool",
+        "flag-text",
+        "output-dir-number",
+        "plan-document",
+        "api-only-update",
+        "task-option",
+    ],
+)
+def test_format_command_run_flags_are_validated_like_options(run, option, text):
+    with pytest.raises(ValidationError) as caught:
+        format_command("elevation download", {"product": "nmt"}, run=run)
+
+    assert caught.value.option == option
+    assert str(caught.value).startswith(text)
+
+
+def test_format_command_writes_the_flags_of_a_valid_run():
+    line = format_command(
+        "elevation download",
+        {"product": "nmt", "sheet": G},
+        run={
+            "output_dir": Path("data"),
+            "plan": "plan.json",
+            "workers": 4,
+            "upgrade": True,
+            "force": False,
+            "quiet": None,
+        },
+    )
+
+    call = parse_command(line[len("kartograf ") :])
+    assert call.run == {
+        "output_dir": "data",
+        "plan": "plan.json",
+        "workers": 4,
+        "upgrade": True,
+    }
 
 
 _EXAMPLES = [

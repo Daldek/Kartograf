@@ -45,6 +45,7 @@ from kartograf.catalog.cliparser import (
 from kartograf.catalog.commands import declared, declared_commands
 from kartograf.catalog.formatting import format_command_line
 from kartograf.catalog.kinds import convert_arguments
+from kartograf.catalog.spec import Command, Kind
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import UpdatePlan
@@ -107,7 +108,7 @@ def _words(tokens: Sequence[str]) -> str | None:
 def _call(parsed: argparse.Namespace) -> CommandCall:
     """A ``CommandCall`` of the namespace of a parsed line."""
     command = declared_commands()[parsed._command_id]
-    options, run = parsed_options(command, parsed)
+    options, run = parsed_options(command, parsed, given_only=True)
     return CommandCall(command.id, options, run)
 
 
@@ -141,7 +142,8 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     ValidationError
         A command that is not a data command (``parse``, ``catalog``,
         ``elevation availability``, ``project ...``; ``option="command"``,
-        ``allowed``: the data commands) or a ``--bbox`` that is not four numbers.
+        ``allowed``: the data commands), a ``--bbox`` that is not four numbers or
+        a ``--bbox-crs`` without ``--bbox`` (``option="bbox_crs"``).
     """
     try:
         tokens = shlex.split(argv) if isinstance(argv, str) else list(argv)
@@ -204,6 +206,18 @@ def validate_command(
     entry.validate(store, convert_arguments(entry.options, options))
 
 
+def _run_kinds(command: Command) -> dict[str, Kind]:
+    """The flags of a run that a command line can write, by name, with the kinds
+    a line gives them: a plan is a file (a path), not the document of the API, and
+    the argument ``update`` has no flag (``--upgrade`` and ``--force`` stand for
+    it)."""
+    return {
+        param.name: "path" if param.kind == "plan" else param.kind
+        for param in command.params
+        if not param.task and (param.cli_flag is not None or param.positional)
+    }
+
+
 def format_command(
     command: str,
     options: Mapping[str, object],
@@ -215,14 +229,18 @@ def format_command(
 
     The flags follow the order of the parameters of the command; ``--bbox-crs`` is
     left out when it is the default of the flag; ``run`` adds the other flags
-    (``output_dir`` as ``-o``). ``parse_command`` reads the line back into the
-    same command, options and run.
+    (``output_dir`` as ``-o``): ``output_dir`` and ``plan`` are paths, ``workers``
+    a whole number, ``upgrade``, ``force``, ``check_updates``, ``quiet``, ``json``
+    and ``summary`` are ``True`` (or left out). ``parse_command`` reads the line
+    back into the same command, options and run.
 
     Raises
     ------
     ValidationError
         An unknown command, an option the command does not have, one in both
-        ``options`` and ``run``, or a value of a wrong form.
+        ``options`` and ``run``, a flag of ``run`` that is not a flag of a run (a
+        task option, the argument ``update``), or a value of a wrong form
+        (``option`` names it).
     """
     entry = task_command(command)
     declaration = declared_commands()[command]
@@ -239,10 +257,8 @@ def format_command(
             option=name,
         )
     convert_arguments(entry.options, options)
-    try:
-        return format_command_line(declaration, options, given_run)
-    except ValueError as error:
-        raise ValidationError(str(error)) from error
+    convert_arguments(_run_kinds(declaration), given_run)
+    return format_command_line(declaration, options, given_run)
 
 
 def _store(output_dir: str | Path) -> Path:

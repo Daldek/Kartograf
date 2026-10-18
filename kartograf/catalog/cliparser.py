@@ -27,7 +27,7 @@ from kartograf._version import build_version
 from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.kinds import layer_codes, parse_bbox_arg, parse_per_country
 from kartograf.catalog.spec import Command, Group, Param, resolve, sorted_groups
-from kartograf.exceptions import UsageError
+from kartograf.exceptions import UsageError, ValidationError
 
 ROOT_DESCRIPTION = (
     "Pobieranie danych przestrzennych z GUGiK (PL), CUZK (CZ), Copernicus "
@@ -296,7 +296,7 @@ def _json_value(param: Param, value: object) -> object:
 
 
 def parsed_options(
-    command: Command, parsed: argparse.Namespace
+    command: Command, parsed: argparse.Namespace, *, given_only: bool = False
 ) -> tuple[dict[str, object], dict[str, object]]:
     """The flags of a parsed command line as the JSON form of the options.
 
@@ -309,6 +309,11 @@ def parsed_options(
         namespace has a value for it that is not ``None`` and not ``False``: with
         the parser of ``given_only`` that is a flag the line wrote, with the parser
         of the CLI (which has defaults) a flag the line wrote or a default.
+    given_only : bool
+        ``parsed`` comes from the parser of ``given_only``, whose namespace tells
+        what the line wrote: a ``--bbox-crs`` without ``--bbox`` is then a mistake
+        (the parser of the CLI has the default of the flag for it, so a lone
+        ``--bbox-crs`` cannot be told from none there).
 
     Returns
     -------
@@ -323,8 +328,9 @@ def parsed_options(
     Raises
     ------
     ValidationError
-        A ``--bbox`` that is not four numbers or a per-country value that is
-        not a text or ``pl=..,cz=..`` pairs.
+        A ``--bbox`` that is not four numbers, a per-country value that is not a
+        text or ``pl=..,cz=..`` pairs, or (``given_only``) a ``--bbox-crs`` without
+        ``--bbox`` (``option="bbox_crs"``).
     """
     crs = next((param for param in command.params if param.kind == "bbox_crs"), None)
     options: dict[str, object] = {}
@@ -346,6 +352,19 @@ def parsed_options(
             options[crs.name] = box.crs
             continue
         (options if param.task else run)[param.name] = _json_value(param, value)
+    if (
+        given_only
+        and crs is not None
+        and crs.name not in options
+        and getattr(parsed, crs.cli_dest, None)
+    ):
+        area = next(param for param in command.params if param.kind == "bbox")
+        raise ValidationError(
+            f"{crs.cli_flag} wymaga {area.cli_flag} (uklad wspolrzednych "
+            f"prostokata podaje sie razem z nim)",
+            option=crs.name,
+            options=(area.name, crs.name),
+        )
     return options, run
 
 
