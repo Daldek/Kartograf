@@ -562,3 +562,37 @@ def test_broken_network_source_does_not_invent_extent(tmp_path, monkeypatch):
     monkeypatch.setattr(client.CuzkClient, "query", unavailable)
     with pytest.raises(DownloadError, match="unavailable"):
         file_footprint(entry, network=True)
+
+
+def test_sm5_sheet_unknown_to_the_index_has_no_extent(tmp_path, monkeypatch):
+    """Like an unknown TERYT or KU: no footprint, not an error."""
+    from kartograf.providers.cuzk import client
+
+    entry = _entry(
+        tmp_path,
+        "CTES96.zip",
+        hierarchy="CTES/96",
+        country="CZ",
+        request={"sheet": "CTES96"},
+    )
+    monkeypatch.setattr(client.CuzkClient, "query", lambda *_a, **_kw: [])
+    assert file_footprint(entry, network=True) is None
+
+
+def test_prg_unit_query_identifies_itself_as_kartograf(tmp_path, monkeypatch):
+    from kartograf import __version__
+    from kartograf.transport import http
+
+    entry = _entry(tmp_path, "1465.zip", hierarchy="teryt", request={"teryt": "1465"})
+    seen = []
+
+    def request(session, url, **kwargs):
+        seen.append(session.headers["User-Agent"])
+        return SimpleNamespace(
+            content=b'<wfs:FeatureCollection xmlns:wfs="http://www.opengis.net/wfs/2.0"'
+            b' numberMatched="0" numberReturned="0"/>'
+        )
+
+    monkeypatch.setattr(http, "get_with_retry", request)
+    assert file_footprint(entry, network=True) is None
+    assert seen == [f"kartograf/{__version__}"]
