@@ -1,0 +1,141 @@
+# Kartograf
+
+> Pobieranie danych przestrzennych Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC) do
+> magazynu wersji: NMT/NMPT, LAZ, ortofotomapa, BDOT10k, CORINE, SoilGrids, HSG, granice,
+> kataster, modele 3D i inne. Trzy interfejsy, ten sam wynik: CLI `kartograf`,
+> biblioteka Pythona `kartograf` i serwer MCP `kartograf-mcp`.
+
+Kazdy plik trafia do katalogu `output_dir` (CLI: `--output`) jako niezmienna wersja z
+sidecarem `kartograf-meta/1`; nic nie jest nadpisywane. Dane wybierasz jawnie (produkt,
+rozdzielczosc, uklad wysokosci, obszar): Kartograf nie ma cichych wartosci domyslnych
+i nie zgaduje. Brakujacy lub bledny argument to blad z podpowiedzia (`hint`), nie zgadywanie.
+
+## Zasady dla agentow
+- Zacznij od katalogu: `kartograf catalog --json` to zwiezly przeglad (grupy, produkty,
+  komendy, nazwy narzedzi MCP). Parametry jednej komendy, dozwolone wartosci i przyklady:
+  `kartograf catalog elevation download --json`; wszystko naraz: `--params`.
+- Dodawaj `--json`: stdout to dokladnie jeden dokument `kartograf-<rodzaj>/1` (pole
+  `schema`), tekst i pasek postepu znikaja, ostrzezenia sa w `notices`.
+- Przed pobraniem sprawdz, co ma obszar (lata, uklady, rozdzielczosci), bez pobierania danych.
+- Zawsze podawaj `--output` jako sciezke bezwzgledna (poza repozytorium i poza /tmp) oraz
+  przy `--bbox` uklad `--bbox-crs`; `--country` przy `--bbox` i `--geometry`.
+- Nie wiesz, jakie wartosci sa dozwolone? `kartograf elevation list-sources --json` (bez sieci).
+- Ponowne uruchomienie jest bezpieczne: lokalne wersje sa uzywane, `--upgrade` pobiera tylko
+  nowsze, `--check-updates` niczego nie pobiera.
+
+## Instalacja
+- `pip install "kartograf @ git+https://github.com/Daldek/Kartograf.git"` (Python >= 3.12);
+  z serwerem MCP: `pip install "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"`.
+- Uruchomienie bez instalacji skryptu: `python -m kartograf ...`; wersja: `kartograf --version`.
+
+## Typowe zadania (CLI)
+Rozpoznanie godla (PL-1992, PL-2000, CZ SM5/TM33), bez sieci:
+
+```
+kartograf parse N-34-130-D-d-2-4 --json
+```
+
+Jakie dane ma obszar (sieciowe, bez pobierania plikow):
+
+```
+kartograf elevation availability --product nmt --sheet N-34-130-D-d-2-4 --json
+kartograf elevation availability --product nmpt --country pl --bbox 565000,242000,569000,246000 --json
+```
+
+Pobranie NMT arkusza, NMT dla obszaru, LAZ (zawsze `--output`):
+
+```
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --output /dane/kartograf --json
+kartograf elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --output /dane/kartograf --json
+kartograf elevation download --product laz --country pl --bbox 530000,382000,533000,386000 --vertical-crs KRON86 --output /dane/kartograf --json
+```
+
+Pokrycie terenu, gleby, HSG:
+
+```
+kartograf landcover download --product bdot10k --teryt 1465 --output /dane/kartograf --json
+kartograf soil download --property clay --depth 0-5cm --stat mean --bbox 626000,480000,628000,482000 --output /dane/kartograf --json
+kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 --output /dane/kartograf --summary --json
+```
+
+Aktualnosc lokalnych wersji i zrodla z rejestru:
+
+```
+kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --output /dane/kartograf --check-updates --json
+kartograf elevation list-sources --json
+kartograf landcover list-layers --json
+```
+
+Projekt (zadania i przypiete wersje; polecenia w katalogu projektu, `--json` przed nazwa zadania):
+
+```
+kartograf project init --output /dane/kartograf --json
+kartograf project add --json teren elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007
+kartograf project download --json
+kartograf project status --json
+```
+
+## Biblioteka Pythona
+Funkcje bierze sie z `kartograf`, argumenty tylko nazwane; kazdy raport ma `to_dict()` i
+`to_json()` (ten sam dokument co `--json`):
+
+```python
+from kartograf import check_availability, download_data, get_catalog
+
+catalog = get_catalog(command="elevation download")   # parametry i przyklady
+report = check_availability(product="nmt", sheet="N-34-130-D-d-2-4")
+result = download_data(product="nmt", sheet="N-34-130-D-d-2-4",
+                       resolution="1m", vertical_crs="EVRF2007",
+                       output_dir="/dane/kartograf")
+print(result.to_json())
+```
+
+Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)` daje dokument
+`kartograf-error/1`. Wiersz polecenia na dane: `parse_command`, `validate_command`, `run_command`.
+
+## Serwer MCP
+- Dodanie do Claude Code: `claude mcp add kartograf -- kartograf-mcp` (potrzebny extra `mcp`).
+  Inni klienci: `{"mcpServers": {"kartograf": {"command": "kartograf-mcp"}}}`.
+- Opcje serwera: `--tools` (rodziny narzedzi), `--allow-dir` (dozwolone katalogi sciezek),
+  `--cache-file` / `--no-cache` (cache metadanych).
+- Narzedzia 1:1 z komendami: odkrywanie `get_catalog`, `parse_sheet`, `find_sheets`,
+  `list_sources`, `list_layers`; dostepnosc `elevation_availability`; dane
+  `elevation_download`, `imagery_download`, `landcover_download`, `soil_download`,
+  `soil_hsg`; aktualnosc `check_updates` (parametry `tool` i `arguments`); projekt
+  `project_status`, `project_download`; magazyn `store_overview`, `store_entries`.
+- Wynik narzedzia to ten sam dokument co `--json`; `is_error` jest prawda, gdy CLI zwrocilby
+  kod wyjscia != 0 (blad albo `ok: false`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
+- Dlugie pobrania zglaszaja postep notyfikacjami MCP.
+
+## Kody wyjscia i bledow
+Kod wyjscia: 0 = ok; 1 = brak kompletnego wyniku (awaria zrodla/sieci/dysku albo
+`ok: false`: sprawdz `failed` i `notices`); 2 = bledne dane wejsciowe (popraw wg `hint`
+i `details.option`); 130 = przerwane. Blad na stdout (`--json`) to `kartograf-error/1`:
+`code`, `message`, `hint`, `exception`, `exit_code`, `command`, `details`. Kody:
+
+- `kartograf_error` (wyjscie 1): blad pakietu bez dokladniejszej klasy
+- `invalid_input` (wyjscie 2): bledna wartosc lub kombinacja argumentow, brak wymaganego
+- `usage_error` (wyjscie 2): nieznana komenda lub flaga, brak argumentu pozycyjnego
+- `invalid_sheet_code` (wyjscie 2): godlo spoza nomenklatury PL i CZ
+- `download_failed` (wyjscie 1): siec, HTTP, timeout albo odpowiedz zrodla
+- `no_coverage` (wyjscie 1): zrodlo nie ma danych dla arkusza (ponowienie nie pomoze)
+- `year_out_of_range` (wyjscie 1): dane sa, ale poza przedzialem lat
+- `cache_error` (wyjscie 1): cache metadanych niedostepny lub zablokowany
+- `invalid_sidecar` (wyjscie 1): sidecar `kartograf-meta/1` nieczytelny lub innego schematu
+- `transform_failed` (wyjscie 1): blad przeliczenia wspolrzednych
+- `transform_unavailable` (wyjscie 1): brak bezpiecznej operacji dla pary ukladow
+- `io_error` (wyjscie 1): katalog lub plik niedostepny (brak, uprawnienia, miejsce)
+- `interrupted` (wyjscie 130): przerwane przez uzytkownika
+- `internal_error` (wyjscie 1): blad programu
+
+## Dokumentacja
+- [Uzycie](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md): przyklady CLI i biblioteki, kody wyjscia i bledow
+- [Architektura](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md): moduly, uklad magazynu, sidecar, katalog
+- [Zakres](https://github.com/Daldek/Kartograf/blob/main/docs/SCOPE.md): co jest w zakresie, ograniczenia zrodel
+- [Decyzje](https://github.com/Daldek/Kartograf/blob/main/docs/DECISIONS.md): ADR-037 (CLI = API), ADR-045 (odczyt magazynu)
+- [README](https://github.com/Daldek/Kartograf/blob/main/README.md): wprowadzenie
+
+## Optional
+- [Changelog](https://github.com/Daldek/Kartograf/blob/main/docs/CHANGELOG.md): zmiany per wydanie
+- [Standardy](https://github.com/Daldek/Kartograf/blob/main/docs/DEVELOPMENT_STANDARDS.md): zasady pracy nad kodem
+- [Specyfikacja interfejsu dla agentow](https://github.com/Daldek/Kartograf/blob/main/docs/superpowers/specs/2026-10-18-agent-interface-design.md): kontrakt dokumentow, katalogu i MCP
