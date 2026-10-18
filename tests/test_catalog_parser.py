@@ -3,6 +3,8 @@ parameter becomes in argparse, the usage error mode and the texts of the old
 parser that survive the migration."""
 
 import argparse
+import shlex
+from dataclasses import replace
 
 import pytest
 
@@ -12,6 +14,9 @@ from kartograf.catalog.cliparser import (
     parse_command_line,
     removed_command_error,
 )
+from kartograf.catalog.commands import declared
+from kartograf.catalog.formatting import example_command_line
+from kartograf.catalog.kinds import parse_per_country
 from kartograf.catalog.shared import OUTPUT_TITLE, SELECTION_TITLE
 from kartograf.catalog.spec import Command, Example, Group, Param
 from kartograf.cli import _parser as old_parser
@@ -557,3 +562,195 @@ def test_help_wraps_paragraphs_and_keeps_example_lines(monkeypatch):
     )
     assert len(example) > 60
     assert example in help_text.splitlines()
+
+
+# =============================================================================
+# The parser of the declarations against the old parser (stage 1 of the
+# migration, O6). The old parser and this part go away with it in T5.
+# =============================================================================
+
+# Examples of an old ``epilog`` that the canonical command line writes with the
+# flags in another order (the order of the declaration; the same call).
+_REORDERED_EXAMPLES = {
+    "kartograf elevation download --product nmt --country cz --bbox "
+    "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --cutout "
+    "--horizontal-crs EPSG:5514 --resolution 5m --vertical-crs Bpv -o ./data": (
+        "kartograf elevation download --product nmt --country cz --bbox "
+        "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --resolution 5m "
+        "--vertical-crs Bpv --cutout --horizontal-crs EPSG:5514 -o ./data"
+    ),
+}
+
+
+def _walk(parser, path=()):
+    """Every parser of the tree with its words (the root: ``()``)."""
+    yield path, parser
+    sub = old_parser._subparsers(parser)
+    if sub is not None:
+        for name, child in sub.choices.items():
+            yield from _walk(child, (*path, name))
+
+
+def _without_json(commands):
+    """The declarations as the old CLI has them: no ``catalog`` and no ``--json``
+    (the old ``elevation availability`` has its own)."""
+    return [
+        replace(
+            command,
+            params=tuple(
+                p
+                for p in command.params
+                if p.name != "json" or command.id == "elevation availability"
+            ),
+        )
+        for command in commands
+        if command.id != "catalog"
+    ]
+
+
+_DECLARED = declared()
+_OLD = dict(_walk(old_parser.create_parser()))
+_NEW = dict(_walk(build_parser(_without_json(_DECLARED.commands), _DECLARED.groups)))
+_CLI_COMMANDS = [
+    command
+    for command in _DECLARED.commands
+    if command.cli is not None and command.id != "catalog"
+]
+_DATA_EXAMPLES = [
+    (command, index)
+    for command in _DECLARED.commands
+    if command.project_task
+    for index in range(len(command.examples))
+]
+
+
+def _type_name(action: argparse.Action) -> str | None:
+    kind = action.type
+    if kind is None:
+        return None
+    return getattr(kind, "__qualname__", None) or repr(kind)
+
+
+def _dump(parser: argparse.ArgumentParser) -> list[dict]:
+    """Every action of a parser as data: what the parser accepts and shows."""
+    titles = {
+        id(action): group.title
+        for group in parser._action_groups
+        for action in group._group_actions
+    }
+    exclusive = {
+        id(action): index
+        for index, group in enumerate(parser._mutually_exclusive_groups)
+        for action in group._group_actions
+    }
+    return [
+        {
+            "option_strings": list(action.option_strings),
+            "dest": action.dest,
+            "action": type(action).__name__,
+            "type": _type_name(action),
+            "choices": None if action.choices is None else list(action.choices),
+            "default": repr(action.default),
+            "nargs": action.nargs,
+            "required": action.required,
+            "const": repr(action.const),
+            "metavar": action.metavar,
+            "help": action.help,
+            "section": titles.get(id(action)),
+            "exclusive": exclusive.get(id(action)),
+        }
+        for action in parser._actions
+        if not isinstance(action, argparse._SubParsersAction)
+    ]
+
+
+def _old_help(parser: argparse.ArgumentParser) -> str:
+    """The help of an old parser with its re-ordered examples written the way the
+    declarations write them."""
+    text = parser.format_help()
+    for old, new in _REORDERED_EXAMPLES.items():
+        text = text.replace(f"  {old}\n", f"  {new}\n")
+    return text
+
+
+@pytest.mark.parametrize("command", _CLI_COMMANDS, ids=[c.id for c in _CLI_COMMANDS])
+def test_new_parser_equals_old_parser(command, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "100")
+    words = tuple(command.id.split())
+    old, new = _OLD[words], _NEW[words]
+
+    assert new.prog == old.prog
+    assert new.description == old.description
+    assert _dump(new) == _dump(old)
+    assert new.format_help() == _old_help(old)
+
+
+@pytest.mark.parametrize(
+    "group", _DECLARED.groups, ids=[g.name for g in _DECLARED.groups]
+)
+def test_group_help_equals_old(group, monkeypatch):
+    monkeypatch.setenv("COLUMNS", "100")
+    old, new = _OLD[(group.name,)], _NEW[(group.name,)]
+
+    assert new.format_help() == old.format_help()
+    declared_names = {c.name for c in _CLI_COMMANDS if c.group == group.name}
+    old_names = {
+        words[-1] for words in _OLD if len(words) == 2 and words[0] == group.name
+    }
+    assert declared_names == old_names
+
+
+def test_every_reordered_example_is_still_an_old_example():
+    old_epilogs = "\n".join(p.epilog or "" for p in _OLD.values())
+    new_epilogs = "\n".join(p.epilog or "" for p in _NEW.values())
+
+    for old, new in _REORDERED_EXAMPLES.items():
+        assert f"  {old}\n" in f"{old_epilogs}\n"
+        assert f"  {new}\n" in f"{new_epilogs}\n"
+
+
+def _options_of(command: Command, parsed: argparse.Namespace) -> dict:
+    """The task options (JSON form of the manifest) a parsed line gives."""
+    options: dict = {}
+    for param in command.params:
+        value = getattr(parsed, param.cli_dest, None) if param.task else None
+        if value is None or value is False:
+            continue
+        if param.kind == "bbox":
+            options["bbox"] = [float(v) for v in value.split(",")]
+            options["bbox_crs"] = parsed.bbox_crs
+        elif param.kind == "per_country":
+            options[param.name] = parse_per_country(value, param.cli_flag or "")
+        elif param.kind == "str_list":
+            options[param.name] = list(value)
+        elif param.kind != "bbox_crs":
+            options[param.name] = value
+    return options
+
+
+@pytest.mark.parametrize(
+    ("command", "index"),
+    _DATA_EXAMPLES,
+    ids=[f"{c.id}#{i}" for c, i in _DATA_EXAMPLES],
+)
+def test_example_command_lines_round_trip(command, index):
+    parser = build_parser(_DECLARED.commands, _DECLARED.groups, usage_errors=True)
+    example = command.examples[index]
+
+    words = shlex.split(example_command_line(command, example))
+    parsed = parse_command_line(parser, words[1:])
+
+    assert words[:1] == ["kartograf"]
+    assert parsed._command_id == command.id
+    assert _options_of(command, parsed) == example.options
+    assert parsed.output == "./data"
+
+
+def test_example_command_lines_of_every_command_parse():
+    parser = build_parser(_DECLARED.commands, _DECLARED.groups, usage_errors=True)
+
+    for command in _DECLARED.commands:
+        for example in command.examples:
+            words = shlex.split(example_command_line(command, example))
+            parsed = parse_command_line(parser, words[1:])
+            assert parsed._command_id == command.id
