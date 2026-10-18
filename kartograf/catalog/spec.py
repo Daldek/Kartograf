@@ -16,7 +16,7 @@ imported.
 
 import enum
 import re
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Final, Literal, cast, get_args
 
@@ -403,3 +403,36 @@ class Group:
     def __post_init__(self) -> None:
         if not _GROUP_NAME.fullmatch(self.name):
             raise ValueError(f"Group {self.name!r}: the name is lowercase letters")
+
+
+def sorted_groups(groups: Iterable[Group]) -> tuple[Group, ...]:
+    """The groups in the order of ``kartograf --help`` and of the catalog: by
+    ``position``, then by name."""
+    return tuple(sorted(groups, key=lambda group: (group.position, group.name)))
+
+
+def check_declarations(commands: Sequence[Command], groups: Sequence[Group]) -> None:
+    """Check the declarations as a whole.
+
+    Raises
+    ------
+    ValueError
+        A command id or a group name declared twice, a command of a CLI group
+        that nobody declares, or a group without commands.
+    """
+    ids = [command.id for command in commands]
+    for duplicate in sorted({i for i in ids if ids.count(i) > 1}):
+        raise ValueError(f"command {duplicate!r} is declared twice")
+    names = [group.name for group in groups]
+    for duplicate in sorted({n for n in names if names.count(n) > 1}):
+        raise ValueError(f"group {duplicate!r} is declared twice")
+    owned = {
+        command.group
+        for command in commands
+        if command.cli is not None and command.group is not None
+    }
+    for missing in sorted(owned - set(names)):
+        raise ValueError(f"group {missing!r} has commands but no declaration")
+    for group in groups:
+        if group.name not in owned:
+            raise ValueError(f"group {group.name!r} has no commands")
