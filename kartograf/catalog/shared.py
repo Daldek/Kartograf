@@ -15,7 +15,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from typing import get_args
 
-from kartograf.catalog.spec import Param, Text, Values, resolve
+from kartograf.catalog.spec import Command, Param, Text, Values, resolve
 from kartograf.download.fetch import UpdateMode
 from kartograf.download.options import BBOX_CRS_CHOICES
 
@@ -272,3 +272,56 @@ def update_params(
     if plan is not None:
         params.append(replace(PLAN, description=plan))
     return tuple(params)
+
+
+def product_summaries(
+    products: Sequence[str], choices_text: Callable[[Sequence[str]], str]
+) -> list[tuple[str, str]]:
+    """The ``(product, summary)`` pairs of a group: the text in the parentheses of
+    ``choices_text`` of one product (``nmt (Numeryczny Model Terenu; PL i CZ)``
+    gives ``Numeryczny Model Terenu; PL i CZ``)."""
+    pairs = []
+    for name in products:
+        text = choices_text([name])
+        prefix = f"{name} ("
+        if not (text.startswith(prefix) and text.endswith(")")):
+            raise ValueError(f"{text!r} is not '{name} (<summary>)'")
+        pairs.append((name, text[len(prefix) : -1]))
+    return pairs
+
+
+def list_sources_command(group: str, products: Values) -> Command:
+    """``<group> list-sources``: the registered sources of the group's ``products``
+    (the registry, no network). The API function ``list_sources`` serves every
+    group, so ``group`` is an API-only parameter with the one value of this
+    command and ``product`` narrows the list."""
+    return Command(
+        f"{group} list-sources",
+        "Wypisz zrodla danych grupy (rejestr zrodel, bez sieci)",
+        "query",
+        "list_sources",
+        "kartograf-sources/1",
+        (
+            Param(
+                "group",
+                "str",
+                f"Grupa komend (tu: {group}); list_sources obsluguje wszystkie grupy",
+                flag=None,
+                required=True,
+                allowed=(group,),
+            ),
+            Param(
+                "product",
+                "str",
+                "Tylko zrodla tego produktu (domyslnie wszystkie produkty grupy)",
+                flag=None,
+                allowed=lambda: tuple(resolve(products)),
+            ),
+            JSON,
+        ),
+        description=f"Wypisz zrodla danych grupy {group} z rejestru zrodel "
+        "(bez sieci): WYBOR = wymagane flagi wyboru zrodla w download (a|b - "
+        "jedna z wartosci), KATALOG = katalog plikow pod --output, KLUCZ = "
+        "pole dataset w sidecarze pliku",
+        tool="list_sources",
+    )
