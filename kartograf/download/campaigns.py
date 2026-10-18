@@ -101,11 +101,13 @@ def validate_year_bounds(min_year: int | None, max_year: int | None) -> None:
             or not 1900 <= year <= 2100
         ):
             raise ValidationError(
-                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}"
+                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}",
+                option=name,
             )
     if min_year is not None and max_year is not None and min_year > max_year:
         raise ValidationError(
-            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})"
+            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})",
+            options=("min_year", "max_year"),
         )
 
 

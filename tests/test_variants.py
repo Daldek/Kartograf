@@ -405,7 +405,7 @@ def test_variant_error_names_flags_and_registry_values(
         "vertical_crs": vertical_crs,
         "format": fmt,
     }
-    assert variant_error(**choice) == message
+    assert str(variant_error(**choice)) == message
     with pytest.raises(ValidationError) as exc:
         find_variant(**choice)
     assert str(exc.value) == message
@@ -419,15 +419,22 @@ def test_variant_error_without_vertical_crs_checks_resolution_in_any_system():
         )
         is None
     )
-    assert variant_error(
+    error = variant_error(
         product="nmt", country="PL", resolution="3m", vertical_crs=None
-    ) == (f"PL nie ma rozdzielczosci 3m dla NMT - dostepne: {_NMT_LABELS}")
+    )
+    assert (
+        str(error) == f"PL nie ma rozdzielczosci 3m dla NMT - dostepne: {_NMT_LABELS}"
+    )
 
 
 def test_variant_error_for_country_without_variants():
     # plan B adds CZ variants; a country outside the registry has none
     assert (
-        variant_error(product="nmt", country="DE", resolution="1m", vertical_crs=None)
+        str(
+            variant_error(
+                product="nmt", country="DE", resolution="1m", vertical_crs=None
+            )
+        )
         == "--product nmt nie ma wariantow w DE"
     )
 
@@ -595,7 +602,7 @@ def test_cz_variant_error_names_flags_and_registry_values(
         vertical_crs=vertical_crs,
         system=system,
     )
-    assert error == message
+    assert str(error) == message
 
 
 @pytest.mark.parametrize(
@@ -669,9 +676,8 @@ _MODELS_TEXT = (
     ],
 )
 def test_cz_laz_error(model, vertical_crs, system, message):
-    assert (
-        cz_laz_error(model=model, vertical_crs=vertical_crs, system=system) == message
-    )
+    error = cz_laz_error(model=model, vertical_crs=vertical_crs, system=system)
+    assert str(error) == message
     with pytest.raises(ValidationError) as exc:
         find_cz_laz_variant(model=model, vertical_crs=vertical_crs, system=system)
     assert str(exc.value) == message

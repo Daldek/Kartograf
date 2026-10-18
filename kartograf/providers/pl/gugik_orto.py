@@ -133,26 +133,33 @@ def coverage_choices(key: str) -> str:
     )
 
 
-def _coverage_error(key: str, coverage: object) -> str | None:
-    """Error text of ``coverage`` for the cutout of ``key`` (``None`` = valid):
+def _coverage_error(key: str, coverage: object) -> ValidationError | None:
+    """The error of ``coverage`` for the cutout of ``key`` (``None`` = valid):
     required with several cutout channels, none with one."""
     channels = wcs_cutout_channels(key)
     product = get_source(key).product
     if len(channels) == 1:
         if coverage is None:
             return None
-        return (
+        return ValidationError(
             f"--coverage {coverage!r}: --product {product} ma jedna usluge WCS "
-            f"wycinka ({channels[0].notes}) - bez --coverage"
+            f"wycinka ({channels[0].notes}) - bez --coverage",
+            option="coverage",
         )
+    allowed = tuple(_params(c).variant for c in channels)
     if coverage is None:
-        return f"--coverage wymagane z --cutout --product {product}: " + (
-            coverage_choices(key)
+        return ValidationError(
+            f"--coverage wymagane z --cutout --product {product}: "
+            + coverage_choices(key),
+            option="coverage",
+            allowed=allowed,
         )
-    if coverage not in [_params(c).variant for c in channels]:
-        return (
+    if coverage not in allowed:
+        return ValidationError(
             f"--coverage {coverage!r}: nieznana wartosc - dostepne: "
-            f"{coverage_choices(key)}"
+            f"{coverage_choices(key)}",
+            option="coverage",
+            allowed=allowed,
         )
     return None
 
@@ -168,7 +175,7 @@ def wcs_cutout_channel(key: str, coverage: str | None) -> AccessChannel:
     """
     error = _coverage_error(key, coverage)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     channels = wcs_cutout_channels(key)
     if coverage is None:
         return channels[0]
@@ -184,9 +191,12 @@ def cutout_resolution_labels(key: str, coverage: str | None) -> list[str]:
     ]
 
 
-def cutout_choice_error(key: str, coverage: object, resolution: object) -> str | None:
-    """Error text of a WCS cutout choice of source ``key`` (``None`` = valid;
-    texts name the CLI flags, lists from the registry)."""
+def cutout_choice_error(
+    key: str, coverage: object, resolution: object
+) -> ValidationError | None:
+    """The error of a WCS cutout choice of source ``key`` (``None`` = valid;
+    texts name the CLI flags, lists from the registry; ``option`` and
+    ``allowed`` name the argument and its values)."""
     error = _coverage_error(key, coverage)
     if error is not None:
         return error
@@ -194,15 +204,19 @@ def cutout_choice_error(key: str, coverage: object, resolution: object) -> str |
     product = get_source(key).product
     labels = cutout_resolution_labels(key, coverage)
     if resolution is None:
-        return (
+        return ValidationError(
             f"--resolution wymagane z --cutout --product {product} (piksel "
-            f"wycinka): {', '.join(labels)}"
+            f"wycinka): {', '.join(labels)}",
+            option="resolution",
+            allowed=tuple(labels),
         )
     if not isinstance(resolution, str) or resolution not in labels:
         variant = _params(wcs_cutout_channel(key, coverage)).variant
-        return (
+        return ValidationError(
             f"--resolution {resolution!r}: niedostepne dla wycinka ortofotomapy "
-            f"{variant} - dostepne: {', '.join(labels)}"
+            f"{variant} - dostepne: {', '.join(labels)}",
+            option="resolution",
+            allowed=tuple(labels),
         )
     return None
 
@@ -319,16 +333,19 @@ class GugikImageProvider(SkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         if not channels:
             raise ValidationError(
                 f"--product {product} nie ma wycinka WCS - pomin --coverage i "
-                "--resolution"
+                "--resolution",
+                options=("coverage", "resolution"),
             )
         if coverage is None and len(channels) > 1:
             raise ValidationError(
                 f"--resolution --product {product} dotyczy tylko wycinka WCS - "
-                f"podaj --coverage: {coverage_choices(source)}"
+                f"podaj --coverage: {coverage_choices(source)}",
+                option="coverage",
+                allowed=tuple(_params(c).variant for c in channels),
             )
         error = cutout_choice_error(source, coverage, resolution)
         if error is not None:
-            raise ValidationError(error)
+            raise error
         step = parse_resolution(resolution) if resolution is not None else None
         assert step is not None  # cutout_choice_error accepted the label
         self._cutout = wcs_cutout_channel(source, coverage)
