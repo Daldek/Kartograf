@@ -58,15 +58,16 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) | Wspolny mechanizm zapytan obszarowych (kawalki na siatce zrodla) | 2026-10-10 | Przyjeta — uzupelniona przez [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (ASC 1 Mpx i NMPT) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (kawalki wycinka ortofotomapy; errata 1: zszycie bit w bit tylko dla NMT); uzupelnia [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (kawalkowanie CUZK) i [ADR-024](#adr-024-reprojekcja-tresci-cz-wylacznie-lokalnie-zakaz-imagesr--natywny) (kotwica NW) |
 | [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) | Wycinki PL z WCS GUGiK z maska ladu PRG | 2026-10-11 | Przyjeta; czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (zrodlo wycinka w CLI i `download_pl_cutout`), uzupelnia [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (ASC 1 Mpx i NMPT); errata 1: kawalek ASC NMPT 4 Mpx coverage; errata 2: tor arkuszowy usuniety w 0.8.0; errata 3: W-U3/W-U8 zastapione przez [ADR-036](#adr-036-magazyn-wersjonowany) (D15, plan 2/3) |
 | [ADR-036](#adr-036-magazyn-wersjonowany) | Magazyn wersjonowany | 2026-10-12 | Przyjeta — czesciowo zastapiona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D27: wycinek ortofotomapy w magazynie; errata 2) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D32: publiczne raporty land cover i HSG); uzupelniona przez [ADR-037](#adr-037-spojnosc-cli-i-api) (arkusz CZ w publicznym API; errata 1) i [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D23 miedzy wydaniami, sloty jednostek); czesciowo zastepuje [ADR-030](#adr-030-strategie-kampanii-newestall---min-year-i-uklad-kampanie-z-dowiazaniem) (`kampanie/`, automatyczne `newest`, kopia), [ADR-032](#adr-032-wybor-roku-danych-przedzial-lat-zatrzymanie-przy-konflikcie) (pkt 2 i 4), [ADR-033](#adr-033-drugie-dowiazanie-do-najnowszego-pelnego-lotu-full_sheet---full-sheet) (F-U5), [ADR-035](#adr-035-wycinki-pl-z-wcs-gugik-z-maska-ladu-prg) (W-U3/W-U8) i [ADR-003](#adr-003-opendata-asc-vs-wcs-geotiff--rozdzielenie-sciezek-pobierania-nmt) (`DownloadManager.download_bbox`); uzupelnia [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (`versions/`; land cover i HSG w ukladzie `data/`); errata 3: tryb domyslny bez zapytan o sygnal przy lokalnej wersji, `--upgrade` pyta zrodlo (test na zywo 0.8.0) |
-| [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (jedna komenda = jedna funkcja biblioteki) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D5-D6: funkcje land cover, gleb i HSG, raporty); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
+| [ADR-037](#adr-037-spojnosc-cli-i-api) | Spojnosc CLI i API | 2026-10-12 | Przyjeta — uzupelniona przez [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag i parametrow ukladow), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (jedna komenda = jedna funkcja biblioteki), [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D5-D6: funkcje land cover, gleb i HSG, raporty) i [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia); uzupelnia [ADR-036](#adr-036-magazyn-wersjonowany) (arkusz CZ w publicznym API; errata 1 ADR-036) i [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100) (jezyk tekstow dla uzytkownika) |
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta — uzupelniona przez [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (nazwy flag w grupach); czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem, bez flagi trybu); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
-| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (grupy `names`, `maps`, `geodesy`); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1: `landcover --source`, D5: funkcje zamiast metod); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
-| [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D2: nazwa `project_status`); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
+| [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`), [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (grupy `names`, `maps`, `geodesy`) i [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (deklaracje komend w katalogu, parser CLI budowany z katalogu); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1: `landcover --source`, D5: funkcje zamiast metod); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
+| [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji) i [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (nazwy i rodzaje opcji komend danych z katalogu); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D2: nazwa `project_status`); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
 | [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - zamyka Ograniczenia, errata 4); errata 1-3: zakonczenie planu A, warianty CZ (plan B), zakonczenie planu B |
 | [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy; D6: jawny timeout wywolania kolekcji); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto); errata 6: wycinek obrazu w calosci 0,0,0 = `NoCoverageError` bez wersji (test na zywo 0.8.0) |
 | [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5) |
 | [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`); errata 1: argumenty tylko nazwane wszystkich funkcji pobrania i sprawdzenia (test na zywo 0.8.0) |
-| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta |
+| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta — uzupelniona przez [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (narzedzia MCP odczytu magazynu) |
+| [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) | Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP | 2026-10-18 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (deklaracje komend w katalogu), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (opcje komend danych z katalogu) i [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) (narzedzia MCP odczytu magazynu) |
 
 ---
 
@@ -2697,7 +2698,7 @@ nowy lot opublikowany w TTL jest widoczny bez wczesniejszego sprawdzenia.
 ## ADR-037: Spojnosc CLI i API
 
 **Data:** 2026-10-12 (spec `docs/superpowers/specs/2026-10-12-cli-api-consistency-design.md`, plan `docs/superpowers/plans/2026-10-12-cli-api-consistency.md`)
-**Status:** Przyjeta — uzupelniona przez ADR-038 (nazwy flag i parametrow ukladow), ADR-039 (jedna komenda = jedna funkcja biblioteki) i ADR-044 (D5-D6: funkcje land cover, gleb i HSG, raporty); uzupelnia ADR-036 (arkusz CZ w publicznym API; errata 1 ADR-036) i ADR-031 (jezyk tekstow dla uzytkownika)
+**Status:** Przyjeta — uzupelniona przez ADR-038 (nazwy flag i parametrow ukladow), ADR-039 (jedna komenda = jedna funkcja biblioteki), ADR-044 (D5-D6: funkcje land cover, gleb i HSG, raporty) i ADR-046 (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia); uzupelnia ADR-036 (arkusz CZ w publicznym API; errata 1 ADR-036) i ADR-031 (jezyk tekstow dla uzytkownika)
 
 **Kontekst:** Audyt 2026-10-12 pokazal, ze to samo zadanie z CLI
 i z biblioteki dawalo rozne wyniki: logika danych tylko w CLI (`--country
@@ -2845,7 +2846,7 @@ wymaga `--cutout` takze dla natywnego ukladu.
 ## ADR-039: Grupy komend CLI wg typu danych
 
 **Data:** 2026-10-15
-**Status:** Przyjeta — uzupelniona przez ADR-040 (komenda danych ustawia `_task` dla `project add`), ADR-042 (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i ADR-043 (grupy `names`, `maps`, `geodesy`); czesciowo zastapiona przez ADR-044 (D1: `landcover --source`, D5: funkcje zamiast metod); uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag); bez aliasow usunietych komend (zasada jak errata ADR-031)
+**Status:** Przyjeta — uzupelniona przez ADR-040 (komenda danych ustawia `_task` dla `project add`), ADR-042 (grupy `boundaries`, `cadastre`, `models3d`, `hydro`), ADR-043 (grupy `names`, `maps`, `geodesy`) i ADR-046 (deklaracje komend w katalogu, parser CLI budowany z katalogu); czesciowo zastapiona przez ADR-044 (D1: `landcover --source`, D5: funkcje zamiast metod); uzupelnia ADR-037 (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i ADR-038 (nazwy flag); bez aliasow usunietych komend (zasada jak errata ADR-031)
 
 **Kontekst:** CLI 0.8.0-dev mialo jedna komende `download` dla NMT, NMPT,
 ortofotomapy i LAZ (z flagami dotyczacymi tylko czesci produktow:
@@ -2925,7 +2926,7 @@ Hydrograf/Hydrolog) trzeba zaktualizowac.
 ## ADR-040: Manifest projektu i przypiete wersje
 
 **Data:** 2026-10-15
-**Status:** Przyjeta — uzupelniona przez ADR-042 (pozycje komend kolekcji); czesciowo zastapiona przez ADR-044 (D2: nazwa `project_status`); uzupelnia ADR-039 (komenda danych ustawia `_task` dla `project add`)
+**Status:** Przyjeta — uzupelniona przez ADR-042 (pozycje komend kolekcji) i ADR-046 (nazwy i rodzaje opcji komend danych z katalogu); czesciowo zastapiona przez ADR-044 (D2: nazwa `project_status`); uzupelnia ADR-039 (komenda danych ustawia `_task` dla `project add`)
 
 **Kontekst:** Magazyn wersjonowany (ADR-036) jest wspolny dla wielu
 projektow, a sciezka standardowa wskazuje najnowsza lokalna wersje, wiec
@@ -3859,7 +3860,7 @@ wspolny calej rodziny (`init_project`, `open_project`,
 ## ADR-045: Publiczne API odczytu magazynu dla Archiwisty
 
 **Data:** 2026-10-18
-**Status:** Przyjeta
+**Status:** Przyjeta — uzupelniona przez ADR-046 (narzedzia MCP odczytu magazynu)
 
 **Kontekst:** Archiwista 0.1 indeksuje duzy magazyn (takze na SMB) bez
 zapisywania do niego i bez prywatnego parsera `data/`. Potrzebuje szesciu
@@ -3922,6 +3923,71 @@ gdy brak bboxa/godla; `link_target` moze odczytac caly plik na CIFS bez
 `serverino` — nie wolac dla kazdej wersji przy pelnym skanie. Wersja
 `kartograf-meta/1` na dysku pozostaje bez zmian. Opis kontraktu: ARCH 3.3.1;
 plan: ARCH 3.3.2. Zadna czesc KD/KB ani pobieranie nie sa w tym cyklu.
+
+---
+
+## ADR-046: Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP
+
+**Data:** 2026-10-18
+**Status:** Przyjeta; uzupelnia ADR-037 (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia), ADR-039 (deklaracje komend w katalogu), ADR-040 (opcje komend danych z katalogu) i ADR-045 (narzedzia MCP odczytu magazynu)
+
+**Kontekst:** Kartograf ma byc narzedziem, ktore agenci AI (Claude Code, asystent
+Archiwisty, skrypty, inne serwery) wybieraja i uzywaja bez czytania kodu - przez CLI,
+biblioteke Pythona i serwer MCP. Stan 0.8.0-dev: `--json` ma tylko `elevation
+availability`; wyniki komend danych, projektu, `parse`, `list-sources`, `list-layers` i
+`cache` nie maja serializacji (czesc logiki wyboru flag, warstw i cache siedzi w CLI);
+wyjatki nie maja stabilnych kodow ani podpowiedzi, a kody wyjscia (0, 1, 2, 130) nie sa
+nigdzie spisane; nazwy, rodzaje i dozwolone wartosci opcji powtarza sie recznie w argparse
+(36 komend, 38 tys. znakow pomocy), w `COMMANDS` projektu i w funkcjach
+`*_task_arguments`; brak katalogu komend (wymaganie KB Archiwisty, SPEC 12.2); brak
+`py.typed`, `llms.txt` i jednej komendy bramy. Zakres (8 pozycji) ustalil koordynator
+2026-10-18; projekt: `docs/superpowers/specs/2026-10-18-agent-interface-design.md`.
+
+**Opcje:**
+- A) Tylko dokumentacja i `--help` dla agentow; tekst CLI parsowany po stronie agenta.
+- B) Jeden kontrakt maszynowy: dokumenty JSON z biblioteki, stabilne kody bledow, katalog
+  komend jako zrodlo prawdy (parser CLI, opcje projektu i schematy MCP z niego), serwer
+  MCP jako cienka nakladka na funkcje biblioteki.
+- C) Tylko serwer MCP z wlasnymi opisami narzedzi (CLI i biblioteka bez zmian).
+
+**Decyzja:** B (szczegoly D1-D20 specyfikacji):
+- D1. Serializacja w bibliotece: mixin `Document` (`kartograf/serialization.py`),
+  `to_dict()`/`to_json()`, `schema` pierwszym kluczem, sciezki bezwzgledne; CLI i MCP
+  tylko drukuja. Schematy `kartograf-<rodzaj>/<n>`, w obrebie `/1` tylko zmiany
+  addytywne. Jeden schemat `kartograf-download/1` dla `DataReport`, `CollectionReport`,
+  `LandCoverReport`, `SoilReport` i `HsgReport`. Pole komunikatu zostaje `text`
+  (`Notice.text`), blad ma `message`.
+- D2. `--json` w kazdej komendzie: stdout = jeden dokument, stderr bez `Info:`/`Warning:`
+  (komunikaty w `notices`), blad = `kartograf-error/1` na stdout (takze blad argparse).
+- D3. Wyjatki dostaja `code`, `exit_code`, `hint` i `DETAIL_FIELDS`; `ValidationError` niesie
+  `option`/`options`/`allowed`; nowa `UsageError`. Kody wyjscia: 0, 1, 2 (bledne wejscie i
+  uzycie, jak argparse), 130; jedna tabela kodow wyjscia i bledow w USAGE.
+- D4. Katalog komend (`get_catalog()`, `kartograf catalog`, `data_commands()`): deklaracje
+  komend i parametrow w `kartograf/catalog/`; parser CLI budowany z deklaracji (stdlib
+  argparse, biblioteka nie importuje `kartograf.cli`), opcje `COMMANDS` projektu i schematy
+  MCP z tych samych deklaracji, testy kontraktowe jako druga bariera. Warstwa komend
+  `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
+  (KB-2..KB-5 Archiwisty, bez `cancel`).
+- D5. Serwer MCP: extra `kartograf[mcp]` (`mcp>=2.3.0,<3`), skrypt `kartograf-mcp`, stdio,
+  niskopoziomowy `mcp.server.Server` z jawnymi schematami z katalogu; 40 narzedzi (komenda
+  katalogu + blizniak `*_check_updates`), wynik = dokument `--json`, `is_error` = kod
+  wyjscia CLI != 0, postep przez `report_progress`, sciezki bezwzgledne, bez wartosci
+  domyslnych wplywajacych na dane, `--tools` i `--allow-dir`.
+- D6. `py.typed` (PEP 561), `llms.txt`, `scripts/gate.sh`, `python -m kartograf` oraz regula
+  w `CLAUDE.md` dla agentow z innych repozytoriow (galaz od `develop`, bez merge, tagow
+  i wpisow wydania bez zgody, przeglad przed tagiem).
+
+**Konsekwencje:** Zmiana lamiaca 0.8.0-dev (CHANGELOG [0.8.0], "Co zrobic"): blad wejscia
+konczy CLI kodem 2 (nie 1); `schema` jest pierwszym kluczem `kartograf-availability/1` i
+`kartograf-plan/1`, plan ma `notices` i `ok`; moduly `kartograf/cli/groups/*` i funkcje
+`*_task_arguments` znikaja (CLI = `create_parser()` z katalogu). Biblioteka zyskuje
+`describe_sheet`, `find_sheets`, `list_sources`, `list_layers`, `get_cache_info`,
+`clear_cache`, `describe_store`, `list_store_entries`, `read_store_sidecar` (logika
+przeniesiona z CLI zgodnie z Z1). Hydrograf bez zmian (biblioteka; atrybuty wyjatkow
+addytywne); Archiwista dostaje KB-1..KB-5 i zachowuje `Notice(level, code, text)`.
+Rozszerzenie regul DEVELOPMENT_STANDARDS: 7.3 (Z8-Z11), 6.3 (`scripts/gate.sh`), 11.1
+(kody bledow), 17.2 (nowa komenda przez katalog). Otwarte kwestie O1-O9 specyfikacji
+czekaja na decyzje koordynatora i uzytkownika.
 
 ---
 
