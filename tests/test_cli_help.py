@@ -38,7 +38,9 @@ _DATA_EXAMPLES = sorted(
     {
         example
         for example in _examples()
-        if example.split()[2] in ("download", "hsg") and example.split()[1] != "project"
+        if len(words := example.split()) > 2
+        and words[2] in ("download", "hsg")
+        and words[1] != "project"
     }
 )
 

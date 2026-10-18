@@ -1,15 +1,15 @@
 """The CLI parser built from the declarations of the catalog (spec 8.2): what a
-parameter becomes in argparse, the usage error mode and the texts of the old
-parser that survive the migration."""
+parameter becomes in argparse, the usage error mode and the texts of the
+parser's messages."""
 
 import argparse
 import shlex
-from dataclasses import replace
 
 import pytest
 
 from kartograf._version import build_version
 from kartograf.catalog.cliparser import (
+    _subparsers,
     build_parser,
     parse_command_line,
     removed_command_error,
@@ -19,7 +19,6 @@ from kartograf.catalog.formatting import example_command_line
 from kartograf.catalog.kinds import parse_per_country
 from kartograf.catalog.shared import OUTPUT_TITLE, SELECTION_TITLE
 from kartograf.catalog.spec import Command, Example, Group, Param
-from kartograf.cli import _parser as old_parser
 from kartograf.exceptions import UsageError, ValidationError
 
 
@@ -243,7 +242,7 @@ def _parser(**options) -> argparse.ArgumentParser:
 def _leaf(parser: argparse.ArgumentParser, *words: str) -> argparse.ArgumentParser:
     current = parser
     for word in words:
-        action = old_parser._subparsers(current)
+        action = _subparsers(current)
         assert action is not None
         current = action.choices[word]
     return current
@@ -471,7 +470,7 @@ def test_leaf_parsers_carry_command_id_and_groups_carry_group_parser():
 
 def test_root_lists_commands_then_groups_by_position():
     parser = _parser()
-    top = old_parser._subparsers(parser)
+    top = _subparsers(parser)
     assert top is not None
 
     # the commands without a group first (declaration order), then the groups by
@@ -491,23 +490,37 @@ def test_group_without_command_name_lists_its_commands():
 def test_command_names_come_from_the_ids():
     parser = _parser()
 
-    assert list(old_parser._subparsers(_leaf(parser, "cache")).choices) == ["stats"]  # type: ignore[union-attr]
+    assert list(_subparsers(_leaf(parser, "cache")).choices) == ["stats"]  # type: ignore[union-attr]
 
 
-def test_removed_command_and_unknown_flag_texts_equal_the_old_parser():
-    argvs = [
-        [],
-        ["download"],
-        ["soilgrids", "--property", "clay"],
-        ["landcover", "download", "--product", "soilgrids"],
-        ["landcover", "download", "--source", "soilgrids"],
-        ["landcover", "list-layers", "-s", "soilgrids"],
-        ["landcover", "download", "--product=bdot10k"],
-        ["elevation", "download", "--product", "nmt"],
-    ]
+def test_removed_commands_name_their_replacement():
+    elevation = (
+        "kartograf elevation download (--product nmt, nmpt, laz) albo kartograf "
+        "imagery download (--product orto)"
+    )
+    soil = (
+        "kartograf soil hsg (grupy HSG) albo kartograf soil download "
+        "(wlasciwosci SoilGrids)"
+    )
+    landcover = (
+        "SoilGrids jest w grupie soil od 0.8.0 - uzyj kartograf soil download "
+        "albo kartograf soil list-layers"
+    )
+    expected = {
+        (): None,
+        ("download",): f"komenda 'download' usunieta w 0.8.0 - uzyj {elevation}",
+        ("soilgrids", "--property", "clay"): (
+            f"komenda 'soilgrids' usunieta w 0.8.0 - uzyj {soil}"
+        ),
+        ("landcover", "download", "--product", "soilgrids"): landcover,
+        ("landcover", "download", "--source", "soilgrids"): landcover,
+        ("landcover", "list-layers", "-s", "soilgrids"): landcover,
+        ("landcover", "download", "--product=bdot10k"): None,
+        ("elevation", "download", "--product", "nmt"): None,
+    }
 
-    for argv in argvs:
-        assert removed_command_error(argv) == old_parser.removed_command_error(argv)
+    for argv, text in expected.items():
+        assert removed_command_error(list(argv)) == text
 
 
 @pytest.mark.parametrize(
@@ -565,310 +578,16 @@ def test_help_wraps_paragraphs_and_keeps_example_lines(monkeypatch):
 
 
 # =============================================================================
-# The parser of the declarations against the old parser (stage 1 of the
-# migration, O6). The old parser and this part go away with it in T5.
+# The examples of the declarations, read back by the parser
 # =============================================================================
 
-# Examples of an old ``epilog`` that the canonical command line writes another
-# way: with the flags in the order of the declaration (the same call), and the
-# project store written ``-o ./data`` like every example (``shlex.quote`` would
-# quote the ``~`` of the old text and so change its meaning).
-_REORDERED_EXAMPLES = {
-    "kartograf elevation download --product nmt --country cz --bbox "
-    "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --cutout "
-    "--horizontal-crs EPSG:5514 --resolution 5m --vertical-crs Bpv -o ./data": (
-        "kartograf elevation download --product nmt --country cz --bbox "
-        "-447000,-1114000,-446000,-1113000 --bbox-crs EPSG:5514 --resolution 5m "
-        "--vertical-crs Bpv --cutout --horizontal-crs EPSG:5514 -o ./data"
-    ),
-    "kartograf boundaries download --product admin --country pl --level gmina "
-    "--bbox 550000,220000,590000,270000 -o ./data": (
-        "kartograf boundaries download --product admin --country pl --bbox "
-        "550000,220000,590000,270000 --level gmina -o ./data"
-    ),
-    "kartograf geodesy download --product control --network horizontal "
-    "--teryt 1201 -o ./data": (
-        "kartograf geodesy download --product control --teryt 1201 "
-        "--network horizontal -o ./data"
-    ),
-    "kartograf geodesy download --product control --country pl --network "
-    "vertical --bbox 560000,240000,575000,250000 -o ./data": (
-        "kartograf geodesy download --product control --country pl --bbox "
-        "560000,240000,575000,250000 --network vertical -o ./data"
-    ),
-    "kartograf landcover download --product corine --year 2018 --sheet "
-    "N-34-130-D -o ./data": (
-        "kartograf landcover download --product corine --sheet N-34-130-D "
-        "--year 2018 -o ./data"
-    ),
-    "kartograf maps download --product topographic --country cz --bbox "
-    "-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 --scale 1:10000 "
-    "--sheet-system sjtsk --format PDF -o ./data": (
-        "kartograf maps download --product topographic --country cz --bbox "
-        "-452000,-1112000,-450000,-1110000 --bbox-crs EPSG:5514 --scale 1:10000 "
-        "--format PDF --sheet-system sjtsk -o ./data"
-    ),
-    "kartograf models3d download --product buildings --lod 1 --year 2024 "
-    "--teryt 1261 -o ./data": (
-        "kartograf models3d download --product buildings --teryt 1261 --lod 1 "
-        "--year 2024 -o ./data"
-    ),
-    "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
-    "--summary -o ./data": (
-        "kartograf soil hsg --depth 0-5cm --bbox 626000,480000,628000,482000 "
-        "-o ./data --summary"
-    ),
-    "kartograf project init --output ~/dane/kartograf": (
-        "kartograf project init -o ./data"
-    ),
-}
-# Examples the catalog adds to an old ``epilog``: every data command shows an
-# example of each country its products have (``boundaries`` had only PL ones).
-_ADDED_EXAMPLES = {
-    "kartograf boundaries download": (
-        "kartograf boundaries download --product admin --country cz --bbox "
-        "-470000,-1130000,-440000,-1100000 --bbox-crs EPSG:5514 --level obec "
-        "-o ./data",
-    ),
-}
-
-
-def _walk(parser, path=()):
-    """Every parser of the tree with its words (the root: ``()``)."""
-    yield path, parser
-    sub = old_parser._subparsers(parser)
-    if sub is not None:
-        for name, child in sub.choices.items():
-            yield from _walk(child, (*path, name))
-
-
-def _without_json(commands):
-    """The declarations as the old CLI has them: no ``catalog`` and no ``--json``
-    (the old ``elevation availability`` has its own)."""
-    return [
-        replace(
-            command,
-            params=tuple(
-                p
-                for p in command.params
-                if p.name != "json" or command.id == "elevation availability"
-            ),
-        )
-        for command in commands
-        if command.id != "catalog"
-    ]
-
-
 _DECLARED = declared()
-_OLD = dict(_walk(old_parser.create_parser()))
-_NEW = dict(_walk(build_parser(_without_json(_DECLARED.commands), _DECLARED.groups)))
-_OLD_TOP = old_parser._subparsers(_OLD[()])
-_NEW_TOP = old_parser._subparsers(_NEW[()])
-assert _OLD_TOP is not None and _NEW_TOP is not None
-_CLI_COMMANDS = [
-    command
-    for command in _DECLARED.commands
-    if command.cli is not None and command.id != "catalog"
-]
 _DATA_EXAMPLES = [
     (command, index)
     for command in _DECLARED.commands
     if command.project_task
     for index in range(len(command.examples))
 ]
-
-
-def _type_name(action: argparse.Action) -> str | None:
-    kind = action.type
-    if kind is None:
-        return None
-    return getattr(kind, "__qualname__", None) or repr(kind)
-
-
-def _dump(parser: argparse.ArgumentParser) -> list[dict]:
-    """Every action of a parser as data: what the parser accepts and shows."""
-    titles = {
-        id(action): group.title
-        for group in parser._action_groups
-        for action in group._group_actions
-    }
-    exclusive = {
-        id(action): index
-        for index, group in enumerate(parser._mutually_exclusive_groups)
-        for action in group._group_actions
-    }
-    return [
-        {
-            "option_strings": list(action.option_strings),
-            "dest": action.dest,
-            "action": type(action).__name__,
-            "type": _type_name(action),
-            "choices": None if action.choices is None else list(action.choices),
-            "default": repr(action.default),
-            "nargs": action.nargs,
-            "required": action.required,
-            "const": repr(action.const),
-            "metavar": action.metavar,
-            "help": action.help,
-            "section": titles.get(id(action)),
-            "exclusive": exclusive.get(id(action)),
-        }
-        for action in parser._actions
-        if not isinstance(action, argparse._SubParsersAction)
-    ]
-
-
-def _old_help(parser: argparse.ArgumentParser) -> str:
-    """The help of an old parser with its re-ordered examples written the way the
-    declarations write them and the examples the catalog adds (the epilog is the
-    last block of a help)."""
-    text = parser.format_help()
-    for old, new in _REORDERED_EXAMPLES.items():
-        text = text.replace(f"  {old}\n", f"  {new}\n")
-    return text + "".join(
-        f"  {line}\n" for line in _ADDED_EXAMPLES.get(parser.prog, ())
-    )
-
-
-@pytest.mark.parametrize("command", _CLI_COMMANDS, ids=[c.id for c in _CLI_COMMANDS])
-def test_new_parser_equals_old_parser(command, monkeypatch):
-    monkeypatch.setenv("COLUMNS", "100")
-    words = tuple(command.id.split())
-    old, new = _OLD[words], _NEW[words]
-
-    assert new.prog == old.prog
-    assert new.description == old.description
-    assert _dump(new) == _dump(old)
-    assert new.format_help() == _old_help(old)
-
-
-@pytest.mark.parametrize(
-    "group", _DECLARED.groups, ids=[g.name for g in _DECLARED.groups]
-)
-def test_group_help_equals_old(group, monkeypatch):
-    monkeypatch.setenv("COLUMNS", "100")
-    old, new = _OLD[(group.name,)], _NEW[(group.name,)]
-
-    assert new.format_help() == old.format_help()
-    declared_names = {c.name for c in _CLI_COMMANDS if c.group == group.name}
-    old_names = {
-        words[-1] for words in _OLD if len(words) == 2 and words[0] == group.name
-    }
-    assert declared_names == old_names
-
-
-def test_root_help_equals_old(monkeypatch):
-    """The root of the declarations - without ``catalog`` and ``--json``, which the
-    old parser does not have - lists the same commands in the same order with
-    the same texts."""
-    monkeypatch.setenv("COLUMNS", "100")
-    old, new = _OLD[()], _NEW[()]
-
-    assert new.format_help() == old.format_help()
-    assert _dump(new) == _dump(old)
-    assert new.description == old.description and new.epilog == old.epilog
-    assert list(_NEW_TOP.choices) == list(_OLD_TOP.choices)
-
-
-def test_root_of_the_full_parser_lists_catalog_after_parse():
-    """With ``catalog`` the root is the old one plus one command, right after
-    ``parse`` (the commands without a group come first), ``cache`` last."""
-    full = build_parser(_DECLARED.commands, _DECLARED.groups)
-    top = old_parser._subparsers(full)
-    assert top is not None
-
-    names = list(top.choices)
-    assert names[:2] == ["parse", "catalog"] and names[-1] == "cache"
-    assert [n for n in names if n != "catalog"] == list(_OLD_TOP.choices)
-
-
-_FOREIGN_FLAGS = (
-    "--nope",
-    "--nope=1",
-    "--product",
-    "--bbox",
-    "--output",
-    "-o",
-    "--hierarchy",
-    "--source",
-    "-s",
-    "--stats",
-    "--sheet",
-    "--country",
-    "--teryt",
-    "--json",
-    "--check-updates",
-    "--summary",
-)
-
-
-def _outcome(parse, parser, argv, capsys):
-    """How a parser takes a command line: ``("ok",)`` or the exit code and the
-    text on stderr (the usage line and the message)."""
-    try:
-        parse(parser, argv)
-    except SystemExit as exit_info:
-        return ("exit", exit_info.code, capsys.readouterr().err)
-    return ("ok",)
-
-
-@pytest.mark.parametrize("command", _CLI_COMMANDS, ids=[c.id for c in _CLI_COMMANDS])
-def test_unknown_argument_texts_equal_the_old_parser(command, monkeypatch, capsys):
-    """An unknown flag, a flag of another command and a stray word give the same
-    error text - the usage of the command, the commands that have the flag and
-    the hints of the usual mix-ups - as the old parser over the whole tree."""
-    monkeypatch.setenv("COLUMNS", "100")
-    words = command.id.split()
-    needs = {"parse": ["N-34-130-D"], "project add": ["task"]}.get(command.id, [])
-
-    for extra in (*_FOREIGN_FLAGS, "stray"):
-        for argv in ([*words, extra], [*words, *needs, extra]):
-            old = _outcome(old_parser.parse_command_line, _OLD[()], argv, capsys)
-            new = _outcome(parse_command_line, _NEW[()], argv, capsys)
-            assert new == old, argv
-
-
-@pytest.mark.parametrize(
-    "argv",
-    [
-        [],
-        ["--nope"],
-        ["nope"],
-        ["elevation"],
-        ["elevation", "nope"],
-        ["elevation", "--nope"],
-        ["cache"],
-        ["cache", "nope", "--json"],
-        ["project", "--hierarchy"],
-        ["--version"],
-        ["--bbox", "-447000,-1100000,-437000,-1090000", "elevation"],
-        ["elevation", "download", "--bbox", "-447000,-1100000,-437000,-1090000"],
-        ["elevation", "download", "--bbox", "-447000,-1100000,-437000", "--nope"],
-        ["landcover", "download", "--source", "bdot10k"],
-        ["landcover", "list-layers", "-s", "bdot10k"],
-        ["landcover", "download", "--country", "cz"],
-        ["soil", "download", "--product", "clay"],
-        ["soil", "hsg", "--stats"],
-        ["hydro", "download", "--sheet", "N-34-130-D"],
-    ],
-)
-def test_group_and_root_command_lines_read_like_the_old_parser(
-    argv, monkeypatch, capsys
-):
-    monkeypatch.setenv("COLUMNS", "100")
-    old = _outcome(old_parser.parse_command_line, _OLD[()], argv, capsys)
-    new = _outcome(parse_command_line, _NEW[()], argv, capsys)
-
-    assert new == old
-
-
-def test_every_reordered_example_is_still_an_old_example():
-    old_epilogs = "\n".join(p.epilog or "" for p in _OLD.values())
-    new_epilogs = "\n".join(p.epilog or "" for p in _NEW.values())
-
-    for old, new in _REORDERED_EXAMPLES.items():
-        assert f"  {old}\n" in f"{old_epilogs}\n"
-        assert f"  {new}\n" in f"{new_epilogs}\n"
 
 
 def _options_of(command: Command, parsed: argparse.Namespace) -> dict:

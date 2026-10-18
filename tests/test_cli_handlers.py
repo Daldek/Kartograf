@@ -6,8 +6,13 @@ import argparse
 import pytest
 
 from kartograf import get_catalog
+from kartograf.catalog.cliparser import _subparsers
+from kartograf.cli._handlers import HANDLERS
+from kartograf.cli._parser import create_parser
 from kartograf.cli.catalog_cmd import cmd_catalog
+from kartograf.cli.project_cmd import _TASK_OPTIONS
 from kartograf.exceptions import ValidationError
+from kartograf.project.commands import COMMANDS
 
 
 def _catalog_text(capsys, **given) -> str:
@@ -135,3 +140,34 @@ def test_catalog_unknown_group_is_a_validation_error(given, option, capsys):
         assert "elevation" in caught.value.allowed
         assert "parse" in caught.value.allowed
     assert capsys.readouterr().out == ""
+
+
+def _command_ids(parser) -> set[str]:
+    """The ``_command_id`` every command parser of the CLI marks its lines with."""
+    ids = set()
+    for _, child in (
+        _subparsers(parser) or argparse.Namespace(choices={})
+    ).choices.items():
+        inner = _subparsers(child)
+        for leaf in [child] if inner is None else inner.choices.values():
+            ids.add(leaf.get_default("_command_id"))
+    return ids
+
+
+def test_every_catalog_cli_command_has_a_handler():
+    parsed = _command_ids(create_parser())
+    declared = {c.id for c in get_catalog().commands if c.cli is not None}
+
+    assert len(parsed) == 37 and None not in parsed
+    assert parsed == declared
+    assert parsed <= set(HANDLERS)
+
+
+def test_no_handler_without_a_catalog_command():
+    declared = {c.id for c in get_catalog().commands if c.cli is not None}
+
+    assert set(HANDLERS) == declared
+
+
+def test_project_add_reads_the_options_of_every_data_command():
+    assert set(_TASK_OPTIONS) == set(COMMANDS)

@@ -2,6 +2,7 @@
 built from synthetic declarations; the parts on the real declarations (the hint
 example, the completeness of the declarations) come last."""
 
+import argparse
 import dataclasses
 import shlex
 import subprocess
@@ -12,7 +13,7 @@ import pytest
 
 from kartograf.catalog import build
 from kartograf.catalog.build import build_catalog, data_commands, get_catalog
-from kartograf.catalog.cliparser import build_parser, parse_command_line
+from kartograf.catalog.cliparser import _subparsers, build_parser, parse_command_line
 from kartograf.catalog.commands import Declared, declared
 from kartograf.catalog.hints import example_for
 from kartograf.catalog.kinds import check_options_json, options_from_json
@@ -25,7 +26,7 @@ from kartograf.catalog.spec import (
     Param,
     resolve,
 )
-from kartograf.cli import _parser as old_parser
+from kartograf.cli._parser import create_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 from kartograf.exceptions import ValidationError
 from kartograf.project.commands import COMMANDS
@@ -651,27 +652,86 @@ _NO_GROUP = (
 )
 
 
-def _leaf_words(parser, path=()):
-    """The words of every command (a parser without commands) of an argparse tree."""
-    action = old_parser._subparsers(parser)
+def _leaf_parsers(parser, path=()):
+    """Every command (a parser without commands) of an argparse tree, by words."""
+    action = _subparsers(parser)
     if action is None:
-        yield path
+        yield " ".join(path), parser
         return
     for name, child in action.choices.items():
-        yield from _leaf_words(child, (*path, name))
+        yield from _leaf_parsers(child, (*path, name))
 
 
-def test_every_old_leaf_command_is_declared():
-    """Transitional (the old parser goes away in T5): the 36 commands of the old
-    CLI are declared, and with ``catalog`` they are the 37 of the new one."""
-    old = {" ".join(words) for words in _leaf_words(old_parser.create_parser())}
-    declared_cli = {c.cli_words for c in _DECLARED.commands if c.cli_words is not None}
-    new = build_parser(_DECLARED.commands, _DECLARED.groups)
+def _exclusive_groups(parser) -> set[frozenset[str]]:
+    return {
+        frozenset(a.dest for a in group._group_actions)
+        for group in parser._mutually_exclusive_groups
+    }
 
-    assert len(old) == 36
-    assert declared_cli == old | {"catalog"}
-    assert len(declared_cli) == 37
-    assert {" ".join(words) for words in _leaf_words(new)} == declared_cli
+
+def test_real_parser_matches_the_catalog():
+    """Spec 12.5 a: the parser of the CLI has, for every command of the catalog,
+    the flags with the ``dest``, type, default, choices, argument count and
+    exclusive groups of the catalog and the declarations - and no other flag."""
+    leaves = dict(_leaf_parsers(create_parser()))
+    commands = {c.id: c for c in get_catalog(params=True).commands if c.cli}
+    declarations = {c.id: c for c in _DECLARED.commands}
+
+    assert len(commands) == 37 and set(leaves) == set(commands)
+    for command_id, command in commands.items():
+        leaf, declaration = leaves[command_id], declarations[command_id]
+        expected_flags = {
+            flag for p in command.params or () for flag in (p.flag, p.short) if flag
+        }
+        flags = {
+            flag
+            for action in leaf._actions
+            for flag in action.option_strings
+            if flag not in ("-h", "--help")
+        }
+        assert flags == expected_flags, command_id
+        exclusive = {
+            frozenset(p.cli_dest for p in declaration.params if p.exclusive == name)
+            for name in {p.exclusive for p in declaration.params if p.exclusive}
+        }
+        assert _exclusive_groups(leaf) == exclusive, command_id
+        positional = [a for a in leaf._get_positional_actions()]
+        assert [a.dest for a in positional] == [
+            p.name for p in command.params or () if p.positional
+        ], command_id
+        for param, declared_param in zip(
+            command.params or (), declaration.params, strict=True
+        ):
+            assert param.name == declared_param.name
+            if param.positional:
+                action = next(a for a in positional if a.dest == param.name)
+                nargs = {"REMAINDER": argparse.REMAINDER}.get(
+                    declared_param.nargs or "", declared_param.nargs
+                )
+                assert action.nargs == nargs, (command_id, param.name)
+                continue
+            if param.flag is None:
+                continue
+            action = leaf._option_string_actions[param.flag]
+            where = (command_id, param.name)
+            assert action.dest == declared_param.cli_dest, where
+            assert not action.required, where  # the library reports what is missing
+            if param.short:
+                assert param.short in action.option_strings, where
+            if param.kind == "flag":
+                assert isinstance(action, argparse._StoreTrueAction), where
+                continue
+            if param.kind == "int":
+                assert action.type is int, where
+            default = (
+                param.cli_default if param.cli_default is not None else param.default
+            )
+            assert action.default == default, where
+            if declared_param.choices:
+                assert action.choices is not None
+                assert list(action.choices) == list(param.allowed or ()), where
+            else:
+                assert action.choices is None, where
 
 
 def test_data_commands_are_the_twelve_in_COMMANDS_order():
