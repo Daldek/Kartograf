@@ -708,14 +708,19 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   plik, bez `stat` i bez otwierania plikow danych; wywolania rownolegle
   w watkach), `read_sidecar` (tolerancyjny odczyt starszych metadanych
   i kluczy 0.8.0-dev, rok danych nigdy z daty pobrania; blad:
-  `InvalidSidecarError`), `describe_segment` (ludzka nazwa i zrodlo
+  `InvalidSidecarError`; sidecar bez pola `schema` zapisany przez
+  `emit_sidecar` dla providera bez deskryptora jest przyjmowany jak w
+  `read_version`; `Sidecar.unit` pliku krajowego z motywem to
+  `<kraj>_<motyw>`, np. `pl_miejscowosci`, czyli nazwa przyjmowana przez
+  `iter_store(units=...)`), `describe_segment` (ludzka nazwa i zrodlo
   segmentu z rejestru, `known=False` bez zgadywania), `file_footprint`
   (obrys natywny i WGS84 z bboxa zadania, godla, naglowka albo jednostki;
-  siec tylko po jawnym `network=True`), `link_target` (potwierdzenie celu
+  siec tylko po jawnym `network=True`; arkusz SM5 nieznany indeksowi nie
+  ma obrysu, tak jak nieznany TERYT i KU), `link_target` (potwierdzenie celu
   takze na SMB bez stabilnych i-wezlow) i `pinned_transform` (operacja bez
   przyblizen, per watek). Typy `StoreEntry`, `Sidecar`, `SegmentInfo`,
   `Footprint`, `PinnedTransform` i wyjatek `InvalidSidecarError` sa
-  w `kartograf.__all__`. Funkcje nie zapisuja do magazynu; cache i indeks
+  w `kartograf.__all__`; `StoreEntry` i `Sidecar` sa niehashowalne. Funkcje nie zapisuja do magazynu; cache i indeks
   konsumenta naleza do jego lokalnego katalogu. Schemat `kartograf-meta/1`
   i uklad dotychczasowych plikow nie zmieniaja sie.
 
