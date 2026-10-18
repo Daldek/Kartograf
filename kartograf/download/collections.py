@@ -74,7 +74,13 @@ from kartograf.download.countries import (
     country_bbox,
     outside_country,
 )
-from kartograf.download.data import UnitFailure, UnitFile
+from kartograf.download.data import (
+    DOWNLOAD_FILL,
+    DOWNLOAD_KEYS,
+    DOWNLOAD_SCHEMA,
+    UnitFailure,
+    UnitFile,
+)
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -133,6 +139,7 @@ from kartograf.notices import (
 )
 from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
+from kartograf.serialization import Document
 from kartograf.sources.descriptor import (
     AccessChannel,
     AtomFilesParams,
@@ -485,8 +492,8 @@ class CollectionRequest:
 
 
 @dataclass(frozen=True)
-class CollectionReport:
-    """Outcome of ``download_collection``.
+class CollectionReport(Document):
+    """Outcome of ``download_collection`` (``kartograf-download/1``).
 
     ``files``: one ``UnitFile`` per file (``unit`` = TERYT, bbox
     coordinates, the country code with its theme, the sheet code, the tile
@@ -495,6 +502,12 @@ class CollectionReport:
     ``download``), the others still ran; ``stale``: planned positions
     changed since the plan; ``ok`` = no failure and no stale position.
     """
+
+    SCHEMA = DOWNLOAD_SCHEMA
+    JSON_KEYS = DOWNLOAD_KEYS
+    JSON_FILL = {
+        key: DOWNLOAD_FILL[key] for key in ("raw", "inputs", "superseded", "summary")
+    }
 
     files: tuple[UnitFile, ...]
     failed: tuple[UnitFailure, ...]

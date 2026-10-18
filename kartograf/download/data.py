@@ -133,11 +133,35 @@ from kartograf.notices import (
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.providers.pl.gugik_orto import image_directions, image_source
+from kartograf.serialization import Document
 from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
 from kartograf.sources.variants import cz_model_text, cz_sheet_system
 
 FailureKind = Literal["no_coverage", "download", "country"]
 MAX_HINT_LINES = 5
+
+# ``kartograf-download/1``: the schema of the five command reports (``DataReport``,
+# ``CollectionReport``, ``LandCoverReport``, ``SoilReport``, ``HsgReport``; spec
+# 5.4.1). One key set in one order for all of them: a class without a field for a
+# key gives the value of ``DOWNLOAD_FILL`` (consumers read one shape).
+DOWNLOAD_SCHEMA = "kartograf-download/1"
+DOWNLOAD_KEYS = (
+    "files",
+    "raw",
+    "inputs",
+    "failed",
+    "stale",
+    "superseded",
+    "summary",
+    "notices",
+    "ok",
+)
+DOWNLOAD_FILL: Mapping[str, object] = {
+    "raw": (),
+    "inputs": (),
+    "superseded": (),
+    "summary": None,
+}
 
 
 @dataclass(frozen=True)
@@ -167,13 +191,17 @@ class UnitFailure:
 
 
 @dataclass(frozen=True)
-class DataReport:
-    """Outcome of ``download_data`` (spec 4.1).
+class DataReport(Document):
+    """Outcome of ``download_data`` (spec 4.1; ``kartograf-download/1``).
 
     ``ok`` is the exit rule of the CLI (former ``_finish_pl_sheets`` and
     ``country="auto"`` partial success): ``False`` after any failure or stale
     plan position, except ``auto`` with at least one country succeeding.
     """
+
+    SCHEMA = DOWNLOAD_SCHEMA
+    JSON_KEYS = DOWNLOAD_KEYS
+    JSON_FILL = {key: DOWNLOAD_FILL[key] for key in ("raw", "inputs", "summary")}
 
     files: tuple[UnitFile, ...]
     failed: tuple[UnitFailure, ...]
