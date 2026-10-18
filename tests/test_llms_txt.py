@@ -9,13 +9,15 @@ import ast
 import inspect
 import re
 import shlex
+import tomllib
 from pathlib import Path
 
 import pytest
 
 import kartograf
-from kartograf import get_catalog, parse_command, validate_command
+from kartograf import get_catalog, mcp_server, parse_command, validate_command
 from kartograf.catalog import data_commands
+from kartograf.catalog.tools import FAMILIES
 from kartograf.cli._parser import create_parser
 from kartograf.error_report import ERROR_CODES, EXIT_CODES
 
@@ -129,6 +131,31 @@ def test_mcp_tool_names_are_tools_of_the_catalog():
     named = set(re.findall(r"`([a-z0-9]+(?:_[a-z0-9]+)+)`", section)) - NOT_TOOLS
     assert {"get_catalog", "elevation_download", "check_updates"} <= named
     assert named <= tools, sorted(named - tools)
+
+
+def test_mcp_options_of_the_text_are_those_of_the_server():
+    """Every option that configures ``kartograf-mcp`` is described, and no other."""
+    section = _section("Serwer MCP")
+    # ``--json`` is the CLI flag whose document a tool result equals
+    flags = set(re.findall(r"`(--[a-z-]+)`", section)) - {"--json"}
+    parser = mcp_server._parser()
+    options = {flag for action in parser._actions for flag in action.option_strings}
+
+    assert flags == options - {"-h", "--help", "--version"}
+    # the families ``--tools`` takes are named, as the server knows them
+    assert ", ".join(FAMILIES) in section
+
+
+def test_mcp_script_and_extra_are_those_of_the_package():
+    project = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))[
+        "project"
+    ]
+    text = _text()
+
+    assert project["scripts"]["kartograf-mcp"] == "kartograf.mcp_server:main"
+    assert "mcp" in project["optional-dependencies"]
+    assert "kartograf-mcp" in _section("Serwer MCP")
+    assert 'kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"' in text
 
 
 def test_error_table_is_the_error_codes_of_the_library():
