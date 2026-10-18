@@ -1945,3 +1945,16 @@ Sprawdzenie specyfikacji wzgledem kodu galezi po poprawkach przegladu (ADR-045; 
 | `iter_store`: bledne argumenty (segment, zarezerwowana jednostka, nazwa dluzsza niz 255 bajtow, `units` bez `segment`) to `ValidationError` od razu przy wywolaniu | 6.1: wymagane `option` (`segment`, `units`) w walidatorach magazynu |
 | Brak albo niedostepny `output_dir` to `OSError`, nie pusty magazyn | D21, 6.2-6.3, 6.6, 9.5: kod `io_error` (kod wyjscia 1) zamiast `internal_error` |
 | `StoreEntry` i `Sidecar` jawnie niehashowalne (pola `dict`) | 5.1: koder nie opiera sie na hashowaniu; `ctx.omit` pomija `Sidecar.raw` w `StoreEntries` |
+
+### 16.2 Zmiany strukturalne wynikajace z planu wdrozenia
+
+Plan (`docs/superpowers/plans/2026-10-18-agent-interface.md`) rozdziela prace na dwa rownolegle
+tory o rozlacznych zbiorach plikow; to wymusilo cztery korekty tej specyfikacji (tresc wyzej jest
+juz zgodna z nimi):
+
+| Korekta | Powod | Miejsce |
+|---|---|---|
+| `list_sources` i `list_layers` w `kartograf/source_info.py` (nie `catalog/sources.py`) | tor biblioteki nie tworzy plikow w pakiecie toru katalogu; katalog korzysta z rejestru, nie z tych funkcji (A6) | 5.4.6, 5.4.7, 8.2 |
+| `describe_sheet` i `find_sheets` w `kartograf/sheet_info.py`, zadanie T4d | `SheetInfo.commands` wylicza sie z `ParamInfo.accepts` katalogu | 5.4.4, 8.2, 13 |
+| nowe moduly katalogu `kinds.py`, `formatting.py`, `hints.py`; skladnik (b) hintu bledu wpina T5 | wspolny kod parsera, `format_command` i `ExampleInfo.command_line` bez cyklu `catalog` <-> `commands`; `error_report.py` ma jednego wlasciciela na raz | 8.2, 6.3, 13 |
+| `kartograf.mcp_server` importuje sie bez `mcp`; `create_server` rzuca `ImportError`, `main()` drukuje komunikat | poprzednie sformulowanie ("import rzuca `ImportError`" i "`main()` go drukuje") bylo sprzeczne | 9.2 |
