@@ -518,7 +518,8 @@ class HSGCalculator:
         sink = NoticeSink(on_notice)
         selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
         assert depth is not None  # checked with the selection
-        return self._check(selection, depth, _HSG_STAT, sink)
+        plan = self._check(selection, depth, _HSG_STAT, sink)
+        return replace(plan, notices=sink.notices)
 
     def validate_request(
         self,

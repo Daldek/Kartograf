@@ -14,6 +14,7 @@ from kartograf.download.plan import (
     store_id,
 )
 from kartograf.exceptions import ValidationError
+from kartograf.notices import Notice
 
 
 def _item(track="laz_tile", name="a.laz", status="missing", **kwargs) -> PlanItem:
@@ -61,6 +62,112 @@ def test_plan_without_track_is_validation_error():
         UpdatePlan.from_json(json.dumps(payload))
 
 
+def test_plan_to_dict_schema_first():
+    unit_list = Notice("info", "unit_list", "nmt: wojewodztwa obszaru wg PRG (1): 12")
+    plan = dataclasses.replace(_plan(_item()), notices=(unit_list,))
+
+    data = plan.to_dict()
+
+    assert list(data) == [
+        "schema",
+        "store",
+        "checked_at",
+        "kartograf_version",
+        "items",
+        "notices",
+        "ok",
+    ]
+    assert data["schema"] == "kartograf-plan/1" == plan.schema
+    assert data["notices"] == [
+        {"level": "info", "code": "unit_list", "text": unit_list.text}
+    ]
+    assert data["ok"] is True
+    assert list(data["items"][0]) == [f.name for f in dataclasses.fields(PlanItem)]
+
+
+def test_plan_ok_is_false_with_check_failed():
+    good = _plan(_item(status="missing"), _item(name="b.laz", status="current"))
+    failed = _plan(
+        _item(), _item(name="b.laz", status="check_failed", error="HTTP 500")
+    )
+
+    assert good.ok is True and good.to_dict()["ok"] is True
+    assert failed.ok is False and failed.to_dict()["ok"] is False
+    assert _plan().ok is True
+
+
+def test_plan_from_dict_reads_0_8_dev_plans():
+    """A plan file written before ``notices`` and ``ok`` existed (``schema`` was
+    the last key) still loads; ``ok`` is computed, never read."""
+    plan = _plan(_item(), _item(name="b.laz", status="current", local_label="x"))
+    old = {
+        "store": plan.store,
+        "checked_at": plan.checked_at,
+        "kartograf_version": plan.kartograf_version,
+        "items": [dataclasses.asdict(item) for item in plan.items],
+        "schema": "kartograf-plan/1",
+    }
+    foreign_ok = {**old, "ok": False}
+
+    assert UpdatePlan.from_dict(old) == plan
+    assert UpdatePlan.from_dict(foreign_ok) == plan
+    assert UpdatePlan.from_dict(foreign_ok).ok is True
+    assert UpdatePlan.from_json(json.dumps(old)) == plan
+
+
+def test_plan_from_dict_rejects_other_schema():
+    payload = _plan(_item()).to_dict()
+    for schema in ("kartograf-plan/2", "kartograf-availability/1", None):
+        broken = {**payload, "schema": schema}
+        with pytest.raises(ValidationError, match="schemat"):
+            UpdatePlan.from_dict(broken)
+    del payload["schema"]
+    with pytest.raises(ValidationError, match="schemat"):
+        UpdatePlan.from_dict(payload)
+    with pytest.raises(ValidationError, match="schemat"):
+        UpdatePlan.from_json("[1, 2]")
+
+
+def test_plan_from_dict_rejects_malformed_notices():
+    payload = _plan(_item()).to_dict()
+    for notices in (
+        [{"level": "info", "code": "x"}],
+        [{"level": "info", "code": "x", "text": "zażółć"}],
+        "not a list",
+        None,
+    ):
+        with pytest.raises(ValidationError, match="Niekompletny"):
+            UpdatePlan.from_dict({**payload, "notices": notices})
+    unknown_level = [{"level": "debug", "code": "x", "text": "t"}]
+    with pytest.raises(ValidationError, match="Nieznany poziom"):
+        UpdatePlan.from_dict({**payload, "notices": unknown_level})
+
+
+def test_plan_json_round_trip_with_notices():
+    notices = (
+        Notice("info", "unit_list", "nmt: wojewodztwa obszaru wg PRG (2)\n  12, 24"),
+        Notice("warning", "check_failed", "N-34-130-D: HTTP 500"),
+    )
+    plan = dataclasses.replace(_plan(_item(), _item(track="pl_sheet")), notices=notices)
+
+    again = UpdatePlan.from_json(plan.to_json())
+
+    assert again == plan
+    assert again.notices == notices
+    assert again.to_json() == plan.to_json()
+
+
+def test_merge_joins_notices_without_repeats():
+    first = Notice("info", "unit_list", "pierwszy")
+    shared = Notice("warning", "check_failed", "wspolny")
+    last = Notice("info", "sheet_list", "ostatni")
+    pl = dataclasses.replace(_plan(_item(track="pl_sheet")), notices=(first, shared))
+    cz = dataclasses.replace(_plan(_item(track="cz_cutout")), notices=(shared, last))
+
+    assert pl.merge(cz).notices == (first, shared, last)
+    assert cz.merge(pl).notices == (shared, last, first)
+
+
 def test_merge_keeps_both_and_earliest_check():
     pl = _plan(_item(track="pl_sheet"))
     cz = dataclasses.replace(
@@ -77,13 +184,11 @@ def test_merge_rejects_other_store():
         _plan(_item()).merge(_plan(_item(), store="/inny"))
 
 
-def test_require_store_rejects_other_store_and_schema(tmp_path):
+def test_require_store_rejects_other_store(tmp_path):
     plan = _plan(_item(), store=store_id(tmp_path))
     require_store(plan, store_id(tmp_path / "." / ""))
     with pytest.raises(ValidationError, match="innego magazynu"):
         require_store(plan, store_id(tmp_path / "b"))
-    with pytest.raises(ValidationError, match="schemat"):
-        require_store(dataclasses.replace(plan, schema="kartograf-plan/2"), plan.store)
 
 
 def test_select_planned_stale_and_removed():

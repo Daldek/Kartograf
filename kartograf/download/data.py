@@ -443,7 +443,7 @@ def check_data(
     merged = run.plans[0]
     for other in run.plans[1:]:
         merged = merged.merge(other)
-    return merged
+    return replace(merged, notices=run.sink.notices)
 
 
 def validate_data_request(

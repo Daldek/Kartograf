@@ -15,14 +15,16 @@ from the plan file are never executed.
 """
 
 import json
-from collections.abc import Iterable
-from dataclasses import asdict, dataclass, replace
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal, cast, get_args
 
 from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.exceptions import ValidationError
+from kartograf.notices import Notice
+from kartograf.serialization import Document
 
 PLAN_SCHEMA = "kartograf-plan/1"
 ItemStatus = Literal["current", "newer", "missing", "unverifiable", "check_failed"]
@@ -70,20 +72,28 @@ class PlanItem:
 
 
 @dataclass(frozen=True)
-class UpdatePlan:
-    """Plan of one store; ``store`` = resolved output directory."""
+class UpdatePlan(Document):
+    """Plan of one store (``kartograf-plan/1``); ``store`` = resolved output
+    directory.
+
+    ``notices``: the messages emitted while the plan was built (what the
+    checking command passed to ``on_notice``); ``ok``: no position failed to
+    be checked (a computed property, never read from a plan file).
+    """
+
+    SCHEMA = PLAN_SCHEMA
+    JSON_KEYS = ("store", "checked_at", "kartograf_version", "items", "notices", "ok")
 
     store: str
     checked_at: str
     kartograf_version: str
     items: tuple[PlanItem, ...]
-    schema: str = PLAN_SCHEMA
+    notices: tuple[Notice, ...] = ()
 
-    def to_json(self) -> str:
-        """The plan as JSON (``kartograf-plan/1``)."""
-        payload = asdict(self)
-        payload["items"] = [asdict(item) for item in self.items]
-        return json.dumps(payload, ensure_ascii=False, indent=2) + "\n"
+    @property
+    def ok(self) -> bool:
+        """No position has the status ``check_failed``."""
+        return all(item.status != "check_failed" for item in self.items)
 
     @classmethod
     def from_json(cls, text: str) -> "UpdatePlan":
@@ -92,25 +102,38 @@ class UpdatePlan:
             payload = json.loads(text)
         except ValueError as e:
             raise ValidationError(f"Plan aktualizacji nie jest JSON: {e}") from e
-        if not isinstance(payload, dict) or payload.get("schema") != PLAN_SCHEMA:
-            schema = payload.get("schema") if isinstance(payload, dict) else None
+        return cls.from_dict(payload)
+
+    @classmethod
+    def from_dict(cls, payload: object) -> "UpdatePlan":
+        """Read a plan document (``to_dict`` or a plan file of 0.8.0-dev).
+
+        A plan without ``notices`` and ``ok`` loads; ``ok`` is ignored (it is
+        computed). An unknown schema or a malformed plan = ``ValidationError``.
+        """
+        if not isinstance(payload, Mapping) or payload.get("schema") != PLAN_SCHEMA:
+            schema = payload.get("schema") if isinstance(payload, Mapping) else None
             raise ValidationError(
                 f"Nieznany schemat planu aktualizacji {schema!r} "
                 f"(oczekiwano {PLAN_SCHEMA!r})"
             )
         try:
             items = tuple(_item(raw) for raw in payload["items"])
+            notices = tuple(_notice(raw) for raw in payload.get("notices", ()))
             return cls(
                 store=str(payload["store"]),
                 checked_at=str(payload["checked_at"]),
                 kartograf_version=str(payload["kartograf_version"]),
                 items=items,
+                notices=notices,
             )
-        except (KeyError, TypeError, AttributeError) as e:
+        except (KeyError, TypeError, AttributeError, ValueError) as e:
             raise ValidationError(f"Niekompletny plan aktualizacji: {e}") from e
 
     def merge(self, other: "UpdatePlan") -> "UpdatePlan":
         """One plan of both (``--country auto``); the earlier ``checked_at`` wins.
+
+        The notices of both plans are joined, in order, without repeats.
 
         Raises
         ------
@@ -126,6 +149,7 @@ class UpdatePlan:
             self,
             checked_at=min(self.checked_at, other.checked_at),
             items=self.items + other.items,
+            notices=tuple(dict.fromkeys(self.notices + other.notices)),
         )
 
     def items_for(self, track: Track) -> tuple[PlanItem, ...]:
@@ -155,6 +179,15 @@ def _item(raw: dict) -> PlanItem:
     )
 
 
+def _notice(raw: Mapping[str, object]) -> Notice:
+    level = raw["level"]
+    if level not in ("info", "warning"):
+        raise ValidationError(f"Nieznany poziom komunikatu planu {level!r}")
+    return Notice(
+        cast(Literal["info", "warning"], level), str(raw["code"]), str(raw["text"])
+    )
+
+
 def store_id(output_dir: str | Path) -> str:
     """Identity of a store in a plan: the resolved output directory."""
     return str(Path(output_dir).resolve())
@@ -171,18 +204,13 @@ def new_plan(output_dir: str | Path, items: Iterable[PlanItem]) -> UpdatePlan:
 
 
 def require_store(plan: UpdatePlan, store: str) -> None:
-    """Reject a plan of an unknown schema or of another store.
+    """Reject a plan of another store.
 
     Raises
     ------
     ValidationError
         Before any request to the source.
     """
-    if plan.schema != PLAN_SCHEMA:
-        raise ValidationError(
-            f"Nieznany schemat planu aktualizacji {plan.schema!r} "
-            f"(oczekiwano {PLAN_SCHEMA!r})"
-        )
     if plan.store != store:
         raise ValidationError(
             f"Plan dotyczy innego magazynu ({plan.store}), nie {store}"
