@@ -333,3 +333,470 @@ def test_transform_errors_have_codes():
     assert TransformError("m").code == "transform_failed"
     assert TransformUnavailableError("m").code == "transform_unavailable"
     assert isinstance(TransformUnavailableError("m"), TransformError)
+
+
+# --- option/allowed of the collection, land cover, SoilGrids and HSG validators ---
+# One row per message class, called through the PUBLIC entry points: the raise must
+# reach the caller before any request (the suite blocks the network).
+
+_STORE = object()  # placeholder of the store directory (``tmp_path``)
+_AREA = kartograf.BBox(450000, 550000, 450500, 550500, "EPSG:2180")
+_SHEET = "N-34-130-D"
+_DEPTHS = ("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm", "100-200cm")
+_COLLECTIONS = importlib.import_module("kartograf.download.collections")
+_AREA_NAMES = ("sheet", "bbox", "geometry")
+
+
+def _row(function, arguments, option, options, allowed, text):
+    """A scenario: the call and the expected attributes plus a message fragment."""
+    return pytest.param(
+        function,
+        arguments,
+        (option, options, allowed),
+        text,
+        id=f"{function.__name__}-{text[:40]}",
+    )
+
+
+COLLECTION_OPTION_SCENARIOS = [
+    _row(
+        kartograf.download_collection,
+        {"product": None, "output_dir": _STORE, "teryt": "1261"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products(),
+        "--product wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "xyz", "output_dir": _STORE, "teryt": "1261"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products(),
+        "Nieznany produkt 'xyz'",
+    ),
+    _row(
+        _COLLECTIONS.require_collection_product,
+        {"product": None, "group": "boundaries"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products("boundaries"),
+        "--product wymagane",
+    ),
+    _row(
+        _COLLECTIONS.require_collection_product,
+        {"product": "buildings", "group": "boundaries"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products("boundaries"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": None, "teryt": "1261", "lod": 2},
+        "output_dir",
+        None,
+        None,
+        "--output wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "lod": 1, "year": 2024},
+        None,
+        ("teryt", *_AREA_NAMES),
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.check_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "bbox": _AREA,
+            "lod": 1,
+            "year": 2024,
+        },
+        None,
+        ("teryt", "bbox"),
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "bbox": _AREA, "country": "xx"},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "Nieznany kraj --country 'xx'",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "bbox": _AREA},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "--country wymagane z --bbox/--geometry",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "country": "cz",
+        },
+        None,
+        ("teryt", "country"),
+        None,
+        "usun --country cz",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        "teryt",
+        None,
+        None,
+        "Nieprawidlowy kod TERYT",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "ku": "623164", "country": "pl"},
+        None,
+        ("ku", "country"),
+        None,
+        "usun --country pl",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "ku": "12", "country": "cz"},
+        "ku",
+        None,
+        None,
+        "Nieprawidlowy kod katastralniho uzemi",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "admin",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "auto",
+        },
+        "country",
+        None,
+        ("pl", "cz"),
+        "--whole-country wymaga --country pl albo --country cz",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "prices",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "cz",
+        },
+        "country",
+        None,
+        ("pl",),
+        "jest dostepny tylko dla PL",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "geographic",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "cz",
+            "format": "XYZ",
+        },
+        "format",
+        None,
+        ("GPKG", "FGDB"),
+        "niedostepne dla --whole-country geographic (CZ)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "topographic",
+            "output_dir": _STORE,
+            "country": "pl",
+            "sheet": _SHEET,
+            "format": "XYZ",
+        },
+        "format",
+        None,
+        ("TIFF", "PDF"),
+        "--format XYZ: niedostepne",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "format": "SHP",
+        },
+        "format",
+        None,
+        None,
+        "dotyczy tylko --product map (CZ",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "topographic",
+            "output_dir": _STORE,
+            "country": "cz",
+            "bbox": _AREA,
+            "scale": "1:1",
+        },
+        "scale",
+        None,
+        _COLLECTIONS.collection_choice_values("topographic", "scale")["CZ"],
+        "--scale 1:1: niedostepne",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "topographic",
+            "output_dir": _STORE,
+            "country": "cz",
+            "bbox": _AREA,
+            "sheet_system": "1965",
+        },
+        "sheet_system",
+        None,
+        ("sjtsk", "etrs89"),
+        "--sheet-system 1965: niedostepne",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "horizontal_crs": "EPSG:4326",
+        },
+        "horizontal_crs",
+        None,
+        ("EPSG:2180",),
+        "sa zawsze w ukladzie uslugi EPSG:2180",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "teryt": "1261"},
+        "lod",
+        None,
+        ("1", "2"),
+        "--lod wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "year": 2016,
+        },
+        "year",
+        None,
+        ("2017",),
+        "--year 2016: niedostepne dla --lod 2",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "admin",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "level": "gmina",
+            "year": 2020,
+        },
+        "year",
+        None,
+        None,
+        "nie dotyczy obiektow obszaru produktu admin",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "level": "gmina",
+        },
+        "level",
+        None,
+        None,
+        "nie paczek buildings",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "level": "gmina",
+        },
+        "level",
+        None,
+        None,
+        "(stala zawartosc",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "lod": 1,
+        },
+        "lod",
+        None,
+        None,
+        "nie dotyczy obiektow obszaru produktu map",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "admin", "output_dir": _STORE, "country": "pl", "bbox": _AREA},
+        "level",
+        None,
+        _COLLECTIONS.collection_levels("admin")["PL"],
+        "--level wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "admin",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "level": "obec",
+        },
+        "level",
+        None,
+        _COLLECTIONS.collection_levels("admin")["PL"],
+        "nieznany poziom admin (PL)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "control",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "network": "xyz",
+        },
+        "network",
+        None,
+        _COLLECTIONS.collection_choice_values("control", "network")["PL"],
+        "--network xyz: niedostepne dla obszaru control (PL)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "control", "output_dir": _STORE, "country": "pl", "bbox": _AREA},
+        "network",
+        None,
+        _COLLECTIONS.collection_choice_values("control", "network")["PL"],
+        "--network wymagane dla obszaru control (PL)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "prices",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "pl",
+        },
+        "whole_country",
+        None,
+        None,
+        "nie ma pliku krajowego",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "sheet": _SHEET,
+            "country": "cz",
+        },
+        None,
+        ("sheet", "country"),
+        None,
+        "a podano --country cz",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": kartograf.BBox(1, 1, 2, 2, "EPSG:2180"),
+        },
+        "bbox",
+        None,
+        None,
+        "lezy poza PL",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "year": 2017,
+            "plan": object(),
+        },
+        None,
+        ("plan", "update"),
+        None,
+        "Plan aktualizacji wymaga update='upgrade'",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "year": 2017,
+            "workers": 0,
+        },
+        "workers",
+        None,
+        None,
+        "workers musi byc >= 1",
+    ),
+]
+
+
+def _assert_option_scenario(function, arguments, expected, text, tmp_path):
+    arguments = {
+        name: tmp_path if value is _STORE else value
+        for name, value in arguments.items()
+    }
+    with pytest.raises(ValidationError) as caught:
+        function(**arguments)
+    error = caught.value
+    assert (error.option, error.options, error.allowed) == expected
+    assert text in str(error)
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "expected", "text"), COLLECTION_OPTION_SCENARIOS
+)
+def test_collection_input_error_names_the_option(
+    function, arguments, expected, text, tmp_path
+):
+    _assert_option_scenario(function, arguments, expected, text, tmp_path)
