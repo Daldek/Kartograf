@@ -38,6 +38,28 @@ def test_download_and_check_functions_are_keyword_only(name):
     assert positional == expected
 
 
+# Functions that return a document (spec 5.5): all arguments by name, except the
+# one that identifies the object, which is positional like ``read_sidecar(path)``.
+_DOCUMENT_FUNCTIONS = {
+    "list_sources": [],
+    "list_layers": [],
+    "get_cache_info": [],
+    "clear_cache": [],
+    "describe_store": ["output_dir"],
+    "list_store_entries": ["output_dir"],
+    "read_store_sidecar": ["path"],
+}
+
+
+@pytest.mark.parametrize(("name", "expected"), sorted(_DOCUMENT_FUNCTIONS.items()))
+def test_document_functions_are_keyword_only(name, expected):
+    """The new document functions take their selection by name; only the
+    object that is read is positional."""
+    assert name in kartograf.__all__
+    params = inspect.signature(getattr(kartograf, name)).parameters.values()
+    assert [p.name for p in params if p.kind is not p.KEYWORD_ONLY] == expected
+
+
 def test_transport_and_mosaic_exported():
     from kartograf.transport.http import get_with_retry, make_gugik_session
     from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
