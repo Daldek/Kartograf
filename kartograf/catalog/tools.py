@@ -128,7 +128,7 @@ _PLAN_TEXT = (
 _PATH_TEXT = "Sciezka bezwzgledna."
 _DEFAULT_CLAUSE = re.compile(r"\s*\(domyslnie [^)]*\)")
 
-_FLOAT_BBOX = {
+_BBOX_SCHEMA = {
     "type": "array",
     "items": {"type": "number"},
     "minItems": 4,
@@ -235,7 +235,7 @@ def _property(param: ParamInfo) -> dict[str, Any]:
         case "flag":
             schema = {"type": "boolean"}
         case "bbox":
-            schema = copy.deepcopy(_FLOAT_BBOX)
+            schema = copy.deepcopy(_BBOX_SCHEMA)
         case "path":
             schema = {"type": "string"}
         case "per_country":

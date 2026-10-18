@@ -299,16 +299,15 @@ class _Toolbox:
         *,
         cache: MetadataCache | bool,
         allow_dirs: Sequence[Path],
+        validator_class: Any,
     ) -> None:
-        from jsonschema import Draft202012Validator
-
-        self._validator_class = Draft202012Validator
+        self._validator_class = validator_class
         self.specs = {spec.name: spec for spec in specs}
         # nested checks (``check_updates``, ``project_add``) need every data tool
         self._data = {spec.name: spec for spec in tool_specs(("data",))}
         self._data_by_command = {spec.commands[0]: spec for spec in self._data.values()}
         self._validators = {
-            spec.name: Draft202012Validator(spec.input_schema) for spec in specs
+            spec.name: validator_class(spec.input_schema) for spec in specs
         }
         self._cache = cache
         self._allow_dirs = tuple(allow_dirs)
@@ -555,6 +554,7 @@ def create_server(
     try:
         import anyio
         import mcp_types as types
+        from jsonschema import Draft202012Validator
         from mcp.server import Server
         from mcp.shared.exceptions import MCPError
     except ImportError as error:
@@ -573,6 +573,7 @@ def create_server(
         specs,
         cache=library_cache,
         allow_dirs=[Path(d).expanduser().resolve() for d in allow_dirs],
+        validator_class=Draft202012Validator,
     )
     tools = [_wire_tool(spec) for spec in specs]
 
