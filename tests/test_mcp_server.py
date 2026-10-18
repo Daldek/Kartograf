@@ -104,9 +104,27 @@ def capture_server(argv, monkeypatch):
 # -- no SDK needed --------------------------------------------------------------
 
 
-def test_instructions_are_ascii_and_at_most_8_lines():
+def test_instructions_are_ascii_short_and_say_what_the_tools_do_not_repeat():
     assert INSTRUCTIONS.isascii()
+    # Claude Code loads them at the start of a session and cuts them at 4096
+    assert len(INSTRUCTIONS) <= 2000
     assert len(INSTRUCTIONS.splitlines()) <= 8
+    # what is the same in many tools is said here, once
+    for word in (
+        "get_catalog",
+        "tables=true",
+        "bezwzglednie",
+        "bbox_crs",
+        "sheet",
+        "geometry",
+        "country",
+        "update",
+        "check_updates",
+        "kartograf-download/1",
+        "ok=false",
+        "kartograf-error/1",
+    ):
+        assert word in INSTRUCTIONS, word
 
 
 def test_main_without_mcp_prints_the_install_hint_and_exits_1():
@@ -206,7 +224,8 @@ def test_list_tools_equals_tool_specs():
 
     assert [t.name for t in tools] == [s.name for s in specs]
     for tool, spec in zip(tools, specs, strict=True):
-        assert (tool.title, tool.description) == (spec.title, spec.description)
+        assert tool.title is None  # the first sentence of the description says it
+        assert tool.description == spec.description
         assert tool.input_schema == spec.input_schema
         assert tool.output_schema is None  # a result is a family of documents
         hints = tool.annotations
@@ -216,6 +235,28 @@ def test_list_tools_equals_tool_specs():
             hints.idempotent_hint,
             hints.open_world_hint,
         ) == dataclass_values(spec.annotations)
+
+
+@needs_mcp
+def test_tools_list_on_the_wire_is_under_30000_characters():
+    """The acceptance of the context budget on the real protocol objects: what
+    ``tools/list`` sends (it was 65 883) and the answer of ``get_catalog()``
+    (it was 47 807; the CLI form is the same document, indented)."""
+
+    async def scenario(client):
+        listed = (await client.list_tools()).tools
+        overview = await client.call_tool("get_catalog", {})
+        return listed, overview
+
+    listed, overview = run_session(scenario)
+
+    wire = [tool.model_dump(by_alias=True, exclude_none=True) for tool in listed]
+    assert len(json.dumps(wire, ensure_ascii=False, separators=(",", ":"))) <= 30_000
+    text = overview.content[0].text
+    assert text == json.dumps(
+        json.loads(text), ensure_ascii=False, separators=(",", ":")
+    )
+    assert len(text) <= 8_000
 
 
 DISCOVERY = [

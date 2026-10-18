@@ -3,6 +3,7 @@ families, input schemas and annotations, all read from the command catalog. No
 test here needs the MCP SDK; the ones that check a schema need ``jsonschema``."""
 
 import dataclasses
+import json
 import re
 import subprocess
 import sys
@@ -13,12 +14,16 @@ import pytest
 
 import kartograf
 from kartograf.catalog import data_commands, get_catalog
+from kartograf.catalog import tools as tools_module
 from kartograf.catalog.tools import FAMILIES, check_arguments_schema, tool_specs
 from kartograf.serialization import SCHEMAS
 
 REPO = Path(__file__).resolve().parent.parent
 RUN_ARGUMENTS = {"update", "plan", "workers", "summary"}
 CLI_ONLY_FLAGS = {"quiet", "json", "check_updates", "upgrade", "force"}
+NO_ENUM = tools_module._NO_ENUM
+WORDS = tools_module._BRIEF
+WORDS_FOR = tools_module._BRIEF_FOR
 
 SPECS = {spec.name: spec for spec in tool_specs()}
 CATALOG = {command.id: command for command in get_catalog(params=True).commands}
@@ -160,14 +165,17 @@ def test_schemas_follow_catalog_params(spec):
     for param in exposed:
         prop = properties[param.argument]
         if param.kind in ("str", "bbox_crs") and param.allowed is not None:
-            assert prop["enum"] == list(param.allowed), param.name
+            if (spec.name, param.name) in NO_ENUM:
+                assert "enum" not in prop, param.name
+            else:
+                assert prop["enum"] == list(param.allowed), param.name
         if param.kind == "bbox":
             assert prop["type"] == "array" and prop["items"] == {"type": "number"}
             assert prop["minItems"] == prop["maxItems"] == 4
             assert "bbox_crs" in properties
             assert schema["dependentRequired"] == {"bbox": ["bbox_crs"]}
         if param.kind == "path":
-            assert "bezwzgledn" in prop["description"].lower(), param.name
+            assert prop["type"] == "string"
         if param.kind == "per_country":
             string, mapping = prop["anyOf"]
             assert string == {"type": "string"}
@@ -200,19 +208,13 @@ def test_shared_tools_require_group():
         spec = SPECS[name]
         commands = [c for c in CATALOG.values() if c.tool == name]
         schema = spec.input_schema
-        products = {
-            v
-            for c in commands
-            for p in c.params
-            if p.name == "product"
-            for v in p.allowed or ()
-        }
 
         assert spec.commands == tuple(c.id for c in commands)
         assert schema["required"] == ["group"]
         assert schema["properties"]["group"]["enum"] == [c.group for c in commands]
         assert set(schema["properties"]) == {"group", "product"}
-        assert set(schema["properties"]["product"]["enum"]) == products
+        # the values of ``product`` depend on the group: the library names them
+        assert "enum" not in schema["properties"]["product"]
     assert len(SPECS["list_sources"].commands) == 11
     assert SPECS["list_layers"].input_schema["properties"]["group"]["enum"] == [
         "landcover",
@@ -271,38 +273,126 @@ def test_annotations_of_the_data_tools_and_the_checks():
     assert SPECS["parse_sheet"].annotations.open_world_hint is False
 
 
-def test_descriptions_are_ascii_and_titles_are_summaries():
+def test_descriptions_are_ascii_and_start_with_the_summary():
     for spec in tool_specs():
-        assert spec.title.isascii() and spec.description.isascii(), spec.name
+        assert spec.description.isascii(), spec.name
         assert all(text.isascii() for text in _descriptions(spec.input_schema))
-        assert 0 < len(spec.title) <= 120
-        schema = _result_schema(spec)
-        assert f"Wynik: {schema}" in spec.description, spec.name
-        # what ``ok: false`` says is told for the documents that have an ``ok``
-        assert ("ok=false" in spec.description) == _has_ok(schema), spec.name
+        assert not hasattr(spec, "title")  # the first sentence is the summary
+        # ``ok: false`` is explained once, in the instructions of the server
+        assert "ok=false" not in spec.description, spec.name
+        assert "--" not in spec.description, spec.name  # a call has no flags
     for spec in SINGLE:
+        if spec.name == "get_catalog":
+            continue
         summary = CATALOG[spec.commands[0]].summary
-        assert spec.title == summary
-        assert spec.description.startswith(summary.rstrip("."))
+        assert spec.description.startswith(summary.rstrip(".")), spec.name
+        if spec.family != "data":
+            # the document a tool returns; the twelve data tools all return one
+            assert f"Wynik: {_result_schema(spec)}" in spec.description, spec.name
 
 
-def test_the_cli_wording_a_tool_call_does_not_have_is_not_in_the_schemas():
-    """The CLI says ``--bbox`` is a comma list with a default CRS, a plan is a file
-    and the project is the current directory; a call has none of these (the other
-    flags named in a description are the arguments with dashes: ``--level``)."""
+def test_data_tools_send_to_the_catalog_for_their_parameters():
+    for spec in DATA_TOOLS:
+        command = spec.commands[0]
+
+        assert f'get_catalog(command="{command}")' in spec.description, spec.name
+        assert "Wynik:" not in spec.description
+    assert "get_catalog(command=<command>)" in SPECS["project_add"].description
+    catalog = SPECS["get_catalog"].description
+    for word in ("command=", "group=", "tables=", "przeglad"):
+        assert word in catalog
+
+
+def test_get_catalog_has_four_arguments_and_lists_no_commands():
+    schema = SPECS["get_catalog"].input_schema
+    properties = schema["properties"]
+
+    assert list(properties) == ["group", "command", "params", "tables"]
+    assert properties["group"]["enum"] == [g.name for g in get_catalog().groups]
+    assert properties["tables"]["type"] == "boolean"
+    assert "required" not in schema
+    # the 41 ids are the overview's: a second copy in every tools/list is waste
+    assert "enum" not in properties["command"]
+
+
+def _says(text: str, value: str) -> bool:
+    """The text has the value as a word (``1:1000`` is not in ``1:10000``)."""
+    return re.search(rf"(?<![\w.:]){re.escape(value)}(?![\w.:])", text) is not None
+
+
+def test_no_description_names_a_flag_or_lists_the_allowed_values():
+    """A tool call has no flags (``--bbox``), and the allowed values are the
+    ``enum``: a description that repeats them is the catalog's text."""
     for spec in tool_specs():
         for name, prop in spec.input_schema["properties"].items():
-            text = prop["description"]
-            if name == "bbox":
-                assert "domyslny uklad" not in text and "--bbox" not in text, spec.name
-            if name == "bbox_crs":
-                assert "domyslnie" not in text and "--bbox" not in text, spec.name
-            if name == "plan":
-                assert "--" not in text and "plik" not in text, spec.name
-            if name == "project_dir":
-                assert "domyslnie" not in text, spec.name
-    plan = SPECS["elevation_download"].input_schema["properties"]["plan"]
-    assert "kartograf-plan/1" in plan["description"]
+            text = prop.get("description", "")
+            values = prop.get("enum") or prop.get("items", {}).get("enum") or []
+
+            assert "--" not in text, (spec.name, name)
+            assert sum(_says(text, str(value)) for value in values) <= 1, (
+                spec.name,
+                name,
+            )
+            assert len(text) <= 80, (spec.name, name, text)
+    properties = SPECS["elevation_download"].input_schema["properties"]
+    assert "description" not in properties["plan"]
+
+
+def test_every_argument_has_wording_and_no_wording_is_stale():
+    """A new argument of the catalog needs words for a tool call (or an explicit
+    ``None``), and an argument that is gone takes its words with it."""
+    used = {(spec.name, name) for spec in tool_specs() for name in spec.kinds}
+    names = {name for _, name in used}
+
+    assert [name for name in WORDS if name not in names] == []
+    assert [pair for pair in WORDS_FOR if pair not in used] == []
+    # the wording of one tool is only for an argument that means something else
+    for pair, text in WORDS_FOR.items():
+        assert text != WORDS.get(pair[1]), pair
+
+
+def test_a_path_is_a_string_and_the_instructions_say_it_is_absolute():
+    from kartograf.mcp_server import INSTRUCTIONS
+
+    paths = {
+        (spec.name, name)
+        for spec in tool_specs()
+        for name, kind in spec.kinds.items()
+        if kind == "path"
+    }
+
+    assert paths
+    for tool, name in paths:
+        assert SPECS[tool].input_schema["properties"][name]["type"] == "string"
+        assert name in INSTRUCTIONS, (tool, name)
+    assert "bezwzgledn" in INSTRUCTIONS
+
+
+def test_tools_list_is_small():
+    """What a client puts in the context at the start: the budget of the agent
+    interface is 30 000 characters for the 29 tools (it was 65 883)."""
+
+    def camel(name: str) -> str:
+        first, *rest = name.split("_")
+        return first + "".join(word.capitalize() for word in rest)
+
+    wire = [
+        {
+            "name": spec.name,
+            "description": spec.description,
+            "inputSchema": spec.input_schema,
+            "annotations": {
+                camel(key): value
+                for key, value in dataclasses.asdict(spec.annotations).items()
+                if value is not None
+            },
+        }
+        for spec in tool_specs()
+    ]
+
+    size = len(json.dumps(wire, ensure_ascii=False, separators=(",", ":")))
+
+    assert size <= 30_000, size
 
 
 def test_family_filter():

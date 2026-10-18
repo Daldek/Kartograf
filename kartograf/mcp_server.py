@@ -65,24 +65,38 @@ logger = logging.getLogger(__name__)
 
 INSTALL_HINT = 'Brak pakietu mcp: pip install "kartograf[mcp]"'
 
-# Text for the client (``instructions`` of the server): Polish, ASCII, at most 8
-# lines (spec 9.9).
-INSTRUCTIONS = (
-    "Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, "
-    "ISRIC)\n"
-    "do magazynu wersji w katalogu output_dir. Zacznij od get_catalog (komendy, "
-    "produkty,\n"
-    "dozwolone wartosci; get_catalog z command= daje parametry jednej komendy) i od\n"
-    "elevation_availability (jakie lata i uklady ma obszar). Wszystkie sciezki "
-    "podawaj\n"
-    "bezwzglednie; bbox zawsze z bbox_crs. Dane wybierasz jawnie (product, "
-    "resolution,\n"
-    "vertical_crs...): Kartograf nie zgaduje. Pobranie nie nadpisuje danych; "
-    "check_updates\n"
-    "(tool=<narzedzie danych>, arguments=jego argumenty) sprawdza aktualnosc bez "
-    "pobierania.\n"
-    "Wynik to dokument kartograf-*/1 z polem ok; blad to kartograf-error/1 z code, "
-    "hint i details.option."
+# Text for the client (``instructions`` of the server): Polish, ASCII, four
+# paragraphs, under 2000 characters (spec 9.9). The tools do not repeat what is
+# the same in many of them (the area, the paths, the update mode, the result
+# documents): it is said here once, and ``get_catalog`` has the rest. Claude Code
+# loads this text at the start of every session and cuts it at 4096 characters.
+INSTRUCTIONS = "\n".join(
+    (
+        "Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, "
+        "Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od "
+        "get_catalog (przeglad: grupy, produkty, komendy); parametry komendy: "
+        'get_catalog(command="elevation download"); kody wyjscia, kody bledow i '
+        "schematy dokumentow: get_catalog(tables=true). Jakie lata i uklady ma "
+        "obszar: elevation_availability.",
+        "Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) "
+        "podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. "
+        "N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] w ukladzie "
+        "bbox_crs, ktory jest wymagany: bez wartosci domyslnej) albo geometry "
+        "(plik SHP albo GPKG, obwiednia obiektow; layer: warstwa GPKG) - "
+        "dokladnie jeden; czesc komend ma tez teryt, ku albo whole_country. "
+        "country: pl, cz albo auto (wymagany z bbox i geometry, z sheet wynika "
+        "z godla).",
+        "Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf "
+        "nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety "
+        "- tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od "
+        "nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) "
+        "sprawdza aktualnosc bez pobierania; jego plan (kartograf-plan/1) "
+        "wykonasz z update=upgrade i plan.",
+        "Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: "
+        "kartograf-download/1); ok=false: czesc jednostek sie nie powiodla "
+        "(is_error=true, lista failed). Blad to kartograf-error/1 z code, hint "
+        "i details.option.",
+    )
 )
 
 # At most this many calls that use the network run at once (spec 9.7): several
@@ -460,7 +474,6 @@ def _wire_tool(spec: ToolSpec) -> types.Tool:
     hints = spec.annotations
     return types.Tool(
         name=spec.name,
-        title=spec.title,
         description=spec.description,
         input_schema=copy.deepcopy(spec.input_schema),
         annotations=types.ToolAnnotations(
