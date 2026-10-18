@@ -75,8 +75,9 @@ class _Parser(argparse.ArgumentParser):
     CLI is of this class (``add_subparsers`` uses the class of its parser) and
     formats its help with ``_HelpFormatter`` (examples in ``epilog``).
 
-    ``usage_errors``: an error raises ``UsageError`` (the argparse message)
-    instead of printing the usage and exiting with 2.
+    ``usage_errors``: an error raises ``UsageError`` (the argparse message, and the
+    id of the command whose parser found it) instead of printing the usage and
+    exiting with 2.
     """
 
     def __init__(self, *args: Any, usage_errors: bool = False, **kwargs: Any) -> None:
@@ -87,7 +88,9 @@ class _Parser(argparse.ArgumentParser):
 
     def error(self, message: str) -> NoReturn:
         if self.usage_errors:
-            raise UsageError(message)
+            # only the parser of a command knows its id: a group or the root parser
+            # has none, and the error is not about one command
+            raise UsageError(message, command=self.get_default("_command_id"))
         super().error(message)
 
 

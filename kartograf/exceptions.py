@@ -141,10 +141,32 @@ class UsageError(ValidationError):
     Raised by the parser of the command catalog (``parse_command``, the CLI in
     the ``--json`` mode). A subclass of ``ValidationError``: wrong use is
     invalid input, so ``except ValidationError`` catches it too.
+
+    Attributes
+    ----------
+    command : str, optional
+        Catalog id of the command whose line was wrong (``elevation download``),
+        when the line named one that the parser knows: ``error_report`` takes
+        the example of the hint from it.
     """
 
     code = "usage_error"
     DEFAULT_HINT = "Parametry komendy: kartograf catalog <grupa> <komenda> --params"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        command: str | None = None,
+        option: str | None = None,
+        options: Sequence[str] | None = None,
+        allowed: Sequence[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message, option=option, options=options, allowed=allowed, hint=hint
+        )
+        self.command = command
 
 
 class ParseError(ValidationError):

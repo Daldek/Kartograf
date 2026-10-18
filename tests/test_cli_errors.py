@@ -14,7 +14,7 @@ from kartograf.cli.commands import main
 from kartograf.commands import parse_command
 from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.plan import new_plan
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, UsageError, ValidationError
 from kartograf.transform.crs import TransformError, TransformUnavailableError
 
 SHEET = "N-34-130-D-d-2-4"
@@ -160,6 +160,55 @@ def test_json_argparse_error_is_usage_error(capsys):
     assert document["exception"] == "UsageError"
     assert document["exit_code"] == 2
     assert "nieznana opcja --bogus" in document["message"]
+
+
+@pytest.mark.parametrize(
+    ("flags", "message"),
+    [
+        (["--product", "foo"], "invalid choice: 'foo'"),
+        (["--bogus"], "nieznana opcja --bogus"),
+        (["--product"], "expected one argument"),
+    ],
+    ids=["value-outside-choices", "unknown-flag", "flag-without-value"],
+)
+def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
+    capsys, flags, message
+):
+    code, out, err = _run(capsys, ["elevation", "download", *flags, "--json"])
+
+    document = json.loads(out)
+    assert code == 2 and err == ""
+    assert document["code"] == "usage_error"
+    assert message in document["message"]
+    assert document["command"] == "elevation download"
+    where, example = document["hint"].split(" Przyklad: kartograf ", 1)
+    assert where == "Parametry komendy: kartograf catalog elevation download."
+    assert parse_command(example).command == "elevation download"
+
+
+def test_json_usage_error_without_a_command_has_the_generic_hint(capsys):
+    code, out, err = _run(capsys, ["elevation", "frobnicate", "--json"])
+
+    document = json.loads(out)
+    assert code == 2 and err == ""
+    assert document["code"] == "usage_error"
+    assert document["command"] is None
+    assert document["hint"] == UsageError.DEFAULT_HINT
+
+
+def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
+    capsys, tmp_path
+):
+    argv = ["project", "add", "--json", "--project", str(tmp_path), "teren"]
+    code, out, err = _run(capsys, [*argv, "elevation", "download", "--bogus"])
+
+    document = json.loads(out)
+    assert code == 2 and err == ""
+    assert document["code"] == "usage_error"
+    assert document["command"] == "project add"
+    assert document["hint"].startswith(
+        "Parametry komendy: kartograf catalog elevation download. Przyklad: "
+    )
 
 
 def test_json_removed_command_is_usage_error(capsys):

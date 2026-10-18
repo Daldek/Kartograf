@@ -297,6 +297,42 @@ def test_validation_hint_has_flag_and_example_from_the_catalog():
     )
 
 
+def test_usage_error_of_a_known_command_names_it_and_gives_an_example():
+    exc = UsageError("argument --product: invalid choice", command="elevation download")
+
+    report = error_report(exc)
+
+    assert (exc.command, report.command) == ("elevation download",) * 2
+    assert report.exit_code == 2 and report.details == {}
+    assert report.hint is not None
+    where, example = report.hint.split(" Przyklad: kartograf ", 1)
+    assert where == "Parametry komendy: kartograf catalog elevation download."
+    assert parse_command(example).command == "elevation download"
+    assert UsageError("m").command is None
+
+
+def test_usage_error_command_and_hint_sources():
+    exc = UsageError("m", command="elevation download")
+
+    # the command a caller names is the one that failed; the hint is about the
+    # command whose line was wrong (the parser of a line inside ``project add``)
+    nested = error_report(exc, command="project add")
+    assert nested.command == "project add"
+    assert nested.hint is not None
+    assert nested.hint.startswith("Parametry komendy: kartograf catalog elevation ")
+    # without a command of its own the error is about the command that was run
+    assert error_report(UsageError("m"), command="parse").hint == (
+        "Parametry komendy: kartograf catalog parse. "
+        "Przyklad: kartograf parse N-34-130-D-d-2-4"
+    )
+    # a hint set where the error is raised wins, an unknown id is no command
+    own = UsageError("m", command="elevation download", hint="Wlasna podpowiedz")
+    assert error_report(own).hint == "Wlasna podpowiedz"
+    unknown = UsageError("m", command="no such command")
+    assert error_report(unknown).hint == UsageError.DEFAULT_HINT
+    assert error_report(UsageError("m")).hint == UsageError.DEFAULT_HINT
+
+
 def test_validation_hint_has_an_example_without_allowed_values():
     hint = error_report(
         ValidationError("m", option="output_dir"), command="elevation download"

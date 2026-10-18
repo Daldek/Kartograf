@@ -1,12 +1,15 @@
 """
-The example of an error hint (spec 6.3, part (b)): ``example_for``.
+The example of an error hint (spec 6.3, part (b)): ``example_for``, and the hint
+of a wrong command line (``usage_hint``).
 
 A ``ValidationError`` names the argument that is wrong (``option``); the hint of
 its ``kartograf-error/1`` document points at the CLI flag of that argument and at
 a command line that uses it, taken from the examples of the catalog - the same
-lines as the ``epilog`` of ``--help`` and ``ExampleInfo.command_line``. The
-function is a lookup in the declarations: no catalog is built, nothing is
-raised for an unknown command or option.
+lines as the ``epilog`` of ``--help`` and ``ExampleInfo.command_line``. A
+``UsageError`` names the command whose line was wrong; its hint says where the
+parameters of that command are and gives its first example. The functions are
+lookups in the declarations: no catalog is built, nothing is raised for an
+unknown command or option.
 """
 
 import shlex
@@ -64,3 +67,32 @@ def example_for(
         found.examples[0],
     )
     return flag, example_command_line(found, chosen)
+
+
+def usage_hint(command: str | None, *, max_chars: int) -> str | None:
+    """Where the parameters of a command are and an example line of it: the hint
+    of a ``UsageError`` about the command.
+
+    Parameters
+    ----------
+    command : str, optional
+        Id of the command (``elevation download``); ``None`` or an unknown id
+        gives no hint.
+    max_chars : int
+        The longest text allowed: the example is left out when the hint would
+        pass it.
+
+    Returns
+    -------
+    str or None
+        ``Parametry komendy: kartograf catalog <id>.`` followed by ``Przyklad:``
+        and the first example of the command when it has one and the text fits.
+    """
+    found = declared_commands().get(command) if command is not None else None
+    if found is None:
+        return None
+    where = f"Parametry komendy: kartograf catalog {found.id}."
+    _, line = example_for(found.id, None)
+    if line and len(candidate := f"{where} Przyklad: {line}") <= max_chars:
+        return candidate
+    return where
