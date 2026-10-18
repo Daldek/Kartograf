@@ -1,14 +1,15 @@
 # Spec: Interfejs dla agentow AI - dokumenty JSON, kody bledow, katalog komend i serwer MCP (0.8.0)
 
 **Data:** 2026-10-18
-**Status:** projekt do implementacji; zakres (pozycje 1-8 sekcji 0) z decyzji
-koordynatora 2026-10-18 (brief "agent interface"), decyzje szczegolowe D1-D20
-(sekcja 4) i otwarte kwestie O1-O9 (sekcja 16) do akceptacji uzytkownika
-**Galaz:** `feat/agent-interface` (z `feat/archiwista-store-api`)
+**Status:** zaakceptowana przez koordynatora 2026-10-18: zakres (pozycje 1-8 sekcji 0),
+decyzje szczegolowe D1-D21 (sekcja 4) i rozstrzygniecia O1-O9 (sekcja 16); wdrozenie wg
+planu `docs/superpowers/plans/2026-10-18-agent-interface.md` (zadania T0-T9, sekcja 13)
+**Galaz:** `feat/agent-interface` (z `feat/archiwista-store-api`; zawiera poprawki
+przegladu API odczytu magazynu, merge `8c65f4e`)
 **Wersja docelowa:** 0.8.0 (wydanie jeszcze nietagowane: zmiany lamiace API
 i CLI dozwolone, wszystko w jednym wydaniu; sekcja 11)
-**Warunek wstepny:** API odczytu magazynu (ADR-045), grupy komend CLI
-(ADR-039, ADR-044), manifest projektu (ADR-040), raport dostepnosci
+**Warunek wstepny:** API odczytu magazynu (ADR-045, po przegladzie z merge `8c65f4e`),
+grupy komend CLI (ADR-039, ADR-044), manifest projektu (ADR-040), raport dostepnosci
 (ADR-041) i `Notice` (ADR-037) sa juz w 0.8.0-dev na galezi bazowej
 **Dokumenty zrodlowe:**
 - decyzje koordynatora 2026-10-18 (pozycje 1-8 sekcji 0; poza zakresem:
@@ -35,7 +36,7 @@ i CLI dozwolone, wszystko w jednym wydaniu; sekcja 11)
 | 2 | `--json` w kazdej komendzie CLI | dokumenty `kartograf-<rodzaj>/1` z biblioteki (`to_dict()`/`to_json()`), CLI tylko drukuje; blad = `kartograf-error/1` | 5, 6, 7 |
 | 3 | Stabilne kody bledow | `code`, `hint`, `exit_code` na wyjatkach, jedna tabela kodow bledow i wyjscia | 6 |
 | 4 | Katalog komend | `get_catalog()` (`kartograf-catalog/1`), `kartograf catalog`, pokrycie KB-1 i warstwa komend KB-2..KB-5; parser CLI budowany z katalogu | 8 |
-| 5 | Serwer MCP | `kartograf[mcp]`, `kartograf-mcp`, `kartograf/mcp_server.py`, 40 narzedzi z katalogu | 9 |
+| 5 | Serwer MCP | `kartograf[mcp]`, `kartograf-mcp`, `kartograf/mcp_server.py`, 29 narzedzi z katalogu | 9 |
 | 6 | `llms.txt` | spis tresci dla agentow (llmstxt.org), po polsku, < 150 linii | 10.2 |
 | 7 | `scripts/gate.sh` | jedna komenda bramy (ruff, ruff format, mypy, pytest), dziala z worktree | 10.3 |
 | 8 | `CLAUDE.md` | regula dla agentow z innych repozytoriow + wskazanie `scripts/gate.sh` i `llms.txt` | 10.4 |
@@ -94,6 +95,17 @@ Kryterium (kontroluja je testy z sekcji 12, kryteria numerowane w sekcji 14):
   `remedy`); bez `code` i `hint`; informacje dla wywolujacego maja tylko czesc
   klas (`DownloadError.sheet`/`status_code`, `NoCoverageError.hints`,
   `YearRangeError.sheets`/`hints`, `InvalidSidecarError.path`).
+- Odczyt magazynu (ADR-045, stan po przegladzie `8c65f4e`): `list_segments`,
+  `iter_store`, `read_sidecar`, `describe_segment`, `file_footprint`, `link_target` i
+  typy `Sidecar`, `StoreEntry`, `SegmentInfo` (`Sidecar` i `StoreEntry` niehashowalne:
+  pola `dict`). Brak albo niedostepny `output_dir` to `OSError` (nie pusty magazyn);
+  bledne argumenty (segment, jednostka: nazwa zarezerwowana `versions`/`full_sheet`/
+  `kampanie` albo dluzsza niz 255 bajtow, `units` bez `segment`) to `ValidationError`
+  od razu przy wywolaniu; `read_sidecar` zglasza `InvalidSidecarError` (brak pliku, zly
+  JSON, inny schemat; sidecar bez pola `schema` tylko w ksztalcie `emit_sidecar`).
+  `Sidecar.unit` pliku krajowego z motywem to nazwa pliku slotu (`pl_miejscowosci`) i
+  jest wartoscia przyjmowana przez `iter_store(units=...)` tego segmentu;
+  `Sidecar.schema` jest zawsze `kartograf-meta/1`.
 - Kody wyjscia (`cli/commands.py::main`): 0, 1 (`KartografError`, wyjatek
   spoza hierarchii, `ok == false`), 2 (argparse), 130 (Ctrl-C). Nigdzie nie sa
   spisane w jednej tabeli.
@@ -163,9 +175,10 @@ Rozjazd wyklucza budowa, a testy kontraktowe (sekcja 12) sprawdzaja reszte.
 zaleznoscia opcjonalna (extra), importowana wylacznie w `kartograf/mcp_server.py`.
 
 **A7. MCP jest cienki.** Narzedzie = jedna komenda katalogu = jedna funkcja
-biblioteki (przez `run_command`/`check_command` albo wprost); wynik narzedzia =
-ten sam dict co `--json`; zadna logika danych, walidacja ani formatowanie nie
-powstaje w serwerze.
+biblioteki (przez `run_command`/`check_command` albo wprost); jedyny wyjatek to
+`check_updates`: jedno narzedzie sprawdzajace dla komend danych (argument `tool`
+wybiera komende, wywolanie to `check_command`). Wynik narzedzia = ten sam dict co
+`--json`; zadna logika danych, walidacja ani formatowanie nie powstaje w serwerze.
 
 **A8. Bez cichych wartosci domyslnych wplywajacych na dane.** Narzedzia MCP
 nie dodaja wartosci domyslnych: `output_dir` jest zawsze jawny, kazda sciezka
@@ -195,7 +208,7 @@ pol dataclass, kolejnosc wyniku biblioteki); przy zamrozonym zegarze
 | D9 | `get_catalog()` zwraca widok skrocony (grupy, komendy bez parametrow, kody); parametry na zadanie (`command=`, `params=True`) | zawsze pelny: ok. 25-30 tys. tokenow (szacunek) na kazde wywolanie przez model |
 | D10 | Warstwa komend w bibliotece: `parse_command` (KB-2), `validate_command` (KB-3), `format_command` (KB-4), `run_command`/`check_command` (KB-5); `data_commands()` = filtr katalogu (KB-1) | tylko katalog: MCP i Archiwista pisza wlasny dispatch po 12 funkcjach; patrz O5 |
 | D11 | MCP na niskopoziomowym `mcp.server.Server` z jawnymi schematami z katalogu; wynik `CallToolResult(content, structured_content, is_error)` budowany przez serwer | `MCPServer`: schemat z sygnatur Pythona (artefakty pydantic, `title`), do modelu dociera tylko tresc `ToolError`, brak `structured_content` przy bledzie; `mcp run`/`mcp dev` dzialaja tylko z `MCPServer` (nieistotne: skrypt `kartograf-mcp`) |
-| D12 | Narzedzie na komende katalogu (`elevation_download`, `boundaries_download`, ...) plus blizniak `*_check_updates` (tylko odczyt); nazwy z katalogu (`mcp.tool`) | narzedzie na funkcje API (`download_data` dla elevation i imagery, `download_collection` dla 7 grup): 10 narzedzi zamiast 24, ale `collection` to zargon biblioteki, schemat to suma 17 parametrow roznych produktow; jedno narzedzie z trybem `check`: `readOnlyHint` nie moze zalezec od argumentu; patrz O4 |
+| D12 | Narzedzie na komende katalogu (`elevation_download`, `boundaries_download`, ...) plus jedno narzedzie `check_updates` (tylko odczyt; parametry `tool` = nazwa narzedzia danych i `arguments` = jego argumenty) zamiast blizniaka per komenda; nazwy narzedzi z katalogu (`CommandInfo.tool`) | narzedzie na funkcje API (`download_data` dla elevation i imagery, `download_collection` dla 7 grup): 5 narzedzi danych zamiast 12, ale `collection` to zargon biblioteki, schemat to suma 17 parametrow roznych produktow; 12 blizniakow `<narzedzie>_check_updates`: 12 dodatkowych narzedzi (kontekst, gorszy wybor narzedzia przez agenta); jedno narzedzie danych z trybem `check`: `readOnlyHint` nie moze zalezec od argumentu; patrz O4 |
 | D13 | `is_error` narzedzia MCP = kod wyjscia komendy CLI != 0 (takze `ok: false`); dokument jest zawsze w `content` i `structured_content` | `is_error` tylko dla wyjatkow: agent musi pamietac o sprawdzaniu `ok`; patrz O3 |
 | D14 | Sciezki w argumentach narzedzi MCP musza byc bezwzgledne | wzgledne: zaleza od cwd serwera uruchomionego przez klienta |
 | D15 | Postep MCP: `report_progress(n, None, tekst)` z licznikiem zdarzen `n` | `DownloadProgress.current` jako `progress`: nie rosnie scisle (status `downloading` i `completed` tej samej jednostki), a protokol wymaga wzrostu |
@@ -204,6 +217,7 @@ pol dataclass, kolejnosc wyniku biblioteki); przy zamrozonym zegarze
 | D18 | `llms.txt` w korzeniu repo (llmstxt.org), tekst po polsku, linki bezwzgledne do GitHub (`main`), zgodnosc polecen z katalogiem sprawdza test | linki wzgledne: nie dzialaja poza repozytorium; kopia opisu CLI: dubel katalogu |
 | D19 | `scripts/gate.sh`: ruff check, ruff format --check, mypy, pytest `-m "not live"`; Python z `.venv` repozytorium albo glownego checkoutu (worktree) | `make`/`nox`: nowa zaleznosc; skrypt w Pythonie: potrzebuje Pythona do znalezienia Pythona |
 | D20 | `kartograf/__main__.py` (`python -m kartograf`) wola `kartograf.cli.commands.main` | tylko skrypt `kartograf`: agent w srodowisku bez `PATH` skryptow (worktree, `uvx`) nie uruchomi CLI z kodu worktree |
+| D21 | `OSError` (brak, uprawnienia, odlaczony udzial; kontrakt odczytu magazynu ADR-045 mowi o `OSError`, nie o pustym magazynie) = kod bledu `io_error`, kod wyjscia 1; budowany przez `error_report` obok `interrupted` i `internal_error`, bez nowej klasy w hierarchii `KartografError` | `internal_error` dla `OSError`: model dostaje "blad programu" za literowke w `output_dir`; klasa `StoreError(KartografError)` opakowujaca `OSError`: `OSError` leci tez z zapisu pobran, cache i projektu, wiec kazde miejsce wymagaloby opakowania; `ValidationError(option="output_dir")` tylko w nowych funkcjach: gubi odlaczony udzial (zawsze `invalid_input`, kod 2) |
 
 ## 5. Serializacja i dokumenty JSON
 
@@ -258,6 +272,11 @@ Uzywaja go `PinnedFile` i `FileCheck`: w manifescie `path` i `version` sa
 wzgledne do magazynu, a dokument ma sciezki bezwzgledne, wiec `Project`,
 `ProjectReport` i `ProjectCheck` ustawiaja `ctx.store` (= `project.output_dir`)
 przed zakodowaniem potomkow.
+
+Kontekst kodera niesie tez `ctx.omit` (zbior par `(klasa, pole)` pomijanych w kodowaniu
+dataclass): `StoreEntries` ustawia `{("Sidecar", "raw")}` (5.4.10), `StoreSidecar` nie.
+`Sidecar` i `StoreEntry` sa niehashowalne (pola `dict`): koder nigdy nie opiera sie na
+hashowaniu wartosci.
 
 Rejestr `SCHEMAS: dict[str, tuple[type[Document], ...]]` wypelnia
 `__init_subclass__`. Test: kazda nazwa pasuje do `^kartograf-[a-z][a-z0-9-]*/[1-9][0-9]*$`,
@@ -446,9 +465,10 @@ Typ `AvailabilityReport` (ADR-041; USAGE 2, ARCHITECTURE 4.9). Bez zmian poza
 
 Nowy typ `SheetInfo`; funkcja `describe_sheet(sheet, *, hierarchy=False,
 children=False, descendants=None) -> SheetInfo` (logika dzis w `cli/parse_cmd.py`:
-`format_cz_sheet`, `SheetParser`, hierarchia, potomkowie). Bez sieci. Bledy:
-`ParseError` (godlo spoza nomenklatur), `ValidationError` z `option` (`hierarchy`,
-`children`, `descendants` dla godla CZ; nieznana skala).
+`format_cz_sheet`, `SheetParser`, hierarchia, potomkowie; modul `kartograf/sheet_info.py`,
+T4d: pole `commands` wylicza sie z deklaracji katalogu, wiec funkcja powstaje w torze
+katalogu). Bez sieci. Bledy: `ParseError` (godlo spoza nomenklatur), `ValidationError` z
+`option` (`hierarchy`, `children`, `descendants` dla godla CZ; nieznana skala).
 
 | Klucz | Typ | Znaczenie |
 |---|---|---|
@@ -506,7 +526,8 @@ download --bbox` rozwija obszar sam).
 
 Nowy typ `SourceList`; funkcja `list_sources(*, group, product=None) -> SourceList`
 (rejestr zrodel, bez sieci). Logika wyboru flag per grupa (dzis `_source_choice` w
-`cli/groups/*.py`) przechodzi do `kartograf/catalog/sources.py`; tabela CLI
+`cli/groups/*.py`) przechodzi do `kartograf/source_info.py` (T3; modul biblioteki poza
+`catalog/`: katalog korzysta z rejestru, nie odwrotnie); tabela CLI
 (WYBOR, KRAJ, DOSTAWCA, KATALOG, KLUCZ, NAZWA) jest renderowana z tego dokumentu
 i musi dawac ten sam tekst co dzis (kontrola jednorazowa przed/po, sekcja 13).
 `group`: jedna z 11 grup z `list-sources` (`elevation`, `imagery`, `landcover`,
@@ -555,7 +576,7 @@ zrodlo), `directory` (segment pod `output_dir` z `<uklad>`, `<uklad-wys>`), `sel
 Nowy typ `LayerList`; funkcja `list_layers(*, group, product=None) -> LayerList`
 (`landcover`: `product` wymagany; `soil`: bez `product`). Bez sieci i bez zapisu;
 logika dzis w `cli/landcover_cmd.py` i `cli/soil_cmd.py` (provider przez
-`LandCoverManager`) przechodzi do biblioteki.
+`LandCoverManager`) przechodzi do `kartograf/source_info.py` (obok `list_sources`).
 
 | Klucz | Typ | Znaczenie |
 |---|---|---|
@@ -658,7 +679,10 @@ przez inny proces zglasza jako `CacheError`, nigdy jej nie usuwa). Cache to
 #### 5.4.10 Dokumenty odczytu magazynu (API i MCP; ADR-045)
 
 Nowe typy opakowuja istniejace obiekty odczytu w dokumenty (A1: serializacja w
-bibliotece; strumieniowe `list_segments`, `iter_store`, `read_sidecar` bez zmian):
+bibliotece; strumieniowe `list_segments`, `iter_store`, `read_sidecar` bez zmian).
+Kontrakt odczytu po przegladzie (ADR-045, ARCHITECTURE 3.3.1) zostaje: bledne argumenty
+to `ValidationError` (z `option`, 6.1), brak albo niedostepny `output_dir` to `OSError`
+(`io_error`, 6.2), brak albo nieczytelny sidecar to `InvalidSidecarError`:
 
 - `kartograf-store-overview/1`: `describe_store(output_dir) -> StoreOverview` =
   `list_segments` + `describe_segment` dla kazdego segmentu. Klucze: `schema`,
@@ -671,11 +695,17 @@ bibliotece; strumieniowe `list_segments`, `iter_store`, `read_sidecar` bez zmian
   `segment`, `hierarchy`, `name`, `path`, `version_path`, `label`, `sha8`, `sidecar`,
   `problem`, `skipped`; `sidecar` = pola `Sidecar` bez `raw`). `segment` i `limit`
   (liczba >= 1) sa wymagane: pelny skan magazynu z 80 tys. wersji nie jest
-  odpowiedzia dla modelu.
+  odpowiedzia dla modelu. `units` to nazwy jednostek jak w `iter_store(units=)` (nie
+  prefiksy); `sidecar.unit` wpisu jest wartoscia przyjmowana przez `units` tego samego
+  segmentu (plik krajowy z motywem: `pl_miejscowosci`), wiec agent odswieza jedna
+  jednostke bez zgadywania nazwy; nazwy zarezerwowane (`versions`, `full_sheet`,
+  `kampanie`) i dluzsze niz 255 bajtow to `invalid_input` z `details.option` = `units`.
+  `skip_versions` nie jest wystawione (dokument nie ma wlasnego indeksu).
 - `kartograf-store-sidecar/1`: `read_store_sidecar(path) -> StoreSidecar`. Klucze:
   `schema`, `path`, `sidecar` (wszystkie pola `Sidecar`, z `raw`; zagniezdzone pole
-  `schema` = `kartograf-meta/1`). `InvalidSidecarError` -> `kartograf-error/1`
-  (`invalid_sidecar`).
+  `schema` jest zawsze `kartograf-meta/1`, takze gdy `raw` nie ma pola `schema`:
+  sidecar w ksztalcie `emit_sidecar`). `InvalidSidecarError` -> `kartograf-error/1`
+  (`invalid_sidecar`, `details.path`).
 
 ### 5.5 Typy -> dokumenty -> funkcje
 
@@ -733,9 +763,10 @@ parser katalogu (`parse_command`, CLI w trybie `--json`); `code = "usage_error"`
 
 Pozostale klasy: `DownloadError.DETAIL_FIELDS = ("sheet", "status_code")`;
 `NoCoverageError`: `+ "hints"`; `YearRangeError`: `("sheets", "min_year",
-"max_year", "hints")`; `InvalidSidecarError`: `("path",)`; `TransformUnavailableError`:
-`("rejected", "remedy")`; `CacheError.DEFAULT_HINT = "Wyczysc cache: kartograf cache
-clear"`.
+"max_year", "hints")`; `InvalidSidecarError`: `("path",)` i `DEFAULT_HINT = "Podaj
+sciezke pliku danych magazynu albo jego sidecara <plik>.meta.json (kartograf-meta/1)"`;
+`TransformUnavailableError`: `("rejected", "remedy")`; `CacheError.DEFAULT_HINT =
+"Wyczysc cache: kartograf cache clear"`.
 
 Obowiazkowe miejsca ustawiania `option`/`allowed` (test sprawdza kazdy scenariusz):
 wspolne walidatory (`download/options.py`: `require_product`, wybor `resolution`,
@@ -744,9 +775,13 @@ wspolne walidatory (`download/options.py`: `require_product`, wybor `resolution`
 `landcover/manager.py`: `require_landcover_product`, `validate_landcover_request`,
 `validate_soil_request`; `hydrology/hsg.py`: `validate_hsg_request`; `output_required`;
 `validate_request_bbox`/`parse_bbox_arg`; zgloszenia "wymagane" i "niedozwolone"
-opcji) oraz argumenty projektu (`name`, `command`). Pozostale `ValidationError`
-bez `option` sa dozwolone (`option: null`); regula STANDARDS 11.1 zostaje:
-informacje dla wywolujacego sa atrybutami, nigdy wyciagnietymi z tekstu.
+opcji), argumenty projektu (`name`, `command`) oraz walidatory odczytu magazynu
+(`store.py`: nieprawidlowy segment -> `option="segment"`, nieprawidlowa jednostka albo
+`units` bez `segment` -> `option="units"`) i nowych funkcji biblioteki (`limit`,
+`group` i `product` w `list_sources`/`list_layers`, `scale` i `sheet_system` w
+`find_sheets`, `hierarchy`/`children`/`descendants` w `describe_sheet`). Pozostale
+`ValidationError` bez `option` sa dozwolone (`option: null`); regula STANDARDS 11.1
+zostaje: informacje dla wywolujacego sa atrybutami, nigdy wyciagnietymi z tekstu.
 
 ### 6.2 Taksonomia: wyjatek -> kod -> kod wyjscia -> podpowiedz
 
@@ -760,15 +795,16 @@ informacje dla wywolujacego sa atrybutami, nigdy wyciagnietymi z tekstu.
 | `NoCoverageError` (`DownloadError`) | `no_coverage` | 1 | zrodlo nie ma danych dla arkusza (stan danych, ponowienie nie pomoze) | `hints` wyjatku (te same teksty co po kropce w komunikacie) |
 | `YearRangeError` (`DownloadError`) | `year_out_of_range` | 1 | dane sa, ale poza przedzialem lat (przed pobraniem) | `hints` wyjatku (propozycje flag) |
 | `CacheError` | `cache_error` | 1 | cache SQLite niedostepny (`strict`), zablokowany albo nieczytelny | `Wyczysc cache: kartograf cache clear` |
-| `InvalidSidecarError` | `invalid_sidecar` | 1 | sidecar `kartograf-meta/1` nieczytelny, nie-obiekt albo inny schemat | - (`details.path`) |
+| `InvalidSidecarError` | `invalid_sidecar` | 1 | sidecar `kartograf-meta/1` nie istnieje, jest nieczytelny, nie jest obiektem JSON albo ma inny schemat (`read_sidecar`, `read_store_sidecar`; brak pola `schema` przyjmowany tylko w ksztalcie `emit_sidecar`); skan `iter_store` go nie zglasza (wpis `problem`) | `DEFAULT_HINT` (`details.path`) |
 | `TransformError` | `transform_failed` | 1 | blad przeliczenia wspolrzednych (np. wynik nieskonczony) | - |
 | `TransformUnavailableError` (`TransformError`) | `transform_unavailable` | 1 | brak bezpiecznej operacji dla pary ukladow | `remedy` |
+| `OSError` (`FileNotFoundError`, `PermissionError`...) | `io_error` | 1 | katalog albo plik niedostepny: brak, uprawnienia, brak miejsca, odlaczony udzial; m.in. `describe_store` i `list_store_entries` na nieistniejacym `output_dir` (kontrakt ADR-045: brak magazynu to `OSError`, nie pusty magazyn) | `Sprawdz sciezke i uprawnienia: <exc.filename>` |
 | `KeyboardInterrupt` (CLI, serwer) | `interrupted` | 130 | Ctrl-C / SIGINT | - |
-| kazdy inny `Exception` (`KeyError`, `ValueError` niezmiennika, `RuntimeError`, `TypeError`) | `internal_error` | 1 | blad programu | `Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback` |
+| kazdy inny `Exception` poza `OSError` (`KeyError`, `ValueError` niezmiennika, `RuntimeError`, `TypeError`) | `internal_error` | 1 | blad programu | `Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback` |
 
-`KeyboardInterrupt` i wyjatki spoza hierarchii nie maja klas `code`: kody
-`interrupted` i `internal_error` buduje `error_report` (6.3). Kolejne kody wolno
-dodawac (A3); zmiana albo usuniecie istniejacego to zmiana lamiaca.
+`KeyboardInterrupt`, `OSError` i wyjatki spoza hierarchii nie maja klas `code`: kody
+`interrupted`, `io_error` i `internal_error` buduje `error_report` (6.3). Kolejne kody
+wolno dodawac (A3); zmiana albo usuniecie istniejacego to zmiana lamiaca.
 
 ### 6.3 Dokument `kartograf-error/1` (`ErrorReport`, `error_report`)
 
@@ -785,13 +821,15 @@ katalog dociaga leniwie): dataclass `ErrorReport(Document)` i funkcja
 | `exception` | string | nazwa klasy wyjatku (`type(exc).__name__`) |
 | `exit_code` | int | kod wyjscia z 6.5 |
 | `command` | string albo `null` | id komendy katalogu, w ktorej wystapil blad (CLI i MCP znaja ja z kontekstu; biblioteka bez kontekstu: `null`) |
-| `details` | obiekt | `exc.details()`; `{}` gdy brak atrybutow |
+| `details` | obiekt | `exc.details()`; `{}` gdy brak atrybutow; dla `OSError` `{"errno": "ENOENT", "path": "<exc.filename>"}` (tylko niepuste pola; `errno` jako nazwa symboliczna) |
 
 Algorytm `hint` (deterministyczny, jedna linia ASCII, najwyzej 400 znakow):
 
 1. `exc.hint`, gdy ustawiony;
 2. `DEFAULT_HINT` klasy, a dla `NoCoverageError`/`YearRangeError` - `hints` wyjatku
-   polaczone `"; "`, dla `TransformUnavailableError` - `remedy`;
+   polaczone `"; "`, dla `TransformUnavailableError` - `remedy`, dla `OSError` - `Sprawdz
+   sciezke i uprawnienia: <exc.filename>` (bez nazwy pliku: `Sprawdz sciezki i
+   uprawnienia katalogow z argumentow`);
 3. dla `ValidationError` z `option`: skladniki (a) `Dozwolone wartosci <flaga>: a, b,
    c.` (z `allowed`, najwyzej 40 wartosci i `...`; flaga z katalogu, gdy `command` znana
    i parametr istnieje, inaczej nazwa `option`), (b) `Przyklad: <command_line>` -
@@ -845,6 +883,7 @@ sie kodem 2, nie 1 (D4, O2); argparse konczyl sie 2 juz wczesniej.
     `e.exit_code`; bez JSON - `Error: <message>` na stderr jak dotad (podpowiedz
     nie jest drukowana drugi raz: teksty `hints` sa juz w komunikacie), kod `e.exit_code`;
   - `KeyboardInterrupt`: kod 130 (JSON: `interrupted`; bez JSON: `Error: przerwano (Ctrl-C)`);
+  - `OSError`: kod 1 (JSON: `io_error`; bez JSON jak inny `Exception`);
   - inny `Exception`: kod 1 (JSON: `internal_error`; bez JSON: `Error: <Typ>: <tekst>` + linia
     o `KARTOGRAF_DEBUG`, jak dotad);
   - `KARTOGRAF_DEBUG=1`: wyjatek jest podnoszony ponownie (takze w trybie JSON).
@@ -988,9 +1027,9 @@ tekstow kolekcji, np. `Numeryczny Model Terenu; PL i CZ`), `countries` (`pl`, `c
 | `check_function` | string albo `null` | blizniak `check_*` (`check_data`) |
 | `result_schema` | string | schemat wyniku (`kartograf-download/1`) |
 | `check_result_schema` | string albo `null` | schemat wyniku blizniaka (`kartograf-plan/1`) |
+| `supports_check` | bool | komenda ma sprawdzenie aktualnosci bez pobierania: `true` <=> `check_function` i `check_result_schema` sa ustawione (CLI: `--check-updates`; MCP: dla komend danych narzedzie `check_updates`, dla `project download` narzedzie `project_check_updates`) |
 | `cli` | string albo `null` | slowa po `kartograf` (`elevation download`); `null` = tylko API |
-| `tool` | string albo `null` | nazwa narzedzia MCP (9.3) |
-| `check_tool` | string albo `null` | narzedzie MCP blizniaka |
+| `tool` | string albo `null` | nazwa narzedzia MCP (9.3); komenda z `supports_check`, bedaca komenda danych, jest sprawdzana narzedziem `check_updates` z `tool` = ta nazwa |
 | `params` | `ParamInfo[]` albo `null` | parametry; tylko na zadanie (8.5) |
 | `constraints` | `ConstraintInfo[]` albo `null` | ograniczenia (j.w.) |
 | `examples` | `ExampleInfo[]` albo `null` | przyklady (j.w.) |
@@ -1046,9 +1085,9 @@ Przyklad (skrocony do 5 z 28 parametrow `elevation download`):
   "check_function": "check_data",
   "result_schema": "kartograf-download/1",
   "check_result_schema": "kartograf-plan/1",
+  "supports_check": true,
   "cli": "elevation download",
   "tool": "elevation_download",
-  "check_tool": "elevation_download_check_updates",
   "params": [
     {"name": "product", "argument": "product", "flag": "--product", "short": null, "positional": false, "kind": "str", "required": true, "task": true, "allowed": ["nmt", "nmpt", "laz", "contours"], "default": null, "cli_default": null, "accepts": null, "section": "Produkt i obszar", "description": "Produkt (wymagany): nmt (Numeryczny Model Terenu; PL i CZ), ..."},
     {"name": "bbox", "argument": "bbox", "flag": "--bbox", "short": null, "positional": false, "kind": "bbox", "required": false, "task": true, "allowed": null, "default": null, "cli_default": null, "accepts": null, "section": "Produkt i obszar", "description": "Prostokat obszaru: min_x,min_y,max_x,max_y ..."},
@@ -1076,17 +1115,27 @@ kartograf/catalog/
     spec.py         # typy deklaracji: Param, Command, Group (frozen); allowed i description moga byc dostawcami
     shared.py       # parametry wspolne: obszar (sheet, bbox, bbox_crs, geometry, layer), product, country,
                     #   output_dir, workers, quiet, json, check_updates/upgrade/force, plan, update
+    kinds.py        # rodzaje parametrow: parsery wartosci CLI (bbox, per_country, layers) i konwersja opcji
+                    #   zadania <-> argumenty biblioteki (options_from_json/_to_json, check_options_json)
     commands/       # jeden modul na grupe: elevation.py, imagery.py, landcover.py, soil.py, boundaries.py,
                     #   cadastre.py, models3d.py, hydro.py, names.py, maps.py, geodesy.py, project.py,
                     #   misc.py (parse, catalog, cache, tylko-API)
     model.py        # dokument katalogu (8.1)
     build.py        # get_catalog(): rozstrzyga dostawcow, waliduje deklaracje, buduje Catalog
     cliparser.py    # argparse z deklaracji (tylko stdlib); UsageError zamiast SystemExit
-    sources.py      # list_sources, list_layers i wybor flag per grupa (przeniesione z cli/groups)
+    formatting.py   # format_command_line: kanoniczna linia komendy (8.7); ExampleInfo.command_line i format_command
+    hints.py        # example_for(command, option): skladnik (b) podpowiedzi bledow (6.3)
     tools.py        # specyfikacje narzedzi MCP (czyste dane, 9.3-9.4)
     __init__.py     # get_catalog, data_commands
 kartograf/commands.py  # warstwa komend KB-2..KB-5 (8.7): importuje catalog i project.commands
 ```
+
+Moduly biblioteki dodane poza `catalog/` (katalog korzysta z rejestru i funkcji
+biblioteki, nie odwrotnie; A6): w T3 `kartograf/source_info.py` (`list_sources`,
+`list_layers`: rejestr zrodel i wybor flag per grupa, przeniesione z `cli/groups`),
+`kartograf/cache_info.py` (`get_cache_info`, `clear_cache`) i
+`kartograf/store_documents.py` (`describe_store`, `list_store_entries`,
+`read_store_sidecar`); w T4d `kartograf/sheet_info.py` (`describe_sheet`, `find_sheets`).
 
 Przeplyw (jedno zrodlo, cztery rzuty):
 
@@ -1298,9 +1347,10 @@ def check_command(command: str, options: Mapping[str, object], *, output_dir: st
   `kartograf/mcp_server.py`, skrypt `kartograf-mcp`. Narzedzia generuja sie z katalogu
   (`kartograf/catalog/tools.py`, czyste dane bez `mcp`); serwer tylko je wystawia i
   wola funkcje biblioteki (A7).
-- Narzedzie = komenda katalogu z `tool` (40 narzedzi, 9.3); nazwa narzedzia jest
-  stabilna jak kod bledu (A3). Wynik narzedzia = dokument `kartograf-*/1` identyczny
-  z `--json` (9.5). Brak wartosci domyslnych wplywajacych na dane (A8, D14).
+- Narzedzie = komenda katalogu z `tool` albo wspolne narzedzie `check_updates` (29
+  narzedzi, 9.3); nazwa narzedzia jest stabilna jak kod bledu (A3). Wynik narzedzia =
+  dokument `kartograf-*/1` identyczny z `--json` (9.5). Brak wartosci domyslnych
+  wplywajacych na dane (A8, D14).
 - `mcp` importuje tylko `kartograf/mcp_server.py`; `import kartograf` i CLI dzialaja bez
   niego (A6). Niskopoziomowy `mcp.server.Server` (D11): schematy wejscia sa dokladnie
   tymi z katalogu (bez artefaktow pydantic), a wynik budujemy recznie, bo wyjatek w
@@ -1328,9 +1378,11 @@ kartograf-mcp = "kartograf.mcp_server:main"
   argumentow przez SDK) i nie jest wspierana. Gorna granica `<3` chroni przed zmiana
   glowna; kontakt z SDK ogranicza sie do jednego modulu i testow w pamieci (9.10), wiec
   zmiany podwersji lapie brama.
-- `import kartograf.mcp_server` bez `mcp` rzuca `ImportError` z napisem `Brak pakietu
-  mcp: pip install "kartograf[mcp]"`; `main()` drukuje go na stderr i konczy kodem 1.
-  Skrypt `kartograf-mcp` jest instalowany zawsze (komunikat zamiast `ModuleNotFoundError`).
+- `kartograf.mcp_server` importuje sie BEZ `mcp` (importy SDK leniwie, w `create_server`; typy
+  tylko pod `TYPE_CHECKING`): `create_server` bez `mcp` rzuca `ImportError` z napisem `Brak
+  pakietu mcp: pip install "kartograf[mcp]"`, a `main()` lapie go, drukuje na stderr i konczy
+  kodem 1. Skrypt `kartograf-mcp` jest instalowany zawsze (komunikat zamiast
+  `ModuleNotFoundError`).
 - Rdzen nie zyskuje zaleznosci. `kartograf[mcp]` dolacza m.in. `pydantic>=2.12`,
   `starlette`, `uvicorn` (twarde zaleznosci SDK, takze dla stdio), `httpx2`,
   `jsonschema`, `sse-starlette`, `anyio`, `opentelemetry-api`, `mcp-types==2.3.0`.
@@ -1341,8 +1393,8 @@ kartograf-mcp = "kartograf.mcp_server:main"
   on_call_tool=...)`; petla: `anyio.run` z `mcp.server.stdio.stdio_server()` i
   `server.run(read, write, server.create_initialization_options())`.
   - `--tools`: rodziny po przecinku z `discovery`, `availability`, `data`, `check`,
-    `project`, `store` (domyslnie wszystkie 40 narzedzi; klienty z limitem liczby narzedzi
-    zawezaja np. do `discovery,availability,data`); nieznana rodzina = blad uruchomienia;
+    `project`, `store` (domyslnie wszystkie 29 narzedzi; klienty z limitem liczby narzedzi
+    zawezaja np. do `discovery,availability,data,check`); nieznana rodzina = blad uruchomienia;
   - `--cache-file`: plik cache metadanych; domyslnie `<katalog cache>/kartograf/metadata.db`
     (`$XDG_CACHE_HOME` albo `~/.cache`; Windows `%LOCALAPPDATA%`), tworzony przy
     pierwszym uzyciu; `--no-cache` = `cache=False`. Domyslny cache serwera NIE jest
@@ -1373,7 +1425,7 @@ magazyn jest niezmienny, nic nie jest nadpisywane (ADR-036). `title` = `summary`
 | `data` | `soil_download` | `soil download` | `download_soil` (`run_command`) | `kartograf-download/1` | D=false, I, OW |
 | `data` | `soil_hsg` | `soil hsg` | `calculate_hsg` (`run_command`) | `kartograf-download/1` | D=false, I, OW |
 | `data` | `boundaries_download`, `cadastre_download`, `models3d_download`, `hydro_download`, `names_download`, `maps_download`, `geodesy_download` | `<grupa> download` | `download_collection` (`run_command`) | `kartograf-download/1` | D=false, I, OW |
-| `check` | `<narzedzie danych>_check_updates` (12 narzedzi, np. `elevation_download_check_updates`, `soil_hsg_check_updates`) | te same komendy | `check_data`, `check_landcover`, `check_soil`, `check_hsg`, `check_collection` (`check_command`) | `kartograf-plan/1` | RO, OW |
+| `check` | `check_updates` (jedno narzedzie dla 12 komend danych; parametry `tool` i `arguments`, 9.4) | 12 komend danych z `supports_check` | `check_data`, `check_landcover`, `check_soil`, `check_hsg`, `check_collection` (`check_command`) | `kartograf-plan/1` | RO, OW |
 | `project` | `project_init` | `project init` | `init_project` | `kartograf-project-state/1` | D=false, I |
 | `project` | `project_add` | `project add` | `add_project_task` | `kartograf-project-state/1` | D=false |
 | `project` | `project_remove` | `project remove` | `remove_project_task` | `kartograf-project-state/1` | D=true |
@@ -1385,10 +1437,24 @@ magazyn jest niezmienny, nic nie jest nadpisywane (ADR-036). `title` = `summary`
 | `store` | `store_entries` | `store_entries` | `list_store_entries` | `kartograf-store-entries/1` | RO |
 | `store` | `store_sidecar` | `store_sidecar` | `read_store_sidecar` | `kartograf-store-sidecar/1` | RO |
 
-Razem 5 + 1 + 12 + 12 + 7 + 3 = 40. Poza MCP: `cache *` (cache serwera to jego
+Razem 5 + 1 + 12 + 1 + 7 + 3 = 29. Poza MCP: `cache *` (cache serwera to jego
 wewnetrzna sprawa: `update="force"` odswieza wpisy), `project_open` (stan projektu
 zwracaja `project_status` i pozostale). Nazwy narzedzi sa polem katalogu
-(`CommandInfo.tool`/`check_tool`), nie wyprowadza sie ich w locie.
+(`CommandInfo.tool`), nie wyprowadza sie ich w locie; wyjatek: `check_updates` nie ma
+wlasnej komendy (O4), a jego `tool` wskazuje komende przez jej `tool`.
+
+`check_updates` (O4) zastepuje 12 blizniakow `<narzedzie>_check_updates`: mniej
+narzedzi to mniej kontekstu i latwiejszy wybor narzedzia przez agenta. Parametry:
+`tool` (wymagany; `enum` = `tool` komend z `project_task` i `supports_check`, 12 nazw) i
+`arguments` (wymagany `object`: argumenty narzedzia z `tool` bez `update`, `plan` i
+`workers` - sprawdzenie niczego nie pobiera, nie przyjmuje planu i nie ma liczby
+watkow; ich podanie to `invalid_input`; `output_dir` wymagany jak w narzedziu danych).
+Serwer rozwiazuje `tool` -> komenda, waliduje `arguments` schematem narzedzia danych
+bez tych trzech wlasciwosci (`check_arguments_schema`, 9.4) i `validate_command`, po czym
+wola `check_command`. Adnotacje RO, OW (`readOnlyHint` nie zalezy od argumentu: dlatego
+sprawdzenie nie jest trybem narzedzi danych); wynik `kartograf-plan/1`, `ok: false` =
+czesc pozycji `check_failed`. Sprawdzenie projektu zostaje osobnym narzedziem
+`project_check_updates` (`project_dir`, `check_project`, `kartograf-project-check/1`).
 
 ### 9.4 Schematy wejscia z katalogu
 
@@ -1397,7 +1463,7 @@ drut; klucze protokolu w drucie sa camelCase: `inputSchema`, `readOnlyHint`):
 
 1. korzen `{"type": "object", "properties": ..., "required": [...],
    "additionalProperties": false}`; `required` = parametry z `required: true`,
-   ktore maja `argument`, plus `output_dir` narzedzi danych i sprawdzajacych;
+   ktore maja `argument`, plus `output_dir` narzedzi danych (w `check_updates` wymagany w `arguments`);
 2. rodzaj -> wlasciwosc: `str` -> `string` (+ `enum` z `allowed`), `int` -> `integer`,
    `flag` -> `boolean`, `bbox` -> tablica 4 `number` (`minItems`=`maxItems`=4) i
    `dependentRequired: {"bbox": ["bbox_crs"]}`, `bbox_crs` -> `string` z `enum`, `path`
@@ -1405,17 +1471,19 @@ drut; klucze protokolu w drucie sa camelCase: `inputSchema`, `readOnlyHint`):
    `{pl, cz}` o wartosciach `string`, `additionalProperties: false`), `str_list` ->
    tablica `string`, `plan` -> `object` (dokument `kartograf-plan/1`), `options` ->
    `object` (opcje zadania projektu, 8.1);
-3. wystawiane sa tylko parametry z `argument` (bez `quiet`, `json`, `check_updates`,
-   `upgrade`, `force`), a z flag uruchomienia: `update` (`enum` `upgrade`, `force`),
-   `plan`, `workers` (`integer`, `minimum` 1); bez `cache`, `on_progress`, `on_notice`;
-4. `description` wlasciwosci = `ParamInfo.description` (polski, ASCII); w narzedziach
-   `*_check_updates` opisy wlasciwosci sa pominiete (te same parametry co narzedzie
-   danych; opis narzedzia to mowi) - oszczednosc ok. 40% tokenow; `title` narzedzia =
+3. wystawiane sa tylko parametry z `argument` (bez flag CLI `quiet`, `json`,
+   `check_updates`, `upgrade`, `force`), a z flag uruchomienia: `update` (`enum`
+   `upgrade`, `force`), `plan`, `workers` (`integer`, `minimum` 1); bez `cache`,
+   `on_progress`, `on_notice`;
+4. `description` wlasciwosci = `ParamInfo.description` (polski, ASCII); `title` narzedzia =
    `summary` komendy; `description` narzedzia = `summary` + jedno zdanie o wyniku
-   (dokument i znaczenie `ok`);
+   (dokument i znaczenie `ok`); `check_updates` ma tylko dwie wlasciwosci (`tool`,
+   `arguments`) - opisy parametrow zadania daje `get_catalog` z `command=`;
 5. narzedzia wspoldzielone (`list_sources`, `list_layers`) maja dodatkowy wymagany
    parametr `group` (`enum` grup komend, ktore dziela narzedzie), `product` - opcjonalny
    `enum`; `project_add` ma `command` (`enum` 12 komend danych) i `options` (`object`);
+   `check_updates` ma `tool` (`enum` 12 narzedzi danych) i `arguments` (`object`; schemat
+   korzenia nie zawiera schematow 12 narzedzi - serwer wybiera schemat po `tool`);
 6. ograniczenia katalogu (8.4) nie sa kodowane w schemacie (poza `dependentRequired`
    dla `bbox` i `required`): wykonuje je `validate_command` i zwraca `option`.
 
@@ -1447,11 +1515,36 @@ Skrocony przyklad (`elevation_download`):
 
 (w przykladzie pominieto 22 pozostale wlasciwosci `elevation download`).
 
+Schemat `check_updates` (caly; `enum` w kolejnosci `COMMANDS`):
+
+```json
+{
+  "name": "check_updates",
+  "title": "Sprawdz, czy lokalne wersje danych sa aktualne (bez pobierania)",
+  "description": "Porownaj magazyn (output_dir w arguments) z sygnalami zrodel dla zadania narzedzia danych (tool) i jego argumentow (arguments, bez update, plan i workers). Nic nie jest pobierane. Wynik: kartograf-plan/1; ok=false oznacza, ze czesci pozycji nie dalo sie sprawdzic (check_failed).",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "tool": {"type": "string", "enum": ["elevation_download", "imagery_download", "landcover_download", "soil_download", "soil_hsg", "boundaries_download", "cadastre_download", "models3d_download", "hydro_download", "names_download", "maps_download", "geodesy_download"], "description": "Narzedzie danych, ktorego zadanie sprawdzasz"},
+      "arguments": {"type": "object", "description": "Argumenty tego narzedzia danych bez update, plan i workers (parametry: get_catalog z command=); wymagany output_dir"}
+    },
+    "required": ["tool", "arguments"],
+    "additionalProperties": false
+  },
+  "annotations": {"readOnlyHint": true, "openWorldHint": true}
+}
+```
+
+`check_arguments_schema(tool)` (`catalog/tools.py`) zwraca schemat wejscia narzedzia
+danych `tool` bez wlasciwosci `update`, `plan` i `workers`.
+
 Kolejnosc walidacji wywolania: (1) nieznana nazwa narzedzia -> blad protokolu
 `INVALID_PARAMS` (jedyny przypadek bledu protokolu); (2) argumenty wobec
 `input_schema` (`jsonschema.Draft202012Validator`): pierwszy blad -> `invalid_input`
-z `details.option` = nazwa wlasciwosci, `message` po polsku z opisem naruszenia;
-(3) regula sciezek (9.7); (4) dla narzedzi danych i sprawdzajacych `validate_command`
+z `details.option` = nazwa wlasciwosci, `message` po polsku z opisem naruszenia; dla
+`check_updates` dodatkowo `arguments` wobec `check_arguments_schema(tool)` (`option` =
+nazwa wlasciwosci wewnatrz `arguments`; `tool` spoza `enum` = `option="tool"`);
+(3) regula sciezek (9.7); (4) dla narzedzi danych i `check_updates` `validate_command`
 (`ValidationError` z `option`); (5) wykonanie w watku roboczym.
 
 ### 9.5 Wynik i bledy
@@ -1462,9 +1555,10 @@ z `details.option` = nazwa wlasciwosci, `message` po polsku z opisem naruszenia;
   `ensure_ascii=False`). `is_error` jest `true` dokladnie wtedy, gdy ten sam dokument
   dalby kod wyjscia CLI != 0 (6.5; D13): `ok: false` (w tym `project_status` z
   niepobranym zadaniem) i kazdy blad.
-- Blad: `error_report(exc, command=<id komendy narzedzia>)`, `is_error=True`, ten sam
-  ksztalt (`content` + `structured_content`); wyjatek spoza hierarchii -> `internal_error`
-  (komunikat `Typ: tekst`; pelny traceback tylko w logu stderr serwera).
+- Blad: `error_report(exc, command=<id komendy narzedzia>)` (dla `check_updates` - id komendy
+  wskazanej przez `tool`), `is_error=True`, ten sam ksztalt (`content` +
+  `structured_content`); `OSError` -> `io_error`, inny wyjatek spoza hierarchii ->
+  `internal_error` (komunikat `Typ: tekst`; pelny traceback tylko w logu stderr serwera).
 - Nie deklarujemy `output_schema` (D11): wynik jest rodzina dokumentow (wynik albo
   `kartograf-error/1`), a `Client` SDK waliduje `structured_content` wobec zadeklarowanego
   schematu - niezgodny wynik bledu wywalalby `RuntimeError` po stronie klienta.
@@ -1488,8 +1582,8 @@ raportuja postep notyfikacjami MCP:
   `"<status> <jednostka> (<current>/<total>): <message>"` (ASCII, bez pustych skladnikow);
 - `report_progress` jest no-op, gdy klient nie przekazal `progressToken` (SDK) - serwer
   raportuje bezwarunkowo;
-- bez postepu (brak `on_progress` w API): `soil_download`, `soil_hsg`, wszystkie
-  `*_check_updates`, narzedzia odczytu; KC-2 (jednolity postep) poza zakresem.
+- bez postepu (brak `on_progress` w API): `soil_download`, `soil_hsg`, `check_updates`,
+  `project_check_updates`, narzedzia odczytu; KC-2 (jednolity postep) poza zakresem.
 
 ### 9.7 Wspolbieznosc, anulowanie, sciezki
 
@@ -1533,9 +1627,9 @@ do magazynu wersji w katalogu output_dir. Zacznij od get_catalog (komendy, produ
 dozwolone wartosci; get_catalog z command= daje parametry jednej komendy) i od
 elevation_availability (jakie lata i uklady ma obszar). Wszystkie sciezki podawaj
 bezwzglednie; bbox zawsze z bbox_crs. Dane wybierasz jawnie (product, resolution,
-vertical_crs...): Kartograf nie zgaduje. Pobranie nie nadpisuje danych; <narzedzie>_check_updates
-sprawdza aktualnosc bez pobierania. Wynik to dokument kartograf-*/1 z polem ok; blad to
-kartograf-error/1 z code, hint i details.option.
+vertical_crs...): Kartograf nie zgaduje. Pobranie nie nadpisuje danych; check_updates
+(tool=<narzedzie danych>, arguments=jego argumenty) sprawdza aktualnosc bez pobierania.
+Wynik to dokument kartograf-*/1 z polem ok; blad to kartograf-error/1 z code, hint i details.option.
 ```
 
 ### 9.10 Testy serwera
@@ -1607,7 +1701,7 @@ rozdzielczosc, uklad wysokosci, obszar) - Kartograf nie ma cichych wartosci domy
 ## Kody bledow
 [tabela 6.2 w skrocie: invalid_input 2, usage_error 2, invalid_sheet_code 2, download_failed 1,
  no_coverage 1, year_out_of_range 1, cache_error 1, invalid_sidecar 1, transform_failed 1,
- transform_unavailable 1, interrupted 130, internal_error 1]
+ transform_unavailable 1, io_error 1, interrupted 130, internal_error 1]
 
 ## Dokumentacja
 - [Uzycie](.../docs/USAGE.md): przyklady CLI i biblioteki, kody wyjscia i bledow
@@ -1679,7 +1773,7 @@ Zmiany:
 |---|---|
 | `docs/DECISIONS.md` (CRLF) | ADR-046; relacje po obu stronach w ADR-037, ADR-039, ADR-040 i ADR-045 (status i indeks) |
 | `docs/USAGE.md` | nowa sekcja "Interfejs dla agentow": `--json` per komenda (tabela 7.2), **jedna tabela kodow wyjscia i bledow** (6.2, 6.5), katalog, serwer MCP i konfiguracja klientow, `llms.txt`; poprawka opisu `--json` raportu dostepnosci (`schema` pierwszym kluczem, `notices` bez echa na stderr) |
-| `docs/ARCHITECTURE.md` | sekcja 2: graf (`serialization`, `error_report`, `catalog`, `commands`, `mcp_server`; krawedzie `cli -> catalog`, `project -> catalog`, `mcp_server -> catalog, commands, kartograf`; `catalog -> sources, download, landcover, hydrology`), drzewo modulow, nowa 3.6 "Dokumenty JSON `kartograf-*/1`" (lista schematow), nowa 4.11 "Interfejs dla agentow"; reguly Z1 (3) i rejestr komend |
+| `docs/ARCHITECTURE.md` | sekcja 2: graf (`serialization`, `error_report`, `sheet_info`, `source_info`, `cache_info`, `store_documents`, `catalog`, `commands`, `mcp_server`; krawedzie `cli -> catalog`, `project -> catalog`, `mcp_server -> catalog, commands, kartograf`; `catalog -> sources, download, landcover, hydrology`), drzewo modulow, nowa 3.6 "Dokumenty JSON `kartograf-*/1`" (lista schematow), nowa 4.11 "Interfejs dla agentow"; reguly Z1 (3) i rejestr komend |
 | `docs/DEVELOPMENT_STANDARDS.md` | 7.3: Z8 (CLI i MCP drukuja `to_json()`/`to_dict()`), Z9 (nowa komenda = deklaracja w `catalog/commands/`, nie flagi w `cli/`), Z10 (wyjatek ma `code`/`exit_code`, walidator ustawia `option`), Z11 (schematy `/1` addytywne; nowy dokument = `Document` + test kluczy); 6.3: `scripts/gate.sh`; 11.1: kody bledow; 17.2: przepis na nowa komende przez katalog |
 | `docs/SCOPE.md`, `docs/PRD.md` | interfejs dla agentow w zakresie 0.8.0; poza zakresem: HTTP MCP, KC, KH |
 | `README.md` | sekcja "Dla agentow AI" (kilka zdan, linki do `llms.txt`, USAGE, serwera MCP) |
@@ -1731,17 +1825,18 @@ Wszystkie offline (`-m "not live"`); frozen clock jak w `tests/parity.py`; testy
 
 | # | Plik | Co dowodzi (konsument zobaczy blad) |
 |---|---|---|
-| 12.1 | `tests/test_serialization.py` | koder: `Path` bezwzgledna, `BBox` -> `{bbox, crs}`, `Decimal`, `tuple`, `NaN` odrzucone, `schema` pierwszy, `JSON_KEYS`/`JSON_FILL` (staly zestaw i kolejnosc kluczy rodziny `kartograf-download/1` dla 5 klas), rejestr `SCHEMAS` (wzorzec nazwy, unikalnosc); `to_json()` bajtowo powtarzalne; hak `__json__` w projekcie (sciezki pinow bezwzgledne) |
+| 12.1 | `tests/test_serialization.py` | koder: `Path` bezwzgledna, `BBox` -> `{bbox, crs}`, `Decimal`, `tuple`, `NaN` odrzucone, `schema` pierwszy, `JSON_KEYS`/`JSON_FILL` (staly zestaw i kolejnosc kluczy rodziny `kartograf-download/1` dla 5 klas), rejestr `SCHEMAS` (wzorzec nazwy, unikalnosc); `to_json()` bajtowo powtarzalne; hak `__json__` w projekcie (sciezki pinow bezwzgledne); kontekst kodera: `Sidecar.raw` pominiete w `StoreEntries`, obecne w `StoreSidecar` |
 | 12.2 | `tests/test_json_contract.py` | tabela schemat -> **dokladna lista kluczy w kolejnosci** dla kazdego dokumentu z sekcji 5 (zmiana klucza = blad) na raportach zbudowanych z fixtur; dokumenty tolerowane przez `from_dict` planu |
 | 12.3 | `tests/test_cli_json.py` | kazda komenda-lisc: `main([... , "--json"])` -> stdout to jeden dokument (`json.loads` calosci), znany `schema`, stderr pusty, kod wyjscia wg 6.5; parzystosc CLI `--json` == `api_result.to_dict()` (po normalizacji katalogow magazynow) przez `run_both` dla scenariuszy: arkusz PL, obszar PL, kolekcja, land cover, soil, HSG (`--summary`), `--check-updates`, availability (bajtowo `to_json()`), project init/add/download/status/verify; blad wejscia -> `kartograf-error/1`, kod 2, stderr pusty; blad argparse w trybie JSON -> `usage_error`; tryb tekstowy bez zmian (`Error:` na stderr, kod 2) |
-| 12.4 | `tests/test_errors.py` | kazda klasa `KartografError` z pakietu (przeglad modulow) ma wlasny `code` w `__dict__`, kody unikalne i zgodne ze wzorcem, tabela 6.2 (literal w tescie) = `ERROR_CODES`; `error_report`: hint z `hints`/`remedy`/`allowed` + przyklad z katalogu, `details`; scenariusze `option`/`allowed` z 6.1 (brak `product`, zly `product`, brak `output_dir`, brak i zly `vertical_crs`, zla `resolution`, brak obszaru, `bbox` bez `bbox_crs` w MCP, zle godlo...); `internal_error` dla `KeyError`; `interrupted` |
+| 12.4 | `tests/test_errors.py` | kazda klasa `KartografError` z pakietu (przeglad modulow) ma wlasny `code` w `__dict__`, kody unikalne i zgodne ze wzorcem, tabela 6.2 (literal w tescie) = `ERROR_CODES`; `error_report`: hint z `hints`/`remedy`/`allowed` + przyklad z katalogu, `details`; scenariusze `option`/`allowed` z 6.1 (brak `product`, zly `product`, brak `output_dir`, brak i zly `vertical_crs`, zla `resolution`, brak obszaru, `bbox` bez `bbox_crs` w MCP, zle godlo, zly `segment` i `units` odczytu magazynu...); `io_error` dla `OSError` (nieistniejacy `output_dir`: `details.path`, `errno`); `invalid_sidecar` takze dla braku pliku sidecara; `internal_error` dla `KeyError`; `interrupted` |
 | 12.5 | `tests/test_catalog.py` | (a) parser z deklaracji == katalog: dla kazdej komendy flagi, `dest`, `type`, `choices`, `default`, `nargs`, wykluczanie; kazda flaga parsera jest w katalogu i odwrotnie; (b) `COMMANDS[...].options == {p.name: p.kind}` dla parametrow z `task: true`; (c) `function`/`check_function` istnieja w `__all__`, `argument` komendy to parametr funkcji, parametry bez wartosci domyslnej sa `required`, argumenty tylko nazwane; (d) `allowed` = wynik dostawcy z rejestru; (e) przyklady: `validate_command`, `parse_command(format_command(...)) == (command, options, run)`, `kartograf <command_line>` parsuje prawdziwy parser; (f) ograniczenia: test naruszenia wyprowadzony z przykladu (8.4); (g) `result_schema` w `SCHEMAS`; (h) teksty ASCII, `summary` <= 120; (i) filtry `get_catalog` i bledy (`option="group"`/`"command"`); (j) KB-1: `data_commands()` = 12 komend w kolejnosci `COMMANDS` |
 | 12.6 | `tests/test_commands_layer.py` | `parse_command`: opcje podane jawnie, `bbox` z `bbox_crs`, `run` osobno, blad skladni -> `UsageError`, komenda spoza `COMMANDS` -> `ValidationError` z lista; `validate_command` bez sieci (atrapa transportu odrzuca kazde zapytanie); `run_command`/`check_command` = funkcje komend (parzystosc z `download_data`/`check_data`) z `plan` i `update` |
-| 12.7 | `tests/test_mcp_tools.py` (bez `mcp`) | `tools.py`: nazwy unikalne i zgodne z `^[a-z][a-z0-9_]*$`; 40 narzedzi; kazda komenda z `tool`/`check_tool` ma narzedzie i odwrotnie; schemat wejscia poprawny wg `Draft202012Validator.check_schema` i zgodny z parametrami katalogu (`argument`, `required`, `enum` = `allowed`, `dependentRequired` dla `bbox`); adnotacje wg `kind`/`effects` (`destructive_hint=false` dla zapisujacych); opisy ASCII; rodziny `--tools` |
-| 12.8 | `tests/test_mcp_server.py` | `Client(server, raise_exceptions=True)`: `list_tools` == `tools.py`; `get_catalog`, `parse_sheet`, `list_sources`, `find_sheets` offline: `structured_content == doc.to_dict()` i tekst == `to_json(indent=None)`; narzedzie danych na fixturach (jak w `test_parity.py`) -> dokument i `is_error` = (kod != 0); `ok: false` -> `is_error=True` z dokumentem raportu; blad wejscia (wzgledna sciezka, nieznany klucz, zly `enum`, `bbox` bez `bbox_crs`) -> `kartograf-error/1`, `details.option`; wyjatek spoza hierarchii -> `internal_error`; `progress_callback` dostaje rosnace `progress` z `on_progress` podrobionego pobrania; `--allow-dir`; nieznane narzedzie -> `MCPError`; test stdio: `StdioServerParameters` + podproces `python -m kartograf.mcp_server`, lista narzedzi i `parse_sheet`, stdout zawiera wylacznie ramki protokolu |
+| 12.7 | `tests/test_mcp_tools.py` (bez `mcp`) | `tools.py`: nazwy unikalne i zgodne z `^[a-z][a-z0-9_]*$`; 29 narzedzi; kazda nazwa `CommandInfo.tool` ma narzedzie, a kazde narzedzie poza `check_updates` ma komende; `enum` `check_updates.tool` = narzedzia komend z `project_task` i `supports_check` (12), `check_arguments_schema(tool)` = schemat narzedzia danych bez `update`, `plan`, `workers`; schemat wejscia poprawny wg `Draft202012Validator.check_schema` i zgodny z parametrami katalogu (`argument`, `required`, `enum` = `allowed`, `dependentRequired` dla `bbox`); adnotacje wg `kind`/`effects` (`destructive_hint=false` dla zapisujacych; `check_updates`: RO, OW); opisy ASCII; rodziny `--tools` |
+| 12.8 | `tests/test_mcp_server.py` | `Client(server, raise_exceptions=True)`: `list_tools` == `tools.py`; `get_catalog`, `parse_sheet`, `list_sources`, `find_sheets` offline: `structured_content == doc.to_dict()` i tekst == `to_json(indent=None)`; narzedzie danych na fixturach (jak w `test_parity.py`) -> dokument i `is_error` = (kod != 0); `check_updates` na fixturach -> `kartograf-plan/1` rowny `check_command`; `tool` spoza `enum`, `arguments` z `update`/`plan`/`workers` albo bez `output_dir` -> `invalid_input` z `details.option`, `command` bledu = komenda wskazana przez `tool`; `ok: false` -> `is_error=True` z dokumentem raportu; blad wejscia (wzgledna sciezka, nieznany klucz, zly `enum`, `bbox` bez `bbox_crs`) -> `kartograf-error/1`, `details.option`; `OSError` (`store_overview` na nieistniejacym `output_dir`) -> `io_error`; wyjatek spoza hierarchii -> `internal_error`; `progress_callback` dostaje rosnace `progress` z `on_progress` podrobionego pobrania; `--allow-dir`; nieznane narzedzie -> `MCPError`; test stdio: `StdioServerParameters` + podproces `python -m kartograf.mcp_server`, lista narzedzi i `parse_sheet`, stdout zawiera wylacznie ramki protokolu |
 | 12.9 | `tests/test_llms_txt.py` | wg 10.2 |
 | 12.10 | `tests/test_cli_translation.py`, `tests/test_public_api.py`, `tests/test_cli_help.py`, `tests/test_cli_language.py` | aktualizacja: dozwolony import `kartograf.catalog`/`serialization`; nowe funkcje w `__all__` i ich sygnatury (argumenty nazwane); przyklady `--help` z katalogu; ASCII calego parsera |
 | 12.11 | zachowane | `tests/test_parity*.py`, `test_project_*`, `test_availability.py`, `test_cli*.py` przechodza po przepisaniu parsera bez zmiany asercji o zachowaniu (zmieniaja sie tylko importy wnetrznosci i kod wyjscia bledow wejscia) |
+| 12.12 | `tests/test_sheet_info.py` (T4d), `tests/test_source_info.py`, `tests/test_cache_info.py`, `tests/test_store_documents.py` (T3) | nowe funkcje biblioteki: `describe_sheet`, `list_sources` i `list_layers` daja te same informacje co dzisiejszy tekst CLI (tabela, hierarchia, potomkowie; kontrola jednorazowa przed/po + testy na fixturach), `SheetInfo.commands` zgodne z `accepts` katalogu, bledy z `option`, brak sieci (atrapa transportu odrzuca kazde zapytanie) i brak zapisu poza `clear_cache`; odczyt magazynu: `limit`/`truncated`, `sidecar.unit` -> `units` (plik krajowy z motywem), zarezerwowana jednostka -> `ValidationError` z `option="units"`, nieistniejacy `output_dir` -> `OSError`, `read_store_sidecar` (`raw` obecne; w `StoreEntries` pominiete), `InvalidSidecarError` dla braku pliku |
 
 Poza testami stalymi (skrypty jednorazowe, poza repozytorium): zrzut `format_help()` i akcji
 argparse kazdej komendy PRZED etapem 2 migracji i porownanie PO (8.2); tekst `list-sources`
@@ -1749,25 +1844,29 @@ kazdej grupy przed/po; wheel z `py.typed` (10.1); przebieg `scripts/gate.sh` w w
 
 ## 13. Kolejnosc prac (zadania planu)
 
-| # | Zadanie | Zalezy od | Rownolegle z |
+| # | Zadanie | Zalezy od | Tor i fala (plan wdrozenia) |
 |---|---|---|---|
-| T0 | `py.typed` + `pyproject`/`MANIFEST.in`; `scripts/gate.sh`; `kartograf/__main__.py`; zrzut odniesienia parsera i `list-sources` (poza repo) | - | T1, T2 |
-| T1 | `serialization.py` (`Document`, koder, `SCHEMAS`), migracja `AvailabilityReport`/`UpdatePlan` (schema pierwszy, `notices`, `ok`, `from_dict`), `to_dict()` dla `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` (+ `calculate_hsg(summary=)`), `Project`, `ProjectReport`, `ProjectCheck`; testy 12.1-12.2 | - | T0, T2 |
-| T2 | wyjatki (`code`, `exit_code`, `hint`, `DETAIL_FIELDS`, `option`/`allowed`, `UsageError`), `ErrorReport`/`error_report` (bez wzbogacania z katalogu), `option`/`allowed` w walidatorach; testy 12.4 | - | T0, T1 |
-| T3 | nowe raporty biblioteki z przeniesieniem logiki z CLI: `describe_sheet`, `find_sheets`, `list_sources`, `list_layers`, `get_cache_info`, `clear_cache`, `describe_store`, `list_store_entries`, `read_store_sidecar` | T1 | T4a |
-| T4a | katalog: `spec.py`, `model.py`, `shared.py`, `build.py`, `cliparser.py` (parser z deklaracji, przeniesiona logika `_parser.py`), `get_catalog`; zrzut rownowaznosci stary parser <-> katalog | T1, T2 | T3 |
-| T4b | deklaracje: `elevation`, `imagery`, availability (+ przyklady, ograniczenia) | T4a | T4c, T4d |
-| T4c | deklaracje: `landcover`, `soil`, `hsg`, 7 grup kolekcji | T4a | T4b, T4d |
-| T4d | deklaracje: `project`, `cache`, `parse`, `catalog`, tylko-API; wzbogacanie `hint` z katalogu | T4a, T3 | T4b, T4c |
-| T5 | CLI na katalogu: `create_parser()` z `cliparser`, usuniecie `cli/groups/*` i `*_task_arguments`, handlery z `--json` (dokument albo tekst), `main()` z blednym dokumentem i kodami, komenda `catalog`; `project/commands.py` z opcjami z katalogu i `plan`; `commands.py` (KB-2..KB-5); testy 12.3, 12.5, 12.6, 12.10-12.11 | T1-T4 | - |
-| T6 | `catalog/tools.py` + `mcp_server.py` + testy 12.7-12.8; `mcp` w venv deweloperskim | T4, T5 | T7 |
-| T7 | `llms.txt` + test 12.9 (po T5: polecenia musza byc prawdziwe) | T5 | T6 |
-| T8 | dokumentacja 10.5 (USAGE, ARCHITECTURE, STANDARDS, SCOPE, PRD, README, CLAUDE.md), ADR-046 (jest), CHANGELOG, PROGRESS | T5-T7 | - |
-| T9 | brama pelna (`scripts/gate.sh`), smoke: `kartograf catalog --json`, `--json` kazdej grupy, `kartograf-mcp` przez stdio (lista narzedzi, `parse_sheet`, `elevation_availability` na zywo w katalogu danych poza repo i poza /tmp), wheel z `py.typed` | wszystko | - |
+| T0 | `py.typed` + `pyproject`/`MANIFEST.in`; `scripts/gate.sh`; `kartograf/__main__.py`; zrzut odniesienia (poza repo): `format_help()` i akcje parsera kazdej komendy, `list-sources`, `list-layers`, `parse`, `cache` | - | Tor A, fala 1 |
+| T1 | `serialization.py` (`Document`, koder, `SCHEMAS`), migracja `AvailabilityReport`/`UpdatePlan` (schema pierwszy, `notices`, `ok`, `from_dict`), `to_dict()` dla `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` (+ `calculate_hsg(summary=)`), `Project`, `ProjectReport`, `ProjectCheck`; testy 12.1-12.2 | - | Tor A, fala 1 |
+| T2 | wyjatki (`code`, `exit_code`, `hint`, `DETAIL_FIELDS`, `option`/`allowed`, `UsageError`), `ErrorReport`/`error_report` (bez skladnika (b) hintu z katalogu; `OSError` -> `io_error`), `option`/`allowed` w walidatorach; testy 12.4 | - | Tor A, fala 1 |
+| T3 | nowe funkcje biblioteki z przeniesieniem logiki z CLI (moduly poza `catalog/`: `source_info.py`, `cache_info.py`, `store_documents.py`): `list_sources`, `list_layers`, `get_cache_info`, `clear_cache`, `describe_store`, `list_store_entries`, `read_store_sidecar`; testy 12.12 | T1, T2 (kontrakt K1) | Tor A, fala 1 |
+| T4a | katalog: `spec.py`, `model.py`, `shared.py`, `kinds.py`, `formatting.py`, `build.py`, `cliparser.py` (parser z deklaracji, przeniesiona logika `_parser.py`), `get_catalog`; zrzut rownowaznosci stary parser <-> katalog | kontrakt K1 (`Document`, `ValidationError.option`/`allowed`, `UsageError` z T1 i T2) | Tor B, fala 1 |
+| T4b | deklaracje: `elevation`, `imagery`, availability (+ przyklady, ograniczenia) | T4a | Tor B, fala 1 |
+| T4c | deklaracje: `landcover`, `soil`, `hsg`, 7 grup kolekcji | T4a | Tor B, fala 1 |
+| T4d | deklaracje: `project`, `cache`, `parse`, `catalog`, tylko-API; `sheet_info.py` (`describe_sheet`, `find_sheets`: `SheetInfo.commands` z `accepts` katalogu); `catalog/hints.py` (`example_for`) | T4a, T3 (nazwy funkcji w `kartograf.__all__`) | Tor B, fala 1 |
+| T5 | CLI na katalogu: `create_parser()` z `cliparser`, usuniecie `cli/groups/*` i `*_task_arguments`, handlery z `--json` (dokument albo tekst), `main()` z blednym dokumentem i kodami, komenda `catalog`; `project/commands.py` z opcjami z katalogu i `plan`; `commands.py` (KB-2..KB-5); wpiecie `example_for` w `error_report` (skladnik (b) hintu); testy 12.3, 12.5, 12.6, 12.10-12.11 | T1-T4 | fala 2 (jeden wlasciciel) |
+| T6 | `catalog/tools.py` + `mcp_server.py` + testy 12.7-12.8; `mcp` w venv deweloperskim i w `dev` | T4, T5 | fala 3 (z T7) |
+| T7 | `llms.txt` + test 12.9 (po T5: polecenia musza byc prawdziwe) | T5 | fala 3 (z T6) |
+| T8 | dokumentacja 10.5 (USAGE, ARCHITECTURE, STANDARDS, SCOPE, PRD, README, CLAUDE.md), ADR-046 (jest), CHANGELOG, PROGRESS | T5-T7 | fala 4 |
+| T9 | brama pelna (`scripts/gate.sh`), smoke: `kartograf catalog --json`, `--json` kazdej grupy, `kartograf-mcp` przez stdio (lista narzedzi, `parse_sheet`, `elevation_availability` na zywo w katalogu danych poza repo i poza /tmp), wheel z `py.typed` | wszystko | fala 5 |
 
-Na zadania T4b-T4d i T3 mozna rozdzielic agentow po grupach (wspolny kontrakt: `spec.py`,
-`shared.py`, ta specyfikacja); T5 ma jednego wlasciciela (parser i `main` to jeden
-modul).
+Wykonanie (plan wdrozenia `docs/superpowers/plans/2026-10-18-agent-interface.md`, sekcja
+"Organizacja wykonania"): fala 1 to dwa tory rownolegle w osobnych worktree z rozlacznymi
+zbiorami plikow - Tor A (T0-T3: biblioteka, serializacja, wyjatki, raporty) i Tor B
+(T4a-T4d: katalog i deklaracje) - z kontraktem K1 (sygnatury `Document`,
+`ValidationError.option`/`allowed`, `UsageError`) udostepnionym przez Tor A jako pierwsze
+commity; potem sekwencyjnie T5 (jeden wlasciciel: parser i `main` to jeden modul), T6 i
+T7 rownolegle, T8, T9.
 
 ## 14. Kryteria akceptacji
 
@@ -1790,10 +1889,10 @@ modul).
    nowa flaga `--json`).
 8. `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
    dzialaja wg 8.7; przyklady katalogu sa w obie strony zgodne.
-9. `kartograf-mcp` wystawia 40 narzedzi (`--tools` zaweza); schematy wejscia zgodne z
-   katalogiem; wynik narzedzia == `to_dict()` dokumentu; `is_error` == kod CLI != 0; postep
-   rosnie scisle; testy in-memory i stdio zielone offline; `import kartograf` dziala bez
-   `mcp`.
+9. `kartograf-mcp` wystawia 29 narzedzi (`--tools` zaweza), w tym jedno `check_updates` dla
+   12 komend danych; schematy wejscia zgodne z katalogiem; wynik narzedzia == `to_dict()`
+   dokumentu; `is_error` == kod CLI != 0; postep rosnie scisle; testy in-memory i stdio
+   zielone offline; `import kartograf` dziala bez `mcp`.
 10. `llms.txt` (< 150 linii, polecenia prawdziwe) i `scripts/gate.sh` (zielony w worktree,
     != 0 przy bledzie) w repozytorium; `CLAUDE.md` zawiera regule dla agentow z innych
     repozytoriow i wskazuje oba; brak `AGENTS.md`.
@@ -1808,25 +1907,41 @@ modul).
 |---|---|---|
 | Przepisanie parsera (T5) psuje `--help` albo zachowanie flag (10 tys. linii `test_cli.py`) | regresje CLI tuz przed wydaniem | etapy z porownaniem `format_help()` i zrzutu akcji przed/po; stary parser zostaje do zielonych testow rownowaznosci; `choices` i brak `required` odtwarzane wprost |
 | SDK `mcp` 2.x zmienia API podwersjami (3 wydania w 6 tygodni) | zlamany serwer po aktualizacji | pin `<3`, kontakt z SDK w jednym module, testy in-memory i stdio w bramie |
-| 40 narzedzi = duzy koszt kontekstu (ok. 20-25 tys. tokenow; szacunek) i limity klientow | gorsza selekcja narzedzi | `--tools`, skrocone opisy narzedzi `*_check_updates`, `get_catalog` w widoku skroconym |
+| 29 narzedzi = koszt kontekstu (12 blizniakow `_check_updates` zastapionych jednym narzedziem `check_updates`, O4; pomiar `len(json.dumps(tools))` w T6; przed zmiana szacunek ok. 20-25 tys. tokenow dla 40 narzedzi) i limity klientow | gorsza selekcja narzedzi | `--tools`, `get_catalog` w widoku skroconym, jedno narzedzie sprawdzajace |
 | Kod wyjscia 2 dla bledow wejscia (D4) zaskakuje skrypty | falszywe alarmy | jawny wpis BREAKING z "Co zrobic"; O2 |
 | Rozjazd katalogu z walidatorami biblioteki (ograniczenia) | agent dostaje bledna wiedze | testy naruszen z przykladow (8.4); zrodlem zachowania jest biblioteka |
 | Biblioteka drukuje na stdout w trakcie wywolania | psuje ramki MCP / dokument `--json` | test czystosci stdout w obu trybach; SDK przekierowuje zrzuty na stderr, ale to ostatnia linia obrony |
 | Dlugie pobrania blokuja watki; brak anulowania (KC) | zawieszone rozmowy | limit 4 wywolan, `workers`, dokumentacja; KC osobno |
 | Narzedzia pisza po dowolnym `output_dir` i czytaja dowolna `geometry` | niezamierzony zapis/odczyt poza projektem | sciezki bezwzgledne, `--allow-dir`, adnotacje, zatwierdzanie wywolan przez klienta |
 | Windows: sciezki i kodowanie stdout | rozne dokumenty | `as_posix()`, wymuszone UTF-8; `pywin32` w zaleznosciach `mcp` |
-| Brak `mcp` w `.venv` (brama: mypy, testy) | brama niezielona | `dev` zawiera `mcp`; instalacja wymaga zgody (O7) |
+| Brak `mcp` w `.venv` (brama: mypy, testy) | brama niezielona | `dev` zawiera `mcp`; instalacja w `.venv` glownego checkoutu za zgoda koordynatora, addytywnie (O7) |
 
-## 16. Otwarte kwestie dla koordynatora
+## 16. Rozstrzygniecia kwestii O1-O9 (decyzje koordynatora 2026-10-18)
 
-| # | Kwestia | Rekomendacja (zastosowana w specyfikacji) | Alternatywa |
+Kwestie otwarte z projektu specyfikacji rozstrzygnal koordynator; tresc specyfikacji jest
+z nimi zgodna (kolumna "Skutek").
+
+| # | Kwestia | Rozstrzygniecie | Skutek w specyfikacji |
 |---|---|---|---|
-| O1 | Klucz tekstu komunikatu w JSON: brief mowi `message`, kod, Archiwista (SPEC 5.6, 7.9, SSE 9.3) i `kartograf-availability/1` maja `text` | `text` (D3); blad ma `message` | `message` wszedzie: zmiana `Notice.text` (publiczne API) i adaptera Archiwisty |
-| O2 | Kod wyjscia dla bledow wejscia | 2 (D4) | wszystkie bledy 1 (bez zmiany zachowania) |
-| O3 | `is_error` w MCP dla `ok: false` | tak, = kod CLI != 0 (D13) | tylko wyjatki |
-| O4 | Granularnosc narzedzi MCP | na komende katalogu + blizniak `_check_updates` (D12), `--tools` zaweza | na funkcje API (10 narzedzi danych) |
-| O5 | Zakres KB-2..KB-5 w 0.8.0 (publiczne `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`) | w zakresie: potrzebne MCP, podpowiedziom bledow i Archiwiscie (8.6) | tylko KB-1; MCP z wlasnym dispatchem |
-| O6 | Parser CLI z deklaracji (D7) kosztem przepisania 14 plikow `cli/groups` | tak, etapami z porownaniem `--help` (8.2) | test kontraktowy bez generowania (dubel opisow) |
-| O7 | Instalacja `mcp>=2.3.0,<3` w `.venv` (i w `dev`): wymaga zgody na instalacje pakietow | zgoda na T6 | osobny venv `.venv-mcp` tylko dla testow MCP (brama bez nich) |
-| O8 | Cache serwera MCP: domyslnie plik w katalogu cache uzytkownika, `--allow-dir` opcjonalne | tak (9.2) | `cache=False` domyslnie; domyslne `--allow-dir` = brak ograniczenia (zostaje) |
-| O9 | Status ADR-046 `Przyjeta` przed akceptacja specyfikacji przez uzytkownika | `Przyjeta` dla zakresu (decyzje koordynatora); szczegoly D1-D20 w spec | `Proponowana` do akceptacji |
+| O1 | Klucz tekstu komunikatu w JSON: brief mowi `message`, kod, Archiwista (SPEC 5.6, 7.9, SSE 9.3) i `kartograf-availability/1` maja `text` | `text` (zgodnie z rekomendacja); blad ma `message` | D3, 5.3 |
+| O2 | Kod wyjscia dla bledow wejscia | 2 dla `ValidationError`/`ParseError`/`UsageError`; wpis BREAKING w CHANGELOG `[0.8.0]` | D4, 6.5, 11.1 poz. 1 |
+| O3 | `is_error` w MCP dla `ok: false` | tak: `is_error` = kod wyjscia CLI != 0 | D13, 9.5 |
+| O4 | Granularnosc narzedzi MCP | narzedzie na komende katalogu, ale bez 12 blizniakow `_check_updates`: jedno narzedzie `check_updates` z parametrami `tool` (`enum` nazw narzedzi danych) i `arguments` (obiekt walidowany schematem wskazanego narzedzia danych przez `validate_command`); adnotacje RO, OW; dokument `kartograf-plan/1`; razem 29 narzedzi (mniej narzedzi = mniej kontekstu i lepszy wybor narzedzia przez agenta); pole katalogu `CommandInfo.check_tool` usuniete (zbedne), w katalogu zostaje `supports_check: bool` | D12, 8.1, 9.3-9.6, 9.9, 12.7-12.8, 14.9, 15 |
+| O5 | Zakres KB-2..KB-5 w 0.8.0 | w zakresie: `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command` | D10, 8.6, 8.7 |
+| O6 | Parser CLI z deklaracji (D7) kosztem przepisania 14 plikow `cli/groups` | tak; migracja grup z porownaniem zrzutu `--help` i parsowania przed i po (zrzut poza repo) | D7, 8.2, 13 |
+| O7 | Instalacja `mcp>=2.3.0,<3` w `.venv` (i w `dev`) | zgoda: instalacja w `.venv` glownego checkoutu (addytywnie) i wpis w extra `dev` | 9.2, 15 |
+| O8 | Cache serwera MCP | jak w 9.2: domyslnie plik w katalogu cache uzytkownika, `--allow-dir` opcjonalne | 9.2 |
+| O9 | Status ADR-046 | `Przyjeta` | ADR-046 |
+
+### 16.1 Uzgodnienia ze zmianami na galezi bazowej (przeglad API odczytu magazynu, merge `8c65f4e`)
+
+Sprawdzenie specyfikacji wzgledem kodu galezi po poprawkach przegladu (ADR-045; commity
+`f33f037`, `a189f25`):
+
+| Zmiana w kodzie i dokumentacji galezi bazowej | Poprawka w specyfikacji |
+|---|---|
+| `Sidecar.unit` pliku krajowego z motywem to nazwa pliku slotu (`pl_miejscowosci`), przyjmowana przez `iter_store(units=...)` | 2, 5.4.10: `sidecar.unit` -> `units` zamyka petle odswiezania jednostki |
+| `InvalidSidecarError` obejmuje brak pliku sidecara; sidecar bez pola `schema` jest przyjmowany w ksztalcie `emit_sidecar`; `Sidecar.schema` jest zawsze `kartograf-meta/1` | 2, 5.4.10, 6.1 (`DEFAULT_HINT`), 6.2 |
+| `iter_store`: bledne argumenty (segment, zarezerwowana jednostka, nazwa dluzsza niz 255 bajtow, `units` bez `segment`) to `ValidationError` od razu przy wywolaniu | 6.1: wymagane `option` (`segment`, `units`) w walidatorach magazynu |
+| Brak albo niedostepny `output_dir` to `OSError`, nie pusty magazyn | D21, 6.2-6.3, 6.6, 9.5: kod `io_error` (kod wyjscia 1) zamiast `internal_error` |
+| `StoreEntry` i `Sidecar` jawnie niehashowalne (pola `dict`) | 5.1: koder nie opiera sie na hashowaniu; `ctx.omit` pomija `Sidecar.raw` w `StoreEntries` |
