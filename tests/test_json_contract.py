@@ -20,6 +20,7 @@ import pytest
 
 import kartograf
 from kartograf.cache_info import CacheEntries, CacheInfo
+from kartograf.catalog import get_catalog
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
     AvailabilityArea,
@@ -46,6 +47,13 @@ from kartograf.project.model import (
 )
 from kartograf.providers.pl.gugik_laz import LazTile, SupersededLazTile
 from kartograf.serialization import SCHEMAS, Document, EncodeContext, encode
+from kartograf.sheet_info import (
+    SheetDescendants,
+    SheetLevel,
+    SheetList,
+    SheetRequest,
+    describe_sheet,
+)
 from kartograf.source_info import (
     LayerInfo,
     LayerList,
@@ -429,6 +437,57 @@ def _store_sidecar() -> Document:
     return StoreSidecar(STORE / SEGMENT / f"{SHEET}.asc", _sidecar())
 
 
+def _sheet_info() -> Document:
+    # a PL-2000 code: the zone is set; every optional block is asked for
+    return describe_sheet(
+        "6.179.12.20", hierarchy=True, children=True, descendants="1:500"
+    )
+
+
+def _sheet_level() -> SheetLevel:
+    return SheetLevel(SHEET, "1:10000")
+
+
+def _sheet_descendants() -> SheetDescendants:
+    return SheetDescendants("1:5000", 1, (f"{SHEET}-1",))
+
+
+def _sheet_request() -> SheetRequest:
+    # a request has a bbox or a geometry file; both are set to see every key
+    return SheetRequest(
+        "1:10000",
+        "1992",
+        (1.0, 2.0, 3.0, 4.0),
+        "EPSG:2180",
+        Path("/srv/praca/obszar.gpkg"),
+        "zlewnie",
+    )
+
+
+def _sheets() -> Document:
+    return SheetList(_sheet_request(), (SHEET,))
+
+
+def _catalog() -> Document:
+    return get_catalog(command="elevation download")
+
+
+def _catalog_command() -> object:
+    return get_catalog(command="elevation download").commands[0]
+
+
+def _catalog_param() -> object:
+    return get_catalog(command="elevation download").commands[0].params[0]  # type: ignore[index]
+
+
+def _catalog_constraint() -> object:
+    return get_catalog(command="elevation download").commands[0].constraints[0]  # type: ignore[index]
+
+
+def _catalog_example() -> object:
+    return get_catalog(command="elevation download").commands[0].examples[0]  # type: ignore[index]
+
+
 # schema -> a document of every class of that schema, built without a network
 DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-error/1": (_error_document,),
@@ -450,6 +509,9 @@ DOCUMENTS: dict[str, tuple[Callable[[], Document], ...]] = {
     "kartograf-store-overview/1": (_store_overview,),
     "kartograf-store-entries/1": (_store_entries,),
     "kartograf-store-sidecar/1": (_store_sidecar,),
+    "kartograf-sheet/1": (_sheet_info,),
+    "kartograf-sheets/1": (_sheets,),
+    "kartograf-catalog/1": (_catalog,),
 }
 
 # schema -> the keys of the document in order (``schema`` first)
@@ -538,6 +600,33 @@ CONTRACT: dict[str, list[str]] = {
         "entries",
     ],
     "kartograf-store-sidecar/1": ["schema", "path", "sidecar"],
+    "kartograf-sheet/1": [
+        "schema",
+        "sheet",
+        "system",
+        "country",
+        "sheet_system",
+        "scale",
+        "components",
+        "zone",
+        "crs",
+        "bounds",
+        "commands",
+        "hierarchy",
+        "children",
+        "descendants",
+    ],
+    "kartograf-sheets/1": ["schema", "request", "sheets", "count"],
+    "kartograf-catalog/1": [
+        "schema",
+        "kartograf_version",
+        "language",
+        "groups",
+        "commands",
+        "exit_codes",
+        "errors",
+        "schemas",
+    ],
 }
 
 # type name -> (a value, the keys of its object in order); spec 5.3 and 5.4
@@ -728,6 +817,81 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "unit",
             "raw",
         ],
+    ),
+    "SheetLevel": (_sheet_level, ["sheet", "scale"]),
+    "SheetDescendants": (_sheet_descendants, ["scale", "count", "sheets"]),
+    "SheetRequest": (
+        _sheet_request,
+        ["scale", "sheet_system", "bbox", "bbox_crs", "geometry", "layer"],
+    ),
+    "GroupInfo": (
+        lambda: get_catalog().groups[0],
+        ["name", "summary", "description", "products", "commands"],
+    ),
+    "ProductInfo": (
+        lambda: get_catalog().groups[0].products[0],
+        ["name", "summary", "countries", "sources"],
+    ),
+    "CommandInfo": (
+        _catalog_command,
+        [
+            "id",
+            "group",
+            "name",
+            "summary",
+            "description",
+            "kind",
+            "effects",
+            "idempotent",
+            "destructive",
+            "project_task",
+            "function",
+            "check_function",
+            "result_schema",
+            "check_result_schema",
+            "supports_check",
+            "cli",
+            "tool",
+            "params",
+            "constraints",
+            "examples",
+        ],
+    ),
+    "ParamInfo": (
+        _catalog_param,
+        [
+            "name",
+            "argument",
+            "flag",
+            "short",
+            "positional",
+            "kind",
+            "required",
+            "task",
+            "allowed",
+            "default",
+            "cli_default",
+            "accepts",
+            "section",
+            "description",
+        ],
+    ),
+    "ConstraintInfo": (
+        _catalog_constraint,
+        ["type", "param", "params", "when", "message"],
+    ),
+    "ExampleInfo": (_catalog_example, ["title", "options", "command_line"]),
+    "ExitCodeInfo": (
+        lambda: get_catalog().exit_codes[0],
+        ["code", "name", "meaning"],
+    ),
+    "ErrorCodeInfo": (
+        lambda: get_catalog().errors[0],
+        ["code", "exception", "exit_code", "meaning"],
+    ),
+    "SchemaInfo": (
+        lambda: get_catalog().schemas[0],
+        ["schema", "description", "produced_by"],
     ),
 }
 
