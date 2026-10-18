@@ -133,7 +133,8 @@ co najmniej jeden import na poziomie modulu (takze pod `if TYPE_CHECKING:`).
 
 ```
 kartograf ──> core, download, providers, landcover, hydrology, cache,
-        sources, transport, notices, project       # re-eksport Public API
+        sources, transport, notices, project, store, store_geometry,
+        transform                                  # re-eksport Public API
 cli ──> _version, download, landcover, core, hydrology, cache,
         notices, transform, project, sources, kartograf
 project ──> download, landcover, hydrology, core, sources, cache,
@@ -150,11 +151,14 @@ transport ──> transform, core, sources, cache, kartograf (l, __version__)
 transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
 cache ──> core (TYPE_CHECKING), notices
 _version ──> kartograf (l, __version__)
+store ──> core, download, sources, providers (l)
+store_geometry ──> core, transform, store (TYPE_CHECKING), providers (l),
+        transport (l)
 _clock, notices, auth ──> (nic wewnetrznego)
 core ──> (nic poza exceptions)
 exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
         kartograf, cli, core, sources, transform, transport, providers, download,
-        landcover, hydrology, cache, project)
+        landcover, hydrology, cache, project, store, store_geometry)
 ```
 
 **Jak odtworzyc graf.** Kod uzywa wylacznie bezwzglednych importow
@@ -174,6 +178,10 @@ kazdej nowej krawedzi miedzy pakietami.
 
 Uwagi, ktore latwo przeoczyc:
 
+- `store` i `store_geometry` (odczyt magazynu, sekcja 3.3.1) tylko czytaja:
+  korzystaja z regul zapisu `download` (`links.linked_version`, stale
+  `versions`) i rejestru `sources`, bez `DownloadManager`; zaden modul
+  pobierania nie importuje `store`.
 - `core` nie importuje nic spoza `core` i `exceptions` — takze leniwie.
   Kierunek jest odwrotny: `providers.cuzk.sheets`
   i `core.parser_tm33` importuja wzorce godel CZ z `core.parser_registry`.
@@ -324,7 +332,8 @@ kartograf/
 ├── exceptions.py        # KartografError; ParseError; ValidationError;
 │                        # DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — zrodlo nie ma danych
-│                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000)
+│                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000);
+│                        # InvalidSidecarError(.path) — nieczytelny sidecar (read_sidecar)
 ├── core/                # Logika bazowa, bez IO sieciowego
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia: _DENSIFY
 │   │                       # punktow na krawedz, cache transformerow, operacja przypieta
@@ -430,6 +439,11 @@ kartograf/
 ├── _clock.py            # now() — jedno zrodlo czasu wynikow (sidecar, etykiety wersji,
 │                        # plan); testy zgodnosci je zamrazaja (frozen_clock)
 ├── notices.py           # Notice(level, code, text), NoticeSink, kody komunikatow (Z3, ADR-037)
+├── store.py             # Odczyt magazynu bez zapisu (ADR-045, 3.3.1): list_segments,
+│                        # iter_store -> StoreEntry (units, skip_versions), read_sidecar
+│                        # -> Sidecar, describe_segment -> SegmentInfo, link_target
+├── store_geometry.py    # file_footprint -> Footprint (bbox zadania, godlo, naglowek,
+│                        # indeks jednostek), pinned_transform (polityka obwiedni, per watek)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
 │                        # campaigns_cache, teryt_cache, teryt_bbox_cache, index_area_cache
 │                        # (raport dostepnosci; rekordy obszaru indeksu kafli WFS),
@@ -1356,52 +1370,126 @@ wlasna uzytkownika albo re-download. Kartograf nie migruje istniejacego
 widziane jako pobrane (nastepne zadanie pobierze je ponownie do nowego
 segmentu).
 
-### 3.3.1 Publiczny odczyt magazynu (ADR-045, v0.9.0)
+### 3.3.1 Publiczny odczyt magazynu (ADR-045, v0.8.0)
 
-Szesciu operacjom odczytu `kartograf.__all__` odpowiada jeden kontrakt
-`data/`, opisany w 3.2-3.3: `iter_store`, `read_sidecar`,
-`describe_segment`, `file_footprint`, `link_target` i `pinned_transform`.
-Nie tworza katalogow, cache na udziale ani plikow w magazynie; powolujacy
-moze trzymac indeks i cache w pamieci/dysku lokalnym. Publiczne rekordy:
+Odczyt `data/` bez zapisu (takze z udzialu SMB zamontowanego tylko do
+odczytu) dla Archiwisty i innych czytnikow - jeden kontrakt `data/`
+z 3.2-3.3, bez prywatnego parsera po stronie konsumenta. W
+`kartograf.__all__`: `list_segments`, `iter_store`, `read_sidecar`,
+`describe_segment`, `link_target` (modul `kartograf/store.py`),
+`file_footprint`, `pinned_transform` (`kartograf/store_geometry.py`), typy
+ponizej i `InvalidSidecarError` (atrybut `path`). Funkcje nie tworza
+katalogow, cache ani plikow w magazynie; indeks i cache trzyma
+wywolujacy lokalnie. Publiczne rekordy:
 
 | Rekord | Pola i semantyka |
 |---|---|
-| `StoreEntry` | `kind`: `version`, `link`, `full_sheet`, `problem`; `segment` (`produkt/wariant`), `hierarchy` (sciezka wzgledna), `name`, `path`, `version_path` (wskazany cel, gdy znany), `label`, `sha8`, `sidecar` (`Sidecar` albo `None`) i `problem` (kod, np. `missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`). |
-| `Sidecar` | Typowane pola z 3.2 (`schema`, `dataset` surowy, `dataset_key` z rejestru albo `None`, `country`, `product`, `provider`, `horizontal_crs`, `vertical_crs`, `vertical_source`, `resolution`, `nodata`, `request`, `license`, `downloaded_at`, `kartograf_version`, `transform`, `extra`, `sha256`, `size_bytes`) i pola wyliczone `data_year`, `data_date`, `campaign`, `survey_work_id`, `edition`, `full_sheet`, `coverage`, `unit`, `raw`. Brak wartosci to `None`, a oryginalny JSON pozostaje dostepny bez zmian. |
-| `SegmentInfo` | `segment`, `product`, `country`, `dataset_key`, `name`, `known`. Nazwa jest ludzka, z wariantami ukladu/formatu/rocznika/LoD/poziomu; brak dopasowania do rejestru = `known=False`, nigdy przypuszczalny deskryptor. |
-| `Footprint` | `native: BBox`, `wgs84: BBox`, `source`: `request`, `sheet`, `header`, `unit`. Brak sprawdzonego obrysu = `None` (w tym paczki krajowe). |
+| `StoreEntry` | `kind`: `version`, `link` (sciezka standardowa), `full_sheet`, `problem`; `segment` (`produkt/wariant`), `hierarchy` (katalog slotu wzgledem segmentu, a dla wersji i `full_sheet` - wzgledem `versions/` i `full_sheet/`; `""` dla problemu segmentu), `name`, `path` (zbudowana z `output_dir` w podanej postaci), `version_path` (wersja wskazana przez `extra.link_target` dowiazania, sprawdzona leksykalnie: lezy w slocie tego dowiazania; dla wersji jej wlasna sciezka; `None` = nieznana), `label` i `sha8` (z nazwy katalogu `<etykieta>_<sha8>`; dowiazanie bez znanej wersji - z sidecara), `sidecar` (`Sidecar` albo `None`), `problem` (`missing_sidecar`, `invalid_sidecar`, `unknown_segment`, `legacy_campaigns`, `stale_incoming`) i `skipped` (`True` = wersja z `skip_versions`, sidecar nieczytany). |
+| `Sidecar` | Typowane pola z 3.2 (`schema`, `dataset` surowy, `dataset_key` z rejestru albo `None`, `country`, `product`, `provider`, `horizontal_crs`, `vertical_crs`, `vertical_source`, `resolution`, `nodata`, `request`, `license`, `downloaded_at`, `kartograf_version`, `transform`, `extra`, `sha256`, `size_bytes`) i pola wyliczone `data_year`, `data_date`, `campaign`, `survey_work_id`, `edition`, `full_sheet`, `coverage`, `unit`, `raw`. Brak wartosci albo wartosc o nieoczekiwanym typie to `None`, a oryginalny JSON (`raw`) pozostaje bez zmian. |
+| `SegmentInfo` | `segment`, `product`, `country`, `dataset_key`, `name`, `known`. Nazwa jest ludzka: nazwa deskryptora + wariant (uklad, uklad wysokosci, format, rocznik, LoD, poziom); brak dopasowania do rejestru = `known=False`, nigdy przypuszczalny deskryptor. |
+| `Footprint` | `native: BBox`, `wgs84: BBox` (EPSG:4326, dlugosc/szerokosc), `source`: `request`, `sheet`, `header`, `unit`. Brak sprawdzonego obrysu = `None` (w tym paczki krajowe). |
 
-`iter_store(output_dir, *, segment=None, units=None)` przechodzi drzewo
-strumieniowo (`Iterator`, bez listy wszystkich slotow), odroznia wersje od
-obu dowiazan i raportuje rowniez nierozpoznane segmenty oraz pozostalosci.
-`units` wymaga `segment` i oznacza konkretne nazwy jednostek, nie prefiksy:
-`teryt/<kod>`, `bbox/<coords>`, `country/<kod>`, `ku/<kod>`, godlo
-PL-1992/2000/TM33/SM5 lub sciezka hierarchii (`models3d` i arkusze map);
-sciezki katalogow oblicza przez ten sam rejestr/parser co zapis. Czytnik
-otwiera sidecar danej sciezki raz, nie czyta pliku danych i nie robi
-`stat` kazdego pliku; tylko osierocony katalog `.incoming` wymaga sprawdzenia
-wieku (> 24 h). Skan kierowany `units` nie listuje calego segmentu ani
-innych hierarchii. `read_sidecar(path)` obsluguje plik danych lub sidecar:
-waliduje schemat; stare brakujace pola zostaja puste, historyczne nazwy
-kluczy rekordow nie sa obowiazkowe, klucze z 0.8.0-dev sa rozpoznawane
-przez jawne mapowanie w czytniku. `data_year` nigdy nie pochodzi
-z `downloaded_at`. Niespojne/nieczytelne metadane podczas skanu daja
-problem wpisu, bez wypierania pozostalych wersji slotu.
+`list_segments(output_dir)` zwraca posortowane `<produkt>/<wariant>`
+wszystkich prawdziwych katalogow drugiego poziomu (bez dowiazan
+symbolicznych i nazw zaczynajacych sie od `.`), takze nieznanych rejestrowi.
+Brak `output_dir` to `OSError`, nie pusty magazyn (odlaczony udzial).
 
-`file_footprint` wybiera pierwsze WIARYGODNE zrodlo: bbox zadania
-(z `bbox_crs`), parsowalne godlo PL/TM33, obrys z naglowka GeoTIFF/ASC,
-JPG/JGW/GPKG/LAS(LAZ), obrys jednostki z PRG/RUIAN/indeksu SM5 (tylko
-przy `network=True` z pamiecia cache); nie udaje obrysu kraju.
-Przelicza obwiednie densyfikowanymi krawedziami (`transform_bbox`) przez
-`pinned_transform`, nigdy przez domyslny `Transformer.from_crs`.
-`link_target(path)` uzywa istniejacego `download.links.linked_version`,
-w tym potwierdzenia SHA-256 na SMB bez stabilnych i-wezlow. Odczyt wszystkich
-celow przy pelnym skanie moze kosztowac wiele gigabajtow — zwykly skan
-przypisuje wersje ze sciezki sidecara bez haszowania zawartosci, a
-`link_target` wywolywane na zadanie potwierdza zgodnosc. Wszystkie funkcje
-sa tylko do odczytu; blad operacji transformacji jest jawny.
+`iter_store(output_dir, *, segment=None, units=None, skip_versions=None)`
+to generator; bez `segment` przechodzi segmenty z `list_segments` po kolei.
+W segmencie kolejnosc: dowiazania, `full_sheet`, wersje, pozostalosci;
+wpis wychodzi, zanim powstanie listing kolejnych katalogow. `units`
+(wymaga `segment`) to nazwy jednostek, nie prefiksy: godlo PL-1992/2000,
+TM33, SM5, arkusz ZTM albo kafel LAZ (slot = katalog hierarchii godla ze
+WSZYSTKIMI plikami arkusza: nazwy plikow LAZ z URL, kierunki orto ukosnej,
+pliki georeferencji), `teryt/<kod>`, `bbox/<coords>`, `country/<kod>`,
+`ku/<kod>` albo `<katalog>/<nazwa pliku bez rozszerzenia>` (kafel mesh
+`2000/7/<plik>`); sam kod TERYT, `<coords>` i kraju tez dziala (6 cyfr =
+KU w segmencie, ktorego kanal paczek ma jednostke `ku`). Hierarchie licza
+te same funkcje co zapis (`SheetParser`, `path_parts`,
+`cuzk_map_path_parts`); skan nie listuje innych katalogow segmentu i nie
+zglasza problemow poziomu segmentu. `skip_versions` to znane wywolujacemu
+katalogi wersji, wzgledem `output_dir`, z `/` (np.
+`nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e`):
+ich pliki wracaja z `skipped=True` i `sidecar=None` z samego listingu
+(wersje sa niezmienne), brak sidecara w listingu nadal daje
+`missing_sidecar`. Bledne argumenty to `ValidationError` od razu przy
+wywolaniu (zadna sciezka nie wychodzi poza magazyn; segment bedacy
+dowiazaniem symbolicznym jest odrzucany, a takie katalogi w drzewie nie sa
+przechodzone). Blad I/O w trakcie (np. odlaczony udzial) to `OSError` -
+wywolujacy zachowuje stary indeks; plik lub katalog, ktory zniknal w
+trakcie skanu, nie jest bledem. Niespojne lub nieczytelne metadane daja
+problem wpisu, bez wypierania pozostalych wersji slotu. Wersja jest wazna
+wg tej samej reguly co `download.versions.read_version` (`sha256`
+zaczyna sie od `<sha8>` katalogu, `extra.version` ma `label`
+i `label_source`).
 
-### 3.3.2 Plan realizacji odczytu v0.9.0
+Koszt na wpis (skan nigdy nie wola `link_target`):
+
+| Element | Operacje na dysku/udziale |
+|---|---|
+| segmenty (`list_segments`) | 1 listing `output_dir` + 1 listing na katalog produktu |
+| katalog (hierarchia, `full_sheet/`, `versions/`, katalog wersji) | 1 listing (`scandir`; typ wpisu z listingu - bez `stat` pliku na ext4/XFS/NTFS/SMB) |
+| `link`, `full_sheet` | 1 odczyt sidecara (open, read, close); bez `stat`, plik danych nieotwierany |
+| `version` | 1 odczyt sidecara; wersja z `skip_versions`: 0 odczytow, tylko listing jej katalogu |
+| `missing_sidecar` | 0 (brak `<plik>.meta.json` w listingu) |
+| `invalid_sidecar` | 1 odczyt |
+| `unknown_segment`, `legacy_campaigns` | 0 (z listingu segmentu) |
+| `stale_incoming` | listing `versions/.incoming` (tylko gdy jest w listingu) + `lstat` drzewa katalogow roboczych |
+| `iter_store(segment=...)` | `stat` `output_dir` + `lstat` katalogu produktu i segmentu |
+| `units` | na jednostke: `lstat` skladowych sciezki slotu (straz dowiazan symbolicznych, wynik wspolny dla jednostek wywolania) dla dowiazania, `full_sheet/` i `versions/` + listing tych katalogow i katalogow wersji; slot plaski (`teryt/`, `bbox/`, `country/`, `ku/`, strefa mesh) jest wspolny wielu jednostkom - jego katalog wersji i kazdy katalog wersji w nim listowany raz na wywolanie |
+
+Watki: dowolne wywolania `iter_store` moga isc rownolegle w osobnych
+watkach - rozne segmenty albo czesci `units` jednego segmentu (jednostki
+wspolne dla dwoch czesci daja tylko powtorzone wpisy). Skan tylko czyta i
+nie ma wspolnego stanu poza niezmiennym rejestrem i `functools.lru_cache`;
+jeden iterator nalezy do jednego watku. To samo dotyczy `read_sidecar`,
+`describe_segment`, `file_footprint` i `link_target`.
+
+`read_sidecar(path)` przyjmuje plik danych albo sidecar i nie otwiera pliku
+danych: waliduje schemat (`InvalidSidecarError`: brak pliku, zly JSON, inny
+schemat); stare brakujace pola zostaja puste, klucze sprzed ADR-031 i klucze
+`dataset` z 0.8.0-dev (ADR-044 D7) sa rozpoznawane przez jawne mapowanie
+w czytniku, bez zmiany `raw`. `data_date`/`data_year` pochodza z kampanii,
+rekordu skorowidza, kafla LAZ albo wydania (data `updated` feedu ATOM
+ortofoto CZ to publikacja, nie rok danych) - nigdy z `downloaded_at` ani
+z etykiety `downloaded`. `describe_segment` odwraca reguly zapisu
+(`resolve_subdir`, `content_segment`, warianty i wycinki ortofotomapy, HSG);
+kazdy segment, ktory zapisuja tory biezacego rejestru, jest rozpoznany
+(test `test_every_segment_the_writers_produce_is_known_with_its_source`),
+segmenty z 0.8.0-dev (`orto/pl_1992_true`, `cadastre/cz_km_*`) sa
+`known=False`.
+
+`file_footprint(entry, *, network=False, cache=None)` wybiera pierwsze
+WIARYGODNE zrodlo: bbox zadania (z `bbox_crs`), obliczalne godlo
+PL-1992/PL-2000/TM33 (PL-1992: WGS84 = dokladny prostokat godla), obrys
+z naglowka GeoTIFF/ASC, JPG/JGW (plik georeferencji tej samej wersji),
+GPKG (SQLite `immutable=1`, bez plikow `-wal`/`-shm`), LAS/LAZ, obrys
+jednostki TERYT (PRG), KU (RUIAN) albo arkusza SM5 (indeks CUZK); nie udaje
+obrysu kraju. Obrys jednostki z `cache` (`(rodzaj, kod) -> BBox`, pamiec
+wywolujacego) jest uzywany takze bez sieci; zapytanie do indeksu tylko przy
+`network=True`. Wpis bez `sidecar` (np. `skipped`) najpierw czyta sidecar.
+Naglowek rastra GDAL czyta bez listowania katalogu
+(`GDAL_DISABLE_READDIR_ON_OPEN=TRUE`). Obwiednie liczy densyfikowanymi
+krawedziami (`transform_bbox`) przez `pinned_transform`, nigdy przez
+domyslny `Transformer.from_crs`; brak bezpiecznej operacji to
+`TransformUnavailableError`.
+
+`link_target(path)` sprawdza, ze `extra.link_target` wskazuje wersje
+slotu tego dowiazania (ta sama regula co `version_path` skanu), a nastepnie
+potwierdza ja istniejacym `download.links.linked_version`: ten sam plik wg
+i-wezla albo - na udziale bez stabilnych i-wezlow (SMB bez `serverino`) -
+trescia (oba pliki > 1 dowiazanie, ten sam rozmiar, SHA-256 dowiazania =
+SHA-256 sidecara wersji, jeden pelny odczyt pliku). Zwraca sciezke w tej
+samej postaci co `version_path`. Odczyt wszystkich celow przy pelnym skanie
+moglby kosztowac wiele gigabajtow, dlatego skan przypisuje wersje ze
+sciezki sidecara, a `link_target` wola sie na zadanie.
+`pinned_transform(src_crs, dst_crs)` buduje `PinnedTransform` polityka
+obwiedni (dokladnosc <= 1 m, bez ballpark i bez siatek sieciowych, krok
+datum CZ dla S-JTSK); operacje z `TransformerGroup` pyproj nie sa
+bezpieczne watkowo, wiec obiekt jest buforowany per watek, a budowe
+(przelacza globalna flage sieci PROJ) wykonuje jeden watek naraz.
+
+### 3.3.2 Plan realizacji odczytu v0.8.0 (wykonany 2026-10-18)
 
 1. Ustalic typy i format problemow (ADR-045), uzyc wzorcow deskryptorow
    i parserow hierarchii, przejsc drzewa generatorem; osobno scenariusz
@@ -1412,9 +1500,10 @@ sa tylko do odczytu; blad operacji transformacji jest jawny.
    bboxow/godel, podlaczyc przypieta transformacje i opcjonalne indeksy
    jednostek.
 4. Dodac testy offline na sztucznym magazynie, API `__all__`, dokumentacje,
-   CHANGELOG i wersje 0.9.0; uruchomic brame offline pytest/ruff/mypy.
-5. Zaktualizowac PROGRESS, wykonac logiczne commity i merge `--no-ff`
-   do `develop`; bez pobran danych ani zmian w CLI.
+   CHANGELOG w sekcji 0.8.0; uruchomic brame offline pytest/ruff/mypy.
+5. Zaktualizowac PROGRESS, wykonac logiczne commity na galezi
+   `feat/archiwista-store-api`; merge do `develop` dopiero po zgodzie
+   uzytkownika. Bez pobran danych ani zmian w CLI.
 
 ### 3.4 `extra.parent_request`
 

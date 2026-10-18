@@ -3873,17 +3873,24 @@ deweloperskiej nie odpowiadaja dokladnie obecnemu rejestrowi.
 - B) Strumieniowe, tylko odczytowe API producenta; wspolne rejestry, parsery,
   walidacja dowiazan i przypiete operacje transformacji — jedna polityka.
 
-**Decyzja:** B. `iter_store(output_dir, *, segment=None, units=None)` oddaje
+**Decyzja:** B, w wydaniu 0.8.0. `list_segments(output_dir)` daje
+segmenty `<produkt>/<wariant>` (takze nieznane rejestrowi), a
+`iter_store(output_dir, *, segment=None, units=None, skip_versions=None)`
 generator wpisow wersji, sciezek standardowych, `full_sheet/` i problemow
 (nieznany segment, brak/uszkodzony sidecar, stare `kampanie/`, nieaktualne
 `.incoming/`). `segment` to sciezka wzgledna `<produkt>/<wariant>`;
-`units` to jednostki segmentu, ktorych hierarchie wylicza ta sama logika
-co zapis; ograniczenie skanu nastepuje PRZED listowaniem galezi segmentu.
-Skan nie czyta zawartosci plikow; sidecar jednego pliku odczytuje najwyzej
-raz, a bajty dowiazania haszuje tylko podczas potwierdzania celu, jesli
-udział nie daje stabilnych i-wezlow. Nieznane segmenty sa widoczne, nie
-trafiaja po cichu do innego produktu. `StoreEntry.sidecar` moze byc `None`;
-`problem` jest kodem przydatnym do indeksowania.
+`units` to jednostki segmentu, ktorych katalogi slotow wylicza ta sama
+logika co zapis; ograniczenie skanu nastepuje PRZED listowaniem galezi
+segmentu. `skip_versions` to katalogi wersji znane wywolujacemu: ich pliki
+wracaja z samego listingu (`skipped=True`, `sidecar=None`) - wersje sa
+niezmienne, wiec skan przyrostowy czyta tylko sidecary dowiazan i nowych
+wersji. Skan nie czyta zawartosci plikow i nie wola `link_target`; sidecar
+jednego pliku odczytuje najwyzej raz, a `version_path` dowiazania bierze
+z `extra.link_target` po sprawdzeniu, ze wskazuje wersje wlasnego slotu.
+Wywolania dla roznych segmentow albo czesci `units` jednego segmentu moga
+isc rownolegle w watkach. Nieznane segmenty sa widoczne, nie trafiaja po
+cichu do innego produktu. `StoreEntry.sidecar` moze byc `None`; `problem`
+jest kodem przydatnym do indeksowania.
 
 `read_sidecar(path)` przyjmuje plik danych albo `.meta.json`, zachowuje
 surowe wartosci i odrebnie wystawia rozpoznany klucz deskryptora oraz
@@ -3897,16 +3904,18 @@ odwracajac `resolve_subdir`/`content_segment`, z bezpiecznym wynikiem
 ma kolejnosc: bbox zadania, parsowalne godlo PL/TM33, naglowek pliku,
 jednostka z indeksu sieciowego, wreszcie brak obrysu; `Footprint` niesie
 `native` i `wgs84` jako `BBox` oraz `source`. Siec do PRG/RUIAN/SM5
-jest opt-in i cache jest lokalna pamiecia wywolujacego; pliki krajowe nie
-otrzymuja zmyslonego obrysu. `link_target(path)` korzysta z istniejacego
-`linked_version`: metadane dowiazania i `samefile`, a na CIFS z odczytu
-skrotu pliku (bez stabilnego inode). `pinned_transform(src_crs, dst_crs)`
-buduje `PinnedTransform` bez sieciowych siatek i bez ballpark; nie
-udostepniamy domyslnej transformacji pyproj.
+jest opt-in, a cache jest lokalna pamiecia wywolujacego (czytana takze bez
+sieci); pliki krajowe nie otrzymuja zmyslonego obrysu. `link_target(path)`
+korzysta z istniejacego `linked_version`: metadane dowiazania i `samefile`,
+a na CIFS z odczytu skrotu pliku (bez stabilnego inode).
+`pinned_transform(src_crs, dst_crs)` buduje `PinnedTransform` bez
+sieciowych siatek i bez ballpark (obiekt per watek - operacje pyproj nie sa
+bezpieczne watkowo); nie udostepniamy domyslnej transformacji pyproj.
 
 **Konsekwencje:** Wyłącznie odczyt magazynu (takze zamontowanego read-only);
 wyniki problemowe zamiast zgubionych plikow. Koszt pelnego skanu to listowanie
 katalogow + jeden odczyt sidecara na plik, bez `stat`/`open` tresci kazdej
+wersji; skan z `skip_versions` - listowanie + sidecary dowiazan i nowych
 wersji; dla `units` liczba listowanych galezi jest proporcjonalna do liczby
 wybranych jednostek i ich wersji. `file_footprint` czyta naglowek tylko,
 gdy brak bboxa/godla; `link_target` moze odczytac caly plik na CIFS bez
