@@ -1941,3 +1941,120 @@ def test_malformed_sheet_of_the_availability_report_is_a_parse_error(tmp_path):
             )
 
         assert caught.value.option == "sheet"
+
+
+STORE_OPTION_SCENARIOS = [
+    _row(
+        kartograf.iter_store,
+        {"output_dir": _STORE, "segment": "zly"},
+        "segment",
+        None,
+        None,
+        "Nieprawidlowy segment magazynu",
+    ),
+    _row(
+        kartograf.iter_store,
+        {"output_dir": _STORE, "units": ["x"]},
+        "units",
+        None,
+        None,
+        "units wymaga segment",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "units": ["versions"],
+        },
+        "units",
+        None,
+        None,
+        "Nieprawidlowa jednostka magazynu",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "units": "N-33-130-D-d-2-4",
+        },
+        "units",
+        None,
+        None,
+        "podaj kolekcje nazw jednostek",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "skip_versions": "nmt/x",
+        },
+        "skip_versions",
+        None,
+        None,
+        "podaj kolekcje sciezek katalogow wersji",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "expected", "text"), STORE_OPTION_SCENARIOS
+)
+def test_store_input_error_names_the_option(
+    function, arguments, expected, text, tmp_path
+):
+    _assert_option_scenario(function, arguments, expected, text, tmp_path)
+
+
+def test_store_segment_that_is_a_symlink_names_the_segment(tmp_path):
+    (tmp_path / "nmt").mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "nmt" / "pl_1992_1m_evrf2007").symlink_to(
+        tmp_path / "elsewhere", target_is_directory=True
+    )
+
+    with pytest.raises(ValidationError) as caught:
+        kartograf.iter_store(tmp_path, segment="nmt/pl_1992_1m_evrf2007")
+
+    assert caught.value.option == "segment"
+
+
+def test_project_task_name_and_command_errors_name_the_option(tmp_path):
+    project = kartograf.init_project(tmp_path / "p", output_dir=tmp_path / "p" / "data")
+
+    with pytest.raises(ValidationError) as bad_name:
+        kartograf.add_project_task(
+            project.directory,
+            name="zla nazwa",
+            command="soil hsg",
+            options={"depth": "0-5cm"},
+        )
+    with pytest.raises(ValidationError) as bad_command:
+        kartograf.add_project_task(
+            project.directory, name="ok", command="project status", options={}
+        )
+    with pytest.raises(ValidationError) as unknown:
+        kartograf.remove_project_task(project.directory, name="brak")
+
+    assert (bad_name.value.option, bad_name.value.allowed) == ("name", None)
+    assert bad_command.value.option == "command"
+    assert "elevation download" in (bad_command.value.allowed or ())
+    assert "project status" not in (bad_command.value.allowed or ())
+    assert (unknown.value.option, unknown.value.allowed) == ("name", None)
+
+
+def test_project_download_update_and_workers_name_the_option(tmp_path):
+    project = kartograf.init_project(tmp_path / "p", output_dir=tmp_path / "p" / "data")
+
+    with pytest.raises(ValidationError) as bad_update:
+        kartograf.download_project(project.directory, update="x")
+    with pytest.raises(ValidationError) as bad_workers:
+        kartograf.download_project(project.directory, workers=0)
+
+    assert (bad_update.value.option, bad_update.value.allowed) == (
+        "update",
+        ("upgrade", "force"),
+    )
+    assert bad_workers.value.option == "workers"
