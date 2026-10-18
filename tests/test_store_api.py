@@ -5,6 +5,7 @@ import hashlib
 import itertools
 import json
 import os
+import random
 import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -38,6 +39,7 @@ from kartograf.store import (
     describe_segment,
     iter_store,
     link_target,
+    list_partitions,
     list_segments,
     read_sidecar,
 )
@@ -457,8 +459,11 @@ def test_missing_store_is_an_error_not_an_empty_store(tmp_path):
         iter_store(missing)
     with pytest.raises(FileNotFoundError):
         iter_store(missing, segment=SEGMENT)
+    with pytest.raises(FileNotFoundError):
+        list_partitions(missing, SEGMENT)
     (tmp_path / "data").mkdir()
     assert list(iter_store(tmp_path / "data", segment=SEGMENT)) == []
+    assert list_partitions(tmp_path / "data", SEGMENT) == []
 
 
 def test_iter_store_all_kinds_sidecar_failures_and_leftovers(tmp_path):
@@ -667,6 +672,85 @@ def test_skip_versions_lists_known_versions_without_reading_their_sidecars(
     assert _rows(scoped) == _rows(entries.values())
 
 
+def _listed(monkeypatch) -> list[Path]:
+    listed: list[Path] = []
+    original = os.scandir
+
+    def recording(path):
+        listed.append(Path(path))
+        return original(path)
+
+    monkeypatch.setattr(os, "scandir", recording)
+    return listed
+
+
+def test_skip_versions_mapping_gives_known_files_without_listing_their_directory(
+    tmp_path, monkeypatch
+):
+    root = tmp_path / "data"
+    old = _version(root, SEGMENT, HIERARCHY, "2024", f"{SHEET}.asc", b"old")
+    new = _version(root, SEGMENT, HIERARCHY, "2025", f"{SHEET}.asc", b"new")
+    _linked(root / SEGMENT / HIERARCHY / f"{SHEET}.asc", new)
+    key = old.parent.relative_to(root).as_posix()
+    listed_known = _rows(iter_store(root, segment=SEGMENT, skip_versions={key}))
+    listed = _listed(monkeypatch)
+    opened = _opened(monkeypatch)
+
+    entries = list(iter_store(root, segment=SEGMENT, skip_versions={key: [old.name]}))
+
+    assert _rows(entries) == listed_known  # the same entries as from the listing
+    assert old.parent not in listed and new.parent in listed
+    assert old.with_name(old.name + ".meta.json") not in map(Path, opened)
+
+
+def test_skip_versions_mapping_serves_units_of_a_flat_slot_without_listings(
+    tmp_path, monkeypatch
+):
+    """A flat slot shares ``versions/teryt`` between its units: known version
+    directories are not listed for every unit of a refresh."""
+    root = tmp_path / "data"
+    segment = "landcover/pl_bdot10k_gpkg"
+    versions = {
+        unit: _version(root, segment, "teryt", "2024", f"{unit}.gpkg", unit.encode())
+        for unit in ("1465", "1261", "0201")
+    }
+    known = {
+        path.parent.relative_to(root).as_posix(): (path.name,)
+        for path in versions.values()
+    }
+    listed = _listed(monkeypatch)
+
+    result = list(
+        iter_store(root, segment=segment, units=["1465"], skip_versions=known)
+    )
+
+    assert [(e.path, e.skipped, e.label) for e in result] == [
+        (versions["1465"], True, "2024")
+    ]
+    assert not {path.parent for path in versions.values()} & set(listed)
+
+
+@pytest.mark.parametrize(
+    "names",
+    [
+        "M-34.asc",  # a string, not a collection of names
+        None,
+        ["../escape.asc"],
+        ["sub/name.asc"],
+        [".hidden"],
+        [f"{SHEET}.asc.meta.json"],
+        [""],
+        [7],
+    ],
+)
+def test_skip_versions_mapping_rejects_names_of_no_data_file(tmp_path, names):
+    root = tmp_path / "data"
+    old = _version(root, SEGMENT, HIERARCHY, "2024", f"{SHEET}.asc")
+    known = {old.parent.relative_to(root).as_posix(): names}
+    with pytest.raises(ValidationError, match="skip_versions"):
+        list(iter_store(root, segment=SEGMENT, skip_versions=known))
+
+
 # --- units --------------------------------------------------------------------------
 
 
@@ -756,6 +840,19 @@ def test_scoped_sheet_unit_takes_every_file_of_the_sheet_and_its_versions(tmp_pa
     }
 
 
+def test_scoped_units_skip_hidden_version_directories_like_the_full_scan(tmp_path):
+    root = tmp_path / "data"
+    segment = "landcover/pl_bdot10k_gpkg"
+    version = _version(root, segment, "teryt", "2024", "1465.gpkg")
+    hidden = version.parent.with_name("." + version.parent.name)
+    hidden.mkdir()
+    for file in version.parent.iterdir():
+        (hidden / file.name).write_bytes(file.read_bytes())
+    whole = _rows(iter_store(root, segment=segment))
+    assert {row[1] for row in whole} == {version}
+    assert _rows(iter_store(root, segment=segment, units=["1465"])) == whole
+
+
 def test_units_of_one_flat_slot_are_listed_once(tmp_path, monkeypatch):
     root = tmp_path / "data"
     segment = "landcover/pl_bdot10k_gpkg"
@@ -824,6 +921,231 @@ def test_scoped_unit_does_not_follow_hierarchy_symlink(tmp_path, monkeypatch):
         list(iter_store(root, segment="landcover/pl_bdot10k_gpkg", units=["1465"]))
         == []
     )
+
+
+# --- partitions -----------------------------------------------------------------
+
+# Directory names the generator below combines: nested sheets, a flat slot, a
+# name that is a version directory below the first level, reserved and hidden.
+_NAMES = ("A", "B", "7", "bbox", "x_0123abcd", "versions", "kampanie", ".h")
+
+
+def _random_segment(tmp_path: Path, rng: random.Random) -> str:
+    """A segment with every shape the scan tells apart, at random places:
+    slots at several levels (so split directories have files of their own),
+    links resolved, of another slot or unpaired, damaged sidecars, versions
+    with a wrong sha8 or without a sidecar, files outside version
+    directories, hidden entries, symlinks out of the store and the
+    segment-level leftovers."""
+    root = tmp_path / "data"
+    segment = rng.choice((SEGMENT, "newproduct/pl_x"))
+    base = root / segment
+    base.mkdir(parents=True)
+    outside = tmp_path / "outside"
+    _data(outside / "deep" / "escaped.asc")
+    slots = {
+        tuple(rng.choice(_NAMES) for _ in range(rng.randint(1, 4)))
+        for _ in range(rng.randint(3, 10))
+    }
+    for n, parts in enumerate(sorted(slots)):
+        hierarchy = "/".join(parts)
+        directory = base.joinpath(*parts)
+        name = f"f{n}.asc"
+        versions = [
+            _version(root, segment, hierarchy, label, name, f"{n}{label}".encode())
+            for label in rng.sample(("2023", "2024", "2025"), rng.randint(0, 2))
+        ]
+        foreign = base / "versions" / "A" / "2020_0123abcd" / name
+        for tree in rng.sample(((), ("full_sheet",)), rng.randint(0, 2)):
+            link = base.joinpath(*tree, *parts, name)
+            target = rng.choice([*versions, foreign, None])
+            rel = None if target is None else os.path.relpath(target, link.parent)
+            _data(link, extra={"link": "hardlink", "link_target": rel} if rel else {})
+        shape = rng.randrange(6)
+        if shape == 0 and versions:
+            versions[0].with_name(versions[0].name + ".meta.json").unlink()
+        elif shape == 1:
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "unpaired.asc").write_bytes(b"no sidecar")
+        elif shape == 2:
+            _data(base / "versions" / hierarchy / "2022_00000000" / name)  # wrong sha8
+        elif shape == 3:
+            _data(base / "versions" / hierarchy / "outside_any_version.asc")
+        elif shape == 4:
+            _data(directory / "damaged.asc")
+            (directory / "damaged.asc.meta.json").write_text("{", encoding="utf-8")
+        elif not (directory / "s").exists():
+            directory.mkdir(parents=True, exist_ok=True)
+            (directory / "s").symlink_to(outside / "deep", target_is_directory=True)
+    if rng.random() < 0.5:
+        _data(base / "root.asc")
+        _data(base / "full_sheet" / "root.asc")
+    if rng.random() < 0.5:
+        (base / "kampanie" / "old").mkdir(parents=True, exist_ok=True)
+        stale = base / "versions" / ".incoming" / "host_1_old"
+        stale.mkdir(parents=True)
+        day_ago = time.time() - 90000
+        os.utime(stale, (day_ago, day_ago))
+    (base / "S").symlink_to(outside, target_is_directory=True)
+    return segment
+
+
+def _entries(entries) -> list[str]:
+    """Every field of the entries (sidecars included), duplicates kept."""
+    return sorted(repr(entry) for entry in entries)
+
+
+@pytest.mark.parametrize("seed", range(16))
+def test_partitions_union_is_exactly_the_segment_scan(tmp_path, seed):
+    root = tmp_path / "data"
+    segment = _random_segment(tmp_path, random.Random(seed))
+    found = list(iter_store(root, segment=segment))
+    bad = {e.path.parent for e in found if e.kind == "problem"}
+    mapping: dict[str, list[str]] = {}
+    for e in found:
+        if e.kind == "version" and e.path.parent not in bad:
+            key = e.path.parent.relative_to(root).as_posix()
+            mapping.setdefault(key, []).append(e.name)
+    assert _entries(iter_store(root, segment=segment, skip_versions=mapping)) == (
+        _entries(iter_store(root, segment=segment, skip_versions=set(mapping)))
+    )
+    for target, skip in itertools.product((1, 2, 3, 1000), (None, mapping)):
+        whole = _entries(iter_store(root, segment=segment, skip_versions=skip))
+        keys = list_partitions(root, segment, target=target)
+        assert keys[0] == "." and len(set(keys)) == len(keys)
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            parts = pool.map(
+                lambda key, skip=skip: list(
+                    iter_store(root, segment=segment, partition=key, skip_versions=skip)
+                ),
+                keys,
+            )
+            union = _entries(itertools.chain.from_iterable(parts))
+        assert union == whole, (target, keys)
+
+
+def test_partitions_split_levels_and_keep_own_files_of_split_directories(tmp_path):
+    root = tmp_path / "data"
+    base = root / SEGMENT
+    own = _data(base / "M-34" / "own.asc")
+    in_22 = _version(root, SEGMENT, "M-34/22", "2025", "a.asc")
+    _version(root, SEGMENT, "M-34/7", "2025", "b.asc")
+    full = _data(base / "full_sheet" / "M-34" / "7" / "b.asc")
+    _version(root, SEGMENT, "bbox", "2025", "1_2_3_4.tif")
+
+    assert list_partitions(root, SEGMENT, target=1) == [".", "M-34", "bbox"]
+    keys = list_partitions(root, SEGMENT)
+    assert keys == [".", "M-34/.", "M-34/22", "M-34/7", "bbox"]
+
+    def paths(key):
+        return {e.path for e in iter_store(root, segment=SEGMENT, partition=key)}
+
+    assert paths("M-34/.") == {own}
+    assert paths("M-34/22") == {in_22}
+    assert full in paths("M-34/7")
+    assert paths(".") == set()
+
+
+def test_segment_level_problems_and_files_belong_to_dot_partition_only(tmp_path):
+    root = tmp_path / "data"
+    segment = "newproduct/pl_experimental"
+    base = root / segment
+    on_root = _data(base / "root.zip")
+    full_root = _data(base / "full_sheet" / "root.zip")
+    unit = _data(base / "teryt" / "12.zip")
+    (base / "kampanie" / "old").mkdir(parents=True)
+    stale = base / "versions" / ".incoming" / "host_1_old"
+    stale.mkdir(parents=True)
+    day_ago = time.time() - 90000
+    os.utime(stale, (day_ago, day_ago))
+
+    keys = list_partitions(root, segment)
+
+    assert keys == [".", "teryt"]
+    rows = {
+        key: {
+            (e.kind, e.problem, e.path)
+            for e in iter_store(root, segment=segment, partition=key)
+        }
+        for key in keys
+    }
+    assert rows["."] == {
+        ("problem", "unknown_segment", base),
+        ("link", None, on_root),
+        ("full_sheet", None, full_root),
+        ("problem", "legacy_campaigns", base / "kampanie"),
+        ("problem", "stale_incoming", stale),
+    }
+    assert rows["teryt"] == {("link", None, unit)}
+
+
+def test_partition_lists_only_its_own_subtree(tmp_path, monkeypatch):
+    root = tmp_path / "data"
+    base = root / SEGMENT
+    mine = _version(root, SEGMENT, "M-34/22/A", "2025", "a.asc")
+    link = _linked(base / "M-34/22/A/a.asc", mine)
+    other = _version(root, SEGMENT, "M-34/23/A", "2025", "b.asc")
+    _linked(base / "M-34/23/A/b.asc", other)
+    listed = _listed(monkeypatch)
+
+    entries = list(iter_store(root, segment=SEGMENT, partition="M-34/22"))
+
+    assert {(e.kind, e.path, e.version_path) for e in entries} == {
+        ("link", link, mine),
+        ("version", mine, mine),
+    }
+    own = (base / "M-34/22", base / "versions/M-34/22")
+    assert listed
+    assert all(any(path.is_relative_to(tree) for tree in own) for path in listed)
+
+
+def test_partitions_never_follow_symlinks(tmp_path, monkeypatch):
+    root = tmp_path / "data"
+    outside = tmp_path / "outside"
+    _data(outside / "N-34" / "x.asc")
+    base = root / SEGMENT
+    _data(base / "M-34" / "own.asc")
+    (base / "N-34").symlink_to(outside / "N-34", target_is_directory=True)
+    (base / "M-34" / "22").symlink_to(outside, target_is_directory=True)
+    listed = _listed(monkeypatch)
+
+    assert list_partitions(root, SEGMENT) == [".", "M-34"]
+    assert list(iter_store(root, segment=SEGMENT, partition="N-34")) == []
+    assert list(iter_store(root, segment=SEGMENT, partition="M-34/22")) == []
+    assert not any(path.is_relative_to(outside) for path in listed)
+
+
+@pytest.mark.parametrize(
+    ("segment", "units", "partition"),
+    [
+        (None, None, "."),  # a partition requires its segment
+        (SEGMENT, [SHEET], "."),  # units or a partition, not both
+        (SEGMENT, None, ""),
+        (SEGMENT, None, "/etc"),
+        (SEGMENT, None, "../escape"),
+        (SEGMENT, None, "M-34/../../escape"),
+        (SEGMENT, None, "M-34//22"),
+        (SEGMENT, None, "M-34/./22"),
+        (SEGMENT, None, ".hidden"),
+        (SEGMENT, None, "M-34/./."),
+        (SEGMENT, None, "M-34\x00"),
+        (SEGMENT, None, ["M-34"]),
+    ],
+)
+def test_untrusted_partitions_never_traverse_store(tmp_path, segment, units, partition):
+    (tmp_path / "data" / SEGMENT).mkdir(parents=True)
+    with pytest.raises(ValidationError):
+        iter_store(tmp_path / "data", segment=segment, units=units, partition=partition)
+
+
+@pytest.mark.parametrize(
+    ("segment", "target"),
+    [("../escape", 32), ("nmt", 32), (SEGMENT, 0), (SEGMENT, True), (SEGMENT, 2.5)],
+)
+def test_list_partitions_rejects_malformed_arguments(tmp_path, segment, target):
+    (tmp_path / "data").mkdir()
+    with pytest.raises(ValidationError):
+        list_partitions(tmp_path / "data", segment, target=target)
 
 
 # --- streaming, cost and threads -----------------------------------------------------
