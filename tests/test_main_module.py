@@ -36,6 +36,6 @@ def test_python_dash_m_kartograf_reports_errors_like_the_script():
         timeout=60,
     )
 
-    assert done.returncode != 0  # 1 today; T5 moves input errors to 2
+    assert done.returncode == 2
     assert done.stderr.startswith("Error: ")
     assert done.stdout == ""
