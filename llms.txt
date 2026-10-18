@@ -136,7 +136,7 @@ i `details.option`); 130 = przerwane. Blad na stdout (`--json`) to `kartograf-er
 - [Uzycie](https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md): przyklady CLI i biblioteki, kody wyjscia i bledow
 - [Architektura](https://github.com/Daldek/Kartograf/blob/main/docs/ARCHITECTURE.md): moduly, uklad magazynu, sidecar, katalog
 - [Zakres](https://github.com/Daldek/Kartograf/blob/main/docs/SCOPE.md): co jest w zakresie, ograniczenia zrodel
-- [Decyzje](https://github.com/Daldek/Kartograf/blob/main/docs/DECISIONS.md): ADR-037 (CLI = API), ADR-045 (odczyt magazynu)
+- [Decyzje](https://github.com/Daldek/Kartograf/blob/main/docs/DECISIONS.md): ADR-037 (CLI = API), ADR-045 (odczyt magazynu), ADR-046 (interfejs dla agentow)
 - [README](https://github.com/Daldek/Kartograf/blob/main/README.md): wprowadzenie
 
 ## Optional

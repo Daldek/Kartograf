@@ -3263,10 +3263,10 @@ polecenia: kazdy przyklad przechodzi `validate_command` i okrazenie
 
 ### 9.5 Warstwa komend
 
-Pieciu funkcjom z `kartograf.__all__` (wszystkie z argumentami tylko nazwanymi poza
-pierwszymi dwoma) odpowiada kazda komenda danych; wolaja je CLI (`project add`) i serwer MCP,
-a asystent Archiwisty moze nimi budowac, walidowac i uruchamiac zadania bez znajomosci
-funkcji per produkt:
+Warstwa komend to piec funkcji z `kartograf.__all__` (`command` i `options` podaje sie
+pozycyjnie, reszta argumentow jest tylko nazwana); wolaja je CLI (`project add`) i serwer
+MCP, a asystent Archiwisty moze nimi budowac, walidowac i uruchamiac zadania bez
+znajomosci funkcji per produkt:
 
 | Funkcja | Rola |
 |---|---|
