@@ -66,6 +66,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy; D6: jawny timeout wywolania kolekcji); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto); errata 6: wycinek obrazu w calosci 0,0,0 = `NoCoverageError` bez wersji (test na zywo 0.8.0) |
 | [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5) |
 | [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`); errata 1: argumenty tylko nazwane wszystkich funkcji pobrania i sprawdzenia (test na zywo 0.8.0) |
+| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta |
 
 ---
 
@@ -3852,6 +3853,66 @@ wspolny calej rodziny (`init_project`, `open_project`,
 `verify_project`, ...). Regula: DEVELOPMENT_STANDARDS 7.3 (Z2), test
 `tests/test_public_api.py`; zmiana lamiaca z "Co zrobic" w CHANGELOG
 [0.8.0].
+
+---
+
+## ADR-045: Publiczne API odczytu magazynu dla Archiwisty
+
+**Data:** 2026-10-18
+**Status:** Przyjeta
+
+**Kontekst:** Archiwista 0.1 indeksuje duzy magazyn (takze na SMB) bez
+zapisywania do niego i bez prywatnego parsera `data/`. Potrzebuje szesciu
+operacji KA-1..KA-6 ze swojej specyfikacji 12.1. Numer i-wezla na niektorych
+udzialach CIFS nie rozpoznaje hardlinku, stare sidecary i segmenty z wersji
+deweloperskiej nie odpowiadaja dokladnie obecnemu rejestrowi.
+
+**Opcje:**
+- A) Czytnik struktury w Archiwiscie i heurystyki numerow i-wezlow — szybszy
+  start, dwa rozne kontrakty magazynu i falszywe cele hardlinkow na SMB.
+- B) Strumieniowe, tylko odczytowe API producenta; wspolne rejestry, parsery,
+  walidacja dowiazan i przypiete operacje transformacji — jedna polityka.
+
+**Decyzja:** B. `iter_store(output_dir, *, segment=None, units=None)` oddaje
+generator wpisow wersji, sciezek standardowych, `full_sheet/` i problemow
+(nieznany segment, brak/uszkodzony sidecar, stare `kampanie/`, nieaktualne
+`.incoming/`). `segment` to sciezka wzgledna `<produkt>/<wariant>`;
+`units` to jednostki segmentu, ktorych hierarchie wylicza ta sama logika
+co zapis; ograniczenie skanu nastepuje PRZED listowaniem galezi segmentu.
+Skan nie czyta zawartosci plikow; sidecar jednego pliku odczytuje najwyzej
+raz, a bajty dowiazania haszuje tylko podczas potwierdzania celu, jesli
+udział nie daje stabilnych i-wezlow. Nieznane segmenty sa widoczne, nie
+trafiaja po cichu do innego produktu. `StoreEntry.sidecar` moze byc `None`;
+`problem` jest kodem przydatnym do indeksowania.
+
+`read_sidecar(path)` przyjmuje plik danych albo `.meta.json`, zachowuje
+surowe wartosci i odrebnie wystawia rozpoznany klucz deskryptora oraz
+znormalizowane daty, rok danych i jednostke. Brak danych w starym sidecarze
+pozostaje brakiem: data pobrania nie jest rokiem danych; bledny JSON/nieznany
+schemat to blad odczytu, ktory skan zamienia w wpis problemowy. Normalizacja
+historycznych kluczy (w tym z 0.8.0-dev) nie mutuje magazynu.
+`describe_segment(segment)` rozpoznaje wzorce rejestru i warianty tresci
+odwracajac `resolve_subdir`/`content_segment`, z bezpiecznym wynikiem
+`known=False` dla reszty. `file_footprint(entry, *, network=False, cache=None)`
+ma kolejnosc: bbox zadania, parsowalne godlo PL/TM33, naglowek pliku,
+jednostka z indeksu sieciowego, wreszcie brak obrysu; `Footprint` niesie
+`native` i `wgs84` jako `BBox` oraz `source`. Siec do PRG/RUIAN/SM5
+jest opt-in i cache jest lokalna pamiecia wywolujacego; pliki krajowe nie
+otrzymuja zmyslonego obrysu. `link_target(path)` korzysta z istniejacego
+`linked_version`: metadane dowiazania i `samefile`, a na CIFS z odczytu
+skrotu pliku (bez stabilnego inode). `pinned_transform(src_crs, dst_crs)`
+buduje `PinnedTransform` bez sieciowych siatek i bez ballpark; nie
+udostepniamy domyslnej transformacji pyproj.
+
+**Konsekwencje:** Wyłącznie odczyt magazynu (takze zamontowanego read-only);
+wyniki problemowe zamiast zgubionych plikow. Koszt pelnego skanu to listowanie
+katalogow + jeden odczyt sidecara na plik, bez `stat`/`open` tresci kazdej
+wersji; dla `units` liczba listowanych galezi jest proporcjonalna do liczby
+wybranych jednostek i ich wersji. `file_footprint` czyta naglowek tylko,
+gdy brak bboxa/godla; `link_target` moze odczytac caly plik na CIFS bez
+`serverino` — nie wolac dla kazdej wersji przy pelnym skanie. Wersja
+`kartograf-meta/1` na dysku pozostaje bez zmian. Opis kontraktu: ARCH 3.3.1;
+plan: ARCH 3.3.2. Zadna czesc KD/KB ani pobieranie nie sa w tym cyklu.
 
 ---
 
