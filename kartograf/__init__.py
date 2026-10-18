@@ -23,6 +23,9 @@ result (ADR-037, ADR-044): ``elevation download`` and ``imagery download`` =
 project, ADR-040). Every data report (``DataReport``, ``CollectionReport``,
 ``LandCoverReport``, ``SoilReport``, ``HsgReport``) has ``files`` and
 ``failed`` (``UnitFile``/``UnitFailure``), ``stale``, ``notices`` and ``ok``.
+The store is read without writing to it (ADR-045): ``list_segments``,
+``iter_store``, ``read_sidecar``, ``describe_segment``, ``file_footprint``,
+``link_target`` and ``pinned_transform``.
 
 Example usage::
 
@@ -169,6 +172,7 @@ from kartograf.download.versions import VersionRef
 from kartograf.exceptions import (
     CacheError,
     DownloadError,
+    InvalidSidecarError,
     KartografError,
     NoCoverageError,
     ParseError,
@@ -228,6 +232,18 @@ from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.edition import Edition
+from kartograf.store import (
+    SegmentInfo,
+    Sidecar,
+    StoreEntry,
+    describe_segment,
+    iter_store,
+    link_target,
+    list_segments,
+    read_sidecar,
+)
+from kartograf.store_geometry import Footprint, file_footprint, pinned_transform
+from kartograf.transform.crs import PinnedTransform
 from kartograf.transport.http import get_with_retry, make_gugik_session
 from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop
 
@@ -366,6 +382,19 @@ __all__ = [
     "make_gugik_session",
     "mosaic_and_crop",
     "check_source_grid",
+    # Store reading, without writing to it (Archiwista, ADR-045)
+    "list_segments",
+    "iter_store",
+    "StoreEntry",
+    "read_sidecar",
+    "Sidecar",
+    "describe_segment",
+    "SegmentInfo",
+    "file_footprint",
+    "Footprint",
+    "link_target",
+    "pinned_transform",
+    "PinnedTransform",
     # Exceptions
     "KartografError",
     "ParseError",
@@ -374,6 +403,7 @@ __all__ = [
     "NoCoverageError",
     "YearRangeError",
     "CacheError",
+    "InvalidSidecarError",
     # Version
     "__version__",
 ]
