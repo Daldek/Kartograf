@@ -97,7 +97,7 @@ Example usage::
 """
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info
+from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info, get_cache_path
 from kartograf.catalog import data_commands, get_catalog
 from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
 from kartograf.commands import (
@@ -445,6 +445,7 @@ __all__ = [
     "list_layers",
     "LayerList",
     "get_cache_info",
+    "get_cache_path",
     "clear_cache",
     "CacheInfo",
     # Sheet codes and the catalog of the commands as data (spec 5.4.4, 5.4.5, 8.5)

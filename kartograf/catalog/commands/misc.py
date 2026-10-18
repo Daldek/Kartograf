@@ -286,10 +286,11 @@ COMMANDS = (
         "cache path",
         "Pokaz sciezke pliku bazy cache",
         "query",
-        "get_cache_info",
+        "get_cache_path",
         "kartograf-cache/1",
         (shared.JSON,),
-        description="Wypisz sciezke pliku bazy cache metadanych (w biezacym katalogu)",
+        description="Wypisz sciezke pliku bazy cache metadanych (w biezacym "
+        "katalogu) bez otwierania bazy: dziala tez, gdy baza jest nieczytelna",
     ),
     Command(
         "find_sheets",
