@@ -128,7 +128,8 @@ def select_variant(
     if foreign:
         raise ValidationError(
             f"{cli_flag(foreign[0])} nie dotyczy {subject}"
-            + (f" (wybory: {', '.join(cli_flag(k) for k in keys)})" if keys else "")
+            + (f" (wybory: {', '.join(cli_flag(k) for k in keys)})" if keys else ""),
+            option=foreign[0],
         )
     candidates = list(params.variants)
     context: list[str] = []
@@ -140,7 +141,9 @@ def select_variant(
             where = f" dla {', '.join(context)}" if context else ""
             raise ValidationError(
                 f"{cli_flag(key)} {given[key]}: niedostepne{where}; dostepne: "
-                f"{', '.join(allowed)}"
+                f"{', '.join(allowed)}",
+                option=key,
+                allowed=tuple(allowed),
             )
         candidates = [v for v in candidates if dict(v.choice)[key] == given[key]]
         context.append(f"{cli_flag(key)} {given[key]}")
@@ -151,7 +154,9 @@ def select_variant(
         if len(allowed) > 1:
             where = f" dla {', '.join(context)}" if context else ""
             raise ValidationError(
-                f"{cli_flag(key)} wymagane{where}: {', '.join(allowed)}"
+                f"{cli_flag(key)} wymagane{where}: {', '.join(allowed)}",
+                option=key,
+                allowed=tuple(allowed),
             )
     raise AssertionError(f"Warianty kanalu nie sa rozroznialne: {candidates}")
 

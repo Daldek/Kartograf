@@ -8,6 +8,9 @@ from pathlib import Path
 import pytest
 
 import kartograf
+from kartograf.download.cutout import CUTOUT_CRS
+from kartograf.download.cz_contours import contours_formats
+from kartograf.download.options import BBOX_CRS_CHOICES, require_product
 from kartograf.error_report import ERROR_CODES, EXIT_CODES, ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
@@ -20,7 +23,9 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.providers.pl.gugik_orto import cutout_resolution_labels
 from kartograf.serialization import SCHEMAS
+from kartograf.sources.variants import cz_models, resolution_label, variants
 from kartograf.transform.crs import TransformError, TransformUnavailableError
 
 # Table 6.2 of the spec (code, exception, exit code) - a literal on purpose: a
@@ -333,3 +338,1723 @@ def test_transform_errors_have_codes():
     assert TransformError("m").code == "transform_failed"
     assert TransformUnavailableError("m").code == "transform_unavailable"
     assert isinstance(TransformUnavailableError("m"), TransformError)
+
+
+# --- option/allowed of the collection, land cover, SoilGrids and HSG validators ---
+# One row per message class, called through the PUBLIC entry points: the raise must
+# reach the caller before any request (the suite blocks the network).
+
+_STORE = object()  # placeholder of the store directory (``tmp_path``)
+_AREA = kartograf.BBox(450000, 550000, 450500, 550500, "EPSG:2180")
+_SHEET = "N-34-130-D"
+_DEPTHS = ("0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm", "100-200cm")
+_COLLECTIONS = importlib.import_module("kartograf.download.collections")
+_AREA_NAMES = ("sheet", "bbox", "geometry")
+
+
+def _row(function, arguments, option, options, allowed, text):
+    """A scenario: the call and the expected attributes plus a message fragment."""
+    return pytest.param(
+        function,
+        arguments,
+        (option, options, allowed),
+        text,
+        id=f"{function.__name__}-{text[:40]}",
+    )
+
+
+COLLECTION_OPTION_SCENARIOS = [
+    _row(
+        kartograf.download_collection,
+        {"product": None, "output_dir": _STORE, "teryt": "1261"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products(),
+        "--product wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "xyz", "output_dir": _STORE, "teryt": "1261"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products(),
+        "Nieznany produkt 'xyz'",
+    ),
+    _row(
+        _COLLECTIONS.require_collection_product,
+        {"product": None, "group": "boundaries"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products("boundaries"),
+        "--product wymagane",
+    ),
+    _row(
+        _COLLECTIONS.require_collection_product,
+        {"product": "buildings", "group": "boundaries"},
+        "product",
+        None,
+        _COLLECTIONS.collection_products("boundaries"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": None, "teryt": "1261", "lod": 2},
+        "output_dir",
+        None,
+        None,
+        "--output wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "lod": 1, "year": 2024},
+        None,
+        ("teryt", *_AREA_NAMES),
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.check_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "bbox": _AREA,
+            "lod": 1,
+            "year": 2024,
+        },
+        None,
+        ("teryt", "bbox"),
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "bbox": _AREA, "country": "xx"},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "Nieznany kraj --country 'xx'",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "bbox": _AREA},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "--country wymagane z --bbox/--geometry",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "country": "cz",
+        },
+        None,
+        ("teryt", "country"),
+        None,
+        "usun --country cz",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        "teryt",
+        None,
+        None,
+        "Nieprawidlowy kod TERYT",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "ku": "623164", "country": "pl"},
+        None,
+        ("ku", "country"),
+        None,
+        "usun --country pl",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "map", "output_dir": _STORE, "ku": "12", "country": "cz"},
+        "ku",
+        None,
+        None,
+        "Nieprawidlowy kod katastralniho uzemi",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "admin",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "auto",
+        },
+        "country",
+        None,
+        ("pl", "cz"),
+        "--whole-country wymaga --country pl albo --country cz",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "prices",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "cz",
+        },
+        "country",
+        None,
+        ("pl",),
+        "jest dostepny tylko dla PL",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "geographic",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "cz",
+            "format": "XYZ",
+        },
+        "format",
+        None,
+        ("GPKG", "FGDB"),
+        "niedostepne dla --whole-country geographic (CZ)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "topographic",
+            "output_dir": _STORE,
+            "country": "pl",
+            "sheet": _SHEET,
+            "format": "XYZ",
+        },
+        "format",
+        None,
+        ("TIFF", "PDF"),
+        "--format XYZ: niedostepne",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "format": "SHP",
+        },
+        "format",
+        None,
+        None,
+        "dotyczy tylko --product map (CZ",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "topographic",
+            "output_dir": _STORE,
+            "country": "cz",
+            "bbox": _AREA,
+            "scale": "1:1",
+        },
+        "scale",
+        None,
+        _COLLECTIONS.collection_choice_values("topographic", "scale")["CZ"],
+        "--scale 1:1: niedostepne",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "topographic",
+            "output_dir": _STORE,
+            "country": "cz",
+            "bbox": _AREA,
+            "sheet_system": "1965",
+        },
+        "sheet_system",
+        None,
+        ("sjtsk", "etrs89"),
+        "--sheet-system 1965: niedostepne",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "horizontal_crs": "EPSG:4326",
+        },
+        "horizontal_crs",
+        None,
+        ("EPSG:2180",),
+        "sa zawsze w ukladzie uslugi EPSG:2180",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "teryt": "1261"},
+        "lod",
+        None,
+        ("1", "2"),
+        "--lod wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "year": 2016,
+        },
+        "year",
+        None,
+        ("2017",),
+        "--year 2016: niedostepne dla --lod 2",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "admin",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "level": "gmina",
+            "year": 2020,
+        },
+        "year",
+        None,
+        None,
+        "nie dotyczy obiektow obszaru produktu admin",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "level": "gmina",
+        },
+        "level",
+        None,
+        None,
+        "nie paczek buildings",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "level": "gmina",
+        },
+        "level",
+        None,
+        None,
+        "(stala zawartosc",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "lod": 1,
+        },
+        "lod",
+        None,
+        None,
+        "nie dotyczy obiektow obszaru produktu map",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "admin", "output_dir": _STORE, "country": "pl", "bbox": _AREA},
+        "level",
+        None,
+        _COLLECTIONS.collection_levels("admin")["PL"],
+        "--level wymagane",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "admin",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "level": "obec",
+        },
+        "level",
+        None,
+        _COLLECTIONS.collection_levels("admin")["PL"],
+        "nieznany poziom admin (PL)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "control",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": _AREA,
+            "network": "xyz",
+        },
+        "network",
+        None,
+        _COLLECTIONS.collection_choice_values("control", "network")["PL"],
+        "--network xyz: niedostepne dla obszaru control (PL)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "control", "output_dir": _STORE, "country": "pl", "bbox": _AREA},
+        "network",
+        None,
+        _COLLECTIONS.collection_choice_values("control", "network")["PL"],
+        "--network wymagane dla obszaru control (PL)",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "prices",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "country": "pl",
+        },
+        "whole_country",
+        None,
+        None,
+        "nie ma pliku krajowego",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "sheet": _SHEET,
+            "country": "cz",
+        },
+        None,
+        ("sheet", "country"),
+        None,
+        "a podano --country cz",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "map",
+            "output_dir": _STORE,
+            "country": "pl",
+            "bbox": kartograf.BBox(1, 1, 2, 2, "EPSG:2180"),
+        },
+        "bbox",
+        None,
+        None,
+        "lezy poza PL",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "year": 2017,
+            "plan": object(),
+        },
+        None,
+        ("plan", "update"),
+        None,
+        "Plan aktualizacji wymaga update='upgrade'",
+    ),
+    _row(
+        kartograf.download_collection,
+        {
+            "product": "buildings",
+            "output_dir": _STORE,
+            "teryt": "1261",
+            "lod": 2,
+            "year": 2017,
+            "workers": 0,
+        },
+        "workers",
+        None,
+        None,
+        "workers musi byc >= 1",
+    ),
+]
+
+LANDCOVER_OPTION_SCENARIOS = [
+    _row(
+        kartograf.download_landcover,
+        {"product": None, "output_dir": _STORE, "teryt": "1465"},
+        "product",
+        None,
+        ("bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"),
+        "--product wymagane",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "soilgrids", "output_dir": _STORE, "teryt": "1465"},
+        "product",
+        None,
+        ("bdot10k", "bdoo", "corine", "zabaged", "data50", "data250"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "bdot10k", "output_dir": None, "teryt": "1465"},
+        "output_dir",
+        None,
+        None,
+        "--output wymagane",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "bdot10k", "output_dir": _STORE},
+        None,
+        ("teryt", *_AREA_NAMES),
+        None,
+        "Podaj dokladnie jeden wybor dla --product bdot10k",
+    ),
+    _row(
+        kartograf.check_landcover,
+        {
+            "product": "corine",
+            "output_dir": _STORE,
+            "year": 2018,
+            "sheet": _SHEET,
+            "bbox": _AREA,
+        },
+        None,
+        ("sheet", "bbox"),
+        None,
+        "Podaj dokladnie jeden wybor dla --product corine",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "corine", "output_dir": _STORE, "year": 2018},
+        None,
+        _AREA_NAMES,
+        None,
+        "Podaj dokladnie jeden wybor dla --product corine",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "corine", "output_dir": _STORE, "sheet": _SHEET},
+        "year",
+        None,
+        ("2018", "2012", "2006", "2000", "1990"),
+        "--year wymagane dla corine",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "corine", "output_dir": _STORE, "sheet": _SHEET, "year": 2019},
+        "year",
+        None,
+        ("2018", "2012", "2006", "2000", "1990"),
+        "Nieprawidlowy rok: 2019",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {
+            "product": "corine",
+            "output_dir": _STORE,
+            "sheet": _SHEET,
+            "year": 2018,
+            "format": "SHP",
+        },
+        "format",
+        None,
+        None,
+        "--format dziala tylko z --product bdot10k",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "bdot10k", "output_dir": _STORE, "teryt": "1465", "format": "GML"},
+        "format",
+        None,
+        ("GPKG", "SHP"),
+        "GML tylko z --year",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {
+            "product": "bdot10k",
+            "output_dir": _STORE,
+            "teryt": "1465",
+            "format": "SHP",
+            "layers": ["PTWP"],
+        },
+        None,
+        ("layers", "format"),
+        None,
+        "--layers dotyczy tylko --format GPKG",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {
+            "product": "bdot10k",
+            "output_dir": _STORE,
+            "teryt": "1465",
+            "year": 2020,
+            "format": "GML",
+            "layers": ["PTWP"],
+        },
+        "layers",
+        None,
+        None,
+        "nie dotyczy archiwum BDOT10k",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "bdot10k", "output_dir": _STORE, "teryt": "1465", "year": 2020},
+        "format",
+        None,
+        ("GML", "SHP"),
+        "--format wymagane dla --year 2020",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "bdot10k", "output_dir": _STORE, "teryt": "14"},
+        "teryt",
+        None,
+        None,
+        "publikowany per powiat",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {"product": "corine", "output_dir": _STORE, "teryt": "1465", "year": 2018},
+        "teryt",
+        None,
+        None,
+        "--teryt dziala tylko z",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {
+            "product": "corine",
+            "output_dir": _STORE,
+            "sheet": _SHEET,
+            "year": 2018,
+            "layers": ["PTWP"],
+        },
+        "layers",
+        None,
+        None,
+        "--layers dziala tylko z --product bdot10k albo bdoo",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {
+            "product": "zabaged",
+            "output_dir": _STORE,
+            "whole_country": True,
+            "horizontal_crs": "EPSG:1",
+        },
+        "horizontal_crs",
+        None,
+        ("EPSG:5514", "EPSG:3045"),
+        "zbior nie jest publikowany w tym ukladzie",
+    ),
+    _row(
+        kartograf.download_landcover,
+        {
+            "product": "bdot10k",
+            "output_dir": _STORE,
+            "teryt": "1465",
+            "plan": object(),
+        },
+        None,
+        ("plan", "update"),
+        None,
+        "Plan aktualizacji wymaga update='upgrade'",
+    ),
+    _row(
+        kartograf.download_soil,
+        {
+            "output_dir": None,
+            "sheet": _SHEET,
+            "property": "clay",
+            "depth": "0-5cm",
+            "stat": "mean",
+        },
+        "output_dir",
+        None,
+        None,
+        "--output wymagane",
+    ),
+    _row(
+        kartograf.download_soil,
+        {"output_dir": _STORE, "sheet": _SHEET, "depth": "0-5cm", "stat": "mean"},
+        "property",
+        None,
+        (
+            "bdod",
+            "cec",
+            "cfvo",
+            "clay",
+            "nitrogen",
+            "ocd",
+            "ocs",
+            "phh2o",
+            "sand",
+            "silt",
+            "soc",
+        ),
+        "--property wymagane",
+    ),
+    _row(
+        kartograf.download_soil,
+        {
+            "output_dir": _STORE,
+            "sheet": _SHEET,
+            "property": "clay",
+            "depth": "1m",
+            "stat": "mean",
+        },
+        "depth",
+        None,
+        _DEPTHS,
+        "Nieprawidlowa glebokosc: 1m",
+    ),
+    _row(
+        kartograf.download_soil,
+        {"output_dir": _STORE, "sheet": _SHEET, "property": "clay", "depth": "0-5cm"},
+        "stat",
+        None,
+        ("mean", "Q0.05", "Q0.5", "Q0.95", "uncertainty"),
+        "--stat wymagane",
+    ),
+    _row(
+        kartograf.check_soil,
+        {
+            "output_dir": _STORE,
+            "sheet": _SHEET,
+            "property": "x",
+            "depth": "0-5cm",
+            "stat": "mean",
+        },
+        "property",
+        None,
+        (
+            "bdod",
+            "cec",
+            "cfvo",
+            "clay",
+            "nitrogen",
+            "ocd",
+            "ocs",
+            "phh2o",
+            "sand",
+            "silt",
+            "soc",
+        ),
+        "Nieprawidlowa wlasciwosc: x",
+    ),
+    _row(
+        kartograf.download_soil,
+        {
+            "output_dir": _STORE,
+            "property": "clay",
+            "depth": "0-5cm",
+            "stat": "mean",
+        },
+        None,
+        _AREA_NAMES,
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.calculate_hsg,
+        {"output_dir": None, "sheet": _SHEET, "depth": "0-5cm"},
+        "output_dir",
+        None,
+        None,
+        "--output wymagane",
+    ),
+    _row(
+        kartograf.calculate_hsg,
+        {"output_dir": Path("hsg.tif"), "sheet": _SHEET, "depth": "0-5cm"},
+        "output_dir",
+        None,
+        None,
+        "--output to katalog magazynu",
+    ),
+    _row(
+        kartograf.calculate_hsg,
+        {"output_dir": _STORE, "sheet": _SHEET},
+        "depth",
+        None,
+        _DEPTHS,
+        "--depth wymagane",
+    ),
+    _row(
+        kartograf.calculate_hsg,
+        {"output_dir": _STORE, "sheet": _SHEET, "depth": "1m"},
+        "depth",
+        None,
+        _DEPTHS,
+        "Nieprawidlowa glebokosc: 1m",
+    ),
+    _row(
+        kartograf.check_hsg,
+        {"output_dir": _STORE, "depth": "0-5cm"},
+        None,
+        _AREA_NAMES,
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.calculate_hsg,
+        {"output_dir": _STORE, "sheet": _SHEET, "depth": "0-5cm", "plan": object()},
+        None,
+        ("plan", "update"),
+        None,
+        "Plan aktualizacji wymaga update='upgrade'",
+    ),
+]
+
+
+def _assert_option_scenario(function, arguments, expected, text, tmp_path):
+    arguments = {
+        name: tmp_path if value is _STORE else value
+        for name, value in arguments.items()
+    }
+    with pytest.raises(ValidationError) as caught:
+        function(**arguments)
+    error = caught.value
+    assert (error.option, error.options, error.allowed) == expected
+    assert text in str(error)
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "expected", "text"), COLLECTION_OPTION_SCENARIOS
+)
+def test_collection_input_error_names_the_option(
+    function, arguments, expected, text, tmp_path
+):
+    _assert_option_scenario(function, arguments, expected, text, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "expected", "text"), LANDCOVER_OPTION_SCENARIOS
+)
+def test_landcover_soil_and_hsg_input_error_names_the_option(
+    function, arguments, expected, text, tmp_path
+):
+    _assert_option_scenario(function, arguments, expected, text, tmp_path)
+
+
+# --- option/allowed of the data validators (download_data, check_data) ---------
+# The same rule as above: one row per message class, through the public entry
+# points; ``allowed`` comes from the registries the message lists.
+
+_PL_SHEET = "N-34-130-D-d-2-4"
+_DATA_PRODUCTS = (
+    "nmt",
+    "nmpt",
+    "orto",
+    "laz",
+    "contours",
+    "intensity",
+    "true-orto",
+    "oblique-orto",
+)
+_NMT = {
+    "product": "nmt",
+    "output_dir": _STORE,
+    "sheet": _PL_SHEET,
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
+_NMT_AREA = {
+    "product": "nmt",
+    "output_dir": _STORE,
+    "bbox": _AREA,
+    "country": "pl",
+    "sheet_system": "1992",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+}
+_ORTO_CUTOUT = {
+    "product": "orto",
+    "output_dir": _STORE,
+    "bbox": _AREA,
+    "country": "pl",
+    "cutout": True,
+    "horizontal_crs": "EPSG:2180",
+}
+_ORTO_KEY = "pl.gugik.orto"
+
+
+def _pl_labels(product: str) -> tuple[str, ...]:
+    """The grid resolutions of the PL variants in the product format."""
+    steps = {
+        v.resolution_m
+        for v in variants(product=product, country="PL")
+        if not v.source_file and v.resolution_m is not None
+    }
+    return tuple(resolution_label(step) for step in sorted(steps))
+
+
+OPTION_SCENARIOS = [
+    _row(
+        kartograf.download_data,
+        {**_NMT, "product": None},
+        "product",
+        None,
+        _DATA_PRODUCTS,
+        "--product wymagane",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "product": "xyz"},
+        "product",
+        None,
+        _DATA_PRODUCTS,
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.check_data,
+        {**_NMT, "product": None},
+        "product",
+        None,
+        _DATA_PRODUCTS,
+        "--product wymagane",
+    ),
+    _row(
+        require_product,
+        {"product": "orto", "products": ("nmt", "nmpt")},
+        "product",
+        None,
+        ("nmt", "nmpt"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "output_dir": None},
+        "output_dir",
+        None,
+        None,
+        "--output wymagane",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "vertical_crs": None},
+        "vertical_crs",
+        None,
+        ("EVRF2007", "KRON86"),
+        "--vertical-crs wymagane dla --product nmt (PL)",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "vertical_crs": "XYZ"},
+        "vertical_crs",
+        None,
+        ("EVRF2007", "KRON86"),
+        "nie jest ukladem wysokosci PL",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "resolution": None},
+        "resolution",
+        None,
+        _pl_labels("nmt"),
+        "--resolution wymagane dla NMT PL",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "resolution": "7m"},
+        "resolution",
+        None,
+        _pl_labels("nmt"),
+        "PL nie ma rozdzielczosci 7m",
+    ),
+    _row(
+        kartograf.download_data,
+        {"product": "nmt", "output_dir": _STORE},
+        None,
+        _AREA_NAMES,
+        None,
+        "Podaj wybor obszaru",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "bbox": _AREA},
+        None,
+        ("sheet", "bbox"),
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "bbox": kartograf.BBox(5, 5, 1, 1, "EPSG:2180")},
+        "bbox",
+        None,
+        None,
+        "bbox odwrocony",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "bbox": kartograf.BBox(1, 2, 3, 4, "EPSG:9999")},
+        "bbox",
+        None,
+        BBOX_CRS_CHOICES,
+        "nieobslugiwany uklad",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "sheet_system": "1965"},
+        "sheet_system",
+        None,
+        ("1992", "2000"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "sheet_system": None},
+        "sheet_system",
+        None,
+        ("1992", "2000"),
+        "--sheet-system wymagane",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "scale": "1:9999", "sheet_system": "2000"},
+        "scale",
+        None,
+        ("1:5000", "1:2000", "1:1000", "1:500"),
+        "Nieznana skala PL-2000",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "sheet_system": "2000"},
+        "scale",
+        None,
+        ("1:5000", "1:2000", "1:1000", "1:500"),
+        "--scale wymagane dla arkuszy PL-2000",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "country": "xx"},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "country": None},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "--country wymagane z --bbox/--geometry",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "min_year": 2025, "max_year": 2020},
+        None,
+        ("min_year", "max_year"),
+        None,
+        "nie moze byc wiekszy",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "year": 1800},
+        "year",
+        None,
+        None,
+        "--year musi byc liczba calkowita",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "year": "2018"},
+        "year",
+        None,
+        None,
+        "--year musi byc liczba calkowita",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "max_year": 2100 + 1},
+        "max_year",
+        None,
+        None,
+        "--max-year musi byc liczba calkowita",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "year": 2020, "min_year": 2019},
+        None,
+        ("year", "min_year"),
+        None,
+        "--year wyklucza sie",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "cutout": "no"},
+        "cutout",
+        None,
+        None,
+        "musi byc przelacznikiem",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "min_density": "5"},
+        "min_density",
+        None,
+        None,
+        "--min-density musi byc liczba calkowita",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "workers": "2"},
+        "workers",
+        None,
+        None,
+        "--workers musi byc liczba calkowita",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "layer": "obszar"},
+        None,
+        ("layer", "geometry"),
+        None,
+        "--layer dotyczy tylko --geometry",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "resolution": {"xx": "1m"}},
+        "resolution",
+        None,
+        None,
+        "nieprawidlowa wartosc",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "cutout": True, "horizontal_crs": "EPSG:2180"},
+        None,
+        ("cutout", "sheet"),
+        None,
+        "--cutout dziala tylko z --bbox/--geometry",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "cutout": True},
+        "horizontal_crs",
+        None,
+        CUTOUT_CRS,
+        "--horizontal-crs wymagane z --cutout",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "horizontal_crs": "EPSG:2180"},
+        None,
+        ("horizontal_crs", "cutout"),
+        None,
+        "dziala tylko z --cutout",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "cutout": True, "horizontal_crs": "EPSG:1"},
+        "horizontal_crs",
+        None,
+        CUTOUT_CRS,
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "cutout": True, "horizontal_crs": "EPSG:2180", "year": 2020},
+        None,
+        ("year", "cutout"),
+        None,
+        "--year nie dziala z --cutout",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "model": "dmr5g"},
+        None,
+        ("model", "product"),
+        None,
+        "--model dotyczy tylko --product laz",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "resolution": "1m", "product": "laz"},
+        "resolution",
+        None,
+        None,
+        "--resolution nie dotyczy LAZ",
+    ),
+    _row(
+        kartograf.download_data,
+        {"product": "orto", "output_dir": _STORE, "sheet": _PL_SHEET, "format": "ASC"},
+        "format",
+        None,
+        None,
+        "--format dotyczy tylko --product nmt i nmpt",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "resolution": "100m", "sheet_system": "1992"},
+        None,
+        ("sheet_system", "resolution"),
+        None,
+        "nie dotyczy --resolution 100m",
+    ),
+    _row(
+        kartograf.download_data,
+        {"product": "contours", "output_dir": _STORE, "sheet": "CTES96"},
+        "format",
+        None,
+        contours_formats(),
+        "--format wymagane dla --product contours",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "contours",
+            "output_dir": _STORE,
+            "sheet": "CTES96",
+            "format": "SHP",
+            "resolution": "5m",
+        },
+        "resolution",
+        None,
+        None,
+        "--resolution nie dotyczy --product contours",
+    ),
+    _row(
+        kartograf.download_data,
+        {"product": "nmt", "output_dir": _STORE, "sheet": "CTES96"},
+        "vertical_crs",
+        None,
+        ("Bpv", "EVRF2007"),
+        "--vertical-crs wymagane dla NMT CZ",
+    ),
+    _row(
+        kartograf.download_data,
+        {"product": "nmt", "output_dir": _STORE, "sheet": "CTES96", "format": "ASC"},
+        "format",
+        None,
+        None,
+        "--format dotyczy w CZ tylko --product contours",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "nmt",
+            "output_dir": _STORE,
+            "sheet": "CTES96",
+            "vertical_crs": "Bpv",
+            "resolution": "7m",
+        },
+        "resolution",
+        None,
+        ("2m", "5m"),
+        "CZ nie ma rozdzielczosci 7m",
+    ),
+    _row(
+        kartograf.download_data,
+        {"product": "laz", "output_dir": _STORE, "sheet": "CTES96"},
+        "model",
+        None,
+        cz_models(),
+        "--model wymagane dla --product laz w CZ",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "orto",
+            "output_dir": _STORE,
+            "sheet": "CTES96",
+            "vertical_crs": "Bpv",
+        },
+        "vertical_crs",
+        None,
+        None,
+        "--vertical-crs nie dotyczy --product orto",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "nmt",
+            "output_dir": _STORE,
+            "bbox": _AREA,
+            "country": "cz",
+            "vertical_crs": "Bpv",
+            "resolution": "5m",
+        },
+        None,
+        ("cutout", "horizontal_crs"),
+        None,
+        "dodaj --cutout --horizontal-crs",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_ORTO_CUTOUT, "resolution": "0.1m"},
+        "coverage",
+        None,
+        ("standard", "high"),
+        "--coverage wymagane z --cutout --product orto",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_ORTO_CUTOUT, "coverage": "standard", "resolution": "7m"},
+        "resolution",
+        None,
+        tuple(cutout_resolution_labels(_ORTO_KEY, "standard")),
+        "niedostepne dla wycinka ortofotomapy standard",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            **_ORTO_CUTOUT,
+            "coverage": "standard",
+            "resolution": cutout_resolution_labels(_ORTO_KEY, "standard")[0],
+            "horizontal_crs": "EPSG:5514",
+        },
+        "horizontal_crs",
+        None,
+        ("EPSG:2180",),
+        "wycinek ortofotomapy tylko EPSG:2180",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "oblique-orto",
+            "output_dir": _STORE,
+            "sheet": "7.125.11.08",
+            "direction": "x",
+        },
+        "direction",
+        None,
+        ("n", "e", "s", "w"),
+        "--direction 'x': nieznana wartosc",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "direction": "n"},
+        None,
+        ("direction", "product"),
+        None,
+        "--direction dotyczy tylko --product",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "update": "bogus"},
+        "update",
+        None,
+        ("upgrade", "force"),
+        "Nieznany tryb update",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "update": "check"},
+        "update",
+        None,
+        ("upgrade", "force"),
+        "update='check' niczego nie pobiera",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "plan": object()},
+        None,
+        ("plan", "update"),
+        None,
+        "Plan aktualizacji wymaga update='upgrade'",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "country": "cz"},
+        None,
+        ("sheet", "country"),
+        None,
+        "nalezy do systemu",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "contours",
+            "output_dir": _STORE,
+            "sheet": _PL_SHEET,
+            "format": "SHP",
+        },
+        None,
+        ("product", "sheet"),
+        None,
+        "nie ma danych PL",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "laz",
+            "output_dir": _STORE,
+            "sheet": _PL_SHEET,
+            "vertical_crs": "EVRF2007",
+            "model": "dmr5g",
+        },
+        None,
+        ("model", "sheet"),
+        None,
+        "pomin --model dla PL",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            **_NMT_AREA,
+            "country": "pl",
+            "bbox": kartograf.BBox(0, 0, 10, 10, "EPSG:2180"),
+        },
+        "bbox",
+        None,
+        None,
+        "lezy poza PL",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            **_NMT_AREA,
+            "country": "auto",
+            "bbox": kartograf.BBox(0, 0, 10, 10, "EPSG:2180"),
+        },
+        "bbox",
+        None,
+        None,
+        "obszar nie przecina zasiegu zadnego znanego kraju",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "nmt",
+            "output_dir": _STORE,
+            "sheet": "CTES96",
+            "vertical_crs": "Bpv",
+            "year": 2020,
+        },
+        "year",
+        None,
+        None,
+        "CZ (CUZK) nie ma kampanii",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "nmt",
+            "output_dir": _STORE,
+            "sheet": "CTES96",
+            "vertical_crs": "Bpv",
+            "all_campaigns": True,
+            "min_year": 2020,
+        },
+        None,
+        ("all_campaigns", "min_year"),
+        None,
+        "CZ (CUZK) nie ma kampanii",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "contours",
+            "output_dir": _STORE,
+            "bbox": _AREA,
+            "country": "pl",
+            "format": "SHP",
+        },
+        None,
+        ("product", "country"),
+        None,
+        "jest dostepny tylko dla CZ",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            "product": "laz",
+            "output_dir": _STORE,
+            "bbox": kartograf.BBox(18.6300, 49.7450, 18.6303, 49.7452, "EPSG:4326"),
+            "country": "auto",
+            "vertical_crs": "EVRF2007",
+        },
+        "model",
+        None,
+        cz_models(),
+        "obszar siega CZ: podaj --model",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": None, "sheet": _PL_SHEET, "country": "pl", "cache": False},
+        "product",
+        None,
+        ("nmt", "nmpt", "laz"),
+        "--product wymagane",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "orto", "sheet": _PL_SHEET, "cache": False},
+        "product",
+        None,
+        ("nmt", "nmpt", "laz"),
+        "nieznana wartosc",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "bbox": _AREA, "cache": False},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "--country wymagane z --bbox/--geometry",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "sheet": _PL_SHEET, "country": "xx", "cache": False},
+        "country",
+        None,
+        ("pl", "cz", "auto"),
+        "raport dostepnosci obejmuje",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "sheet": _PL_SHEET, "country": "cz", "cache": False},
+        None,
+        ("sheet", "country"),
+        None,
+        "nalezy do systemu",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "bbox": _AREA, "sheet": _PL_SHEET, "cache": False},
+        None,
+        ("sheet", "bbox"),
+        None,
+        "Podaj dokladnie jeden wybor",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "sheet": _PL_SHEET,
+            "min_year": 2025,
+            "max_year": 2020,
+            "cache": False,
+        },
+        None,
+        ("min_year", "max_year"),
+        None,
+        "nie moze byc wiekszy",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "sheet": _PL_SHEET, "min_year": 1800, "cache": False},
+        "min_year",
+        None,
+        None,
+        "--min-year musi byc liczba calkowita",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "sheet": "CTES96", "year": 2020, "cache": False},
+        "year",
+        None,
+        None,
+        "CZ (CUZK) nie publikuje lat nalotu",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "sheet": "CTES96",
+            "min_year": 2020,
+            "max_year": 2021,
+            "cache": False,
+        },
+        None,
+        ("min_year", "max_year"),
+        None,
+        "CZ (CUZK) nie publikuje lat nalotu",
+    ),
+    _row(
+        kartograf.check_availability,
+        {"product": "nmt", "sheet": _PL_SHEET, "year": 1901, "cache": False},
+        "year",
+        None,
+        None,
+        "nie ma rocznika",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "sheet": _PL_SHEET,
+            "min_year": 1901,
+            "max_year": 1905,
+            "cache": False,
+        },
+        None,
+        ("min_year", "max_year"),
+        None,
+        "nie ma rocznika",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "bbox": kartograf.BBox(5, 5, 1, 1, "EPSG:2180"),
+            "country": "pl",
+            "cache": False,
+        },
+        "bbox",
+        None,
+        None,
+        "bbox odwrocony",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "expected", "text"), OPTION_SCENARIOS
+)
+def test_input_error_names_the_option(function, arguments, expected, text, tmp_path):
+    _assert_option_scenario(function, arguments, expected, text, tmp_path)
+
+
+@pytest.mark.parametrize("function", [kartograf.download_data, kartograf.check_data])
+def test_malformed_sheet_is_a_parse_error_naming_the_sheet(function, tmp_path):
+    """The sheet code is parsed by ``SheetParser`` (``ParseError``); the error
+    of the caller's argument carries ``option="sheet"``."""
+    arguments = {**_NMT, "output_dir": tmp_path, "sheet": "XYZ"}
+
+    with pytest.raises(ParseError) as caught:
+        function(**arguments)
+
+    assert caught.value.option == "sheet"
+    assert caught.value.code == "invalid_sheet_code"
+
+
+def test_malformed_sheet_of_the_availability_report_is_a_parse_error(tmp_path):
+    for sheet in ("XYZ", "302_5551"):  # not a PL code; a TM33 tile off the 2 km grid
+        country = "pl" if sheet == "XYZ" else "cz"
+        with pytest.raises(ParseError) as caught:
+            kartograf.check_availability(
+                product="nmt", sheet=sheet, country=country, cache=False
+            )
+
+        assert caught.value.option == "sheet"
+
+
+STORE_OPTION_SCENARIOS = [
+    _row(
+        kartograf.iter_store,
+        {"output_dir": _STORE, "segment": "zly"},
+        "segment",
+        None,
+        None,
+        "Nieprawidlowy segment magazynu",
+    ),
+    _row(
+        kartograf.iter_store,
+        {"output_dir": _STORE, "units": ["x"]},
+        "units",
+        None,
+        None,
+        "units wymaga segment",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "units": ["versions"],
+        },
+        "units",
+        None,
+        None,
+        "Nieprawidlowa jednostka magazynu",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "units": "N-33-130-D-d-2-4",
+        },
+        "units",
+        None,
+        None,
+        "podaj kolekcje nazw jednostek",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "skip_versions": "nmt/x",
+        },
+        "skip_versions",
+        None,
+        None,
+        "podaj kolekcje sciezek katalogow wersji",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    ("function", "arguments", "expected", "text"), STORE_OPTION_SCENARIOS
+)
+def test_store_input_error_names_the_option(
+    function, arguments, expected, text, tmp_path
+):
+    _assert_option_scenario(function, arguments, expected, text, tmp_path)
+
+
+def test_store_segment_that_is_a_symlink_names_the_segment(tmp_path):
+    (tmp_path / "nmt").mkdir()
+    (tmp_path / "elsewhere").mkdir()
+    (tmp_path / "nmt" / "pl_1992_1m_evrf2007").symlink_to(
+        tmp_path / "elsewhere", target_is_directory=True
+    )
+
+    with pytest.raises(ValidationError) as caught:
+        kartograf.iter_store(tmp_path, segment="nmt/pl_1992_1m_evrf2007")
+
+    assert caught.value.option == "segment"
+
+
+def test_project_task_name_and_command_errors_name_the_option(tmp_path):
+    project = kartograf.init_project(tmp_path / "p", output_dir=tmp_path / "p" / "data")
+
+    with pytest.raises(ValidationError) as bad_name:
+        kartograf.add_project_task(
+            project.directory,
+            name="zla nazwa",
+            command="soil hsg",
+            options={"depth": "0-5cm"},
+        )
+    with pytest.raises(ValidationError) as bad_command:
+        kartograf.add_project_task(
+            project.directory, name="ok", command="project status", options={}
+        )
+    with pytest.raises(ValidationError) as unknown:
+        kartograf.remove_project_task(project.directory, name="brak")
+
+    assert (bad_name.value.option, bad_name.value.allowed) == ("name", None)
+    assert bad_command.value.option == "command"
+    assert "elevation download" in (bad_command.value.allowed or ())
+    assert "project status" not in (bad_command.value.allowed or ())
+    assert (unknown.value.option, unknown.value.allowed) == ("name", None)
+
+
+def test_project_download_update_and_workers_name_the_option(tmp_path):
+    project = kartograf.init_project(tmp_path / "p", output_dir=tmp_path / "p" / "data")
+
+    with pytest.raises(ValidationError) as bad_update:
+        kartograf.download_project(project.directory, update="x")
+    with pytest.raises(ValidationError) as bad_workers:
+        kartograf.download_project(project.directory, workers=0)
+
+    assert (bad_update.value.option, bad_update.value.allowed) == (
+        "update",
+        ("upgrade", "force"),
+    )
+    assert bad_workers.value.option == "workers"
