@@ -2089,6 +2089,74 @@ dla LAZ PL, `CuzkRasterProvider`/`create_cz_raster_provider` dla rastrów CZ,
 `ParserTM33`, `FileStorage`) — eksporty w `kartograf/__init__.py`, opis
 w SCOPE 2.10 i PRD 5.
 
+**Odczyt magazynu (od 0.8.0, ADR-045).** Funkcje biblioteki indeksują
+pliki bez ich modyfikowania, także z udziału SMB zamontowanego tylko do
+odczytu. `list_segments` zwraca segmenty `<produkt>/<wariant>` (także
+nieznane rejestrowi), `iter_store` — iterator wpisów `version`, `link`,
+`full_sheet` i `problem` (brak lub zły sidecar, nieznany segment,
+pozostałości). Skan czyta tylko sidecary (jeden odczyt na plik), nie
+otwiera plików danych i nie robi `stat` każdego pliku. Segmenty można
+skanować równolegle w wątkach, a znane już katalogi wersji pominąć
+(`skip_versions`: ich pliki wracają z `skipped=True` i `sidecar=None`):
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+from kartograf import describe_segment, iter_store, list_segments
+
+store = "<katalog-danych>"
+# katalogi wersji z poprzedniego skanu, względem store, np.
+# "nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e"
+known: set[str] = set()
+
+
+def scan(segment: str) -> list:
+    return list(iter_store(store, segment=segment, skip_versions=known))
+
+
+segments = list_segments(store)
+with ThreadPoolExecutor(max_workers=8) as pool:
+    for segment, entries in zip(segments, pool.map(scan, segments)):
+        print(describe_segment(segment).name, len(entries))
+```
+
+Skan jednostek nie listuje całego segmentu — tylko sloty podanych godeł,
+`teryt/<kod>`, `bbox/<coords>`, `country/<kod>`, `ku/<kod>`:
+
+```python
+from kartograf import file_footprint, iter_store, link_target, read_sidecar
+
+entries = iter_store(
+    "<katalog-danych>",
+    segment="nmt/pl_1992_1m_evrf2007",
+    units=["N-34-130-D-d-2-4"],
+)
+for entry in entries:
+    if entry.kind == "problem":
+        print(entry.problem, entry.path)
+    elif entry.kind == "version":
+        meta = entry.sidecar or read_sidecar(entry.path)  # None przy skipped
+        outline = file_footprint(entry)  # bez sieci; None = brak pewnego obrysu
+        print(entry.path, meta.data_year, outline.wgs84 if outline else None)
+    else:  # link, full_sheet
+        print(entry.path, entry.version_path, link_target(entry.path))
+```
+
+`read_sidecar` czyta plik danych albo ścieżkę `.meta.json`, zachowuje surowy
+`dataset` i zwraca `dataset_key` rozpoznany w rejestrze (albo `None`);
+`data_year` nie jest wyciągany z `downloaded_at`, a nieczytelny sidecar to
+`InvalidSidecarError`. `describe_segment` daje nazwę z wariantami,
+`known=False` przy nieznanym segmencie. `version_path` dowiązania pochodzi
+z jego sidecara (bez czytania danych); `link_target` potwierdza zawartość —
+na niektórych udziałach SMB wymusza odczyt całego pliku, więc wołaj je dla
+interesujących dowiązań, nie 50 tys. slotów naraz. `file_footprint` zwraca
+`native`, `wgs84`, `source` (`request`, `sheet`, `header`, `unit`); nie
+przyjmuje zmyślonego obrysu kraju. Obrysy jednostek z indeksów
+PRG/RUIAN/SM5 wymagają `network=True` albo wcześniej wypełnionego `cache`
+(w domyślnym wywołaniu zero zapytań sieciowych). Przeliczenie do WGS84 jest
+przypiętą operacją `pinned_transform`, a nie domyślnym pyproj. Koszt,
+wątki i warianty struktury: ARCHITECTURE 3.3.1.
+
 **Kody komunikatów (`Notice.code`).** Kod nie zależy od treści komunikatu
 (stałe w `kartograf/notices.py`); CLI wypisuje `info` jako `Info:`,
 `warning` jako `Warning:` na stderr, także z `-q` (wyjątek: `sheet_list`).

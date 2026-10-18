@@ -31,6 +31,7 @@
 | Grupy komend CLI (ADR-039, ADR-044) | ✅ Gotowy | v0.8.0; `elevation`, `imagery`, `landcover`, `soil`, `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`, `geodesy`, `project`; dane wybiera `--product` w kazdej grupie; CLI tylko tlumaczy na publiczne API (ADR-037) |
 | Manifest projektu (podprojekt 2, ADR-040) | ✅ Gotowy | v0.8.0; `kartograf-project.json`, grupa `kartograf project`, API `init_project`/`get_project_status`/`verify_project`; E2E `docs/research/2026-10-15-project-e2e/raport.md` |
 | Katalog GUGiK/CUZK (podprojekt 3, plany A-E, ADR-041-043) | ✅ Gotowy | v0.8.0; rejestr wariantow NMT/NMPT, raport `availability` PL/CZ, NMPT/LAZ/ortofoto/warstwice CZ, kolekcje (PRG, EGiB, modele 3D, ZABAGED, RUIAN, HY-NET, nazwy, mapy, osnowy, BDOO, Data50/250, RCN, mapa katastralna CZ), limit obszaru kolekcji 100 plikow / 10 GB; E2E `docs/research/2026-10-1[56]-plan-*-e2e/`; mapa katastralna CZ VKM poza 0.8.0 (backlog) |
+| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony na galezi `feat/archiwista-store-api` (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1); czeka na zgode uzytkownika na merge do `develop` |
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekty 1 (magazyn wersjonowany, ADR-036), 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, plany A-E) wykonane w 0.8.0; nastepne: 4 (wtyczka QGIS) i 5 (GUI webowe) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -110,7 +111,8 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-17, po przygotowaniu wydania 0.8.0):**
+> **START NASTEPNEJ SESJI (stan 2026-10-18, wydanie 0.8.0 przygotowane, API
+> odczytu magazynu na galezi `feat/archiwista-store-api` - pkt 1):**
 > 0. **Wydanie 0.8.0 przygotowane na `develop`** (`3a1c426`; `__version__ =
 >    "0.8.0"`, CHANGELOG `[0.8.0] - 2026-10-17`, statusy SCOPE/PRD; brama
 >    zielona: 5214 passed, ruff/format/mypy czyste; dwa testy na zywo
@@ -138,8 +140,11 @@
 >    (szczegoly arkuszy i kampanii, `full_m2` w raporcie dostepnosci),
 >    KB/KC/KH (katalog komend, `cancel`, jednolity `on_progress`, rozmiar
 >    pozycji planu), KD-3/KD-4, KE/KF/KG (mozaika, PL+CZ, porownanie
->    wersji). Propozycja na kolejna sesje: spec i plan pakietu KA + KD-1/KD-2
->    jako cykl 0.9.0 (po zgodzie uzytkownika). Pozostale pozycje: backlog
+>    wersji). KA-1..KA-6 wykonane 2026-10-18 na galezi
+>    `feat/archiwista-store-api` (w wydaniu 0.8.0; sesja 2026-10-18 nizej) -
+>    CZEKA NA ZGODE UZYTKOWNIKA na merge `--no-ff` do `develop` przed
+>    tagiem `v0.8.0`. Propozycja na kolejna sesje: spec i plan KD-1/KD-2
+>    (po zgodzie uzytkownika). Pozostale pozycje: backlog
 >    nizej (m.in. VKM CZ, CLMS na zywo).
 >    Sprzatanie (czeka na zgode uzytkownika): ok. 30 worktree i galezi
 >    roboczych cyklu 0.8.0 w `/home/claude-agent/workspace/wt/`
@@ -170,6 +175,57 @@
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
+
+### Sesja 2026-10-18 - API odczytu magazynu dla Archiwisty (KA-1..KA-6, ADR-045)
+
+- Zakres: pakiet KA ze SPEC 12.1 Archiwisty (odczyt magazynu bez zapisu,
+  takze z udzialu SMB tylko do odczytu). Decyzja uzytkownika: wchodzi do
+  przygotowanego, nieotagowanego wydania 0.8.0 - `__version__` zostaje
+  `0.8.0`, wpis w CHANGELOG [0.8.0], Archiwista przypina
+  `kartograf>=0.8.0,<0.9`. Galaz `feat/archiwista-store-api` od `develop`;
+  bez merge, tagu i push (czeka na zgode uzytkownika).
+- Decyzje koordynatora Archiwisty (wiazace): `skip_versions` (znane
+  katalogi wersji bez odczytu sidecarow - skan przyrostowy SPEC 4.4);
+  skan nigdy nie wola `link_target` (`version_path` z sidecara
+  dowiazania); rownolegle wywolania per segment i tania lista segmentow
+  (`list_segments`).
+- Wynik: `kartograf/store.py` (`list_segments`, `iter_store` ->
+  `StoreEntry`, `read_sidecar` -> `Sidecar`, `describe_segment` ->
+  `SegmentInfo`, `link_target`), `kartograf/store_geometry.py`
+  (`file_footprint` -> `Footprint`, `pinned_transform`),
+  `InvalidSidecarError`; eksport w `kartograf.__all__` (z
+  `PinnedTransform`); kontrakt, koszt na wpis i watki: ARCHITECTURE 3.3.1;
+  ADR-045 zaktualizowany (CRLF zachowane), USAGE, CHANGELOG, SCOPE, mapa
+  w CLAUDE.md.
+- Rozstrzygniecia implementacyjne: brak sidecara wykrywany z listingu
+  katalogu (bez `open`), sidecar czytany samym open/read/close; `units` -
+  slot godla to caly katalog hierarchii (pliki LAZ z nazwa z URL, kierunki
+  orto ukosnej), slot plaski (`teryt/`, `bbox/`, ...) filtrowany po nazwie
+  i listowany raz na wywolanie, bez problemow poziomu segmentu;
+  `version_path` sprawdzany leksykalnie (wersja wlasnego slotu,
+  `link_target` uzywa tej samej reguly + `linked_version`); wersja wazna wg
+  reguly `read_version`; pole sidecara o zlym typie = `None` (nie blad);
+  `data_date` bez `updated` feedu ATOM ortofoto CZ (publikacja, nie rok
+  danych); `pinned_transform` per watek (operacje `TransformerGroup` pyproj
+  nie sa thread-safe), budowa pod blokada (globalna flaga sieci PROJ,
+  dotyczy A1-15 tylko dla tej sciezki); `file_footprint` czyta cache
+  jednostek takze bez sieci, wpis bez sidecara (np. `skipped`) czyta go,
+  GDAL bez listowania katalogu, PL-1992 z dokladnym prostokatem WGS84;
+  `describe_segment` sprawdzony na wszystkich 644 segmentach zapisu
+  rejestru (test). Brak `output_dir` = `OSError`, nie pusty magazyn.
+- Pomiar (sztuczny magazyn 3000 arkuszy PL-1992 x 2 wersje + 300 TERYT,
+  dysk lokalny): skan pelny 9600 wpisow = 9600 odczytow sidecarow, 0
+  `stat`; z `skip_versions` 3300 odczytow (tylko dowiazania); 20 arkuszy
+  przez `units` = 60 odczytow, 80 listingow, 64 `lstat`; wyniki rownoleglych
+  skanow (segmenty, czesci `units`) rowne skanowi sekwencyjnemu.
+- Odstepstwa od SPEC 12.1 Archiwisty: dodane `list_segments`,
+  `skip_versions` i `StoreEntry.skipped`; `link_target` w `kartograf.store`
+  (eksport jak w specu); `file_footprint` jeszcze nie przyjmuje `PlanItem`
+  (SPEC: od Archiwisty v0.3); skan `units` nie zglasza problemow poziomu
+  segmentu.
+- Testy: `tests/test_store_api.py`, `tests/test_store_geometry.py`,
+  `tests/test_public_api.py`; brama na galezi: pytest offline, ruff check,
+  ruff format --check, mypy - zielone (liczby: komendy z bloku START).
 
 ### Sesja 2026-10-15/16/17 - przygotowanie i wydanie 0.8.0 (podprojekty 2 i 3)
 
