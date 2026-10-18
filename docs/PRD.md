@@ -1,8 +1,8 @@
 # PRD.md - Product Requirements Document
 **Kartograf - Narzędzie do Pobierania Danych Przestrzennych**
 
-**Wersja:** 4.7
-**Data:** 2026-10-17
+**Wersja:** 4.8
+**Data:** 2026-10-18
 **Product Owner:** Piotr
 **Status:** Wydanie v0.8.0 (2026-10-17)
 
@@ -36,6 +36,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--cutout --horizontal-crs`)
 5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla pobrań do magazynu, jawny wybór zakresu kampanii GUGiK
 6. **Secure Auth** - Auth Proxy dla izolacji credentials CLMS
+7. **Agent-ready** - `--json` w każdej komendzie i dokumenty `kartograf-*/1` z biblioteki, katalog komend (`kartograf catalog`), serwer MCP (`kartograf[mcp]`), `llms.txt` (ADR-046; sekcja 3.27)
 
 ### 1.3 Target Users
 
@@ -1313,6 +1314,50 @@ kartograf geodesy download --product geoid --country pl --whole-country -o ./dat
 kartograf geodesy list-sources
 ```
 
+### 3.27 Feature: Interfejs dla agentów AI (ADR-046)
+
+**Priority:** P1 (High)
+**Status:** Production (0.8.0)
+
+#### Description
+Agenci AI (Claude Code, asystent Archiwisty, skrypty, inne serwery) używają
+Kartografa przez CLI, bibliotekę i serwer MCP i dostają to samo zadanie jako ten
+sam dokument JSON; mogą odkryć komendy i dozwolone wartości bez czytania kodu i
+poprawić błąd bez parsowania tekstu.
+
+#### Requirements
+- `--json` w każdej komendzie CLI: stdout to jeden dokument `kartograf-<rodzaj>/1`
+  (pierwszy klucz `schema`; 16 schematów), bez paska postępu i linii statusu
+  (komunikaty w `notices`); błąd to `kartograf-error/1` (`code`, `message`, `hint`,
+  `exception`, `exit_code`, `command`, `details`). Dokumenty zwraca biblioteka
+  (`to_dict()`/`to_json()`), a CLI i MCP tylko je drukują.
+- Stabilne kody błędów (`code`) i kody wyjścia: 0 (ok), 1 (awaria źródła, sieci
+  albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C);
+  `ValidationError` niesie `option` i `allowed`, a podpowiedź (`hint`) dozwolone
+  wartości i przykład komendy. Jedna tabela kodów: `docs/USAGE.md` 9.3.
+- Katalog komend (`kartograf catalog`, `get_catalog()`, `kartograf-catalog/1`):
+  grupy, produkty, komendy, parametry (flaga, argument API, rodzaj, wymagany,
+  dozwolone wartości), ograniczenia i przykłady; jedyne źródło prawdy: parser CLI,
+  opcje projektu i schematy narzędzi MCP powstają z deklaracji. Warstwa komend:
+  `parse_command`, `validate_command`, `format_command`, `run_command`,
+  `check_command` (KB-1..KB-5 Archiwisty).
+- Serwer MCP `kartograf-mcp` (extra `kartograf[mcp]`, stdio): 29 narzędzi 1:1
+  z komendami (w tym `check_updates`), wynik = dokument `--json`, `is_error` = kod
+  wyjścia CLI != 0, bez wartości domyślnych wpływających na dane (`output_dir`
+  jawny i bezwzględny, `bbox` z `bbox_crs`), postęp przez notyfikacje MCP,
+  `--tools` i `--allow-dir`.
+- `kartograf/py.typed` (PEP 561), `llms.txt`, `scripts/gate.sh`, `python -m
+  kartograf`; reguła dla agentów z innych repozytoriów w `CLAUDE.md`.
+- Poza zakresem 0.8.0: transport HTTP serwera MCP, anulowanie pobrań (KC),
+  szacunek rozmiaru pobrania (KH).
+
+#### CLI Commands
+```bash
+kartograf catalog --json
+kartograf elevation availability --product nmt --sheet N-34-130-D-d-2-4 --json
+claude mcp add kartograf -- kartograf-mcp
+```
+
 ---
 
 ## 4. Architecture
@@ -1557,6 +1602,39 @@ from kartograf import (
     pinned_transform,
     PinnedTransform,
 
+    # Command catalog, command layer and JSON documents (agent interface, ADR-046)
+    get_catalog,
+    data_commands,
+    Catalog,
+    CommandInfo,
+    ParamInfo,
+    parse_command,
+    validate_command,
+    format_command,
+    run_command,
+    check_command,
+    CommandCall,
+    describe_sheet,
+    SheetInfo,
+    find_sheets,
+    SheetList,
+    list_sources,
+    SourceList,
+    list_layers,
+    LayerList,
+    get_cache_info,
+    get_cache_path,
+    clear_cache,
+    CacheInfo,
+    describe_store,
+    StoreOverview,
+    list_store_entries,
+    StoreEntries,
+    read_store_sidecar,
+    StoreSidecar,
+    ErrorReport,
+    error_report,
+
     # Exceptions
     KartografError,
     ParseError,
@@ -1566,6 +1644,7 @@ from kartograf import (
     YearRangeError,
     CacheError,
     InvalidSidecarError,
+    UsageError,
 
     # Version
     __version__,            # "0.8.0"
@@ -1604,6 +1683,7 @@ rasterio >= 1.3.0      # GeoTIFF processing
 numpy >= 1.24.0        # Array operations
 pyshp >= 2.3.0         # Shapefile reading
 pyogrio >= 0.10        # GDAL vector: GPKG of collection area results (ADR-042)
+mcp >= 2.3.0, < 3      # optional extra `kartograf[mcp]`: MCP server (ADR-046)
 ```
 
 ### 6.2 Development Dependencies
@@ -1613,6 +1693,7 @@ pytest >= 8.0          # Testing
 pytest-cov >= 5.0      # Coverage
 ruff >= 0.8            # Linting + Formatting
 mypy >= 1.13           # Type checking
+mcp >= 2.3.0, < 3      # MCP server tests (in the `dev` extra)
 ```
 
 ---
@@ -1670,12 +1751,16 @@ mypy >= 1.13           # Type checking
       QGZU-2013 (plany D i E, 0.8.0)
 - [x] Kampanie GUGiK (0.7.0; w 0.8.0 `--all-campaigns` i
       `--year`/`--min-year`/`--max-year`)
+- [x] Interfejs dla agentów AI: `--json` w każdej komendzie, dokumenty
+      `kartograf-*/1`, kody błędów i wyjścia, katalog komend, serwer MCP,
+      `llms.txt`, `py.typed`, `scripts/gate.sh` (ADR-046, 0.8.0)
 
 ### Dalsze zadania (bez przypisanego wydania) — szczegóły w `docs/SCOPE.md` 3.1
 - [ ] Wielokąt granicy kraju zamiast prostokątnej obwiedni (`--country auto`)
 - [ ] Scalanie wycinków PL+CZ w jedną powierzchnię przygraniczną (R6)
 - [ ] Składanie kampanii w jedną powierzchnię
 - [ ] Mapa katastralna CZ w formacie VKM (gdy CUZK rozszerzy pilotaż)
+- [ ] Transport HTTP serwera MCP, anulowanie pobrań (KC), szacunek rozmiaru pobrania (KH)
 
 ### Version 1.0.0 — roadmapa (kolejność i zasady: `docs/SCOPE.md` 3.3)
 
@@ -1737,6 +1822,6 @@ HYDROGRAF (główna aplikacja)
 
 ---
 
-**Wersja dokumentu:** 4.7
-**Data ostatniej aktualizacji:** 2026-10-17
+**Wersja dokumentu:** 4.8
+**Data ostatniej aktualizacji:** 2026-10-18
 **Status:** Wydanie v0.8.0 (2026-10-17)
