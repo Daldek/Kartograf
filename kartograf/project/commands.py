@@ -65,6 +65,7 @@ from kartograf.landcover.manager import (
 )
 from kartograf.notices import Notice
 from kartograf.project.model import PinRole
+from kartograf.serialization import Document
 
 # JSON kind of a task option (the kinds of the catalog parameters): ``bbox`` is
 # a list of 4 numbers whose CRS is the ``bbox_crs`` option (one ``BBox``
@@ -81,7 +82,9 @@ class TaskDownload(Protocol):
 
     ``workers``: parallel transfers of the task's files (``None`` = the
     default of the library function; HSG computes one raster from three
-    inputs and has no workers).
+    inputs and has no workers). ``plan``: the plan of ``update="upgrade"``
+    (a project passes ``None``). ``summary``: HSG statistics in the report
+    (``soil hsg`` only; the other commands ignore it).
     """
 
     def __call__(
@@ -91,11 +94,13 @@ class TaskDownload(Protocol):
         /,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object: ...
+    ) -> Document: ...
 
 
 class TaskCheck(Protocol):
@@ -247,15 +252,18 @@ def _data_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         require_product(opts.get("product"), products)
         return download_data(
             output_dir=output_dir,
             update=update,
+            plan=plan,
             cache=cache,
             on_progress=on_progress,
             on_notice=on_notice,
@@ -302,11 +310,13 @@ def _landcover_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         if product is None:
             return download_landcover(
                 output_dir=output_dir,
@@ -314,6 +324,7 @@ def _landcover_command(
                 **_run_options(workers),
                 cache=cache,
                 update=update,
+                plan=plan,
                 on_notice=on_notice,
                 on_progress=on_progress,
             )
@@ -322,6 +333,7 @@ def _landcover_command(
             **request(opts),
             cache=cache,
             update=update,
+            plan=plan,
             on_notice=on_notice,
         )
 
@@ -361,16 +373,20 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         return calculate_hsg(
             output_dir=output_dir,
             **opts,
             cache=cache,
             update=update,
+            plan=plan,
+            summary=summary,
             on_notice=on_notice,
         )
 
@@ -407,15 +423,18 @@ def _collection_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         require_collection_product(opts.get("product"), group)
         return download_collection(
             output_dir=output_dir,
             update=update,
+            plan=plan,
             cache=cache,
             on_progress=on_progress,
             on_notice=on_notice,

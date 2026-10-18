@@ -100,6 +100,14 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info
 from kartograf.catalog import data_commands, get_catalog
 from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
+from kartograf.commands import (
+    CommandCall,
+    check_command,
+    format_command,
+    parse_command,
+    run_command,
+    validate_command,
+)
 from kartograf.core.bbox import transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
@@ -449,6 +457,13 @@ __all__ = [
     "Catalog",
     "CommandInfo",
     "ParamInfo",
+    # The command layer: a data command as data (spec 8.7; KB-2..KB-5)
+    "CommandCall",
+    "parse_command",
+    "validate_command",
+    "format_command",
+    "run_command",
+    "check_command",
     # Errors as data (`kartograf-error/1`, spec 6)
     "ErrorReport",
     "error_report",
