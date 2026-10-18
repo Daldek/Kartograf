@@ -187,7 +187,7 @@ class CuzkRasterProvider(BaseProvider):
             product=product, resolution=resolution, vertical_crs=vertical_crs
         )
         if error is not None:
-            raise ValidationError(error)
+            raise error
         variant = variants(product=product, country="CZ", resolution=resolution)[0]
         assert variant.resolution_m is not None  # a label of the registry
         self.descriptor_key = variant.source

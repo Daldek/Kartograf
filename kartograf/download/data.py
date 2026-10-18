@@ -93,6 +93,7 @@ from kartograf.download.options import (
     cz_option_error,
     cz_orto_option_error,
     is_source_file_request,
+    parse_sheet,
     pl_file_variant,
     pl_option_error,
     pl_target_scale,
@@ -592,7 +593,7 @@ def _execute(task: SimpleNamespace, run: _Run) -> int:
             if task.product == "laz":
                 return _download_cz_laz(task, run)
             return _download_cz(task, run)
-        parsed = SheetParser(task.sheet)
+        parsed = parse_sheet(task.sheet)
         if pl_file_variant(task) is not None:
             return _download_pl_files(
                 task,
@@ -825,7 +826,7 @@ def _validate_cross_country(task: SimpleNamespace, countries: tuple[str, ...]) -
         else:
             error = cz_option_error(task, countries=countries)
         if error is not None:
-            raise ValidationError(error)
+            raise error
 
 
 def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
@@ -1758,7 +1759,7 @@ def _download_cz(
     countries = ("CZ",) if has_sheet or task.country == "cz" else ("CZ", "PL")
     error = cz_option_error(task, system=system, countries=countries)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     resolution = country_value(task.resolution, "CZ")  # only SM5 may omit it
     vertical_crs = country_value(task.vertical_crs, "CZ")
     assert vertical_crs is not None  # required: checked by cz_option_error
@@ -1837,7 +1838,7 @@ def _download_cz_laz(
     countries = ("CZ",) if bbox is None or task.country == "cz" else ("CZ", "PL")
     error = cz_option_error(task, system=system, countries=countries)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     vertical_crs = country_value(task.vertical_crs, "CZ")
     assert vertical_crs is not None
     assert task.model is not None
@@ -1902,7 +1903,7 @@ def _download_cz_orto(
     countries = ("CZ",) if bbox is None or task.country == "cz" else ("CZ", "PL")
     error = cz_orto_option_error(task, countries=countries)
     if error is not None:
-        raise ValidationError(error)
+        raise error
     if run.dry:
         return 0
     if bbox is None:

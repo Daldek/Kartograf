@@ -103,15 +103,19 @@ def validate_bbox(bbox: BBox, *, crs: str | None = None) -> None:
     coords = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     if not all(math.isfinite(v) for v in coords):
         raise ValidationError(
-            f"wspolrzedne bboxa musza byc skonczone, otrzymano {coords}"
+            f"wspolrzedne bboxa musza byc skonczone, otrzymano {coords}",
+            option="bbox",
         )
     if bbox.min_x > bbox.max_x or bbox.min_y > bbox.max_y:
         raise ValidationError(
             f"bbox odwrocony (min > max): {coords}; "
-            "oczekiwano min_x <= max_x i min_y <= max_y"
+            "oczekiwano min_x <= max_x i min_y <= max_y",
+            option="bbox",
         )
     if crs is not None and _norm_label(bbox.crs) != _norm_label(crs):
-        raise ValidationError(f"bbox w ukladzie {bbox.crs!r}, oczekiwano {crs!r}")
+        raise ValidationError(
+            f"bbox w ukladzie {bbox.crs!r}, oczekiwano {crs!r}", option="bbox"
+        )
 
 
 def transform_bbox(bbox: BBox, target_crs: str, *, transformer: Any = None) -> BBox:
