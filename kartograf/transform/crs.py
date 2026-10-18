@@ -31,17 +31,32 @@ from kartograf.exceptions import KartografError
 class TransformError(KartografError):
     """Coordinate transformation error (e.g. an infinite result)."""
 
+    code = "transform_failed"
+
 
 class TransformUnavailableError(TransformError):
-    """No safe transformation operation for the CRS pair."""
+    """No safe transformation operation for the CRS pair.
+
+    Attributes
+    ----------
+    rejected : list[tuple[str, str]]
+        Operations considered and the reason each was rejected.
+    remedy : str, optional
+        What the user can do (the hint of the error).
+    """
+
+    code = "transform_unavailable"
+    DETAIL_FIELDS = ("rejected", "remedy")
 
     def __init__(
         self,
         message: str,
         rejected: list[tuple[str, str]] | None = None,
         remedy: str | None = None,
+        *,
+        hint: str | None = None,
     ):
-        super().__init__(message)
+        super().__init__(message, hint=hint)
         self.rejected = rejected or []
         self.remedy = remedy
 
