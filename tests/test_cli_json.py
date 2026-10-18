@@ -32,6 +32,7 @@ from kartograf import (
     download_project,
     download_soil,
     get_cache_info,
+    get_cache_path,
     get_project_status,
     init_project,
     list_layers,
@@ -662,8 +663,12 @@ def test_cache_documents(tmp_path, monkeypatch, capsys):
     assert main(["cache", "path", "--json"]) == 0
     path = capsys.readouterr().out
     info = get_cache_info()
-    assert stats == path == info.to_json()
+    assert stats == info.to_json()
+    assert path == get_cache_path().to_json()
     assert json.loads(stats)["entries"]["records"] == 1
+    # the path says where the cache is and does not count what is in it
+    assert json.loads(path)["action"] == "path"
+    assert json.loads(path)["entries"] is None
 
     assert main(["cache", "clear", "--json"]) == 0
     cleared = json.loads(capsys.readouterr().out)
@@ -671,6 +676,25 @@ def test_cache_documents(tmp_path, monkeypatch, capsys):
     assert cleared["removed_unreadable"] is False
     assert get_cache_info().entries.records == 0  # type: ignore[union-attr]
     assert clear_cache().cleared is True
+
+
+def test_cache_path_is_given_when_the_database_cannot_be_read(
+    tmp_path, monkeypatch, capsys
+):
+    """``cache path`` does not open the database: the path of a cache that cannot
+    be read is what is needed to repair it, in the text and in the document."""
+    monkeypatch.chdir(tmp_path)
+    db = Path.cwd() / ".kartograf_cache.db"
+    db.write_bytes(b"to nie jest baza SQLite\n" * 200)
+
+    assert main(["cache", "stats", "--json"]) == 1
+    assert json.loads(capsys.readouterr().out)["code"] == "cache_error"
+    assert main(["cache", "path", "--json"]) == 0
+    document = json.loads(capsys.readouterr().out)
+    assert (document["path"], document["exists"]) == (db.as_posix(), True)
+    assert document["size_bytes"] == db.stat().st_size
+    assert main(["cache", "path"]) == 0
+    assert capsys.readouterr().out == f"{db}\n"
 
 
 # -- project: the documents are the ones of the public API -------------------

@@ -44,6 +44,7 @@ _DOCUMENT_FUNCTIONS = {
     "list_sources": [],
     "list_layers": [],
     "get_cache_info": [],
+    "get_cache_path": [],
     "clear_cache": [],
     "describe_store": ["output_dir"],
     "list_store_entries": ["output_dir"],

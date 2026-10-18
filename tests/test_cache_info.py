@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info
+from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info, get_cache_path
 from kartograf.core.bbox import BBox
 from kartograf.error_report import error_report
 from kartograf.exceptions import CacheError
@@ -294,6 +294,59 @@ def test_info_of_an_unreadable_database_is_cache_error(db, make_broken):
     assert db.exists()
     if content is not None:
         assert db.read_bytes() == content
+
+
+@pytest.mark.usefixtures("db")
+def test_path_of_a_missing_database_is_reported_and_not_created(tmp_path):
+    info = get_cache_path()
+
+    assert info.action == "path"
+    assert info.path == Path.cwd() / DB_NAME
+    assert info.path.is_absolute()
+    assert (info.exists, info.size_bytes, info.entries) == (False, None, None)
+    assert (info.cleared, info.removed_unreadable) == (None, None)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_path_of_a_database_says_where_it_is_and_does_not_count_it(db):
+    _populate(db)
+
+    info = get_cache_path()
+
+    assert info.path == db
+    assert info.exists is True
+    assert info.size_bytes == db.stat().st_size
+    assert info.entries is None
+
+
+@pytest.mark.parametrize("make_broken", UNREADABLE)
+def test_path_of_an_unreadable_database_is_still_the_path(db, make_broken):
+    """The path is what one needs to repair a cache that cannot be read: it is
+    given without opening the database (``get_cache_info`` is a ``CacheError``)."""
+    make_broken(db)
+    content = db.read_bytes() if os.access(db, os.R_OK) else None
+    with pytest.raises(CacheError):
+        get_cache_info()
+
+    info = get_cache_path()
+
+    assert (info.path, info.exists) == (db, True)
+    assert info.size_bytes == db.stat().st_size
+    if content is not None:
+        assert db.read_bytes() == content
+
+
+@pytest.mark.usefixtures("short_lock_timeout")
+def test_path_of_a_database_locked_exclusively_is_still_the_path(db):
+    _populate(db)
+    holder = _hold_lock(db, exclusive=True)
+    try:
+        info = get_cache_path()
+    finally:
+        holder.execute("ROLLBACK")
+        holder.close()
+
+    assert (info.path, info.exists, info.entries) == (db, True, None)
 
 
 def test_document_has_the_keys_of_the_spec(db):

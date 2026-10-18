@@ -5,12 +5,14 @@ The default cache of the library and the CLI is the SQLite database
 ``<cwd>/.kartograf_cache.db`` (the index records, campaign lists, TERYT codes,
 sheet indexes, index areas and ATOM feed indexes it keeps are lookups that save
 network requests, never downloaded data). ``get_cache_info`` reports it,
-``clear_cache`` empties it. Neither creates a missing database.
+``get_cache_path`` only says where it is, ``clear_cache`` empties it. None of
+them creates a missing database.
 
 An unreadable database is a ``CacheError`` for ``get_cache_info``; ``clear_cache``
 repairs it by deleting the file with its ``-wal`` and ``-shm`` companions. A
 database locked by another process is a ``CacheError`` for both and is never
-deleted: the file is fine, it only has to wait.
+deleted: the file is fine, it only has to wait. ``get_cache_path`` never opens
+the database, so it names the file in each of these cases.
 
 Examples
 --------
@@ -24,7 +26,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from kartograf.cache.defaults import open_cache
+from kartograf.cache.defaults import default_cache_path, open_cache
 from kartograf.cache.metadata import is_lock_error
 from kartograf.exceptions import CacheError
 from kartograf.notices import Notice
@@ -56,7 +58,8 @@ class CacheInfo(Document):
     Attributes
     ----------
     action : str
-        ``info`` (``get_cache_info``) or ``clear`` (``clear_cache``).
+        ``info`` (``get_cache_info``), ``path`` (``get_cache_path``) or ``clear``
+        (``clear_cache``).
     path : Path
         The database file (``<cwd>/.kartograf_cache.db``), absolute.
     exists : bool
@@ -64,16 +67,17 @@ class CacheInfo(Document):
     size_bytes : int, optional
         Size of the file; ``None`` without it.
     entries : CacheEntries, optional
-        The numbers of entries; ``None`` after ``clear`` and without the file.
+        The numbers of entries; ``None`` after ``clear``, for ``path`` (the
+        database is not opened) and without the file.
     cleared : bool, optional
-        ``True`` after ``clear``, ``None`` for ``info``.
+        ``True`` after ``clear``, ``None`` for ``info`` and ``path``.
     removed_unreadable : bool, optional
-        ``clear``: whether an unreadable file was deleted; ``None`` for ``info``.
+        ``clear``: whether an unreadable file was deleted; ``None`` otherwise.
     """
 
     SCHEMA = "kartograf-cache/1"
 
-    action: Literal["info", "clear"]
+    action: Literal["info", "path", "clear"]
     path: Path
     exists: bool
     size_bytes: int | None
@@ -125,6 +129,34 @@ def get_cache_info() -> CacheInfo:
         atom_feeds=stats["atom_feed_count"],
     )
     return CacheInfo("info", path, True, stats["db_size_bytes"], entries)
+
+
+def get_cache_path() -> CacheInfo:
+    """Say where the metadata cache of the current directory is, without opening it.
+
+    The path is what is needed to repair a cache that cannot be read, so it is
+    given when ``get_cache_info`` is a ``CacheError``: the file is looked at
+    (``exists``, ``size_bytes``), never opened, so an unreadable or a locked
+    database does not matter, and a missing one is not created.
+
+    Returns
+    -------
+    CacheInfo
+        The document ``kartograf-cache/1`` with ``action="path"`` and no
+        ``entries``.
+
+    Examples
+    --------
+    >>> from kartograf.cache_info import get_cache_path
+    >>> get_cache_path().path.name
+    '.kartograf_cache.db'
+    """
+    path = default_cache_path()
+    try:
+        size: int | None = path.stat().st_size
+    except OSError:
+        size = None
+    return CacheInfo("path", path, size is not None, size, None)
 
 
 def clear_cache() -> CacheInfo:
