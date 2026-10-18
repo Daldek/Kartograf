@@ -115,9 +115,23 @@ def test_error_and_exit_code_tables_exist_only_in_usage():
         assert not exit_row.search(text), f"{path.name}: exit code table"
 
 
+def _library_documents() -> dict[str, list[str]]:
+    """Schema -> class names of the documents of the library.
+
+    Other tests register throwaway documents (``kartograf-test-widget/1``) in the
+    same registry; they are not documented.
+    """
+    return {
+        schema: [cls.__name__ for cls in classes]
+        for schema, classes in SCHEMAS.items()
+        if all(cls.__module__.startswith("kartograf.") for cls in classes)
+    }
+
+
 def test_document_tables_name_every_registered_schema_once():
-    registered = sorted(SCHEMAS)
-    types = sorted(cls.__name__ for classes in SCHEMAS.values() for cls in classes)
+    documents = _library_documents()
+    registered = sorted(documents)
+    types = sorted(name for names in documents.values() for name in names)
     pattern = re.compile(r"kartograf-[a-z-]+/[1-9][0-9]*")
 
     usage_rows = _table_rows(_section(_read(USAGE), "Dokumenty JSON"))
