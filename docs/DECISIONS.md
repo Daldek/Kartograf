@@ -3955,7 +3955,7 @@ nigdzie spisane; nazwy, rodzaje i dozwolone wartosci opcji powtarza sie recznie 
   MCP jako cienka nakladka na funkcje biblioteki.
 - C) Tylko serwer MCP z wlasnymi opisami narzedzi (CLI i biblioteka bez zmian).
 
-**Decyzja:** B (szczegoly D1-D20 specyfikacji):
+**Decyzja:** B (szczegoly D1-D21 specyfikacji):
 - D1. Serializacja w bibliotece: mixin `Document` (`kartograf/serialization.py`),
   `to_dict()`/`to_json()`, `schema` pierwszym kluczem, sciezki bezwzgledne; CLI i MCP
   tylko drukuja. Schematy `kartograf-<rodzaj>/<n>`, w obrebie `/1` tylko zmiany
@@ -3965,8 +3965,9 @@ nigdzie spisane; nazwy, rodzaje i dozwolone wartosci opcji powtarza sie recznie 
 - D2. `--json` w kazdej komendzie: stdout = jeden dokument, stderr bez `Info:`/`Warning:`
   (komunikaty w `notices`), blad = `kartograf-error/1` na stdout (takze blad argparse).
 - D3. Wyjatki dostaja `code`, `exit_code`, `hint` i `DETAIL_FIELDS`; `ValidationError` niesie
-  `option`/`options`/`allowed`; nowa `UsageError`. Kody wyjscia: 0, 1, 2 (bledne wejscie i
-  uzycie, jak argparse), 130; jedna tabela kodow wyjscia i bledow w USAGE.
+  `option`/`options`/`allowed`; nowa `UsageError`; `OSError` (brak, uprawnienia, odlaczony
+  udzial) ma kod `io_error` (D21). Kody wyjscia: 0, 1, 2 (bledne wejscie i uzycie, jak
+  argparse), 130; jedna tabela kodow wyjscia i bledow w USAGE.
 - D4. Katalog komend (`get_catalog()`, `kartograf catalog`, `data_commands()`): deklaracje
   komend i parametrow w `kartograf/catalog/`; parser CLI budowany z deklaracji (stdlib
   argparse, biblioteka nie importuje `kartograf.cli`), opcje `COMMANDS` projektu i schematy
@@ -3974,10 +3975,11 @@ nigdzie spisane; nazwy, rodzaje i dozwolone wartosci opcji powtarza sie recznie 
   `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
   (KB-2..KB-5 Archiwisty, bez `cancel`).
 - D5. Serwer MCP: extra `kartograf[mcp]` (`mcp>=2.3.0,<3`), skrypt `kartograf-mcp`, stdio,
-  niskopoziomowy `mcp.server.Server` z jawnymi schematami z katalogu; 40 narzedzi (komenda
-  katalogu + blizniak `*_check_updates`), wynik = dokument `--json`, `is_error` = kod
-  wyjscia CLI != 0, postep przez `report_progress`, sciezki bezwzgledne, bez wartosci
-  domyslnych wplywajacych na dane, `--tools` i `--allow-dir`.
+  niskopoziomowy `mcp.server.Server` z jawnymi schematami z katalogu; 29 narzedzi (komenda
+  katalogu + jedno narzedzie `check_updates` z parametrami `tool` i `arguments` zamiast
+  12 blizniakow), wynik = dokument `--json`, `is_error` = kod wyjscia CLI != 0, postep
+  przez `report_progress`, sciezki bezwzgledne, bez wartosci domyslnych wplywajacych na
+  dane, `--tools` i `--allow-dir`.
 - D6. `py.typed` (PEP 561), `llms.txt`, `scripts/gate.sh`, `python -m kartograf` oraz regula
   w `CLAUDE.md` dla agentow z innych repozytoriow (galaz od `develop`, bez merge, tagow
   i wpisow wydania bez zgody, przeglad przed tagiem).
@@ -3991,8 +3993,9 @@ konczy CLI kodem 2 (nie 1); `schema` jest pierwszym kluczem `kartograf-availabil
 przeniesiona z CLI zgodnie z Z1). Hydrograf bez zmian (biblioteka; atrybuty wyjatkow
 addytywne); Archiwista dostaje KB-1..KB-5 i zachowuje `Notice(level, code, text)`.
 Rozszerzenie regul DEVELOPMENT_STANDARDS: 7.3 (Z8-Z11), 6.3 (`scripts/gate.sh`), 11.1
-(kody bledow), 17.2 (nowa komenda przez katalog). Otwarte kwestie O1-O9 specyfikacji
-czekaja na decyzje koordynatora i uzytkownika.
+(kody bledow), 17.2 (nowa komenda przez katalog). Kwestie O1-O9 specyfikacji rozstrzygnal
+koordynator 2026-10-18 (sekcja 16 specyfikacji: m.in. jedno narzedzie `check_updates`,
+`CommandInfo.supports_check` zamiast `check_tool`, kod wyjscia 2 dla bledow wejscia).
 
 ---
 
