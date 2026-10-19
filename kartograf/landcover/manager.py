@@ -41,7 +41,12 @@ from kartograf.cache.metadata import MetadataCache
 from kartograf.core.bbox import bbox_coords
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
-from kartograf.download.arguments import require_bool, require_codes, require_int
+from kartograf.download.arguments import (
+    require_bool,
+    require_codes,
+    require_int,
+    require_workers,
+)
 from kartograf.download.collections import (
     CollectionRequest,
     UnitJob,
@@ -760,7 +765,7 @@ class LandCoverManager:
                 else "check_landcover"
             ),
         )
-        require_int(workers, "--workers")
+        require_workers(workers, "--workers")
         _canonical_options(options)
         if self._collection is not None:
             request = self._collection_request(

@@ -22,7 +22,7 @@ from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.kinds import options_from_json, options_to_json
-from kartograf.download.arguments import require_int
+from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import PlanItem
@@ -399,11 +399,7 @@ def download_project(
             allowed=("upgrade", "force"),
         )
     if workers is not None:
-        require_int(workers, "--workers")
-        if workers < 1:
-            raise ValidationError(
-                f"--workers musi byc >= 1, podano {workers}", option="workers"
-            )
+        require_workers(workers, "--workers")
     project, state = read_manifest(project_dir)
     _require_store(project)
     selected = _select(project, tasks)
