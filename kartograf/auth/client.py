@@ -58,6 +58,9 @@ class AuthProxyClient:
     # already running child instead of starting a second proxy.
     _proxy_process: subprocess.Popen | None = None
     _proxy_port: int | None = None
+    # Why the proxy has no credentials although a source is configured (the
+    # ``credentials_error`` of its last health check: a text, never a secret).
+    _credentials_error: str | None = None
     _stderr_thread: threading.Thread | None = None
     # Guards the whole start/check sequence: without it a second thread sees
     # a live process with _proxy_port still unset and builds "None/health".
@@ -276,11 +279,27 @@ class AuthProxyClient:
             )
             if resp.status_code == 200:
                 data = resp.json()
+                AuthProxyClient._credentials_error = data.get("credentials_error")
                 return data.get("credentials_available", False)
         except requests.RequestException as e:
             logger.debug(f"Health check failed: {e}")
 
         return False
+
+    def credentials_problem(self) -> str | None:
+        """
+        Why ``CLMS_CREDENTIALS`` cannot be used, as the proxy tells it.
+
+        Returns
+        -------
+        str or None
+            The text of the proxy (e.g. the variable is not valid JSON), or
+            ``None`` when the credentials are usable or the proxy gives no
+            reason (nothing is configured, the proxy is not running).
+        """
+        if self.is_available():
+            return None
+        return AuthProxyClient._credentials_error
 
     def proxy_request(
         self,

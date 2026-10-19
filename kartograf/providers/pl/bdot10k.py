@@ -5,26 +5,13 @@ This module provides the Bdot10kProvider class for downloading
 land cover data from the Polish BDOT10k database (Baza Danych
 Obiektów Topograficznych) maintained by GUGiK.
 
-BDOT10k contains 15 layers in two categories:
-
-Land cover (PT - Pokrycie Terenu, 12 layers):
-- PTGN: Grunty nieużytkowe (unused land)
-- PTKM: Tereny komunikacyjne (transportation areas)
-- PTLZ: Tereny leśne (forests)
-- PTNZ: Tereny niezabudowane (unbuilt areas)
-- PTPL: Place (squares/plazas)
-- PTRK: Roślinność krzewiasta (shrub vegetation)
-- PTSO: Składowiska (landfills)
-- PTTR: Tereny rolne (agricultural land)
-- PTUT: Uprawy trwałe (permanent crops)
-- PTWP: Wody powierzchniowe (surface waters)
-- PTWZ: Tereny zabagnione (wetlands)
-- PTZB: Tereny zabudowane (built-up areas)
-
-Hydrographic (SW - Sieć Wodna, 3 layers):
-- SWKN: Kanały (canals)
-- SWRM: Rowy melioracyjne (drainage ditches)
-- SWRS: Rzeki i strumienie (rivers/streams)
+A powiat package holds one table per class and geometry type
+(``OT_<CODE>_<A|L|P>``), 47-70 tables depending on the objects of the powiat.
+``BDOT10K_CLASSES`` lists the 58 classes of the BDOT10k classification
+(the regulation of 2021, Dz.U. 2021 poz. 1412, annex 1) - every value that
+``layers`` accepts; among them the land cover (PT, 12 classes) and the
+hydrographic network (SW, 3 classes: SWKN canals, SWRM drainage ditches,
+SWRS rivers and streams).
 """
 
 import logging
@@ -61,32 +48,123 @@ logger = logging.getLogger(__name__)
 # Layer code = the 4 letters after OT_ in GUGiK table names (e.g. PTWP in OT_PTWP_A)
 _LAYER_CODE = re.compile(r"[A-Z]{4}")
 
+# The classes of BDOT10k (code -> Polish name without diacritics): the
+# classification of the regulation of 27 July 2021 (Dz.U. 2021 poz. 1412, annex
+# 1: 58 classes, categories AD BU KU OI PT RT SK SU SW TC), the codes of the
+# ``OT_<CODE>_<A|L|P>`` tables of the 2021 schema packages (checked 2026-10-19
+# against the packages of powiats 2463, 2472, 2476: 47-49 classes each, all in
+# this list; GUGiK's own table OT_BIUB_L of powiat 2472 is a typo of BUIB).
+# A class a powiat has no objects of is missing in its package.
+BDOT10K_CLASSES = {
+    "ADJA": "Jednostki podzialu administracyjnego",
+    "ADMS": "Miejscowosci",
+    "BUBD": "Budynki",
+    "BUHD": "Budowle hydrotechniczne",
+    "BUIB": "Inne budowle",
+    "BUIN": "Budowle inzynierskie",
+    "BUIT": "Inne urzadzenia techniczne",
+    "BUSP": "Budowle sportowe",
+    "BUTR": "Urzadzenia transportowe",
+    "BUUO": "Umocnienia drogowe, kolejowe i wodne",
+    "BUWT": "Wysokie budowle techniczne",
+    "BUZM": "Budowle ziemne",
+    "BUZT": "Zbiorniki techniczne",
+    "KUHO": "Kompleksy uslug hotelarskich",
+    "KUHU": "Bazary i targowiska",
+    "KUKO": "Kompleksy komunikacyjne",
+    "KUMN": "Osiedla mieszkaniowe",
+    "KUOS": "Kompleksy oswiatowe",
+    "KUOZ": "Kompleksy ochrony zdrowia i opieki spolecznej",
+    "KUPG": "Kompleksy przemyslowo-gospodarcze",
+    "KUPW": "Poligony wojskowe",
+    "KUSC": "Kompleksy sakralne i cmentarze",
+    "KUSK": "Kompleksy sportowe i rekreacyjne",
+    "KUZA": "Kompleksy zabytkowo-historyczne",
+    "OIKM": "Obiekty zwiazane z komunikacja",
+    "OIMK": "Mokradla",
+    "OIOR": "Obiekty o znaczeniu orientacyjnym",
+    "OIPR": "Obiekty przyrodnicze",
+    "OISZ": "Szuwary",
+    "PTGN": "Grunty nieuzytkowe",
+    "PTKM": "Tereny komunikacyjne",
+    "PTLZ": "Tereny lesne",
+    "PTNZ": "Tereny niezabudowane",
+    "PTPL": "Place",
+    "PTRK": "Roslinnosc krzewiasta",
+    "PTSO": "Skladowiska",
+    "PTTR": "Tereny rolne",
+    "PTUT": "Uprawy trwale",
+    "PTWP": "Wody powierzchniowe",
+    "PTWZ": "Wyrobiska i zwalowiska",
+    "PTZB": "Tereny zabudowane",
+    "RTLW": "Linie wysokosciowe",
+    "RTPW": "Punkty wysokosciowe",
+    "SKDR": "Drogi",
+    "SKJZ": "Jezdnie",
+    "SKPP": "Przeprawy",
+    "SKRP": "Ciagi ruchu pieszego i rowerowego",
+    "SKRW": "Ronda i wezly drogowe",
+    "SKTR": "Tory i zespoly torow",
+    "SULN": "Linie elektroenergetyczne",
+    "SUPR": "Przewody rurowe",
+    "SWKN": "Kanaly",
+    "SWRM": "Rowy melioracyjne",
+    "SWRS": "Rzeki i strumienie",
+    "TCON": "Obszary Natura 2000",
+    "TCPK": "Parki krajobrazowe",
+    "TCPN": "Parki narodowe",
+    "TCRZ": "Rezerwaty",
+}
+
 
 def normalize_layers(layers: Sequence[str]) -> list[str]:
     """Sorted unique BDOT10k layer codes in upper case (``ptwp`` = ``PTWP``);
-    ``ValidationError`` for a bad code.
+    ``ValidationError`` (before any network) for a bad code.
 
-    A code is 4 letters (``PTWP``, ``SWRS``); an empty selection is an error
-    too.
+    A code is 4 letters of a class of ``BDOT10K_CLASSES`` (``PTWP``, ``SWRS``);
+    an empty selection and an empty code (a stray comma) are errors too. A
+    class a powiat package has no objects of is not an error here: the package
+    download reports it (``Bdot10kPackage.absent``).
     """
     wanted = sorted({layer.strip().upper() for layer in layers})
-    bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
     if not wanted:
         raise ValidationError(
             "--layers: podaj co najmniej jeden kod warstwy BDOT10k (4 litery, "
-            "np. PTWP, SWRS)"
+            "np. PTWP, SWRS)",
+            option="layers",
         )
+    if "" in wanted:
+        raise ValidationError(
+            "--layers: pusty kod warstwy (nadmiarowy przecinek?); podaj kody "
+            "BDOT10k po przecinku (4 litery, np. PTWP,SWRS)",
+            option="layers",
+        )
+    bad = [layer for layer in wanted if not _LAYER_CODE.fullmatch(layer)]
     if bad:
         raise ValidationError(
             f"Nieprawidlowe kody warstw BDOT10k: {', '.join(bad)} (4 litery, np. "
-            "PTWP, SWRS)"
+            "PTWP, SWRS)",
+            option="layers",
+        )
+    unknown = [layer for layer in wanted if layer not in BDOT10K_CLASSES]
+    if unknown:
+        raise ValidationError(
+            f"--layers {', '.join(unknown)}: brak takich klas w BDOT10k; "
+            f"dostepne: {', '.join(BDOT10K_CLASSES)}",
+            option="layers",
+            allowed=tuple(BDOT10K_CLASSES),
         )
     return wanted
 
 
 @dataclass(frozen=True)
 class Bdot10kPackage:
-    """One downloaded powiat package (``Bdot10kProvider.download_package``)."""
+    """One downloaded powiat package (``Bdot10kProvider.download_package``).
+
+    ``classes``: the classes kept in the GPKG when ``layers`` was given (else
+    ``None``: the whole package); ``absent``: the requested classes the package
+    has no table of (no objects of them in the powiat).
+    """
 
     path: Path  # the file actually written (.gpkg, or .zip for SHP)
     teryt: str
@@ -95,6 +173,8 @@ class Bdot10kPackage:
     # Response headers: etag / last_modified / content_length (None = not sent)
     http: dict[str, Any] = field(default_factory=dict)
     raw_path: Path | None = None  # original GUGiK ZIP (keep_raw=True)
+    classes: tuple[str, ...] | None = None
+    absent: tuple[str, ...] = ()
 
 
 # Mapping of voivodeship (wojewodztwo) TERYT codes to names used in OpenData URLs
@@ -253,17 +333,21 @@ class Bdot10kProvider(LandCoverProvider):
         Bdot10kPackage
             ``path`` = the file actually written, plus ``teryt``, ``url``,
             ``format``, ``http`` (``etag``, ``last_modified``,
-            ``content_length`` of the response; None when not sent) and
-            ``raw_path`` (the raw ZIP with ``keep_raw``, else None)
+            ``content_length`` of the response; None when not sent),
+            ``raw_path`` (the raw ZIP with ``keep_raw``, else None) and, with
+            ``layers``, ``classes`` (kept in the GPKG) and ``absent`` (the
+            requested classes the package has no table of)
 
         Raises
         ------
         ValidationError
-            Invalid TERYT or layer code (before the network); ``layers`` or
-            ``keep_raw`` with SHP; ``raw_path`` without ``keep_raw``.
+            Invalid TERYT, layer code or class (before the network); ``layers``
+            or ``keep_raw`` with SHP; ``raw_path`` without ``keep_raw``.
+        NoCoverageError
+            With ``layers``: the package has none of the requested classes
+            (no objects of them in the powiat).
         DownloadError
-            Download failure, a requested layer missing in the package, or two
-            package files with the same table name.
+            Download failure or two package files with the same table name.
         """
         if not self.validate_admin_unit(code):
             raise ValidationError(f"Nieprawidlowy kod TERYT: {code}")
@@ -290,6 +374,7 @@ class Bdot10kProvider(LandCoverProvider):
             output_path = output_path.with_suffix(".zip")
         url = self._construct_opendata_url(code, format)
         headers: dict = {}
+        found: dict = {}
 
         def capture(response: requests.Response) -> None:
             headers.clear()
@@ -300,7 +385,7 @@ class Bdot10kProvider(LandCoverProvider):
 
         def save(response: requests.Response, target: Path) -> Path:
             return self._extract_gpkg_from_zip(
-                response, target, layers=wanted, raw_path=raw_path
+                response, target, layers=wanted, raw_path=raw_path, report=found
             )
 
         path = download_to(
@@ -320,6 +405,8 @@ class Bdot10kProvider(LandCoverProvider):
             format=format,
             http=dict(headers),
             raw_path=raw_path,
+            classes=tuple(found["classes"]) if "classes" in found else None,
+            absent=tuple(found.get("absent", ())),
         )
 
     def download_by_admin_unit(
@@ -373,6 +460,11 @@ class Bdot10kProvider(LandCoverProvider):
         pattern = self.OPENDATA_PATTERNS.get(format, self.OPENDATA_PATTERNS["GPKG"])
 
         return pattern.format(base=self.OPENDATA_BASE, woj=woj_code, teryt=teryt)
+
+    def package_url(self, teryt: str, format: str = "GPKG") -> str:
+        """The OpenData URL of the package of powiat ``teryt`` (the file
+        ``download_package`` downloads; ``HEAD`` of it gives its size)."""
+        return self._construct_opendata_url(teryt, format)
 
     # =========================================================================
     # Download by sheet code / bbox → the one powiat of the area (PRG)
@@ -512,6 +604,7 @@ class Bdot10kProvider(LandCoverProvider):
         output_path: Path,
         layers: Sequence[str] | None = None,
         raw_path: Path | None = None,
+        report: dict | None = None,
     ) -> Path:
         """
         Extract and merge all layers from downloaded ZIP.
@@ -530,11 +623,16 @@ class Bdot10kProvider(LandCoverProvider):
             ``output_path.with_suffix(".gpkg")``, which is also what is
             returned)
         layers : Sequence[str], optional
-            Layer codes to keep (``OT_<code>_*`` files); None = all
+            Layer codes to keep (``OT_<code>_*`` files); None = all. A class
+            without a file in the package is skipped (``report["absent"]``)
+            unless none of them is in the package
         raw_path : Path, optional
             Where to also save the downloaded ZIP unchanged (atomically, only
             after a successful merge, before the GPKG replaces the previous
             one); None = not kept
+        report : dict, optional
+            Filled with ``classes`` (kept) and ``absent`` (requested, not in
+            the package) when ``layers`` is given
 
         Returns
         -------
@@ -543,9 +641,11 @@ class Bdot10kProvider(LandCoverProvider):
 
         Raises
         ------
+        NoCoverageError
+            ``layers`` given and the package has a file of none of them.
         DownloadError
-            Not a ZIP, no GPKG inside, a requested layer missing in the
-            package, two files with the same table name, or an I/O error
+            Not a ZIP, no GPKG inside, two files with the same table name,
+            or an I/O error
             while extracting, merging or writing the raw ZIP. The merged
             GPKG waits in ``<name>.gpkg.<pid>_<tid>.tmp`` and replaces ``output_path``
             only after the raw ZIP is saved, so on any error the previous
@@ -575,12 +675,18 @@ class Bdot10kProvider(LandCoverProvider):
                         code: [f for f in all_gpkg if f"__OT_{code}_" in Path(f).name]
                         for code in layers
                     }
-                    missing = [code for code, files in by_code.items() if not files]
-                    if missing:
-                        raise DownloadError(
-                            f"Paczka BDOT10k nie zawiera warstw: {', '.join(missing)}"
+                    kept = [code for code, files in by_code.items() if files]
+                    absent = [code for code in by_code if code not in kept]
+                    if not kept:
+                        raise NoCoverageError(
+                            "paczka BDOT10k nie ma plikow klas "
+                            f"{', '.join(absent)} (brak obiektow tych klas w "
+                            "powiecie)"
                         )
-                    all_gpkg = [f for files in by_code.values() for f in files]
+                    if report is not None:
+                        report["classes"] = kept
+                        report["absent"] = absent
+                    all_gpkg = [f for code in kept for f in by_code[code]]
 
                 logger.debug(f"Found {len(all_gpkg)} layers to merge")
 
@@ -878,23 +984,7 @@ class Bdot10kProvider(LandCoverProvider):
     @staticmethod
     def _layer_descriptions() -> dict[str, str]:
         """Return mapping of layer codes to descriptions."""
-        return {
-            "PTGN": "Grunty nieuzytkowe",
-            "PTKM": "Tereny komunikacyjne",
-            "PTLZ": "Tereny lesne",
-            "PTNZ": "Tereny niezabudowane",
-            "PTPL": "Place",
-            "PTRK": "Roslinnosc krzewiasta",
-            "PTSO": "Skladowiska",
-            "PTTR": "Tereny rolne",
-            "PTUT": "Uprawy trwale",
-            "PTWP": "Wody powierzchniowe",
-            "PTWZ": "Tereny zabagnione",
-            "PTZB": "Tereny zabudowane",
-            "SWRS": "Rzeki i strumienie",
-            "SWKN": "Kanaly",
-            "SWRM": "Rowy melioracyjne",
-        }
+        return dict(BDOT10K_CLASSES)
 
     def get_supported_formats(self) -> list[str]:
         """Return list of supported output formats."""

@@ -709,11 +709,19 @@ kartograf landcover download --product corine --year 2018 --sheet N-34-130-D -o 
 #   z CLMS_CREDENTIALS: landcover/eu_corine_2018/N-34/130/D/N-34-130-D.tif: nowa wersja V2020_20u1_<sha8>
 #   bez: Info: CORINE 2018: podglad WMS ...
 #        landcover/eu_corine_2018_preview/N-34/130/D/N-34-130-D.png: nowa wersja 2026-10-12_<sha8>
+# Podgląd WMS działa dla 2018, 2012, 2006, 2000 (EEA; warstwę rastrową roku Kartograf czyta
+# z GetCapabilities usługi tego roku) i 1990 (DLR). Obraz w całości przezroczysty (usługa
+# nie ma danych CLC tego roku dla obszaru: 1990 dla Polski, obszar poza Europą) to
+# Error: (kod 1, `no_coverage`) i brak wersji w magazynie.
 kartograf soil download --bbox 626000,480000,628000,482000 --property clay --depth 0-5cm --stat mean -o ./data
 #   soil/global_soilgrids_clay_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_717f0989
 # Segment niesie każdy parametr treści (lowercase), więc --property sand
 # dla tego samego obszaru to osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
+# Wartości w pliku to liczby całkowite w jednostkach ISRIC (clay g/kg, phh2o pH x 10, bdod
+# cg/cm3, soc dg/kg, nitrogen cg/kg, cec mmol(c)/kg, cfvo cm3/dm3, ocd hg/m3, ocs t/ha);
+# jednostka konwencjonalna = wartość / dzielnik: `soil list-layers`, sidecar `extra.units`
+# ({"mapped": "g/kg", "conventional": "%", "divisor": 10}). `ocs` tylko --depth 0-30cm.
 
 # Tylko wybrane warstwy BDOT10k (GPKG) + oryginalny ZIP, bbox w WGS84,
 # 4 powiaty równolegle, bez linii statusu (Info:/Warning:/Error: zostają)
@@ -759,7 +767,14 @@ wybierają obszar przez `--sheet`, `--bbox` albo `--geometry`. BDOT10k
 z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
 z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
 w `Wpisy TERYT`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
-się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
+się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Obszar BDOT10k
+(bieżące paczki i archiwum `--year`) podlega limitowi z sekcji 1.8 (100 plików
+albo 10 GB wg `HEAD`, `Error:` kod 2 przed pobraniem) i wypisuje listę powiatów
+w `Info:` (`unit_list`). `--layers`: kod klasy BDOT10k z `landcover list-layers
+--product bdot10k` (58 klas, także `BUBD`); nieznany kod to `Error:` kod 2 przed
+siecią, klasa bez obiektów w powiecie (brak jej w paczce, np. `SWKN` w Sopocie)
+to `Info:` `classes_absent` — zapisują się pozostałe klasy, a brak wszystkich to
+błąd powiatu (jak BDOO). Tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
 credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
 parametry SoilGrids i lata CORINE: PRD 3.5–3.7. ZABAGED, Data50 i Data250
@@ -1407,7 +1422,8 @@ tylko pliki do pobrania: wersje już lokalne nie (z `--force` — wszystkie).
 Wybór jednostki (`--teryt`, `--ku`) i `--whole-country` nie mają limitu —
 rozmiar dużego pliku pojawia się jako `Warning:` przed transferem. Limit
 dotyczy wszystkich kolekcji, także ZABAGED, BDOO, Data50 i Data250
-w `landcover` oraz NMT 100 m (pliki województw obszaru).
+w `landcover`, obszaru BDOT10k (paczki powiatów, bieżące i z archiwum) oraz
+NMT 100 m (pliki województw obszaru).
 
 ```bash
 kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 -o ~/kartograf-data
@@ -2698,9 +2714,15 @@ print(report.stale, report.files.get(godlo, ()))
 
 ## 5. Gleby i HSG
 
-- SoilGrids (ISRIC): 11 parametrów, 6 głębokości, 5 statystyk,
-  rozdzielczość 250 m — tabela parametrów i jednostek: PRD 3.7;
-  `kartograf soil list-layers`.
+- SoilGrids (ISRIC): 11 właściwości (`ocs` tylko dla głębokości 0-30cm, reszta
+  6 głębokości), 5 statystyk, rozdzielczość 250 m. Plik ma liczby całkowite
+  w jednostkach ISRIC; jednostka konwencjonalna = wartość / dzielnik (`soil
+  list-layers`, sidecar `extra.units`): clay, sand, silt g/kg (% = / 10), phh2o
+  pH x 10 (/ 10), bdod cg/cm3 (kg/dm3 = / 100), nitrogen cg/kg (g/kg = / 100),
+  soc dg/kg (g/kg = / 10), cec mmol(c)/kg (cmol(c)/kg = / 10), cfvo cm3/dm3
+  (cm3/100cm3 = / 10), ocd hg/m3 (kg/m3 = / 10), ocs t/ha (kg/m2 = / 10);
+  statystyka `uncertainty` to iloraz 10 x (Q0.95 - Q0.05) / Q0.5 (/ 10 = iloraz).
+  Okno mniejsze niż piksel (250 m) jest rozszerzane do jednego piksela.
 - HSG (`kartograf soil hsg`, `calculate_hsg(output_dir=...)`) bierze
   `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
   (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)
@@ -2819,7 +2841,9 @@ proxy).
   zapisuje plik bez zmian (sidecar `nodata` jak w pliku), a HSG traktuje
   trójkę zer clay/sand/silt jako brak danych (`Brak danych` w `--summary`);
   w analizach własnych traktuj 0 g/kg w obszarze maskowanym jako brak
-  wartości.
+  wartości. Raster samych zer (morze, woda, zabudowa) to `Warning:`
+  `all_nodata` i `extra.all_nodata` w sidecarze (poza `cfvo`, gdzie 0 bywa
+  wartością); HSG bez żadnej klasy dostaje to samo ostrzeżenie.
 - WCS ortofotomapy jest wolny (pomiar 2026-10-15: ok. 1 min na kawałek
   200 x 200 m; obszar 1 x 1 km = 25 kawałków niezależnie od piksela),
   a Standard bywa przejściowo niedostępny. Złożony z kawałków wycinek nie

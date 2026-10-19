@@ -34,7 +34,10 @@ them out of the main application process.
 
 import json
 import logging
+import os
 import time
+import warnings
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -42,7 +45,7 @@ from urllib.parse import urlencode
 import requests
 
 from kartograf.core.sheet_parser import BBox
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
 from kartograf.sources.edition import Edition, edition_label
 from kartograf.transform.bbox import envelope_from_2180
@@ -55,6 +58,65 @@ from kartograf.transport.http import (
 )
 
 logger = logging.getLogger(__name__)
+
+_WMS = "{http://www.opengis.net/wms}"
+
+
+def _raster_layer_name(content: bytes, year: int, *, what: str) -> str:
+    """The name of the raster layer of the CLC ``year`` in a WMS 1.3.0
+    GetCapabilities of the EEA service of that year.
+
+    The layer is found by its title ``Corine Land Cover <year> raster``: its
+    NAME differs per year (``12`` in CLC2018, ``Corine_Land_Cover_2012_raster59601``
+    in CLC2012 - a number that changes when EEA republishes the service).
+
+    Raises
+    ------
+    DownloadError
+        Not XML, or no named layer with that title (the message lists the
+        named layers).
+    """
+    try:
+        root = ET.fromstring(content)
+    except ET.ParseError as e:
+        raise DownloadError(f"{what}: GetCapabilities nie jest XML: {e}") from e
+    wanted = f"Corine Land Cover {year} raster".lower()
+    named: list[str] = []
+    for layer in root.iter(f"{_WMS}Layer"):
+        name = (layer.findtext(f"{_WMS}Name") or "").strip()
+        if not name:
+            continue
+        named.append(name)
+        if (layer.findtext(f"{_WMS}Title") or "").strip().lower() == wanted:
+            return name
+    raise DownloadError(
+        f"{what}: usluga WMS EEA nie ma warstwy rastrowej 'Corine Land Cover "
+        f"{year} raster' (warstwy: {', '.join(named) or 'brak'}); podglad "
+        "tego roku jest niedostepny - zmien --year albo ustaw CLMS_CREDENTIALS"
+    )
+
+
+def _is_blank(path: Path) -> bool:
+    """Whether the preview image at ``path`` has no visible pixel: every pixel
+    transparent (alpha 0, or the transparent colour of a palette) - the WMS
+    answered an area without data. An unreadable file is not blank (it is the
+    answer as it came, never rejected on a guess)."""
+    import rasterio
+    from rasterio.errors import NotGeoreferencedWarning, RasterioError
+
+    try:
+        with warnings.catch_warnings():
+            # a PNG has no georeference: not a problem of a preview
+            warnings.simplefilter("ignore", NotGeoreferencedWarning)
+            with rasterio.open(path) as image:
+                for _, window in image.block_windows(1):
+                    if image.dataset_mask(window=window).any():
+                        return False
+                return True
+    except (OSError, ValueError, RasterioError) as e:
+        logger.debug("CORINE preview %s unreadable: %s", path, e)
+        return False
+
 
 # Lazy import to avoid circular dependency
 _auth_proxy_client = None
@@ -234,8 +296,8 @@ class CorineProvider(LandCoverProvider):
     EEA_YEARS = [2018, 2012, 2006, 2000]
     CLMS_YEARS = [2018, 2012, 2006, 2000]  # Years with CLMS API support
 
-    # WMS layer names
-    EEA_RASTER_LAYER = "12"
+    # DLR layer of the 1990 preview (the EEA raster layer of a year is read from
+    # the GetCapabilities of its service: ``_eea_raster_layer``)
     DLR_WMS_LAYERS = {
         1990: "CORINE_LAND_COVER_1990_100x100_ETRS89",
     }
@@ -275,6 +337,8 @@ class CorineProvider(LandCoverProvider):
         self._sessions = SessionPerThread(session, factory=requests.Session)
         self._use_proxy = use_proxy and clms_credentials is None
         self._clms_auth: CLMSAuth | None = None
+        # EEA raster layer name per year (GetCapabilities read once per provider)
+        self._wms_layers: dict[int, str] = {}
 
         # Direct mode: use provided credentials
         if (
@@ -317,6 +381,35 @@ class CorineProvider(LandCoverProvider):
     def uses_clms(self, year: int) -> bool:
         """True when ``year`` is downloaded as CLMS data (else a WMS preview)."""
         return year in self.CLMS_YEARS and self.has_clms_token
+
+    @property
+    def clms_credentials_problem(self) -> str | None:
+        """Why ``CLMS_CREDENTIALS`` of the environment cannot be used (a text
+        of the auth proxy - the one process that reads it), else ``None``:
+        the variable is not set, credentials were given to the provider or
+        the proxy is not used."""
+        if (
+            self._clms_auth is not None
+            or not self._use_proxy
+            or not os.environ.get("CLMS_CREDENTIALS")
+        ):
+            return None
+        try:
+            return _get_auth_proxy().credentials_problem()
+        except Exception as e:  # the proxy is best effort here
+            logger.debug("CLMS credentials check failed: %s", e)
+            return None
+
+    @classmethod
+    def check_year(cls, year: int) -> None:
+        """``ValidationError`` unless ``year`` is a CORINE edition (``--year``)."""
+        if year not in cls.AVAILABLE_YEARS:
+            raise ValidationError(
+                f"--year {year}: niedostepne dla --product corine; dostepne: "
+                f"{', '.join(str(y) for y in cls.AVAILABLE_YEARS)}",
+                option="year",
+                allowed=tuple(str(y) for y in cls.AVAILABLE_YEARS),
+            )
 
     def edition(self, year: int, timeout: int = DEFAULT_TIMEOUT) -> Edition:
         """CORINE edition of ``year`` from the public CLMS catalogue (D29).
@@ -417,10 +510,7 @@ class CorineProvider(LandCoverProvider):
                 "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
             )
 
-        if year not in self.AVAILABLE_YEARS:
-            raise ValidationError(
-                f"Nieprawidlowy rok: {year}. Dostepne lata: {self.AVAILABLE_YEARS}"
-            )
+        self.check_year(year)
 
         output_path = Path(output_path)
 
@@ -431,6 +521,40 @@ class CorineProvider(LandCoverProvider):
         # Fallback to WMS (styled preview)
         return self._download_via_wms(bbox, output_path, year, timeout)
 
+    def _eea_endpoint(self, year: int) -> str:
+        """The WMS service of the EEA for the CLC ``year``."""
+        return f"{self.EEA_WMS_BASE}/CLC{year}_WM/MapServer/WMSServer"
+
+    def _eea_raster_layer(self, year: int, timeout: int) -> str:
+        """The name of the raster layer of the EEA WMS of ``year``, read from the
+        GetCapabilities of that service (once per provider: the names carry
+        numbers that change when EEA republishes a service).
+
+        Raises
+        ------
+        DownloadError
+            GetCapabilities failed or the service has no such layer.
+        """
+        layer = self._wms_layers.get(year)
+        if layer is None:
+            what = f"CORINE {year}"
+            params = {
+                "SERVICE": "WMS",
+                "VERSION": "1.3.0",
+                "REQUEST": "GetCapabilities",
+            }
+            response = get_with_retry(
+                self._sessions.get(),
+                f"{self._eea_endpoint(year)}?{urlencode(params)}",
+                timeout=timeout,
+                retries=self.MAX_RETRIES,
+                description=f"{what} GetCapabilities WMS EEA",
+            )
+            layer = self._wms_layers.setdefault(
+                year, _raster_layer_name(response.content, year, what=what)
+            )
+        return layer
+
     def _download_via_wms(
         self,
         bbox: BBox,
@@ -438,7 +562,16 @@ class CorineProvider(LandCoverProvider):
         year: int,
         timeout: int,
     ) -> Path:
-        """Download styled preview via WMS."""
+        """Download styled preview via WMS.
+
+        Raises
+        ------
+        NoCoverageError
+            The image is fully transparent: the service has no CLC data of
+            that year for the area. The file is not kept.
+        DownloadError
+            The download fails, or the EEA service has no raster layer.
+        """
         # Aspect ratio always comes from the metric (EPSG:3857) envelope, so
         # the ground resolution along Y matches the one along X. Degrees would
         # not do: plate carree is not conformal, a pixel square in degrees is
@@ -472,7 +605,10 @@ class CorineProvider(LandCoverProvider):
         if height_px > max_size:
             height_px = max_size
 
-        url = self._construct_wms_url(target_bounds, year, width_px, height_px)
+        layer = (
+            self._eea_raster_layer(year, timeout) if year in self.EEA_YEARS else None
+        )
+        url = self._construct_wms_url(target_bounds, year, width_px, height_px, layer)
 
         logger.debug(
             "Downloading CLC %s preview via WMS "
@@ -480,7 +616,7 @@ class CorineProvider(LandCoverProvider):
             year,
         )
 
-        return download_to(
+        path = download_to(
             self._sessions.get(),
             url,
             output_path.with_suffix(".png"),
@@ -493,6 +629,16 @@ class CorineProvider(LandCoverProvider):
                 f"({bbox.max_x:.0f},{bbox.max_y:.0f})"
             ),
         )
+        if _is_blank(path):
+            path.unlink(missing_ok=True)
+            service = "EEA" if year in self.EEA_YEARS else "DLR"
+            raise NoCoverageError(
+                f"podglad CORINE {year}: obraz WMS {service} jest w calosci "
+                f"przezroczysty - usluga nie ma danych CLC {year} dla tego obszaru "
+                "(poza zasiegiem CORINE albo kraj bez tego rocznika); wersja nie "
+                "powstala, zmien --bbox albo --year"
+            )
+        return path
 
     # =========================================================================
     # CLMS API Download (GeoTIFF with class codes)
@@ -830,6 +976,7 @@ class CorineProvider(LandCoverProvider):
         year: int,
         width: int,
         height: int,
+        layer: str | None = None,
     ) -> str:
         """
         Construct WMS GetMap URL.
@@ -849,6 +996,9 @@ class CorineProvider(LandCoverProvider):
             Image width in pixels
         height : int
             Image height in pixels
+        layer : str, optional
+            The raster layer of the EEA service of ``year``
+            (``_eea_raster_layer``); required for the EEA years, unused for 1990
 
         Returns
         -------
@@ -856,9 +1006,10 @@ class CorineProvider(LandCoverProvider):
             Full WMS URL
         """
         if year in self.EEA_YEARS:
-            return self._construct_eea_wms_url(bounds, year, width, height)
-        else:
-            return self._construct_dlr_wms_url(bounds, year, width, height)
+            if layer is None:
+                raise ValueError(f"CLC {year}: GetMap of the EEA needs a layer name")
+            return self._construct_eea_wms_url(bounds, year, width, height, layer)
+        return self._construct_dlr_wms_url(bounds, year, width, height)
 
     def _construct_eea_wms_url(
         self,
@@ -866,20 +1017,20 @@ class CorineProvider(LandCoverProvider):
         year: int,
         width: int,
         height: int,
+        layer: str,
     ) -> str:
         """
         Construct EEA Discomap WMS GetMap URL.
 
         EEA WMS uses WMS 1.3.0 with EPSG:3857 (Web Mercator).
         """
-        # EEA endpoint for this year
-        endpoint = f"{self.EEA_WMS_BASE}/CLC{year}_WM/MapServer/WMSServer"
+        endpoint = self._eea_endpoint(year)
 
         params = {
             "SERVICE": "WMS",
             "VERSION": "1.3.0",
             "REQUEST": "GetMap",
-            "LAYERS": self.EEA_RASTER_LAYER,
+            "LAYERS": layer,
             "STYLES": "",
             "CRS": "EPSG:3857",
             "BBOX": f"{bbox_3857[0]},{bbox_3857[1]},{bbox_3857[2]},{bbox_3857[3]}",
