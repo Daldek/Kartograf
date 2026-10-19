@@ -24,8 +24,8 @@ project, ADR-040). Every data report (``DataReport``, ``CollectionReport``,
 ``LandCoverReport``, ``SoilReport``, ``HsgReport``) has ``files`` and
 ``failed`` (``UnitFile``/``UnitFailure``), ``stale``, ``notices`` and ``ok``.
 The store is read without writing to it (ADR-045): ``list_segments``,
-``iter_store``, ``read_sidecar``, ``describe_segment``, ``file_footprint``,
-``link_target`` and ``pinned_transform``.
+``list_partitions``, ``iter_store``, ``read_sidecar``, ``describe_segment``,
+``file_footprint``, ``link_target`` and ``pinned_transform``.
 
 Example usage::
 
@@ -239,6 +239,7 @@ from kartograf.store import (
     describe_segment,
     iter_store,
     link_target,
+    list_partitions,
     list_segments,
     read_sidecar,
 )
@@ -384,6 +385,7 @@ __all__ = [
     "check_source_grid",
     # Store reading, without writing to it (Archiwista, ADR-045)
     "list_segments",
+    "list_partitions",
     "iter_store",
     "StoreEntry",
     "read_sidecar",

@@ -66,6 +66,7 @@ def test_store_read_api_exported():
         describe_segment,
         iter_store,
         link_target,
+        list_partitions,
         list_segments,
         read_sidecar,
     )
@@ -74,6 +75,7 @@ def test_store_read_api_exported():
 
     expected = {
         "list_segments": list_segments,
+        "list_partitions": list_partitions,
         "iter_store": iter_store,
         "StoreEntry": StoreEntry,
         "read_sidecar": read_sidecar,

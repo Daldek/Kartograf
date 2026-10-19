@@ -1147,7 +1147,7 @@ kartograf/
 ├── _version.py           # build_version() — identyfikator wersji
 ├── notices.py            # Notice, NoticeSink, kody komunikatów o danych (ADR-037)
 ├── exceptions.py         # KartografError, ValidationError -> ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError
-├── store.py              # Odczyt magazynu bez zapisu (ADR-045): list_segments, iter_store, read_sidecar, describe_segment, link_target
+├── store.py              # Odczyt magazynu bez zapisu (ADR-045): list_segments, list_partitions, iter_store, read_sidecar, describe_segment, link_target
 ├── store_geometry.py     # file_footprint (obrys natywny i WGS84), pinned_transform (operacja przypięta, per wątek)
 ├── core/                 # Logika bazowa
 │   ├── bbox.py              # BBox, validate_bbox, transform_bbox, is_czech_crs
