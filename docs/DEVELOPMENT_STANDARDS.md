@@ -514,7 +514,7 @@ same statusy, plan, komunikaty i bledy. Reguly:
   zdefiniowany w klasie) i `exit_code`; walidator biblioteki ustawia `option` (nazwa
   argumentu API) i `allowed` tam, gdzie wiadomo, co poprawic (11.1). Kody wyjscia: 0, 1
   (awaria zrodla, sieci albo dysku, `ok: false`), 2 (bledne dane wejsciowe i uzycie),
-  130 (Ctrl-C); jedna tabela kodow wyjscia i bledow jest w USAGE 9.3 i rowna katalogowi
+  130 (Ctrl-C), 143 (SIGTERM); jedna tabela kodow wyjscia i bledow jest w USAGE 9.3 i rowna katalogowi
   (`tests/test_docs_tables.py`).
 - **Z11:** schematy dokumentow `/1` sa addytywne: nowe klucze i nowe wartosci wyliczen
   tak, usuniecie klucza albo zmiana typu to `/2`. Nowy dokument = klasa z `Document`
