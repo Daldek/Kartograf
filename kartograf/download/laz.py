@@ -30,7 +30,6 @@ Example::
 """
 
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -64,6 +63,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.notices import LAZ_SUPERSEDED, TILES, Notice, NoticeSink, count_text
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
@@ -328,10 +328,12 @@ def _run_laz_download(
     if on_progress is not None:
         on_progress(0, total)
     if workers > 1 and total > 1:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(fetch, tile) for tile in tiles]
-            for future in as_completed(futures):
-                record(future.result())
+        run_parallel(
+            fetch,
+            tiles,
+            workers=workers,
+            on_done=lambda _ended, _tile, outcome: record(outcome),
+        )
     else:
         for tile in tiles:
             record(fetch(tile))

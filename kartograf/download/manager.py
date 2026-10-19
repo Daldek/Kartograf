@@ -66,6 +66,7 @@ from kartograf.download.versions import (
     version_key,
 )
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.notices import (
     CHECK_FAILED,
     DOWNLOAD_SIZE,
@@ -1950,29 +1951,27 @@ class DownloadManager:
                 self._record(result, sheet, fetch, status, hints, message)
                 self._emit(on_progress, i, total, sheet, status, message)
         else:
-            counter = 0
             outcomes: dict[str, tuple] = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                future_to_sheet = {
-                    executor.submit(
-                        self._download_single_sheet_task,
-                        sheet,
-                        update,
-                        check=check,
-                        on_progress=on_progress,
-                    ): sheet
-                    for sheet in sheets
-                }
-                for future in concurrent.futures.as_completed(future_to_sheet):
-                    sheet = future_to_sheet[future]
-                    try:
-                        sheet, fetch, status, message, hints = future.result()
-                    except Exception as e:
-                        logger.debug("Unexpected error downloading %s: %s", sheet, e)
-                        fetch, status, message, hints = None, "failed", str(e), ()
-                    counter += 1
-                    outcomes[sheet] = (fetch, status, hints, message)
-                    self._emit(on_progress, counter, total, sheet, status, message)
+
+            def task(sheet: str) -> tuple[str, SheetFetch | None, str, str, tuple]:
+                try:
+                    return self._download_single_sheet_task(
+                        sheet, update, check=check, on_progress=on_progress
+                    )
+                except Exception as e:
+                    logger.debug("Unexpected error downloading %s: %s", sheet, e)
+                    return sheet, None, "failed", str(e), ()
+
+            def finished(
+                ended: int,
+                _sheet: str,
+                outcome: tuple[str, SheetFetch | None, str, str, tuple],
+            ) -> None:
+                sheet, fetch, status, message, hints = outcome
+                outcomes[sheet] = (fetch, status, hints, message)
+                self._emit(on_progress, ended, total, sheet, status, message)
+
+            run_parallel(task, sheets, workers=workers, on_done=finished)
             for sheet in sheets:
                 self._record(result, sheet, *outcomes[sheet])
 

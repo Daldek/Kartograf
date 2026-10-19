@@ -11,7 +11,8 @@ the target module (e.g. ``kartograf.cli.download_cmd``).
 
 Exit codes (one table, spec 6.5): 0 ok, 1 failed (a source, the network, the
 cache, a program error, or a result with ``ok: false``), 2 wrong use or wrong
-input (argparse, ``ValidationError`` and its subclasses), 130 interrupted. With
+input (argparse, ``ValidationError`` and its subclasses), 130 interrupted
+(Ctrl-C), 143 terminated (SIGTERM, handled like Ctrl-C). With
 ``--json`` every error is the document ``kartograf-error/1`` on stdout and
 stderr stays empty.
 """
@@ -31,8 +32,9 @@ from kartograf.cli._parser import (
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.download_cmd import cmd_download, create_progress_callback
 from kartograf.cli.parse_cmd import cmd_parse, format_sheet
-from kartograf.error_report import INTERRUPTED_MESSAGE, error_report
+from kartograf.error_report import error_report
 from kartograf.exceptions import KartografError, ValidationError
+from kartograf.interrupt import sigterm_interrupts
 
 __all__ = [
     "create_parser",
@@ -83,7 +85,7 @@ def _retry_lines() -> None:
 def _fail(error: BaseException, command: str | None, as_json: bool) -> int:
     """Report ``error`` in the mode of the command line; the exit code of the
     error table (spec 6.2): ``exit_code`` of a ``KartografError``, 130 for Ctrl-C,
-    1 for every other exception.
+    143 for SIGTERM, 1 for every other exception.
 
     ``--json``: the document ``kartograf-error/1`` on stdout. Text: one
     ``Error:`` line on stderr - the message of a ``KartografError`` (its hint is
@@ -96,8 +98,9 @@ def _fail(error: BaseException, command: str | None, as_json: bool) -> int:
     if isinstance(error, KeyboardInterrupt):
         # versions are committed atomically from .incoming/ staging (a stale
         # leftover is removed by a later run): no half-written file is kept
-        print(f"Error: {INTERRUPTED_MESSAGE}", file=sys.stderr)
-        return 130
+        report = error_report(error)
+        print(f"Error: {report.message}", file=sys.stderr)
+        return report.exit_code
     if isinstance(error, KartografError):
         remedy = getattr(error, "remedy", None)  # TransformUnavailableError
         text = f"Error: {error}" + (f" Remedium: {remedy}" if remedy else "")
@@ -121,8 +124,9 @@ def main(args: list[str] | None = None) -> int:
     -------
     int
         Exit code: 0 ok, 1 failed (or a result with ``ok: false``), 2 wrong
-        use or wrong input, 130 interrupted. ``--help`` and ``--version`` end
-        the process (``SystemExit``) as argparse does.
+        use or wrong input, 130 interrupted (Ctrl-C), 143 terminated (SIGTERM).
+        ``--help`` and ``--version`` end the process (``SystemExit``) as argparse
+        does.
     """
     _retry_lines()
     argv = sys.argv[1:] if args is None else args
@@ -130,21 +134,22 @@ def main(args: list[str] | None = None) -> int:
     if as_json:
         use_utf8_stdout()
     command: str | None = None
-    try:
-        parser = create_parser(usage_errors=as_json)
-        removed = removed_command_error(argv)
-        if removed is not None:
-            parser.error(removed)  # exit 2, like any unknown command
-        # argparse raises SystemExit for --help/--version - let it pass unchanged
-        parsed_args = parse_command_line(parser, argv)
-        command = getattr(parsed_args, "_command_id", None)
-        return _dispatch(parser, parsed_args)
-    except KeyboardInterrupt as e:
-        return _fail(e, command, as_json)
-    except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
-        if os.environ.get("KARTOGRAF_DEBUG"):
-            raise
-        return _fail(e, command, as_json)
+    with sigterm_interrupts():
+        try:
+            parser = create_parser(usage_errors=as_json)
+            removed = removed_command_error(argv)
+            if removed is not None:
+                parser.error(removed)  # exit 2, like any unknown command
+            # argparse raises SystemExit for --help/--version - let it pass unchanged
+            parsed_args = parse_command_line(parser, argv)
+            command = getattr(parsed_args, "_command_id", None)
+            return _dispatch(parser, parsed_args)
+        except KeyboardInterrupt as e:
+            return _fail(e, command, as_json)
+        except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
+            if os.environ.get("KARTOGRAF_DEBUG"):
+                raise
+            return _fail(e, command, as_json)
 
 
 if __name__ == "__main__":
