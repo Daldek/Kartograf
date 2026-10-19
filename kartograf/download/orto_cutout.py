@@ -50,7 +50,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 import rasterio
@@ -580,7 +580,7 @@ def download_image_cutout(
     coverage: str | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
 ) -> ImageCutoutResult:

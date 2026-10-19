@@ -26,6 +26,7 @@ import shutil
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rasterio
@@ -487,7 +488,9 @@ class CuzkRasterProvider(BaseProvider):
             )
         return route.channel.endpoint.format(sheet=sheet)
 
-    def file_signal(self, sheet: str, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+    def file_signal(
+        self, sheet: str, timeout: int = _DEFAULT_TIMEOUT
+    ) -> dict[str, Any]:
         """Current HTTP signal of the CUZK file of a sheet (``HEAD``), without
         downloading it."""
         return head_signal(self._session, self.file_url(sheet), timeout=timeout)

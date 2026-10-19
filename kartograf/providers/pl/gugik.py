@@ -24,6 +24,7 @@ from pathlib import Path
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.coverage import Polygon
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.exceptions import (
@@ -148,7 +149,7 @@ class GugikProvider(WfsSkorowidzLayersMixin, GugikWcsMixin, BaseProvider):
         vertical_crs: str,
         resolution: str | None,
         format: str = "ASC",
-        cache=None,
+        cache: MetadataCache | None = None,
     ):
         """
         Initialize the provider of one variant.

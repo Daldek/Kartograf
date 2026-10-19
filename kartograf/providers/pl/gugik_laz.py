@@ -43,6 +43,7 @@ from pathlib import Path
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.coverage import (
     AREA_EPS,
     Polygon,
@@ -629,7 +630,7 @@ class GugikLazProvider(DataSourceProvider):
         session: requests.Session | None = None,
         *,
         vertical_crs: str,
-        cache=None,
+        cache: MetadataCache | None = None,
     ):
         self._indexes = _laz_indexes()
         if vertical_crs not in self._indexes:

@@ -27,6 +27,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -357,7 +358,7 @@ def download_cz_laz(
     bbox: BBox | None = None,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     workers: int = 4,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,

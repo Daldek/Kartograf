@@ -34,10 +34,12 @@ import logging
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.providers.base import LandCoverProvider
@@ -148,7 +150,11 @@ class SoilGridsProvider(LandCoverProvider):
     DEFAULT_TIMEOUT = 120
     MAX_RETRIES = MAX_RETRIES
 
-    def __init__(self, session: requests.Session | None = None, cache=None):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        cache: MetadataCache | None = None,
+    ):
         """
         Initialize SoilGrids provider.
 
@@ -240,7 +246,7 @@ class SoilGridsProvider(LandCoverProvider):
         property: str,
         depth: str,
         stat: str,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download soil property data for a bounding box via WCS.
@@ -432,7 +438,7 @@ class SoilGridsProvider(LandCoverProvider):
         teryt: str,
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         SoilGrids does not support TERYT (administrative unit) selection.

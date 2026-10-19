@@ -20,7 +20,7 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
@@ -1004,7 +1004,7 @@ def validate_hsg_request(
     )
 
 
-def hsg_statistics(hsg_path: str | Path) -> dict:
+def hsg_statistics(hsg_path: str | Path) -> dict[str, Any]:
     """
     Statistics of an HSG raster over its request area (``soil hsg
     --summary``).

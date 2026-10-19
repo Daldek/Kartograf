@@ -36,6 +36,7 @@ import json
 import logging
 import time
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlencode
 
 import requests
@@ -252,7 +253,7 @@ class CorineProvider(LandCoverProvider):
     def __init__(
         self,
         session: requests.Session | None = None,
-        clms_credentials: dict | None = None,
+        clms_credentials: dict[str, Any] | None = None,
         use_proxy: bool = True,
     ):
         """
@@ -376,7 +377,7 @@ class CorineProvider(LandCoverProvider):
         timeout: int = DEFAULT_TIMEOUT,
         *,
         year: int,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download CORINE Land Cover data for a bounding box.
@@ -765,7 +766,7 @@ class CorineProvider(LandCoverProvider):
         timeout: int = DEFAULT_TIMEOUT,
         *,
         year: int,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download CORINE Land Cover data for a map sheet.
@@ -807,7 +808,7 @@ class CorineProvider(LandCoverProvider):
         teryt: str,
         output_path: Path,
         timeout: int = 120,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         CORINE does not support TERYT downloads.

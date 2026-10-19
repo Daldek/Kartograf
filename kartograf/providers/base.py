@@ -10,6 +10,7 @@ from landcover_base.py (removed without a shim, stage 0 spec 6.7).
 
 from abc import ABC, abstractmethod
 from pathlib import Path
+from typing import Any
 
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import ValidationError
@@ -91,7 +92,7 @@ class BaseProvider(DataSourceProvider):
         a code of this level or a finer one is the sheet itself."""
         return "1:10000"
 
-    def source_info(self, sheet: str) -> dict | None:
+    def source_info(self, sheet: str) -> dict[str, Any] | None:
         """Origin of the downloaded sheet, if the provider exposes it.
 
         Filled by the single-record flow (e.g. ``download`` of one record). In
@@ -276,7 +277,7 @@ class LandCoverProvider(DataSourceProvider):
         bbox: BBox,
         output_path: Path,
         timeout: int = 60,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download land cover data for a bounding box.
@@ -312,7 +313,7 @@ class LandCoverProvider(DataSourceProvider):
         code: str,
         output_path: Path,
         timeout: int = 120,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """Download data for an administrative unit (canonical name).
 
@@ -327,7 +328,7 @@ class LandCoverProvider(DataSourceProvider):
         teryt: str,
         output_path: Path,
         timeout: int = 120,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """Deprecated alias for download_by_admin_unit."""
         return self.download_by_admin_unit(
@@ -339,7 +340,7 @@ class LandCoverProvider(DataSourceProvider):
         sheet: str,
         output_path: Path,
         timeout: int = 60,
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download land cover data for a map sheet.
