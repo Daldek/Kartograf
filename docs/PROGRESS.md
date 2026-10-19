@@ -157,9 +157,9 @@
 >    `parse_command`, `validate_command`, `format_command`, `run_command`,
 >    `check_command`; ADR-046) SCALONE do `develop` 2026-10-19 (sesja
 >    2026-10-19 "weryfikacja i scalenie" nizej); zostaja KB-6/KB-7, KC i KH.
->    KD-1/KD-2 (szczegoly arkuszy i kampanii, `full_m2`; ADR-047) WDROZONE
->    2026-10-19 na galezi `feat/availability-sheet-details` (z `develop`,
->    NIE scalonej; czeka na przeglad diffu przez uzytkownika). Propozycja
+>    KD-1/KD-2 (szczegoly arkuszy i kampanii, `full_m2`; ADR-047 z errata 1)
+>    SCALONE do `develop` 2026-10-19 (`d1bb952`, decyzja uzytkownika po
+>    przegladzie; galaz `feat/availability-sheet-details` usunieta). Propozycja
 >    na kolejna sesje: KD-3/KD-4 albo KB-6/KB-7, KC, KH. Pozostale pozycje:
 >    backlog nizej (m.in. VKM CZ, CLMS na zywo).
 >    Nowe worktree subagentow: `/home/claude-agent/workspace/wt/<galaz>`
@@ -234,6 +234,9 @@
   (potwierdzone na nagraniu Krakow 2023: podpowiedz kombinacji PL-2000
   planuje 63 kafle PL-1992, wspolnych z `sheet_records` 0); wyjatek CZ dla
   `complete <=> full_m2 == land_m2` w opisie klasy i CHANGELOG.
+- Decyzja uzytkownika: scalenie `--no-ff` do `develop` (`d1bb952`); drzewo
+  rowne sprawdzonej galezi (brama 7160 passed), galaz usunieta. Bez merge
+  do `main`, tagu i push.
 
 ### Sesja 2026-10-19 - weryfikacja zmian Archiwisty i scalenie do develop
 
