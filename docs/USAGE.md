@@ -2570,9 +2570,14 @@ pozycje każdego toru.
 `--check-updates` niczego nie pobiera; z `--plan PLIK` zapisuje plan JSON
 (`kartograf-plan/1`), który `--upgrade --plan PLIK` wykonuje później —
 pozycja, której źródło zmieniło się od planu, kończy się `Error:` bez
-pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
+pobrania, a pozycje usunięte z pliku nie są wykonywane. `--plan`
+wskazujący katalog albo katalog, którego nie ma, to błąd `invalid_input`
+przed siecią; `--upgrade --plan`, który nie wykonał żadnej pozycji (wszystkie
+aktualne albo już wykonane), mówi to linią `Info:` (nie w `--json`).
+`--force` pobiera
 ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
-`bez zmian`, inna = nowa wersja.
+`bez zmian`, inna = nowa wersja (w projekcie `--force` naprawia przy tym
+uszkodzone przypięte wersje, sekcja 8.1).
 
 `--check-updates` i `--upgrade` zawsze pytają źródło: odczyt cache
 metadanych (rekordy skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest
@@ -2904,6 +2909,18 @@ rozroznialne. Zadanie jeszcze nie pobrane to linia `teren: nie pobrane
 (pobierz: kartograf project download teren)` i kod 1 (z `-q` sam kod:
 `kartograf project status -q || kartograf project download`).
 
+Uszkodzona przypieta wersja (`status`: inny rozmiar; `verify`: inna suma
+SHA-256 albo sidecar) wraca z kopii magazynu albo po `kartograf project
+download --force NAZWA`: `--force` odklada pliki uszkodzonej wersji
+(dane i sidecar) do ukrytego katalogu `.<etykieta>_<sha8>.corrupt-<czas>`
+obok niej - nic nie jest usuwane, a skan magazynu pomija ukryte katalogi -
+i pobiera zadanie ponownie. Te same bajty wracaja pod przypieta wersje
+(`odtworzono`, manifest bez zmian); inna tresc u zrodla przepina zadanie
+jak kazde `--force`. Bez sieci wersja zostaje odlozona (`status`: brak
+przypietego pliku), a zwykle `download NAZWA` odtworzy ja z tych samych
+bajtow. Bez `--force` naprawa reczna: usun katalog wersji i uruchom
+`download`.
+
 ### 8.2 Swiezosc i wariant danych
 
 ```bash
@@ -2917,13 +2934,17 @@ kartograf project download --force pokrycie
 manifestu. `--upgrade` jawnie przepina cale zadanie na nowsza wersje,
 jesli jest sygnal zmiany, rowniez gdy nowa wersja juz jest w magazynie.
 `--force` ponawia pobranie nawet bez taniego sygnalu; przepiecie
-nastepuje po pelnym sukcesie zadania. Inne projekty zachowuja swoje
+nastepuje po pelnym sukcesie zadania, a uszkodzone przypiete wersje
+naprawia (8.1). Inne projekty zachowuja swoje
 przypiecia, stare wersje nadal sa w magazynie.
 
 **Zalecenie dla odtwarzalnosci:** wybieraj jawny wariant w zadaniu
 (np. `--year`, odpowiednie `--resolution` i `--vertical-crs`), gdy
 produkt to umozliwia. Bez `--year` wybierasz najnowszy lot w chwili
-pobrania; po opublikowaniu nowego lotu odtworzenie na pustym
+pobrania ze zrodla - ale gdy magazyn ma juz starszy lot tego arkusza,
+pierwsze `download` przypina ten lokalny lot (tryb domyslny, sekcja 4.3:
+bez pytania zrodla; `Info:` mowi o nowszym), a nowszy dopiero `--upgrade`;
+po opublikowaniu nowego lotu odtworzenie na pustym
 magazynie moze zwrocic inna sume i zakonczyc sie bledem. Nawet
 jawny rok nie zastepuje kopii magazynu, jesli zrodlo wycofa albo
 podmieni plik. Nie ma `project availability`: przed `project add`
@@ -2941,9 +2962,15 @@ nowszego rocznika.
 ### 8.3 Przenoszenie projektu i magazynu
 
 Sciezki `output_dir` i `options.geometry` podane wzglednie sa zapisane
-wzgledem katalogu projektu (nie biezacego katalogu odczytu).
-Sciezki podane bezwzglednie pozostaja bezwzgledne. Przypiete `path`
-i `version` sa zawsze wzgledne do magazynu.
+wzgledem katalogu projektu (nie biezacego katalogu odczytu). Sciezka
+z linii polecen (`--output` w `project init`, `--geometry` w `project
+add`) jest jednak najpierw CZYTANA wzgledem biezacego katalogu, takze
+przy `--project KATALOG` z innego miejsca; dopiero potem zapisuje sie ja
+wzgledem projektu (poza drzewem projektu to w manifescie lancuch `../..`,
+a magazyn powstaje tam, gdzie wskazuje biezacy katalog): podawaj sciezki
+bezwzgledne albo uruchamiaj polecenie z katalogu projektu. Geometria to
+`.gpkg` albo `.shp`. Sciezki podane bezwzglednie pozostaja bezwzgledne.
+Przypiete `path` i `version` sa zawsze wzgledne do magazynu.
 
 | Sytuacja | Co zrobic |
 |---|---|
@@ -2958,10 +2985,11 @@ twardych (sekcja 4); `verify` nie wykrywa nadmiarowych kopii.
 
 Plik geometrii obszaru warto trzymac przy manifeście i podawac wzglednie:
 przenosi sie z projektem. Zmiana jego bajtow od chwili przypiecia
-blokuje zwykle odtworzenie; jawne `--upgrade`/`--force` moze przyjac
-zmieniony obszar. Pozostale komendy wymagaja istniejacego katalogu
-magazynu (brak zamontowanego udzialu nie spowoduje pobrania do
-pustego katalogu).
+blokuje zwykle odtworzenie brakujacych plikow; `status`, `verify` i `download`
+przy obecnych plikach jej nie widza (ostrzega `--check-updates`), a jawne
+`--upgrade`/`--force` moze przyjac zmieniony obszar. Pozostale komendy
+wymagaja istniejacego katalogu magazynu (brak zamontowanego udzialu nie
+spowoduje pobrania do pustego katalogu).
 
 ### 8.4 Biblioteka Python
 
@@ -3059,6 +3087,14 @@ Zasady wspolne dokumentow:
   **wynik** z czesciowa porazka (kod wyjscia 1: jednostki w `failed`, nieaktualne
   pozycje w `stale`, pozycja `check_failed`), a nie blad; blad to `kartograf-error/1`,
   wiec agent odroznia je po `schema`;
+- `ok` w `kartograf-project-check/1` zalezy od komendy: `project status` i
+  `project verify` daja `ok: false`, gdy zadanie nie jest pobrane
+  (`not_downloaded`) albo plik nie ma statusu `ok`; `project download
+  --check-updates` ocenia tylko swiezosc zrodla (`ok: false` = pozycja
+  `check_failed`), wiec projekt bez przypiec ma tam `ok: true` i kod 0, a
+  `not_downloaded` wymienia wszystkie zadania. Kompletnosc i cala
+  zawartosc projektu ocenia `status`/`verify` (idiom `project status -q ||
+  project download`);
 - w obrebie `/1` zmiany sa tylko addytywne (nowe klucze, nowe wartosci wyliczen):
   czytaj po kluczach i ignoruj nieznane; usuniecie klucza albo zmiana typu to `/2`;
 - biblioteka: kazdy dokument ma `to_dict()` i `to_json(indent=2)`; `to_json()` jest
@@ -3330,10 +3366,10 @@ znajomosci funkcji per produkt:
 
 | Funkcja | Rola |
 |---|---|
-| `parse_command(argv)` | linia polecenia (lista slow albo napis, takze z poczatkowym `kartograf`, tak jak ja pisze `format_command`) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to flagi uruchomienia (`output_dir`, `update`..., `workers`, `plan`, `json`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
+| `parse_command(argv)` | linia polecenia (lista slow albo napis, takze z poczatkowym `kartograf`, tak jak ja pisze `format_command`) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to pozostale flagi linii pod nazwami parametrow (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`, `quiet`, `json`, `summary`; nie ma klucza `update`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
 | `validate_command(command, options, output_dir=None)` | walidacja bez sieci i bez zapisu tymi samymi regulami co pobranie: `ValidationError` z `option`/`allowed` |
 | `format_command(command, options, run=None)` | kanoniczna linia `kartograf <grupa> <komenda> --flaga ...` (odwrotnosc `parse_command`) |
-| `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | wywoluje funkcje komendy (`download_data`, ...), wynik jak ta funkcja: `kartograf-download/1` |
+| `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | wywoluje funkcje komendy (`download_data`, ...), wynik jak ta funkcja: `kartograf-download/1`; tryb to `update="upgrade"` albo `"force"` (z `run` robi go wywolujacy: `upgrade`/`force` -> `update`, `check_updates` -> `check_command`) |
 | `check_command(command, options, output_dir=, cache=, on_notice=)` | `check_*` komendy: `kartograf-plan/1` (bez pobierania) |
 
 ```python
