@@ -2106,6 +2106,47 @@ STORE_OPTION_SCENARIOS = [
         None,
         "podaj kolekcje sciezek katalogow wersji",
     ),
+    _row(
+        kartograf.iter_store,
+        {"output_dir": _STORE, "partition": "."},
+        "partition",
+        None,
+        None,
+        "partition wymaga segment",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "partition": "../x",
+        },
+        "partition",
+        None,
+        None,
+        "Nieprawidlowa czesc segmentu",
+    ),
+    _row(
+        kartograf.iter_store,
+        {
+            "output_dir": _STORE,
+            "segment": "nmt/pl_1992_1m_evrf2007",
+            "units": ["N-34-130-D-d-2-4"],
+            "partition": ".",
+        },
+        None,
+        ("units", "partition"),
+        None,
+        "units albo partition",
+    ),
+    _row(
+        kartograf.list_partitions,
+        {"output_dir": _STORE, "segment": "nmt/pl_1992_1m_evrf2007", "target": 0},
+        "target",
+        None,
+        None,
+        "podaj dodatnia liczbe czesci",
+    ),
 ]
 
 

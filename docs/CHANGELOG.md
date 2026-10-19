@@ -832,6 +832,21 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   w `kartograf.__all__`; `StoreEntry` i `Sidecar` sa niehashowalne. Funkcje nie zapisuja do magazynu; cache i indeks
   konsumenta naleza do jego lokalnego katalogu. Schemat `kartograf-meta/1`
   i uklad dotychczasowych plikow nie zmieniaja sie.
+- Odczyt magazynu: rownolegle czesci jednego segmentu i szybszy skan
+  (ADR-045, ARCHITECTURE 3.3.1; pomiar Archiwisty v0.1 - najwiekszy segment
+  czytany jednym watkiem). `list_partitions(output_dir, segment, *,
+  target=32)` dzieli segment na rozlaczne czesci: `"."` (poziom segmentu:
+  jego problemy i pliki bezposrednio w nim i w `full_sheet/`),
+  `"<katalog>[/<katalog>...]"` (slot i wszystkie sloty pod nim - w sciezce
+  standardowej, `full_sheet/` i `versions/`) i `"<katalog>/."` (sam slot
+  katalogu dzielonego dalej); `iter_store(..., segment=..., partition=...)`
+  czyta jedna czesc, a suma czesci to dokladnie skan segmentu (bez
+  powtorzen; czesci w osobnych watkach). `skip_versions` przyjmuje tez
+  mapowanie `katalog wersji -> nazwy plikow danych`: taki katalog nie jest
+  nawet listowany, wywolujacy reczy za jego zawartosc (zbior dziala jak
+  dotad). Skan bez `pathlib` w petli i z tanszym typowaniem sidecara -
+  magazyn testowy Archiwisty (50 tys. slotow, SSD): skan przyrostowy 12,4
+  -> 6,3 s (z mapowaniem 5,2 s), pelny 20,3 -> 10,1 s, wynik bez zmian.
 
 - `Info:` przed wolnymi uslugami (test na zywo 2026-10-16): wycinek PL
   NMT/NMPT z kilku zapytan WCS podaje szacowany czas (`CUTOUT_SIZE`:

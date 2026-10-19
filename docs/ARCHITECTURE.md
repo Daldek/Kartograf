@@ -524,8 +524,9 @@ kartograf/
 │                        # cadastre, models3d, hydro, names, maps, geodesy, project, misc: parse, catalog,
 │                        # cache i komendy tylko-API); _collection.py = ksztalt grup kolekcji
 ├── store.py             # Odczyt magazynu bez zapisu (ADR-045, 3.3.1): list_segments,
-│                        # iter_store -> StoreEntry (units, skip_versions), read_sidecar
-│                        # -> Sidecar, describe_segment -> SegmentInfo, link_target
+│                        # list_partitions, iter_store -> StoreEntry (units, partition,
+│                        # skip_versions), read_sidecar -> Sidecar, describe_segment
+│                        # -> SegmentInfo, link_target
 ├── store_geometry.py    # file_footprint -> Footprint (bbox zadania, godlo, naglowek,
 │                        # indeks jednostek), pinned_transform (polityka obwiedni, per watek)
 ├── cache/metadata.py    # MetadataCache — SQLite WAL, thread-safe; tabele record_cache,
@@ -1461,8 +1462,8 @@ segmentu).
 Odczyt `data/` bez zapisu (takze z udzialu SMB zamontowanego tylko do
 odczytu) dla Archiwisty i innych czytnikow - jeden kontrakt `data/`
 z 3.2-3.3, bez prywatnego parsera po stronie konsumenta. W
-`kartograf.__all__`: `list_segments`, `iter_store`, `read_sidecar`,
-`describe_segment`, `link_target` (modul `kartograf/store.py`),
+`kartograf.__all__`: `list_segments`, `list_partitions`, `iter_store`,
+`read_sidecar`, `describe_segment`, `link_target` (modul `kartograf/store.py`),
 `file_footprint`, `pinned_transform` (`kartograf/store_geometry.py`), typy
 ponizej i `InvalidSidecarError` (atrybut `path`). Funkcje nie tworza
 katalogow, cache ani plikow w magazynie; indeks i cache trzyma
@@ -1480,8 +1481,10 @@ wszystkich prawdziwych katalogow drugiego poziomu (bez dowiazan
 symbolicznych i nazw zaczynajacych sie od `.`), takze nieznanych rejestrowi.
 Brak `output_dir` to `OSError`, nie pusty magazyn (odlaczony udzial).
 
-`iter_store(output_dir, *, segment=None, units=None, skip_versions=None)`
-to generator; bez `segment` przechodzi segmenty z `list_segments` po kolei.
+`iter_store(output_dir, *, segment=None, units=None, skip_versions=None,
+partition=None)` to generator; bez `segment` przechodzi segmenty
+z `list_segments` po kolei; `partition` (wymaga `segment`, wyklucza
+`units`) to jedna czesc z `list_partitions` (nizej).
 W segmencie kolejnosc: dowiazania, `full_sheet`, wersje, pozostalosci;
 wpis wychodzi, zanim powstanie listing kolejnych katalogow. `units`
 (wymaga `segment`) to nazwy jednostek, nie prefiksy: godlo PL-1992/2000,
@@ -1502,10 +1505,22 @@ te same funkcje co zapis (`SheetParser`, `path_parts`,
 zglasza problemow poziomu segmentu. `skip_versions` to znane wywolujacemu
 katalogi wersji, wzgledem `output_dir`, z `/` (np.
 `nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e`):
-ich pliki wracaja z `skipped=True` i `sidecar=None` z samego listingu
-(wersje sa niezmienne), brak sidecara w listingu nadal daje
-`missing_sidecar`. Bledne argumenty to `ValidationError` od razu przy
-wywolaniu (zadna sciezka nie wychodzi poza magazyn; segment bedacy
+ich pliki wracaja z `skipped=True` i `sidecar=None` bez czytania sidecarow
+(wersje sa niezmienne). Zbior katalogow: pliki z listingu katalogu wersji,
+brak sidecara w listingu nadal daje `missing_sidecar`. Mapowanie `katalog ->
+nazwy plikow danych`: katalog obecny w listingu rodzica nie jest listowany,
+wpisy (te same co z listingu, w kolejnosci nazw, filtrowane przez `units`)
+powstaja z podanych nazw - wywolujacy reczy za zawartosc katalogu; plik
+usuniety z niego albo dopisany pozniej (Kartograf dopisuje plik do
+istniejacego `<etykieta>_<sha8>` przy tej samej etykiecie i tym samym
+`sha8` innego pliku slotu) nie jest widoczny do skanu bez mapowania.
+Wywolujacy mapuje wiec tylko katalogi, ktorych wszystkie pliki byly przy
+ostatnim odczycie poprawnymi wersjami, i okresowo skanuje bez mapowania.
+Klucze mapowania nie sa sprawdzane (klucz spoza skanu niczego nie
+dopasowuje); nazwy sprawdza skan, gdy dojdzie do katalogu (nazwa ze
+sciezka, ukryta albo sidecara to `ValidationError` z iteratora).
+Bledne argumenty to `ValidationError` od razu przy wywolaniu (zadna
+sciezka nie wychodzi poza magazyn; segment bedacy
 dowiazaniem symbolicznym jest odrzucany, a takie katalogi w drzewie nie sa
 przechodzone). Blad I/O w trakcie (np. odlaczony udzial) to `OSError` -
 wywolujacy zachowuje stary indeks; plik lub katalog, ktory zniknal w
@@ -1514,6 +1529,28 @@ problem wpisu, bez wypierania pozostalych wersji slotu. Wersja jest wazna
 wg tej samej reguly co `download.versions.read_version` (`sha256`
 zaczyna sie od `<sha8>` katalogu, `extra.version` ma `label`
 i `label_source`).
+
+`list_partitions(output_dir, segment, *, target=32)` dzieli jeden segment
+na rozlaczne czesci do rownoleglych wywolan `iter_store(..., segment=...,
+partition=...)`; suma czesci to dokladnie `iter_store(..., segment=...)` -
+te same wpisy, zaden dwa razy (test wlasnosci na losowych magazynach).
+Klucze: `"."` (zawsze pierwszy) - poziom segmentu: `unknown_segment`,
+`legacy_campaigns`, `stale_incoming` i pliki bezposrednio w katalogu
+segmentu i w `full_sheet/` (hierarchia `""`); `"<katalog>[/<katalog>...]"`
+- slot tego katalogu hierarchii i wszystkie sloty pod nim, jednoczesnie
+w sciezce standardowej, `full_sheet/` i `versions/`; `"<katalog>/."` -
+tylko wlasny slot katalogu (jego pliki i wersje), gdy jego podkatalogi sa
+osobnymi czesciami. Podzial: katalogi pierwszego poziomu (suma trzech
+drzew) dzielone poziomami na podkatalogi, dopoki czesci jest mniej niz
+`target` i jest co dzielic; katalog bez podkatalogow zostaje cala czescia.
+Magazyn testowy Archiwisty (50 tys. slotow): `nmt/pl_1992_1m_evrf2007` -
+75 czesci (`M-33/<7>`, `M-34/<66>`, `bbox`), `laz/pl_1992_evrf2007` - 77,
+`orto/cz_sjtsk` - 715 (katalogi pierwszego poziomu), segmenty plaskie
+(`teryt`, `bbox`) - 2. Klucz sprawdza `iter_store` (skladowe bez `.`
+na poczatku, bez separatora i dysku), a sciezke czesci - `lstat` kazdej
+skladowej (dowiazanie symboliczne nie jest przechodzone). Segment
+nieistniejacy daje `[]`. Katalog dopisany po podziale trafia do kolejnego
+podzialu (jak katalog dopisany za miejscem pelnego skanu).
 
 Koszt na wpis (skan nigdy nie wola `link_target`):
 
@@ -1528,14 +1565,28 @@ Koszt na wpis (skan nigdy nie wola `link_target`):
 | `unknown_segment`, `legacy_campaigns` | 0 (z listingu segmentu) |
 | `stale_incoming` | listing `versions/.incoming` (tylko gdy jest w listingu) + `lstat` drzewa katalogow roboczych |
 | `iter_store(segment=...)` | `stat` `output_dir` + `lstat` katalogu produktu i segmentu |
-| `units` | na jednostke: `lstat` skladowych sciezki slotu (straz dowiazan symbolicznych, wynik wspolny dla jednostek wywolania) dla dowiazania, `full_sheet/` i `versions/` + listing tych katalogow i katalogow wersji; slot plaski (`teryt/`, `bbox/`, `country/`, `ku/`, strefa mesh) jest wspolny wielu jednostkom - jego katalog wersji i kazdy katalog wersji w nim listowany raz na wywolanie |
+| `list_partitions` | jak `iter_store(segment=...)` + listing segmentu, `full_sheet/` i `versions/` + najwyzej 3 listingi (po jednym w kazdym drzewie) na katalog sprawdzany przy podziale (na udziale SMB ok. 2-5 ms na listing; `nmt/pl_1992_1m_evrf2007`: 11 listingow) |
+| `partition` | jak `iter_store(segment=...)` + `lstat` skladowych klucza w kazdym z trzech drzew + listingi wylacznie poddrzewa czesci; `"."`: listing segmentu, `full_sheet/` i `versions/` |
+| `skip_versions` - mapowanie | znany katalog wersji: 0 listingow i 0 odczytow (bez mapowania: 1 listing) |
+| `units` | na jednostke: `lstat` skladowych sciezki slotu (straz dowiazan symbolicznych, wynik wspolny dla jednostek wywolania) dla dowiazania, `full_sheet/` i `versions/` + listing tych katalogow i katalogow wersji; slot plaski (`teryt/`, `bbox/`, `country/`, `ku/`, strefa mesh) jest wspolny wielu jednostkom - jego katalog wersji i kazdy katalog wersji w nim listowany raz na wywolanie (katalog z mapowania `skip_versions` - wcale) |
 
 Watki: dowolne wywolania `iter_store` moga isc rownolegle w osobnych
-watkach - rozne segmenty albo czesci `units` jednego segmentu (jednostki
-wspolne dla dwoch czesci daja tylko powtorzone wpisy). Skan tylko czyta i
-nie ma wspolnego stanu poza niezmiennym rejestrem i `functools.lru_cache`;
-jeden iterator nalezy do jednego watku. To samo dotyczy `read_sidecar`,
-`describe_segment`, `file_footprint` i `link_target`.
+watkach - rozne segmenty, czesci `list_partitions` jednego segmentu (tak
+dzieli prace Archiwista: najwiekszy segment nie czeka na jeden watek)
+albo czesci `units` jednego segmentu (jednostki wspolne dla dwoch czesci
+daja tylko powtorzone wpisy). Skan tylko czyta i nie ma wspolnego stanu
+poza niezmiennym rejestrem i `functools.lru_cache`; jeden iterator nalezy
+do jednego watku, a jedno mapowanie `skip_versions` moze sluzyc wielu
+wywolaniom naraz (skan go nie kopiuje ani nie zmienia). To samo dotyczy
+`read_sidecar`, `describe_segment`, `file_footprint` i `link_target`.
+
+Koszt CPU (magazyn testowy 50 tys. slotow, SSD, jeden watek, 131 111
+wpisow): skan przyrostowy (`skip_versions` = wszystkie wersje) 6,3 s,
+z mapowaniem 5,2 s, pelny 10,1 s (przed optymalizacja 12,4 s i 20,3 s).
+Petla skanu dziala na napisach (sciezki `Path` tylko w wynikowych
+`StoreEntry`), wersje dowiazania sprawdza ta sama regula co
+`link_target` bez `pathlib`, nazwy krotkie odrzuca bez wyrazenia
+regularnego, a typowanie sidecara liczy pola wyliczone leniwie.
 
 `read_sidecar(path)` przyjmuje plik danych albo sidecar i nie otwiera pliku
 danych: waliduje schemat (`InvalidSidecarError`: brak pliku, zly JSON, inny
