@@ -4,6 +4,7 @@ import json
 import sqlite3
 import struct
 import threading
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -438,6 +439,113 @@ def test_pinned_transform_is_built_once_per_thread(monkeypatch):
     worker.join()
     assert elsewhere[0] is not here
     assert elsewhere[0].description == here.description
+
+
+def test_footprints_and_transforms_are_safe_from_a_thread_pool(tmp_path, monkeypatch):
+    """Archiwista calls ``file_footprint`` and ``pinned_transform`` from a
+    thread pool with one shared ``cache`` dict: every thread gets the same
+    results as a sequential run and its own transform object."""
+    monkeypatch.setattr(store_geometry, "_LOCAL", threading.local())
+    tiff = _entry(tmp_path, "tile.tif")
+    with rasterio.open(
+        tiff.path,
+        "w",
+        driver="GTiff",
+        height=3,
+        width=2,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:2180",
+        transform=from_origin(500000, 300000, 10, 20),
+    ):
+        pass
+    entries = [
+        _entry(
+            tmp_path,
+            "18.9_50_19_50.1.tif",
+            request={"bbox": [18.9, 50.0, 19.0, 50.1], "bbox_crs": "EPSG:4326"},
+        ),
+        _entry(
+            tmp_path,
+            "N-34-130-D-d-2-4.asc",
+            hierarchy="N-34/130/D/d/2/4",
+            request={"sheet": "N-34-130-D-d-2-4"},
+        ),
+        _entry(
+            tmp_path,
+            "6.179.12.20.asc",
+            hierarchy="6/179/12/20",
+            crs="EPSG:2177",
+            request={"sheet": "6.179.12.20"},
+        ),
+        _entry(
+            tmp_path,
+            "302_5550.zip",
+            hierarchy="sheets",
+            country="CZ",
+            crs="EPSG:3045",
+            request={"sheet": "302_5550"},
+        ),
+        tiff,
+        _entry(tmp_path, "1465.zip", hierarchy="teryt", request={"teryt": "1465"}),
+    ]
+    cache = {("teryt", "1465"): BBox(630000, 480000, 660000, 500000, "EPSG:2180")}
+    # (src, dst, lon, lat) inside the area of each operation (PL, CZ)
+    pairs = [
+        (
+            "EPSG:4326",
+            "EPSG:2180",
+            np.linspace(14.2, 24.1, 50),
+            np.linspace(49, 54.8, 50),
+        ),
+        (
+            "EPSG:4326",
+            "EPSG:5514",
+            np.linspace(12.2, 18.8, 50),
+            np.linspace(48.6, 51, 50),
+        ),
+    ]
+
+    def run() -> tuple[list, list]:
+        footprints = [file_footprint(entry, cache=cache) for entry in entries]
+        points = [pinned_transform(s, d).transform(x, y) for s, d, x, y in pairs]
+        return footprints, points
+
+    expected: list = []
+    reference = threading.Thread(target=lambda: expected.append(run()))
+    reference.start()
+    reference.join()
+    footprints, points = expected[0]
+    assert [fp.source for fp in footprints] == [
+        "request",
+        "sheet",
+        "sheet",
+        "sheet",
+        "header",
+        "unit",
+    ]
+
+    workers = 8
+    start = threading.Barrier(workers)
+    objects: dict[int, object] = {}
+    lock = threading.Lock()
+
+    def job(_: int) -> tuple[list, list]:
+        start.wait()  # the first builds of every thread overlap
+        result = [run() for _ in range(5)]
+        with lock:
+            objects[threading.get_ident()] = pinned_transform("EPSG:4326", "EPSG:2180")
+        return result[-1]
+
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        results = list(pool.map(job, range(workers)))
+
+    for got_footprints, got_points in results:
+        assert got_footprints == footprints
+        for got, want in zip(got_points, points, strict=True):
+            np.testing.assert_array_equal(got, want)
+    assert len({id(obj) for obj in objects.values()}) == len(objects) == workers
+    assert set(cache) == {("teryt", "1465")}
 
 
 def test_unit_indexes_are_opt_in_and_cached_in_memory(tmp_path, monkeypatch):
