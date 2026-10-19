@@ -145,7 +145,18 @@ def year_range_label(min_year: int | None, max_year: int | None) -> str:
 def year_range_hints(
     conflicts: Mapping[str, Sequence[int]], min_year: int | None, max_year: int | None
 ) -> tuple[str, ...]:
-    """Suggest a one-sided bound that admits every conflicting sheet (6.2)."""
+    """Suggest a bound that admits every conflicting sheet (6.2).
+
+    A hint always changes what the call gave, never repeats a flag it
+    already has. A range (``--min-year L --max-year U``, ``L < U``) moves
+    the bound that is in the way to the nearest year all conflicting sheets
+    have: ``--min-year`` down when every sheet has an older year,
+    ``--max-year`` up when every sheet has a newer one; the text names the
+    resulting range. One bound moves the same way (``--min-year`` only down,
+    ``--max-year`` only up). One year (``--year Y``, ``L == U``) is
+    widened to a one-sided bound: ``--min-year Y`` (newer data) or
+    ``--max-year Y`` (older data), as the spec of U4 words it.
+    """
     if not conflicts:
         return ()
     newer = (
@@ -160,17 +171,21 @@ def year_range_hints(
     )
     hints: list[str] = []
     if newer and all(newer):
-        if min_year is not None:
+        upper = max(min(years) for years in newer)
+        if min_year is None:
+            hints.append(f"--max-year {upper} (rok {upper} i starsze)")
+        elif min_year == max_year:
             hints.append(f"--min-year {min_year} (rok {min_year} i nowsze)")
         else:
-            upper = max(min(years) for years in newer)
-            hints.append(f"--max-year {upper} (rok {upper} i starsze)")
+            hints.append(f"--max-year {upper} ({year_range_label(min_year, upper)})")
     if older and all(older):
-        if max_year is not None:
+        lower = min(max(years) for years in older)
+        if max_year is None:
+            hints.append(f"--min-year {lower} (rok {lower} i nowsze)")
+        elif min_year == max_year:
             hints.append(f"--max-year {max_year} (rok {max_year} i starsze)")
         else:
-            lower = min(max(years) for years in older)
-            hints.append(f"--min-year {lower} (rok {lower} i nowsze)")
+            hints.append(f"--min-year {lower} ({year_range_label(lower, max_year)})")
     return tuple(hints)
 
 
