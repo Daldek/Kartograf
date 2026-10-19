@@ -2377,14 +2377,23 @@ Szczegóły trybów: sekcja 4.3.
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
   sshfs/FUSE) kończy pobranie arkusza błędem. Na udziale SMB montowanym
   bez `serverino` (niestabilne numery i-węzłów) dowiązanie jest
-  potwierdzane sumą SHA-256 (jeden odczyt pliku przy każdym uruchomieniu;
-  koszt: sekcja 7).
+  potwierdzane treścią: rozmiar i suma SHA-256 pliku zgadzają się
+  z sidecarem wersji, na którą wskazuje sidecar dowiązania (jeden odczyt
+  pliku przy każdym uruchomieniu; koszt: sekcja 7). Liczba dowiązań nie
+  bierze w tym udziału: klient cifs zgłasza `st_nlink = 1` dla ścieżki,
+  którą właśnie otwarto (także do odczytu, przez Kartografa albo inny
+  program), przez kilka sekund, czasem dłużej. Dlatego dowiązanie nigdy
+  nie cofa się na starszy lot także tuż po odczycie pliku. Plik o treści
+  wersji jest tą wersją nawet jako niezależna kopia; pobranie arkusza
+  zamienia taką kopię z powrotem w dowiązanie tej samej wersji, gdy żadna
+  ze ścieżek nie zgłasza drugiej nazwy (np. po `rsync -a` bez `-H`).
 - **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` — bez zachowania
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
   zbiorach warto włączyć kompresję systemu plików.
   Na udziale SMB/cifs klient może przejściowo raportować błędną liczbę
-  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki.
+  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki
+  (po takim kopiowaniu pobranie arkusza przywraca dowiązanie, patrz wyżej).
   `project verify` potwierdza treść kopii, ale nie oszczędność miejsca:
   sprawdź jej zajętość; w razie potrzeby kopiuj po stronie serwera lub
   z hosta z lokalnym dostępem do systemu plików.
@@ -2740,11 +2749,13 @@ proxy).
 - Magazyn na udziale SMB/cifs bez `serverino` (sekcja 4): każde
   uruchomienie czyta cały plik dla każdego dowiązania (ścieżka standardowa
   i `full_sheet/`), także przy `lokalna wersja` (pomiar 2026-10-16: orto
-  PL 300 MB = ok. 5 s; magazyn setek arkuszy = minuty). Montuj udział
-  z `serverino` albo trzymaj magazyn na dysku lokalnym. Kartograf nie
-  skraca tego sprawdzenia: skrót bez sumy (liczba dowiązań, rozmiar, czas
-  modyfikacji) mógłby uznać dowiązanie do starszej wersji tego samego
-  rozmiaru za aktualne.
+  PL 300 MB = ok. 5 s; magazyn setek arkuszy = minuty); tak samo każde
+  wywołanie `link_target`. Montuj udział z `serverino` albo trzymaj magazyn
+  na dysku lokalnym. Kartograf nie skraca tego sprawdzenia: skrót bez sumy
+  (liczba dowiązań, rozmiar, czas modyfikacji) mógłby uznać dowiązanie do
+  starszej wersji tego samego rozmiaru za aktualne, a liczba dowiązań
+  zmienia się przejściowo po każdym odczycie pliku, także po odczycie
+  samego sprawdzenia.
 - SoilGrids zwraca w obszarach maskowanych **0**, nie `-32768` z opisu
   ISRIC: WCS z `OUTPUTCRS=EPSG:4326` oddaje GeoTIFF bez tagu NoData
   (pomiar 2026-10-16: Piastów/Ursus, 85 ze 104 pikseli = 0). Kartograf
