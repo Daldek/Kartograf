@@ -120,11 +120,14 @@
 >    agentow: `docs/research/2026-10-18-agent-interface-e2e/raport.md`).
 >    2026-10-19 scalone do `develop`: odczyt magazynu dla Archiwisty
 >    (ADR-045 z erratami 1-2, KA-1..KA-6, KA-8; zweryfikowane zmiany agenta
->    Archiwisty) i `feat/agent-interface` (ADR-046, `py.typed` z pelnymi
->    typami). Brama na `develop` (`scripts/gate.sh`): 7146 passed,
->    18 deselected, ruff/format/mypy czyste. Lokalny `develop` ma 302
->    commity ponad `origin/develop`. CZEKA NA ZGODE UZYTKOWNIKA: merge do
->    `main`, tag `v0.8.0` i push (`develop`, `main`, tag); przed tagiem
+>    Archiwisty), `feat/agent-interface` (ADR-046, `py.typed` z pelnymi
+>    typami), KD-1/KD-2 (ADR-047) oraz audyt dokumentacji i poprawki testu
+>    E2E przed tagiem (`docs/research/2026-10-19-e2e-0.8.0/raport.md`: P1 0,
+>    wszystkie P2 naprawione, otwarte decyzje w sekcji "Otwarte" raportu).
+>    Brama na `develop` (`scripts/gate.sh`): 7419 passed, 18 deselected,
+>    ruff/format/mypy czyste. CZEKA NA ZGODE UZYTKOWNIKA: tag wersji
+>    deweloperskiej `v0.8.0` (potem testy z Archiwista i Retmanem), merge do
+>    `main` i push (`develop`, `main`, tag); przed tagiem
 >    przeglad `git log origin/develop..develop` i `scripts/gate.sh` (CLAUDE.md,
 >    "Agenci z innych repozytoriow"). Po wydaniu: poczatek kolejnego cyklu
 >    (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased` w CHANGELOG, jak
