@@ -716,6 +716,53 @@ def test_example_for_unknown_command_or_option():
     assert example_for("elevation download", None) == (None, first)
 
 
+def test_example_for_is_an_example_of_the_product_of_the_call():
+    # E2E 0.8.0 D P3-7: the first example of the command, whatever the product
+    lines = _lines("models3d download")
+    trees = example_for("models3d download", "bbox", {"product": "trees"})[1]
+    mesh = example_for("models3d download", "bbox", {"product": "mesh"})[1]
+    # the example of another product shows the argument but is not the product's
+    year = example_for("landcover download", "year", {"product": "bdot10k"})[1]
+    other = example_for("landcover download", "year", {"product": "bdoo"})[1]
+
+    assert trees == next(line for line in lines if "--product trees" in line)
+    assert mesh == next(line for line in lines if "--product mesh" in line)
+    assert year is not None and "--product bdot10k" in year and "--year" not in year
+    assert other is not None and "--product bdoo" in other and "--year" in other
+    # a product none of the examples shows has no example: another one misleads
+    assert example_for("elevation download", "resolution", {"product": "nmpt"}) == (
+        "--resolution",
+        None,
+    )
+    # a call without a product, or a command whose examples have none: as before
+    assert example_for("models3d download", "bbox", {}) == (
+        "--bbox",
+        example_for("models3d download", "bbox")[1],
+    )
+    assert example_for("parse", "sheet", {"product": "x"}) == (
+        None,
+        "kartograf parse N-34-130-D-d-2-4",
+    )
+
+
+def test_example_for_takes_the_country_and_the_selection_of_the_call_next():
+    # E2E 0.8.0 D P3-7: --country auto --level gmina got an example with --country pl
+    auto = example_for(
+        "boundaries download", "level", {"product": "admin", "country": "auto"}
+    )[1]
+    cz = example_for(
+        "boundaries download", "level", {"product": "admin", "country": "cz"}
+    )[1]
+    by_unit = example_for(
+        "boundaries download", "product", {"product": "admin", "teryt": "12"}
+    )[1]
+
+    assert auto is not None and "--country auto" in auto and "--level pl=" in auto
+    assert cz is not None and "--country cz" in cz and "--level obec" in cz
+    # the argument of the error decides first, the selection of the call then
+    assert by_unit is not None and "--teryt 12" in by_unit
+
+
 def test_example_for_positional_api_only_and_example_less_commands():
     # a positional argument has no flag; its example shows the value
     assert example_for("parse", "sheet") == (None, "kartograf parse N-34-130-D-d-2-4")

@@ -628,7 +628,9 @@ def create_server(
         except Exception as exc:
             if not isinstance(exc, KartografError | OSError):
                 logger.exception("Narzedzie %s: blad programu", spec.name)
-            return _result(error_report(exc, command=command), failed=True)
+            return _result(
+                error_report(exc, command=command, given=arguments), failed=True
+            )
 
     return Server(
         "kartograf",

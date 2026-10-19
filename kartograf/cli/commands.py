@@ -107,19 +107,25 @@ def _stderr_lines(as_json: bool) -> None:
     handler.as_json = as_json
 
 
-def _fail(error: BaseException, command: str | None, as_json: bool) -> int:
+def _fail(
+    error: BaseException,
+    command: str | None,
+    as_json: bool,
+    given: dict[str, object] | None = None,
+) -> int:
     """Report ``error`` in the mode of the command line; the exit code of the
     error table (spec 6.2): ``exit_code`` of a ``KartografError``, 130 for Ctrl-C,
     143 for SIGTERM, 1 for every other exception.
 
-    ``--json``: the document ``kartograf-error/1`` on stdout. Text: one
+    ``--json``: the document ``kartograf-error/1`` on stdout (``given``: the
+    arguments the line gave, for the example of its hint). Text: one
     ``Error:`` line on stderr - the message of a ``KartografError`` (its hint is
     not printed twice: the texts of ``hints`` are in the message), with the
     remedy of an unavailable coordinate transformation; any other exception
     with its class and the way to a traceback.
     """
     if as_json:
-        return emit_document(error_report(error, command=command))
+        return emit_document(error_report(error, command=command, given=given))
     if isinstance(error, KeyboardInterrupt):
         # versions are committed atomically from .incoming/ staging (a stale
         # leftover is removed by a later run): no half-written file is kept
@@ -159,6 +165,7 @@ def main(args: list[str] | None = None) -> int:
     if as_json:
         use_utf8_stdout()
     command: str | None = None
+    given: dict[str, object] | None = None
     with sigterm_interrupts():
         try:
             parser = create_parser(usage_errors=as_json)
@@ -168,13 +175,14 @@ def main(args: list[str] | None = None) -> int:
             # argparse raises SystemExit for --help/--version - let it pass unchanged
             parsed_args = parse_command_line(parser, argv)
             command = getattr(parsed_args, "_command_id", None)
+            given = dict(vars(parsed_args))
             return _dispatch(parser, parsed_args)
         except KeyboardInterrupt as e:
             return _fail(e, command, as_json)
         except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
             if os.environ.get("KARTOGRAF_DEBUG"):
                 raise
-            return _fail(e, command, as_json)
+            return _fail(e, command, as_json, given)
 
 
 if __name__ == "__main__":

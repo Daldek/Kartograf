@@ -30,7 +30,9 @@ def _content(products: Products) -> tuple[Param, ...]:
             "horizontal_crs",
             "str",
             "Uklad pliku krajowego Geonames (CZ): EPSG:5514 albo EPSG:3045; "
-            "wymagany przy --whole-country --country cz. Obszar: uklad natywny uslugi",
+            "wymagany przy --whole-country --country cz. Obszar: tylko uklad "
+            "natywny uslugi (PL: OGC:CRS84, CZ: EPSG:5514) - rowny mu jest "
+            "przyjmowany, inny to Error",
             metavar="EPSG:KOD",
             task=True,
         ),
@@ -65,6 +67,15 @@ COMMANDS = collection_commands(
                 "horizontal_crs": "EPSG:5514",
             },
             title="Geonames CZ: plik krajowy w S-JTSK",
+        ),
+        Example(
+            {
+                "product": "world",
+                "country": "pl",
+                "bbox": [-74.02, 40.69, -73.92, 40.79],
+                "bbox_crs": "EPSG:4326",
+            },
+            title="Polskie nazwy swiata dla prostokata (Nowy Jork)",
         ),
     ),
     area_result="obiekty geograficzne w GeoPackage (PL: OGC:CRS84; CZ: EPSG:5514)",
