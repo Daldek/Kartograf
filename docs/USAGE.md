@@ -319,6 +319,15 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 - PL bez `--cutout` zapisuje **listę arkuszy** w hierarchii godeł;
   arkusz bez danych GUGiK jest pomijany z `Warning:` (kod 0, gdy pobrano
   choć jeden arkusz).
+- **Punkt albo linia w `--geometry` (od 0.8.0):** obwiednia o zerowej
+  powierzchni (punkt, linia równoległa do osi) wybiera arkusze, jednostki
+  i piksele, w których leży — arkusze NMT/orto, `boundaries`, `soil
+  download`, `landcover` BDOT10k przyjmują ją (`--bbox x,y,x,y` nie, p.
+  niżej). Wycinek (`--cutout`, PL i CZ), kafle LAZ, `soil hsg`
+  i `elevation availability` pracują na obszarze i kończą się `Error:
+  --geometry: obwiednia obiektow ma zerowa powierzchnie ...` (kod 2,
+  `details.option=geometry`) przed siecią, także w `project add`; podaj
+  wielobok albo `--bbox` o dodatniej powierzchni.
 - `--country` jest wymagane z `--bbox`/`--geometry` (`pl`, `cz` albo
   `auto`; z `--sheet` kraj wynika z godła). Pod `auto` kraje są
   rozpoznawane po **prostokątnych** obwiedniach, nie po granicy: obszar
@@ -1149,7 +1158,9 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
   przed siecią — ta sama kontrola co w `elevation download`; dotyczy liczb
   w innym układzie niż `--bbox-crs` i zamienionych osi. `--bbox` o zerowej
   powierzchni (`min == max`) albo ze współrzędnymi spoza zakresu EPSG:4326
-  (długość ±180, szerokość ±90) to `Error: Nieprawidlowy bbox: ...` (kod 2).
+  (długość ±180, szerokość ±90) to `Error: Nieprawidlowy bbox: ...` (kod 2);
+  `--geometry` o zerowej powierzchni (sam punkt) to `Error: --geometry: ...`
+  z `details.option=geometry` (sekcja 1.2).
 - **Obszar bez lądu:** `area_m2` to część obszaru w granicach PL (z morzem
   terytorialnym; część poza granicą ma `0,00 ha`), `land_m2` — jej ląd (PRG
   `A00` bez `W02`/`W03`). Obszar całkiem na morzu (`land_m2 = 0`) nie ma lądu
@@ -2723,6 +2734,11 @@ print(report.stale, report.files.get(godlo, ()))
   (cm3/100cm3 = / 10), ocd hg/m3 (kg/m3 = / 10), ocs t/ha (kg/m2 = / 10);
   statystyka `uncertainty` to iloraz 10 x (Q0.95 - Q0.05) / Q0.5 (/ 10 = iloraz).
   Okno mniejsze niż piksel (250 m) jest rozszerzane do jednego piksela.
+  Wydanie (`extra.edition`) pochodzi z GetCapabilities mapy właściwości; mapa
+  `ocd` nie podaje wydania w tytule, więc jej wydanie to wydanie mapy `clay`
+  i sidecar `ocd` mówi to maszynowo: `extra.edition.source_property` =
+  `"clay"` (`id` = wydanie, `title` i `url` to mapy `clay`); w sidecarach
+  pozostałych właściwości tego pola nie ma (własna mapa).
 - HSG (`kartograf soil hsg`, `calculate_hsg(output_dir=...)`) bierze
   `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
   (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)

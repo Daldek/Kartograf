@@ -1669,10 +1669,13 @@ obrysu kraju. Obrys jednostki z `cache` (`(rodzaj, kod) -> BBox`, pamiec
 wywolujacego) jest uzywany takze bez sieci; zapytanie do indeksu tylko przy
 `network=True`. Wpis bez `sidecar` (np. `skipped`) najpierw czyta sidecar.
 Arkusz SM5 albo jednostka nieznane indeksowi nie maja obrysu (`None`, nie
-blad). Wyjatki: `TransformUnavailableError`/`TransformError` (brak
-bezpiecznej operacji CRS albo obwiednia poza obszarem operacji),
-`DownloadError` (indeks niedostepny) i `ParseError` (cecha KU bez
-geometrii) - dwa ostatnie tylko przy `network=True`. Zapytanie PRG
+blad). Zrodlo, ktorego obwiedni nie da sie bezpiecznie przeliczyc na WGS84
+(`TransformError`: brak operacji w polityce albo obwiednia poza obszarem
+operacji), jest pomijane i decyduje nastepne (pierwsze WIARYGODNE zrodlo);
+bez zadnego wynik to `None`. `OGC:CRS84` (PRNG, granice specjalne PRG) i
+EPSG:4326 to ta sama dlugosc/szerokosc: obwiednia to te same liczby bez
+operacji. Wyjatki: `DownloadError` (indeks niedostepny) i `ParseError`
+(cecha KU bez geometrii) - tylko przy `network=True`. Zapytanie PRG
 przedstawia sie jak reszta zapytan GUGiK (`make_gugik_session`).
 
 `StoreEntry` i `Sidecar` sa niehashowalne (pola slownikowe; `__hash__ =
@@ -1681,7 +1684,8 @@ Naglowek rastra GDAL czyta bez listowania katalogu
 (`GDAL_DISABLE_READDIR_ON_OPEN=TRUE`). Obwiednie liczy densyfikowanymi
 krawedziami (`transform_bbox`) przez `pinned_transform`, nigdy przez
 domyslny `Transformer.from_crs`; brak bezpiecznej operacji to
-`TransformUnavailableError`.
+`TransformUnavailableError` z `pinned_transform` (dla pary rownej z
+dokladnoscia do kolejnosci osi CRS geograficznego operacja jest dokladna).
 
 `link_target(path)` sprawdza, ze `extra.link_target` wskazuje wersje
 slotu tego dowiazania (ta sama regula co `version_path` skanu), a nastepnie
@@ -2071,8 +2075,10 @@ Lista `campaigns_cache` (TTL 7 dni, bez `scanned_from`) sluzy rowniez
 `record_cache`. `GugikProvider.available_years(sheet)` zwraca rosnace
 lata z pelnej listy. Arkusz bez danych GUGiK = `NoCoverageError` i
 pominiecie R5, a z danymi tylko poza przedzialem = `YearRangeError`
-(lista lat do 20 arkuszy, podpowiedz tylko gdy jedna jednostronna
-granica obejmuje wszystkie konflikty), zero pobran dla CALEGO zadania.
+(lista lat do 20 arkuszy, podpowiedz zmienia granice, ktora blokuje: przy
+przedziale `--min-year` w dol albo `--max-year` w gore do najblizszego
+roku, ktory ma kazdy konfliktowy arkusz; `--year` daje flagi jednostronne),
+zero pobran dla CALEGO zadania.
 Awaria skorowidza w fazie sprawdzania przerywa zadanie przed pobraniem,
 chyba ze w trybie domyslnym (D14) KAZDY arkusz zadania ma lokalna wersje
 z rocznikiem w zakresie (`extra.campaign.date[:4]`) — wtedy arkusze
@@ -2968,7 +2974,7 @@ Sygnal per kanal (`AccessChannel.update_signal`):
 
 | Zrodlo / kanal | Sygnal | Etykieta wersji | Segment |
 |---|---|---|---|
-| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`); mapa `ocd` nie podaje wydania w tytule (stan 2026-10-19), wiec jej wydanie to wydanie mapy `clay` (`extra.edition.url`/`title` wskazuja ja) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
+| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`); mapa `ocd` nie podaje wydania w tytule (stan 2026-10-19), wiec jej wydanie to wydanie mapy `clay` (`extra.edition.url`/`title` wskazuja ja, a `extra.edition.source_property` = `clay` mowi to maszynowo) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
 | CORINE CLMS (`uses_clms(year)`: token i rok w `CLMS_YEARS`) | `metadata`: `CorineProvider.edition(year)` — `characteristics_release_major_version` z `@search?UID=<uid>&fullobjects=1` (bez tokenu) | wydanie (`V2020_20u1`) | `landcover/eu_corine_<rok>` |
 | CORINE podglad WMS (bez credentials; 1990 zawsze) | `none` | data pobrania | `landcover/eu_corine_<rok>_preview` (`.png`) |
 | BDOT10k paczka powiatu | `none` | data pobrania | `landcover/pl_bdot10k_gpkg[_<warstwy>]`, `_shp`, `_gpkg_zip` |
@@ -3574,8 +3580,10 @@ po 0,2-90 s, ok. 3,5 s na GB paczek drzew 3D).
 wiecej niz `VOLUME_BYTES` = 10 GB, konczy sie `ValidationError` PRZED
 pierwszym transferem (`run_request` -> `_within_volume`, jedno miejsce dla
 kolekcji, `LandCoverManager` i NMT 100 m): liczba plikow, rozmiar (suma
-`HEAD`/`length` feedu ATOM; ponad 100 plikow - szacunek ze sredniej
-`VOLUME_SAMPLE` = 5 plikow rozlozonych rownomiernie) i podpowiedz (zawez
+`HEAD`/`length` feedu ATOM; do 100 plikow kazdy plik jest mierzony, wiec
+limit 10 GB jest dokladny, powyzej 100 o odmowie decyduje liczba, a rozmiar
+to tylko orientacyjna srednia `VOLUME_SAMPLE` = 5 plikow rozlozonych
+rownomiernie) i podpowiedz (zawez
 obszar, wybierz jednostke `--teryt`/`--ku`, wykonaj plan z czescia
 pozycji). Liczone sa pliki, ktore zadanie przesloloby: bez lokalnej
 wersji, z `update="force"` wszystkie, z `--upgrade --plan` pozycje planu;
