@@ -11,6 +11,7 @@ come from the ``KladyMapovychListu`` index (layer 24 SM5, layer 26 TM33).
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -153,7 +154,7 @@ class CuzkLazProvider(BaseProvider):
             )
         return self._endpoint.format(sheet=sheet)
 
-    def file_signal(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
+    def file_signal(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> dict[str, Any]:
         """HTTP signal of the sheet's ZIP (one ``HEAD``, nothing downloaded)."""
         return head_signal(self._sessions.get(), self.file_url(sheet), timeout=timeout)
 

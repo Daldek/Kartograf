@@ -53,6 +53,7 @@ from dataclasses import asdict, dataclass, field, replace
 from decimal import Decimal
 from email.utils import parsedate_to_datetime
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 from rasterio.features import rasterize
@@ -257,7 +258,7 @@ class AvailabilityReport(Document):
     SCHEMA = AVAILABILITY_SCHEMA
     JSON_KEYS = ("request", "checked_at", "areas", "combinations", "notices", "ok")
 
-    request: dict
+    request: dict[str, Any]
     checked_at: str
     areas: tuple[AvailabilityArea, ...]
     combinations: tuple[AvailabilityCombination, ...]

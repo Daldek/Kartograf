@@ -26,6 +26,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -463,7 +464,7 @@ def download_cz_orto_sheet(
     output_dir: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
     on_download: Callable[[], None] | None = None,

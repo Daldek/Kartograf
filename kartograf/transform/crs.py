@@ -19,13 +19,18 @@ and providers/soilgrids.py is deferred (stage 0 spec, section "Out of scope").
 """
 
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, overload
 
 import numpy as np
+import numpy.typing as npt
 from pyproj import CRS, network
 from pyproj.transformer import TransformerGroup
 
 from kartograf.exceptions import KartografError
+
+# Coordinate arrays accepted by ``PinnedTransform.transform`` (any float dtype;
+# pyproj returns float64).
+_FloatArray = npt.NDArray[np.floating[Any]]
 
 
 class TransformError(KartografError):
@@ -92,7 +97,30 @@ class PinnedTransform:
     src_crs: str | None = None
     dst_crs: str | None = None
 
-    def transform(self, x, y, z=None) -> tuple:
+    @overload
+    def transform(self, x: float, y: float, z: None = None) -> tuple[float, float]: ...
+
+    @overload
+    def transform(self, x: float, y: float, z: float) -> tuple[float, float, float]: ...
+
+    @overload
+    def transform(
+        self, x: _FloatArray, y: _FloatArray, z: None = None
+    ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]: ...
+
+    @overload
+    def transform(
+        self, x: _FloatArray, y: _FloatArray, z: _FloatArray
+    ) -> tuple[
+        npt.NDArray[np.float64], npt.NDArray[np.float64], npt.NDArray[np.float64]
+    ]: ...
+
+    def transform(
+        self,
+        x: float | _FloatArray,
+        y: float | _FloatArray,
+        z: float | _FloatArray | None = None,
+    ) -> tuple[Any, ...]:
         """Transform a point or numpy arrays; an inf/NaN result => TransformError."""
         if z is None:
             result = self._transformer.transform(x, y)

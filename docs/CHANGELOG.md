@@ -801,7 +801,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `mcp`.
 
 - Pliki dla agentow (ADR-046): `kartograf/py.typed` (PEP 561, `Typing :: Typed`;
-  `mypy` konsumenta widzi typy biblioteki), `llms.txt` (spis dla agentow, format
+  `mypy` konsumenta widzi typy biblioteki; cale publiczne API (`kartograf.__all__`)
+  ma pelne, precyzyjne adnotacje - `PinnedTransform.transform` ma przeciazenia
+  (skalary i tablice numpy), `cache` to `MetadataCache | None`, slowniki to
+  `dict[str, Any]`, a `CampaignRef.from_record` przyjmuje protokol
+  `IndexRecord`; sprawdza to `tests/test_typing_consumer.py`: `mypy --strict`
+  na module konsumenta oraz przeglad `inspect`), `llms.txt` (spis dla agentow, format
   llmstxt.org), `scripts/gate.sh` (jedna komenda bramy: ruff check, ruff format
   --check, mypy, pytest offline; dziala tez z worktree), `python -m kartograf`
   oraz regula dla agentow z innych repozytoriow w `CLAUDE.md` (galaz od `develop`,

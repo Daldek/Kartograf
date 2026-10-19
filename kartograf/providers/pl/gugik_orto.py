@@ -643,7 +643,7 @@ class GugikOrtoProvider(GugikImageProvider):
     def __init__(
         self,
         session: requests.Session | None = None,
-        cache=None,
+        cache: MetadataCache | None = None,
         *,
         color: str,
         coverage: OrtoCoverage | None = None,

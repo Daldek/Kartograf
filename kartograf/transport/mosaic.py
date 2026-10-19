@@ -11,6 +11,7 @@ from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rasterio
@@ -155,7 +156,7 @@ def mosaic_and_crop(
     output_path: Path,
     *,
     nodata: float | None = None,
-    dst_kwds: dict | None = None,
+    dst_kwds: dict[str, Any] | None = None,
     dtype: str | None = None,
 ) -> Path:
     """Stitch the input rasters and crop to bbox; return output_path.

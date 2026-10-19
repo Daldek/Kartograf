@@ -18,7 +18,7 @@ import json
 from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Literal, cast, get_args
+from typing import Any, Literal, cast, get_args
 
 from kartograf import _clock
 from kartograf._version import build_version
@@ -66,7 +66,7 @@ class PlanItem:
     local_label: str | None
     local_sha256: str | None
     available_label: str | None
-    available_signal: dict | None
+    available_signal: dict[str, Any] | None
     status: ItemStatus
     error: str | None = None
 
