@@ -2919,7 +2919,7 @@ Sygnal per kanal (`AccessChannel.update_signal`):
 
 | Zrodlo / kanal | Sygnal | Etykieta wersji | Segment |
 |---|---|---|---|
-| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
+| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`); mapa `ocd` nie podaje wydania w tytule (stan 2026-10-19), wiec jej wydanie to wydanie mapy `clay` (`extra.edition.url`/`title` wskazuja ja) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
 | CORINE CLMS (`uses_clms(year)`: token i rok w `CLMS_YEARS`) | `metadata`: `CorineProvider.edition(year)` — `characteristics_release_major_version` z `@search?UID=<uid>&fullobjects=1` (bez tokenu) | wydanie (`V2020_20u1`) | `landcover/eu_corine_<rok>` |
 | CORINE podglad WMS (bez credentials; 1990 zawsze) | `none` | data pobrania | `landcover/eu_corine_<rok>_preview` (`.png`) |
 | BDOT10k paczka powiatu | `none` | data pobrania | `landcover/pl_bdot10k_gpkg[_<warstwy>]`, `_shp`, `_gpkg_zip` |
@@ -2952,7 +2952,18 @@ wyboru (`teryt` / `bbox`+`bbox_crs` / `sheet` kanoniczne); `nodata` GeoTIFF
 czytane z pliku (`null`, gdy brak tagu). Sidecar wersji SoilGrids/CORINE CLMS
 ma `extra.edition` (`id`, `url`, `title` / `dataset_uid`). Podglad
 CORINE: `horizontal_crs` uslugi WMS (EPSG:3857, 1990 EPSG:4326),
-`extra.fallback = "wms_png"`, `extra.note = "podglad WMS, nie dane"`.
+`extra.fallback = "wms_png"`, `extra.note = "podglad WMS, nie dane"`. Warstwe
+rastrowa uslugi EEA danego roku (`Corine Land Cover <rok> raster`; nazwa to `12`
+tylko w CLC2018, w innych latach `Corine_Land_Cover_<rok>_raster<numer>`)
+`CorineProvider._eea_raster_layer` czyta z GetCapabilities raz na providera;
+obraz podgladu w calosci przezroczysty (alfa 0: brak danych CLC roku dla obszaru)
+to `NoCoverageError` PO pobraniu i PRZED zapisem wersji (`kind: no_coverage`, jak
+true orto). Sidecar SoilGrids ma `extra.units` = `{mapped, conventional,
+divisor}` (jednostki ISRIC: wartosc w pliku / `divisor` = jednostka
+konwencjonalna; `uncertainty` to iloraz `10 x (Q0.95 - Q0.05) / Q0.5`),
+a raster samych zer (poza `cfvo`) `extra.all_nodata` i `Warning`
+`all_nodata`; `ocs` istnieje tylko dla `0-30cm` (`SoilGridsProvider.check_layer`),
+okno mniejsze niz piksel jest rozszerzane do jednego piksela (250 m).
 
 **ZABAGED (CZ, ADR-042 D15, plan D).** `LandCoverManager(output_dir,
 "zabaged")` nie ma klasy providera (`COLLECTION_SOURCES`): opcje sprawdza
@@ -3032,15 +3043,21 @@ plikow, `Error: <TERYT>: ...` dla porazek i konczy kodem 1 przy
 `download_by_sheet` (plik poza magazynem) pobieraja JEDEN powiat
 (`_single_teryt`): obszar kilku powiatow to `ValidationError` z lista
 kodow i podpowiedzia `download_landcover`. Provider stosuje swoj limit
-czasu pobrania i zapytania PRG, nie jawny `timeout` komendy. `layers=`
-(kody 4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
-wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
-`DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
+czasu pobrania i zapytania PRG, nie jawny `timeout` komendy. Obszar wypisuje
+`Info` `unit_list` (powiaty z PRG) i podlega limitowi kolekcji
+(`download.collections.within_volume`: > 100 pakietow do pobrania albo > 10 GB
+wg `HEAD` = `ValidationError` przed pierwszym transferem; takze archiwum
+`year`). `layers=` (kody klas z `BDOT10K_CLASSES`: 58 klas rozporzadzenia 2021;
+tylko GPKG) zostawia w scalonym GPKG wylacznie pliki `__OT_<kod>_*` pakietu;
+nieznany kod i pusty kod to `ValidationError` przed siecia, klasa bez pliku
+w paczce powiatu (brak jej obiektow) to `Info` `classes_absent` (jak BDOO;
+`Bdot10kPackage.classes`/`absent`, `extra.source.classes`), a brak wszystkich
+wybranych klas to `NoCoverageError` powiatu; plik z filtrem
 nosi token warstw w segmencie, bo nie jest juz pelnym pakietem. Scalanie
 pakietu (`_merge_gpkg_files`) konczy sie `DownloadError`, gdy nazwa
 tabeli powtarza sie w dwoch plikach pakietu (dotad druga kopia byla po
-cichu pomijana); w prawdziwej paczce (63 pliki `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`,
-po jednej tabeli) duplikatow nie ma.
+cichu pomijana); w prawdziwej paczce (po jednej tabeli na klase i typ
+geometrii, `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`) duplikatow nie ma.
 
 BDOT10k GPKG: archiwum ZIP z GUGiK jest rozpakowywane, a warstwy scalane
 w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
