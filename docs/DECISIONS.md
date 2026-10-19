@@ -62,12 +62,13 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) | Jawny tryb wycinka i nazwy ukladow (--cutout, --horizontal-crs, --sheet-system) | 2026-10-13 | Przyjeta — uzupelniona przez [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (nazwy flag w grupach); czesciowo zastepuje [ADR-027](#adr-027---target-crs-dla-pl--scalony-wycinek-bbox-mozaika--pinned-warp) (wlaczanie wycinka PL flaga ukladu, nazwa `--target-crs`) i [ADR-023](#adr-023-silnik-cuzk-polityka-układów-cz-i-evrf20075621-etap-1) (obszar CZ zawsze wycinkiem, bez flagi trybu); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (nazwy CLI = API) |
 | [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) | Grupy komend CLI wg typu danych | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (komenda danych ustawia `_task` dla `project add`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`), [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (grupy `names`, `maps`, `geodesy`) i [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (deklaracje komend w katalogu, parser CLI budowany z katalogu); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1: `landcover --source`, D5: funkcje zamiast metod); uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (CLI tylko tlumaczy; jedna komenda = jedna funkcja biblioteki) i [ADR-038](#adr-038-jawny-tryb-wycinka-i-nazwy-ukladow---cutout---horizontal-crs---sheet-system) (nazwy flag); bez aliasow usunietych komend (zasada jak errata [ADR-031](#adr-031-jezyk-identyfikatorow--angielski-sidecar-od-070-apicli-do-v100)) |
 | [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) | Manifest projektu i przypiete wersje | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (pozycje komend kolekcji) i [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (nazwy i rodzaje opcji komend danych z katalogu); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D2: nazwa `project_status`); uzupelnia [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (komenda danych ustawia `_task` dla `project add`) |
-| [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - zamyka Ograniczenia, errata 4); errata 1-3: zakonczenie planu A, warianty CZ (plan B), zakonczenie planu B |
+| [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) | Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci | 2026-10-15 | Przyjeta — uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - zamyka Ograniczenia, errata 4) i [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1-3: zakonczenie planu A, warianty CZ (plan B), zakonczenie planu B |
 | [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy; D6: jawny timeout wywolania kolekcji); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto); errata 6: wycinek obrazu w calosci 0,0,0 = `NoCoverageError` bez wersji (test na zywo 0.8.0) |
 | [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5) |
 | [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`); errata 1: argumenty tylko nazwane wszystkich funkcji pobrania i sprawdzenia (test na zywo 0.8.0) |
 | [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta — uzupelniona przez [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (narzedzia MCP odczytu magazynu; errata 1); errata 2: czesci segmentu (`list_partitions`, `partition`) i mapowanie `skip_versions` bez listingu znanych katalogow wersji (luzuje widocznosc zmian w nich) |
 | [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) | Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP | 2026-10-18 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (deklaracje komend w katalogu), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (opcje komend danych z katalogu) i [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) (narzedzia MCP odczytu magazynu) |
+| [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) | Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2) | 2026-10-19 | Przyjeta; uzupelnia [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1: `AvailabilityRecord.full_sheet`, ograniczenie LAZ i wyjatek CZ w dokumentacji pola |
 
 ---
 
@@ -3021,7 +3022,7 @@ kolejnosc deklaracji (`country` zaraz po `product`).
 ## ADR-041: Rejestr wariantow produktu, skorowidz WFS NMT/NMPT i raport dostepnosci
 
 **Data:** 2026-10-15
-**Status:** Przyjeta — uzupelniona przez ADR-043 (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - zamyka Ograniczenia, errata 4); errata 1-3: zakonczenie planu A, warianty CZ (plan B), zakonczenie planu B
+**Status:** Przyjeta — uzupelniona przez ADR-043 (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - zamyka Ograniczenia, errata 4) i ADR-047 (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1-3: zakonczenie planu A, warianty CZ (plan B), zakonczenie planu B
 
 **Kontekst:** Skorowidze GUGiK 2025 maja NMT wylacznie w 0,5 m i 5 m,
 a NMPT w 73% w 0,5 m; Kartograf znal tylko NMT 1 m i 5 m oraz NMPT 1 m,
@@ -4130,6 +4131,73 @@ w 37 komendach-lisciach, availability, pobranie, serwer MCP przez stdio, Claude 
   zmian; plan innego magazynu to `ValidationError` z `option="plan"`; `--allow-dir`
   wzgledny konczy start bledem uzycia (kod 2: sciezki wywolan sa bezwzgledne, wzgledny
   katalog zalezalby od katalogu roboczego serwera wybranego przez klienta).
+
+---
+
+## ADR-047: Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2)
+
+**Data:** 2026-10-19
+**Status:** Przyjeta; uzupelnia ADR-041 (nowe pola `AvailabilityCombination`: `full_m2`, `sheet_records`, `campaign_coverage`)
+
+**Kontekst:** Archiwista (SPEC 6.4, 12.4: KD-1, KD-2) wylicza etykiety
+pokrycia "pelne", "pelne · N kampanie" i "czesciowe · 58%" z raportu
+`check_availability`. Raport oddawal tylko `complete`, `uncovered_m2`
+(gorna granica) i `campaigns` (wszystkie rekordy, takze niepelne
+i niewybierane przez pobranie), wiec udzialu pelnych arkuszy, rekordow,
+ktore pobierze Kartograf, i kompletnosci kampanii nie dalo sie wyliczyc bez
+kopii regul Kartografa. Spec:
+`docs/superpowers/specs/2026-10-19-availability-sheet-details-design.md`.
+
+**Opcje:**
+- A) Nowe pola w `AvailabilityCombination` liczone z tych samych rekordow
+  i tej samej siatki co `complete`; wybor rekordow tymi samymi regulami co
+  pobranie.
+- B) Osobna funkcja szczegolow kombinacji (drugie zapytanie albo drugi
+  przebieg pomiaru).
+- C) Tylko `full_m2`; rekordy i kampanie liczy konsument z `campaigns`.
+
+**Decyzja:** A. Addytywnie w `kartograf-availability/1`:
+- `full_m2` (KD-2): lad w ramach rekordow TAK; PL `land_px * (target_px -
+  missing) // target_px` (dla `bbox`/`geometry` dokladnie `land_m2 -
+  missing`; pas ramy zadania `sheet` nie jest ani pokryty, ani brakiem),
+  wiec w PL `complete <=> full_m2 == land_m2`, a same rekordy NIE daja 0.
+  CZ: czesc prostokata obszaru w ramach arkuszy z plikiem (ta sama miara co
+  `uncovered_m2`); kombinacja kompletna moze miec `full_m2 < land_m2`, gdy
+  obszar wychodzi poza arkusze indeksu.
+- `sheet_records` (KD-1): `AvailabilityRecord(sheet, campaign,
+  acquisition_date, published, full_sheet, url)` rekordow, ktore pobiera
+  `download_hint`: NMT/NMPT najnowszy rekord arkusza (ADR-028) i najnowszy
+  TAK, gdy najnowszy nie jest TAK (`--full-sheet`, ADR-033); LAZ kafle
+  `select_newest_cover` (ADR-029) sposrod kafli kombinacji (jeden uklad
+  arkuszy). CZ: puste.
+- `campaign_coverage` (KD-1): `AvailabilityCampaign(campaign, complete,
+  full_m2)` na kazda kampanie z `campaigns`, w tym samym przebiegu
+  `_measure`. CZ: puste.
+- CLI `elevation availability --details`: udzial pelnych arkuszy (w dol,
+  `<1%`), kampanie osobno, kampanie rekordow do pobrania.
+
+Odrzucone: B (drugi przebieg po tych samych pikselach i drugi kontrakt);
+C (konsument musialby powtorzyc ADR-028/029/033); `land_px - missing`
+(rama zadania `sheet` liczylaby sie jako pokryta, same rekordy NIE > 0).
+
+**Konsekwencje:** Archiwista bierze etykiety wprost z raportu ("N
+kampanii" = rozne `campaign` rekordow `full_sheet` w `sheet_records`).
+Koszt: jeden `rasterize` na kampanie w pasie pomiaru; zapytania i cache bez
+zmian. Test kontraktu: `sheet_records` == URL-e planu `check_data`
+z podpowiedzi (NMT z `--full-sheet`, LAZ roku z jednym ukladem arkuszy).
+Ograniczenie LAZ: podpowiedz nie ma ukladu arkuszy, wiec pobranie `--year`
+wybiera kafle obu ukladow naraz, a kombinacja ma jeden - dla roku z kaflami
+PL-1992 i PL-2000 `sheet_records` moze sie roznic od tego, co polecenie
+zapisze (Krakow 2023: podpowiedz kombinacji PL-2000 pobiera kafle PL-1992;
+opisane w docstringu pola, USAGE 1.7 i ARCHITECTURE 4.9); rok LAZ, ktory
+nie pokrywa kafli obszaru, pobranie odrzuca (bez zmian).
+
+**Errata 1 (2026-10-19, przeglad uzytkownika przed scaleniem):** pole
+`AvailabilityRecord.full` nazywa sie `full_sheet`, jak w `SkorowidzRecord`,
+`LazTile`, sidecarze i fladze `--full-sheet` (w `/1` zmiana nazwy po
+wydaniu wymagalaby `/2`); ograniczenie LAZ (dwa uklady arkuszy) opisane
+przy polu i w USAGE, nie tylko w ADR; wyjatek CZ dla `complete <=>
+full_m2 == land_m2` dopisany w opisie klasy i w CHANGELOG.
 
 ---
 

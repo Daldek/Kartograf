@@ -179,6 +179,39 @@ def test_pomorze_partial_and_uncovered():
     assert land_only.areas[0].land_m2 == area.land_m2
 
 
+def test_full_m2_is_the_land_in_full_sheets():
+    """KD-2: ``complete`` <=> ``full_m2 == land_m2``; an incomplete
+    combination: the land in its full sheets (lower bound), never more than
+    the land in any of its sheets (upper bound, ``land_m2 - uncovered_m2``)."""
+    land = _report("nmt", "pomorze").areas[0].land_m2
+    for report in (_report("nmt", "krakow"), _report("nmt", "pomorze")):
+        (area,) = report.areas
+        for combo in report.combinations:
+            assert (combo.full_m2 == area.land_m2) == combo.complete
+            assert 0 <= combo.full_m2 <= area.land_m2 - combo.uncovered_m2
+    pomorze = _report("nmt", "pomorze")
+    # every sheet of 2022 1 m is full: only the land outside its sheets lacks
+    grid_2022 = _combo(pomorze, 2022, "PL-1992", "1m")
+    assert grid_2022.full_m2 == land - grid_2022.uncovered_m2
+    # only partial sheets: nothing is surely covered, though no land is
+    # outside the sheets
+    newest = _combo(pomorze, 2025, "PL-1992", "0.5m")
+    assert newest.full_m2 == 0.0 and newest.uncovered_m2 == 0.0
+
+
+def test_full_m2_of_a_sheet_request_ignores_the_rim():
+    """A sheet request measures without the rim of its frame (``_inner``),
+    while ``land_m2`` is the whole frame: a complete combination still has
+    ``full_m2 == land_m2`` and one of partial records only has 0 - the rim
+    never counts as covered on its own."""
+    report = _sheet_report("N-33-58-A-c-1-4", "E")
+    (area,) = report.areas
+    assert {(c.complete, c.full_m2) for c in report.combinations} == {
+        (True, area.land_m2),
+        (False, 0.0),
+    }
+
+
 def test_nmpt_and_kron86_from_their_services():
     report, session = _krakow("nmpt")
 
@@ -688,6 +721,60 @@ def test_report_sheets_equal_download_selection(tmp_path):
     assert not any("opendata" in url for url in session.urls)
 
 
+@pytest.mark.parametrize(
+    ("product", "place", "key"),
+    [
+        pytest.param("nmt", "krakow", (2025, "PL-1992", "1m"), id="nmt-complete"),
+        pytest.param("nmt", "pomorze", (2023, "PL-1992", "5m"), id="nmt-full-sheet"),
+        pytest.param(
+            "laz", "krakow", (2025, "PL-1992", None, "EVRF2007", "LAZ"), id="laz"
+        ),
+    ],
+)
+def test_sheet_records_are_what_the_hint_downloads(tmp_path, product, place, key):
+    """KD-1: ``sheet_records`` are exactly the records ``check_data`` plans
+    for the hint commands - NMT with ``--full-sheet`` the newest (partial)
+    and the newest full record of a sheet, LAZ the tiles of the coverage
+    selection."""
+    combo = _combo(_report(product, place), *key)
+    planned = set()
+    for hint in combo.download_hint:
+        session = RecordedIndex(_areas(product, place), coast=place == "pomorze")
+        with patch(SESSION, return_value=session):
+            plan = check_data(**{**_arguments(hint, tmp_path), "cache": False})
+        planned |= {item.available_signal["url"] for item in plan.items}
+
+    urls = [record.url for record in combo.sheet_records]
+    assert sorted(urls) == sorted(planned) and len(urls) == len(planned)
+    sheets = [record.sheet for record in combo.sheet_records]
+    assert sheets == sorted(sheets)
+
+
+def test_full_sheet_records_and_campaigns_on_their_own():
+    """Pomorze 2023 5 m: the newest records of its sheets (DFT.7201.028.2023)
+    are partial, the full ones (DFT.7201.002.2023) come with ``--full-sheet``
+    - newest first; neither campaign alone covers the land, the partial one
+    covers none of it."""
+    combo = _combo(_report("nmt", "pomorze"), 2023, "PL-1992", "5m")
+
+    by_sheet: dict[str, list] = {}
+    for record in combo.sheet_records:
+        by_sheet.setdefault(record.sheet, []).append(record)
+    assert set(by_sheet) == set(combo.sheets_full)
+    for records in by_sheet.values():
+        assert records[-1].full_sheet is True
+        assert records[-1].campaign == "DFT.7201.002.2023"
+        dates = [r.acquisition_date or "" for r in records]
+        assert dates == sorted(dates, reverse=True)
+    assert sum(len(r) == 2 for r in by_sheet.values()) == 2
+    assert [(c.campaign, c.complete) for c in combo.campaign_coverage] == [
+        ("DFT.7201.002.2023", False),
+        ("DFT.7201.028.2023", False),
+    ]
+    full, partial = combo.campaign_coverage
+    assert full.full_m2 == combo.full_m2 and partial.full_m2 == 0.0
+
+
 def test_check_asks_the_index_despite_cached_records(tmp_path):
     """Live test 0.8.0 (P2-2): ``--check-updates`` always asks the source - a
     sheet record in the metadata cache (TTL 7 days) is refreshed, not read,
@@ -844,9 +931,13 @@ def test_cz_missing_file_is_incomplete():
     assert s_jtsk.sheets_full == () and s_jtsk.sheets_missing == ("CTES86",)
     assert not s_jtsk.complete and s_jtsk.uncovered
     # the whole area lies in the frame of CTES86
-    assert s_jtsk.uncovered_m2 == 1_000_000.0
+    assert s_jtsk.uncovered_m2 == 1_000_000.0 and s_jtsk.full_m2 == 0.0
     assert s_jtsk.download_hint == () and s_jtsk.published is None
     assert tm33.complete and tm33.sheets_full == ("760_5516",)
+    # complete = every index sheet has a file; the NE corner of the area lies
+    # outside every TM33 tile, so the area in tiles with a file is smaller
+    assert 0.99 * 1_000_000.0 < tm33.full_m2 < 1_000_000.0
+    assert tm33.sheet_records == () and tm33.campaign_coverage == ()
 
 
 def test_cz_no_file_at_all():
