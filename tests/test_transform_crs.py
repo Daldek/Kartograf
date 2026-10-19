@@ -1,6 +1,7 @@
 """Tests of the strict transformation policy (kartograf.transform.crs)."""
 
 import math
+import warnings
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -61,6 +62,37 @@ class TestBuildPinnedTransform:
         assert kwargs["allow_ballpark"] is False
         assert kwargs["always_xy"] is True
 
+    def test_missing_grid_warning_of_pyproj_is_not_raised(self):
+        """pyproj's "Best transformation is not available" (a PROJ grid missing on
+        a clean install) is noise for a policy that picks among the available
+        operations; any other warning of the construction still gets through."""
+        group = _mock_group([_mock_transformer(0.5, "op dokladna")])
+
+        def warning_construction(message):
+            def construct(*args, **kwargs):
+                warnings.warn(message, UserWarning, stacklevel=1)
+                return group
+
+            return construct
+
+        grid_message = (
+            "Best transformation is not available due to missing "
+            "Grid(short_name=cz_cuzk_table_-y-x_3_v1710.tif)"
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with patch(_GROUP_PATCH, side_effect=warning_construction(grid_message)):
+                pinned = build_pinned_transform(
+                    "EPSG:5514", "EPSG:3045", TransformPolicy()
+                )
+            assert pinned.description == "op dokladna"
+
+            with (
+                patch(_GROUP_PATCH, side_effect=warning_construction("inna uwaga")),
+                pytest.raises(UserWarning, match="inna uwaga"),
+            ):
+                build_pinned_transform("EPSG:5514", "EPSG:3045", TransformPolicy())
+
     def test_empty_group_raises_with_remedy(self):
         """(b) An empty operation list => TransformUnavailableError with a remedy."""
         with patch(_GROUP_PATCH) as mock_cls:
@@ -101,6 +133,27 @@ class TestBuildPinnedTransform:
             )
         assert pinned.accuracy_m == 0.0
         assert pinned.description == "dokladna konwersja"
+
+    def test_axis_swap_of_one_wgs84_is_exact_whatever_proj_reports(self):
+        """E2E 0.8.0 N-P2-1: PROJ 9.8.1 gives the one operation between
+        ``OGC:CRS84`` and ``EPSG:4326`` (an axis swap, the identity with
+        ``always_xy``) an unknown accuracy; the rule rejecting an unknown
+        accuracy must not reject it. A pair that is not one CRS keeps the rule."""
+        swap = _mock_transformer(-1.0, "OGC:CRS84 to WGS 84", result=(19.9, 50.1))
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([swap])
+            pinned = build_pinned_transform(
+                "OGC:CRS84", "EPSG:4326", TransformPolicy(min_accuracy_m=1.0)
+            )
+        assert pinned.accuracy_m == 0.0
+        assert pinned.transform(19.9, 50.1) == (19.9, 50.1)
+
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([_mock_transformer(-1.0, "nieznana")])
+            with pytest.raises(TransformUnavailableError):
+                build_pinned_transform(
+                    "EPSG:4258", "EPSG:4326", TransformPolicy(min_accuracy_m=1.0)
+                )
 
     def test_probe_rejects_inf(self):
         """(d) Probe: an operation returning inf at the control point is rejected."""

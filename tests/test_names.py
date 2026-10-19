@@ -164,6 +164,8 @@ def test_world_bbox_outside_poland_and_national_file(tmp_path, monkeypatch):
         product="world", country="pl", bbox=bbox, output_dir=tmp_path, cache=False
     )
     assert report.ok, report.failed
+    # the 80-95 s of a page was measured for the geographic names, not for these
+    assert not [n for n in report.notices if n.code == SLOW_SOURCE]
     assert (
         pyogrio.read_info(report.files[0].file.path, layer="prng_world")["features"]
         == 7

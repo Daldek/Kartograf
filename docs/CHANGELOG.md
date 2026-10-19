@@ -736,6 +736,83 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   importujace wnetrznosci CLI uzywaja `parse_command(...).options` albo
   `create_parser()`; reczny `argparse.Namespace` handlera musi niesc
   `_command_id`; nowa komenda to deklaracja w katalogu (STANDARDS 17.2).
+- Test E2E 2026-10-19 (czysta instalacja, wszystkie grupy komend; errata
+  ADR-018, 036, 040-042, 043-047): zmiany zachowan istniejacych komend i
+  API.
+  - `--bbox` w kazdej komendzie z obszarem (elevation, imagery, kolekcje,
+    landcover, soil, hsg, availability, wycinki, LAZ): wspolrzedne poza
+    zakresem EPSG:4326 (dlugosc +-180, szerokosc +-90; np. metry z
+    `--bbox-crs EPSG:4326`) i bbox o zerowej powierzchni (`min == max`)
+    to `ValidationError` (kod 2, `details.option=bbox`, podpowiedz
+    o `--bbox-crs` i kolejnosci osi) przed siecia; dotad `OverflowError`,
+    `ValueError`, zapytanie z `inf` albo plik 1 x 1 px. `--bbox x,y,x,y`
+    (punkt) nie jest przyjmowany. Punkt (albo linia rownolegla do osi) w
+    `--geometry` wybiera arkusze, jednostki i piksele, w ktorych lezy
+    (arkusze NMT/orto, `boundaries`, `soil download`, `landcover` BDOT10k),
+    ale wycinek (`--cutout`, PL i CZ), kafle LAZ, `soil hsg` i `elevation
+    availability` pracuja na obszarze: `Error: --geometry: obwiednia
+    obiektow ma zerowa powierzchnie ...` (kod 2, `details.option=geometry`;
+    dotad komunikat o `bbox`, a `validate_data_request`/`project add` tego
+    nie wychwytywaly). Co zrobic: dla tych komend podawaj wielobok albo
+    `--bbox` z dodatnia powierzchnia.
+  - `--workers 0` i ujemne w kazdej komendzie z `--workers` (CLI
+    i biblioteka: `download_data`, `download_landcover`, kolekcje, LAZ PL
+    i CZ, `DownloadManager`, `download_project`) to `ValidationError` (kod
+    2, `option=workers`, `... musi byc >= 1, podano N`); dotad
+    `elevation`/`imagery`/`landcover` i `DownloadManager` po cichu
+    przyjmowaly 1. Co zrobic: podawaj `--workers >= 1`.
+  - `--check-updates` i plan (`check_data`, `project download
+    --check-updates`) traktuja arkusz bez danych w skorowidzu jak
+    pobranie: to stan danych, nie pozycja planu (dotad `check_failed`
+    i kod 1). Obszar z dziurami pokrycia daje kod 0 i `Warning: GUGiK nie
+    ma danych dla N z M arkuszy ...` (`no_coverage_some`); brak danych
+    we wszystkich arkuszach to `NoCoverageError` (`no_coverage`, kod 1);
+    arkusze z danymi tylko poza zakresem lat to jeden `year_out_of_range`
+    dla wszystkich arkuszy (dotad `check_failed` per arkusz); `check_failed`
+    zostaje dla awarii skorowidza. `DownloadManager.check_sheets(sheets, *,
+    on_no_coverage=None)`. Co zrobic: kod czytajacy z planu `check_failed`
+    jako brak danych sprawdza `Notice` `no_coverage_some` i kody bledow.
+  - `failed[].kind` w `kartograf-download/1` (`UnitFailure.kind`):
+    pojedynczy `--sheet` bez rekordu to `no_coverage` (dotad `download`),
+    nowa wartosc `year_out_of_range` (kod `YearRangeError`) dla konfliktu
+    lat takze w LAZ i `--country auto` (dotad `download`/`country`).
+    Co zrobic: kod porownujacy `kind` z `download` obsluguje nowe wartosci.
+  - `--country auto` w kolekcjach (`boundaries`, `cadastre`, `names`,
+    `maps`, `geodesy`): czesciowy sukces (kraj z bledami przy kraju bez
+    bledow) konczy sie kodem 0 z `Warning:` `auto_partial_success` (ta sama
+    regula co `elevation` i `imagery`; dotad kod 1), wpisy zostaja
+    w `failed`, a `Error:` drukuje CLI jak dotad; kod 1 zostaje dla jawnego
+    `--country`, jednego kraju i porazki wszystkich krajow. Kraj bez
+    jednostek obszaru albo z nieudanym zapytaniem o jednostki nie przerywa
+    zadania (dotad `Error:` bez pobrania drugiego kraju). Co zrobic:
+    skrypty sprawdzajace kod 1 dla czesciowego sukcesu czytaja `failed`
+    i `notices`.
+  - Kod wyjscia 143 i kod bledu `terminated`: SIGTERM w CLI dziala jak
+    Ctrl-C (dotad proces ginal bez komunikatu); 130 zostaje dla SIGINT.
+    Co zrobic: skrypt obslugujacy kody 0/1/2/130 dopisuje 143.
+  - Odczyt magazynu: `Sidecar.unit` kafla LAZ to jego godlo
+    (`extra.tile_sheet`), nie `<coords>` obszaru zadania z `request.bbox`
+    (dotad `iter_store(units=[unit])` nie odnajdywal kafla), a
+    `file_footprint` kafla bierze obrys z naglowka LAS (bez czytelnego
+    naglowka: `None`, nie obszar zadania); w segmencie samych arkuszy
+    (ZTM) sam numer (`0510`) to arkusz, nie TERYT. Format sidecara bez
+    zmian. Co zrobic: kod grupujacy kafle po `Sidecar.unit` dostaje godla
+    kafli zamiast wspolnego obszaru.
+  - `link_target(sciezka)` i `linked_version` dla pliku o tresci wersji,
+    ktory nie jest dowiazaniem (niezalezna kopia, np. po `rsync -a` bez
+    `-H`), zwracaja te wersje (dotad `None`); pobranie zamienia taka kopie
+    z powrotem w dowiazanie tej samej wersji, nigdy innej. Co zrobic:
+    kod liczacy "oszczednosc miejsca" po `link_target` sprawdza liczbe
+    dowiazan (`os.stat`) osobno.
+  - `file_footprint` nie zglasza juz `TransformUnavailableError`/
+    `TransformError`: zrodlo, ktorego obwiedni nie da sie bezpiecznie
+    przeliczyc na WGS84, jest pomijane i decyduje nastepne (bbox zadania,
+    godlo, naglowek, jednostka), a gdy zadne nie zostanie - wynik to
+    `None`. Dotad pierwszy blad przerywal wywolanie (wpisy `names`
+    `geographic`/`world` i `boundaries` `special` z `request.bbox_crs` =
+    `OGC:CRS84`, PROJ 9.8.1). Co zrobic: kod otaczajacy `file_footprint`
+    `try/except TransformError` moze go usunac; `None` znaczy "brak
+    pewnego obrysu".
 
 ### Dodane
 
@@ -1322,6 +1399,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   (SM5), `extra.edition` i status `relabeled` (ta sama tresc pod nowa
   etykieta; `VersionedFile.same_as` = etykieta najnowszej identycznej
   wersji, w CLI `(plik identyczny z <etykieta>)`).
+- Test E2E 2026-10-19, biblioteka: modul `kartograf.interrupt`
+  (`run_parallel(work, items, *, workers, on_done=None)`, `check_stop`,
+  `Stopped`, `Terminated`, `sigterm_interrupts`; `Stopped` i `Terminated`
+  sa podklasami `KeyboardInterrupt`, wiec dziala to samo sprzatanie co
+  przy Ctrl-C z `--workers 1`); wszystkie pule pobierania
+  (`DownloadManager`, kolekcje, powiaty BDOT10k, kafle LAZ PL i CZ) ida
+  przez `run_parallel`, a punkty sprawdzania stopu maja transport HTTP
+  (przed proba, miedzy kawalkami, zamiast pauzy ponowienia), strumien
+  AAIGrid, paczka BDOT10k i `commit_version`. Kody `terminated` (143)
+  w `ERROR_CODES` i `EXIT_CODES` (`kartograf catalog`, USAGE 9.3,
+  `llms.txt`); zmiana addytywna, 130 zostaje dla Ctrl-C.
+  `AuthProxyClient.last_error`/`credentials_problem()`,
+  `notices.names_text`/`LISTED_UNITS`, `notices.NO_LAND`
+  i `download.arguments.require_workers`.
 
 ### Zmienione
 
@@ -1422,6 +1513,36 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   godlo w `--sheet`; `--hierarchy`/`--children`/`--descendants` z godlem CZ
   to `Error:`. Wzorce ZTM w `core.parser_registry.ztm_sheet_system` (jedno
   zrodlo dla `parse` i `maps download --sheet`). Co zrobic: nic.
+- Test E2E 2026-10-19, `hint` w `kartograf-error/1` (CLI i MCP) bierze
+  `Przyklad:` z produktu, kraju i wyboru obszaru wywolania
+  (`error_report(exc, command=, given=)`, `catalog.hints.example_for(...,
+  given)`; dotad pierwszy przyklad komendy, np. `buildings` dla
+  `--product trees`); nowe przyklady katalogu: `boundaries` (`admin
+  --country auto --level pl=gmina,cz=obec`, `special`, `geomorphology`),
+  `models3d` `trees`, `names` `world`. Co zrobic: nic.
+- Test E2E 2026-10-19, `soil list-layers --json`: `properties[]` ma pola
+  `unit`, `conventional_unit`, `divisor` i `depths` (`PropertyInfo`;
+  `depths` zawiera `0-30cm`), a `landcover list-layers --product bdot10k`
+  wypisuje wszystkie 58 klas BDOT10k (wartosci `--layers`) zamiast 15.
+  Jednostki w `--help`, `soil list-layers` i sidecarze (`extra.units`:
+  `mapped`, `conventional`, `divisor`; dodatek do `kartograf-meta/1`)
+  to "mapped units" ISRIC: clay g/kg, phh2o pH x 10, bdod cg/cm3, soc
+  dg/kg, nitrogen cg/kg, cec mmol(c)/kg, cfvo cm3/dm3, ocd hg/m3, ocs
+  t/ha (dotad opisy konwencjonalne). BDOT10k: `extra.source.classes`
+  i `Bdot10kPackage.classes`/`absent` przy `--layers`. `--property ocs`
+  przyjmuje tylko `--depth 0-30cm` (`ValidationError` z lista
+  dostepnych, kod 2).
+- Test E2E 2026-10-19, zmiany zachowan bez wplywu na kody wyjscia:
+  wyjatek jednostki puli pobierania inny niz `DownloadError` (np. blad
+  zapisu) w kolekcjach, land cover i LAZ zatrzymuje pule od razu (dotad
+  po calej kolejce; `DownloadManager` nadal zamienia go na status
+  `failed` jednostki); `project add ... -q` to `Error:` (kod 2,
+  `option=quiet`; dotad `-q` po cichu pomijane); log WARNING o niezgodnym
+  ukladzie godla w sidecarze PL (`sources.sidecar.pl_sheet_horizontal_crs`)
+  zszedl na DEBUG, bo ten sam fakt niesie `Notice` `SHEET_CRS_MISMATCH`
+  (i sidecar: `horizontal_crs`, `extra.source.declared_crs`); bezposredni
+  uzytkownicy `DownloadManager` nie dostaja juz tej linii loggera. Co
+  zrobic: nic.
 
 ### Naprawione
 
@@ -1603,6 +1724,128 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Dokumentacja ortofotomapy (SCOPE, PRD, docstring `gugik_orto.py`):
   rozdzielczosc "wg kampanii (np. 25 cm, 10 cm)" zamiast stalego 25 cm
   (README poprawione wczesniej).
+- Test E2E 2026-10-19, przerwanie: Ctrl-C przy `--workers >= 2` zatrzymuje
+  pobieranie. Kolejka (arkusze PL, kolekcje, powiaty BDOT10k, kafle LAZ PL
+  i CZ) jest anulowana, trwajace transfery staja po biezacym kawalku
+  (takze paczka BDOT10k), a jednostki niedokonczone przed przerwaniem nie
+  sa pobierane ani zatwierdzane; dotad komenda czekala na cala kolejke
+  i zatwierdzala ja (12 powiatow BDOT10k, 6 powiatow RCN, 3 arkusze orto
+  po Ctrl-C). Kod 130 i `kartograf-error/1` `interrupted` jak przy
+  `--workers 1`; wersje zatwierdzone przed przerwaniem zostaja.
+  SIGTERM (`timeout`, `docker stop`) w CLI dziala jak Ctrl-C: sprzatanie
+  katalogu `versions/.incoming/`, `Error: przerwano (SIGTERM)` albo
+  `kartograf-error/1` z kodem `terminated`, kod 143 (dotad proces ginal
+  bez komunikatu i zostawial resztki). Serwer MCP nie przechwytuje SIGTERM
+  (domyslne zakonczenie; `.incoming` sprzata sie po 24 h). Znane limity:
+  zapytanie zablokowane na sieci konczy sie z limitem czasu, pule sond
+  (`check_year_range`, HEAD rozmiarow, `availability`) czekaja na biezace
+  zapytania.
+- Test E2E 2026-10-19, dowiazania na udziale SMB/cifs bez `serverino`
+  (sciezka standardowa i `full_sheet/`): dowiazanie nie cofa sie na
+  starszy lot, gdy plik byl chwile wczesniej czytany (inny program,
+  poprzednie uruchomienie). Klient cifs zglasza wtedy `st_nlink` = 1 przez
+  kilka sekund, a potwierdzenie wymagalo `st_nlink >= 2` obu plikow, wiec
+  sciezka uchodzila za nieznana i byla przepinana na wybrany lot (np.
+  `--max-year 2022` zaraz po pobraniu z `--full-sheet`, bez Warning/Info).
+  Ta sama przyczyna dawala `link_target` = `None` na przemian z wynikiem
+  i zbedny zapis (podmiana dowiazania, przepisany sidecar) przy `lokalna
+  wersja`. Potwierdzenie bez stabilnych i-wezlow opiera sie teraz na
+  tresci (rozmiar i SHA-256 z sidecara wersji), bez liczby dowiazan
+  (`links._hold`); dysk lokalny i udzialy ze stabilnymi i-wezlami bez
+  zmian (zob. zmiana `link_target` niezaleznej kopii w sekcji BREAKING).
+- Test E2E 2026-10-19, stderr zgodny z kontraktem `--json` (USAGE 9.2)
+  w czystej instalacji: ostrzezenie pyproj `Best transformation is not
+  available` (siatka PROJ CUZK; availability CZ/auto, `--bbox-crs
+  EPSG:3045`, warp TM33, wycinek CZ) nie jest drukowane (filtr tylko wokol
+  `TransformerGroup` w `transform/crs.py`); rekordy loggera biblioteki
+  (`Pominieto wersje o niezgodnym sha256`, `Pominieto wersje bez
+  czytelnego sidecara`, bledy zapisu sidecara) nie sa surowymi liniami -
+  w tekscie maja prefiks `Warning:`/`Error:`, z `--json` stderr zostaje
+  pusty (poza ponowieniami HTTP i `KARTOGRAF_DEBUG`); blad zadania CLMS
+  przez proxy niesie przyczyne (`Zadanie przez proxy nie powiodlo sie:
+  ...`) zamiast linii `Proxy request failed` na stderr.
+- Test E2E 2026-10-19, CORINE: podglad WMS dziala dla 2012, 2006 i 2000
+  (warstwa rastrowa roku z GetCapabilities uslugi EEA; dotad
+  `LayerNotDefined`); obraz w calosci przezroczysty (1990 dla Polski,
+  obszar poza Europa) to `NoCoverageError` bez zapisu wersji (dotad pusta
+  wersja); blad roku nazywa flage (`--year 2019: niedostepne dla
+  --product corine; dostepne: ...`); `Warning` `corine_preview` z powodem,
+  gdy `CLMS_CREDENTIALS` jest ustawione, ale nieuzywalne (proxy `/health`
+  zwraca `credentials_error`, bez wartosci zmiennej).
+- Test E2E 2026-10-19, SoilGrids i HSG: `--property ocd` dziala (wydanie
+  z mapy `clay`: `ocd.map` nie ma wydania w tytule); okno mniejsze niz
+  piksel jest rozszerzane do jednego piksela (dotad HTTP 400); raster
+  samych zer (poza `cfvo`, gdzie 0 to wartosc) to `Warning` `all_nodata`
+  i `extra.all_nodata`, HSG bez zadnej klasy tak samo; klasyfikacja
+  trojkata USDA nie zaokragla (wartosci na granicach g/kg wg regul
+  w float64, nie wg float32; usuniete martwe `HSGCalculator.
+  CONVERSION_FACTOR`).
+- Test E2E 2026-10-19, BDOT10k: obszar (`--bbox`, `--geometry`)
+  podlega limitowi 100 plikow / 10 GB jak kolekcje, takze archiwum
+  `--year` (dotad bez limitu); `--layers` odrzuca nieznany lub pusty kod
+  przed siecia (kod 2,
+  `option=layers`, `allowed`; dotad dopiero po pobraniu), klasa
+  nieobecna w paczce powiatu to `Info` `classes_absent` (jak BDOO), brak
+  wszystkich klas - `NoCoverageError` powiatu (dotad `DownloadError`
+  powiatu); opis klasy `PTWZ` poprawiony ("Wyrobiska i zwalowiska").
+- Test E2E 2026-10-19, kolekcje: `Info:` `unit_list` nazywa co najwyzej
+  10 jednostek (`a, ..., j i 3874 inne`, `notices.names_text`); mesh
+  z obszarem ponad limit nie drukuje juz linii 120 KB. Mapa katastralna
+  CZ po obszarze: KU wg RUIAN (takze pusta odpowiedz) w cache metadanych
+  (TTL 7 dni; `--force`, `--upgrade` i `--check-updates` pytaja usluge),
+  wiec powtorzenie dziala bez sieci (dotad kod 1 po 3 probach).
+- Test E2E 2026-10-19, `elevation availability`: obszar bez ladu PL (morze
+  terytorialne, poza granica panstwa) ma `complete: true` (inwariant
+  `complete <=> full_m2 == land_m2` zostaje), ale `Info:` `no_land`,
+  kolumne KOMPLET `brak ladu` i stopke bez podpowiedzi pobrania (dotad
+  `tak` i `Pobranie ...` dla 0,00 ha). Pusty wybor kafli LAZ po
+  `--min-density` wskazuje flage, liczbe odrzuconych kafli i najwyzsza
+  gestosc nominalna (`LazTileSelection.below_density`).
+- Test E2E 2026-10-19, projekt i cache: `project download --force`
+  naprawia uszkodzona przypieta wersje (inny rozmiar, SHA-256 albo
+  sidecar; dotad `bez zmian` i `verify` dalej uszkodzone): odklada ja do
+  ukrytego katalogu `.<etykieta>_<sha8>.corrupt-<czas>` (nic nie jest
+  usuwane) i pobiera ponownie, te same bajty wracaja pod przypieta wersje
+  (`odtworzono`, manifest bez zmian), a `status` i `verify` podaja ten sam
+  opis naprawy. Manifest z BOM-em edytora jest czytany; `--project`
+  wskazujacy plik daje czytelny blad; `--check-updates --plan KATALOG` to
+  `invalid_input` przed siecia; `--upgrade --plan` bez pozycji do
+  wykonania wypisuje `Info:` (nie milczy); podpowiedz po `project init`
+  `NAZWA <grupa> <komenda> ...`. `cache stats` i `cache_disabled` nie
+  nazywaja cache "nieczytelnym", gdy nie da sie go otworzyc ani zapisac
+  (katalog tylko do odczytu, pelny dysk, katalog w miejscu pliku) -
+  podpowiedz dotyczy uprawnien, nie `cache clear`; `cache clear` bez pliku
+  bazy mowi, ze nie ma czego czyscic.
+- Test E2E 2026-10-19, availability i komunikaty: `--country pl|cz` z `--bbox`
+  albo `--geometry` poza obwiednia kraju to kod 2 takze w `elevation
+  availability` (jak w `elevation download`; dotad `Brak arkuszy` albo
+  `obszar 0,00 ha`, kod 0). Pozostale poprawki komunikatow: nieistniejace
+  wojewodztwo w `--teryt` mowi, ze kodu nie ma, i podaje liste;
+  `--whole-country` bez kraju nazywa kraje produktu (hydro: tylko
+  `--country cz`); `Info:` o 80-95 s tylko dla `names --product
+  geographic`; pomoc `boundaries`: 44 rodzaje granic specjalnych
+  w wyniku obszaru; poprawny `llms.txt` (`landcover list-layers --product
+  bdoo --json`, `soil list-layers --json`, narzedzia MCP wszystkich grup
+  kolekcji).
+- Test E2E 2026-10-19, runda 3 (po drugiej weryfikacji na zywo):
+  `file_footprint` zwraca obrys wpisow w `OGC:CRS84` (PRNG, granice
+  specjalne PRG): CRS84 i EPSG:4326 to ta sama dlugosc/szerokosc WGS84,
+  wiec obwiednia to te same liczby bez operacji, a `build_pinned_transform`
+  przyjmuje zamiane osi tego samego CRS jako dokladna, takze gdy PROJ 9.8.1
+  podaje jej nieznana dokladnosc (-1). Podpowiedz zakresu lat zmienia
+  granice, ktora blokuje (`--min-year 2023 --max-year 2024` przy danych
+  z 2022: `--min-year 2022`, dotad `--max-year 2024`, flaga z wywolania);
+  dla `--year RRRR` zostaja flagi jednostronne. Blok `Przyklad:` w bledach
+  wejscia pasuje do kraju i trybu wywolania (nowe przyklady katalogu: PL
+  NMT `--bbox` jako arkusze i jako wycinek, CZ LAZ z `--model`, orto PL
+  `--bbox` jako arkusze, orto CZ `--bbox`; przyklad wybiera tryb wg
+  `--cutout`). Sidecar `ocd` ma `extra.edition.source_property` = `clay`
+  (wydanie pochodzi z mapy `clay`, jej tytul i url w `extra.edition`).
+  Limit obszaru BDOT10k i kolekcji: do 100 plikow rozmiar kazdego jest
+  mierzony `HEAD`, wiec limit 10 GB jest dokladny (obszar 69 powiatow to
+  2,87 GB i slusznie przechodzi); powyzej 100 plikow o odmowie decyduje
+  liczba, a rozmiar w komunikacie jest tylko orientacyjny (srednia 5 plikow,
+  dla 378 powiatow 6,4 GB przy 18 GB faktycznych).
 
 ## [0.7.2] - 2026-10-11
 

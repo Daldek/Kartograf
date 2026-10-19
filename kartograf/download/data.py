@@ -62,12 +62,13 @@ from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.area import (
     cz_geometry_bbox,
     emit_clipping_notices,
+    emit_partial_success,
     geometry_envelope,
     parent_request_for,
     pl_only_flags,
     resolve_geometry_layer,
 )
-from kartograf.download.arguments import option_error, require_int
+from kartograf.download.arguments import option_error, require_workers
 from kartograf.download.countries import (
     countries_for_bbox,
     country_bbox,
@@ -81,7 +82,12 @@ from kartograf.download.fetch import (
     emit_file_notices,
     refreshes_cache,
 )
-from kartograf.download.manager import DownloadManager, DownloadProgress, DownloadResult
+from kartograf.download.manager import (
+    DownloadManager,
+    DownloadProgress,
+    DownloadResult,
+    no_coverage_text,
+)
 from kartograf.download.options import (
     campaign_option_names,
     canonical_bbox,
@@ -99,6 +105,7 @@ from kartograf.download.options import (
     pl_target_scale,
     reject_campaign_opts_with_cutout,
     require_cz_cutout,
+    require_geometry_area,
     resolve_pl_options,
     validate_request,
 )
@@ -109,11 +116,11 @@ from kartograf.exceptions import (
     KartografError,
     NoCoverageError,
     ValidationError,
+    YearRangeError,
 )
 from kartograf.notices import (
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
-    AUTO_PARTIAL_SUCCESS,
     BETTER_COVERAGE,
     CHECK_FAILED,
     INCOMPLETE_CAMPAIGN,
@@ -138,7 +145,7 @@ from kartograf.serialization import Document
 from kartograf.sources.registry import horizontal_crs_for_sheet, sources_for
 from kartograf.sources.variants import cz_model_text, cz_models, cz_sheet_system
 
-FailureKind = Literal["no_coverage", "download", "country"]
+FailureKind = Literal["no_coverage", "year_out_of_range", "download", "country"]
 MAX_HINT_LINES = 5
 
 # ``kartograf-download/1``: the schema of the five command reports (``DataReport``,
@@ -181,8 +188,10 @@ class UnitFile:
 class UnitFailure:
     """A failed part of the request (country, sheet set or tile set).
 
-    ``kind``: ``no_coverage`` (no data at the source), ``download`` (network,
-    server) or ``country`` (the country part of the request failed).
+    ``kind``: ``no_coverage`` (no data at the source), ``year_out_of_range``
+    (data, but none of the requested years - the code of ``YearRangeError``),
+    ``download`` (network, server) or ``country`` (the country part of the
+    request failed).
     """
 
     unit: str
@@ -233,6 +242,7 @@ class _Run:
     stale: list[PlanItem] = field(default_factory=list)
     superseded: list[SupersededLazTile] = field(default_factory=list)
     plans: list[UpdatePlan] = field(default_factory=list)
+    causes: dict[UnitFailure, DownloadError] = field(default_factory=dict)
     dry: bool = False
 
     def add(
@@ -267,8 +277,20 @@ class _Run:
         self.stale.extend(stale)
         return 1 if stale else 0
 
-    def fail(self, unit: str, country: str, error: str, kind: FailureKind) -> int:
-        self.failed.append(UnitFailure(unit, country, error, kind))
+    def fail(
+        self,
+        unit: str,
+        country: str,
+        error: str,
+        kind: FailureKind,
+        cause: DownloadError | None = None,
+    ) -> int:
+        """Record a failed part; ``cause`` (the error it comes from) is kept for
+        ``check_data``, which raises it when no plan came out."""
+        failure = UnitFailure(unit, country, error, kind)
+        self.failed.append(failure)
+        if cause is not None:
+            self.causes[failure] = cause
         return 1
 
 
@@ -276,6 +298,34 @@ def _error_text(error: Exception) -> str:
     """Error text with the remedy of a ``TransformError`` (if any)."""
     remedy = getattr(error, "remedy", None)
     return f"{error}" + (f" Remedium: {remedy}" if remedy else "")
+
+
+def _failure_kind(
+    error: DownloadError, default: FailureKind = "download"
+) -> FailureKind:
+    """The ``UnitFailure.kind`` of an error: the states of the data keep the
+    name of their error code (``no_coverage``, ``year_out_of_range``), any other
+    ``DownloadError`` gets ``default``."""
+    if isinstance(error, NoCoverageError):
+        return "no_coverage"
+    if isinstance(error, YearRangeError):
+        return "year_out_of_range"
+    return default
+
+
+def _check_error(run: _Run) -> DownloadError:
+    """The error of a check that planned nothing: the error of its first
+    failure (its class says why: no data, data outside the years), else a
+    ``DownloadError`` of its text."""
+    if not run.failed:
+        return DownloadError("brak pozycji planu")
+    failure = run.failed[0]
+    cause = run.causes.get(failure)
+    if cause is not None:
+        return cause
+    if failure.kind == "no_coverage":
+        return NoCoverageError(failure.error)
+    return DownloadError(failure.error)
 
 
 def _task(**kwargs) -> SimpleNamespace:
@@ -305,7 +355,7 @@ def _start(
     from kartograf.download.fetch import validate_update
 
     validate_update(update, check="check_data")
-    require_int(workers, "--workers")
+    require_workers(workers)
     if plan is not None and update != "upgrade":
         raise ValidationError(
             "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
@@ -454,7 +504,10 @@ def check_data(
 
     ``country="auto"`` gives ONE merged plan of every country. A country
     that cannot be checked is a ``CHECK_FAILED`` notice when another one
-    was checked, else its error is raised (``DownloadError``).
+    was checked, else its error is raised (``DownloadError``; the states of
+    the data keep their class - ``NoCoverageError`` when no sheet has data,
+    ``YearRangeError`` when the data are outside the years - as in the
+    download, where they are the ``kind`` of the failure).
     """
     run, _ = _start(
         _selection_kwargs(locals()),
@@ -467,8 +520,7 @@ def check_data(
         on_notice=on_notice,
     )
     if not run.plans:
-        error = run.failed[0].error if run.failed else "brak pozycji planu"
-        raise DownloadError(error)
+        raise _check_error(run)
     for failure in run.failed:
         run.sink.emit("warning", CHECK_FAILED, f"{failure.unit}: {failure.error}")
     merged = run.plans[0]
@@ -655,6 +707,11 @@ def _dispatch_area(
     With ``filepath`` the PL part works on the file (sheets per feature, not
     the envelope); the bbox recognizes countries and gives ``parent_request``.
     """
+    if filepath is not None and (task.cutout or task.product == "laz"):
+        # a point picks sheets, units or pixels; these two cut or select by AREA
+        require_geometry_area(
+            bbox, "wycinek (--cutout)" if task.cutout else "wybor kafli LAZ"
+        )
     auto = task.country == "auto"
     countries = (
         countries_for_bbox(bbox) if auto else ({"pl": "PL", "cz": "CZ"}[task.country],)
@@ -777,7 +834,8 @@ def _dispatch_area(
             else:
                 rc = _download_pl_bbox(country_task, run, part, parent_request)
         except DownloadError as e:
-            rc = run.fail(code, code, _error_text(e), "country")
+            kind = _failure_kind(e, "country")
+            rc = run.fail(code, code, _error_text(e), kind, e)
         results.append((code, rc))
 
     exit_codes = [rc for _, rc in results]
@@ -786,19 +844,7 @@ def _dispatch_area(
     if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
-        if run.check:
-            text = (
-                f"czesc {', '.join(failed)} zadania nie mogla zostac sprawdzona "
-                f"- sprawdzono {', '.join(ok)}; kod 0 "
-                "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
-            )
-        else:
-            text = (
-                f"czesc {', '.join(failed)} zadania zakonczyla sie bledem "
-                f"(patrz Error) - pobrano {', '.join(ok)}; kod 0 "
-                "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
-            )
-        run.sink.emit("warning", AUTO_PARTIAL_SUCCESS, text)
+        emit_partial_success(run.sink, failed, ok, check=run.check)
         return 0
     return max(exit_codes)
 
@@ -853,6 +899,8 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
         bbox = cz_geometry_bbox(
             task.geometry, task.layer, task.horizontal_crs or "EPSG:5514"
         )
+        if task.cutout:
+            require_geometry_area(bbox, "wycinek (--cutout)")
         error = outside_country(bbox, "CZ", flag="--geometry")
         if error is not None:
             raise ValidationError(error, option="geometry")
@@ -1010,7 +1058,11 @@ def _progress(
 def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int | None:
     """Check or planned upgrade of PL sheets; ``None`` = a plain download."""
     if run.check:
-        run.plans.append(manager.check_sheets(sheets))
+        run.plans.append(
+            manager.check_sheets(
+                sheets, on_no_coverage=_check_no_coverage(run, _prefix(manager))
+            )
+        )
         return 0
     if run.update != "upgrade" or run.loaded is None:
         return None
@@ -1029,8 +1081,28 @@ def _plan_modes(run: _Run, manager: DownloadManager, sheets: list[str]) -> int |
     rc = run.add_stale(report.stale)
     prefix = _prefix(manager)
     for sheet, message in report.errors.items():
-        run.fail(sheet, "PL", f"{prefix}{sheet}: {message}", "download")
+        kind: FailureKind = "no_coverage" if sheet in report.no_coverage else "download"
+        run.fail(sheet, "PL", f"{prefix}{sheet}: {message}", kind)
     return 1 if rc or report.failed else 0
+
+
+def _check_no_coverage(
+    run: _Run, prefix: str
+) -> Callable[[Mapping[str, NoCoverageError], int], None]:
+    """``on_no_coverage`` of ``DownloadManager.check_sheets``: the sheets
+    without data are reported as the download reports them
+    (``_finish_pl_sheets``) - a ``NO_COVERAGE_SOME`` warning when the rest has
+    positions, the hints of the provider always."""
+
+    def report(no_data: Mapping[str, NoCoverageError], total: int) -> None:
+        kept = total - len(no_data)
+        if kept:
+            _no_coverage_warning(
+                run, list(no_data), total, f"sprawdzono {kept}", prefix
+            )
+        _coverage_hints(run, {sheet: e.hints for sheet, e in no_data.items()})
+
+    return report
 
 
 def _announcer(
@@ -1069,10 +1141,10 @@ def _download_pl_code(
         if task.scale
         else [task.sheet]
     )
-    planned = _plan_modes(run, manager, sheets)
-    if planned is not None:
-        return planned
     try:
+        planned = _plan_modes(run, manager, sheets)
+        if planned is not None:
+            return planned
         if task.scale:
             if on_progress is not None:
                 count = manager.count_sheets(task.sheet, task.scale)
@@ -1104,7 +1176,9 @@ def _download_pl_code(
             on_download=announce,
         )
     except DownloadError as e:
-        return run.fail(task.sheet, "PL", f"{prefix}{e}", "download")
+        # a sheet without data or outside the years is the same kind of failure
+        # in the download and in the check (``_check_error``)
+        return run.fail(task.sheet, "PL", f"{prefix}{e}", _failure_kind(e), e)
     if expanded:
         return _finish_pl_sheets(task, run, result, prefix)
     reported = any(n.code == CHECK_FAILED for n in result.notices)
@@ -1223,7 +1297,7 @@ def _download_pl_sheet_list(
         try:
             managers = _managers(task, run, metadata, parent_request)
         except DownloadError as e:
-            return run.fail("PL", "PL", str(e), "download")
+            return run.fail("PL", "PL", str(e), _failure_kind(e), e)
         rc = 0
         for manager in managers:
             prefix = _prefix(manager)
@@ -1236,7 +1310,8 @@ def _download_pl_sheet_list(
                     sheets, update=run.update, on_progress=_progress(run, manager)
                 )
             except DownloadError as e:
-                rc = max(rc, run.fail("PL", "PL", f"{prefix}{e}", "download"))
+                kind = _failure_kind(e)
+                rc = max(rc, run.fail("PL", "PL", f"{prefix}{e}", kind, e))
                 continue
             rc = max(rc, _finish_pl_sheets(task, run, result, prefix))
     return rc
@@ -1309,7 +1384,7 @@ def _download_pl_archive(
                 sheets, update=run.update, on_progress=run.on_progress
             )
         except DownloadError as e:
-            return run.fail("PL", "PL", str(e), "download")
+            return run.fail("PL", "PL", str(e), _failure_kind(e), e)
     return _finish_pl_sheets(task, run, result)
 
 
@@ -1360,10 +1435,8 @@ def _download_pl_files(
             sink=run.sink,
             on_progress=run.on_progress,
         )
-    except NoCoverageError as e:
-        return run.fail("PL", "PL", str(e), "no_coverage")
     except DownloadError as e:
-        return run.fail("PL", "PL", str(e), "download")
+        return run.fail("PL", "PL", str(e), _failure_kind(e), e)
     # run_request emitted the file notices already
     run.files.extend(files)
     run.failed.extend(failed)
@@ -1395,17 +1468,8 @@ def _finish_pl_sheets(
     hard = result.hard_failures
     missing = result.no_coverage
     if missing and (paths or hard):
-        shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
-        run.sink.emit(
-            "warning",
-            NO_COVERAGE_SOME,
-            f"{prefix}GUGiK nie ma danych dla {len(missing)} z "
-            f"{count_text(total, *OF_SHEETS)} "
-            f"({shown}) - pominiete (skorowidz GUGiK nie ma tych arkuszy dla "
-            "wybranego produktu i rozdzielczosci, np. morze, obszar za granica, "
-            f"brak NMT 5 m w czesci kraju); pobrano {len(paths)}",
-        )
-        _coverage_hints(run, result)
+        _no_coverage_warning(run, missing, total, f"pobrano {len(paths)}", prefix)
+        _coverage_hints(run, result.no_coverage_hints)
     if hard:
         causes = "; ".join(
             f"{sheet}: {result.errors[sheet].removeprefix(sheet + ': ')}"
@@ -1420,23 +1484,34 @@ def _finish_pl_sheets(
             "download",
         )
     if not paths:
-        _coverage_hints(run, result)
-        return run.fail(
-            "PL",
-            "PL",
-            f"{prefix}GUGiK nie ma danych dla zadnego z "
-            f"{count_text(total, *OF_SHEETS)} obszaru",
-            "no_coverage",
-        )
+        _coverage_hints(run, result.no_coverage_hints)
+        return run.fail("PL", "PL", f"{prefix}{no_coverage_text(total)}", "no_coverage")
     return 0
 
 
-def _coverage_hints(run: _Run, result: DownloadResult) -> None:
+def _no_coverage_warning(
+    run: _Run, missing: Sequence[str], total: int, outcome: str, prefix: str
+) -> None:
+    """``NO_COVERAGE_SOME``: sheets without GUGiK data of a request that goes on
+    with the others (R5) - the download and ``--check-updates`` say it the same
+    way; ``outcome`` is what became of the rest (``pobrano 3``,
+    ``sprawdzono 3``), ``prefix`` the view direction (``kierunek n: ``)."""
+    shown = ", ".join(missing[:10]) + (" ..." if len(missing) > 10 else "")
+    run.sink.emit(
+        "warning",
+        NO_COVERAGE_SOME,
+        f"{prefix}GUGiK nie ma danych dla {len(missing)} z "
+        f"{count_text(total, *OF_SHEETS)} "
+        f"({shown}) - pominiete (skorowidz GUGiK nie ma tych arkuszy dla "
+        "wybranego produktu i rozdzielczosci, np. morze, obszar za granica, "
+        f"brak NMT 5 m w czesci kraju); {outcome}",
+    )
+
+
+def _coverage_hints(run: _Run, hints_by_sheet: Mapping[str, Sequence[str]]) -> None:
     """``NO_COVERAGE_HINT``: provider hints without duplicates, at most
     ``MAX_HINT_LINES`` (full list: ``DownloadResult.no_coverage_hints``)."""
-    hints = list(
-        dict.fromkeys(h for hs in result.no_coverage_hints.values() for h in hs)
-    )
+    hints = list(dict.fromkeys(h for hs in hints_by_sheet.values() for h in hs))
     # the view directions of one oblique request share their hints
     shown = {n.text for n in run.sink.notices if n.code == NO_COVERAGE_HINT}
     hints = [hint for hint in hints if hint not in shown]
@@ -1735,10 +1810,7 @@ def _download_pl_cutout(
             )
     except DownloadError as e:
         # a cutout entirely off PL land (PRG mask) is "no data", like a sheet
-        kind: FailureKind = (
-            "no_coverage" if isinstance(e, NoCoverageError) else "download"
-        )
-        return run.fail("PL", "PL", _error_text(e), kind)
+        return run.fail("PL", "PL", _error_text(e), _failure_kind(e), e)
     if result.file is not None:
         run.add(_cutout_unit(result.file.path), "PL", result.file)
     return run.add_stale(result.stale)
@@ -1831,7 +1903,7 @@ def _download_cz(
             **common,
         )
     except DownloadError as e:
-        return run.fail(task.sheet or "CZ", "CZ", str(e), "download")
+        return run.fail(task.sheet or "CZ", "CZ", str(e), _failure_kind(e), e)
     if cutout.file is not None:
         run.add(_cutout_unit(cutout.file.path), "CZ", cutout.file)
     return run.add_stale(cutout.stale)
@@ -1884,10 +1956,8 @@ def _download_cz_laz(
             on_progress=on_progress if progress is not None else None,
             **selection,
         )
-    except NoCoverageError as e:
-        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), "no_coverage")
     except DownloadError as e:
-        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), "download")
+        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), _failure_kind(e), e)
     for file in result.files:
         run.add(file.path.stem, "CZ", file)
     rc = run.add_stale(result.stale)
@@ -1925,7 +1995,7 @@ def _download_cz_orto(
         try:
             sheets = cz_orto_area_sheets(bbox)
         except DownloadError as e:
-            return run.fail("CZ", "CZ", str(e), "download")
+            return run.fail("CZ", "CZ", str(e), _failure_kind(e), e)
         if not sheets:
             return run.fail(
                 "CZ",
@@ -1960,10 +2030,9 @@ def _download_cz_orto(
                 **common,
             )
         except DownloadError as e:
-            no_data = isinstance(e, NoCoverageError)
-            kind: FailureKind = "no_coverage" if no_data else "download"
-            rc = run.fail(sheet, "CZ", str(e), kind)
-            status = "no_coverage" if no_data else "failed"
+            kind = _failure_kind(e)
+            rc = run.fail(sheet, "CZ", str(e), kind, e)
+            status = "no_coverage" if kind == "no_coverage" else "failed"
         else:
             for position, file in enumerate(result.files):
                 # one CHECK_FAILED per sheet: its files share one edition lookup
@@ -2002,7 +2071,7 @@ def _download_cz_contours(
         try:
             sheets = cz_contours_area_sheets(bbox)
         except DownloadError as e:
-            return run.fail("CZ", "CZ", str(e), "download")
+            return run.fail("CZ", "CZ", str(e), _failure_kind(e), e)
         if not sheets:
             return run.fail(
                 "CZ",
@@ -2039,7 +2108,7 @@ def _download_cz_contours(
                 ),
             )
         except DownloadError as e:
-            rc = run.fail(sheet, "CZ", str(e), "download")
+            rc = run.fail(sheet, "CZ", str(e), _failure_kind(e), e)
             status = "failed"
         else:
             run.add(sheet, "CZ", result.file)

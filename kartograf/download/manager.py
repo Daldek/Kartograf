@@ -12,7 +12,7 @@ import logging
 import os
 import shutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
@@ -20,7 +20,7 @@ from typing import Any, Literal, Protocol, cast
 import requests
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.download.arguments import require_bool, require_int
+from kartograf.download.arguments import require_bool, require_workers
 from kartograf.download.campaigns import (
     RASTER_EXTENSIONS,
     CampaignRef,
@@ -65,7 +65,13 @@ from kartograf.download.versions import (
     read_version,
     version_key,
 )
-from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.exceptions import (
+    DownloadError,
+    NoCoverageError,
+    ValidationError,
+    YearRangeError,
+)
+from kartograf.interrupt import run_parallel
 from kartograf.notices import (
     CHECK_FAILED,
     DOWNLOAD_SIZE,
@@ -458,6 +464,13 @@ def _is_transport_failure(error: DownloadError) -> bool:
     return isinstance(error.__cause__, requests.RequestException)
 
 
+def no_coverage_text(total: int) -> str:
+    """The failure of a sheet list in which no sheet has data: the download
+    (``download_data``) and the check (``DownloadManager.check_sheets``) of
+    the same area say it the same way."""
+    return f"GUGiK nie ma danych dla zadnego z {count_text(total, *OF_SHEETS)} obszaru"
+
+
 class DownloadManager:
     """
     Manages downloading of NMT data sheets.
@@ -549,7 +562,7 @@ class DownloadManager:
             incompatible resolution/CRS; ``workers`` not an ``int`` or a
             switch not a ``bool``.
         """
-        require_int(workers, "workers")
+        require_workers(workers, "workers")
         require_bool(all_campaigns, "all_campaigns")
         require_bool(full_sheet, "full_sheet")
         if year is not None:
@@ -580,7 +593,7 @@ class DownloadManager:
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._default_ext = self._provider.default_extension
-        self._workers = max(1, workers)
+        self._workers = workers
         self._sidecar_extra = sidecar_extra
         self._on_notice = on_notice
         # `is True`, not truthiness: Mock/Mock(spec=...) yields a Mock -> plain flow.
@@ -1056,13 +1069,67 @@ class DownloadManager:
                 return list(executor.map(inspect, leaves))
         return [inspect(sheet) for sheet in leaves]
 
-    def check_sheets(self, sheets: list[str]) -> UpdatePlan:
-        """Return the PL-sheet update plan without downloading any files."""
+    def check_sheets(
+        self,
+        sheets: list[str],
+        *,
+        on_no_coverage: Callable[[Mapping[str, NoCoverageError], int], None]
+        | None = None,
+    ) -> UpdatePlan:
+        """Return the PL-sheet update plan without downloading any files.
+
+        One position per file the same request would download
+        (``inspect_sheets``); the states of the data are those of the download:
+
+        - a sheet the index has no data for (``NoCoverageError``: the sea, an
+          area abroad, a resolution the region lacks) is no position - there is
+          no file to plan - and not a failed check. ``on_no_coverage(no_data,
+          total)`` receives them (sheet -> error) and the number of sheets of
+          the request, as ``download_sheets`` reports
+          ``DownloadResult.no_coverage``; when no sheet has data at all the
+          check raises ``NoCoverageError`` (the one of the sheet, for a list
+          ``no_coverage_text``), as the download fails;
+        - sheets with data only in other years raise ONE ``YearRangeError``
+          for all of them, nothing is planned (as ``download_sheets``);
+        - an index error (network, 5xx) is a ``check_failed`` position.
+
+        Raises
+        ------
+        NoCoverageError
+            No sheet of the request has data.
+        YearRangeError
+            A sheet has data only outside the year bounds.
+        """
         from kartograf.download.updates import _items
 
+        inspections = self.inspect_sheets(sheets)
+        conflicts: dict[str, tuple[int, ...]] = {}
+        no_data: dict[str, NoCoverageError] = {}
+        for inspection in inspections:
+            error = inspection.error
+            if isinstance(error, YearRangeError):
+                conflicts.update(error.sheets)
+            elif isinstance(error, NoCoverageError):
+                no_data[inspection.sheet] = error
+        if conflicts:
+            raise year_range_error(
+                conflicts, self._min_year, self._max_year, total=len(inspections)
+            )
+        if no_data and on_no_coverage is not None:
+            on_no_coverage(no_data, len(inspections))
+        if no_data and len(no_data) == len(inspections):
+            if len(inspections) == 1:
+                raise next(iter(no_data.values()))
+            raise NoCoverageError(
+                no_coverage_text(len(inspections)),
+                hints=tuple(
+                    dict.fromkeys(hint for e in no_data.values() for hint in e.hints)
+                ),
+            )
         items = [
             item
-            for inspection in self.inspect_sheets(sheets)
+            for inspection in inspections
+            if inspection.sheet not in no_data
             for item in _items(self, inspection)
         ]
         return new_plan(self._storage.output_dir, items)
@@ -1104,14 +1171,17 @@ class DownloadManager:
         for inspection in self.inspect_sheets(sheets):
             sheet = inspection.sheet
             if inspection.error is not None:
+                no_data = isinstance(inspection.error, NoCoverageError)
                 result.failed.append(sheet)
                 result.errors[sheet] = str(inspection.error)
+                if no_data:
+                    result.no_coverage.append(sheet)
                 self._emit(
                     on_progress,
                     result.total,
                     len(sheets),
                     sheet,
-                    "failed",
+                    "no_coverage" if no_data else "failed",
                     str(inspection.error),
                 )
                 continue
@@ -1950,29 +2020,27 @@ class DownloadManager:
                 self._record(result, sheet, fetch, status, hints, message)
                 self._emit(on_progress, i, total, sheet, status, message)
         else:
-            counter = 0
             outcomes: dict[str, tuple] = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as executor:
-                future_to_sheet = {
-                    executor.submit(
-                        self._download_single_sheet_task,
-                        sheet,
-                        update,
-                        check=check,
-                        on_progress=on_progress,
-                    ): sheet
-                    for sheet in sheets
-                }
-                for future in concurrent.futures.as_completed(future_to_sheet):
-                    sheet = future_to_sheet[future]
-                    try:
-                        sheet, fetch, status, message, hints = future.result()
-                    except Exception as e:
-                        logger.debug("Unexpected error downloading %s: %s", sheet, e)
-                        fetch, status, message, hints = None, "failed", str(e), ()
-                    counter += 1
-                    outcomes[sheet] = (fetch, status, hints, message)
-                    self._emit(on_progress, counter, total, sheet, status, message)
+
+            def task(sheet: str) -> tuple[str, SheetFetch | None, str, str, tuple]:
+                try:
+                    return self._download_single_sheet_task(
+                        sheet, update, check=check, on_progress=on_progress
+                    )
+                except Exception as e:
+                    logger.debug("Unexpected error downloading %s: %s", sheet, e)
+                    return sheet, None, "failed", str(e), ()
+
+            def finished(
+                ended: int,
+                _sheet: str,
+                outcome: tuple[str, SheetFetch | None, str, str, tuple],
+            ) -> None:
+                sheet, fetch, status, message, hints = outcome
+                outcomes[sheet] = (fetch, status, hints, message)
+                self._emit(on_progress, ended, total, sheet, status, message)
+
+            run_parallel(task, sheets, workers=workers, on_done=finished)
             for sheet in sheets:
                 self._record(result, sheet, *outcomes[sheet])
 

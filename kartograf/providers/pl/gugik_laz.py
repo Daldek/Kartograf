@@ -38,7 +38,7 @@ import re
 import threading
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, field, fields
+from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 
 import requests
@@ -198,10 +198,13 @@ class SupersededLazTile:
 
 @dataclass(frozen=True)
 class LazTileSelection:
-    """Tile selection result: ``tiles`` to download (by sheet) and ``superseded``."""
+    """Tile selection result: ``tiles`` to download (by sheet) and ``superseded``;
+    ``below_density``: the tiles of the area dropped by ``min_density`` before
+    the selection (``select_tiles`` only)."""
 
     tiles: tuple[LazTile, ...]
     superseded: tuple[SupersededLazTile, ...] = field(default=())
+    below_density: tuple[LazTile, ...] = field(default=())
 
 
 def _tile_order_key(tile: LazTile) -> tuple:
@@ -865,11 +868,13 @@ class GugikLazProvider(DataSourceProvider):
                 f"(dostepne: {', '.join(map(str, available_years))})"
             )
         found: list[LazTile] = []
+        below: list[LazTile] = []
         for yr in available_years:
             for tile in self._query_layer(vcrs, yr, bbox, timeout):
                 if min_density is not None and (
                     tile.density is None or tile.density < min_density
                 ):
+                    below.append(tile)
                     continue
                 found.append(tile)
 
@@ -900,7 +905,7 @@ class GugikLazProvider(DataSourceProvider):
                     labels=labels,
                     partial_years=partial_years,
                 )
-        return selection
+        return replace(selection, below_density=tuple(below))
 
     def _query_layer(
         self,

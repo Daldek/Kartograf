@@ -94,6 +94,10 @@ from_crs` potrafi cicho zwrocic identycznosc; (2) pusta lista operacji to
 o nieznanej dokladnosci (`accuracy < 0`) i powyzej `policy.min_accuracy_m`,
 a pozostale przechodza probe na punkcie kontrolnym (inf/NaN = odrzut, to
 przypadek siatki obcego kraju); (4) kazdy wynik przechodzi `isfinite`.
+Budowa grupy pomija wylacznie ostrzezenie pyproj `Best transformation is not
+available` (brak siatki PROJ, np. CUZK na czystej instalacji): polityka wybiera
+sama sposrod dostepnych operacji, a surowy `UserWarning` lamalby kontrakt
+pustego stderr w `--json` (USAGE 9.2).
 Wybrana operacja jest **przypieta** (`PinnedTransform`) i przy reprojekcji
 rastra WYMUSZANA na GDAL-u przez `COORDINATE_OPERATION` — bez tego GDAL
 wybiera operacje sam, poza polityka. Pulapka osi jest tu realna, nie
@@ -139,13 +143,13 @@ kartograf ──> core, download, providers, landcover, hydrology, cache,
 __main__ ──> cli
 cli ──> catalog, commands, error_report, sheet_info, source_info,
         cache_info, download, landcover, hydrology, notices, project,
-        sources, kartograf
+        sources, interrupt, kartograf
 mcp_server ──> catalog, commands, error_report, download, cache, kartograf
         # SDK `mcp`, `anyio`, `jsonschema`: tylko leniwie, w create_server
 commands ──> catalog, project, download, cache, notices
 catalog ──> sources, download, landcover, hydrology, providers, core,
         error_report, _version, kartograf (l)
-error_report ──> transform, catalog (l)
+error_report ──> transform, interrupt, catalog (l)
 sheet_info ──> catalog, core
 source_info ──> download, landcover, providers, sources
 cache_info ──> cache, notices
@@ -153,15 +157,16 @@ store_documents ──> download, store
 project ──> download, landcover, hydrology, sources, cache, catalog,
         notices, _version, kartograf (_clock)
 download ──> providers, sources, transform, core, cache, notices,
-        _version, kartograf (_clock), transport
-landcover ──> providers, download, core, cache, sources, notices, transport
+        _version, kartograf (_clock), transport, interrupt
+landcover ──> providers, download, core, cache, sources, notices, transport,
+        interrupt
 hydrology ──> core, download, landcover, cache (TYPE_CHECKING), notices,
         providers (l), sources (l), transform (l)
 providers ──> sources, transform, transport, core, cache, notices,
-        auth (l), download (l)
+        auth (l), download (l), interrupt
 sources ──> core, kartograf (_clock), _version
 transport ──> transform, core, sources, cache, notices, providers,
-        kartograf (l, __version__)
+        interrupt, kartograf (l, __version__)
 transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
 cache ──> core (TYPE_CHECKING), notices
 _version ──> kartograf (l, __version__)
@@ -169,7 +174,7 @@ store ──> core, download, sources, providers (l)
 store_geometry ──> core, transform, store (typy pod TYPE_CHECKING; w czasie
         dzialania takze leniwy import `read_sidecar`), providers (l),
         transport (l)
-_clock, notices, auth ──> (nic wewnetrznego)
+_clock, notices, auth, interrupt ──> (nic wewnetrznego)
 core ──> (nic poza exceptions i serialization)
 exceptions ──> serialization (koder dla `details()`; krawedzie DO niego
         pominiete powyzej — importuja go kartograf, cli, core, sources,
@@ -249,7 +254,7 @@ Uwagi, ktore latwo przeoczyc:
   (`cli/_json.py`) to `Document.to_json()`, tryb tekstowy renderuje te same
   dokumenty (tabele, linie statusu, pasek postepu z
   `download.manager.DownloadProgress`), a `main` zamienia wyjatki na
-  `error_report` i kody wyjscia 0/1/2/130. Z `download` bierze ponadto
+  `error_report` i kody wyjscia 0/1/2/130/143. Z `download` bierze ponadto
   `download.plan`/`fetch` (plik planu, `UpdateMode`, `VersionedFile`) i
   `download.options` (`output_required`, `require_product`), z `sources.variants`
   tabele wariantow, z `notices` komunikaty, z `project.commands` `task_command`.
@@ -400,8 +405,10 @@ kartograf/
 │                        # CacheError; InvalidSidecarError(.path) — nieczytelny sidecar (read_sidecar);
 │                        # kody bledow i kody wyjscia: USAGE 9.3
 ├── error_report.py      # ErrorReport (kartograf-error/1), error_report(exc, command=):
-│                        # wyjatek jako dane (io_error, interrupted, internal_error buduje tu),
-│                        # ERROR_CODES/EXIT_CODES - jedyne zrodlo tabel USAGE 9.3 i katalogu
+│                        # wyjatek jako dane (io_error, interrupted, terminated, internal_error
+│                        # buduje tu), ERROR_CODES/EXIT_CODES - jedyne zrodlo tabel USAGE 9.3 i katalogu
+├── interrupt.py         # Przerwanie: run_parallel (pula z anulowaniem kolejki i flaga stopu dla
+│                        # trwajacych jednostek), check_stop, Stopped/Terminated, sigterm_interrupts
 ├── core/                # Logika bazowa, bez IO sieciowego
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia: _DENSIFY
 │   │                       # punktow na krawedz, cache transformerow, operacja przypieta
@@ -639,7 +646,7 @@ kartograf/
                          # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
                          # cache_cmd.py (cache_info), catalog_cmd.py (get_catalog),
                          # project_cmd.py (API projektu; project add przez parse_command),
-                         # commands.py (entry point main: wyjatki -> error_report, kody 0/1/2/130)
+                         # commands.py (entry point main: wyjatki -> error_report, kody 0/1/2/130/143)
 ```
 
 ---
@@ -1020,7 +1027,9 @@ wersji = wydanie `<rok>_<updated>` (`label_source="edition"`).
 
 **Kolekcje (ADR-042) w sidecarze.** `download/collections.py::run_job`
 wybiera kanal po jego capability (unikalnej w deskryptorze) i zapisuje:
-`request` = wybor uzytkownika w tej jednostce (`teryt`, `bbox` +
+`request` = wybor uzytkownika w tej jednostce (`teryt`, `ku` (mapa katastralna
+CZ, z `format`), `tile` (kafel mesh: `<uklad>/<modul>`, np.
+`2000/7/78944_6777_74230_55482`), `sheet`, `bbox` +
 `bbox_crs` w ukladzie natywnym uslugi albo `whole_country: true`; `year`,
 `format`, `lod`, `level`, `horizontal_crs` tylko gdy podane - jedyne
 wydanie LoD2 bez `year`), `horizontal_crs` =
@@ -1267,9 +1276,18 @@ data/
    podmiana atomowa (plik tymczasowy + `os.replace`), nigdy wstecz (klucz
    ADR-028 z sidecara wersji). Kontrola: cel z `extra.link_target` +
    `os.path.samefile`; gdy system plikow nie ma stabilnych i-wezlow (SMB bez
-   `serverino`), potwierdzenie trescia: oba pliki maja > 1 link, ten sam
-   rozmiar i sha256 dowiazania = sha256 sidecara wersji
-   (`links._same_content_hardlink`). `FileStorage.get_versions_root(sheet)`/`get_versions_base`,
+   `serverino`), potwierdzenie trescia: ten sam rozmiar i sha256 dowiazania =
+   sha256 sidecara wersji (`links._same_content`). Liczba dowiazan nie
+   bierze udzialu w potwierdzeniu: klient cifs zglasza `st_nlink` = 1 dla
+   sciezki, ktora wlasnie otwarto (takze tym odczytem), przez kilka sekund
+   albo dluzej, wiec liczba zmienialaby wynik miedzy kolejnymi wywolaniami
+   (e2e 0.8.0: dowiazanie cofniete na starszy lot). Sciezka o tresci wersji
+   JEST ta wersja (`links._hold`), takze gdy jest niezalezna kopia, i od jej
+   klucza zalezy "nigdy wstecz"; `ensure_link` zamienia taka kopie z
+   powrotem w hardlink TEJ samej wersji, gdy zadna ze sciezek nie zglasza
+   drugiej nazwy (`_Held.lone`, np. po `rsync -a` bez `-H`), a w innym
+   przypadku niczego nie zapisuje. `FileStorage.get_versions_root(sheet)`/
+   `get_versions_base`,
    `list_files()` pomija `versions/`, `full_sheet/` i `kampanie/`
    (`versions=True` = tylko pliki wersji). Katalog `kampanie/` z 0.7.x
    nie jest czytany (`has_legacy_campaigns()` -> `Info:` w CLI). Od planu
@@ -1522,7 +1540,11 @@ KU w segmencie, ktorego kanal paczek ma jednostke `ku`). Plik krajowy
 z motywem to `<kraj>_<motyw>` (`pl_miejscowosci`) - dokladnie ta nazwa,
 ktora zwraca `Sidecar.unit` (wyprowadzona z nazwy pliku slotu, bo motywu
 nie ma w `request`), wiec `unit` z indeksu zamyka petle odswiezania
-`iter_store(units=[unit])`. Nazwy zarezerwowane (`versions`, `full_sheet`,
+`iter_store(units=[unit])`. Tak samo kafel LAZ: wybrany dla obszaru albo
+arkusza ma w `request.bbox` ten obszar (sidecary 0.7.x i 0.8.0), ale jego
+`unit` to godlo kafla z `extra.tile_sheet` (takze `godlo_kafla` sprzed
+ADR-031); w segmencie samych arkuszy i kafli (ZTM) sam numer (`0510`) to
+arkusz, nie TERYT. Nazwy zarezerwowane (`versions`, `full_sheet`,
 `kampanie`, takze jako sama jednostka) i nazwy dluzsze niz 255 bajtow to
 `ValidationError`. Hierarchie licza
 te same funkcje co zapis (`SheetParser`, `path_parts`,
@@ -1636,7 +1658,9 @@ segmenty z 0.8.0-dev (`orto/pl_1992_true`, `cadastre/cz_km_*`) sa
 `known=False`.
 
 `file_footprint(entry, *, network=False, cache=None)` wybiera pierwsze
-WIARYGODNE zrodlo: bbox zadania (z `bbox_crs`), obliczalne godlo
+WIARYGODNE zrodlo: bbox zadania (z `bbox_crs`; tylko dla pliku, ktory JEST
+tym obszarem - kafel LAZ z `extra.tile_sheet` ma w `request.bbox` obszar,
+z ktorego go wybrano, wiec jego obrys to naglowek LAS), obliczalne godlo
 PL-1992/PL-2000/TM33 (PL-1992: WGS84 = dokladny prostokat godla), obrys
 z naglowka GeoTIFF/ASC, JPG/JGW (plik georeferencji tej samej wersji),
 GPKG (SQLite `immutable=1`, bez plikow `-wal`/`-shm`), LAS/LAZ, obrys
@@ -1645,10 +1669,13 @@ obrysu kraju. Obrys jednostki z `cache` (`(rodzaj, kod) -> BBox`, pamiec
 wywolujacego) jest uzywany takze bez sieci; zapytanie do indeksu tylko przy
 `network=True`. Wpis bez `sidecar` (np. `skipped`) najpierw czyta sidecar.
 Arkusz SM5 albo jednostka nieznane indeksowi nie maja obrysu (`None`, nie
-blad). Wyjatki: `TransformUnavailableError`/`TransformError` (brak
-bezpiecznej operacji CRS albo obwiednia poza obszarem operacji),
-`DownloadError` (indeks niedostepny) i `ParseError` (cecha KU bez
-geometrii) - dwa ostatnie tylko przy `network=True`. Zapytanie PRG
+blad). Zrodlo, ktorego obwiedni nie da sie bezpiecznie przeliczyc na WGS84
+(`TransformError`: brak operacji w polityce albo obwiednia poza obszarem
+operacji), jest pomijane i decyduje nastepne (pierwsze WIARYGODNE zrodlo);
+bez zadnego wynik to `None`. `OGC:CRS84` (PRNG, granice specjalne PRG) i
+EPSG:4326 to ta sama dlugosc/szerokosc: obwiednia to te same liczby bez
+operacji. Wyjatki: `DownloadError` (indeks niedostepny) i `ParseError`
+(cecha KU bez geometrii) - tylko przy `network=True`. Zapytanie PRG
 przedstawia sie jak reszta zapytan GUGiK (`make_gugik_session`).
 
 `StoreEntry` i `Sidecar` sa niehashowalne (pola slownikowe; `__hash__ =
@@ -1657,14 +1684,19 @@ Naglowek rastra GDAL czyta bez listowania katalogu
 (`GDAL_DISABLE_READDIR_ON_OPEN=TRUE`). Obwiednie liczy densyfikowanymi
 krawedziami (`transform_bbox`) przez `pinned_transform`, nigdy przez
 domyslny `Transformer.from_crs`; brak bezpiecznej operacji to
-`TransformUnavailableError`.
+`TransformUnavailableError` z `pinned_transform` (dla pary rownej z
+dokladnoscia do kolejnosci osi CRS geograficznego operacja jest dokladna).
 
 `link_target(path)` sprawdza, ze `extra.link_target` wskazuje wersje
 slotu tego dowiazania (ta sama regula co `version_path` skanu), a nastepnie
 potwierdza ja istniejacym `download.links.linked_version`: ten sam plik wg
 i-wezla albo - na udziale bez stabilnych i-wezlow (SMB bez `serverino`) -
-trescia (oba pliki > 1 dowiazanie, ten sam rozmiar, SHA-256 dowiazania =
-SHA-256 sidecara wersji, jeden pelny odczyt pliku). Zwraca sciezke w tej
+trescia (ten sam rozmiar, SHA-256 dowiazania = SHA-256 sidecara wersji,
+jeden pelny odczyt pliku przy kazdym wywolaniu; liczba dowiazan nie jest
+sprawdzana, bo klient cifs zglasza po odczycie `st_nlink` = 1 i kolejne
+wywolania zwracalyby na zmiane wersje i `None`). Plik o tresci wersji
+liczy sie jako ta wersja takze wtedy, gdy jest niezalezna kopia (pobranie
+zamienia ja w hardlink, regula 6 w 3.3). Zwraca sciezke w tej
 samej postaci co `version_path`. Odczyt wszystkich celow przy pelnym skanie
 moglby kosztowac wiele gigabajtow, dlatego skan przypisuje wersje ze
 sciezki sidecara, a `link_target` wola sie na zadanie.
@@ -1742,7 +1774,8 @@ separatorem `/`; `version` wskazuje plik pod `versions/`, nigdy
 powiazania, jezeli ich wzajemne polozenie pozostaje takie samo.
 
 `kartograf/project/manifest.py` scisle sprawdza strukture i typy przy
-kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki). Zapisuje
+kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki; BOM UTF-8
+edytora jest dopuszczony, zapis zawsze bez BOM). Zapisuje
 plik tymczasowy obok manifestu, synchronizuje go (`fsync`) i podmienia
 atomowo (`os.replace`); synchronizuje rowniez katalog, gdy system plikow
 na to pozwala. Krotka blokada katalogowa `.kartograf-project.lock`
@@ -2042,8 +2075,10 @@ Lista `campaigns_cache` (TTL 7 dni, bez `scanned_from`) sluzy rowniez
 `record_cache`. `GugikProvider.available_years(sheet)` zwraca rosnace
 lata z pelnej listy. Arkusz bez danych GUGiK = `NoCoverageError` i
 pominiecie R5, a z danymi tylko poza przedzialem = `YearRangeError`
-(lista lat do 20 arkuszy, podpowiedz tylko gdy jedna jednostronna
-granica obejmuje wszystkie konflikty), zero pobran dla CALEGO zadania.
+(lista lat do 20 arkuszy, podpowiedz zmienia granice, ktora blokuje: przy
+przedziale `--min-year` w dol albo `--max-year` w gore do najblizszego
+roku, ktory ma kazdy konfliktowy arkusz; `--year` daje flagi jednostronne),
+zero pobran dla CALEGO zadania.
 Awaria skorowidza w fazie sprawdzania przerywa zadanie przed pobraniem,
 chyba ze w trybie domyslnym (D14) KAZDY arkusz zadania ma lokalna wersje
 z rocznikiem w zakresie (`extra.campaign.date[:4]`) — wtedy arkusze
@@ -2142,6 +2177,20 @@ sygnal = pozycja `result.stale` (blad, bez pobrania). Typy planu leza w
 `cz_laz`/`pl_cutout`/`cz_cutout`, `unit` = jednostka zadania; `UpdatePlan.merge`,
 `select_planned`, `new_plan`); pozostale tory dostaja `plan=` w swoich
 `run_*`.
+
+**Stany danych w sprawdzeniu (0.8.0, E2E P2-3).** `check_sheets(sheets,
+on_no_coverage=)` odtwarza wynik pobrania, a nie tylko pozycje: arkusz bez
+danych (`NoCoverageError`) nie jest pozycja planu ani niepowodzeniem
+sprawdzenia — `on_no_coverage(brakujace, liczba_arkuszy)` dostaje te arkusze
+(`download/data.py` zamienia je w `NO_COVERAGE_SOME` i `NO_COVERAGE_HINT`,
+tekstem pobrania, `_no_coverage_warning`/`_coverage_hints`), a gdy zaden
+arkusz nie ma danych, zglasza `NoCoverageError` (pojedynczy arkusz: jego
+wlasny; lista: `no_coverage_text`). Arkusze z danymi tylko poza zakresem lat to
+JEDEN `YearRangeError` (`year_range_error`, jak `_checked_range`), a
+`check_failed` zostaje dla awarii skorowidza. `check_data` rzuca wtedy blad
+pierwszej porazki (`_Run.causes`): klasa wyjatku = kod bledu (`no_coverage`,
+`year_out_of_range`), a w raporcie pobrania ta sama nazwa to `UnitFailure.kind`
+(`_failure_kind`; `download` i `country` dla pozostalych).
 
 **Tory bez kampanii (plan 2/3; LAZ CZ: plan B).** LAZ (`download/laz.py`),
 LAZ CZ (`download/cz_laz.py`), arkusze CZ
@@ -2251,6 +2300,9 @@ nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 (`Warning:` R5); arkusz z danymi tylko poza przedzialem to
 `YearRangeError` i przerwanie CALEJ listy przed pobraniem, rowniez przy
 samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
+Tak samo `--check-updates`: arkusze bez danych to `NO_COVERAGE_SOME` i kod 0
+(zaden arkusz z danymi = `no_coverage`, kod 1), konflikt lat to jeden
+`year_out_of_range` dla wszystkich arkuszy (sekcja 4.1).
 
 **Archiwa GUGiK (`format` inny niz `ASC`, ADR-041).** Arkusze archiwum
 maja rozne skale (godla 6-czlonowe 1:25000 i 7-czlonowe jednego wariantu,
@@ -2679,8 +2731,9 @@ takze `--year`, `--min-year`, `--max-year`, `--all-campaigns`
 i `--min-density`; `download/area.py::pl_only_flags`
 czyta rejestry) ROZSTRZYGA kraj do `pl` z komunikatem `Info:` zamiast
 przewracac zadanie; (3) porazka jednego kraju
-przy sukcesie drugiego daje kod 0 i `Warning:` — kod 1 zostaje dla jawnego
-`--country` i dla porazki wszystkich krajow. `Info:`/`Warning:` ida na stderr,
+przy sukcesie drugiego daje kod 0 i `Warning:` (takze w kolekcjach, sekcja
+4.10) — kod 1 zostaje dla jawnego `--country` i dla porazki wszystkich krajow.
+`Info:`/`Warning:` ida na stderr,
 wiec `-q` ich nie tlumi. `--cutout` NIE rozstrzyga kraju w zadna strone,
 bo od ADR-027 dziala po obu stronach granicy.
 
@@ -2860,7 +2913,9 @@ Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
 (+ `.meta.json` z `extra.tile_sheet`/`year`/`nominal_density`/`url`,
 `extra.acquisition_date`/`full_sheet`, gdy znane, oraz
 `extra.parent_request` w trybie `--bbox`/`--geometry`; `request`
-niesie bbox, podane granice roku, `year` dla jednego roku
+niesie bbox OBSZARU zadania (okno EPSG:2180 - nie kafla: obrys i `unit`
+kafla czyta sie z naglowka LAS i z `extra.tile_sheet`, sekcja 3.3.1),
+podane granice roku, `year` dla jednego roku
 i `min_density`, gdy podane — E16).
 `nominal_density` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
 (`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
@@ -2919,7 +2974,7 @@ Sygnal per kanal (`AccessChannel.update_signal`):
 
 | Zrodlo / kanal | Sygnal | Etykieta wersji | Segment |
 |---|---|---|---|
-| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
+| SoilGrids WCS | `metadata`: `SoilGridsProvider.edition(property)` — pierwszy `ows:Title` GetCapabilities mapy wlasciwosci (`SoilGrids250m 2.0 - ...` -> `2.0`); mapa `ocd` nie podaje wydania w tytule (stan 2026-10-19), wiec jej wydanie to wydanie mapy `clay` (`extra.edition.url`/`title` wskazuja ja, a `extra.edition.source_property` = `clay` mowi to maszynowo) | wydanie | `soil/global_soilgrids_<wl>_<gl>_<stat>` |
 | CORINE CLMS (`uses_clms(year)`: token i rok w `CLMS_YEARS`) | `metadata`: `CorineProvider.edition(year)` — `characteristics_release_major_version` z `@search?UID=<uid>&fullobjects=1` (bez tokenu) | wydanie (`V2020_20u1`) | `landcover/eu_corine_<rok>` |
 | CORINE podglad WMS (bez credentials; 1990 zawsze) | `none` | data pobrania | `landcover/eu_corine_<rok>_preview` (`.png`) |
 | BDOT10k paczka powiatu | `none` | data pobrania | `landcover/pl_bdot10k_gpkg[_<warstwy>]`, `_shp`, `_gpkg_zip` |
@@ -2952,7 +3007,18 @@ wyboru (`teryt` / `bbox`+`bbox_crs` / `sheet` kanoniczne); `nodata` GeoTIFF
 czytane z pliku (`null`, gdy brak tagu). Sidecar wersji SoilGrids/CORINE CLMS
 ma `extra.edition` (`id`, `url`, `title` / `dataset_uid`). Podglad
 CORINE: `horizontal_crs` uslugi WMS (EPSG:3857, 1990 EPSG:4326),
-`extra.fallback = "wms_png"`, `extra.note = "podglad WMS, nie dane"`.
+`extra.fallback = "wms_png"`, `extra.note = "podglad WMS, nie dane"`. Warstwe
+rastrowa uslugi EEA danego roku (`Corine Land Cover <rok> raster`; nazwa to `12`
+tylko w CLC2018, w innych latach `Corine_Land_Cover_<rok>_raster<numer>`)
+`CorineProvider._eea_raster_layer` czyta z GetCapabilities raz na providera;
+obraz podgladu w calosci przezroczysty (alfa 0: brak danych CLC roku dla obszaru)
+to `NoCoverageError` PO pobraniu i PRZED zapisem wersji (`kind: no_coverage`, jak
+true orto). Sidecar SoilGrids ma `extra.units` = `{mapped, conventional,
+divisor}` (jednostki ISRIC: wartosc w pliku / `divisor` = jednostka
+konwencjonalna; `uncertainty` to iloraz `10 x (Q0.95 - Q0.05) / Q0.5`),
+a raster samych zer (poza `cfvo`) `extra.all_nodata` i `Warning`
+`all_nodata`; `ocs` istnieje tylko dla `0-30cm` (`SoilGridsProvider.check_layer`),
+okno mniejsze niz piksel jest rozszerzane do jednego piksela (250 m).
 
 **ZABAGED (CZ, ADR-042 D15, plan D).** `LandCoverManager(output_dir,
 "zabaged")` nie ma klasy providera (`COLLECTION_SOURCES`): opcje sprawdza
@@ -3032,15 +3098,21 @@ plikow, `Error: <TERYT>: ...` dla porazek i konczy kodem 1 przy
 `download_by_sheet` (plik poza magazynem) pobieraja JEDEN powiat
 (`_single_teryt`): obszar kilku powiatow to `ValidationError` z lista
 kodow i podpowiedzia `download_landcover`. Provider stosuje swoj limit
-czasu pobrania i zapytania PRG, nie jawny `timeout` komendy. `layers=`
-(kody 4-literowe, np. `PTWP`, `SWRS`; tylko GPKG) zostawia w scalonym GPKG
-wylacznie pliki `__OT_<kod>_*` pakietu — brakujaca warstwa to
-`DownloadError`, zly kod `ValidationError` przed siecia; plik z filtrem
+czasu pobrania i zapytania PRG, nie jawny `timeout` komendy. Obszar wypisuje
+`Info` `unit_list` (powiaty z PRG) i podlega limitowi kolekcji
+(`download.collections.within_volume`: > 100 pakietow do pobrania albo > 10 GB
+wg `HEAD` = `ValidationError` przed pierwszym transferem; takze archiwum
+`year`). `layers=` (kody klas z `BDOT10K_CLASSES`: 58 klas rozporzadzenia 2021;
+tylko GPKG) zostawia w scalonym GPKG wylacznie pliki `__OT_<kod>_*` pakietu;
+nieznany kod i pusty kod to `ValidationError` przed siecia, klasa bez pliku
+w paczce powiatu (brak jej obiektow) to `Info` `classes_absent` (jak BDOO;
+`Bdot10kPackage.classes`/`absent`, `extra.source.classes`), a brak wszystkich
+wybranych klas to `NoCoverageError` powiatu; plik z filtrem
 nosi token warstw w segmencie, bo nie jest juz pelnym pakietem. Scalanie
 pakietu (`_merge_gpkg_files`) konczy sie `DownloadError`, gdy nazwa
 tabeli powtarza sie w dwoch plikach pakietu (dotad druga kopia byla po
-cichu pomijana); w prawdziwej paczce (63 pliki `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`,
-po jednej tabeli) duplikatow nie ma.
+cichu pomijana); w prawdziwej paczce (po jednej tabeli na klase i typ
+geometrii, `..._<TERYT>__OT_<KOD>_<A|L|P>.gpkg`) duplikatow nie ma.
 
 BDOT10k GPKG: archiwum ZIP z GUGiK jest rozpakowywane, a warstwy scalane
 w jeden GeoPackage w LOKALNYM katalogu tymczasowym (`tempfile`); do
@@ -3480,7 +3552,21 @@ kind)` (`no_coverage` dla `NoCoverageError`, `download` dla
 `DownloadError`), pozostale jednostki dzialaja dalej (`workers` =
 `ThreadPoolExecutor`, sesja HTTP per watek). Wynik: `CollectionReport(files,
 failed, stale, notices, ok)`, `ok` = brak bledow i nieaktualnych pozycji
-planu. Czasy: `SERVICE_TIMEOUT` 60 s (WFS/REST, kanal moze miec wlasny
+planu, z wyjatkiem `--country auto` w PL i CZ (regula `download_data`,
+sekcja 4.6): kraj z bledami przy kraju bez bledow to czesciowy sukces -
+`ok = True` (kod 0), `Notice` `auto_partial_success`
+(`download/area.py::emit_partial_success`, wspolny z `download_data`), bledy
+zostaja w `failed`. Kraj, w ktorym obszar nie ma jednostek (brak KU w RUIAN,
+powiatu, arkusza, kafla - prostokatna obwiednia CZ obejmuje terytorium PL)
+albo zapytanie o jednostki zawiodlo, to blad tego kraju
+(`UnitFailure(<kraj>, <kraj>, ...)`, `_jobs`) i nie przerywa drugiego; brak
+jednostek we WSZYSTKICH krajach = `NoCoverageError`. `--check-updates`: taki
+kraj to `Warning` `check_failed` + `auto_partial_success` (jak `check_data`).
+KU obszaru wg RUIAN (`cadastral_areas_for_bbox`, takze pusta odpowiedz) leza
+w cache metadanych (`index_area_cache`, TTL 7 dni, jak powiaty PRG), wiec
+powtorzenie obszaru dziala bez sieci. `Notice` `unit_list` nazywa co
+najwyzej 10 jednostek, reszta jest policzona (`notices.names_text`). Czasy:
+`SERVICE_TIMEOUT` 60 s (WFS/REST, kanal moze miec wlasny
 `FeatureBBoxParams.timeout`, np. PRNG OGC API 180 s), `PACKAGE_TIMEOUT`
 120 s (paczka), `PROBE_TIMEOUT` 30 s (`HEAD` sygnalu, zapytanie PRG),
 `SIZE_TIMEOUT` 120 s (`HEAD` rozmiaru: serwer opendata GUGiK odpowiada
@@ -3494,8 +3580,10 @@ po 0,2-90 s, ok. 3,5 s na GB paczek drzew 3D).
 wiecej niz `VOLUME_BYTES` = 10 GB, konczy sie `ValidationError` PRZED
 pierwszym transferem (`run_request` -> `_within_volume`, jedno miejsce dla
 kolekcji, `LandCoverManager` i NMT 100 m): liczba plikow, rozmiar (suma
-`HEAD`/`length` feedu ATOM; ponad 100 plikow - szacunek ze sredniej
-`VOLUME_SAMPLE` = 5 plikow rozlozonych rownomiernie) i podpowiedz (zawez
+`HEAD`/`length` feedu ATOM; do 100 plikow kazdy plik jest mierzony, wiec
+limit 10 GB jest dokladny, powyzej 100 o odmowie decyduje liczba, a rozmiar
+to tylko orientacyjna srednia `VOLUME_SAMPLE` = 5 plikow rozlozonych
+rownomiernie) i podpowiedz (zawez
 obszar, wybierz jednostke `--teryt`/`--ku`, wykonaj plan z czescia
 pozycji). Liczone sa pliki, ktore zadanie przesloloby: bez lokalnej
 wersji, z `update="force"` wszystkie, z `--upgrade --plan` pozycje planu;
@@ -3751,22 +3839,48 @@ czystym procesie).
 `validate_command` (konwersja i walidacja zadania bez sieci i zapisu), `format_command`
 (`catalog/formatting.py`), `run_command`/`check_command` (konwersja, walidacja, potem funkcja
 komendy: `download_data`, `download_collection`, ... albo `check_*`). `options` to postac
-JSON opcji zadania projektu (ADR-040), `run` - flagi uruchomienia (`output_dir`, `update`,
-`plan`, `workers`, `summary`). Funkcje bez sieci (`parse_command`, `validate_command`,
+JSON opcji zadania projektu (ADR-040), `run` - pozostale flagi linii pod nazwami
+parametrow (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`,
+`quiet`, `json`, `summary`; nie ma klucza `update`: `run_command` bierze tryb jako
+`update="upgrade"|"force"`, a `check_updates` to `check_command`, wiec odwzorowanie robi
+wywolujacy). Funkcje bez sieci (`parse_command`, `validate_command`,
 `format_command`) maja test z atrapa transportu odrzucajaca kazde zapytanie.
 
 **Bledy.** Kazda klasa `KartografError` ma w `__dict__` wlasny `code` (snake_case, unikalny;
 `tests/test_errors.py`), `exit_code`, `DETAIL_FIELDS` i opcjonalny `hint`; walidatory biblioteki
 ustawiaja `ValidationError.option`/`options`/`allowed` (nazwa argumentu API, nie flaga).
 `error_report(exc, command=)` zamienia dowolny wyjatek na `ErrorReport` (kody `io_error` dla
-`OSError`, `interrupted` i `internal_error` buduje tu, a nie klasy hierarchii); `hint` skladany
+`OSError`, `interrupted`, `terminated` i `internal_error` buduje tu, a nie klasy hierarchii); `hint` skladany
 deterministycznie z `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` albo `Dozwolone wartosci ...` i
 `Przyklad: ...` z katalogu (do 400 znakow). `main` (`cli/commands.py`) wykrywa tryb JSON przed
 parsowaniem (`cli/_json.py::json_mode`), buduje parser z `usage_errors=True` (blad skladni
 to `UsageError`, z `command`, gdy linia nazwala znana komende) i zamienia kazdy wyjatek na
 dokument `kartograf-error/1` na stdout (stderr pusty) oraz kod wyjscia `e.exit_code`
-(0/1/2), 130 dla Ctrl-C; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Tabele kodow wyjscia
+(0/1/2), 130 dla Ctrl-C, 143 dla SIGTERM; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Rekordy loggera
+`kartograf` (poziom WARNING i wyzej) `main` zamienia na linie `Warning:`/`Error:` na stderr
+(`_StderrLines`; bez handlera Python drukuje je bez prefiksu); z `--json` przechodza tylko
+rekordy `kartograf.transport.http` (ponowienia), a z `KARTOGRAF_DEBUG` wszystkie. Tabele kodow wyjscia
 i bledow sa w USAGE 9.3 (`tests/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
+
+**Przerwanie i pule watkow (`kartograf/interrupt.py`).** Ctrl-C to `KeyboardInterrupt` tylko w
+watku glownym, wiec `--workers >= 2` (jednostki w `ThreadPoolExecutor`) czekalo na cala kolejke
+i zatwierdzalo ja po przerwaniu (e2e 0.8.0: B P2-1, C P2-5, D P2-2). Kazda pula pobierania
+(`DownloadManager._download_many`, `run_request` kolekcji, powiaty BDOT10k w `LandCoverManager`,
+kafle LAZ PL i arkusze LAZ CZ) idzie przez jednego pomocnika `run_parallel(work, items,
+workers=, on_done=)`: gdy watek czekajacy na wyniki dostanie wyjatek (Ctrl-C, blad jednostki,
+wyjatek `on_done`), jednostki, ktore nie ruszyly, sa anulowane, a trwajace dostaja flage stopu;
+wywolanie wraca dopiero po nich, wiec nic z puli nie dziala dalej i nic nie jest zatwierdzane po
+przerwaniu (wersje zatwierdzone wczesniej zostaja). Jednostka widzi flage w `check_stop()` (przed
+zapytaniem i miedzy kawalkami ciala w `transport/http.py::download_to`/`get_with_retry`/
+`head_signal`, w `transport/aaigrid.py`, w petlach paczki BDOT10k i na poczatku
+`commit_version`) oraz zamiast pauzy ponowienia, i konczy sie `Stopped` - podklasa
+`KeyboardInterrupt`: dziala to samo sprzatanie co przy `--workers 1` (`except BaseException`,
+`finally`), a zaden `except Exception` pakietu nie zamienia jej w porazke jednostki. Zapytanie
+zablokowane na sieci konczy sie najpozniej z limitem czasu. Pule sond (`executor.map` z HEAD i
+zapytaniami indeksu) anuluja kolejke juz same (`map`) i czekaja tylko na biezace zapytania.
+SIGTERM: `sigterm_interrupts()` (CLI `main`) rzuca w watku glownym `Terminated` (tez
+`KeyboardInterrupt`; pierwszy sygnal przywraca domyslna reakcje), a `error_report` daje
+`terminated`/143. Poza `main` (biblioteka, serwer MCP) sygnal nie jest przechwytywany.
 
 **Serwer MCP (`kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
 deklaracje na specyfikacje 29 narzedzi (nazwa, krotki opis, schemat wejscia JSON Schema

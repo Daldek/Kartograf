@@ -22,7 +22,7 @@ from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
 from kartograf.catalog.kinds import options_from_json, options_to_json
-from kartograf.download.arguments import require_int
+from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
 from kartograf.download.plan import PlanItem
@@ -371,7 +371,12 @@ def download_project(
     download date). ``update="upgrade"``/
     ``"force"`` (spec 4.7): the library function in that mode; after a full
     success the pins of the task are replaced by the result as a whole
-    (``updated``, or ``unchanged`` when identical). A failure of a task
+    (``updated``, or ``unchanged`` when identical). ``"force"`` also repairs:
+    a pinned version that ``verify_project`` calls corrupt (bytes, size or
+    sidecar other than pinned) is set aside - its files move to the hidden
+    ``.<label>_<sha8>.corrupt-<time>`` next to it, nothing is deleted - and
+    the download makes it again; pins that return with the same bytes stay
+    as they were (``restored``). A failure of a task
     (``failed``, library errors in ``TaskResult.errors``) leaves its pins
     as they were and the other tasks run. The manifest is written after
     each task. ``workers``: parallel file transfers within a task, for every
@@ -394,11 +399,7 @@ def download_project(
             allowed=("upgrade", "force"),
         )
     if workers is not None:
-        require_int(workers, "--workers")
-        if workers < 1:
-            raise ValidationError(
-                f"--workers musi byc >= 1, podano {workers}", option="workers"
-            )
+        require_workers(workers, "--workers")
     project, state = read_manifest(project_dir)
     _require_store(project)
     selected = _select(project, tasks)
@@ -461,6 +462,12 @@ def _download_task(
                 f"{_upgrade_hint(project, task.name)}"
             ],
         )
+    repaired: tuple[PinnedFile, ...] = ()
+    if update == "force":
+        try:
+            repaired = _set_aside_corrupt(project, task)
+        except (OSError, ValueError) as e:
+            return _failed(task, [str(e)])
     try:
         result = command.download(
             store,
@@ -479,7 +486,11 @@ def _download_task(
     pins, pin_errors = _pins(store, files)
     if restore:
         return _restore(project, task, restore, files, pins, pin_errors)
-    errors = [*files.errors, *pin_errors]
+    errors = [
+        *files.errors,
+        *pin_errors,
+        *_repin_repaired(project.output_dir, repaired, pins),
+    ]
     if not files.complete or errors or not pins:
         return _failed(
             task, errors or ["zadanie nie dalo pelnego wyniku - nic nie przypieto"]
@@ -494,7 +505,10 @@ def _download_task(
         }
         pins = [present.get((pin.path, pin.sha256), pin) for pin in pins]
     if task.files and set(pins) == set(task.files) and geometry == pinned_geometry:
-        return TaskResult(task.name, "unchanged", (), (), ())
+        # repaired: the same pins, the bytes of some of them made again
+        return TaskResult(
+            task.name, "restored" if repaired else "unchanged", repaired, (), ()
+        )
     pinned = replace(
         task,
         pinned_at=_clock.now().isoformat(timespec="seconds"),
@@ -515,13 +529,114 @@ def _download_task(
     )
 
 
+def _repair_advice(project: Project, task: str) -> str:
+    """The ways back from a corrupt pinned version: the copy of the store or
+    ``--force`` (``_set_aside_corrupt``)."""
+    return (
+        "przywroc katalog wersji z kopii magazynu albo uruchom "
+        f"{project_command(project.directory, 'download', '--force', task)} "
+        "(odklada uszkodzona wersje i pobiera ja ponownie)"
+    )
+
+
 def _corrupt_text(project: Project, task: str, pin: PinnedFile) -> str:
     return (
         f"{pin.unit}: przypieta wersja {pin.version} ma inny rozmiar niz "
-        "przypiety - przywroc katalog wersji z kopii magazynu albo usun "
-        "uszkodzony katalog wersji i uruchom "
-        f"{project_command(project.directory, 'download', task)}"
+        f"przypiety - {_repair_advice(project, task)}"
     )
+
+
+def _set_aside_corrupt(project: Project, task: ProjectTask) -> tuple[PinnedFile, ...]:
+    """The repair of ``--force``: the pinned versions that ``verify`` calls
+    corrupt are set aside (``_set_aside``) before the download, so it makes them
+    again; the pins that return with the same bytes keep their version path and
+    label (``_repin_repaired``).
+
+    Raises
+    ------
+    OSError, ValueError
+        A corrupt version that cannot be set aside (it lies outside the store
+        or cannot be moved); the ones before it stay set aside.
+    """
+    corrupt = tuple(
+        pin
+        for pin in task.files
+        if _store_check(project, task, pin, verify=True).status == "corrupt"
+    )
+    for pin in corrupt:
+        _set_aside(project.output_dir, pin)
+    return corrupt
+
+
+def _set_aside(store: Path, pin: PinnedFile) -> None:
+    """Move the data file and the sidecar of a pinned version into the hidden
+    directory ``.<label>_<sha8>.corrupt-<time>`` next to it: Kartograf never
+    deletes a version, and a hidden directory is none for ``list_versions``
+    and ``iter_store``. The standard path (a hardlink of the same bytes) is
+    linked anew by the download.
+
+    Raises
+    ------
+    ValueError
+        The version lies outside the store (a symlink in its path).
+    OSError
+        The files cannot be moved (nothing is moved then).
+    """
+    data = store / pin.version
+    directory = data.parent
+    expected = store.resolve(strict=True) / PurePosixPath(pin.version).parent
+    if directory.resolve(strict=True) != expected:
+        raise ValueError(
+            f"{pin.unit}: sciezka przypietej wersji {pin.version} wykracza poza "
+            "magazyn (dowiazanie symboliczne) - nie odkladam jej"
+        )
+    stamp = _clock.now().strftime("%Y%m%dT%H%M%S")
+    for attempt in range(1000):
+        suffix = f"-{attempt}" if attempt else ""
+        aside = directory.with_name(f".{directory.name}.corrupt-{stamp}{suffix}")
+        try:
+            aside.mkdir()
+        except FileExistsError:
+            continue
+        break
+    else:
+        raise OSError(f"{directory}: brak wolnej nazwy katalogu na uszkodzona wersje")
+    moved: list[tuple[Path, Path]] = []
+    try:
+        for source in (data, data.with_name(f"{data.name}.meta.json")):
+            os.replace(source, aside / source.name)
+            moved.append((source, aside / source.name))
+    except OSError:
+        for source, target in reversed(moved):
+            with contextlib.suppress(OSError):
+                os.replace(target, source)
+        with contextlib.suppress(OSError):
+            aside.rmdir()
+        raise
+
+
+def _repin_repaired(
+    store: Path, repaired: tuple[PinnedFile, ...], pins: list[PinnedFile]
+) -> list[str]:
+    """The pinned version directory of a repaired pin back when the download gave
+    its bytes under another version (``_repin_version``); the errors of that.
+    Other bytes (the source changed) are no repair: ``--force`` re-pins them."""
+    problems = []
+    for pin in repaired:
+        same = next(
+            (new for new in pins if new.path == pin.path and new.sha256 == pin.sha256),
+            None,
+        )
+        if same is None:
+            continue
+        try:
+            _repin_version(store, pin, same)
+        except (OSError, ValueError, KeyError, TypeError) as e:
+            problems.append(
+                f"{pin.unit}: nie udalo sie odtworzyc przypietej wersji "
+                f"{pin.version}: {e}"
+            )
+    return problems
 
 
 def _upgrade_hint(project: Project, task: str) -> str:
@@ -679,7 +794,7 @@ def _store_check(
             task,
             pin,
             "corrupt",
-            detail=f"{error}; przywroc katalog wersji z kopii magazynu",
+            detail=f"{error}; {_repair_advice(project, task.name)}",
         )
     return _file_check(task, pin, "ok")
 

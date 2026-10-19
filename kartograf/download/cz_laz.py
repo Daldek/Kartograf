@@ -24,7 +24,6 @@ Example::
 import functools
 import logging
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
@@ -34,7 +33,7 @@ import requests
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.arguments import require_int
+from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -55,6 +54,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import storage_for_provider
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.notices import Notice, NoticeSink
 from kartograf.providers.cuzk.laz import CuzkLazProvider
 from kartograf.sources.descriptor import SignalKind, TransportKind
@@ -302,10 +302,12 @@ def _run(
     if on_progress is not None:
         on_progress(0, total)
     if workers > 1 and total > 1:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(fetch, sheet) for sheet in selected]
-            for future in as_completed(futures):
-                record(future.result())
+        run_parallel(
+            fetch,
+            selected,
+            workers=workers,
+            on_done=lambda _ended, _sheet, outcome: record(outcome),
+        )
     else:
         for sheet in selected:
             record(fetch(sheet))
@@ -414,7 +416,7 @@ def download_cz_laz(
         Index or plan check failure.
     """
     validate_update(update, check="check_cz_laz")
-    require_int(workers, "workers")
+    require_workers(workers, "workers")
     bbox = _validate_selection(
         model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
     )

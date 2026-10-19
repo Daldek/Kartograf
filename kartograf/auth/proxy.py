@@ -74,6 +74,9 @@ class CLMSCredentials:
         self._credentials: dict | None = None
         self._access_token: str | None = None
         self._token_expires: float = 0
+        # Why CLMS_CREDENTIALS is set but not usable (a text without the
+        # value: shown by the health check); None while it is fine or unset.
+        self.env_error: str | None = None
 
     def load_from_env(self) -> bool:
         """Load credentials from the CLMS_CREDENTIALS environment variable."""
@@ -85,6 +88,7 @@ class CLMSCredentials:
             creds = json.loads(raw)
         except json.JSONDecodeError as e:
             logger.error(f"Invalid JSON in CLMS_CREDENTIALS: {e}")
+            self.env_error = f"CLMS_CREDENTIALS nie jest poprawnym JSON ({e})"
             return False
 
         if (
@@ -96,9 +100,14 @@ class CLMSCredentials:
                 "CLMS_CREDENTIALS must be a JSON object with "
                 "'client_id' and 'private_key'"
             )
+            self.env_error = (
+                "CLMS_CREDENTIALS musi byc obiektem JSON z polami client_id "
+                "i private_key"
+            )
             return False
 
         self._credentials = creds
+        self.env_error = None
         logger.info("Credentials loaded from CLMS_CREDENTIALS")
         return True
 
@@ -236,10 +245,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
 
         if parsed.path == "/health":
+            available = self.credentials.is_available
             self.send_json(
                 {
                     "status": "ok",
-                    "credentials_available": self.credentials.is_available,
+                    "credentials_available": available,
+                    "credentials_error": None
+                    if available
+                    else self.credentials.env_error,
                 }
             )
         else:

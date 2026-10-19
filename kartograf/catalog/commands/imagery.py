@@ -357,12 +357,31 @@ _DOWNLOAD_EXAMPLES = (
         title="Ortofotomapa PL: wycinek WCS",
     ),
     Example(
+        {
+            "product": "orto",
+            "country": "pl",
+            "bbox": [566000, 243000, 566500, 243500],
+            "bbox_crs": "EPSG:2180",
+            "sheet_system": "1992",
+        },
+        title="Ortofotomapa PL: arkusze dla prostokata (uklad 1992)",
+    ),
+    Example(
         {"product": "oblique-orto", "sheet": "7.125.11.08", "direction": ["n"]},
         title="Orto ukosna PL: kierunek polnocny",
     ),
     Example(
         {"product": "orto", "sheet": "CTES96"},
         title="Ortofotomapa CZ: arkusz SM5",
+    ),
+    Example(
+        {
+            "product": "orto",
+            "country": "cz",
+            "bbox": [-447000, -1114000, -446000, -1113000],
+            "bbox_crs": "EPSG:5514",
+        },
+        title="Ortofotomapa CZ: arkusze SM5 dla prostokata",
     ),
 )
 

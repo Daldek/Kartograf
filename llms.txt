@@ -64,7 +64,7 @@ Aktualnosc lokalnych wersji i zrodla z rejestru:
 ```
 kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --output /dane/kartograf --check-updates --json
 kartograf elevation list-sources --json
-kartograf landcover list-layers --json
+kartograf landcover list-layers --product bdoo --json
 ```
 
 Projekt (zadania i przypiete wersje; polecenia w katalogu projektu, `--json` przed nazwa zadania):
@@ -105,10 +105,11 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
   z argumentem `command` (np. `elevation download`), kody wyjscia i bledow z argumentem `tables`.
 - Narzedzia 1:1 z komendami: odkrywanie `get_catalog`, `parse_sheet`, `find_sheets`,
   `list_sources`, `list_layers`; dostepnosc `elevation_availability`; dane
-  `elevation_download`, `imagery_download`, `landcover_download`, `soil_download`,
-  `soil_hsg`; aktualnosc `check_updates` (parametry `tool` i `arguments`); projekt
-  `project_status`, `project_download`, `project_check_updates` (aktualnosc projektu);
-  magazyn `store_overview`, `store_entries`.
+  `elevation_download`, `imagery_download`, `landcover_download`, `soil_download`, `soil_hsg`,
+  `boundaries_download`, `cadastre_download`, `models3d_download`, `hydro_download`,
+  `names_download`, `maps_download`, `geodesy_download`; aktualnosc `check_updates` (parametry
+  `tool` i `arguments`); projekt `project_status`, `project_download`, `project_check_updates`
+  (aktualnosc projektu); magazyn `store_overview`, `store_entries`.
 - Wynik narzedzia to ten sam dokument co `--json`; `is_error` jest prawda, gdy CLI zwrocilby
   kod wyjscia != 0 (blad albo `ok: false`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
 - Dlugie pobrania zglaszaja postep notyfikacjami MCP.
@@ -116,7 +117,7 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
 ## Kody wyjscia i bledow
 Kod wyjscia: 0 = ok; 1 = brak kompletnego wyniku (awaria zrodla/sieci/dysku albo
 `ok: false`: sprawdz `failed` i `notices`); 2 = bledne dane wejsciowe (popraw wg `hint`
-i `details.option`); 130 = przerwane. Blad na stdout (`--json`) to `kartograf-error/1`:
+i `details.option`); 130 = przerwane (Ctrl-C), 143 = przerwane (SIGTERM). Blad na stdout (`--json`) to `kartograf-error/1`:
 `code`, `message`, `hint`, `exception`, `exit_code`, `command`, `details`. Kody:
 
 - `kartograf_error` (wyjscie 1): blad pakietu bez dokladniejszej klasy
@@ -131,7 +132,8 @@ i `details.option`); 130 = przerwane. Blad na stdout (`--json`) to `kartograf-er
 - `transform_failed` (wyjscie 1): blad przeliczenia wspolrzednych
 - `transform_unavailable` (wyjscie 1): brak bezpiecznej operacji dla pary ukladow
 - `io_error` (wyjscie 1): katalog lub plik niedostepny (brak, uprawnienia, miejsce)
-- `interrupted` (wyjscie 130): przerwane przez uzytkownika
+- `interrupted` (wyjscie 130): przerwane przez uzytkownika (Ctrl-C)
+- `terminated` (wyjscie 143): zakonczone sygnalem SIGTERM (timeout, docker stop)
 - `internal_error` (wyjscie 1): blad programu
 
 ## Dokumentacja

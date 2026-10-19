@@ -23,6 +23,7 @@ from kartograf.download.arguments import (
     require_int,
 )
 from kartograf.download.campaigns import validate_year_bounds
+from kartograf.download.countries import BBOX_CRS_REMEDY
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import PRODUCT as CONTOURS
 from kartograf.download.cz_contours import contours_formats
@@ -261,6 +262,9 @@ BBOX_CRS_CHOICES = (
 
 
 BBOX_EXPECTED = "Oczekiwano: min_x,min_y,max_x,max_y (np. 450000,550000,460000,560000)"
+# Limits of an EPSG:4326 bbox in degrees (``validate_request_bbox``).
+_LON_LIMIT = 180.0
+_LAT_LIMIT = 90.0
 _PRODUCTS = tuple(_PRODUCT_TEXT)
 # Keys of a per-country value (``pl=1m,cz=2m``) and the ``--country`` values
 # of a data request (also the CLI choices).
@@ -902,7 +906,15 @@ def canonical_bbox[T](bbox: T) -> T:
 def validate_request_bbox(bbox: BBox) -> BBox:
     """Validate parsed bbox coordinates with the same text for CLI and API;
     returns the bbox with its CRS code in the registry spelling
-    (``epsg:2180`` = ``EPSG:2180``) - callers go on with it."""
+    (``epsg:2180`` = ``EPSG:2180``) - callers go on with it.
+
+    The one check of every ``--bbox`` (a command of any group, before any
+    request): a supported CRS, finite numbers, ``min < max`` on both axes
+    (a point or a line has no area; ``core.bbox.validate_bbox`` allows it for
+    the sheet finder) and, in EPSG:4326, a longitude within +-180 and a
+    latitude within +-90 - metres given as degrees (``--bbox-crs`` forgotten)
+    or swapped axes would reach the sources as ``inf``/``nan``.
+    """
     bbox = canonical_bbox(bbox)
     if bbox.crs not in BBOX_CRS_CHOICES:
         raise ValidationError(
@@ -925,7 +937,56 @@ def validate_request_bbox(bbox: BBox) -> BBox:
         raise ValidationError(
             f"Nieprawidlowy bbox: {e}. {BBOX_EXPECTED}", option="bbox"
         ) from e
+    coords = (normalized.min_x, normalized.min_y, normalized.max_x, normalized.max_y)
+    if normalized.min_x == normalized.max_x or normalized.min_y == normalized.max_y:
+        raise ValidationError(
+            f"Nieprawidlowy bbox: bbox o zerowej powierzchni (min == max): {coords}; "
+            f"oczekiwano min_x < max_x i min_y < max_y. {BBOX_EXPECTED}",
+            option="bbox",
+        )
+    if normalized.crs == "EPSG:4326" and (
+        max(abs(normalized.min_x), abs(normalized.max_x)) > _LON_LIMIT
+        or max(abs(normalized.min_y), abs(normalized.max_y)) > _LAT_LIMIT
+    ):
+        raise ValidationError(
+            f"Nieprawidlowy bbox: wspolrzedne {coords} leza poza zakresem EPSG:4326 "
+            f"(dlugosc -180..180, szerokosc -90..90). {BBOX_CRS_REMEDY}. "
+            f"{BBOX_EXPECTED}",
+            option="bbox",
+            hint=f"{BBOX_CRS_REMEDY}.",
+        )
     return bbox
+
+
+def geometry_area_error(envelope: BBox, what: str) -> ValidationError:
+    """The refusal of a ``--geometry`` without an area (``option="geometry"``):
+    ``what`` is the track that needs one (``wycinek (--cutout)``)."""
+    coords = tuple(
+        float(value)
+        for value in (envelope.min_x, envelope.min_y, envelope.max_x, envelope.max_y)
+    )
+    return ValidationError(
+        "--geometry: obwiednia obiektow ma zerowa powierzchnie (punkt albo linia "
+        f"rownolegla do osi), {coords} w {envelope.crs}; {what} wymaga obszaru - "
+        "podaj wielobok albo --bbox o dodatniej powierzchni",
+        option="geometry",
+    )
+
+
+def require_geometry_area(envelope: BBox, what: str) -> None:
+    """The envelope of a ``--geometry`` has an area, for the tracks that cut,
+    select tiles of or measure the AREA (``what``: a cutout, LAZ tiles, HSG,
+    the availability report). The tracks that pick the sheets, units or pixels
+    a point lies in do not call it - a point is a valid ``--geometry`` there
+    (``--bbox`` of zero area is refused everywhere: ``validate_request_bbox``).
+
+    Raises
+    ------
+    ValidationError
+        ``min == max`` on an axis (``option="geometry"``).
+    """
+    if envelope.min_x == envelope.max_x or envelope.min_y == envelope.max_y:
+        raise geometry_area_error(envelope, what)
 
 
 def validate_area_choice(

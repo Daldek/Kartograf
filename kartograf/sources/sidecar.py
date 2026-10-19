@@ -124,7 +124,9 @@ def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
     A PL-2000 sheet code determines the zone (EPSG:2176..2179), PL-1992 -> EPSG:2180.
     When the file is readable and its left edge points to a different CRS (a
     PL-1992 sheet substituted for a PL-2000 sheet code by a pre-0.7.0 cache - K4),
-    the sidecar describes the FILE: the CRS from the file is returned, with a warning.
+    the sidecar describes the FILE: the CRS from the file is returned. The
+    mismatch reaches the user as the ``SHEET_CRS_MISMATCH`` notice of the download
+    result (built from the sidecars), so it is only a debug record here.
     """
     expected = horizontal_crs_for_sheet(sheet)
     if data_path is None:
@@ -133,7 +135,7 @@ def pl_sheet_horizontal_crs(data_path: Path | None, sheet: str) -> str:
     actual = _crs_from_pl_coordinate(x) if x is not None else None
     if actual is None or actual == expected:
         return expected
-    logger.warning(
+    logger.debug(
         f"Sidecar {data_path}: godlo {sheet} wskazuje {expected}, ale wspolrzedne "
         f"pliku (x = {x:.0f}) sa w {actual} - zapisano uklad pliku"
     )

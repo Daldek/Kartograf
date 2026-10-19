@@ -59,9 +59,10 @@ COMMANDS = collection_commands(
     "w EPSG:5514). --product addresses (PL): punkty adresowe i ulice obszaru "
     "(GeoPackage w EPSG:2180), paczka SHP powiatu (--teryt 4 cyfry) albo "
     "plik krajowy (--whole-country --format SHP|GML). --product special "
-    "(PL): 45 rodzajow granic specjalnych (sady, policja, skarbowe, lasy, "
-    "wody, obszary morskie, ...) przecinajacych obszar (GeoPackage "
-    "w OGC:CRS84) albo plik krajowy (--whole-country --format SHP|GML). "
+    "(PL): 44 rodzaje granic specjalnych (sady, policja, skarbowe, lasy, "
+    "wody, obszary morskie, ...) przecinajace obszar (GeoPackage "
+    "w OGC:CRS84; obwody spisowe sa tylko w pliku krajowym) albo plik "
+    "krajowy (--whole-country --format SHP|GML). "
     "--product geomorphology (CZ): jednostki poziomu --level przecinajace "
     "obszar (GeoPackage w EPSG:5514). Obszar przy granicy z --country "
     "auto: osobny plik PL i CZ. Pelne geometrie w ukladzie uslugi.",
@@ -101,6 +102,35 @@ COMMANDS = collection_commands(
                 "bbox_crs": "EPSG:5514",
             },
             title="Obce CZ (RUIAN) dla prostokata w S-JTSK",
+        ),
+        Example(
+            {
+                "product": "admin",
+                "country": "auto",
+                "level": {"pl": "gmina", "cz": "obec"},
+                "bbox": [18.60, 49.73, 18.66, 49.76],
+                "bbox_crs": "EPSG:4326",
+            },
+            title="Gminy PL i obce CZ dla prostokata na granicy (--country auto)",
+        ),
+        Example(
+            {
+                "product": "special",
+                "country": "pl",
+                "bbox": [566200, 244650, 566250, 244700],
+                "bbox_crs": "EPSG:2180",
+            },
+            title="Granice specjalne PL dla prostokata (trwa minuty)",
+        ),
+        Example(
+            {
+                "product": "geomorphology",
+                "country": "cz",
+                "level": "celek",
+                "bbox": [-470000, -1130000, -440000, -1100000],
+                "bbox_crs": "EPSG:5514",
+            },
+            title="Jednostki geomorfologiczne CZ (celky) dla prostokata",
         ),
     ),
     area_result="obiekty przecinajace obszar (GeoPackage; admin i "

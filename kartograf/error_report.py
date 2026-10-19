@@ -3,9 +3,10 @@ The ``kartograf-error/1`` document: an exception as data (spec 6).
 
 ``error_report(exc)`` turns any exception into an :class:`ErrorReport` with a
 stable ``code``, the exit code of the CLI, a one-line ``hint`` and the
-``details`` of the exception. Three codes belong to no class of the package
+``details`` of the exception. Four codes belong to no class of the package
 hierarchy and are built here: ``io_error`` (``OSError``: a missing or
-unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``) and
+unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``: Ctrl-C),
+``terminated`` (``kartograf.interrupt.Terminated``: SIGTERM) and
 ``internal_error`` (any other exception: a program error).
 
 ``ERROR_CODES`` and ``EXIT_CODES`` are the single source of the two tables of
@@ -14,7 +15,7 @@ unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``) and
 
 import errno
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from kartograf.exceptions import (
@@ -24,6 +25,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.interrupt import Terminated
 from kartograf.serialization import Document
 from kartograf.transform.crs import TransformUnavailableError
 
@@ -133,6 +135,13 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "przerwane przez uzytkownika (Ctrl-C)",
     ),
     ErrorCodeSpec(
+        "terminated",
+        "Terminated",
+        143,
+        "zakonczone sygnalem SIGTERM (timeout, docker stop, kill): sprzatanie "
+        "jak po Ctrl-C",
+    ),
+    ErrorCodeSpec(
         "internal_error",
         "Exception",
         1,
@@ -162,11 +171,19 @@ EXIT_CODES: tuple[ExitCodeSpec, ...] = (
         130,
         "interrupted",
         "przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane "
-        "atomowo, brak polowicznych plikow",
+        "atomowo - jednostki niedokonczone przed przerwaniem (takze zakolejkowane "
+        "przy --workers > 1) nie powstaja, brak polowicznych plikow",
+    ),
+    ExitCodeSpec(
+        143,
+        "terminated",
+        "zakonczone sygnalem SIGTERM (128 + SIGTERM); sprzatanie i dokument "
+        "bledu jak po Ctrl-C",
     ),
 )
 
 INTERRUPTED_MESSAGE = "przerwano (Ctrl-C)"
+TERMINATED_MESSAGE = "przerwano (SIGTERM)"
 INTERNAL_ERROR_HINT = (
     "Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback"
 )
@@ -229,11 +246,15 @@ def _ascii(text: str) -> str:
 
 
 def _option_hint(
-    option: str, allowed: Sequence[str] | None, command: str | None
+    option: str,
+    allowed: Sequence[str] | None,
+    command: str | None,
+    given: Mapping[str, object] | None = None,
 ) -> str | None:
     """The hint of a ``ValidationError`` that names an argument (spec 6.3, step
     3): the allowed values with the CLI flag of the argument and an example
-    command line of the catalog that uses it.
+    command line of the catalog that uses it (of the product of the call,
+    ``given``).
 
     The flag and the example need the command (``command``); without it the flag
     is the name of the argument and there is no example. The example is left
@@ -241,7 +262,7 @@ def _option_hint(
     """
     from kartograf.catalog.hints import example_for  # loads the declarations
 
-    flag, line = example_for(command, option)
+    flag, line = example_for(command, option, given)
     text = allowed_values_hint(flag or option, allowed) if allowed else ""
     if line:
         candidate = f"{text} Przyklad: {line}".strip()
@@ -250,11 +271,15 @@ def _option_hint(
     return text or None
 
 
-def _options_hint(options: Sequence[str], command: str | None) -> str | None:
+def _options_hint(
+    options: Sequence[str],
+    command: str | None,
+    given: Mapping[str, object] | None = None,
+) -> str | None:
     """The hint of a ``ValidationError`` that names several arguments (the area
     is missing: ``sheet``, ``bbox``, ``geometry``; two arguments exclude each
     other): their CLI flags and an example command line of the catalog that
-    uses the first of them.
+    uses the first of them (of the product of the call, ``given``).
 
     Without the command (or for an argument it does not have) the name of the
     argument stands for the flag and there is no example; the example is left
@@ -264,7 +289,7 @@ def _options_hint(options: Sequence[str], command: str | None) -> str | None:
 
     flags = [example_for(command, name)[0] or name for name in options]
     text = f"Opcje: {', '.join(flags)}."
-    _, line = example_for(command, options[0])
+    _, line = example_for(command, options[0], given)
     if line and len(candidate := f"{text} Przyklad: {line}") <= HINT_MAX_CHARS:
         return candidate
     return text
@@ -278,7 +303,11 @@ def _usage_hint(command: str | None) -> str | None:
     return usage_hint(command, max_chars=HINT_MAX_CHARS)
 
 
-def _library_hint(exc: KartografError, command: str | None) -> str | None:
+def _library_hint(
+    exc: KartografError,
+    command: str | None,
+    given: Mapping[str, object] | None = None,
+) -> str | None:
     """The hint of an exception of the package hierarchy (spec 6.3, steps 1-3)."""
     if exc.hint:
         return exc.hint
@@ -295,9 +324,9 @@ def _library_hint(exc: KartografError, command: str | None) -> str | None:
         return exc.DEFAULT_HINT
     if isinstance(exc, ValidationError):
         if exc.option:
-            return _option_hint(exc.option, exc.allowed, command)
+            return _option_hint(exc.option, exc.allowed, command, given)
         if exc.options:
-            return _options_hint(exc.options, command)
+            return _options_hint(exc.options, command, given)
     return None
 
 
@@ -321,7 +350,12 @@ def _io_details(exc: OSError) -> dict[str, object]:
     return details
 
 
-def error_report(exc: BaseException, *, command: str | None = None) -> ErrorReport:
+def error_report(
+    exc: BaseException,
+    *,
+    command: str | None = None,
+    given: Mapping[str, object] | None = None,
+) -> ErrorReport:
     """Describe an exception as an :class:`ErrorReport`.
 
     Parameters
@@ -329,24 +363,40 @@ def error_report(exc: BaseException, *, command: str | None = None) -> ErrorRepo
     exc : BaseException
         Any exception: a ``KartografError`` keeps its ``code``, ``exit_code``,
         ``hint`` and ``details``; ``KeyboardInterrupt`` is ``interrupted``
-        (130), ``OSError`` is ``io_error`` and every other exception is
-        ``internal_error`` (a program error; both exit with 1).
+        (130), ``Terminated`` (SIGTERM) is ``terminated`` (143), ``OSError``
+        is ``io_error`` and every other exception is ``internal_error`` (a
+        program error; both exit with 1).
     command : str, optional
         Catalog id of the command that failed (``elevation download``); without
         it the command a ``UsageError`` names. The hint of a ``UsageError`` is
         about the command whose line was wrong (``exc.command``), else about this
         one.
+    given : mapping, optional
+        The arguments of the failed call by their names (what the CLI parsed or
+        an MCP tool was given). The example of the hint of an invalid argument
+        is then the one of the ``product`` of the call, of its ``country`` and
+        of the way it chose the area (``kartograf.catalog.hints.example_for``);
+        without it the example is the first one that shows the argument.
     """
     if isinstance(exc, KartografError):
         named = exc.command if isinstance(exc, UsageError) else None
         return ErrorReport(
             code=exc.code,
             message=str(exc),
-            hint=_hint_or_none(_library_hint(exc, command)),
+            hint=_hint_or_none(_library_hint(exc, command, given)),
             exception=type(exc).__name__,
             exit_code=exc.exit_code,
             command=command if command is not None else named,
             details=exc.details(),
+        )
+    if isinstance(exc, Terminated):
+        return ErrorReport(
+            code="terminated",
+            message=TERMINATED_MESSAGE,
+            hint=None,
+            exception=type(exc).__name__,
+            exit_code=143,
+            command=command,
         )
     if isinstance(exc, KeyboardInterrupt):
         return ErrorReport(

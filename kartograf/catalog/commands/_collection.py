@@ -209,11 +209,15 @@ def collection_commands(
         )
     ]
     if whole_country is not None:
+        # the countries of the group's products: hydro has CZ only
+        countries = " albo ".join(
+            f"--country {code}" for code in collection_countries(products())
+        )
         rules.append(
             Constraint(
                 "requires",
                 ("country",),
-                "--whole-country wymaga --country pl albo --country cz",
+                f"--whole-country wymaga {countries}",
                 "whole_country",
             )
         )

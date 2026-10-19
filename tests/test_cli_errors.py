@@ -1,10 +1,13 @@
-"""``main``: the exit codes 0/1/2/130 and the ``kartograf-error/1`` document of
+"""``main``: the exit codes 0/1/2/130/143 and the ``kartograf-error/1`` document of
 every kind of failure, in text and in the ``--json`` mode (spec 6.5, 6.6, 7.1)."""
 
 import io
 import json
 import logging
+import os
+import signal
 import sys
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -16,6 +19,7 @@ from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import DownloadError, UsageError, ValidationError
 from kartograf.transform.crs import TransformError, TransformUnavailableError
+from tests.interrupt_fakes import PATIENCE_S
 
 SHEET = "N-34-130-D-d-2-4"
 OUTPUT_REQUIRED = "--output wymagane: katalog magazynu (pliki w <KATALOG>/nmt/...)"
@@ -151,6 +155,25 @@ def test_json_input_error_lists_allowed_values_and_an_example(capsys, tmp_path):
     )
 
 
+def test_json_input_error_hint_example_is_of_the_product_and_country_of_the_line(
+    capsys, tmp_path
+):
+    # E2E 0.8.0 D P3-7: the hint took the first example of the command
+    argv = ["boundaries", "download", "--product", "admin", "--country", "auto"]
+    argv += ["--level", "gmina", "--bbox", "18.6,49.7,18.7,49.8"]
+    argv += ["--bbox-crs", "EPSG:4326", "-o", str(tmp_path), "--json"]
+
+    code, out, err = _run(capsys, argv)
+
+    document = json.loads(out)
+    assert code == 2 and err == ""
+    assert document["details"]["option"] == "level"
+    example = parse_command(document["hint"].split("Przyklad: kartograf ", 1)[1])
+    assert example.command == "boundaries download"
+    assert example.options["product"] == "admin"
+    assert example.options["country"] == "auto"
+
+
 def test_json_argparse_error_is_usage_error(capsys):
     code, out, err = _run(capsys, ["elevation", "download", "--bogus", "--json"])
 
@@ -256,14 +279,58 @@ def test_json_interrupt_is_130(capsys):
     assert document["command"] == "parse"
 
 
+@pytest.fixture
+def sigterm_during_parse():
+    """``kartograf parse`` that gets a real SIGTERM (``timeout``, ``docker
+    stop``) in the middle of its work; the handler of ``main`` ends it."""
+    if os.name == "nt" or signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL:
+        pytest.skip("SIGTERM is handled by the test runner")
+
+    def handler(args):
+        # a regression (no handler) must fail here, not kill the test run
+        assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(PATIENCE_S)  # the handler raises here, in the main thread
+        raise AssertionError("SIGTERM did not interrupt the command")
+
+    with patch.dict(HANDLERS, {"parse": handler}):
+        yield
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL  # given back
+
+
+def test_sigterm_is_143_with_the_error_document_in_json_mode(
+    capsys, sigterm_during_parse
+):
+    code, out, err = _run(capsys, ["parse", "N-34-130-D", "--json"])
+
+    document = json.loads(out)
+    assert code == 143 and err == ""
+    assert document["code"] == "terminated"
+    assert document["exit_code"] == 143
+    assert document["message"] == "przerwano (SIGTERM)"
+    assert document["command"] == "parse"
+
+
+def test_sigterm_is_143_with_one_error_line_in_text_mode(capsys, sigterm_during_parse):
+    code, out, err = _run(capsys, ["parse", "N-34-130-D"])
+
+    assert code == 143 and out == ""
+    assert err == "Error: przerwano (SIGTERM)\n"
+
+
 def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
-    """The plan cannot be written (its path is a directory): the failure of the
-    store, not a mistake of the command line - code 1, ``io_error``."""
+    """The plan cannot be written (the write fails with an ``OSError``): the
+    failure of the store, not a mistake of the command line - code 1,
+    ``io_error``. (A directory in place of the plan file is rejected before
+    any work: ``test_plan_file_that_is_a_directory_is_one_error_line``.)"""
     plan_file = tmp_path / "plan.json"
-    plan_file.mkdir()
     checked = new_plan(tmp_path, [])
     argv = [*ELEVATION, "-o", str(tmp_path), "--check-updates", "--json"]
-    with patch("kartograf.cli.download_cmd.check_data", return_value=checked):
+    failure = IsADirectoryError(21, "Is a directory", str(plan_file))
+    with (
+        patch("kartograf.cli.download_cmd.check_data", return_value=checked),
+        patch("pathlib.Path.write_text", side_effect=failure),
+    ):
         code, out, err = _run(capsys, [*argv, "--plan", str(plan_file)])
 
     document = json.loads(out)
@@ -320,6 +387,62 @@ def test_http_retry_lines_stay_on_stderr(capsys):
     assert code == 2
     assert json.loads(out)["message"] == "zle"
     assert err == "Warning: HTTP 503, ponawiam 1/3\n"
+
+
+def _skipped_version_listing(tmp_path):
+    """A ``parse`` handler listing a version directory with no readable sidecar:
+    the library logs "Pominieto wersje bez czytelnego sidecara" for it."""
+    from kartograf.download.versions import list_versions
+
+    directory = tmp_path / "versions" / "bbox" / "2026-10-19_0123abcd"
+    directory.mkdir(parents=True)
+    (directory / "plik.tif").write_bytes(b"x")
+
+    def handler(args):
+        assert list_versions(directory.parent, "plik.tif") == []
+        raise ValidationError("zle")
+
+    return handler
+
+
+def test_library_warnings_are_not_on_stderr_in_json_mode(capsys, tmp_path, monkeypatch):
+    """USAGE 9.2: with ``--json`` stderr is empty - a library log record (here the
+    skipped version of a store listing) is not printed as a bare line."""
+    # no handler above the 'kartograf' branch -> logging.lastResort writes to
+    # stderr, as in a real CLI run (pytest's root handler would hide it)
+    monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
+    with patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}):
+        code, out, err = _run(capsys, ["parse", "N-34", "--json"])
+
+    assert code == 2
+    assert json.loads(out)["message"] == "zle"
+    assert err == ""
+
+
+def test_library_warnings_are_prefixed_in_text_mode(capsys, tmp_path, monkeypatch):
+    """Text mode: the same record is a ``Warning:`` line, not a bare message."""
+    monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
+    with patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}):
+        code, out, err = _run(capsys, ["parse", "N-34"])
+
+    assert code == 2
+    lines = err.splitlines()
+    assert lines[0].startswith("Warning: Pominieto wersje bez czytelnego sidecara")
+    assert lines[1] == "Error: zle"
+
+
+def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeypatch):
+    """``KARTOGRAF_DEBUG`` lets the library records through also in ``--json``."""
+    monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
+    with (
+        patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}),
+        pytest.raises(ValidationError),
+    ):
+        main(["parse", "N-34", "--json"])
+
+    assert capsys.readouterr().err.startswith(
+        "Warning: Pominieto wersje bez czytelnego sidecara"
+    )
 
 
 # -- the handlers raise their input errors (no own "Error:" line) -------------

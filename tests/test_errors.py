@@ -24,6 +24,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.interrupt import Terminated
 from kartograf.providers.pl.gugik_orto import cutout_resolution_labels
 from kartograf.serialization import SCHEMAS
 from kartograf.sources.variants import cz_models, resolution_label, variants
@@ -45,6 +46,7 @@ SPEC_ERROR_TABLE = [
     ("transform_unavailable", "TransformUnavailableError", 1),
     ("io_error", "OSError", 1),
     ("interrupted", "KeyboardInterrupt", 130),
+    ("terminated", "Terminated", 143),
     ("internal_error", "Exception", 1),
 ]
 
@@ -89,6 +91,7 @@ def test_error_code_table_equals_the_spec():
         (1, "failed"),
         (2, "usage"),
         (130, "interrupted"),
+        (143, "terminated"),
     ]
     for row in (*ERROR_CODES, *EXIT_CODES):
         assert row.meaning.isascii() and row.meaning
@@ -425,6 +428,16 @@ def test_keyboard_interrupt_is_interrupted():
     assert report.command == "elevation download"
 
 
+def test_sigterm_is_terminated_with_its_own_exit_code():
+    report = error_report(Terminated(), command="landcover download")
+
+    assert (report.code, report.exit_code) == ("terminated", 143)
+    assert report.exception == "Terminated"
+    assert report.message == "przerwano (SIGTERM)"
+    assert report.command == "landcover download"
+    assert report.hint is None
+
+
 def test_hint_is_one_ascii_line_up_to_400_chars():
     path = "/dane/zażółć\ngęślą"
     accented = error_report(FileNotFoundError(2, "No such file", path))
@@ -569,11 +582,19 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        {"product": "buildings", "output_dir": _STORE, "teryt": "126", "lod": 2},
         "teryt",
         None,
         None,
         "Nieprawidlowy kod TERYT",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        "teryt",
+        None,
+        None,
+        "nie ma wojewodztwa o kodzie 99",
     ),
     _row(
         kartograf.download_collection,
@@ -964,7 +985,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "year",
         None,
         ("2018", "2012", "2006", "2000", "1990"),
-        "Nieprawidlowy rok: 2019",
+        "--year 2019: niedostepne dla --product corine; dostepne: 2018, 2012, ",
     ),
     _row(
         kartograf.download_landcover,
@@ -1405,6 +1426,60 @@ OPTION_SCENARIOS = [
         None,
         None,
         "bbox odwrocony",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "bbox": kartograf.BBox(5, 5, 5, 5, "EPSG:2180")},
+        "bbox",
+        None,
+        None,
+        "bbox o zerowej powierzchni",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "bbox": kartograf.BBox(1, 5, 4, 5, "EPSG:2180")},
+        "bbox",
+        None,
+        None,
+        "bbox o zerowej powierzchni",
+    ),
+    _row(
+        kartograf.download_data,
+        {
+            **_NMT_AREA,
+            "bbox": kartograf.BBox(626000, 480000, 628000, 482000, "EPSG:4326"),
+        },
+        "bbox",
+        None,
+        None,
+        "poza zakresem EPSG:4326",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT_AREA, "bbox": kartograf.BBox(19, 91, 20, 92, "EPSG:4326")},
+        "bbox",
+        None,
+        None,
+        "poza zakresem EPSG:4326",
+    ),
+    _row(
+        kartograf.download_data,
+        {**_NMT, "workers": 0},
+        "workers",
+        None,
+        None,
+        "--workers musi byc >= 1, podano 0",
+    ),
+    _row(
+        kartograf.check_data,
+        {
+            **_NMT_AREA,
+            "bbox": kartograf.BBox(626000, 480000, 628000, 482000, "EPSG:4326"),
+        },
+        "bbox",
+        None,
+        None,
+        "poza zakresem EPSG:4326",
     ),
     _row(
         kartograf.download_data,
@@ -2018,6 +2093,45 @@ OPTION_SCENARIOS = [
         None,
         None,
         "bbox odwrocony",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "bbox": kartograf.BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
+            "country": "cz",
+            "cache": False,
+        },
+        "bbox",
+        None,
+        None,
+        "lezy poza CZ",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "bbox": kartograf.BBox(9.9, 53.5, 10.0, 53.6, "EPSG:4326"),
+            "country": "pl",
+            "cache": False,
+        },
+        "bbox",
+        None,
+        None,
+        "lezy poza PL",
+    ),
+    _row(
+        kartograf.check_availability,
+        {
+            "product": "nmt",
+            "bbox": kartograf.BBox(5, 5, 5, 5, "EPSG:2180"),
+            "country": "pl",
+            "cache": False,
+        },
+        "bbox",
+        None,
+        None,
+        "bbox o zerowej powierzchni",
     ),
 ]
 

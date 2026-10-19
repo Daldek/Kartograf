@@ -32,7 +32,7 @@ from kartograf.download.data import (
     UnitFile,
 )
 from kartograf.exceptions import ValidationError
-from kartograf.notices import Notice, NoticeSink
+from kartograf.notices import ALL_NODATA, Notice, NoticeSink
 from kartograf.serialization import Document
 
 if TYPE_CHECKING:
@@ -102,63 +102,65 @@ TEXTURE_TO_HSG = {
 
 
 # Canonical USDA texture triangle (Soil Survey Manual) - the SINGLE source of
-# truth for both the scalar and the vectorised classifier.  Each predicate gets
-# float64 arrays with clay/sand/silt in percent (already normalised to sum 100)
-# and returns a boolean mask.  Order matters: first matching rule wins.
+# truth for both the scalar and the vectorised classifier. A predicate gets
+# 100 x the amounts of clay, sand and silt (``c``, ``s``, ``si``) and their
+# total ``u``: the share of clay in percent is ``c / u``, so "k percent" is
+# ``k * u``. The rules compare amounts and never divide them, which keeps
+# every comparison exact (``classify_usda_texture_array``). A predicate
+# returns a boolean mask. Order matters: first matching rule wins.
 _USDA_RULES: tuple[
-    tuple[str, Callable[[np.ndarray, np.ndarray, np.ndarray], np.ndarray]], ...
+    tuple[
+        str,
+        Callable[[np.ndarray, np.ndarray, np.ndarray, np.ndarray], np.ndarray],
+    ],
+    ...,
 ] = (
-    ("sand", lambda c, s, si: si + 1.5 * c < 15),
-    ("loamy_sand", lambda c, s, si: (si + 1.5 * c >= 15) & (si + 2 * c < 30)),
+    ("sand", lambda c, s, si, u: si + 1.5 * c < 15 * u),
+    (
+        "loamy_sand",
+        lambda c, s, si, u: (si + 1.5 * c >= 15 * u) & (si + 2 * c < 30 * u),
+    ),
     (
         "sandy_loam",
-        lambda c, s, si: (
-            ((c >= 7) & (c <= 20) & (s > 52) & (si + 2 * c >= 30))
-            | ((c < 7) & (si < 50) & (si + 2 * c >= 30))
+        lambda c, s, si, u: (
+            ((c >= 7 * u) & (c <= 20 * u) & (s > 52 * u) & (si + 2 * c >= 30 * u))
+            | ((c < 7 * u) & (si < 50 * u) & (si + 2 * c >= 30 * u))
         ),
     ),
-    ("silt", lambda c, s, si: (si >= 80) & (c < 12)),
+    ("silt", lambda c, s, si, u: (si >= 80 * u) & (c < 12 * u)),
     (
         "silt_loam",
-        lambda c, s, si: (
-            ((si >= 50) & (c >= 12) & (c < 27)) | ((si >= 50) & (si < 80) & (c < 12))
+        lambda c, s, si, u: (
+            ((si >= 50 * u) & (c >= 12 * u) & (c < 27 * u))
+            | ((si >= 50 * u) & (si < 80 * u) & (c < 12 * u))
         ),
     ),
     (
         "loam",
-        lambda c, s, si: (c >= 7) & (c <= 27) & (si >= 28) & (si < 50) & (s <= 52),
+        lambda c, s, si, u: (
+            (c >= 7 * u)
+            & (c <= 27 * u)
+            & (si >= 28 * u)
+            & (si < 50 * u)
+            & (s <= 52 * u)
+        ),
     ),
-    ("sandy_clay_loam", lambda c, s, si: (c >= 20) & (c < 35) & (si < 28) & (s > 45)),
-    ("clay_loam", lambda c, s, si: (c >= 27) & (c < 40) & (s > 20) & (s <= 45)),
-    ("silty_clay_loam", lambda c, s, si: (c >= 27) & (c < 40) & (s <= 20)),
-    ("sandy_clay", lambda c, s, si: (c >= 35) & (s > 45)),
-    ("silty_clay", lambda c, s, si: (c >= 40) & (si >= 40)),
-    ("clay", lambda c, s, si: (c >= 40) & (s <= 45) & (si < 40)),
+    (
+        "sandy_clay_loam",
+        lambda c, s, si, u: (c >= 20 * u) & (c < 35 * u) & (si < 28 * u) & (s > 45 * u),
+    ),
+    (
+        "clay_loam",
+        lambda c, s, si, u: (c >= 27 * u) & (c < 40 * u) & (s > 20 * u) & (s <= 45 * u),
+    ),
+    (
+        "silty_clay_loam",
+        lambda c, s, si, u: (c >= 27 * u) & (c < 40 * u) & (s <= 20 * u),
+    ),
+    ("sandy_clay", lambda c, s, si, u: (c >= 35 * u) & (s > 45 * u)),
+    ("silty_clay", lambda c, s, si, u: (c >= 40 * u) & (si >= 40 * u)),
+    ("clay", lambda c, s, si, u: (c >= 40 * u) & (s <= 45 * u) & (si < 40 * u)),
 )
-
-
-def _normalize_pct(
-    clay, sand, silt
-) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Normalise clay/sand/silt to percentages summing to 100 (float64).
-
-    Returns the three normalised arrays plus the raw total, so callers can tell
-    apart real soil from the "no input at all" case (total == 0).
-    """
-    clay = np.asarray(clay, dtype=np.float64)
-    sand = np.asarray(sand, dtype=np.float64)
-    silt = np.asarray(silt, dtype=np.float64)
-
-    total = clay + sand + silt
-    valid = total > 0
-
-    normalised = tuple(
-        np.divide(part, total, out=np.zeros_like(part), where=valid) * 100
-        for part in (clay, sand, silt)
-    )
-
-    return normalised[0], normalised[1], normalised[2], total
 
 
 def classify_usda_texture(clay: float, sand: float, silt: float) -> str:
@@ -220,16 +222,20 @@ def classify_usda_texture_array(
     Classify soil texture for arrays (vectorized).
 
     Uses the same canonical rule list (`_USDA_RULES`) as the scalar
-    `classify_usda_texture`, evaluated in float64.
+    `classify_usda_texture`, evaluated in float64 on the amounts and their
+    total: a share is never computed (``clay / total * 100`` rounds, so a
+    value exactly on a boundary of the triangle - silt + 2 * clay = 300 g/kg,
+    clay = 270 g/kg - would fall on either side by the rounding). Integers
+    (the g/kg of SoilGrids) are therefore classified exactly by the rules.
 
     Parameters
     ----------
     clay : np.ndarray
-        Clay content array in percent (0-100)
+        Clay amount array (percent or any consistent unit, e.g. g/kg)
     sand : np.ndarray
-        Sand content array in percent (0-100)
+        Sand amount array, in the same unit
     silt : np.ndarray
-        Silt content array in percent (0-100)
+        Silt amount array, in the same unit
 
     Returns
     -------
@@ -237,16 +243,19 @@ def classify_usda_texture_array(
         Array of texture class codes (1-12); cells whose inputs sum to 0
         (no data) get "loam".
     """
-    clay_n, sand_n, silt_n, total = _normalize_pct(clay, sand, silt)
+    clay = np.asarray(clay, dtype=np.float64)
+    sand = np.asarray(sand, dtype=np.float64)
+    silt = np.asarray(silt, dtype=np.float64)
+    total = clay + sand + silt
 
-    masks = [rule(clay_n, sand_n, silt_n) for _, rule in _USDA_RULES]
+    masks = [rule(100 * clay, 100 * sand, 100 * silt, total) for _, rule in _USDA_RULES]
     codes = [TEXTURE_CLASSES[name] for name, _ in _USDA_RULES]
 
     selected = np.select(masks, codes, default=TEXTURE_CLASSES["loam"])
 
     # The rules partition the whole simplex, but cells with a zero total are
     # not soil at all - pin them to "loam" explicitly instead of letting the
-    # normalised zeros fall into the "sand" rule.
+    # zeros fall into the "sand" rule.
     return np.where(total > 0, selected, TEXTURE_CLASSES["loam"]).astype(np.uint8)
 
 
@@ -343,12 +352,13 @@ def _classify_hsg(
 ) -> np.ndarray:
     """HSG classes (uint8, 0 = nodata) from clay/sand/silt in g/kg.
 
-    Nodata comes from the RAW values (before g/kg -> %): the texture
-    classifier falls back to loam for anything it cannot place. All-zero
-    triplets are gaps (SoilGrids convention).
+    The texture comes from the RAW g/kg values by exact arithmetic
+    (``classify_usda_texture_array`` compares them with their total, no unit
+    conversion and no division); nodata comes from the raw values too: the
+    texture classifier falls back to loam for anything it cannot place.
+    All-zero triplets are gaps (SoilGrids convention).
     """
-    factor = HSGCalculator.CONVERSION_FACTOR
-    texture = classify_usda_texture_array(clay / factor, sand / factor, silt / factor)
+    texture = classify_usda_texture_array(clay, sand, silt)
     hsg = texture_to_hsg_array(texture)
     mask = (
         _nodata_mask(clay, nodata[0])
@@ -448,10 +458,6 @@ class HSGCalculator:
     (``reused``, nothing computed). Rasters outside the store:
     ``hsg_from_rasters``.
     """
-
-    # SoilGrids conversion factors
-    # Data is stored as g/kg, divide by 10 for percentage
-    CONVERSION_FACTOR = 10.0
 
     def __init__(
         self,
@@ -585,7 +591,11 @@ class HSGCalculator:
         """HSG selection: the canonical sheet or an EPSG:2180 bbox."""
         from kartograf.core.sheet_parser import SheetParser
         from kartograf.download.area import bbox_to_2180, geometry_envelope_2180
-        from kartograf.download.options import check_layer, validate_request_bbox
+        from kartograf.download.options import (
+            check_layer,
+            require_geometry_area,
+            validate_request_bbox,
+        )
         from kartograf.exceptions import ValidationError
 
         if sum(v is not None for v in (sheet, bbox, geometry)) != 1:
@@ -597,7 +607,9 @@ class HSGCalculator:
         if sheet is not None:
             return {"sheet": SheetParser(sheet).sheet}
         if geometry is not None:
-            return _bbox_request(geometry_envelope_2180(geometry, layer, sink))
+            envelope = geometry_envelope_2180(geometry, layer, sink)
+            require_geometry_area(envelope, "obliczenie HSG")
+            return _bbox_request(envelope)
         assert bbox is not None
         return _bbox_request(bbox_to_2180(validate_request_bbox(bbox)))
 
@@ -755,7 +767,7 @@ class HSGCalculator:
             else:
                 try:
                     hsg = self._reuse_or_compute(
-                        slot, selection, depth, stat, [i.file for i in inputs]
+                        slot, selection, depth, stat, [i.file for i in inputs], sink
                     )
                 except DownloadError as e:  # the store: a failure of the HSG
                     logger.debug("HSG %s: %s", unit, e)
@@ -777,8 +789,11 @@ class HSGCalculator:
         depth: str,
         stat: str,
         files: "list[VersionedFile]",
+        sink: "NoticeSink",
     ) -> "VersionedFile":
-        """The HSG version of these inputs: reused, or computed and stored."""
+        """The HSG version of these inputs: reused, or computed and stored (a
+        computed HSG without a single class - every input cell is a gap -
+        gets ``extra.all_nodata`` and the ``ALL_NODATA`` warning)."""
         import rasterio
 
         from kartograf.download.fetch import (
@@ -806,7 +821,7 @@ class HSGCalculator:
             arrays, nodatas = [], []
             for f in files:
                 with rasterio.open(f.version_path) as src:
-                    arrays.append(src.read(1).astype(np.float32))
+                    arrays.append(src.read(1).astype(np.float64))
                     nodatas.append(src.nodata)
                     if len(arrays) == 1:  # grid of clay = grid of the result
                         profile = src.profile.copy()
@@ -814,13 +829,14 @@ class HSGCalculator:
             hsg = _classify_hsg(
                 arrays[0], arrays[1], arrays[2], (nodatas[0], nodatas[1], nodatas[2])
             )
+            empty = not hsg.any()
             _write_hsg_geotiff(staged, hsg, profile)
         except BaseException:
             discard_staging(staged, slot)
             raise
         crs = profile.get("crs")
         request = {k: v for k, v in selection.items() if k != "bbox_obj"}
-        extra = {
+        extra: dict[str, object] = {
             "derived": "hsg",
             "depth": depth,
             "stat": stat,
@@ -836,6 +852,8 @@ class HSGCalculator:
                 for name, f in zip(HSG_INPUTS, files, strict=True)
             ],
         }
+        if empty:
+            extra["all_nodata"] = True
 
         def write(data: Path, ref, dg, _http) -> None:
             emit_sidecar(
@@ -852,7 +870,7 @@ class HSGCalculator:
                 product=_HSG_PRODUCT,
             )
 
-        return store_file(
+        stored = store_file(
             slot,
             staged,
             version=VersionRef(label, "edition"),
@@ -860,6 +878,16 @@ class HSGCalculator:
             http=None,
             signal="metadata",
         )
+        if empty:
+            sink.emit(
+                "warning",
+                ALL_NODATA,
+                f"{stored.path.relative_to(self._output_dir).as_posix()}: HSG "
+                "w calosci bez danych - clay, sand i silt sa zerami (SoilGrids "
+                "nie ma danych: morze, woda, zabudowa, skaly, lod); sprawdz "
+                "--bbox",
+            )
+        return stored
 
 
 def _calculator(
@@ -1214,7 +1242,7 @@ def hsg_from_rasters(
                 nodata=float("nan") if fill is None else fill,
             )
             with rasterio.open(warped) as w:
-                arrays[name] = w.read(1).astype(np.float32)
+                arrays[name] = w.read(1).astype(np.float64)
                 profile = w.profile.copy()
     hsg = _classify_hsg(
         arrays["clay"],
