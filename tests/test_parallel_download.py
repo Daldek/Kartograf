@@ -22,7 +22,7 @@ from kartograf.download.manager import (
     DownloadResult,
 )
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.gugik import GugikProvider
 from tests.interrupt_fakes import FirstThenTransfer, ctrl_c
@@ -248,12 +248,11 @@ class TestParallelDownloadHierarchy:
         assert len(progress_calls) >= 4
 
     @pytest.mark.parametrize("count", [0, -5])
-    def test_workers_init_minimum_1(self, tmp_path, mock_provider, count):
-        """Invalid worker counts cannot disable downloads."""
-        manager = DownloadManager(tmp_path, provider=mock_provider, workers=count)
-        result = manager.download_sheet("N-34-130-D-d-2-4")
-        assert len(result.succeeded) == 1
-        assert result.succeeded[0].exists()
+    def test_workers_below_1_rejected(self, tmp_path, mock_provider, count):
+        """A worker count below 1 is an input error (not silently one worker)."""
+        with pytest.raises(ValidationError, match="workers musi byc >= 1") as error:
+            DownloadManager(tmp_path, provider=mock_provider, workers=count)
+        assert error.value.option == "workers"
 
 
 class TestDownloadHierarchyResult:

@@ -20,7 +20,7 @@ from typing import Any, Literal, Protocol, cast
 import requests
 
 from kartograf.core.sheet_parser import SheetParser
-from kartograf.download.arguments import require_bool, require_int
+from kartograf.download.arguments import require_bool, require_workers
 from kartograf.download.campaigns import (
     RASTER_EXTENSIONS,
     CampaignRef,
@@ -562,7 +562,7 @@ class DownloadManager:
             incompatible resolution/CRS; ``workers`` not an ``int`` or a
             switch not a ``bool``.
         """
-        require_int(workers, "workers")
+        require_workers(workers, "workers")
         require_bool(all_campaigns, "all_campaigns")
         require_bool(full_sheet, "full_sheet")
         if year is not None:
@@ -593,7 +593,7 @@ class DownloadManager:
         self._vertical_crs = vertical_crs
         self._resolution = resolution
         self._default_ext = self._provider.default_extension
-        self._workers = max(1, workers)
+        self._workers = workers
         self._sidecar_extra = sidecar_extra
         self._on_notice = on_notice
         # `is True`, not truthiness: Mock/Mock(spec=...) yields a Mock -> plain flow.

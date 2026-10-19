@@ -748,10 +748,12 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     `ValueError`, zapytanie z `inf` albo plik 1 x 1 px. `--bbox x,y,x,y`
     (punkt) nie jest przyjmowany. Co zrobic: punkt podawaj przez
     `--geometry`, bbox z dodatnia powierzchnia.
-  - `--workers 0` i ujemne w `elevation download` i `imagery download`
-    (CLI i `download_data`) to `ValidationError` (kod 2, `option=workers`,
-    `--workers musi byc >= 1, podano N`); dotad po cichu 1. Co zrobic:
-    podawaj `--workers >= 1`.
+  - `--workers 0` i ujemne w kazdej komendzie z `--workers` (CLI
+    i biblioteka: `download_data`, `download_landcover`, kolekcje, LAZ PL
+    i CZ, `DownloadManager`, `download_project`) to `ValidationError` (kod
+    2, `option=workers`, `... musi byc >= 1, podano N`); dotad
+    `elevation`/`imagery`/`landcover` i `DownloadManager` po cichu
+    przyjmowaly 1. Co zrobic: podawaj `--workers >= 1`.
   - `--check-updates` i plan (`check_data`, `project download
     --check-updates`) traktuja arkusz bez danych w skorowidzu jak
     pobranie: to stan danych, nie pozycja planu (dotad `check_failed`

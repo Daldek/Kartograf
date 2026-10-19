@@ -33,7 +33,7 @@ import requests
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
-from kartograf.download.arguments import require_int
+from kartograf.download.arguments import require_workers
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -416,7 +416,7 @@ def download_cz_laz(
         Index or plan check failure.
     """
     validate_update(update, check="check_cz_laz")
-    require_int(workers, "workers")
+    require_workers(workers, "workers")
     bbox = _validate_selection(
         model=model, vertical_crs=vertical_crs, sheet=sheet, bbox=bbox
     )

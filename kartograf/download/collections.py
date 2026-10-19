@@ -69,6 +69,7 @@ from kartograf.download.arguments import (
     require_codes,
     require_int,
     require_str,
+    require_workers,
 )
 from kartograf.download.countries import (
     countries_for_bbox,
@@ -3326,11 +3327,7 @@ def run_request(
                 "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
             )
         require_store(plan, store_id(request.output_dir))
-    require_int(workers, "--workers")
-    if workers < 1:
-        raise ValidationError(
-            f"workers musi byc >= 1, podano {workers}", option="workers"
-        )
+    require_workers(workers, "--workers")
     with open_cache(
         cache, force=refreshes_cache(update), on_notice=sink.add
     ) as metadata:
