@@ -3239,7 +3239,7 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    target_px` (`land_px`, gdy `missing == 0`): udzial pokrytej czesci
    `target` przeniesiony na lad, w dol — dla `bbox`/`geometry` dokladnie
    `land_m2 - missing`, dla `sheet` pas ramy nie jest ani pokryty, ani
-   brakiem; `complete` <=> `full_m2 == land_m2`, same rekordy NIE = 0.
+   brakiem; w PL `complete` <=> `full_m2 == land_m2`, same rekordy NIE = 0.
 7. **Wynik:** `AvailabilityCombination` z `source` (klucz deskryptora),
    `year`, `acquisition_dates`/`published` (min/max `akt_data`/
    `dt_pzgik`), `campaigns` (`nr_zglosz`), `horizontal`, `resolution`
@@ -3259,19 +3259,24 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    zadania nie dalo sie sprawdzic (plan B, `auto`) — w PL zawsze `True`.
    `to_json()` z mixinu `Document` (sekcja 3.6): wciecie 2 spacje, `\n` na koncu.
 8. **Rekordy do pobrania i kampanie (KD-1, ADR-047):** `sheet_records` =
-   `AvailabilityRecord(sheet, campaign, acquisition_date, published, full,
+   `AvailabilityRecord(sheet, campaign, acquisition_date, published, full_sheet,
    url)` rekordow, ktore pobiera `download_hint` kombinacji, po arkuszu,
    w arkuszu od najnowszego: NMT/NMPT najnowszy rekord arkusza w kolejnosci
    ADR-028 (`akt_data`, `dt_pzgik`, `url`) i — gdy nie jest TAK, a arkusz
    ma rekord TAK (podpowiedz z `--full-sheet`, ADR-033) — najnowszy TAK
    (`_sheet_records`, wspolne z `_needs_full_sheet`); LAZ kafle, ktore
-   zostawia `select_newest_cover` (ADR-029) na obszarze zadania (kafle
-   jednego ukladu arkuszy; pobranie `--year` wybiera z obu ukladow naraz).
+   zostawia `select_newest_cover` (ADR-029) na obszarze zadania sposrod
+   kafli kombinacji (jednego ukladu arkuszy). Ograniczenie LAZ: podpowiedz
+   nie ma ukladu arkuszy, wiec pobranie `--year` wybiera z kafli obu
+   ukladow naraz; gdy rok ma kafle PL-1992 i PL-2000, `sheet_records` moze
+   sie roznic od tego, co polecenie zapisze (Krakow 2023: podpowiedz PL-2000
+   pobiera kafle PL-1992). NMT/NMPT: `sheet_records` == plan pobrania.
    `campaign_coverage` = `AvailabilityCampaign(campaign, complete,
    full_m2)` na kazda kampanie z `campaigns` (ta sama kolejnosc): czy jej
    rekordy TAK same pokrywaja lad i ile ladu jest w ich ramach (miara
    `full_m2`). Test: `sheet_records` == URL-e planu `check_data`
-   z podpowiedzi (`test_sheet_records_are_what_the_hint_downloads`).
+   z podpowiedzi (`test_sheet_records_are_what_the_hint_downloads`; LAZ
+   na roku z jednym ukladem arkuszy).
 
 **Algorytm CZ i `auto` (plan B, decyzje 9-10):**
 

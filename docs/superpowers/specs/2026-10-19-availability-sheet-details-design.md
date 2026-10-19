@@ -83,7 +83,7 @@ class AvailabilityRecord:
     campaign: str | None       # nr_zglosz
     acquisition_date: str | None   # akt_data (RRRR-MM-DD)
     published: str | None      # dt_pzgik
-    full: bool | None          # czy_ark_wypelniony
+    full_sheet: bool | None    # czy_ark_wypelniony (nazwa jak w SkorowidzRecord, LazTile, sidecarze)
     url: str                   # plik rekordu (identyfikuje rekord jednoznacznie)
 ```
 
@@ -95,16 +95,18 @@ class AvailabilityRecord:
 - LAZ: kafle kombinacji, ktore zostawia `select_newest_cover` (ADR-029)
   na obszarze zadania - ta sama funkcja co pobieranie (kafel niepelny nie
   pokrywa, wiec obok niego zostaje kafel pelny tego samego arkusza).
-  Ograniczenia: pobranie `--year` bez ukladu arkuszy wybiera kafle obu
-  ukladow naraz, a kombinacja ma jeden uklad; kafel jednego ukladu
-  pokryty kaflami drugiego zostaje w `sheet_records` (raport per uklad,
-  jak `sheets_full`). Rok, ktory nie pokrywa kafli obszaru, pobranie LAZ
+  Ograniczenia: polecenie pobrania LAZ nie ma ukladu arkuszy, wiec `--year`
+  wybiera najnowsze kafle obu ukladow naraz, a kombinacja ma jeden uklad;
+  dla roku z kaflami PL-1992 i PL-2000 `sheet_records` moze sie roznic od
+  tego, co polecenie zapisze (Krakow 2023: podpowiedz kombinacji PL-2000
+  pobiera kafle PL-1992). Opisane w docstringu pola i USAGE (przeglad
+  uzytkownika 2026-10-19). Rok, ktory nie pokrywa kafli obszaru, pobranie LAZ
   odrzuca juz dzis (konflikt zakresu lat, `year_range_error`) - wtedy
   `sheet_records` to kafle, ktore wybralaby selekcja.
 - CZ: `()` (CUZK nie publikuje rekordow z kampaniami).
 
 Archiwista liczy "N kampanii" z `sheet_records` (np. rozne `campaign`
-rekordow `full`), bez kopii regul wyboru. Odrzucone: slownik arkusz ->
+rekordow `full_sheet`), bez kopii regul wyboru. Odrzucone: slownik arkusz ->
 rekord (arkusz z `--full-sheet` ma dwa rekordy; tuple dataclass to konwencja
 raportu); `campaigns_selected` z mockupu (wyliczalne z `sheet_records`).
 

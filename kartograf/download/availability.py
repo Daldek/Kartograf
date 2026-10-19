@@ -209,15 +209,16 @@ class AvailabilityRecord:
 
     ``sheet`` = sheet code (LAZ: tile code), ``campaign`` = survey work id
     (``nr_zglosz``), ``acquisition_date``/``published`` = ``akt_data``/
-    ``dt_pzgik``, ``full`` = ``czy_ark_wypelniony`` (``None``: not given),
-    ``url`` = the file of the record (identifies it).
+    ``dt_pzgik``, ``full_sheet`` = ``czy_ark_wypelniony`` (``None``: not
+    given; the name of the field in ``SkorowidzRecord``, ``LazTile`` and the
+    sidecar), ``url`` = the file of the record (identifies it).
     """
 
     sheet: str
     campaign: str | None
     acquisition_date: str | None
     published: str | None
-    full: bool | None
+    full_sheet: bool | None
     url: str
 
 
@@ -247,12 +248,18 @@ class AvailabilityCombination:
     ``sheets_missing`` and ``size_bytes`` are CZ fields (PL: empty/``None``).
 
     ``full_m2`` (KD-2): land in the frames of the full records, measured as
-    ``complete`` (``complete`` <=> ``full_m2 == land_m2`` of the area).
+    ``complete`` (PL: ``complete`` <=> ``full_m2 == land_m2`` of the area;
+    not in CZ, below).
     ``sheet_records`` (KD-1): the records the hint downloads, by sheet,
     newest first - NMT/NMPT the newest record of each sheet and, when it is
     not full while a full one exists (``--full-sheet``), the newest full one;
     LAZ the tiles kept by the coverage selection of the download
-    (``select_newest_cover``) within the sheet system of the combination.
+    (``select_newest_cover``) among the tiles of the combination only. LAZ
+    limitation: the hint has no sheet system, so its download selects among
+    the tiles of both systems of the year at once - when a year has tiles in
+    PL-1992 and PL-2000, the records of a combination may differ from what
+    its hint stores (e.g. Krakow 2023: the PL-2000 hint downloads the
+    PL-1992 tiles).
     ``campaign_coverage`` (KD-1): each campaign of ``campaigns`` on its own.
 
     CZ: ``year``/``acquisition_dates`` ``None``, ``campaigns`` empty,
@@ -260,9 +267,10 @@ class AvailabilityCombination:
     ``sheets_full`` = index sheets with a file, ``sheets_missing`` = without
     one (HTTP 404), ``complete`` = no sheet without a file,
     ``uncovered_m2``/``full_m2`` = the area in the frames of
-    ``sheets_missing``/``sheets_full``, ``size_bytes`` = sum of
-    ``Content-Length`` (``None``: a file without it), ``sheet_records`` and
-    ``campaign_coverage`` empty.
+    ``sheets_missing``/``sheets_full`` (``full_m2 < land_m2`` is possible
+    for a complete combination: an area reaching outside the index sheets),
+    ``size_bytes`` = sum of ``Content-Length`` (``None``: a file without it),
+    ``sheet_records`` and ``campaign_coverage`` empty.
     """
 
     country: str
@@ -1311,7 +1319,7 @@ def _record(entry: _Entry) -> AvailabilityRecord:
         campaign=entry.campaign,
         acquisition_date=entry.date or None,
         published=entry.published,
-        full=entry.full,
+        full_sheet=entry.full,
         url=entry.url,
     )
 

@@ -1051,16 +1051,24 @@ deskryptora, `year`, `acquisition_dates`, `published`, `campaigns`,
 `download_hint` — polecenia bez przedrostka `kartograf `, `full_m2`,
 `sheet_records`, `campaign_coverage`), `notices` i `ok`. `full_m2` to
 ląd w ramach pełnych arkuszy (dolna granica tego, co na pewno ma dane;
-`complete` wtedy i tylko wtedy, gdy `full_m2 == land_m2`), a
+w PL `complete` wtedy i tylko wtedy, gdy `full_m2 == land_m2`), a
 `land_m2 - uncovered_m2` — górna granica. `sheet_records` to rekordy,
 które pobierze polecenie `download_hint` (`sheet`, `campaign`,
-`acquisition_date`, `published`, `full`, `url`; po arkuszu, od
+`acquisition_date`, `published`, `full_sheet`, `url`; po arkuszu, od
 najnowszego; NMT/NMPT najnowszy rekord arkusza i — z `--full-sheet` —
-najnowszy pełny, LAZ kafle wyboru pokrycia), `campaign_coverage` — każda
-kampania osobno (`campaign`, `complete`, `full_m2`). Pola
-`sheets_missing` i `size_bytes` wypełnia tylko część CZ (w PL
-`[]`/`null`); w CZ `full_m2` to część obszaru w ramach arkuszy z plikiem,
-a `sheet_records`/`campaign_coverage` są puste. Początek (Kraków):
+najnowszy pełny, LAZ kafle wyboru pokrycia spośród kafli tej
+kombinacji), `campaign_coverage` — każda kampania osobno (`campaign`,
+`complete`, `full_m2`). **Ograniczenie LAZ:** polecenie pobrania LAZ nie
+ma układu arkuszy, więc wybiera najnowsze kafle obu układów naraz. Gdy
+rok ma kafle w PL-1992 i w PL-2000, `sheet_records` kombinacji może się
+różnić od tego, co jej polecenie zapisze w magazynie (Kraków 2023:
+polecenie kombinacji PL-2000 pobiera kafle PL-1992); dla NMT/NMPT
+`sheet_records` to dokładnie plan pobrania. Pola `sheets_missing`
+i `size_bytes` wypełnia tylko część CZ (w PL `[]`/`null`); w CZ
+`full_m2` to część obszaru w ramach arkuszy z plikiem — kombinacja
+kompletna (każdy arkusz indeksu ma plik) może mieć `full_m2 < land_m2`,
+gdy obszar wychodzi poza arkusze indeksu — a
+`sheet_records`/`campaign_coverage` są puste. Początek (Kraków):
 
 ```json
 {
@@ -1090,7 +1098,7 @@ a `sheet_records`/`campaign_coverage` są puste. Początek (Kraków):
       "full_m2": 16000000.0,
       "sheet_records": [
         {"sheet": "M-34-64-D-d-1-2", "campaign": "GK-FOTO.6201.5.2025", "acquisition_date": "2025-04-28",
-         "published": "2025-11-07", "full": true,
+         "published": "2025-11-07", "full_sheet": true,
          "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83137/83137_1729552_M-34-64-D-d-1-2.asc"},
         "..."
       ],
@@ -1773,7 +1781,7 @@ for c in report.combinations:                        # rok malejąco
           c.complete, len(c.sheets_full), len(c.sheets_partial), c.uncovered_m2)
     print(f"  pełne arkusze: {int(c.full_m2 * 100 // land)}% lądu")  # KD-2, w dół
     one = [k.campaign for k in c.campaign_coverage if k.complete]  # KD-1
-    taken = {r.campaign for r in c.sheet_records if r.full and r.campaign}
+    taken = {r.campaign for r in c.sheet_records if r.full_sheet and r.campaign}
     print("  sama kampania:", one, "kampanie pobrania:", sorted(taken))
 newest = next((c for c in report.combinations if c.complete), None)
 if newest is not None:

@@ -762,7 +762,7 @@ def test_full_sheet_records_and_campaigns_on_their_own():
         by_sheet.setdefault(record.sheet, []).append(record)
     assert set(by_sheet) == set(combo.sheets_full)
     for records in by_sheet.values():
-        assert records[-1].full is True
+        assert records[-1].full_sheet is True
         assert records[-1].campaign == "DFT.7201.002.2023"
         dates = [r.acquisition_date or "" for r in records]
         assert dates == sorted(dates, reverse=True)
