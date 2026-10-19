@@ -609,9 +609,10 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
     if key == "global.isric.soilgrids":
         from kartograf.providers.soilgrids import SoilGridsProvider
 
-        if len(parts) == 3 and (
-            parts[0] in SoilGridsProvider.PROPERTIES
-            and parts[1] in SoilGridsProvider.DEPTHS
+        if (
+            len(parts) == 3
+            and parts[0] in SoilGridsProvider.PROPERTIES
+            and parts[1] in SoilGridsProvider.depths_for(parts[0])
             and parts[2] in (s.lower() for s in SoilGridsProvider.STATS)
         ):
             return " · " + " · ".join(parts)

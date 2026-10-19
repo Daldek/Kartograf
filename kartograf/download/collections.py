@@ -3107,12 +3107,18 @@ def _spread(jobs: Sequence[UnitJob], count: int) -> list[UnitJob]:
     return [jobs[round(i * step)] for i in range(count)]
 
 
-def _sized(job: UnitJob, cache: MetadataCache | None, refresh: bool) -> UnitJob:
+def _sized(
+    job: UnitJob,
+    cache: MetadataCache | None,
+    refresh: bool,
+    sessions: Callable[[], requests.Session] | None = None,
+) -> UnitJob:
     """The job with the bytes of its file asked before the transfer: the
     ``length`` of a file of an ATOM feed (the resolved file is kept for the
-    transfer), the ``Content-Length`` of a ``HEAD`` of a package; ``None``:
-    not known (the objects of an area, no length, a failed request - the
-    transfer itself reports a failure)."""
+    transfer), the ``Content-Length`` of a ``HEAD`` of a package (by the
+    session of ``sessions``, the one of the thread of this module without
+    it); ``None``: not known (the objects of an area, no length, a failed
+    request - the transfer itself reports a failure)."""
     if job.atom:
         try:
             found = _atom_file(job, None, cache, refresh)()
@@ -3122,7 +3128,8 @@ def _sized(job: UnitJob, cache: MetadataCache | None, refresh: bool) -> UnitJob:
         return replace(job, size=found.length, sized=True, atom_file=found)
     if job.url is None:
         return replace(job, sized=True)
-    return replace(job, size=_head_length(_session(), job.url), sized=True)
+    session = (sessions or _session)()
+    return replace(job, size=_head_length(session, job.url), sized=True)
 
 
 def _bytes_text(length: int) -> str:
@@ -3137,12 +3144,30 @@ def _bytes_text(length: int) -> str:
 _UNIT_CHOICE = {"powiat": "--teryt <4 cyfry>", "woj": "--teryt <2 cyfry>", "ku": "--ku"}
 
 
+def unit_choices(descriptors: Iterable[SourceDescriptor]) -> tuple[str, ...]:
+    """The flags that choose ONE unit of the packages of ``descriptors``
+    (``--teryt <4 cyfry>``): what makes a request over the volume limits
+    smaller."""
+    return _distinct(
+        _UNIT_CHOICE[channel.params.unit]
+        for descriptor in descriptors
+        for channel in descriptor.channels
+        if isinstance(channel.params, UnitPackageParams)
+        and channel.params.unit in _UNIT_CHOICE
+    )
+
+
 def _volume_error(
-    request: CollectionRequest, count: int, total: int | None, asked: int, known: int
+    product: str,
+    units: Sequence[str],
+    count: int,
+    total: int | None,
+    asked: int,
+    known: int,
 ) -> ValidationError:
     """The refusal of an area over the volume limits: the number of files, the
     size (a sum, a lower bound or an estimate from ``asked`` files) and what
-    makes the request smaller."""
+    makes the request smaller (``units``: the flags choosing one unit)."""
     if total is None:
         size = "rozmiar nieznany (serwer nie podal Content-Length)"
     elif asked < count:
@@ -3157,16 +3182,9 @@ def _volume_error(
         )
     else:
         size = f"razem {_bytes_text(total)} wg HEAD"
-    units = _distinct(
-        _UNIT_CHOICE[channel.params.unit]
-        for part in request.parts
-        for channel in part.descriptor.channels
-        if isinstance(channel.params, UnitPackageParams)
-        and channel.params.unit in _UNIT_CHOICE
-    )
     unit = f", wybierz jednostke ({', '.join(units)})" if units else ""
     return ValidationError(
-        f"{request.product}: obszar daje {count_text(count, *FILES)} do pobrania, "
+        f"{product}: obszar daje {count_text(count, *FILES)} do pobrania, "
         f"{size} - limit "
         f"jednego zadania to {VOLUME_FILES} plikow i {VOLUME_BYTES // 10**9} GB. "
         f"Zawez obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan "
@@ -3176,22 +3194,26 @@ def _volume_error(
     )
 
 
-def _within_volume(
-    request: CollectionRequest,
+def within_volume(
+    product: str,
+    units: Sequence[str],
     jobs: list[UnitJob],
     *,
     update: UpdateMode | None,
     planned: set[_SLOT_KEY] | None,
     cache: MetadataCache | None,
     workers: int,
+    sessions: Callable[[], requests.Session] | None = None,
 ) -> list[UnitJob]:
-    """The jobs of an area within the volume limits (ADR-043 errata 3).
+    """The jobs of an area within the volume limits (ADR-043 errata 3; the
+    collections and the BDOT10k powiat packages of ``LandCoverManager``).
 
     Counted are the files the request would transfer (``_transfers``); their
-    size is the ``HEAD``/feed length of each of them - above ``VOLUME_FILES``
-    the mean of ``VOLUME_SAMPLE`` evenly spread files times their number. A
-    file whose size was asked keeps it for the size notice of its transfer
-    (no second ``HEAD``).
+    size is the ``HEAD``/feed length of each of them (by the session of
+    ``sessions``) - above ``VOLUME_FILES`` the mean of ``VOLUME_SAMPLE``
+    evenly spread files times their number. A file whose size was asked keeps
+    it for the size notice of its transfer (no second ``HEAD``). ``product``
+    and ``units`` (``unit_choices``) only word the refusal.
 
     Raises
     ------
@@ -3203,7 +3225,9 @@ def _within_volume(
     if not count:
         return jobs
     asked = todo if count <= VOLUME_FILES else _spread(todo, VOLUME_SAMPLE)
-    size = functools.partial(_sized, cache=cache, refresh=update == "upgrade")
+    size = functools.partial(
+        _sized, cache=cache, refresh=update == "upgrade", sessions=sessions
+    )
     if workers > 1 and len(asked) > 1:
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
             sized = list(pool.map(size, asked))
@@ -3216,7 +3240,7 @@ def _within_volume(
         if count > VOLUME_FILES:  # the mean of the sample for every file
             total = total * count // len(known)
     if count > VOLUME_FILES or (total is not None and total > VOLUME_BYTES):
-        raise _volume_error(request, count, total, len(asked), len(known))
+        raise _volume_error(product, units, count, total, len(asked), len(known))
     by_key = {job.key: job for job in sized}
     return [by_key.get(job.key, job) for job in jobs]
 
@@ -3286,7 +3310,7 @@ def run_request(
     ValidationError
         A plan of another store or without ``update="upgrade"``, bad workers;
         an area whose files to download exceed ``VOLUME_FILES`` or
-        ``VOLUME_BYTES`` (``_within_volume``; before any transfer).
+        ``VOLUME_BYTES`` (``within_volume``; before any transfer).
     NoCoverageError
         An area of a package product without any unit (powiat, sheet, tile,
         cadastral area) in the only country or in every country of the request.
@@ -3319,8 +3343,9 @@ def run_request(
             planned = {(i.segment, i.hierarchy, i.name) for i in todo}
             stale = tuple(stale_items)
         if _is_area(request):
-            jobs = _within_volume(
-                request,
+            jobs = within_volume(
+                request.product,
+                unit_choices(part.descriptor for part in request.parts),
                 jobs,
                 update=update,
                 planned=planned,

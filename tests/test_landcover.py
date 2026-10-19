@@ -28,6 +28,7 @@ from kartograf.providers.pl.bdot10k import (
     WOJEWODZTWO_NAMES,
     Bdot10kPackage,
     Bdot10kProvider,
+    normalize_layers,
 )
 from kartograf.transform.bbox import envelope_from_2180
 from kartograf.transport.http import SessionPerThread
@@ -70,13 +71,13 @@ class TestBdot10kProvider:
         assert "geoportal.gov.pl" in provider.source_url
 
     def test_available_layers(self):
-        """Test available layers."""
+        """``get_available_layers`` is exactly what ``--layers`` accepts."""
         provider = Bdot10kProvider()
         layers = provider.get_available_layers()
-        assert "PTLZ" in layers  # forests
-        assert "PTWP" in layers  # waters
-        assert "PTZB" in layers  # built-up areas
-        assert len(layers) == 15
+        assert {"PTLZ", "PTWP", "PTZB", "BUBD", "SWRS"} <= set(layers)
+        assert normalize_layers(layers) == sorted(layers)
+        with pytest.raises(ValidationError, match="brak takich klas"):
+            normalize_layers(["PTWP", "XXXX"])
 
     def test_layer_description(self):
         """Test layer descriptions."""
@@ -217,7 +218,8 @@ class TestCorineProvider:
         provider = CorineProvider()
         bbox = BBox(450000, 550000, 460000, 560000, "EPSG:2180")
         bounds = envelope_from_2180(bbox, "EPSG:3857")
-        url = provider._construct_wms_url(bounds, 2018, 100, 100)
+        url = provider._construct_wms_url(bounds, 2018, 100, 100, "12")
+        assert "LAYERS=12" in url
         assert "WMS" in url
         assert "GetMap" in url
         assert "discomap.eea.europa.eu" in url  # EEA Discomap endpoint
@@ -907,7 +909,14 @@ def _wms_bbox(url):
 
 
 class TestCorineProviderDownload:
-    """Test CorineProvider download methods."""
+    """Test CorineProvider download methods (the EEA layer lookup is stubbed:
+    its own tests are in ``tests/test_corine_wms_layers.py``)."""
+
+    @pytest.fixture(autouse=True)
+    def _eea_layer(self, monkeypatch):
+        monkeypatch.setattr(
+            CorineProvider, "_eea_raster_layer", lambda self, year, timeout: "12"
+        )
 
     def test_download_by_bbox_wms_fallback(self, tmp_path):
         """No CLMS token -> WMS fallback."""
@@ -1115,7 +1124,9 @@ class TestCorineProviderDownload:
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
         # provider path: DLR (1990) sends BBOX in EPSG:4326 (WMS 1.1.1, lon/lat)
         provider = CorineProvider(use_proxy=False)
-        with patch("kartograf.providers.corine.download_to") as dl:
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=tmp_path / "x.png"
+        ) as dl:
             provider._download_via_wms(bbox, tmp_path / "x.png", 1990, 30)
         min_lon, min_lat, max_lon, max_lat = _wms_bbox(dl.call_args.args[1])
 
@@ -1142,7 +1153,9 @@ class TestCorineProviderDownload:
         bbox = SheetParser("N-34-130-D").get_bbox("EPSG:2180")
         # provider path: EEA (2018) sends BBOX in EPSG:3857
         provider = CorineProvider(use_proxy=False)
-        with patch("kartograf.providers.corine.download_to") as dl:
+        with patch(
+            "kartograf.providers.corine.download_to", return_value=tmp_path / "x.png"
+        ) as dl:
             provider._download_via_wms(bbox, tmp_path / "x.png", 2018, 30)
         min_x, min_y, max_x, max_y = _wms_bbox(dl.call_args.args[1])
 
@@ -1955,6 +1968,10 @@ class TestLandCoverCliManyCounties:
         from kartograf.cli.commands import main
 
         monkeypatch.chdir(tmp_path)
+        # the volume check asks the size of the packages (HEAD): not known here
+        monkeypatch.setattr(
+            "kartograf.download.collections._head_length", lambda session, url: None
+        )
         with (
             patch(
                 "kartograf.providers.pl.bdot10k.discover_teryts_for_bbox",

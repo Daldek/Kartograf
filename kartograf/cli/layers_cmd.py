@@ -13,7 +13,7 @@ import textwrap
 
 from kartograf.cli._json import emit_document, wants_json
 from kartograf.landcover.manager import soil_choices
-from kartograf.source_info import LayerList, list_layers
+from kartograf.source_info import LayerList, PropertyInfo, list_layers
 
 _WIDTH = 78
 _CLASSES_NOTE = (
@@ -21,11 +21,23 @@ _CLASSES_NOTE = (
     "tych klas, ktorych obiekty sa w wojewodztwie (do 2023): brak czesci "
     "klas = Info, brak wszystkich = blad wojewodztwa."
 )
+_BDOT10K_NOTE = (
+    "Klasy BDOT10k ({count}): kazdy kod przyjmuje --layers (z --format GPKG; "
+    "kod = OT_<KOD> w nazwach tabel). Paczka powiatu ma tabele tylko tych "
+    "klas, ktorych obiekty sa w powiecie: brak czesci wybranych klas = Info, "
+    "brak wszystkich = blad powiatu."
+)
 _AREA_LAYERS_NOTE = (
     "Nazwy = warstwy GeoPackage obszaru (--bbox/--geometry); wynik "
     "obszaru ma zawsze wszystkie te warstwy (--layers dziala tylko "
     "z --product bdot10k albo bdoo). Plik krajowy (--whole-country) "
     "ma warstwy pelnej bazy pod nazwami CUZK."
+)
+_SOIL_NOTE = (
+    'Plik SoilGrids to liczby calkowite w jednostkach ISRIC ("w pliku"); '
+    "wartosc / dzielnik = jednostka konwencjonalna (ten sam opis w sidecarze: "
+    "extra.units). Wartosc 0 oznacza obszar bez danych (morze, woda, "
+    "zabudowa, skaly, lod); plik nie ma tagu NoData."
 )
 
 
@@ -56,17 +68,33 @@ def _classes(layers: LayerList) -> list[str]:
     return [*lines, "", _wrapped(_CLASSES_NOTE, "  ")]
 
 
+def _depths(layers: LayerList) -> list[str]:
+    """The depth intervals; one published for a minority of the properties (``ocs``:
+    0-30cm) is marked with the properties that have it."""
+    properties = [p for p in layers.properties or () if isinstance(p, PropertyInfo)]
+    lines = []
+    for depth in layers.depths or ():
+        owners = [p.code for p in properties if depth in p.depths]
+        only = (
+            f"  (tylko {', '.join(owners)})"
+            if len(owners) * 2 < len(properties)
+            else ""
+        )
+        lines.append(f"    {depth}{only}")
+    return lines
+
+
 def _soil(layers: LayerList) -> list[str]:
     """Properties, depths and statistics of SoilGrids."""
     return [
-        "  Wlasciwosci gleb:",
+        "  Wlasciwosci gleb (w pliku = jednostka wartosci w pliku):",
         *(
             f"    {item.code:11} - {item.description}"
             for item in layers.properties or ()
         ),
         "",
         f"  Glebokosci ({_depth_note()}):",
-        *(f"    {depth}" for depth in layers.depths or ()),
+        *_depths(layers),
         "",
         "  Statystyki:",
         *(
@@ -75,6 +103,8 @@ def _soil(layers: LayerList) -> list[str]:
         ),
         "",
         "  Wybor pobrania: --property, --depth, --stat.",
+        "",
+        _wrapped(_SOIL_NOTE, "  "),
     ]
 
 
@@ -88,10 +118,15 @@ def _corine(layers: LayerList) -> list[str]:
 
 
 def _named(layers: LayerList) -> list[str]:
-    """Layers with a description (BDOT10k), or only the names of the layers of
-    the service (ZABAGED, Data50, Data250) with the note on the area result."""
+    """Layers with a description (BDOT10k, with the note on the classes), or only
+    the names of the layers of the service (ZABAGED, Data50, Data250) with the
+    note on the area result."""
     if any(layer.description is not None for layer in layers.layers):
-        return [f"    {layer.code}  - {layer.description}" for layer in layers.layers]
+        return [
+            *(f"    {layer.code}  - {layer.description}" for layer in layers.layers),
+            "",
+            _wrapped(_BDOT10K_NOTE.format(count=len(layers.layers)), "  "),
+        ]
     return [
         *(f"    {layer.code}" for layer in layers.layers),
         "",
