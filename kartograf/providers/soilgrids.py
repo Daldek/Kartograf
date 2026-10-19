@@ -389,7 +389,8 @@ class SoilGridsProvider(LandCoverProvider):
         version label of every file of this property. The map of ``ocd``
         announces no edition (its title is ``Soilgrids property: Organic
         carbon density``): its edition is the one the map of ``clay``
-        announces, and the ``url``/``title`` of the edition name that map.
+        announces, the ``url``/``title`` of the edition name that map and
+        ``source_property`` says so (``"clay"``; ``None`` for an own map).
 
         Raises
         ------
@@ -403,6 +404,7 @@ class SoilGridsProvider(LandCoverProvider):
             )
         url, title = self._capabilities_title(property, timeout)
         match = _EDITION_RE.match(title)
+        source_property = None  # the edition of the file's own map
         if match is None and property in _EDITIONLESS_MAPS:
             reference_url, reference_title = self._capabilities_title(
                 _EDITION_REFERENCE, timeout
@@ -410,13 +412,14 @@ class SoilGridsProvider(LandCoverProvider):
             match = _EDITION_RE.match(reference_title)
             if match is not None:
                 url, title = reference_url, reference_title
+                source_property = _EDITION_REFERENCE
         if match is None:
             raise DownloadError(
                 f"SoilGrids GetCapabilities {property}: brak wydania w tytule "
                 f"{title!r} (oczekiwano 'SoilGrids250m <wydanie> - ...')"
             )
         label = edition_label(match.group(1), what="SoilGrids")
-        return Edition(id=label, url=url, title=title)
+        return Edition(id=label, url=url, title=title, source_property=source_property)
 
     # =========================================================================
     # Download by bbox → WCS
