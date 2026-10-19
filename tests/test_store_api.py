@@ -44,6 +44,7 @@ from kartograf.store import (
     read_sidecar,
 )
 from kartograf.transport.atom import atom_segment_tokens
+from tests.smb_share import no_stable_inodes, report_one_link
 
 SHEET = "N-34-130-D-d-2-4"
 HIERARCHY = "N-34/130/D/d/2/4"
@@ -1361,6 +1362,22 @@ def test_verified_link_and_smb_content_fallback(tmp_path, monkeypatch, full):
     # SMB without stable inode numbers: samefile fails, content confirms.
     monkeypatch.setattr(os.path, "samefile", lambda *_: False)
     assert link_target(link) == version
+    link.write_bytes(b"corrupted stored version")
+    assert link_target(link) is None
+
+
+@pytest.mark.parametrize("every_path", [False, True])
+@pytest.mark.parametrize("full", [False, True])
+def test_link_target_is_stable_while_smb_reports_one_link(
+    tmp_path, monkeypatch, full, every_path
+):
+    """SMB without ``serverino``: a path that was just opened reports one
+    link. Every confirming ``link_target`` reads the file, so the next call
+    meets exactly that (e2e 0.8.0: 0 of 14 links confirmed in a loop)."""
+    link, version = _store_link(tmp_path, full=full)
+    no_stable_inodes(monkeypatch)
+    report_one_link(monkeypatch, *(() if every_path else (link,)))
+    assert [link_target(link) for _ in range(3)] == [version] * 3
     link.write_bytes(b"corrupted stored version")
     assert link_target(link) is None
 

@@ -15,6 +15,7 @@ from kartograf.download.links import (
     version_key_of,
 )
 from kartograf.exceptions import DownloadError
+from tests.smb_share import no_stable_inodes, report_one_link
 
 A = ("2025-04-27_83233", "2025-04-27", "2025-11-17", "u1")
 B = ("2025-10-21_84183", "2025-10-21", "2025-12-01", "u2")
@@ -70,6 +71,17 @@ def _hardlinked(link, target):
 
 def _same(p, q):
     return os.path.normpath(os.path.abspath(p)) == os.path.normpath(os.path.abspath(q))
+
+
+def _snapshot(link):
+    """What a needless rewrite of the link or its sidecar would change."""
+    sidecar = _sidecar(link)
+    return (
+        os.stat(link).st_ino,
+        os.stat(sidecar).st_ino,
+        os.stat(sidecar).st_mtime_ns,
+        sidecar.read_bytes(),
+    )
 
 
 def test_hardlink_is_atomic_and_replaces_legacy_file(tmp_path):
@@ -138,16 +150,34 @@ def test_copy_sidecar_from_older_release_is_unknown(tmp_path):
     assert _hardlinked(link, a)
 
 
-def test_regular_file_claiming_hardlink_is_not_trusted(tmp_path):
+def test_independent_copy_of_the_version_is_restored_as_hardlink(tmp_path):
+    """The path holds the version's bytes (so the version), but it is not
+    its hardlink: ``ensure_link`` restores the hardlink (D22), of that
+    version."""
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)
     ensure_link(link, a, k_a)
     other = link.parent / "other.asc"
     other.write_text("A")
     os.replace(other, link)  # same content, other inode
-    assert linked_version(link) is None
-    assert ensure_link(link, a, k_a).changed is True
-    assert os.path.samefile(link, a)
+    assert _same(linked_version(link), a)
+    assert ensure_link(link, a, k_a) == LinkOutcome(a, True)
+    assert _hardlinked(link, a)
+    assert ensure_link(link, a, k_a).changed is False  # a hardlink again
+
+
+def test_independent_copy_of_a_newer_version_is_not_moved_back(tmp_path):
+    """The content decides what the path holds: the copy of B stays on B
+    when an older A is chosen."""
+    a, k_a = _a(tmp_path)
+    b, k_b = _b(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, b, k_b)
+    other = link.parent / "other.asc"
+    other.write_text("B")
+    os.replace(other, link)
+    assert ensure_link(link, a, k_a) == LinkOutcome(b, True)
+    assert link.read_text() == "B" and _hardlinked(link, b)
 
 
 def test_newer_version_moves_link_older_never(tmp_path):
@@ -276,16 +306,61 @@ def test_aux_xml_removed_on_relink(tmp_path):
     assert not aux.exists()
 
 
-def _no_inode_identity(monkeypatch):
-    """SMB without ``serverino``: ``samefile`` is false even for a hardlink."""
-    monkeypatch.setattr(os.path, "samefile", lambda a, b: False)
+@pytest.mark.parametrize("refresh", [False, True])
+def test_link_does_not_move_back_while_smb_reports_one_link(
+    tmp_path, monkeypatch, refresh
+):
+    """SMB without ``serverino``: the client reports one link for a path it
+    has just opened. The path still holds the newer version B, so an older
+    A is not linked (e2e 0.8.0: the link moved back to the 2022 flight)."""
+    a, k_a = _a(tmp_path)
+    b, k_b = _b(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, b, k_b)
+    before = _snapshot(link)
+    with monkeypatch.context() as smb:
+        no_stable_inodes(smb)
+        report_one_link(smb, link)
+        assert ensure_link(link, a, k_a, refresh=refresh) == LinkOutcome(b, False)
+        assert _same(linked_version(link), b)
+    assert _snapshot(link) == before  # nothing was rewritten
+    assert link.read_text() == "B" and _hardlinked(link, b)
+
+
+def test_local_version_with_one_reported_link_writes_nothing(tmp_path, monkeypatch):
+    a, k_a = _a(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, a, k_a)
+    before = _snapshot(link)
+    with monkeypatch.context() as smb:
+        no_stable_inodes(smb)
+        report_one_link(smb, link)
+        assert ensure_link(link, a, k_a) == LinkOutcome(a, False)
+    assert _snapshot(link) == before
+
+
+def test_link_stays_on_newer_version_when_every_path_reports_one_link(
+    tmp_path, monkeypatch
+):
+    """The link count is no evidence at all: with one reported for the
+    version file too the link may be re-linked, but never to an older one."""
+    a, k_a = _a(tmp_path)
+    b, k_b = _b(tmp_path)
+    link = _link(tmp_path)
+    ensure_link(link, b, k_b)
+    with monkeypatch.context() as smb:
+        no_stable_inodes(smb)
+        report_one_link(smb)
+        assert _same(linked_version(link), b)
+        assert _same(ensure_link(link, a, k_a).target, b)
+    assert link.read_text() == "B" and _hardlinked(link, b)
 
 
 def test_hardlink_confirmed_by_sha256_without_inode_identity(tmp_path, monkeypatch):
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)
     ensure_link(link, a, k_a)
-    _no_inode_identity(monkeypatch)
+    no_stable_inodes(monkeypatch)
     assert _same(linked_version(link), a)
     assert ensure_link(link, a, k_a).changed is False  # no relink each run
 
@@ -295,17 +370,21 @@ def test_edited_link_rejected_without_inode_identity(tmp_path, monkeypatch):
     link = _link(tmp_path)
     ensure_link(link, a, k_a)
     link.write_text("BBBB")  # same size, edited in place (both names)
-    _no_inode_identity(monkeypatch)
+    no_stable_inodes(monkeypatch)
     assert linked_version(link) is None
 
 
-def test_single_link_copy_rejected_without_inode_identity(tmp_path, monkeypatch):
-    """A regular file with the version content but nlink 1 is not a hardlink."""
+def test_lone_copy_is_restored_without_inode_identity(tmp_path, monkeypatch):
+    """No path reports a second name: an independent copy of the version
+    (``rsync -a`` without ``-H``), restored as a hardlink of the same version."""
     a, k_a = _a(tmp_path)
     link = _link(tmp_path)
     ensure_link(link, a, k_a)
     other = link.parent / "other.asc"
     other.write_text("A")
     os.replace(other, link)
-    _no_inode_identity(monkeypatch)
-    assert linked_version(link) is None
+    with monkeypatch.context() as smb:
+        no_stable_inodes(smb)
+        assert _same(linked_version(link), a)
+        assert ensure_link(link, a, k_a) == LinkOutcome(a, True)
+    assert _hardlinked(link, a)
