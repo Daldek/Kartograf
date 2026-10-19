@@ -8,9 +8,10 @@ a command line that uses it, taken from the examples of the catalog - the same
 lines as the ``epilog`` of ``--help`` and ``ExampleInfo.command_line``. The
 example is the one of the product the call had (an example of another product
 shows another thing), then the one that shows the argument, then the one of the
-country and of the kind of selection of the call. A ``UsageError`` names the
-command whose line was wrong; its hint says where the parameters of that command
-are and gives its first example. The functions are lookups in the declarations:
+country, of the mode (a cutout or a list of sheets) and of the kind of
+selection of the call. A ``UsageError`` names the command whose line was wrong;
+its hint says where the parameters of that command are and gives its first
+example. The functions are lookups in the declarations:
 no catalog is built, nothing is raised for an unknown command or option.
 """
 
@@ -45,7 +46,9 @@ def _best(
     taken (when the examples of the command tell products apart). Of those the
     first that shows ``param`` wins, then the one of the same ``country``
     (an example without a country is next to it, another country last), then
-    the one that chooses the area or the unit as the call did.
+    the one of the same mode (``cutout`` among ``given``: a cutout of the area
+    or a list of sheets), then the one that chooses the area or the unit as
+    the call did.
     """
     examples = command.examples
     given = given or {}
@@ -55,7 +58,7 @@ def _best(
     country = given.get("country")
     selection = next((name for name in _SELECTIONS if given.get(name)), None)
 
-    def rank(example: Example) -> tuple[bool, int, bool]:
+    def rank(example: Example) -> tuple[bool, int, bool, bool]:
         own = example.options.get("country")
         if not isinstance(country, str) or own == country:
             nearness = 0
@@ -64,6 +67,8 @@ def _best(
         return (
             param is None or not _shows(command, param, example),
             nearness,
+            "cutout" in given
+            and bool(example.options.get("cutout")) != bool(given["cutout"]),
             selection is not None and selection not in example.options,
         )
 

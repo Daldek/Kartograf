@@ -404,6 +404,30 @@ _DOWNLOAD_EXAMPLES = (
     Example(
         {
             "product": "nmt",
+            "country": "pl",
+            "bbox": [565000, 242000, 565500, 242500],
+            "bbox_crs": "EPSG:2180",
+            "sheet_system": "1992",
+            "resolution": "5m",
+            "vertical_crs": "EVRF2007",
+        },
+        title="Obszar PL: arkusze NMT 5 m w ukladzie 1992",
+    ),
+    Example(
+        {
+            "product": "nmt",
+            "country": "pl",
+            "bbox": [566000, 243000, 566500, 243500],
+            "bbox_crs": "EPSG:2180",
+            "cutout": True,
+            "horizontal_crs": "EPSG:2180",
+            "vertical_crs": "EVRF2007",
+        },
+        title="Wycinek PL: NMT 1 m z WCS",
+    ),
+    Example(
+        {
+            "product": "nmt",
             "sheet": "CTES96",
             "resolution": "5m",
             "vertical_crs": "Bpv",
@@ -422,6 +446,17 @@ _DOWNLOAD_EXAMPLES = (
             "vertical_crs": "Bpv",
         },
         title="Wycinek CZ w S-JTSK",
+    ),
+    Example(
+        {
+            "product": "laz",
+            "country": "cz",
+            "bbox": [-447000, -1114000, -446000, -1113000],
+            "bbox_crs": "EPSG:5514",
+            "model": "dmr5g",
+            "vertical_crs": "Bpv",
+        },
+        title="Chmura LAZ CZ: model DMR 5G dla prostokata",
     ),
 )
 

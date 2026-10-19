@@ -763,6 +763,45 @@ def test_example_for_takes_the_country_and_the_selection_of_the_call_next():
     assert by_unit is not None and "--teryt 12" in by_unit
 
 
+def _example_of(command, option, **given):
+    """The flags of the example line of the hint of a failed call: ``{flag: the
+    word after it}`` (a flag without a value maps to the next flag)."""
+    line = example_for(command, option, given)[1]
+    assert line is not None
+    words = line.split()
+    return {word: words[i + 1] for i, word in enumerate(words[:-1]) if word[:2] == "--"}
+
+
+def test_example_for_elevation_and_imagery_is_of_the_country_and_mode_of_the_call():
+    # E2E 0.8.0 N-P3-2: a PL NMT area got a CZ cutout, a CZ LAZ the PL LAZ line
+    # (no --model) and a PL sheet list of orthophotos the cutout example
+    sheets = _example_of("elevation download", "bbox", product="nmt", country="pl")
+    cutout = _example_of(
+        "elevation download", "bbox", product="nmt", country="pl", cutout=True
+    )
+    model = _example_of("elevation download", "model", product="laz", country="cz")
+    density = _example_of(
+        "elevation download", "min_density", product="laz", country="cz"
+    )
+    orto_cz = _example_of("imagery download", "bbox", product="orto", country="cz")
+    orto_sheets = _example_of(
+        "imagery download", "bbox", product="orto", country="pl", cutout=False
+    )
+    orto_cutout = _example_of(
+        "imagery download", "bbox", product="orto", country="pl", cutout=True
+    )
+
+    assert (
+        sheets["--country"] == "pl" and "--bbox" in sheets and "--cutout" not in sheets
+    )
+    assert cutout["--country"] == "pl" and "--cutout" in cutout and "--bbox" in cutout
+    for words in (model, density):
+        assert words["--country"] == "cz" and "--model" in words
+    assert orto_cz["--country"] == "cz" and "--bbox" in orto_cz
+    assert orto_sheets["--country"] == "pl" and "--cutout" not in orto_sheets
+    assert orto_cutout["--country"] == "pl" and "--cutout" in orto_cutout
+
+
 def test_example_for_positional_api_only_and_example_less_commands():
     # a positional argument has no flag; its example shows the value
     assert example_for("parse", "sheet") == (None, "kartograf parse N-34-130-D-d-2-4")
