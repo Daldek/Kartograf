@@ -12,6 +12,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import rasterio
+from pyogrio.raw import write as write_features
 from rasterio.transform import from_origin
 
 from kartograf import store_geometry
@@ -20,7 +21,7 @@ from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import DownloadError
 from kartograf.store import StoreEntry, read_sidecar
 from kartograf.store_geometry import Footprint, file_footprint, pinned_transform
-from kartograf.transform.crs import TransformUnavailableError
+from kartograf.transform.crs import TransformError, TransformUnavailableError
 
 
 def _entry(
@@ -400,6 +401,105 @@ def test_wgs84_envelope_densifies_non_linear_edge(tmp_path, monkeypatch):
     )
     fp = file_footprint(entry)
     assert fp.wgs84.max_y > 2.2  # a four-corner envelope would stop at 2
+
+
+def test_crs84_request_is_the_wgs84_envelope_without_an_operation(
+    tmp_path, monkeypatch
+):
+    """E2E 0.8.0 N-P2-1: the files of PRNG and of the special PRG boundaries carry
+    ``bbox_crs`` = ``OGC:CRS84``, the longitude/latitude WGS 84 of ``EPSG:4326``
+    (the same numbers). PROJ 9.8.1 gives that axis swap an unknown accuracy, the
+    policy rejected it and ``file_footprint`` raised for every such file."""
+    asked = []
+
+    def pinned(src, dst):
+        asked.append((src, dst))
+        raise TransformUnavailableError("jak PROJ 9.8.1 dla zamiany osi")
+
+    monkeypatch.setattr("kartograf.store_geometry.pinned_transform", pinned)
+    area = [19.93, 50.055, 19.945, 50.065]
+    entry = _entry(
+        tmp_path,
+        "19.93_50.055_19.945_50.065.gpkg",
+        crs="OGC:CRS84",
+        request={"bbox": area, "bbox_crs": "OGC:CRS84"},
+    )
+
+    assert file_footprint(entry) == Footprint(
+        BBox(*area, "OGC:CRS84"), BBox(*area, "EPSG:4326"), "request"
+    )
+    assert asked == []
+    # another datum is no axis swap: ETRS89 still needs an operation of the policy
+    etrs = _entry(
+        tmp_path,
+        "etrs.gpkg",
+        request={"bbox": area, "bbox_crs": "EPSG:4258"},
+    )
+    assert file_footprint(etrs) is None
+    assert asked == [("EPSG:4258", "EPSG:4326")]
+
+
+def test_crs84_geopackage_header_is_the_wgs84_envelope(tmp_path):
+    """The header of the same files: a GeoPackage in ``OGC:CRS84`` as GDAL writes
+    it (its own SRS, ``NONE:100000`` with the CRS84 WKT)."""
+    entry = _entry(tmp_path, "names.gpkg", crs="OGC:CRS84")
+    points = [
+        struct.pack("<BIdd", 1, 1, x, y) for x, y in ((19.93, 50.055), (19.94, 50.06))
+    ]
+    write_features(
+        entry.path,
+        geometry=np.array(points, dtype=object),
+        field_data=[],
+        fields=[],
+        geometry_type="Point",
+        crs="OGC:CRS84",
+        driver="GPKG",
+        layer="prng",
+    )
+
+    fp = file_footprint(entry)
+
+    assert fp.source == "header"
+    assert _coords(fp.wgs84) == pytest.approx((19.93, 50.055, 19.94, 50.06))
+    assert fp.wgs84.crs == "EPSG:4326"
+
+
+@pytest.mark.parametrize("failure", [TransformUnavailableError, TransformError])
+def test_a_source_without_a_safe_operation_falls_through_to_the_next(
+    tmp_path, monkeypatch, failure
+):
+    """E2E 0.8.0 N-P2-1: ``file_footprint`` took the first source and raised when
+    its envelope could not be moved to WGS84; the header of the file was never
+    read. A file with no source left has no footprint, not an exception."""
+    real = pinned_transform
+
+    def pinned(src, dst):
+        if src == "EPSG:3857":
+            raise failure("brak operacji")
+        return real(src, dst)
+
+    monkeypatch.setattr("kartograf.store_geometry.pinned_transform", pinned)
+    request = {"bbox": [2000000, 6400000, 2001000, 6401000], "bbox_crs": "EPSG:3857"}
+    tiff = _entry(tmp_path, "tile.tif", request=request)
+    with rasterio.open(
+        tiff.path,
+        "w",
+        driver="GTiff",
+        height=3,
+        width=2,
+        count=1,
+        dtype="uint8",
+        crs="EPSG:2180",
+        transform=from_origin(500000, 300000, 10, 20),
+    ):
+        pass
+
+    fp = file_footprint(tiff)
+    assert fp.source == "header" and fp.native == BBox(
+        500000, 299940, 500020, 300000, "EPSG:2180"
+    )
+
+    assert file_footprint(_entry(tmp_path, "pl.zip", request=request)) is None
 
 
 def test_pinned_transform_is_offline_and_rejects_unsafe_operations(monkeypatch):
