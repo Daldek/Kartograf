@@ -2109,14 +2109,18 @@ odczytu. `list_segments` zwraca segmenty `<produkt>/<wariant>` (także
 nieznane rejestrowi), `iter_store` — iterator wpisów `version`, `link`,
 `full_sheet` i `problem` (brak lub zły sidecar, nieznany segment,
 pozostałości). Skan czyta tylko sidecary (jeden odczyt na plik), nie
-otwiera plików danych i nie robi `stat` każdego pliku. Segmenty można
-skanować równolegle w wątkach, a znane już katalogi wersji pominąć
-(`skip_versions`: ich pliki wracają z `skipped=True` i `sidecar=None`):
+otwiera plików danych i nie robi `stat` każdego pliku. `list_partitions`
+dzieli segment na rozłączne części (suma części = skan segmentu), które
+można skanować równolegle w wątkach — także największy segment nie czeka
+na jeden wątek. Znane już katalogi wersji można pominąć (`skip_versions`:
+ich pliki wracają z `skipped=True` i `sidecar=None`; zbiór katalogów —
+z listingu katalogu wersji, mapowanie katalog → nazwy plików — nawet bez
+listingu, wtedy wywołujący ręczy za zawartość katalogu):
 
 ```python
 from concurrent.futures import ThreadPoolExecutor
 
-from kartograf import describe_segment, iter_store, list_segments
+from kartograf import iter_store, list_partitions, list_segments
 
 store = "<katalog-danych>"
 # katalogi wersji z poprzedniego skanu, względem store, np.
@@ -2124,14 +2128,15 @@ store = "<katalog-danych>"
 known: set[str] = set()
 
 
-def scan(segment: str) -> list:
-    return list(iter_store(store, segment=segment, skip_versions=known))
+def scan(job: tuple[str, str]) -> list:
+    segment, part = job
+    return list(iter_store(store, segment=segment, partition=part, skip_versions=known))
 
 
-segments = list_segments(store)
+jobs = [(s, p) for s in list_segments(store) for p in list_partitions(store, s)]
 with ThreadPoolExecutor(max_workers=8) as pool:
-    for segment, entries in zip(segments, pool.map(scan, segments)):
-        print(describe_segment(segment).name, len(entries))
+    entries = [entry for part in pool.map(scan, jobs) for entry in part]
+print(len(entries))
 ```
 
 Skan jednostek nie listuje całego segmentu — tylko sloty podanych godeł,
