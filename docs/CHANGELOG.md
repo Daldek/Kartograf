@@ -737,7 +737,9 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   nawet listowany, wywolujacy reczy za jego zawartosc (zbior dziala jak
   dotad). Skan bez `pathlib` w petli i z tanszym typowaniem sidecara -
   magazyn testowy Archiwisty (50 tys. slotow, SSD): skan przyrostowy 12,4
-  -> 6,3 s (z mapowaniem 5,2 s), pelny 20,3 -> 10,1 s, wynik bez zmian.
+  -> 6,3 s (z mapowaniem 5,2 s), pelny 20,3 -> 10,1 s, wynik bez zmian
+  z jednym zamierzonym wyjatkiem: skan `units` pomija ukryte katalogi wersji
+  (`.<etykieta>_<sha8>`) tak jak pelny skan (wczesniej je czytal).
 
 - Odczyt magazynu - zapisane gwarancje dla konsumentow (uwagi Archiwisty):
   stabilnosc klucza zrodla (KA-8: klucz `dataset` niezmienny po wydaniu,

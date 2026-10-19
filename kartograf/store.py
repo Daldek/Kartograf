@@ -1466,13 +1466,15 @@ def _validated_segment(segment: str) -> tuple[str, str]:
 
 
 def _single_name(name: object) -> bool:
-    """One non-hidden directory entry name: never a path or a drive."""
+    """One non-hidden directory entry name: never a path, a drive or longer
+    than file systems accept (``NAME_MAX``)."""
     return (
         isinstance(name, str)
         and name != ""
         and not name.startswith(".")
         and not any(separator in name for separator in _SEPARATORS)
         and not os.path.splitdrive(name)[0]
+        and len(name.encode()) <= _NAME_MAX
     )
 
 
@@ -1524,7 +1526,7 @@ def _known_names(key: str, names: Collection[str]) -> list[str]:
             f"skip_versions[{key!r}]: podaj nazwy plikow danych wersji (bez "
             f"sidecarow, sciezek i nazw ukrytych), nie {names!r}"
         )
-    return sorted(names)
+    return sorted(set(names))  # a listing never repeats a name
 
 
 def _segment_dir(root: str, segment: str) -> str | None:

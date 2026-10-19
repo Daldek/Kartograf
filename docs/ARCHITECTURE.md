@@ -1432,7 +1432,8 @@ nie ma w `request`), wiec `unit` z indeksu zamyka petle odswiezania
 `ValidationError`. Hierarchie licza
 te same funkcje co zapis (`SheetParser`, `path_parts`,
 `cuzk_map_path_parts`); skan nie listuje innych katalogow segmentu i nie
-zglasza problemow poziomu segmentu. `skip_versions` to znane wywolujacemu
+zglasza problemow poziomu segmentu; ukryte katalogi wersji
+(`.<etykieta>_<sha8>`) pomija tak jak pelny skan. `skip_versions` to znane wywolujacemu
 katalogi wersji, wzgledem `output_dir`, z `/` (np.
 `nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e`):
 ich pliki wracaja z `skipped=True` i `sidecar=None` bez czytania sidecarow
