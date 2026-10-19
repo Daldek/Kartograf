@@ -867,6 +867,19 @@ class TestCorineProviderInit:
         provider = CorineProvider(clms_credentials={})
         assert provider._clms_auth is None
 
+    def test_proxy_failure_reason_in_error(self):
+        """The reason of a failed proxy request is in the error (the log line of
+        the client never reaches the ``--json`` stderr)."""
+        provider = CorineProvider(use_proxy=True)
+        proxy = Mock()
+        proxy.proxy_request.return_value = None
+        proxy.last_error = 'Proxy request failed: {"error": "token"}'
+        with (
+            patch("kartograf.providers.corine._get_auth_proxy", return_value=proxy),
+            pytest.raises(DownloadError, match="proxy nie powiodlo sie: Proxy.*token"),
+        ):
+            provider._download_via_clms_proxy({}, Path("x"), 2018, 10)
+
     def test_init_no_proxy(self):
         """use_proxy=False without creds."""
         provider = CorineProvider(use_proxy=False)

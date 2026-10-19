@@ -94,6 +94,10 @@ from_crs` potrafi cicho zwrocic identycznosc; (2) pusta lista operacji to
 o nieznanej dokladnosci (`accuracy < 0`) i powyzej `policy.min_accuracy_m`,
 a pozostale przechodza probe na punkcie kontrolnym (inf/NaN = odrzut, to
 przypadek siatki obcego kraju); (4) kazdy wynik przechodzi `isfinite`.
+Budowa grupy pomija wylacznie ostrzezenie pyproj `Best transformation is not
+available` (brak siatki PROJ, np. CUZK na czystej instalacji): polityka wybiera
+sama sposrod dostepnych operacji, a surowy `UserWarning` lamalby kontrakt
+pustego stderr w `--json` (USAGE 9.2).
 Wybrana operacja jest **przypieta** (`PinnedTransform`) i przy reprojekcji
 rastra WYMUSZANA na GDAL-u przez `COORDINATE_OPERATION` — bez tego GDAL
 wybiera operacje sam, poza polityka. Pulapka osi jest tu realna, nie
@@ -3765,7 +3769,10 @@ deterministycznie z `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` albo `Dozwolone
 parsowaniem (`cli/_json.py::json_mode`), buduje parser z `usage_errors=True` (blad skladni
 to `UsageError`, z `command`, gdy linia nazwala znana komende) i zamienia kazdy wyjatek na
 dokument `kartograf-error/1` na stdout (stderr pusty) oraz kod wyjscia `e.exit_code`
-(0/1/2), 130 dla Ctrl-C; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Tabele kodow wyjscia
+(0/1/2), 130 dla Ctrl-C; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Rekordy loggera
+`kartograf` (poziom WARNING i wyzej) `main` zamienia na linie `Warning:`/`Error:` na stderr
+(`_StderrLines`; bez handlera Python drukuje je bez prefiksu); z `--json` przechodza tylko
+rekordy `kartograf.transport.http` (ponowienia), a z `KARTOGRAF_DEBUG` wszystkie. Tabele kodow wyjscia
 i bledow sa w USAGE 9.3 (`tests/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
 
 **Serwer MCP (`kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
