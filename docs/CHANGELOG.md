@@ -746,8 +746,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     to `ValidationError` (kod 2, `details.option=bbox`, podpowiedz
     o `--bbox-crs` i kolejnosci osi) przed siecia; dotad `OverflowError`,
     `ValueError`, zapytanie z `inf` albo plik 1 x 1 px. `--bbox x,y,x,y`
-    (punkt) nie jest przyjmowany. Co zrobic: punkt podawaj przez
-    `--geometry`, bbox z dodatnia powierzchnia.
+    (punkt) nie jest przyjmowany. Punkt (albo linia rownolegla do osi) w
+    `--geometry` wybiera arkusze, jednostki i piksele, w ktorych lezy
+    (arkusze NMT/orto, `boundaries`, `soil download`, `landcover` BDOT10k),
+    ale wycinek (`--cutout`, PL i CZ), kafle LAZ, `soil hsg` i `elevation
+    availability` pracuja na obszarze: `Error: --geometry: obwiednia
+    obiektow ma zerowa powierzchnie ...` (kod 2, `details.option=geometry`;
+    dotad komunikat o `bbox`, a `validate_data_request`/`project add` tego
+    nie wychwytywaly). Co zrobic: dla tych komend podawaj wielobok albo
+    `--bbox` z dodatnia powierzchnia.
   - `--workers 0` i ujemne w kazdej komendzie z `--workers` (CLI
     i biblioteka: `download_data`, `download_landcover`, kolekcje, LAZ PL
     i CZ, `DownloadManager`, `download_project`) to `ValidationError` (kod
@@ -797,6 +804,15 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     z powrotem w dowiazanie tej samej wersji, nigdy innej. Co zrobic:
     kod liczacy "oszczednosc miejsca" po `link_target` sprawdza liczbe
     dowiazan (`os.stat`) osobno.
+  - `file_footprint` nie zglasza juz `TransformUnavailableError`/
+    `TransformError`: zrodlo, ktorego obwiedni nie da sie bezpiecznie
+    przeliczyc na WGS84, jest pomijane i decyduje nastepne (bbox zadania,
+    godlo, naglowek, jednostka), a gdy zadne nie zostanie - wynik to
+    `None`. Dotad pierwszy blad przerywal wywolanie (wpisy `names`
+    `geographic`/`world` i `boundaries` `special` z `request.bbox_crs` =
+    `OGC:CRS84`, PROJ 9.8.1). Co zrobic: kod otaczajacy `file_footprint`
+    `try/except TransformError` moze go usunac; `None` znaczy "brak
+    pewnego obrysu".
 
 ### Dodane
 
@@ -1811,6 +1827,25 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   w wyniku obszaru; poprawny `llms.txt` (`landcover list-layers --product
   bdoo --json`, `soil list-layers --json`, narzedzia MCP wszystkich grup
   kolekcji).
+- Test E2E 2026-10-19, runda 3 (po drugiej weryfikacji na zywo):
+  `file_footprint` zwraca obrys wpisow w `OGC:CRS84` (PRNG, granice
+  specjalne PRG): CRS84 i EPSG:4326 to ta sama dlugosc/szerokosc WGS84,
+  wiec obwiednia to te same liczby bez operacji, a `build_pinned_transform`
+  przyjmuje zamiane osi tego samego CRS jako dokladna, takze gdy PROJ 9.8.1
+  podaje jej nieznana dokladnosc (-1). Podpowiedz zakresu lat zmienia
+  granice, ktora blokuje (`--min-year 2023 --max-year 2024` przy danych
+  z 2022: `--min-year 2022`, dotad `--max-year 2024`, flaga z wywolania);
+  dla `--year RRRR` zostaja flagi jednostronne. Blok `Przyklad:` w bledach
+  wejscia pasuje do kraju i trybu wywolania (nowe przyklady katalogu: PL
+  NMT `--bbox` jako arkusze i jako wycinek, CZ LAZ z `--model`, orto PL
+  `--bbox` jako arkusze, orto CZ `--bbox`; przyklad wybiera tryb wg
+  `--cutout`). Sidecar `ocd` ma `extra.edition.source_property` = `clay`
+  (wydanie pochodzi z mapy `clay`, jej tytul i url w `extra.edition`).
+  Limit obszaru BDOT10k i kolekcji: do 100 plikow rozmiar kazdego jest
+  mierzony `HEAD`, wiec limit 10 GB jest dokladny (obszar 69 powiatow to
+  2,87 GB i slusznie przechodzi); powyzej 100 plikow o odmowie decyduje
+  liczba, a rozmiar w komunikacie jest tylko orientacyjny (srednia 5 plikow,
+  dla 378 powiatow 6,4 GB przy 18 GB faktycznych).
 
 ## [0.7.2] - 2026-10-11
 

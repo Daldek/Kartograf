@@ -66,7 +66,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) | Silniki kanalow (unit_package, feature_bbox, atom_files) i dane planow C/D | 2026-10-15 | Przyjeta — czesciowo zastapiona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze) i [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy; D6: jawny timeout wywolania kolekcji); uzupelniona przez [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (jednostki arkuszy, kafli i KU, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji); czesciowo zastepuje [ADR-036](#adr-036-magazyn-wersjonowany) (D27: wycinek ortofotomapy w magazynie; errata 2 ADR-036); uzupelnia [ADR-015](#adr-015-pyshp--sqlite3-zamiast-fiona-dla-czytania-geometrii) (zapis GPKG przez pyogrio; odczyt obwiedni bez zmian), [ADR-034](#adr-034-wspolny-mechanizm-zapytan-obszarowych-kawalki-na-siatce-zrodla) (kawalki wycinka ortofotomapy; errata 1 ADR-034), [ADR-036](#adr-036-magazyn-wersjonowany) (D23 miedzy wydaniami, sloty jednostek), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `boundaries`, `cadastre`, `models3d`, `hydro`) i [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (pozycje komend projektu); errata 1-5: D5 i D12-D17 wg kodu planu D (indeks ATOM, HY-NET obszaru 2 warstwy, ZABAGED i RUIAN, ortofoto CZ, wycinek orto); errata 6: wycinek obrazu w calosci 0,0,0 = `NoCoverageError` bez wersji (test na zywo 0.8.0); errata 7: `--country auto` w kolekcjach: czesciowy sukces z kodem 0, kraj bez jednostek nie przerywa zadania, cache KU (test E2E 0.8.0) |
 | [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) | Plan E: produkty jednostkowe, arkuszowe i krajowe na silnikach C/D | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D1: capability kanalu kolekcji unikalna w deskryptorze); uzupelniona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D6: limit kanalu zamiast jawnego timeoutu wywolania); czesciowo zastapiona przez [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7 ADR-044); uzupelnia [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (jednostki arkuszy, kafli i KU, tematy plikow krajowych, rekord indeksu i sygnal `index`, OGC API Features, wybor kanalu po wartosciach opcji, `DOWNLOAD_SIZE`), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (grupy `names`, `maps`, `geodesy`) i [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (NMT 100 m w rejestrze wariantow bez ukladu wysokosci; godla 8-czlonowe PL-1992 - D10); errata 1: obwody spisowe PRG poza obszarem granic specjalnych (E3); errata 2: klasy paczek BDOO (`--layers`) i paczki wojewodztw obszaru (E4); errata 3: limit obszaru (100 plikow, 10 GB), kafel mesh = plik rekordu, Bodove pole = suma warstw sieci (E5); errata 4: limit obszaru obejmuje BDOT10k (test E2E 0.8.0) |
 | [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1, D6: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` zostaje z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`); errata 1: argumenty tylko nazwane wszystkich funkcji pobrania i sprawdzenia (test na zywo 0.8.0); errata 2: land cover i gleby: jednostki SoilGrids, klasy BDOT10k, podglad CORINE (test E2E 0.8.0) |
-| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta — uzupelniona przez [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (narzedzia MCP odczytu magazynu; errata 1); errata 2: czesci segmentu (`list_partitions`, `partition`) i mapowanie `skip_versions` bez listingu znanych katalogow wersji (luzuje widocznosc zmian w nich); errata 3: `Sidecar.unit` i obrys kafla LAZ, arkusz ZTM, `link_target` niezaleznej kopii (test E2E 0.8.0) |
+| [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta — uzupelniona przez [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (narzedzia MCP odczytu magazynu; errata 1); errata 2: czesci segmentu (`list_partitions`, `partition`) i mapowanie `skip_versions` bez listingu znanych katalogow wersji (luzuje widocznosc zmian w nich); errata 3: `Sidecar.unit` i obrys kafla LAZ, arkusz ZTM, `link_target` niezaleznej kopii, `file_footprint` bez wyjatku dla zrodla bez operacji CRS (test E2E 0.8.0) |
 | [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) | Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP | 2026-10-18 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (deklaracje komend w katalogu), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (opcje komend danych z katalogu) i [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) (narzedzia MCP odczytu magazynu); errata 3: kod wyjscia 143 (`terminated`), `failed[].kind`, stderr w `--json`, `hint` z argumentow wywolania (test E2E 0.8.0) |
 | [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) | Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2) | 2026-10-19 | Przyjeta; uzupelnia [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1: `AvailabilityRecord.full_sheet`, ograniczenie LAZ i wyjatek CZ w dokumentacji pola; errata 2: obszar bez ladu: `complete` bez zmian, sygnal `no_land` (test E2E 0.8.0) |
 
@@ -3307,7 +3307,10 @@ pobranie (`outside_country`, kod 2, `option=bbox|geometry`); godlo PL i
 wskazuje flage, liczbe odrzuconych kafli i najwyzsza gestosc nominalna
 (`LazTileSelection.below_density`). `--bbox` poza zakresem EPSG:4326 albo
 o zerowej powierzchni odrzuca wspolne `validate_request_bbox` (kod 2,
-`option=bbox`) - punkt podaje sie przez `--geometry`.
+`option=bbox`). Punkt (albo linia rownolegla do osi) w `--geometry` wybiera
+arkusze, jednostki i piksele, w ktorych lezy; wycinek, kafle LAZ, `soil hsg`
+i ten raport pracuja na obszarze i odrzucaja go (`require_geometry_area`,
+`option=geometry`; runda 3 testu E2E 0.8.0).
 
 ---
 
@@ -3801,7 +3804,10 @@ powiat liczony raz mimo `--keep-raw`, tez archiwum `--year`): rozmiary
 `HEAD` przez sesje providera, ten sam komunikat; w tym celu
 `collections.within_volume` i `unit_choices` sa publiczne. Lista powiatow
 obszaru to `Info` `unit_list` (`notices.names_text`, co najwyzej 10
-nazw).
+nazw). Do 100 plikow rozmiar kazdego pliku jest mierzony `HEAD` (limit
+10 GB jest dokladny: 69 powiatow = 2,87 GB przechodzi); powyzej 100 plikow
+o odmowie decyduje liczba, a rozmiar (srednia 5 plikow) jest tylko
+orientacyjny (runda 3 testu E2E 0.8.0).
 
 ---
 
@@ -3960,7 +3966,9 @@ cfvo cm3/dm3, ocd hg/m3, ocs t/ha), a `soil list-layers --json` niesie
 `unit`, `conventional_unit`, `divisor` i `depths` (`PropertyInfo`).
 `ocs` istnieje tylko dla 0-30 cm (`PROPERTY_DEPTHS`, jedno miejsce
 walidacji dla providera i `LandCoverManager`); wydanie `ocd` pochodzi
-z mapy `clay` (`ocd.map` nie ma wydania w tytule). Raster samych zer
+z mapy `clay` (`ocd.map` nie ma wydania w tytule; tytul i url w
+`extra.edition` sa mapy `clay`, a `extra.edition.source_property` =
+`clay` mowi to maszynowo). Raster samych zer
 (poza `cfvo`) to `Warning` `all_nodata` i `extra.all_nodata`, HSG bez
 klasy tak samo; okno mniejsze niz piksel jest rozszerzane do jednego
 piksela. (2) BDOT10k: `--layers` walidowane wzgledem 58 klas z
@@ -4110,7 +4118,18 @@ znac stary ksztalt); przestawienie na `request.tile` z `parent_request`
 rozwazone i odlozone. (2) `link_target`/`linked_version` pliku o tresci
 wersji, ktory nie jest dowiazaniem (niezalezna kopia), zwraca te wersje
 zamiast `None`: kontrakt "potwierdzone na dysku" to ta sama tresc, nie ten
-sam i-wezel (ADR-036 errata 4).
+sam i-wezel (ADR-036 errata 4). (3) `file_footprint` pomija zrodlo, ktorego
+obwiedni nie da sie bezpiecznie przeliczyc na WGS84 (`TransformError`: brak
+operacji w polityce albo obwiednia poza obszarem operacji) i bierze nastepne
+zrodlo; bez zadnego zrodla wynik to `None`, wyjatek nie opuszcza funkcji
+(zostaja `DownloadError`/`ParseError` indeksow przy `network=True`). Powod:
+wpisy `names` i `boundaries` `special` maja `request.bbox_crs` =
+`OGC:CRS84`, a PROJ 9.8.1 podaje zamianie osi CRS84 -> EPSG:4326 nieznana
+dokladnosc, wiec polityka ja odrzucala i pierwszy blad przerywal wywolanie
+(naglowek GPKG nie byl czytany). Para CRS rownych z dokladnoscia do
+kolejnosci osi CRS geograficznego (CRS84, EPSG:4326) to tozsamosc:
+obwiednia to te same liczby bez operacji, a `build_pinned_transform` uznaje
+taka pare za dokladna.
 
 ---
 
