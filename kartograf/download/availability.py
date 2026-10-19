@@ -93,8 +93,10 @@ from kartograf.download.countries import (
 from kartograf.download.options import (
     canonical_bbox,
     canonical_country,
+    geometry_area_error,
     parse_sheet,
     product_choices,
+    require_geometry_area,
     validate_area_choice,
     year_bounds,
 )
@@ -746,6 +748,8 @@ def _explicit_area(request: _Request, layer_name: str | None) -> BBox | None:
     else:
         assert request.geometry is not None
         area = geometry_envelope(request.geometry, layer_name)
+        if request.country == "cz":  # PL keeps the area of each feature
+            require_geometry_area(area, "raport dostepnosci")
     error = outside_country(area, request.country.upper(), flag=f"--{option}")
     if error is not None:
         raise ValidationError(error, option=option)
@@ -779,6 +783,8 @@ def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Part
         area = request.bbox
     split = split_bbox_by_country(area, cz_crs=_CZ_CRS)
     countries = tuple(code for code in ("PL", "CZ") if code in split)
+    if request.geometry is not None and "CZ" in countries:
+        require_geometry_area(area, "raport dostepnosci")
     if not countries:
         raise ValidationError(
             "obszar nie przecina zasiegu zadnego znanego kraju (PL, CZ)",
@@ -829,7 +835,14 @@ def _area_polygons(
         )
     if laz:
         b = get_overall_bbox(request.geometry, layer=layer_name, target_crs="EPSG:2180")
+        require_geometry_area(b, "raport dostepnosci")
         return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y)]
+    if not any(b.min_x < b.max_x and b.min_y < b.max_y for b in boxes):
+        # sheets per feature: points and axis-parallel lines add no area
+        overall = get_overall_bbox(
+            request.geometry, layer=layer_name, target_crs="EPSG:2180"
+        )
+        raise geometry_area_error(overall, "raport dostepnosci")
     return [rectangle(b.min_x, b.min_y, b.max_x, b.max_y) for b in boxes]
 
 
