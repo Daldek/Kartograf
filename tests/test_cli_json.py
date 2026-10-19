@@ -49,6 +49,7 @@ from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.plan import PlanItem, UpdatePlan, new_plan
 from kartograf.error_report import error_report
 from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.interrupt import Terminated
 from kartograf.providers.pl.gugik_laz import SupersededLazTile
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.serialization import SCHEMAS
@@ -120,6 +121,7 @@ def test_emit_document_prints_the_document_and_returns_the_code_of_ok(
         (ValidationError("zle dane"), 2),
         (DownloadError("siec"), 1),
         (KeyboardInterrupt(), 130),
+        (Terminated(), 143),
     ],
 )
 def test_emit_document_returns_the_exit_code_of_an_error_document(capsys, error, code):

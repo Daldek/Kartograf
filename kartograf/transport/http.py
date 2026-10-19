@@ -8,6 +8,9 @@ network errors, 429 and 5xx are retried (``is_retryable``), ``Retry-After`` exte
 the pause (``retry_wait``), ``DownloadError.status_code`` carries the HTTP code
 of the last attempt (``http_failure``). Files are downloaded by ``download_to``,
 in-memory responses by ``get_with_retry``; per-thread sessions by ``SessionPerThread``.
+A thread of a stopping pool (``kartograf.interrupt``) leaves ``download_to``,
+``get_with_retry`` and ``head_signal`` with ``Stopped`` before the next attempt,
+between the chunks of a body and instead of a retry pause.
 """
 
 import logging
@@ -23,6 +26,7 @@ import requests
 from urllib3.exceptions import NameResolutionError
 
 from kartograf.exceptions import DownloadError
+from kartograf.interrupt import Stopped, check_stop, current_stop
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +78,16 @@ def retry_wait(exc: requests.RequestException, backoff: float) -> float:
     if seconds < 0:
         return backoff
     return max(backoff, min(seconds, MAX_RETRY_AFTER))
+
+
+def _pause(seconds: float) -> None:
+    """Wait ``seconds`` before the next attempt; a thread of a stopping pool does
+    not wait it out (``Stopped``)."""
+    stop = current_stop()
+    if stop is None:
+        time.sleep(seconds)
+    elif stop.wait(seconds):
+        raise Stopped
 
 
 def failure_reason(exc: requests.RequestException | None) -> str:
@@ -187,6 +201,7 @@ def get_with_retry(
     context = description or url
     last_error: requests.RequestException | None = None
     for attempt in range(retries):
+        check_stop()
         try:
             response = session.get(url, timeout=timeout, **extra)
             response.raise_for_status()
@@ -208,7 +223,7 @@ def get_with_retry(
                     delay,
                 )
                 logger.debug("%s: %r", context, exc)
-                time.sleep(delay)
+                _pause(delay)
     raise http_failure(
         f"{context}: pobranie nieudane po {retries} probach "
         f"({failure_reason(last_error)})",
@@ -256,6 +271,7 @@ def head_signal(
     context = description or url
     last_error: requests.RequestException | None = None
     for attempt in range(retries):
+        check_stop()
         try:
             response = session.head(url, timeout=timeout, allow_redirects=True)
             response.raise_for_status()
@@ -277,7 +293,7 @@ def head_signal(
                     delay,
                 )
                 logger.debug("%s: %r", context, exc)
-                time.sleep(delay)
+                _pause(delay)
     raise http_failure(
         f"{context}: sprawdzenie nieudane po {retries} probach "
         f"({failure_reason(last_error)})",
@@ -295,6 +311,7 @@ def _write_atomic(
     try:
         with open(temp_path, "wb") as f:
             for chunk in response.iter_content(chunk_size):
+                check_stop()
                 if chunk:
                     f.write(chunk)
         os.replace(temp_path, output_path)
@@ -344,6 +361,7 @@ def download_to(
 
     last_error: requests.RequestException | None = None
     for attempt in range(retries):
+        check_stop()
         try:
             logger.debug("Pobieranie %s (proba %s/%s)", context, attempt + 1, retries)
             response = session.get(url, stream=True, timeout=timeout)
@@ -378,7 +396,7 @@ def download_to(
                     wait,
                 )
                 logger.debug("%s: %r", context, e)
-                time.sleep(wait)
+                _pause(wait)
 
     raise http_failure(
         f"Nie udalo sie pobrac {context} po {retries} probach "

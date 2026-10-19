@@ -24,6 +24,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.interrupt import Terminated
 from kartograf.providers.pl.gugik_orto import cutout_resolution_labels
 from kartograf.serialization import SCHEMAS
 from kartograf.sources.variants import cz_models, resolution_label, variants
@@ -45,6 +46,7 @@ SPEC_ERROR_TABLE = [
     ("transform_unavailable", "TransformUnavailableError", 1),
     ("io_error", "OSError", 1),
     ("interrupted", "KeyboardInterrupt", 130),
+    ("terminated", "Terminated", 143),
     ("internal_error", "Exception", 1),
 ]
 
@@ -89,6 +91,7 @@ def test_error_code_table_equals_the_spec():
         (1, "failed"),
         (2, "usage"),
         (130, "interrupted"),
+        (143, "terminated"),
     ]
     for row in (*ERROR_CODES, *EXIT_CODES):
         assert row.meaning.isascii() and row.meaning
@@ -423,6 +426,16 @@ def test_keyboard_interrupt_is_interrupted():
     assert report.exception == "KeyboardInterrupt"
     assert report.message == "przerwano (Ctrl-C)"
     assert report.command == "elevation download"
+
+
+def test_sigterm_is_terminated_with_its_own_exit_code():
+    report = error_report(Terminated(), command="landcover download")
+
+    assert (report.code, report.exit_code) == ("terminated", 143)
+    assert report.exception == "Terminated"
+    assert report.message == "przerwano (SIGTERM)"
+    assert report.command == "landcover download"
+    assert report.hint is None
 
 
 def test_hint_is_one_ascii_line_up_to_400_chars():

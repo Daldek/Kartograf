@@ -3,6 +3,7 @@
 import io
 import os
 import threading
+import time
 from datetime import UTC, datetime, timedelta
 from email.utils import format_datetime
 from unittest.mock import MagicMock, patch
@@ -11,6 +12,7 @@ import pytest
 import requests
 
 from kartograf.exceptions import DownloadError
+from kartograf.interrupt import current_stop
 from kartograf.transport.http import (
     MAX_RETRY_AFTER,
     SessionPerThread,
@@ -22,6 +24,7 @@ from kartograf.transport.http import (
     response_signal,
     retry_wait,
 )
+from tests.interrupt_fakes import PATIENCE_S, EndlessResponse, interrupted_after_first
 
 
 def _mock_response(chunks=(b"abc", b"def")):
@@ -408,3 +411,68 @@ class TestHeadSignal:
             head_signal(session, "https://example.test/p", timeout=5, retries=2)
         assert exc.value.status_code == 503
         assert session.head.call_count == 2
+
+
+class TestStoppedPool:
+    """A thread of a pool that is stopping (Ctrl-C with several workers, e2e-B
+    P2-1) leaves the transport at its next check: no bytes are left on disk and
+    no attempt follows."""
+
+    URL = "https://example.test/p"
+
+    def test_download_to_stops_between_chunks_and_removes_the_tmp_file(self, tmp_path):
+        body = EndlessResponse()
+        session = MagicMock()
+        session.get.return_value = body
+
+        def work(item):
+            if item == "download":
+                download_to(session, self.URL, tmp_path / "plik.tif", timeout=5)
+            else:  # the interrupt comes while the body is being written
+                deadline = time.monotonic() + PATIENCE_S
+                while body.chunks < 3 and time.monotonic() < deadline:
+                    time.sleep(0.01)
+
+        error, seconds = interrupted_after_first(work, ["download", "interrupt"])
+
+        assert type(error) is KeyboardInterrupt
+        assert seconds < PATIENCE_S / 2
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_retry_pause_ends_with_the_stop(self, tmp_path):
+        tried = threading.Event()
+
+        def refuse(*args, **kwargs):
+            tried.set()
+            raise requests.ConnectionError("reset")
+
+        session = MagicMock()
+        session.get.side_effect = refuse
+
+        def work(item):
+            if item == "download":
+                download_to(session, self.URL, tmp_path / "p", timeout=5, retries=3)
+            else:
+                assert tried.wait(PATIENCE_S)  # the first attempt failed: a pause
+
+        with patch("kartograf.transport.http.backoff_delay", return_value=600):
+            error, seconds = interrupted_after_first(work, ["download", "interrupt"])
+
+        assert type(error) is KeyboardInterrupt
+        assert seconds < PATIENCE_S / 2  # not the 600 s of the pause
+        assert session.get.call_count == 1  # and no second attempt
+
+    @pytest.mark.parametrize("call", [get_with_retry, head_signal])
+    def test_no_request_is_sent_once_the_pool_stopped(self, call):
+        session = MagicMock()
+
+        def work(item):
+            if item == "request":
+                stop = current_stop()
+                assert stop is not None and stop.wait(PATIENCE_S)
+                call(session, self.URL, timeout=4)
+
+        error, _ = interrupted_after_first(work, ["interrupt", "request"])
+
+        assert type(error) is KeyboardInterrupt
+        assert session.method_calls == []
