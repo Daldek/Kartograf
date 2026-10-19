@@ -8,6 +8,13 @@ from dataclasses import dataclass
 
 from kartograf.core.bbox import BBox
 
+# The remedy of numbers that do not fit the CRS label of a bbox: another CRS
+# than ``--bbox-crs`` says (metres given as EPSG:4326) or swapped axes.
+BBOX_CRS_REMEDY = (
+    "Sprawdz --bbox-crs (domyslnie EPSG:2180; wspolrzedne S-JTSK: --bbox-crs "
+    "EPSG:5514) i kolejnosc osi (EPSG:4326: dlugosc,szerokosc)"
+)
+
 
 def bbox_to_wgs84(bbox: BBox) -> BBox:
     """
@@ -93,10 +100,7 @@ def outside_country(area: BBox, code: str, *, flag: str = "--bbox") -> str | Non
     text = f"{flag} ({area.crs}) lezy poza {code} (w EPSG:4326: {_coords(wgs)})"
     if flag != "--bbox":
         return f"{text}. Sprawdz uklad wspolrzednych pliku geometrii"
-    text += (
-        ". Sprawdz --bbox-crs (domyslnie EPSG:2180; wspolrzedne S-JTSK: --bbox-crs "
-        "EPSG:5514) i kolejnosc osi (EPSG:4326: dlugosc,szerokosc)"
-    )
+    text += f". {BBOX_CRS_REMEDY}"
     swapped = BBox(area.min_y, area.min_x, area.max_y, area.max_x, area.crs)
     if area.crs == "EPSG:4326" and _reaches(swapped, code):
         text += f"; osie wygladaja na zamienione: --bbox {_coords(swapped, 'g')}"
