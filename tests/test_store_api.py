@@ -757,6 +757,17 @@ def test_skip_versions_mapping_rejects_names_of_no_data_file(tmp_path, names):
         list(iter_store(root, segment=SEGMENT, skip_versions=known))
 
 
+def test_skip_versions_mapping_with_a_repeated_name_yields_the_file_once(tmp_path):
+    """A listing never repeats a name; neither does the mapping form."""
+    root = tmp_path / "data"
+    old = _version(root, SEGMENT, HIERARCHY, "2024", f"{SHEET}.asc")
+    known = {old.parent.relative_to(root).as_posix(): [old.name, old.name]}
+
+    found = list(iter_store(root, segment=SEGMENT, skip_versions=known))
+
+    assert [(e.path, e.skipped) for e in found if e.kind == "version"] == [(old, True)]
+
+
 # --- units --------------------------------------------------------------------------
 
 
@@ -1234,6 +1245,8 @@ def test_partitions_never_follow_symlinks(tmp_path, monkeypatch):
         (SEGMENT, None, "M-34/./."),
         (SEGMENT, None, "M-34\x00"),
         (SEGMENT, None, ["M-34"]),
+        (SEGMENT, None, "x" * 300),  # longer than NAME_MAX: not OSError
+        (SEGMENT, None, "M-34/" + "x" * 300),
     ],
 )
 def test_untrusted_partitions_never_traverse_store(tmp_path, segment, units, partition):
