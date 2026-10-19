@@ -18,6 +18,7 @@ core/geometry.py, core/sheet_parser.py, core/parser_2000.py, providers/corine.py
 and providers/soilgrids.py is deferred (stage 0 spec, section "Out of scope").
 """
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, overload
 
@@ -279,6 +280,25 @@ def _operation_codes(transformer: Any) -> frozenset[str]:
     return frozenset(codes)
 
 
+def _transformer_group(src_crs: str, dst_crs: str) -> TransformerGroup:
+    """``TransformerGroup`` without pyproj's "Best transformation is not
+    available" warning.
+
+    pyproj warns when the best operation of a pair needs a grid missing from
+    the PROJ data (e.g. the CUZK S-JTSK grid on a clean install). The pinned
+    policy chooses by accuracy among the operations that are available and
+    probes the area, so the warning only adds a raw Python line to stderr
+    (the ``--json`` contract: empty stderr). Only this message is ignored.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Best transformation is not available",
+            category=UserWarning,
+        )
+        return TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
+
+
 def build_pinned_transform(
     src_crs: str, dst_crs: str, policy: TransformPolicy
 ) -> PinnedTransform:
@@ -294,7 +314,7 @@ def build_pinned_transform(
     previous_network_enabled = network.is_network_enabled()
     network.set_network_enabled(policy.allow_network_grids)
     try:
-        group = TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
+        group = _transformer_group(src_crs, dst_crs)
         rejected: list[tuple[str, str]] = []
         candidates = []
         for transformer in group.transformers:
