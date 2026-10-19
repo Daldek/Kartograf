@@ -71,6 +71,20 @@ def is_lock_error(error: BaseException) -> bool:
     return isinstance(error, sqlite3.OperationalError) and "locked" in str(error)
 
 
+def is_unwritable_error(error: BaseException, path: Path) -> bool:
+    """True when SQLite could not open, create or write the cache file ``path``
+    for a reason that is not damage of the file: a read-only directory or file,
+    a full disk, a directory in place of the file, a file that cannot be created.
+    (A file that exists and cannot be opened, e.g. no read permission, is the
+    unreadable one that ``cache clear`` removes.)"""
+    if not isinstance(error, sqlite3.OperationalError):
+        return False
+    name = getattr(error, "sqlite_errorname", None) or ""
+    if name.startswith("SQLITE_CANTOPEN"):
+        return path.is_dir() or not path.exists()
+    return name.startswith(("SQLITE_READONLY", "SQLITE_PERM", "SQLITE_FULL"))
+
+
 class MetadataCache:
     """
     SQLite-based metadata cache for Kartograf.
@@ -192,6 +206,12 @@ class MetadataCache:
             message = (
                 f"cache metadanych zablokowany przez inny proces "
                 f"({self._db_path}): {error} - praca bez cache do konca zadania"
+            )
+        elif is_unwritable_error(error, self._db_path):
+            message = (
+                f"cache metadanych niedostepny do otwarcia lub zapisu "
+                f"({self._db_path}): {error} - praca bez cache; sprawdz "
+                f"uprawnienia katalogu i pliku"
             )
         else:
             message = (
