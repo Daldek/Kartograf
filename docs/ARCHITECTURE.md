@@ -1020,7 +1020,9 @@ wersji = wydanie `<rok>_<updated>` (`label_source="edition"`).
 
 **Kolekcje (ADR-042) w sidecarze.** `download/collections.py::run_job`
 wybiera kanal po jego capability (unikalnej w deskryptorze) i zapisuje:
-`request` = wybor uzytkownika w tej jednostce (`teryt`, `bbox` +
+`request` = wybor uzytkownika w tej jednostce (`teryt`, `ku` (mapa katastralna
+CZ, z `format`), `tile` (kafel mesh: `<uklad>/<modul>`, np.
+`2000/7/78944_6777_74230_55482`), `sheet`, `bbox` +
 `bbox_crs` w ukladzie natywnym uslugi albo `whole_country: true`; `year`,
 `format`, `lod`, `level`, `horizontal_crs` tylko gdy podane - jedyne
 wydanie LoD2 bez `year`), `horizontal_crs` =
@@ -2679,8 +2681,9 @@ takze `--year`, `--min-year`, `--max-year`, `--all-campaigns`
 i `--min-density`; `download/area.py::pl_only_flags`
 czyta rejestry) ROZSTRZYGA kraj do `pl` z komunikatem `Info:` zamiast
 przewracac zadanie; (3) porazka jednego kraju
-przy sukcesie drugiego daje kod 0 i `Warning:` — kod 1 zostaje dla jawnego
-`--country` i dla porazki wszystkich krajow. `Info:`/`Warning:` ida na stderr,
+przy sukcesie drugiego daje kod 0 i `Warning:` (takze w kolekcjach, sekcja
+4.10) — kod 1 zostaje dla jawnego `--country` i dla porazki wszystkich krajow.
+`Info:`/`Warning:` ida na stderr,
 wiec `-q` ich nie tlumi. `--cutout` NIE rozstrzyga kraju w zadna strone,
 bo od ADR-027 dziala po obu stronach granicy.
 
@@ -3480,7 +3483,21 @@ kind)` (`no_coverage` dla `NoCoverageError`, `download` dla
 `DownloadError`), pozostale jednostki dzialaja dalej (`workers` =
 `ThreadPoolExecutor`, sesja HTTP per watek). Wynik: `CollectionReport(files,
 failed, stale, notices, ok)`, `ok` = brak bledow i nieaktualnych pozycji
-planu. Czasy: `SERVICE_TIMEOUT` 60 s (WFS/REST, kanal moze miec wlasny
+planu, z wyjatkiem `--country auto` w PL i CZ (regula `download_data`,
+sekcja 4.6): kraj z bledami przy kraju bez bledow to czesciowy sukces -
+`ok = True` (kod 0), `Notice` `auto_partial_success`
+(`download/area.py::emit_partial_success`, wspolny z `download_data`), bledy
+zostaja w `failed`. Kraj, w ktorym obszar nie ma jednostek (brak KU w RUIAN,
+powiatu, arkusza, kafla - prostokatna obwiednia CZ obejmuje terytorium PL)
+albo zapytanie o jednostki zawiodlo, to blad tego kraju
+(`UnitFailure(<kraj>, <kraj>, ...)`, `_jobs`) i nie przerywa drugiego; brak
+jednostek we WSZYSTKICH krajach = `NoCoverageError`. `--check-updates`: taki
+kraj to `Warning` `check_failed` + `auto_partial_success` (jak `check_data`).
+KU obszaru wg RUIAN (`cadastral_areas_for_bbox`, takze pusta odpowiedz) leza
+w cache metadanych (`index_area_cache`, TTL 7 dni, jak powiaty PRG), wiec
+powtorzenie obszaru dziala bez sieci. `Notice` `unit_list` nazywa co
+najwyzej 10 jednostek, reszta jest policzona (`notices.names_text`). Czasy:
+`SERVICE_TIMEOUT` 60 s (WFS/REST, kanal moze miec wlasny
 `FeatureBBoxParams.timeout`, np. PRNG OGC API 180 s), `PACKAGE_TIMEOUT`
 120 s (paczka), `PROBE_TIMEOUT` 30 s (`HEAD` sygnalu, zapytanie PRG),
 `SIZE_TIMEOUT` 120 s (`HEAD` rozmiaru: serwer opendata GUGiK odpowiada

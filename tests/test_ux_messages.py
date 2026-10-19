@@ -354,3 +354,39 @@ def test_project_init_without_output_is_an_input_error(tmp_path, capsys):
     err = _cli_error(capsys, "project", "init", "--project", str(tmp_path))
     assert "Error: --output wymagane: katalog magazynu projektu" in err
     assert not (tmp_path / "kartograf-project.json").exists()
+
+
+@pytest.mark.parametrize("teryt", ["99", "9999", "33"])
+def test_teryt_of_a_missing_voivodeship_says_so_and_lists_the_existing_ones(
+    tmp_path, teryt
+):
+    # E2E 0.8.0 D P3-6: a well-formed code of no voivodeship read as a format error
+    with pytest.raises(ValidationError) as error:
+        validate_collection_request(product="admin", output_dir=tmp_path, teryt=teryt)
+    text = str(error.value)
+    assert f"nie ma wojewodztwa o kodzie {teryt[:2]}" in text
+    assert "12 (malopolskie)" in text and "Nieprawidlowy" not in text
+    assert error.value.option == "teryt"
+
+
+def test_teryt_of_a_wrong_format_is_still_a_format_error(tmp_path):
+    with pytest.raises(ValidationError, match="2 cyfry, np. 12") as error:
+        validate_collection_request(product="admin", output_dir=tmp_path, teryt="126")
+    assert error.value.option == "teryt"
+
+
+def test_whole_country_names_only_the_countries_of_the_product(tmp_path):
+    # E2E 0.8.0 D P3-4: hydro (CZ only) asked for --country pl, which it rejects
+    with pytest.raises(ValidationError) as hydro:
+        validate_collection_request(
+            product="network", output_dir=tmp_path, whole_country=True
+        )
+    assert "--country cz" in str(hydro.value)
+    assert "--country pl" not in str(hydro.value)
+    assert hydro.value.allowed == ("cz",)
+    with pytest.raises(ValidationError) as admin:
+        validate_collection_request(
+            product="admin", output_dir=tmp_path, whole_country=True, country="auto"
+        )
+    assert "--country pl albo --country cz" in str(admin.value)
+    assert admin.value.allowed == ("pl", "cz")

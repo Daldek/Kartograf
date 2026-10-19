@@ -569,11 +569,19 @@ COLLECTION_OPTION_SCENARIOS = [
     ),
     _row(
         kartograf.download_collection,
-        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        {"product": "buildings", "output_dir": _STORE, "teryt": "126", "lod": 2},
         "teryt",
         None,
         None,
         "Nieprawidlowy kod TERYT",
+    ),
+    _row(
+        kartograf.download_collection,
+        {"product": "buildings", "output_dir": _STORE, "teryt": "9901", "lod": 2},
+        "teryt",
+        None,
+        None,
+        "nie ma wojewodztwa o kodzie 99",
     ),
     _row(
         kartograf.download_collection,

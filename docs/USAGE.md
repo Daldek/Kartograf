@@ -1437,7 +1437,7 @@ kartograf boundaries download --product admin --country cz --level obec "--bbox=
 kartograf boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox 18.5,49.6,18.8,49.9 --bbox-crs EPSG:4326 -o ./data
 #   -> boundaries/pl_prg_gmina/bbox/<współrzędne EPSG:2180>.gpkg i boundaries/cz_ruian_obec/bbox/<współrzędne EPSG:5514>.gpkg
 kartograf boundaries download --product admin --country cz --whole-country -o ./data
-#   -> boundaries/cz_ruian_shp/country/cz.zip (SHP, ok. 253 MB)
+#   -> boundaries/cz_ruian_shp/country/cz.zip (SHP, ok. 251 MB)
 
 # HY-NET (hydro): odcinki cieków i węzły obszaru, EPSG:5514
 kartograf hydro download --product network --country cz "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
@@ -1509,9 +1509,22 @@ obszar przy granicy daje dwa pliki (PRG i RUIAN) ze wspólnym
 kraj (`--level pl=gmina,cz=obec`; biblioteka: `{"pl": "gmina", "cz":
 "obec"}`) — jedna wartość niedostępna w którymś kraju to `Error:`
 z podpowiedzią `--level pl=<poziom>,cz=<poziom>`. `--whole-country
---country cz` to krajowy SHP (ok. 253 MB) z `ETag`: domyślnie jedno
-`HEAD` porównuje lokalną wersję, `--check-updates` raportuje `aktualne`
-albo `nowsza` bez pobierania.
+--country cz` to krajowy SHP (ok. 251 MB) z `ETag`: domyślnie lokalna
+wersja jest używana bez zapytania (sekcja 4.3), `HEAD` robią tylko
+`--check-updates` (`aktualne` albo `nowsza`) i `--upgrade`.
+
+**`--country auto` w kolekcjach.** Obwiednie krajów to prostokąty, więc
+obszar w głębi jednego kraju (np. Cieszyn po polskiej stronie) trafia też
+do drugiego, gdzie źródło nie ma dla niego danych (brak katastrálního území
+w RUIAN, arkusza mapy, obiektów). Taka część to błąd tego kraju — wpis
+w `failed` (`kind` `no_coverage` albo `download`; `unit` = kod kraju, gdy
+nie dało się ustalić jednostek) i linia `Error:` — ale drugi kraj jest
+pobierany, a zadanie kończy się kodem 0 z `Warning:`
+`auto_partial_success` (ta sama reguła co w `elevation` i `imagery`;
+`--check-updates`: `Warning:` `check_failed` i `auto_partial_success`).
+Kod 1 zostaje dla jawnego `--country` i dla porażki wszystkich krajów
+(brak jednostek w obu = `no_coverage`). Zadanie projektu z częściowym
+sukcesem nie jest przypinane.
 
 **HY-NET.** Grupa `hydro` (`--product network`; tylko CZ — `--country pl`
 to `Error:`, a `auto` zawęża się do CZ z `Info:`) pobiera sieć
@@ -1552,8 +1565,11 @@ magazynu `cadastre/cz_cadastral-map_<format>/ku/`). `--ku` (6 cyfr) wybiera jedn
 każdego KU obszaru wg RUIAN (z `Info:` listą KU). Brak `--format` to
 `Error:` z listą formatów. KU bez paczki (np. 999999) kończy się
 `Error: ... (HTTP 404)`, a pozostałe KU zadania się zapisują. Paczki mają
-sygnał HTTP: kolejne uruchomienie używa lokalnej wersji po jednym `HEAD`,
-a `--check-updates` raportuje `aktualne` albo `nowsza` bez pobierania.
+sygnał HTTP: kolejne uruchomienie używa lokalnej wersji bez zapytania
+(`HEAD` robią tylko `--check-updates` i `--upgrade`: `aktualne` albo
+`nowsza`). KU obszaru z RUIAN leżą w cache metadanych (TTL 7 dni; `--force`,
+`--upgrade` i `--check-updates` pytają usługę), więc powtórzenie obszaru
+działa bez sieci.
 Format VKM (wymiana katastralna) nie jest obsługiwany: jego adres
 odpowiada 404 dla KU 623164 (stan 2026-10-16).
 
@@ -1574,7 +1590,8 @@ Obszar (`--bbox`, `--sheet` lub `--geometry`) daje GPKG z pełnymi geometriami
 obiektów przecinających obszar: PRNG w OGC:CRS84 (długość, szerokość), Geonames
 w EPSG:5514 (25 warstw). Zapytanie PRNG trwa ok. 80–95 s na stronę obiektów
 (pomiar 2026-10-16) — przed nim pada `Info: geographic: zapytanie OGC API
-PRNG - usluga odpowiada ...`; do kompletu danych użyj `--whole-country`.
+PRNG - usluga odpowiada ...` (tylko `geographic`; `world` odpowiada w kilka
+sekund); do kompletu danych użyj `--whole-country`.
 Wyniki obszaru nie mają taniego sygnału aktualizacji, do odświeżenia służy
 `--force`.
 
@@ -2235,7 +2252,7 @@ wątki i warianty struktury: ARCHITECTURE 3.3.1.
 | `geometry_layer_default` | info | GPKG z kilkoma warstwami bez `--layer`: użyta pierwsza | komendy z `--geometry` |
 | `auto_narrowed_to_pl`, `auto_narrowed_to_cz` | info | `--country auto` zawężone do jednego kraju (produkt albo wybór tylko tego kraju) | `elevation`, `imagery`, kolekcje, `elevation availability` |
 | `auto_clipped`, `auto_area_outside` | info | `--country auto`: część obszaru przycięta do obwiedni kraju albo leżąca poza PL i CZ | komendy z obszarem i `--country auto` |
-| `auto_partial_success` | warning | `--country auto`: jeden kraj zakończył się błędem, drugi pobrany (kod wyjścia 0) | `elevation`, `imagery download` |
+| `auto_partial_success` | warning | `--country auto`: jeden kraj zakończył się błędem, drugi pobrany (kod wyjścia 0) | `elevation`, `imagery download`, grupy kolekcji z obszarem |
 | `legacy_campaigns_dir` | info | w magazynie jest katalog `kampanie/` z 0.7.x | `elevation`, `imagery download` |
 | `newer_available` | info | źródło ma nowszy lot, użyta wersja lokalna (bez `--upgrade`) | arkusze PL `elevation`, `imagery` |
 | `check_failed` | warning | nie udało się sprawdzić źródła (np. skorowidz GUGiK niedostępny), użyta wersja lokalna | komendy danych, `elevation availability` |
