@@ -143,10 +143,10 @@
 >    pozycji planu), KD-3/KD-4, KE/KF/KG (mozaika, PL+CZ, porownanie
 >    wersji). KA-1..KA-6 i KA-8 SCALONE do `develop` 2026-10-19 (sesja
 >    2026-10-19 "weryfikacja i scalenie" nizej). Interfejs dla agentow
->    (ADR-046, KB-1..KB-5, `py.typed`) jest na galezi `feat/agent-interface`
->    (worktree `wt/feat/agent-interface`); proba scalenia z obecnym `develop`
->    na galezi `trial/agent-interface-errata` (rozwiazane konflikty, errata
->    Archiwisty jako ADR-045 errata 2, brama zielona) - CZEKA NA ZGODE
+>    (ADR-046, KB-1..KB-5, `py.typed` z pelnymi typami publicznego API) jest
+>    na galezi `feat/agent-interface` (worktree `wt/feat/agent-interface`),
+>    juz scalonej z tym `develop` (rozwiazane konflikty, errata Archiwisty
+>    jako ADR-045 errata 2, brama zielona: 7146 passed) - CZEKA NA ZGODE
 >    UZYTKOWNIKA na merge do `develop` przed tagiem `v0.8.0`. Propozycja na
 >    kolejna sesje: spec i plan KD-1/KD-2. Pozostale pozycje: backlog
 >    nizej (m.in. VKM CZ, CLMS na zywo).
@@ -213,7 +213,9 @@
   (`partition`, `target`, `skip_versions`, `segment`, `options` dla `units`
   + `partition`) i wiersze w `tests/test_errors.py`. `store_documents`
   i narzedzia MCP bez zmian (czesci to wydajnosc dla programow, nie dla
-  agenta). Brama na probie: 7139 passed.
+  agenta). Brama na probie: 7139 passed. Proba weszla do
+  `feat/agent-interface` (fast-forward) razem z typami publicznego API
+  (uwaga 1 Archiwisty); brama tej galezi po scaleniu `develop`: 7146 passed.
 
 ### Sesja 2026-10-19 - czesci segmentu i szybszy skan magazynu (ADR-045 errata 1)
 
