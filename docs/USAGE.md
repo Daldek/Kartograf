@@ -2218,9 +2218,14 @@ z jego sidecara (bez czytania danych); `link_target` potwierdza zawartość —
 na niektórych udziałach SMB wymusza odczyt całego pliku, więc wołaj je dla
 interesujących dowiązań, nie 50 tys. slotów naraz. `file_footprint` zwraca
 `native`, `wgs84`, `source` (`request`, `sheet`, `header`, `unit`); nie
-przyjmuje zmyślonego obrysu kraju. Obrysy jednostek z indeksów
-PRG/RUIAN/SM5 wymagają `network=True` albo wcześniej wypełnionego `cache`
-(w domyślnym wywołaniu zero zapytań sieciowych). Przeliczenie do WGS84 jest
+przyjmuje zmyślonego obrysu kraju. Obrys z bboxa zadania (`request`) ma
+plik, który jest tym obszarem (wycinek, `bbox/`); kafel LAZ wybrany dla
+obszaru albo arkusza (jego `request.bbox` to obszar zadania) ma obrys
+z nagłówka LAS (`header`), a jego `Sidecar.unit` to godło kafla
+(`extra.tile_sheet`), więc `iter_store(units=[unit])` go odnajduje. Obrysy
+jednostek z indeksów PRG/RUIAN/SM5 wymagają `network=True` albo wcześniej
+wypełnionego `cache` (w domyślnym wywołaniu zero zapytań sieciowych).
+Przeliczenie do WGS84 jest
 przypiętą operacją `pinned_transform`, a nie domyślnym pyproj. Koszt,
 wątki i warianty struktury: ARCHITECTURE 3.3.1.
 

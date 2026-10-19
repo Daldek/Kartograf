@@ -1,11 +1,11 @@
 """Read-only extents of store files and pinned CRS operations (ADR-045).
 
 ``file_footprint`` takes the first trustworthy source of an extent - the
-request bbox, a computable sheet code, the file header, a unit index (PRG,
-RUIAN, SM5) - and never invents one (a national file has none). Envelopes
-are reprojected with densified edges through ``pinned_transform``: an
-operation chosen once by Kartograf's policy (no ballpark, no network
-grids), never pyproj's default.
+request bbox (of a file that IS that area), a computable sheet code, the
+file header, a unit index (PRG, RUIAN, SM5) - and never invents one (a
+national file has none). Envelopes are reprojected with densified edges
+through ``pinned_transform``: an operation chosen once by Kartograf's
+policy (no ballpark, no network grids), never pyproj's default.
 """
 
 from __future__ import annotations
@@ -173,6 +173,13 @@ def _valid_bbox(coords: Any, crs: Any) -> BBox | None:
 
 def _stem(entry: StoreEntry) -> str:
     return entry.name.split(".", 1)[0]
+
+
+def _is_tile(meta: Sidecar | None) -> bool:
+    """A LAZ tile (``extra.tile_sheet``): one part of the area or sheet it was
+    selected for - ``request.bbox`` is that area, not the extent of the file."""
+    extra = meta.extra if meta is not None else None
+    return extra is not None and isinstance(extra.get("tile_sheet"), str)
 
 
 def _sheet_footprint(entry: StoreEntry, meta: Sidecar | None) -> Footprint | None:
@@ -548,11 +555,13 @@ def file_footprint(
 ) -> Footprint | None:
     """Extent of a store file from the first trustworthy source.
 
-    Order: the request bbox (``request.bbox`` + ``bbox_crs``), a computable
-    sheet code (PL-1992, PL-2000, TM33), the file header (GeoTIFF, ASC,
-    JPEG + world file, GPKG, LAS/LAZ), the unit (TERYT from PRG, KU from
-    RUIAN, SM5 sheet from the CUZK index). A malformed source is skipped;
-    a file without any (a national package) has no footprint.
+    Order: the request bbox (``request.bbox`` + ``bbox_crs``; not for a LAZ
+    tile selected for an area - its ``request.bbox`` is that area and the
+    extent of the tile is its header), a computable sheet code (PL-1992,
+    PL-2000, TM33), the file header (GeoTIFF, ASC, JPEG + world file, GPKG,
+    LAS/LAZ), the unit (TERYT from PRG, KU from RUIAN, SM5 sheet from the
+    CUZK index). A malformed source is skipped; a file without any (a
+    national package) has no footprint.
 
     Parameters
     ----------
@@ -594,7 +603,7 @@ def file_footprint(
     """
     meta = _sidecar_of(entry)
     request = meta.request if meta is not None else None
-    if request is not None:
+    if request is not None and not _is_tile(meta):
         bbox = _valid_bbox(request.get("bbox"), request.get("bbox_crs"))
         if bbox is not None:
             return _footprint(bbox, "request")

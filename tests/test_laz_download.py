@@ -8,6 +8,7 @@ few bytes.
 """
 
 import json
+import struct
 import threading
 from dataclasses import replace
 from pathlib import Path
@@ -43,6 +44,8 @@ from kartograf.providers.pl.gugik_laz import (
     LazTileSelection,
     SupersededLazTile,
 )
+from kartograf.store import iter_store
+from kartograf.store_geometry import file_footprint
 
 LAZ_FIXTURES = Path(__file__).parent / "fixtures" / "gugik_laz"
 REAL_LAZ = LAZ_FIXTURES / "real_2026_10_06"
@@ -946,3 +949,97 @@ class TestCliOnRealWfs:
             "77941_1396678_7.173.21.06.2.laz"
         ]
         assert "Info: pominieto" not in capsys.readouterr().err
+
+
+def _las_header(min_x, min_y, max_x, max_y) -> bytes:
+    """The public header block of a LAS 1.2 file: the extent of its points."""
+    header = bytearray(227)
+    header[:4] = b"LASF"
+    header[24:26] = bytes((1, 2))
+    struct.pack_into("<H", header, 94, 227)
+    struct.pack_into("<I", header, 107, 2)
+    struct.pack_into("<4d", header, 179, max_x, min_x, max_y, min_y)
+    return bytes(header)
+
+
+class HeaderProvider(FakeProvider):
+    """``download_tile`` writes the LAS header of the extent of that tile."""
+
+    def __init__(self, tiles) -> None:
+        super().__init__()
+        self.extents = {t.url: (t.min_x, t.min_y, t.max_x, t.max_y) for t in tiles}
+
+    def download_tile(self, url, target, **kwargs):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(_las_header(*self.extents[url]))
+        return target
+
+
+class TestTilesInTheStoreApi:
+    """A tile selected for an area is read back as its own unit and extent
+    (E2E 0.8.0 P2-2): ``request.bbox`` of its sidecar is the AREA."""
+
+    AREA = BBox(530400, 382000, 530600, 382200, "EPSG:2180")
+
+    @pytest.mark.parametrize(
+        ("crs", "sheets", "segment", "native_crs", "origin"),
+        [
+            (
+                "PL-1992",
+                ("M-34-1-A-a-1-1-1", "M-34-1-A-a-1-1-2"),
+                "laz/pl_1992_evrf2007",
+                "EPSG:2180",
+                (529900, 381900),
+            ),
+            (
+                "PL-2000:S6",
+                ("N-33-131-B-a-1-1-3", "N-33-131-B-a-1-1-4"),
+                "laz/pl_2000_evrf2007",
+                "EPSG:2177",
+                (6500100, 5540100),
+            ),
+        ],
+    )
+    def test_every_tile_has_its_own_unit_and_header_extent(
+        self, tmp_path, crs, sheets, segment, native_crs, origin
+    ):
+        x0, y0 = origin
+        # two neighbouring 600 x 600 m tiles; the area reaches into both
+        tiles = [
+            replace(
+                _tile(sheet, crs),
+                min_x=x0 + 600 * i,
+                min_y=y0,
+                max_x=x0 + 600 * (i + 1),
+                max_y=y0 + 600,
+            )
+            for i, sheet in enumerate(sheets)
+        ]
+        _run_laz_download(
+            _selection(*tiles),
+            provider=HeaderProvider(tiles),
+            bbox=self.AREA,
+            output_dir=tmp_path,
+        )
+        links = [e for e in iter_store(tmp_path, segment=segment) if e.kind == "link"]
+        assert len(links) == 2
+        for tile in tiles:
+            link = next(e for e in links if e.name == tile.filename)
+            assert link.sidecar.request["bbox"] == [530400, 382000, 530600, 382200]
+            assert link.sidecar.unit == tile.sheet
+            found = list(iter_store(tmp_path, segment=segment, units=[tile.sheet]))
+            assert {(e.kind, e.name) for e in found} == {
+                ("link", tile.filename),
+                ("version", tile.filename),
+            }
+            footprint = file_footprint(link)
+            assert footprint.source == "header"
+            assert footprint.native.crs == native_crs
+            assert (footprint.native.min_x, footprint.native.min_y) == (
+                tile.min_x,
+                tile.min_y,
+            )
+            assert (footprint.native.max_x, footprint.native.max_y) == (
+                tile.max_x,
+                tile.max_y,
+            )

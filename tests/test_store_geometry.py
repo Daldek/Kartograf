@@ -29,6 +29,7 @@ def _entry(
     *,
     hierarchy: str = "bbox",
     request: dict | None = None,
+    extra: dict | None = None,
     crs: str | None = "EPSG:2180",
     country: str = "PL",
     body: bytes | None = None,
@@ -44,6 +45,8 @@ def _entry(
         "horizontal_crs": crs,
         "request": request or {},
     }
+    if extra is not None:
+        meta["extra"] = extra
     Path(f"{path}.meta.json").write_text(json.dumps(meta), encoding="utf-8")
     return StoreEntry(
         kind="link",
@@ -704,3 +707,50 @@ def test_prg_unit_query_identifies_itself_as_kartograf(tmp_path, monkeypatch):
     monkeypatch.setattr(http, "get_with_retry", request)
     assert file_footprint(entry, network=True) is None
     assert seen == [f"kartograf/{__version__}"]
+
+
+def _las_header(min_x, min_y, max_x, max_y) -> bytes:
+    header = bytearray(227)
+    header[:4] = b"LASF"
+    header[24:26] = bytes((1, 2))
+    struct.pack_into("<H", header, 94, 227)
+    struct.pack_into("<I", header, 107, 2)
+    struct.pack_into("<4d", header, 179, max_x, min_x, max_y, min_y)
+    return bytes(header)
+
+
+_TILE_REQUEST = {  # the AREA a tile was selected for (100 x 100 m), not the tile
+    "bbox": [566000, 243000, 566100, 243100],
+    "bbox_crs": "EPSG:2180",
+    "year": 2025,
+}
+
+
+@pytest.mark.parametrize("key", ["tile_sheet", "godlo_kafla"])
+def test_laz_tile_extent_is_its_header_not_the_area_of_the_request(tmp_path, key):
+    """E2E 0.8.0 P2-2: ``request.bbox`` of a LAZ tile is the area it was selected
+    for; ``godlo_kafla`` is the key of sidecars written before ADR-031."""
+    entry = _entry(
+        tmp_path,
+        "83134_1728146_M-34-64-D-d-1-4-4-1.laz",
+        hierarchy="M-34/64/D/d/1/4/4/1",
+        request=_TILE_REQUEST,
+        extra={key: "M-34-64-D-d-1-4-4-1"},
+        body=_las_header(565977.27, 242585.65, 566542.61, 243171.5),
+    )
+    fp = file_footprint(entry)
+    assert fp.source == "header"
+    assert _coords(fp.native) == (565977.27, 242585.65, 566542.61, 243171.5)
+    assert 19.92 < fp.wgs84.min_x < fp.wgs84.max_x < 19.93
+
+
+def test_laz_tile_without_a_readable_header_has_no_extent_not_its_area(tmp_path):
+    entry = _entry(
+        tmp_path,
+        "83134_1728146_M-34-64-D-d-1-4-4-1.laz",
+        hierarchy="M-34/64/D/d/1/4/4/1",
+        request=_TILE_REQUEST,
+        extra={"tile_sheet": "M-34-64-D-d-1-4-4-1"},
+        body=b"LASF",
+    )
+    assert file_footprint(entry) is None
