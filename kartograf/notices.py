@@ -1,7 +1,7 @@
 """Structured data notices shared by command-level results and CLI output,
 and the text helpers of user messages (sizes, counted nouns, flag names)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -91,6 +91,21 @@ def count_text(count: int, one: str, few: str, many: str) -> str:
     else:
         form = many
     return f"{count} {form}"
+
+
+# The units a ``UNIT_LIST`` notice names; the rest is only counted (an area of
+# thousands of index tiles must not print one line of 100 KB before the volume
+# limit refuses it).
+LISTED_UNITS = 10
+
+
+def names_text(names: Sequence[str]) -> str:
+    """The names of the units of a notice: ``a, b, c``; over ``LISTED_UNITS``
+    of them the first ones and the rest counted: ``a, b, ..., j i 3 inne``."""
+    if len(names) <= LISTED_UNITS:
+        return ", ".join(names)
+    rest = count_text(len(names) - LISTED_UNITS, "inny", "inne", "innych")
+    return f"{', '.join(names[:LISTED_UNITS])} i {rest}"
 
 
 def cli_flag(name: str) -> str:
