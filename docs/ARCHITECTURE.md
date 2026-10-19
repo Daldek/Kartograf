@@ -1401,6 +1401,21 @@ data/
       (`country/pl_miejscowosci.zip`, `pl_obiekty-fizjograficzne.zip`),
       kierunek orto ukosnej (`7.125.11.08_n.tif`). Czlony ZIP zapisywane 1:1
       zachowuja nazwy zrodla (`CTES96.TM33N.jgw`).
+    - **Stabilnosc klucza (kontrakt z konsumentami magazynu, KA-8
+      Archiwisty).** Klucz zrodla opublikowany w wydaniu sie nie zmienia:
+      sidecary wersji sa niezmienne (ADR-036), wiec kazdy zapisany kiedys
+      `dataset` zostaje na dysku. Zmiana nazwy klucza idzie wylacznie przez
+      tabele aliasow czytnika (`_DEV_DATASETS` w `kartograf/store.py`):
+      surowy `dataset` w sidecarze i w `Sidecar.dataset` zostaje bez zmian,
+      `Sidecar.dataset_key` podaje biezacy klucz deskryptora, a klucz
+      nieznany rejestrowi daje `dataset_key=None`, nie blad (3.3.1).
+      Dostawca jest w polu `provider` sidecara (`provider_name`
+      deskryptora: `GUGiK`, `CUZK`, `Copernicus CLMS`, `ISRIC`), kraj w polu
+      `country`; srodkowa czesc klucza nie jest identyfikatorem dostawcy,
+      a konsument porownuje klucz w calosci i nie wyprowadza z niego
+      produktu, wariantu, dostawcy ani kraju (bierze je z sidecara
+      i `describe_segment`). Pierwsza czesc klucza zbioru ponadnarodowego
+      to zasieg (`eu.clms.corine`, `global.isric.soilgrids`).
 
 Nowe zrodlo rastrowe wymaga providera i toru dyspozycji (sekcja 5), ale
 jego `storage_subdir` (wg reguly 10, np. `nmt/de_bb_dgm1_dhhn2016/`) nie
@@ -1502,7 +1517,8 @@ nie ma w `request`), wiec `unit` z indeksu zamyka petle odswiezania
 `ValidationError`. Hierarchie licza
 te same funkcje co zapis (`SheetParser`, `path_parts`,
 `cuzk_map_path_parts`); skan nie listuje innych katalogow segmentu i nie
-zglasza problemow poziomu segmentu. `skip_versions` to znane wywolujacemu
+zglasza problemow poziomu segmentu; ukryte katalogi wersji
+(`.<etykieta>_<sha8>`) pomija tak jak pelny skan. `skip_versions` to znane wywolujacemu
 katalogi wersji, wzgledem `output_dir`, z `/` (np.
 `nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e`):
 ich pliki wracaja z `skipped=True` i `sidecar=None` bez czytania sidecarow
@@ -1578,7 +1594,12 @@ daja tylko powtorzone wpisy). Skan tylko czyta i nie ma wspolnego stanu
 poza niezmiennym rejestrem i `functools.lru_cache`; jeden iterator nalezy
 do jednego watku, a jedno mapowanie `skip_versions` moze sluzyc wielu
 wywolaniom naraz (skan go nie kopiuje ani nie zmienia). To samo dotyczy
-`read_sidecar`, `describe_segment`, `file_footprint` i `link_target`.
+`read_sidecar`, `describe_segment`, `file_footprint` i `link_target`;
+`file_footprint` dzieli miedzy watkami tylko `cache` wywolujacego (jeden
+zwykly `dict` moze sluzyc wszystkim watkom - w najgorszym razie dwa watki
+odpytaja indeks o te sama jednostke). `pinned_transform` takze mozna wolac
+z wielu watkow naraz (nizej). Tej gwarancji pilnuje test rownoleglego
+uzycia w `tests/test_store_geometry.py`.
 
 Koszt CPU (magazyn testowy 50 tys. slotow, SSD, jeden watek, 131 111
 wpisow): skan przyrostowy (`skip_versions` = wszystkie wersje) 6,3 s,
