@@ -62,6 +62,7 @@ from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.area import (
     cz_geometry_bbox,
     emit_clipping_notices,
+    emit_partial_success,
     geometry_envelope,
     parent_request_for,
     pl_only_flags,
@@ -113,7 +114,6 @@ from kartograf.exceptions import (
 from kartograf.notices import (
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
-    AUTO_PARTIAL_SUCCESS,
     BETTER_COVERAGE,
     CHECK_FAILED,
     INCOMPLETE_CAMPAIGN,
@@ -786,19 +786,7 @@ def _dispatch_area(
     if auto and len(results) > 1 and 0 in exit_codes and max(exit_codes) != 0:
         failed = [code for code, rc in results if rc != 0]
         ok = [code for code, rc in results if rc == 0]
-        if run.check:
-            text = (
-                f"czesc {', '.join(failed)} zadania nie mogla zostac sprawdzona "
-                f"- sprawdzono {', '.join(ok)}; kod 0 "
-                "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
-            )
-        else:
-            text = (
-                f"czesc {', '.join(failed)} zadania zakonczyla sie bledem "
-                f"(patrz Error) - pobrano {', '.join(ok)}; kod 0 "
-                "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
-            )
-        run.sink.emit("warning", AUTO_PARTIAL_SUCCESS, text)
+        emit_partial_success(run.sink, failed, ok, check=run.check)
         return 0
     return max(exit_codes)
 

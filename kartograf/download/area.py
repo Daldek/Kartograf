@@ -17,6 +17,7 @@ from kartograf.exceptions import ValidationError
 from kartograf.notices import (
     AUTO_AREA_OUTSIDE,
     AUTO_CLIPPED,
+    AUTO_PARTIAL_SUCCESS,
     GEOMETRY_LAYER_DEFAULT,
     NoticeSink,
 )
@@ -306,3 +307,33 @@ def emit_clipping_notices(
         f"caly bbox pobiera jawne --country {explicit} (za granica: arkusze "
         "bez danych / nodata)",
     )
+
+
+def emit_partial_success(
+    sink: NoticeSink,
+    failed: Sequence[str],
+    succeeded: Sequence[str],
+    *,
+    check: bool = False,
+) -> None:
+    """``AUTO_PARTIAL_SUCCESS``: under ``country="auto"`` the countries
+    ``failed`` failed and the countries ``succeeded`` did not - the request
+    ends with code 0 and this warning (ADR-023 points 4-5). The countries
+    come from RECTANGULAR envelopes, so an area deep inside one country
+    routinely reaches the other one; code 1 stays for an explicit
+    ``--country`` and for the failure of every country. ``check``: the plan
+    of the failed countries could not be made (``--check-updates``).
+    """
+    if check:
+        text = (
+            f"czesc {', '.join(failed)} zadania nie mogla zostac sprawdzona "
+            f"- sprawdzono {', '.join(succeeded)}; kod 0 "
+            "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
+        )
+    else:
+        text = (
+            f"czesc {', '.join(failed)} zadania zakonczyla sie bledem "
+            f"(patrz Error) - pobrano {', '.join(succeeded)}; kod 0 "
+            "(prostokatne obwiednie krajow, ADR-023 pkt 4-5)"
+        )
+    sink.emit("warning", AUTO_PARTIAL_SUCCESS, text)

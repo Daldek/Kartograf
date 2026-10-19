@@ -105,10 +105,11 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
   z argumentem `command` (np. `elevation download`), kody wyjscia i bledow z argumentem `tables`.
 - Narzedzia 1:1 z komendami: odkrywanie `get_catalog`, `parse_sheet`, `find_sheets`,
   `list_sources`, `list_layers`; dostepnosc `elevation_availability`; dane
-  `elevation_download`, `imagery_download`, `landcover_download`, `soil_download`,
-  `soil_hsg`; aktualnosc `check_updates` (parametry `tool` i `arguments`); projekt
-  `project_status`, `project_download`, `project_check_updates` (aktualnosc projektu);
-  magazyn `store_overview`, `store_entries`.
+  `elevation_download`, `imagery_download`, `landcover_download`, `soil_download`, `soil_hsg`,
+  `boundaries_download`, `cadastre_download`, `models3d_download`, `hydro_download`,
+  `names_download`, `maps_download`, `geodesy_download`; aktualnosc `check_updates` (parametry
+  `tool` i `arguments`); projekt `project_status`, `project_download`, `project_check_updates`
+  (aktualnosc projektu); magazyn `store_overview`, `store_entries`.
 - Wynik narzedzia to ten sam dokument co `--json`; `is_error` jest prawda, gdy CLI zwrocilby
   kod wyjscia != 0 (blad albo `ok: false`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
 - Dlugie pobrania zglaszaja postep notyfikacjami MCP.

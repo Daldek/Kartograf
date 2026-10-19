@@ -188,3 +188,63 @@ def test_ku_units_from_ruian_bad_answer_is_download_error(attributes):
     )
     with pytest.raises(DownloadError):
         cadastral_areas_for_bbox(CuzkClient(session=session), RUIAN_LAYER, KU_5514)
+
+
+def test_ku_units_cached_asks_no_service_again_also_when_empty(tmp_path):
+    """The answer of an area is kept in the metadata cache (also 'no KU
+    there'): a repeated run needs no service - the session of the second
+    call answers nothing at all."""
+    cache = MetadataCache(tmp_path / "meta.db")
+    first = cadastral_areas_for_bbox(
+        CuzkClient(session=FakeCuzk("ruian_7_bbox_tesin.json")),
+        RUIAN_LAYER,
+        KU_5514,
+        cache=cache,
+    )
+    empty = cadastral_areas_for_bbox(
+        CuzkClient(session=FakeCuzk("ruian_7_bbox_outside.json")),
+        RUIAN_LAYER,
+        OUTSIDE_5514,
+        cache=cache,
+    )
+
+    offline = CuzkClient(session=FakeCuzk())  # any request fails the test
+    assert cadastral_areas_for_bbox(offline, RUIAN_LAYER, KU_5514, cache=cache) == (
+        first
+    )
+    assert cadastral_areas_for_bbox(
+        offline, RUIAN_LAYER, OUTSIDE_5514, cache=cache
+    ) == (empty)
+    assert first == TESIN_KU and empty == []
+
+
+def test_ku_units_refreshing_cache_asks_again_and_stores_the_answer(tmp_path):
+    """``--force``/``--upgrade``/``--check-updates`` (a refreshing cache) ask
+    the service even for a stored area; the answer replaces the stored one
+    for the next plain run."""
+    path = tmp_path / "meta.db"
+    fewer = _ruian_body(lambda features: features.pop())  # an older answer
+    cadastral_areas_for_bbox(
+        CuzkClient(
+            session=FakeCuzk(
+                "ruian_7_bbox_tesin.json", bodies={"ruian_7_bbox_tesin.json": fewer}
+            )
+        ),
+        RUIAN_LAYER,
+        KU_5514,
+        cache=MetadataCache(path),
+    )
+    session = FakeCuzk("ruian_7_bbox_tesin.json")
+
+    refreshed = cadastral_areas_for_bbox(
+        CuzkClient(session=session),
+        RUIAN_LAYER,
+        KU_5514,
+        cache=MetadataCache(path, refresh=True),
+    )
+
+    assert refreshed == TESIN_KU and len(session.calls) == 1
+    plain = cadastral_areas_for_bbox(
+        CuzkClient(session=FakeCuzk()), RUIAN_LAYER, KU_5514, cache=MetadataCache(path)
+    )
+    assert plain == TESIN_KU
