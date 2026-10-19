@@ -319,13 +319,18 @@ def test_sigterm_is_143_with_one_error_line_in_text_mode(capsys, sigterm_during_
 
 
 def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
-    """The plan cannot be written (its path is a directory): the failure of the
-    store, not a mistake of the command line - code 1, ``io_error``."""
+    """The plan cannot be written (the write fails with an ``OSError``): the
+    failure of the store, not a mistake of the command line - code 1,
+    ``io_error``. (A directory in place of the plan file is rejected before
+    any work: ``test_plan_file_that_is_a_directory_is_one_error_line``.)"""
     plan_file = tmp_path / "plan.json"
-    plan_file.mkdir()
     checked = new_plan(tmp_path, [])
     argv = [*ELEVATION, "-o", str(tmp_path), "--check-updates", "--json"]
-    with patch("kartograf.cli.download_cmd.check_data", return_value=checked):
+    failure = IsADirectoryError(21, "Is a directory", str(plan_file))
+    with (
+        patch("kartograf.cli.download_cmd.check_data", return_value=checked),
+        patch("pathlib.Path.write_text", side_effect=failure),
+    ):
         code, out, err = _run(capsys, [*argv, "--plan", str(plan_file)])
 
     document = json.loads(out)

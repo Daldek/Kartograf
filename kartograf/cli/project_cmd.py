@@ -45,15 +45,15 @@ def cmd_project_init(args: argparse.Namespace) -> int:
     print(f"Magazyn: {project.output_dir}")
     print(
         "Dodaj zadanie: "
-        f"{project_command(args.project, 'add', 'NAZWA <grupa> download ...')}"
+        f"{project_command(args.project, 'add', 'NAZWA <grupa> <komenda> ...')}"
     )
     return 0
 
 
 def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
     """A task is the options of a data command: the flags of a run (``--upgrade``,
-    ``--workers``...) and of the output (``--summary``, ``--json``, ``--output``
-    of another store) are an error, not a silently dropped value."""
+    ``--workers``...) and of the output (``--summary``, ``--quiet``, ``--json``,
+    ``--output`` of another store) are an error, not a silently dropped value."""
     for flag, name in (
         ("--check-updates", "check_updates"),
         ("--upgrade", "upgrade"),
@@ -72,6 +72,12 @@ def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
             "pobieranie: "
             f"{project_command(args.project, 'download', '--workers', 'N', args.name)}",
             option="workers",
+        )
+    if "quiet" in call.run:
+        raise ValidationError(
+            "-q/--quiet nie jest czescia zadania (wycisza tekst komendy danych, "
+            "a add niczego nie pobiera); usun -q",
+            option="quiet",
         )
     if "summary" in call.run:
         raise ValidationError(

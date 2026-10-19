@@ -185,8 +185,9 @@ def progress_printer(args: argparse.Namespace, workers: int = 1):
 class _PlanContext:
     """Update plan of one run: ``--check-updates`` collects one plan per
     request (``plans``, written as ONE file); ``--upgrade --plan`` reads the
-    file once (``loaded``). ``--json``: the document of the run waits in
-    ``document`` until the plan file is written, then it is printed."""
+    file once (``loaded``). ``document``: the result of the run (a plan or a
+    report); with ``--json`` it waits until the plan file is written, then it
+    is printed."""
 
     plans: list[UpdatePlan] = field(default_factory=list)
     loaded: UpdatePlan | None = None
@@ -208,10 +209,17 @@ def _present(
     """The outcome of a command: its text (``render`` prints it and gives the exit
     code) or, with ``--json``, the document - kept until ``run_with_plan_file`` has
     written the plan file, so that a failed write is the only thing reported."""
+    _plan_context(args).document = document
     if wants_json(args):
-        _plan_context(args).document = document
         return 0
     return render()
+
+
+def _ran_nothing(document: Document | None) -> bool:
+    """A report with no file, no failure and no stale position (the five reports
+    of ``kartograf-download/1`` share these keys); a plan has none of them."""
+    names = ("files", "raw", "inputs", "failed", "stale")
+    return document is not None and not any(getattr(document, n, None) for n in names)
 
 
 def run_with_plan_file(
@@ -221,13 +229,15 @@ def run_with_plan_file(
 
     ``--upgrade --plan`` reads the plan before any work; ``--check-updates
     --plan`` writes the plans collected by ``body`` as ONE file after it -
-    into an existing directory, checked before any request. A plan that
-    cannot be read and a directory that does not exist are input errors
-    (``ValidationError`` of the option ``plan``, no work done); a plan that
-    cannot be written is the ``OSError`` of the write (``main`` reports it).
+    a file in an existing directory, checked before any request. A plan that
+    cannot be read, a directory in place of the file and a directory that does
+    not exist are input errors (``ValidationError`` of the option ``plan``, no
+    work done); a plan that cannot be written is the ``OSError`` of the write
+    (``main`` reports it). ``--upgrade --plan`` that ran no position of the plan
+    (all current, or done already) says so with an ``Info:`` line.
 
     With ``--json`` the body keeps its document (``_present``): the plan file is
-    written first, the document printed after it and the ``Info:`` line is not
+    written first, the document printed after it and the ``Info:`` lines are not
     (the file is the same document as stdout).
     """
     ctx = _PlanContext()
@@ -246,6 +256,12 @@ def run_with_plan_file(
             e.option = "plan"
             raise
     if getattr(args, "check_updates", False) and plan_file:
+        if Path(plan_file).is_dir():
+            raise ValidationError(
+                f"--plan {plan_file}: to katalog - podaj plik planu, np. "
+                f"{Path(plan_file) / 'plan.json'}",
+                option="plan",
+            )
         directory = Path(plan_file).parent
         if not directory.is_dir():
             raise ValidationError(
@@ -267,6 +283,12 @@ def run_with_plan_file(
         return emit_document(ctx.document)
     if wrote_plan:
         print(f"Info: zapisano plan aktualizacji {plan_file}", file=sys.stderr)
+    elif getattr(args, "upgrade", False) and plan_file and _ran_nothing(ctx.document):
+        print(
+            f"Info: plan {plan_file}: brak pozycji do wykonania (pozycje sa "
+            "aktualne albo juz wykonane)",
+            file=sys.stderr,
+        )
     return rc
 
 

@@ -168,7 +168,9 @@ def write_laz_sidecar(
 ) -> None:
     """Write the mandatory LAZ version sidecar exclusively via ``emit_sidecar``.
 
-    ``request`` describes the bbox and requested year/density bounds (E16).
+    ``request`` describes the area (``bbox``: the EPSG:2180 query window - not
+    the extent of the tile, which the store reader takes from the LAS header,
+    its unit from ``extra.tile_sheet``) and requested year/density bounds (E16).
     ``all_campaigns=False`` selects the newest flight within year bounds;
     True selects every flight within them without coverage deduplication and
     records ``"all"`` in the sidecar's ``request.campaigns`` field.

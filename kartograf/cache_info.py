@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Literal
 
 from kartograf.cache.defaults import default_cache_path, open_cache
-from kartograf.cache.metadata import is_lock_error
+from kartograf.cache.metadata import is_lock_error, is_unwritable_error
 from kartograf.exceptions import CacheError
 from kartograf.notices import Notice
 from kartograf.serialization import Document
@@ -37,6 +37,7 @@ from kartograf.serialization import Document
 # unreadable file that cannot be deleted is what ``clear`` just failed at.
 _LOCKED_HINT = "Poczekaj, az inny proces zwolni baze cache, i powtorz komende"
 _UNDELETABLE_HINT = "Usun plik cache recznie albo sprawdz uprawnienia jego katalogu"
+_UNWRITABLE_HINT = "Sprawdz uprawnienia katalogu i pliku cache (nie jest uszkodzony)"
 
 
 @dataclass(frozen=True)
@@ -216,6 +217,11 @@ def _unusable(path: Path, error: Exception) -> CacheError:
             f"cache zablokowany przez inny proces: {path} ({error}) - "
             "sprobuj ponownie po jego zakonczeniu",
             hint=_LOCKED_HINT,
+        )
+    if is_unwritable_error(error, path):
+        return CacheError(
+            f"cache niedostepny do otwarcia lub zapisu: {path} ({error})",
+            hint=_UNWRITABLE_HINT,
         )
     return CacheError(
         f"cache nieczytelny: {path} ({error}) - uzyj `kartograf cache clear`"

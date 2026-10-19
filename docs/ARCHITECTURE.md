@@ -1540,7 +1540,11 @@ KU w segmencie, ktorego kanal paczek ma jednostke `ku`). Plik krajowy
 z motywem to `<kraj>_<motyw>` (`pl_miejscowosci`) - dokladnie ta nazwa,
 ktora zwraca `Sidecar.unit` (wyprowadzona z nazwy pliku slotu, bo motywu
 nie ma w `request`), wiec `unit` z indeksu zamyka petle odswiezania
-`iter_store(units=[unit])`. Nazwy zarezerwowane (`versions`, `full_sheet`,
+`iter_store(units=[unit])`. Tak samo kafel LAZ: wybrany dla obszaru albo
+arkusza ma w `request.bbox` ten obszar (sidecary 0.7.x i 0.8.0), ale jego
+`unit` to godlo kafla z `extra.tile_sheet` (takze `godlo_kafla` sprzed
+ADR-031); w segmencie samych arkuszy i kafli (ZTM) sam numer (`0510`) to
+arkusz, nie TERYT. Nazwy zarezerwowane (`versions`, `full_sheet`,
 `kampanie`, takze jako sama jednostka) i nazwy dluzsze niz 255 bajtow to
 `ValidationError`. Hierarchie licza
 te same funkcje co zapis (`SheetParser`, `path_parts`,
@@ -1654,7 +1658,9 @@ segmenty z 0.8.0-dev (`orto/pl_1992_true`, `cadastre/cz_km_*`) sa
 `known=False`.
 
 `file_footprint(entry, *, network=False, cache=None)` wybiera pierwsze
-WIARYGODNE zrodlo: bbox zadania (z `bbox_crs`), obliczalne godlo
+WIARYGODNE zrodlo: bbox zadania (z `bbox_crs`; tylko dla pliku, ktory JEST
+tym obszarem - kafel LAZ z `extra.tile_sheet` ma w `request.bbox` obszar,
+z ktorego go wybrano, wiec jego obrys to naglowek LAS), obliczalne godlo
 PL-1992/PL-2000/TM33 (PL-1992: WGS84 = dokladny prostokat godla), obrys
 z naglowka GeoTIFF/ASC, JPG/JGW (plik georeferencji tej samej wersji),
 GPKG (SQLite `immutable=1`, bez plikow `-wal`/`-shm`), LAS/LAZ, obrys
@@ -1764,7 +1770,8 @@ separatorem `/`; `version` wskazuje plik pod `versions/`, nigdy
 powiazania, jezeli ich wzajemne polozenie pozostaje takie samo.
 
 `kartograf/project/manifest.py` scisle sprawdza strukture i typy przy
-kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki). Zapisuje
+kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki; BOM UTF-8
+edytora jest dopuszczony, zapis zawsze bez BOM). Zapisuje
 plik tymczasowy obok manifestu, synchronizuje go (`fsync`) i podmienia
 atomowo (`os.replace`); synchronizuje rowniez katalog, gdy system plikow
 na to pozwala. Krotka blokada katalogowa `.kartograf-project.lock`
@@ -2900,7 +2907,9 @@ Wynik: `data/laz/pl_2000_evrf2007/6/162/34/02/3/<oryginalna_nazwa>.laz`
 (+ `.meta.json` z `extra.tile_sheet`/`year`/`nominal_density`/`url`,
 `extra.acquisition_date`/`full_sheet`, gdy znane, oraz
 `extra.parent_request` w trybie `--bbox`/`--geometry`; `request`
-niesie bbox, podane granice roku, `year` dla jednego roku
+niesie bbox OBSZARU zadania (okno EPSG:2180 - nie kafla: obrys i `unit`
+kafla czyta sie z naglowka LAS i z `extra.tile_sheet`, sekcja 3.3.1),
+podane granice roku, `year` dla jednego roku
 i `min_density`, gdy podane — E16).
 `nominal_density` i filtr `--min-density` to wartosc NOMINALNA z WFS GUGiK
 (`char_przestrz`); faktyczna gestosc kafla bywa kilkukrotnie wyzsza
@@ -3805,8 +3814,11 @@ czystym procesie).
 `validate_command` (konwersja i walidacja zadania bez sieci i zapisu), `format_command`
 (`catalog/formatting.py`), `run_command`/`check_command` (konwersja, walidacja, potem funkcja
 komendy: `download_data`, `download_collection`, ... albo `check_*`). `options` to postac
-JSON opcji zadania projektu (ADR-040), `run` - flagi uruchomienia (`output_dir`, `update`,
-`plan`, `workers`, `summary`). Funkcje bez sieci (`parse_command`, `validate_command`,
+JSON opcji zadania projektu (ADR-040), `run` - pozostale flagi linii pod nazwami
+parametrow (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`,
+`quiet`, `json`, `summary`; nie ma klucza `update`: `run_command` bierze tryb jako
+`update="upgrade"|"force"`, a `check_updates` to `check_command`, wiec odwzorowanie robi
+wywolujacy). Funkcje bez sieci (`parse_command`, `validate_command`,
 `format_command`) maja test z atrapa transportu odrzucajaca kazde zapytanie.
 
 **Bledy.** Kazda klasa `KartografError` ma w `__dict__` wlasny `code` (snake_case, unikalny;
