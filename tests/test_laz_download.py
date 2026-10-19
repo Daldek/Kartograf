@@ -807,6 +807,43 @@ class TestDownloadLazArea:
         assert str(caught.value) == NO_TILES_MESSAGE
         provider.download_tile.assert_not_called()
 
+    def test_min_density_that_dropped_every_tile_is_named(self, tmp_path):
+        dropped = tuple(
+            replace(_tile(f"N-33-131-B-a-1-1-{i}"), density=density)
+            for i, density in ((1, 4), (2, 8))
+        )
+        provider = MagicMock(vertical_crs="EVRF2007")
+        provider.select_tiles.return_value = LazTileSelection(
+            tiles=(), below_density=dropped
+        )
+        with pytest.raises(NoCoverageError) as caught:
+            download_laz_area(
+                bbox=W2_AREA,
+                output_dir=tmp_path,
+                vertical_crs="EVRF2007",
+                min_density=12,
+                cache=False,
+                provider=provider,
+            )
+        text = str(caught.value)
+        assert "--min-density 12 odrzucilo 2 kafle" in text
+        assert "najwyzsza gestosc nominalna 8 pkt/m2" in text
+        provider.download_tile.assert_not_called()
+
+    def test_min_density_without_dropped_tiles_keeps_the_general_text(self, tmp_path):
+        provider = MagicMock(vertical_crs="EVRF2007")
+        provider.select_tiles.return_value = _selection()
+        with pytest.raises(NoCoverageError) as caught:
+            download_laz_area(
+                bbox=W2_AREA,
+                output_dir=tmp_path,
+                vertical_crs="EVRF2007",
+                min_density=12,
+                cache=False,
+                provider=provider,
+            )
+        assert str(caught.value) == NO_TILES_MESSAGE
+
     def test_workers_param_name(self, tmp_path):
         tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 5)]
         provider = FakeProvider()

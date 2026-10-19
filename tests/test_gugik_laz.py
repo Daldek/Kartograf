@@ -533,6 +533,34 @@ class TestDiscoverTiles:
         tiles = p.discover_tiles(QUERY_BBOX, year=2024, min_density=12)
         assert [t.sheet for t in tiles] == ["BBB"]
 
+    def test_min_density_dropping_every_tile_keeps_them_in_the_selection(self):
+        members = [
+            _feature(
+                "AAA",
+                2024,
+                (530500, 382500),
+                (531000, 383000),
+                density="4 p/m2",
+                seq="1",
+            ),
+            _feature(
+                "BBB",
+                2024,
+                (531000, 383000),
+                (531500, 383500),
+                density="8 p/m2",
+                seq="2",
+            ),
+        ]
+        p, _ = _provider_with_getfeature(_collection(members))
+        selection = p.select_tiles(QUERY_BBOX, year=2024, min_density=12)
+        assert selection.tiles == ()
+        # the recorded answer repeats for every queried year
+        assert {(t.sheet, t.density) for t in selection.below_density} == {
+            ("AAA", 4),
+            ("BBB", 8),
+        }
+
     def test_newest_per_sheet_dedup(self):
         # Same sheet code present in 2024 and 2023 -> keep 2024
         coll_2024 = _collection(
