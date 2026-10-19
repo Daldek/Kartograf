@@ -120,11 +120,14 @@
 >    agentow: `docs/research/2026-10-18-agent-interface-e2e/raport.md`).
 >    2026-10-19 scalone do `develop`: odczyt magazynu dla Archiwisty
 >    (ADR-045 z erratami 1-2, KA-1..KA-6, KA-8; zweryfikowane zmiany agenta
->    Archiwisty) i `feat/agent-interface` (ADR-046, `py.typed` z pelnymi
->    typami). Brama na `develop` (`scripts/gate.sh`): 7146 passed,
->    18 deselected, ruff/format/mypy czyste. Lokalny `develop` ma 302
->    commity ponad `origin/develop`. CZEKA NA ZGODE UZYTKOWNIKA: merge do
->    `main`, tag `v0.8.0` i push (`develop`, `main`, tag); przed tagiem
+>    Archiwisty), `feat/agent-interface` (ADR-046, `py.typed` z pelnymi
+>    typami), KD-1/KD-2 (ADR-047) oraz audyt dokumentacji i poprawki testu
+>    E2E przed tagiem (`docs/research/2026-10-19-e2e-0.8.0/raport.md`: P1 0,
+>    wszystkie P2 naprawione, otwarte decyzje w sekcji "Otwarte" raportu).
+>    Brama na `develop` (`scripts/gate.sh`): 7419 passed, 18 deselected,
+>    ruff/format/mypy czyste. CZEKA NA ZGODE UZYTKOWNIKA: tag wersji
+>    deweloperskiej `v0.8.0` (potem testy z Archiwista i Retmanem), merge do
+>    `main` i push (`develop`, `main`, tag); przed tagiem
 >    przeglad `git log origin/develop..develop` i `scripts/gate.sh` (CLAUDE.md,
 >    "Agenci z innych repozytoriow"). Po wydaniu: poczatek kolejnego cyklu
 >    (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased` w CHANGELOG, jak
@@ -199,6 +202,35 @@
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
+
+### Sesja 2026-10-19 - test E2E przed tagiem v0.8.0, MCP, audyt dokumentacji i poprawki
+
+- Prosba uzytkownika: test E2E wszystkich danych w czystym srodowisku (male
+  wycinki, przypadki typowe i brzegowe), potem mniejszy test przez MCP
+  z malym agentem, rownolegle audyt dokumentacji (bez README); cel:
+  gotowosc do tagu wersji deweloperskiej v0.8.0. Raport zbiorczy
+  i szczegolowe: `docs/research/2026-10-19-e2e-0.8.0/`.
+- Runda 1 (wheel z `e019126a`, 5 wycinkow, ok. 2 300 wywolan CLI): P1 0,
+  P2 16, P3 ok. 100; MCP haiku 7/7 zadan poprawnie. Audyt dokumentacji:
+  17 poprawek (scalony `bef8750`).
+- Poprawki na 7 galeziach `fix/e2e-*` (dowiazania SMB bez `serverino`,
+  Ctrl-C/SIGTERM i pule `kartograf.interrupt`, stderr w `--json`, arkusze
+  PL i walidacja bbox/`--workers`, landcover/SoilGrids/CORINE/BDOT10k,
+  kolekcje i `auto`, magazyn LAZ i projekt), integracja
+  `integrate/e2e-fixes`; runda 2 (wheel `cf39177a`): 29/32 naprawione,
+  1 czesciowo, 0 regresji w 1 307 powtorzonych poleceniach, MCP 6/6, nowe
+  P2 1 (`file_footprint` dla `OGC:CRS84`) - naprawione w rundzie 3 razem
+  z 6 P3. Smoke koncowy na wheel `42ec581b`: 22 polecenia w 13 grupach
+  zgodne. CHANGELOG [0.8.0] (wpisy "test E2E 2026-10-19") i erraty ADR
+  (DECISIONS, "test E2E 0.8.0"). Brama: 7419 passed.
+- Otwarte decyzje (raport, sekcja "Otwarte"): SIGTERM w serwerze MCP,
+  przypinanie czesciowego sukcesu `auto` w projekcie, obrys WGS84 przez
+  MCP, data wydania w CHANGELOG przy tagu, komunikaty argparse po
+  angielsku.
+- Lekcja procesu: `git stash` jest wspolny dla wszystkich worktree
+  (subagenci podmienili sobie zmiany - naprawione); w zadaniach dla
+  subagentow zakazac `git stash`. Trzy edycje subagentow sciezka wzgledna
+  trafily w glowny checkout - cofniete od razu.
 
 ### Sesja 2026-10-19 - KD-1/KD-2: szczegoly arkuszy i kampanii w raporcie dostepnosci (ADR-047)
 

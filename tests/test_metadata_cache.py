@@ -1445,7 +1445,7 @@ class TestCLICacheCommandsWithoutDatabase:
     def test_cache_clear_does_not_create_db(self, tmp_path, monkeypatch, capsys):
         monkeypatch.chdir(tmp_path)
         assert main(["cache", "clear"]) == 0
-        assert "Cache wyczyszczony." in capsys.readouterr().out
+        assert "nie ma pliku cache" in capsys.readouterr().out
         assert list(tmp_path.iterdir()) == []
 
 

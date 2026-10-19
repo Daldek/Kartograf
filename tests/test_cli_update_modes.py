@@ -162,6 +162,42 @@ def test_plan_file_in_missing_directory_is_one_error_line(tmp_path, capsys):
     assert fake.resolve_calls == []  # no index query before the error
 
 
+def test_plan_file_that_is_a_directory_is_one_error_line(tmp_path, capsys):
+    """E2E 0.8.0 P3-8: ``--plan KATALOG`` failed only after the check of the
+    source (``IsADirectoryError``)."""
+    plan = tmp_path / "plany"
+    plan.mkdir()
+    fake = FakeCampaignProvider(C14)
+    args = ["--sheet", G, "--check-updates", "--plan", str(plan)]
+    assert _run(fake, tmp_path / "data", *args) == 2
+    assert capsys.readouterr().err.startswith(f"Error: --plan {plan}: to katalog")
+    assert fake.resolve_calls == []  # no index query before the error
+
+
+def test_upgrade_plan_that_runs_nothing_says_so(tmp_path, capsys):
+    """E2E 0.8.0 P3-25: a plan of an up-to-date store (and a plan run twice)
+    printed nothing at all."""
+    fake = FakeCampaignProvider({"newest": [REC["83233"]]})
+    plan, out = tmp_path / "plan.json", tmp_path / "data"
+    assert _run(fake, out, "--sheet", G, "-q") == 0  # a local version
+    assert _run(fake, out, "--sheet", G, "--check-updates", "--plan", str(plan)) == 0
+    capsys.readouterr()
+    assert _run(fake, out, "--sheet", G, "--upgrade", "--plan", str(plan)) == 0
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert f"Info: plan {plan}: brak pozycji do wykonania" in captured.err
+
+    fake.records = {"newest": [REC["84183"]]}  # a newer flight: the plan has work
+    assert _run(fake, out, "--sheet", G, "--check-updates", "--plan", str(plan)) == 0
+    capsys.readouterr()
+    assert _run(fake, out, "--sheet", G, "--upgrade", "--plan", str(plan)) == 0
+    executed = capsys.readouterr()
+    assert "nowa wersja" in executed.out and "brak pozycji" not in executed.err
+    assert _run(fake, out, "--sheet", G, "--upgrade", "--plan", str(plan)) == 0
+    again = capsys.readouterr()  # done since the plan was made
+    assert again.out == "" and "brak pozycji do wykonania" in again.err
+
+
 def test_upgrade_plan_of_other_store_is_error(tmp_path, capsys):
     fake = FakeCampaignProvider(C14)
     plan = tmp_path / "plan.json"

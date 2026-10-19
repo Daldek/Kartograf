@@ -11,7 +11,8 @@ the target module (e.g. ``kartograf.cli.download_cmd``).
 
 Exit codes (one table, spec 6.5): 0 ok, 1 failed (a source, the network, the
 cache, a program error, or a result with ``ok: false``), 2 wrong use or wrong
-input (argparse, ``ValidationError`` and its subclasses), 130 interrupted. With
+input (argparse, ``ValidationError`` and its subclasses), 130 interrupted
+(Ctrl-C), 143 terminated (SIGTERM, handled like Ctrl-C). With
 ``--json`` every error is the document ``kartograf-error/1`` on stdout and
 stderr stays empty.
 """
@@ -31,8 +32,9 @@ from kartograf.cli._parser import (
 from kartograf.cli.cache_cmd import cmd_cache
 from kartograf.cli.download_cmd import cmd_download, create_progress_callback
 from kartograf.cli.parse_cmd import cmd_parse, format_sheet
-from kartograf.error_report import INTERRUPTED_MESSAGE, error_report
+from kartograf.error_report import error_report
 from kartograf.exceptions import KartografError, ValidationError
+from kartograf.interrupt import sigterm_interrupts
 
 __all__ = [
     "create_parser",
@@ -64,40 +66,72 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     return HANDLERS[command](parsed_args)
 
 
+_HTTP_LOGGER = "kartograf.transport.http"
+
+
 class _StderrLines(logging.Handler):
-    """Records of the HTTP transport (a failed attempt before its retry) as
-    ``Warning:`` lines on the current stderr; the Python fallback printed
-    them without a prefix. Other library records stay where they were."""
+    """Warning and error records of the library as prefixed lines on the
+    current stderr (``Warning:``/``Error:``); without this handler Python's
+    fallback prints them as bare messages.
+
+    ``--json`` keeps stderr empty (USAGE 9.2): of all the records only the
+    failed attempts of the HTTP transport (before their retry) pass; the other
+    records are diagnostics of the library, and what concerns the result is in
+    the document (``notices``, the verdict of the command). ``KARTOGRAF_DEBUG``
+    lets every record through.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.as_json = False
 
     def emit(self, record: logging.LogRecord) -> None:
+        if (
+            self.as_json
+            and record.name != _HTTP_LOGGER
+            and not os.environ.get("KARTOGRAF_DEBUG")
+        ):
+            return
         prefix = "Error" if record.levelno >= logging.ERROR else "Warning"
         print(f"{prefix}: {record.getMessage()}", file=sys.stderr)
 
 
-def _retry_lines() -> None:
-    log = logging.getLogger("kartograf.transport.http")
-    if not any(isinstance(handler, _StderrLines) for handler in log.handlers):
-        log.addHandler(_StderrLines(logging.WARNING))
+def _stderr_lines(as_json: bool) -> None:
+    """Install (once per process) the handler of the library records and set its
+    mode for this command line."""
+    log = logging.getLogger("kartograf")
+    handler = next((h for h in log.handlers if isinstance(h, _StderrLines)), None)
+    if handler is None:
+        handler = _StderrLines()
+        log.addHandler(handler)
+    handler.as_json = as_json
 
 
-def _fail(error: BaseException, command: str | None, as_json: bool) -> int:
+def _fail(
+    error: BaseException,
+    command: str | None,
+    as_json: bool,
+    given: dict[str, object] | None = None,
+) -> int:
     """Report ``error`` in the mode of the command line; the exit code of the
     error table (spec 6.2): ``exit_code`` of a ``KartografError``, 130 for Ctrl-C,
-    1 for every other exception.
+    143 for SIGTERM, 1 for every other exception.
 
-    ``--json``: the document ``kartograf-error/1`` on stdout. Text: one
+    ``--json``: the document ``kartograf-error/1`` on stdout (``given``: the
+    arguments the line gave, for the example of its hint). Text: one
     ``Error:`` line on stderr - the message of a ``KartografError`` (its hint is
     not printed twice: the texts of ``hints`` are in the message), with the
     remedy of an unavailable coordinate transformation; any other exception
     with its class and the way to a traceback.
     """
     if as_json:
-        return emit_document(error_report(error, command=command))
+        return emit_document(error_report(error, command=command, given=given))
     if isinstance(error, KeyboardInterrupt):
         # versions are committed atomically from .incoming/ staging (a stale
         # leftover is removed by a later run): no half-written file is kept
-        print(f"Error: {INTERRUPTED_MESSAGE}", file=sys.stderr)
-        return 130
+        report = error_report(error)
+        print(f"Error: {report.message}", file=sys.stderr)
+        return report.exit_code
     if isinstance(error, KartografError):
         remedy = getattr(error, "remedy", None)  # TransformUnavailableError
         text = f"Error: {error}" + (f" Remedium: {remedy}" if remedy else "")
@@ -121,30 +155,34 @@ def main(args: list[str] | None = None) -> int:
     -------
     int
         Exit code: 0 ok, 1 failed (or a result with ``ok: false``), 2 wrong
-        use or wrong input, 130 interrupted. ``--help`` and ``--version`` end
-        the process (``SystemExit``) as argparse does.
+        use or wrong input, 130 interrupted (Ctrl-C), 143 terminated (SIGTERM).
+        ``--help`` and ``--version`` end the process (``SystemExit``) as argparse
+        does.
     """
-    _retry_lines()
     argv = sys.argv[1:] if args is None else args
     as_json = json_mode(argv)
+    _stderr_lines(as_json)
     if as_json:
         use_utf8_stdout()
     command: str | None = None
-    try:
-        parser = create_parser(usage_errors=as_json)
-        removed = removed_command_error(argv)
-        if removed is not None:
-            parser.error(removed)  # exit 2, like any unknown command
-        # argparse raises SystemExit for --help/--version - let it pass unchanged
-        parsed_args = parse_command_line(parser, argv)
-        command = getattr(parsed_args, "_command_id", None)
-        return _dispatch(parser, parsed_args)
-    except KeyboardInterrupt as e:
-        return _fail(e, command, as_json)
-    except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
-        if os.environ.get("KARTOGRAF_DEBUG"):
-            raise
-        return _fail(e, command, as_json)
+    given: dict[str, object] | None = None
+    with sigterm_interrupts():
+        try:
+            parser = create_parser(usage_errors=as_json)
+            removed = removed_command_error(argv)
+            if removed is not None:
+                parser.error(removed)  # exit 2, like any unknown command
+            # argparse raises SystemExit for --help/--version - let it pass unchanged
+            parsed_args = parse_command_line(parser, argv)
+            command = getattr(parsed_args, "_command_id", None)
+            given = dict(vars(parsed_args))
+            return _dispatch(parser, parsed_args)
+        except KeyboardInterrupt as e:
+            return _fail(e, command, as_json)
+        except Exception as e:  # noqa: BLE001 - last-resort barrier for the CLI user
+            if os.environ.get("KARTOGRAF_DEBUG"):
+                raise
+            return _fail(e, command, as_json, given)
 
 
 if __name__ == "__main__":

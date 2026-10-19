@@ -59,6 +59,7 @@ from kartograf.core.sheet_parser import SheetParser, find_sheets_for_bbox, serie
 from kartograf.download.area import (
     bbox_to_2180,
     emit_clipping_notices,
+    emit_partial_success,
     geometry_envelope,
     parent_request_for,
     resolve_geometry_layer,
@@ -68,6 +69,7 @@ from kartograf.download.arguments import (
     require_codes,
     require_int,
     require_str,
+    require_workers,
 )
 from kartograf.download.countries import (
     countries_for_bbox,
@@ -78,6 +80,7 @@ from kartograf.download.data import (
     DOWNLOAD_FILL,
     DOWNLOAD_KEYS,
     DOWNLOAD_SCHEMA,
+    FailureKind,
     UnitFailure,
     UnitFile,
 )
@@ -119,10 +122,12 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_cutout_path, content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.notices import (
     AREA_OMITTED,
     AUTO_NARROWED_TO_CZ,
     AUTO_NARROWED_TO_PL,
+    CHECK_FAILED,
     CLASSES_ABSENT,
     DOWNLOAD_SIZE,
     FILES,
@@ -135,6 +140,7 @@ from kartograf.notices import (
     NoticeSink,
     cli_flag,
     count_text,
+    names_text,
     size_text,
 )
 from kartograf.providers.pl.bdot10k import WOJEWODZTWO_NAMES
@@ -1450,10 +1456,18 @@ def _resolve(
                 f"--teryt to kod TERYT (PL); usun --country {country}",
                 options=("teryt", "country"),
             )
-        if not _TERYT.fullmatch(teryt) or teryt[:2] not in WOJEWODZTWO_NAMES:
+        if not _TERYT.fullmatch(teryt):
             raise ValidationError(
                 f"Nieprawidlowy kod TERYT {teryt!r}: wojewodztwo (2 cyfry, np. 12) "
                 "albo powiat (4 cyfry, np. 1261)",
+                option="teryt",
+            )
+        if teryt[:2] not in WOJEWODZTWO_NAMES:
+            known = ", ".join(f"{c} ({n})" for c, n in WOJEWODZTWO_NAMES.items())
+            of_powiat = " (dwie pierwsze cyfry kodu powiatu)" if len(teryt) == 4 else ""
+            raise ValidationError(
+                f"--teryt {teryt}: nie ma wojewodztwa o kodzie {teryt[:2]}"
+                f"{of_powiat}; dostepne: {known}",
                 option="teryt",
             )
         return CollectionRequest(
@@ -1476,11 +1490,16 @@ def _resolve(
         )
     if kind == "whole_country":
         if country not in ("pl", "cz"):
+            # the countries of this product: hydro has CZ only, so no --country pl
+            countries = tuple(c for c in COUNTRY_KEYS if c.upper() in descriptors)
+            choices = " albo ".join(f"--country {c}" for c in countries)
+            what = (
+                "plik krajowy jednego kraju" if len(countries) > 1 else "plik krajowy"
+            )
             raise ValidationError(
-                "--whole-country wymaga --country pl albo --country cz (plik krajowy "
-                "jednego kraju)",
+                f"--whole-country wymaga {choices} ({what})",
                 option="country",
-                allowed=COUNTRY_KEYS,
+                allowed=countries,
             )
         whole = part(country.upper(), "whole_country")
         return CollectionRequest(product, output_dir, None, True, (whole,))
@@ -2116,15 +2135,15 @@ def _sheet_jobs(
         sheets = [s for s in sheets if s in records or s in local]
     else:
         missing = []
-    text = f"{product}: arkusze ({len(sheets)}): {', '.join(sheets) or '-'}"
+    text = f"{product}: arkusze ({len(sheets)}): {names_text(sheets) or '-'}"
     if missing:
-        text += f"; bez rekordu w indeksie ({len(missing)}): {', '.join(missing)}"
+        text += f"; bez rekordu w indeksie ({len(missing)}): {names_text(missing)}"
     sink.emit("info", UNIT_LIST, text)
     if not sheets:
         year = f" z roku {part.year_filter}" if part.year_filter is not None else ""
         raise NoCoverageError(
             f"{product}: indeks nie ma rekordow{year} dla arkuszy obszaru "
-            f"({', '.join(missing)})"
+            f"({names_text(missing)})"
         )
     jobs = []
     for sheet in sheets:
@@ -2208,7 +2227,7 @@ def _tile_jobs(
     sink.emit(
         "info",
         UNIT_LIST,
-        f"{product}: kafle obszaru ({len(chosen)}): {', '.join(names.values())}",
+        f"{product}: kafle obszaru ({len(chosen)}): {names_text(list(names.values()))}",
     )
     return [
         _record_job(
@@ -2224,9 +2243,14 @@ def _tile_jobs(
 
 
 def _ku_jobs(
-    out: Path, part: CollectionPart, request: CollectionRequest, sink: NoticeSink
+    out: Path,
+    part: CollectionPart,
+    request: CollectionRequest,
+    sink: NoticeSink,
+    metadata: MetadataCache | None,
 ) -> list[UnitJob]:
-    """The packages of a CZ cadastral area or of the areas of an area (RUIAN)."""
+    """The packages of a CZ cadastral area or of the areas of an area (RUIAN;
+    the answer for an area is kept in the metadata cache)."""
     params = part.channel.params
     assert isinstance(params, UnitPackageParams)
     if request.ku is not None:
@@ -2240,7 +2264,10 @@ def _ku_jobs(
         assert part.area is not None
         client = CuzkClient(session=_session(), timeout=SERVICE_TIMEOUT)
         areas = cadastral_areas_for_bbox(
-            client, params.ku_layer, _to_crs(part.area, "EPSG:5514")
+            client,
+            params.ku_layer,
+            _to_crs(part.area, "EPSG:5514"),
+            cache=metadata,
         )
         if not areas:
             raise NoCoverageError(
@@ -2252,7 +2279,7 @@ def _ku_jobs(
             "info",
             UNIT_LIST,
             f"{request.product}: katastralni uzemi obszaru wg RUIAN ({len(codes)}): "
-            f"{', '.join(codes)}",
+            f"{names_text(codes)}",
         )
     return [
         _record_job(
@@ -2266,102 +2293,144 @@ def _ku_jobs(
     ]
 
 
+def _part_jobs(
+    request: CollectionRequest,
+    part: CollectionPart,
+    sink: NoticeSink,
+    metadata: MetadataCache | None,
+    skip_local: bool,
+) -> list[UnitJob]:
+    """Unit jobs of one country part of a request (``_jobs``)."""
+    out = request.output_dir
+    params = part.channel.params
+    if part.layers:
+        if isinstance(params, FeatureBBoxParams) and params.area_omitted:
+            sink.emit(
+                "info",
+                AREA_OMITTED,
+                f"{part.descriptor.product}: {params.area_omitted}",
+            )
+        return [_feature_job(out, part)]
+    if isinstance(params, AtomFilesParams):
+        if request.whole_country:
+            return [_atom_job(out, part)]
+        return _voivodeship_jobs(out, part, sink, metadata)
+    assert isinstance(params, UnitPackageParams) and part.variant is not None
+    if params.unit == "sheet":
+        return _sheet_jobs(out, part, request.product, sink, metadata, skip_local)
+    if params.unit == "tile":
+        return _tile_jobs(out, part, request.product, sink, metadata)
+    if params.unit == "ku":
+        return _ku_jobs(out, part, request, sink, metadata)
+    if request.teryt is not None or request.whole_country:
+        selection = (
+            {"teryt": request.teryt}
+            if request.teryt is not None
+            else {"whole_country": True}
+        )
+        return [
+            package_job(
+                out,
+                part.descriptor,
+                part.channel,
+                part.variant,
+                country=part.country,
+                teryt=request.teryt,
+                request={**selection, **part.choice},
+                theme=theme,
+                classes=part.classes,
+            )
+            for theme in params.themes or (None,)
+        ]
+    assert part.area is not None
+    if params.unit == "woj":
+        units = _area_voivodeships(part, sink, metadata)
+    else:
+        units = discover_teryts_for_bbox(
+            part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
+        )
+        if not units:
+            raise NoCoverageError(
+                f"{request.product}: obszar nie przecina zadnego powiatu (PRG)"
+            )
+        sink.emit(
+            "info",
+            UNIT_LIST,
+            f"{request.product}: powiaty obszaru wg PRG ({len(units)}): "
+            f"{names_text(units)}",
+        )
+    return [
+        package_job(
+            out,
+            part.descriptor,
+            part.channel,
+            part.variant,
+            country=part.country,
+            teryt=teryt,
+            request={"teryt": teryt, **part.choice},
+            parent=part.parent,
+            classes=part.classes,
+        )
+        for teryt in units
+    ]
+
+
 def _jobs(
     request: CollectionRequest,
     sink: NoticeSink,
     metadata: MetadataCache | None,
     skip_local: bool = False,
-) -> list[UnitJob]:
-    """Unit jobs of a request; the units of an area come from PRG (powiats,
-    voivodeships of an ATOM feed or of a product with voivodeship packages
-    only), the sheet grid or index, the tile index or RUIAN. ``skip_local``:
-    the default download mode - a map sheet with a local version is not
-    asked for its index record (``_sheet_jobs``)."""
-    out = request.output_dir
+) -> tuple[list[UnitJob], list[UnitFailure]]:
+    """Unit jobs of a request and the countries whose units could not be
+    found; the units of an area come from PRG (powiats, voivodeships of an
+    ATOM feed or of a product with voivodeship packages only), the sheet
+    grid or index, the tile index or RUIAN. ``skip_local``: the default
+    download mode - a map sheet with a local version is not asked for its
+    index record (``_sheet_jobs``).
+
+    A request of one country (an explicit ``--country``, one unit, one area
+    narrowed by ``auto``) raises what its unit query raised. In PL and CZ
+    (``auto``) the area of a country without units (``NoCoverageError``: a
+    CZ cadastral area query of a PL-only area inside the rectangular
+    envelope of CZ) or with a failed unit query (``DownloadError``) is that
+    country's failure (``UnitFailure`` of the country): the other country
+    still runs.
+
+    Raises
+    ------
+    NoCoverageError, DownloadError
+        The units of the only country, or of every country of the request,
+        could not be found.
+    """
     jobs: list[UnitJob] = []
+    failures: list[UnitFailure] = []
+    errors: list[DownloadError] = []
     for part in request.parts:
-        if part.layers:
-            jobs.append(_feature_job(out, part))
-            params = part.channel.params
-            if isinstance(params, FeatureBBoxParams) and params.area_omitted:
-                sink.emit(
-                    "info",
-                    AREA_OMITTED,
-                    f"{part.descriptor.product}: {params.area_omitted}",
-                )
-            continue
-        params = part.channel.params
-        if isinstance(params, AtomFilesParams):
-            if request.whole_country:
-                jobs.append(_atom_job(out, part))
-            else:
-                jobs.extend(_voivodeship_jobs(out, part, sink, metadata))
-            continue
-        assert isinstance(params, UnitPackageParams) and part.variant is not None
-        if params.unit == "sheet":
-            jobs.extend(
-                _sheet_jobs(out, part, request.product, sink, metadata, skip_local)
+        try:
+            jobs.extend(_part_jobs(request, part, sink, metadata, skip_local))
+        except DownloadError as e:
+            if len(request.parts) < 2:
+                raise
+            kind: FailureKind = (
+                "no_coverage" if isinstance(e, NoCoverageError) else "download"
             )
-            continue
-        if params.unit == "tile":
-            jobs.extend(_tile_jobs(out, part, request.product, sink, metadata))
-            continue
-        if params.unit == "ku":
-            jobs.extend(_ku_jobs(out, part, request, sink))
-            continue
-        if request.teryt is not None or request.whole_country:
-            selection = (
-                {"teryt": request.teryt}
-                if request.teryt is not None
-                else {"whole_country": True}
-            )
-            for theme in params.themes or (None,):
-                jobs.append(
-                    package_job(
-                        out,
-                        part.descriptor,
-                        part.channel,
-                        part.variant,
-                        country=part.country,
-                        teryt=request.teryt,
-                        request={**selection, **part.choice},
-                        theme=theme,
-                        classes=part.classes,
-                    )
-                )
-            continue
-        assert part.area is not None
-        if params.unit == "woj":
-            units = _area_voivodeships(part, sink, metadata)
-        else:
-            units = discover_teryts_for_bbox(
-                part.area, session=_session(), cache=metadata, timeout=PROBE_TIMEOUT
-            )
-            if not units:
-                raise NoCoverageError(
-                    f"{request.product}: obszar nie przecina zadnego powiatu (PRG)"
-                )
-            sink.emit(
-                "info",
-                UNIT_LIST,
-                f"{request.product}: powiaty obszaru wg PRG ({len(units)}): "
-                f"{', '.join(units)}",
-            )
-        for teryt in units:
-            jobs.append(
-                package_job(
-                    out,
-                    part.descriptor,
-                    part.channel,
-                    part.variant,
-                    country=part.country,
-                    teryt=teryt,
-                    request={"teryt": teryt, **part.choice},
-                    parent=part.parent,
-                    classes=part.classes,
-                )
-            )
-    return jobs
+            failures.append(UnitFailure(part.country, part.country, str(e), kind))
+            errors.append(e)
+    if failures and not jobs:
+        raise _no_units(errors)
+    return jobs, failures
+
+
+def _no_units(errors: Sequence[DownloadError]) -> DownloadError:
+    """The error of a request of several countries none of which has units:
+    the only one, or one error with every text (no data in all of them is
+    ``NoCoverageError``)."""
+    if len(errors) == 1:
+        return errors[0]
+    text = "; ".join(str(error) for error in errors)
+    if all(isinstance(error, NoCoverageError) for error in errors):
+        return NoCoverageError(text)
+    return DownloadError(text)
 
 
 def _capability(descriptor: SourceDescriptor, channel: AccessChannel) -> str:
@@ -2917,6 +2986,13 @@ def download_collection(
     transfer, ``DOWNLOAD_SIZE`` before a unit file over 100 MiB, clipping
     notices of ``auto``).
 
+    ``ok`` = no failure and no stale plan position, except ``auto`` in PL
+    and CZ: failures in one country while the other one has none is a
+    success (``AUTO_PARTIAL_SUCCESS``, as ``download_data``); the failures
+    stay in ``failed``. A country whose units could not be found (no
+    cadastral area, powiat, sheet or tile in the part of the area in that
+    country) is such a failure and does not stop the other one.
+
     Raises
     ------
     ValidationError
@@ -2928,10 +3004,12 @@ def download_collection(
         before any transfer).
     NoCoverageError
         An area without any unit (powiat, sheet with an index record, tile,
-        cadastral area).
+        cadastral area) in the only country or in every country of the
+        request.
     DownloadError
-        The query of the units failed (PRG, sheet index, tile index, RUIAN;
-        unit failures land in ``failed``).
+        The query of the units failed (PRG, sheet index, tile index, RUIAN)
+        in the only country or in every country of the request (unit
+        failures land in ``failed``).
     """
     sink = NoticeSink(on_notice)
     validate_update(update, check="check_collection")
@@ -2945,12 +3023,13 @@ def download_collection(
         sink=sink,
         on_progress=on_progress,
     )
+    ok = not stale and (not failed or _auto_partial_success(request, failed, sink))
     return CollectionReport(
         files=files,
         failed=failed,
         stale=stale,
         notices=sink.notices,
-        ok=not failed and not stale,
+        ok=ok,
     )
 
 
@@ -3029,12 +3108,18 @@ def _spread(jobs: Sequence[UnitJob], count: int) -> list[UnitJob]:
     return [jobs[round(i * step)] for i in range(count)]
 
 
-def _sized(job: UnitJob, cache: MetadataCache | None, refresh: bool) -> UnitJob:
+def _sized(
+    job: UnitJob,
+    cache: MetadataCache | None,
+    refresh: bool,
+    sessions: Callable[[], requests.Session] | None = None,
+) -> UnitJob:
     """The job with the bytes of its file asked before the transfer: the
     ``length`` of a file of an ATOM feed (the resolved file is kept for the
-    transfer), the ``Content-Length`` of a ``HEAD`` of a package; ``None``:
-    not known (the objects of an area, no length, a failed request - the
-    transfer itself reports a failure)."""
+    transfer), the ``Content-Length`` of a ``HEAD`` of a package (by the
+    session of ``sessions``, the one of the thread of this module without
+    it); ``None``: not known (the objects of an area, no length, a failed
+    request - the transfer itself reports a failure)."""
     if job.atom:
         try:
             found = _atom_file(job, None, cache, refresh)()
@@ -3044,7 +3129,8 @@ def _sized(job: UnitJob, cache: MetadataCache | None, refresh: bool) -> UnitJob:
         return replace(job, size=found.length, sized=True, atom_file=found)
     if job.url is None:
         return replace(job, sized=True)
-    return replace(job, size=_head_length(_session(), job.url), sized=True)
+    session = (sessions or _session)()
+    return replace(job, size=_head_length(session, job.url), sized=True)
 
 
 def _bytes_text(length: int) -> str:
@@ -3059,18 +3145,37 @@ def _bytes_text(length: int) -> str:
 _UNIT_CHOICE = {"powiat": "--teryt <4 cyfry>", "woj": "--teryt <2 cyfry>", "ku": "--ku"}
 
 
+def unit_choices(descriptors: Iterable[SourceDescriptor]) -> tuple[str, ...]:
+    """The flags that choose ONE unit of the packages of ``descriptors``
+    (``--teryt <4 cyfry>``): what makes a request over the volume limits
+    smaller."""
+    return _distinct(
+        _UNIT_CHOICE[channel.params.unit]
+        for descriptor in descriptors
+        for channel in descriptor.channels
+        if isinstance(channel.params, UnitPackageParams)
+        and channel.params.unit in _UNIT_CHOICE
+    )
+
+
 def _volume_error(
-    request: CollectionRequest, count: int, total: int | None, asked: int, known: int
+    product: str,
+    units: Sequence[str],
+    count: int,
+    total: int | None,
+    asked: int,
+    known: int,
 ) -> ValidationError:
     """The refusal of an area over the volume limits: the number of files, the
     size (a sum, a lower bound or an estimate from ``asked`` files) and what
-    makes the request smaller."""
+    makes the request smaller (``units``: the flags choosing one unit)."""
     if total is None:
         size = "rozmiar nieznany (serwer nie podal Content-Length)"
     elif asked < count:
         size = (
             f"szacunkowo {_bytes_text(total)} (sredni rozmiar {known} z "
-            f"{count_text(count, *OF_FILES)} wg HEAD)"
+            f"{count_text(count, *OF_FILES)} wg HEAD; tylko orientacyjnie - rozmiary "
+            "plikow sa bardzo rozne, a o odmowie decyduje juz sama liczba plikow)"
         )
     elif known < count:
         size = (
@@ -3079,16 +3184,9 @@ def _volume_error(
         )
     else:
         size = f"razem {_bytes_text(total)} wg HEAD"
-    units = _distinct(
-        _UNIT_CHOICE[channel.params.unit]
-        for part in request.parts
-        for channel in part.descriptor.channels
-        if isinstance(channel.params, UnitPackageParams)
-        and channel.params.unit in _UNIT_CHOICE
-    )
     unit = f", wybierz jednostke ({', '.join(units)})" if units else ""
     return ValidationError(
-        f"{request.product}: obszar daje {count_text(count, *FILES)} do pobrania, "
+        f"{product}: obszar daje {count_text(count, *FILES)} do pobrania, "
         f"{size} - limit "
         f"jednego zadania to {VOLUME_FILES} plikow i {VOLUME_BYTES // 10**9} GB. "
         f"Zawez obszar (--bbox, --sheet, --geometry){unit} albo wykonaj plan "
@@ -3098,22 +3196,28 @@ def _volume_error(
     )
 
 
-def _within_volume(
-    request: CollectionRequest,
+def within_volume(
+    product: str,
+    units: Sequence[str],
     jobs: list[UnitJob],
     *,
     update: UpdateMode | None,
     planned: set[_SLOT_KEY] | None,
     cache: MetadataCache | None,
     workers: int,
+    sessions: Callable[[], requests.Session] | None = None,
 ) -> list[UnitJob]:
-    """The jobs of an area within the volume limits (ADR-043 errata 3).
+    """The jobs of an area within the volume limits (ADR-043 errata 3; the
+    collections and the BDOT10k powiat packages of ``LandCoverManager``).
 
-    Counted are the files the request would transfer (``_transfers``); their
-    size is the ``HEAD``/feed length of each of them - above ``VOLUME_FILES``
-    the mean of ``VOLUME_SAMPLE`` evenly spread files times their number. A
-    file whose size was asked keeps it for the size notice of its transfer
-    (no second ``HEAD``).
+    Counted are the files the request would transfer (``_transfers``). Up to
+    ``VOLUME_FILES`` of them EVERY file is asked (the ``HEAD``/feed length, by
+    the session of ``sessions``), so the ``VOLUME_BYTES`` check is exact; above
+    it the count alone refuses the request and the size in the message is only
+    indicative: the mean of ``VOLUME_SAMPLE`` evenly spread files times their
+    number. A file whose size was asked keeps it for the size notice of its
+    transfer (no second ``HEAD``). ``product`` and ``units``
+    (``unit_choices``) only word the refusal.
 
     Raises
     ------
@@ -3125,7 +3229,9 @@ def _within_volume(
     if not count:
         return jobs
     asked = todo if count <= VOLUME_FILES else _spread(todo, VOLUME_SAMPLE)
-    size = functools.partial(_sized, cache=cache, refresh=update == "upgrade")
+    size = functools.partial(
+        _sized, cache=cache, refresh=update == "upgrade", sessions=sessions
+    )
     if workers > 1 and len(asked) > 1:
         with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
             sized = list(pool.map(size, asked))
@@ -3138,7 +3244,7 @@ def _within_volume(
         if count > VOLUME_FILES:  # the mean of the sample for every file
             total = total * count // len(known)
     if count > VOLUME_FILES or (total is not None and total > VOLUME_BYTES):
-        raise _volume_error(request, count, total, len(asked), len(known))
+        raise _volume_error(product, units, count, total, len(asked), len(known))
     by_key = {job.key: job for job in sized}
     return [by_key.get(job.key, job) for job in jobs]
 
@@ -3152,6 +3258,31 @@ def _progress_status(outcome: VersionedFile | UnitFailure | None) -> str:
     if outcome is None or outcome.status == "local":
         return "skipped"
     return "completed"
+
+
+def _auto_partial_success(
+    request: CollectionRequest,
+    failed: Sequence[UnitFailure],
+    sink: NoticeSink,
+    *,
+    check: bool = False,
+) -> bool:
+    """Whether ``failed`` still leaves the request a success: the rule of
+    ``download_data`` for ``country="auto"`` (ADR-023 points 4-5, SCOPE 3.2).
+
+    A request in PL and CZ whose failures are all in one country while the
+    other one has none is a partial success: ``AUTO_PARTIAL_SUCCESS`` (code
+    0); the failures stay in ``failed``. An explicit country, a request of
+    one country (also ``auto`` narrowed to one) and the failure of every
+    country are failures. ``check``: the notice of a plan.
+    """
+    countries = [part.country for part in request.parts]
+    failing = [c for c in countries if any(f.country == c for f in failed)]
+    working = [c for c in countries if c not in failing]
+    if len(countries) < 2 or not failing or not working:
+        return False
+    emit_partial_success(sink, failing, working, check=check)
+    return True
 
 
 def run_request(
@@ -3174,16 +3305,23 @@ def run_request(
     ``no_coverage`` in completion order. One unit has its status line and
     the size notices (``DOWNLOAD_SIZE``, ``WHOLE_COUNTRY_SIZE``) instead.
 
+    A country of an area in PL and CZ (``auto``) whose units could not be
+    found is a failure of that country (``UnitFailure``, its code as the
+    unit) before the units of the other one run (``_jobs``).
+
     Raises
     ------
     ValidationError
         A plan of another store or without ``update="upgrade"``, bad workers;
         an area whose files to download exceed ``VOLUME_FILES`` or
-        ``VOLUME_BYTES`` (``_within_volume``; before any transfer).
+        ``VOLUME_BYTES`` (``within_volume``; before any transfer).
     NoCoverageError
-        An area of a package product without any powiat (PRG).
+        An area of a package product without any unit (powiat, sheet, tile,
+        cadastral area) in the only country or in every country of the request.
     DownloadError
-        The PRG powiat query failed (unit failures land in the result).
+        The query of the units failed (PRG, indexes, RUIAN) in the only
+        country or in every country of the request (unit failures land in
+        the result).
     """
     validate_update(update)
     if plan is not None:
@@ -3192,15 +3330,11 @@ def run_request(
                 "Plan aktualizacji wymaga update='upgrade'", options=("plan", "update")
             )
         require_store(plan, store_id(request.output_dir))
-    require_int(workers, "--workers")
-    if workers < 1:
-        raise ValidationError(
-            f"workers musi byc >= 1, podano {workers}", option="workers"
-        )
+    require_workers(workers, "--workers")
     with open_cache(
         cache, force=refreshes_cache(update), on_notice=sink.add
     ) as metadata:
-        jobs = _jobs(request, sink, metadata, update is None and plan is None)
+        jobs, unlisted = _jobs(request, sink, metadata, update is None and plan is None)
         planned: set[_SLOT_KEY] | None = None
         stale: tuple[PlanItem, ...] = ()
         if plan is not None:
@@ -3209,8 +3343,9 @@ def run_request(
             planned = {(i.segment, i.hierarchy, i.name) for i in todo}
             stale = tuple(stale_items)
         if _is_area(request):
-            jobs = _within_volume(
-                request,
+            jobs = within_volume(
+                request.product,
+                unit_choices(part.descriptor for part in request.parts),
                 jobs,
                 update=update,
                 planned=planned,
@@ -3243,14 +3378,14 @@ def run_request(
 
         outcomes: list[VersionedFile | UnitFailure | None]
         if workers > 1 and len(jobs) > 1:
-            done: dict[int, VersionedFile | UnitFailure | None] = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {pool.submit(one, job): i for i, job in enumerate(jobs)}
-                for future in concurrent.futures.as_completed(futures):
-                    index = futures[future]
-                    done[index] = future.result()
-                    progress(len(done), jobs[index], _progress_status(done[index]))
-            outcomes = [done[index] for index in range(total)]
+            outcomes = run_parallel(
+                one,
+                jobs,
+                workers=workers,
+                on_done=lambda ended, job, outcome: progress(
+                    ended, job, _progress_status(outcome)
+                ),
+            )
         else:
             transfers = (
                 {job.key for job in _transfers(jobs, update, planned)}
@@ -3264,7 +3399,7 @@ def run_request(
                 outcomes.append(one(job))
                 progress(position, job, _progress_status(outcomes[-1]))
     files: list[UnitFile] = []
-    failed: list[UnitFailure] = []
+    failed: list[UnitFailure] = list(unlisted)
     for job, outcome in zip(jobs, outcomes, strict=True):
         if isinstance(outcome, UnitFailure):
             failed.append(outcome)
@@ -3284,10 +3419,15 @@ def plan_request(
 ) -> UpdatePlan:
     """Update plan of a validated request (no data downloaded). The source is
     always asked: the metadata cache (PRG units, indexes, feeds) is
-    refreshed, never read (``--check-updates``)."""
+    refreshed, never read (``--check-updates``). A country of an area in PL
+    and CZ (``auto``) whose units could not be found is a ``CHECK_FAILED``
+    warning, and the plan of the other one an ``AUTO_PARTIAL_SUCCESS`` one."""
     with open_cache(cache, force=True, on_notice=sink.add) as metadata:
-        jobs = _jobs(request, sink, metadata)
+        jobs, unlisted = _jobs(request, sink, metadata)
         items = [inspect_job(job, track=track, cache=metadata) for job in jobs]
+    for failure in unlisted:
+        sink.emit("warning", CHECK_FAILED, f"{failure.unit}: {failure.error}")
+    _auto_partial_success(request, unlisted, sink, check=True)
     return new_plan(request.output_dir, items)
 
 

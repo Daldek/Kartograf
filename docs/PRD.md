@@ -380,7 +380,14 @@ download_landcover(product="bdot10k", output_dir="./data", sheet="N-34-130-D",
                    layers=["PTWP", "SWRS"], workers=4)
 ```
 
-#### Warstwy (15 warstw — cały pakiet źródłowy; w wynikowym GPKG opcjonalny filtr `--layers`)
+#### Warstwy (58 klas BDOT10k; w wynikowym GPKG opcjonalny filtr `--layers`)
+
+`--layers` przyjmuje kod każdej z 58 klas klasyfikacji BDOT10k (rozporządzenie z 2021 r.,
+Dz.U. 2021 poz. 1412; lista: `kartograf landcover list-layers --product bdot10k`),
+np. `BUBD`. Paczka powiatu ma tabele tylko klas, których obiekty są w powiecie
+(47–70 tabel): brak części wybranych klas to `Info:` (`classes_absent`), brak wszystkich —
+błąd powiatu; nieznany kod to `ValidationError` przed siecią. Poniżej klasy pokrycia
+terenu i hydrografii:
 
 **Pokrycie terenu (PT* — 12 warstw):**
 | Warstwa | Opis |
@@ -434,7 +441,8 @@ report = download_landcover(product="corine", output_dir="./data",
 ```
 
 #### Dostępne lata
-- 1990, 2000, 2006, 2012, 2018
+- 1990, 2000, 2006, 2012, 2018 (podgląd WMS każdego roku: warstwę rastrową roku Kartograf
+  czyta z GetCapabilities; obraz w całości przezroczysty = `no_coverage`, bez wersji)
 
 #### Źródła danych (priorytet)
 1. **CLMS API** - GeoTIFF z kodami klas (wymaga OAuth2)
@@ -492,21 +500,26 @@ download_soil(
 ```
 
 #### Dostępne parametry (11)
-| Parametr | Opis | Jednostka |
-|----------|------|-----------|
-| bdod | Gęstość objętościowa | kg/dm³ |
-| cec | Pojemność wymiany kationowej | cmol/kg |
-| cfvo | Fragmenty gruboziarniste | % |
-| clay | Zawartość gliny | % |
-| nitrogen | Azot całkowity | g/kg |
-| ocd | Gęstość węgla organicznego | kg/m³ |
-| ocs | Zasób węgla organicznego | t/ha |
-| phh2o | pH w H2O | - |
-| sand | Zawartość piasku | % |
-| silt | Zawartość pyłu | % |
-| soc | Węgiel organiczny | g/kg |
+Plik SoilGrids zawiera liczby całkowite w jednostkach ISRIC (kolumna „W pliku”);
+jednostka konwencjonalna = wartość / dzielnik (tak samo w sidecarze: `extra.units`;
+źródło: <https://docs.isric.org/globaldata/soilgrids/SoilGrids_faqs_01.html>).
+| Parametr | Opis | W pliku | Konwencjonalna (dzielnik) |
+|----------|------|---------|---------------------------|
+| bdod | Gęstość objętościowa | cg/cm³ | kg/dm³ (100) |
+| cec | Pojemność wymiany kationowej | mmol(c)/kg | cmol(c)/kg (10) |
+| cfvo | Fragmenty gruboziarniste | cm³/dm³ | cm³/100 cm³ = % obj. (10) |
+| clay | Zawartość gliny | g/kg | % (10) |
+| nitrogen | Azot całkowity | cg/kg | g/kg (100) |
+| ocd | Gęstość węgla organicznego | hg/m³ | kg/m³ (10) |
+| ocs | Zasób węgla organicznego (tylko 0-30cm) | t/ha | kg/m² (10) |
+| phh2o | pH w H2O | pH x 10 | pH (10) |
+| sand | Zawartość piasku | g/kg | % (10) |
+| silt | Zawartość pyłu | g/kg | % (10) |
+| soc | Węgiel organiczny | dg/kg | g/kg (10) |
 
-#### Głębokości (6)
+Statystyka `uncertainty` to iloraz 10 x (Q0.95 − Q0.05) / Q0.5 (bez jednostki, / 10 = iloraz).
+
+#### Głębokości (6; `ocs`: tylko 0-30cm)
 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
 
 #### Statystyki (5)
@@ -1333,7 +1346,7 @@ poprawić błąd bez parsowania tekstu.
   `exception`, `exit_code`, `command`, `details`). Dokumenty zwraca biblioteka
   (`to_dict()`/`to_json()`), a CLI i MCP tylko je drukują.
 - Stabilne kody błędów (`code`) i kody wyjścia: 0 (ok), 1 (awaria źródła, sieci
-  albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C);
+  albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C), 143 (SIGTERM);
   `ValidationError` niesie `option` i `allowed`, a podpowiedź (`hint`) dozwolone
   wartości i przykład komendy. Jedna tabela kodów: `docs/USAGE.md` 9.3.
 - Katalog komend (`kartograf catalog`, `get_catalog()`, `kartograf-catalog/1`):

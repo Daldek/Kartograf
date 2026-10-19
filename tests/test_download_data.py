@@ -22,7 +22,12 @@ from kartograf.download.laz import (
     download_laz_area,
 )
 from kartograf.download.manager import DownloadProgress
-from kartograf.exceptions import DownloadError, ValidationError
+from kartograf.exceptions import (
+    DownloadError,
+    NoCoverageError,
+    ValidationError,
+    YearRangeError,
+)
 from kartograf.notices import (
     AUTO_CLIPPED,
     AUTO_PARTIAL_SUCCESS,
@@ -31,7 +36,7 @@ from kartograf.notices import (
     Notice,
 )
 from tests.test_cli import _cz_provider_mock
-from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
+from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider, c14_fake
 
 G = "N-34-139-C-a-3-1"
 # Cieszyn: a bbox crossing the PL-CZ border
@@ -581,3 +586,94 @@ def test_check_data_auto_partial_names_failed_country_without_download_claim(tmp
     assert "sprawdzono PL" in partial.text and "pobrano" not in partial.text
     failed = [n for n in notices if n.code == CHECK_FAILED]
     assert len(failed) == 1 and failed[0].text == "CZ: CUZK 503"
+
+
+# --- no data / data outside the years: one outcome in the download and the check ---
+
+NO_DATA = "N-34-139-C-a-1-1"  # no record in the C14 fixtures
+_NMT_1M = {
+    "product": "nmt",
+    "resolution": "1m",
+    "vertical_crs": "EVRF2007",
+    "cache": False,
+}
+
+
+def _area(**kwargs):
+    return {
+        **_NMT_1M,
+        "bbox": BBox(530000, 380000, 530100, 380100, "EPSG:2180"),
+        "country": "pl",
+        "sheet_system": "1992",
+        **kwargs,
+    }
+
+
+def _area_sheets(sheets):
+    return patch("kartograf.download.data.find_sheets_for_bbox", return_value=sheets)
+
+
+def test_check_data_partial_coverage_is_a_plan_with_the_warning_of_the_download(
+    tmp_path,
+):
+    """e2e-A P2-3: sheets the index has no data for are a state of the data -
+    the check of an area with holes is not a failed check (code 0), it warns
+    exactly as the download of the same area does."""
+    with _pl_sheets(c14_fake()), _area_sheets([G, NO_DATA]):
+        plan = check_data(output_dir=tmp_path, **_area())
+        report = download_data(output_dir=tmp_path, **_area())
+    assert plan.ok and [item.unit for item in plan.items] == [G]
+    assert report.ok and report.failed == ()
+    check = next(n for n in plan.notices if n.code == NO_COVERAGE_SOME)
+    download = next(n for n in report.notices if n.code == NO_COVERAGE_SOME)
+    assert check.level == download.level == "warning"
+    assert check.text.rsplit("; ", 1)[0] == download.text.rsplit("; ", 1)[0]
+    assert "GUGiK nie ma danych dla 1 z 2 arkuszy" in check.text
+    assert check.text.endswith("sprawdzono 1") and download.text.endswith("pobrano 1")
+
+
+def test_every_sheet_without_data_fails_the_check_like_the_download(tmp_path):
+    sheets = [NO_DATA, "N-34-139-C-a-1-2"]
+    with _pl_sheets(c14_fake()), _area_sheets(sheets):
+        report = download_data(output_dir=tmp_path, **_area())
+        with pytest.raises(NoCoverageError) as caught:
+            check_data(output_dir=tmp_path, **_area())
+    assert [(f.unit, f.kind) for f in report.failed] == [("PL", "no_coverage")]
+    assert report.failed[0].error == str(caught.value)
+
+
+def test_single_sheet_without_data_is_a_no_coverage_failure(tmp_path):
+    """e2e-A P3-3 / e2e-B P3-1: ``failed[].kind`` of one ``--sheet`` without a
+    record is ``no_coverage``, as for the same sheet in an area."""
+    with _pl_sheets(c14_fake()):
+        report = download_data(output_dir=tmp_path, sheet=NO_DATA, **_NMT_1M)
+        with pytest.raises(NoCoverageError):
+            check_data(output_dir=tmp_path, sheet=NO_DATA, **_NMT_1M)
+    assert not report.ok
+    assert [(f.unit, f.kind) for f in report.failed] == [(NO_DATA, "no_coverage")]
+
+
+def test_year_conflict_is_year_out_of_range_in_the_download_and_the_check(tmp_path):
+    """e2e-B P3-2: the kind is the code of ``YearRangeError``; the check
+    names the conflicting sheets in ONE error, as the download does."""
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    with _pl_sheets(c14_fake()), _area_sheets(sheets):
+        report = download_data(output_dir=tmp_path, min_year=2026, **_area())
+        with pytest.raises(YearRangeError) as caught:
+            check_data(output_dir=tmp_path, min_year=2026, **_area())
+        single = download_data(output_dir=tmp_path, sheet=G, min_year=2026, **_NMT_1M)
+    assert [f.kind for f in report.failed] == ["year_out_of_range"]
+    assert [f.kind for f in single.failed] == ["year_out_of_range"]
+    assert set(caught.value.sheets) == {G, "N-34-139-C-a-3-3"}
+    assert "dla 2 z 4 arkuszy" in str(caught.value)
+    assert "dla 2 z 4 arkuszy" in report.failed[0].error
+
+
+def test_check_failed_stays_for_an_index_transport_failure(tmp_path):
+    """Only the data states leave the plan: a failed index query of a sheet is
+    still a position that could not be checked."""
+    fake = FakeCampaignProvider(C14, errors={G: DownloadError("zrodlo HTTP 503")})
+    with _pl_sheets(fake):
+        plan = check_data(output_dir=tmp_path, sheet=G, **_NMT_1M)
+    assert not plan.ok
+    assert [item.status for item in plan.items] == ["check_failed"]

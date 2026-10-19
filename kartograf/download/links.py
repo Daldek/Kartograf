@@ -17,7 +17,12 @@ link sidecar from an older release (``extra.link == "copy"``, a symlink,
 no ``extra.link``) = unknown path, replaced with a hardlink.
 
 The link never moves back to a version older than the current target: the
-target key comes from its version sidecar (``version_key``).
+target key comes from its version sidecar (``version_key``). The current
+target is what the path HOLDS: the version named by its sidecar, confirmed
+by inode identity (``samefile``) or - where the file system gives none -
+by content (size + sha256), never by the link count: an SMB client without
+``serverino`` reports ``st_nlink == 1`` for a path it has just opened (also
+for the read that confirms the content), so the count is no evidence.
 """
 
 import contextlib
@@ -41,7 +46,7 @@ class LinkOutcome:
     """Result of ``ensure_link``."""
 
     target: Path  # version file the link path points to
-    changed: bool  # link created/moved in this call
+    changed: bool  # link created/moved/restored in this call
 
 
 def _sidecar_of(path: Path) -> Path:
@@ -107,19 +112,25 @@ def version_key_of(path: Path) -> tuple[str, str, str] | None:
     return version_key(version) if version is not None else None
 
 
-def linked_version(link: Path) -> Path | None:
-    """Version file the link path points to.
+@dataclass(frozen=True)
+class _Held:
+    """What a link path holds (``_hold``)."""
+
+    version: Path  # version file named by the link sidecar
+    lone: bool  # confirmed by content only and no path reports a second name
+
+
+def _hold(link: Path) -> _Held | None:
+    """The version ``link`` holds, from its sidecar and the file itself.
 
     The target comes ONLY from the link sidecar (``extra.link == "hardlink"``
     + ``extra.link_target``), verified with ``samefile``. Where the file
     system reports no stable inode numbers (e.g. SMB mounted without
-    ``serverino``) ``samefile`` is false even for a hardlink; the link is
-    then confirmed by content: both paths have more than one link, the same
-    size and the link's sha256 equals the version sidecar's (one full read,
-    only on such mounts). ``None`` = no file, a sidecar without
-    ``extra.link``, a ``copy`` from 0.7.x (D22: never trusted), a
-    nonexistent ``link_target`` (version directory removed) or a link that
-    no longer holds the version content.
+    ``serverino``) ``samefile`` is false even for a hardlink; the path is
+    then confirmed by content (``_same_content``). ``None`` = no file, a
+    sidecar without ``extra.link``, a ``copy`` from 0.7.x (D22: never
+    trusted), a nonexistent ``link_target`` (version directory removed) or
+    a path that no longer holds the version content.
     """
     if not link.is_file():
         return None
@@ -135,19 +146,46 @@ def linked_version(link: Path) -> Path | None:
         if not target.is_file():
             return None
         if os.path.samefile(link, target):
-            return target
-        return target if _same_content_hardlink(link, target) else None
+            return _Held(target, False)
+        return _same_content(link, target)
     except OSError:
         return None
 
 
-def _same_content_hardlink(link: Path, target: Path) -> bool:
-    """Hardlink confirmation without inode identity (``linked_version``)."""
+def _same_content(link: Path, target: Path) -> _Held | None:
+    """Confirmation without inode identity: the same size and the link's
+    sha256 equal to the version sidecar's (one full read of ``link``).
+
+    The link counts are read BEFORE that read (the read itself makes an SMB
+    client report ``st_nlink == 1`` for ``link`` for a few seconds). They do
+    not confirm anything; they only mark a probable independent copy
+    (``_Held.lone``: neither path reports a second name) for ``ensure_link``
+    to restore as a hardlink. A transient 1 on one path leaves the other
+    one at its real count.
+    """
     l_stat, t_stat = link.stat(), target.stat()
-    if l_stat.st_nlink < 2 or t_stat.st_nlink < 2 or l_stat.st_size != t_stat.st_size:
-        return False
+    if l_stat.st_size != t_stat.st_size:
+        return None
     version = read_version(target.parent, target.name)
-    return version is not None and file_digest(link)[0] == version.sha256
+    if version is None or file_digest(link)[0] != version.sha256:
+        return None
+    return _Held(target, l_stat.st_nlink < 2 and t_stat.st_nlink < 2)
+
+
+def linked_version(link: Path) -> Path | None:
+    """Version file the link path holds (``None`` = none).
+
+    The version named by the link sidecar when the path is that file by
+    inode identity (``samefile``) or - where the file system gives no
+    stable inode numbers (e.g. SMB mounted without ``serverino``) - holds
+    its content: the same size and the sha256 of the sidecar of that
+    version (one full read, only on such mounts). The link count plays no
+    part, so the answer does not change with the client's attribute cache.
+    Nonexistent file, sidecar without ``extra.link``, a ``copy`` from 0.7.x,
+    a removed version directory or changed content give ``None``.
+    """
+    held = _hold(link)
+    return held.version if held is not None else None
 
 
 def _link_target_text(link: Path, target: Path) -> str:
@@ -241,15 +279,19 @@ def ensure_link(
 ) -> LinkOutcome:
     """Link ``link`` (standard or ``full_sheet/`` path) to the newest LOCAL version.
 
-    The current target ``cur = linked_version(link)`` stays
+    The version the path holds now (``cur``, see ``linked_version``) stays
     (``changed=False``) when it is ``target`` itself and ``refresh`` is not
     set, or when its key (``version_key_of``) is newer than ``key`` — or
     equal without ``refresh`` (a new version under the same key, e.g. new
     content of the same campaign, moves the link only when committed in
-    this call). Otherwise ``link_atomic`` + ``write_link_sidecar`` + removal
-    of ``<link>.aux.xml`` (stale GDAL PAM statistics). A link sidecar that
-    is a symlink is rewritten as a regular file even when the link stays.
-    A missing ``<link>.meta.json`` = unknown path, the link is created anew.
+    this call). Then nothing is written, except: a path that holds the
+    content of ``cur`` but is evidently an independent copy (no path
+    reports a second name, e.g. after ``rsync -a`` without ``-H``) is
+    replaced by a hardlink of ``cur`` (``changed=True``, never of another
+    version), and a link sidecar that is a symlink is rewritten as a
+    regular file. Otherwise ``link_atomic`` + ``write_link_sidecar`` +
+    removal of ``<link>.aux.xml`` (stale GDAL PAM statistics). A missing
+    ``<link>.meta.json`` = unknown path, the link is created anew.
     A swap failure propagates (``DownloadError`` without hardlinks, else
     ``OSError``); the existing link stays.
 
@@ -258,8 +300,9 @@ def ensure_link(
     version; versions are never touched and the next call repairs the link.
     ``DownloadManager`` links each sheet once per call.
     """
-    cur = linked_version(link)
-    if cur is not None:
+    held = _hold(link)
+    if held is not None:
+        cur = held.version
         same = _norm(cur) == _norm(target)
         cur_key = None if same else version_key_of(cur)
         keep = (
@@ -268,9 +311,11 @@ def ensure_link(
             or (cur_key is not None and cur_key == key and not refresh)
         )
         if keep:
+            if held.lone:
+                link_atomic(cur, link)
             if _sidecar_of(link).is_symlink():
                 write_link_sidecar(link, cur)
-            return LinkOutcome(cur, False)
+            return LinkOutcome(cur, held.lone)
     link_atomic(target, link)
     write_link_sidecar(link, target)
     (link.parent / f"{link.name}.aux.xml").unlink(missing_ok=True)

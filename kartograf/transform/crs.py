@@ -10,7 +10,11 @@ section 6.4 and docs/research/2026-08-10-*):
    an EXACT operation and is accepted) and accuracy > policy.min_accuracy_m;
    then pin the datum step for CRSs shared between countries and probe
    a control point (inf/NaN => the operation is rejected - the case of a
-   foreign country's grid). Of the rest, pick the best accuracy.
+   foreign country's grid). Of the rest, pick the best accuracy. The one
+   exception to "unknown is rejected": two CRSs that differ only in the axis
+   order of a geographic CRS (``OGC:CRS84``, ``EPSG:4326``) - the operation is
+   an axis swap, which ``always_xy`` makes the identity, exact whatever
+   accuracy PROJ reports for it (0 in PROJ 9.5.1, -1 in 9.8.1).
 4. Every transformation result passes an isfinite check; otherwise TransformError.
 
 The policy applies to NEW code (stage 1+); migration of the existing pyproj calls in
@@ -18,12 +22,14 @@ core/geometry.py, core/sheet_parser.py, core/parser_2000.py, providers/corine.py
 and providers/soilgrids.py is deferred (stage 0 spec, section "Out of scope").
 """
 
+import warnings
 from dataclasses import dataclass, field
 from typing import Any, overload
 
 import numpy as np
 import numpy.typing as npt
 from pyproj import CRS, network
+from pyproj.exceptions import CRSError
 from pyproj.transformer import TransformerGroup
 
 from kartograf.exceptions import KartografError
@@ -265,6 +271,24 @@ def _epsg_code(crs: str) -> int | None:
         return None
 
 
+def _axis_order_only(src_crs: str, dst_crs: str) -> bool:
+    """The two CRSs are the same up to the axis order of a geographic CRS.
+
+    ``OGC:CRS84`` (longitude, latitude) and ``EPSG:4326`` (latitude,
+    longitude) are one WGS 84; with ``always_xy`` the operation between them is
+    the identity. ``False`` for a CRS pyproj cannot parse (the transformer
+    reports that).
+    """
+    try:
+        return bool(
+            CRS.from_user_input(src_crs).equals(
+                CRS.from_user_input(dst_crs), ignore_axis_order=True
+            )
+        )
+    except CRSError:
+        return False
+
+
 def _operation_codes(transformer: Any) -> frozenset[str]:
     """Codes of operation steps, including inverted ones: INVERSE(EPSG) -> EPSG."""
     doc = transformer.to_json_dict()
@@ -277,6 +301,25 @@ def _operation_codes(transformer: Any) -> frozenset[str]:
         if authority and "code" in ident:
             codes.add(f"{authority}:{ident['code']}")
     return frozenset(codes)
+
+
+def _transformer_group(src_crs: str, dst_crs: str) -> TransformerGroup:
+    """``TransformerGroup`` without pyproj's "Best transformation is not
+    available" warning.
+
+    pyproj warns when the best operation of a pair needs a grid missing from
+    the PROJ data (e.g. the CUZK S-JTSK grid on a clean install). The pinned
+    policy chooses by accuracy among the operations that are available and
+    probes the area, so the warning only adds a raw Python line to stderr
+    (the ``--json`` contract: empty stderr). Only this message is ignored.
+    """
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="Best transformation is not available",
+            category=UserWarning,
+        )
+        return TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
 
 
 def build_pinned_transform(
@@ -294,12 +337,15 @@ def build_pinned_transform(
     previous_network_enabled = network.is_network_enabled()
     network.set_network_enabled(policy.allow_network_grids)
     try:
-        group = TransformerGroup(src_crs, dst_crs, always_xy=True, allow_ballpark=False)
+        group = _transformer_group(src_crs, dst_crs)
+        identity = _axis_order_only(src_crs, dst_crs)
         rejected: list[tuple[str, str]] = []
         candidates = []
         for transformer in group.transformers:
             accuracy = transformer.accuracy
             description = str(transformer.description)
+            if accuracy < 0 and identity:
+                accuracy = 0.0  # PROJ 9.8.1 calls a pure axis swap "unknown"
             if accuracy < 0:
                 rejected.append((description, "nieznana dokladnosc (accuracy < 0)"))
                 continue

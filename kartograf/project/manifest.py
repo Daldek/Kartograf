@@ -114,10 +114,16 @@ def _no_constant(name: str) -> NoReturn:
 
 
 def _load(directory: Path) -> dict:
-    """Read and validate the manifest of ``directory``."""
+    """Read and validate the manifest of ``directory``. A UTF-8 BOM (an editor
+    puts it in) is no part of the JSON; the manifest is always written without."""
     path = directory / MANIFEST_NAME
+    if directory.is_file():
+        raise ValidationError(
+            f"{directory} to plik, a --project wymaga katalogu projektu (z "
+            f"{MANIFEST_NAME}), np. --project {directory.parent}"
+        )
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8-sig")
     except FileNotFoundError:
         raise ValidationError(
             f"brak projektu w {directory} ({MANIFEST_NAME}); utworz: kartograf "

@@ -72,6 +72,10 @@ COMMANDS = collection_commands(
             },
             title="Mesh miast: kafle dla prostokata",
         ),
+        Example(
+            {"product": "trees", "teryt": "1261"},
+            title="Drzewa LoD1 2023: paczka powiatu (0,3-25 GB)",
+        ),
     ),
     area_result="paczki powiatow przecinajacych obszar (PRG; buildings, "
     "trees) albo kafle mesh obszaru",

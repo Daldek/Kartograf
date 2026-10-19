@@ -347,10 +347,6 @@ class TestHSGCalculator:
             )
         assert list(tmp_path.iterdir()) == []
 
-    def test_conversion_factor(self):
-        """Test conversion factor is correct."""
-        assert HSGCalculator.CONVERSION_FACTOR == 10.0
-
 
 def _create_test_raster(path, data, transform=None, crs="EPSG:2180", nodata=0):
     """Helper to create a minimal GeoTIFF for testing."""

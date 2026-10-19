@@ -1,22 +1,24 @@
 """Read-only extents of store files and pinned CRS operations (ADR-045).
 
 ``file_footprint`` takes the first trustworthy source of an extent - the
-request bbox, a computable sheet code, the file header, a unit index (PRG,
-RUIAN, SM5) - and never invents one (a national file has none). Envelopes
-are reprojected with densified edges through ``pinned_transform``: an
-operation chosen once by Kartograf's policy (no ballpark, no network
-grids), never pyproj's default.
+request bbox (of a file that IS that area), a computable sheet code, the
+file header, a unit index (PRG, RUIAN, SM5) - and never invents one (a
+national file has none). Envelopes are reprojected with densified edges
+through ``pinned_transform``: an operation chosen once by Kartograf's
+policy (no ballpark, no network grids), never pyproj's default; a source
+whose envelope has no such operation is skipped, the next one decides.
 """
 
 from __future__ import annotations
 
+import logging
 import math
 import os
 import re
 import sqlite3
 import struct
 import threading
-from collections.abc import MutableMapping
+from collections.abc import Callable, MutableMapping
 from contextlib import closing
 from dataclasses import dataclass
 from pathlib import Path
@@ -33,12 +35,15 @@ from kartograf.core.sheet_parser import SheetParser
 from kartograf.exceptions import InvalidSidecarError, ValidationError
 from kartograf.transform.crs import (
     PinnedTransform,
+    TransformError,
     TransformPolicy,
     build_pinned_transform,
 )
 
 if TYPE_CHECKING:
     from kartograf.store import Sidecar, StoreEntry
+
+logger = logging.getLogger(__name__)
 
 _WGS84 = "EPSG:4326"
 _ENVELOPE_POLICY = TransformPolicy(min_accuracy_m=1.0, allow_network_grids=False)
@@ -135,8 +140,13 @@ def pinned_transform(src_crs: str, dst_crs: str) -> PinnedTransform:
 
 
 def _same_crs(first: str, second: str) -> bool:
+    """The same CRS up to the axis order of a geographic CRS (``OGC:CRS84`` and
+    ``EPSG:4326`` are one WGS 84; the envelopes here are always x = longitude or
+    easting, y = latitude or northing)."""
     return first.strip().upper() == second.strip().upper() or (
-        CRS.from_user_input(first) == CRS.from_user_input(second)
+        CRS.from_user_input(first).equals(
+            CRS.from_user_input(second), ignore_axis_order=True
+        )
     )
 
 
@@ -173,6 +183,13 @@ def _valid_bbox(coords: Any, crs: Any) -> BBox | None:
 
 def _stem(entry: StoreEntry) -> str:
     return entry.name.split(".", 1)[0]
+
+
+def _is_tile(meta: Sidecar | None) -> bool:
+    """A LAZ tile (``extra.tile_sheet``): one part of the area or sheet it was
+    selected for - ``request.bbox`` is that area, not the extent of the file."""
+    extra = meta.extra if meta is not None else None
+    return extra is not None and isinstance(extra.get("tile_sheet"), str)
 
 
 def _sheet_footprint(entry: StoreEntry, meta: Sidecar | None) -> Footprint | None:
@@ -540,6 +557,30 @@ def _sidecar_of(entry: StoreEntry) -> Sidecar | None:
         return None
 
 
+def _request_footprint(meta: Sidecar | None) -> Footprint | None:
+    """The request bbox of a file that IS that area (not of a LAZ tile)."""
+    request = meta.request if meta is not None else None
+    if request is None or _is_tile(meta):
+        return None
+    bbox = _valid_bbox(request.get("bbox"), request.get("bbox_crs"))
+    return None if bbox is None else _footprint(bbox, "request")
+
+
+def _header_footprint(entry: StoreEntry, meta: Sidecar | None) -> Footprint | None:
+    bbox = _header_bbox(entry, meta)
+    return None if bbox is None else _footprint(bbox, "header")
+
+
+def _unit_footprint(
+    entry: StoreEntry,
+    meta: Sidecar | None,
+    cache: MutableMapping[tuple[str, str], BBox] | None,
+    network: bool,
+) -> Footprint | None:
+    bbox = _unit_bbox(entry, meta, cache, network)
+    return None if bbox is None else _footprint(bbox, "unit")
+
+
 def file_footprint(
     entry: StoreEntry,
     *,
@@ -548,11 +589,16 @@ def file_footprint(
 ) -> Footprint | None:
     """Extent of a store file from the first trustworthy source.
 
-    Order: the request bbox (``request.bbox`` + ``bbox_crs``), a computable
-    sheet code (PL-1992, PL-2000, TM33), the file header (GeoTIFF, ASC,
-    JPEG + world file, GPKG, LAS/LAZ), the unit (TERYT from PRG, KU from
-    RUIAN, SM5 sheet from the CUZK index). A malformed source is skipped;
-    a file without any (a national package) has no footprint.
+    Order: the request bbox (``request.bbox`` + ``bbox_crs``; not for a LAZ
+    tile selected for an area - its ``request.bbox`` is that area and the
+    extent of the tile is its header), a computable sheet code (PL-1992,
+    PL-2000, TM33), the file header (GeoTIFF, ASC, JPEG + world file, GPKG,
+    LAS/LAZ), the unit (TERYT from PRG, KU from RUIAN, SM5 sheet from the
+    CUZK index). A malformed source is skipped, and so is a source whose
+    envelope has no safe operation to WGS84 (``TransformError``: none within
+    the policy, or the envelope outside the area of the pinned operation) -
+    the next source decides, never an approximated envelope. A file without
+    any (a national package) has no footprint.
 
     Parameters
     ----------
@@ -571,40 +617,42 @@ def file_footprint(
     -------
     Footprint or None
         Native and WGS84 envelopes with their ``source``; ``None`` when no
-        source gives a trustworthy extent.
+        source gives a trustworthy extent that has a safe WGS84 operation.
 
     Raises
     ------
-    TransformUnavailableError
-        No safe operation from the file's CRS to WGS84 (never approximated).
     DownloadError
         A unit index failed (only with ``network=True``).
     ParseError
         A unit index feature without usable geometry (only with
         ``network=True``).
-    TransformError
-        A source envelope lies outside the area of the pinned operation.
 
     Notes
     -----
+    ``OGC:CRS84`` (the CRS of the PRNG and special PRG GeoPackages and of
+    their request bbox) and ``EPSG:4326`` are the same longitude/latitude
+    WGS 84: the envelope is the same numbers, no operation is needed.
+
     Thread-safe: may be called concurrently from any number of threads
     (e.g. a thread pool over ``iter_store`` entries). The only state shared
     between calls is ``cache``: one plain ``dict`` may serve all threads;
     two threads missing the same unit may both query its index.
     """
     meta = _sidecar_of(entry)
-    request = meta.request if meta is not None else None
-    if request is not None:
-        bbox = _valid_bbox(request.get("bbox"), request.get("bbox_crs"))
-        if bbox is not None:
-            return _footprint(bbox, "request")
-    footprint = _sheet_footprint(entry, meta)
-    if footprint is not None:
-        return footprint
-    bbox = _header_bbox(entry, meta)
-    if bbox is not None:
-        return _footprint(bbox, "header")
-    bbox = _unit_bbox(entry, meta, cache, network)
-    if bbox is not None:
-        return _footprint(bbox, "unit")
+    sources: tuple[tuple[str, Callable[[], Footprint | None]], ...] = (
+        ("request", lambda: _request_footprint(meta)),
+        ("sheet", lambda: _sheet_footprint(entry, meta)),
+        ("header", lambda: _header_footprint(entry, meta)),
+        ("unit", lambda: _unit_footprint(entry, meta, cache, network)),
+    )
+    for source, make in sources:
+        try:
+            footprint = make()
+        except TransformError as error:
+            logger.debug(
+                "file_footprint %s: source %s skipped: %s", entry.path, source, error
+            )
+            continue
+        if footprint is not None:
+            return footprint
     return None

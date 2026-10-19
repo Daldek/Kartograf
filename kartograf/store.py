@@ -71,7 +71,9 @@ class Sidecar:
     ``coverage`` (valid-cell share 0..1) and ``unit`` (the unit of the
     request: TERYT, KU, sheet, tile, ``<coords>`` or the country code; for
     a national file of a theme the file stem ``<code>_<theme>``, e.g.
-    ``pl_miejscowosci``). ``unit`` can be passed to ``iter_store(units=...)``
+    ``pl_miejscowosci``; for a LAZ tile - also one selected for an area or
+    a sheet request, whose ``request.bbox`` is that area - its tile code
+    ``extra.tile_sheet``). ``unit`` can be passed to ``iter_store(units=...)``
     of the file's segment.
 
     Not hashable (``request``/``extra``/``raw`` are dicts); compare with
@@ -255,6 +257,8 @@ _BBOX_UNIT = re.compile(rf"{_COORD}(?:_{_COORD}){{3}}")
 _TERYT = re.compile(r"[0-9]{2,7}")
 _KU = re.compile(r"[0-9]{6}")
 _COUNTRY = re.compile(r"[a-z]{2}(?:_[a-z0-9]+(?:-[a-z0-9]+)*)?")
+# Unit kinds of package channels that are sheet or tile codes, not TERYT/KU.
+_CODE_KINDS = frozenset({"sheet", "tile"})
 # Orthophoto colour variants of GugikOrtoProvider.storage_variant (E12).
 _ORTO_COLORS = {"cir": "CIR", "bw": "B/W"}
 
@@ -333,6 +337,7 @@ def _year(value: Any) -> int | None:
 def _unit(
     request: dict[str, Any] | None,
     source: dict[str, Any],
+    tile_sheet: Any,
     country: str | None,
     stem: str | None,
 ) -> str | None:
@@ -344,6 +349,9 @@ def _unit(
         request.get("sheet"),
         request.get("tile"),
         source.get("sheet"),
+        # A LAZ tile selected for an area keeps that area in ``request.bbox``
+        # (0.7.x-0.8.0 sidecars): its own unit is the tile, never the area.
+        tile_sheet,
     )
     if unit:
         return unit
@@ -462,7 +470,7 @@ def _typed(raw: dict[str, Any], stem: str | None) -> Sidecar:
         edition=edition,
         full_sheet=full_sheet,
         coverage=_number(extra_data.get("coverage")),
-        unit=_unit(request, source, country, stem),
+        unit=_unit(request, source, extra_data.get("tile_sheet"), country, stem),
         raw=raw,
     )
 
@@ -601,9 +609,10 @@ def _content_variant(descriptor: SourceDescriptor, suffix: str) -> str | None:
     if key == "global.isric.soilgrids":
         from kartograf.providers.soilgrids import SoilGridsProvider
 
-        if len(parts) == 3 and (
-            parts[0] in SoilGridsProvider.PROPERTIES
-            and parts[1] in SoilGridsProvider.DEPTHS
+        if (
+            len(parts) == 3
+            and parts[0] in SoilGridsProvider.PROPERTIES
+            and parts[1] in SoilGridsProvider.depths_for(parts[0])
             and parts[2] in (s.lower() for s in SoilGridsProvider.STATS)
         ):
             return " · " + " · ".join(parts)
@@ -1358,7 +1367,9 @@ def _unit_slot(
         return tuple(directory), code
     if _BBOX_UNIT.fullmatch(code):
         return ("bbox",), code
-    if _TERYT.fullmatch(code):
+    # A segment of sheets or tiles only has no TERYT: a bare number there is a
+    # sheet code (the ZTM 1:100000 sheet ``0510``).
+    if _TERYT.fullmatch(code) and not (kinds and kinds <= _CODE_KINDS):
         return ("ku",) if _KU.fullmatch(code) and "ku" in kinds else ("teryt",), code
     if _COUNTRY.fullmatch(code):
         return ("country",), code
@@ -1757,10 +1768,14 @@ def link_target(path: str | Path) -> Path | None:
     ``extra.link_target``), requires the target to be a version of the
     link's own slot and confirms it with ``download.links.linked_version``:
     the same file by inode, or - on a share without stable inode numbers
-    (SMB without ``serverino``) - by content: both paths with more than one
-    link, the same size and the link's sha256 equal to the version sidecar's
-    (one full read of the file). Call it for the links of interest, not for
-    every slot of a full scan.
+    (SMB without ``serverino``) - by content: the same size and the link's
+    sha256 equal to the version sidecar's (one full read of the file on
+    every call). The link count is not consulted (an SMB client reports 1
+    for a path it has just opened, the confirming read included), so a path
+    that holds the version's bytes counts as holding it, a hardlink or an
+    independent copy alike (a download turns an evident copy back into a
+    hardlink). Call it for the links of interest, not for every slot of a
+    full scan.
 
     Parameters
     ----------
@@ -1772,8 +1787,8 @@ def link_target(path: str | Path) -> Path | None:
     Path or None
         The version file, in the same form as ``StoreEntry.version_path``;
         ``None`` for a missing file or sidecar, a 0.7.x copy, a target
-        outside the slot, a removed version or a link that no longer holds
-        the version's content.
+        outside the slot, a removed version or a path whose content is no
+        longer the version's.
     """
     link = Path(path)
     try:

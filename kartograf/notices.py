@@ -1,7 +1,7 @@
 """Structured data notices shared by command-level results and CLI output,
 and the text helpers of user messages (sizes, counted nouns, flag names)."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Literal
 
@@ -49,6 +49,10 @@ INDEX_UNSUPPORTED = "index_unsupported"
 # Availability report CZ: models without sheet files (DMR 5G, DMP 1G) - only
 # a cutout or a TM33 tile of the ImageServer, and their LAZ.
 CZ_SERVICE_ONLY = "cz_service_only"
+# Availability report PL: the area has no land (the sea within the territorial
+# waters, an area beyond the state border) - every combination is "complete"
+# for lack of land to cover.
+NO_LAND = "no_land"
 
 # A file above this size is announced (``DOWNLOAD_SIZE``) before its transfer
 # (K9): collection units and the image sheets of ``download_data``.
@@ -87,6 +91,21 @@ def count_text(count: int, one: str, few: str, many: str) -> str:
     else:
         form = many
     return f"{count} {form}"
+
+
+# The units a ``UNIT_LIST`` notice names; the rest is only counted (an area of
+# thousands of index tiles must not print one line of 100 KB before the volume
+# limit refuses it).
+LISTED_UNITS = 10
+
+
+def names_text(names: Sequence[str]) -> str:
+    """The names of the units of a notice: ``a, b, c``; over ``LISTED_UNITS``
+    of them the first ones and the rest counted: ``a, b, ..., j i 3 inne``."""
+    if len(names) <= LISTED_UNITS:
+        return ", ".join(names)
+    rest = count_text(len(names) - LISTED_UNITS, "inny", "inne", "innych")
+    return f"{', '.join(names[:LISTED_UNITS])} i {rest}"
 
 
 def cli_flag(name: str) -> str:

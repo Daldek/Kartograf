@@ -974,13 +974,7 @@ _CHOICE_TOKENS: dict[str, list[tuple[str, ...]]] = {
         for year in CorineProvider.AVAILABLE_YEARS
         for tokens in ((str(year),), (str(year), "preview"))
     ],
-    "global.isric.soilgrids": list(
-        itertools.product(
-            SoilGridsProvider.PROPERTIES,
-            SoilGridsProvider.DEPTHS,
-            SoilGridsProvider.STATS,
-        )
-    ),
+    "global.isric.soilgrids": [tuple(layer) for layer in SoilGridsProvider.layers()],
 }
 
 

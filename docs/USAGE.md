@@ -126,13 +126,13 @@ kartograf elevation download --product nmt --country pl --bbox 339000,744800,343
 # Inne produkty GUGiK: ortofotomapa, chmury punktów LAZ
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 637400,487000,637450,487050 --product laz --min-density 12 --vertical-crs EVRF2007 --country pl -o ./data
 kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl -o ./data
 
 # PL-2000: godło albo bbox w CRS strefy; godło grubsze i bbox wymagają --scale
 # zgodnej z arkuszami GUGiK (sekcja 1.6)
 kartograf parse 6.179.12.20
-kartograf elevation download --sheet 6.179.12.20 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet 6.179.12.20 --product nmt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
 
@@ -148,7 +148,7 @@ kartograf elevation download --sheet N-34-130-D-d-2-4 --year 2025 --product nmt 
 kartograf elevation download --sheet N-34-130-D-d-2-4 --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z 2025
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto --year 2024 -o ./data
 kartograf elevation download --bbox 530000,382000,533000,386000 --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --min-year 2022 --max-year 2024 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowsza, nie starsza niż 2024
 kartograf elevation download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
@@ -284,6 +284,11 @@ krawędzią albo narożnikiem nie jest pobierany (`--sheet N-34-130-D-d-2-4`
 (zaokrąglenie ram GUGiK do 1 cm) jest pomijany.
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
+Gdy `--min-density` odrzuci wszystkie kafle obszaru, błąd je wskazuje (kod 1):
+`Error: Brak kafli LAZ dla podanego obszaru: --min-density 12 odrzucilo 13 kafli
+obszaru (najwyzsza gestosc nominalna 4 pkt/m2) - obniz albo pomin --min-density`
+(kafle arkusza `N-34-130-D-d-2-4` mają 4 pkt/m2; z 12 pkt/m2 jest m.in. obszar
+Warszawy z przykładu wyżej).
 
 `--min-density` działa **tylko z `--product laz`**. Z `nmt`, `nmpt` i `orto`
 kończy się `Error:` i kodem 2 przed jakimkolwiek
@@ -314,6 +319,15 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --country pl --p
 - PL bez `--cutout` zapisuje **listę arkuszy** w hierarchii godeł;
   arkusz bez danych GUGiK jest pomijany z `Warning:` (kod 0, gdy pobrano
   choć jeden arkusz).
+- **Punkt albo linia w `--geometry` (od 0.8.0):** obwiednia o zerowej
+  powierzchni (punkt, linia równoległa do osi) wybiera arkusze, jednostki
+  i piksele, w których leży — arkusze NMT/orto, `boundaries`, `soil
+  download`, `landcover` BDOT10k przyjmują ją (`--bbox x,y,x,y` nie, p.
+  niżej). Wycinek (`--cutout`, PL i CZ), kafle LAZ, `soil hsg`
+  i `elevation availability` pracują na obszarze i kończą się `Error:
+  --geometry: obwiednia obiektow ma zerowa powierzchnie ...` (kod 2,
+  `details.option=geometry`) przed siecią, także w `project add`; podaj
+  wielobok albo `--bbox` o dodatniej powierzchni.
 - `--country` jest wymagane z `--bbox`/`--geometry` (`pl`, `cz` albo
   `auto`; z `--sheet` kraj wynika z godła). Pod `auto` kraje są
   rozpoznawane po **prostokątnych** obwiedniach, nie po granicy: obszar
@@ -704,11 +718,19 @@ kartograf landcover download --product corine --year 2018 --sheet N-34-130-D -o 
 #   z CLMS_CREDENTIALS: landcover/eu_corine_2018/N-34/130/D/N-34-130-D.tif: nowa wersja V2020_20u1_<sha8>
 #   bez: Info: CORINE 2018: podglad WMS ...
 #        landcover/eu_corine_2018_preview/N-34/130/D/N-34-130-D.png: nowa wersja 2026-10-12_<sha8>
+# Podgląd WMS działa dla 2018, 2012, 2006, 2000 (EEA; warstwę rastrową roku Kartograf czyta
+# z GetCapabilities usługi tego roku) i 1990 (DLR). Obraz w całości przezroczysty (usługa
+# nie ma danych CLC tego roku dla obszaru: 1990 dla Polski, obszar poza Europą) to
+# Error: (kod 1, `no_coverage`) i brak wersji w magazynie.
 kartograf soil download --bbox 626000,480000,628000,482000 --property clay --depth 0-5cm --stat mean -o ./data
 #   soil/global_soilgrids_clay_0-5cm_mean/bbox/626000_480000_628000_482000.tif: nowa wersja 2.0_717f0989
 # Segment niesie każdy parametr treści (lowercase), więc --property sand
 # dla tego samego obszaru to osobny plik; parametry są też w sidecarze
 # (request.property/depth/stat, request.year, request.format).
+# Wartości w pliku to liczby całkowite w jednostkach ISRIC (clay g/kg, phh2o pH x 10, bdod
+# cg/cm3, soc dg/kg, nitrogen cg/kg, cec mmol(c)/kg, cfvo cm3/dm3, ocd hg/m3, ocs t/ha);
+# jednostka konwencjonalna = wartość / dzielnik: `soil list-layers`, sidecar `extra.units`
+# ({"mapped": "g/kg", "conventional": "%", "divisor": 10}). `ocs` tylko --depth 0-30cm.
 
 # Tylko wybrane warstwy BDOT10k (GPKG) + oryginalny ZIP, bbox w WGS84,
 # 4 powiaty równolegle, bez linii statusu (Info:/Warning:/Error: zostają)
@@ -754,7 +776,14 @@ wybierają obszar przez `--sheet`, `--bbox` albo `--geometry`. BDOT10k
 z `--bbox`/`--sheet`/`--geometry` pobiera wszystkie powiaty obszaru (lista
 z WFS PRG, odpowiedzi w cache metadanych — `cache stats` liczy je
 w `Wpisy TERYT`); błąd jednego powiatu to `Error: <TERYT>: ...`, reszta
-się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Tryby
+się pobiera, kod 1; obszar bez powiatu (morze) to `Error:`. Obszar BDOT10k
+(bieżące paczki i archiwum `--year`) podlega limitowi z sekcji 1.8 (100 plików
+albo 10 GB wg `HEAD`, `Error:` kod 2 przed pobraniem) i wypisuje listę powiatów
+w `Info:` (`unit_list`). `--layers`: kod klasy BDOT10k z `landcover list-layers
+--product bdot10k` (58 klas, także `BUBD`); nieznany kod to `Error:` kod 2 przed
+siecią, klasa bez obiektów w powiecie (brak jej w paczce, np. `SWKN` w Sopocie)
+to `Info:` `classes_absent` — zapisują się pozostałe klasy, a brak wszystkich to
+błąd powiatu (jak BDOO). Tryby
 `--check-updates`/`--upgrade`/`--force`/`--plan`: sekcja 4.3. CORINE bez
 credentials CLMS pobiera podgląd PNG (sekcja 6). Warstwy BDOT10k,
 parametry SoilGrids i lata CORINE: PRD 3.5–3.7. ZABAGED, Data50 i Data250
@@ -1123,6 +1152,22 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
   indeksu CUZK albo `HEAD` pliku inna niż `404`. Zakres lat bez
   żadnego rocznika usługi: `Error: --year 2030: skorowidz GUGiK NMT nie
   ma rocznika ... - dostepne roczniki: ...`.
+- **Obszar jednego kraju musi sięgać jego obwiedni (od 0.8.0):** `--country pl`
+  z `--bbox`/`--geometry` poza obwiednią PL (albo `--country cz` poza CZ) to
+  `Error: --bbox (EPSG:2180) lezy poza CZ ... Sprawdz --bbox-crs ...` i kod 2
+  przed siecią — ta sama kontrola co w `elevation download`; dotyczy liczb
+  w innym układzie niż `--bbox-crs` i zamienionych osi. `--bbox` o zerowej
+  powierzchni (`min == max`) albo ze współrzędnymi spoza zakresu EPSG:4326
+  (długość ±180, szerokość ±90) to `Error: Nieprawidlowy bbox: ...` (kod 2);
+  `--geometry` o zerowej powierzchni (sam punkt) to `Error: --geometry: ...`
+  z `details.option=geometry` (sekcja 1.2).
+- **Obszar bez lądu:** `area_m2` to część obszaru w granicach PL (z morzem
+  terytorialnym; część poza granicą ma `0,00 ha`), `land_m2` — jej ląd (PRG
+  `A00` bez `W02`/`W03`). Obszar całkiem na morzu (`land_m2 = 0`) nie ma lądu
+  do pokrycia, więc każda kombinacja ma `complete: true` (`full_m2 = land_m2 = 0`,
+  w tabeli `KOMPLET` = `brak ladu`), a raport mówi to w `Info:` (kod `no_land`
+  w `notices`); stopka nie podaje polecenia pobrania. Inwariant `complete`
+  wtedy i tylko wtedy, gdy `full_m2 == land_m2`, zostaje.
 - **`Info:`** (kod `index_unsupported` w bibliotece) wymienia rekordy
   obszaru, których Kartograf nie pobiera: format rekordu niezgodny
   z plikiem, format albo wariant spoza rejestru, godło spoza układów
@@ -1388,7 +1433,8 @@ tylko pliki do pobrania: wersje już lokalne nie (z `--force` — wszystkie).
 Wybór jednostki (`--teryt`, `--ku`) i `--whole-country` nie mają limitu —
 rozmiar dużego pliku pojawia się jako `Warning:` przed transferem. Limit
 dotyczy wszystkich kolekcji, także ZABAGED, BDOO, Data50 i Data250
-w `landcover` oraz NMT 100 m (pliki województw obszaru).
+w `landcover`, obszaru BDOT10k (paczki powiatów, bieżące i z archiwum) oraz
+NMT 100 m (pliki województw obszaru).
 
 ```bash
 kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 -o ~/kartograf-data
@@ -1437,7 +1483,7 @@ kartograf boundaries download --product admin --country cz --level obec "--bbox=
 kartograf boundaries download --product admin --country auto --level pl=gmina,cz=obec --bbox 18.5,49.6,18.8,49.9 --bbox-crs EPSG:4326 -o ./data
 #   -> boundaries/pl_prg_gmina/bbox/<współrzędne EPSG:2180>.gpkg i boundaries/cz_ruian_obec/bbox/<współrzędne EPSG:5514>.gpkg
 kartograf boundaries download --product admin --country cz --whole-country -o ./data
-#   -> boundaries/cz_ruian_shp/country/cz.zip (SHP, ok. 253 MB)
+#   -> boundaries/cz_ruian_shp/country/cz.zip (SHP, ok. 251 MB)
 
 # HY-NET (hydro): odcinki cieków i węzły obszaru, EPSG:5514
 kartograf hydro download --product network --country cz "--bbox=-470000,-1130000,-440000,-1100000" --bbox-crs EPSG:5514 -o ./data
@@ -1509,9 +1555,22 @@ obszar przy granicy daje dwa pliki (PRG i RUIAN) ze wspólnym
 kraj (`--level pl=gmina,cz=obec`; biblioteka: `{"pl": "gmina", "cz":
 "obec"}`) — jedna wartość niedostępna w którymś kraju to `Error:`
 z podpowiedzią `--level pl=<poziom>,cz=<poziom>`. `--whole-country
---country cz` to krajowy SHP (ok. 253 MB) z `ETag`: domyślnie jedno
-`HEAD` porównuje lokalną wersję, `--check-updates` raportuje `aktualne`
-albo `nowsza` bez pobierania.
+--country cz` to krajowy SHP (ok. 251 MB) z `ETag`: domyślnie lokalna
+wersja jest używana bez zapytania (sekcja 4.3), `HEAD` robią tylko
+`--check-updates` (`aktualne` albo `nowsza`) i `--upgrade`.
+
+**`--country auto` w kolekcjach.** Obwiednie krajów to prostokąty, więc
+obszar w głębi jednego kraju (np. Cieszyn po polskiej stronie) trafia też
+do drugiego, gdzie źródło nie ma dla niego danych (brak katastrálního území
+w RUIAN, arkusza mapy, obiektów). Taka część to błąd tego kraju — wpis
+w `failed` (`kind` `no_coverage` albo `download`; `unit` = kod kraju, gdy
+nie dało się ustalić jednostek) i linia `Error:` — ale drugi kraj jest
+pobierany, a zadanie kończy się kodem 0 z `Warning:`
+`auto_partial_success` (ta sama reguła co w `elevation` i `imagery`;
+`--check-updates`: `Warning:` `check_failed` i `auto_partial_success`).
+Kod 1 zostaje dla jawnego `--country` i dla porażki wszystkich krajów
+(brak jednostek w obu = `no_coverage`). Zadanie projektu z częściowym
+sukcesem nie jest przypinane.
 
 **HY-NET.** Grupa `hydro` (`--product network`; tylko CZ — `--country pl`
 to `Error:`, a `auto` zawęża się do CZ z `Info:`) pobiera sieć
@@ -1552,8 +1611,11 @@ magazynu `cadastre/cz_cadastral-map_<format>/ku/`). `--ku` (6 cyfr) wybiera jedn
 każdego KU obszaru wg RUIAN (z `Info:` listą KU). Brak `--format` to
 `Error:` z listą formatów. KU bez paczki (np. 999999) kończy się
 `Error: ... (HTTP 404)`, a pozostałe KU zadania się zapisują. Paczki mają
-sygnał HTTP: kolejne uruchomienie używa lokalnej wersji po jednym `HEAD`,
-a `--check-updates` raportuje `aktualne` albo `nowsza` bez pobierania.
+sygnał HTTP: kolejne uruchomienie używa lokalnej wersji bez zapytania
+(`HEAD` robią tylko `--check-updates` i `--upgrade`: `aktualne` albo
+`nowsza`). KU obszaru z RUIAN leżą w cache metadanych (TTL 7 dni; `--force`,
+`--upgrade` i `--check-updates` pytają usługę), więc powtórzenie obszaru
+działa bez sieci.
 Format VKM (wymiana katastralna) nie jest obsługiwany: jego adres
 odpowiada 404 dla KU 623164 (stan 2026-10-16).
 
@@ -1574,7 +1636,8 @@ Obszar (`--bbox`, `--sheet` lub `--geometry`) daje GPKG z pełnymi geometriami
 obiektów przecinających obszar: PRNG w OGC:CRS84 (długość, szerokość), Geonames
 w EPSG:5514 (25 warstw). Zapytanie PRNG trwa ok. 80–95 s na stronę obiektów
 (pomiar 2026-10-16) — przed nim pada `Info: geographic: zapytanie OGC API
-PRNG - usluga odpowiada ...`; do kompletu danych użyj `--whole-country`.
+PRNG - usluga odpowiada ...` (tylko `geographic`; `world` odpowiada w kilka
+sekund); do kompletu danych użyj `--whole-country`.
 Wyniki obszaru nie mają taniego sygnału aktualizacji, do odświeżenia służy
 `--force`.
 
@@ -2218,9 +2281,14 @@ z jego sidecara (bez czytania danych); `link_target` potwierdza zawartość —
 na niektórych udziałach SMB wymusza odczyt całego pliku, więc wołaj je dla
 interesujących dowiązań, nie 50 tys. slotów naraz. `file_footprint` zwraca
 `native`, `wgs84`, `source` (`request`, `sheet`, `header`, `unit`); nie
-przyjmuje zmyślonego obrysu kraju. Obrysy jednostek z indeksów
-PRG/RUIAN/SM5 wymagają `network=True` albo wcześniej wypełnionego `cache`
-(w domyślnym wywołaniu zero zapytań sieciowych). Przeliczenie do WGS84 jest
+przyjmuje zmyślonego obrysu kraju. Obrys z bboxa zadania (`request`) ma
+plik, który jest tym obszarem (wycinek, `bbox/`); kafel LAZ wybrany dla
+obszaru albo arkusza (jego `request.bbox` to obszar zadania) ma obrys
+z nagłówka LAS (`header`), a jego `Sidecar.unit` to godło kafla
+(`extra.tile_sheet`), więc `iter_store(units=[unit])` go odnajduje. Obrysy
+jednostek z indeksów PRG/RUIAN/SM5 wymagają `network=True` albo wcześniej
+wypełnionego `cache` (w domyślnym wywołaniu zero zapytań sieciowych).
+Przeliczenie do WGS84 jest
 przypiętą operacją `pinned_transform`, a nie domyślnym pyproj. Koszt,
 wątki i warianty struktury: ARCHITECTURE 3.3.1.
 
@@ -2235,7 +2303,7 @@ wątki i warianty struktury: ARCHITECTURE 3.3.1.
 | `geometry_layer_default` | info | GPKG z kilkoma warstwami bez `--layer`: użyta pierwsza | komendy z `--geometry` |
 | `auto_narrowed_to_pl`, `auto_narrowed_to_cz` | info | `--country auto` zawężone do jednego kraju (produkt albo wybór tylko tego kraju) | `elevation`, `imagery`, kolekcje, `elevation availability` |
 | `auto_clipped`, `auto_area_outside` | info | `--country auto`: część obszaru przycięta do obwiedni kraju albo leżąca poza PL i CZ | komendy z obszarem i `--country auto` |
-| `auto_partial_success` | warning | `--country auto`: jeden kraj zakończył się błędem, drugi pobrany (kod wyjścia 0) | `elevation`, `imagery download` |
+| `auto_partial_success` | warning | `--country auto`: jeden kraj zakończył się błędem, drugi pobrany (kod wyjścia 0) | `elevation`, `imagery download`, grupy kolekcji z obszarem |
 | `legacy_campaigns_dir` | info | w magazynie jest katalog `kampanie/` z 0.7.x | `elevation`, `imagery download` |
 | `newer_available` | info | źródło ma nowszy lot, użyta wersja lokalna (bez `--upgrade`) | arkusze PL `elevation`, `imagery` |
 | `check_failed` | warning | nie udało się sprawdzić źródła (np. skorowidz GUGiK niedostępny), użyta wersja lokalna | komendy danych, `elevation availability` |
@@ -2377,14 +2445,23 @@ Szczegóły trybów: sekcja 4.3.
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
   sshfs/FUSE) kończy pobranie arkusza błędem. Na udziale SMB montowanym
   bez `serverino` (niestabilne numery i-węzłów) dowiązanie jest
-  potwierdzane sumą SHA-256 (jeden odczyt pliku przy każdym uruchomieniu;
-  koszt: sekcja 7).
+  potwierdzane treścią: rozmiar i suma SHA-256 pliku zgadzają się
+  z sidecarem wersji, na którą wskazuje sidecar dowiązania (jeden odczyt
+  pliku przy każdym uruchomieniu; koszt: sekcja 7). Liczba dowiązań nie
+  bierze w tym udziału: klient cifs zgłasza `st_nlink = 1` dla ścieżki,
+  którą właśnie otwarto (także do odczytu, przez Kartografa albo inny
+  program), przez kilka sekund, czasem dłużej. Dlatego dowiązanie nigdy
+  nie cofa się na starszy lot także tuż po odczycie pliku. Plik o treści
+  wersji jest tą wersją nawet jako niezależna kopia; pobranie arkusza
+  zamienia taką kopię z powrotem w dowiązanie tej samej wersji, gdy żadna
+  ze ścieżek nie zgłasza drugiej nazwy (np. po `rsync -a` bez `-H`).
 - **Kopiowanie `data/`:** użyj `rsync -aH` albo `cp -a` — bez zachowania
   hardlinków ścieżka standardowa staje się osobną kopią (duplikat danych).
   Treść wersji jest nieskompresowana (suma SHA-256 z bajtów) — przy dużych
   zbiorach warto włączyć kompresję systemu plików.
   Na udziale SMB/cifs klient może przejściowo raportować błędną liczbę
-  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki.
+  dowiązań, przez co nawet `rsync -aH` skopiuje je jako osobne pliki
+  (po takim kopiowaniu pobranie arkusza przywraca dowiązanie, patrz wyżej).
   `project verify` potwierdza treść kopii, ale nie oszczędność miejsca:
   sprawdź jej zajętość; w razie potrzeby kopiuj po stronie serwera lub
   z hosta z lokalnym dostępem do systemu plików.
@@ -2565,9 +2642,25 @@ pozycje każdego toru.
 `--check-updates` niczego nie pobiera; z `--plan PLIK` zapisuje plan JSON
 (`kartograf-plan/1`), który `--upgrade --plan PLIK` wykonuje później —
 pozycja, której źródło zmieniło się od planu, kończy się `Error:` bez
-pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
+pobrania, a pozycje usunięte z pliku nie są wykonywane. `--plan`
+wskazujący katalog albo katalog, którego nie ma, to błąd `invalid_input`
+przed siecią; `--upgrade --plan`, który nie wykonał żadnej pozycji (wszystkie
+aktualne albo już wykonane), mówi to linią `Info:` (nie w `--json`).
+`--force` pobiera
 ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
-`bez zmian`, inna = nowa wersja.
+`bez zmian`, inna = nowa wersja (w projekcie `--force` naprawia przy tym
+uszkodzone przypięte wersje, sekcja 8.1).
+
+`--check-updates` zachowuje się jak pobranie tego samego obszaru wobec danych
+(od 0.8.0): arkusz bez danych w skorowidzu (morze, obszar za granicą, brak
+rozdzielczości w regionie) **nie jest pozycją planu** i nie jest błędem
+sprawdzenia — gdy reszta obszaru ma dane, `--check-updates` kończy się kodem 0
+z tym samym `Warning: GUGiK nie ma danych dla N z M arkuszy ...` co pobranie
+(w JSON: `notices`, `ok: true`); gdy żaden arkusz nie ma danych, to
+`Error:` z kodem 1 i kodem błędu `no_coverage`. Arkusze z danymi tylko poza
+zakresem lat to JEDEN błąd `year_out_of_range` dla wszystkich (`dla N z M
+arkuszy`), jak w pobraniu; pozycja `check_failed` zostaje dla awarii
+skorowidza (sieć, 5xx).
 
 `--check-updates` i `--upgrade` zawsze pytają źródło: odczyt cache
 metadanych (rekordy skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest
@@ -2632,9 +2725,20 @@ print(report.stale, report.files.get(godlo, ()))
 
 ## 5. Gleby i HSG
 
-- SoilGrids (ISRIC): 11 parametrów, 6 głębokości, 5 statystyk,
-  rozdzielczość 250 m — tabela parametrów i jednostek: PRD 3.7;
-  `kartograf soil list-layers`.
+- SoilGrids (ISRIC): 11 właściwości (`ocs` tylko dla głębokości 0-30cm, reszta
+  6 głębokości), 5 statystyk, rozdzielczość 250 m. Plik ma liczby całkowite
+  w jednostkach ISRIC; jednostka konwencjonalna = wartość / dzielnik (`soil
+  list-layers`, sidecar `extra.units`): clay, sand, silt g/kg (% = / 10), phh2o
+  pH x 10 (/ 10), bdod cg/cm3 (kg/dm3 = / 100), nitrogen cg/kg (g/kg = / 100),
+  soc dg/kg (g/kg = / 10), cec mmol(c)/kg (cmol(c)/kg = / 10), cfvo cm3/dm3
+  (cm3/100cm3 = / 10), ocd hg/m3 (kg/m3 = / 10), ocs t/ha (kg/m2 = / 10);
+  statystyka `uncertainty` to iloraz 10 x (Q0.95 - Q0.05) / Q0.5 (/ 10 = iloraz).
+  Okno mniejsze niż piksel (250 m) jest rozszerzane do jednego piksela.
+  Wydanie (`extra.edition`) pochodzi z GetCapabilities mapy właściwości; mapa
+  `ocd` nie podaje wydania w tytule, więc jej wydanie to wydanie mapy `clay`
+  i sidecar `ocd` mówi to maszynowo: `extra.edition.source_property` =
+  `"clay"` (`id` = wydanie, `title` i `url` to mapy `clay`); w sidecarach
+  pozostałych właściwości tego pola nie ma (własna mapa).
 - HSG (`kartograf soil hsg`, `calculate_hsg(output_dir=...)`) bierze
   `clay`/`sand`/`silt` jako wersje SoilGrids z tego samego magazynu
   (pobiera brakujące), klasyfikuje teksturę wg trójkąta USDA (12 klas)
@@ -2740,18 +2844,22 @@ proxy).
 - Magazyn na udziale SMB/cifs bez `serverino` (sekcja 4): każde
   uruchomienie czyta cały plik dla każdego dowiązania (ścieżka standardowa
   i `full_sheet/`), także przy `lokalna wersja` (pomiar 2026-10-16: orto
-  PL 300 MB = ok. 5 s; magazyn setek arkuszy = minuty). Montuj udział
-  z `serverino` albo trzymaj magazyn na dysku lokalnym. Kartograf nie
-  skraca tego sprawdzenia: skrót bez sumy (liczba dowiązań, rozmiar, czas
-  modyfikacji) mógłby uznać dowiązanie do starszej wersji tego samego
-  rozmiaru za aktualne.
+  PL 300 MB = ok. 5 s; magazyn setek arkuszy = minuty); tak samo każde
+  wywołanie `link_target`. Montuj udział z `serverino` albo trzymaj magazyn
+  na dysku lokalnym. Kartograf nie skraca tego sprawdzenia: skrót bez sumy
+  (liczba dowiązań, rozmiar, czas modyfikacji) mógłby uznać dowiązanie do
+  starszej wersji tego samego rozmiaru za aktualne, a liczba dowiązań
+  zmienia się przejściowo po każdym odczycie pliku, także po odczycie
+  samego sprawdzenia.
 - SoilGrids zwraca w obszarach maskowanych **0**, nie `-32768` z opisu
   ISRIC: WCS z `OUTPUTCRS=EPSG:4326` oddaje GeoTIFF bez tagu NoData
   (pomiar 2026-10-16: Piastów/Ursus, 85 ze 104 pikseli = 0). Kartograf
   zapisuje plik bez zmian (sidecar `nodata` jak w pliku), a HSG traktuje
   trójkę zer clay/sand/silt jako brak danych (`Brak danych` w `--summary`);
   w analizach własnych traktuj 0 g/kg w obszarze maskowanym jako brak
-  wartości.
+  wartości. Raster samych zer (morze, woda, zabudowa) to `Warning:`
+  `all_nodata` i `extra.all_nodata` w sidecarze (poza `cfvo`, gdzie 0 bywa
+  wartością); HSG bez żadnej klasy dostaje to samo ostrzeżenie.
 - WCS ortofotomapy jest wolny (pomiar 2026-10-15: ok. 1 min na kawałek
   200 x 200 m; obszar 1 x 1 km = 25 kawałków niezależnie od piksela),
   a Standard bywa przejściowo niedostępny. Złożony z kawałków wycinek nie
@@ -2899,6 +3007,18 @@ rozroznialne. Zadanie jeszcze nie pobrane to linia `teren: nie pobrane
 (pobierz: kartograf project download teren)` i kod 1 (z `-q` sam kod:
 `kartograf project status -q || kartograf project download`).
 
+Uszkodzona przypieta wersja (`status`: inny rozmiar; `verify`: inna suma
+SHA-256 albo sidecar) wraca z kopii magazynu albo po `kartograf project
+download --force NAZWA`: `--force` odklada pliki uszkodzonej wersji
+(dane i sidecar) do ukrytego katalogu `.<etykieta>_<sha8>.corrupt-<czas>`
+obok niej - nic nie jest usuwane, a skan magazynu pomija ukryte katalogi -
+i pobiera zadanie ponownie. Te same bajty wracaja pod przypieta wersje
+(`odtworzono`, manifest bez zmian); inna tresc u zrodla przepina zadanie
+jak kazde `--force`. Bez sieci wersja zostaje odlozona (`status`: brak
+przypietego pliku), a zwykle `download NAZWA` odtworzy ja z tych samych
+bajtow. Bez `--force` naprawa reczna: usun katalog wersji i uruchom
+`download`.
+
 ### 8.2 Swiezosc i wariant danych
 
 ```bash
@@ -2912,13 +3032,17 @@ kartograf project download --force pokrycie
 manifestu. `--upgrade` jawnie przepina cale zadanie na nowsza wersje,
 jesli jest sygnal zmiany, rowniez gdy nowa wersja juz jest w magazynie.
 `--force` ponawia pobranie nawet bez taniego sygnalu; przepiecie
-nastepuje po pelnym sukcesie zadania. Inne projekty zachowuja swoje
+nastepuje po pelnym sukcesie zadania, a uszkodzone przypiete wersje
+naprawia (8.1). Inne projekty zachowuja swoje
 przypiecia, stare wersje nadal sa w magazynie.
 
 **Zalecenie dla odtwarzalnosci:** wybieraj jawny wariant w zadaniu
 (np. `--year`, odpowiednie `--resolution` i `--vertical-crs`), gdy
 produkt to umozliwia. Bez `--year` wybierasz najnowszy lot w chwili
-pobrania; po opublikowaniu nowego lotu odtworzenie na pustym
+pobrania ze zrodla - ale gdy magazyn ma juz starszy lot tego arkusza,
+pierwsze `download` przypina ten lokalny lot (tryb domyslny, sekcja 4.3:
+bez pytania zrodla; `Info:` mowi o nowszym), a nowszy dopiero `--upgrade`;
+po opublikowaniu nowego lotu odtworzenie na pustym
 magazynie moze zwrocic inna sume i zakonczyc sie bledem. Nawet
 jawny rok nie zastepuje kopii magazynu, jesli zrodlo wycofa albo
 podmieni plik. Nie ma `project availability`: przed `project add`
@@ -2936,9 +3060,15 @@ nowszego rocznika.
 ### 8.3 Przenoszenie projektu i magazynu
 
 Sciezki `output_dir` i `options.geometry` podane wzglednie sa zapisane
-wzgledem katalogu projektu (nie biezacego katalogu odczytu).
-Sciezki podane bezwzglednie pozostaja bezwzgledne. Przypiete `path`
-i `version` sa zawsze wzgledne do magazynu.
+wzgledem katalogu projektu (nie biezacego katalogu odczytu). Sciezka
+z linii polecen (`--output` w `project init`, `--geometry` w `project
+add`) jest jednak najpierw CZYTANA wzgledem biezacego katalogu, takze
+przy `--project KATALOG` z innego miejsca; dopiero potem zapisuje sie ja
+wzgledem projektu (poza drzewem projektu to w manifescie lancuch `../..`,
+a magazyn powstaje tam, gdzie wskazuje biezacy katalog): podawaj sciezki
+bezwzgledne albo uruchamiaj polecenie z katalogu projektu. Geometria to
+`.gpkg` albo `.shp`. Sciezki podane bezwzglednie pozostaja bezwzgledne.
+Przypiete `path` i `version` sa zawsze wzgledne do magazynu.
 
 | Sytuacja | Co zrobic |
 |---|---|
@@ -2953,10 +3083,11 @@ twardych (sekcja 4); `verify` nie wykrywa nadmiarowych kopii.
 
 Plik geometrii obszaru warto trzymac przy manifeście i podawac wzglednie:
 przenosi sie z projektem. Zmiana jego bajtow od chwili przypiecia
-blokuje zwykle odtworzenie; jawne `--upgrade`/`--force` moze przyjac
-zmieniony obszar. Pozostale komendy wymagaja istniejacego katalogu
-magazynu (brak zamontowanego udzialu nie spowoduje pobrania do
-pustego katalogu).
+blokuje zwykle odtworzenie brakujacych plikow; `status`, `verify` i `download`
+przy obecnych plikach jej nie widza (ostrzega `--check-updates`), a jawne
+`--upgrade`/`--force` moze przyjac zmieniony obszar. Pozostale komendy
+wymagaja istniejacego katalogu magazynu (brak zamontowanego udzialu nie
+spowoduje pobrania do pustego katalogu).
 
 ### 8.4 Biblioteka Python
 
@@ -3054,6 +3185,14 @@ Zasady wspolne dokumentow:
   **wynik** z czesciowa porazka (kod wyjscia 1: jednostki w `failed`, nieaktualne
   pozycje w `stale`, pozycja `check_failed`), a nie blad; blad to `kartograf-error/1`,
   wiec agent odroznia je po `schema`;
+- `ok` w `kartograf-project-check/1` zalezy od komendy: `project status` i
+  `project verify` daja `ok: false`, gdy zadanie nie jest pobrane
+  (`not_downloaded`) albo plik nie ma statusu `ok`; `project download
+  --check-updates` ocenia tylko swiezosc zrodla (`ok: false` = pozycja
+  `check_failed`), wiec projekt bez przypiec ma tam `ok: true` i kod 0, a
+  `not_downloaded` wymienia wszystkie zadania. Kompletnosc i cala
+  zawartosc projektu ocenia `status`/`verify` (idiom `project status -q ||
+  project download`);
 - w obrebie `/1` zmiany sa tylko addytywne (nowe klucze, nowe wartosci wyliczen):
   czytaj po kluczach i ignoruj nieznane; usuniecie klucza albo zmiana typu to `/2`;
 - biblioteka: kazdy dokument ma `to_dict()` i `to_json(indent=2)`; `to_json()` jest
@@ -3076,14 +3215,20 @@ bledem `invalid_input` z `details.option` rownym `json`.
    grupy) drukuje rekord grupy i komendy w jednej linii.
 2. **stderr** jest pusty, z dwoma wyjatkami spoza kontraktu: linie ponowien transportu HTTP
    (`Warning:`) i traceback przy `KARTOGRAF_DEBUG=1` (wyjatek jest wtedy podnoszony takze
-   w trybie JSON).
+   w trybie JSON; z ta zmienna przechodza tez ostrzezenia diagnostyczne biblioteki). Inne
+   ostrzezenia diagnostyczne biblioteki (np. `Pominieto wersje o niezgodnym sha256`,
+   `Pominieto wersje bez czytelnego sidecara` przy rownoleglych zapisach) nie sa tu
+   drukowane, a bez `--json` maja prefiks `Warning:`; stan magazynu opisuje wtedy wynik
+   komendy (np. `project verify`). Ostrzezenie pyproj o brakujacej siatce PROJ
+   (`Best transformation is not available`) nie jest drukowane w zadnym trybie:
+   transformacje wybiera polityka przypietych operacji (ARCHITECTURE 2).
 3. Komunikaty `Info:`/`Warning:` sa w polu `notices` dokumentu; `-q` jest dozwolone i bez
    efektu. `--plan PLIK` dziala jak dotad, a plik planu to ten sam dokument co stdout
    (zapisany przed wydrukiem; linia `Info: zapisano plan` nie jest drukowana).
    `soil hsg --json --summary` zwraca statystyki w polu `summary`.
 4. **Kod wyjscia** wg 9.3: 0, gdy dokument nie ma pola `ok` albo ma `ok: true`; 1, gdy
    `ok: false` (dokument i tak jest wydrukowany) albo blad zrodla; 2 dla bledu wejscia;
-   130 po Ctrl-C. Blad to dokument `kartograf-error/1` na stdout, takze blad skladni
+   130 po Ctrl-C, 143 po SIGTERM. Blad to dokument `kartograf-error/1` na stdout, takze blad skladni
    (`usage_error`); stderr zostaje pusty.
 5. Bez `--json` zachowanie jest bez zmian (tekst), z wyjatkami: kod wyjscia 2 dla bledow
    wejscia, tabele `list-sources` i `list-layers` oraz `parse` sa renderowane z dokumentow
@@ -3164,7 +3309,8 @@ Jedna tabela kodow wyjscia CLI (te same wartosci ma katalog: `get_catalog(tables
 | 0 | `ok` | komenda wykonana; dokument wyniku z `ok: true` albo dokument bez pola `ok` | dokument wyniku |
 | 1 | `failed` | brak kompletnego wyniku: blad zrodla, sieci, cache, magazynu, blad programu albo `ok: false` | dokument wyniku (`ok: false`) albo `kartograf-error/1` |
 | 2 | `usage` | bledne uzycie albo bledne dane wejsciowe: blad skladni parsera, `ValidationError`, `ParseError`, `UsageError` | `kartograf-error/1` |
-| 130 | `interrupted` | przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane atomowo, brak polowicznych plikow | `kartograf-error/1` |
+| 130 | `interrupted` | przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane atomowo - jednostki niedokonczone przed przerwaniem (takze zakolejkowane przy `--workers > 1`) nie powstaja, brak polowicznych plikow | `kartograf-error/1` |
+| 143 | `terminated` | zakonczone sygnalem SIGTERM (128 + SIGTERM): `timeout`, `docker stop`; sprzatanie i dokument bledu jak po Ctrl-C | `kartograf-error/1` |
 
 Jedna tabela kodow bledow (`get_catalog(tables=True).errors`; kazdy wyjatek z hierarchii
 `KartografError` ma stabilny atrybut `code`, a kod wyjscia wynika z kodu bledu):
@@ -3183,12 +3329,34 @@ Jedna tabela kodow bledow (`get_catalog(tables=True).errors`; kazdy wyjatek z hi
 | `transform_failed` | `TransformError` | 1 | blad przeliczenia wspolrzednych (np. wynik nieskonczony) | - |
 | `transform_unavailable` | `TransformUnavailableError` | 1 | brak bezpiecznej operacji dla pary ukladow | `remedy` wyjatku |
 | `io_error` | `OSError` | 1 | katalog albo plik niedostepny: brak, uprawnienia, brak miejsca, odlaczony udzial (m.in. `describe_store` na nieistniejacym `output_dir`) | `Sprawdz sciezke i uprawnienia: <plik>` |
-| `interrupted` | `KeyboardInterrupt` | 130 | Ctrl-C | - |
+| `interrupted` | `KeyboardInterrupt` | 130 | Ctrl-C (SIGINT) | - |
+| `terminated` | `Terminated` | 143 | SIGTERM (`timeout`, `docker stop`, `kill`) | - |
 | `internal_error` | `Exception` | 1 | blad programu: kazdy inny wyjatek poza `OSError` | `Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback` |
 
-Kody `io_error`, `interrupted` i `internal_error` nie maja klas w hierarchii: buduje je
-`error_report`. Nowe kody wolno dodawac (zmiana addytywna); zmiana albo usuniecie kodu to
-zmiana lamiaca.
+Kody `io_error`, `interrupted`, `terminated` i `internal_error` nie maja klas w hierarchii
+`KartografError`: buduje je `error_report` (`terminated` z wyjatku `kartograf.interrupt.Terminated`,
+podklasy `KeyboardInterrupt`). Nowe kody wolno dodawac (zmiana addytywna); zmiana albo usuniecie
+kodu to zmiana lamiaca.
+
+**Przerwanie w CLI (Ctrl-C, SIGTERM).** Oba sygnaly dzialaja tak samo: komenda przerywa
+transfer, usuwa katalog roboczy swojego zapisu (`versions/.incoming/<host>_<pid>_<token>/`),
+drukuje `Error: przerwano (Ctrl-C)` albo `Error: przerwano (SIGTERM)` (z `--json`: dokument
+`kartograf-error/1` z kodem `interrupted` albo `terminated`) i konczy sie kodem 130 albo 143.
+Przy `--workers >= 2` kolejka jest anulowana: jednostki (arkusze, powiaty, kafle, paczki),
+ktore nie zakonczyly sie przed przerwaniem, nie sa pobierane ani zatwierdzane; trwajace
+transfery zatrzymuja sie po biezacym kawalku (zwykle w ulamku sekundy, najpozniej z limitem
+czasu odpowiedzi serwera) i dopiero potem komenda sie konczy. Wersje zatwierdzone przed
+przerwaniem zostaja (kazda powstaje atomowo). Po SIGKILL i po drugim SIGTERM (pierwszy
+przywraca domyslna reakcje) sprzatania nie ma: katalog roboczy zostaje, a usuwa go zapis do
+tego segmentu po 24 godzinach. Serwer MCP (`kartograf-mcp`) nie przechwytuje SIGTERM: sygnal
+konczy proces od razu, bez sprzatania (zamkniecie stdin konczy go po biezacych wywolaniach).
+
+`failed[].kind` w `kartograf-download/1` ma te same nazwy co kody błędów danych:
+`no_coverage` (źródło nie ma danych: arkusz, kafle, wycinek), `year_out_of_range`
+(dane są, ale poza przedziałem lat), `download` (sieć, serwer) i `country`
+(część `--country auto` zawiodła z innej przyczyny). Ten sam stan danych, który
+biblioteka zgłasza wyjątkiem (`NoCoverageError`, `YearRangeError`, np. przy
+`check_data` albo LAZ `--sheet`), jest w raporcie pobrania `kind` jednostki.
 
 Dokument `kartograf-error/1` ma klucze `code`, `message`, `hint`, `exception`, `exit_code`,
 `command` i `details`:
@@ -3325,10 +3493,10 @@ znajomosci funkcji per produkt:
 
 | Funkcja | Rola |
 |---|---|
-| `parse_command(argv)` | linia polecenia (lista slow albo napis, takze z poczatkowym `kartograf`, tak jak ja pisze `format_command`) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to flagi uruchomienia (`output_dir`, `update`..., `workers`, `plan`, `json`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
+| `parse_command(argv)` | linia polecenia (lista slow albo napis, takze z poczatkowym `kartograf`, tak jak ja pisze `format_command`) -> `CommandCall(command, options, run)`: `options` to postac JSON opcji zadania (jak w `kartograf-project.json`, `bbox` zawsze z `bbox_crs`), `run` to pozostale flagi linii pod nazwami parametrow (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`, `quiet`, `json`, `summary`; nie ma klucza `update`); blad skladni to `UsageError`, komenda spoza komend danych `ValidationError(option="command")` |
 | `validate_command(command, options, output_dir=None)` | walidacja bez sieci i bez zapisu tymi samymi regulami co pobranie: `ValidationError` z `option`/`allowed` |
 | `format_command(command, options, run=None)` | kanoniczna linia `kartograf <grupa> <komenda> --flaga ...` (odwrotnosc `parse_command`) |
-| `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | wywoluje funkcje komendy (`download_data`, ...), wynik jak ta funkcja: `kartograf-download/1` |
+| `run_command(command, options, output_dir=, update=, plan=, workers=, summary=, cache=, on_progress=, on_notice=)` | wywoluje funkcje komendy (`download_data`, ...), wynik jak ta funkcja: `kartograf-download/1`; tryb to `update="upgrade"` albo `"force"` (z `run` robi go wywolujacy: `upgrade`/`force` -> `update`, `check_updates` -> `check_command`) |
 | `check_command(command, options, output_dir=, cache=, on_notice=)` | `check_*` komendy: `kartograf-plan/1` (bez pobierania) |
 
 ```python

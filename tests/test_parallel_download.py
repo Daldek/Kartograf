@@ -22,9 +22,10 @@ from kartograf.download.manager import (
     DownloadResult,
 )
 from kartograf.download.storage import FileStorage
-from kartograf.exceptions import DownloadError
+from kartograf.exceptions import DownloadError, ValidationError
 from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.pl.gugik import GugikProvider
+from tests.interrupt_fakes import FirstThenTransfer, ctrl_c
 
 
 class TestDownloadResult:
@@ -169,6 +170,39 @@ class TestParallelDownloadHierarchy:
         failed = [p for p in progress_calls if p.status == "failed"]
         assert len(failed) == 1
 
+    def test_ctrl_c_downloads_and_commits_no_sheet_after_it(
+        self, tmp_path, mock_provider
+    ):
+        """Ctrl-C with several workers (e2e-B P2-1): the queued sheets are not
+        downloaded and the running ones are stopped, not committed - the
+        sheet that ended before the interrupt stays."""
+        transfers = FirstThenTransfer()
+
+        def download(sheet, path, timeout=30):
+            transfers.begin(sheet)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"ASC data")
+            return path
+
+        mock_provider.download = download
+        manager = DownloadManager(
+            output_dir=tmp_path, provider=mock_provider, workers=2
+        )
+
+        def ctrl_c_when_a_sheet_ended(progress):
+            if progress.status == "completed":
+                raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            manager.download_hierarchy(
+                "N-34-130-D-d", "1:10000", on_progress=ctrl_c_when_a_sheet_ended
+            )
+
+        assert len(transfers.calls) <= 3  # 16 sheets, 2 workers
+        versions = [p for p in tmp_path.rglob("*.asc") if "versions" in p.parts]
+        assert len(versions) == 1
+        assert [p for p in tmp_path.rglob("*") if ".incoming" in p.parts] == []
+
     def test_parallel_download_skip_existing(self, tmp_path, mock_provider):
         """Test that parallel download skips existing files correctly."""
         manager = DownloadManager(
@@ -214,12 +248,11 @@ class TestParallelDownloadHierarchy:
         assert len(progress_calls) >= 4
 
     @pytest.mark.parametrize("count", [0, -5])
-    def test_workers_init_minimum_1(self, tmp_path, mock_provider, count):
-        """Invalid worker counts cannot disable downloads."""
-        manager = DownloadManager(tmp_path, provider=mock_provider, workers=count)
-        result = manager.download_sheet("N-34-130-D-d-2-4")
-        assert len(result.succeeded) == 1
-        assert result.succeeded[0].exists()
+    def test_workers_below_1_rejected(self, tmp_path, mock_provider, count):
+        """A worker count below 1 is an input error (not silently one worker)."""
+        with pytest.raises(ValidationError, match="workers musi byc >= 1") as error:
+            DownloadManager(tmp_path, provider=mock_provider, workers=count)
+        assert error.value.option == "workers"
 
 
 class TestDownloadHierarchyResult:
@@ -516,6 +549,39 @@ class TestLandCoverParallelDownload:
         with pkg, prg:
             manager.download(teryt="1465", on_progress=events.append)
         assert events == []
+
+    def test_ctrl_c_downloads_and_commits_no_powiat_after_it(self, tmp_path):
+        """Ctrl-C with several workers (e2e-C P2-5: 12 powiats were committed
+        after it): the powiat that ended before the interrupt stays, the running
+        ones stop and the queued ones are never started."""
+        from kartograf.providers.pl.bdot10k import Bdot10kPackage, Bdot10kProvider
+
+        provider = Bdot10kProvider()
+        teryts = ["0616", "1261", "1465", "2401", "2405", "2408", "2413", "2462"]
+        transfers = FirstThenTransfer()
+
+        def package(code, output_path, **kwargs):
+            transfers.begin(code)
+            output_path.write_bytes(f"data-{code}".encode())
+            return Bdot10kPackage(path=output_path, teryt=code, url="u", format="GPKG")
+
+        def ctrl_c_when_a_powiat_ended(progress):
+            if progress.status == "completed":
+                ctrl_c()
+
+        with (
+            patch.object(provider, "download_package", side_effect=package),
+            patch.object(provider, "teryts_for_area", return_value=teryts),
+            pytest.raises(KeyboardInterrupt),
+        ):
+            LandCoverManager(tmp_path, provider).download(
+                bbox=self.BBOX, workers=2, on_progress=ctrl_c_when_a_powiat_ended
+            )
+
+        assert len(transfers.calls) <= 3  # 8 powiats, 2 workers
+        versions = [p for p in tmp_path.rglob("*.gpkg") if "versions" in p.parts]
+        assert len(versions) == 1
+        assert [p for p in tmp_path.rglob("*") if ".incoming" in p.parts] == []
 
 
 class TestCLIWorkersFlag:

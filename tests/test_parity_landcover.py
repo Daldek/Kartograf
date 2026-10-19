@@ -36,7 +36,16 @@ CLAY_ARGS = ["--property", "clay", "--depth", "0-5cm", "--stat", "mean"]
 # layers 93 (2 lines), 132 (no features) and 138 (3 polygons, pages of 2)
 ZABAGED_ARGS = ["--bbox=-451000,-1112000,-450500,-1111500", "--bbox-crs", "EPSG:5514"]
 
-pytestmark = pytest.mark.usefixtures("frozen_clock")
+pytestmark = pytest.mark.usefixtures("frozen_clock", "_no_package_sizes")
+
+
+@pytest.fixture
+def _no_package_sizes(monkeypatch):
+    """The volume check of a BDOT10k area asks the size of every package (HEAD):
+    not known here (the transfers are faked)."""
+    monkeypatch.setattr(
+        "kartograf.download.collections._head_length", lambda session, url: None
+    )
 
 
 def _same(run, notices: tuple[Notice, ...], ok: bool) -> None:

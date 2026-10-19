@@ -22,13 +22,17 @@ class Edition:
 
     ``id`` is the version label (D29), ``url`` the metadata request,
     ``title`` the raw SoilGrids ``ows:Title``, ``dataset_uid`` the CLMS
-    dataset UID of CORINE.
+    dataset UID of CORINE. ``source_property`` names the SoilGrids property
+    whose map announced the edition when it is not the property of the file
+    (``ocd``: its own map names no edition, so ``url`` and ``title`` are the
+    ``clay`` map's); ``None`` = the file's own map.
     """
 
     id: str
     url: str
     title: str | None = None
     dataset_uid: str | None = None
+    source_property: str | None = None
 
     def to_extra(self) -> dict[str, Any]:
         """``extra.edition`` of the version sidecar (``None`` fields skipped)."""
@@ -37,6 +41,7 @@ class Edition:
             "url": self.url,
             "title": self.title,
             "dataset_uid": self.dataset_uid,
+            "source_property": self.source_property,
         }
         return {k: v for k, v in fields.items() if v is not None}
 

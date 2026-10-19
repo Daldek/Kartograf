@@ -30,7 +30,6 @@ Example::
 """
 
 from collections.abc import Callable, Iterator
-from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -42,7 +41,7 @@ from kartograf.core.bbox import bbox_coords
 from kartograf.core.coverage import Polygon
 from kartograf.core.sheet_parser import BBox, SheetParser
 from kartograf.download.area import bbox_to_2180
-from kartograf.download.arguments import require_bool, require_int
+from kartograf.download.arguments import require_bool, require_int, require_workers
 from kartograf.download.fetch import (
     FileSlot,
     UpdateMode,
@@ -64,6 +63,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.notices import LAZ_SUPERSEDED, TILES, Notice, NoticeSink, count_text
 from kartograf.providers.pl.gugik_laz import (
     COVERAGE_TOLERANCE_M,
@@ -82,6 +82,25 @@ NO_TILES_MESSAGE = (
     "Brak kafli LAZ dla podanego obszaru (sprawdz obszar, --year, "
     "--min-year, --max-year i --vertical-crs; wszystkie roczniki WFS odpowiedzialy)"
 )
+
+
+def no_tiles_message(selection: LazTileSelection, min_density: int | None) -> str:
+    """The text of an empty tile selection. When ``--min-density`` dropped the
+    tiles of the area, the filter is named with the best density the area
+    has (an empty answer of the WFS says ``NO_TILES_MESSAGE``)."""
+    if min_density is None or not selection.below_density:
+        return NO_TILES_MESSAGE
+    densities = [t.density for t in selection.below_density if t.density is not None]
+    best = (
+        f"najwyzsza gestosc nominalna {max(densities)} pkt/m2"
+        if densities
+        else "kafle nie podaja gestosci nominalnej"
+    )
+    return (
+        f"Brak kafli LAZ dla podanego obszaru: --min-density {min_density} "
+        f"odrzucilo {count_text(len(selection.below_density), *TILES)} obszaru "
+        f"({best}) - obniz albo pomin --min-density"
+    )
 
 
 @dataclass(frozen=True)
@@ -149,7 +168,9 @@ def write_laz_sidecar(
 ) -> None:
     """Write the mandatory LAZ version sidecar exclusively via ``emit_sidecar``.
 
-    ``request`` describes the bbox and requested year/density bounds (E16).
+    ``request`` describes the area (``bbox``: the EPSG:2180 query window - not
+    the extent of the tile, which the store reader takes from the LAS header,
+    its unit from ``extra.tile_sheet``) and requested year/density bounds (E16).
     ``all_campaigns=False`` selects the newest flight within year bounds;
     True selects every flight within them without coverage deduplication and
     records ``"all"`` in the sidecar's ``request.campaigns`` field.
@@ -328,10 +349,12 @@ def _run_laz_download(
     if on_progress is not None:
         on_progress(0, total)
     if workers > 1 and total > 1:
-        with ThreadPoolExecutor(max_workers=workers) as executor:
-            futures = [executor.submit(fetch, tile) for tile in tiles]
-            for future in as_completed(futures):
-                record(future.result())
+        run_parallel(
+            fetch,
+            tiles,
+            workers=workers,
+            on_done=lambda _ended, _tile, outcome: record(outcome),
+        )
     else:
         for tile in tiles:
             record(fetch(tile))
@@ -440,7 +463,7 @@ def _selected(
         )
         _emit_superseded(sink, selection.superseded)
         if not selection.tiles:
-            raise NoCoverageError(NO_TILES_MESSAGE)
+            raise NoCoverageError(no_tiles_message(selection, min_density))
         yield provider, selection, area
 
 
@@ -611,7 +634,7 @@ def download_laz_area(
     """
     bbox = _validate_area(bbox, sheet)
     validate_update(update, check="check_laz_area")
-    require_int(workers, "workers")
+    require_workers(workers, "workers")
     sink = NoticeSink(on_notice)
     with _selected(
         bbox,

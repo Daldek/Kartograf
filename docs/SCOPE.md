@@ -435,7 +435,7 @@ kartograf project status                   # istnienie i rozmiar, bez czytania d
 kartograf project verify                   # SHA-256 plikow i sidecarow
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
 kartograf catalog --json                   # katalog komend (grupy, komendy, parametry, dozwolone wartości, przykłady); get_catalog() (ADR-046)
-kartograf elevation availability --product nmt --sheet <godlo> --json # --json w każdej komendzie: jeden dokument kartograf-<rodzaj>/1, błąd kartograf-error/1, kody wyjścia 0/1/2/130
+kartograf elevation availability --product nmt --sheet <godlo> --json # --json w każdej komendzie: jeden dokument kartograf-<rodzaj>/1, błąd kartograf-error/1, kody wyjścia 0/1/2/130/143
 kartograf-mcp                              # serwer MCP (stdio; extra `kartograf[mcp]`): 29 narzędzi 1:1 z komendami (USAGE 9.6)
 # Pełna lista opcji: kartograf <grupa> <komenda> --help
 ```
@@ -856,7 +856,7 @@ from kartograf import (
 # Ten sam wynik trzema drogami (ADR-046; przewodnik: USAGE 9):
 # - CLI: `--json` w każdej komendzie (37 komend-liści: 36 i `catalog`) — stdout to jeden
 #   dokument `kartograf-<rodzaj>/1` (16 schematów), błąd to `kartograf-error/1` ze stabilnym
-#   `code`, `hint` i kodem wyjścia 0/1/2/130 (błąd wejścia = 2);
+#   `code`, `hint` i kodem wyjścia 0/1/2/130/143 (błąd wejścia = 2);
 # - biblioteka: `to_dict()`/`to_json()` każdego raportu, wyjątki ze stabilnym `code`,
 #   `exit_code` i `hint` (`ValidationError.option`/`allowed`), `error_report`;
 # - serwer MCP `kartograf-mcp` (stdio; opcjonalny extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
@@ -1306,7 +1306,7 @@ kartograf/
     ├── project_cmd.py         # `kartograf project` -> API projektu (ADR-040); `project add` przez parse_command
     ├── cache_cmd.py           # `kartograf cache` -> get_cache_info/get_cache_path/clear_cache
     ├── catalog_cmd.py         # `kartograf catalog` -> get_catalog
-    └── commands.py            # Fasada zgodności — entry point `main` (błędy -> error_report, kody 0/1/2/130)
+    └── commands.py            # Fasada zgodności — entry point `main` (błędy -> error_report, kody 0/1/2/130/143)
 ```
 
 ### 4.2 Zależności
