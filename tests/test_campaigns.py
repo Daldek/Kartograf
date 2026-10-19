@@ -10,6 +10,7 @@ the 7th row (448 B, CRLF); GDAL opens it as a 2131x2399 AAIGrid.
 import dataclasses
 import hashlib
 import io
+import itertools
 import logging
 import re
 import zipfile
@@ -532,8 +533,8 @@ def test_record_year_prefers_aktualnosc_rok():
             2023,
             2024,
             (
-                "--min-year 2023 (rok 2023 i nowsze)",
-                "--max-year 2024 (rok 2024 i starsze)",
+                "--max-year 2025 (z lat 2023-2025)",
+                "--min-year 2019 (z lat 2019-2024)",
             ),
         ),
     ],
@@ -541,6 +542,61 @@ def test_record_year_prefers_aktualnosc_rok():
 def test_year_range_hints_spec_cases(suffixes, min_year, max_year, hints):
     years = {f"N-34-139-C-a-3-{suffix}": _c14_years(suffix) for suffix in suffixes}
     assert year_range_hints(years, min_year, max_year) == hints
+
+
+def _apply_hint(hint, min_year, max_year):
+    """The year bounds after the user follows ``hint``: ``--year Y`` (equal
+    bounds) is replaced by the one-sided flag, a range or one bound has just
+    the named bound changed."""
+    flag, value = hint.split()[:2]
+    value = int(value)
+    if min_year is not None and min_year == max_year:
+        return (value, None) if flag == "--min-year" else (None, value)
+    return (value, max_year) if flag == "--min-year" else (min_year, value)
+
+
+def _year_conflicts():
+    """``(conflicts, min_year, max_year)``: a year range and the sheets whose
+    years all lie outside of it (the sheets of a ``YearRangeError``)."""
+    data = [
+        {"a": (2019,)},
+        {"a": (2025,)},
+        {"a": (2019, 2025)},
+        {"a": (2018, 2019), "b": (2017, 2019)},
+        {"a": (2025, 2026), "b": (2027,)},
+        {"a": (2019, 2025), "b": (2018, 2026)},
+        {"a": (2019,), "b": (2026,)},
+    ]
+    for lo, hi in itertools.product((None, 2020, 2022, 2024), repeat=2):
+        if (lo, hi) == (None, None) or (lo and hi and lo > hi):
+            continue
+        for years in data:
+            conflicts = {
+                sheet: ys
+                for sheet, ys in years.items()
+                if not any(in_year_range(y, lo, hi) for y in ys)
+            }
+            if conflicts:
+                yield pytest.param(conflicts, lo, hi, id=f"{lo}-{hi}-{years}")
+
+
+@pytest.mark.parametrize(("conflicts", "min_year", "max_year"), _year_conflicts())
+def test_a_year_range_hint_changes_the_call_and_finds_data_for_every_sheet(
+    conflicts, min_year, max_year
+):
+    """E2E 0.8.0 N-P3-3: ``--min-year 2023 --max-year 2024`` with data only of 2022
+    got ``--max-year 2024``, a flag the call had and that finds nothing."""
+    for hint in year_range_hints(conflicts, min_year, max_year):
+        proposed = _apply_hint(hint, min_year, max_year)
+        assert proposed != (min_year, max_year), hint
+        for sheet, years in conflicts.items():
+            assert any(in_year_range(y, *proposed) for y in years), (hint, sheet)
+
+
+def test_a_year_range_with_data_only_below_it_is_widened_downwards():
+    """The case of the E2E 0.8.0 report: a range, data only older than it."""
+    hints = year_range_hints({"N-34-130-D-d-2-4": (2022,)}, 2023, 2024)
+    assert [hint.split()[:2] for hint in hints] == [["--min-year", "2022"]]
 
 
 def test_year_range_error_lists_years_and_truncates():
