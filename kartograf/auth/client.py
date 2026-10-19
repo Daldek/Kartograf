@@ -82,6 +82,9 @@ class AuthProxyClient:
         """Initialize proxy client."""
         if not hasattr(self, "_initialized"):
             self._initialized = True
+            self.last_error: str | None = None
+            """Why the last ``proxy_request`` returned ``None`` (the callers
+            put it into their exception: the log line does not reach ``--json``)."""
             self._session = requests.Session()
             atexit.register(self._cleanup)
 
@@ -185,6 +188,7 @@ class AuthProxyClient:
     def _fail_proxy(self, message: str) -> None:
         """Log a startup failure and leave no half-started child behind."""
         logger.error(message)
+        self.last_error = message
 
         proc = AuthProxyClient._proxy_process
         if proc is not None:
@@ -304,6 +308,7 @@ class AuthProxyClient:
         dict or None
             Response with status_code, headers, body.
         """
+        self.last_error = None
         if not self._ensure_proxy():
             return None
 
@@ -321,10 +326,11 @@ class AuthProxyClient:
             if resp.status_code == 200:
                 return resp.json()
             else:
-                logger.error(f"Proxy request failed: {resp.text}")
+                self.last_error = f"Proxy request failed: {resp.text}"
         except requests.RequestException as e:
-            logger.error(f"Proxy request error: {e}")
+            self.last_error = f"Proxy request error: {e}"
 
+        logger.debug(self.last_error)
         return None
 
     def download_file(

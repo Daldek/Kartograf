@@ -1,6 +1,7 @@
 """Tests of the strict transformation policy (kartograf.transform.crs)."""
 
 import math
+import warnings
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -60,6 +61,37 @@ class TestBuildPinnedTransform:
         _, kwargs = mock_cls.call_args
         assert kwargs["allow_ballpark"] is False
         assert kwargs["always_xy"] is True
+
+    def test_missing_grid_warning_of_pyproj_is_not_raised(self):
+        """pyproj's "Best transformation is not available" (a PROJ grid missing on
+        a clean install) is noise for a policy that picks among the available
+        operations; any other warning of the construction still gets through."""
+        group = _mock_group([_mock_transformer(0.5, "op dokladna")])
+
+        def warning_construction(message):
+            def construct(*args, **kwargs):
+                warnings.warn(message, UserWarning, stacklevel=1)
+                return group
+
+            return construct
+
+        grid_message = (
+            "Best transformation is not available due to missing "
+            "Grid(short_name=cz_cuzk_table_-y-x_3_v1710.tif)"
+        )
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")
+            with patch(_GROUP_PATCH, side_effect=warning_construction(grid_message)):
+                pinned = build_pinned_transform(
+                    "EPSG:5514", "EPSG:3045", TransformPolicy()
+                )
+            assert pinned.description == "op dokladna"
+
+            with (
+                patch(_GROUP_PATCH, side_effect=warning_construction("inna uwaga")),
+                pytest.raises(UserWarning, match="inna uwaga"),
+            ):
+                build_pinned_transform("EPSG:5514", "EPSG:3045", TransformPolicy())
 
     def test_empty_group_raises_with_remedy(self):
         """(b) An empty operation list => TransformUnavailableError with a remedy."""
