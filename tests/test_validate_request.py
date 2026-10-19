@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from kartograf.core.bbox import BBox
+from kartograf.download.availability import check_availability
 from kartograf.download.data import download_data, validate_data_request
 from kartograf.exceptions import KartografError, ValidationError
 from kartograf.hydrology.hsg import calculate_hsg, check_hsg, validate_hsg_request
@@ -294,3 +295,134 @@ def test_hsg_validate_request_rejects_depth_and_selection(tmp_path, kwargs, meth
     assert isinstance(got, ValidationError)
     assert validate_hsg_request(output_dir=out, bbox=BBOX_PL, depth="0-5cm") is None
     assert not out.exists()
+
+
+# A point in --geometry (E2E 0.8.0 N-P3-4): its envelope has no area.
+PL_POINT = (566250.0, 243250.0, 2180)
+CZ_POINT = (-450000.0, -1111000.0, 5514)
+
+
+def _point_shapefile(directory: Path, point: tuple[float, float, int]) -> Path:
+    """A shapefile with one point of the CRS ``point[2]``."""
+    import shapefile
+
+    x, y, epsg = point
+    path = directory / f"point_{epsg}.shp"
+    with shapefile.Writer(str(path), shapeType=shapefile.POINT) as writer:
+        writer.field("name", "C", 10)
+        writer.point(x, y)
+        writer.record("a")
+    _write_prj(path.with_suffix(".prj"), epsg)
+    return path
+
+
+NEEDS_AREA = {
+    "pl-nmt-cutout": (
+        PL_POINT,
+        {"product": "nmt", "country": "pl", "cutout": True, **PL_1M}
+        | {"horizontal_crs": "EPSG:2180"},
+    ),
+    "pl-orto-cutout": (
+        PL_POINT,
+        {
+            "product": "orto",
+            "country": "pl",
+            "cutout": True,
+            "horizontal_crs": "EPSG:2180",
+            "coverage": "standard",
+            "resolution": "0.25m",
+        },
+    ),
+    "pl-laz": (
+        PL_POINT,
+        {"product": "laz", "country": "pl", "vertical_crs": "EVRF2007"},
+    ),
+    "auto-nmt-cutout": (
+        PL_POINT,
+        {**AUTO, "product": "nmt", "cutout": True, "horizontal_crs": "EPSG:2180"},
+    ),
+    "cz-nmt-cutout": (
+        CZ_POINT,
+        {
+            "product": "nmt",
+            "country": "cz",
+            "cutout": True,
+            "horizontal_crs": "EPSG:5514",
+            "resolution": "5m",
+            "vertical_crs": "Bpv",
+        },
+    ),
+    "cz-laz": (
+        CZ_POINT,
+        {
+            "product": "laz",
+            "country": "cz",
+            "model": "dmr5g",
+            "vertical_crs": "Bpv",
+        },
+    ),
+}
+
+
+@pytest.mark.parametrize(("point", "kwargs"), NEEDS_AREA.values(), ids=NEEDS_AREA)
+def test_a_point_geometry_is_refused_where_the_track_needs_an_area(
+    tmp_path, point, kwargs
+):
+    """A cutout and the LAZ tiles are made for an area: the point is refused
+    before the network and the error names ``--geometry`` (it named ``bbox``, an
+    option the call never had), the same for the download and the validation."""
+    area = _point_shapefile(tmp_path, point)
+    out = tmp_path / "out"
+    expected = _raised(
+        lambda: download_data(output_dir=out, geometry=area, cache=False, **kwargs)
+    )
+    got = _raised(
+        lambda: validate_data_request(output_dir=out, geometry=area, **kwargs)
+    )
+    assert type(got) is type(expected) and str(got) == str(expected)
+    assert isinstance(got, ValidationError) and got.option == "geometry"
+    assert "--geometry" in str(got)
+    assert not out.exists()
+
+
+def test_a_point_geometry_still_picks_the_sheet_it_lies_in(tmp_path):
+    """Sheets, units and pixels are what a point lies in: no area needed."""
+    area = _point_shapefile(tmp_path, PL_POINT)
+    kwargs = {"product": "nmt", "country": "pl", "sheet_system": "1992", **PL_1M}
+    assert (
+        validate_data_request(output_dir=tmp_path / "out", geometry=area, **kwargs)
+        is None
+    )
+
+
+def test_hsg_refuses_a_point_geometry(tmp_path):
+    area = _point_shapefile(tmp_path, PL_POINT)
+    out = tmp_path / "out"
+    kwargs = {"output_dir": out, "geometry": area, "depth": "0-5cm"}
+    got = _raised(lambda: validate_hsg_request(**kwargs))
+    assert isinstance(got, ValidationError) and got.option == "geometry"
+    for call in (calculate_hsg, check_hsg):
+        expected = _raised(lambda call=call: call(cache=False, **kwargs))
+        assert type(got) is type(expected) and str(got) == str(expected)
+    assert not out.exists()
+
+
+@pytest.mark.parametrize(
+    ("product", "country", "point"),
+    [
+        ("nmt", "pl", PL_POINT),
+        ("laz", "pl", PL_POINT),
+        ("nmt", "cz", CZ_POINT),
+        ("nmt", "auto", PL_POINT),
+    ],
+)
+def test_availability_refuses_a_point_geometry(tmp_path, product, country, point):
+    """The report is about the coverage of an area: a point gave ``obszar 0,00 ha``
+    and ``brak ladu`` for land."""
+    area = _point_shapefile(tmp_path, point)
+    got = _raised(
+        lambda: check_availability(
+            product=product, country=country, geometry=area, cache=False
+        )
+    )
+    assert isinstance(got, ValidationError) and got.option == "geometry"

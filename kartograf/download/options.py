@@ -958,6 +958,37 @@ def validate_request_bbox(bbox: BBox) -> BBox:
     return bbox
 
 
+def geometry_area_error(envelope: BBox, what: str) -> ValidationError:
+    """The refusal of a ``--geometry`` without an area (``option="geometry"``):
+    ``what`` is the track that needs one (``wycinek (--cutout)``)."""
+    coords = tuple(
+        float(value)
+        for value in (envelope.min_x, envelope.min_y, envelope.max_x, envelope.max_y)
+    )
+    return ValidationError(
+        "--geometry: obwiednia obiektow ma zerowa powierzchnie (punkt albo linia "
+        f"rownolegla do osi), {coords} w {envelope.crs}; {what} wymaga obszaru - "
+        "podaj wielobok albo --bbox o dodatniej powierzchni",
+        option="geometry",
+    )
+
+
+def require_geometry_area(envelope: BBox, what: str) -> None:
+    """The envelope of a ``--geometry`` has an area, for the tracks that cut,
+    select tiles of or measure the AREA (``what``: a cutout, LAZ tiles, HSG,
+    the availability report). The tracks that pick the sheets, units or pixels
+    a point lies in do not call it - a point is a valid ``--geometry`` there
+    (``--bbox`` of zero area is refused everywhere: ``validate_request_bbox``).
+
+    Raises
+    ------
+    ValidationError
+        ``min == max`` on an axis (``option="geometry"``).
+    """
+    if envelope.min_x == envelope.max_x or envelope.min_y == envelope.max_y:
+        raise geometry_area_error(envelope, what)
+
+
 def validate_area_choice(
     sheet: str | None,
     bbox: BBox | None,

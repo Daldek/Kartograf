@@ -105,6 +105,7 @@ from kartograf.download.options import (
     pl_target_scale,
     reject_campaign_opts_with_cutout,
     require_cz_cutout,
+    require_geometry_area,
     resolve_pl_options,
     validate_request,
 )
@@ -706,6 +707,11 @@ def _dispatch_area(
     With ``filepath`` the PL part works on the file (sheets per feature, not
     the envelope); the bbox recognizes countries and gives ``parent_request``.
     """
+    if filepath is not None and (task.cutout or task.product == "laz"):
+        # a point picks sheets, units or pixels; these two cut or select by AREA
+        require_geometry_area(
+            bbox, "wycinek (--cutout)" if task.cutout else "wybor kafli LAZ"
+        )
     auto = task.country == "auto"
     countries = (
         countries_for_bbox(bbox) if auto else ({"pl": "PL", "cz": "CZ"}[task.country],)
@@ -893,6 +899,8 @@ def _download_geometry(task: SimpleNamespace, run: _Run) -> int:
         bbox = cz_geometry_bbox(
             task.geometry, task.layer, task.horizontal_crs or "EPSG:5514"
         )
+        if task.cutout:
+            require_geometry_area(bbox, "wycinek (--cutout)")
         error = outside_country(bbox, "CZ", flag="--geometry")
         if error is not None:
             raise ValidationError(error, option="geometry")
