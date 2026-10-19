@@ -130,11 +130,14 @@
 >    (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased` w CHANGELOG, jak
 >    `chore(release): poczatek cyklu 0.8.0`). Hydrograf/Hydrolog dostosuja
 >    sie same do zmian lamiacych (CHANGELOG [0.8.0], "Co zrobic").
->    Do sprzatniecia (usuwanie TYLKO za zgoda uzytkownika): worktree
->    i galezie `wt/feat/agent-interface`, `-a`, `-b`, `-mcp`, `-llms`,
->    `-e2e`, `wt/fix/archiwista-store-review`, galaz
->    `feat/archiwista-store-api` (glowny checkout jest na niej - przelaczyc
->    na `develop`); pozostale w pkt 1.
+>    Sprzatanie WYKONANE 2026-10-19 (zgoda uzytkownika): glowny checkout na
+>    `develop`; lokalnie zostaly tylko `develop` i `main`, worktree w
+>    `/home/claude-agent/workspace/wt/` usuniete (wszystkie galezie byly w
+>    `develop`; tresc galezi `wip/*`, stasha `fix/live-0.8.0`
+>    i niezacommitowanych zmian `wt/feat/plan-d-cz-orto` sprawdzona linia po
+>    linii - weszla do `develop` albo zostala zastapiona pozniejszymi
+>    zmianami, np. `cz.cuzk.ortofoto` -> `cz.cuzk.orto`). Na `origin` sa
+>    tylko `develop` i `main`.
 > 1. **Nastepne kroki:** podprojekt 4 (wtyczka QGIS) roadmapy
 >    (`docs/SCOPE.md` 3.3) - od brainstormingu i specu. Podprojekt 5 (GUI
 >    webowe) ZASTAPIONY osobnym projektem **Archiwista**
@@ -158,12 +161,8 @@
 >    i kampanii w `AvailabilityCombination`, `full_m2`; SPEC Archiwisty
 >    6.4 i 12.4). Pozostale pozycje: backlog
 >    nizej (m.in. VKM CZ, CLMS na zywo).
->    Sprzatanie (czeka na zgode uzytkownika): ok. 30 worktree i galezi
->    roboczych cyklu 0.8.0 w `/home/claude-agent/workspace/wt/`
->    (`feat/`, `fix/`, `docs/`, `wip/`, `release/0.8.0`; `git worktree list`,
->    `git branch --merged develop`); wszystkie scalone do `develop` poza
->    galeziami `wip/*` (ich tresc weszla przez pozniejsze commity).
->    Usuwanie galezi na `origin` tylko za zgoda uzytkownika.
+>    Nowe worktree subagentow: `/home/claude-agent/workspace/wt/<galaz>`
+>    (pkt 3); po scaleniu usuwac je razem z galezia.
 > 2. **CLMS_CREDENTIALS odlozone** (decyzja uzytkownika 2026-10-12):
 >    pobranie CLMS niesprawdzone na zywo (backlog razem z CLMS 1990).
 >    Stara, rozjechana `feat/versioned-store` na `origin`: push
