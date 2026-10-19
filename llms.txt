@@ -64,7 +64,8 @@ Aktualnosc lokalnych wersji i zrodla z rejestru:
 ```
 kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 --output /dane/kartograf --check-updates --json
 kartograf elevation list-sources --json
-kartograf landcover list-layers --json
+kartograf landcover list-layers --product bdoo --json
+kartograf soil list-layers --json
 ```
 
 Projekt (zadania i przypiete wersje; polecenia w katalogu projektu, `--json` przed nazwa zadania):
