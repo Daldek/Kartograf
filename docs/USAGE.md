@@ -172,8 +172,9 @@ Siatki ASC (bez `--format`; format produktu):
 
 - `--resolution` przyjmuje tylko dokładne etykiety z rejestru: `0,5m`
   albo `50cm` to `Error: PL nie ma rozdzielczosci 0,5m dla NMT - dostepne:
-  EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m`. Etykieta
-  jest członem segmentu: `nmt/pl_1992_0.5m_evrf2007/`.
+  EVRF2007: 0.15m, 0.5m, 0.6m, 1m, 5m, 10m; KRON86: 0.5m, 1m; uklad
+  wysokosci nieznany: 100m`. Etykieta jest członem segmentu:
+  `nmt/pl_1992_0.5m_evrf2007/`.
 - `--product nmpt` wymaga `--resolution` (do 0.7.x NMPT było tylko
   1 m): bez flagi `Error: --resolution wymagane dla NMPT PL: EVRF2007:
   0.5m, 0.6m, 1m; KRON86: 0.5m, 1m` (kod 2, przed siecią) — dotychczasowe
@@ -192,7 +193,10 @@ ZIP), `TBD` (punkty i linie struktury, ZIP), `TIN` (ESRI TIN, ZIP),
 `TTN` (Intergraph TTN), `GRD` (Intergraph GRD), `DXF` i `DGN`
 (warstwice); NMPT ma archiwa `XYZ` 0.5m i 1m w KRON86. Rozdzielczości
 i układy wysokości archiwów (np. TBD 1–25 m w obu układach, 30–50 m
-tylko KRON86): `kartograf elevation list-sources`.
+tylko KRON86): `kartograf elevation list-sources`. Godła 8-członowe PL-1992
+(ćwiartki arkusza 7-członowego, np. `N-34-50-A-c-3-2-3`, etykieta skali
+`1:5000`; m.in. arkusze `ASCII-NMT` 10 m i część arkuszy ASC 1 m) podaje się
+w `--sheet` jak każde godło (od 0.8.0, ADR-043 D10).
 
 - Plik trafia do magazynu jak arkusz siatki (wersje w `versions/`,
   sidecar, kampanie, `full_sheet/`), bez konwersji, wycinka i mozaiki;
@@ -1121,8 +1125,8 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
   ma rocznika ... - dostepne roczniki: ...`.
 - **`Info:`** (kod `index_unsupported` w bibliotece) wymienia rekordy
   obszaru, których Kartograf nie pobiera: format rekordu niezgodny
-  z plikiem, wariant spoza rejestru albo godło spoza układów PL-1992/PL-2000
-  (np. 8-członowe godła ASCII NMT 10 m i części ASC 1 m, sekcja 7).
+  z plikiem, format albo wariant spoza rejestru, godło spoza układów
+  PL-1992/PL-2000 albo brak adresu `https` lub układu współrzędnych.
   Archiwa z rejestru nie trafiają do `Info:` — są kombinacjami.
 - **Cache:** typy warstw WFS, rekordy obszaru z obrysami arkuszy i maska
   lądu PRG, a dla CZ arkusze indeksu i wyniki `HEAD` plików trafiają do
@@ -1389,7 +1393,7 @@ w `landcover` oraz NMT 100 m (pliki województw obszaru).
 ```bash
 kartograf models3d download --product trees --country pl --bbox 560000,240000,575000,250000 -o ~/kartograf-data
 #   Info: trees: powiaty obszaru wg PRG (2): 1206, 1261
-#   Error: trees: obszar daje 2 plikow do pobrania, razem ok. 13,7 GB wg HEAD - limit jednego zadania to 100 plikow i 10 GB. Zawez obszar (--bbox, --sheet, --geometry), wybierz jednostke (--teryt <4 cyfry>) albo wykonaj plan z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan PLIK)
+#   Error: trees: obszar daje 2 pliki do pobrania, razem ok. 13,7 GB wg HEAD - limit jednego zadania to 100 plikow i 10 GB. Zawez obszar (--bbox, --sheet, --geometry), wybierz jednostke (--teryt <4 cyfry>) albo wykonaj plan z czescia pozycji (--check-updates --plan PLIK, potem --upgrade --plan PLIK)
 ```
 
 ### 1.9 Dane CZ: ZABAGED, Data50, Data250, RUIAN i HY-NET
@@ -2299,7 +2303,8 @@ pozycje planu, `notices` komunikaty o danych przekazywane rowniez przez
 - `VersionedFile`: `path` (ścieżka standardowa = hardlink), `status`
   (`new`/`unchanged`/`relabeled`/`local`, dla HSG także `reused`), `label`, `sha256`,
   `version_path`, `newer` (źródło ma nowszą treść, tryb domyślny),
-  `unverified` (`"none"` — brak taniego sygnału, `"check_failed: ..."`).
+  `unverified` (`"unchecked"` — tryb domyślny nie pytał źródła o lokalną wersję,
+  `"none"` — brak taniego sygnału, `"check_failed: ..."`).
   `file` wyników jednoplikowych jest `None` tylko z `plan=`, gdy plan nie
   wykonuje tego pliku i nie ma wersji lokalnej.
 
@@ -2366,7 +2371,7 @@ Szczegóły trybów: sekcja 4.3.
   inaczej cale zadanie konczy sie bledem bez pobran. Bez lokalnej wersji,
   z `--upgrade` albo `--force` blad konczy pobranie porazka. Biblioteka:
   `DownloadResult.unverified` (tresc bledu transportu) i `notices` z kodem
-  `UNVERIFIED_LOCAL`.
+  `CHECK_FAILED`.
 - **Wymagane hardlinki:** ścieżka standardowa to dowiązanie twarde do pliku
   wersji (ten sam plik na dysku, bez dodatkowego miejsca); Kartograf nie
   tworzy symlinków ani kopii. System plików bez hardlinków (exFAT/FAT,
@@ -2519,7 +2524,7 @@ Dotyczy każdego toru `kartograf elevation download` i `kartograf imagery downlo
 kafli LAZ (PL i CZ), arkuszy CZ (TM33, SM5; ortofoto CZ), wycinków CZ i wycinków PL
 `--cutout` (także ortofotomapy), a także `landcover download`, `soil download`, `soil hsg`
 oraz `boundaries download`, `cadastre download`, `models3d download`,
-`hydro download`, `names download` i `maps download`. Flagi
+`hydro download`, `names download`, `maps download` i `geodesy download`. Flagi
 wykluczają się wzajemnie. Tabela niżej opisuje arkusze PL (sygnał:
 skorowidz); pozostałe tory różnią się sygnałem. Bez `--check-updates`
 i `--upgrade` plik z lokalną wersją jest używany **bez zapytania
@@ -2783,9 +2788,6 @@ proxy).
   danych, a raport nie mierzy treści plików (sekcja 1.7). W CZ sprawdza
   tylko istnienie plików (`HEAD`), nie zna lat nalotu, a `area_m2` części
   CZ to prostokąt, nie ląd.
-- Godła 8-członowe PL-1992 (wszystkie arkusze ASCII NMT 10 m i część
-  arkuszy ASC 1 m w skorowidzu GUGiK) są poza układem godeł Kartografu:
-  nie są pobierane, a raport dostępności wymienia je w `Info:`.
 - Raport dostępności rasteryzuje ląd obszaru na siatce 1 m (pasy po
   4 Mpx): dla dużych obszarów liczy się długo, ponowny raport tego
   samego obszaru korzysta z cache metadanych (sekcja 1.7).
