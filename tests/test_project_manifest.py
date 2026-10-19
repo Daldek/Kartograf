@@ -194,6 +194,23 @@ def test_missing_manifest_names_the_directory(tmp_path):
     assert str(caught.value).startswith(f"brak projektu w {tmp_path} ")
 
 
+def test_bom_of_an_editor_is_accepted_and_not_written_back(project):
+    """E2E 0.8.0 P3-15: Notepad & co. save JSON with a BOM."""
+    path = project / MANIFEST_NAME
+    path.write_bytes(b"\xef\xbb\xbf" + path.read_bytes())
+    read, state = read_manifest(project)
+    assert [task.name for task in read.tasks] == ["teren", "pokrycie"]
+    assert commit_tasks(project, {"pokrycie": (state["pokrycie"], None)}) == ()
+    assert not path.read_bytes().startswith(b"\xef\xbb\xbf")
+
+
+def test_project_given_as_the_manifest_file_names_the_directory_to_give(project):
+    with pytest.raises(ValidationError) as caught:
+        read_manifest(project / MANIFEST_NAME)
+    assert f"--project {project}" in str(caught.value)
+    assert f"{MANIFEST_NAME}/{MANIFEST_NAME}" not in str(caught.value)
+
+
 def _pinned(task: dict, label: str) -> dict:
     changed = copy.deepcopy(task)
     changed["files"][0]["label"] = label

@@ -3,6 +3,7 @@
 
 import json
 import os
+import shutil
 from datetime import UTC, datetime
 from pathlib import Path
 from unittest.mock import patch
@@ -12,6 +13,7 @@ import pytest
 from kartograf import (
     add_project_task,
     download_project,
+    get_project_status,
     open_project,
     remove_project_task,
     verify_project,
@@ -51,7 +53,7 @@ from tests.project_fixtures import (
 from tests.test_cli import _cz_provider_mock
 from tests.test_hsg import RasterSoilGrids
 from tests.test_landcover_output_params import FakePackages
-from tests.test_manager_campaigns import REC, FakeCampaignProvider
+from tests.test_manager_campaigns import C14, REC, FakeCampaignProvider
 from tests.test_parity import _sheet_0_5m_session
 from tests.test_validate_request import _shapefile
 
@@ -562,6 +564,90 @@ def test_force_same_content_keeps_pin_new_content_repins(tmp_path, monkeypatch):
     (new,) = changed.project.tasks[0].files
     assert result.outcome == "updated" and result.unpinned == (old,)
     assert new.sha256 != old.sha256 and new.label == "2026-11-03"
+
+
+def _corrupt_pinned_pl(tmp_path: Path, damage: str):
+    """A pinned PL sheet whose version file (also the standard path: the same
+    inode) is damaged: ``flip`` keeps its size, ``truncate`` does not."""
+    project = _pinned_pl(tmp_path)
+    store = project / "data"
+    (pin,) = open_project(project).tasks[0].files
+    version, standard = store / pin.version, store / pin.path
+    good = version.read_bytes()
+    bad = good[:-1] + bytes([good[-1] ^ 1]) if damage == "flip" else good[:-5]
+    version.write_bytes(bad)
+    return project, pin, version, standard, good, bad
+
+
+@pytest.mark.parametrize("damage", ["flip", "truncate"])
+def test_force_repairs_a_corrupt_pinned_version(tmp_path, damage):
+    """E2E 0.8.0 P3-1: ``--force`` took the same bytes for 'bez zmian' and left
+    the corrupt version; it sets it aside and makes it again, pin unchanged."""
+    project, pin, version, standard, good, bad = _corrupt_pinned_pl(tmp_path, damage)
+    manifest = _manifest_bytes(project)
+    assert not verify_project(project).ok
+
+    with pl_sheets():
+        report = download_project(project, update="force")
+
+    assert report.ok and [t.outcome for t in report.tasks] == ["restored"]
+    assert report.tasks[0].pinned == (pin,)
+    assert _manifest_bytes(project) == manifest
+    assert verify_project(project).ok
+    assert version.read_bytes() == standard.read_bytes() == good
+    assert os.path.samefile(version, standard)
+    (aside,) = (p for p in version.parent.parent.iterdir() if p.name.startswith("."))
+    assert aside.name.startswith(f".{version.parent.name}.corrupt-")
+    assert (aside / version.name).read_bytes() == bad  # nothing was deleted
+
+
+def test_force_leaves_intact_versions_alone(tmp_path):
+    project = _pinned_pl(tmp_path)
+    with pl_sheets():
+        report = download_project(project, update="force")
+    assert report.tasks[0].outcome == "unchanged"
+    assert not list((project / "data").rglob(".*corrupt*"))
+
+
+def test_force_without_a_source_leaves_the_repair_to_the_next_download(tmp_path):
+    project, pin, version, _, good, _ = _corrupt_pinned_pl(tmp_path, "flip")
+    manifest = _manifest_bytes(project)
+    unreachable = FakeCampaignProvider(C14, fail_urls={C14["newest"][0].url})
+    with pl_sheets(unreachable):
+        report = download_project(project, update="force")
+    assert not report.ok and report.tasks[0].outcome == "failed"
+    assert _manifest_bytes(project) == manifest
+    assert [f.status for f in get_project_status(project).files] == ["missing"]
+
+    with pl_sheets():
+        report = download_project(project)
+    assert report.tasks[0].outcome == "restored"
+    assert verify_project(project).ok and version.read_bytes() == good
+
+
+def test_force_never_moves_a_version_that_lies_outside_the_store(tmp_path):
+    project, pin, version, _, _, bad = _corrupt_pinned_pl(tmp_path, "flip")
+    hierarchy = version.parent.parent  # versions/<hierarchy>, holds <label>_<sha8>
+    outside = tmp_path / "poza"
+    shutil.move(hierarchy, outside)
+    hierarchy.symlink_to(outside, target_is_directory=True)
+    with pl_sheets():
+        report = download_project(project, update="force")
+    (result,) = report.tasks
+    assert result.outcome == "failed" and "wykracza poza magazyn" in result.errors[0]
+    assert (outside / version.parent.name / version.name).read_bytes() == bad
+    assert not list(outside.glob(".*corrupt*"))
+
+
+@pytest.mark.parametrize("damage", ["flip", "truncate"])
+def test_status_and_verify_offer_the_repair_of_a_corrupt_version(tmp_path, damage):
+    """Both ways to find damage (size: ``status``; bytes: ``verify``) say how
+    to repair it: the command that works (``test_force_repairs...``)."""
+    project, *_ = _corrupt_pinned_pl(tmp_path, damage)
+    (check,) = (
+        get_project_status(project) if damage == "truncate" else verify_project(project)
+    ).files
+    assert check.status == "corrupt" and "--force teren" in check.detail
 
 
 def test_upgrade_adds_and_removes_files(tmp_path):

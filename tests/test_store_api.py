@@ -13,6 +13,7 @@ from pathlib import Path
 
 import pytest
 
+from kartograf.core.parser_registry import path_parts
 from kartograf.download.fetch import fetch_version
 from kartograf.download.links import ensure_link
 from kartograf.download.storage import content_segment, token_segment, unit_slot
@@ -970,6 +971,51 @@ def test_unit_of_a_national_file_round_trips_into_scoped_scan(
     found = list(iter_store(root, segment=segment, units=[unit]))
     assert {(e.kind, e.path) for e in found} == {("link", link), ("version", version)}
     assert other not in {e.path for e in found}
+
+
+@pytest.mark.parametrize("key", ["tile_sheet", "godlo_kafla"])
+def test_unit_of_a_laz_tile_is_the_tile_not_the_area_and_round_trips(tmp_path, key):
+    """E2E 0.8.0 P2-2: a LAZ tile selected for an area keeps the area in
+    ``request.bbox`` (0.7.x and 0.8.0 sidecars, ``godlo_kafla`` before ADR-031);
+    its unit is the tile and finds the tile again, not another tile's files."""
+    root = tmp_path / "data"
+    segment = "laz/pl_1992_evrf2007"
+    tile, other = "M-34-64-D-d-1-4-4-1", "M-34-64-D-d-1-4-4-2"
+    area = {"bbox": [566000, 243000, 566100, 243100], "bbox_crs": "EPSG:2180"}
+    found = {}
+    for code in (tile, other):
+        hierarchy = "/".join(path_parts(code))
+        name = f"83134_1728146_{code}.laz"
+        version_dir = root / segment / "versions" / hierarchy / f"2025_{SHA[:8]}"
+        version = _data(
+            version_dir / name,
+            request=area,
+            extra={"version": {"label": "2025", "label_source": "campaign"}, key: code},
+            dataset="pl.gugik.laz",
+        )
+        found[code] = (version, _linked(root / segment / hierarchy / name, version))
+    version, link = found[tile]
+
+    unit = read_sidecar(link).unit
+    assert unit == tile
+    entries = list(iter_store(root, segment=segment, units=[unit]))
+    assert {(e.kind, e.path) for e in entries} == {("link", link), ("version", version)}
+
+
+def test_unit_of_a_ztm_sheet_of_digits_only_round_trips_into_scoped_scan(tmp_path):
+    """The ZTM 1:100000 sheet ``0510`` looks like a TERYT; in a segment of
+    sheets it is the sheet (found by an audit of the E2E stores)."""
+    root = tmp_path / "data"
+    segment = "maps/cz_ztm_100000_sjtsk_pdf"
+    request = {"sheet": "0510"}
+    version = _version(root, segment, "0510", "2026", "0510.pdf", request=request)
+    link = _linked(root / segment / "0510" / "0510.pdf", version)
+    _version(root, segment, "0607", "2026", "0607.pdf", b"another sheet")
+
+    unit = read_sidecar(link).unit
+    assert unit == "0510"
+    entries = list(iter_store(root, segment=segment, units=[unit]))
+    assert {(e.kind, e.path) for e in entries} == {("link", link), ("version", version)}
 
 
 @pytest.mark.parametrize("unit", ["versions", "full_sheet", "kampanie", "x" * 300])

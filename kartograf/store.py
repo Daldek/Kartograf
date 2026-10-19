@@ -71,7 +71,9 @@ class Sidecar:
     ``coverage`` (valid-cell share 0..1) and ``unit`` (the unit of the
     request: TERYT, KU, sheet, tile, ``<coords>`` or the country code; for
     a national file of a theme the file stem ``<code>_<theme>``, e.g.
-    ``pl_miejscowosci``). ``unit`` can be passed to ``iter_store(units=...)``
+    ``pl_miejscowosci``; for a LAZ tile - also one selected for an area or
+    a sheet request, whose ``request.bbox`` is that area - its tile code
+    ``extra.tile_sheet``). ``unit`` can be passed to ``iter_store(units=...)``
     of the file's segment.
 
     Not hashable (``request``/``extra``/``raw`` are dicts); compare with
@@ -255,6 +257,8 @@ _BBOX_UNIT = re.compile(rf"{_COORD}(?:_{_COORD}){{3}}")
 _TERYT = re.compile(r"[0-9]{2,7}")
 _KU = re.compile(r"[0-9]{6}")
 _COUNTRY = re.compile(r"[a-z]{2}(?:_[a-z0-9]+(?:-[a-z0-9]+)*)?")
+# Unit kinds of package channels that are sheet or tile codes, not TERYT/KU.
+_CODE_KINDS = frozenset({"sheet", "tile"})
 # Orthophoto colour variants of GugikOrtoProvider.storage_variant (E12).
 _ORTO_COLORS = {"cir": "CIR", "bw": "B/W"}
 
@@ -333,6 +337,7 @@ def _year(value: Any) -> int | None:
 def _unit(
     request: dict[str, Any] | None,
     source: dict[str, Any],
+    tile_sheet: Any,
     country: str | None,
     stem: str | None,
 ) -> str | None:
@@ -344,6 +349,9 @@ def _unit(
         request.get("sheet"),
         request.get("tile"),
         source.get("sheet"),
+        # A LAZ tile selected for an area keeps that area in ``request.bbox``
+        # (0.7.x-0.8.0 sidecars): its own unit is the tile, never the area.
+        tile_sheet,
     )
     if unit:
         return unit
@@ -462,7 +470,7 @@ def _typed(raw: dict[str, Any], stem: str | None) -> Sidecar:
         edition=edition,
         full_sheet=full_sheet,
         coverage=_number(extra_data.get("coverage")),
-        unit=_unit(request, source, country, stem),
+        unit=_unit(request, source, extra_data.get("tile_sheet"), country, stem),
         raw=raw,
     )
 
@@ -1358,7 +1366,9 @@ def _unit_slot(
         return tuple(directory), code
     if _BBOX_UNIT.fullmatch(code):
         return ("bbox",), code
-    if _TERYT.fullmatch(code):
+    # A segment of sheets or tiles only has no TERYT: a bare number there is a
+    # sheet code (the ZTM 1:100000 sheet ``0510``).
+    if _TERYT.fullmatch(code) and not (kinds and kinds <= _CODE_KINDS):
         return ("ku",) if _KU.fullmatch(code) and "ku" in kinds else ("teryt",), code
     if _COUNTRY.fullmatch(code):
         return ("country",), code
