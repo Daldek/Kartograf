@@ -128,7 +128,9 @@ from kartograf.core.sheet_parser import BBox, SheetParser, find_sheets_for_bbox
 from kartograf.download.area import parent_request_for
 from kartograf.download.availability import (
     AvailabilityArea,
+    AvailabilityCampaign,
     AvailabilityCombination,
+    AvailabilityRecord,
     AvailabilityReport,
     check_availability,
 )
@@ -321,6 +323,8 @@ __all__ = [
     "check_availability",
     "AvailabilityReport",
     "AvailabilityCombination",
+    "AvailabilityRecord",
+    "AvailabilityCampaign",
     "AvailabilityArea",
     # Download (NMT)
     "DownloadManager",

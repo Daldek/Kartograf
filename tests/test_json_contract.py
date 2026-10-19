@@ -24,7 +24,9 @@ from kartograf.catalog import get_catalog
 from kartograf.core.bbox import BBox
 from kartograf.download.availability import (
     AvailabilityArea,
+    AvailabilityCampaign,
     AvailabilityCombination,
+    AvailabilityRecord,
     AvailabilityReport,
 )
 from kartograf.download.collections import CollectionReport
@@ -160,7 +162,25 @@ def _combination() -> AvailabilityCombination:
         uncovered_m2=0.0,
         size_bytes=None,
         download_hint=("elevation download --product nmt --sheet " + SHEET,),
+        full_m2=9.0e5,
+        sheet_records=(_record(),),
+        campaign_coverage=(_campaign(),),
     )
+
+
+def _record() -> AvailabilityRecord:
+    return AvailabilityRecord(
+        sheet=SHEET,
+        campaign="83233",
+        acquisition_date="2022-05-10",
+        published="2022-09-01",
+        full_sheet=True,
+        url=f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/{SHEET}.asc",
+    )
+
+
+def _campaign() -> AvailabilityCampaign:
+    return AvailabilityCampaign(campaign="83233", complete=True, full_m2=9.0e5)
 
 
 def _pin() -> PinnedFile:
@@ -713,8 +733,16 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
             "uncovered_m2",
             "size_bytes",
             "download_hint",
+            "full_m2",
+            "sheet_records",
+            "campaign_coverage",
         ],
     ),
+    "AvailabilityRecord": (
+        _record,
+        ["sheet", "campaign", "acquisition_date", "published", "full_sheet", "url"],
+    ),
+    "AvailabilityCampaign": (_campaign, ["campaign", "complete", "full_m2"]),
     "BBoxValue": (lambda: BBox(1, 2, 3, 4, "EPSG:2180"), ["bbox", "crs"]),
     "PinnedFile": (
         _pin,

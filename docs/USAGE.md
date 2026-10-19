@@ -1004,23 +1004,37 @@ zadania. Bez kompletnej kombinacji stopka mówi
 (arkusze niepelne i brakujace: --details)`.
 
 `--details` dopisuje dla każdej kombinacji godła arkuszy niepełnych, ląd
-bez arkuszy i polecenia pobrania (fragment, Pomorze — siatka obszaru ma
-arkusze morskie bez rekordów, więc rastry dostają polecenia `--sheet`):
+bez arkuszy, w PL udział lądu w ramach pełnych arkuszy (tylko kombinacja
+niekompletna; w dół do pełnego procentu, niezerowy poniżej 1% to `<1%`,
+więc niekompletna nigdy nie ma 100%), każdą kampanię osobno (`komplet`,
+gdy jej pełne arkusze same pokrywają ląd, inaczej jej udział), kampanie
+rekordów, które pobierze polecenie podpowiedzi (liczba rekordów na
+kampanię; z `--full-sheet` arkusz ma dwa rekordy), i polecenia pobrania
+(fragment, Pomorze — siatka obszaru ma arkusze morskie bez rekordów, więc
+rastry dostają polecenia `--sheet`):
 
 ```
 Szczegoly kombinacji:
   2025 PL-1992 0.5m EVRF2007 ASC: nie: 4 niepelne
     arkusze niepelne (4): N-33-58-A-c-1-3, N-33-58-A-c-1-4, N-33-58-A-c-2-3, N-33-58-A-c-3-1
+    lad w ramach pelnych arkuszy: 0% (0,00 ha)
+    kampanie: DFT.7201.024.2024 (0%)
+    pobierane rekordy: 4 ark., kampanie: DFT.7201.024.2024 (4)
     kartograf elevation download --product nmt --sheet N-33-58-A-c-1-3 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
     kartograf elevation download --product nmt --sheet N-33-58-A-c-1-4 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
     kartograf elevation download --product nmt --sheet N-33-58-A-c-2-3 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
     kartograf elevation download --product nmt --sheet N-33-58-A-c-3-1 --resolution 0.5m --vertical-crs EVRF2007 --year 2025
   2023 PL-1992 5m EVRF2007 ASC: nie: brak arkuszy dla 0,88 ha
     lad bez zadnego arkusza kombinacji: 0,88 ha
+    lad w ramach pelnych arkuszy: 98% (85,50 ha)
+    kampanie: DFT.7201.002.2023 (98%), DFT.7201.028.2023 (0%)
+    pobierane rekordy: 3 ark., kampanie: DFT.7201.002.2023 (3), DFT.7201.028.2023 (2)
     kartograf elevation download --product nmt --sheet N-33-58-A-c-1-4 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
     kartograf elevation download --product nmt --sheet N-33-58-A-c-2-3 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
     kartograf elevation download --product nmt --sheet N-33-58-A-c-3-1 --resolution 5m --vertical-crs EVRF2007 --year 2023 --full-sheet
   2005 PL-1992 KRON86 TIN: tak
+    kampanie: N-33-020/04 (komplet)
+    pobierane rekordy: 3 ark., kampanie: N-33-020/04 (3)
     kartograf elevation download --product nmt --country pl --bbox 339000,744800,343000,747000 --sheet-system 1992 --format TIN --vertical-crs KRON86 --year 2005
 ```
 
@@ -1034,9 +1048,27 @@ powielania na stderr (kontrakt trybu `--json`: sekcja 9.2). Pola (po
 deskryptora, `year`, `acquisition_dates`, `published`, `campaigns`,
 `horizontal`, `resolution`, `vertical_crs`, `format`, `densities`,
 `complete`, `sheets_full`, `sheets_partial`, `uncovered_m2`,
-`download_hint` — polecenia bez przedrostka `kartograf `), `notices`
-i `ok`. Pola `sheets_missing` i `size_bytes` wypełnia tylko część
-CZ (w PL `[]`/`null`). Początek (Kraków):
+`download_hint` — polecenia bez przedrostka `kartograf `, `full_m2`,
+`sheet_records`, `campaign_coverage`), `notices` i `ok`. `full_m2` to
+ląd w ramach pełnych arkuszy (dolna granica tego, co na pewno ma dane;
+w PL `complete` wtedy i tylko wtedy, gdy `full_m2 == land_m2`), a
+`land_m2 - uncovered_m2` — górna granica. `sheet_records` to rekordy,
+które pobierze polecenie `download_hint` (`sheet`, `campaign`,
+`acquisition_date`, `published`, `full_sheet`, `url`; po arkuszu, od
+najnowszego; NMT/NMPT najnowszy rekord arkusza i — z `--full-sheet` —
+najnowszy pełny, LAZ kafle wyboru pokrycia spośród kafli tej
+kombinacji), `campaign_coverage` — każda kampania osobno (`campaign`,
+`complete`, `full_m2`). **Ograniczenie LAZ:** polecenie pobrania LAZ nie
+ma układu arkuszy, więc wybiera najnowsze kafle obu układów naraz. Gdy
+rok ma kafle w PL-1992 i w PL-2000, `sheet_records` kombinacji może się
+różnić od tego, co jej polecenie zapisze w magazynie (Kraków 2023:
+polecenie kombinacji PL-2000 pobiera kafle PL-1992); dla NMT/NMPT
+`sheet_records` to dokładnie plan pobrania. Pola `sheets_missing`
+i `size_bytes` wypełnia tylko część CZ (w PL `[]`/`null`); w CZ
+`full_m2` to część obszaru w ramach arkuszy z plikiem — kombinacja
+kompletna (każdy arkusz indeksu ma plik) może mieć `full_m2 < land_m2`,
+gdy obszar wychodzi poza arkusze indeksu — a
+`sheet_records`/`campaign_coverage` są puste. Początek (Kraków):
 
 ```json
 {
@@ -1062,7 +1094,15 @@ CZ (w PL `[]`/`null`). Początek (Kraków):
       "complete": true,
       "sheets_full": ["M-34-64-D-d-1-2", "M-34-64-D-d-1-4", "M-34-64-D-d-2-1", "..."],
       "sheets_partial": [], "uncovered": false, "uncovered_m2": 0.0,
-      "download_hint": ["elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025"]
+      "download_hint": ["elevation download --product nmt --country pl --bbox 565000,242000,569000,246000 --sheet-system 1992 --resolution 1m --vertical-crs EVRF2007 --year 2025"],
+      "full_m2": 16000000.0,
+      "sheet_records": [
+        {"sheet": "M-34-64-D-d-1-2", "campaign": "GK-FOTO.6201.5.2025", "acquisition_date": "2025-04-28",
+         "published": "2025-11-07", "full_sheet": true,
+         "url": "https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83137/83137_1729552_M-34-64-D-d-1-2.asc"},
+        "..."
+      ],
+      "campaign_coverage": [{"campaign": "GK-FOTO.6201.5.2025", "complete": true, "full_m2": 16000000.0}]
     }
   ]
 }
@@ -1735,10 +1775,14 @@ report = check_availability(
     bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
     min_year=2020,                                   # opcjonalnie; także year=, max_year=
 )                                                    # cache=True, force=False, on_notice=
-print(report.areas[0].land_m2)
+land = report.areas[0].land_m2
 for c in report.combinations:                        # rok malejąco
     print(c.year, c.horizontal, c.resolution, c.vertical_crs, c.format,
           c.complete, len(c.sheets_full), len(c.sheets_partial), c.uncovered_m2)
+    print(f"  pełne arkusze: {int(c.full_m2 * 100 // land)}% lądu")  # KD-2, w dół
+    one = [k.campaign for k in c.campaign_coverage if k.complete]  # KD-1
+    taken = {r.campaign for r in c.sheet_records if r.full_sheet and r.campaign}
+    print("  sama kampania:", one, "kampanie pobrania:", sorted(taken))
 newest = next((c for c in report.combinations if c.complete), None)
 if newest is not None:
     print(newest.source, newest.download_hint)     # np. "pl.gugik.nmt_1m", ("elevation download ...",)

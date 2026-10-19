@@ -462,7 +462,7 @@ from kartograf import (
     download_image_cutout, check_image_cutout, ImageCutoutResult,
     # Availability report (`kartograf elevation availability`, ADR-041)
     check_availability, AvailabilityReport, AvailabilityCombination,
-    AvailabilityArea,
+    AvailabilityRecord, AvailabilityCampaign, AvailabilityArea,
     # Download (NMT)
     DownloadManager, DownloadProgress, DownloadResult, CampaignRef, FileStorage,
     # Download (versioned store, update plan)

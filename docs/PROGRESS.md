@@ -157,10 +157,11 @@
 >    `parse_command`, `validate_command`, `format_command`, `run_command`,
 >    `check_command`; ADR-046) SCALONE do `develop` 2026-10-19 (sesja
 >    2026-10-19 "weryfikacja i scalenie" nizej); zostaja KB-6/KB-7, KC i KH.
->    Propozycja na kolejna sesje: spec i plan KD-1/KD-2 (szczegoly arkuszy
->    i kampanii w `AvailabilityCombination`, `full_m2`; SPEC Archiwisty
->    6.4 i 12.4). Pozostale pozycje: backlog
->    nizej (m.in. VKM CZ, CLMS na zywo).
+>    KD-1/KD-2 (szczegoly arkuszy i kampanii, `full_m2`; ADR-047) WDROZONE
+>    2026-10-19 na galezi `feat/availability-sheet-details` (z `develop`,
+>    NIE scalonej; czeka na przeglad diffu przez uzytkownika). Propozycja
+>    na kolejna sesje: KD-3/KD-4 albo KB-6/KB-7, KC, KH. Pozostale pozycje:
+>    backlog nizej (m.in. VKM CZ, CLMS na zywo).
 >    Nowe worktree subagentow: `/home/claude-agent/workspace/wt/<galaz>`
 >    (pkt 3); po scaleniu usuwac je razem z galezia.
 > 2. **CLMS_CREDENTIALS odlozone** (decyzja uzytkownika 2026-10-12):
@@ -198,6 +199,41 @@
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
+
+### Sesja 2026-10-19 - KD-1/KD-2: szczegoly arkuszy i kampanii w raporcie dostepnosci (ADR-047)
+
+- Spec i plan nie istnialy (PROGRESS wymienial je jako propozycje);
+  decyzja uzytkownika: agent pisze spec i plan, przeglada je sam
+  i wdraza w tej samej sesji, ksztalt pol zatwierdza uzytkownik przy
+  przegladzie diffu. Galaz `feat/availability-sheet-details` z `develop`.
+  Spec `docs/superpowers/specs/2026-10-19-availability-sheet-details-design.md`,
+  plan `docs/superpowers/plans/2026-10-19-availability-sheet-details.md`
+  (zrodla: Archiwista SPEC 6.4 i 12.4, mockup Archiwisty).
+- `AvailabilityCombination`: `full_m2` (KD-2; PL udzial pokrytego `target`
+  przeniesiony na lad, w dol: `complete <=> full_m2 == land_m2`, same
+  rekordy NIE = 0 takze dla zadania `sheet`; CZ obszar w ramach arkuszy
+  z plikiem), `sheet_records` (KD-1; `AvailabilityRecord` - rekordy, ktore
+  pobiera `download_hint`: NMT/NMPT ADR-028 + najnowszy pelny przy
+  `--full-sheet`, LAZ `select_newest_cover`), `campaign_coverage` (KD-1;
+  `AvailabilityCampaign` - kazda kampania osobno, ten sam przebieg
+  `_measure`). CLI `--details`: udzial pelnych arkuszy, kampanie osobno,
+  kampanie rekordow do pobrania. Dokumentacja: ARCHITECTURE 4.9, USAGE
+  1.7 i 2, SCOPE, PRD, ADR-047, CHANGELOG 0.8.0.
+- Weryfikacja: `sheet_records` == URL-e planu `check_data` z podpowiedzi
+  (Krakow NMT 2025, Pomorze NMT 2023 5 m z `--full-sheet`, Krakow LAZ
+  2025 - 63 kafle); na zywo Krakow 2023 `--details` i `--json --force`.
+  Brama: 7160 passed, 18 deselected, ruff/format/mypy czyste.
+- Zauwazone, bez zmian (poza zakresem): podpowiedz LAZ roku, ktory nie
+  pokrywa kafli obszaru (np. Pomorze 2025, 2022), pobranie odrzuca
+  konfliktem zakresu lat (`year_range_error`) - raport podaje dla niej
+  polecenie, ktore konczy sie bledem.
+- Uwagi z przegladu (ADR-047 errata 1): `AvailabilityRecord.full` ->
+  `full_sheet` (nazwa jak w `SkorowidzRecord`, `LazTile`, sidecarze; po
+  wydaniu `/1` zmiana wymagalaby `/2`); ograniczenie LAZ opisane przy polu,
+  w USAGE, ARCHITECTURE i CHANGELOG - polecenie LAZ nie ma ukladu arkuszy
+  (potwierdzone na nagraniu Krakow 2023: podpowiedz kombinacji PL-2000
+  planuje 63 kafle PL-1992, wspolnych z `sheet_records` 0); wyjatek CZ dla
+  `complete <=> full_m2 == land_m2` w opisie klasy i CHANGELOG.
 
 ### Sesja 2026-10-19 - weryfikacja zmian Archiwisty i scalenie do develop
 
