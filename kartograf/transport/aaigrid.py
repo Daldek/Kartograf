@@ -25,6 +25,7 @@ from rasterio.errors import RasterioError
 from rasterio.io import DatasetReader
 
 from kartograf.exceptions import DownloadError
+from kartograf.interrupt import check_stop
 from kartograf.transport.chunks import Chunk
 from kartograf.transport.mosaic import _GRID_TOL_PX
 
@@ -269,6 +270,7 @@ def save_multipart_asc(
         try:
             with open(mime, "wb") as f:
                 for block in response.iter_content(chunk_size):
+                    check_stop()
                     if block:
                         f.write(block)
             extract_multipart_asc(mime, response.headers.get("Content-Type", ""), asc)

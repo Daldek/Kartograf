@@ -961,7 +961,7 @@ def test_catalog_filters_and_errors():
     for view in (soil, get_catalog(command="parse"), get_catalog()):
         assert (view.exit_codes, view.errors, view.schemas) == (None, None, None)
     tables = get_catalog(group="soil", tables=True)
-    assert [r.code for r in tables.exit_codes] == [0, 1, 2, 130]
+    assert [r.code for r in tables.exit_codes] == [0, 1, 2, 130, 143]
     assert tables.errors and tables.schemas
     short = get_catalog()
 

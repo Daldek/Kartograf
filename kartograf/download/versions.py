@@ -32,6 +32,7 @@ from typing import Any, Literal
 from kartograf import _clock
 from kartograf.download.campaigns import AscCoverage, measure_coverage
 from kartograf.exceptions import DownloadError
+from kartograf.interrupt import check_stop
 from kartograf.sources.sidecar import file_digest
 
 logger = logging.getLogger(__name__)
@@ -407,7 +408,11 @@ def commit_version(
     DownloadError
         sha256 collision with an existing file, a file system without
         hardlinks (D22), or a failed sidecar.
+    Stopped
+        The thread belongs to a pool that is stopping (``kartograf.interrupt``):
+        nothing is published and the staged file is left to the caller's cleanup.
     """
+    check_stop()  # the point of no return: a stopping pool commits nothing
     root = Path(versions_root)
     limit = time.time() - STALE_AFTER_S
     cleanup_stale(root)

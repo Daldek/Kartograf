@@ -3,9 +3,10 @@ The ``kartograf-error/1`` document: an exception as data (spec 6).
 
 ``error_report(exc)`` turns any exception into an :class:`ErrorReport` with a
 stable ``code``, the exit code of the CLI, a one-line ``hint`` and the
-``details`` of the exception. Three codes belong to no class of the package
+``details`` of the exception. Four codes belong to no class of the package
 hierarchy and are built here: ``io_error`` (``OSError``: a missing or
-unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``) and
+unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``: Ctrl-C),
+``terminated`` (``kartograf.interrupt.Terminated``: SIGTERM) and
 ``internal_error`` (any other exception: a program error).
 
 ``ERROR_CODES`` and ``EXIT_CODES`` are the single source of the two tables of
@@ -24,6 +25,7 @@ from kartograf.exceptions import (
     ValidationError,
     YearRangeError,
 )
+from kartograf.interrupt import Terminated
 from kartograf.serialization import Document
 from kartograf.transform.crs import TransformUnavailableError
 
@@ -133,6 +135,13 @@ ERROR_CODES: tuple[ErrorCodeSpec, ...] = (
         "przerwane przez uzytkownika (Ctrl-C)",
     ),
     ErrorCodeSpec(
+        "terminated",
+        "Terminated",
+        143,
+        "zakonczone sygnalem SIGTERM (timeout, docker stop, kill): sprzatanie "
+        "jak po Ctrl-C",
+    ),
+    ErrorCodeSpec(
         "internal_error",
         "Exception",
         1,
@@ -162,11 +171,19 @@ EXIT_CODES: tuple[ExitCodeSpec, ...] = (
         130,
         "interrupted",
         "przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane "
-        "atomowo, brak polowicznych plikow",
+        "atomowo - jednostki niedokonczone przed przerwaniem (takze zakolejkowane "
+        "przy --workers > 1) nie powstaja, brak polowicznych plikow",
+    ),
+    ExitCodeSpec(
+        143,
+        "terminated",
+        "zakonczone sygnalem SIGTERM (128 + SIGTERM); sprzatanie i dokument "
+        "bledu jak po Ctrl-C",
     ),
 )
 
 INTERRUPTED_MESSAGE = "przerwano (Ctrl-C)"
+TERMINATED_MESSAGE = "przerwano (SIGTERM)"
 INTERNAL_ERROR_HINT = (
     "Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback"
 )
@@ -329,8 +346,9 @@ def error_report(exc: BaseException, *, command: str | None = None) -> ErrorRepo
     exc : BaseException
         Any exception: a ``KartografError`` keeps its ``code``, ``exit_code``,
         ``hint`` and ``details``; ``KeyboardInterrupt`` is ``interrupted``
-        (130), ``OSError`` is ``io_error`` and every other exception is
-        ``internal_error`` (a program error; both exit with 1).
+        (130), ``Terminated`` (SIGTERM) is ``terminated`` (143), ``OSError``
+        is ``io_error`` and every other exception is ``internal_error`` (a
+        program error; both exit with 1).
     command : str, optional
         Catalog id of the command that failed (``elevation download``); without
         it the command a ``UsageError`` names. The hint of a ``UsageError`` is
@@ -347,6 +365,15 @@ def error_report(exc: BaseException, *, command: str | None = None) -> ErrorRepo
             exit_code=exc.exit_code,
             command=command if command is not None else named,
             details=exc.details(),
+        )
+    if isinstance(exc, Terminated):
+        return ErrorReport(
+            code="terminated",
+            message=TERMINATED_MESSAGE,
+            hint=None,
+            exception=type(exc).__name__,
+            exit_code=143,
+            command=command,
         )
     if isinstance(exc, KeyboardInterrupt):
         return ErrorReport(

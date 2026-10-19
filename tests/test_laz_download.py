@@ -43,6 +43,7 @@ from kartograf.providers.pl.gugik_laz import (
     LazTileSelection,
     SupersededLazTile,
 )
+from tests.interrupt_fakes import FirstThenTransfer
 
 LAZ_FIXTURES = Path(__file__).parent / "fixtures" / "gugik_laz"
 REAL_LAZ = LAZ_FIXTURES / "real_2026_10_06"
@@ -520,6 +521,33 @@ class TestRunLazDownload:
         )
         assert len(list(tmp_path.rglob("versions/**/*.laz.meta.json"))) == 6
         assert progress == [(i, 6) for i in range(0, 7)]
+
+    def test_ctrl_c_downloads_and_commits_no_tile_after_it(self, tmp_path: Path):
+        tiles = [_tile(f"N-33-131-B-a-1-1-{i}") for i in range(1, 9)]
+        transfers = FirstThenTransfer()
+
+        class Provider(FakeProvider):
+            def download_tile(self, url, target, **kwargs):
+                transfers.begin(url)
+                return super().download_tile(url, target, **kwargs)
+
+        def ctrl_c_when_a_tile_ended(done: int, total: int) -> None:
+            if done:
+                raise KeyboardInterrupt
+
+        with pytest.raises(KeyboardInterrupt):
+            _run_laz_download(
+                _selection(*tiles),
+                provider=Provider(),
+                bbox=BBOX,
+                output_dir=tmp_path,
+                workers=2,
+                on_progress=ctrl_c_when_a_tile_ended,
+            )
+
+        assert len(transfers.calls) <= 3  # 8 tiles, 2 workers
+        assert len(list(tmp_path.rglob("versions/**/*.laz.meta.json"))) == 1
+        assert [p for p in tmp_path.rglob("*") if ".incoming" in p.parts] == []
 
     def test_kron86_segment_follows_provider(self, tmp_path):
         tile = _tile("N-33-131-B-a-1-1-4")

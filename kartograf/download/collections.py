@@ -119,6 +119,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import bbox_cutout_path, content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.notices import (
     AREA_OMITTED,
     AUTO_NARROWED_TO_CZ,
@@ -3243,14 +3244,14 @@ def run_request(
 
         outcomes: list[VersionedFile | UnitFailure | None]
         if workers > 1 and len(jobs) > 1:
-            done: dict[int, VersionedFile | UnitFailure | None] = {}
-            with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-                futures = {pool.submit(one, job): i for i, job in enumerate(jobs)}
-                for future in concurrent.futures.as_completed(futures):
-                    index = futures[future]
-                    done[index] = future.result()
-                    progress(len(done), jobs[index], _progress_status(done[index]))
-            outcomes = [done[index] for index in range(total)]
+            outcomes = run_parallel(
+                one,
+                jobs,
+                workers=workers,
+                on_done=lambda ended, job, outcome: progress(
+                    ended, job, _progress_status(outcome)
+                ),
+            )
         else:
             transfers = (
                 {job.key for job in _transfers(jobs, update, planned)}
