@@ -134,6 +134,27 @@ class TestBuildPinnedTransform:
         assert pinned.accuracy_m == 0.0
         assert pinned.description == "dokladna konwersja"
 
+    def test_axis_swap_of_one_wgs84_is_exact_whatever_proj_reports(self):
+        """E2E 0.8.0 N-P2-1: PROJ 9.8.1 gives the one operation between
+        ``OGC:CRS84`` and ``EPSG:4326`` (an axis swap, the identity with
+        ``always_xy``) an unknown accuracy; the rule rejecting an unknown
+        accuracy must not reject it. A pair that is not one CRS keeps the rule."""
+        swap = _mock_transformer(-1.0, "OGC:CRS84 to WGS 84", result=(19.9, 50.1))
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([swap])
+            pinned = build_pinned_transform(
+                "OGC:CRS84", "EPSG:4326", TransformPolicy(min_accuracy_m=1.0)
+            )
+        assert pinned.accuracy_m == 0.0
+        assert pinned.transform(19.9, 50.1) == (19.9, 50.1)
+
+        with patch(_GROUP_PATCH) as mock_cls:
+            mock_cls.return_value = _mock_group([_mock_transformer(-1.0, "nieznana")])
+            with pytest.raises(TransformUnavailableError):
+                build_pinned_transform(
+                    "EPSG:4258", "EPSG:4326", TransformPolicy(min_accuracy_m=1.0)
+                )
+
     def test_probe_rejects_inf(self):
         """(d) Probe: an operation returning inf at the control point is rejected."""
         bad_grid = _mock_transformer(
