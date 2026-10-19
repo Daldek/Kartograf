@@ -499,7 +499,7 @@ from kartograf import (
     # Transport and mosaic (stable since 0.7.1)
     get_with_retry, make_gugik_session, mosaic_and_crop, check_source_grid,
     # Store reading without writing (Archiwista, ADR-045, ARCHITECTURE 3.3.1)
-    list_segments, iter_store, StoreEntry, read_sidecar, Sidecar,
+    list_segments, list_partitions, iter_store, StoreEntry, read_sidecar, Sidecar,
     describe_segment, SegmentInfo, file_footprint, Footprint, link_target,
     pinned_transform, PinnedTransform,
     # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 9)

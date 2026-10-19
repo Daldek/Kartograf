@@ -99,6 +99,10 @@ def pinned_transform(src_crs: str, dst_crs: str) -> PinnedTransform:
     without network grids, the Czech datum step for S-JTSK (ADR-024). No
     approximate fallback: S-JTSK with ballpark is about 100 m off.
 
+    Thread-safe: may be called concurrently from any number of threads
+    (e.g. a thread pool); each thread gets its own object, built one
+    thread at a time. Do not pass the returned object to another thread.
+
     Parameters
     ----------
     src_crs, dst_crs : str
@@ -580,6 +584,13 @@ def file_footprint(
         ``network=True``).
     TransformError
         A source envelope lies outside the area of the pinned operation.
+
+    Notes
+    -----
+    Thread-safe: may be called concurrently from any number of threads
+    (e.g. a thread pool over ``iter_store`` entries). The only state shared
+    between calls is ``cache``: one plain ``dict`` may serve all threads;
+    two threads missing the same unit may both query its index.
     """
     meta = _sidecar_of(entry)
     request = meta.request if meta is not None else None

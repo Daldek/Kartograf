@@ -3939,6 +3939,13 @@ a na CIFS z odczytu skrotu pliku (bez stabilnego inode).
 `pinned_transform(src_crs, dst_crs)` buduje `PinnedTransform` bez
 sieciowych siatek i bez ballpark (obiekt per watek - operacje pyproj nie sa
 bezpieczne watkowo); nie udostepniamy domyslnej transformacji pyproj.
+Gwarancja watkow: `list_segments`, `iter_store`, `read_sidecar`,
+`describe_segment`, `file_footprint`, `link_target` i `pinned_transform`
+mozna wolac rownolegle z wielu watkow (pula watkow konsumenta);
+`pinned_transform` daje obiekt wlasny watku (nie przekazywac go innemu
+watkowi), a `file_footprint` dzieli miedzy watkami tylko `cache`
+wywolujacego (wystarcza zwykly `dict`). Pilnuje tego test rownoleglego
+uzycia.
 
 **Konsekwencje:** Wylacznie odczyt magazynu (takze zamontowanego read-only);
 wyniki problemowe zamiast zgubionych plikow. Koszt pelnego skanu to listowanie
