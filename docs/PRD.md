@@ -1482,6 +1482,8 @@ from kartograf import (
     check_availability,
     AvailabilityReport,
     AvailabilityCombination,
+    AvailabilityRecord,
+    AvailabilityCampaign,
     AvailabilityArea,
 
     # Download (NMT)

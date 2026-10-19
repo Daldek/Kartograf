@@ -3231,17 +3231,25 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    `sheet` NMT/NMPT bez pasa `EDGE_TOLERANCE_M` = 1 m przy ramie
    (`_inner`: rama liczona z godla rozni sie od ramy GUGiK o centymetry),
    `bbox`/`geometry` mierzone dokladnie. Per kombinacja: piksele
-   `target` poza suma obrysow arkuszy z rekordem TAK (`missing`) i poza
-   obrysami wszystkich arkuszy kombinacji (`uncovered`). `complete` <=>
-   `missing == 0`; `uncovered_m2` = `uncovered`; bez progu.
+   `target` poza suma obrysow arkuszy z rekordem TAK (`missing`), poza
+   obrysami wszystkich arkuszy kombinacji (`uncovered`) i poza obrysami
+   rekordow TAK kazdej kampanii osobno (jeden `rasterize` na kampanie
+   w pasie). `complete` <=> `missing == 0`; `uncovered_m2` = `uncovered`;
+   bez progu. `full_m2` (KD-2) = `land_px * (target_px - missing) //
+   target_px` (`land_px`, gdy `missing == 0`): udzial pokrytej czesci
+   `target` przeniesiony na lad, w dol — dla `bbox`/`geometry` dokladnie
+   `land_m2 - missing`, dla `sheet` pas ramy nie jest ani pokryty, ani
+   brakiem; `complete` <=> `full_m2 == land_m2`, same rekordy NIE = 0.
 7. **Wynik:** `AvailabilityCombination` z `source` (klucz deskryptora),
    `year`, `acquisition_dates`/`published` (min/max `akt_data`/
    `dt_pzgik`), `campaigns` (`nr_zglosz`), `horizontal`, `resolution`
    (etykieta albo `None`), `vertical_crs`, `format`, `densities`
    (gestosci nominalne LAZ), `complete`, `sheets_full` (arkusz z co
    najmniej jednym rekordem TAK kombinacji), `sheets_partial` (tylko NIE),
-   `uncovered`, `uncovered_m2`, `download_hint`; `sheets_missing`
-   i `size_bytes` to pola CZ (plan B; PL puste/`None`). Kolejnosc: rok
+   `uncovered`, `uncovered_m2`, `download_hint`, `full_m2`,
+   `sheet_records` i `campaign_coverage` (KD-1, ADR-047; nizej);
+   `sheets_missing` i `size_bytes` to pola CZ (plan B; PL puste/`None`).
+   Kolejnosc: rok
    malejaco, uklad, rozdzielczosc, uklad wysokosci, format (kolejnosc
    `FORMATS`). `AvailabilityReport(request, checked_at, areas, combinations,
    notices, ok)` (`Document`: schemat `kartograf-availability/1` to stala klasy,
@@ -3250,6 +3258,20 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    `checked_at` z `kartograf._clock`; `ok` = `False` tylko, gdy czesci
    zadania nie dalo sie sprawdzic (plan B, `auto`) — w PL zawsze `True`.
    `to_json()` z mixinu `Document` (sekcja 3.6): wciecie 2 spacje, `\n` na koncu.
+8. **Rekordy do pobrania i kampanie (KD-1, ADR-047):** `sheet_records` =
+   `AvailabilityRecord(sheet, campaign, acquisition_date, published, full,
+   url)` rekordow, ktore pobiera `download_hint` kombinacji, po arkuszu,
+   w arkuszu od najnowszego: NMT/NMPT najnowszy rekord arkusza w kolejnosci
+   ADR-028 (`akt_data`, `dt_pzgik`, `url`) i — gdy nie jest TAK, a arkusz
+   ma rekord TAK (podpowiedz z `--full-sheet`, ADR-033) — najnowszy TAK
+   (`_sheet_records`, wspolne z `_needs_full_sheet`); LAZ kafle, ktore
+   zostawia `select_newest_cover` (ADR-029) na obszarze zadania (kafle
+   jednego ukladu arkuszy; pobranie `--year` wybiera z obu ukladow naraz).
+   `campaign_coverage` = `AvailabilityCampaign(campaign, complete,
+   full_m2)` na kazda kampanie z `campaigns` (ta sama kolejnosc): czy jej
+   rekordy TAK same pokrywaja lad i ile ladu jest w ich ramach (miara
+   `full_m2`). Test: `sheet_records` == URL-e planu `check_data`
+   z podpowiedzi (`test_sheet_records_are_what_the_hint_downloads`).
 
 **Algorytm CZ i `auto` (plan B, decyzje 9-10):**
 
@@ -3286,11 +3308,15 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    `uncovered_m2` = czesc prostokata obszaru raportu lezaca w ramach arkuszy
    bez pliku, liczona w ukladzie tego prostokata (rama kafla TM33
    przeniesiona naroznik po narozniku przypieta operacja, wiec nigdy
-   wiecej niz `area_m2`), `published` = min/max `Last-Modified`
+   wiecej niz `area_m2`; `_frames_m2`), `full_m2` = ta sama miara dla
+   arkuszy z plikiem (KD-2; `complete` nie wymaga `full_m2 == land_m2`, gdy
+   obszar wychodzi poza arkusze indeksu), `published` = min/max
+   `Last-Modified`
    (RRRR-MM-DD), `size_bytes` = suma `Content-Length` (`None`, gdy ktorys
    plik go nie podaje albo zaden arkusz nie ma pliku; CLI: `-`),
    `year`/`acquisition_dates` = `None`, `campaigns`/`densities`/
-   `sheets_partial` puste, `horizontal` `S-JTSK`/`ETRS89-TM33`.
+   `sheets_partial`/`sheet_records`/`campaign_coverage` puste,
+   `horizontal` `S-JTSK`/`ETRS89-TM33`.
    `AvailabilityArea` CZ: `crs="EPSG:5514"`, `bounds` = czesc CZ
    w EPSG:5514, `area_m2` = `land_m2` = prostokat raportu (obszar: czesc
    CZ w EPSG:5514; godlo: jego rama) — CZ nie ma maski ladu.

@@ -14,6 +14,7 @@ import pytest
 import requests
 
 from kartograf.cli import main
+from kartograf.cli.availability_cmd import share_text
 from kartograf.download.availability import COUNTRY_CHOICES
 from tests.conftest import RecordedIndex, wfs_endpoint
 from tests.test_availability import CTES86_DMPOK, TILE_DMPOK, _Border, _FailingHead
@@ -115,6 +116,9 @@ def test_details_lists_partial_and_uncovered(capsys):
     assert (
         "  2022 PL-1992 1m EVRF2007 ASC: nie: brak arkuszy dla 0,88 ha\n"
         "    lad bez zadnego arkusza kombinacji: 0,88 ha\n"
+        "    lad w ramach pelnych arkuszy: 98% (85,50 ha)\n"
+        "    kampanie: GI-FOTO.6202.11.2022 (98%)\n"
+        "    pobierane rekordy: 3 ark., kampanie: GI-FOTO.6202.11.2022 (3)\n"
         + "".join(
             f"    kartograf elevation download --product nmt --sheet {sheet} "
             "--resolution 1m --vertical-crs EVRF2007 --year 2022\n"
@@ -122,6 +126,38 @@ def test_details_lists_partial_and_uncovered(capsys):
         )
     ) in details
     assert "Zadna kombinacja nie pokrywa calego ladu" in out
+
+
+def test_details_name_campaigns_of_full_sheets_and_downloaded_records(capsys):
+    """KD-1: 2023 5 m of Pomorze - the newest records (DFT.7201.028.2023) are
+    partial, the full ones (DFT.7201.002.2023) come with --full-sheet; neither
+    campaign alone covers the land."""
+    _, out, _ = _run(
+        capsys,
+        ["--country", "pl", *POMORZE, "--year", "2023", "--details"],
+        RecordedIndex(_areas("nmt", "pomorze"), coast=True),
+    )
+
+    assert (
+        "    lad w ramach pelnych arkuszy: 98% (85,50 ha)\n"
+        "    kampanie: DFT.7201.002.2023 (98%), DFT.7201.028.2023 (0%)\n"
+        "    pobierane rekordy: 3 ark., kampanie: DFT.7201.002.2023 (3), "
+        "DFT.7201.028.2023 (2)\n"
+    ) in out.split("Szczegoly kombinacji:\n")[1]
+
+
+@pytest.mark.parametrize(
+    ("part", "whole", "text"),
+    [
+        pytest.param(999_999.0, 1_000_000.0, "99%", id="never-100-below-whole"),
+        pytest.param(1_000_000.0, 1_000_000.0, "100%", id="whole"),
+        pytest.param(1.0, 1_000_000.0, "<1%", id="non-zero-below-1"),
+        pytest.param(0.0, 1_000_000.0, "0%", id="zero"),
+        pytest.param(0.0, 0.0, "-", id="no-land"),
+    ],
+)
+def test_share_rounds_down(part, whole, text):
+    assert share_text(part, whole) == text
 
 
 def test_exit_codes(capsys):
