@@ -31,7 +31,7 @@
 | Grupy komend CLI (ADR-039, ADR-044) | ✅ Gotowy | v0.8.0; `elevation`, `imagery`, `landcover`, `soil`, `boundaries`, `cadastre`, `models3d`, `hydro`, `names`, `maps`, `geodesy`, `project`; dane wybiera `--product` w kazdej grupie; CLI tylko tlumaczy na publiczne API (ADR-037) |
 | Manifest projektu (podprojekt 2, ADR-040) | ✅ Gotowy | v0.8.0; `kartograf-project.json`, grupa `kartograf project`, API `init_project`/`get_project_status`/`verify_project`; E2E `docs/research/2026-10-15-project-e2e/raport.md` |
 | Katalog GUGiK/CUZK (podprojekt 3, plany A-E, ADR-041-043) | ✅ Gotowy | v0.8.0; rejestr wariantow NMT/NMPT, raport `availability` PL/CZ, NMPT/LAZ/ortofoto/warstwice CZ, kolekcje (PRG, EGiB, modele 3D, ZABAGED, RUIAN, HY-NET, nazwy, mapy, osnowy, BDOO, Data50/250, RCN, mapa katastralna CZ), limit obszaru kolekcji 100 plikow / 10 GB; E2E `docs/research/2026-10-1[56]-plan-*-e2e/`; mapa katastralna CZ VKM poza 0.8.0 (backlog) |
-| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6) | 🔧 W trakcie | gotowy i zielony na galezi `feat/archiwista-store-api` (wchodzi do wydania 0.8.0, ARCHITECTURE 3.3.1); 2026-10-19: czesci segmentu (`list_partitions`, `partition`), mapowanie `skip_versions`, skan ok. 2x szybszy (ADR-045 errata 1); czeka na zgode uzytkownika na merge do `develop` |
+| Odczyt magazynu dla Archiwisty (ADR-045, KA-1..KA-6, KA-8) | ✅ Gotowy | v0.8.0, scalony do `develop` 2026-10-19 po weryfikacji: API odczytu magazynu, 7 poprawek przegladu, errata 1 (czesci segmentu `list_partitions`/`partition`, mapowanie `skip_versions`, skan ok. 2x szybszy) i poprawki jej przegladu, konwencja kluczy KA-8 (ARCHITECTURE 3.3, regula 10) i gwarancje watkow (ADR-045); kontrakt: ARCHITECTURE 3.3.1 |
 | Roadmapa do v1.0.0 (komplet danych GUGiK, gotowe dane, manager danych, wtyczka QGIS, GUI webowe) | 🔧 W trakcie | kierunek zatwierdzony 2026-10-08; podprojekty i kolejnosc: `docs/SCOPE.md` 3.3; podprojekty 1 (magazyn wersjonowany, ADR-036), 2 (manifest projektu, ADR-040) i 3 (katalog GUGiK/CUZK, plany A-E) wykonane w 0.8.0; nastepne: 4 (wtyczka QGIS) i 5 (GUI webowe) |
 <!-- Statusy: ✅ Gotowy | ⚠️ Gotowy ze znanym bledem (tabela "Znane bledy", sesja 2026-09-29) | 🔧 W trakcie | ⏳ Zaplanowany | ❌ Wstrzymany -->
 
@@ -111,8 +111,9 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-18, wydanie 0.8.0 przygotowane, API
-> odczytu magazynu na galezi `feat/archiwista-store-api` - pkt 1):**
+> **START NASTEPNEJ SESJI (stan 2026-10-19, wydanie 0.8.0 przygotowane; API
+> odczytu magazynu scalone do `develop`, interfejs dla agentow na
+> `feat/agent-interface` czeka na zgode - pkt 1):**
 > 0. **Wydanie 0.8.0 przygotowane na `develop`** (`3a1c426`; `__version__ =
 >    "0.8.0"`, CHANGELOG `[0.8.0] - 2026-10-17`, statusy SCOPE/PRD; brama
 >    zielona: 5214 passed, ruff/format/mypy czyste; dwa testy na zywo
@@ -140,11 +141,14 @@
 >    (szczegoly arkuszy i kampanii, `full_m2` w raporcie dostepnosci),
 >    KB/KC/KH (katalog komend, `cancel`, jednolity `on_progress`, rozmiar
 >    pozycji planu), KD-3/KD-4, KE/KF/KG (mozaika, PL+CZ, porownanie
->    wersji). KA-1..KA-6 wykonane 2026-10-18 na galezi
->    `feat/archiwista-store-api` (w wydaniu 0.8.0; sesja 2026-10-18 nizej) -
->    CZEKA NA ZGODE UZYTKOWNIKA na merge `--no-ff` do `develop` przed
->    tagiem `v0.8.0`. Propozycja na kolejna sesje: spec i plan KD-1/KD-2
->    (po zgodzie uzytkownika). Pozostale pozycje: backlog
+>    wersji). KA-1..KA-6 i KA-8 SCALONE do `develop` 2026-10-19 (sesja
+>    2026-10-19 "weryfikacja i scalenie" nizej). Interfejs dla agentow
+>    (ADR-046, KB-1..KB-5, `py.typed`) jest na galezi `feat/agent-interface`
+>    (worktree `wt/feat/agent-interface`); proba scalenia z obecnym `develop`
+>    na galezi `trial/agent-interface-errata` (rozwiazane konflikty, errata
+>    Archiwisty jako ADR-045 errata 2, brama zielona) - CZEKA NA ZGODE
+>    UZYTKOWNIKA na merge do `develop` przed tagiem `v0.8.0`. Propozycja na
+>    kolejna sesje: spec i plan KD-1/KD-2. Pozostale pozycje: backlog
 >    nizej (m.in. VKM CZ, CLMS na zywo).
 >    Sprzatanie (czeka na zgode uzytkownika): ok. 30 worktree i galezi
 >    roboczych cyklu 0.8.0 w `/home/claude-agent/workspace/wt/`
@@ -175,6 +179,41 @@
 > --check .`, `.venv/bin/python -m mypy kartograf/ tests/`
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
+
+### Sesja 2026-10-19 - weryfikacja zmian Archiwisty i scalenie do develop
+
+- Zmiany agenta Archiwisty w Kartografie: `feat/archiwista-store-api`
+  (`a96b541..2fd87f2` - przejrzane 2026-10-18, poprawki na
+  `fix/archiwista-store-review`; `4c0ea08`, `55cac64` - errata 1 z
+  2026-10-19, bez poprawek przegladu). Integracja na galezi
+  `integrate/archiwista-store` (worktree `wt/integrate/archiwista-store`):
+  merge `--no-ff` obu galezi; konflikt `_load`/`_typed` rozwiazany tak, ze
+  zostaja `_is_meta` i jednostka z nazwy pliku z poprawek przegladu oraz
+  sciezki-napisy errata (`os.path.basename`), testy obu stron zachowane.
+- Przeglad errata 1 (reviewer, kod uruchamiany: stary i nowy `store.py` na
+  240 losowych magazynach - wyniki identyczne; suma czesci = skan; wyscigi;
+  12 mutacji): bez blokerow; trzy drobiazgi poprawione z testami
+  regresji (failing-before): za dluga nazwa czesci dawala `OSError` zamiast
+  `ValidationError`, powtorzona nazwa w mapowaniu `skip_versions` dawala
+  wpis dwa razy, CHANGELOG/ARCHITECTURE nie wspominaly zmiany skanu `units`
+  (ukryte katalogi wersji). `list_partitions` dopisane do listy eksportow
+  SCOPE.
+- Uwagi Archiwisty przed 0.8.0: (2) konwencja kluczy KA-8 zapisana w
+  ARCHITECTURE 3.3, regula 10 (niezmiennosc, tabela aliasow, `dataset_key`,
+  dostawca w `provider`); (3) gwarancje watkow `file_footprint`
+  i `pinned_transform` w docstringach, ADR-045 i ARCHITECTURE 3.3.1 z testem
+  rownoleglego uzycia (pula 8 watkow, wspolny `cache`; mutacja ze wspolnym
+  obiektem transformacji wykrywana); (1) `py.typed` i pelne typy publicznego
+  API naleza do `feat/agent-interface` (tam jest `py.typed`).
+- Zgodnosc z `feat/agent-interface`: proba merge na
+  `trial/agent-interface-errata` - konflikty w `store.py` (walidacja
+  `option=` z ADR-046 kontra `partition`/`_segment_dir`), DECISIONS (dwie
+  "errata 1" ADR-045: errata Archiwisty przenumerowana na 2 w tej galezi),
+  SCOPE, PROGRESS; nowe `ValidationError` errata dostaly `option`
+  (`partition`, `target`, `skip_versions`, `segment`, `options` dla `units`
+  + `partition`) i wiersze w `tests/test_errors.py`. `store_documents`
+  i narzedzia MCP bez zmian (czesci to wydajnosc dla programow, nie dla
+  agenta). Brama na probie: 7139 passed.
 
 ### Sesja 2026-10-19 - czesci segmentu i szybszy skan magazynu (ADR-045 errata 1)
 
