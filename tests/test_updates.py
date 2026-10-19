@@ -12,7 +12,7 @@ from kartograf.download.collections import check_collection
 from kartograf.download.data import check_data
 from kartograf.download.manager import DownloadManager
 from kartograf.download.plan import PLAN_SCHEMA, UpdatePlan
-from kartograf.exceptions import ValidationError
+from kartograf.exceptions import NoCoverageError, ValidationError, YearRangeError
 from kartograf.hydrology.hsg import check_hsg
 from kartograf.landcover.manager import check_landcover, check_soil
 from kartograf.notices import GEOMETRY_LAYER_DEFAULT, UNIT_LIST, Notice
@@ -262,3 +262,38 @@ def test_check_plan_carries_the_notices_of_the_call(
 
     assert code in [notice.code for notice in received]
     assert plan.notices == tuple(received)
+
+
+# --- the check of sheets without data: a state of the data, as in the download ---
+
+NO_DATA = "N-34-139-C-a-1-1"  # no record in the C14 fixtures
+
+
+def test_check_sheets_without_data_are_no_positions_and_not_a_failed_check(tmp_path):
+    seen: list[tuple[list[str], int]] = []
+    plan = _manager(tmp_path, c14_fake()).check_sheets(
+        [G, NO_DATA],
+        on_no_coverage=lambda missing, total: seen.append((sorted(missing), total)),
+    )
+    assert plan.ok and [item.unit for item in plan.items] == [G]
+    assert seen == [([NO_DATA], 2)]
+
+
+def test_check_sheets_of_one_sheet_without_data_raises_its_own_error(tmp_path):
+    with pytest.raises(NoCoverageError, match=NO_DATA):
+        _manager(tmp_path, c14_fake()).check_sheets([NO_DATA])
+
+
+def test_check_sheets_without_any_data_fails_like_the_download(tmp_path):
+    with pytest.raises(NoCoverageError) as caught:
+        _manager(tmp_path, c14_fake()).check_sheets([NO_DATA, "N-34-139-C-a-1-2"])
+    assert str(caught.value) == "GUGiK nie ma danych dla zadnego z 2 arkuszy obszaru"
+
+
+def test_check_sheets_year_conflicts_are_one_error_for_all_the_sheets(tmp_path):
+    sheets = [f"N-34-139-C-a-3-{i}" for i in range(1, 5)]
+    manager = _manager(tmp_path, c14_fake(), min_year=2026)
+    with pytest.raises(YearRangeError) as caught:
+        manager.check_sheets([*sheets, NO_DATA])
+    assert set(caught.value.sheets) == {G, "N-34-139-C-a-3-3"}
+    assert "dla 2 z 5 arkuszy" in str(caught.value)
