@@ -964,7 +964,7 @@ LANDCOVER_OPTION_SCENARIOS = [
         "year",
         None,
         ("2018", "2012", "2006", "2000", "1990"),
-        "Nieprawidlowy rok: 2019",
+        "--year 2019: niedostepne dla --product corine; dostepne: 2018, 2012, ",
     ),
     _row(
         kartograf.download_landcover,

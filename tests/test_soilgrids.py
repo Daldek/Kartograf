@@ -45,16 +45,20 @@ class TestSoilGridsProvider:
         assert len(props) == 11
 
     def test_available_depths(self):
-        """Test available depths."""
+        """The standard six depths, and 0-30cm for ocs only."""
         provider = SoilGridsProvider()
         depths = provider.get_available_depths()
-        assert "0-5cm" in depths
-        assert "5-15cm" in depths
-        assert "15-30cm" in depths
-        assert "30-60cm" in depths
-        assert "60-100cm" in depths
-        assert "100-200cm" in depths
-        assert len(depths) == 6
+        assert depths[:6] == [
+            "0-5cm",
+            "5-15cm",
+            "15-30cm",
+            "30-60cm",
+            "60-100cm",
+            "100-200cm",
+        ]
+        assert "0-30cm" in depths
+        assert provider.depths_for("ocs") == ["0-30cm"]
+        assert provider.depths_for("clay") == depths[:6]
 
     def test_available_stats(self):
         """Test available statistics."""

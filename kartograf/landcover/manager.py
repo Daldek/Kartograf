@@ -55,6 +55,8 @@ from kartograf.download.collections import (
     run_job,
     run_request,
     selection_choices,
+    unit_choices,
+    within_volume,
 )
 from kartograf.download.data import (
     DOWNLOAD_FILL,
@@ -102,7 +104,15 @@ from kartograf.download.storage import content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.landcover.store import selection_unit
-from kartograf.notices import CORINE_PREVIEW, Notice, NoticeSink
+from kartograf.notices import (
+    ALL_NODATA,
+    CLASSES_ABSENT,
+    CORINE_PREVIEW,
+    UNIT_LIST,
+    Notice,
+    NoticeSink,
+    names_text,
+)
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider, normalize_layers
@@ -111,6 +121,8 @@ from kartograf.providers.soilgrids import (
     PROPERTY_DESCRIPTIONS,
     STAT_DESCRIPTIONS,
     SoilGridsProvider,
+    is_empty,
+    units_for,
 )
 from kartograf.serialization import Document
 from kartograf.sources.descriptor import (
@@ -197,8 +209,8 @@ _REQUIRED_MESSAGES = {
     "ocs (zasob wegla organicznego), phh2o (pH), sand (piasek), "
     "silt (pyl), soc (wegiel organiczny)",
     "depth": "--depth wymagane: 0-5cm, 5-15cm, 15-30cm, "
-    "30-60cm, 60-100cm, 100-200cm "
-    "(przedzial glebokosci ponizej powierzchni)",
+    "30-60cm, 60-100cm, 100-200cm (przedzial glebokosci ponizej "
+    "powierzchni); ocs tylko 0-30cm",
     "stat": "--stat wymagane: mean (srednia), "
     "Q0.05 (5. percentyl), Q0.5 (mediana), "
     "Q0.95 (95. percentyl), uncertainty (niepewnosc predykcji)",
@@ -208,9 +220,19 @@ _REQUIRED_MESSAGES = {
 _REQUIRED_ALLOWED: dict[str, tuple[str, ...]] = {
     "year": tuple(str(year) for year in CorineProvider.AVAILABLE_YEARS),
     "property": tuple(SoilGridsProvider.PROPERTIES),
-    "depth": tuple(SoilGridsProvider.DEPTHS),
+    "depth": tuple(SoilGridsProvider.all_depths()),
     "stat": tuple(SoilGridsProvider.STATS),
 }
+
+
+def _required_allowed(name: str, given: dict) -> tuple[str, ...]:
+    """Values the missing required option ``name`` may take: the depths of the
+    ``property`` given (``ocs``: 0-30cm only), else ``_REQUIRED_ALLOWED``."""
+    if name == "depth" and given.get("property") in SoilGridsProvider.PROPERTIES:
+        return tuple(SoilGridsProvider.depths_for(given["property"]))
+    return _REQUIRED_ALLOWED[name]
+
+
 _PREVIEW_NOTE = {"fallback": "wms_png", "note": "podglad WMS, nie dane"}
 _TRACK: Track = "landcover"
 # Plan position key of a slot (segment, hierarchy, name).
@@ -291,7 +313,7 @@ def soil_choices() -> dict[str, dict[str, str]]:
     with their descriptions for the user (``--help``, ``soil list-layers``)."""
     return {
         "property": dict(PROPERTY_DESCRIPTIONS),
-        "depth": {depth: DEPTH_DESCRIPTION for depth in SoilGridsProvider.DEPTHS},
+        "depth": {depth: DEPTH_DESCRIPTION for depth in SoilGridsProvider.all_depths()},
         "stat": dict(STAT_DESCRIPTIONS),
     }
 
@@ -437,6 +459,17 @@ def _canonical_options(options: dict) -> None:
         options["format"] = canonical_format(options["format"])
     if "horizontal_crs" in options:
         options["horizontal_crs"] = canonical_crs(options["horizontal_crs"])
+
+
+def _transfers(
+    job: _Job, update: UpdateMode | None, planned: set[_SlotKey] | None
+) -> bool:
+    """Whether ``job`` would transfer its file - the rule of the volume check of
+    ``download.collections``: a position of a plan to execute, every job with
+    ``update="force"``, otherwise a job without a local version."""
+    if planned is not None:
+        return job.key in planned
+    return update == "force" or local_version(job.slot) is None
 
 
 _PowiatOutcome = _UnitResult | UnitFailure
@@ -764,7 +797,7 @@ class LandCoverManager:
                 )
             elif teryt is None and isinstance(self._provider, Bdot10kProvider):
                 outcomes, stale = self._download_counties(
-                    bbox, sheet, options, update, plan, workers, on_progress
+                    bbox, sheet, options, update, plan, workers, sink, on_progress
                 )
             else:
                 if teryt is not None:
@@ -781,7 +814,7 @@ class LandCoverManager:
                     self._unit(
                         jobs[0].unit,
                         lambda: self._run(
-                            jobs, options, update, planned, parent=parent
+                            jobs, options, update, planned, parent=parent, sink=sink
                         ),
                     )
                 ]
@@ -849,7 +882,9 @@ class LandCoverManager:
         with self._session(force=True, sink=sink):
             if self._archive(options):
                 teryts = (
-                    [teryt] if teryt is not None else self._area_teryts(bbox, sheet)[0]
+                    [teryt]
+                    if teryt is not None
+                    else self._area_teryts(bbox, sheet, sink)[0]
                 )
                 archive = self._archive_jobs(teryts, options, parent=None)
                 plan = new_plan(
@@ -859,7 +894,7 @@ class LandCoverManager:
             if teryt is not None:
                 jobs = self._jobs(teryt=teryt, kwargs=options)
             elif isinstance(self._provider, Bdot10kProvider):
-                teryts, _ = self._area_teryts(bbox, sheet)
+                teryts, _ = self._area_teryts(bbox, sheet, sink)
                 jobs = [j for t in teryts for j in self._jobs(teryt=t, kwargs=options)]
             else:
                 jobs, _ = self._area_jobs(bbox=bbox, sheet=sheet, kwargs=options)
@@ -1006,16 +1041,19 @@ class LandCoverManager:
         update: UpdateMode | None,
         plan: UpdatePlan | None,
         workers: int,
+        sink: NoticeSink,
         on_progress: Callable[[DownloadProgress], None] | None,
     ) -> tuple[list[_PowiatOutcome], tuple[PlanItem, ...]]:
-        """BDOT10k packages of EVERY powiat of an area (PRG), TERYT order."""
-        teryts, parent = self._area_teryts(bbox, sheet)
+        """BDOT10k packages of EVERY powiat of an area (PRG), TERYT order, after
+        the volume check (``_bdot_volume``)."""
+        teryts, parent = self._area_teryts(bbox, sheet, sink)
         jobs = {t: self._jobs(teryt=t, kwargs=options) for t in teryts}
         planned, stale = self._planned(
             lambda: [self._inspect(job) for group in jobs.values() for job in group],
             update,
             plan,
         )
+        self._bdot_volume(jobs, options.get("format", "GPKG"), update, planned, workers)
 
         def one(teryt: str, started: Callable[[], None] | None) -> _PowiatOutcome:
             return self._unit(
@@ -1026,11 +1064,66 @@ class LandCoverManager:
                     update,
                     planned,
                     parent=parent,
+                    sink=sink,
                     on_download=started,
                 ),
             )
 
         return _each_powiat(teryts, one, workers, on_progress), stale
+
+    def _bdot_volume(
+        self,
+        groups: dict[str, list[_Job]],
+        fmt: str,
+        update: UpdateMode | None,
+        planned: set[_SlotKey] | None,
+        workers: int,
+    ) -> None:
+        """The volume limits of an area of BDOT10k powiat packages: the same rule
+        and the same refusal as for the collections (``within_volume``: more
+        than ``VOLUME_FILES`` packages to download or more than
+        ``VOLUME_BYTES`` by ``HEAD``), before the first transfer.
+
+        A powiat is counted once, however many of its files (the GPKG and the
+        raw ZIP of ``keep_raw``) the package makes: the package is downloaded
+        once.
+
+        Raises
+        ------
+        ValidationError
+            The area is over the limits.
+        """
+        provider = self._provider
+        assert isinstance(provider, Bdot10kProvider)
+        descriptor = get_source(self._descriptor_key())
+        channel = next(
+            c for c in descriptor.channels if "admin_unit_files" in c.capabilities
+        )
+        packages = []
+        for teryt, group in groups.items():
+            due = [job for job in group if _transfers(job, update, planned)]
+            if due:
+                packages.append(
+                    UnitJob(
+                        descriptor=descriptor,
+                        channel=channel,
+                        country=descriptor.country,
+                        unit=teryt,
+                        slot=due[0].slot,
+                        request=due[0].selection,
+                        url=provider.package_url(teryt, fmt),
+                    )
+                )
+        within_volume(
+            descriptor.product,
+            unit_choices([descriptor]),
+            packages,
+            update=update,
+            planned=planned,
+            cache=None,
+            workers=workers,
+            sessions=provider.session,
+        )
 
     def _download_archive(
         self,
@@ -1056,11 +1149,23 @@ class LandCoverManager:
         if teryt is not None:
             teryts, parent = [teryt], None
         else:
-            teryts, parent = self._area_teryts(bbox, sheet)
+            teryts, parent = self._area_teryts(bbox, sheet, sink)
         jobs = self._archive_jobs(teryts, options, parent=parent)
         planned, stale = self._planned(
             lambda: [self._inspect_archive(job) for job in jobs], update, plan
         )
+        if teryt is None:
+            descriptor = get_source(self._descriptor_key())
+            jobs = within_volume(
+                descriptor.product,
+                unit_choices([descriptor]),
+                jobs,
+                update=update,
+                planned=planned,
+                cache=None,
+                workers=workers,
+                sessions=provider.session,
+            )
         by_unit = {job.unit: job for job in jobs}
 
         def one(unit: str, started: Callable[[], None] | None) -> _PowiatOutcome:
@@ -1198,15 +1303,33 @@ class LandCoverManager:
         return teryt, sheet, bbox
 
     def _corine_preview(self, options: dict, sink: NoticeSink) -> None:
-        """``CORINE_PREVIEW`` before downloading a WMS preview instead of data."""
+        """``CORINE_PREVIEW`` before downloading a WMS preview instead of data.
+
+        An ``Info``; a ``Warning`` when the year has CLMS data and the preview
+        is the answer only because ``CLMS_CREDENTIALS`` is set but unusable
+        (the text of the auth proxy names the reason)."""
         provider = self._provider
-        if isinstance(provider, CorineProvider) and not provider.uses_clms(
-            options["year"]
-        ):
+        if not isinstance(provider, CorineProvider):
+            return
+        year = options["year"]
+        if not provider.uses_clms(year):
+            problem = (
+                provider.clms_credentials_problem
+                if year in provider.CLMS_YEARS
+                else None
+            )
+            if problem is not None:
+                sink.emit(
+                    "warning",
+                    CORINE_PREVIEW,
+                    f"CORINE {year}: {problem} - podglad WMS (stylizowany PNG, "
+                    "nie dane)",
+                )
+                return
             sink.emit(
                 "info",
                 CORINE_PREVIEW,
-                f"CORINE {options['year']}: podglad WMS (stylizowany PNG, nie dane; "
+                f"CORINE {year}: podglad WMS (stylizowany PNG, nie dane; "
                 "dane CLMS wymagaja CLMS_CREDENTIALS)",
             )
 
@@ -1235,7 +1358,7 @@ class LandCoverManager:
                 raise ValidationError(
                     _REQUIRED_MESSAGES[name],
                     option=name,
-                    allowed=_REQUIRED_ALLOWED[name],
+                    allowed=_required_allowed(name, kwargs),
                 )
         for name in kwargs:
             if name not in _OPTIONS[kind] and kwargs[name] is not None:
@@ -1260,26 +1383,9 @@ class LandCoverManager:
             require_bool(kwargs["keep_raw"], "--keep-raw")
         provider = self._provider
         if isinstance(provider, SoilGridsProvider):
-            for name, label, allowed in (
-                ("property", "wlasciwosc", provider.PROPERTIES),
-                ("depth", "glebokosc", provider.DEPTHS),
-                ("stat", "statystyka", provider.STATS),
-            ):
-                if kwargs[name] not in allowed:
-                    raise ValidationError(
-                        f"Nieprawidlowa {label}: {kwargs[name]}. "
-                        f"Dostepne: {', '.join(allowed)}",
-                        option=name,
-                        allowed=tuple(allowed),
-                    )
+            provider.check_layer(kwargs["property"], kwargs["depth"], kwargs["stat"])
         elif isinstance(provider, CorineProvider):
-            if kwargs["year"] not in provider.AVAILABLE_YEARS:
-                raise ValidationError(
-                    f"Nieprawidlowy rok: {kwargs['year']}. "
-                    f"Dostepne lata: {provider.AVAILABLE_YEARS}",
-                    option="year",
-                    allowed=tuple(str(year) for year in provider.AVAILABLE_YEARS),
-                )
+            provider.check_year(kwargs["year"])
         else:
             self._check_bdot10k(kwargs)
 
@@ -1443,16 +1549,22 @@ class LandCoverManager:
         return key
 
     def _area_teryts(
-        self, bbox: BBox | None, sheet: str | None
+        self, bbox: BBox | None, sheet: str | None, sink: NoticeSink
     ) -> tuple[list[str], dict]:
-        """Powiats of a BDOT10k area (PRG, its 30 s timeout - P7) and its
-        ``extra.parent_request``."""
+        """Powiats of a BDOT10k area (PRG, its 30 s timeout - P7), listed in a
+        ``UNIT_LIST`` notice, and its ``extra.parent_request``."""
         provider = self._provider
         assert isinstance(provider, Bdot10kProvider)  # callers: BDOT10k only
         parent, area = self._bdot_area(bbox, sheet)
         teryts = provider.teryts_for_area(area)
         if not teryts:
             raise NoCoverageError("BDOT10k: obszar nie przecina zadnego powiatu (PRG)")
+        sink.emit(
+            "info",
+            UNIT_LIST,
+            f"{get_source(self._descriptor_key()).product}: powiaty obszaru wg PRG "
+            f"({len(teryts)}): {names_text(teryts)}",
+        )
         return teryts, parent
 
     def _area_jobs(
@@ -1528,6 +1640,7 @@ class LandCoverManager:
         planned: set[_SlotKey] | None,
         *,
         parent: dict | None,
+        sink: NoticeSink,
         on_download: Callable[[], None] | None = None,
     ) -> _UnitResult:
         """Local versions or one download for the jobs of one unit (spec 4.2).
@@ -1553,9 +1666,11 @@ class LandCoverManager:
             if on_download is not None:
                 on_download()
             if isinstance(self._provider, Bdot10kProvider):
-                outcome = self._fetch_bdot(jobs, in_scope, outcome, kwargs, parent)
+                outcome = self._fetch_bdot(
+                    jobs, in_scope, outcome, kwargs, parent, sink
+                )
             else:
-                outcome = [self._fetch_raster(jobs[0], kwargs)]
+                outcome = [self._fetch_raster(jobs[0], kwargs, sink)]
         return _UnitResult(
             jobs[0].unit,
             outcome[0],
@@ -1566,8 +1681,13 @@ class LandCoverManager:
         """Sidecar ``request``: the selection of this file + content params."""
         return {**job.selection, **self._content_params(kwargs)}
 
-    def _fetch_raster(self, job: _Job, kwargs: dict) -> VersionedFile:
-        """Download one SoilGrids/CORINE file and store it as a version."""
+    def _fetch_raster(self, job: _Job, kwargs: dict, sink: NoticeSink) -> VersionedFile:
+        """Download one SoilGrids/CORINE file and store it as a version.
+
+        The sidecar of a SoilGrids file has ``extra.units`` (the unit of its
+        integer values and the divisor to the conventional one) and, for a
+        raster without any data (every pixel 0), ``extra.all_nodata`` with the
+        ``ALL_NODATA`` warning."""
         provider = self._provider
         key = self._descriptor_key()
         version = job.version()  # the edition BEFORE the download (D30)
@@ -1583,6 +1703,8 @@ class LandCoverManager:
             extra.update(_PREVIEW_NOTE)
         if job.edition is not None:
             extra["edition"] = job.edition().to_extra()
+        if isinstance(provider, SoilGridsProvider):
+            extra["units"] = units_for(kwargs["property"], kwargs["stat"]).to_extra()
 
         def write(data: Path, ref: VersionRef, dg: ContentDigest, _http) -> None:
             emit_sidecar(
@@ -1598,6 +1720,7 @@ class LandCoverManager:
             )
 
         staged = new_staging(job.slot)
+        empty = False
         try:
             if job.sheet is not None:
                 path = provider.download_by_sheet(job.sheet, staged, **kwargs)
@@ -1606,10 +1729,14 @@ class LandCoverManager:
                 path = provider.download_by_bbox(job.bbox, staged, **kwargs)
             if Path(path) != staged:
                 os.replace(path, staged)
+            if isinstance(provider, SoilGridsProvider):
+                empty = is_empty(staged, kwargs["property"])
+                if empty:
+                    extra["all_nodata"] = True
         except BaseException:
             discard_staging(staged, job.slot)
             raise
-        return store_file(
+        file = store_file(
             job.slot,
             staged,
             version=version,
@@ -1617,6 +1744,15 @@ class LandCoverManager:
             http=None,
             signal=job.signal,
         )
+        if empty:
+            sink.emit(
+                "warning",
+                ALL_NODATA,
+                f"{file.path.relative_to(self._output_dir).as_posix()}: raster "
+                "w calosci zerowy - SoilGrids daje 0 w obszarach bez danych "
+                "(morze, woda, zabudowa, skaly, lod); sprawdz --bbox",
+            )
+        return file
 
     def _fetch_bdot(
         self,
@@ -1625,6 +1761,7 @@ class LandCoverManager:
         outcome: list[VersionedFile | None],
         kwargs: dict,
         parent: dict | None,
+        sink: NoticeSink,
     ) -> list[VersionedFile | None]:
         """Download one BDOT10k package; store the raw ZIP, then the result."""
         provider = self._provider
@@ -1653,7 +1790,21 @@ class LandCoverManager:
             if raw is not None and staged_raw is not None:
                 discard_staging(staged_raw, raw.slot)
             raise
-        source = {"url": package.url, "teryt": package.teryt, "format": package.format}
+        source: dict[str, object] = {
+            "url": package.url,
+            "teryt": package.teryt,
+            "format": package.format,
+        }
+        if package.classes is not None:
+            source["classes"] = list(package.classes)
+            if package.absent:
+                sink.emit(
+                    "info",
+                    CLASSES_ABSENT,
+                    f"{get_source(key).product} PL {teryt}: paczka nie ma plikow "
+                    f"klas {', '.join(package.absent)} (brak takich obiektow); "
+                    f"zapisano klasy {', '.join(package.classes)}",
+                )
         base: dict = {"source": source, "http": package.http}
         if parent:
             base["parent_request"] = parent

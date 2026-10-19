@@ -13,26 +13,35 @@ SoilGrids provides global soil information at 250m resolution:
 Data source: https://soilgrids.org
 WCS endpoint: https://maps.isric.org/mapserv
 
-Available properties:
-- bdod: Bulk density (kg/dm³)
-- cec: Cation exchange capacity (cmol/kg)
-- cfvo: Coarse fragments (%)
-- clay: Clay content (%)
-- nitrogen: Total nitrogen (g/kg)
-- ocd: Organic carbon density (kg/m³)
-- ocs: Organic carbon stock (t/ha)
-- phh2o: pH in H2O
-- sand: Sand content (%)
-- silt: Silt content (%)
-- soc: Soil organic carbon (g/kg)
+Available properties and the unit of their VALUES in the files. A SoilGrids
+raster holds integers ("mapped units" of ISRIC, stored this way to save
+space); the familiar unit is ``value / divisor`` (``SoilUnits``; the ISRIC
+table https://docs.isric.org/globaldata/soilgrids/SoilGrids_faqs_01.html,
+checked 2026-10-19 against the ISRIC REST ``unit_measure``):
+
+- bdod: bulk density, cg/cm3 (kg/dm3 = value / 100)
+- cec: cation exchange capacity, mmol(c)/kg (cmol(c)/kg = value / 10)
+- cfvo: coarse fragments, cm3/dm3 (cm3/100cm3 = value / 10)
+- clay: clay content, g/kg (% = value / 10)
+- nitrogen: total nitrogen, cg/kg (g/kg = value / 100)
+- ocd: organic carbon density, hg/m3 (kg/m3 = value / 10)
+- ocs: organic carbon stock, t/ha (kg/m2 = value / 10); ONLY depth 0-30cm
+- phh2o: pH in H2O, pH x 10 (pH = value / 10)
+- sand: sand content, g/kg (% = value / 10)
+- silt: silt content, g/kg (% = value / 10)
+- soc: soil organic carbon, dg/kg (g/kg = value / 10)
+
+The ``uncertainty`` statistic of every property is the ratio
+``(Q0.95 - Q0.05) / Q0.5`` times 10 (no unit).
 
 Depth intervals: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm, 100-200cm
-Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
+(every property but ocs). Statistics: mean, Q0.05, Q0.5, Q0.95, uncertainty
 """
 
 import logging
 import re
 import xml.etree.ElementTree as ET
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlencode
@@ -59,29 +68,144 @@ _OWS = "{http://www.opengis.net/ows/2.0}"
 _OWS_TITLE = f"{_OWS}ServiceIdentification/{_OWS}Title"
 # "SoilGrids250m 2.0 - Clay content" -> "2.0" (D29)
 _EDITION_RE = re.compile(r"^SoilGrids250m (\S+) - ")
+# The maps whose own GetCapabilities title names no edition (``ocd``:
+# "Soilgrids property: Organic carbon density", measured 2026-10-19; the ISRIC
+# documentation lists it in the release 2.0): their edition is the one the map
+# of ``_EDITION_REFERENCE`` announces, the version of the whole service.
+_EDITIONLESS_MAPS = frozenset({"ocd"})
+_EDITION_REFERENCE = "clay"
+# One pixel of the SoilGrids WCS in EPSG:4326 (250 m). A window narrower than
+# half a pixel is answered with HTTP 400 (measured 2026-10-19: 0.001 deg fails,
+# 0.0012 deg gives one pixel), so a smaller window is widened to one pixel.
+PIXEL_DEGREES = 0.00225
 
 
-# Descriptions of the soil properties and statistics for the user (Polish,
-# ASCII; one text for --help and `soil list-layers`, UX-23)
-PROPERTY_DESCRIPTIONS = {
-    "bdod": "gestosc objetosciowa (kg/dm3)",
-    "cec": "pojemnosc sorpcyjna (cmol/kg)",
-    "cfvo": "frakcja szkieletowa (%)",
-    "clay": "il (%)",
-    "nitrogen": "azot calkowity (g/kg)",
-    "ocd": "gestosc wegla organicznego (kg/m3)",
-    "ocs": "zasob wegla organicznego (t/ha)",
+@dataclass(frozen=True)
+class SoilUnits:
+    """The unit of the integer values of a SoilGrids file (the ISRIC "mapped
+    units") and its conversion: ``conventional = value / divisor``."""
+
+    mapped: str
+    conventional: str
+    divisor: int
+
+    def to_extra(self) -> dict[str, Any]:
+        """``extra.units`` of the version sidecar."""
+        return {
+            "mapped": self.mapped,
+            "conventional": self.conventional,
+            "divisor": self.divisor,
+        }
+
+
+# ISRIC mapped units per property (docstring of the module).
+PROPERTY_UNITS = {
+    "bdod": SoilUnits("cg/cm3", "kg/dm3", 100),
+    "cec": SoilUnits("mmol(c)/kg", "cmol(c)/kg", 10),
+    "cfvo": SoilUnits("cm3/dm3", "cm3/100cm3", 10),
+    "clay": SoilUnits("g/kg", "%", 10),
+    "nitrogen": SoilUnits("cg/kg", "g/kg", 100),
+    "ocd": SoilUnits("hg/m3", "kg/m3", 10),
+    "ocs": SoilUnits("t/ha", "kg/m2", 10),
+    "phh2o": SoilUnits("pH x 10", "pH", 10),
+    "sand": SoilUnits("g/kg", "%", 10),
+    "silt": SoilUnits("g/kg", "%", 10),
+    "soc": SoilUnits("dg/kg", "g/kg", 10),
+}
+# ``uncertainty`` of any property: 10 x (Q0.95 - Q0.05) / Q0.5, rounded
+# (checked on clay: the layer equals the ratio of the quantile layers, |diff| <= 0.5).
+UNCERTAINTY_UNITS = SoilUnits(
+    "10 * (Q0.95 - Q0.05) / Q0.5", "(Q0.95 - Q0.05) / Q0.5", 10
+)
+
+
+def units_for(property: str, stat: str) -> SoilUnits:
+    """The unit of the values of the layer ``property``/``stat`` (the
+    ``uncertainty`` of every property is the same ratio)."""
+    return UNCERTAINTY_UNITS if stat == "uncertainty" else PROPERTY_UNITS[property]
+
+
+def _at_least_one_pixel(
+    bounds: tuple[float, float, float, float],
+) -> tuple[float, float, float, float]:
+    """``bounds`` (min_lon, min_lat, max_lon, max_lat) with each side at least
+    ``PIXEL_DEGREES`` long: a shorter side is widened symmetrically around its
+    centre (the WCS answers a window under half a pixel with HTTP 400)."""
+
+    def side(low: float, high: float) -> tuple[float, float]:
+        if high - low >= PIXEL_DEGREES:
+            return low, high
+        centre = (low + high) / 2
+        return centre - PIXEL_DEGREES / 2, centre + PIXEL_DEGREES / 2
+
+    min_lon, max_lon = side(bounds[0], bounds[2])
+    min_lat, max_lat = side(bounds[1], bounds[3])
+    return min_lon, min_lat, max_lon, max_lat
+
+
+# Properties whose value 0 is a real value, so a raster of zeros may be data: a
+# soil without coarse fragments (the 5th percentile of ``cfvo`` is 0 over most
+# of Poland, measured 2026-10-19).
+_ZERO_IS_DATA = frozenset({"cfvo"})
+
+
+def is_empty(path: Path, property: str) -> bool:
+    """Whether the SoilGrids raster at ``path`` holds no data: every pixel is 0,
+    the value SoilGrids gives the areas it masks (sea, water, built-up land,
+    bare rock, ice; the GeoTIFF has no NoData tag).
+
+    ``cfvo`` is never empty: 0 is one of its values, so a raster of zeros
+    cannot be told from a masked area. An unreadable file is not empty.
+    """
+    if property in _ZERO_IS_DATA:
+        return False
+    import rasterio
+    from rasterio.errors import RasterioError
+
+    try:
+        with rasterio.open(path) as raster:
+            for _, window in raster.block_windows(1):
+                if raster.read(1, window=window).any():
+                    return False
+    except (OSError, ValueError, RasterioError) as e:
+        logger.debug("SoilGrids raster %s unreadable: %s", path, e)
+        return False
+    return True
+
+
+# Names of the soil properties for the user (Polish, ASCII; one text for --help
+# and `soil list-layers`, UX-23); the description adds the unit of the values
+# in the file and its conversion (``PROPERTY_UNITS``).
+_PROPERTY_NAMES = {
+    "bdod": "gestosc objetosciowa",
+    "cec": "pojemnosc sorpcyjna",
+    "cfvo": "frakcja szkieletowa",
+    "clay": "il",
+    "nitrogen": "azot calkowity",
+    "ocd": "gestosc wegla organicznego",
+    "ocs": "zasob wegla organicznego, tylko glebokosc 0-30cm",
     "phh2o": "pH w wodzie (H2O)",
-    "sand": "piasek (%)",
-    "silt": "pyl (%)",
-    "soc": "wegiel organiczny (g/kg)",
+    "sand": "piasek",
+    "silt": "pyl",
+    "soc": "wegiel organiczny",
+}
+
+
+def _unit_text(units: SoilUnits) -> str:
+    return f"w pliku {units.mapped}; {units.conventional} = wartosc / {units.divisor}"
+
+
+PROPERTY_DESCRIPTIONS = {
+    code: f"{name} ({_unit_text(PROPERTY_UNITS[code])})"
+    for code, name in _PROPERTY_NAMES.items()
 }
 STAT_DESCRIPTIONS = {
     "mean": "srednia",
     "Q0.05": "5. percentyl",
     "Q0.5": "mediana",
     "Q0.95": "95. percentyl",
-    "uncertainty": "niepewnosc predykcji",
+    "uncertainty": f"niepewnosc predykcji ({_unit_text(UNCERTAINTY_UNITS)}; bez "
+    "jednostki)",
 }
 DEPTH_DESCRIPTION = "przedzial glebokosci ponizej powierzchni"
 
@@ -140,8 +264,13 @@ class SoilGridsProvider(LandCoverProvider):
         "soc",
     ]
 
-    # Available depth intervals
+    # Standard depth intervals (every property but ocs)
     DEPTHS = ["0-5cm", "5-15cm", "15-30cm", "30-60cm", "60-100cm", "100-200cm"]
+
+    # Properties published at other depths: ocs is the carbon stock of the
+    # topsoil 0-30cm only (GetCapabilities of ocs.map, 2026-10-19: the
+    # coverages are ocs_0-30cm_<stat>; ocs_0-5cm_mean is HTTP 404)
+    PROPERTY_DEPTHS = {"ocs": ["0-30cm"]}
 
     # Available statistics
     STATS = ["mean", "Q0.05", "Q0.5", "Q0.95", "uncertainty"]
@@ -149,6 +278,49 @@ class SoilGridsProvider(LandCoverProvider):
     # Default settings
     DEFAULT_TIMEOUT = 120
     MAX_RETRIES = MAX_RETRIES
+
+    @classmethod
+    def depths_for(cls, property: str) -> list[str]:
+        """The depth intervals SoilGrids publishes for ``property``: the six
+        standard ones, ``ocs`` only 0-30cm."""
+        return list(cls.PROPERTY_DEPTHS.get(property, cls.DEPTHS))
+
+    @classmethod
+    def all_depths(cls) -> list[str]:
+        """The depth intervals of all properties (the standard ones first)."""
+        extra = [depth for depths in cls.PROPERTY_DEPTHS.values() for depth in depths]
+        return list(dict.fromkeys([*cls.DEPTHS, *extra]))
+
+    @classmethod
+    def layers(cls) -> list[tuple[str, str, str]]:
+        """Every layer the service publishes: ``(property, depth, stat)``."""
+        return [
+            (prop, depth, stat)
+            for prop in cls.PROPERTIES
+            for depth in cls.depths_for(prop)
+            for stat in cls.STATS
+        ]
+
+    @classmethod
+    def check_layer(cls, property: str, depth: str, stat: str) -> None:
+        """``ValidationError`` unless SoilGrids publishes the layer.
+
+        The property, its depth (``depths_for``) and the statistic are checked
+        in this order; the error names the allowed values of the argument
+        (``option`` and ``allowed``).
+        """
+        for name, label, value, allowed, where in (
+            ("property", "wlasciwosc", property, cls.PROPERTIES, ""),
+            ("depth", "glebokosc", depth, cls.depths_for(property), f" dla {property}"),
+            ("stat", "statystyka", stat, cls.STATS, ""),
+        ):
+            if value not in allowed:
+                raise ValidationError(
+                    f"Nieprawidlowa {label}: {value}. Dostepne{where}: "
+                    f"{', '.join(allowed)}",
+                    option=name,
+                    allowed=tuple(allowed),
+                )
 
     def __init__(
         self,
@@ -190,23 +362,9 @@ class SoilGridsProvider(LandCoverProvider):
         params = {"SERVICE": "WCS", "VERSION": "2.0.1", "REQUEST": "GetCapabilities"}
         return f"{self.WCS_BASE}?map=/map/{property}.map&{urlencode(params)}"
 
-    def edition(self, property: str, timeout: int = DEFAULT_TIMEOUT) -> Edition:
-        """SoilGrids edition announced by the property map's GetCapabilities.
-
-        The first ``ows:Title`` of ``ServiceIdentification`` has the form
-        ``SoilGrids250m <edition> - <property name>``; the edition is the
-        version label of every file of this property.
-
-        Raises
-        ------
-        DownloadError
-            HTTP failure, unreadable XML or a title without an edition.
-        """
-        if property not in self.PROPERTIES:
-            raise ValidationError(
-                f"Nieprawidlowa wlasciwosc: {property}. "
-                f"Dostepne: {', '.join(self.PROPERTIES)}"
-            )
+    def _capabilities_title(self, property: str, timeout: int) -> tuple[str, str]:
+        """``(url, title)``: the GetCapabilities request of the property map
+        and the first ``ows:Title`` of its ``ServiceIdentification``."""
         url = self.capabilities_url(property)
         response = get_with_retry(
             self._sessions.get(),
@@ -221,8 +379,37 @@ class SoilGridsProvider(LandCoverProvider):
             raise DownloadError(
                 f"SoilGrids GetCapabilities {property}: XML: {e}"
             ) from e
-        title = (root.findtext(_OWS_TITLE) or "").strip()
+        return url, (root.findtext(_OWS_TITLE) or "").strip()
+
+    def edition(self, property: str, timeout: int = DEFAULT_TIMEOUT) -> Edition:
+        """SoilGrids edition announced by the property map's GetCapabilities.
+
+        The first ``ows:Title`` of ``ServiceIdentification`` has the form
+        ``SoilGrids250m <edition> - <property name>``; the edition is the
+        version label of every file of this property. The map of ``ocd``
+        announces no edition (its title is ``Soilgrids property: Organic
+        carbon density``): its edition is the one the map of ``clay``
+        announces, and the ``url``/``title`` of the edition name that map.
+
+        Raises
+        ------
+        DownloadError
+            HTTP failure, unreadable XML or a title without an edition.
+        """
+        if property not in self.PROPERTIES:
+            raise ValidationError(
+                f"Nieprawidlowa wlasciwosc: {property}. "
+                f"Dostepne: {', '.join(self.PROPERTIES)}"
+            )
+        url, title = self._capabilities_title(property, timeout)
         match = _EDITION_RE.match(title)
+        if match is None and property in _EDITIONLESS_MAPS:
+            reference_url, reference_title = self._capabilities_title(
+                _EDITION_REFERENCE, timeout
+            )
+            match = _EDITION_RE.match(reference_title)
+            if match is not None:
+                url, title = reference_url, reference_title
         if match is None:
             raise DownloadError(
                 f"SoilGrids GetCapabilities {property}: brak wydania w tytule "
@@ -266,7 +453,7 @@ class SoilGridsProvider(LandCoverProvider):
             phh2o (soil pH), sand (sand), silt (silt), soc (organic carbon).
         depth : str
             Soil interval: 0-5cm, 5-15cm, 15-30cm, 30-60cm, 60-100cm,
-            or 100-200cm (centimetres below surface).
+            or 100-200cm (centimetres below surface); ocs only 0-30cm.
         stat : str
             mean (average), Q0.05 (5th percentile), Q0.5 (median),
             Q0.95 (95th percentile), or uncertainty (prediction uncertainty).
@@ -292,29 +479,14 @@ class SoilGridsProvider(LandCoverProvider):
                 "Przelicz: SheetParser.get_bbox(crs='EPSG:2180')."
             )
 
-        # Validate property
-        if property not in self.PROPERTIES:
-            raise ValidationError(
-                f"Nieprawidlowa wlasciwosc: {property}. "
-                f"Dostepne: {', '.join(self.PROPERTIES)}"
-            )
-
-        # Validate depth
-        if depth not in self.DEPTHS:
-            raise ValidationError(
-                f"Nieprawidlowa glebokosc: {depth}. Dostepne: {', '.join(self.DEPTHS)}"
-            )
-
-        # Validate stat
-        if stat not in self.STATS:
-            raise ValidationError(
-                f"Nieprawidlowa statystyka: {stat}. Dostepne: {', '.join(self.STATS)}"
-            )
+        # Validate property, its depth and the statistic
+        self.check_layer(property, depth, stat)
 
         output_path = Path(output_path)
 
-        # Transform bbox to WGS84 for WCS
-        bbox_wgs84 = envelope_from_2180(bbox, "EPSG:4326")
+        # Transform bbox to WGS84 for WCS; a window smaller than a pixel is
+        # widened to one pixel (the WCS answers it with HTTP 400)
+        bbox_wgs84 = _at_least_one_pixel(envelope_from_2180(bbox, "EPSG:4326"))
 
         # Download via WCS
         return self._download_via_wcs(
@@ -483,16 +655,22 @@ class SoilGridsProvider(LandCoverProvider):
         """
         return self.PROPERTIES.copy()
 
-    def get_available_depths(self) -> list[str]:
+    def get_available_depths(self, property: str | None = None) -> list[str]:
         """
         Return list of available depth intervals.
+
+        Parameters
+        ----------
+        property : str, optional
+            Only the depths of this property (``depths_for``); default: the
+            depths of all properties (``all_depths``).
 
         Returns
         -------
         list[str]
             List of depth intervals
         """
-        return self.DEPTHS.copy()
+        return self.all_depths() if property is None else self.depths_for(property)
 
     def get_available_stats(self) -> list[str]:
         """

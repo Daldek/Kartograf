@@ -34,7 +34,7 @@ from kartograf.landcover.manager import (
 )
 from kartograf.providers.corine import CorineProvider
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
-from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.providers.soilgrids import PROPERTY_UNITS, SoilGridsProvider
 from kartograf.serialization import Document
 from kartograf.sources.descriptor import SignalKind, SourceDescriptor, UnitPackageParams
 from kartograf.sources.registry import get_source, sources_for
@@ -155,6 +155,19 @@ class LayerInfo:
 
 
 @dataclass(frozen=True)
+class PropertyInfo(LayerInfo):
+    """A SoilGrids property: its ``code`` and ``description`` (the text names the
+    unit), the ``unit`` of the integer values in the file (the ISRIC "mapped
+    units"), the ``conventional_unit`` and the ``divisor``: the familiar value is
+    ``value / divisor``; ``depths``: the depth intervals published for it."""
+
+    unit: str
+    conventional_unit: str
+    divisor: int
+    depths: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class YearInfo:
     """A CORINE release: ``year`` (the reference year, the value of ``year``),
     ``data`` - ``clms`` (the CLMS data; the WMS preview without credentials) or
@@ -170,10 +183,12 @@ class LayerList(Document):
     """What a product of ``landcover`` or ``soil`` offers (``kartograf-layers/1``).
 
     Only the fields of the product are filled, the others are empty (``layers``)
-    or ``None``: ``layers`` (BDOT10k: code and description; ZABAGED, Data50,
-    Data250: the name of the layer of the service), ``classes`` (BDOO: release
-    year -> class codes), ``years`` (CORINE), ``properties``, ``depths`` and
-    ``statistics`` (SoilGrids). ``product`` is ``None`` for ``soil``.
+    or ``None``: ``layers`` (BDOT10k: the code and description of every class
+    ``--layers`` accepts; ZABAGED, Data50, Data250: the name of the layer of
+    the service), ``classes`` (BDOO: release year -> class codes), ``years``
+    (CORINE), ``properties`` (``PropertyInfo``), ``depths`` (the depth
+    intervals of all properties) and ``statistics`` (SoilGrids). ``product`` is
+    ``None`` for ``soil``.
     """
 
     SCHEMA = "kartograf-layers/1"
@@ -478,7 +493,14 @@ def _soil_layers() -> LayerList:
         None,
         provider.name,
         properties=tuple(
-            LayerInfo(code, provider.get_property_description(code))
+            PropertyInfo(
+                code,
+                provider.get_property_description(code),
+                PROPERTY_UNITS[code].mapped,
+                PROPERTY_UNITS[code].conventional,
+                PROPERTY_UNITS[code].divisor,
+                tuple(provider.depths_for(code)),
+            )
             for code in provider.get_available_properties()
         ),
         depths=tuple(choices["depth"]),

@@ -13,6 +13,7 @@ from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
 from kartograf.download.options import store_files
 from kartograf.hydrology.hsg import HSG_OUTPUT_FILES
 from kartograf.landcover.manager import soil_choices
+from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.registry import sources_for
 
 _AREA_RULE = Constraint(
@@ -32,9 +33,14 @@ def _described(kind: str) -> str:
     return "; ".join(f"{value}: {text}" for value, text in soil_choices()[kind].items())
 
 
-def _depths() -> str:
+def _depths(standard_only: bool = False) -> str:
+    """The depth values of ``--depth`` with their explanation: all of them for
+    ``soil download`` (``0-30cm`` only for ocs), the standard ones for HSG
+    (clay, sand and silt are published at those only)."""
     depths = soil_choices()["depth"]
-    return f"{', '.join(depths)} ({', '.join(dict.fromkeys(depths.values()))})"
+    names = SoilGridsProvider.DEPTHS if standard_only else list(depths)
+    note = "" if standard_only else "; 0-30cm tylko dla ocs"
+    return f"{', '.join(names)} ({', '.join(dict.fromkeys(depths.values()))}{note})"
 
 
 def _property_help() -> str:
@@ -45,6 +51,10 @@ def _depth_help() -> str:
     return f"Wymagane: {_depths()}"
 
 
+def _hsg_depth_help() -> str:
+    return f"Wymagane: {_depths(standard_only=True)}"
+
+
 def _stat_help() -> str:
     return f"Wymagane: {_described('stat')}"
 
@@ -53,14 +63,16 @@ def _values(kind: str):
     return lambda: list(soil_choices()[kind])
 
 
-def _depth() -> Param:
+def _depth(standard_only: bool = False) -> Param:
     return Param(
         "depth",
         "str",
-        _depth_help,
+        _hsg_depth_help if standard_only else _depth_help,
         short="-d",
         metavar="GLEBOKOSC",
-        allowed=_values("depth"),
+        allowed=(lambda: list(SoilGridsProvider.DEPTHS))
+        if standard_only
+        else _values("depth"),
         required=True,
         task=True,
         section=SELECTION_TITLE,
@@ -117,7 +129,7 @@ _DOWNLOAD_PARAMS = (
 )
 
 _HSG_PARAMS = (
-    _depth(),
+    _depth(standard_only=True),
     *shared.area(sheet=SHEET_AREA_HELP, accepts=PL_SHEETS),
     shared.output_dir(lambda: HSG_OUTPUT_FILES),
     *shared.update_params(

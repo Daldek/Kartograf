@@ -330,13 +330,9 @@ def _writer_segments() -> Iterator[tuple[str, str]]:
         ],
         "eu.clms.corine": [(str(y),) for y in CorineProvider.CLMS_YEARS]
         + [(str(y), "preview") for y in CorineProvider.AVAILABLE_YEARS],
-        "global.isric.soilgrids": list(
-            itertools.product(
-                SoilGridsProvider.PROPERTIES,
-                SoilGridsProvider.DEPTHS,
-                SoilGridsProvider.STATS,
-            )
-        ),
+        "global.isric.soilgrids": [
+            tuple(layer) for layer in SoilGridsProvider.layers()
+        ],
     }
     for d in all_sources():
         template = d.storage_subdir
