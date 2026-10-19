@@ -1748,7 +1748,8 @@ separatorem `/`; `version` wskazuje plik pod `versions/`, nigdy
 powiazania, jezeli ich wzajemne polozenie pozostaje takie samo.
 
 `kartograf/project/manifest.py` scisle sprawdza strukture i typy przy
-kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki). Zapisuje
+kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki; BOM UTF-8
+edytora jest dopuszczony, zapis zawsze bez BOM). Zapisuje
 plik tymczasowy obok manifestu, synchronizuje go (`fsync`) i podmienia
 atomowo (`os.replace`); synchronizuje rowniez katalog, gdy system plikow
 na to pozwala. Krotka blokada katalogowa `.kartograf-project.lock`
@@ -3759,8 +3760,11 @@ czystym procesie).
 `validate_command` (konwersja i walidacja zadania bez sieci i zapisu), `format_command`
 (`catalog/formatting.py`), `run_command`/`check_command` (konwersja, walidacja, potem funkcja
 komendy: `download_data`, `download_collection`, ... albo `check_*`). `options` to postac
-JSON opcji zadania projektu (ADR-040), `run` - flagi uruchomienia (`output_dir`, `update`,
-`plan`, `workers`, `summary`). Funkcje bez sieci (`parse_command`, `validate_command`,
+JSON opcji zadania projektu (ADR-040), `run` - pozostale flagi linii pod nazwami
+parametrow (`output_dir`, `upgrade`, `force`, `check_updates`, `plan`, `workers`,
+`quiet`, `json`, `summary`; nie ma klucza `update`: `run_command` bierze tryb jako
+`update="upgrade"|"force"`, a `check_updates` to `check_command`, wiec odwzorowanie robi
+wywolujacy). Funkcje bez sieci (`parse_command`, `validate_command`,
 `format_command`) maja test z atrapa transportu odrzucajaca kazde zapytanie.
 
 **Bledy.** Kazda klasa `KartografError` ma w `__dict__` wlasny `code` (snake_case, unikalny;
