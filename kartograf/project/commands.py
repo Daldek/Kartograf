@@ -1,32 +1,32 @@
 """Data commands of project tasks (ADR-040; spec 5 of the project manifest).
 
 ``COMMANDS`` has one entry per data command of the CLI (``kartograf <grupa>
-download``, ``soil hsg``): the option names of a task (the data flags of the
-command in ``snake_case``; ``bbox`` as 4 numbers plus ``bbox_crs``) with
-their JSON kinds, the validation without network that the download function
+download``, ``soil hsg``): the option names of a task with their JSON kinds -
+the parameters of the declaration of the command in ``kartograf.catalog`` that
+are task options (``Command.task_options``; ``bbox`` as 4 numbers plus
+``bbox_crs``) - the validation without network that the download function
 itself runs first, the download and ``check_*`` calls and the adapter of
 the result family to the files a task pins. The project has no per-product
 logic: a new product of an existing command changes nothing here, a new
-data command (a new group) adds one entry - plus ``_task`` in its CLI
-parser and a project task test.
+data command (a new group) adds its declaration to the catalog and one entry
+here.
 
 Options exist in two forms: library arguments (``BBox``, ``Path``, per
-country mappings, sequences) and the JSON form of ``tasks[].options``.
-``options_to_json`` / ``options_from_json`` convert between them;
-``check_options_json`` validates the JSON form read from a manifest.
+country mappings, sequences) and the JSON form of ``tasks[].options``; the
+conversion between them (``options_to_json``, ``options_from_json``,
+``check_options_json``) is in ``kartograf.catalog.kinds``.
 """
 
-import math
-import os
 import shlex
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
-from pathlib import Path, PurePath
+from pathlib import Path
 from types import MappingProxyType
-from typing import Any, Literal, Protocol
+from typing import Any, Protocol
 
 from kartograf.cache.metadata import MetadataCache
-from kartograf.core.bbox import BBox
+from kartograf.catalog.commands import declared_commands
+from kartograf.catalog.spec import Kind
 from kartograf.download.collections import (
     check_collection,
     download_collection,
@@ -67,14 +67,14 @@ from kartograf.landcover.manager import (
 )
 from kartograf.notices import Notice
 from kartograf.project.model import PinRole
+from kartograf.serialization import Document
 
-# JSON kind of a task option: ``bbox`` is a list of 4 numbers whose CRS is the
-# ``bbox_crs`` option (one ``BBox`` argument of the library); ``path`` is a
-# string resolved against the project directory; ``per_country`` is a string
-# or ``{"pl": ..., "cz": ...}``; ``flag`` is ``true`` (``false`` is omitted).
-OptionKind = Literal[
-    "str", "int", "flag", "bbox", "bbox_crs", "path", "per_country", "str_list"
-]
+# JSON kind of a task option (the kinds of the catalog parameters): ``bbox`` is
+# a list of 4 numbers whose CRS is the ``bbox_crs`` option (one ``BBox``
+# argument of the library); ``path`` is a string resolved against the project
+# directory; ``per_country`` is a string or ``{"pl": ..., "cz": ...}``;
+# ``flag`` is ``true`` (``false`` is omitted).
+OptionKind = Kind
 # Library arguments of a task (without ``output_dir`` and run options).
 Options = dict[str, Any]
 
@@ -84,7 +84,9 @@ class TaskDownload(Protocol):
 
     ``workers``: parallel transfers of the task's files (``None`` = the
     default of the library function; HSG computes one raster from three
-    inputs and has no workers).
+    inputs and has no workers). ``plan``: the plan of ``update="upgrade"``
+    (a project passes ``None``). ``summary``: HSG statistics in the report
+    (``soil hsg`` only; the other commands ignore it).
     """
 
     def __call__(
@@ -94,11 +96,13 @@ class TaskDownload(Protocol):
         /,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object: ...
+    ) -> Document: ...
 
 
 class TaskCheck(Protocol):
@@ -220,25 +224,13 @@ def _run_options(workers: int | None) -> Options:
     return {} if workers is None else {"workers": workers}
 
 
-_AREA: dict[str, OptionKind] = {
-    "sheet": "str",
-    "bbox": "bbox",
-    "bbox_crs": "bbox_crs",
-    "geometry": "path",
-    "layer": "str",
-}
-_CAMPAIGNS: dict[str, OptionKind] = {
-    "year": "int",
-    "min_year": "int",
-    "max_year": "int",
-    "all_campaigns": "flag",
-    "full_sheet": "flag",
-}
+def _options(name: str) -> Mapping[str, OptionKind]:
+    """The options of a task of a data command: the parameters of its declaration
+    in the catalog that are task options, in the order of the manifest."""
+    return MappingProxyType(declared_commands()[name].task_options)
 
 
-def _data_command(
-    name: str, products: tuple[str, ...], options: dict[str, OptionKind]
-) -> TaskCommand:
+def _data_command(name: str, products: tuple[str, ...]) -> TaskCommand:
     """``download_data``/``check_data`` limited to the products of a group."""
 
     def validate(output_dir: Path, opts: Options) -> None:
@@ -250,15 +242,18 @@ def _data_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         require_product(opts.get("product"), products)
         return download_data(
             output_dir=output_dir,
             update=update,
+            plan=plan,
             cache=cache,
             on_progress=on_progress,
             on_notice=on_notice,
@@ -279,13 +274,11 @@ def _data_command(
         )
 
     return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, unit_report_files
+        name, _options(name), validate, download, check, unit_report_files
     )
 
 
-def _landcover_command(
-    name: str, product: str | None, options: dict[str, OptionKind]
-) -> TaskCommand:
+def _landcover_command(name: str, product: str | None) -> TaskCommand:
     """The land cover or SoilGrids command-level function."""
 
     def request(opts: Options) -> Options:
@@ -305,11 +298,13 @@ def _landcover_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         if product is None:
             return download_landcover(
                 output_dir=output_dir,
@@ -317,6 +312,7 @@ def _landcover_command(
                 **_run_options(workers),
                 cache=cache,
                 update=update,
+                plan=plan,
                 on_notice=on_notice,
                 on_progress=on_progress,
             )
@@ -325,6 +321,7 @@ def _landcover_command(
             **request(opts),
             cache=cache,
             update=update,
+            plan=plan,
             on_notice=on_notice,
         )
 
@@ -345,7 +342,7 @@ def _landcover_command(
 
     return TaskCommand(
         name,
-        MappingProxyType(options),
+        _options(name),
         validate,
         download,
         check,
@@ -353,7 +350,7 @@ def _landcover_command(
     )
 
 
-def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
+def _hsg_command(name: str) -> TaskCommand:
     """Command-level ``calculate_hsg``/``check_hsg``."""
 
     def validate(output_dir: Path, opts: Options) -> None:
@@ -364,16 +361,20 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         return calculate_hsg(
             output_dir=output_dir,
             **opts,
             cache=cache,
             update=update,
+            plan=plan,
+            summary=summary,
             on_notice=on_notice,
         )
 
@@ -388,14 +389,10 @@ def _hsg_command(name: str, options: dict[str, OptionKind]) -> TaskCommand:
             output_dir=output_dir, **opts, cache=cache, on_notice=on_notice
         )
 
-    return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, _hsg_files
-    )
+    return TaskCommand(name, _options(name), validate, download, check, _hsg_files)
 
 
-def _collection_command(
-    name: str, group: str, options: dict[str, OptionKind]
-) -> TaskCommand:
+def _collection_command(name: str, group: str) -> TaskCommand:
     """``download_collection``/``check_collection`` limited to the products of
     a collection group (``boundaries``, ``cadastre``, ``models3d``, ``hydro``,
     ``names``, ``maps``, ``geodesy``; ADR-042); the result family is
@@ -410,15 +407,18 @@ def _collection_command(
         opts: Options,
         *,
         update: UpdateMode | None,
+        plan: UpdatePlan | None,
         workers: int | None,
+        summary: bool,
         cache: MetadataCache | bool,
         on_progress: Callable[[DownloadProgress], None] | None,
         on_notice: Callable[[Notice], None] | None,
-    ) -> object:
+    ) -> Document:
         require_collection_product(opts.get("product"), group)
         return download_collection(
             output_dir=output_dir,
             update=update,
+            plan=plan,
             cache=cache,
             on_progress=on_progress,
             on_notice=on_notice,
@@ -439,137 +439,26 @@ def _collection_command(
         )
 
     return TaskCommand(
-        name, MappingProxyType(options), validate, download, check, unit_report_files
+        name, _options(name), validate, download, check, unit_report_files
     )
-
-
-# The selection of a collection group (ADR-042 D9): product, country, unit
-# or area; each group adds only its own content flags.
-_COLLECTION: dict[str, OptionKind] = {
-    "product": "str",
-    "country": "str",
-    "teryt": "str",
-    **_AREA,
-}
-# A group without PL sources (``hydro``): no TERYT and no sheet code (both
-# select PL units and sheets).
-_CZ_COLLECTION: dict[str, OptionKind] = {
-    name: kind for name, kind in _COLLECTION.items() if name not in ("teryt", "sheet")
-}
-_SHEET_COLLECTION: dict[str, OptionKind] = {
-    name: kind for name, kind in _COLLECTION.items() if name != "teryt"
-}
 
 
 COMMANDS: Mapping[str, TaskCommand] = MappingProxyType(
     {
         command.name: command
         for command in (
-            _data_command(
-                "elevation download",
-                ELEVATION_PRODUCTS,
-                {
-                    "product": "str",
-                    **_AREA,
-                    "country": "str",
-                    "resolution": "per_country",
-                    "vertical_crs": "per_country",
-                    "model": "str",
-                    "format": "str",
-                    "sheet_system": "str",
-                    "scale": "str",
-                    "cutout": "flag",
-                    "horizontal_crs": "str",
-                    **_CAMPAIGNS,
-                    "min_density": "int",
-                },
-            ),
-            _data_command(
-                "imagery download",
-                IMAGERY_PRODUCTS,
-                {
-                    "product": "str",
-                    **_AREA,
-                    "country": "str",
-                    "sheet_system": "str",
-                    "scale": "str",
-                    "cutout": "flag",
-                    "horizontal_crs": "str",
-                    "coverage": "str",
-                    "direction": "str_list",
-                    "resolution": "per_country",
-                    **_CAMPAIGNS,
-                },
-            ),
-            _landcover_command(
-                "landcover download",
-                None,
-                {
-                    "product": "str",
-                    "teryt": "str",
-                    **_AREA,
-                    "whole_country": "flag",
-                    "year": "int",
-                    "format": "str",
-                    "layers": "str_list",
-                    "keep_raw": "flag",
-                    "horizontal_crs": "str",
-                },
-            ),
-            _landcover_command(
-                "soil download",
-                "soilgrids",
-                {**_AREA, "property": "str", "depth": "str", "stat": "str"},
-            ),
-            _hsg_command("soil hsg", {**_AREA, "depth": "str"}),
-            _collection_command(
-                "boundaries download",
-                "boundaries",
-                {
-                    **_COLLECTION,
-                    "whole_country": "flag",
-                    "level": "per_country",
-                    "format": "str",
-                },
-            ),
-            _collection_command(
-                "cadastre download",
-                "cadastre",
-                {**_COLLECTION, "ku": "str", "format": "str"},
-            ),
-            _collection_command(
-                "models3d download",
-                "models3d",
-                {**_COLLECTION, "lod": "int", "year": "int"},
-            ),
-            _collection_command(
-                "hydro download", "hydro", {**_CZ_COLLECTION, "whole_country": "flag"}
-            ),
-            _collection_command(
-                "names download",
-                "names",
-                {
-                    **_SHEET_COLLECTION,
-                    "whole_country": "flag",
-                    "format": "str",
-                    "horizontal_crs": "str",
-                },
-            ),
-            _collection_command(
-                "maps download",
-                "maps",
-                {
-                    **_SHEET_COLLECTION,
-                    "scale": "str",
-                    "format": "str",
-                    "sheet_system": "str",
-                },
-            ),
-            _collection_command(
-                "geodesy download",
-                "geodesy",
-                {**_COLLECTION, "whole_country": "flag", "network": "per_country"},
-            ),
+            _data_command("elevation download", ELEVATION_PRODUCTS),
+            _data_command("imagery download", IMAGERY_PRODUCTS),
+            _landcover_command("landcover download", None),
+            _landcover_command("soil download", "soilgrids"),
+            _hsg_command("soil hsg"),
+            _collection_command("boundaries download", "boundaries"),
+            _collection_command("cadastre download", "cadastre"),
+            _collection_command("models3d download", "models3d"),
+            _collection_command("hydro download", "hydro"),
+            _collection_command("names download", "names"),
+            _collection_command("maps download", "maps"),
+            _collection_command("geodesy download", "geodesy"),
         )
     }
 )
@@ -605,166 +494,8 @@ def task_command(name: str) -> TaskCommand:
     command = COMMANDS.get(name)
     if command is None:
         raise ValidationError(
-            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
+            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}",
+            option="command",
+            allowed=tuple(COMMANDS),
         )
     return command
-
-
-# =============================================================================
-# Options: library arguments <-> JSON form
-# =============================================================================
-
-_KIND_TEXT: dict[OptionKind, str] = {
-    "str": "napis",
-    "int": "liczba calkowita",
-    "flag": "true",
-    "bbox": "lista 4 liczb [min_x, min_y, max_x, max_y] z bbox_crs",
-    "bbox_crs": "napis (uklad bbox) razem z bbox",
-    "path": "niepusta sciezka (napis)",
-    "per_country": 'napis albo obiekt {"pl": napis, "cz": napis}',
-    "str_list": "lista napisow",
-}
-
-
-def _argument_names(command: TaskCommand) -> list[str]:
-    """Library argument names of a command (``bbox_crs`` is part of ``bbox``)."""
-    return [name for name, kind in command.options.items() if kind != "bbox_crs"]
-
-
-def _is_number(value: object) -> bool:
-    return isinstance(value, int | float) and not isinstance(value, bool)
-
-
-def _json_value(kind: OptionKind, value: object) -> object | None:
-    """The JSON form of one library argument; ``None`` = wrong type."""
-    if kind == "str":
-        return value if isinstance(value, str) else None
-    if kind == "int":
-        return value if isinstance(value, int) and not isinstance(value, bool) else None
-    if kind == "flag":
-        return True if value is True else None
-    if kind == "path":
-        if isinstance(value, str | os.PathLike) and os.fspath(value):
-            return PurePath(os.fspath(value)).as_posix()
-        return None
-    if kind == "per_country":
-        if isinstance(value, str):
-            return value
-        if isinstance(value, Mapping) and all(
-            isinstance(k, str) and isinstance(v, str) for k, v in value.items()
-        ):
-            return dict(value)
-        return None
-    if kind == "str_list":
-        if isinstance(value, Sequence) and not isinstance(value, str):
-            items = list(value)
-            return items if all(isinstance(item, str) for item in items) else None
-        return None
-    return None
-
-
-def options_to_json(command: TaskCommand, options: Mapping[str, object]) -> dict:
-    """Library arguments of ``command`` -> ``tasks[].options`` (spec 3.3).
-
-    ``None`` and ``False`` are omitted (only chosen values are recorded);
-    keys follow the order of ``command.options``; a ``BBox`` becomes
-    ``bbox`` (4 numbers) and ``bbox_crs``, a path a string with ``/``.
-
-    Raises
-    ------
-    ValidationError
-        An option of another command or not a library argument (e.g.
-        ``output_dir``, ``update``, ``timeout``), or a value of a wrong type.
-    """
-    given = {
-        name: value
-        for name, value in options.items()
-        if value is not None and value is not False
-    }
-    names = _argument_names(command)
-    for name in given:
-        if name not in names:
-            raise ValidationError(
-                f"opcja {name!r} nie nalezy do zadania komendy {command.name} "
-                f"(opcje: {', '.join(names)})"
-            )
-    data: dict = {}
-    for name in names:
-        if name not in given:
-            continue
-        value = given[name]
-        kind = command.options[name]
-        if kind == "bbox":
-            if not isinstance(value, BBox):
-                raise ValidationError(f"opcja bbox: oczekiwano BBox, podano {value!r}")
-            data["bbox"] = [value.min_x, value.min_y, value.max_x, value.max_y]
-            data["bbox_crs"] = value.crs
-            continue
-        converted = _json_value(kind, value)
-        if converted is None:
-            raise ValidationError(
-                f"opcja {name}: oczekiwano {_KIND_TEXT[kind]}, podano {value!r}"
-            )
-        data[name] = converted
-    return data
-
-
-def check_options_json(command: TaskCommand, data: object) -> str | None:
-    """Error text of ``tasks[].options`` read from a manifest (``None`` = valid).
-
-    Keys of ``command.options`` only, values of their kind; ``null`` and
-    ``false`` are not written by Kartograf (an omitted key means "not
-    chosen"); ``bbox`` and ``bbox_crs`` come together.
-    """
-    if not isinstance(data, dict):
-        return "options: oczekiwano obiektu"
-    for name, value in data.items():
-        kind = command.options.get(name)
-        if kind is None:
-            return (
-                f"options: opcja {name!r} nie nalezy do komendy {command.name} "
-                f"(opcje: {', '.join(command.options)})"
-            )
-        if kind == "bbox":
-            valid = (
-                isinstance(value, list)
-                and len(value) == 4
-                and all(_is_number(v) and math.isfinite(v) for v in value)
-                and "bbox_crs" in data
-            )
-        elif kind == "bbox_crs":
-            valid = isinstance(value, str) and "bbox" in data
-        elif kind == "path":
-            valid = isinstance(value, str) and bool(value)
-        else:
-            valid = value is not False and _json_value(kind, value) is not None
-        if not valid:
-            return f"options.{name}: oczekiwano {_KIND_TEXT[kind]}"
-    return None
-
-
-def options_from_json(
-    command: TaskCommand, data: Mapping[str, Any], *, project_dir: Path
-) -> Options:
-    """``tasks[].options`` (validated by ``check_options_json``) -> library
-    arguments; a relative path is resolved against ``project_dir``."""
-    options: Options = {}
-    for name, value in data.items():
-        kind = command.options[name]
-        if kind == "bbox":
-            x0, y0, x1, y1 = value
-            options["bbox"] = BBox(x0, y0, x1, y1, str(data["bbox_crs"]))
-        elif kind == "bbox_crs":
-            continue
-        elif kind == "path":
-            path = Path(str(value))
-            if not path.is_absolute():
-                path = Path(os.path.abspath(project_dir / path))
-            options[name] = path
-        elif kind == "str_list":
-            options[name] = tuple(value)
-        elif kind == "per_country" and isinstance(value, Mapping):
-            options[name] = dict(value)
-        else:
-            options[name] = value
-    return options

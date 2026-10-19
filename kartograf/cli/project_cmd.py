@@ -1,4 +1,12 @@
-"""Project CLI: parse task commands and render the public project API results."""
+"""Project CLI: the commands of ``kartograf project`` on the public project API.
+
+Every command is one library call (``init_project``, ``add_project_task``,
+``remove_project_task``, ``download_project``, ``check_project``,
+``get_project_status``, ``verify_project``); the CLI prints its result as text or,
+with ``--json``, as the document of the library (``kartograf-project-state/1``,
+``-report/1``, ``-check/1``). ``project add`` reads the data command after the
+task name with ``parse_command`` (the parser of the command catalog).
+"""
 
 import argparse
 import sys
@@ -8,6 +16,7 @@ from pathlib import Path, PurePosixPath
 from kartograf import (
     FileCheck,
     ProjectCheck,
+    ProjectReport,
     add_project_task,
     check_project,
     download_project,
@@ -17,20 +26,21 @@ from kartograf import (
     remove_project_task,
     verify_project,
 )
-from kartograf.cli._parser import (
-    create_parser,
-    parse_command_line,
-    removed_command_error,
-)
-from kartograf.cli.download_cmd import _print_notice, create_progress_callback
+from kartograf.catalog.kinds import convert_arguments
+from kartograf.cli._json import emit_document, wants_json
+from kartograf.cli._parser import create_parser
+from kartograf.cli.download_cmd import notice_printer, progress_printer
+from kartograf.commands import CommandCall, parse_command
 from kartograf.download.fetch import UpdateMode
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import data_commands_text, project_command
+from kartograf.project.commands import project_command, task_command
 
 
 def cmd_project_init(args: argparse.Namespace) -> int:
     """Create a manifest and its store with the public API."""
     project = init_project(args.project, output_dir=args.output)
+    if wants_json(args):
+        return emit_document(project)
     print(f"Utworzono projekt: {project.directory / 'kartograf-project.json'}")
     print(f"Magazyn: {project.output_dir}")
     print(
@@ -40,80 +50,76 @@ def cmd_project_init(args: argparse.Namespace) -> int:
     return 0
 
 
-def _workers_given(tokens: list[str]) -> bool:
-    """``-w``/``--workers`` among the tokens of a data command (also ``-w8``,
-    ``--workers=8``): argparse cannot tell an explicit default."""
-    return any(
-        token in ("-w", "--workers")
-        or token.startswith("--workers=")
-        or (token.startswith("-w") and token[2:].isdigit())
-        for token in tokens
-    )
+def _reject_run_options(args: argparse.Namespace, call: CommandCall) -> None:
+    """A task is the options of a data command: the flags of a run (``--upgrade``,
+    ``--workers``...) and of the output (``--summary``, ``--json``, ``--output``
+    of another store) are an error, not a silently dropped value."""
+    for flag, name in (
+        ("--check-updates", "check_updates"),
+        ("--upgrade", "upgrade"),
+        ("--force", "force"),
+        ("--plan", "plan"),
+    ):
+        if name in call.run:
+            raise ValidationError(
+                f"{flag} nie jest czescia zadania; aktualizacja projektu: "
+                f"{project_command(args.project, 'download', '--upgrade', args.name)}",
+                option=name,
+            )
+    if "workers" in call.run:
+        raise ValidationError(
+            "--workers nie jest czescia zadania (opcja uruchomienia); rownolegle "
+            "pobieranie: "
+            f"{project_command(args.project, 'download', '--workers', 'N', args.name)}",
+            option="workers",
+        )
+    if "summary" in call.run:
+        raise ValidationError(
+            "--summary nie jest czescia zadania (tylko wypisuje statystyki HSG "
+            "po obliczeniu); usun --summary",
+            option="summary",
+        )
+    if "json" in call.run:
+        raise ValidationError(
+            "--json nie jest czescia zadania (to tryb wyniku komendy project add); "
+            "podaj go przed nazwa zadania: "
+            f"{project_command(args.project, 'add', '--json', args.name, '...')}",
+            option="json",
+        )
+    output = call.run.get("output_dir")
+    if output is not None:
+        store = open_project(args.project).output_dir
+        if Path(str(output)).resolve() != store.resolve():
+            raise ValidationError(
+                f"zadanie pobiera do magazynu projektu ({store}), a --output "
+                f"wskazuje {Path(str(output)).resolve()}; usun --output",
+                option="output_dir",
+            )
 
 
 def cmd_project_add(args: argparse.Namespace) -> int:
-    """Parse the unchanged data-group grammar after the project task name."""
+    """Read the data command after the task name (``parse_command``) and add it
+    as a task."""
     command_args = args.arguments
     if command_args and command_args[0] == "--":
         command_args = command_args[1:]
     if any(arg == "--project" or arg.startswith("--project=") for arg in command_args):
         raise ValidationError("--project podaj przed nazwa zadania (przed NAZWA)")
-    parser = create_parser()
-    if not command_args:
-        parser.error("podaj komende danych po nazwie zadania")
-    removed = removed_command_error(command_args)
-    if removed is not None:
-        parser.error(removed)
-    # Reject non-data commands before they demand their own (irrelevant) flags.
-    if command_args[0] in ("parse", "cache") or (
-        len(command_args) > 1
-        and command_args[1] in ("list-sources", "list-layers", "availability")
-    ):
-        raise ValidationError(
-            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
-        )
-    parsed = parse_command_line(parser, command_args)
-    task = getattr(parsed, "_task", None)
-    if task is None:
-        raise ValidationError(
-            f"do projektu mozna dodac komendy zapisujace dane: {data_commands_text()}"
-        )
-    command = f"{parsed.command} {getattr(parsed, f'{parsed.command}_command')}"
-    for flag, enabled in (
-        ("--check-updates", getattr(parsed, "check_updates", False)),
-        ("--upgrade", getattr(parsed, "upgrade", False)),
-        ("--force", getattr(parsed, "force", False)),
-        ("--plan", getattr(parsed, "plan", None) is not None),
-    ):
-        if enabled:
-            raise ValidationError(
-                f"{flag} nie jest czescia zadania; aktualizacja projektu: "
-                f"{project_command(args.project, 'download', '--upgrade', args.name)}"
-            )
-    if _workers_given(command_args):
-        raise ValidationError(
-            "--workers nie jest czescia zadania (opcja uruchomienia); rownolegle "
-            "pobieranie: "
-            f"{project_command(args.project, 'download', '--workers', 'N', args.name)}"
-        )
-    if getattr(parsed, "summary", False):
-        raise ValidationError(
-            "--summary nie jest czescia zadania (tylko wypisuje statystyki HSG "
-            "po obliczeniu); usun --summary"
-        )
-    output = getattr(parsed, "output", None)
-    if output is not None:
-        store = open_project(args.project).output_dir
-        if Path(output).resolve() != store.resolve():
-            raise ValidationError(
-                f"zadanie pobiera do magazynu projektu ({store}), a --output "
-                f"wskazuje {Path(output).resolve()}; usun --output"
-            )
-    add_project_task(
-        args.project, name=args.name, command=command, options=task(parsed)
+    if any(arg in ("-h", "--help") for arg in command_args):
+        # the help of the data command itself: argparse prints it and exits
+        create_parser().parse_args(command_args)
+    call = parse_command(command_args)
+    _reject_run_options(args, call)
+    project = add_project_task(
+        args.project,
+        name=args.name,
+        command=call.command,
+        options=convert_arguments(task_command(call.command).options, call.options),
     )
+    if wants_json(args):
+        return emit_document(project)
     print(
-        f"Dodano zadanie {args.name} ({command}); pobierz: "
+        f"Dodano zadanie {args.name} ({call.command}); pobierz: "
         f"{project_command(args.project, 'download', args.name)}"
     )
     return 0
@@ -121,7 +127,9 @@ def cmd_project_add(args: argparse.Namespace) -> int:
 
 def cmd_project_remove(args: argparse.Namespace) -> int:
     """Remove one task, leaving its store versions untouched."""
-    remove_project_task(args.project, name=args.name)
+    project = remove_project_task(args.project, name=args.name)
+    if wants_json(args):
+        return emit_document(project)
     print(f"Usunieto zadanie {args.name}; pliki zostaly w magazynie")
     return 0
 
@@ -204,26 +212,9 @@ def _render_check(report: ProjectCheck, *, quiet: bool, checking_updates: bool) 
     return 0 if report.ok else 1
 
 
-def cmd_project_download(args: argparse.Namespace) -> int:
-    """Use ``check_project`` in check mode; otherwise ``download_project``."""
-    if args.check_updates:
-        checked = check_project(
-            args.project, tasks=_selected_tasks(args), on_notice=_print_notice
-        )
-        return _render_check(checked, quiet=args.quiet, checking_updates=True)
-    mode: UpdateMode | None = (
-        "upgrade" if args.upgrade else "force" if args.force else None
-    )
-    workers = args.workers if args.workers is not None else 4
-    progress = create_progress_callback(args.quiet, workers=workers)
-    report = download_project(
-        args.project,
-        tasks=_selected_tasks(args),
-        update=mode,
-        workers=args.workers,
-        on_progress=progress,
-        on_notice=_print_notice,
-    )
+def _print_download(args: argparse.Namespace, report: ProjectReport, progress) -> int:
+    """The text of ``download_project``: a line per task and its pins, the
+    errors, the totals; the exit code."""
     if getattr(progress, "pending", False):
         print()
     for result in report.tasks:
@@ -261,19 +252,46 @@ def cmd_project_download(args: argparse.Namespace) -> int:
     return 0 if report.ok else 1
 
 
+def cmd_project_download(args: argparse.Namespace) -> int:
+    """Use ``check_project`` in check mode; otherwise ``download_project``."""
+    on_notice = notice_printer(args)
+    if args.check_updates:
+        checked = check_project(
+            args.project, tasks=_selected_tasks(args), on_notice=on_notice
+        )
+        if wants_json(args):
+            return emit_document(checked)
+        return _render_check(checked, quiet=args.quiet, checking_updates=True)
+    mode: UpdateMode | None = (
+        "upgrade" if args.upgrade else "force" if args.force else None
+    )
+    workers = args.workers if args.workers is not None else 4
+    progress = progress_printer(args, workers)
+    report = download_project(
+        args.project,
+        tasks=_selected_tasks(args),
+        update=mode,
+        workers=args.workers,
+        on_progress=progress,
+        on_notice=on_notice,
+    )
+    if wants_json(args):
+        return emit_document(report)
+    return _print_download(args, report, progress)
+
+
+def _check(args: argparse.Namespace, report: ProjectCheck) -> int:
+    """The result of ``status``/``verify``: the text or the document."""
+    if wants_json(args):
+        return emit_document(report)
+    return _render_check(report, quiet=args.quiet, checking_updates=False)
+
+
 def cmd_project_status(args: argparse.Namespace) -> int:
     """Fast local file presence and size check through the public API."""
-    return _render_check(
-        get_project_status(args.project, tasks=_selected_tasks(args)),
-        quiet=args.quiet,
-        checking_updates=False,
-    )
+    return _check(args, get_project_status(args.project, tasks=_selected_tasks(args)))
 
 
 def cmd_project_verify(args: argparse.Namespace) -> int:
     """Verify pinned bytes and sidecars through the public API."""
-    return _render_check(
-        verify_project(args.project, tasks=_selected_tasks(args)),
-        quiet=args.quiet,
-        checking_updates=False,
-    )
+    return _check(args, verify_project(args.project, tasks=_selected_tasks(args)))

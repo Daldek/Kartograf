@@ -143,7 +143,7 @@ def test_exit_codes(capsys):
     assert error.startswith("Error: ") and "wynik bylby niepelny" in error
 
     code, _, err = _run(capsys, KRAKOW, RecordedIndex())
-    assert code == 1
+    assert code == 2
     assert err == f"Error: --country wymagane z --bbox/--geometry: {COUNTRY_CHOICES}\n"
 
     with pytest.raises(SystemExit) as error:

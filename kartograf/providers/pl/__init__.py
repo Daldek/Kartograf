@@ -2,6 +2,7 @@
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.providers.pl.bdot10k import Bdot10kProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_laz import GugikLazProvider, LazTile
@@ -23,7 +24,7 @@ def create_nmt_provider(
     vertical_crs: str,
     resolution: str | None,
     session: requests.Session | None = None,
-    cache=None,
+    cache: MetadataCache | None = None,
     format: str = "ASC",
 ) -> GugikProvider:
     """Build an NMT provider for an explicitly selected PL variant.

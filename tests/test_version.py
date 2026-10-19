@@ -167,10 +167,10 @@ class TestVersionUsage:
         assert meta.kartograf_version == "9.9.9-dev+feed123"
 
     def test_cli_version_uses_build_version(self, monkeypatch, capsys):
-        from kartograf.cli import _parser
+        from kartograf.catalog import cliparser
         from kartograf.cli.commands import main
 
-        monkeypatch.setattr(_parser, "build_version", lambda: "9.9.9-dev+feed123")
+        monkeypatch.setattr(cliparser, "build_version", lambda: "9.9.9-dev+feed123")
         with pytest.raises(SystemExit) as exc_info:
             main(["--version"])
         assert exc_info.value.code == 0

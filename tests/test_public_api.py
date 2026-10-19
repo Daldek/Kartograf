@@ -38,6 +38,60 @@ def test_download_and_check_functions_are_keyword_only(name):
     assert positional == expected
 
 
+# Functions that return a document (spec 5.5): all arguments by name, except the
+# one that identifies the object, which is positional like ``read_sidecar(path)``.
+_DOCUMENT_FUNCTIONS = {
+    "list_sources": [],
+    "list_layers": [],
+    "get_cache_info": [],
+    "get_cache_path": [],
+    "clear_cache": [],
+    "describe_store": ["output_dir"],
+    "list_store_entries": ["output_dir"],
+    "read_store_sidecar": ["path"],
+    "describe_sheet": ["sheet"],
+    "find_sheets": [],
+    "get_catalog": [],
+}
+
+
+@pytest.mark.parametrize(("name", "expected"), sorted(_DOCUMENT_FUNCTIONS.items()))
+def test_document_functions_are_keyword_only(name, expected):
+    """The new document functions take their selection by name; only the
+    object that is read is positional."""
+    assert name in kartograf.__all__
+    params = inspect.signature(getattr(kartograf, name)).parameters.values()
+    assert [p.name for p in params if p.kind is not p.KEYWORD_ONLY] == expected
+
+
+# The command layer (KB-2..KB-5): what names the command - the line, or the command
+# and its options - is positional; everything else is by name.
+_COMMAND_FUNCTIONS = {
+    "parse_command": ["argv"],
+    "validate_command": ["command", "options"],
+    "format_command": ["command", "options"],
+    "run_command": ["command", "options"],
+    "check_command": ["command", "options"],
+}
+
+
+@pytest.mark.parametrize(("name", "expected"), sorted(_COMMAND_FUNCTIONS.items()))
+def test_command_functions_take_only_the_command_positionally(name, expected):
+    assert name in kartograf.__all__
+    params = inspect.signature(getattr(kartograf, name)).parameters.values()
+    assert [p.name for p in params if p.kind is not p.KEYWORD_ONLY] == expected
+
+
+def test_command_call_is_exported():
+    """``parse_command`` returns it, ``format_command`` and ``run_command`` take its
+    parts: a caller needs the type by name."""
+    assert "CommandCall" in kartograf.__all__
+    assert isinstance(
+        kartograf.parse_command("elevation download --product nmt"),
+        kartograf.CommandCall,
+    )
+
+
 def test_transport_and_mosaic_exported():
     from kartograf.transport.http import get_with_retry, make_gugik_session
     from kartograf.transport.mosaic import check_source_grid, mosaic_and_crop

@@ -146,18 +146,23 @@ def check_atom_crs(params: AtomFilesParams, crs: str | None) -> None:
     if not params.crs:
         if crs is not None:
             raise ValidationError(
-                f"--horizontal-crs {crs}: zbior ma jeden plik (uklad wynika ze zrodla)"
+                f"--horizontal-crs {crs}: zbior ma jeden plik (uklad wynika ze zrodla)",
+                option="horizontal_crs",
             )
         return
     if crs is None:
         raise ValidationError(
             f"--horizontal-crs wymagane (plik publikowany w kilku ukladach): "
-            f"{', '.join(params.crs)}"
+            f"{', '.join(params.crs)}",
+            option="horizontal_crs",
+            allowed=tuple(params.crs),
         )
     if crs not in params.crs:
         raise ValidationError(
             f"--horizontal-crs {crs}: zbior nie jest publikowany w tym ukladzie; "
-            f"dostepne: {', '.join(params.crs)}"
+            f"dostepne: {', '.join(params.crs)}",
+            option="horizontal_crs",
+            allowed=tuple(params.crs),
         )
 
 

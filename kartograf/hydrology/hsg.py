@@ -20,17 +20,24 @@ import tempfile
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
+from kartograf.download.data import (
+    DOWNLOAD_FILL,
+    DOWNLOAD_KEYS,
+    DOWNLOAD_SCHEMA,
+    UnitFailure,
+    UnitFile,
+)
 from kartograf.exceptions import ValidationError
 from kartograf.notices import Notice, NoticeSink
+from kartograf.serialization import Document
 
 if TYPE_CHECKING:
     from kartograf.cache.metadata import MetadataCache
     from kartograf.core.bbox import BBox
-    from kartograf.download.data import UnitFailure, UnitFile
     from kartograf.download.fetch import FileSlot, UpdateMode, VersionedFile
     from kartograf.download.plan import ItemStatus, PlanItem, Track, UpdatePlan
     from kartograf.download.versions import LocalVersion
@@ -395,8 +402,8 @@ _OUTPUT_REQUIRED = f"--output wymagane: katalog magazynu ({HSG_OUTPUT_FILES})"
 
 
 @dataclass(frozen=True)
-class HsgReport:
-    """Outcome of ``calculate_hsg`` (``soil hsg``).
+class HsgReport(Document):
+    """Outcome of ``calculate_hsg`` (``soil hsg``; ``kartograf-download/1``).
 
     ``files``: the HSG raster (one ``UnitFile``, ``unit`` = bbox coordinates
     or the sheet, ``country`` = ``GLOBAL``; status ``new``/``unchanged``/
@@ -408,8 +415,14 @@ class HsgReport:
     as in ``inputs``; no HSG is computed) or the store failure of the HSG.
     ``stale``: planned positions whose source changed since the plan.
     ``notices``: data messages (e.g. the geometry layer choice). ``ok``: no
-    failure and no stale position.
+    failure and no stale position. ``summary``: ``hsg_statistics`` of the
+    HSG raster, only when ``calculate_hsg(summary=True)`` and the report has
+    the raster; else ``None``.
     """
+
+    SCHEMA = DOWNLOAD_SCHEMA
+    JSON_KEYS = DOWNLOAD_KEYS
+    JSON_FILL = {key: DOWNLOAD_FILL[key] for key in ("raw", "superseded")}
 
     files: "tuple[UnitFile, ...]"
     inputs: "tuple[UnitFile, ...]"
@@ -417,6 +430,7 @@ class HsgReport:
     stale: "tuple[PlanItem, ...]"
     notices: "tuple[Notice, ...]"
     ok: bool
+    summary: "dict | None" = None
 
 
 class HSGCalculator:
@@ -463,7 +477,8 @@ class HSGCalculator:
         if self._output_dir.suffix.lower() in (".tif", ".tiff"):
             raise ValidationError(
                 "--output to katalog magazynu (od 0.8.0); plik poza "
-                "magazynem: hsg_from_rasters"
+                "magazynem: hsg_from_rasters",
+                option="output_dir",
             )
         self._provider = provider
         self._cache = cache
@@ -518,7 +533,8 @@ class HSGCalculator:
         sink = NoticeSink(on_notice)
         selection = self._validated(sheet, bbox, geometry, layer, depth, sink)
         assert depth is not None  # checked with the selection
-        return self._check(selection, depth, _HSG_STAT, sink)
+        plan = self._check(selection, depth, _HSG_STAT, sink)
+        return replace(plan, notices=sink.notices)
 
     def validate_request(
         self,
@@ -574,7 +590,8 @@ class HSGCalculator:
 
         if sum(v is not None for v in (sheet, bbox, geometry)) != 1:
             raise ValidationError(
-                "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry"
+                "Podaj dokladnie jeden wybor: --sheet, --bbox albo --geometry",
+                options=("sheet", "bbox", "geometry"),
             )
         check_layer(layer, geometry)
         if sheet is not None:
@@ -696,7 +713,10 @@ class HSGCalculator:
         stale: list = []
         if plan is not None:
             if update != "upgrade":
-                raise ValidationError("Plan aktualizacji wymaga update='upgrade'")
+                raise ValidationError(
+                    "Plan aktualizacji wymaga update='upgrade'",
+                    options=("plan", "update"),
+                )
             require_store(plan, store_id(self._output_dir))
             # The HSG position is checked BEFORE the inputs change.
             fresh = self._hsg_item(
@@ -847,7 +867,7 @@ def _calculator(
 ) -> HSGCalculator:
     """The calculator of the store ``output_dir`` (checked first)."""
     if output_dir is None:
-        raise ValidationError(_OUTPUT_REQUIRED)
+        raise ValidationError(_OUTPUT_REQUIRED, option="output_dir")
     return HSGCalculator(output_dir, cache=cache)
 
 
@@ -861,6 +881,7 @@ def calculate_hsg(
     depth: str | None = None,
     update: "UpdateMode | None" = None,
     plan: "UpdatePlan | None" = None,
+    summary: bool = False,
     cache: "MetadataCache | bool" = True,
     on_notice: "Callable[[Notice], None] | None" = None,
 ) -> HsgReport:
@@ -879,17 +900,20 @@ def calculate_hsg(
     1=A, 2=B, 3=C, 4=D, 0 = no data) is computed only for a new input set,
     a version of the same inputs is used again (``reused``). ``update`` is
     the mode of the INPUTS (spec 4.2); ``plan`` from ``check_hsg`` with
-    ``update="upgrade"``; ``cache``: SoilGrids metadata cache (``True``:
-    default file in the current directory, ``False``: none); ``on_notice``
-    receives each notice when emitted. Statistics of the result:
-    ``hsg_statistics``; rasters outside the store: ``hsg_from_rasters``.
+    ``update="upgrade"``; ``summary``: also put ``hsg_statistics`` of the HSG
+    raster into the report (``soil hsg --summary``); ``cache``: SoilGrids
+    metadata cache (``True``: default file in the current directory,
+    ``False``: none); ``on_notice`` receives each notice when emitted.
+    Statistics of any HSG raster: ``hsg_statistics``; rasters outside the
+    store: ``hsg_from_rasters``.
 
     Returns
     -------
     HsgReport
         ``files`` (the HSG raster), ``inputs``, ``failed`` (an input that
         failed - no HSG is computed - or the store failure of the HSG),
-        ``stale``, ``notices`` and ``ok``.
+        ``stale``, ``notices``, ``ok`` and ``summary`` (``None`` unless
+        ``summary=True`` and the report has the HSG raster).
 
     Raises
     ------
@@ -908,7 +932,7 @@ def calculate_hsg(
     >>> hsg.path, hsg.status  # data/hsg/.../N-34-130-D.tif, "new"
     >>> hsg_statistics(hsg.path)["B"]["percent"]
     """
-    return _calculator(output_dir, cache).calculate_hsg(
+    report = _calculator(output_dir, cache).calculate_hsg(
         sheet=sheet,
         bbox=bbox,
         geometry=geometry,
@@ -918,6 +942,9 @@ def calculate_hsg(
         plan=plan,
         on_notice=on_notice,
     )
+    if summary and report.files:
+        return replace(report, summary=hsg_statistics(report.files[0].file.path))
+    return report
 
 
 def check_hsg(
@@ -977,7 +1004,7 @@ def validate_hsg_request(
     )
 
 
-def hsg_statistics(hsg_path: str | Path) -> dict:
+def hsg_statistics(hsg_path: str | Path) -> dict[str, Any]:
     """
     Statistics of an HSG raster over its request area (``soil hsg
     --summary``).
@@ -1159,7 +1186,9 @@ def hsg_from_rasters(
     from kartograf.transform.raster import warp_to_grid
 
     if pixel_m <= 0:
-        raise ValidationError(f"pixel_m musi byc dodatni (podano {pixel_m})")
+        raise ValidationError(
+            f"pixel_m musi byc dodatni (podano {pixel_m})", option="pixel_m"
+        )
     grid = bbox if bbox.crs == crs else transform_bbox(bbox, crs)
     layers = {"clay": Path(clay), "sand": Path(sand), "silt": Path(silt)}
     arrays: dict[str, np.ndarray] = {}

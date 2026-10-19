@@ -39,9 +39,11 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from io import BytesIO
 from pathlib import Path
+from typing import Any
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
 from kartograf.providers.base import LandCoverProvider
@@ -90,7 +92,7 @@ class Bdot10kPackage:
     url: str
     format: str
     # Response headers: etag / last_modified / content_length (None = not sent)
-    http: dict = field(default_factory=dict)
+    http: dict[str, Any] = field(default_factory=dict)
     raw_path: Path | None = None  # original GUGiK ZIP (keep_raw=True)
 
 
@@ -163,7 +165,11 @@ class Bdot10kProvider(LandCoverProvider):
     DEFAULT_TIMEOUT = 120  # package download (all modes); TERYT (PRG): 30 s
     MAX_RETRIES = MAX_RETRIES
 
-    def __init__(self, session: requests.Session | None = None, cache=None):
+    def __init__(
+        self,
+        session: requests.Session | None = None,
+        cache: MetadataCache | None = None,
+    ):
         """
         Initialize BDOT10k provider.
 
@@ -321,7 +327,7 @@ class Bdot10kProvider(LandCoverProvider):
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """``LandCoverProvider`` entry point: ``download_package(...).path``.
 
@@ -396,7 +402,7 @@ class Bdot10kProvider(LandCoverProvider):
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download BDOT10k data for a map sheet.
@@ -448,7 +454,7 @@ class Bdot10kProvider(LandCoverProvider):
         output_path: Path,
         timeout: int = DEFAULT_TIMEOUT,
         format: str = "GPKG",
-        **kwargs,
+        **kwargs: Any,
     ) -> Path:
         """
         Download BDOT10k land cover data for a bounding box.

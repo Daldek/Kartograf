@@ -45,7 +45,7 @@ def test_count_text_polish_numerals(count, files, of_sheets):
 
 
 def _cli_error(capsys, *argv: str) -> str:
-    assert main(list(argv)) == 1
+    assert main(list(argv)) == 2
     return capsys.readouterr().err
 
 

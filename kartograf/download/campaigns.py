@@ -20,6 +20,7 @@ from collections.abc import Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
+from typing import Any, Protocol
 from urllib.parse import urlparse
 
 from kartograf.core.sheet_parser import SheetParser
@@ -101,11 +102,13 @@ def validate_year_bounds(min_year: int | None, max_year: int | None) -> None:
             or not 1900 <= year <= 2100
         ):
             raise ValidationError(
-                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}"
+                f"{name} musi byc liczba calkowita 1900..2100, otrzymano {year!r}",
+                option=name,
             )
     if min_year is not None and max_year is not None and min_year > max_year:
         raise ValidationError(
-            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})"
+            f"min_year ({min_year}) nie moze byc wiekszy niz max_year ({max_year})",
+            options=("min_year", "max_year"),
         )
 
 
@@ -221,6 +224,29 @@ def year_range_error(
     )
 
 
+class IndexRecord(Protocol):
+    """Structural type of an index (skorowidz) record read by
+    ``CampaignRef.from_record`` (``SkorowidzRecord`` satisfies it)."""
+
+    @property
+    def url(self) -> str: ...
+
+    @property
+    def sheet(self) -> str: ...
+
+    @property
+    def aktualnosc(self) -> str: ...
+
+    @property
+    def dt_pzgik(self) -> str | None: ...
+
+    @property
+    def full_sheet(self) -> bool | None: ...
+
+    @property
+    def raw(self) -> Mapping[str, str]: ...
+
+
 @dataclass(frozen=True)
 class CampaignRef:
     id: str  # digits or 'u'+8 hex — path-safe
@@ -233,7 +259,7 @@ class CampaignRef:
     file_format: str | None  # record `format` field; None = no field (orto, old cache)
 
     @classmethod
-    def from_record(cls, record) -> "CampaignRef":
+    def from_record(cls, record: IndexRecord) -> "CampaignRef":
         """Build from an index record (duck typing: url, sheet, aktualnosc,
         dt_pzgik, full_sheet, raw). An aktualnosc outside YYYY-MM-DD raises
         DownloadError — the server value ends up in a path."""
@@ -257,7 +283,7 @@ class CampaignRef:
         )
 
     @classmethod
-    def from_sidecar(cls, meta: dict) -> "CampaignRef | None":
+    def from_sidecar(cls, meta: dict[str, Any]) -> "CampaignRef | None":
         """Rebuild from a version sidecar (``extra.campaign`` +
         ``extra.source.url``); ``None`` when it describes no campaign."""
         extra = meta.get("extra")
@@ -292,7 +318,7 @@ class CampaignRef:
         """(aktualnosc, dt_pzgik, url) — ADR-028 ordering."""
         return (self.date, self.dt_pzgik or "", self.url)
 
-    def to_extra(self) -> dict:
+    def to_extra(self) -> dict[str, Any]:
         """``extra.campaign`` of the campaign sidecar (English keys, ADR-031)."""
         return {
             "id": self.id,

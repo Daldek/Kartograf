@@ -134,17 +134,30 @@ co najmniej jeden import na poziomie modulu (takze pod `if TYPE_CHECKING:`).
 ```
 kartograf ──> core, download, providers, landcover, hydrology, cache,
         sources, transport, notices, project, store, store_geometry,
-        transform                                  # re-eksport Public API
-cli ──> _version, download, landcover, core, hydrology, cache,
-        notices, transform, project, sources, kartograf
-project ──> download, landcover, hydrology, core, sources, cache,
+        transform, catalog, commands, error_report, sheet_info,
+        source_info, cache_info, store_documents    # re-eksport Public API
+__main__ ──> cli
+cli ──> catalog, commands, error_report, sheet_info, source_info,
+        cache_info, download, landcover, hydrology, notices, project,
+        sources, kartograf
+mcp_server ──> catalog, commands, error_report, download, cache, kartograf
+        # SDK `mcp`, `anyio`, `jsonschema`: tylko leniwie, w create_server
+commands ──> catalog, project, download, cache, notices
+catalog ──> sources, download, landcover, hydrology, providers, core,
+        error_report, _version, kartograf (l)
+error_report ──> transform, catalog (l)
+sheet_info ──> catalog, core
+source_info ──> download, landcover, providers, sources
+cache_info ──> cache, notices
+store_documents ──> download, store
+project ──> download, landcover, hydrology, sources, cache, catalog,
         notices, _version, kartograf (_clock)
 download ──> providers, sources, transform, core, cache, notices,
         _version, kartograf (_clock), transport
 landcover ──> providers, download, core, cache, sources, notices, transport
 hydrology ──> core, download, landcover, cache (TYPE_CHECKING), notices,
         providers (l), sources (l), transform (l)
-providers ──> sources, transform, transport, core, cache,
+providers ──> sources, transform, transport, core, cache, notices,
         auth (l), download (l)
 sources ──> core, kartograf (_clock), _version
 transport ──> transform, core, sources, cache, kartograf (l, __version__)
@@ -156,10 +169,13 @@ store_geometry ──> core, transform, store (typy pod TYPE_CHECKING; w czasie
         dzialania takze leniwy import `read_sidecar`), providers (l),
         transport (l)
 _clock, notices, auth ──> (nic wewnetrznego)
-core ──> (nic poza exceptions)
-exceptions ──> (lisc; krawedzie DO niego pominiete powyzej — importuja go
-        kartograf, cli, core, sources, transform, transport, providers, download,
-        landcover, hydrology, cache, project, store, store_geometry)
+core ──> (nic poza exceptions i serialization)
+exceptions ──> serialization (koder dla `details()`; krawedzie DO niego
+        pominiete powyzej — importuja go kartograf, cli, core, sources,
+        transform, transport, providers, download, landcover, hydrology,
+        cache, project, store, store_geometry, error_report, catalog)
+serialization ──> (lisc, nic wewnetrznego; krawedzie DO niego pominiete jak
+        do exceptions — importuja go typy wyniku: Document, EncodeContext)
 ```
 
 **Jak odtworzyc graf.** Kod uzywa wylacznie bezwzglednych importow
@@ -218,20 +234,27 @@ Uwagi, ktore latwo przeoczyc:
   `providers.pl.prg.discover_teryts_for_bbox` (powiaty obszaru)
   i `WOJEWODZTWO_NAMES`, leniwie `providers.cuzk.raster.bbox_to_crs`.
 - `cli` tylko tlumaczy flagi na argumenty funkcji poziomu komendy
-  i wypisuje wynik (Z1, ADR-037): importuje `download.data`
-  (`download_data`/`check_data`), `download.availability`
+  i wypisuje wynik (Z1, Z8; ADR-037, ADR-046): parser buduje z deklaracji
+  katalogu (`catalog.cliparser`; `cli/_parser.py::create_parser` to fasada),
+  handler komendy wybiera po jej id (`cli/_handlers.py::HANDLERS`), flagi
+  zamienia na argumenty funkcji przez `catalog.kinds.convert_arguments`
+  (`cli/_args.py::library_arguments`) i wola funkcje poziomu komendy:
+  `download.data` (`download_data`/`check_data`), `download.availability`
   (`check_availability`, ADR-041), `download.collections`
-  (`download_collection`/`check_collection` i teksty wyborow `--help`
-  grup kolekcji), `download.orto_cutout` (wybory `--horizontal-crs`,
-  `--coverage`, `--resolution` wycinka ortofotomapy), `landcover.manager`,
-  `hydrology`, `download.plan`/`fetch` (plik planu, linie statusu), `notices`,
-  `_version` i `cache`; z `transform` bierze tylko `TransformError`,
-  z `sources` deskryptory (`sources_for`; tabela `list-sources` z
-  `SourceDescriptor.variants`; uklady pliku krajowego ZABAGED z kanalu
-  `AtomFilesParams`), z pakietu glownego API projektu
-  (`cli/project_cmd.py`); teksty `--help` z wariantow buduje `download/options.py`.
-  Nie importuje `providers`, `transport` ani doboru arkuszy
-  (`tests/test_cli_translation.py::test_cli_imports_no_data_logic`).
+  (`download_collection`/`check_collection`), `landcover.manager`
+  i `hydrology`; `parse`, `list-sources`, `list-layers`, `cache` i `catalog`
+  ida przez `sheet_info`, `source_info`, `cache_info` i `catalog.get_catalog`,
+  a `project add` przez `commands.parse_command`. Wynik drukuje: tryb `--json`
+  (`cli/_json.py`) to `Document.to_json()`, tryb tekstowy renderuje te same
+  dokumenty (tabele, linie statusu, pasek postepu z
+  `download.manager.DownloadProgress`), a `main` zamienia wyjatki na
+  `error_report` i kody wyjscia 0/1/2/130. Z `download` bierze ponadto
+  `download.plan`/`fetch` (plik planu, `UpdateMode`, `VersionedFile`) i
+  `download.options` (`output_required`, `require_product`), z `sources.variants`
+  tabele wariantow, z `notices` komunikaty, z `project.commands` `task_command`.
+  Nie importuje `providers`, `transport`, `transform`, `core` ani doboru
+  arkuszy (`tests/test_cli_translation.py::test_cli_imports_no_data_logic`
+  dopuszcza ponad to tylko `catalog` i `serialization`).
 - Rejestr wariantow `sources/variants.py` (ADR-041) to czyste dane:
   importuje tylko `exceptions`, `sources.descriptor` i
   `core.parser_registry.detect_system` (system godla CZ: `sm5`/`tm33`),
@@ -251,8 +274,32 @@ Uwagi, ktore latwo przeoczyc:
   `head_signal`); nie importuje `DownloadManager` ani magazynu.
 - `project` (`model`, `commands`, `manifest`, `operations`) mapuje komendy danych
   na funkcje biblioteki `download`/`landcover`/`hydrology`; nie implementuje
-  logiki per produkt. `cli/groups/project.py` i `cli/project_cmd.py` tylko
-  tlumacza argumenty i wypisuja wyniki API projektu (ADR-037, ADR-040).
+  logiki per produkt. Nazwy i rodzaje opcji komend danych (`TaskCommand.options`)
+  pochodza z katalogu (`Command.task_options`; konwersja JSON <-> argumenty:
+  `catalog.kinds`), stad krawedz `project ──> catalog`. `cli/project_cmd.py` tylko
+  tlumaczy argumenty i wypisuje wyniki API projektu (ADR-037, ADR-040).
+- `serialization` (sekcja 3.6) jest lisciem jak `exceptions`: typy wyniku dziedzicza
+  z mixinu `Document`, a `exceptions` uzywa kodera w `KartografError.details()`;
+  `core.bbox` importuje tylko `EncodeContext` (hak `BBox.__json__`).
+- `catalog` (sekcja 4.11) opisuje komendy: deklaracje w `catalog/commands/*` czytaja
+  rejestr zrodel i stale walidatorow (`sources`, `providers`, `download`, `landcover`,
+  `hydrology`) oraz `core` (godla, bbox), a `catalog.build` bierze tabele kodow z
+  `error_report` (`ERROR_CODES`, `EXIT_CODES`). Jedyna krawedz zwrotna to leniwy import
+  `catalog.hints` w `error_report` (przyklad komendy w podpowiedzi bledu). Biblioteka,
+  w tym `catalog`, nie importuje `cli` ani `mcp` (test w czystym procesie).
+- `commands` (KB-2..KB-5) laczy `catalog` (deklaracje, `convert_arguments`,
+  `parsed_options`), `project.commands` (walidacja i wykonanie zadania danych:
+  `task_command`) i `download` (`UpdateMode`, `UpdatePlan`, `DownloadProgress`).
+- `sheet_info`, `source_info`, `cache_info` i `store_documents` sa raportami z logika
+  przeniesiona z CLI (Z1): `describe_sheet`/`find_sheets` (`core`, `catalog`:
+  `SheetInfo.commands` z `ParamInfo.accepts`), `list_sources`/`list_layers`
+  (`sources`, `providers`, `landcover`, `download`), `get_cache_info`/
+  `get_cache_path`/`clear_cache` (`cache`, `notices`), `describe_store`/
+  `list_store_entries`/`read_store_sidecar` (`store`, `download`); zaden nie importuje `cli`.
+- `mcp_server` jest jedynym modulem, ktory dotyka SDK `mcp` (oraz `anyio` i
+  `jsonschema`), zawsze leniwie w `create_server`: `import kartograf` i `import
+  kartograf.mcp_server` dzialaja bez `mcp`. Narzedzia jako dane daje
+  `catalog.tools` (bez `mcp`), wykonanie `commands`, bledy `error_report`.
 - `transport ──> transform`: `transport/mosaic.py` owija zrodla mozaiki
   w VRT przez `transform.raster` (`vrt_xml`, `VRT_TYPES`; import na poziomie
   modulu). `transform` siega po `transport` i `sources` wylacznie pod
@@ -330,11 +377,21 @@ z `kartograf`; zmiana sygnatury = zmiana lamiaca w CHANGELOG.
 kartograf/
 ├── __init__.py          # Public API (BBox, SheetParser, DownloadManager, providery, ...)
 ├── _version.py         # build_version() — identyfikator wersji dev (git, leniwie)
-├── exceptions.py        # KartografError; ParseError; ValidationError;
-│                        # DownloadError(.sheet, .status_code)
+├── __main__.py          # `python -m kartograf` = skrypt `kartograf` (cli.commands.main)
+├── py.typed             # znacznik PEP 561: mypy konsumenta widzi typy biblioteki
+├── serialization.py     # Document (mixin dataclass: to_dict/to_json, `schema` pierwszym
+│                        # kluczem), encode/EncodeContext (koder: Path, Decimal, BBox, Notice,
+│                        # hak __json__), SCHEMAS (rejestr schematow kartograf-*/1); lisc
+├── exceptions.py        # KartografError(.code, .exit_code, .hint, DETAIL_FIELDS, .details());
+│                        # ValidationError(.option, .options, .allowed) -> UsageError(.command),
+│                        # ParseError (kod 2); DownloadError(.sheet, .status_code)
 │                        # -> NoCoverageError(DownloadError; .hints) — zrodlo nie ma danych
-│                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000);
-│                        # InvalidSidecarError(.path) — nieczytelny sidecar (read_sidecar)
+│                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000), YearRangeError;
+│                        # CacheError; InvalidSidecarError(.path) — nieczytelny sidecar (read_sidecar);
+│                        # kody bledow i kody wyjscia: USAGE 9.3
+├── error_report.py      # ErrorReport (kartograf-error/1), error_report(exc, command=):
+│                        # wyjatek jako dane (io_error, interrupted, internal_error buduje tu),
+│                        # ERROR_CODES/EXIT_CODES - jedyne zrodlo tabel USAGE 9.3 i katalogu
 ├── core/                # Logika bazowa, bez IO sieciowego
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia: _DENSIFY
 │   │                       # punktow na krawedz, cache transformerow, operacja przypieta
@@ -440,6 +497,32 @@ kartograf/
 ├── _clock.py            # now() — jedno zrodlo czasu wynikow (sidecar, etykiety wersji,
 │                        # plan); testy zgodnosci je zamrazaja (frozen_clock)
 ├── notices.py           # Notice(level, code, text), NoticeSink, kody komunikatow (Z3, ADR-037)
+├── sheet_info.py        # describe_sheet -> SheetInfo, find_sheets -> SheetList
+│                        # (kartograf-sheet/1, -sheets/1; logika `parse` przeniesiona z CLI)
+├── source_info.py       # list_sources -> SourceList, list_layers -> LayerList
+│                        # (kartograf-sources/1, -layers/1; rejestr zrodel, bez sieci)
+├── cache_info.py        # get_cache_info/get_cache_path/clear_cache -> CacheInfo (kartograf-cache/1)
+├── store_documents.py   # describe_store -> StoreOverview, list_store_entries -> StoreEntries,
+│                        # read_store_sidecar -> StoreSidecar (odczyt magazynu jako dokumenty, ADR-045)
+├── commands.py          # warstwa komend (KB-2..KB-5): parse_command, validate_command,
+│                        # format_command, run_command, check_command, CommandCall
+├── mcp_server.py        # serwer MCP (stdio; extra `mcp`, skrypt kartograf-mcp): create_server,
+│                        # main, INSTRUCTIONS; jedyny modul dotykajacy SDK
+├── catalog/             # Katalog komend - jedyne zrodlo prawdy (sekcja 4.11), bez importu cli/mcp
+│   ├── spec.py          # Command, Param, Constraint, Example, Group (dane; dostawcy wartosci z rejestru)
+│   ├── model.py         # dokument kartograf-catalog/1: Catalog, GroupInfo, ProductInfo, CommandInfo,
+│   │                    # ParamInfo, ConstraintInfo, ExampleInfo, ExitCodeInfo, ErrorCodeInfo, SchemaInfo
+│   ├── build.py         # get_catalog(group, command, params, tables), data_commands; widoki overview/full
+│   ├── shared.py        # parametry wspolne komend (obszar, wyjscie, tryby aktualizacji, --json...)
+│   ├── kinds.py         # rodzaje wartosci: parsery tekstow flag, convert_arguments (JSON opcji ->
+│   │                    # argumenty biblioteki), options_from_json/options_to_json
+│   ├── cliparser.py     # parser argparse z deklaracji: build_parser, parse_command_line, parsed_options
+│   ├── formatting.py    # kanoniczna linia komendy (format_command_line)
+│   ├── hints.py         # example_for, usage_hint (przyklad w podpowiedzi bledu)
+│   ├── tools.py         # narzedzia MCP jako dane: tool_specs, check_arguments_schema, FAMILIES
+│   └── commands/        # deklaracje, jeden modul = grupa (elevation, imagery, landcover, soil, boundaries,
+│                        # cadastre, models3d, hydro, names, maps, geodesy, project, misc: parse, catalog,
+│                        # cache i komendy tylko-API); _collection.py = ksztalt grup kolekcji
 ├── store.py             # Odczyt magazynu bez zapisu (ADR-045, 3.3.1): list_segments,
 │                        # list_partitions, iter_store -> StoreEntry (units, partition,
 │                        # skip_versions), read_sidecar -> Sidecar, describe_segment
@@ -466,7 +549,7 @@ kartograf/
 │   ├── arguments.py     # Kontrola typow argumentow biblioteki (STANDARDS 11.2): require_int,
 │   │                    # require_str, require_bool, require_codes
 │   ├── availability.py  # Raport dostepnosci (ADR-041, sekcja 4.9): check_availability (PL, CZ, auto),
-│   │                    # AvailabilityReport/AvailabilityCombination/AvailabilityArea
+│   │                    # AvailabilityReport (kartograf-availability/1)/AvailabilityCombination/AvailabilityArea
 │   ├── area.py          # Obszar zadania: bbox_to_2180, obwiednie geometrii,
 │   │                    # parent_request_for, przyciecie `auto` (Notice)
 │   ├── campaigns.py     # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu,
@@ -476,7 +559,8 @@ kartograf/
 │   ├── links.py         # Dowiazanie sciezki standardowej do wersji (wylacznie hardlink, nigdy wstecz)
 │   ├── fetch.py         # Polityka plikow bez kampanii: fetch_version, VersionedFile;
 │   │                    # FileSlot.related_roots (D23 miedzy wydaniami, ADR-042 D7)
-│   ├── plan.py          # Plan aktualizacji kartograf-plan/1 (PlanItem.track/unit)
+│   ├── plan.py          # Plan aktualizacji: UpdatePlan = dokument kartograf-plan/1 (PlanItem.track/unit,
+│   │                    # notices, ok, from_dict)
 │   ├── cutout.py        # Wycinek PL WCS (ADR-035): download_pl_cutout/check_pl_cutout,
 │   │                    # maska ladu, sidecar (kroki wewnetrzne prywatne)
 │   ├── orto_cutout.py   # Wycinek obrazu PL WCS (ADR-042 D14, plan E1, ADR-044): download_image_cutout/
@@ -524,27 +608,28 @@ kartograf/
 ├── project/             # Manifest projektu (ADR-040):
 │   ├── model.py         # Project, ProjectTask, PinnedFile, ProjectReport,
 │   │                    # ProjectCheck i wyniki zadan oraz plikow
-│   ├── commands.py      # COMMANDS: opcje JSON, walidacja bez sieci, pobranie,
-│   │                    # check_* i przypiecia na komende danych (bez logiki per produkt)
+│   ├── commands.py      # COMMANDS: opcje JSON (TaskCommand.options z katalogu), walidacja bez sieci,
+│   │                    # pobranie (TaskDownload: plan, summary), check_* i przypiecia na komende danych
+│   │                    # (bez logiki per produkt)
 │   ├── manifest.py      # kartograf-project/1: walidacja, blokada mkdir, atomowy
 │   │                    # zapis i scalanie zmian per zadanie
 │   └── operations.py    # Publiczne API: init, add, remove, download,
 │                        # check, status, verify i open_project
 ├── auth/                # proxy.py (subprocess izolujacy credentials CLMS), client.py
 │                        # (AuthProxyClient — singleton, sam uruchamia proxy)
-└── cli/                 # Tylko tlumaczenie flag i wypisanie wyniku (Z1, ADR-037):
-                         # _parser.py (parser glowny), _args.py (wspolne flagi),
-                         # groups/ (grupy komend wg typu danych, ADR-039: elevation,
-                         # imagery, landcover, soil, boundaries, cadastre, models3d,
-                         # hydro, names, maps, geodesy, project — jeden modul = jedna
-                         # grupa; groups/_collection.py to wspolny ksztalt komend
-                         # kolekcji, nie grupa),
+└── cli/                 # Tylko tlumaczenie flag i wypisanie wyniku (Z1, Z8; ADR-037, ADR-046):
+                         # _parser.py (create_parser: fasada na catalog.cliparser - parser z deklaracji
+                         # katalogu, ADR-039), _handlers.py (HANDLERS: id komendy -> handler),
+                         # _args.py (library_arguments: flagi -> argumenty funkcji przez katalog),
+                         # _json.py (tryb --json: json_mode, emit_document, UTF-8),
                          # download_cmd.py (download_data/check_data),
                          # availability_cmd.py (check_availability: tabele PL i CZ, --details, --json),
                          # collection_cmd.py (download_collection/check_collection),
-                         # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG),
-                         # project_cmd.py (API projektu), parse_cmd.py,
-                         # cache_cmd.py, commands.py (entry point main)
+                         # landcover_cmd.py, soil_cmd.py (SoilGrids + HSG), layers_cmd.py (list-layers),
+                         # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
+                         # cache_cmd.py (cache_info), catalog_cmd.py (get_catalog),
+                         # project_cmd.py (API projektu; project add przez parse_command),
+                         # commands.py (entry point main: wyjatki -> error_report, kody 0/1/2/130)
 ```
 
 ---
@@ -1659,6 +1744,77 @@ zakresow bajtow na udziale. Szczegoly formatu i trybow:
 [`USAGE.md`, sekcja 8](USAGE.md#8-projekt) oraz spec
 `docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`.
 
+### 3.6 Dokumenty JSON `kartograf-*/1`
+
+Wynik komendy to dokument: `@dataclass(frozen=True)` z mixinem `Document`
+(`kartograf/serialization.py`), ktory daje `to_dict()` i `to_json()`. `schema`
+(`kartograf-<rodzaj>/<n>`, stala klasy `SCHEMA`, wlasciwosc `schema`) jest zawsze
+pierwszym kluczem, dalej klucze `JSON_KEYS` w stalej kolejnosci (domyslnie pola
+dataclass; klucz bez pola i bez wlasciwosci bierze `JSON_FILL`). `to_json()` =
+`json.dumps(to_dict(), ensure_ascii=False, indent=2, allow_nan=False)` i `\n` na
+koncu (`indent=None`: postac zwarta serwera MCP, bez nowej linii). CLI `--json` drukuje
+`to_json()` (`cli/_json.py::emit_document`), serwer MCP zwraca `to_dict()` i
+`to_json(indent=None)`; zaden inny modul nie zamienia wynikow na JSON (Z8).
+
+Koder (`encode`, sprawdzane w tej kolejnosci): `Enum` -> wartosc; `float` skonczony
+(`NaN`/`Infinity` to `ValueError`); typ z hakiem `__json__(ctx)` (`BBox` ->
+`{"bbox": [...], "crs"}`, wpisy projektu); `Path` -> `Path.absolute().as_posix()` (bez
+dotykania systemu plikow); `Decimal` -> napis; `datetime` -> ISO 8601 UTC do sekund;
+dataclass -> obiekt z polami w kolejnosci deklaracji (`metadata={"json": False}` i pary
+`ctx.omit` pomijane); `Mapping` -> obiekt; `tuple`/`list` -> tablica; `set` -> posortowana
+tablica; inny typ to `TypeError` (nigdy `str(obj)`). `EncodeContext` niesie `store`
+(katalog magazynu, do ktorego sciezki wersji pinow projektu sa wzgledne) i `omit` (pary
+`(klasa, pole)`: `StoreEntries` pomija `Sidecar.raw`). Rejestr `SCHEMAS`
+(`__init_subclass__`) zbiera klasy per schemat; test sprawdza wzorzec nazwy
+(`^kartograf-[a-z][a-z0-9-]*/[1-9][0-9]*$`), ten sam zestaw i kolejnosc kluczy klas jednego
+schematu oraz to, ze kazdy `result_schema` katalogu jest w rejestrze.
+
+| Schemat | Typ biblioteki | Modul | Klucze po `schema` |
+|---|---|---|---|
+| `kartograf-download/1` | `DataReport`, `CollectionReport`, `LandCoverReport`, `SoilReport`, `HsgReport` | `download.data`, `download.collections`, `landcover.manager`, `hydrology.hsg` | `files, raw, inputs, failed, stale, superseded, summary, notices, ok` |
+| `kartograf-plan/1` | `UpdatePlan` | `download.plan` | `store, checked_at, kartograf_version, items, notices, ok` |
+| `kartograf-availability/1` | `AvailabilityReport` | `download.availability` | `request, checked_at, areas, combinations, notices, ok` |
+| `kartograf-sheet/1` | `SheetInfo` | `sheet_info` | `sheet, system, country, sheet_system, scale, components, zone, crs, bounds, commands, hierarchy, children, descendants` |
+| `kartograf-sheets/1` | `SheetList` | `sheet_info` | `request, sheets, count` |
+| `kartograf-sources/1` | `SourceList` | `source_info` | `group, products, sources` |
+| `kartograf-layers/1` | `LayerList` | `source_info` | `group, product, source, layers, classes, years, properties, depths, statistics` |
+| `kartograf-project-state/1` | `Project` | `project.model` | `directory, output_dir, tasks` |
+| `kartograf-project-report/1` | `ProjectReport` | `project.model` | `project, tasks, notices, ok` |
+| `kartograf-project-check/1` | `ProjectCheck` | `project.model` | `project, files, not_downloaded, notices, ok` |
+| `kartograf-cache/1` | `CacheInfo` | `cache_info` | `action, path, exists, size_bytes, entries, cleared, removed_unreadable` |
+| `kartograf-catalog/1` | `Catalog` | `catalog.model` | `view, kartograf_version, language, groups, commands, exit_codes, errors, schemas` |
+| `kartograf-store-overview/1` | `StoreOverview` | `store_documents` | `output_dir, segments` |
+| `kartograf-store-entries/1` | `StoreEntries` | `store_documents` | `output_dir, segment, units, limit, truncated, entries` |
+| `kartograf-store-sidecar/1` | `StoreSidecar` | `store_documents` | `path, sidecar` |
+| `kartograf-error/1` | `ErrorReport` | `error_report` | `code, message, hint, exception, exit_code, command, details` |
+
+Zasady dokumentow (zrodlo: `docs/superpowers/specs/2026-10-18-agent-interface-design.md`,
+sekcja 5; uzycie: USAGE 9.1):
+
+- jeden schemat `kartograf-download/1` dla piecu typow wyniku komend danych ze stalym
+  zestawem kluczy (`raw`, `inputs`, `superseded`, `summary` puste, gdy klasa ich nie ma:
+  `JSON_FILL`), wiec konsument nie rozrozna typu po kluczach;
+- `AvailabilityReport` i `UpdatePlan` nie maja pola `schema` (stala `SCHEMA`
+  i wlasciwosc `schema`): nie buduje sie ich z `schema=`, a nieznany schemat odrzuca
+  `UpdatePlan.from_dict`; plany zapisane przez 0.8.0-dev nadal sie wczytuja;
+- sciezki w dokumentach sa bezwzgledne (wyjatki: `request.geometry` raportu dostepnosci
+  i `tasks[].options` projektu w postaci manifestu); `Project`, `ProjectReport` i
+  `ProjectCheck` ustawiaja `ctx.store`, wiec sciezki pinow (`PinnedFile`, `FileCheck`)
+  sa bezwzgledne;
+- klucz jest zawsze obecny (brak wartosci `null`, brak elementow `[]`), listy nie sa
+  ucinane po cichu (`kartograf-store-entries/1` niesie `limit` i `truncated`);
+- `ok` maja dokumenty wyniku (`-download/1`, `-plan/1`, `-availability/1`,
+  `-project-report/1`, `-project-check/1`): kod wyjscia CLI to 0 przy `ok: true` albo bez
+  pola `ok`, inaczej 1; `ok: false` jest wynikiem, nie bledem (blad to `kartograf-error/1`);
+- w obrebie `/1` tylko zmiany addytywne (nowe klucze, nowe wartosci wyliczen); usuniecie
+  klucza albo zmiana typu to `/2`. Nowy dokument = klasa z `Document` w module wyniku,
+  wpis w tabeli wyzej i wiersz w `tests/test_json_contract.py` (dokladna lista kluczy w
+  kolejnosci; zmiana klucza to blad testu).
+
+Schematy plikow - sidecar `kartograf-meta/1` (3.2) i manifest `kartograf-project/1` (3.5) -
+nie sa dokumentami wyniku i nie wchodza do `SCHEMAS`; dokument projektu to
+`kartograf-project-state/1`.
+
 ---
 
 ## 4. Przeplywy per produkt
@@ -1823,7 +1979,7 @@ nie niesie CRS (rasterio: `crs=None`), wiec jedynym nosnikiem ukladu jest
 sidecar. Ponowne uruchomienie rozwiazuje najnowszy rekord arkusza (cache 7 d;
 po jego wygasnieciu zapytanie do skorowidza) i stosuje tryb `update`
 (ponizej, "Tryby i plan aktualizacji"). `--cutout` w trybie godlowym jest
-**odrzucane** (kod 1) — godlo PL dostarcza arkusz natywny 1:1.
+**odrzucane** (`ValidationError`, kod 2) — godlo PL dostarcza arkusz natywny 1:1.
 
 **Niepelna najnowsza kampania (E13).** Rekord z `full_sheet: false`
 (skorowidz deklaruje arkusz nie w calosci wypelniony) nadal wygrywa, gdy
@@ -2535,7 +2691,7 @@ arkusze PL wyznacza sama geometria (cala), wiec nie ma komunikatu
 o przycieciu PL ani o obszarze poza prostokatami; czesc CZ nadal jest
 przycinana i komunikowana. Jawny
 `--country pl` nie przycina; bbox w calosci poza prostokatami =
-`ValidationError` (CLI `Error:`, kod 1) bez sieci. Poza obwiednia CZ przy granicach
+`ValidationError` (CLI `Error:`, kod 2) bez sieci. Poza obwiednia CZ przy granicach
 DE/SK/UA/BY/LT/RU `auto` odpytuje tylko PL; w prostokacie CZ
 dochodzi CUZK nawet nad Polska/Saksonia, bo obwiednia nie jest
 wielokatem granicy. Wynik calkowicie nodata (CZ albo wycinek PL
@@ -2556,7 +2712,7 @@ tylko arkuszy i kafli LAZ PL; `download_data` sprawdza wszystkie wejscia: zadani
 flaga roku = `ValidationError` (`CZ (CUZK) nie ma kampanii -
 --all-campaigns/--min-year/--max-year/--year dotycza tylko PL`; ortofoto
 CZ: `--year dotyczy tylko PL - CUZK publikuje tylko aktualny rocznik
-arkusza ortofoto CZ ...`), kod 1 bez sieci (LAZ CZ z `--min-density`:
+arkusza ortofoto CZ ...`), kod 2 bez sieci (LAZ CZ z `--min-density`:
 `--min-density dotyczy tylko LAZ PL`). Obszar rastra NMT/NMPT PL+CZ pod
 `auto` wymaga `--cutout`, a wycinek odrzuca te
 flagi (4.3) - arkusze PL z kampaniami daje tylko `--country pl` (od
@@ -3017,9 +3173,10 @@ i tabela CZ (kolumny `MODEL`, `UKLAD`, `ROZDZ.`, `WYSOKOSCI`, `FORMAT`,
 kazdej kombinacji), stopka z najnowsza kompletna kombinacja PL i
 z kompletnymi kombinacjami CZ (na kombinacje najwyzej `MAX_HINT_LINES`
 = 5 polecen i liczba pozostalych), `--json` = dokladnie
-`AvailabilityReport.to_json()`. `ok=False` (czesc `auto` niesprawdzona)
+`AvailabilityReport.to_json()` (komunikaty tylko w polu `notices`, bez
+powielania na stderr). `ok=False` (czesc `auto` niesprawdzona)
 = raport wypisany i kod 1. Raport nie jest komenda danych projektu
-(brak `_task`; `project add` go odrzuca). Przyklady i wydruki na zywo:
+(`project_task` katalogu = `false`; `project add` go odrzuca). Przyklady i wydruki na zywo:
 USAGE 1.7.
 
 **Walidacja przed siecia** (teksty jak `download_data`): jeden wybor
@@ -3087,12 +3244,12 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    i `size_bytes` to pola CZ (plan B; PL puste/`None`). Kolejnosc: rok
    malejaco, uklad, rozdzielczosc, uklad wysokosci, format (kolejnosc
    `FORMATS`). `AvailabilityReport(request, checked_at, areas, combinations,
-   notices, ok, schema="kartograf-availability/1")`; `areas` =
+   notices, ok)` (`Document`: schemat `kartograf-availability/1` to stala klasy,
+   pierwszy klucz dokumentu; bez pola `schema`); `areas` =
    `AvailabilityArea(country, crs, bounds, area_m2, land_m2)`;
    `checked_at` z `kartograf._clock`; `ok` = `False` tylko, gdy czesci
    zadania nie dalo sie sprawdzic (plan B, `auto`) — w PL zawsze `True`.
-   `to_json()` = `json.dumps(asdict(...), ensure_ascii=False, indent=2) + "\n"`
-   (jak `UpdatePlan.to_json`).
+   `to_json()` z mixinu `Document` (sekcja 3.6): wciecie 2 spacje, `\n` na koncu.
 
 **Algorytm CZ i `auto` (plan B, decyzje 9-10):**
 
@@ -3219,9 +3376,9 @@ co `check_availability(...).to_json()` z tym samym cache.
 boundaries|cadastre|models3d|hydro|names|maps|geodesy download` =
 `download_collection(...)`/`check_collection(...)`
 (`download/collections.py`); CLI tylko tlumaczy flagi
-(`cli/collection_cmd.py::collection_task` - to samo dla `_handler`
-i `_task` projektu), a wspolny ksztalt grup jest w
-`cli/groups/_collection.py` (teksty `--help` z biblioteki:
+(`cli/collection_cmd.py`: `library_arguments` z katalogu daje argumenty funkcji,
+te same dla pozycji projektu), a wspolny ksztalt grup jest w
+`catalog/commands/_collection.py` (teksty `--help` z biblioteki:
 `collection_product_choices`, `collection_level_choices`,
 `collection_variant_choices`). `validate_collection_request` sprawdza caly
 wybor BEZ sieci i jest jedynym miejscem regul (wolaja ja obie funkcje
@@ -3509,6 +3666,87 @@ jako tekst bez NUL i znacznikow) i QGZU ZIP z feedu ATOM (produkt kolekcji
 z samym kanalem ATOM jednego zbioru); obszar = blad z `--whole-country`.
 Kartograf nie stosuje modeli do innych danych (ADR-043, pkt 7 planu E).
 
+### 4.11 Interfejs dla agentow: katalog komend, dokumenty i serwer MCP (ADR-046)
+
+**Zasada.** To samo zadanie wykonane przez CLI z `--json`, przez biblioteke (`to_dict()`) i
+przez serwer MCP daje ten sam dokument (3.6); blad ma stabilny `code`, `exit_code` i `hint`
+(`kartograf-error/1`). CLI i MCP sa cienkie: tlumacza i drukuja (Z1, Z8), a komendy,
+parametry i dozwolone wartosci opisuje jeden katalog (Z9). Uzycie: USAGE, sekcja 9;
+uzasadnienia: ADR-046.
+
+**Katalog komend (`kartograf/catalog/`).** Deklaracje (`catalog/spec.py`: `Command`, `Param`,
+`Constraint`, `Example`, `Group`) leza w `catalog/commands/<modul>.py`, po jednym module na
+grupe CLI (`MODULE_ORDER`: elevation, imagery, landcover, soil, boundaries, cadastre,
+models3d, hydro, names, maps, geodesy, project, misc); `declared()` znajduje moduly po
+nazwie, wiec nowa grupa to jeden nowy plik. `Param` niesie nazwe, rodzaj (`str`, `int`,
+`flag`, `bbox`, `bbox_crs`, `path`, `per_country`, `str_list`, `plan`, `options`), flage CLI,
+nazwe argumentu API (`argument`), wymagalnosc, `task` (opcja zadania projektu), `allowed`
+(dostawca czytajacy rejestr zrodel przy budowie katalogu, nie przy imporcie), opis i pola
+tylko dla parsera (`dest`, `metavar`...). Z deklaracji powstaja:
+
+- `get_catalog(group, command, params, tables)` -> `Catalog` (`kartograf-catalog/1`,
+  `catalog/build.py`, `model.py`): przeglad (`view: overview`, ok. 7,6 tys. znakow), opis
+  grupy albo komendy, caly katalog z parametrami; `tables=True` dodaje `exit_codes` i
+  `errors` (`error_report.EXIT_CODES`, `ERROR_CODES`) oraz `schemas` (`SCHEMAS`);
+  `data_commands()` zwraca 12 komend danych (KB-1);
+- parser CLI (`catalog/cliparser.py::build_parser`; `cli/_parser.py::create_parser` to
+  fasada): `--help`, `choices`, wykluczanie flag i przyklady (`epilog` z przykladow
+  katalogu); moduly `cli/groups/*` nie istnieja;
+- opcje komend danych projektu (`project/commands.py::COMMANDS`: `TaskCommand.options` =
+  `Command.task_options`) i konwersja JSON <-> argumenty biblioteki
+  (`catalog/kinds.py::convert_arguments`), wspolna dla `project add`, `parse_command` i serwera
+  MCP;
+- specyfikacje narzedzi MCP (`catalog/tools.py`) i podpowiedzi bledow
+  (`catalog/hints.py::example_for`: przyklad komendy w `hint`).
+
+Spojnosc wymuszaja testy kontraktowe (`tests/test_catalog*.py`): flagi parsera == katalog w
+obie strony, `COMMANDS[...].options` == parametry `task`, `function`/`check_function` w
+`kartograf.__all__` ze zgodnymi sygnaturami, `allowed` == rejestr, przyklady przez
+`validate_command` i okrazenie `parse_command(format_command(...))`, ograniczenia testowane
+naruszeniem wyprowadzonym z przykladu. Biblioteka nie importuje `kartograf.cli` (test w
+czystym procesie).
+
+**Warstwa komend (`kartograf/commands.py`, KB-2..KB-5 Archiwisty).** `parse_command` (linia
+-> `CommandCall(command, options, run)`; parser katalogu w trybie "tylko podane flagi"),
+`validate_command` (konwersja i walidacja zadania bez sieci i zapisu), `format_command`
+(`catalog/formatting.py`), `run_command`/`check_command` (konwersja, walidacja, potem funkcja
+komendy: `download_data`, `download_collection`, ... albo `check_*`). `options` to postac
+JSON opcji zadania projektu (ADR-040), `run` - flagi uruchomienia (`output_dir`, `update`,
+`plan`, `workers`, `summary`). Funkcje bez sieci (`parse_command`, `validate_command`,
+`format_command`) maja test z atrapa transportu odrzucajaca kazde zapytanie.
+
+**Bledy.** Kazda klasa `KartografError` ma w `__dict__` wlasny `code` (snake_case, unikalny;
+`tests/test_errors.py`), `exit_code`, `DETAIL_FIELDS` i opcjonalny `hint`; walidatory biblioteki
+ustawiaja `ValidationError.option`/`options`/`allowed` (nazwa argumentu API, nie flaga).
+`error_report(exc, command=)` zamienia dowolny wyjatek na `ErrorReport` (kody `io_error` dla
+`OSError`, `interrupted` i `internal_error` buduje tu, a nie klasy hierarchii); `hint` skladany
+deterministycznie z `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` albo `Dozwolone wartosci ...` i
+`Przyklad: ...` z katalogu (do 400 znakow). `main` (`cli/commands.py`) wykrywa tryb JSON przed
+parsowaniem (`cli/_json.py::json_mode`), buduje parser z `usage_errors=True` (blad skladni
+to `UsageError`, z `command`, gdy linia nazwala znana komende) i zamienia kazdy wyjatek na
+dokument `kartograf-error/1` na stdout (stderr pusty) oraz kod wyjscia `e.exit_code`
+(0/1/2), 130 dla Ctrl-C; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Tabele kodow wyjscia
+i bledow sa w USAGE 9.3 (`tests/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
+
+**Serwer MCP (`kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
+deklaracje na specyfikacje 29 narzedzi (nazwa, krotki opis, schemat wejscia JSON Schema
+2020-12 bez `$ref`, adnotacje, funkcja) bez `mcp`; `mcp_server.py` wystawia je przez
+niskopoziomowy `mcp.server.Server` (stdio): wynik `CallToolResult(content=<zwarty JSON>,
+structured_content=<to_dict()>, is_error=<kod wyjscia != 0>)`, bledy jako `kartograf-error/1`,
+walidacja wejscia schematem (`jsonschema`), regula sciezek bezwzglednych (`--allow-dir`),
+postep przez `report_progress`, najwyzej 4 jednoczesne wywolania sieciowe i cache serwera w
+katalogu cache uzytkownika. SDK `mcp` jest zaleznoscia opcjonalna (extra `mcp`), a dotyka go
+tylko `mcp_server.py` i to leniwie. Budzet kontekstu agenta (D22): `tools/list` <= 30 000 znakow
+(opisy narzedzi pisane na wywolanie, wspolne znaczenia w `instructions`), `get_catalog()` <= 8 000
+znakow; pilnuja go testy. Uzycie i konfiguracja klientow: USAGE 9.6.
+
+**Nowa komenda przez katalog.** Deklaracja w `catalog/commands/<modul>.py` (`Command` z
+`function`/`check_function` z `kartograf.__all__`, `result_schema`, `tool`, parametrami,
+ograniczeniami i przykladami), handler w `cli/_handlers.py::HANDLERS` (grupa kolekcji: nazwa
+w `COLLECTION_GROUPS`), dla komendy danych pozycja w `project/commands.py::COMMANDS`, a dla
+narzedzia MCP wpisy `_BRIEF` w `catalog/tools.py` (nowy parametr nie zbuduje narzedzi, dopoki
+go nie dostanie). Przepis krok po kroku: DEVELOPMENT_STANDARDS 17.2.
+
 ---
 
 ## 5. Jak dodac nowe zrodlo albo nowy kraj
@@ -3546,8 +3784,8 @@ Checklist na przykladzie DE (Brandenburgia, DGM1):
    w `download/data.py` (`_dispatch_area` -> funkcja toru kraju) i uzupelnij
    walidacje `download/options.py` (`validate_request`, `check_per_country`)
    oraz `download/area.py::pl_only_flags` o opcje, ktore w tym kraju nie
-   istnieja; CLI nie zmienia sie poza wyborami flag w module grupy
-   `cli/groups/elevation.py` / `imagery.py` (stale z `download/options.py`). Scenariusz kraju w `tests/test_parity.py`. Reprojekcje rob lokalnie, przypieta operacja — nigdy przez
+   istnieja; CLI nie zmienia sie poza wyborami flag w deklaracji katalogu
+   (`catalog/commands/elevation.py` / `imagery.py`, stale z `download/options.py`). Scenariusz kraju w `tests/test_parity.py`. Reprojekcje rob lokalnie, przypieta operacja — nigdy przez
    parametr CRS serwera (ADR-024).
 6. **Testy**: fixtury z REALNYCH odpowiedzi serwera (wzor `tests/fixtures/cuzk/`),
    test spojnosci deskryptor-provider, wpis w `KNOWN_PATHS` dla kazdej
@@ -3576,15 +3814,14 @@ tresci w `download/campaigns.py::verify_file_format`. Nowy kanal WCS
 wycinka NMT/NMPT to osobna decyzja — dzis tylko warianty 1 m; kanaly
 WCS wycinka ortofotomapy sa wpisami `WcsCutoutParams` (sekcja 3.1, 4.3).
 
-Nowa **komenda zapisujaca dane** (w tym `download` nowej grupy) musi
-otrzymac pozycje w `kartograf/project/commands.py::COMMANDS`: dozwolone
-opcje zadania, wspolna z pobraniem walidacja bez sieci, funkcja pobrania
-i `check_*`, adapter wyniku na komplet przypinanych `VersionedFile`.
-Parser komendy ustawia `_task` korzystajace z tego samego tlumaczenia
-flag co `_handler`, bez `output_dir` i opcji pojedynczego uruchomienia.
-Dodaj test zadania projektu dla tej komendy (przypiecie, sprawdzenie
-i odtworzenie); nowy produkt istniejacej komendy nie wymaga nowej
-pozycji w tabeli (ADR-040, spec manifestu sekcja 5).
+Nowa **komenda zapisujaca dane** (w tym `download` nowej grupy) to deklaracja
+w `kartograf/catalog/commands/<grupa>.py` (parametry `task=True` = opcje zadania
+manifestu; parser CLI, opcje projektu i schematy MCP powstaja z niej, sekcja 4.11)
+oraz pozycja w `kartograf/project/commands.py::COMMANDS`: wspolna z pobraniem
+walidacja bez sieci, funkcja pobrania i `check_*`, adapter wyniku na komplet
+przypinanych `VersionedFile`. Dodaj test zadania projektu dla tej komendy
+(przypiecie, sprawdzenie i odtworzenie); nowy produkt istniejacej komendy nie
+wymaga nowej pozycji w tabeli (ADR-040, spec manifestu sekcja 5).
 
 **Nowy produkt kolekcji (ADR-042).** Paczka jednostki (powiat,
 wojewodztwo, plik krajowy), obiekty obszaru z WFS 2.0 / ArcGIS REST albo
@@ -3596,8 +3833,9 @@ wynika z rodzaju wyboru (sekcja 4.10), sidecar, wersje i plan sa wspolne.
 Kolejnosc osi BBOX (`axis_order`) potwierdz testem na prawdziwej
 odpowiedzi uslugi (zamiana osi daje pusty wynik bez bledu), kanal dopisz
 do inwentarza sygnalow testow rejestru, fixtury nagraj z prawdziwych
-odpowiedzi. CLI: nowa grupa = modul z `add_collection_commands`
-(`cli/groups/_collection.py`) i pozycja projektu (akapit wyzej); nowy
+odpowiedzi. CLI: nowa grupa = modul `catalog/commands/<grupa>.py` z `collection_commands`
+i `collection_group` (`catalog/commands/_collection.py`), nazwa grupy w `COLLECTION_GROUPS`
+(`cli/_handlers.py`) i pozycja projektu (akapit wyzej); nowy
 produkt istniejacej grupy = tylko nowy wybor `--product` z rejestru. Nowy
 protokol (np. OGC API Features) rozszerza `FeatureBBoxParams.protocol`
 razem z pierwszym produktem. Checklista: `docs/DEVELOPMENT_STANDARDS.md`

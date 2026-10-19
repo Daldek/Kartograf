@@ -398,7 +398,7 @@ class TestLandCoverCLI:
         from kartograf.cli.commands import main
 
         result = main(["landcover", "download", "--product", "bdot10k", "-o", "unused"])
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
@@ -418,7 +418,7 @@ class TestLandCoverCLI:
                 "invalid",
             ]
         )
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Nieprawidlowy bbox" in captured.err
         # the "Oczekiwano" hint goes to stderr together with the error (review-1 D4)
@@ -430,10 +430,10 @@ class TestLandCoverCLI:
         ["10,10,5,5", "1,10,5,5", "nan,1,2,3", "1,2,inf,4", "1,2,3", "1,2,3,4,5"],
     )
     def test_landcover_download_rejects_bad_bbox(self, bbox, capsys, tmp_path):
-        """Inverted/NaN/inf/wrong value count -> Error on stderr, code 1 (K7a)."""
+        """Inverted/NaN/inf/wrong value count -> Error on stderr, code 2 (K7a)."""
         from kartograf.cli.commands import main
 
-        with patch("kartograf.cli.landcover_cmd.LandCoverManager") as manager:
+        with patch("kartograf.landcover.manager.LandCoverManager") as manager:
             result = main(
                 [
                     "landcover",
@@ -445,7 +445,7 @@ class TestLandCoverCLI:
                     str(tmp_path),
                 ]
             )
-        assert result == 1
+        assert result == 2
         manager.assert_not_called()
         captured = capsys.readouterr()
         assert "Error: Nieprawidlowy bbox" in captured.err
@@ -457,7 +457,7 @@ class TestLandCoverInvalidOptions:
     """An invalid --property/--year/--depth/--stat is a USER error (N8).
 
     `Error: <message>` without the exception type name and without the
-    KARTOGRAF_DEBUG hint (that one is for internal errors), exit code 1, before
+    KARTOGRAF_DEBUG hint (that one is for internal errors), exit code 2, before
     the network (conftest blocks sockets - a connection attempt would fail the
     test).
     """
@@ -490,7 +490,7 @@ class TestLandCoverInvalidOptions:
 
         rc = main([*command, "--sheet", "N-34-130-D", "-o", str(tmp_path)])
         err = capsys.readouterr().err
-        assert rc == 1
+        assert rc == 2
         assert fragment in err
         assert "Error: " in err
         assert "ValueError" not in err

@@ -199,7 +199,7 @@ class TestPreparePlCutout:
 
 
 class TestTargetCrsValidations:
-    """Spec 6.3 through main() - readable errors, code 1."""
+    """Spec 6.3 through main() - readable errors, code 2."""
 
     _BBOX = ["--bbox", "530010,382010,530190,382090", "--country", "pl"]
 
@@ -227,7 +227,7 @@ class TestTargetCrsValidations:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert "--bbox/--geometry" in capsys.readouterr().err
 
     def test_laz_cutout_rejected(self, tmp_path):
@@ -270,5 +270,5 @@ class TestTargetCrsValidations:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert "1992" in capsys.readouterr().err

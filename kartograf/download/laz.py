@@ -34,6 +34,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 from kartograf.cache.defaults import open_cache
 from kartograf.cache.metadata import MetadataCache
@@ -530,7 +531,7 @@ def download_laz_area(
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
     workers: int = 1,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     cache: MetadataCache | bool = True,
     on_progress: LazProgressCallback | None = None,
     on_notice: Callable[[Notice], None] | None = None,

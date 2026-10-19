@@ -9,6 +9,7 @@ two versions are comparable without downloading the data.
 
 import re
 from dataclasses import dataclass
+from typing import Any
 
 from kartograf.exceptions import DownloadError
 
@@ -29,7 +30,7 @@ class Edition:
     title: str | None = None
     dataset_uid: str | None = None
 
-    def to_extra(self) -> dict:
+    def to_extra(self) -> dict[str, Any]:
         """``extra.edition`` of the version sidecar (``None`` fields skipped)."""
         fields = {
             "id": self.id,

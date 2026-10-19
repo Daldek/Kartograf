@@ -27,7 +27,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from kartograf import _clock
 from kartograf.download.campaigns import AscCoverage, measure_coverage
@@ -70,7 +70,7 @@ class VersionRef:
     label: str
     label_source: LabelSource
 
-    def to_extra(self) -> dict:
+    def to_extra(self) -> dict[str, Any]:
         """``extra.version`` of the version sidecar."""
         return {"label": self.label, "label_source": self.label_source}
 

@@ -433,6 +433,9 @@ kartograf project download                 # przypnij wersje zadan; --check-upda
 kartograf project status                   # istnienie i rozmiar, bez czytania danych
 kartograf project verify                   # SHA-256 plikow i sidecarow
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
+kartograf catalog --json                   # katalog komend (grupy, komendy, parametry, dozwolone wartości, przykłady); get_catalog() (ADR-046)
+kartograf elevation availability --product nmt --sheet <godlo> --json # --json w każdej komendzie: jeden dokument kartograf-<rodzaj>/1, błąd kartograf-error/1, kody wyjścia 0/1/2/130
+kartograf-mcp                              # serwer MCP (stdio; extra `kartograf[mcp]`): 29 narzędzi 1:1 z komendami (USAGE 9.6)
 # Pełna lista opcji: kartograf <grupa> <komenda> --help
 ```
 
@@ -499,9 +502,17 @@ from kartograf import (
     list_segments, list_partitions, iter_store, StoreEntry, read_sidecar, Sidecar,
     describe_segment, SegmentInfo, file_footprint, Footprint, link_target,
     pinned_transform, PinnedTransform,
+    # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 9)
+    get_catalog, data_commands, Catalog, CommandInfo, ParamInfo,
+    parse_command, validate_command, format_command, run_command, check_command,
+    CommandCall, describe_sheet, SheetInfo, find_sheets, SheetList,
+    list_sources, SourceList, list_layers, LayerList,
+    get_cache_info, get_cache_path, clear_cache, CacheInfo,
+    describe_store, StoreOverview, list_store_entries, StoreEntries,
+    read_store_sidecar, StoreSidecar, ErrorReport, error_report,
     # Exceptions
     KartografError, ParseError, ValidationError, DownloadError, NoCoverageError,
-    YearRangeError, CacheError, InvalidSidecarError,
+    YearRangeError, CacheError, InvalidSidecarError, UsageError,
     # Version
     __version__,
 )
@@ -838,6 +849,27 @@ from kartograf import (
 # API: WFS (sieci PL), ArcGIS REST (Bodove pole), ATOM, OpenData
 ```
 
+### 2.17 Interfejs dla agentów AI - IN SCOPE
+
+```text
+# Ten sam wynik trzema drogami (ADR-046; przewodnik: USAGE 9):
+# - CLI: `--json` w każdej komendzie (37 komend-liści: 36 i `catalog`) — stdout to jeden
+#   dokument `kartograf-<rodzaj>/1` (16 schematów), błąd to `kartograf-error/1` ze stabilnym
+#   `code`, `hint` i kodem wyjścia 0/1/2/130 (błąd wejścia = 2);
+# - biblioteka: `to_dict()`/`to_json()` każdego raportu, wyjątki ze stabilnym `code`,
+#   `exit_code` i `hint` (`ValidationError.option`/`allowed`), `error_report`;
+# - serwer MCP `kartograf-mcp` (stdio; opcjonalny extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
+#   29 narzędzi 1:1 z komendami (w tym `check_updates`), wynik = dokument `--json`,
+#   `is_error` = kod wyjścia CLI != 0, postęp przez notyfikacje MCP, ścieżki bezwzględne,
+#   `--tools`, `--allow-dir`, bez wartości domyślnych wpływających na dane.
+# Katalog komend: `kartograf catalog [--json]`, `get_catalog()` — jedyne źródło prawdy
+# o komendach (parser CLI, opcje projektu, schematy narzędzi MCP); warstwa komend
+# `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
+# (KB-1..KB-5 Archiwisty). Pliki dla agentów: `llms.txt`, `kartograf/py.typed`,
+# `scripts/gate.sh`, `python -m kartograf`; reguły dla agentów z innych repozytoriów:
+# CLAUDE.md. Nowa komenda = deklaracja w `kartograf/catalog/commands/` (STANDARDS 17.2).
+```
+
 ---
 
 ## 3. Out of Scope - Wersja 0.8.0
@@ -876,6 +908,13 @@ from kartograf import (
   z podpowiedzią `--teryt <4 cyfry>`
 - Pliki krajowe modeli 3D budynków (3,5-4,1 GB): `models3d --whole-country` = błąd
 - Mapowanie klas ZABAGED na kody BDOT10k
+
+# Interfejs dla agentów AI (ADR-046) — poza zakresem 0.8.0:
+- Transport HTTP serwera MCP (tylko stdio)
+- Anulowanie pobrań (KC) i jednolity `on_progress` wszystkich funkcji (KC-2); narzędzia
+  MCP bez postępu: `soil_download`, `soil_hsg`, `check_updates`, `project_check_updates`
+- Szacunek rozmiaru pobrania (KH), `command_for_file` (KB-6), `find_admin_units` (KB-7)
+- `output_schema` narzędzi MCP (wynik to rodzina dokumentów: wynik albo `kartograf-error/1`)
 
 # Później — inne kraje:
 - Niemcy (DE) — federacja 17 modeli krajów związkowych (BKG/basemap.de)
@@ -1145,8 +1184,19 @@ kartograf/
 ├── __init__.py           # Public API exports
 ├── _clock.py             # now() — jedno źródło czasu wyników (zamrażane w testach zgodności)
 ├── _version.py           # build_version() — identyfikator wersji
+├── __main__.py           # `python -m kartograf` = skrypt `kartograf`
+├── py.typed              # znacznik PEP 561 (typy dla mypy konsumenta)
+├── serialization.py      # Document (to_dict/to_json, schema pierwszym kluczem), koder, rejestr SCHEMAS (ADR-046)
+├── error_report.py       # ErrorReport, error_report, ERROR_CODES/EXIT_CODES (kartograf-error/1)
+├── commands.py           # warstwa komend: parse_command, validate_command, format_command, run_command, check_command
+├── sheet_info.py         # describe_sheet, find_sheets (kartograf-sheet/1, kartograf-sheets/1)
+├── source_info.py        # list_sources, list_layers (kartograf-sources/1, kartograf-layers/1)
+├── cache_info.py         # get_cache_info, get_cache_path, clear_cache (kartograf-cache/1)
+├── store_documents.py    # describe_store, list_store_entries, read_store_sidecar (dokumenty odczytu magazynu)
+├── mcp_server.py         # serwer MCP kartograf-mcp (stdio; opcjonalny extra `mcp`)
+├── catalog/              # Katalog komend: deklaracje (commands/), get_catalog, parser CLI, narzędzia MCP (tools.py)
 ├── notices.py            # Notice, NoticeSink, kody komunikatów o danych (ADR-037)
-├── exceptions.py         # KartografError, ValidationError -> ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError
+├── exceptions.py         # KartografError (code, exit_code, hint), ValidationError (option, allowed) -> UsageError/ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError
 ├── store.py              # Odczyt magazynu bez zapisu (ADR-045): list_segments, list_partitions, iter_store, read_sidecar, describe_segment, link_target
 ├── store_geometry.py     # file_footprint (obrys natywny i WGS84), pinned_transform (operacja przypięta, per wątek)
 ├── core/                 # Logika bazowa
@@ -1215,7 +1265,7 @@ kartograf/
 │   ├── campaigns.py          # Kampanie GUGiK (ADR-030): CampaignRef, format z rekordu, verify_file_format
 │   ├── countries.py          # Podział obszaru na kraje (countries_for_bbox, split_bbox_by_country)
 │   ├── fetch.py              # Polityka plików bez kampanii: fetch_version, VersionedFile
-│   ├── plan.py               # Plan aktualizacji kartograf-plan/1 (PlanItem, UpdatePlan)
+│   ├── plan.py               # Plan aktualizacji kartograf-plan/1 (PlanItem, UpdatePlan jako Document)
 │   ├── links.py              # Dowiązanie ścieżki standardowej do wersji (wyłącznie hardlink, nigdy wstecz)
 │   ├── cutout.py             # Wycinek PL --cutout (download_pl_cutout/check_pl_cutout)
 │   ├── cz_cutout.py          # Wycinek CZ (download_cz_cutout/check_cz_cutout)
@@ -1233,27 +1283,29 @@ kartograf/
 │   └── hsg.py                # calculate_hsg/check_hsg, hsg_statistics; wewnętrzny HSGCalculator (wersje wejść, reused)
 ├── project/               # Manifest projektu kartograf-project/1 (ADR-040)
 │   ├── model.py              # Project, ProjectTask, PinnedFile, ProjectReport, TaskResult, ProjectCheck, FileCheck
-│   ├── commands.py           # COMMANDS: komendy danych w zadaniach (opcje JSON, walidacja bez sieci, pobranie, przypięcia)
+│   ├── commands.py           # COMMANDS: komendy danych w zadaniach (opcje z katalogu, walidacja bez sieci, pobranie, przypięcia)
 │   ├── manifest.py           # odczyt, walidacja i atomowy zapis manifestu
 │   └── operations.py         # API: init_project, open_project, add/remove_project_task, download_project, check_project, get_project_status, verify_project
 ├── auth/                  # Autentykacja (CLMS)
 │   ├── proxy.py               # Auth Proxy server
 │   └── client.py               # Auth Proxy client
-└── cli/                   # CLI: tylko tłumaczenie flag i wypisanie wyniku (ADR-037)
-    ├── _parser.py             # argparse — parser główny (parse, cache, błąd usuniętych komend)
-    ├── _args.py               # wspólne flagi (obszar, tryby aktualizacji, --quiet)
-    ├── groups/                # grupy komend wg typu danych (ADR-039): elevation, imagery, landcover, soil, boundaries, cadastre, models3d, hydro, names, maps, geodesy, project
-    │                          #   (jeden moduł = jedna grupa z register(); wykrywane automatycznie)
-    │                          #   _collection.py: wspólny kształt download/list-sources grup kolekcji (add_collection_commands)
-    ├── parse_cmd.py           # `kartograf parse`
+└── cli/                   # CLI: tylko tłumaczenie flag i wypisanie wyniku (ADR-037, ADR-046)
+    ├── _parser.py             # create_parser() — fasada na parser budowany z katalogu komend (ADR-039, ADR-046)
+    ├── _handlers.py           # HANDLERS: id komendy -> handler
+    ├── _args.py               # library_arguments: flagi -> argumenty funkcji biblioteki (przez katalog)
+    ├── _json.py               # tryb --json: dokument na stdout, kody wyjścia
+    ├── parse_cmd.py           # `kartograf parse` -> describe_sheet
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
     ├── availability_cmd.py    # `elevation availability` -> check_availability (tabela, --details, --json)
     ├── landcover_cmd.py       # `landcover download` -> download_landcover/check_landcover
+    ├── layers_cmd.py          # `landcover list-layers` / `soil list-layers` -> list_layers
+    ├── sources_cmd.py         # `<grupa> list-sources` -> list_sources
     ├── collection_cmd.py      # `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download` -> download_collection/check_collection
     ├── soil_cmd.py            # `soil download` -> download_soil/check_soil; `soil hsg` -> calculate_hsg/check_hsg
-    ├── project_cmd.py         # `kartograf project` -> API projektu (ADR-040)
-    ├── cache_cmd.py           # `kartograf cache`
-    └── commands.py            # Fasada zgodności — re-eksport + entry point `main`
+    ├── project_cmd.py         # `kartograf project` -> API projektu (ADR-040); `project add` przez parse_command
+    ├── cache_cmd.py           # `kartograf cache` -> get_cache_info/get_cache_path/clear_cache
+    ├── catalog_cmd.py         # `kartograf catalog` -> get_catalog
+    └── commands.py            # Fasada zgodności — entry point `main` (błędy -> error_report, kody 0/1/2/130)
 ```
 
 ### 4.2 Zależności

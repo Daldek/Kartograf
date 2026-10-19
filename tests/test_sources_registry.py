@@ -7,14 +7,12 @@ variant registry (ADR-041), sheet records from the GUGiK WFS index.
 import dataclasses
 import itertools
 import json
-import pkgutil
 import re
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 
-from kartograf.cli import groups as cli_groups
 from kartograf.core.sheet_parser import BBox
 from kartograf.download.collections import _capability
 from kartograf.download.options import ELEVATION_PRODUCTS, IMAGERY_PRODUCTS
@@ -26,6 +24,7 @@ from kartograf.providers.pl.gugik_orto import (
     wcs_cutout_channels,
 )
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.source_info import SOURCE_GROUPS
 from kartograf.sources.descriptor import (
     PACKAGE_URL_TOKENS,
     AccessChannel,
@@ -1077,11 +1076,7 @@ class TestNamingConvention:
         """``elevation`` and ``imagery`` store a product in the directory of
         its ``--product`` (``true-orto/``), the other groups in the directory
         of the group (``geodesy/``)."""
-        groups = {
-            module.name
-            for module in pkgutil.iter_modules(cli_groups.__path__)
-            if not module.name.startswith("_")
-        } - {"elevation", "imagery", "project"}
+        groups = set(SOURCE_GROUPS) - {"elevation", "imagery"}
         for d in all_sources():
             directory = d.storage_subdir.split("/")[0]
             if d.product in (*ELEVATION_PRODUCTS, *IMAGERY_PRODUCTS):

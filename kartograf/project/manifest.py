@@ -29,8 +29,9 @@ from types import MappingProxyType
 from typing import NoReturn
 
 from kartograf import _clock
+from kartograf.catalog.kinds import check_options_json
 from kartograf.exceptions import ValidationError
-from kartograf.project.commands import COMMANDS, check_options_json, data_commands_text
+from kartograf.project.commands import COMMANDS, data_commands_text
 from kartograf.project.model import PinnedFile, Project, ProjectTask
 
 MANIFEST_NAME = "kartograf-project.json"
@@ -200,7 +201,7 @@ def _validate_task(task: object, index: int, names: set[str]) -> None:
             f"nieznana komenda {raw_command!r} (komendy danych: "
             f"{data_commands_text()})",
         )
-    error = check_options_json(command, task["options"])
+    error = check_options_json(command.options, task["options"], command=command.name)
     if error is not None:
         _fail(where, error)
     pinned_at, version = task["pinned_at"], task["kartograf_version"]

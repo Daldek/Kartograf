@@ -1,100 +1,77 @@
 """
 ``kartograf cache`` command group (stats, clear, path).
+
+The commands are the library functions ``get_cache_info``, ``clear_cache`` and
+``get_cache_path``: the text is rendered from their document
+(``kartograf-cache/1``) and with ``--json`` the CLI prints that document. A cache
+that cannot be used is the ``CacheError`` of the library (``main`` reports it,
+exit code 1); ``path`` does not open the database, so it works then, too.
 """
 
 import argparse
-import sys
-from pathlib import Path
 
-from kartograf.cache.defaults import default_cache_path, open_cache
-
-
-def _unreadable_message(path: Path, error: Exception) -> str:
-    """``Error:`` line for ``stats``/``clear`` when the cache is unusable."""
-    from kartograf.cache.metadata import is_lock_error
-
-    if is_lock_error(error):
-        return (
-            f"Error: cache zablokowany przez inny proces: {path} ({error}) - "
-            "sprobuj ponownie po jego zakonczeniu"
-        )
-    return f"Error: cache nieczytelny: {path} ({error}) - uzyj `kartograf cache clear`"
+from kartograf.cache_info import (
+    CacheEntries,
+    CacheInfo,
+    clear_cache,
+    get_cache_info,
+    get_cache_path,
+)
+from kartograf.cli._json import emit_document, wants_json
 
 
-def _remove_unreadable(path: Path) -> int:
-    """Delete an unreadable cache file with its ``-wal``/``-shm`` companions."""
-    for candidate in (path, Path(f"{path}-wal"), Path(f"{path}-shm")):
-        try:
-            candidate.unlink()
-        except FileNotFoundError:
-            continue
-        except OSError as e:
-            print(
-                f"Error: nie mozna usunac nieczytelnego pliku cache {candidate}: {e}",
-                file=sys.stderr,
-            )
-            return 1
-    print(f"Usunieto nieczytelny plik cache: {path}")
-    return 0
+def _print_stats(info: CacheInfo) -> None:
+    """The statistics of the cache; a database that does not exist yet has none."""
+    entries = info.entries or CacheEntries(0, 0, 0, 0, 0, 0)
+    print("Statystyki cache metadanych:")
+    print(f"  Wpisy rekordow: {entries.records}")
+    print(f"  Wpisy kampanii: {entries.campaigns}")
+    print(f"  Wpisy TERYT: {entries.teryt}")
+    print(f"  Wpisy arkuszy: {entries.sheets}")
+    print(f"  Wpisy obszarow skorowidza: {entries.index_areas}")
+    print(f"  Indeksy feedow ATOM: {entries.atom_feeds}")
+    db_size_kb = (info.size_bytes or 0) / 1024
+    if not info.exists:
+        print("  Rozmiar bazy: - (plik jeszcze nie utworzony)")
+    elif db_size_kb < 1024:
+        print(f"  Rozmiar bazy: {db_size_kb:.1f} KB")
+    else:
+        print(f"  Rozmiar bazy: {db_size_kb / 1024:.1f} MB")
+    print(f"  Sciezka bazy: {info.path}")
 
 
-def cmd_cache(args: argparse.Namespace) -> int:
+def cmd_cache(args: argparse.Namespace, action: str) -> int:
     """
-    Execute cache management commands.
+    Execute a cache management command.
 
     Parameters
     ----------
     args : argparse.Namespace
         Parsed command-line arguments
+    action : {"stats", "clear", "path"}
+        The command: ``get_cache_info``, ``clear_cache`` or ``get_cache_path``.
 
     Returns
     -------
     int
-        Exit code (0 for success, 1 for error)
+        Exit code (0 for success; an unusable cache is the ``CacheError`` that
+        ``main`` reports, except for ``path``, which never opens the database).
     """
-    from kartograf.cache.metadata import is_lock_error
-
-    # Reads and management calls never create a missing database. Ignore the
-    # disabled-cache notice here: these commands report cache.error themselves.
-    with open_cache(True, force=False, on_notice=lambda _notice: None) as cache:
-        assert cache is not None
-        if args.cache_command == "path":
-            print(default_cache_path())
-            return 0
-
-        if args.cache_command == "stats":
-            st = cache.stats()
-            if cache.error is not None:
-                print(_unreadable_message(cache.db_path, cache.error), file=sys.stderr)
-                return 1
-            print("Statystyki cache metadanych:")
-            print(f"  Wpisy rekordow: {st['record_count']}")
-            print(f"  Wpisy kampanii: {st['campaign_count']}")
-            print(f"  Wpisy TERYT: {st['teryt_count']}")
-            print(f"  Wpisy arkuszy: {st['sheet_count']}")
-            print(f"  Wpisy obszarow skorowidza: {st['index_area_count']}")
-            print(f"  Indeksy feedow ATOM: {st['atom_feed_count']}")
-            db_size_kb = st["db_size_bytes"] / 1024
-            if not st["db_exists"]:
-                print("  Rozmiar bazy: - (plik jeszcze nie utworzony)")
-            elif db_size_kb < 1024:
-                print(f"  Rozmiar bazy: {db_size_kb:.1f} KB")
-            else:
-                print(f"  Rozmiar bazy: {db_size_kb / 1024:.1f} MB")
-            print(f"  Sciezka bazy: {st['db_path']}")
-            return 0
-
-        if args.cache_command == "clear":
-            cache.clear()
-            cache.vacuum()
-            if cache.error is None:
-                print("Cache wyczyszczony.")
-                return 0
-            if is_lock_error(cache.error):
-                # The file is fine, another process holds it: never delete it.
-                print(_unreadable_message(cache.db_path, cache.error), file=sys.stderr)
-                return 1
-            cache.close()
-            return _remove_unreadable(cache.db_path)
-
+    if action == "path":
+        info = get_cache_path()
+        if wants_json(args):
+            return emit_document(info)
+        print(info.path)
+        return 0
+    info = clear_cache() if action == "clear" else get_cache_info()
+    if wants_json(args):
+        return emit_document(info)
+    if action == "clear":
+        print(
+            f"Usunieto nieczytelny plik cache: {info.path}"
+            if info.removed_unreadable
+            else "Cache wyczyszczony."
+        )
+    else:
+        _print_stats(info)
     return 0

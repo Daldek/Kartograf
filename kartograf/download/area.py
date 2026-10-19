@@ -10,6 +10,7 @@ described by ``Notice``s and every area file carries ``parent_request``.
 import math
 from collections.abc import Sequence
 from pathlib import Path
+from typing import Any
 
 from kartograf.core.bbox import BBox, bbox_coords, is_czech_crs, transform_bbox
 from kartograf.exceptions import ValidationError
@@ -57,7 +58,7 @@ def resolve_geometry_layer(
 
     filepath = Path(path)
     if not filepath.exists():
-        raise ValidationError(f"Brak pliku: {filepath}")
+        raise ValidationError(f"Brak pliku: {filepath}", option="geometry")
     choice = resolve_layer(filepath, layer)
     if choice.defaulted and len(choice.available) > 1:
         sink.emit(
@@ -80,7 +81,7 @@ def geometry_envelope_2180(
     return get_overall_bbox(Path(path), layer=name, target_crs="EPSG:2180")
 
 
-def parent_request_for(bbox: BBox, countries: Sequence[str]) -> dict:
+def parent_request_for(bbox: BBox, countries: Sequence[str]) -> dict[str, Any]:
     """``extra.parent_request`` of an area request (ADR-023 (f).1).
 
     Groups the files of one bbox/geometry request (including those on both

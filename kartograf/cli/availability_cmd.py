@@ -7,8 +7,8 @@ the ``AvailabilityReport`` per country: PL - a table of the combinations
 sheet system with the publication date and size of the files (CUZK publishes
 no survey years) and the commands of the complete combinations (at most
 ``MAX_HINT_LINES`` each); ``--details`` lists the partial and missing sheets,
-the uncovered area and every command; ``--json`` prints exactly
-``AvailabilityReport.to_json()``. Notices go to stderr (``Info:``/
+the uncovered area and every command; ``--json`` prints the report as the one
+document of stdout (its notices are in it). Notices go to stderr (``Info:``/
 ``Warning:``) when the library emits them; an error of a source is ``Error:``
 with exit code 1, a report without data exits with 0 (it is an answer, not
 a failure), a report with a part that could not be checked (``auto``,
@@ -17,8 +17,9 @@ a failure), a report with a part that could not be checked (``auto``,
 
 import argparse
 
-from kartograf.cli._args import parse_bbox_arg
-from kartograf.cli.download_cmd import _print_notice
+from kartograf.catalog.kinds import parse_bbox_arg
+from kartograf.cli._json import emit_document
+from kartograf.cli.download_cmd import notice_printer
 from kartograf.download.availability import (
     AvailabilityArea,
     AvailabilityCombination,
@@ -65,17 +66,15 @@ def cmd_availability(args: argparse.Namespace) -> int:
         min_year=args.min_year,
         max_year=args.max_year,
         force=args.force,
-        on_notice=_print_notice,
+        on_notice=notice_printer(args),
     )
-    code = 0 if report.ok else 1
     if args.json:
-        print(report.to_json(), end="")
-        return code
+        return emit_document(report)
     _print_tables(report)
     if args.details:
         _print_details(report)
     _print_footer(report)
-    return code
+    return 0 if report.ok else 1
 
 
 def area_text(value_m2: float) -> str:

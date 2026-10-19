@@ -11,6 +11,7 @@ come from the ``KladyMapovychListu`` index (layer 24 SM5, layer 26 TM33).
 
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -146,17 +147,14 @@ class CuzkLazProvider(BaseProvider):
         sheet = sheet.strip()
         system = cz_sheet_system(sheet)
         if system != self._system:
-            raise ValidationError(
-                cz_laz_error(
-                    model=self._model,
-                    vertical_crs=self._vertical_crs,
-                    system=system,
-                )
-                or f"Godlo '{sheet}' spoza systemu {self._system}"
+            raise cz_laz_error(
+                model=self._model, vertical_crs=self._vertical_crs, system=system
+            ) or ValidationError(
+                f"Godlo '{sheet}' spoza systemu {self._system}", option="sheet"
             )
         return self._endpoint.format(sheet=sheet)
 
-    def file_signal(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> dict:
+    def file_signal(self, sheet: str, timeout: int = DEFAULT_TIMEOUT) -> dict[str, Any]:
         """HTTP signal of the sheet's ZIP (one ``HEAD``, nothing downloaded)."""
         return head_signal(self._sessions.get(), self.file_url(sheet), timeout=timeout)
 

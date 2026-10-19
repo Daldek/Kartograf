@@ -26,6 +26,7 @@ import os
 from collections.abc import Callable
 from dataclasses import dataclass, replace
 from pathlib import Path
+from typing import Any
 
 import requests
 
@@ -131,11 +132,12 @@ def cz_orto_sheet(sheet: str) -> str:
     code = sheet.strip()
     system = detect_system(code).id
     if system == "cz_tm33":
-        raise ValidationError(f"{CZ_ORTO_SHEETS} (podano {code})")
+        raise ValidationError(f"{CZ_ORTO_SHEETS} (podano {code})", option="sheet")
     if system != "cz_sm5":
         raise ValidationError(
             f"Godlo '{code}' nie jest arkuszem SM5 ortofoto CZ (2 albo 4 wielkie "
-            "litery + 2 cyfry, np. CTES96, AS91)"
+            "litery + 2 cyfry, np. CTES96, AS91)",
+            option="sheet",
         )
     return code
 
@@ -462,7 +464,7 @@ def download_cz_orto_sheet(
     output_dir: str | Path,
     update: UpdateMode | None = None,
     plan: UpdatePlan | None = None,
-    parent_request: dict | None = None,
+    parent_request: dict[str, Any] | None = None,
     cache: MetadataCache | bool = True,
     on_notice: Callable[[Notice], None] | None = None,
     on_download: Callable[[], None] | None = None,

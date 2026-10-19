@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
 # Download modes (spec 4.2); ``None`` = default: local versions, missing
 # ones downloaded, newer content only reported (D5).
 UpdateMode = Literal["check", "upgrade", "force"]
-_UPDATE_MODES = (None, "upgrade", "force")
+_UPDATE_VALUES = ("upgrade", "force")  # the modes a caller names
+_UPDATE_MODES = (None, *_UPDATE_VALUES)
 
 FileStatus = Literal["new", "unchanged", "relabeled", "local", "reused"]
 
@@ -80,11 +81,15 @@ def validate_update(update: object, *, check: str | None = None) -> None:
         hint = f"{check}()" if check else "check_*() danego toru"
         raise ValidationError(
             f"update='check' niczego nie pobiera - uzyj {hint} "
-            "(plan aktualizacji, kartograf-plan/1)"
+            "(plan aktualizacji, kartograf-plan/1)",
+            option="update",
+            allowed=_UPDATE_VALUES,
         )
     if update not in _UPDATE_MODES:
         raise ValidationError(
-            f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', 'force')"
+            f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', 'force')",
+            option="update",
+            allowed=_UPDATE_VALUES,
         )
 
 

@@ -18,12 +18,14 @@ from kartograf.hydrology.hsg import (
     TEXTURE_CLASSES,
     TEXTURE_NAMES,
     HSGCalculator,
+    calculate_hsg,
     classify_usda_texture,
     classify_usda_texture_array,
     hsg_statistics,
     texture_to_hsg,
     texture_to_hsg_array,
 )
+from kartograf.landcover.manager import LandCoverManager
 from kartograf.providers.soilgrids import SoilGridsProvider
 from kartograf.sources.edition import Edition
 
@@ -1123,3 +1125,49 @@ class TestHsgFromRasters:
         sand_class, silt_class, gap = hsg[0].tolist()
         assert sand_class != 0 and silt_class != 0
         assert gap == 0
+
+
+class TestCalculateHsgSummary:
+    """``calculate_hsg(summary=True)`` puts ``hsg_statistics`` into the report
+    (``soil hsg --summary``): the library gives what the CLI prints."""
+
+    @staticmethod
+    def _soilgrids(provider):
+        return patch.object(
+            LandCoverManager,
+            "_get_provider_by_name",
+            staticmethod(lambda name, cache=None: provider),
+        )
+
+    def test_calculate_hsg_summary_matches_hsg_statistics(self, tmp_path):
+        with self._soilgrids(RasterSoilGrids()):
+            plain = calculate_hsg(
+                output_dir=tmp_path, bbox=BBOX, depth="0-5cm", cache=False
+            )
+            summed = calculate_hsg(
+                output_dir=tmp_path,
+                bbox=BBOX,
+                depth="0-5cm",
+                summary=True,
+                cache=False,
+            )
+
+        hsg_file = summed.files[0].file.path
+        assert summed.summary == hsg_statistics(hsg_file)
+        assert summed.summary is not None and summed.summary["B"]["percent"] == 100.0
+        assert plain.summary is None
+        assert summed.to_dict()["summary"] == summed.summary
+
+    def test_summary_is_none_when_the_report_has_no_hsg_file(self, tmp_path):
+        failing = RasterSoilGrids(editions={"clay": DownloadError("brak odpowiedzi")})
+        with self._soilgrids(failing):
+            report = calculate_hsg(
+                output_dir=tmp_path,
+                bbox=BBOX,
+                depth="0-5cm",
+                summary=True,
+                cache=False,
+            )
+
+        assert report.files == () and not report.ok
+        assert report.summary is None

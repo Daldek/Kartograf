@@ -661,7 +661,7 @@ def test_rejected_before_network_cli_equals_api(tmp_path, argv, selection, messa
             tmp_path,
         )
 
-    assert run.cli_code == 1
+    assert run.cli_code == 2
     assert f"Error: {message}" in run.cli_stderr.splitlines()
     assert isinstance(run.api_error, ValidationError)
     assert str(run.api_error) == message

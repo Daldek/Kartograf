@@ -1337,7 +1337,9 @@ def _unit_slot(
     """``(slot directory below the segment, file stem)`` of one unit; a stem
     ``None`` = every file of the directory (the slot of one sheet)."""
     if not isinstance(unit, str) or any(c in unit for c in ("\\", "\x00", ":")):
-        raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
+        raise ValidationError(
+            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
+        )
     *directory, code = unit.split("/")
     if (
         any(
@@ -1347,7 +1349,9 @@ def _unit_slot(
         or (directory and directory[0] in _RESERVED)
         or code in _RESERVED
     ):
-        raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
+        raise ValidationError(
+            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
+        )
     if directory:
         if tuple(directory) == _sheet_parts(code):
             return tuple(directory), None
@@ -1366,7 +1370,9 @@ def _unit_slot(
         or len(part.encode()) > _NAME_MAX
         for part in parts
     ):
-        raise ValidationError(f"Nieprawidlowa jednostka magazynu: {unit!r}")
+        raise ValidationError(
+            f"Nieprawidlowa jednostka magazynu: {unit!r}", option="units"
+        )
     return parts, None
 
 
@@ -1377,7 +1383,8 @@ def _unit_groups(
     (``None``: the whole directory), in the order of the units."""
     if isinstance(units, str):
         raise ValidationError(
-            f"units: podaj kolekcje nazw jednostek, nie napis ({units!r})"
+            f"units: podaj kolekcje nazw jednostek, nie napis ({units!r})",
+            option="units",
         )
     kinds = _unit_kinds(segment)
     groups: dict[tuple[str, ...], set[str] | None] = {}
@@ -1414,7 +1421,8 @@ def _real_directory(
             except OSError as exc:
                 if exc.errno == errno.ENAMETOOLONG:
                     raise ValidationError(
-                        f"Jednostka magazynu daje zbyt dluga sciezke: {path}"
+                        f"Jednostka magazynu daje zbyt dluga sciezke: {path}",
+                        option="units",
                     ) from exc
                 raise
             known[path] = real
@@ -1460,7 +1468,8 @@ def _validated_segment(segment: str) -> tuple[str, str]:
     ):
         raise ValidationError(
             f"Nieprawidlowy segment magazynu: {segment!r} (oczekiwano "
-            "<produkt>/<wariant>, np. nmt/pl_1992_1m_evrf2007)"
+            "<produkt>/<wariant>, np. nmt/pl_1992_1m_evrf2007)",
+            option="segment",
         )
     return parts[0], parts[1]
 
@@ -1493,7 +1502,8 @@ def _partition_scope(partition: str) -> tuple[tuple[str, ...], bool]:
         raise ValidationError(
             f"Nieprawidlowa czesc segmentu: {partition!r} (oczekiwano klucza "
             'z list_partitions: ".", "<katalog>[/<katalog>...]" albo '
-            '"<katalog>[/<katalog>...]/.")'
+            '"<katalog>[/<katalog>...]/.")',
+            option="partition",
         )
     return parts, exact
 
@@ -1505,7 +1515,8 @@ def _known_versions(
         return None
     if isinstance(skip_versions, str):
         raise ValidationError(
-            "skip_versions: podaj kolekcje sciezek katalogow wersji, nie napis"
+            "skip_versions: podaj kolekcje sciezek katalogow wersji, nie napis",
+            option="skip_versions",
         )
     if isinstance(skip_versions, (Set, Mapping)):
         return skip_versions
@@ -1524,7 +1535,8 @@ def _known_names(key: str, names: Collection[str]) -> list[str]:
     ):
         raise ValidationError(
             f"skip_versions[{key!r}]: podaj nazwy plikow danych wersji (bez "
-            f"sidecarow, sciezek i nazw ukrytych), nie {names!r}"
+            f"sidecarow, sciezek i nazw ukrytych), nie {names!r}",
+            option="skip_versions",
         )
     return sorted(set(names))  # a listing never repeats a name
 
@@ -1541,7 +1553,9 @@ def _segment_dir(root: str, segment: str) -> str | None:
         except (FileNotFoundError, NotADirectoryError):
             return None
         if stat.S_ISLNK(mode):
-            raise ValidationError(f"Segment magazynu jest dowiazaniem: {path}")
+            raise ValidationError(
+                f"Segment magazynu jest dowiazaniem: {path}", option="segment"
+            )
         if not stat.S_ISDIR(mode):
             return None
     return os.path.normpath(path)
@@ -1600,7 +1614,9 @@ def list_partitions(
     root = os.path.normpath(os.fspath(output_dir))
     _validated_segment(segment)
     if isinstance(target, bool) or not isinstance(target, int) or target < 1:
-        raise ValidationError(f"target: podaj dodatnia liczbe czesci, nie {target!r}")
+        raise ValidationError(
+            f"target: podaj dodatnia liczbe czesci, nie {target!r}", option="target"
+        )
     base = _segment_dir(root, segment)
     listing = _listing(base) if base is not None else None
     if base is None or listing is None:
@@ -1709,13 +1725,19 @@ def iter_store(
     skip = _known_versions(skip_versions)
     if segment is None:
         if units is not None:
-            raise ValidationError("units wymaga segment (jednostki jednego segmentu)")
+            raise ValidationError(
+                "units wymaga segment (jednostki jednego segmentu)", option="units"
+            )
         if partition is not None:
-            raise ValidationError("partition wymaga segment (czesc jednego segmentu)")
+            raise ValidationError(
+                "partition wymaga segment (czesc jednego segmentu)", option="partition"
+            )
         return _scan_store(root, list_segments(root), skip)
     _validated_segment(segment)
     if units is not None and partition is not None:
-        raise ValidationError("units albo partition, nie oba naraz")
+        raise ValidationError(
+            "units albo partition, nie oba naraz", options=("units", "partition")
+        )
     groups = _unit_groups(segment, units) if units is not None else None
     scope = _partition_scope(partition) if partition is not None else None
     base = _segment_dir(root, segment)

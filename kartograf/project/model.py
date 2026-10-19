@@ -4,6 +4,12 @@ A project (``kartograf-project.json``, schema ``kartograf-project/1``) is a
 store (``output_dir``) and tasks: a data command of a CLI group with its
 options and the store versions it pinned. Field meanings: spec
 ``docs/superpowers/specs/2026-10-15-manifest-projektu-design.md`` 3.3, 4.3.
+
+``Project``, ``ProjectReport`` and ``ProjectCheck`` are JSON documents
+(``kartograf-project-state/1``, ``-project-report/1``, ``-project-check/1``;
+spec 5.4.8). The manifest keeps the paths of the pins relative to the store;
+the documents have absolute paths: they set ``EncodeContext.store`` to the
+store of the project and ``PinnedFile``/``FileCheck`` join their paths to it.
 """
 
 from collections.abc import Mapping
@@ -12,6 +18,7 @@ from pathlib import Path
 from typing import Literal
 
 from kartograf.notices import Notice
+from kartograf.serialization import Document, EncodeContext
 
 PinRole = Literal["output", "raw", "input"]
 TaskOutcome = Literal["pinned", "unchanged", "restored", "updated", "failed"]
@@ -28,6 +35,16 @@ PinStatus = Literal[
 ]
 
 
+def _store_of(ctx: EncodeContext, what: str) -> Path:
+    """The store of the enclosing project document (a pin has no other)."""
+    if ctx.store is None:
+        raise ValueError(
+            f"{what} is encoded only inside a project document "
+            "(its paths are relative to the store of the project)"
+        )
+    return ctx.store
+
+
 @dataclass(frozen=True)
 class PinnedFile:
     """One pinned store file of a task (``tasks[].files[]``).
@@ -38,6 +55,9 @@ class PinnedFile:
     cutout - for messages. ``path``: the standard path (WHICH file),
     ``version``: the pinned version file (WHICH bytes), both relative to the
     store with ``/``. ``label``, ``sha256`` and ``size_bytes`` of the version.
+
+    In a project document ``path`` and ``version`` are absolute: the store of
+    the project joined to the manifest value (``__json__``).
     """
 
     role: PinRole
@@ -47,6 +67,18 @@ class PinnedFile:
     label: str
     sha256: str
     size_bytes: int
+
+    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        store = _store_of(ctx, "PinnedFile")
+        return {
+            "role": self.role,
+            "unit": self.unit,
+            "path": store / self.path,
+            "version": store / self.version,
+            "label": self.label,
+            "sha256": self.sha256,
+            "size_bytes": self.size_bytes,
+        }
 
 
 @dataclass(frozen=True)
@@ -71,13 +103,22 @@ class ProjectTask:
 
 
 @dataclass(frozen=True)
-class Project:
+class Project(Document):
     """A project read from its manifest: ``directory`` holds
-    ``kartograf-project.json``, ``output_dir`` is the store (both absolute)."""
+    ``kartograf-project.json``, ``output_dir`` is the store (both absolute).
+
+    Document ``kartograf-project-state/1``; ``tasks[].options`` keep the form
+    of the manifest (paths relative to ``directory``, ``bbox`` + ``bbox_crs``).
+    """
+
+    SCHEMA = "kartograf-project-state/1"
 
     directory: Path
     output_dir: Path
     tasks: tuple[ProjectTask, ...]
+
+    def prepare_context(self, ctx: EncodeContext) -> None:
+        ctx.store = self.output_dir
 
 
 @dataclass(frozen=True)
@@ -99,15 +140,24 @@ class TaskResult:
 
 
 @dataclass(frozen=True)
-class ProjectReport:
+class ProjectReport(Document):
     """Outcome of ``download_project``: the manifest after the run, one
     result per selected task, the data notices (prefixed with the task
-    name) and ``ok`` = no selected task failed."""
+    name) and ``ok`` = no selected task failed.
+
+    Document ``kartograf-project-report/1``; ``project`` is nested (no
+    ``schema`` key).
+    """
+
+    SCHEMA = "kartograf-project-report/1"
 
     project: Project
     tasks: tuple[TaskResult, ...]
     notices: tuple[Notice, ...]
     ok: bool
+
+    def prepare_context(self, ctx: EncodeContext) -> None:
+        ctx.store = self.project.output_dir
 
 
 @dataclass(frozen=True)
@@ -118,6 +168,9 @@ class FileCheck:
     ``verify_project``) or ``current``/``newer``/``added``/``removed``/
     ``unverifiable``/``check_failed``/``missing`` (``check_project``).
     ``detail``: the reason with a remedy, ``None`` when nothing to do.
+
+    ``path`` is the standard path relative to the store; in a project
+    document it is absolute (``__json__``).
     """
 
     task: str
@@ -128,18 +181,37 @@ class FileCheck:
     available_label: str | None
     detail: str | None
 
+    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        return {
+            "task": self.task,
+            "unit": self.unit,
+            "path": _store_of(ctx, "FileCheck") / self.path,
+            "status": self.status,
+            "pinned_label": self.pinned_label,
+            "available_label": self.available_label,
+            "detail": self.detail,
+        }
+
 
 @dataclass(frozen=True)
-class ProjectCheck:
+class ProjectCheck(Document):
     """Outcome of ``get_project_status``, ``verify_project`` and ``check_project``.
 
     ``not_downloaded``: selected tasks without pins. ``ok``: status/verify -
     every selected task pinned and every file ``ok``; check - no file
     ``check_failed``.
+
+    Document ``kartograf-project-check/1``; ``project`` is nested (no
+    ``schema`` key).
     """
+
+    SCHEMA = "kartograf-project-check/1"
 
     project: Project
     files: tuple[FileCheck, ...]
     not_downloaded: tuple[str, ...]
     notices: tuple[Notice, ...]
     ok: bool
+
+    def prepare_context(self, ctx: EncodeContext) -> None:
+        ctx.store = self.project.output_dir

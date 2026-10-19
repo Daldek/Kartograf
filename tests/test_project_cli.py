@@ -74,6 +74,7 @@ def test_data_parser_options_cover_manifest_options(command):
         "workers",
         "quiet",
         "summary",
+        "json",
     }
     parsed = {
         action.dest
@@ -294,7 +295,7 @@ def test_cz_laz_task_pins_model_file_and_rejects_availability(
                 "EPSG:5514",
             )
         )
-        == 1
+        == 2
     )
     assert "do projektu mozna dodac komendy zapisujace dane" in capsys.readouterr().err
     assert _manifest_bytes(project) == before
@@ -313,7 +314,7 @@ def test_add_rejects_update_modes_and_foreign_output(tmp_path, capsys, flag):
     )
     assert (
         main(_add(project, "teren", "elevation", "download", *SHEET_FLAGS, *trailing))
-        == 1
+        == 2
     )
     error = capsys.readouterr().err
     assert error.startswith("Error: ")
@@ -336,7 +337,7 @@ def test_add_rejects_run_options(tmp_path, capsys, command, flag):
     project = tmp_path / "projekt"
     init_project(project, output_dir=project / "data")
     before = _manifest_bytes(project)
-    assert main(_add(project, "teren", *command)) == 1
+    assert main(_add(project, "teren", *command)) == 2
     error = capsys.readouterr().err
     assert error.startswith(f"Error: {flag} nie jest czescia zadania")
     if flag == "--workers":
@@ -350,7 +351,7 @@ def test_project_download_rejects_workers_below_one(tmp_path, capsys):
     init_project(project, output_dir=project / "data")
     with pytest.raises(ValidationError, match="--workers musi byc >= 1, podano 0"):
         download_project(project, workers=0)
-    assert main(["project", "download", "--project", str(project), "-w", "0"]) == 1
+    assert main(["project", "download", "--project", str(project), "-w", "0"]) == 2
     assert capsys.readouterr().err == "Error: --workers musi byc >= 1, podano 0\n"
 
 
@@ -450,7 +451,7 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
                 "1m",
             )
         )
-        == 1
+        == 2
     )
     assert capsys.readouterr().err.splitlines() == [f"Error: {api_error.value}"]
     assert _manifest_bytes(project) == manifest
@@ -461,7 +462,6 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
     "invalid",
     [
         ["parse"],
-        ["cache"],
         ["soil", "list-layers"],
         ["elevation", "list-sources"],
         # the report writes nothing: not a data command (no ``_task``)
@@ -480,10 +480,20 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
 def test_add_rejects_commands_without_data(tmp_path, capsys, invalid):
     project = tmp_path / "projekt"
     init_project(project, output_dir=project / "data")
-    assert main(_add(project, "teren", *invalid)) == 1
+    assert main(_add(project, "teren", *invalid)) == 2
     assert (
         "Error: do projektu mozna dodac komendy zapisujace dane:"
         in capsys.readouterr().err
+    )
+    assert open_project(project).tasks == ()
+
+
+def test_add_rejects_a_group_without_its_command(tmp_path, capsys):
+    project = tmp_path / "projekt"
+    init_project(project, output_dir=project / "data")
+    assert main(_add(project, "teren", "cache")) == 2
+    assert (
+        "Error: cache: podaj komende grupy (komendy danych:" in capsys.readouterr().err
     )
     assert open_project(project).tasks == ()
 
@@ -503,7 +513,7 @@ def test_add_misplaced_project_flag_explains_position(tmp_path, capsys):
                 str(project),
             )
         )
-        == 1
+        == 2
     )
     assert "--project podaj przed nazwa zadania" in capsys.readouterr().err
     assert open_project(project).tasks == ()
@@ -512,9 +522,7 @@ def test_add_misplaced_project_flag_explains_position(tmp_path, capsys):
 def test_nested_removed_command_and_help(tmp_path, capsys):
     project = tmp_path / "projekt"
     init_project(project, output_dir=project / "data")
-    with pytest.raises(SystemExit) as removed:
-        main(_add(project, "teren", "download", *SHEET_FLAGS))
-    assert removed.value.code == 2
+    assert main(_add(project, "teren", "download", *SHEET_FLAGS)) == 2
     assert "usunieta w 0.8.0" in capsys.readouterr().err
     for args, phrase in (
         (["project", "--help"], "download"),
@@ -663,7 +671,7 @@ def test_project_error_same_as_public_api(tmp_path, capsys):
     init_project(project, output_dir=project / "data")
     with pytest.raises(ValidationError) as api_error:
         download_project(project, tasks=["literowka"])
-    assert main(["project", "download", "--project", str(project), "literowka"]) == 1
+    assert main(["project", "download", "--project", str(project), "literowka"]) == 2
     assert capsys.readouterr().err.splitlines() == [f"Error: {api_error.value}"]
     assert open_project(project).tasks == ()
 
