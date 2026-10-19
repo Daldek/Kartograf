@@ -7,7 +7,9 @@ the ``AvailabilityReport`` per country: PL - a table of the combinations
 sheet system with the publication date and size of the files (CUZK publishes
 no survey years) and the commands of the complete combinations (at most
 ``MAX_HINT_LINES`` each); ``--details`` lists the partial and missing sheets,
-the uncovered area and every command; ``--json`` prints the report as the one
+the uncovered area, PL the share of the land in full sheets, each campaign on
+its own and the campaigns of the records to download (KD-1/KD-2), and every
+command; ``--json`` prints the report as the one
 document of stdout (its notices are in it). Notices go to stderr (``Info:``/
 ``Warning:``) when the library emits them; an error of a source is ``Error:``
 with exit code 1, a report without data exits with 0 (it is an answer, not
@@ -92,6 +94,17 @@ def size_text(value: int | None) -> str:
         if value >= scale:
             return f"{value / scale:.1f}".replace(".", ",") + f" {unit}"
     return f"{value} B"
+
+
+def share_text(part_m2: float, whole_m2: float) -> str:
+    """``58%`` - a share rounded down (an incomplete combination never reads
+    100%), ``<1%`` for a non-zero share below one per cent."""
+    if whole_m2 <= 0:
+        return "-"
+    percent = int(part_m2 * 100 // whole_m2)
+    if percent == 0 and part_m2 > 0:
+        return "<1%"
+    return f"{percent}%"
 
 
 def _span(dates: tuple[str, str] | None) -> str:
@@ -237,6 +250,7 @@ def _print_cz(report: AvailabilityReport, area: AvailabilityArea) -> None:
 def _print_details(report: AvailabilityReport) -> None:
     if not report.combinations:
         return
+    land = {area.country: area.land_m2 for area in report.areas}
     print()
     print("Szczegoly kombinacji:")
     for combination in report.combinations:
@@ -256,8 +270,40 @@ def _print_details(report: AvailabilityReport) -> None:
                 f"    lad bez zadnego arkusza kombinacji: "
                 f"{area_text(combination.uncovered_m2)}"
             )
+        if combination.country == "PL":
+            _print_campaigns(combination, land[combination.country])
         for hint in combination.download_hint:
             print(f"    kartograf {hint}")
+
+
+def _print_campaigns(combination: AvailabilityCombination, land_m2: float) -> None:
+    """KD-1/KD-2 of a PL combination: the land in full sheets (incomplete
+    only), each campaign on its own and the campaigns of the records the
+    hint downloads."""
+    if not combination.complete:
+        print(
+            "    lad w ramach pelnych arkuszy: "
+            f"{share_text(combination.full_m2, land_m2)} "
+            f"({area_text(combination.full_m2)})"
+        )
+    if combination.campaign_coverage:
+        coverage = ", ".join(
+            f"{c.campaign} "
+            f"({'komplet' if c.complete else share_text(c.full_m2, land_m2)})"
+            for c in combination.campaign_coverage
+        )
+        print(f"    kampanie: {coverage}")
+    if combination.sheet_records:
+        counts: dict[str, int] = {}
+        for record in combination.sheet_records:
+            name = record.campaign or "bez numeru"
+            counts[name] = counts.get(name, 0) + 1
+        sheets = len({record.sheet for record in combination.sheet_records})
+        unit = "kafli" if combination.product == "laz" else "ark."
+        print(
+            f"    pobierane rekordy: {sheets} {unit}, kampanie: "
+            + ", ".join(f"{name} ({count})" for name, count in sorted(counts.items()))
+        )
 
 
 def _print_footer(report: AvailabilityReport) -> None:

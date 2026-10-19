@@ -24,7 +24,11 @@ to whole metres of the EPSG:2180 envelope of the area, pixel centres, row
 strips of ``_STRIP_PX``: ``target`` = area & land (PRG A00 minus W02/W03); a
 combination is ``complete`` when no target pixel lies outside the frames of
 its full (``TAK``) records, ``uncovered_m2`` = target pixels outside every
-frame of the combination. No threshold.
+frame of the combination. No threshold. ``full_m2`` (KD-2) = the land in the
+frames of the full records, also per campaign (``campaign_coverage``, KD-1);
+``sheet_records`` (KD-1) = the records the download hint takes, chosen by the
+rules of the download (ADR-028/033 for sheets, ``select_newest_cover`` for
+LAZ tiles).
 
 CZ (CUZK) has no surveys or completeness flags: a combination is a variant
 with a file channel in the native height system of its files (NMT: DMR 4G,
@@ -102,7 +106,7 @@ from kartograf.notices import (
 from kartograf.providers.cuzk.client import wkid
 from kartograf.providers.cuzk.raster import bbox_to_crs
 from kartograf.providers.cuzk.sheets import SheetIndex
-from kartograf.providers.pl.gugik_laz import laz_tile
+from kartograf.providers.pl.gugik_laz import LazTile, laz_tile, select_newest_cover
 from kartograf.providers.pl.prg import ABROAD, LAND, LandMask, fetch_land_mask
 from kartograf.providers.pl.skorowidz import metres
 from kartograf.providers.pl.skorowidz_wfs import (
@@ -200,6 +204,35 @@ class AvailabilityArea:
 
 
 @dataclass(frozen=True)
+class AvailabilityRecord:
+    """An index record a combination's ``download_hint`` downloads (KD-1).
+
+    ``sheet`` = sheet code (LAZ: tile code), ``campaign`` = survey work id
+    (``nr_zglosz``), ``acquisition_date``/``published`` = ``akt_data``/
+    ``dt_pzgik``, ``full`` = ``czy_ark_wypelniony`` (``None``: not given),
+    ``url`` = the file of the record (identifies it).
+    """
+
+    sheet: str
+    campaign: str | None
+    acquisition_date: str | None
+    published: str | None
+    full: bool | None
+    url: str
+
+
+@dataclass(frozen=True)
+class AvailabilityCampaign:
+    """One campaign of a combination on its own (KD-1): ``complete`` = its
+    full records alone cover the land of the area, ``full_m2`` = the land in
+    their frames (the measure of ``AvailabilityCombination.full_m2``)."""
+
+    campaign: str
+    complete: bool
+    full_m2: float
+
+
+@dataclass(frozen=True)
 class AvailabilityCombination:
     """One downloadable combination of the area (spec 4.1).
 
@@ -213,12 +246,23 @@ class AvailabilityCombination:
     or ``kartograf project add NAME `` (without ``--output``).
     ``sheets_missing`` and ``size_bytes`` are CZ fields (PL: empty/``None``).
 
+    ``full_m2`` (KD-2): land in the frames of the full records, measured as
+    ``complete`` (``complete`` <=> ``full_m2 == land_m2`` of the area).
+    ``sheet_records`` (KD-1): the records the hint downloads, by sheet,
+    newest first - NMT/NMPT the newest record of each sheet and, when it is
+    not full while a full one exists (``--full-sheet``), the newest full one;
+    LAZ the tiles kept by the coverage selection of the download
+    (``select_newest_cover``) within the sheet system of the combination.
+    ``campaign_coverage`` (KD-1): each campaign of ``campaigns`` on its own.
+
     CZ: ``year``/``acquisition_dates`` ``None``, ``campaigns`` empty,
     ``published`` = min/max ``Last-Modified`` of the files (``YYYY-MM-DD``),
     ``sheets_full`` = index sheets with a file, ``sheets_missing`` = without
     one (HTTP 404), ``complete`` = no sheet without a file,
-    ``uncovered_m2`` = the area in the frames of ``sheets_missing``,
-    ``size_bytes`` = sum of ``Content-Length`` (``None``: a file without it).
+    ``uncovered_m2``/``full_m2`` = the area in the frames of
+    ``sheets_missing``/``sheets_full``, ``size_bytes`` = sum of
+    ``Content-Length`` (``None``: a file without it), ``sheet_records`` and
+    ``campaign_coverage`` empty.
     """
 
     country: str
@@ -241,6 +285,9 @@ class AvailabilityCombination:
     uncovered_m2: float
     size_bytes: int | None
     download_hint: tuple[str, ...]
+    full_m2: float
+    sheet_records: tuple[AvailabilityRecord, ...]
+    campaign_coverage: tuple[AvailabilityCampaign, ...]
 
 
 @dataclass(frozen=True)
@@ -367,6 +414,17 @@ class _Group:
     vertical_crs: str
     variant: ProductVariant
     entries: list[_Entry] = field(default_factory=list)
+
+
+@dataclass
+class _Missing:
+    """Target pixels of a group outside the frames of its full records
+    (``full``), of all its records (``any``) and of the full records of each
+    campaign alone (``campaigns``) - counters of ``_measure``."""
+
+    full: int
+    any: int
+    campaigns: dict[str, int]
 
 
 def check_availability(
@@ -502,7 +560,7 @@ def _check_pl(
     ]
     mask = _land_mask(envelope, sessions, metadata)
     groups, unsupported = _group(request.product, answers, areas)
-    area_px, land_px, measured = _measure(
+    area_px, land_px, target_px, measured = _measure(
         areas,
         envelope,
         mask,
@@ -526,8 +584,8 @@ def _check_pl(
     # one grid selection per sheet system and scale for all the hints
     select = functools.cache(functools.partial(_selected_sheets, request))
     return area, [
-        _combination(request, group, missing, uncovered, select)
-        for group, (missing, uncovered) in zip(groups, measured, strict=True)
+        _combination(request, group, (land_px, target_px), measure, areas, select)
+        for group, measure in zip(groups, measured, strict=True)
     ]
 
 
@@ -1098,12 +1156,12 @@ def _measure(
     groups: list[_Group],
     *,
     sheet_frame: bool,
-) -> tuple[int, int, list[tuple[int, int]]]:
-    """``(area_px, land_px, [(missing_full_px, uncovered_px) per group])`` on
-    the 1 m grid of the envelope (pixel = 1 m2), in row strips.
+) -> tuple[int, int, int, list[_Missing]]:
+    """``(area_px, land_px, target_px, [missing per group])`` on the 1 m grid
+    of the envelope (pixel = 1 m2), in row strips.
 
     ``area_px``/``land_px`` measure the whole area; the coverage of the
-    combinations is measured on its land - for a sheet request
+    combinations is measured on ``target``, its land - for a sheet request
     (``sheet_frame``) without the rim of the frame (``_inner``).
     """
     x0, x1 = math.floor(envelope.min_x), math.ceil(envelope.max_x)
@@ -1120,17 +1178,16 @@ def _measure(
         [_geojson(e.footprint) for e in group.entries if e.footprint is not None]
         for group in groups
     ]
-    full = [
-        [
-            _geojson(e.footprint)
-            for e in group.entries
-            if e.full is True and e.footprint is not None
-        ]
+    full = [_full_shapes(group.entries) for group in groups]
+    by_campaign = [
+        {
+            campaign: _full_shapes(e for e in group.entries if e.campaign == campaign)
+            for campaign in _campaigns(group)
+        }
         for group in groups
     ]
-    missing = [0] * len(groups)
-    uncovered = [0] * len(groups)
-    area_px = land_px = 0
+    missing = [_Missing(0, 0, dict.fromkeys(shapes, 0)) for shapes in by_campaign]
+    area_px = land_px = target_px = 0
     rows = max(1, _STRIP_PX // width)
     for top in range(0, height, rows):
         shape = (min(rows, height - top), width)
@@ -1144,12 +1201,43 @@ def _measure(
         target = _burn(inner_shapes, transform, shape) & (classes == LAND)
         if not target.any():
             continue
-        for i in range(len(groups)):
-            covered = _burn(every[i], transform, shape)
-            uncovered[i] += int(np.count_nonzero(target & ~covered))
-            complete = _burn(full[i], transform, shape)
-            missing[i] += int(np.count_nonzero(target & ~complete))
-    return area_px, land_px, list(zip(missing, uncovered, strict=True))
+        target_px += int(np.count_nonzero(target))
+        for i, found in enumerate(missing):
+            found.full += _outside(target, _burn(full[i], transform, shape))
+            found.any += _outside(target, _burn(every[i], transform, shape))
+            for campaign, shapes in by_campaign[i].items():
+                found.campaigns[campaign] += _outside(
+                    target, _burn(shapes, transform, shape)
+                )
+    return area_px, land_px, target_px, missing
+
+
+def _full_shapes(entries) -> list[dict]:
+    """GeoJSON frames of the full (``TAK``) records of ``entries``."""
+    return [
+        _geojson(e.footprint)
+        for e in entries
+        if e.full is True and e.footprint is not None
+    ]
+
+
+def _outside(target: np.ndarray, covered: np.ndarray) -> int:
+    return int(np.count_nonzero(target & ~covered))
+
+
+def _campaigns(group: _Group) -> tuple[str, ...]:
+    """Survey work ids of the records of a group (sorted)."""
+    return tuple(sorted({e.campaign for e in group.entries if e.campaign}))
+
+
+def _full_m2(land_px: int, target_px: int, missing: int) -> float:
+    """Land in the frames of full records: the covered share of ``target``
+    applied to the land, rounded down - ``land_px`` exactly when nothing is
+    missing, 0 when nothing is covered (a sheet request measures ``target``
+    without the rim of its frame, which belongs to the land)."""
+    if missing == 0:
+        return float(land_px)
+    return float(land_px * (target_px - missing) // target_px)
 
 
 def _span(values: list[str]) -> tuple[str, str] | None:
@@ -1160,11 +1248,13 @@ def _span(values: list[str]) -> tuple[str, str] | None:
 def _combination(
     request: _Request,
     group: _Group,
-    missing: int,
-    uncovered: int,
+    land: tuple[int, int],
+    missing: _Missing,
+    areas: Sequence[Polygon],
     select: Callable[[str, str], frozenset[str]],
 ) -> AvailabilityCombination:
-    """The combination of a group of records, its sheets and download hint."""
+    """The combination of a group of records, its sheets, download hint and
+    the records the hint downloads; ``land`` = ``(land_px, target_px)``."""
     by_sheet: dict[str, list[_Entry]] = {}
     for entry in group.entries:
         by_sheet.setdefault(entry.sheet, []).append(entry)
@@ -1173,6 +1263,12 @@ def _combination(
     )
     partial = sorted(s for s in by_sheet if s not in full)
     variant = group.variant
+    land_px, target_px = land
+    if request.product == "laz":
+        (area,) = areas  # LAZ: one area, as the tile selection of the download
+        records = _laz_records(group.entries, area)
+    else:
+        records = [e for s in sorted(by_sheet) for e in _sheet_records(by_sheet[s])]
     return AvailabilityCombination(
         country="PL",
         product=request.product,
@@ -1180,7 +1276,7 @@ def _combination(
         year=group.year,
         acquisition_dates=_span([e.date for e in group.entries]),
         published=_span([e.published or "" for e in group.entries]),
-        campaigns=tuple(sorted({e.campaign for e in group.entries if e.campaign})),
+        campaigns=_campaigns(group),
         horizontal=_HORIZONTAL[group.system],
         resolution=variant.label,
         vertical_crs=group.vertical_crs,
@@ -1188,15 +1284,77 @@ def _combination(
         densities=tuple(
             sorted({e.density for e in group.entries if e.density is not None})
         ),
-        complete=missing == 0,
+        complete=missing.full == 0,
         sheets_full=tuple(full),
         sheets_partial=tuple(partial),
         sheets_missing=(),
-        uncovered=uncovered > 0,
-        uncovered_m2=float(uncovered),
+        uncovered=missing.any > 0,
+        uncovered_m2=float(missing.any),
         size_bytes=None,
         download_hint=_download_hint(request, group, by_sheet, select),
+        full_m2=_full_m2(land_px, target_px, missing.full),
+        sheet_records=tuple(_record(e) for e in records),
+        campaign_coverage=tuple(
+            AvailabilityCampaign(
+                campaign=campaign,
+                complete=count == 0,
+                full_m2=_full_m2(land_px, target_px, count),
+            )
+            for campaign, count in missing.campaigns.items()
+        ),
     )
+
+
+def _record(entry: _Entry) -> AvailabilityRecord:
+    return AvailabilityRecord(
+        sheet=entry.sheet,
+        campaign=entry.campaign,
+        acquisition_date=entry.date or None,
+        published=entry.published,
+        full=entry.full,
+        url=entry.url,
+    )
+
+
+def _sheet_records(rows: list[_Entry]) -> list[_Entry]:
+    """Records of one sheet a download of the year takes (ADR-028 order,
+    newest first): the newest one and, when it is not full while a full one
+    exists, the newest full one (``--full-sheet``, ADR-033)."""
+    ordered = sorted(rows, key=lambda r: (r.date, r.published or "", r.url))
+    newest = ordered[-1]
+    if newest.full is True:
+        return [newest]
+    full = [r for r in ordered if r.full is True]
+    return [newest, full[-1]] if full else [newest]
+
+
+def _laz_records(entries: list[_Entry], area: Polygon) -> list[_Entry]:
+    """Tiles of a LAZ group the coverage selection of the download keeps
+    (``select_newest_cover``, ADR-029), by sheet, newest first."""
+    tiles: dict[int, tuple[LazTile, _Entry]] = {}
+    for entry in entries:
+        xs = [x for x, _ in entry.footprint] if entry.footprint else [math.nan]
+        ys = [y for _, y in entry.footprint] if entry.footprint else [math.nan]
+        tile = LazTile(
+            sheet=entry.sheet,
+            url=entry.url,
+            year=entry.year,
+            density=entry.density,
+            crs=None,
+            min_x=min(xs),
+            min_y=min(ys),
+            max_x=max(xs),
+            max_y=max(ys),
+            footprint=entry.footprint,
+            date=entry.date or None,
+            full_sheet=entry.full,
+        )
+        tiles[id(tile)] = (tile, entry)
+    selection = select_newest_cover([tile for tile, _ in tiles.values()], area)
+    kept = [tiles[id(tile)][1] for tile in selection.tiles]
+    kept.sort(key=lambda e: (e.date, e.density or 0, e.url), reverse=True)
+    kept.sort(key=lambda e: e.sheet)
+    return kept
 
 
 def _unsupported_text(unsupported: dict[tuple, dict]) -> str:
@@ -1486,24 +1644,25 @@ def _http_date(value: str | None) -> str | None:
         return None
 
 
-def _uncovered_m2(missing: list[_CzSheet], system_crs: str, area: BBox) -> float:
-    """Area of ``area`` (the reported rectangle) in the frames of the sheets
-    without a file, measured in the CRS of ``area``: a frame of another CRS
-    (a TM33 tile against the S-JTSK rectangle of an area) is moved there corner
-    by corner through the pinned operation - its envelope would be larger than
-    the frame, and the uncovered area larger than the area itself."""
-    if not missing:
+def _frames_m2(sheets: list[_CzSheet], system_crs: str, area: BBox) -> float:
+    """Area of ``area`` (the reported rectangle) in the frames of ``sheets``
+    (the sheets of one system do not overlap), measured in the CRS of
+    ``area``: a frame of another CRS (a TM33 tile against the S-JTSK
+    rectangle of an area) is moved there corner by corner through the pinned
+    operation - its envelope would be larger than the frame, and the measured
+    area larger than the area itself."""
+    if not sheets:
         return 0.0
     move = None
     if wkid(system_crs) != wkid(area.crs):
-        x0, y0, x1, y1 = missing[0].frame
+        x0, y0, x1, y1 = sheets[0].frame
         probe = replace(CONTENT_POLICY, probe_point=((x0 + x1) / 2, (y0 + y1) / 2))
         move = build_pinned_transform(system_crs, area.crs, probe)
     # local coordinates: 10^5-10^6 m would eat the precision of the area
     ox, oy = area.min_x, area.min_y
     clip = rectangle(0.0, 0.0, area.max_x - ox, area.max_y - oy)
     total = 0.0
-    for sheet in missing:
+    for sheet in sheets:
         x0, y0, x1, y1 = sheet.frame
         xs, ys = np.array([x0, x1, x1, x0]), np.array([y0, y0, y1, y1])
         if move is not None:
@@ -1526,15 +1685,17 @@ def _cz_combination(
 ) -> AvailabilityCombination:
     """A CZ combination: index sheets with (``sheets_full``) and without
     (``sheets_missing``) a file, publication dates and size of the files,
-    ``uncovered_m2`` = the part of ``area`` (the reported rectangle) in the
-    frames of the sheets without a file."""
+    ``uncovered_m2``/``full_m2`` = the part of ``area`` (the reported
+    rectangle) in the frames of the sheets without/with a file."""
     found = [(sheet, heads[file.url(sheet.sheet)]) for sheet in sheets]
-    full = [sheet.sheet for sheet, head in found if head.found]
+    with_file = [sheet for sheet, head in found if head.found]
+    full = [sheet.sheet for sheet in with_file]
     missing = [sheet for sheet, head in found if not head.found]
     present = [head for _, head in found if head.found]
     sizes = [head.content_length for head in present]
     known = [size for size in sizes if size is not None]
     variant = file.variant
+    system_crs = CZ_SYSTEM_CRS[file.system]
     return AvailabilityCombination(
         country="CZ",
         product=request.product,
@@ -1553,9 +1714,12 @@ def _cz_combination(
         sheets_partial=(),
         sheets_missing=tuple(sheet.sheet for sheet in missing),
         uncovered=bool(missing),
-        uncovered_m2=_uncovered_m2(missing, CZ_SYSTEM_CRS[file.system], area),
+        uncovered_m2=_frames_m2(missing, system_crs, area),
         size_bytes=sum(known) if present and len(known) == len(sizes) else None,
         download_hint=_cz_hint(request, file, full),
+        full_m2=_frames_m2(with_file, system_crs, area),
+        sheet_records=(),
+        campaign_coverage=(),
     )
 
 
@@ -1719,8 +1883,7 @@ def _download_hint(
 
 def _needs_full_sheet(rows: list[_Entry]) -> bool:
     """The newest record of a sheet is not full while a full one exists."""
-    newest = max(rows, key=lambda r: (r.date, r.published or "", r.url))
-    return newest.full is not True and any(r.full is True for r in rows)
+    return len(_sheet_records(rows)) > 1
 
 
 def _cz_hint(request: _Request, file: _CzFile, sheets: list[str]) -> tuple[str, ...]:

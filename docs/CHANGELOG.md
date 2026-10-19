@@ -738,6 +738,20 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2; ADR-047;
+  dopisane do przygotowanego wydania 0.8.0 przed tagowaniem): nowe pola
+  `AvailabilityCombination` - `full_m2` (lad w ramach pelnych arkuszy, dolna
+  granica; `complete` wtedy i tylko wtedy, gdy `full_m2 == land_m2`; CZ:
+  obszar w ramach arkuszy z plikiem), `sheet_records` (rekordy, ktore pobiera
+  `download_hint`: arkusz, kampania, data lotu, publikacja, pelny, URL - NMT/
+  NMPT najnowszy rekord arkusza i z `--full-sheet` najnowszy pelny, LAZ kafle
+  wyboru pokrycia) i `campaign_coverage` (kazda kampania osobno: `complete`,
+  `full_m2`); nowe typy `AvailabilityRecord`, `AvailabilityCampaign`
+  w `kartograf.__all__`; schemat `kartograf-availability/1` addytywnie.
+  `kartograf elevation availability --details` dopisuje w PL udzial ladu
+  w pelnych arkuszach (w dol, `<1%`), kampanie osobno i kampanie rekordow do
+  pobrania.
+
 - Interfejs dla agentow AI, dokumenty JSON (ADR-046, USAGE 9; dopisane do
   przygotowanego wydania 0.8.0 przed tagowaniem): `--json` w kazdej komendzie
   CLI (36 komend-lisci i `catalog`) - stdout to dokladnie jeden dokument
