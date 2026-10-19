@@ -222,12 +222,11 @@ def test_add_records_selected_options_for_every_data_command(
         == 0
     )
     capsys.readouterr()
-    assert main(_add(project, "warstwa", *command.split(), *flags, "-q")) == 0
+    assert main(_add(project, "warstwa", *command.split(), *flags)) == 0
     task = open_project(project).tasks[0]
     assert task.command == command
     for name, value in expected.items():
         assert task.options[name] == value
-    assert "quiet" not in task.options
     assert task.files == ()
     assert (project / "data").is_dir()
     assert "Dodano zadanie warstwa" in capsys.readouterr().out
@@ -328,6 +327,8 @@ def test_add_rejects_update_modes_and_foreign_output(tmp_path, capsys, flag):
     [
         (["elevation", "download", *SHEET_FLAGS, "-w", "8"], "--workers"),
         (["elevation", "download", *SHEET_FLAGS, "--workers=2"], "--workers"),
+        (["elevation", "download", *SHEET_FLAGS, "-q"], "-q/--quiet"),
+        (["elevation", "download", *SHEET_FLAGS, "--quiet"], "-q/--quiet"),
         (["soil", "hsg", "--sheet", G, "--depth", "0-5cm", "--summary"], "--summary"),
     ],
 )
