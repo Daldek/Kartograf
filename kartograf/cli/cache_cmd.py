@@ -67,11 +67,12 @@ def cmd_cache(args: argparse.Namespace, action: str) -> int:
     if wants_json(args):
         return emit_document(info)
     if action == "clear":
-        print(
-            f"Usunieto nieczytelny plik cache: {info.path}"
-            if info.removed_unreadable
-            else "Cache wyczyszczony."
-        )
+        if info.removed_unreadable:
+            print(f"Usunieto nieczytelny plik cache: {info.path}")
+        elif not info.exists:
+            print(f"Cache jest pusty: nie ma pliku cache ({info.path})")
+        else:
+            print("Cache wyczyszczony.")
     else:
         _print_stats(info)
     return 0
