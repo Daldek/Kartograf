@@ -3130,7 +3130,7 @@ bledem `invalid_input` z `details.option` rownym `json`.
    `soil hsg --json --summary` zwraca statystyki w polu `summary`.
 4. **Kod wyjscia** wg 9.3: 0, gdy dokument nie ma pola `ok` albo ma `ok: true`; 1, gdy
    `ok: false` (dokument i tak jest wydrukowany) albo blad zrodla; 2 dla bledu wejscia;
-   130 po Ctrl-C. Blad to dokument `kartograf-error/1` na stdout, takze blad skladni
+   130 po Ctrl-C, 143 po SIGTERM. Blad to dokument `kartograf-error/1` na stdout, takze blad skladni
    (`usage_error`); stderr zostaje pusty.
 5. Bez `--json` zachowanie jest bez zmian (tekst), z wyjatkami: kod wyjscia 2 dla bledow
    wejscia, tabele `list-sources` i `list-layers` oraz `parse` sa renderowane z dokumentow
@@ -3211,7 +3211,8 @@ Jedna tabela kodow wyjscia CLI (te same wartosci ma katalog: `get_catalog(tables
 | 0 | `ok` | komenda wykonana; dokument wyniku z `ok: true` albo dokument bez pola `ok` | dokument wyniku |
 | 1 | `failed` | brak kompletnego wyniku: blad zrodla, sieci, cache, magazynu, blad programu albo `ok: false` | dokument wyniku (`ok: false`) albo `kartograf-error/1` |
 | 2 | `usage` | bledne uzycie albo bledne dane wejsciowe: blad skladni parsera, `ValidationError`, `ParseError`, `UsageError` | `kartograf-error/1` |
-| 130 | `interrupted` | przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane atomowo, brak polowicznych plikow | `kartograf-error/1` |
+| 130 | `interrupted` | przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane atomowo - jednostki niedokonczone przed przerwaniem (takze zakolejkowane przy `--workers > 1`) nie powstaja, brak polowicznych plikow | `kartograf-error/1` |
+| 143 | `terminated` | zakonczone sygnalem SIGTERM (128 + SIGTERM): `timeout`, `docker stop`; sprzatanie i dokument bledu jak po Ctrl-C | `kartograf-error/1` |
 
 Jedna tabela kodow bledow (`get_catalog(tables=True).errors`; kazdy wyjatek z hierarchii
 `KartografError` ma stabilny atrybut `code`, a kod wyjscia wynika z kodu bledu):
@@ -3230,12 +3231,27 @@ Jedna tabela kodow bledow (`get_catalog(tables=True).errors`; kazdy wyjatek z hi
 | `transform_failed` | `TransformError` | 1 | blad przeliczenia wspolrzednych (np. wynik nieskonczony) | - |
 | `transform_unavailable` | `TransformUnavailableError` | 1 | brak bezpiecznej operacji dla pary ukladow | `remedy` wyjatku |
 | `io_error` | `OSError` | 1 | katalog albo plik niedostepny: brak, uprawnienia, brak miejsca, odlaczony udzial (m.in. `describe_store` na nieistniejacym `output_dir`) | `Sprawdz sciezke i uprawnienia: <plik>` |
-| `interrupted` | `KeyboardInterrupt` | 130 | Ctrl-C | - |
+| `interrupted` | `KeyboardInterrupt` | 130 | Ctrl-C (SIGINT) | - |
+| `terminated` | `Terminated` | 143 | SIGTERM (`timeout`, `docker stop`, `kill`) | - |
 | `internal_error` | `Exception` | 1 | blad programu: kazdy inny wyjatek poza `OSError` | `Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback` |
 
-Kody `io_error`, `interrupted` i `internal_error` nie maja klas w hierarchii: buduje je
-`error_report`. Nowe kody wolno dodawac (zmiana addytywna); zmiana albo usuniecie kodu to
-zmiana lamiaca.
+Kody `io_error`, `interrupted`, `terminated` i `internal_error` nie maja klas w hierarchii
+`KartografError`: buduje je `error_report` (`terminated` z wyjatku `kartograf.interrupt.Terminated`,
+podklasy `KeyboardInterrupt`). Nowe kody wolno dodawac (zmiana addytywna); zmiana albo usuniecie
+kodu to zmiana lamiaca.
+
+**Przerwanie w CLI (Ctrl-C, SIGTERM).** Oba sygnaly dzialaja tak samo: komenda przerywa
+transfer, usuwa katalog roboczy swojego zapisu (`versions/.incoming/<host>_<pid>_<token>/`),
+drukuje `Error: przerwano (Ctrl-C)` albo `Error: przerwano (SIGTERM)` (z `--json`: dokument
+`kartograf-error/1` z kodem `interrupted` albo `terminated`) i konczy sie kodem 130 albo 143.
+Przy `--workers >= 2` kolejka jest anulowana: jednostki (arkusze, powiaty, kafle, paczki),
+ktore nie zakonczyly sie przed przerwaniem, nie sa pobierane ani zatwierdzane; trwajace
+transfery zatrzymuja sie po biezacym kawalku (zwykle w ulamku sekundy, najpozniej z limitem
+czasu odpowiedzi serwera) i dopiero potem komenda sie konczy. Wersje zatwierdzone przed
+przerwaniem zostaja (kazda powstaje atomowo). Po SIGKILL i po drugim SIGTERM (pierwszy
+przywraca domyslna reakcje) sprzatania nie ma: katalog roboczy zostaje, a usuwa go zapis do
+tego segmentu po 24 godzinach. Serwer MCP (`kartograf-mcp`) nie przechwytuje SIGTERM: sygnal
+konczy proces od razu, bez sprzatania (zamkniecie stdin konczy go po biezacych wywolaniach).
 
 `failed[].kind` w `kartograf-download/1` ma te same nazwy co kody błędów danych:
 `no_coverage` (źródło nie ma danych: arkusz, kafle, wycinek), `year_out_of_range`

@@ -143,13 +143,13 @@ kartograf ──> core, download, providers, landcover, hydrology, cache,
 __main__ ──> cli
 cli ──> catalog, commands, error_report, sheet_info, source_info,
         cache_info, download, landcover, hydrology, notices, project,
-        sources, kartograf
+        sources, interrupt, kartograf
 mcp_server ──> catalog, commands, error_report, download, cache, kartograf
         # SDK `mcp`, `anyio`, `jsonschema`: tylko leniwie, w create_server
 commands ──> catalog, project, download, cache, notices
 catalog ──> sources, download, landcover, hydrology, providers, core,
         error_report, _version, kartograf (l)
-error_report ──> transform, catalog (l)
+error_report ──> transform, interrupt, catalog (l)
 sheet_info ──> catalog, core
 source_info ──> download, landcover, providers, sources
 cache_info ──> cache, notices
@@ -157,15 +157,16 @@ store_documents ──> download, store
 project ──> download, landcover, hydrology, sources, cache, catalog,
         notices, _version, kartograf (_clock)
 download ──> providers, sources, transform, core, cache, notices,
-        _version, kartograf (_clock), transport
-landcover ──> providers, download, core, cache, sources, notices, transport
+        _version, kartograf (_clock), transport, interrupt
+landcover ──> providers, download, core, cache, sources, notices, transport,
+        interrupt
 hydrology ──> core, download, landcover, cache (TYPE_CHECKING), notices,
         providers (l), sources (l), transform (l)
 providers ──> sources, transform, transport, core, cache, notices,
-        auth (l), download (l)
+        auth (l), download (l), interrupt
 sources ──> core, kartograf (_clock), _version
 transport ──> transform, core, sources, cache, notices, providers,
-        kartograf (l, __version__)
+        interrupt, kartograf (l, __version__)
 transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
 cache ──> core (TYPE_CHECKING), notices
 _version ──> kartograf (l, __version__)
@@ -173,7 +174,7 @@ store ──> core, download, sources, providers (l)
 store_geometry ──> core, transform, store (typy pod TYPE_CHECKING; w czasie
         dzialania takze leniwy import `read_sidecar`), providers (l),
         transport (l)
-_clock, notices, auth ──> (nic wewnetrznego)
+_clock, notices, auth, interrupt ──> (nic wewnetrznego)
 core ──> (nic poza exceptions i serialization)
 exceptions ──> serialization (koder dla `details()`; krawedzie DO niego
         pominiete powyzej — importuja go kartograf, cli, core, sources,
@@ -253,7 +254,7 @@ Uwagi, ktore latwo przeoczyc:
   (`cli/_json.py`) to `Document.to_json()`, tryb tekstowy renderuje te same
   dokumenty (tabele, linie statusu, pasek postepu z
   `download.manager.DownloadProgress`), a `main` zamienia wyjatki na
-  `error_report` i kody wyjscia 0/1/2/130. Z `download` bierze ponadto
+  `error_report` i kody wyjscia 0/1/2/130/143. Z `download` bierze ponadto
   `download.plan`/`fetch` (plik planu, `UpdateMode`, `VersionedFile`) i
   `download.options` (`output_required`, `require_product`), z `sources.variants`
   tabele wariantow, z `notices` komunikaty, z `project.commands` `task_command`.
@@ -404,8 +405,10 @@ kartograf/
 │                        # CacheError; InvalidSidecarError(.path) — nieczytelny sidecar (read_sidecar);
 │                        # kody bledow i kody wyjscia: USAGE 9.3
 ├── error_report.py      # ErrorReport (kartograf-error/1), error_report(exc, command=):
-│                        # wyjatek jako dane (io_error, interrupted, internal_error buduje tu),
-│                        # ERROR_CODES/EXIT_CODES - jedyne zrodlo tabel USAGE 9.3 i katalogu
+│                        # wyjatek jako dane (io_error, interrupted, terminated, internal_error
+│                        # buduje tu), ERROR_CODES/EXIT_CODES - jedyne zrodlo tabel USAGE 9.3 i katalogu
+├── interrupt.py         # Przerwanie: run_parallel (pula z anulowaniem kolejki i flaga stopu dla
+│                        # trwajacych jednostek), check_stop, Stopped/Terminated, sigterm_interrupts
 ├── core/                # Logika bazowa, bez IO sieciowego
 │   ├── bbox.py             # BBox, validate_bbox, transform_bbox (gesta obwiednia: _DENSIFY
 │   │                       # punktow na krawedz, cache transformerow, operacja przypieta
@@ -643,7 +646,7 @@ kartograf/
                          # sources_cmd.py (list-sources), parse_cmd.py (describe_sheet),
                          # cache_cmd.py (cache_info), catalog_cmd.py (get_catalog),
                          # project_cmd.py (API projektu; project add przez parse_command),
-                         # commands.py (entry point main: wyjatki -> error_report, kody 0/1/2/130)
+                         # commands.py (entry point main: wyjatki -> error_report, kody 0/1/2/130/143)
 ```
 
 ---
@@ -3793,17 +3796,37 @@ JSON opcji zadania projektu (ADR-040), `run` - flagi uruchomienia (`output_dir`,
 `tests/test_errors.py`), `exit_code`, `DETAIL_FIELDS` i opcjonalny `hint`; walidatory biblioteki
 ustawiaja `ValidationError.option`/`options`/`allowed` (nazwa argumentu API, nie flaga).
 `error_report(exc, command=)` zamienia dowolny wyjatek na `ErrorReport` (kody `io_error` dla
-`OSError`, `interrupted` i `internal_error` buduje tu, a nie klasy hierarchii); `hint` skladany
+`OSError`, `interrupted`, `terminated` i `internal_error` buduje tu, a nie klasy hierarchii); `hint` skladany
 deterministycznie z `exc.hint`, `DEFAULT_HINT`, `hints`/`remedy` albo `Dozwolone wartosci ...` i
 `Przyklad: ...` z katalogu (do 400 znakow). `main` (`cli/commands.py`) wykrywa tryb JSON przed
 parsowaniem (`cli/_json.py::json_mode`), buduje parser z `usage_errors=True` (blad skladni
 to `UsageError`, z `command`, gdy linia nazwala znana komende) i zamienia kazdy wyjatek na
 dokument `kartograf-error/1` na stdout (stderr pusty) oraz kod wyjscia `e.exit_code`
-(0/1/2), 130 dla Ctrl-C; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Rekordy loggera
+(0/1/2), 130 dla Ctrl-C, 143 dla SIGTERM; `KARTOGRAF_DEBUG=1` podnosi wyjatek ponownie. Rekordy loggera
 `kartograf` (poziom WARNING i wyzej) `main` zamienia na linie `Warning:`/`Error:` na stderr
 (`_StderrLines`; bez handlera Python drukuje je bez prefiksu); z `--json` przechodza tylko
 rekordy `kartograf.transport.http` (ponowienia), a z `KARTOGRAF_DEBUG` wszystkie. Tabele kodow wyjscia
 i bledow sa w USAGE 9.3 (`tests/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
+
+**Przerwanie i pule watkow (`kartograf/interrupt.py`).** Ctrl-C to `KeyboardInterrupt` tylko w
+watku glownym, wiec `--workers >= 2` (jednostki w `ThreadPoolExecutor`) czekalo na cala kolejke
+i zatwierdzalo ja po przerwaniu (e2e 0.8.0: B P2-1, C P2-5, D P2-2). Kazda pula pobierania
+(`DownloadManager._download_many`, `run_request` kolekcji, powiaty BDOT10k w `LandCoverManager`,
+kafle LAZ PL i arkusze LAZ CZ) idzie przez jednego pomocnika `run_parallel(work, items,
+workers=, on_done=)`: gdy watek czekajacy na wyniki dostanie wyjatek (Ctrl-C, blad jednostki,
+wyjatek `on_done`), jednostki, ktore nie ruszyly, sa anulowane, a trwajace dostaja flage stopu;
+wywolanie wraca dopiero po nich, wiec nic z puli nie dziala dalej i nic nie jest zatwierdzane po
+przerwaniu (wersje zatwierdzone wczesniej zostaja). Jednostka widzi flage w `check_stop()` (przed
+zapytaniem i miedzy kawalkami ciala w `transport/http.py::download_to`/`get_with_retry`/
+`head_signal`, w `transport/aaigrid.py`, w petlach paczki BDOT10k i na poczatku
+`commit_version`) oraz zamiast pauzy ponowienia, i konczy sie `Stopped` - podklasa
+`KeyboardInterrupt`: dziala to samo sprzatanie co przy `--workers 1` (`except BaseException`,
+`finally`), a zaden `except Exception` pakietu nie zamienia jej w porazke jednostki. Zapytanie
+zablokowane na sieci konczy sie najpozniej z limitem czasu. Pule sond (`executor.map` z HEAD i
+zapytaniami indeksu) anuluja kolejke juz same (`map`) i czekaja tylko na biezace zapytania.
+SIGTERM: `sigterm_interrupts()` (CLI `main`) rzuca w watku glownym `Terminated` (tez
+`KeyboardInterrupt`; pierwszy sygnal przywraca domyslna reakcje), a `error_report` daje
+`terminated`/143. Poza `main` (biblioteka, serwer MCP) sygnal nie jest przechwytywany.
 
 **Serwer MCP (`kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
 deklaracje na specyfikacje 29 narzedzi (nazwa, krotki opis, schemat wejscia JSON Schema

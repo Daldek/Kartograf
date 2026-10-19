@@ -1333,7 +1333,7 @@ poprawić błąd bez parsowania tekstu.
   `exception`, `exit_code`, `command`, `details`). Dokumenty zwraca biblioteka
   (`to_dict()`/`to_json()`), a CLI i MCP tylko je drukują.
 - Stabilne kody błędów (`code`) i kody wyjścia: 0 (ok), 1 (awaria źródła, sieci
-  albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C);
+  albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C), 143 (SIGTERM);
   `ValidationError` niesie `option` i `allowed`, a podpowiedź (`hint`) dozwolone
   wartości i przykład komendy. Jedna tabela kodów: `docs/USAGE.md` 9.3.
 - Katalog komend (`kartograf catalog`, `get_catalog()`, `kartograf-catalog/1`):

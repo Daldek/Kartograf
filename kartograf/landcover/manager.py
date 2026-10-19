@@ -28,7 +28,6 @@ BDOO, Data50, Data250) on its requests - both on the plan track
 ``landcover``.
 """
 
-import concurrent.futures
 import logging
 import os
 import re
@@ -101,6 +100,7 @@ from kartograf.download.plan import (
 from kartograf.download.storage import content_segment, unit_slot
 from kartograf.download.versions import ContentDigest, VersionRef
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import run_parallel
 from kartograf.landcover.store import selection_unit
 from kartograf.notices import CORINE_PREVIEW, Notice, NoticeSink
 from kartograf.providers.base import LandCoverProvider
@@ -481,14 +481,12 @@ def _each_powiat(
             outcomes.append(outcome)
             emit(i, teryt, status(outcome))
         return outcomes
-    done: dict[str, _PowiatOutcome] = {}
-    with concurrent.futures.ThreadPoolExecutor(max_workers=workers) as pool:
-        futures = {pool.submit(one, teryt, None): teryt for teryt in teryts}
-        for future in concurrent.futures.as_completed(futures):
-            teryt = futures[future]
-            done[teryt] = future.result()
-            emit(len(done), teryt, status(done[teryt]))
-    return [done[teryt] for teryt in teryts]
+    return run_parallel(
+        lambda teryt: one(teryt, None),
+        teryts,
+        workers=workers,
+        on_done=lambda ended, teryt, outcome: emit(ended, teryt, status(outcome)),
+    )
 
 
 # Providers created by name that accept a metadata cache (CORINE has none).

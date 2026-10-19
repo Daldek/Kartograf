@@ -1,10 +1,13 @@
-"""``main``: the exit codes 0/1/2/130 and the ``kartograf-error/1`` document of
+"""``main``: the exit codes 0/1/2/130/143 and the ``kartograf-error/1`` document of
 every kind of failure, in text and in the ``--json`` mode (spec 6.5, 6.6, 7.1)."""
 
 import io
 import json
 import logging
+import os
+import signal
 import sys
+import time
 from unittest.mock import Mock, patch
 
 import pytest
@@ -16,6 +19,7 @@ from kartograf.download.data import DataReport, UnitFailure
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import DownloadError, UsageError, ValidationError
 from kartograf.transform.crs import TransformError, TransformUnavailableError
+from tests.interrupt_fakes import PATIENCE_S
 
 SHEET = "N-34-130-D-d-2-4"
 OUTPUT_REQUIRED = "--output wymagane: katalog magazynu (pliki w <KATALOG>/nmt/...)"
@@ -254,6 +258,45 @@ def test_json_interrupt_is_130(capsys):
     assert document["exit_code"] == 130
     assert document["message"] == "przerwano (Ctrl-C)"
     assert document["command"] == "parse"
+
+
+@pytest.fixture
+def sigterm_during_parse():
+    """``kartograf parse`` that gets a real SIGTERM (``timeout``, ``docker
+    stop``) in the middle of its work; the handler of ``main`` ends it."""
+    if os.name == "nt" or signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL:
+        pytest.skip("SIGTERM is handled by the test runner")
+
+    def handler(args):
+        # a regression (no handler) must fail here, not kill the test run
+        assert signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL
+        os.kill(os.getpid(), signal.SIGTERM)
+        time.sleep(PATIENCE_S)  # the handler raises here, in the main thread
+        raise AssertionError("SIGTERM did not interrupt the command")
+
+    with patch.dict(HANDLERS, {"parse": handler}):
+        yield
+    assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL  # given back
+
+
+def test_sigterm_is_143_with_the_error_document_in_json_mode(
+    capsys, sigterm_during_parse
+):
+    code, out, err = _run(capsys, ["parse", "N-34-130-D", "--json"])
+
+    document = json.loads(out)
+    assert code == 143 and err == ""
+    assert document["code"] == "terminated"
+    assert document["exit_code"] == 143
+    assert document["message"] == "przerwano (SIGTERM)"
+    assert document["command"] == "parse"
+
+
+def test_sigterm_is_143_with_one_error_line_in_text_mode(capsys, sigterm_during_parse):
+    code, out, err = _run(capsys, ["parse", "N-34-130-D"])
+
+    assert code == 143 and out == ""
+    assert err == "Error: przerwano (SIGTERM)\n"
 
 
 def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):

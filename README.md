@@ -165,7 +165,7 @@ To samo zadanie daje ten sam wynik w CLI, bibliotece i serwerze MCP:
 
 - `--json` w każdej komendzie CLI: na stdout jeden dokument
   `kartograf-<rodzaj>/1`, błąd jako `kartograf-error/1` z `code`, `hint`
-  i kodem wyjścia (0, 1, 2, 130);
+  i kodem wyjścia (0, 1, 2, 130, 143);
 - `kartograf catalog --json` (`get_catalog()`): komendy, parametry, dozwolone
   wartości i przykłady;
 - serwer MCP `kartograf-mcp` (`pip install "kartograf[mcp]"`, stdio; w Claude

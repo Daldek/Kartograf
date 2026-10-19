@@ -17,6 +17,7 @@ from kartograf import CzLazFailure, check_cz_laz, download_cz_laz
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import NoCoverageError, ValidationError
 from kartograf.providers.cuzk.laz import CuzkLazProvider
+from tests.interrupt_fakes import EndlessResponse
 from tests.test_cuzk_laz import (
     CIESZYN,
     CIESZYN_3045,
@@ -164,6 +165,44 @@ def test_laz_404_is_sheet_failure(tmp_path):
     assert sidecar(file.version_path)["extra"]["parent_request"] == parent
     assert not (tmp_path / "laz/cz_dmr4g_bpv/CTES/86").exists()
     assert progress == [(0, 2), (1, 2), (2, 2)]
+
+
+class _EndlessCtes86(CuzkSession):
+    """The file of CTES86 is a transfer that does not end."""
+
+    def get(self, url, timeout=None, params=None, stream=False, **kwargs):
+        if params is None and url == CTES86_URL:
+            self._record("GET", url)
+            return EndlessResponse({"Content-Length": "999999999"})
+        return super().get(url, timeout, params, stream, **kwargs)
+
+
+def test_laz_ctrl_c_stops_the_running_sheet_and_commits_nothing_after_it(tmp_path):
+    area = BBox(-448000, -1114000, -446000, -1113000, "EPSG:5514")
+    answer = recorded_json("klady_24_bbox_cieszyn.json")
+    ctes96 = json.loads((CUZK_FIXTURES / "klady_sm5_where_ctes96.json").read_text())
+    answer["features"] = ctes96["features"] + answer["features"]
+    envelope = (area.min_x, area.min_y, area.max_x, area.max_y)
+    session = _EndlessCtes86(envelopes={(24, envelope): answer})
+
+    def ctrl_c_when_a_sheet_ended(done: int, total: int) -> None:
+        if done:
+            raise KeyboardInterrupt
+
+    with recorded(session), pytest.raises(KeyboardInterrupt):
+        download_cz_laz(
+            model="dmr4g",
+            vertical_crs="Bpv",
+            output_dir=tmp_path,
+            bbox=area,
+            workers=2,
+            cache=False,
+            on_progress=ctrl_c_when_a_sheet_ended,
+        )
+
+    stored = [p.name for p in tmp_path.rglob("*.laz") if "versions" in p.parts]
+    assert stored == ["CTES96.laz"]
+    assert [p for p in tmp_path.rglob("*") if ".incoming" in p.parts] == []
 
 
 def test_laz_area_without_sheets_is_no_coverage(tmp_path):

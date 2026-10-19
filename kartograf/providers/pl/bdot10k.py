@@ -46,6 +46,7 @@ import requests
 from kartograf.cache.metadata import MetadataCache
 from kartograf.core.sheet_parser import BBox
 from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.interrupt import check_stop
 from kartograf.providers.base import LandCoverProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox
 from kartograf.transport.http import (
@@ -556,6 +557,7 @@ class Bdot10kProvider(LandCoverProvider):
         # Read ZIP into memory
         zip_data = BytesIO()
         for chunk in response.iter_content(chunk_size=8192):
+            check_stop()
             zip_data.write(chunk)
         zip_data.seek(0)
 
@@ -588,6 +590,7 @@ class Bdot10kProvider(LandCoverProvider):
 
                     extracted_files = []
                     for gpkg_file in all_gpkg:
+                        check_stop()
                         # Extract to temp directory
                         extracted_path = tmpdir_path / Path(gpkg_file).name
                         with (
@@ -698,6 +701,7 @@ class Bdot10kProvider(LandCoverProvider):
                 try:
                     cursor = conn.cursor()
                     for source_file in source_files[1:]:
+                        check_stop()
                         self._copy_gpkg_layer(cursor, source_file)
                     conn.commit()
                 finally:
