@@ -858,7 +858,7 @@ class TestCli:
             "5m",
         )
 
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error:") and "--cutout" in err and "1m" in err
         self.factory.assert_not_called()
@@ -871,7 +871,7 @@ class TestCli:
         (the orthophotomap cutout is ``imagery download --cutout``)."""
         rc = self._main(tmp_path, Mock(), "--product", "laz")
 
-        assert rc == 1
+        assert rc == 2
         assert capsys.readouterr().err.startswith("Error:")
         self.factory.assert_not_called()
 

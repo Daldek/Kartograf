@@ -50,6 +50,13 @@
 > wymagane (6.4); nowa grupa lub komenda zapisujaca dane z pozycja
 > manifestu (17.2, ADR-039, ADR-040); nowy produkt kolekcji na silnikach
 > (17.5, ADR-042, ADR-043); jednostki w przykladzie 4.2.
+>
+> **Nota 3.5 (2026-10-18, wydanie 0.8.0):** interfejs dla agentow AI (7.3,
+> ADR-046): wyniki komend to dokumenty `kartograf-*/1` z biblioteki, `--json`
+> w kazdej komendzie (Z8); nowa komenda = deklaracja w katalogu, nie flagi
+> w `cli/` (Z9, 17.2); stabilne kody bledow i kody wyjscia, blad wejscia
+> konczy CLI kodem 2 (Z10, 11.1); schematy `/1` addytywne (Z11);
+> `scripts/gate.sh` jako jedna komenda bramy (6.3, 18).
 
 ---
 
@@ -388,6 +395,15 @@ pip install -e ".[dev]"
 .venv/bin/python -m mypy kartograf/ tests/
 ```
 
+**Jedna komenda bramy:** `scripts/gate.sh [argumenty pytest]` uruchamia po kolei
+`ruff check .`, `ruff format --check .`, `mypy kartograf/ tests/` i
+`pytest tests/ -m "not live" -q` (argumenty trafiaja do pytest, np.
+`scripts/gate.sh -x -k parity`); pierwszy kod != 0 konczy skrypt tym kodem,
+na koncu drukuje `GATE OK`. Dziala z checkoutu i z worktree (Python:
+`$KARTOGRAF_PYTHON`, `.venv` korzenia albo `.venv` glownego checkoutu;
+skrypt sprawdza, ze testowany jest kod tego checkoutu) i niczego nie
+instaluje (`dev` zawiera `mcp`, 9.2 specyfikacji interfejsu dla agentow).
+
 Testy sa **offline**: `tests/conftest.py` przewraca kazdy test otwierajacy
 gniazdo spoza loopbacku; wyjatek maja tylko testy z markerem `live`
 (zapytania o metadane, bez pobierania plikow). `pyproject.toml` nie
@@ -474,14 +490,37 @@ same statusy, plan, komunikaty i bledy. Reguly:
   `notices` wyniku i `on_notice`), z kodem z `kartograf/notices.py`; CLI
   wypisuje `Info:`/`Warning:` na stderr, z wyjatkiem `SHEET_LIST`
   (naglowek listy arkuszy na stdout, ukryty przez `--quiet`). Biblioteka
-  nie loguje dodatkowo tego samego tekstu.
+  nie loguje dodatkowo tego samego tekstu; w trybie `--json` (Z8) komunikaty
+  sa tylko w polu `notices`.
 - **Z6:** parametr `cache: MetadataCache | bool = True` (cache w cwd jak
   w CLI); `update="force"` bez odczytow z cache.
 - **Z7:** nowa flaga albo nowy tor = scenariusz w `tests/test_parity.py`
   (albo `tests/test_parity_landcover.py`) przez `kartograf.cli.main`
   i przez API, z `frozen_clock`.
+- **Z8:** jedyna serializacja wynikow jest w bibliotece (ADR-046): typy wyniku to
+  `@dataclass(frozen=True)` z mixinem `Document` (`kartograf/serialization.py`:
+  `to_dict()`/`to_json()`, `schema` pierwszym kluczem). CLI w trybie `--json` drukuje
+  `to_json()`, serwer MCP zwraca `to_dict()`; ani CLI, ani MCP nie zamienia wynikow
+  na JSON ani nie formatuje danych po swojemu. Tryb `--json`: stdout to jeden dokument,
+  stderr pusty (komunikaty w `notices`), blad to `kartograf-error/1` (USAGE 9.2).
+- **Z9:** katalog komend jest jedynym zrodlem prawdy o komendach (ADR-046): nowa
+  komenda albo grupa to deklaracja w `kartograf/catalog/commands/` (flaga, argument API,
+  rodzaj, `allowed`, opis, przyklady), a nie flagi w `cli/`; parser CLI, opcje `COMMANDS`
+  projektu i schematy narzedzi MCP powstaja z deklaracji. Biblioteka (w tym `catalog`)
+  nie importuje `kartograf.cli` ani `mcp`; `mcp` to zaleznosc opcjonalna, dotykana tylko
+  w `kartograf/mcp_server.py`. Przepis: 17.2.
+- **Z10:** kazdy wyjatek hierarchii `KartografError` ma stabilny `code` (snake_case,
+  zdefiniowany w klasie) i `exit_code`; walidator biblioteki ustawia `option` (nazwa
+  argumentu API) i `allowed` tam, gdzie wiadomo, co poprawic (11.1). Kody wyjscia: 0, 1
+  (awaria zrodla, sieci albo dysku, `ok: false`), 2 (bledne dane wejsciowe i uzycie),
+  130 (Ctrl-C); jedna tabela kodow wyjscia i bledow jest w USAGE 9.3 i rowna katalogowi
+  (`tests/test_docs_tables.py`).
+- **Z11:** schematy dokumentow `/1` sa addytywne: nowe klucze i nowe wartosci wyliczen
+  tak, usuniecie klucza albo zmiana typu to `/2`. Nowy dokument = klasa z `Document`
+  + wiersz w `tests/test_json_contract.py` (dokladna lista kluczy w kolejnosci) + wpis
+  w tabeli ARCHITECTURE 3.6.
 
-Wyjatki: 11.1 (Z4); jezyk: 9.4 (Z5).
+Wyjatki: 11.1 (Z4, Z10); jezyk: 9.4 (Z5).
 
 ---
 
@@ -794,7 +833,9 @@ listy klas. Zasady:
 - Informacje dla wywolujacego przekazuj atrybutami wyjatku (np.
   `DownloadError.status_code`), nie przez parsowanie komunikatu.
 - `KartografError` docierajacy do bariery CLI (`main`) daje
-  `Error: <komunikat>` i kod 1 (pelny traceback: `KARTOGRAF_DEBUG=1`,
+  `Error: <komunikat>` i kod wyjscia wyjatku (`exit_code`: 2 dla bledow wejscia -
+  `ValidationError`, `ParseError`, `UsageError` - inaczej 1; w trybie `--json`
+  dokument `kartograf-error/1`; pelny traceback: `KARTOGRAF_DEBUG=1`,
   sekcja 6.2) — komunikat ma byc zrozumialy dla uzytkownika.
 - Zawsze zachowuj lancuch wyjatkow: `raise ... from err` (sekcja 11.3).
 
@@ -806,6 +847,19 @@ Naruszenie wewnetrznego niezmiennika (blad programu) zachowuje wbudowany
 wyjatek, np. `ValueError`/`RuntimeError`; nieznany argument daje `TypeError`.
 `ValidationError` NIE dziedziczy z `ValueError`: wewnetrzne
 `except ValueError` przy dekodowaniu danych nie moga ukrywac bledow wejscia.
+
+**Kody bledow (Z10, 0.8.0).** Kazda klasa `KartografError` ma w swoim `__dict__`
+stabilny `code` (snake_case, unikalny; `tests/test_errors.py`), `exit_code`
+(2 dla `ValidationError` i podklas, inaczej 1), `DETAIL_FIELDS` (atrybuty, ktore
+trafiaja do `details` dokumentu `kartograf-error/1`) i opcjonalny `hint`. Nowa klasa
+dostaje wlasny `code`, wiersz w `error_report.ERROR_CODES` i w tabeli USAGE 9.3
+(`tests/test_docs_tables.py` pilnuje rownosci z katalogiem). Walidator ustawia
+`option` (nazwa argumentu API, nie flaga), gdy blad dotyczy jednego argumentu,
+`options` dla grupy argumentow w konflikcie i `allowed` dla zamknietego zbioru
+wartosci: z nich `error_report` sklada `hint` z przykladem komendy. `OSError`,
+`KeyboardInterrupt` i wyjatki spoza hierarchii nie maja klas z kodem: kody
+`io_error`, `interrupted` i `internal_error` buduje `error_report`. Kody dodaje sie
+addytywnie; zmiana albo usuniecie kodu to zmiana lamiaca.
 
 
 ### 11.2 Walidacja na wejsciu
@@ -846,9 +900,9 @@ i flaga CLI, ktore wybieraja produkt, wariant, edycje, uklad pionowy,
 rozdzielczosc, wybor arkuszy albo miejsce zapisu, sa wymagane — brak
 argumentu wymaganego w sygnaturze to `TypeError` (API), a brak wymaganej
 wartosci danych przekazanej jako `None` to `ValidationError`. CLI wypisuje
-`Error:` z lista dopuszczalnych wartosci (kod 1) dla brakujacych danych
-sprawdzanych w bibliotece; bledy skladni/wyborow przechwycone przez
-`argparse` maja kod 2. Domyslne zostaja tylko: format danych
+`Error:` z lista dopuszczalnych wartosci (kod 2, jak bledy skladni/wyborow
+przechwycone przez `argparse`) dla brakujacych danych sprawdzanych
+w bibliotece (`ValidationError`, `ParseError`, `UsageError`: Z10, 11.1). Domyslne zostaja tylko: format danych
 (`format="GTiff"`/`"GPKG"`), uklad poziomy PL `EPSG:2180` i natywny
 `EPSG:5514` wyniku CZ, przelaczniki wylaczone (`force`, `full_sheet`,
 `all_campaigns`, ...), `None` = "nie podano", parametry z jedna
@@ -1101,32 +1155,56 @@ danych, uklad `data/`) -> `docs/PRD.md` (wymagania) -> `docs/CHANGELOG.md`
 # 4. Zarejestruj w slowniku modulowym PROVIDERS w kartograf/landcover/manager.py
 # 5. Dodaj eksport do kartograf/__init__.py (__all__)
 # 6. Napisz testy offline w tests/ (fixtury z realnych odpowiedzi serwera)
-# 7. CLI: produkt pojawia sie w choices i pomocy --product grupy
-#    kartograf/cli/groups/landcover.py (download oraz list-layers) z rejestru
-#    (LANDCOVER_PRODUCTS); mapowanie
-#    argumentow w kartograf/cli/landcover_cmd.py; nowa grupa komend = jeden
-#    nowy modul kartograf/cli/groups/<grupa>.py z register() (wykrywany
-#    automatycznie, ADR-039); cli/commands.py to tylko fasada
+# 7. CLI: produkt pojawia sie w choices i pomocy --product grupy z rejestru
+#    (LANDCOVER_PRODUCTS) - deklaracja
+#    kartograf/catalog/commands/landcover.py (download oraz list-layers);
+#    mapowanie argumentow w kartograf/cli/landcover_cmd.py; nowa grupa
+#    komend = jeden nowy modul kartograf/catalog/commands/<grupa>.py
+#    (wykrywany automatycznie, ADR-039, ADR-046; sekcja 17.2);
+#    cli/commands.py to tylko fasada
 ```
 
 Nowe zrodlo NMT albo nowy kraj: checklista w `docs/ARCHITECTURE.md`,
 sekcja 5 ("Jak dodac nowe zrodlo albo nowy kraj").
 
-### 17.2 Nowa grupa lub komenda zapisujaca dane
+### 17.2 Nowa grupa lub komenda zapisujaca dane (przez katalog komend)
 
-Kazda nowa komenda danych (w tym `download` nowej grupy) musi miec
-pozycje w `kartograf/project/commands.py::COMMANDS`: klucze i typy
-opcji manifestu, walidacje bez sieci wspolna z funkcja pobrania,
-wywolania biblioteki do pobrania i `check_*` oraz adapter kompletnego
-wyniku do przypiec (`VersionedFile`, wraz z plikami wejsciowymi i
-surowymi, jesli dotyczy). W parserze komendy ustaw `_task`, ktore
-korzysta z tego samego tlumaczenia flag co `_handler`, ale zwraca
-tylko opcje wyboru danych, bez `output_dir`, trybu aktualizacji
-i opcji uruchomienia. Dopisz test zadania projektu dla nowej komendy:
-przypiecie wyniku, sprawdzenie wzgledem przypiec i odtworzenie przy
-zgodnym SHA-256. Nowy produkt w istniejacej komendzie nie wymaga
-nowej pozycji `COMMANDS`; zgodnosc jej opcji z parserem nadal sprawdz
-testem. Kontrakt: [ARCHITECTURE.md, sekcja 5](ARCHITECTURE.md#5-jak-dodac-nowe-zrodlo-albo-nowy-kraj)
+Komenda to deklaracja w katalogu (Z9, ADR-046), nie flagi w `cli/`:
+
+1. **Deklaracja:** `kartograf/catalog/commands/<grupa>.py` z `COMMANDS` (`Command`:
+   `id`, `summary`, `kind`, `function` i `check_function` z `kartograf.__all__`,
+   `result_schema`, `tool` = nazwa narzedzia MCP, `effects`, `project_task`, `params`,
+   `constraints`, `examples`) i `GROUPS`; moduly sa wykrywane po nazwie (`declared()`),
+   a grupa kolekcji uzywa `collection_commands`/`collection_group`
+   (`catalog/commands/_collection.py`). `Param`: `name`, `kind`, `flag`, `argument`
+   (nazwa argumentu funkcji), `required`, `task=True` dla opcji wyboru danych (trafia do
+   manifestu projektu), `allowed` jako dostawca z rejestru (nie kopia listy) i opis.
+   Parser CLI, `COMMANDS` projektu, schematy narzedzi MCP i `kartograf catalog`
+   powstaja z tej deklaracji.
+2. **Funkcja biblioteki** poziomu komendy (Z1, Z2, 11.2) w `kartograf.__all__`, z
+   argumentami tylko nazwanymi i wynikiem `Document` z wlasnym schematem (Z8, Z11), plus
+   odpowiednik `check_*`; walidacja bez sieci wspolna z pobraniem, bledy `ValidationError`
+   z `option`/`allowed` (Z10).
+3. **Handler CLI:** wpis w `kartograf/cli/_handlers.py::HANDLERS` (grupa kolekcji: nazwa
+   w `COLLECTION_GROUPS`); handler zamienia flagi na argumenty przez
+   `library_arguments(args)`, wola funkcje i drukuje wynik (`--json`: `to_json()`, tekst:
+   renderowanie dokumentu).
+4. **Projekt:** kazda komenda danych musi miec pozycje w
+   `kartograf/project/commands.py::COMMANDS`: walidacje bez sieci wspolna z funkcja
+   pobrania, wywolania biblioteki do pobrania i `check_*` oraz adapter kompletnego wyniku
+   do przypiec (`VersionedFile`, wraz z plikami wejsciowymi i surowymi, jesli dotyczy);
+   opcje zadania to parametry `task=True` deklaracji (`TaskCommand.options`). Nowy produkt
+   w istniejacej komendzie nie wymaga nowej pozycji `COMMANDS`.
+5. **MCP:** narzedzie powstaje z deklaracji (`catalog/tools.py`); kazdy argument potrzebuje
+   wpisu `_BRIEF` (krotki opis na wywolanie) - nowy parametr nie zbuduje narzedzi, dopoki
+   go nie ma.
+6. **Testy:** testy kontraktowe katalogu (`tests/test_catalog*.py`: flagi parsera ==
+   katalog, sygnatura funkcji, przyklady przez `validate_command`, ograniczenia), test
+   zadania projektu (przypiecie wyniku, sprawdzenie wzgledem przypiec i odtworzenie przy
+   zgodnym SHA-256), scenariusz zgodnosci CLI = API (Z7), wiersz dokumentu w
+   `tests/test_json_contract.py` i `--json` w `tests/test_cli_json.py`.
+
+Kontrakt: [ARCHITECTURE.md, sekcje 4.11 i 5](ARCHITECTURE.md#411-interfejs-dla-agentow-katalog-komend-dokumenty-i-serwer-mcp-adr-046)
 i spec manifestu, sekcja 5.
 
 ### 17.3 Rozszerzenie parsera godel
@@ -1210,10 +1288,12 @@ wpis danych, ktory obsluguja wspolne silniki (`transport/unit_package.py`,
 #    capability, sygnal); EXPECTED_KEYS dla nowego klucza.
 # 4. Fixtury z prawdziwych odpowiedzi (male; tests/fixtures/pl/feature_bbox/
 #    z naglowkami *.headers.json, tests/fixtures/pl/unit_package/).
-# 5. CLI: nowa grupa = modul kartograf/cli/groups/<grupa>.py z register(),
-#    ktory wola add_collection_commands (kartograf/cli/groups/_collection.py;
-#    download + list-sources, wybory w --help z rejestru); nowy produkt
-#    w istniejacej grupie = tylko wpis deskryptora (nowy wybor --product).
+# 5. CLI: nowa grupa = modul kartograf/catalog/commands/<grupa>.py, ktory
+#    wola collection_commands i collection_group
+#    (kartograf/catalog/commands/_collection.py; download + list-sources,
+#    wybory w --help z rejestru), i nazwa grupy w COLLECTION_GROUPS
+#    (kartograf/cli/_handlers.py); nowy produkt w istniejacej grupie =
+#    tylko wpis deskryptora (nowy wybor --product).
 # 6. Nowa grupa = pozycja projektu w kartograf/project/commands.py::COMMANDS
 #    (sekcja 17.2).
 ```
@@ -1226,8 +1306,9 @@ decyzje: ADR-042 i ADR-043 w `docs/DECISIONS.md`.
 ## 18. Pre-merge checklist
 
 ```markdown
-- [ ] Testy offline przechodza (`pytest tests/ -v -m "not live"`; testy
-      `live` tylko swiadomie: `pytest tests/ -m live`)
+- [ ] Brama jedna komenda: `scripts/gate.sh` (sekcja 6.3); osobno testy
+      offline (`pytest tests/ -v -m "not live"`; testy `live` tylko
+      swiadomie: `pytest tests/ -m live`)
 - [ ] Pokrycie kodu w normie (sekcja 10.1: `fail_under` + 80% core)
 - [ ] Formatowanie OK (`ruff format --check .`)
 - [ ] Linting OK (`ruff check .`)
@@ -1242,8 +1323,8 @@ decyzje: ADR-042 i ADR-043 w `docs/DECISIONS.md`.
 
 ---
 
-**Wersja dokumentu:** 3.4
-**Data ostatniej aktualizacji:** 2026-10-16
+**Wersja dokumentu:** 3.5
+**Data ostatniej aktualizacji:** 2026-10-18
 **Zrodlo:** `shared/standards/DEVELOPMENT_STANDARDS.md` v1.0 (repozytorium zewnetrzne, nieobecne w tym workspace)
 
 *Odstepstwa od tych standardow wymagaja uzasadnienia — w tym dokumencie albo w ADR (`docs/DECISIONS.md`).*

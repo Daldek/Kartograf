@@ -5,10 +5,20 @@ This module defines the core custom exceptions of the Kartograf package
 (coordinate transformation errors live in ``kartograf.transform.crs``:
 ``TransformError``, ``TransformUnavailableError``). All of them inherit from
 KartografError for easy catching of package-specific errors.
+
+Every class carries machine-readable facts next to its message (spec 6.1):
+a stable ``code`` (defined in the ``__dict__`` of EVERY class, never inherited
+silently), the ``exit_code`` of the CLI, an optional ``hint`` set where the
+error is raised and the ``details`` of the attributes listed in
+``DETAIL_FIELDS``. ``kartograf.error_report.error_report`` turns an exception
+into the ``kartograf-error/1`` document.
 """
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from pathlib import Path
+from typing import ClassVar
+
+from kartograf.serialization import encode
 
 
 class KartografError(Exception):
@@ -17,6 +27,20 @@ class KartografError(Exception):
 
     All custom exceptions in this package inherit from this class,
     allowing users to catch all Kartograf-specific errors with a single except clause.
+
+    Attributes
+    ----------
+    code : str
+        Stable error code (``snake_case``); class attribute, defined by every
+        class itself.
+    exit_code : int
+        Exit code of the CLI for this error (1 failure, 2 invalid input).
+    DETAIL_FIELDS : tuple[str, ...]
+        Names of the instance attributes reported by ``details()``.
+    DEFAULT_HINT : str, optional
+        Hint of the class when the instance has none.
+    hint : str, optional
+        Hint set where the error is raised (ASCII, one line).
 
     Examples
     --------
@@ -27,7 +51,41 @@ class KartografError(Exception):
     ...     print(f"Kartograf error: {e}")
     """
 
-    pass
+    code: ClassVar[str] = "kartograf_error"
+    exit_code: ClassVar[int] = 1
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ()
+    DEFAULT_HINT: ClassVar[str | None] = None
+
+    def __init__(self, *args: object, hint: str | None = None) -> None:
+        super().__init__(*args)
+        self.hint = hint
+
+    def details(self) -> dict[str, object]:
+        """The attributes of ``DETAIL_FIELDS`` as JSON-ready values.
+
+        Empty values (``None``, empty text or collection) are left out;
+        the others go through the encoder of ``kartograf.serialization``
+        (tuples to lists, paths to absolute strings).
+        """
+        details: dict[str, object] = {}
+        for name in self.DETAIL_FIELDS:
+            value = getattr(self, name, None)
+            empty = value is None or (
+                isinstance(value, str | tuple | list | dict | frozenset | set)
+                and not value
+            )
+            if not empty:
+                details[name] = encode(value)
+        return details
+
+
+def _names(value: Sequence[str] | None, argument: str) -> tuple[str, ...] | None:
+    """A sequence of names as a tuple (a bare string is a mistake, not a name)."""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        raise TypeError(f"{argument} must be a sequence of names, not a str")
+    return tuple(value)
 
 
 class ValidationError(KartografError):
@@ -37,12 +95,78 @@ class ValidationError(KartografError):
     Raised when input data fails validation checks,
     such as invalid coordinate system or unsupported scale.
 
+    Attributes
+    ----------
+    option : str, optional
+        Name of the API argument the error is about (``vertical_crs``; the
+        argument name, not the CLI flag).
+    options : tuple[str, ...], optional
+        Arguments in conflict or from which one is required
+        (``("sheet", "bbox")``).
+    allowed : tuple[str, ...], optional
+        Allowed values of ``option``.
+
     Examples
     --------
     >>> raise ValidationError("Invalid układ: '1965'. Must be '1992' or '2000'")
+    >>> raise ValidationError(
+    ...     "zly uklad", option="sheet_system", allowed=("1992", "2000")
+    ... )
     """
 
-    pass
+    code = "invalid_input"
+    exit_code = 2
+    DETAIL_FIELDS = ("option", "options", "allowed")
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        option: str | None = None,
+        options: Sequence[str] | None = None,
+        allowed: Sequence[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(message, hint=hint)
+        self.option = option
+        self.options = _names(options, "options")
+        self.allowed = _names(allowed, "allowed")
+
+
+class UsageError(ValidationError):
+    """
+    Wrong use of a command: an unknown command or flag, a missing positional
+    argument, a value outside the allowed choices.
+
+    Raised by the parser of the command catalog (``parse_command``, the CLI in
+    the ``--json`` mode). A subclass of ``ValidationError``: wrong use is
+    invalid input, so ``except ValidationError`` catches it too.
+
+    Attributes
+    ----------
+    command : str, optional
+        Catalog id of the command whose line was wrong (``elevation download``),
+        when the line named one that the parser knows: ``error_report`` takes
+        the example of the hint from it.
+    """
+
+    code = "usage_error"
+    DEFAULT_HINT = "Parametry komendy: kartograf catalog <grupa> <komenda> --params"
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        command: str | None = None,
+        option: str | None = None,
+        options: Sequence[str] | None = None,
+        allowed: Sequence[str] | None = None,
+        hint: str | None = None,
+    ) -> None:
+        super().__init__(
+            message, option=option, options=options, allowed=allowed, hint=hint
+        )
+        self.command = command
 
 
 class ParseError(ValidationError):
@@ -59,7 +183,11 @@ class ParseError(ValidationError):
     >>> raise ParseError("Invalid godło format: 'ABC-123'")
     """
 
-    pass
+    code = "invalid_sheet_code"
+    DEFAULT_HINT = (
+        "Formaty godel: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, "
+        "SM5 CTES96, TM33 302_5550; wiecej: kartograf parse --help"
+    )
 
 
 class DownloadError(KartografError):
@@ -81,13 +209,18 @@ class DownloadError(KartografError):
     >>> raise DownloadError("Failed to download N-34-130-D: Connection timeout")
     """
 
+    code = "download_failed"
+    DETAIL_FIELDS: ClassVar[tuple[str, ...]] = ("sheet", "status_code")
+
     def __init__(
         self,
         message: str,
         sheet: str | None = None,
         status_code: int | None = None,
+        *,
+        hint: str | None = None,
     ):
-        super().__init__(message)
+        super().__init__(message, hint=hint)
         self.sheet = sheet
         self.status_code = status_code
 
@@ -108,14 +241,19 @@ class NoCoverageError(DownloadError):
         message contains after the period; empty when there are none.
     """
 
+    code = "no_coverage"
+    DETAIL_FIELDS = ("sheet", "status_code", "hints")
+
     def __init__(
         self,
         message: str,
         sheet: str | None = None,
         status_code: int | None = None,
         hints: tuple[str, ...] = (),
+        *,
+        hint: str | None = None,
     ):
-        super().__init__(message, sheet=sheet, status_code=status_code)
+        super().__init__(message, sheet=sheet, status_code=status_code, hint=hint)
         self.hints = tuple(hints)
 
 
@@ -135,6 +273,9 @@ class YearRangeError(DownloadError):
         empty when none applies.
     """
 
+    code = "year_out_of_range"
+    DETAIL_FIELDS = ("sheets", "min_year", "max_year", "hints")
+
     def __init__(
         self,
         message: str,
@@ -143,8 +284,9 @@ class YearRangeError(DownloadError):
         min_year: int | None,
         max_year: int | None,
         hints: tuple[str, ...] = (),
+        hint: str | None = None,
     ):
-        super().__init__(message)
+        super().__init__(message, hint=hint)
         self.sheets = dict(sheets)
         self.min_year = min_year
         self.max_year = max_year
@@ -159,6 +301,9 @@ class CacheError(KartografError):
     on without it (``on_disabled``); in strict mode the same state raises
     this exception on the failing call and on every later one.
     """
+
+    code = "cache_error"
+    DEFAULT_HINT = "Wyczysc cache: kartograf cache clear"
 
 
 class InvalidSidecarError(KartografError):
@@ -175,6 +320,13 @@ class InvalidSidecarError(KartografError):
         The sidecar path (``<file>.meta.json``).
     """
 
-    def __init__(self, message: str, *, path: Path) -> None:
-        super().__init__(message)
+    code = "invalid_sidecar"
+    DETAIL_FIELDS = ("path",)
+    DEFAULT_HINT = (
+        "Podaj sciezke pliku danych magazynu albo jego sidecara "
+        "<plik>.meta.json (kartograf-meta/1)"
+    )
+
+    def __init__(self, message: str, *, path: Path, hint: str | None = None) -> None:
+        super().__init__(message, hint=hint)
         self.path = path

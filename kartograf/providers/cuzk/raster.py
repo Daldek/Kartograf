@@ -26,6 +26,7 @@ import shutil
 import threading
 from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import numpy as np
 import rasterio
@@ -187,7 +188,7 @@ class CuzkRasterProvider(BaseProvider):
             product=product, resolution=resolution, vertical_crs=vertical_crs
         )
         if error is not None:
-            raise ValidationError(error)
+            raise error
         variant = variants(product=product, country="CZ", resolution=resolution)[0]
         assert variant.resolution_m is not None  # a label of the registry
         self.descriptor_key = variant.source
@@ -487,7 +488,9 @@ class CuzkRasterProvider(BaseProvider):
             )
         return route.channel.endpoint.format(sheet=sheet)
 
-    def file_signal(self, sheet: str, timeout: int = _DEFAULT_TIMEOUT) -> dict:
+    def file_signal(
+        self, sheet: str, timeout: int = _DEFAULT_TIMEOUT
+    ) -> dict[str, Any]:
         """Current HTTP signal of the CUZK file of a sheet (``HEAD``), without
         downloading it."""
         return head_signal(self._session, self.file_url(sheet), timeout=timeout)

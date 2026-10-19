@@ -4,7 +4,8 @@ Kartograf pobiera dane przestrzenne z publicznych usług GUGiK (Polska), CUZK
 (Czechy), Copernicus i ISRIC i zapisuje je w uporządkowanym katalogu `data/`
 razem z metadanymi każdego pliku. Obszar wybierasz godłem arkusza, bboxem,
 plikiem geometrii, kodem jednostki (TERYT) albo całym krajem. Działa jako
-narzędzie wiersza poleceń (`kartograf`) i jako biblioteka Python.
+narzędzie wiersza poleceń (`kartograf`), biblioteka Python i serwer MCP
+(`kartograf-mcp`, dla agentów AI).
 
 Jest częścią toolchainu hydrologicznego: **Hydrograf** używa go jako źródła
 danych GIS (NMT, pokrycie terenu), **Hydrolog** opcjonalnie (grupy
@@ -33,7 +34,8 @@ wybiera `--product` w każdej grupie (w `soil` — `--property`, `--depth`,
 | `geodesy` | Osnowy geodezyjne (`control`): pozioma, wysokościowa, grawimetryczna i magnetyczna GUGiK (także archiwa), Bodove pole CUZK. Quasi-geoidy (`geoid`): PL-geoid2021, QGZU-2013 |
 
 Poza grupami danych: `kartograf project` (projekt z przypiętymi wersjami,
-niżej), `kartograf parse` (godło arkusza) i `kartograf cache`.
+niżej), `kartograf parse` (godło arkusza), `kartograf cache` i `kartograf catalog`
+(katalog komend dla agentów AI, niżej).
 
 ## Instalacja
 
@@ -44,6 +46,8 @@ python3.12 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -e .
 ```
+
+Serwer MCP dla agentów AI to opcjonalny dodatek: `pip install -e ".[mcp]"`.
 
 ## Szybki start
 
@@ -155,6 +159,24 @@ result = manager.download_sheet("N-34-130-D-d-2-4")
 path = result.files["N-34-130-D-d-2-4"][0].version_path
 ```
 
+## Dla agentów AI
+
+To samo zadanie daje ten sam wynik w CLI, bibliotece i serwerze MCP:
+
+- `--json` w każdej komendzie CLI: na stdout jeden dokument
+  `kartograf-<rodzaj>/1`, błąd jako `kartograf-error/1` z `code`, `hint`
+  i kodem wyjścia (0, 1, 2, 130);
+- `kartograf catalog --json` (`get_catalog()`): komendy, parametry, dozwolone
+  wartości i przykłady;
+- serwer MCP `kartograf-mcp` (`pip install "kartograf[mcp]"`, stdio; w Claude
+  Code `claude mcp add kartograf -- kartograf-mcp`) z 29 narzędziami;
+- [llms.txt](llms.txt): krótki spis dla agentów (zadania, polecenia, kody
+  błędów).
+
+Szczegóły: [docs/USAGE.md — Interfejs dla agentów](docs/USAGE.md#9-interfejs-dla-agentow).
+Agenci z innych repozytoriów pracują nad kodem Kartografa według reguł z
+[CLAUDE.md](CLAUDE.md).
+
 ## Gdzie trafiają dane
 
 Pliki lądują w katalogu `--output` (niżej `data/`):
@@ -170,6 +192,7 @@ w [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) (sekcja 3).
 | Plik | Zawartość |
 |---|---|
 | [USAGE.md](docs/USAGE.md) | Przewodnik użytkownika: CLI i biblioteka, wynik pobrania, kampanie, CLMS, znane problemy |
+| [llms.txt](llms.txt) | Spis dla agentów AI (llmstxt.org): zadania, polecenia, kody błędów |
 | [SCOPE.md](docs/SCOPE.md) | Zakres projektu: co jest, czego nie ma, ograniczenia techniczne |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Architektura, moduły, kontrakty danych, układ `data/`, przepływy per produkt |
 | [PRD.md](docs/PRD.md) | Wymagania produktowe, publiczne API |

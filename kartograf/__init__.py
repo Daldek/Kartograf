@@ -27,6 +27,18 @@ The store is read without writing to it (ADR-045): ``list_segments``,
 ``list_partitions``, ``iter_store``, ``read_sidecar``, ``describe_segment``,
 ``file_footprint``, ``link_target`` and ``pinned_transform``.
 
+Every result is a JSON document (ADR-046): ``to_dict()``/``to_json()`` of a
+report give the same ``kartograf-<kind>/1`` document as the CLI ``--json``
+output and the MCP server ``kartograf-mcp``; an exception becomes a
+``kartograf-error/1`` document with ``error_report`` (every ``KartografError``
+has a stable ``code``, an ``exit_code`` and a ``hint``). ``get_catalog`` and
+``data_commands`` describe every command, its parameters and allowed values;
+``parse_command``, ``validate_command``, ``format_command``, ``run_command``
+and ``check_command`` work on a data command as data. Other reports of the
+document family: ``describe_sheet``, ``find_sheets``, ``list_sources``,
+``list_layers``, ``get_cache_info``, ``get_cache_path``, ``clear_cache``,
+``describe_store``, ``list_store_entries`` and ``read_store_sidecar``.
+
 Example usage::
 
     from kartograf import (
@@ -97,6 +109,17 @@ Example usage::
 """
 
 from kartograf.cache.metadata import MetadataCache
+from kartograf.cache_info import CacheInfo, clear_cache, get_cache_info, get_cache_path
+from kartograf.catalog import data_commands, get_catalog
+from kartograf.catalog.model import Catalog, CommandInfo, ParamInfo
+from kartograf.commands import (
+    CommandCall,
+    check_command,
+    format_command,
+    parse_command,
+    run_command,
+    validate_command,
+)
 from kartograf.core.bbox import transform_bbox
 from kartograf.core.geometry import find_sheets_for_geometry, get_overall_bbox
 from kartograf.core.parser_2000 import Parser2000, find_sheets_2000_for_bbox
@@ -169,6 +192,7 @@ from kartograf.download.orto_cutout import (
 from kartograf.download.plan import PlanItem, UpdatePlan
 from kartograf.download.storage import FileStorage
 from kartograf.download.versions import VersionRef
+from kartograf.error_report import ErrorReport, error_report
 from kartograf.exceptions import (
     CacheError,
     DownloadError,
@@ -176,6 +200,7 @@ from kartograf.exceptions import (
     KartografError,
     NoCoverageError,
     ParseError,
+    UsageError,
     ValidationError,
     YearRangeError,
 )
@@ -231,6 +256,13 @@ from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.gugik_orto import GugikOrtoProvider
 from kartograf.providers.pl.prg import discover_teryts_for_bbox, teryt_for_point
 from kartograf.providers.soilgrids import SoilGridsProvider
+from kartograf.sheet_info import SheetInfo, SheetList, describe_sheet, find_sheets
+from kartograf.source_info import (
+    LayerList,
+    SourceList,
+    list_layers,
+    list_sources,
+)
 from kartograf.sources.edition import Edition
 from kartograf.store import (
     SegmentInfo,
@@ -242,6 +274,14 @@ from kartograf.store import (
     list_partitions,
     list_segments,
     read_sidecar,
+)
+from kartograf.store_documents import (
+    StoreEntries,
+    StoreOverview,
+    StoreSidecar,
+    describe_store,
+    list_store_entries,
+    read_store_sidecar,
 )
 from kartograf.store_geometry import Footprint, file_footprint, pinned_transform
 from kartograf.transform.crs import PinnedTransform
@@ -392,6 +432,12 @@ __all__ = [
     "Sidecar",
     "describe_segment",
     "SegmentInfo",
+    "describe_store",
+    "StoreOverview",
+    "list_store_entries",
+    "StoreEntries",
+    "read_store_sidecar",
+    "StoreSidecar",
     "file_footprint",
     "Footprint",
     "link_target",
@@ -401,11 +447,41 @@ __all__ = [
     "KartografError",
     "ParseError",
     "ValidationError",
+    "UsageError",
     "DownloadError",
     "NoCoverageError",
     "YearRangeError",
     "CacheError",
     "InvalidSidecarError",
+    # Sources, layers and the metadata cache as data (spec 5.4.6-5.4.9)
+    "list_sources",
+    "SourceList",
+    "list_layers",
+    "LayerList",
+    "get_cache_info",
+    "get_cache_path",
+    "clear_cache",
+    "CacheInfo",
+    # Sheet codes and the catalog of the commands as data (spec 5.4.4, 5.4.5, 8.5)
+    "describe_sheet",
+    "SheetInfo",
+    "find_sheets",
+    "SheetList",
+    "get_catalog",
+    "data_commands",
+    "Catalog",
+    "CommandInfo",
+    "ParamInfo",
+    # The command layer: a data command as data (spec 8.7; KB-2..KB-5)
+    "CommandCall",
+    "parse_command",
+    "validate_command",
+    "format_command",
+    "run_command",
+    "check_command",
+    # Errors as data (`kartograf-error/1`, spec 6)
+    "ErrorReport",
+    "error_report",
     # Version
     "__version__",
 ]

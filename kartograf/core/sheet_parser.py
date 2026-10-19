@@ -1004,9 +1004,11 @@ def _bboxes_intersect(a: BBox, b: BBox) -> bool:
     )
 
 
-# CRSs of a PL-1992 sheet search: the Polish ``--bbox-crs`` values (the
-# PL-2000 zones as for the PL-2000 grid, backlog 0.8.0); envelope via WGS84.
-_PL_1992_BBOX_CRS = (
+# CRSs of a sheet search (``find_sheets_for_bbox``, PL-1992 and PL-2000): the
+# Polish ``--bbox-crs`` values (the PL-2000 zones as for the PL-2000 grid,
+# backlog 0.8.0); envelope via WGS84. Public: the catalog offers them as the
+# allowed values of ``find_sheets(bbox=)``.
+PL_BBOX_CRS = (
     "EPSG:2180",
     "EPSG:4326",
     "EPSG:2176",
@@ -1080,10 +1082,9 @@ def find_sheets_for_bbox(
             f"Dozwolone: {', '.join(SheetParser.SCALE_HIERARCHY)}"
         )
 
-    if bbox.crs not in _PL_1992_BBOX_CRS:
+    if bbox.crs not in PL_BBOX_CRS:
         raise ValidationError(
-            f"Nieobslugiwany CRS: '{bbox.crs}'. Obslugiwane: "
-            f"{', '.join(_PL_1992_BBOX_CRS)}"
+            f"Nieobslugiwany CRS: '{bbox.crs}'. Obslugiwane: {', '.join(PL_BBOX_CRS)}"
         )
 
     # Normalize to WGS84. Densified envelope (core.bbox): in PUWG 1992 a line of

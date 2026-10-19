@@ -23,6 +23,7 @@ import numpy as np
 from pyproj import CRS, Transformer
 
 from kartograf.exceptions import ValidationError
+from kartograf.serialization import EncodeContext
 
 # Number of points per edge (as in corine/soilgrids `transform_bounds`).
 _DENSIFY = 21
@@ -41,6 +42,14 @@ class BBox(NamedTuple):
     max_x: float
     max_y: float
     crs: str
+
+    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        """JSON form (``kartograf.serialization`` hook): ``{"bbox": [...], "crs"}``.
+
+        Coordinates are floats (``BBox(1, ...)`` and ``BBox(1.0, ...)`` give the
+        same document, like ``bbox_coords`` for the sidecar).
+        """
+        return {"bbox": bbox_coords(self), "crs": self.crs}
 
 
 def _norm_label(crs: str) -> str:
@@ -94,15 +103,19 @@ def validate_bbox(bbox: BBox, *, crs: str | None = None) -> None:
     coords = (bbox.min_x, bbox.min_y, bbox.max_x, bbox.max_y)
     if not all(math.isfinite(v) for v in coords):
         raise ValidationError(
-            f"wspolrzedne bboxa musza byc skonczone, otrzymano {coords}"
+            f"wspolrzedne bboxa musza byc skonczone, otrzymano {coords}",
+            option="bbox",
         )
     if bbox.min_x > bbox.max_x or bbox.min_y > bbox.max_y:
         raise ValidationError(
             f"bbox odwrocony (min > max): {coords}; "
-            "oczekiwano min_x <= max_x i min_y <= max_y"
+            "oczekiwano min_x <= max_x i min_y <= max_y",
+            option="bbox",
         )
     if crs is not None and _norm_label(bbox.crs) != _norm_label(crs):
-        raise ValidationError(f"bbox w ukladzie {bbox.crs!r}, oczekiwano {crs!r}")
+        raise ValidationError(
+            f"bbox w ukladzie {bbox.crs!r}, oczekiwano {crs!r}", option="bbox"
+        )
 
 
 def transform_bbox(bbox: BBox, target_crs: str, *, transformer: Any = None) -> BBox:

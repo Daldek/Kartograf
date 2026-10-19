@@ -21,6 +21,7 @@ from pathlib import Path, PurePosixPath
 from kartograf import _clock
 from kartograf._version import build_version
 from kartograf.cache.metadata import MetadataCache
+from kartograf.catalog.kinds import options_from_json, options_to_json
 from kartograf.download.arguments import require_int
 from kartograf.download.fetch import UpdateMode, VersionedFile
 from kartograf.download.manager import DownloadProgress
@@ -28,13 +29,7 @@ from kartograf.download.plan import PlanItem
 from kartograf.download.versions import read_version
 from kartograf.exceptions import KartografError, ValidationError
 from kartograf.notices import PROJECT_GEOMETRY_CHANGED, Notice, NoticeSink
-from kartograf.project.commands import (
-    TaskFiles,
-    options_from_json,
-    options_to_json,
-    project_command,
-    task_command,
-)
+from kartograf.project.commands import TaskFiles, project_command, task_command
 from kartograf.project.manifest import (
     MANIFEST_NAME,
     TASK_NAME,
@@ -91,7 +86,9 @@ def _concurrent(name: str) -> str:
     )
 
 
-def _select(project: Project, names: Sequence[str] | None) -> tuple[ProjectTask, ...]:
+def _select(
+    project: Project, names: Sequence[str] | None, option: str = "tasks"
+) -> tuple[ProjectTask, ...]:
     """Tasks by name in the given order (``None`` = all, in manifest order).
 
     Raises
@@ -112,7 +109,7 @@ def _select(project: Project, names: Sequence[str] | None) -> tuple[ProjectTask,
                 f"brak ({project_command(project.directory, 'add', 'NAZWA ...')})"
             )
             raise ValidationError(
-                f"nieznane zadanie {name!r}; zadania projektu: {known}"
+                f"nieznane zadanie {name!r}; zadania projektu: {known}", option=option
             )
         if task not in selected:
             selected.append(task)
@@ -189,7 +186,7 @@ def add_project_task(
     _require_store(project)
     if not isinstance(name, str) or TASK_NAME.fullmatch(name) is None:
         raise ValidationError(
-            f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})"
+            f"nieprawidlowa nazwa zadania {name!r} ({TASK_NAME_RULE})", option="name"
         )
     taken = (
         f"zadanie {name} juz istnieje; usun je "
@@ -197,18 +194,18 @@ def add_project_task(
         "inna nazwe"
     )
     if name in state:
-        raise ValidationError(taken)
+        raise ValidationError(taken, option="name")
     entry = task_command(command)
-    data = options_to_json(entry, options)
+    data = options_to_json(entry.options, options, command=entry.name)
     if "geometry" in data:
         data["geometry"] = _saved_path(str(data["geometry"]), project.directory)
     entry.validate(
         project.output_dir,
-        options_from_json(entry, data, project_dir=project.directory),
+        options_from_json(entry.options, data, base_dir=project.directory),
     )
     task = ProjectTask(name, command, data, None, None, None, ())
     if commit_tasks(project.directory, {name: (None, task_to_json(task))}):
-        raise ValidationError(taken)
+        raise ValidationError(taken, option="name")
     return open_project(project.directory)
 
 
@@ -224,7 +221,7 @@ def remove_project_task(project_dir: str | Path, *, name: str) -> Project:
     """
     project, state = read_manifest(project_dir)
     _require_store(project)
-    _select(project, (name,))
+    _select(project, (name,), option="name")
     if commit_tasks(project.directory, {name: (state[name], None)}):
         raise ValidationError(_concurrent(name))
     return open_project(project.directory)
@@ -392,12 +389,16 @@ def download_project(
     if update not in _UPDATE_MODES:
         raise ValidationError(
             f"Nieznany tryb update={update!r} (dozwolone: None, 'upgrade', "
-            "'force'); sprawdzenie bez pobierania: check_project"
+            "'force'); sprawdzenie bez pobierania: check_project",
+            option="update",
+            allowed=("upgrade", "force"),
         )
     if workers is not None:
         require_int(workers, "--workers")
         if workers < 1:
-            raise ValidationError(f"--workers musi byc >= 1, podano {workers}")
+            raise ValidationError(
+                f"--workers musi byc >= 1, podano {workers}", option="workers"
+            )
     project, state = read_manifest(project_dir)
     _require_store(project)
     selected = _select(project, tasks)
@@ -429,7 +430,9 @@ def _download_task(
     """One task of ``download_project``."""
     command = task_command(task.command)
     store = project.output_dir
-    options = options_from_json(command, task.options, project_dir=project.directory)
+    options = options_from_json(
+        command.options, task.options, base_dir=project.directory
+    )
     restore: tuple[PinnedFile, ...] = ()
     if task.files and update is None:
         states = {pin.version: pin_state(store, pin) for pin in task.files}
@@ -463,7 +466,9 @@ def _download_task(
             store,
             options,
             update=update,
+            plan=None,
             workers=workers,
+            summary=False,
             cache=cache,
             on_progress=on_progress,
             on_notice=_prefixed(sink, task.name),
@@ -847,7 +852,7 @@ def check_project(
             continue
         command = task_command(task.command)
         options = options_from_json(
-            command, task.options, project_dir=project.directory
+            command.options, task.options, base_dir=project.directory
         )
         if task.geometry_sha256 is not None and geometry_digest(options) != dict(
             task.geometry_sha256

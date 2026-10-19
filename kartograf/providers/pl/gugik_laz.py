@@ -38,11 +38,12 @@ import re
 import threading
 import xml.etree.ElementTree as ET
 from collections.abc import Iterable, Iterator, Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields
 from pathlib import Path
 
 import requests
 
+from kartograf.cache.metadata import MetadataCache
 from kartograf.core.coverage import (
     AREA_EPS,
     Polygon,
@@ -65,6 +66,7 @@ from kartograf.providers.pl.skorowidz_wfs import (
     time_position,
     type_year,
 )
+from kartograf.serialization import EncodeContext
 from kartograf.sources.registry import parse_pl_system
 from kartograf.sources.variants import IndexRef, variants
 from kartograf.transport.http import (
@@ -158,6 +160,19 @@ class LazTile:
                 "(oczekiwano 'PL-1992' albo 'PL-2000:S5'..'S8')"
             )
         return parsed[0]
+
+    def __json__(self, ctx: EncodeContext) -> dict[str, object]:
+        """JSON object of the fields (``kartograf.serialization`` hook).
+
+        An extent the WFS feature did not have (NaN in memory) is ``null``:
+        NaN is no JSON value.
+        """
+        data: dict[str, object] = {f.name: getattr(self, f.name) for f in fields(self)}
+        for name in ("min_x", "min_y", "max_x", "max_y"):
+            value = data[name]
+            if isinstance(value, float) and math.isnan(value):
+                data[name] = None
+        return data
 
 
 @dataclass(frozen=True)
@@ -615,7 +630,7 @@ class GugikLazProvider(DataSourceProvider):
         session: requests.Session | None = None,
         *,
         vertical_crs: str,
-        cache=None,
+        cache: MetadataCache | None = None,
     ):
         self._indexes = _laz_indexes()
         if vertical_crs not in self._indexes:

@@ -17,13 +17,11 @@ import requests
 import shapefile
 from pyproj import CRS
 
+from kartograf.cli._handlers import HANDLERS
 from kartograf.cli.commands import (
     create_parser,
     create_progress_callback,
-    format_children,
-    format_descendants,
-    format_hierarchy,
-    format_sheet_info,
+    format_sheet,
     main,
 )
 from kartograf.core.sheet_parser import BBox, SheetParser
@@ -37,6 +35,7 @@ from kartograf.notices import Notice
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.gugik_nmpt import GugikNmptProvider
 from kartograf.providers.pl.prg import LandMask
+from kartograf.sheet_info import describe_sheet
 from kartograf.sources.registry import sources_for
 from kartograf.sources.variants import UNKNOWN_VERTICAL, ProductVariant, variants
 from tests.conftest import WCS_FIXTURES, recorded_response, write_gpkg_layers
@@ -169,16 +168,16 @@ class TestCreateParser:
 
 
 class TestParseBboxArg:
-    """K7a: cli._args.parse_bbox_arg — a single --bbox parser."""
+    """K7a: catalog.kinds.parse_bbox_arg - a single --bbox parser."""
 
     def test_valid_with_spaces(self):
-        from kartograf.cli._args import parse_bbox_arg
+        from kartograf.catalog.kinds import parse_bbox_arg
 
         bbox = parse_bbox_arg(" 1, 2 ,3,4", "EPSG:2180")
         assert tuple(bbox) == (1.0, 2.0, 3.0, 4.0, "EPSG:2180")
 
     def test_point_allowed(self):
-        from kartograf.cli._args import parse_bbox_arg
+        from kartograf.catalog.kinds import parse_bbox_arg
 
         assert parse_bbox_arg("5,5,5,5", "EPSG:4326").crs == "EPSG:4326"
 
@@ -196,7 +195,7 @@ class TestParseBboxArg:
         ],
     )
     def test_invalid(self, text, reason):
-        from kartograf.cli._args import parse_bbox_arg
+        from kartograf.catalog.kinds import parse_bbox_arg
 
         with pytest.raises(ValidationError) as exc:
             parse_bbox_arg(text, "EPSG:2180")
@@ -228,13 +227,12 @@ class TestCreateParserSheetStrip:
         assert args.sheet is None
 
 
-class TestFormatSheetInfo:
-    """Tests for format_sheet_info()."""
+class TestFormatSheet:
+    """The text of ``parse`` rendered from the document of ``describe_sheet``."""
 
     def test_format_1m_sheet(self):
         """Test formatting 1:1000000 sheet."""
-        parser = SheetParser("N-34")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34"))
 
         assert "N-34" in output
         assert "1:1000000" in output
@@ -243,8 +241,7 @@ class TestFormatSheetInfo:
 
     def test_format_10k_sheet(self):
         """Test formatting 1:10000 sheet."""
-        parser = SheetParser("N-34-130-D-d-2-4")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34-130-D-d-2-4"))
 
         assert "N-34-130-D-d-2-4" in output
         assert "1:10000" in output
@@ -252,8 +249,7 @@ class TestFormatSheetInfo:
 
     def test_format_includes_all_components(self):
         """Test that all components are included."""
-        parser = SheetParser("N-34-130-D")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34-130-D"))
 
         # Should include component values
         assert "N" in output
@@ -261,14 +257,9 @@ class TestFormatSheetInfo:
         assert "130" in output
         assert "D" in output
 
-
-class TestFormatHierarchy:
-    """Tests for format_hierarchy()."""
-
     def test_format_hierarchy_10k(self):
         """Test formatting hierarchy from 1:10000."""
-        parser = SheetParser("N-34-130-D-d-2-4")
-        output = format_hierarchy(parser)
+        output = format_sheet(describe_sheet("N-34-130-D-d-2-4", hierarchy=True))
 
         assert "Hierarchia" in output
         assert "N-34-130-D-d-2-4" in output
@@ -279,20 +270,14 @@ class TestFormatHierarchy:
 
     def test_format_hierarchy_1m(self):
         """Test formatting hierarchy from 1:1000000."""
-        parser = SheetParser("N-34")
-        output = format_hierarchy(parser)
+        output = format_sheet(describe_sheet("N-34", hierarchy=True))
 
         assert "N-34" in output
         assert "1:1000000" in output
 
-
-class TestFormatChildren:
-    """Tests for format_children()."""
-
     def test_format_children_100k(self):
         """Test formatting children of 1:100000 sheet."""
-        parser = SheetParser("N-34-130-D")
-        output = format_children(parser)
+        output = format_sheet(describe_sheet("N-34-130-D", children=True))
 
         assert "Arkusze potomne" in output
         assert "(4)" in output
@@ -303,26 +288,19 @@ class TestFormatChildren:
 
     def test_format_children_8_part_no_children(self):
         """The 8-part sheet is the lowest level (nie ma arkuszy potomnych)."""
-        parser = SheetParser("N-34-130-D-d-2-4-1")
-        output = format_children(parser)
+        output = format_sheet(describe_sheet("N-34-130-D-d-2-4-1", children=True))
 
         assert "nie ma arkuszy potomnych" in output
 
     def test_format_children_500k(self):
         """Test formatting children of 1:500000 ((36))."""
-        parser = SheetParser("N-34-A")
-        output = format_children(parser)
+        output = format_sheet(describe_sheet("N-34-A", children=True))
 
         assert "(36)" in output
 
-
-class TestFormatDescendants:
-    """Tests for format_descendants()."""
-
     def test_format_descendants_small(self):
         """Test formatting descendants (small count)."""
-        parser = SheetParser("N-34-130-D-d-2")
-        output = format_descendants(parser, "1:10000")
+        output = format_sheet(describe_sheet("N-34-130-D-d-2", descendants="1:10000"))
 
         assert "Arkusze potomne" in output
         assert "(4)" in output
@@ -331,8 +309,7 @@ class TestFormatDescendants:
 
     def test_format_descendants_large(self):
         """Test formatting descendants (large count, truncated)."""
-        parser = SheetParser("N-34-130-D")
-        output = format_descendants(parser, "1:10000")
+        output = format_sheet(describe_sheet("N-34-130-D", descendants="1:10000"))
 
         assert "(64)" in output
         assert "..." in output
@@ -354,7 +331,7 @@ class TestCmdParse:
         """Test parsing invalid sheet."""
         result = main(["parse", "INVALID"])
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
@@ -389,9 +366,15 @@ class TestCmdParse:
         """Test parsing with invalid descendants scale."""
         result = main(["parse", "N-34-130-D", "--descendants", "invalid"])
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error" in captured.err
+
+
+def _parse_fails(error):
+    """``kartograf parse`` fails with ``error``: its handler in the registry of
+    the CLI is replaced for the length of the ``with`` block."""
+    return patch.dict(HANDLERS, {"parse": Mock(side_effect=error)})
 
 
 class TestMain:
@@ -408,7 +391,7 @@ class TestMain:
 
     def test_ctrl_c_is_an_error_line_and_exit_130(self, capsys):
         """Ctrl-C mid-command: one Error line, exit 130 - no traceback."""
-        with patch("kartograf.cli.commands.cmd_parse", side_effect=KeyboardInterrupt):
+        with _parse_fails(KeyboardInterrupt):
             result = main(["parse", "N-34-130-D"])
         assert result == 130
         assert capsys.readouterr().err == "Error: przerwano (Ctrl-C)\n"
@@ -439,49 +422,42 @@ class TestMain:
         captured = capsys.readouterr()
         assert "N-34" in captured.out
 
-    @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
-    def test_unexpected_exception_is_reported_not_raised(self, mock_cmd_parse, capsys):
+    def test_unexpected_exception_is_reported_not_raised(self, capsys):
         """A non-KartografError exception gives a message and code 1, no traceback."""
-        result = main(["parse", "N-34"])
+        with _parse_fails(RuntimeError("boom")):
+            result = main(["parse", "N-34"])
 
         assert result == 1
         captured = capsys.readouterr()
         assert "RuntimeError: boom" in captured.err
         assert "KARTOGRAF_DEBUG" in captured.err
 
-    @patch(
-        "kartograf.cli.commands.cmd_parse",
-        side_effect=ValidationError("zly godlo"),
-    )
-    def test_kartograf_error_is_reported_with_message(self, mock_cmd_parse, capsys):
+    def test_kartograf_error_is_reported_with_message(self, capsys):
         """KartografError gives a message without the class name."""
-        result = main(["parse", "N-34"])
+        with _parse_fails(ValidationError("zly godlo")):
+            result = main(["parse", "N-34"])
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error: zly godlo" in captured.err
         assert "ValidationError" not in captured.err
 
-    @patch("kartograf.cli.commands.cmd_parse", side_effect=RuntimeError("boom"))
-    def test_debug_env_reraises(self, mock_cmd_parse, capsys, monkeypatch):
+    def test_debug_env_reraises(self, capsys, monkeypatch):
         """KARTOGRAF_DEBUG=1 lets the full traceback through."""
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
 
-        with pytest.raises(RuntimeError):
+        with _parse_fails(RuntimeError("boom")), pytest.raises(RuntimeError):
             main(["parse", "N-34"])
 
-    @patch(
-        "kartograf.cli.commands.cmd_parse",
-        side_effect=ValidationError("zly godlo"),
-    )
-    def test_debug_env_reraises_kartograf_error(
-        self, mock_cmd_parse, capsys, monkeypatch
-    ):
+    def test_debug_env_reraises_kartograf_error(self, capsys, monkeypatch):
         """N17: KARTOGRAF_DEBUG=1 gives a traceback also for a KartografError
         reaching the ``main`` barrier."""
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
 
-        with pytest.raises(ValidationError, match="zly godlo"):
+        with (
+            _parse_fails(ValidationError("zly godlo")),
+            pytest.raises(ValidationError, match="zly godlo"),
+        ):
             main(["parse", "N-34"])
 
 
@@ -596,7 +572,7 @@ class TestCommandGroups:
             rc = main(
                 [group, "download", "--sheet", "N-34-130-D-d-2-4", "-o", str(tmp_path)]
             )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: --product wymagane: ")
         assert all(f" {product} (" in err for product in listed)
@@ -654,6 +630,7 @@ class TestCommandGroups:
             "--plan",
             "--quiet",
             "-q",
+            "--json",
         }
 
 
@@ -906,7 +883,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
@@ -1109,7 +1086,7 @@ class TestCmdDownload:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error" in captured.err
 
@@ -1855,7 +1832,7 @@ class TestCmdDownloadProduct:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert err.startswith(
             "Error: PL nie ma rozdzielczosci 5m dla NMPT - dostepne: "
@@ -1926,7 +1903,7 @@ class TestCmdDownloadProduct:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert err.startswith(
             "Error: PL nie ma rozdzielczosci 5m dla NMPT - dostepne: "
@@ -2092,7 +2069,7 @@ def _write_pl_shp_2180(directory):
 
 class TestNmt5mKron86Rejected:
     """An explicit ``--resolution 5m --vertical-crs KRON86`` (NMT PL) is an
-    error (code 1) before any provider or network call, without a silent swap
+    error (code 2) before any provider or network call, without a silent swap
     to EVRF2007; the text comes from the variant registry (5m only in
     EVRF2007, the KRON86 grid labels)."""
 
@@ -2155,7 +2132,7 @@ class TestNmt5mKron86Rejected:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert err.splitlines()[-1] == _5M_KRON86_ERROR
         assert "zamieniony" not in err
@@ -2214,7 +2191,7 @@ class TestNmt5mKron86Rejected:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert _5M_KRON86_ERROR in err
         assert "zamieniony" not in err
@@ -2338,7 +2315,7 @@ class TestRegistryVariantsCli:
             + ["-o", str(tmp_path), "-q"]
         )
 
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         prefix = f"Error: PL nie ma rozdzielczosci {label} dla NMT - dostepne: "
         assert err.startswith(prefix)
@@ -2355,7 +2332,7 @@ class TestRegistryVariantsCli:
             ["elevation", "download", "--product", "nmpt", "--sheet", self.SHEET]
             + ["--vertical-crs", "EVRF2007", "-o", str(tmp_path), "-q"]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
 
         with pytest.raises(ValidationError) as exc:
@@ -2441,7 +2418,7 @@ class TestRegistryVariantsCli:
             assert provider.descriptor_key == variant.source, flags
 
     def test_list_sources_cz_models_select_real_laz_variants(self, capsys, tmp_path):
-        from kartograf.cli.download_cmd import download_task_arguments
+        from kartograf.cli._args import library_arguments
         from kartograf.download.data import validate_data_request
 
         assert main(["elevation", "list-sources"]) == 0
@@ -2466,7 +2443,7 @@ class TestRegistryVariantsCli:
             )
             assert (args.product, args.country, args.model) == ("laz", "cz", model)
             validate_data_request(
-                **download_task_arguments(args),
+                **library_arguments(args),
                 output_dir=tmp_path / key,
             )
 
@@ -2529,7 +2506,7 @@ class TestPlCutoutOnly1m:
     def test_cutout_only_1m(self, tmp_path, capsys, product):
         rc, session, mask = self._run(tmp_path, product, "--resolution", "0.5m")
 
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: wycinki PL (--cutout) sa tylko 1 m")
         assert "arkusze bez --cutout" in err
@@ -2657,7 +2634,7 @@ class TestCmdDownloadBBox:
         mock_manager.download_sheets.assert_called_once()
 
     def test_download_bbox_and_sheet_error(self, capsys):
-        """Test oba sheet i --bbox → exit 1."""
+        """Test oba sheet i --bbox → exit 2."""
         result = main(
             [
                 "elevation",
@@ -2682,12 +2659,12 @@ class TestCmdDownloadBBox:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Podaj dokladnie jeden wybor obszaru" in captured.err
 
     def test_download_no_input_error(self, capsys):
-        """Test no sheet code and no --bbox → exit 1."""
+        """Test no sheet code and no --bbox → exit 2."""
         result = main(
             [
                 "elevation",
@@ -2706,12 +2683,12 @@ class TestCmdDownloadBBox:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Podaj wybor obszaru" in captured.err
 
     def test_download_bbox_invalid_format(self, capsys):
-        """Test of a bad bbox format → exit 1."""
+        """Test of a bad bbox format → exit 2."""
         result = main(
             [
                 "elevation",
@@ -2734,7 +2711,7 @@ class TestCmdDownloadBBox:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Nieprawidlowy bbox" in captured.err
 
@@ -2750,7 +2727,7 @@ class TestCmdDownloadBBox:
         self, bbox, extra, capsys, tmp_path
     ):
         """K7b: a single --bbox parse in all download paths (PL, CZ, LAZ): exit
-        code 1, `Error: Invalid bbox format` on stderr (no ValueError, no hint on
+        code 2, `Error: Invalid bbox format` on stderr (no ValueError, no hint on
         stdout), zero providers. Formerly a reversed bbox went on (a junk sheet),
         and NaN ended with a `ValueError`."""
         with (
@@ -2779,7 +2756,7 @@ class TestCmdDownloadBBox:
                     *extra,
                 ]
             )
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
@@ -2789,7 +2766,7 @@ class TestCmdDownloadBBox:
         laz.assert_not_called()
 
     def test_download_bbox_too_few_values(self, capsys):
-        """Test of too few values in the bbox → exit 1."""
+        """Test of too few values in the bbox → exit 2."""
         result = main(
             [
                 "elevation",
@@ -2812,7 +2789,7 @@ class TestCmdDownloadBBox:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Nieprawidlowy bbox" in captured.err
 
@@ -2848,7 +2825,7 @@ class TestCmdDownloadBBox:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         assert "--scale nie dotyczy PL-1992" in capsys.readouterr().err
         mock_manager_class.assert_not_called()
 
@@ -3237,7 +3214,7 @@ class TestCmdLandcoverDownload:
         assert not out.exists()
 
     def test_landcover_download_multiple_selection(self, capsys):
-        """Multiple selection methods -> exit 1."""
+        """Multiple selection methods -> exit 2."""
         result = main(
             [
                 "landcover",
@@ -3252,7 +3229,7 @@ class TestCmdLandcoverDownload:
                 "N-34-130-D",
             ]
         )
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         err = captured.err
         assert "Error: Podaj dokladnie jeden wybor" in err
@@ -3268,14 +3245,14 @@ class TestCmdLandcoverDownload:
         self, flags, missing, choices, capsys
     ):
         rc = main(["landcover", "download", "--sheet", "N-34-130-D", *flags])
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: ")
         assert missing in err and choices in err
 
     def test_list_layers_without_product_fails_with_choices(self, capsys):
         rc = main(["landcover", "list-layers"])
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: --product")
         assert all(product in err for product in ("bdot10k", "corine"))
@@ -3297,7 +3274,7 @@ class TestCmdSoil:
         assert all(name in captured.err for name in ("download", "hsg", "list-sources"))
 
     def test_soilgrids_hsg_out_of_range_sheet(self, capsys, tmp_path):
-        """A7: an out-of-range sheet -> Error on stderr, code 1, before network."""
+        """A7: an out-of-range sheet -> Error on stderr, code 2, before network."""
         out = tmp_path / "out"
 
         result = main(
@@ -3313,7 +3290,7 @@ class TestCmdSoil:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error: " in captured.err
         assert "poza zakresem" in captured.err
@@ -3334,7 +3311,7 @@ class TestCmdSoil:
                 "0-5cm",
             ]
         )
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error: Nieprawidlowy bbox" in captured.err
         assert "ValueError" not in captured.err
@@ -3342,27 +3319,27 @@ class TestCmdSoil:
 
     def test_hsg_missing_output_fails_before_calculation(self, capsys):
         rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "--depth", "0-5cm"])
-        assert rc == 1
+        assert rc == 2
         assert "Error: --output" in capsys.readouterr().err
 
     def test_hsg_missing_depth_is_library_error(self, tmp_path, capsys):
         """The library text (same as ``calculate_hsg(depth=None)``), no network."""
         rc = main(["soil", "hsg", "--sheet", "N-34-130-D", "-o", str(tmp_path)])
-        assert rc == 1
+        assert rc == 2
         assert capsys.readouterr().err.startswith("Error: --depth wymagane: 0-5cm")
 
     def test_soilgrids_hsg_no_selection(self, capsys):
-        """soil hsg without --sheet or --bbox -> exit 1."""
+        """soil hsg without --sheet or --bbox -> exit 2."""
         result = main(["soil", "hsg", "--output", "unused", "--depth", "0-5cm"])
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
 
 def test_landcover_download_no_selection(capsys):
-    """No selection method -> exit 1."""
+    """No selection method -> exit 2."""
     result = main(["landcover", "download", "--product", "bdot10k", "-o", "unused"])
-    assert result == 1
+    assert result == 2
     captured = capsys.readouterr()
     assert "Error: Podaj dokladnie jeden wybor" in captured.err
 
@@ -3600,7 +3577,7 @@ class TestCmdDownloadGeometry:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert err.startswith("Error:") and "layer_a, layer_b" in err
 
@@ -3633,7 +3610,7 @@ class TestCmdDownloadGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Podaj dokladnie jeden wybor obszaru" in captured.err
 
@@ -3666,7 +3643,7 @@ class TestCmdDownloadGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Podaj dokladnie jeden wybor obszaru" in captured.err
 
@@ -3694,7 +3671,7 @@ class TestCmdDownloadGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Brak pliku" in captured.err
 
@@ -3718,7 +3695,7 @@ class TestCmdDownloadGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "--geometry" in captured.err
 
@@ -3804,7 +3781,7 @@ class TestCmdLandcoverDownloadGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         err = captured.err
         assert "Error: Podaj dokladnie jeden wybor" in err
@@ -3824,7 +3801,7 @@ class TestCmdLandcoverDownloadGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         assert "Brak pliku" in captured.err
 
@@ -3857,7 +3834,7 @@ class TestCmdSoilgridsHsgGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         captured = capsys.readouterr()
         err = captured.err
         assert "Error: Podaj dokladnie jeden wybor" in err
@@ -3868,13 +3845,12 @@ class TestCmdSoilgridsHsgGeometry:
 # ===========================================================================
 
 
-class TestFormatSheetInfoPL2000:
-    """Tests for format_sheet_info() with PL-2000 sheets."""
+class TestFormatSheetPL2000:
+    """Tests for the text of ``parse`` with PL-2000 sheets."""
 
     def test_format_pl2000_sheet_basic(self):
         """PL-2000 sheet shows correct layout and components."""
-        parser = SheetParser("6.179.12")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("6.179.12"))
 
         assert "6.179.12" in output
         assert "1:10000" in output
@@ -3886,38 +3862,33 @@ class TestFormatSheetInfoPL2000:
 
     def test_format_pl2000_shows_strefa(self):
         """PL-2000 output should include Strefa line."""
-        parser = SheetParser("6.179.12")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("6.179.12"))
 
         assert "Strefa: 6" in output
 
     def test_format_pl2000_shows_native_crs(self):
         """PL-2000 output should include native CRS."""
-        parser = SheetParser("6.179.12")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("6.179.12"))
 
         assert "Natywny CRS: EPSG:2177" in output
 
     def test_format_pl2000_zone5(self):
         """Zone 5 shows EPSG:2176."""
-        parser = SheetParser("5.100.10")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("5.100.10"))
 
         assert "Strefa: 5" in output
         assert "Natywny CRS: EPSG:2176" in output
 
     def test_format_pl2000_zone8(self):
         """Zone 8 shows EPSG:2179."""
-        parser = SheetParser("8.100.10")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("8.100.10"))
 
         assert "Strefa: 8" in output
         assert "Natywny CRS: EPSG:2179" in output
 
     def test_format_pl1992_no_strefa(self):
         """PL-1992 sheet should NOT show Strefa or Natywny CRS."""
-        parser = SheetParser("N-34-130-D")
-        output = format_sheet_info(parser)
+        output = format_sheet(describe_sheet("N-34-130-D"))
 
         assert "Strefa:" not in output
         assert "Natywny CRS:" not in output
@@ -3958,7 +3929,7 @@ class TestParsePL2000Command:
         """Invalid PL-2000 sheet returns error."""
         result = main(["parse", "9.179.12"])
 
-        assert result == 1
+        assert result == 2
 
 
 class TestCreateParserDownloadSystem:
@@ -4810,7 +4781,7 @@ class TestCmdDownloadLaz:
                 "-q",
             ]
         )
-        assert result == 1
+        assert result == 2
 
     def test_laz_missing_geometry_file_errors(self, capsys, tmp_path):
         result = main(
@@ -4834,7 +4805,7 @@ class TestCmdDownloadLaz:
                 "-q",
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "brak pliku" in capsys.readouterr().err.lower()
 
 
@@ -5039,7 +5010,7 @@ class TestCzDownloadingAfterValidation:
             client_cls.return_value.fetch_file.assert_not_called()
 
         captured = capsys.readouterr()
-        assert rc == 1
+        assert rc == 2
         assert "Pobieranie" not in captured.out
         assert "Error: Arkusz SM5 'ABCD12' nie istnieje" in captured.err
         assert not list(out.rglob("*.tif"))
@@ -5072,7 +5043,7 @@ class TestCzDownloadingAfterValidation:
             client_cls.return_value.export_image.assert_not_called()
 
         captured = capsys.readouterr()
-        assert rc == 1
+        assert rc == 2
         assert "Pobieranie" not in captured.out
         assert "Error:" in captured.err and "parzyste" in captured.err
 
@@ -5296,7 +5267,7 @@ class TestCmdDownloadCz:
                 ]
             )
 
-        assert rc == 1
+        assert rc == 2
         factory.assert_not_called()
         captured = capsys.readouterr()
         assert "Pobieranie" not in captured.out
@@ -5581,7 +5552,7 @@ class TestCmdDownloadCz:
 
     def test_cutout_with_sheet_rejected(self, tmp_path, capsys):
 
-        assert _cmd_download_cz(_cz_args(tmp_path, horizontal_crs="EPSG:2180")) == 1
+        assert _cmd_download_cz(_cz_args(tmp_path, horizontal_crs="EPSG:2180")) == 2
         assert "Error: --cutout dziala tylko z --bbox/--geometry" in (
             capsys.readouterr().err
         )
@@ -5589,29 +5560,14 @@ class TestCmdDownloadCz:
     def test_resolution_1m_rejected(self, tmp_path, capsys):
 
         result = _cmd_download_cz(_cz_args(tmp_path, resolution="1m"))
-        assert result == 1
+        assert result == 2
         assert "2m" in capsys.readouterr().err
 
     def test_sheet_system_flag_rejected(self, tmp_path, capsys):
 
         result = _cmd_download_cz(_cz_args(tmp_path, sheet_system="1992"))
-        assert result == 1
+        assert result == 2
         assert "--sheet-system" in capsys.readouterr().err
-
-    def test_kron86_prints_remedy(self, tmp_path, capsys):
-
-        from kartograf.transform.crs import TransformUnavailableError
-
-        with patch(
-            _CZ_FACTORY_PATCH,
-            side_effect=TransformUnavailableError(
-                "brak operacji", remedy="uzyj EVRF2007 (EPSG:5621)"
-            ),
-        ):
-            result = _cmd_download_cz(_cz_args(tmp_path, vertical_crs="KRON86"))
-        assert result == 1
-        err = capsys.readouterr().err
-        assert "EVRF2007" in err
 
     def test_download_error_returns_1(self, tmp_path, capsys):
 
@@ -5699,7 +5655,7 @@ class TestCmdDownloadCz:
         assert "deskryptor padl" in capsys.readouterr().err
         assert not list((tmp_path / "nmt").rglob("*.tif"))
 
-    def test_factory_validation_error_returns_1(self, tmp_path, capsys):
+    def test_factory_validation_error_returns_2(self, tmp_path, capsys):
 
         with patch(
             _CZ_FACTORY_PATCH,
@@ -5707,7 +5663,7 @@ class TestCmdDownloadCz:
         ):
             result = _cmd_download_cz(_cz_args(tmp_path))
 
-        assert result == 1
+        assert result == 2
         assert "Error: Nieobslugiwany uklad pionowy" in capsys.readouterr().err
 
     def test_verbose_sheet_reports_progress_and_skip(self, tmp_path, capsys):
@@ -5948,7 +5904,7 @@ class TestCmdDownloadCz:
     def test_cutout_with_sheet_message_names_product_frames(self, tmp_path, capsys):
         """K2: the message says WHAT the code defines (SM5 in 5514, TM33 on 3045)."""
 
-        assert _cmd_download_cz(_cz_args(tmp_path, horizontal_crs="EPSG:2180")) == 1
+        assert _cmd_download_cz(_cz_args(tmp_path, horizontal_crs="EPSG:2180")) == 2
         assert "kafel TM33 na siatce EPSG:3045" in capsys.readouterr().err
 
 
@@ -6148,7 +6104,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "systemu SM5" in capsys.readouterr().err
 
     def test_pl_sheet_with_country_cz_conflicts(self, tmp_path, capsys):
@@ -6174,7 +6130,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "pl" in capsys.readouterr().err.lower()
 
     # --- sentinele PL ---
@@ -6290,7 +6246,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "2m" in capsys.readouterr().err
 
     def test_pl_sheet_with_bpv_rejected(self, tmp_path, capsys):
@@ -6316,7 +6272,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "Bpv" in capsys.readouterr().err
 
     def test_pl_sheet_with_cutout_rejected(self, tmp_path, capsys):
@@ -6343,7 +6299,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "--bbox/--geometry" in capsys.readouterr().err
 
     # PL bbox + --cutout has been a legal cutout flow since ADR-027/038 —
@@ -6351,7 +6307,7 @@ class TestCountryDispatch:
 
     # --- ValidationError from the CZ flow does not escape as a traceback ---
 
-    def test_cz_sheet_parse_error_returns_1_without_traceback(self, tmp_path, capsys):
+    def test_cz_sheet_parse_error_returns_2_without_traceback(self, tmp_path, capsys):
         """TM33 pattern with odd km: a CLI error (ParseError), not a traceback."""
         result = main(
             [
@@ -6374,12 +6330,12 @@ class TestCountryDispatch:
                 "-q",
             ]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert "Error:" in err
         assert "301_5551" in err
 
-    def test_cz_sheet_with_cutout_returns_1_without_traceback(self, tmp_path, capsys):
+    def test_cz_sheet_with_cutout_returns_2_without_traceback(self, tmp_path, capsys):
         """R9: --cutout + CZ sheet code = a CLI error (main catches nothing)."""
         result = main(
             [
@@ -6404,11 +6360,11 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "--cutout dziala tylko z --bbox/--geometry" in capsys.readouterr().err
 
     @patch("kartograf.download.data._download_cz")
-    def test_cz_validation_error_from_area_mode_returns_1(
+    def test_cz_validation_error_from_area_mode_returns_2(
         self, mock_cz, tmp_path, capsys
     ):
         mock_cz.side_effect = ValidationError("cos nie gra")
@@ -6438,7 +6394,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "cos nie gra" in capsys.readouterr().err
 
     # --- LAZ CZ selection is explicit; no model is silently chosen ---
@@ -6458,7 +6414,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert "Error: --model wymagane" in err and "dmpok" in err
         assert not (tmp_path / "laz").exists()
@@ -6481,7 +6437,7 @@ class TestCountryDispatch:
                 str(tmp_path),
             ]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert "Error: --model wymagane" in err and "dmr5g" in err
         assert not (tmp_path / "laz").exists()
@@ -6542,7 +6498,7 @@ class TestCountryDispatch:
         ]
         if resolution is not None:
             args += ["--resolution", resolution]
-        assert main(args) == 1
+        assert main(args) == 2
         with pytest.raises(ValidationError) as exc:
             download_data(
                 product=product,
@@ -6791,7 +6747,7 @@ class TestCountryDispatch:
                 "-q",
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "brak pliku" in capsys.readouterr().err.lower()
 
     @patch("kartograf.download.data._download_cz")
@@ -7006,7 +6962,7 @@ class TestAutoSplitBBox:
             patch("kartograf.download.data.DownloadManager") as mock_manager,
         ):
             result = main(self._BORDER + ["-o", str(tmp_path)])
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: obszar siega CZ") and "--country pl" in err
         mock_cz.assert_not_called()
@@ -7076,7 +7032,7 @@ class TestAutoSplitBBox:
         result = main(
             self._CZ_ONLY + self._CUTOUT + ["--resolution", "1m", "-o", str(tmp_path)]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert "CZ nie ma rozdzielczosci 1m" in err
         assert "uzyj jawnie" not in err and "pl=" not in err
@@ -7646,7 +7602,7 @@ class TestAutoSplitBBox:
         result = main(
             self._BORDER + self._CUTOUT + ["--vertical-crs", "Bpv", "-o", str(tmp_path)]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert "Bpv nie jest ukladem wysokosci PL" in err
         assert "--vertical-crs pl=...,cz=..." in err
@@ -7705,7 +7661,7 @@ class TestAutoSplitBBox:
             + self._CUTOUT
             + ["--country", "cz", "--sheet-system", "2000", "-o", str(tmp_path)]
         )
-        assert result == 1
+        assert result == 2
         assert "--sheet-system dotyczy tylko PL" in capsys.readouterr().err
 
     @patch("kartograf.download.data._download_cz")
@@ -7746,7 +7702,7 @@ class TestAutoSplitBBox:
                 + self._CUTOUT
                 + ["--resolution", "5m", "-o", str(tmp_path)]
             )
-        assert result == 1
+        assert result == 2
         assert "wycinki PL (--cutout) sa tylko 1 m" in capsys.readouterr().err
         mock_cz.assert_not_called()
 
@@ -7776,7 +7732,7 @@ class TestAutoSplitBBox:
                 "-q",
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "kraju" in capsys.readouterr().err
 
     def test_laz_bbox_border_auto_requires_model(self, tmp_path, capsys):
@@ -7799,7 +7755,7 @@ class TestAutoSplitBBox:
                 "-q",
             ]
         )
-        assert result == 1
+        assert result == 2
         err = capsys.readouterr().err
         assert "obszar siega CZ: podaj --model" in err
         assert "--country pl" in err
@@ -8297,7 +8253,7 @@ class TestAutoSplitGeometry:
             ]
         )
 
-        assert result == 1
+        assert result == 2
         assert "kraju" in capsys.readouterr().err
 
 
@@ -9126,7 +9082,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert "Error:" in capsys.readouterr().err
         mock_manager_class.assert_not_called()
 
@@ -9164,7 +9120,7 @@ class TestCampaignOptions:
                 "-q",
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert "--year wyklucza sie z --min-year/--max-year" in capsys.readouterr().err
         mock_provider_cls.assert_not_called()
         mock_manager_class.assert_not_called()
@@ -9202,7 +9158,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert expected in err and ("2200" in err or "2023" in err)
         mock_manager.assert_not_called()
@@ -9567,7 +9523,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert "Error: --all-campaigns nie dziala z --cutout" in err
         # no promise of a campaign-composing tool in a given release (ADR-030
@@ -9608,7 +9564,7 @@ class TestCampaignOptions:
                 "-q",
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert f"Error: {flag} nie dziala z --cutout" in err
         assert "pobierz arkusze bez --cutout" in err
@@ -9645,7 +9601,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert "Error: --all-campaigns nie dziala z --cutout" in capsys.readouterr().err
         mock_run_cz.assert_not_called()
         mock_prepare.assert_not_called()
@@ -9677,7 +9633,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err
         assert "Info:" not in err
@@ -9706,7 +9662,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9734,7 +9690,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9761,7 +9717,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9791,7 +9747,7 @@ class TestCampaignOptions:
                 "-q",
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9823,7 +9779,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9862,7 +9818,7 @@ class TestCampaignOptions:
                 str(tmp_path / "out"),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert _CZ_CAMPAIGN_ERROR in capsys.readouterr().err
         mock_run_cz.assert_not_called()
 
@@ -9891,7 +9847,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err
         assert "Info:" not in err
@@ -9923,7 +9879,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err
         assert "Info:" not in err
@@ -9962,7 +9918,7 @@ class TestCampaignOptions:
             ]
         )
 
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error: obszar siega CZ") and "--country pl" in err
         assert "Info:" not in err
@@ -10140,7 +10096,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert "Error: --all-campaigns nie dziala z --cutout" in err
         assert "Info:" not in err
@@ -10174,7 +10130,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert "Error: --cutout dziala tylko z --bbox/--geometry" in err
         assert "--all-campaigns nie dziala" not in err
@@ -10205,7 +10161,7 @@ class TestCampaignOptions:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert "Error: --min-year musi byc" in err and "1800" in err
         assert " min_year" not in err
@@ -10381,6 +10337,7 @@ class TestCampaignOptions:
 
         mock_manager_class.return_value = _mock_manager(tmp_path / "a.asc")
         args = argparse.Namespace(
+            _command_id="elevation download",
             sheet="N-34-130-D-d-2-4",
             bbox=None,
             output=str(tmp_path),
@@ -10984,7 +10941,7 @@ class TestSoilgridsHsgNoEarlyMkdir:
                 str(tmp_path / "out"),
             ]
         )
-        assert result == 1
+        assert result == 2
         assert "Error:" in capsys.readouterr().err
         assert not (tmp_path / "out").exists()
 
@@ -11056,7 +11013,7 @@ class TestLazOnlyOptions:
                 str(out),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         assert capsys.readouterr().err == (
             _LAZ_ONLY_DENSITY_ERROR.format(product=product) + "\n"
         )
@@ -11190,7 +11147,7 @@ class TestFullSheetOption:
                 str(out),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert err.startswith("Error:") and "--full-sheet" in err
         provider_cls.assert_not_called()
@@ -11226,7 +11183,7 @@ class TestFullSheetOption:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert "Error: --full-sheet nie dziala z --cutout" in err
         prepare.assert_not_called()
@@ -11255,7 +11212,7 @@ class TestFullSheetOption:
                 str(tmp_path),
             ]
         )
-        assert rc == 1
+        assert rc == 2
         err = capsys.readouterr().err
         assert _CZ_CAMPAIGN_ERROR in err and "Info:" not in err
         run_cz.assert_not_called()

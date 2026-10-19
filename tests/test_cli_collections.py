@@ -70,7 +70,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
     assert kwargs["level"] == {"pl": "gmina"}
     assert (kwargs["workers"], kwargs["update"]) == (3, "force")
     assert kwargs["output_dir"] == str(tmp_path)
-    assert kwargs["teryt"] is None and kwargs["whole_country"] is False
+    assert kwargs.get("teryt") is None and not kwargs.get("whole_country")
     with patch(_DOWNLOAD, return_value=_report()) as download:
         main(
             [
@@ -90,7 +90,7 @@ def test_flags_map_to_download_collection_kwargs(tmp_path):
         )
     kwargs = download.call_args.kwargs
     assert (kwargs["teryt"], kwargs["lod"], kwargs["year"]) == ("1261", 1, 2024)
-    assert (kwargs["workers"], kwargs["update"], kwargs["level"]) == (1, None, None)
+    assert (kwargs["workers"], kwargs["update"], kwargs.get("level")) == (1, None, None)
 
 
 def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
@@ -122,7 +122,7 @@ def test_check_updates_calls_check_collection_and_writes_plan(tmp_path):
 def test_missing_product_names_only_the_group_products(tmp_path, capsys):
     with patch(_DOWNLOAD) as download:
         rc = main(["models3d", "download", "--teryt", "1261", "-o", str(tmp_path)])
-    assert rc == 1
+    assert rc == 2
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --product wymagane: buildings (")

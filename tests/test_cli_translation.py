@@ -4,11 +4,17 @@
 ``download_collection``."""
 
 import ast
+import shlex
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
+from kartograf import format_command, parse_command
+from kartograf.catalog.commands import declared
+from kartograf.catalog.kinds import convert_arguments
+from kartograf.cli._args import library_arguments
+from kartograf.cli._parser import create_parser, parse_command_line
 from kartograf.cli.commands import main
 from kartograf.core.bbox import BBox
 from kartograf.download.collections import CollectionReport
@@ -17,6 +23,7 @@ from kartograf.download.laz import LazDownloadResult
 from kartograf.download.plan import new_plan
 from kartograf.exceptions import ValidationError
 from kartograf.notices import AUTO_CLIPPED, NO_COVERAGE_SOME, Notice
+from kartograf.project.commands import task_command
 
 _DOWNLOAD = "kartograf.cli.download_cmd.download_data"
 _CHECK = "kartograf.cli.download_cmd.check_data"
@@ -94,7 +101,7 @@ def test_flags_map_to_download_data_kwargs(tmp_path):
     kwargs = download.call_args.kwargs
     assert (kwargs["geometry"], kwargs["layer"]) == (shp, "obszar")
     assert kwargs["cutout"] is True and kwargs["horizontal_crs"] == "EPSG:2180"
-    assert kwargs["bbox"] is None
+    assert kwargs.get("bbox") is None
 
 
 def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
@@ -113,7 +120,7 @@ def test_malformed_per_country_value_is_one_error_line(tmp_path, capsys):
                 str(tmp_path),
             ]
         )
-    assert rc == 1
+    assert rc == 2
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --resolution: nieprawidlowa wartosc 'pl=1m,de=2m'")
@@ -157,17 +164,17 @@ def test_imagery_new_flags_translation(tmp_path):
         rc = main([*argv, "--country", "cz", "--sheet", "CTES96"])
     assert rc == 0
     kwargs = download.call_args.kwargs
-    assert (kwargs["country"], kwargs["sheet"], kwargs["bbox"]) == (
+    assert (kwargs["country"], kwargs["sheet"], kwargs.get("bbox")) == (
         "cz",
         "CTES96",
         None,
     )
-    assert kwargs["cutout"] is False
-    assert (kwargs["horizontal_crs"], kwargs["coverage"], kwargs["resolution"]) == (
-        None,
-        None,
-        None,
-    )
+    assert not kwargs.get("cutout")
+    assert (
+        kwargs.get("horizontal_crs"),
+        kwargs.get("coverage"),
+        kwargs.get("resolution"),
+    ) == (None, None, None)
 
 
 def test_level_per_country_syntax(tmp_path, capsys):
@@ -196,7 +203,7 @@ def test_level_per_country_syntax(tmp_path, capsys):
     assert download.call_args.kwargs["level"] == "obec"
     capsys.readouterr()
     with patch(_COLLECTION) as download:
-        assert main([*argv, "--level", "pl=gmina,de=obec"]) == 1
+        assert main([*argv, "--level", "pl=gmina,de=obec"]) == 2
     download.assert_not_called()
     (line,) = capsys.readouterr().err.splitlines()
     assert line.startswith("Error: --level: nieprawidlowa wartosc 'pl=gmina,de=obec'")
@@ -283,7 +290,7 @@ def test_validation_error_single_error_line(tmp_path, capsys):
             ["elevation", "download", "--product", "nmt", "--sheet", "X"]
             + ["-o", str(tmp_path)]
         )
-    assert rc == 1
+    assert rc == 2
     assert capsys.readouterr().err.splitlines() == ["Error: --vertical-crs wymagane: x"]
 
 
@@ -311,7 +318,7 @@ def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check)
             return_value=new_plan(tmp_path, []),
         ),
     ):
-        assert main(argv) == 1
+        assert main(argv) == 2
         invalid = capsys.readouterr()
         assert invalid.out == ""
         assert invalid.err.startswith("Error: --vertical-crs wymagane")
@@ -323,6 +330,45 @@ def test_laz_preamble_only_after_validation_with_pl_crs(tmp_path, capsys, check)
     else:
         assert valid.out.startswith("Pobieranie kafli LAZ (WFS GUGiK, KRON86)...\n")
         assert "pl=KRON86,cz=Bpv" not in valid.out
+
+
+def _command_lines() -> list[str]:
+    """The example of every data command of the catalog as a line (without
+    ``kartograf``), and lines with the kinds the examples lack: a geometry file with
+    its layer, per-country pairs, codes lists, a flag of a group."""
+    examples = [
+        format_command(command.id, example.options, run=example.run)[
+            len("kartograf ") :
+        ]
+        for command in declared().commands
+        if command.project_task
+        for example in command.examples
+    ]
+    return [
+        *examples,
+        "elevation download --product nmt --geometry zlewnia.gpkg --layer obszar "
+        "--country auto --resolution pl=1m,cz=2m --vertical-crs pl=EVRF2007,cz=Bpv "
+        "--sheet-system 1992",
+        "landcover download --product bdot10k --teryt 1465 --layers SWRS,PTWP "
+        "--keep-raw",
+        "imagery download --product oblique-orto --sheet 7.125.11.08 --direction n,e",
+        "soil hsg --depth 0-5cm --geometry a.shp",
+        "boundaries download --product admin --country auto --bbox 18.5,49.6,18.8,49.9 "
+        "--bbox-crs EPSG:4326 --level pl=gmina,cz=obec",
+    ]
+
+
+@pytest.mark.parametrize("line", _command_lines())
+def test_cli_arguments_are_those_of_a_command_call(line):
+    """The handlers read the flags of a line the way ``parse_command`` (and so a
+    project task or an MCP tool) does: the parser of the CLI has defaults, the one
+    of ``parse_command`` has none, and the library arguments come out the same."""
+    argv = shlex.split(line)
+    call = parse_command(argv)
+    expected = convert_arguments(task_command(call.command).options, call.options)
+
+    parsed = parse_command_line(create_parser(), argv)
+    assert library_arguments(parsed) == expected
 
 
 _FORBIDDEN = {
@@ -343,7 +389,7 @@ def test_cli_imports_no_data_logic():
     the suite, because a regression here is invisible to behaviour tests
     until the CLI and the library diverge again."""
     offenders = []
-    # the command modules and the group modules of kartograf/cli/groups/
+    # the command modules of kartograf/cli/ (the parser itself is the catalog's)
     for path in sorted(Path("kartograf/cli").rglob("*.py")):
         for node in ast.walk(ast.parse(path.read_text(encoding="utf-8"))):
             if isinstance(node, ast.ImportFrom):
@@ -376,6 +422,6 @@ def test_missing_choice_is_error_before_network(flag, tmp_path, capsys):
     for name, values in argv.items():
         if name != flag:
             args += values
-    assert main(args) == 1
+    assert main(args) == 2
     err = capsys.readouterr().err
     assert err.startswith("Error: ") and "wymagane" in err

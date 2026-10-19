@@ -1,2 +1,4 @@
+include kartograf/py.typed
+include llms.txt
 graft tests
 global-exclude __pycache__ *.py[cod]

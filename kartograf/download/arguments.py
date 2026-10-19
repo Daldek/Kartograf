@@ -9,17 +9,33 @@ character by character. Messages name the value as the called function does:
 the CLI flag for command-level functions (``download_data``,
 ``download_landcover``: ``--year``), the parameter elsewhere
 (``DownloadManager``, ``download_laz_area``). ``None`` (= "not given") is
-handled by the callers.
+handled by the callers. The error carries the API name of the argument as
+``ValidationError.option`` (``--min-density`` -> ``min_density``).
 """
 
 from kartograf.exceptions import ValidationError
+
+
+def option_name(name: str) -> str:
+    """The API argument of a CLI flag or a parameter name:
+    ``--vertical-crs`` -> ``vertical_crs``, ``workers`` -> ``workers``."""
+    return name.removeprefix("--").replace("-", "_")
+
+
+def option_error(text: str, *names: str) -> ValidationError:
+    """The error ``text`` about one argument (``option``) or about several
+    that do not go together (``options``, in the order of the message)."""
+    if len(names) == 1:
+        return ValidationError(text, option=names[0])
+    return ValidationError(text, options=names)
 
 
 def require_int(value: object, name: str) -> None:
     """``ValidationError`` unless ``value`` is an ``int`` (``bool`` is not)."""
     if isinstance(value, bool) or not isinstance(value, int):
         raise ValidationError(
-            f"{name} musi byc liczba calkowita (int), otrzymano {value!r}"
+            f"{name} musi byc liczba calkowita (int), otrzymano {value!r}",
+            option=option_name(name),
         )
 
 
@@ -27,14 +43,18 @@ def require_str(value: object, name: str) -> None:
     """``ValidationError`` unless ``value`` is a ``str`` (a code is never a number:
     ``teryt=1261`` would lose leading zeros, e.g. ``0208``)."""
     if not isinstance(value, str):
-        raise ValidationError(f"{name} musi byc napisem (str), otrzymano {value!r}")
+        raise ValidationError(
+            f"{name} musi byc napisem (str), otrzymano {value!r}",
+            option=option_name(name),
+        )
 
 
 def require_bool(value: object, name: str) -> None:
     """``ValidationError`` unless ``value`` is ``True`` or ``False``."""
     if not isinstance(value, bool):
         raise ValidationError(
-            f"{name} musi byc przelacznikiem (True albo False), otrzymano {value!r}"
+            f"{name} musi byc przelacznikiem (True albo False), otrzymano {value!r}",
+            option=option_name(name),
         )
 
 
@@ -47,10 +67,12 @@ def require_codes(value: object, name: str, example: str) -> None:
     """
     if not isinstance(value, list | tuple | set | frozenset):
         raise ValidationError(
-            f"{name}: podaj liste kodow, np. {example}, otrzymano {value!r}"
+            f"{name}: podaj liste kodow, np. {example}, otrzymano {value!r}",
+            option=option_name(name),
         )
     bad = [item for item in value if not isinstance(item, str)]
     if bad:
         raise ValidationError(
-            f"{name}: kody musza byc napisami, np. {example}, otrzymano {bad!r}"
+            f"{name}: kody musza byc napisami, np. {example}, otrzymano {bad!r}",
+            option=option_name(name),
         )

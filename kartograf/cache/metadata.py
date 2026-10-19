@@ -45,7 +45,7 @@ import time
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager, suppress
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from kartograf.exceptions import CacheError
 
@@ -349,7 +349,7 @@ class MetadataCache:
         resolution: str,
         vertical_crs: str,
         sheet: str,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Return the index record or None (missing/expired/refresh mode), 7-day TTL."""
         if self._refresh:
             return None
@@ -403,7 +403,7 @@ class MetadataCache:
         resolution: str,
         vertical_crs: str,
         sheet: str,
-        payload: dict,
+        payload: dict[str, Any],
     ) -> None:
         """Store the chosen record or confirmed no coverage after successful queries."""
         with self._write_lock, self._db_errors():
@@ -438,7 +438,7 @@ class MetadataCache:
         resolution: str,
         vertical_crs: str,
         sheet: str,
-    ) -> dict | None:
+    ) -> dict[str, Any] | None:
         """Return the sheet's campaigns or None (missing/expired/refresh mode), 7-day
         TTL.
 
@@ -484,7 +484,7 @@ class MetadataCache:
         resolution: str,
         vertical_crs: str,
         sheet: str,
-        payload: dict,
+        payload: dict[str, Any],
     ) -> None:
         """Store the sheet's campaigns (newest first) or a confirmed no coverage."""
         with self._write_lock, self._db_errors():
@@ -650,7 +650,7 @@ class MetadataCache:
     # Sheet cache (CZ sheet index: KladyMapovychListu)
     # =========================================================================
 
-    def get_sheet(self, system: str, sheet: str) -> dict | None:
+    def get_sheet(self, system: str, sheet: str) -> dict[str, Any] | None:
         """Return the decoded sheet payload or None (missing/expired).
 
         Lock guards the read too - see comment in get_record(). In
@@ -683,7 +683,7 @@ class MetadataCache:
             return json.loads(payload)
         return None  # disabled by an SQLite error (_db_errors)
 
-    def set_sheet(self, system: str, sheet: str, payload: dict) -> None:
+    def set_sheet(self, system: str, sheet: str, payload: dict[str, Any]) -> None:
         """Store the sheet payload (JSON) under the key (system, sheet)."""
         with self._write_lock, self._db_errors():
             conn = self._connection()
@@ -749,7 +749,9 @@ class MetadataCache:
     # ATOM feed cache (index of a CUZK ATOM service feed, ADR-042 D12)
     # =========================================================================
 
-    def get_atom_entries(self, feed: str) -> tuple[str | None, dict, bool] | None:
+    def get_atom_entries(
+        self, feed: str
+    ) -> tuple[str | None, dict[str, Any], bool] | None:
         """Stored index of a service feed: ``(etag, entries, fresh)``.
 
         ``fresh`` = younger than the TTL. An older index is returned too: its
@@ -773,7 +775,9 @@ class MetadataCache:
             return etag, json.loads(payload), fresh
         return None  # disabled by an SQLite error (_db_errors)
 
-    def set_atom_entries(self, feed: str, etag: str | None, entries: dict) -> None:
+    def set_atom_entries(
+        self, feed: str, etag: str | None, entries: dict[str, Any]
+    ) -> None:
         """Store the index of a service feed with its ``ETag`` (TTL from now)."""
         with self._write_lock, self._db_errors():
             conn = self._connection()
@@ -816,7 +820,7 @@ class MetadataCache:
             conn.execute("VACUUM")
             logger.debug("Cache vacuumed")
 
-    def stats(self) -> dict:
+    def stats(self) -> dict[str, Any]:
         """
         Return cache statistics.
 

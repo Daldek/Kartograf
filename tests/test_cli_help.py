@@ -6,8 +6,11 @@ from collections.abc import Iterator
 
 import pytest
 
+from kartograf.catalog.commands import declared_commands
 from kartograf.cli._parser import _subparsers, create_parser
 from kartograf.cli.commands import main
+from kartograf.landcover.manager import soil_choices
+from kartograf.sheet_info import describe_sheet
 
 
 @pytest.fixture(autouse=True)
@@ -38,7 +41,9 @@ _DATA_EXAMPLES = sorted(
     {
         example
         for example in _examples()
-        if example.split()[2] in ("download", "hsg") and example.split()[1] != "project"
+        if len(words := example.split()) > 2
+        and words[2] in ("download", "hsg")
+        and words[1] != "project"
     }
 )
 
@@ -97,16 +102,39 @@ def test_parse_describes_cz_sheet_codes(sheet, lines, capsys):
     assert all(line in out for line in lines)
 
 
+@pytest.mark.parametrize(
+    "sheet", ["CTES96", "302_5550", "0510-D-11", "NM-34-07-1-D-15"]
+)
+def test_parse_names_the_commands_of_the_document_for_cz_codes(sheet, capsys):
+    """The ``Komendy:`` line names the commands that take the code in ``--sheet``:
+    the ones ``describe_sheet`` lists, no more and no fewer."""
+    assert main(["parse", sheet]) == 0
+    (line,) = [
+        text
+        for text in capsys.readouterr().out.splitlines()
+        if text.startswith("Komendy:")
+    ]
+    named = {command for command in declared_commands() if command in line}
+    assert named == set(describe_sheet(sheet).commands)
+
+
+def test_soil_list_layers_explains_depths_with_the_library_description(capsys):
+    """The depth codes are introduced by the description the library gives them."""
+    (description,) = set(soil_choices()["depth"].values())
+    assert main(["soil", "list-layers"]) == 0
+    assert f"  Glebokosci ({description}):\n    0-5cm\n" in capsys.readouterr().out
+
+
 def test_parse_cz_code_without_pl_hierarchy(capsys):
     """The PL sheet hierarchy flags are an input error for a CZ code."""
-    assert main(["parse", "CTES96", "--children"]) == 1
+    assert main(["parse", "CTES96", "--children"]) == 2
     assert "tylko godel PL" in capsys.readouterr().err
 
 
 def test_parse_off_grid_tm33_tile_and_unknown_code(capsys):
-    assert main(["parse", "303_5550"]) == 1
+    assert main(["parse", "303_5550"]) == 2
     assert "TM33" in capsys.readouterr().err
-    assert main(["parse", "XYZ"]) == 1
+    assert main(["parse", "XYZ"]) == 2
     assert "Godla CZ: SM5" in capsys.readouterr().err
 
 
@@ -134,7 +162,7 @@ def test_country_offers_only_countries_of_the_group(group, product, country, cap
 def test_output_help_and_error_name_the_store_directory(argv, directory, capsys):
     """The ``--output`` help and the error of a missing ``--output`` name the
     same directory of the store - the one of the group, no placeholder."""
-    assert main(argv) == 1
+    assert main(argv) == 2
     error = capsys.readouterr().err
     with pytest.raises(SystemExit):
         main([argv[0], argv[1], "--help"])

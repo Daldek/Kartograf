@@ -15,7 +15,7 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Literal, Protocol, cast
+from typing import Any, Literal, Protocol, cast
 
 import requests
 
@@ -497,7 +497,7 @@ class DownloadManager:
         *,
         storage: FileStorage | None = None,
         workers: int = 1,
-        sidecar_extra: dict | None = None,
+        sidecar_extra: dict[str, Any] | None = None,
         year: int | None = None,
         all_campaigns: bool = False,
         min_year: int | None = None,

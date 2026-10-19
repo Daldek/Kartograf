@@ -6,6 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
+from kartograf.catalog.kinds import options_to_json
 from kartograf.core.bbox import BBox
 from kartograf.download.collections import download_collection
 from kartograf.download.cutout import PlCutoutResult
@@ -13,12 +14,7 @@ from kartograf.download.data import download_data
 from kartograf.exceptions import DownloadError, KartografError, ValidationError
 from kartograf.hydrology import calculate_hsg
 from kartograf.landcover.manager import download_landcover, download_soil
-from kartograf.project.commands import (
-    COMMANDS,
-    check_options_json,
-    options_from_json,
-    options_to_json,
-)
+from kartograf.project.commands import COMMANDS
 from tests.project_fixtures import (
     BDOT_BBOX,
     CZ_FACTORY,
@@ -50,7 +46,9 @@ def _run(command, out: Path, options: dict):
         out,
         options,
         update=None,
+        plan=None,
         workers=None,
+        summary=False,
         cache=False,
         on_progress=None,
         on_notice=None,
@@ -64,101 +62,6 @@ def _raised(call) -> KartografError:
 
 
 # --- options --------------------------------------------------------------------
-
-
-def test_options_json_roundtrip(tmp_path):
-    project = tmp_path / "projekt"
-    elevation = {
-        "vertical_crs": "EVRF2007",
-        "cutout": True,
-        "product": "nmt",
-        "full_sheet": False,
-        "bbox": KRAKOW_5514,
-        "year": None,
-        "resolution": {"pl": "1m", "cz": "2m"},
-        "country": "auto",
-        "horizontal_crs": "EPSG:5514",
-    }
-    data = options_to_json(ELEVATION, elevation)
-    assert list(data.items()) == [
-        ("product", "nmt"),
-        ("bbox", [-447000, -1114000, -446000, -1113000]),
-        ("bbox_crs", "EPSG:5514"),
-        ("country", "auto"),
-        ("resolution", {"pl": "1m", "cz": "2m"}),
-        ("vertical_crs", "EVRF2007"),
-        ("cutout", True),
-        ("horizontal_crs", "EPSG:5514"),
-    ]
-    expected = {k: v for k, v in elevation.items() if v is not None and v is not False}
-    assert options_from_json(ELEVATION, data, project_dir=project) == expected
-
-    absolute = (tmp_path / "obszary" / "b.gpkg").resolve()
-    for given, saved, read in (
-        (
-            Path("obszar/zlewnia.gpkg"),
-            "obszar/zlewnia.gpkg",
-            project / "obszar/zlewnia.gpkg",
-        ),
-        (absolute, absolute.as_posix(), absolute),
-    ):
-        landcover = {
-            "product": "bdot10k",
-            "geometry": given,
-            "layers": ("SWRS", "PTWP"),
-            "keep_raw": True,
-        }
-        data = options_to_json(LANDCOVER, landcover)
-        assert data == {
-            "product": "bdot10k",
-            "geometry": saved,
-            "layers": ["SWRS", "PTWP"],
-            "keep_raw": True,
-        }
-        assert check_options_json(LANDCOVER, data) is None
-        assert options_from_json(LANDCOVER, data, project_dir=project) == {
-            **landcover,
-            "geometry": read,
-        }
-
-
-@pytest.mark.parametrize(
-    ("command", "options"),
-    [
-        (
-            LANDCOVER,
-            {"product": "bdot10k", "teryt": "1465", "vertical_crs": "EVRF2007"},
-        ),
-        (SOIL, {"sheet": HSG_SHEET, "timeout": 30}),
-        (ELEVATION, {**PL_SHEET, "output_dir": "data"}),
-        (ELEVATION, {**PL_SHEET, "update": "upgrade"}),
-        (ELEVATION, {**PL_SHEET, "workers": 2}),
-        (ELEVATION, {**PL_SHEET, "bbox_crs": "EPSG:2180"}),
-        (ELEVATION, {**PL_SHEET, "year": "2024"}),
-        (ELEVATION, {**PL_SHEET, "year": True}),
-        (ELEVATION, {**PL_SHEET, "bbox": [1, 2, 3, 4]}),
-        (ELEVATION, {**PL_SHEET, "resolution": {"pl": 1}}),
-        (LANDCOVER, {"product": "bdot10k", "teryt": "1465", "layers": "SWRS"}),
-        (HYDRO, {"product": "network", "teryt": "1261"}),
-    ],
-    ids=[
-        "flag-of-another-group",
-        "timeout",
-        "output-dir",
-        "update",
-        "workers",
-        "bbox-crs-alone",
-        "year-text",
-        "year-bool",
-        "bbox-list",
-        "per-country-number",
-        "layers-text",
-        "hydro-teryt",
-    ],
-)
-def test_options_reject_unknown_and_foreign(command, options):
-    with pytest.raises(ValidationError):
-        options_to_json(command, options)
 
 
 @pytest.mark.parametrize(
@@ -176,32 +79,12 @@ def test_options_reject_unknown_and_foreign(command, options):
     ids=["soilgrids-in-landcover", "nmt-in-imagery", "no-product", "no-landcover"],
 )
 def test_choice_of_another_command_rejected(tmp_path, command, options, library):
-    data = options_to_json(command, options)
+    data = options_to_json(command.options, options)
     error = _raised(lambda: command.validate(tmp_path / "out", data))
     assert isinstance(error, ValidationError) and str(error).startswith(library)
     with pytest.raises(ValidationError):
         command.check(tmp_path / "out", data, cache=False, on_notice=None)
     assert not (tmp_path / "out").exists()
-
-
-@pytest.mark.parametrize(
-    "data",
-    [
-        {"product": None},
-        {"cutout": False},
-        {"bbox": [1, 2, 3, 4]},
-        {"bbox_crs": "EPSG:2180"},
-        {"bbox": [1, 2, 3], "bbox_crs": "EPSG:2180"},
-        {"bbox": [1, 2, 3, float("nan")], "bbox_crs": "EPSG:2180"},
-        {"year": "2024"},
-        {"geometry": ""},
-        {"resolution": ["1m"]},
-        {"keep_raw": True},
-        [],
-    ],
-)
-def test_check_options_json_rejects(data):
-    assert check_options_json(ELEVATION, data) is not None
 
 
 # --- validation = the library's own checks ---------------------------------------
