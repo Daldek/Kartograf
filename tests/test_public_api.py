@@ -56,6 +56,42 @@ def test_transport_and_mosaic_exported():
         assert name in kartograf.__all__
 
 
+def test_store_read_api_exported():
+    """The store reader of ADR-045 (Archiwista) is available from kartograf."""
+    from kartograf.exceptions import InvalidSidecarError
+    from kartograf.store import (
+        SegmentInfo,
+        Sidecar,
+        StoreEntry,
+        describe_segment,
+        iter_store,
+        link_target,
+        list_segments,
+        read_sidecar,
+    )
+    from kartograf.store_geometry import Footprint, file_footprint, pinned_transform
+    from kartograf.transform.crs import PinnedTransform
+
+    expected = {
+        "list_segments": list_segments,
+        "iter_store": iter_store,
+        "StoreEntry": StoreEntry,
+        "read_sidecar": read_sidecar,
+        "Sidecar": Sidecar,
+        "InvalidSidecarError": InvalidSidecarError,
+        "describe_segment": describe_segment,
+        "SegmentInfo": SegmentInfo,
+        "file_footprint": file_footprint,
+        "Footprint": Footprint,
+        "link_target": link_target,
+        "pinned_transform": pinned_transform,
+        "PinnedTransform": PinnedTransform,
+    }
+    for name, value in expected.items():
+        assert name in kartograf.__all__
+        assert getattr(kartograf, name) is value
+
+
 def test_get_with_retry_any_ogc_url_with_params():
     """Any service URL; params sent unchanged on every attempt."""
     from unittest.mock import Mock

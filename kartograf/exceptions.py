@@ -8,6 +8,7 @@ KartografError for easy catching of package-specific errors.
 """
 
 from collections.abc import Mapping
+from pathlib import Path
 
 
 class KartografError(Exception):
@@ -158,3 +159,22 @@ class CacheError(KartografError):
     on without it (``on_disabled``); in strict mode the same state raises
     this exception on the failing call and on every later one.
     """
+
+
+class InvalidSidecarError(KartografError):
+    """
+    A ``kartograf-meta/1`` sidecar that cannot be read (``read_sidecar``,
+    ADR-045): missing, not a JSON object, or another schema.
+
+    ``iter_store`` never raises it: the store scan reports such a file as an
+    entry with ``problem`` ``missing_sidecar``/``invalid_sidecar``.
+
+    Attributes
+    ----------
+    path : Path
+        The sidecar path (``<file>.meta.json``).
+    """
+
+    def __init__(self, message: str, *, path: Path) -> None:
+        super().__init__(message)
+        self.path = path

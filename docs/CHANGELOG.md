@@ -698,6 +698,32 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Dodane
 
+- Publiczne API odczytu magazynu dla Archiwisty (KA-1..KA-6, ADR-045;
+  dopisane do przygotowanego wydania 0.8.0 przed tagowaniem, ARCHITECTURE
+  3.3.1): `list_segments` (segmenty `<produkt>/<wariant>`, takze
+  nieznane), `iter_store` (strumieniowy skan wersji, obu rodzajow dowiazan
+  i problemow; `segment`, `units` - tylko sloty podanych jednostek, bez
+  listowania segmentu - i `skip_versions` - znane katalogi wersji bez
+  czytania ich sidecarow, do skanu przyrostowego; jeden odczyt sidecara na
+  plik, bez `stat` i bez otwierania plikow danych; wywolania rownolegle
+  w watkach), `read_sidecar` (tolerancyjny odczyt starszych metadanych
+  i kluczy 0.8.0-dev, rok danych nigdy z daty pobrania; blad:
+  `InvalidSidecarError`; sidecar bez pola `schema` zapisany przez
+  `emit_sidecar` dla providera bez deskryptora jest przyjmowany jak w
+  `read_version`; `Sidecar.unit` pliku krajowego z motywem to
+  `<kraj>_<motyw>`, np. `pl_miejscowosci`, czyli nazwa przyjmowana przez
+  `iter_store(units=...)`), `describe_segment` (ludzka nazwa i zrodlo
+  segmentu z rejestru, `known=False` bez zgadywania), `file_footprint`
+  (obrys natywny i WGS84 z bboxa zadania, godla, naglowka albo jednostki;
+  siec tylko po jawnym `network=True`; arkusz SM5 nieznany indeksowi nie
+  ma obrysu, tak jak nieznany TERYT i KU), `link_target` (potwierdzenie celu
+  takze na SMB bez stabilnych i-wezlow) i `pinned_transform` (operacja bez
+  przyblizen, per watek). Typy `StoreEntry`, `Sidecar`, `SegmentInfo`,
+  `Footprint`, `PinnedTransform` i wyjatek `InvalidSidecarError` sa
+  w `kartograf.__all__`; `StoreEntry` i `Sidecar` sa niehashowalne. Funkcje nie zapisuja do magazynu; cache i indeks
+  konsumenta naleza do jego lokalnego katalogu. Schemat `kartograf-meta/1`
+  i uklad dotychczasowych plikow nie zmieniaja sie.
+
 - `Info:` przed wolnymi uslugami (test na zywo 2026-10-16): wycinek PL
   NMT/NMPT z kilku zapytan WCS podaje szacowany czas (`CUTOUT_SIZE`:
   `... 16 zapytan WCS GUGiK pobieranych po kolei - ok. 7-11 min (25-40 s
