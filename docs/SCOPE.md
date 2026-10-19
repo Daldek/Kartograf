@@ -87,7 +87,8 @@ Kartograf automatyzuje ten proces oferując:
   `check_availability`, ADR-041): dla obszaru PL kombinacje rok × układ
   arkuszy × rozdzielczość × układ wysokości × format z kompletnością
   pełnych arkuszy (TAK) na lądzie PRG, bez pobierania danych (także NMPT
-  i LAZ; USAGE 1.7, ARCHITECTURE 4.9)
+  i LAZ; od ADR-047 także `full_m2`, `sheet_records` i `campaign_coverage`;
+  USAGE 1.7, ARCHITECTURE 4.9)
 - Godło PL-2000 1:10000: w CLI i `download_data` `--scale` jest wymagane
   (błąd przed siecią, lista skal); provider/`DownloadManager` wywołany
   bez skali, gdy GUGiK ma wyłącznie arkusze potomne, daje `NoCoverageError`

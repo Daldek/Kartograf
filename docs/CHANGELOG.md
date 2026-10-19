@@ -77,16 +77,17 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
     skorowidza - `CHECK_FAILED`.
   - CLI nie rozwija skrotow dlugich flag (`--out` nie znaczy `--output`,
     `--lay` nie jest skrotem `--layer`/`--layers`); `--plan` bez
-    `--check-updates`/`--upgrade` to `Error:` z kodem 1 (dotad blad parsera,
-    kod 2). Co zrobic: pisz pelne nazwy flag.
+    `--check-updates`/`--upgrade` to `Error:` z kodem 2 (`ValidationError`,
+    `option: plan`; dotad blad parsera, tez kod 2). Co zrobic: pisz pelne
+    nazwy flag.
   - `--sheet` z godlem PL i `--sheet-system` innym niz uklad godla
     (`elevation`/`imagery download`, np. godlo PL-1992 z `--sheet-system
     2000`) to `Error:`/`ValidationError` przed siecia (dotad flaga byla po
     cichu pomijana); zgodna wartosc nadal wolno podac. Co zrobic: usun
     `--sheet-system` (uklad arkuszy wynika z godla).
-  - `project init` bez `--output`: `Error:` z kodem 1 jak w komendach
-    danych (dotad blad parsera, kod 2); `init_project(output_dir=None)` to
-    `ValidationError`. Co zrobic: skrypt sprawdzajacy kod 2 - kod 1.
+  - `project init` bez `--output`: `Error:` jak w komendach danych (kod 2,
+    jak dotad; dotad blad parsera); `init_project(output_dir=None)` to
+    `ValidationError`. Co zrobic: nic (kod wyjscia bez zmian).
   - `landcover download` i `landcover list-layers` wybieraja dane przez
     `--product` jak kazda grupa danych (ADR-044; dotad `--source`/`-s`).
     `--source` i `-s` koncza sie bledem parsera (kod 2) z podpowiedzia
@@ -447,7 +448,7 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   `DownloadManager.all_campaigns` (bool).
 - Bez wartosci domyslnych wplywajacych na dane (CLI i API; DEVELOPMENT_STANDARDS
   11.2, ADR-004 errata 1, ADR-023 errata 2). Brak wartosci: CLI `Error:`
-  z lista dopuszczalnych wartosci (kod 1, przed siecia); API:
+  z lista dopuszczalnych wartosci (kod 2, przed siecia); API:
   `TypeError` dla wymaganych argumentow sygnatury, `ValidationError`
   dla brakujacych opcji warunkowych (m.in. `year` CORINE, `depth` HSG).
   - CLI `elevation download` i `imagery download`: wymagane `--product`

@@ -130,7 +130,8 @@ obszar.
   format (także NMPT i kafle LAZ) z liczbą arkuszy pełnych/niepełnych
   i kompletnością na lądzie PRG (siatka 1 m), podpowiedź polecenia
   pobrania (bez `--output`, także dla `project add`), `--details`,
-  `--json` (`kartograf-availability/1`); bez pobierania danych, cache
+  `--json` (`kartograf-availability/1`; pola `full_m2`, `sheet_records`
+  i `campaign_coverage`, ADR-047); bez pobierania danych, cache
   metadanych (`--force`). USAGE 1.7.
 - Lista arkuszy toleruje brak pokrycia (R5): arkusz bez danych = `Warning:`
   i status `no_coverage`, kod 0 przy co najmniej jednym pliku; twarda
@@ -1592,6 +1593,7 @@ from kartograf import (
 
     # Store reading without writing (Archiwista, ADR-045, ARCHITECTURE 3.3.1)
     list_segments,
+    list_partitions,
     iter_store,
     StoreEntry,
     read_sidecar,
@@ -1659,7 +1661,7 @@ Rejestr wariantów NMT/NMPT/LAZ (ADR-041) jest modułem danych poza
 Zastępuje symbole usunięte w 0.8.0 (BREAKING, bez aliasów):
 `kartograf.providers.pl.nmt_vertical_crs`, `require_nmt_vertical_crs`,
 `NMT_5M_VERTICAL_CRS`, `GugikProvider.SUPPORTED_RESOLUTIONS`,
-`SUPPORTED_VERTICAL_CRS_5M`, `WMS_INDEX_ENDPOINTS`,
+`SUPPORTED_VERTICAL_CRS`, `SUPPORTED_VERTICAL_CRS_5M`, `WMS_SKOROWIDZE_ENDPOINTS`,
 `get_supported_resolutions()`, `get_supported_vertical_crs_for_resolution()`,
 `GugikNmptProvider.SUPPORTED_RESOLUTIONS`, `FileStorage.SUPPORTED_RESOLUTIONS`
 i `GugikLazProvider.WFS_ENDPOINTS` — co zrobić: `variants(product=...,
