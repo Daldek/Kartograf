@@ -436,6 +436,22 @@ class TestProxyRequest:
 
         with patch.object(client, "_ensure_proxy", return_value=True):
             assert client.proxy_request("https://example.com") is None
+        assert client.last_error == "Proxy request failed: error"
+
+    @patch("kartograf.auth.client.atexit")
+    def test_proxy_request_clears_last_error(self, _atexit):
+        """A later successful request does not keep the reason of an old failure."""
+        client = AuthProxyClient()
+        AuthProxyClient._proxy_port = 9999
+        client.last_error = "old"
+        ok = Mock(status_code=200)
+        ok.json.return_value = {"status_code": 200, "headers": {}, "body": ""}
+        client._session = Mock()
+        client._session.post.return_value = ok
+
+        with patch.object(client, "_ensure_proxy", return_value=True):
+            assert client.proxy_request("https://example.com") is not None
+        assert client.last_error is None
 
 
 class TestDownloadFile:

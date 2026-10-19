@@ -322,6 +322,62 @@ def test_http_retry_lines_stay_on_stderr(capsys):
     assert err == "Warning: HTTP 503, ponawiam 1/3\n"
 
 
+def _skipped_version_listing(tmp_path):
+    """A ``parse`` handler listing a version directory with no readable sidecar:
+    the library logs "Pominieto wersje bez czytelnego sidecara" for it."""
+    from kartograf.download.versions import list_versions
+
+    directory = tmp_path / "versions" / "bbox" / "2026-10-19_0123abcd"
+    directory.mkdir(parents=True)
+    (directory / "plik.tif").write_bytes(b"x")
+
+    def handler(args):
+        assert list_versions(directory.parent, "plik.tif") == []
+        raise ValidationError("zle")
+
+    return handler
+
+
+def test_library_warnings_are_not_on_stderr_in_json_mode(capsys, tmp_path, monkeypatch):
+    """USAGE 9.2: with ``--json`` stderr is empty - a library log record (here the
+    skipped version of a store listing) is not printed as a bare line."""
+    # no handler above the 'kartograf' branch -> logging.lastResort writes to
+    # stderr, as in a real CLI run (pytest's root handler would hide it)
+    monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
+    with patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}):
+        code, out, err = _run(capsys, ["parse", "N-34", "--json"])
+
+    assert code == 2
+    assert json.loads(out)["message"] == "zle"
+    assert err == ""
+
+
+def test_library_warnings_are_prefixed_in_text_mode(capsys, tmp_path, monkeypatch):
+    """Text mode: the same record is a ``Warning:`` line, not a bare message."""
+    monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
+    with patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}):
+        code, out, err = _run(capsys, ["parse", "N-34"])
+
+    assert code == 2
+    lines = err.splitlines()
+    assert lines[0].startswith("Warning: Pominieto wersje bez czytelnego sidecara")
+    assert lines[1] == "Error: zle"
+
+
+def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeypatch):
+    """``KARTOGRAF_DEBUG`` lets the library records through also in ``--json``."""
+    monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
+    with (
+        patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}),
+        pytest.raises(ValidationError),
+    ):
+        main(["parse", "N-34", "--json"])
+
+    assert capsys.readouterr().err.startswith(
+        "Warning: Pominieto wersje bez czytelnego sidecara"
+    )
+
+
 # -- the handlers raise their input errors (no own "Error:" line) -------------
 
 

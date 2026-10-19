@@ -64,20 +64,45 @@ def _dispatch(parser: argparse.ArgumentParser, parsed_args: argparse.Namespace) 
     return HANDLERS[command](parsed_args)
 
 
+_HTTP_LOGGER = "kartograf.transport.http"
+
+
 class _StderrLines(logging.Handler):
-    """Records of the HTTP transport (a failed attempt before its retry) as
-    ``Warning:`` lines on the current stderr; the Python fallback printed
-    them without a prefix. Other library records stay where they were."""
+    """Warning and error records of the library as prefixed lines on the
+    current stderr (``Warning:``/``Error:``); without this handler Python's
+    fallback prints them as bare messages.
+
+    ``--json`` keeps stderr empty (USAGE 9.2): of all the records only the
+    failed attempts of the HTTP transport (before their retry) pass; the other
+    records are diagnostics of the library, and what concerns the result is in
+    the document (``notices``, the verdict of the command). ``KARTOGRAF_DEBUG``
+    lets every record through.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(logging.WARNING)
+        self.as_json = False
 
     def emit(self, record: logging.LogRecord) -> None:
+        if (
+            self.as_json
+            and record.name != _HTTP_LOGGER
+            and not os.environ.get("KARTOGRAF_DEBUG")
+        ):
+            return
         prefix = "Error" if record.levelno >= logging.ERROR else "Warning"
         print(f"{prefix}: {record.getMessage()}", file=sys.stderr)
 
 
-def _retry_lines() -> None:
-    log = logging.getLogger("kartograf.transport.http")
-    if not any(isinstance(handler, _StderrLines) for handler in log.handlers):
-        log.addHandler(_StderrLines(logging.WARNING))
+def _stderr_lines(as_json: bool) -> None:
+    """Install (once per process) the handler of the library records and set its
+    mode for this command line."""
+    log = logging.getLogger("kartograf")
+    handler = next((h for h in log.handlers if isinstance(h, _StderrLines)), None)
+    if handler is None:
+        handler = _StderrLines()
+        log.addHandler(handler)
+    handler.as_json = as_json
 
 
 def _fail(error: BaseException, command: str | None, as_json: bool) -> int:
@@ -124,9 +149,9 @@ def main(args: list[str] | None = None) -> int:
         use or wrong input, 130 interrupted. ``--help`` and ``--version`` end
         the process (``SystemExit``) as argparse does.
     """
-    _retry_lines()
     argv = sys.argv[1:] if args is None else args
     as_json = json_mode(argv)
+    _stderr_lines(as_json)
     if as_json:
         use_utf8_stdout()
     command: str | None = None

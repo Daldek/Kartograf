@@ -568,7 +568,8 @@ class CorineProvider(LandCoverProvider):
         )
 
         if not response:
-            raise DownloadError("Zadanie przez proxy nie powiodlo sie")
+            reason = f": {proxy.last_error}" if proxy.last_error else ""
+            raise DownloadError(f"Zadanie przez proxy nie powiodlo sie{reason}")
 
         if response.get("status_code") != 200:
             raise DownloadError(

@@ -57,15 +57,15 @@ class TestPlSheetHorizontalCrs:
         assert meta.horizontal_crs == expected
         assert pl_sheet_horizontal_crs(None, sheet) == expected
 
-    def test_pl1992_sheet_with_pl1992_coordinates_stays_2180(self, tmp_path, caplog):
+    def test_pl1992_sheet_with_pl1992_coordinates_stays_2180(self, tmp_path):
         asc = tmp_path / "M-34-76-A-a-2-4.asc"
         _asc(asc, 542_560.30, key="xllcenter")
-        with caplog.at_level(logging.WARNING):
-            assert pl_sheet_horizontal_crs(asc, "M-34-76-A-a-2-4") == "EPSG:2180"
-        assert "zapisano uklad pliku" not in caplog.text
+        assert pl_sheet_horizontal_crs(asc, "M-34-76-A-a-2-4") == "EPSG:2180"
 
-    def test_file_in_other_system_wins_with_warning(self, tmp_path, caplog):
-        """K4: a PL-1992 file under a PL-2000 code (pre-0.7.0 cache) - the file CRS."""
+    def test_file_in_other_system_wins(self, tmp_path, caplog):
+        """K4: a PL-1992 file under a PL-2000 code (pre-0.7.0 cache) - the file CRS.
+        The mismatch is reported once, as the ``SHEET_CRS_MISMATCH`` notice of the
+        download result; the library does not log it as a warning as well."""
         asc = tmp_path / "7.123.8.asc"
         _asc(asc, 542_560.30)
         with caplog.at_level(logging.WARNING):
@@ -76,15 +76,13 @@ class TestPlSheetHorizontalCrs:
                 data_path=asc,
             )
         assert meta.horizontal_crs == "EPSG:2180"
-        assert "7.123.8" in caplog.text
-        assert "EPSG:2178" in caplog.text
-        assert "EPSG:2180" in caplog.text
+        assert caplog.text == ""
 
     def test_unreadable_file_falls_back_to_sheet(self, tmp_path):
         missing = tmp_path / "6.179.12.20.asc"
         assert pl_sheet_horizontal_crs(missing, "6.179.12.20") == "EPSG:2177"
 
-    def test_pl2000_tif_is_checked_with_rasterio(self, tmp_path, caplog):
+    def test_pl2000_tif_is_checked_with_rasterio(self, tmp_path):
         import rasterio
         from rasterio.transform import from_origin
 
@@ -100,19 +98,15 @@ class TestPlSheetHorizontalCrs:
             transform=from_origin(7_540_000.0, 5_530_000.0, 0.25, 0.25),
         ):
             pass  # empty raster: only georeferencing matters
-        with caplog.at_level(logging.WARNING):
-            meta = build_metadata(
-                get_source("pl.gugik.orto"),
-                request={"sheet": "7.124.07.24"},
-                data_path=tif,
-            )
+        meta = build_metadata(
+            get_source("pl.gugik.orto"),
+            request={"sheet": "7.124.07.24"},
+            data_path=tif,
+        )
         assert meta.horizontal_crs == "EPSG:2178"
-        assert "zapisano uklad pliku" not in caplog.text
 
-        # the same TIF under a PL-1992 sheet code = a mismatch: file CRS + warning
-        with caplog.at_level(logging.WARNING):
-            assert pl_sheet_horizontal_crs(tif, "M-34-76-A-a-1-1") == "EPSG:2178"
-        assert "zapisano uklad pliku" in caplog.text
+        # the same TIF under a PL-1992 sheet code = a mismatch: the file CRS wins
+        assert pl_sheet_horizontal_crs(tif, "M-34-76-A-a-1-1") == "EPSG:2178"
 
     def test_explicit_horizontal_crs_overrides_channel_and_sheet(self, tmp_path):
         asc = tmp_path / "6.179.12.20.asc"
@@ -343,7 +337,7 @@ class TestPl2000SheetPublishedIn2180:
         / "77912_1384976_7.125.11.19.head.asc"
     )
 
-    def test_sidecar_describes_file_not_record(self, tmp_path, caplog):
+    def test_sidecar_describes_file_not_record(self, tmp_path):
         from unittest.mock import Mock, patch
 
         import requests
@@ -375,12 +369,9 @@ class TestPl2000SheetPublishedIn2180:
 
         session = Mock(spec=requests.Session)
         session.get = Mock(side_effect=get)
-        with (
-            patch(
-                "kartograf.transport.http.make_gugik_session",
-                return_value=session,
-            ),
-            caplog.at_level(logging.WARNING, logger="kartograf.sources.sidecar"),
+        with patch(
+            "kartograf.transport.http.make_gugik_session",
+            return_value=session,
         ):
             manager = DownloadManager(
                 output_dir=tmp_path,
@@ -394,10 +385,6 @@ class TestPl2000SheetPublishedIn2180:
         assert meta["horizontal_crs"] == "EPSG:2180"
         assert meta["extra"]["source"]["declared_crs"] == "PL-2000:S7"
         assert meta["nodata"] == -9999
-        warning = next(r for r in caplog.records if "wskazuje" in r.message)
-        assert warning.levelno == logging.WARNING
-        assert "EPSG:2178" in warning.getMessage()
-        assert "zapisano uklad pliku" in warning.getMessage()
 
 
 class TestPlCutoutDescriptor:

@@ -3076,7 +3076,13 @@ bledem `invalid_input` z `details.option` rownym `json`.
    grupy) drukuje rekord grupy i komendy w jednej linii.
 2. **stderr** jest pusty, z dwoma wyjatkami spoza kontraktu: linie ponowien transportu HTTP
    (`Warning:`) i traceback przy `KARTOGRAF_DEBUG=1` (wyjatek jest wtedy podnoszony takze
-   w trybie JSON).
+   w trybie JSON; z ta zmienna przechodza tez ostrzezenia diagnostyczne biblioteki). Inne
+   ostrzezenia diagnostyczne biblioteki (np. `Pominieto wersje o niezgodnym sha256`,
+   `Pominieto wersje bez czytelnego sidecara` przy rownoleglych zapisach) nie sa tu
+   drukowane, a bez `--json` maja prefiks `Warning:`; stan magazynu opisuje wtedy wynik
+   komendy (np. `project verify`). Ostrzezenie pyproj o brakujacej siatce PROJ
+   (`Best transformation is not available`) nie jest drukowane w zadnym trybie:
+   transformacje wybiera polityka przypietych operacji (ARCHITECTURE 2).
 3. Komunikaty `Info:`/`Warning:` sa w polu `notices` dokumentu; `-q` jest dozwolone i bez
    efektu. `--plan PLIK` dziala jak dotad, a plik planu to ten sam dokument co stdout
    (zapisany przed wydrukiem; linia `Info: zapisano plan` nie jest drukowana).
