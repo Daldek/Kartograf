@@ -3174,7 +3174,8 @@ def _volume_error(
     elif asked < count:
         size = (
             f"szacunkowo {_bytes_text(total)} (sredni rozmiar {known} z "
-            f"{count_text(count, *OF_FILES)} wg HEAD)"
+            f"{count_text(count, *OF_FILES)} wg HEAD; tylko orientacyjnie - rozmiary "
+            "plikow sa bardzo rozne, a o odmowie decyduje juz sama liczba plikow)"
         )
     elif known < count:
         size = (
@@ -3209,12 +3210,14 @@ def within_volume(
     """The jobs of an area within the volume limits (ADR-043 errata 3; the
     collections and the BDOT10k powiat packages of ``LandCoverManager``).
 
-    Counted are the files the request would transfer (``_transfers``); their
-    size is the ``HEAD``/feed length of each of them (by the session of
-    ``sessions``) - above ``VOLUME_FILES`` the mean of ``VOLUME_SAMPLE``
-    evenly spread files times their number. A file whose size was asked keeps
-    it for the size notice of its transfer (no second ``HEAD``). ``product``
-    and ``units`` (``unit_choices``) only word the refusal.
+    Counted are the files the request would transfer (``_transfers``). Up to
+    ``VOLUME_FILES`` of them EVERY file is asked (the ``HEAD``/feed length, by
+    the session of ``sessions``), so the ``VOLUME_BYTES`` check is exact; above
+    it the count alone refuses the request and the size in the message is only
+    indicative: the mean of ``VOLUME_SAMPLE`` evenly spread files times their
+    number. A file whose size was asked keeps it for the size notice of its
+    transfer (no second ``HEAD``). ``product`` and ``units``
+    (``unit_choices``) only word the refusal.
 
     Raises
     ------

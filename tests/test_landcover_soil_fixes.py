@@ -226,7 +226,10 @@ def test_ocd_edition_comes_from_the_clay_map_its_title_has_none():
     with patch("kartograf.providers.soilgrids.get_with_retry", get):
         edition = provider.edition("ocd")
         assert edition.id == "2.0" and "/clay.map" in edition.url
-        assert provider.edition("clay").id == "2.0"
+        # E2E 0.8.0 N-P3-7: the sidecar says whose map the title and url are
+        assert edition.to_extra()["source_property"] == "clay"
+        own = provider.edition("clay")
+        assert own.id == "2.0" and "source_property" not in own.to_extra()
         maps["clay"] = "Soilgrids property: Clay"
         with pytest.raises(DownloadError, match="brak wydania"):
             provider.edition("ocd")
@@ -459,6 +462,40 @@ def test_bdot10k_area_over_the_volume_limit_is_refused_before_any_download(tmp_p
     (listed,) = [n for n in notices if n.code == "unit_list"]
     assert "bdot10k: powiaty obszaru wg PRG (101): 0201, 0202" in listed.text
     assert listed.text.endswith("i 91 innych")
+    assert not list(tmp_path.rglob("*.gpkg"))
+
+
+def test_bdot10k_area_within_the_file_limit_is_measured_package_by_package(tmp_path):
+    """E2E 0.8.0 N-P3-6: up to 100 powiats EVERY package is asked by HEAD, so the
+    10 GB limit is exact: the mean of the 5 evenly spread packages (1 MB here)
+    would have let 19 GB through. Above the limit only the count refuses."""
+    teryts = [f"02{i:02d}" for i in range(1, 61)] + [f"04{i:02d}" for i in range(1, 10)]
+    provider = Bdot10kProvider()
+    urls = [provider.package_url(teryt, "GPKG") for teryt in teryts]
+    small = {urls[i] for i in (0, 17, 34, 51, 68)}  # the five of the sample
+    sizes = {url: 1_000_000 if url in small else 300_000_000 for url in urls}
+    asked = []
+
+    def head(session, url):
+        asked.append(url)
+        return sizes[url]
+
+    assert len(teryts) == 69 and sum(sizes.values()) > 10 * 10**9
+    with (
+        patch.object(Bdot10kProvider, "teryts_for_area", return_value=teryts),
+        patch("kartograf.download.collections._head_length", side_effect=head),
+        patch.object(
+            Bdot10kProvider, "download_package", side_effect=AssertionError("download")
+        ),
+        pytest.raises(ValidationError),
+    ):
+        download_landcover(
+            product="bdot10k",
+            output_dir=tmp_path,
+            bbox=BBox(400000, 300000, 600000, 500000, "EPSG:2180"),
+            cache=False,
+        )
+    assert sorted(asked) == sorted(urls)
     assert not list(tmp_path.rglob("*.gpkg"))
 
 
