@@ -125,6 +125,30 @@ def _isolated_default_cache(monkeypatch, tmp_path_factory):
     yield
 
 
+@pytest.fixture(autouse=True)
+def _offline_package_sizes(monkeypatch):
+    """No network for the volume check of a BDOT10k area.
+
+    ``LandCoverManager`` asks the size of every powiat package by ``HEAD``
+    (``within_volume``): a test that does not fake the answer gets "size not
+    known" instead of a connection. Tests of the limit itself fake
+    ``collections._head_length``.
+    """
+    from kartograf.landcover import manager
+
+    real = manager.within_volume
+
+    class NoSizeSession:
+        def head(self, url, **kwargs):
+            return _body_response(b"", "application/octet-stream")
+
+    def within_volume(*args, **kwargs):
+        return real(*args, **{**kwargs, "sessions": NoSizeSession})
+
+    monkeypatch.setattr(manager, "within_volume", within_volume)
+    yield
+
+
 # =============================================================================
 # Offline WMS GetCapabilities (orthophoto index)
 # =============================================================================
@@ -765,6 +789,16 @@ class FakeCorine:
         self.previews = 0
 
     def get(self, url, **kwargs):
+        if "GetCapabilities" in url:  # the WMS layers of the year (EEA service)
+            year = url.split("/CLC")[1][:4]
+            return _body_response(
+                (
+                    '<WMS_Capabilities xmlns="http://www.opengis.net/wms"><Capability>'
+                    f"<Layer><Layer><Name>12</Name><Title>Corine Land Cover {year} "
+                    "raster</Title></Layer></Layer></Capability></WMS_Capabilities>"
+                ).encode(),
+                "text/xml",
+            )
         if "@search" in url:
             self.catalogue += 1
             if isinstance(self.edition, int):

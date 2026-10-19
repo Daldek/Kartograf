@@ -331,8 +331,8 @@ def test_list_layers_bdot10k():
     layers = {layer.code: layer.description for layer in document.layers}
     assert (document.group, document.product) == ("landcover", "bdot10k")
     assert document.source == "BDOT10k"
-    assert len(layers) == 15
-    assert list(layers)[0] == "PTGN" and list(layers)[-1] == "SWRM"
+    assert {"PTWP", "SWRS", "BUBD"} <= set(layers)
+    assert list(layers) == sorted(layers)
     assert layers["PTWP"] == "Wody powierzchniowe"
     assert document.classes is None
     assert document.years is None
@@ -388,7 +388,7 @@ def test_list_layers_soil_properties_depths_statistics():
     assert document.source == "SoilGrids"
     assert document.layers == ()
     assert list(properties)[:2] == ["bdod", "cec"]
-    assert properties["clay"] == "il (%)"
+    assert "w pliku g/kg" in properties["clay"]
     assert document.depths == (
         "0-5cm",
         "5-15cm",
@@ -396,7 +396,11 @@ def test_list_layers_soil_properties_depths_statistics():
         "30-60cm",
         "60-100cm",
         "100-200cm",
+        "0-30cm",
     )
+    clay, ocs = (p for p in document.properties or () if p.code in ("clay", "ocs"))
+    assert (clay.unit, clay.conventional_unit, clay.divisor) == ("g/kg", "%", 10)
+    assert ocs.depths == ("0-30cm",) and len(clay.depths) == 6
     assert list(statistics) == ["mean", "Q0.05", "Q0.5", "Q0.95", "uncertainty"]
     assert statistics["Q0.5"] == "mediana"
     assert document.classes is None and document.years is None
@@ -476,7 +480,14 @@ def test_documents_are_registered_with_spec_keys() -> None:
         assert layers["schema"] == "kartograf-layers/1"
     assert list(bdot10k["layers"][0]) == ["code", "description"]
     assert list(corine["years"][0]) == ["year", "data", "description"]
-    assert list(soil["properties"][0]) == ["code", "description"]
+    assert list(soil["properties"][0]) == [
+        "code",
+        "description",
+        "unit",
+        "conventional_unit",
+        "divisor",
+        "depths",
+    ]
     assert list(soil["statistics"][0]) == ["code", "description"]
 
 

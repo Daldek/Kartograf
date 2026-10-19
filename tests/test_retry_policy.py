@@ -57,6 +57,7 @@ def _bdot10k(provider, out):
 
 
 def _corine(provider, out):
+    provider._wms_layers[2018] = "12"  # the retry policy is about the preview itself
     return provider._download_via_wms(_BBOX_2180, out, 2018, 30)
 
 
