@@ -160,7 +160,8 @@ hydrology ──> core, download, landcover, cache (TYPE_CHECKING), notices,
 providers ──> sources, transform, transport, core, cache, notices,
         auth (l), download (l)
 sources ──> core, kartograf (_clock), _version
-transport ──> transform, core, sources, cache, kartograf (l, __version__)
+transport ──> transform, core, sources, cache, notices, providers,
+        kartograf (l, __version__)
 transform ──> core, sources (TYPE_CHECKING), transport (TYPE_CHECKING)
 cache ──> core (TYPE_CHECKING), notices
 _version ──> kartograf (l, __version__)
@@ -316,6 +317,15 @@ Uwagi, ktore latwo przeoczyc:
 - `transport ──> cache`: `transport/atom.py` trzyma indeks feedu uslugi
   ATOM w `MetadataCache` (tabela `atom_cache` z `ETag` feedu, ADR-042
   D12); `cache` nie importuje `transport`.
+- `transport ──> notices`: silniki kolekcji (`transport/unit_package.py`,
+  `transport/atom.py`) skladaja komunikaty bledow z `notices` (`count_text`,
+  `FILES`, `cli_flag`); `notices` nie importuje nic wewnetrznego.
+- `transport ──> providers`: jedyna krawedz to `transport/index_records.py`
+  (rekordy indeksow plikow, ADR-043), ktory na poziomie modulu importuje
+  `providers.pl.skorowidz_wfs` (`WfsIndex` i stale zapytan WFS). Krawedz
+  odwrotna `providers ──> transport` biegnie do `transport.http`, a
+  `transport.index_records` importuje tylko `download.collections`, wiec
+  cyklu modulow nie ma.
 - `providers ──> download` jest leniwa i MUSI taka zostac (pakiet
   `download` importuje `providers` przy imporcie): walidacja lat i wyboru
   kampanii z `download.campaigns` w
@@ -1900,8 +1910,8 @@ niepelny` — nigdy pusty wynik (pusta, poprawna kolekcja = brak rekordow,
 np. morze); blad transportu zachowuje `status_code` (I-1 nizej).
 `parse_index_feature` mapuje pola WFS na klucze rekordu skorowidza
 (sekcja 3.2), `layer` = typ obiektu (`SkorowidzNMT2025`); obiekt bez URL
-`https` albo z godlem spoza `SheetParser` (np. godla 8-czlonowe PL-1992)
-nie jest rekordem. Ortofotomapa zostaje na WMS (`SkorowidzLayersMixin`:
+`https` albo z godlem spoza `SheetParser` nie jest rekordem. Ortofotomapa
+zostaje na WMS (`SkorowidzLayersMixin`:
 `GetFeatureInfo`, warstwy wykryte lazy przez `GetCapabilities` — ADR-020).
 
 `providers/pl/skorowidz.py` filtruje rekordy (twardy filtr ADR-028,
@@ -3218,9 +3228,8 @@ albo godlem CZ = `ValidationError` (`CZ (CUZK) nie publikuje lat nalotu
    uklad PL-1992/PL-2000, deskryptor wariantu = format i etykieta, uklad
    wysokosci); LAZ: (rok, uklad, uklad wysokosci). Archiwa z rejestru sa
    kombinacjami jak siatki. Rekordy bez wariantu (format niezgodny z URL,
-   format lub wariant spoza rejestru, godlo spoza `SheetParser` — np.
-   8-czlonowe godla ASCII NMT 10 m i czesci ASC 1 m — brak URL `https`
-   albo ukladu) nie sa kombinacja: jedna `Notice("info",
+   format lub wariant spoza rejestru, godlo spoza `SheetParser`, brak URL
+   `https` albo ukladu) nie sa kombinacja: jedna `Notice("info",
    INDEX_UNSUPPORTED, ...)` (`index_unsupported`) z formatem,
    rozdzielczoscia, ukladem wysokosci, latami, liczba arkuszy i powodem.
 6. **Pomiar** (`_measure`): siatka 1 m wyrownana do pelnych metrow

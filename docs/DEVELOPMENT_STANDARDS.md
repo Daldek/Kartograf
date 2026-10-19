@@ -1,7 +1,7 @@
 # Standardy deweloperskie — Kartograf
 
-**Wersja:** 3.4
-**Data:** 2026-10-16
+**Wersja:** 3.5
+**Data:** 2026-10-18
 **Status:** Obowiazujacy
 **Zrodlo:** Zunifikowane standardy workspace (`shared/standards/DEVELOPMENT_STANDARDS.md` — repozytorium zewnetrzne, nieobecne w tym workspace)
 
@@ -17,8 +17,9 @@
 > **Nota 2.3 (2026-09-30):** cache PL zapisuje rekord skorowidza lub
 > potwierdzony brak pokrycia (`get_record/set_record`, TTL 7 dni); uszkodzenie
 > odpowiedzi albo awaria warstwy to `DownloadError`, nie wpis negatywny.
-> `GridMismatchError(ValidationError)` chroni wartości 1:1 wycinka w EPSG:2180;
-> testy sieciowe `live` są poza bramką offline.
+> `GridMismatchError(ValidationError)` chroni wartości 1:1 wycinka w EPSG:2180
+> (usunięty w 0.8.0 razem z torem arkuszowym wycinka); testy sieciowe `live`
+> są poza bramką offline.
 >
 > **Nota 3.0 (2026-10-08, przeglad dokumentacji):** dokument jest glownym
 > zrodlem konwencji i procesu pracy projektu. Przejete
