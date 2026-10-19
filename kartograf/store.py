@@ -1757,10 +1757,14 @@ def link_target(path: str | Path) -> Path | None:
     ``extra.link_target``), requires the target to be a version of the
     link's own slot and confirms it with ``download.links.linked_version``:
     the same file by inode, or - on a share without stable inode numbers
-    (SMB without ``serverino``) - by content: both paths with more than one
-    link, the same size and the link's sha256 equal to the version sidecar's
-    (one full read of the file). Call it for the links of interest, not for
-    every slot of a full scan.
+    (SMB without ``serverino``) - by content: the same size and the link's
+    sha256 equal to the version sidecar's (one full read of the file on
+    every call). The link count is not consulted (an SMB client reports 1
+    for a path it has just opened, the confirming read included), so a path
+    that holds the version's bytes counts as holding it, a hardlink or an
+    independent copy alike (a download turns an evident copy back into a
+    hardlink). Call it for the links of interest, not for every slot of a
+    full scan.
 
     Parameters
     ----------
@@ -1772,8 +1776,8 @@ def link_target(path: str | Path) -> Path | None:
     Path or None
         The version file, in the same form as ``StoreEntry.version_path``;
         ``None`` for a missing file or sidecar, a 0.7.x copy, a target
-        outside the slot, a removed version or a link that no longer holds
-        the version's content.
+        outside the slot, a removed version or a path whose content is no
+        longer the version's.
     """
     link = Path(path)
     try:
