@@ -40,6 +40,7 @@ from kartograf.providers.base import BaseProvider
 from kartograf.providers.pl.gugik import GugikProvider
 from kartograf.providers.pl.skorowidz import parse_skorowidz_records
 from kartograf.transport.http import get_with_retry
+from tests.smb_share import no_stable_inodes, report_one_link
 
 FIXTURES = Path(__file__).parent / "fixtures"
 NMT = FIXTURES / "gugik_skorowidz" / "real_2026_10_06" / "nmt"
@@ -950,6 +951,26 @@ def test_manager_range_reports_link_kept_on_newer_flight(tmp_path):
     within = DownloadManager(tmp_path, provider=fake, min_year=2025)
     selected = within.download_sheet(G)
     assert selected.link_outside_range == {}
+
+
+def test_manager_range_keeps_link_on_newer_flight_while_smb_reports_one_link(
+    tmp_path, monkeypatch
+):
+    """e2e 0.8.0, cifs without ``serverino``: a run right after the standard
+    path was read saw one link, took the path for unknown and moved it back
+    to the in-range 2022 flight. It stays on the newest flight."""
+    fake = c14_fake()
+    DownloadManager(tmp_path, provider=fake).download_sheet(G)
+    std = std_path(tmp_path)
+    newest = campaign_path(tmp_path, REC["84183"])
+    inode = std.stat().st_ino
+    with monkeypatch.context() as smb:
+        no_stable_inodes(smb)
+        report_one_link(smb, std)
+        manager = DownloadManager(tmp_path, provider=fake, max_year=2022)
+        ranged = manager.download_sheet(G)
+    assert std.stat().st_ino == inode and "84183" in linked(std)
+    assert ranged.link_outside_range[G].resolve() == newest.resolve()
 
 
 def test_manager_year_with_no_data_sheet_is_skipped(tmp_path):
