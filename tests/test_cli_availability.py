@@ -392,3 +392,47 @@ def test_auto_part_failed_exit_code(capsys):
     assert out.startswith("Dostepnosc NMPT PL wg skorowidza GUGiK")
     assert "Dostepnosc NMPT CZ" not in out
     assert "Warning: --country auto: nie udalo sie sprawdzic czesci CZ" in err
+
+
+class _SeaMask:
+    """PRG mask of an area that is neither land nor abroad (the sea within the
+    territorial waters)."""
+
+    def burn(self, transform, shape):
+        import numpy as np
+
+        return np.full(shape, 99, dtype=np.uint8)
+
+
+def test_area_without_land_says_so_and_proposes_no_download(capsys):
+    """e2e-A P3-16: for lack of land to cover every combination is complete
+    (``full_m2 == land_m2 == 0``); the report tells it (``NO_LAND``) and the
+    footer does not propose to download sheets without land."""
+    from kartograf.core.bbox import BBox
+    from kartograf.download.availability import check_availability
+    from kartograf.notices import NO_LAND
+
+    with (
+        patch(SESSION, return_value=RecordedIndex(_areas("nmt", "krakow"))),
+        patch("kartograf.download.availability._land_mask", return_value=_SeaMask()),
+    ):
+        report = check_availability(
+            product="nmt",
+            country="pl",
+            bbox=BBox(565000, 242000, 569000, 246000, "EPSG:2180"),
+            cache=False,
+        )
+    (area,) = report.areas
+    assert area.land_m2 == 0 and area.area_m2 > 0
+    assert report.combinations
+    assert all(c.complete and c.full_m2 == 0 for c in report.combinations)
+    assert [n.code for n in report.notices].count(NO_LAND) == 1
+
+    from kartograf.cli.availability_cmd import _print_footer, _print_tables
+
+    _print_tables(report)
+    _print_footer(report)
+    out = capsys.readouterr().out
+    assert "brak ladu" in out and " tak" not in out
+    assert "Obszar nie ma ladu PL" in out
+    assert "Najnowsza kompletna kombinacja" not in out and "Pobranie" not in out

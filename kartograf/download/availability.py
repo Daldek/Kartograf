@@ -85,7 +85,11 @@ from kartograf.download.area import (
 )
 from kartograf.download.arguments import option_error, option_name, require_bool
 from kartograf.download.campaigns import in_year_range, year_range_label
-from kartograf.download.countries import country_bbox, split_bbox_by_country
+from kartograf.download.countries import (
+    country_bbox,
+    outside_country,
+    split_bbox_by_country,
+)
 from kartograf.download.options import (
     canonical_bbox,
     canonical_country,
@@ -100,6 +104,7 @@ from kartograf.notices import (
     CHECK_FAILED,
     CZ_SERVICE_ONLY,
     INDEX_UNSUPPORTED,
+    NO_LAND,
     Notice,
     NoticeSink,
 )
@@ -169,6 +174,12 @@ _CZ_HORIZONTAL = {"sm5": "S-JTSK", "tm33": "ETRS89-TM33"}
 _CZ_NO_YEARS = (
     "CZ (CUZK) nie publikuje lat nalotu - --year/--min-year/--max-year dotycza "
     "tylko PL (raport CZ podaje date publikacji plikow)"
+)
+# ``NO_LAND``: why every combination of a land-less area is complete.
+_NO_LAND = (
+    "obszar nie ma ladu PL (morze terytorialne albo obszar poza granica "
+    "panstwa) - nie ma ladu do pokrycia, wiec kazda kombinacja jest kompletna "
+    "(komplet: tak) bez obietnicy danych do pobrania"
 )
 # Pixels per row strip of the completeness grid (as LandMask.apply).
 _STRIP_PX = 4_000_000
@@ -591,10 +602,13 @@ def _check_pl(
     )
     # one grid selection per sheet system and scale for all the hints
     select = functools.cache(functools.partial(_selected_sheets, request))
-    return area, [
+    found = [
         _combination(request, group, (land_px, target_px), measure, areas, select)
         for group, measure in zip(groups, measured, strict=True)
     ]
+    if found and land_px == 0:
+        sink.emit("info", NO_LAND, _NO_LAND)
+    return area, found
 
 
 # =============================================================================
@@ -717,6 +731,27 @@ def _request_payload(request: _Request, layer_name: str | None) -> dict:
     return payload
 
 
+def _explicit_area(request: _Request, layer_name: str | None) -> BBox | None:
+    """The area of a request for ONE country (``pl``/``cz``): the bbox or the
+    envelope of the geometry, which must reach the envelope of that country
+    (``outside_country``, the check of ``download_data``) - numbers in another
+    CRS than ``--bbox-crs`` says or swapped axes would otherwise reach the
+    index and come back as an empty report. ``None``: a PL sheet code (its frame
+    is in PL) or ``auto`` (``_parts`` splits the area by the countries)."""
+    if request.country not in ("pl", "cz") or request.sheet is not None:
+        return None
+    option = "bbox" if request.geometry is None else "geometry"
+    if request.bbox is not None:
+        area = request.bbox
+    else:
+        assert request.geometry is not None
+        area = geometry_envelope(request.geometry, layer_name)
+    error = outside_country(area, request.country.upper(), flag=f"--{option}")
+    if error is not None:
+        raise ValidationError(error, option=option)
+    return area
+
+
 def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Parts:
     """Countries of the request and the area of each part (before the
     network; a ``TransformError`` fails the request).
@@ -731,14 +766,12 @@ def _parts(request: _Request, layer_name: str | None, sink: NoticeSink) -> _Part
     """
     if request.cz_sheet is not None:
         return _Parts(("CZ",), None, _CzPart(None, request.cz_sheet))
+    explicit = _explicit_area(request, layer_name)
     if request.country == "pl":
         return _Parts(("PL",), _area_polygons(request, layer_name), None)
     if request.country == "cz":
-        if request.bbox is not None:
-            return _Parts(("CZ",), None, _CzPart(request.bbox))
-        assert request.geometry is not None
-        envelope = geometry_envelope(request.geometry, layer_name)
-        return _Parts(("CZ",), None, _CzPart(envelope))
+        assert explicit is not None
+        return _Parts(("CZ",), None, _CzPart(explicit))
     if request.geometry is not None:
         area = geometry_envelope(request.geometry, layer_name)
     else:

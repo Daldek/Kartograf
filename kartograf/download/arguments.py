@@ -39,6 +39,17 @@ def require_int(value: object, name: str) -> None:
         )
 
 
+def require_workers(value: object, name: str = "--workers") -> None:
+    """``ValidationError`` unless ``value`` is an ``int`` of at least 1 (the
+    number of parallel transfers: ``0`` and negative values are not "one")."""
+    require_int(value, name)
+    assert isinstance(value, int)
+    if value < 1:
+        raise ValidationError(
+            f"{name} musi byc >= 1, podano {value}", option=option_name(name)
+        )
+
+
 def require_str(value: object, name: str) -> None:
     """``ValidationError`` unless ``value`` is a ``str`` (a code is never a number:
     ``teryt=1261`` would lose leading zeros, e.g. ``0208``)."""

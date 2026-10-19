@@ -2160,6 +2160,20 @@ sygnal = pozycja `result.stale` (blad, bez pobrania). Typy planu leza w
 `select_planned`, `new_plan`); pozostale tory dostaja `plan=` w swoich
 `run_*`.
 
+**Stany danych w sprawdzeniu (0.8.0, E2E P2-3).** `check_sheets(sheets,
+on_no_coverage=)` odtwarza wynik pobrania, a nie tylko pozycje: arkusz bez
+danych (`NoCoverageError`) nie jest pozycja planu ani niepowodzeniem
+sprawdzenia — `on_no_coverage(brakujace, liczba_arkuszy)` dostaje te arkusze
+(`download/data.py` zamienia je w `NO_COVERAGE_SOME` i `NO_COVERAGE_HINT`,
+tekstem pobrania, `_no_coverage_warning`/`_coverage_hints`), a gdy zaden
+arkusz nie ma danych, zglasza `NoCoverageError` (pojedynczy arkusz: jego
+wlasny; lista: `no_coverage_text`). Arkusze z danymi tylko poza zakresem lat to
+JEDEN `YearRangeError` (`year_range_error`, jak `_checked_range`), a
+`check_failed` zostaje dla awarii skorowidza. `check_data` rzuca wtedy blad
+pierwszej porazki (`_Run.causes`): klasa wyjatku = kod bledu (`no_coverage`,
+`year_out_of_range`), a w raporcie pobrania ta sama nazwa to `UnitFailure.kind`
+(`_failure_kind`; `download` i `country` dla pozostalych).
+
 **Tory bez kampanii (plan 2/3; LAZ CZ: plan B).** LAZ (`download/laz.py`),
 LAZ CZ (`download/cz_laz.py`), arkusze CZ
 (`download/cz_sheets.py`), wycinki CZ (`download/cz_cutout.py`) i PL
@@ -2268,6 +2282,9 @@ nie arkusze. Arkusz bez danych w zadnym roku ma status `no_coverage`
 (`Warning:` R5); arkusz z danymi tylko poza przedzialem to
 `YearRangeError` i przerwanie CALEJ listy przed pobraniem, rowniez przy
 samym `--min-year`. Nieudane sprawdzenie skorowidza tez przerywa liste.
+Tak samo `--check-updates`: arkusze bez danych to `NO_COVERAGE_SOME` i kod 0
+(zaden arkusz z danymi = `no_coverage`, kod 1), konflikt lat to jeden
+`year_out_of_range` dla wszystkich arkuszy (sekcja 4.1).
 
 **Archiwa GUGiK (`format` inny niz `ASC`, ADR-041).** Arkusze archiwum
 maja rozne skale (godla 6-czlonowe 1:25000 i 7-czlonowe jednego wariantu,
