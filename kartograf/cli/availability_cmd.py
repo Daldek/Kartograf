@@ -130,9 +130,10 @@ def _model(combination: AvailabilityCombination) -> str:
     return combination.source
 
 
-def _complete(combination: AvailabilityCombination) -> str:
+def _complete(combination: AvailabilityCombination, land_m2: float) -> str:
     if combination.complete:
-        return "tak"
+        # no land to cover: "tak" would promise data the area does not need
+        return "tak" if land_m2 > 0 else "brak ladu"
     parts = []
     if combination.sheets_partial:
         parts.append(f"{len(combination.sheets_partial)} niepelne")
@@ -210,7 +211,7 @@ def _print_pl(report: AvailabilityReport, area: AvailabilityArea) -> None:
                 c.vertical_crs,
                 c.format,
                 f"{len(c.sheets_full)}/{len(c.sheets_partial)}",
-                _complete(c),
+                _complete(c, area.land_m2),
             )
             for c in found
         ],
@@ -240,7 +241,7 @@ def _print_cz(report: AvailabilityReport, area: AvailabilityArea) -> None:
                 f"{len(c.sheets_full)}/{len(c.sheets_missing)}",
                 _span(c.published),
                 size_text(c.size_bytes),
-                _complete(c),
+                _complete(c, area.land_m2),
             )
             for c in found
         ],
@@ -254,7 +255,8 @@ def _print_details(report: AvailabilityReport) -> None:
     print()
     print("Szczegoly kombinacji:")
     for combination in report.combinations:
-        print(f"  {_label(combination)}: {_complete(combination)}")
+        complete = _complete(combination, land[combination.country])
+        print(f"  {_label(combination)}: {complete}")
         if combination.sheets_partial:
             print(
                 f"    arkusze niepelne ({len(combination.sheets_partial)}): "
@@ -308,14 +310,23 @@ def _print_campaigns(combination: AvailabilityCombination, land_m2: float) -> No
 
 def _print_footer(report: AvailabilityReport) -> None:
     if _of(report, "PL"):
-        _print_pl_footer(_of(report, "PL"))
+        land = next(a.land_m2 for a in report.areas if a.country == "PL")
+        _print_pl_footer(_of(report, "PL"), land)
     if _of(report, "CZ"):
         _print_cz_footer(_of(report, "CZ"))
 
 
-def _print_pl_footer(found: list[AvailabilityCombination]) -> None:
+def _print_pl_footer(found: list[AvailabilityCombination], land_m2: float) -> None:
     newest = next((c for c in found if c.complete), None)
     print()
+    if land_m2 <= 0:
+        # every combination is complete for lack of land: nothing is proposed
+        print(
+            "Obszar nie ma ladu PL (morze albo poza granica panstwa) - nie ma "
+            "czego pobierac, wiec bez podpowiedzi pobrania (arkusze w obszarze: "
+            "--details)"
+        )
+        return
     if newest is None:
         print(
             "Zadna kombinacja nie pokrywa calego ladu obszaru pelnymi arkuszami "

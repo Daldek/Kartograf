@@ -49,6 +49,10 @@ INDEX_UNSUPPORTED = "index_unsupported"
 # Availability report CZ: models without sheet files (DMR 5G, DMP 1G) - only
 # a cutout or a TM33 tile of the ImageServer, and their LAZ.
 CZ_SERVICE_ONLY = "cz_service_only"
+# Availability report PL: the area has no land (the sea within the territorial
+# waters, an area beyond the state border) - every combination is "complete"
+# for lack of land to cover.
+NO_LAND = "no_land"
 
 # A file above this size is announced (``DOWNLOAD_SIZE``) before its transfer
 # (K9): collection units and the image sheets of ``download_data``.
