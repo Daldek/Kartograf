@@ -270,8 +270,9 @@
   (`partition`, `target`, `skip_versions`, `segment`, `options` dla `units`
   + `partition`) i wiersze w `tests/test_errors.py`. `store_documents`
   i narzedzia MCP bez zmian (czesci to wydajnosc dla programow, nie dla
-  agenta). Brama na probie: 7139 passed; po scaleniu `develop` z poprawkami
-  i typami - wynik w bramie koncowej (`scripts/gate.sh`).
+  agenta). Brama na probie: 7139 passed. Proba weszla do
+  `feat/agent-interface` (fast-forward) razem z typami publicznego API
+  (uwaga 1 Archiwisty); brama tej galezi po scaleniu `develop`: 7146 passed.
 
 ### Sesja 2026-10-19 - czesci segmentu i szybszy skan magazynu (ADR-045 errata 2)
 
