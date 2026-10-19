@@ -112,8 +112,8 @@
 
 **Data:** sekcje datowane ponizej (dziennik historyczny, od najnowszej)
 
-> **START NASTEPNEJ SESJI (stan 2026-10-19, wydanie 0.8.0 przygotowane na
-> `develop`, w tym odczyt magazynu i interfejs dla agentow - pkt 0-1):**
+> **START NASTEPNEJ SESJI (stan 2026-10-19 wieczor, `develop` `8e9bcbb` gotowy
+> do tagu wersji deweloperskiej v0.8.0 po tescie E2E - pkt 0-1):**
 > 0. **Wydanie 0.8.0 przygotowane na `develop`** (`__version__ = "0.8.0"`,
 >    CHANGELOG `[0.8.0] - 2026-10-17`; testy na zywo wydania:
 >    `docs/research/2026-10-17-release-0.8.0-live/raport.md`, interfejsu dla
@@ -122,25 +122,33 @@
 >    (ADR-045 z erratami 1-2, KA-1..KA-6, KA-8; zweryfikowane zmiany agenta
 >    Archiwisty), `feat/agent-interface` (ADR-046, `py.typed` z pelnymi
 >    typami), KD-1/KD-2 (ADR-047) oraz audyt dokumentacji i poprawki testu
->    E2E przed tagiem (`docs/research/2026-10-19-e2e-0.8.0/raport.md`: P1 0,
->    wszystkie P2 naprawione, otwarte decyzje w sekcji "Otwarte" raportu).
->    Brama na `develop` (`scripts/gate.sh`): 7419 passed, 18 deselected,
->    ruff/format/mypy czyste. CZEKA NA ZGODE UZYTKOWNIKA: tag wersji
->    deweloperskiej `v0.8.0` (potem testy z Archiwista i Retmanem), merge do
->    `main` i push (`develop`, `main`, tag); przed tagiem
->    przeglad `git log origin/develop..develop` i `scripts/gate.sh` (CLAUDE.md,
->    "Agenci z innych repozytoriow"). Po wydaniu: poczatek kolejnego cyklu
->    (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased` w CHANGELOG, jak
->    `chore(release): poczatek cyklu 0.8.0`). Hydrograf/Hydrolog dostosuja
->    sie same do zmian lamiacych (CHANGELOG [0.8.0], "Co zrobic").
->    Sprzatanie WYKONANE 2026-10-19 (zgoda uzytkownika): glowny checkout na
->    `develop`; lokalnie zostaly tylko `develop` i `main`, worktree w
->    `/home/claude-agent/workspace/wt/` usuniete (wszystkie galezie byly w
->    `develop`; tresc galezi `wip/*`, stasha `fix/live-0.8.0`
->    i niezacommitowanych zmian `wt/feat/plan-d-cz-orto` sprawdzona linia po
->    linii - weszla do `develop` albo zostala zastapiona pozniejszymi
->    zmianami, np. `cz.cuzk.ortofoto` -> `cz.cuzk.orto`). Na `origin` sa
->    tylko `develop` i `main`.
+>    E2E przed tagiem (merge `8e9bcbb`; `docs/research/2026-10-19-e2e-0.8.0/
+>    raport.md`: P1 0, wszystkie P2 naprawione, smoke koncowy na wheel
+>    zgodny). Brama na `develop` (`scripts/gate.sh`): 7419 passed,
+>    18 deselected, ruff/format/mypy czyste. Lokalny `develop` ma 47
+>    commitow ponad `origin/develop`. CZEKA NA ZGODE UZYTKOWNIKA: tag wersji
+>    deweloperskiej `v0.8.0` na `8e9bcbb` (potem uzytkownik testuje
+>    z Archiwista i Retmanem), merge do `main` i push (`develop`, `main`,
+>    tag); przy tagu zapytac o date w CHANGELOG `[0.8.0] - 2026-10-17`
+>    (data tagu?). Przed tagiem przeglad `git log origin/develop..develop`
+>    i `scripts/gate.sh` (CLAUDE.md, "Agenci z innych repozytoriow").
+>    DO DECYZJI UZYTKOWNIKA (raport E2E, sekcja "Otwarte"): SIGTERM
+>    w serwerze MCP (zostaje domyslne zakonczenie), przypinanie czesciowego
+>    sukcesu `--country auto` w projekcie (dzis kod 1, nic nie przypiete,
+>    ostrzezenie mowi "kod 0"), obrys WGS84 przez MCP (brak narzedzia),
+>    komunikaty argparse po angielsku. Nastepny krok uzytkownika: audyt
+>    README (pominiety w audycie 2026-10-19). Po wydaniu: poczatek
+>    kolejnego cyklu (`__version__` z `-dev`, sekcja `[X.Y.Z] - Unreleased`
+>    w CHANGELOG, jak `chore(release): poczatek cyklu 0.8.0`).
+>    Hydrograf/Hydrolog dostosuja sie same do zmian lamiacych (CHANGELOG
+>    [0.8.0], "Co zrobic"; nowe po E2E: bbox zerowej powierzchni i poza
+>    zakresem EPSG:4326 = kod 2, `--workers < 1` = kod 2, kod 143,
+>    `failed[].kind`, `Sidecar.unit` kafla LAZ).
+>    Sprzatanie po sesji 2026-10-19: lokalnie tylko `develop` i `main`, bez
+>    worktree w `/home/claude-agent/workspace/wt/`; srodowiska testowe
+>    (venv z wheel, logi) poza repo w `~/scratch/kartograf-e2e-0.8.0*`
+>    (do usuniecia w dowolnej chwili). Na `origin` sa tylko `develop`
+>    i `main`.
 > 1. **Nastepne kroki:** podprojekt 4 (wtyczka QGIS) roadmapy
 >    (`docs/SCOPE.md` 3.3) - od brainstormingu i specu. Podprojekt 5 (GUI
 >    webowe) ZASTAPIONY osobnym projektem **Archiwista**
@@ -186,9 +194,16 @@
 >    konczy sie po ok. 200 zapytaniach - dzielic zadania na porcje z raportem
 >    punktow startowych dla nastepcy; zakaz wlasnych subagentow subagenta
 >    (omijaja kontrole limitu); wzgledne sciezki narzedzi edycji trafiaja do
->    glownego checkoutu (raz sie zdarzylo, cofniete) - tylko bezwzgledne;
->    `.venv` ma edytowalna instalacje glownego checkoutu - w worktree
->    `python -m ...` z cwd = worktree albo `PYTHONPATH=<worktree>`.
+>    glownego checkoutu (2026-10-19: trzy razy, cofniete) - tylko
+>    bezwzgledne, przypominac w kazdym zadaniu; `git stash` jest WSPOLNY dla
+>    wszystkich worktree - subagentom zakazac `git stash` (2026-10-19
+>    dwaj subagenci podmienili sobie zmiany); `.venv` ma edytowalna
+>    instalacje glownego checkoutu - w worktree
+>    `python -m ...` z cwd = worktree albo `PYTHONPATH=<worktree>`. Test E2E
+>    z czystej instalacji: wheel z `git archive`, nowy venv, osobny cwd
+>    (cache) na kazdy wycinek; MCP z malym agentem: `claude -p --model haiku
+>    --strict-mcp-config --tools "" --allowedTools mcp__kartograf` z
+>    `</dev/null` (inaczej czyta stdin petli skryptu).
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
 > `origin`; szczegoly w sesjach nizej i w `docs/CHANGELOG.md` [0.7.2].
 > **Katalog danych testow na zywo:** poza repo, jawne `--output`
