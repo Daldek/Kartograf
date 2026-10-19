@@ -155,7 +155,8 @@
 >    CLI = biblioteka = MCP, Claude Code (Haiku) - wszystko zgodne ze specem;
 >    jedyny blad (B1: `kartograf-mcp` konczyl sie tracebackiem, gdy nie dalo
 >    sie utworzyc katalogu cache) naprawiony w `a7ba1336` z testem regresji.
->    Brama: 7070 passed (przed dokumentacja), ruff/format/mypy czyste.
+>    Brama koncowa (koordynator, HEAD `4bbbdfca` po poprawkach O1-O5): 7087
+>    passed, 18 deselected, ruff/format/mypy czyste.
 >    **STAN: galaz `feat/agent-interface` GOTOWA; CZEKA NA ZGODE UZYTKOWNIKA**
 >    na `git merge --no-ff` do `develop`, potem do `main`, tag `v0.8.0` i
 >    push (`develop`, `main`, tag); przed tagiem przeglad
@@ -201,7 +202,19 @@
 >    `develop`, sciezki bezwzgledne; zasady trzeba przekazac w zadaniu
 >    (zasada produktowa, brama przed zgloszeniem gotowosci, autor commitow,
 >    bez merge i push, tajny katalog danych, zakaz upraszczania, format
->    raportu). Integracja i konflikty: koordynator.
+>    raportu). Integracja i konflikty: koordynator. Ustalenia uzytkownika
+>    i lekcje z sesji 2026-10-18: koordynator tylko deleguje (nie pisze kodu);
+>    praca wylacznie w worktree (glowny checkout zostaje nietkniety); limit
+>    zuzycia konta 90% - powyzej czekac pasywnie na reset (`omp usage
+>    --provider anthropic`; subagenci dostaja narzedzie blokady); subagenci
+>    `task` na Claude (`anthropic/claude-sonnet-5-5`, zapisane globalnie),
+>    liczba rownoleglych subagentow wg potrzeb (limit 2 zniesiony); subagent
+>    konczy sie po ok. 200 zapytaniach - dzielic zadania na porcje z raportem
+>    punktow startowych dla nastepcy; zakaz wlasnych subagentow subagenta
+>    (omijaja kontrole limitu); wzgledne sciezki narzedzi edycji trafiaja do
+>    glownego checkoutu (raz sie zdarzylo, cofniete) - tylko bezwzgledne;
+>    `.venv` ma edytowalna instalacje glownego checkoutu - w worktree
+>    `python -m ...` z cwd = worktree albo `PYTHONPATH=<worktree>`.
 > **Wydanie 0.7.2** (2026-10-11): `develop`, `main` i tag `v0.7.2` na
 > `origin`; szczegoly w sesjach nizej i w `docs/CHANGELOG.md` [0.7.2].
 > **Katalog danych testow na zywo:** poza repo, jawne `--output`
@@ -265,10 +278,11 @@
   nazwy modulow, import `mcp_server` bez `mcp`, postep przez `BlockingPortal`,
   `get_cache_path`, `UsageError.command`, instalacja `mcp` podnosi `idna`); plan
   liczyl 16 komend w T4d, jest 15 (razem 41 deklaracji).
-- Brama (`scripts/gate.sh` w worktree, po dokumentacji): 7075 passed, 18 deselected
-  (live), 153 s; `ruff check` czysty, `ruff format --check` 306 plikow, `mypy
-  kartograf/ tests/` 304 pliki bez bledow (stan sprawdzaj komenda, nie ta liczba).
-  Zielone byly tez wszystkie wczesniejsze bramy torow i integracji.
+- Brama (`scripts/gate.sh` w worktree): po dokumentacji 7075 passed; koncowa
+  koordynatora na `4bbbdfca` (po O1-O5): 7087 passed, 18 deselected (live),
+  154 s; `ruff check`, `ruff format --check` i `mypy kartograf/ tests/` czyste
+  (stan sprawdzaj komenda, nie ta liczba). Zielone byly tez wszystkie
+  wczesniejsze bramy torow i integracji.
 - Weryfikacja na zywo (T9) WYKONANA: `docs/research/2026-10-18-agent-interface-e2e/raport.md`
   (availability PL na zywo, pobranie arkusza Krakowa i sprawdzenie, serwer MCP przez
   stdio, wheel z `py.typed`, zgodnosc trzech drog, Claude Code). Wynik: gotowe do
