@@ -702,6 +702,27 @@ def test_input_error_hints_name_the_fix(tmp_path):
 
 
 @needs_mcp
+def test_input_error_hint_example_is_of_the_product_and_country_of_the_call(tmp_path):
+    # E2E 0.8.0 D P3-7: the same call as in the CLI, the same example
+    report = error_of(
+        call(
+            "boundaries_download",
+            {
+                "product": "admin",
+                "country": "auto",
+                "level": "gmina",
+                "bbox": [18.6, 49.7, 18.7, 49.8],
+                "bbox_crs": "EPSG:4326",
+                "output_dir": str(tmp_path),
+            },
+        )
+    )
+
+    assert report["details"]["option"] == "level"
+    assert "--country auto" in report["hint"] and "--product admin" in report["hint"]
+
+
+@needs_mcp
 def test_oserror_is_io_error(tmp_path):
     missing = tmp_path / "missing"
 

@@ -14,7 +14,7 @@ unavailable directory or file), ``interrupted`` (``KeyboardInterrupt``) and
 
 import errno
 import os
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 
 from kartograf.exceptions import (
@@ -229,11 +229,15 @@ def _ascii(text: str) -> str:
 
 
 def _option_hint(
-    option: str, allowed: Sequence[str] | None, command: str | None
+    option: str,
+    allowed: Sequence[str] | None,
+    command: str | None,
+    given: Mapping[str, object] | None = None,
 ) -> str | None:
     """The hint of a ``ValidationError`` that names an argument (spec 6.3, step
     3): the allowed values with the CLI flag of the argument and an example
-    command line of the catalog that uses it.
+    command line of the catalog that uses it (of the product of the call,
+    ``given``).
 
     The flag and the example need the command (``command``); without it the flag
     is the name of the argument and there is no example. The example is left
@@ -241,7 +245,7 @@ def _option_hint(
     """
     from kartograf.catalog.hints import example_for  # loads the declarations
 
-    flag, line = example_for(command, option)
+    flag, line = example_for(command, option, given)
     text = allowed_values_hint(flag or option, allowed) if allowed else ""
     if line:
         candidate = f"{text} Przyklad: {line}".strip()
@@ -250,11 +254,15 @@ def _option_hint(
     return text or None
 
 
-def _options_hint(options: Sequence[str], command: str | None) -> str | None:
+def _options_hint(
+    options: Sequence[str],
+    command: str | None,
+    given: Mapping[str, object] | None = None,
+) -> str | None:
     """The hint of a ``ValidationError`` that names several arguments (the area
     is missing: ``sheet``, ``bbox``, ``geometry``; two arguments exclude each
     other): their CLI flags and an example command line of the catalog that
-    uses the first of them.
+    uses the first of them (of the product of the call, ``given``).
 
     Without the command (or for an argument it does not have) the name of the
     argument stands for the flag and there is no example; the example is left
@@ -264,7 +272,7 @@ def _options_hint(options: Sequence[str], command: str | None) -> str | None:
 
     flags = [example_for(command, name)[0] or name for name in options]
     text = f"Opcje: {', '.join(flags)}."
-    _, line = example_for(command, options[0])
+    _, line = example_for(command, options[0], given)
     if line and len(candidate := f"{text} Przyklad: {line}") <= HINT_MAX_CHARS:
         return candidate
     return text
@@ -278,7 +286,11 @@ def _usage_hint(command: str | None) -> str | None:
     return usage_hint(command, max_chars=HINT_MAX_CHARS)
 
 
-def _library_hint(exc: KartografError, command: str | None) -> str | None:
+def _library_hint(
+    exc: KartografError,
+    command: str | None,
+    given: Mapping[str, object] | None = None,
+) -> str | None:
     """The hint of an exception of the package hierarchy (spec 6.3, steps 1-3)."""
     if exc.hint:
         return exc.hint
@@ -295,9 +307,9 @@ def _library_hint(exc: KartografError, command: str | None) -> str | None:
         return exc.DEFAULT_HINT
     if isinstance(exc, ValidationError):
         if exc.option:
-            return _option_hint(exc.option, exc.allowed, command)
+            return _option_hint(exc.option, exc.allowed, command, given)
         if exc.options:
-            return _options_hint(exc.options, command)
+            return _options_hint(exc.options, command, given)
     return None
 
 
@@ -321,7 +333,12 @@ def _io_details(exc: OSError) -> dict[str, object]:
     return details
 
 
-def error_report(exc: BaseException, *, command: str | None = None) -> ErrorReport:
+def error_report(
+    exc: BaseException,
+    *,
+    command: str | None = None,
+    given: Mapping[str, object] | None = None,
+) -> ErrorReport:
     """Describe an exception as an :class:`ErrorReport`.
 
     Parameters
@@ -336,13 +353,19 @@ def error_report(exc: BaseException, *, command: str | None = None) -> ErrorRepo
         it the command a ``UsageError`` names. The hint of a ``UsageError`` is
         about the command whose line was wrong (``exc.command``), else about this
         one.
+    given : mapping, optional
+        The arguments of the failed call by their names (what the CLI parsed or
+        an MCP tool was given). The example of the hint of an invalid argument
+        is then the one of the ``product`` of the call, of its ``country`` and
+        of the way it chose the area (``kartograf.catalog.hints.example_for``);
+        without it the example is the first one that shows the argument.
     """
     if isinstance(exc, KartografError):
         named = exc.command if isinstance(exc, UsageError) else None
         return ErrorReport(
             code=exc.code,
             message=str(exc),
-            hint=_hint_or_none(_library_hint(exc, command)),
+            hint=_hint_or_none(_library_hint(exc, command, given)),
             exception=type(exc).__name__,
             exit_code=exc.exit_code,
             command=command if command is not None else named,

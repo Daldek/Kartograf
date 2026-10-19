@@ -151,6 +151,25 @@ def test_json_input_error_lists_allowed_values_and_an_example(capsys, tmp_path):
     )
 
 
+def test_json_input_error_hint_example_is_of_the_product_and_country_of_the_line(
+    capsys, tmp_path
+):
+    # E2E 0.8.0 D P3-7: the hint took the first example of the command
+    argv = ["boundaries", "download", "--product", "admin", "--country", "auto"]
+    argv += ["--level", "gmina", "--bbox", "18.6,49.7,18.7,49.8"]
+    argv += ["--bbox-crs", "EPSG:4326", "-o", str(tmp_path), "--json"]
+
+    code, out, err = _run(capsys, argv)
+
+    document = json.loads(out)
+    assert code == 2 and err == ""
+    assert document["details"]["option"] == "level"
+    example = parse_command(document["hint"].split("Przyklad: kartograf ", 1)[1])
+    assert example.command == "boundaries download"
+    assert example.options["product"] == "admin"
+    assert example.options["country"] == "auto"
+
+
 def test_json_argparse_error_is_usage_error(capsys):
     code, out, err = _run(capsys, ["elevation", "download", "--bogus", "--json"])
 
