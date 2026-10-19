@@ -4,7 +4,13 @@ import pytest
 
 from kartograf import Notice
 from kartograf.exceptions import ValidationError
-from kartograf.notices import CACHE_DISABLED, CUTOUT_SIZE, NoticeSink
+from kartograf.notices import (
+    CACHE_DISABLED,
+    CUTOUT_SIZE,
+    LISTED_UNITS,
+    NoticeSink,
+    names_text,
+)
 
 
 def test_sink_forwards_in_order_and_collects() -> None:
@@ -33,3 +39,17 @@ def test_notice_text_ascii(text: str) -> None:
     with pytest.raises(ValueError, match="ASCII") as exc:
         Notice("warning", CACHE_DISABLED, text)
     assert not isinstance(exc.value, ValidationError)
+
+
+def test_names_text_lists_all_names_up_to_the_limit_then_counts_the_rest() -> None:
+    names = [f"u{i}" for i in range(LISTED_UNITS + 5)]
+
+    assert names_text([]) == ""
+    assert names_text(names[:LISTED_UNITS]) == ", ".join(names[:LISTED_UNITS])
+    # the first names, then the number of the rest in its Polish noun form
+    first = ", ".join(names[:LISTED_UNITS])
+    assert names_text(names[: LISTED_UNITS + 1]) == f"{first} i 1 inny"
+    assert names_text(names[: LISTED_UNITS + 2]) == f"{first} i 2 inne"
+    assert names_text(names[: LISTED_UNITS + 5]) == f"{first} i 5 innych"
+    # a very long list stays one short line
+    assert len(names_text([f"2000/7/78944_{i}" for i in range(3884)])) < 300
