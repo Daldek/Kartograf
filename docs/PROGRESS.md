@@ -227,6 +227,13 @@
   pokrywa kafli obszaru (np. Pomorze 2025, 2022), pobranie odrzuca
   konfliktem zakresu lat (`year_range_error`) - raport podaje dla niej
   polecenie, ktore konczy sie bledem.
+- Uwagi z przegladu (ADR-047 errata 1): `AvailabilityRecord.full` ->
+  `full_sheet` (nazwa jak w `SkorowidzRecord`, `LazTile`, sidecarze; po
+  wydaniu `/1` zmiana wymagalaby `/2`); ograniczenie LAZ opisane przy polu,
+  w USAGE, ARCHITECTURE i CHANGELOG - polecenie LAZ nie ma ukladu arkuszy
+  (potwierdzone na nagraniu Krakow 2023: podpowiedz kombinacji PL-2000
+  planuje 63 kafle PL-1992, wspolnych z `sheet_records` 0); wyjatek CZ dla
+  `complete <=> full_m2 == land_m2` w opisie klasy i CHANGELOG.
 
 ### Sesja 2026-10-19 - weryfikacja zmian Archiwisty i scalenie do develop
 

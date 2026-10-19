@@ -68,7 +68,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-044](#adr-044-ujednolicenie-cli-i-api---product---summary-funkcje-land-cover-gleb-i-hsg) | Ujednolicenie CLI i API: --product, --summary, funkcje land cover, gleb i HSG | 2026-10-16 | Przyjeta; czesciowo zastepuje [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (D1: `landcover --source`, D5: metody klas w roli API), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (D2: nazwa `project_status`), [ADR-042](#adr-042-silniki-kanalow-unit_package-feature_bbox-atom_files-i-dane-planow-cd) (D9: `landcover` z `--source`; errata 5: nazwy API wycinka ortofotomapy), [ADR-036](#adr-036-magazyn-wersjonowany) (D32: wyniki land cover i HSG), [ADR-037](#adr-037-spojnosc-cli-i-api) (S3-S4: metody klas) i [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D1 i errata 3: sloty arkusza CUZK, kafla i tematu pliku krajowego - D7); uzupelnia [ADR-043](#adr-043-plan-e-produkty-jednostkowe-arkuszowe-i-krajowe-na-silnikach-cd) (D7: timeout wywolania) i [ADR-026](#adr-026-uklad-data-per-produkt--segmenty-i-szablony-w-deskryptorach) (D7: konwencja nazw kluczy i katalogow `data/`); errata 1: argumenty tylko nazwane wszystkich funkcji pobrania i sprawdzenia (test na zywo 0.8.0) |
 | [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta — uzupelniona przez [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (narzedzia MCP odczytu magazynu; errata 1); errata 2: czesci segmentu (`list_partitions`, `partition`) i mapowanie `skip_versions` bez listingu znanych katalogow wersji (luzuje widocznosc zmian w nich) |
 | [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) | Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP | 2026-10-18 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (deklaracje komend w katalogu), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (opcje komend danych z katalogu) i [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) (narzedzia MCP odczytu magazynu) |
-| [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) | Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2) | 2026-10-19 | Przyjeta; uzupelnia [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (`full_m2`, `sheet_records`, `campaign_coverage`) |
+| [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) | Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2) | 2026-10-19 | Przyjeta; uzupelnia [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1: `AvailabilityRecord.full_sheet`, ograniczenie LAZ i wyjatek CZ w dokumentacji pola |
 
 ---
 
@@ -4160,14 +4160,16 @@ kopii regul Kartografa. Spec:
 - `full_m2` (KD-2): lad w ramach rekordow TAK; PL `land_px * (target_px -
   missing) // target_px` (dla `bbox`/`geometry` dokladnie `land_m2 -
   missing`; pas ramy zadania `sheet` nie jest ani pokryty, ani brakiem),
-  wiec `complete <=> full_m2 == land_m2`, a same rekordy NIE daja 0. CZ:
-  czesc prostokata obszaru w ramach arkuszy z plikiem (ta sama miara co
-  `uncovered_m2`).
+  wiec w PL `complete <=> full_m2 == land_m2`, a same rekordy NIE daja 0.
+  CZ: czesc prostokata obszaru w ramach arkuszy z plikiem (ta sama miara co
+  `uncovered_m2`); kombinacja kompletna moze miec `full_m2 < land_m2`, gdy
+  obszar wychodzi poza arkusze indeksu.
 - `sheet_records` (KD-1): `AvailabilityRecord(sheet, campaign,
-  acquisition_date, published, full, url)` rekordow, ktore pobiera
+  acquisition_date, published, full_sheet, url)` rekordow, ktore pobiera
   `download_hint`: NMT/NMPT najnowszy rekord arkusza (ADR-028) i najnowszy
   TAK, gdy najnowszy nie jest TAK (`--full-sheet`, ADR-033); LAZ kafle
-  `select_newest_cover` (ADR-029) w ukladzie arkuszy kombinacji. CZ: puste.
+  `select_newest_cover` (ADR-029) sposrod kafli kombinacji (jeden uklad
+  arkuszy). CZ: puste.
 - `campaign_coverage` (KD-1): `AvailabilityCampaign(campaign, complete,
   full_m2)` na kazda kampanie z `campaigns`, w tym samym przebiegu
   `_measure`. CZ: puste.
@@ -4179,12 +4181,23 @@ C (konsument musialby powtorzyc ADR-028/029/033); `land_px - missing`
 (rama zadania `sheet` liczylaby sie jako pokryta, same rekordy NIE > 0).
 
 **Konsekwencje:** Archiwista bierze etykiety wprost z raportu ("N
-kampanii" = rozne `campaign` rekordow `full` w `sheet_records`). Koszt:
-jeden `rasterize` na kampanie w pasie pomiaru; zapytania i cache bez
+kampanii" = rozne `campaign` rekordow `full_sheet` w `sheet_records`).
+Koszt: jeden `rasterize` na kampanie w pasie pomiaru; zapytania i cache bez
 zmian. Test kontraktu: `sheet_records` == URL-e planu `check_data`
-z podpowiedzi (NMT z `--full-sheet`, LAZ). Ograniczenie LAZ: pobranie
-`--year` wybiera kafle obu ukladow arkuszy naraz, kombinacja ma jeden;
-rok LAZ, ktory nie pokrywa kafli obszaru, pobranie odrzuca (bez zmian).
+z podpowiedzi (NMT z `--full-sheet`, LAZ roku z jednym ukladem arkuszy).
+Ograniczenie LAZ: podpowiedz nie ma ukladu arkuszy, wiec pobranie `--year`
+wybiera kafle obu ukladow naraz, a kombinacja ma jeden - dla roku z kaflami
+PL-1992 i PL-2000 `sheet_records` moze sie roznic od tego, co polecenie
+zapisze (Krakow 2023: podpowiedz kombinacji PL-2000 pobiera kafle PL-1992;
+opisane w docstringu pola, USAGE 1.7 i ARCHITECTURE 4.9); rok LAZ, ktory
+nie pokrywa kafli obszaru, pobranie odrzuca (bez zmian).
+
+**Errata 1 (2026-10-19, przeglad uzytkownika przed scaleniem):** pole
+`AvailabilityRecord.full` nazywa sie `full_sheet`, jak w `SkorowidzRecord`,
+`LazTile`, sidecarze i fladze `--full-sheet` (w `/1` zmiana nazwy po
+wydaniu wymagalaby `/2`); ograniczenie LAZ (dwa uklady arkuszy) opisane
+przy polu i w USAGE, nie tylko w ADR; wyjatek CZ dla `complete <=>
+full_m2 == land_m2` dopisany w opisie klasy i w CHANGELOG.
 
 ---
 

@@ -174,7 +174,7 @@ def _record() -> AvailabilityRecord:
         campaign="83233",
         acquisition_date="2022-05-10",
         published="2022-09-01",
-        full=True,
+        full_sheet=True,
         url=f"https://opendata.geoportal.gov.pl/NumDaneWys/NMT/83233/{SHEET}.asc",
     )
 
@@ -740,7 +740,7 @@ NESTED: dict[str, tuple[Callable[[], object], list[str]]] = {
     ),
     "AvailabilityRecord": (
         _record,
-        ["sheet", "campaign", "acquisition_date", "published", "full", "url"],
+        ["sheet", "campaign", "acquisition_date", "published", "full_sheet", "url"],
     ),
     "AvailabilityCampaign": (_campaign, ["campaign", "complete", "full_m2"]),
     "BBoxValue": (lambda: BBox(1, 2, 3, 4, "EPSG:2180"), ["bbox", "crs"]),
