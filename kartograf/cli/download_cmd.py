@@ -456,7 +456,7 @@ def _cmd_download(args: argparse.Namespace) -> int:
     on_notice = _data_notices(args)
     if getattr(args, "check_updates", False):
         return _report_plan(args, check_data(**arguments, on_notice=on_notice))
-    workers = getattr(args, "workers", 4) or 1
+    workers = getattr(args, "workers", 4)
     on_progress = progress_printer(args, workers)
     report = download_data(
         **arguments,

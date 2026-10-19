@@ -176,10 +176,23 @@ class TestParseBboxArg:
         bbox = parse_bbox_arg(" 1, 2 ,3,4", "EPSG:2180")
         assert tuple(bbox) == (1.0, 2.0, 3.0, 4.0, "EPSG:2180")
 
-    def test_point_allowed(self):
+    @pytest.mark.parametrize("text", ["5,5,5,5", "1,5,4,5", "5,1,5,4"])
+    def test_zero_area_is_rejected(self, text):
+        """A point or a line has no area: the request is refused like an
+        inverted bbox (the sheet finder still accepts a point)."""
         from kartograf.catalog.kinds import parse_bbox_arg
 
-        assert parse_bbox_arg("5,5,5,5", "EPSG:4326").crs == "EPSG:4326"
+        with pytest.raises(ValidationError, match="bbox o zerowej powierzchni") as exc:
+            parse_bbox_arg(text, "EPSG:2180")
+        assert exc.value.option == "bbox"
+
+    def test_metres_given_as_degrees_are_refused_with_the_remedy(self):
+        from kartograf.catalog.kinds import parse_bbox_arg
+
+        with pytest.raises(ValidationError) as exc:
+            parse_bbox_arg("626000,480000,628000,482000", "EPSG:4326")
+        assert "poza zakresem EPSG:4326" in str(exc.value)
+        assert exc.value.option == "bbox" and "--bbox-crs" in (exc.value.hint or "")
 
     @pytest.mark.parametrize(
         ("text", "reason"),

@@ -12,7 +12,7 @@ import logging
 import os
 import shutil
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any, Literal, Protocol, cast
@@ -65,7 +65,12 @@ from kartograf.download.versions import (
     read_version,
     version_key,
 )
-from kartograf.exceptions import DownloadError, NoCoverageError, ValidationError
+from kartograf.exceptions import (
+    DownloadError,
+    NoCoverageError,
+    ValidationError,
+    YearRangeError,
+)
 from kartograf.notices import (
     CHECK_FAILED,
     DOWNLOAD_SIZE,
@@ -456,6 +461,13 @@ def _is_transport_failure(error: DownloadError) -> bool:
     if error.status_code is not None:
         return error.status_code == 429 or error.status_code >= 500
     return isinstance(error.__cause__, requests.RequestException)
+
+
+def no_coverage_text(total: int) -> str:
+    """The failure of a sheet list in which no sheet has data: the download
+    (``download_data``) and the check (``DownloadManager.check_sheets``) of
+    the same area say it the same way."""
+    return f"GUGiK nie ma danych dla zadnego z {count_text(total, *OF_SHEETS)} obszaru"
 
 
 class DownloadManager:
@@ -1056,13 +1068,67 @@ class DownloadManager:
                 return list(executor.map(inspect, leaves))
         return [inspect(sheet) for sheet in leaves]
 
-    def check_sheets(self, sheets: list[str]) -> UpdatePlan:
-        """Return the PL-sheet update plan without downloading any files."""
+    def check_sheets(
+        self,
+        sheets: list[str],
+        *,
+        on_no_coverage: Callable[[Mapping[str, NoCoverageError], int], None]
+        | None = None,
+    ) -> UpdatePlan:
+        """Return the PL-sheet update plan without downloading any files.
+
+        One position per file the same request would download
+        (``inspect_sheets``); the states of the data are those of the download:
+
+        - a sheet the index has no data for (``NoCoverageError``: the sea, an
+          area abroad, a resolution the region lacks) is no position - there is
+          no file to plan - and not a failed check. ``on_no_coverage(no_data,
+          total)`` receives them (sheet -> error) and the number of sheets of
+          the request, as ``download_sheets`` reports
+          ``DownloadResult.no_coverage``; when no sheet has data at all the
+          check raises ``NoCoverageError`` (the one of the sheet, for a list
+          ``no_coverage_text``), as the download fails;
+        - sheets with data only in other years raise ONE ``YearRangeError``
+          for all of them, nothing is planned (as ``download_sheets``);
+        - an index error (network, 5xx) is a ``check_failed`` position.
+
+        Raises
+        ------
+        NoCoverageError
+            No sheet of the request has data.
+        YearRangeError
+            A sheet has data only outside the year bounds.
+        """
         from kartograf.download.updates import _items
 
+        inspections = self.inspect_sheets(sheets)
+        conflicts: dict[str, tuple[int, ...]] = {}
+        no_data: dict[str, NoCoverageError] = {}
+        for inspection in inspections:
+            error = inspection.error
+            if isinstance(error, YearRangeError):
+                conflicts.update(error.sheets)
+            elif isinstance(error, NoCoverageError):
+                no_data[inspection.sheet] = error
+        if conflicts:
+            raise year_range_error(
+                conflicts, self._min_year, self._max_year, total=len(inspections)
+            )
+        if no_data and on_no_coverage is not None:
+            on_no_coverage(no_data, len(inspections))
+        if no_data and len(no_data) == len(inspections):
+            if len(inspections) == 1:
+                raise next(iter(no_data.values()))
+            raise NoCoverageError(
+                no_coverage_text(len(inspections)),
+                hints=tuple(
+                    dict.fromkeys(hint for e in no_data.values() for hint in e.hints)
+                ),
+            )
         items = [
             item
-            for inspection in self.inspect_sheets(sheets)
+            for inspection in inspections
+            if inspection.sheet not in no_data
             for item in _items(self, inspection)
         ]
         return new_plan(self._storage.output_dir, items)
@@ -1104,14 +1170,17 @@ class DownloadManager:
         for inspection in self.inspect_sheets(sheets):
             sheet = inspection.sheet
             if inspection.error is not None:
+                no_data = isinstance(inspection.error, NoCoverageError)
                 result.failed.append(sheet)
                 result.errors[sheet] = str(inspection.error)
+                if no_data:
+                    result.no_coverage.append(sheet)
                 self._emit(
                     on_progress,
                     result.total,
                     len(sheets),
                     sheet,
-                    "failed",
+                    "no_coverage" if no_data else "failed",
                     str(inspection.error),
                 )
                 continue

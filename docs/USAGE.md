@@ -126,13 +126,13 @@ kartograf elevation download --product nmt --country pl --bbox 339000,744800,343
 # Inne produkty GUGiK: ortofotomapa, chmury punktów LAZ
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --vertical-crs EVRF2007 -o ./data
-kartograf elevation download --sheet N-34-130-D-d-2-4 --product laz --year 2024 --min-density 12 --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --bbox 637400,487000,637450,487050 --product laz --min-density 12 --vertical-crs EVRF2007 --country pl -o ./data
 kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --vertical-crs KRON86 --country pl -o ./data
 
 # PL-2000: godło albo bbox w CRS strefy; godło grubsze i bbox wymagają --scale
 # zgodnej z arkuszami GUGiK (sekcja 1.6)
 kartograf parse 6.179.12.20
-kartograf elevation download --sheet 6.179.12.20 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
+kartograf elevation download --sheet 6.179.12.20 --product nmt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
 
@@ -148,7 +148,7 @@ kartograf elevation download --sheet N-34-130-D-d-2-4 --year 2025 --product nmt 
 kartograf elevation download --sheet N-34-130-D-d-2-4 --year 2025 --all-campaigns --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # wszystkie loty z 2025
 kartograf imagery download --sheet N-34-130-D-d-2-4 --product orto --year 2024 -o ./data
 kartograf elevation download --bbox 530000,382000,533000,386000 --max-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
-kartograf elevation download --bbox 530000,382000,533000,386000 --min-year 2023 --max-year 2024 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
+kartograf elevation download --bbox 530000,382000,533000,386000 --min-year 2022 --max-year 2024 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 kartograf elevation download --sheet N-34-130-D-d-2-4 --min-year 2024 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # najnowsza, nie starsza niż 2024
 kartograf elevation download --bbox 530000,382000,533000,386000 --all-campaigns --min-year 2022 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 --sheet-system 1992 -o ./data
 ```
@@ -284,6 +284,11 @@ krawędzią albo narożnikiem nie jest pobierany (`--sheet N-34-130-D-d-2-4`
 (zaokrąglenie ram GUGiK do 1 cm) jest pomijany.
 `--min-density` i `extra.nominal_density` to gęstość **nominalna** z WFS
 GUGiK — faktyczna bywa wyższa.
+Gdy `--min-density` odrzuci wszystkie kafle obszaru, błąd je wskazuje (kod 1):
+`Error: Brak kafli LAZ dla podanego obszaru: --min-density 12 odrzucilo 13 kafli
+obszaru (najwyzsza gestosc nominalna 4 pkt/m2) - obniz albo pomin --min-density`
+(kafle arkusza `N-34-130-D-d-2-4` mają 4 pkt/m2; z 12 pkt/m2 jest m.in. obszar
+Warszawy z przykładu wyżej).
 
 `--min-density` działa **tylko z `--product laz`**. Z `nmt`, `nmpt` i `orto`
 kończy się `Error:` i kodem 2 przed jakimkolwiek
@@ -1123,6 +1128,20 @@ każdą wartość listy w osobnej linii i wszystkie pola.)
   indeksu CUZK albo `HEAD` pliku inna niż `404`. Zakres lat bez
   żadnego rocznika usługi: `Error: --year 2030: skorowidz GUGiK NMT nie
   ma rocznika ... - dostepne roczniki: ...`.
+- **Obszar jednego kraju musi sięgać jego obwiedni (od 0.8.0):** `--country pl`
+  z `--bbox`/`--geometry` poza obwiednią PL (albo `--country cz` poza CZ) to
+  `Error: --bbox (EPSG:2180) lezy poza CZ ... Sprawdz --bbox-crs ...` i kod 2
+  przed siecią — ta sama kontrola co w `elevation download`; dotyczy liczb
+  w innym układzie niż `--bbox-crs` i zamienionych osi. `--bbox` o zerowej
+  powierzchni (`min == max`) albo ze współrzędnymi spoza zakresu EPSG:4326
+  (długość ±180, szerokość ±90) to `Error: Nieprawidlowy bbox: ...` (kod 2).
+- **Obszar bez lądu:** `area_m2` to część obszaru w granicach PL (z morzem
+  terytorialnym; część poza granicą ma `0,00 ha`), `land_m2` — jej ląd (PRG
+  `A00` bez `W02`/`W03`). Obszar całkiem na morzu (`land_m2 = 0`) nie ma lądu
+  do pokrycia, więc każda kombinacja ma `complete: true` (`full_m2 = land_m2 = 0`,
+  w tabeli `KOMPLET` = `brak ladu`), a raport mówi to w `Info:` (kod `no_land`
+  w `notices`); stopka nie podaje polecenia pobrania. Inwariant `complete`
+  wtedy i tylko wtedy, gdy `full_m2 == land_m2`, zostaje.
 - **`Info:`** (kod `index_unsupported` w bibliotece) wymienia rekordy
   obszaru, których Kartograf nie pobiera: format rekordu niezgodny
   z plikiem, format albo wariant spoza rejestru, godło spoza układów
@@ -2578,6 +2597,17 @@ pobrania, a pozycje usunięte z pliku nie są wykonywane. `--force` pobiera
 ponownie i odświeża cache metadanych, ale nie nadpisuje: ta sama treść =
 `bez zmian`, inna = nowa wersja.
 
+`--check-updates` zachowuje się jak pobranie tego samego obszaru wobec danych
+(od 0.8.0): arkusz bez danych w skorowidzu (morze, obszar za granicą, brak
+rozdzielczości w regionie) **nie jest pozycją planu** i nie jest błędem
+sprawdzenia — gdy reszta obszaru ma dane, `--check-updates` kończy się kodem 0
+z tym samym `Warning: GUGiK nie ma danych dla N z M arkuszy ...` co pobranie
+(w JSON: `notices`, `ok: true`); gdy żaden arkusz nie ma danych, to
+`Error:` z kodem 1 i kodem błędu `no_coverage`. Arkusze z danymi tylko poza
+zakresem lat to JEDEN błąd `year_out_of_range` dla wszystkich (`dla N z M
+arkuszy`), jak w pobraniu; pozycja `check_failed` zostaje dla awarii
+skorowidza (sieć, 5xx).
+
 `--check-updates` i `--upgrade` zawsze pytają źródło: odczyt cache
 metadanych (rekordy skorowidza, odpowiedzi PRG, indeksy; TTL 7 dni) jest
 pomijany, a wpisy są odświeżane — nowy lot opublikowany po ostatnim
@@ -3206,6 +3236,13 @@ Jedna tabela kodow bledow (`get_catalog(tables=True).errors`; kazdy wyjatek z hi
 Kody `io_error`, `interrupted` i `internal_error` nie maja klas w hierarchii: buduje je
 `error_report`. Nowe kody wolno dodawac (zmiana addytywna); zmiana albo usuniecie kodu to
 zmiana lamiaca.
+
+`failed[].kind` w `kartograf-download/1` ma te same nazwy co kody błędów danych:
+`no_coverage` (źródło nie ma danych: arkusz, kafle, wycinek), `year_out_of_range`
+(dane są, ale poza przedziałem lat), `download` (sieć, serwer) i `country`
+(część `--country auto` zawiodła z innej przyczyny). Ten sam stan danych, który
+biblioteka zgłasza wyjątkiem (`NoCoverageError`, `YearRangeError`, np. przy
+`check_data` albo LAZ `--sheet`), jest w raporcie pobrania `kind` jednostki.
 
 Dokument `kartograf-error/1` ma klucze `code`, `message`, `hint`, `exception`, `exit_code`,
 `command` i `details`:

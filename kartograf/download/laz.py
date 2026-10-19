@@ -84,6 +84,25 @@ NO_TILES_MESSAGE = (
 )
 
 
+def no_tiles_message(selection: LazTileSelection, min_density: int | None) -> str:
+    """The text of an empty tile selection. When ``--min-density`` dropped the
+    tiles of the area, the filter is named with the best density the area
+    has (an empty answer of the WFS says ``NO_TILES_MESSAGE``)."""
+    if min_density is None or not selection.below_density:
+        return NO_TILES_MESSAGE
+    densities = [t.density for t in selection.below_density if t.density is not None]
+    best = (
+        f"najwyzsza gestosc nominalna {max(densities)} pkt/m2"
+        if densities
+        else "kafle nie podaja gestosci nominalnej"
+    )
+    return (
+        f"Brak kafli LAZ dla podanego obszaru: --min-density {min_density} "
+        f"odrzucilo {count_text(len(selection.below_density), *TILES)} obszaru "
+        f"({best}) - obniz albo pomin --min-density"
+    )
+
+
 @dataclass(frozen=True)
 class LazTileFailure:
     """A tile that could not be downloaded, and the download error."""
@@ -440,7 +459,7 @@ def _selected(
         )
         _emit_superseded(sink, selection.superseded)
         if not selection.tiles:
-            raise NoCoverageError(NO_TILES_MESSAGE)
+            raise NoCoverageError(no_tiles_message(selection, min_density))
         yield provider, selection, area
 
 
