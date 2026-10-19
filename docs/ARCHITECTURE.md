@@ -1267,9 +1267,18 @@ data/
    podmiana atomowa (plik tymczasowy + `os.replace`), nigdy wstecz (klucz
    ADR-028 z sidecara wersji). Kontrola: cel z `extra.link_target` +
    `os.path.samefile`; gdy system plikow nie ma stabilnych i-wezlow (SMB bez
-   `serverino`), potwierdzenie trescia: oba pliki maja > 1 link, ten sam
-   rozmiar i sha256 dowiazania = sha256 sidecara wersji
-   (`links._same_content_hardlink`). `FileStorage.get_versions_root(sheet)`/`get_versions_base`,
+   `serverino`), potwierdzenie trescia: ten sam rozmiar i sha256 dowiazania =
+   sha256 sidecara wersji (`links._same_content`). Liczba dowiazan nie
+   bierze udzialu w potwierdzeniu: klient cifs zglasza `st_nlink` = 1 dla
+   sciezki, ktora wlasnie otwarto (takze tym odczytem), przez kilka sekund
+   albo dluzej, wiec liczba zmienialaby wynik miedzy kolejnymi wywolaniami
+   (e2e 0.8.0: dowiazanie cofniete na starszy lot). Sciezka o tresci wersji
+   JEST ta wersja (`links._hold`), takze gdy jest niezalezna kopia, i od jej
+   klucza zalezy "nigdy wstecz"; `ensure_link` zamienia taka kopie z
+   powrotem w hardlink TEJ samej wersji, gdy zadna ze sciezek nie zglasza
+   drugiej nazwy (`_Held.lone`, np. po `rsync -a` bez `-H`), a w innym
+   przypadku niczego nie zapisuje. `FileStorage.get_versions_root(sheet)`/
+   `get_versions_base`,
    `list_files()` pomija `versions/`, `full_sheet/` i `kampanie/`
    (`versions=True` = tylko pliki wersji). Katalog `kampanie/` z 0.7.x
    nie jest czytany (`has_legacy_campaigns()` -> `Info:` w CLI). Od planu
@@ -1663,8 +1672,12 @@ domyslny `Transformer.from_crs`; brak bezpiecznej operacji to
 slotu tego dowiazania (ta sama regula co `version_path` skanu), a nastepnie
 potwierdza ja istniejacym `download.links.linked_version`: ten sam plik wg
 i-wezla albo - na udziale bez stabilnych i-wezlow (SMB bez `serverino`) -
-trescia (oba pliki > 1 dowiazanie, ten sam rozmiar, SHA-256 dowiazania =
-SHA-256 sidecara wersji, jeden pelny odczyt pliku). Zwraca sciezke w tej
+trescia (ten sam rozmiar, SHA-256 dowiazania = SHA-256 sidecara wersji,
+jeden pelny odczyt pliku przy kazdym wywolaniu; liczba dowiazan nie jest
+sprawdzana, bo klient cifs zglasza po odczycie `st_nlink` = 1 i kolejne
+wywolania zwracalyby na zmiane wersje i `None`). Plik o tresci wersji
+liczy sie jako ta wersja takze wtedy, gdy jest niezalezna kopia (pobranie
+zamienia ja w hardlink, regula 6 w 3.3). Zwraca sciezke w tej
 samej postaci co `version_path`. Odczyt wszystkich celow przy pelnym skanie
 moglby kosztowac wiele gigabajtow, dlatego skan przypisuje wersje ze
 sciezki sidecara, a `link_target` wola sie na zadanie.
