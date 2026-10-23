@@ -217,7 +217,7 @@
 - Spec: `docs/superpowers/specs/2026-10-23-plain-output-design.md`
   (D1-D15, zaakceptowany 2026-10-23), decyzja: ADR-048. Kodu jeszcze nie ma.
 - **Nastepny krok:** plan `docs/superpowers/plans/2026-10-23-plain-output.md`
-  do akceptacji, potem implementacja. Tag `v0.8.0` wstrzymany do czasu tej
+  (kroki K1-K9) do akceptacji, potem implementacja. Tag `v0.8.0` wstrzymany do czasu tej
   zmiany.
 
 ### Sesja 2026-10-19 - test E2E przed tagiem v0.8.0, MCP, audyt dokumentacji i poprawki
