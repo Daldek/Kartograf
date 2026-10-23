@@ -2,7 +2,7 @@
 
 **Data:** 2026-10-23
 **Status:** projekt do przegladu uzytkownika (decyzje D1-D5 od uzytkownika
-2026-10-23, odpowiedzi na p. 7 z 2026-10-23: D9-D11; otwarte: p. 7.2). Po
+2026-10-23, odpowiedzi na p. 7 z 2026-10-23: D9-D14; otwarte: p. 7.5). Po
 akceptacji: ADR-048, plan i implementacja.
 **Wersja docelowa:** 0.8.0 (wydanie nietagowane; zmiana lamiaca zgodnosc
 znaczenia `-o`/`--output` wchodzi przed tagiem)
@@ -119,6 +119,38 @@ p. 7.3).** Pliki pobrane w calosci zostaja; ponowne wywolanie z tym samym
 / `soil hsg` zostaja w 0.8.0 bez zmian (tylko magazyn, parametr `store`);
 tryb `-o` dla HSG przy pozniejszej zmianie HSG.
 
+**D12. W trybie `-o` jeden plik na arkusz = najnowszy PELNY lot
+(uzytkownik 2026-10-23, p. 7.2).** Dotyczy arkuszy PL NMT, NMPT
+i ortofotomapy (rekordy skorowidza GUGiK, ADR-028): sposrod rekordow
+arkusza po twardych filtrach i filtrze lat (D14) wybierany jest najnowszy
+rekord pelny (`full_sheet`, ADR-033), nie najnowszy w ogole. Regula
+dziala WYLACZNIE w trybie `-o`; `--store` zachowuje ADR-028 (domyslnie
+najnowszy lot, takze niepelny) i ADR-033 (`--full-sheet` = drugie
+dowiazanie). Roznica musi byc zapisana jawnie w dokumentacji (USAGE
+przy `-o` i przy kampaniach, ARCHITECTURE 4.1, `--help` opcji `-o`,
+opis parametru `output` w API). LAZ, arkusze i kafle CZ, kolekcje: bez
+zmian (jeden plik na jednostke juz dzis).
+
+**D13. Arkusz bez pelnego lotu jest pomijany (uzytkownik 2026-10-23).**
+Gdy arkusz ma tylko loty niepelne (w przedziale lat, jesli podany),
+w trybie `-o` nie jest pobierany; `Warning:` wymienia arkusz, najnowszy
+niepelny lot i podpowiedz `--store` (magazyn pobiera najnowszy lot
+takze niepelny). Pominiecie nie przerywa zadania (jak R5); pozostale
+arkusze sa pobierane. Lista pominietych arkuszy jest w wyniku (`--json`,
+obiekt wyniku API). Gdy pominiete sa wszystkie arkusze, zadanie konczy
+sie bez plikow i kodem jak dla braku danych.
+
+**D14. Opcje kampanii i lat w trybie `-o` (uzytkownik 2026-10-23).**
+- `--all-campaigns` z `-o` = blad wejscia przed siecia z podpowiedzia
+  `--store` (kilka lotow arkusza = kilka plikow o tej samej nazwie).
+- `--full-sheet` z `-o` = `Warning:` (opcja zbedna: w `-o` pelny lot jest
+  zachowaniem domyslnym, D12), pobranie bez zmian.
+- `--year`/`--min-year`/`--max-year` dzialaja jak w ADR-032 jako filtr
+  dopuszczalnych lat: w trybie `-o` wybierany jest najnowszy pelny lot
+  w przedziale. Konflikt ADR-032 pkt 2 (arkusz ma dane wylacznie poza
+  przedzialem) = blad calego zadania jak dotad; arkusz z danymi
+  w przedziale, ale bez pelnego lotu w przedziale = pominiecie D13.
+
 ## 4. Tryb `-o` w torach pobierania
 
 | Tor | Nazwa pliku w `-o` (D9) |
@@ -164,16 +196,13 @@ jest w obu trybach ten sam; roznica dotyczy wylacznie zapisu.
 ## 7. Pytania (odpowiedzi uzytkownika 2026-10-23)
 
 1. Nazwa pliku: wariant A -> D9.
-2. **Kilka plikow o tej samej nazwie w jednym wywolaniu** (`--all-campaigns`,
-   `--full-sheet`, kilka rekordow arkusza): uzytkownik - kolizje beda
-   nagminne, wiec zmiana logiki na **pobieranie najnowszego pelnego
-   arkusza**. Do doprecyzowania (OTWARTE):
-   - a) czy regula dotyczy tylko trybu `-o`, czy takze `--store`
-     (dzis domyslnie: najnowszy rekord arkusza, takze niepelny, ADR-028;
-     najnowszy pelny tylko jako drugie dowiazanie `--full-sheet`, ADR-033);
-   - b) co, gdy arkusz nie ma zadnego pelnego rekordu (tylko czesciowe):
-     najnowszy czesciowy z ostrzezeniem, czy pominiecie arkusza z bledem;
-   - c) `--all-campaigns` i `--full-sheet` z `-o`: blad z podpowiedzia
-     `--store` (propozycja), bo w `-o` zawsze jest jeden plik na arkusz.
+2. Kilka plikow o tej samej nazwie (kampanie arkusza): najnowszy pelny
+   lot tylko w `-o` -> D12; arkusz bez pelnego lotu pominiety -> D13;
+   `--all-campaigns` blad, `--full-sheet` ostrzezenie -> D14.
 3. Przerwane pobranie: bez `--skip-existing` -> D10.
 4. HSG: poza zakresem -> D11.
+5. **Jawny wybor kampanii (OTWARTE).** Rok wskazuje sie juz dzis
+   (`--year`/`--min-year`/`--max-year`, D14). Opcji wskazania konkretnej
+   kampanii (zgloszenia/daty lotu) Kartograf nie ma w zadnym trybie.
+   Propozycja: poza 0.8.0 (osobna funkcja dla obu trybow; przy wielu
+   arkuszach kazdy ma wlasne kampanie, wiec wymaga osobnego projektu).
