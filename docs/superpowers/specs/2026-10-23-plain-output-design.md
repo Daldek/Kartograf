@@ -2,8 +2,8 @@
 
 **Data:** 2026-10-23
 **Status:** projekt do przegladu uzytkownika (decyzje D1-D5 od uzytkownika
-2026-10-23; pytania otwarte w p. 7). Po akceptacji: ADR-048, plan i
-implementacja.
+2026-10-23, odpowiedzi na p. 7 z 2026-10-23: D9-D11; otwarte: p. 7.2). Po
+akceptacji: ADR-048, plan i implementacja.
 **Wersja docelowa:** 0.8.0 (wydanie nietagowane; zmiana lamiaca zgodnosc
 znaczenia `-o`/`--output` wchodzi przed tagiem)
 **Warunek wstepny:** magazyn wersjonowany (ADR-036), katalog komend
@@ -66,7 +66,7 @@ i bliźniacze komendy `download-versioned` (podwojenie katalogu komend).
 **D2. `-o` to zawsze katalog (uzytkownik 2026-10-23).** Nigdy nazwa
 pliku, takze gdy wynikiem jest jeden plik. Kazdy plik trafia bezposrednio
 do tego katalogu (plasko, bez drzewa godla, segmentu i `versions/`) pod
-swoja nazwa (p. 7, pytanie 1).
+swoja nazwa (D9).
 
 **D3. Najpierw pelna lista, potem sprawdzenie, dopiero potem pobieranie
 (uzytkownik 2026-10-23).** Kolejnosc:
@@ -104,9 +104,24 @@ na `--store`); `project add` odrzuca komende danych z `-o`.
 
 **D8. Katalog `-o` jest tworzony, jesli nie istnieje** (jak `mkdir -p`).
 
+**D9. Nazwa pliku = ostatni element sciezki z magazynu (uzytkownik
+2026-10-23, p. 7.1 wariant A).** Ta sama nazwa, ktora Kartograf nadaje
+plikowi w ukladzie `data/` (`N-34-130-D-d-2-4.asc`, `1465.gpkg`,
+`<coords>.tif`), znana przed pobraniem (wymog D3). Nazwa pliku na serwerze
+zrodla nie jest uzywana.
+
+**D10. Przerwane pobranie bez dodatkowej flagi (uzytkownik 2026-10-23,
+p. 7.3).** Pliki pobrane w calosci zostaja; ponowne wywolanie z tym samym
+`-o` odmawia (D3), a komunikat wymienia pliki do usuniecia. Bez
+`--skip-existing` w 0.8.0.
+
+**D11. HSG poza zakresem (uzytkownik 2026-10-23, p. 7.4).** `calculate_hsg`
+/ `soil hsg` zostaja w 0.8.0 bez zmian (tylko magazyn, parametr `store`);
+tryb `-o` dla HSG przy pozniejszej zmianie HSG.
+
 ## 4. Tryb `-o` w torach pobierania
 
-| Tor | Nazwa pliku w `-o` (wg p. 7, pytanie 1, wariant A) |
+| Tor | Nazwa pliku w `-o` (D9) |
 |---|---|
 | Arkusze PL NMT/NMPT/orto | `N-34-130-D-d-2-4.asc` (`.tif`) |
 | Wycinki PL/CZ (`--cutout`, WCS, ImageServer) | `<coords>.tif` |
@@ -114,7 +129,7 @@ na `--store`); `project add` odrzuca komende danych z `-o`.
 | LAZ PL/CZ | nazwa pliku kafla `.laz` |
 | Kolekcje (paczki jednostek, obiekty obszaru, pliki krajowe) | `1465.gpkg`, `12.zip`, `<coords>.gpkg`, `cz.zip` |
 | Land cover, SoilGrids | `1465.gpkg`, `<coords>.tif` |
-| HSG | `<coords>.tif` (p. 7, pytanie 4) |
+| HSG | poza zakresem (D11) |
 
 Wybor danych (rekord skorowidza, kampania, kafle, warianty, limit obszaru)
 jest w obu trybach ten sam; roznica dotyczy wylacznie zapisu.
@@ -127,11 +142,11 @@ jest w obu trybach ten sam; roznica dotyczy wylacznie zapisu.
 2. Wspolna sciezka zapisu trybu `-o` (np. `download/plain.py`):
    lista docelowa -> sprawdzenie kolizji -> `.part` + `os.replace`.
    Tory pobierania (ok. 15 modulow, m.in. `download/manager.py`,
-   `landcover/manager.py`, `download/collections.py`, `hydrology/hsg.py`,
-   `download/cz_*.py`) dostaja rozgalezienie: `store` -> obecne
+   `landcover/manager.py`, `download/collections.py`, `download/cz_*.py`;
+   bez `hydrology/hsg.py`, D11) dostaja rozgalezienie: `store` -> obecne
    `commit_version` + `ensure_link`, `output` -> zapis zwykly.
-3. Funkcje `download_*`/`calculate_hsg`/`download_soil`: `output`/`store`
-   zamiast `output_dir`; `check_*` (plany aktualizacji) wymagaja `store`.
+3. Funkcje `download_*`/`download_soil`: `output`/`store` zamiast
+   `output_dir` (`calculate_hsg`: tylko `store`, D11); `check_*` (plany aktualizacji) wymagaja `store`.
 4. MCP: narzedzia odczytu magazynu bez zmian (ADR-045, ADR-046).
 5. Testy: tryb `-o` na kazdym torze (nazwy, kolizje przed siecia,
    przerwanie bez `.part`), wykluczenie `-o`/`--store`, opcje magazynu
@@ -141,33 +156,24 @@ jest w obu trybach ten sam; roznica dotyczy wylacznie zapisu.
 
 - Archiwista (v0.3, pierwszy zapis) wywoluje komendy z `--store`;
   decyzje Archiwisty bez zmian, adnotacja w jej SPEC 12 przy KB-*.
-- Hydrolog dostaje zwykle pliki z `download_soil`/`calculate_hsg(output=)`.
+- Hydrolog dostaje zwykle pliki z `download_soil(output=)`; HSG pozniej (D11).
 - Hydrograf (przypiety do 0.7.0) - bez wplywu do aktualizacji zaleznosci.
 - Dokumentacja: USAGE (przyklady zaczynaja od `-o`), ARCHITECTURE 1, 3.3,
   4.x, CHANGELOG 0.8.0 (zmiana lamiaca), llms.txt, README.
 
-## 7. Pytania otwarte (do decyzji uzytkownika)
+## 7. Pytania (odpowiedzi uzytkownika 2026-10-23)
 
-1. **Co znaczy "oryginalna nazwa".**
-   - A) nazwa, ktora Kartograf nadaje dzis ostatniemu elementowi sciezki
-     w magazynie (`N-34-130-D-d-2-4.asc`, `1465.gpkg`, `<coords>.tif`) -
-     przewidywalna, znana przed pobraniem (wymog D3);
-   - B) nazwa pliku na serwerze zrodla - nie kazdy tor ja ma (wycinki WCS,
-     obiekty WFS zapisywane do GPKG sa tworzone przez Kartografa), a czesc
-     zrodel podaje ja dopiero w odpowiedzi, co utrudnia D3.
-   Propozycja: A.
-2. **Kilka plikow o tej samej nazwie w jednym wywolaniu**, np.
-   `--all-campaigns` (kilka kampanii jednego arkusza), `--full-sheet`
-   (najnowszy lot i najnowszy pelny lot), `--country auto`. Wg D3 to
-   kolizja i odmowa. Alternatywa: przyrostek etykiety kampanii
-   (`N-34-130-D-d-2-4_2022-05-10.asc`) tylko dla tych opcji. Propozycja:
-   odmowa z podpowiedzia `--store` dla `--all-campaigns`/`--full-sheet`.
-3. **Przerwane pobranie wielu plikow.** Pliki pobrane w calosci zostaja;
-   ponowne wywolanie z tym samym `-o` odmowi (D3). Czy dodac
-   `--skip-existing` (pomija pliki juz obecne, bez sprawdzania tresci)?
-   Propozycja: nie w 0.8.0; komunikat odmowy podaje liste plikow do
-   usuniecia.
-4. **HSG w trybie `-o`.** HSG liczy sie z rastrow clay/sand/silt; dzis sa
-   one wersjami w magazynie (ADR-036 D33). Propozycja: rastry wejsciowe
-   pobierane do katalogu roboczego w `-o` (`.kartograf-<token>/`),
-   usuwanego po obliczeniu; w `-o` zostaje tylko wynik HSG.
+1. Nazwa pliku: wariant A -> D9.
+2. **Kilka plikow o tej samej nazwie w jednym wywolaniu** (`--all-campaigns`,
+   `--full-sheet`, kilka rekordow arkusza): uzytkownik - kolizje beda
+   nagminne, wiec zmiana logiki na **pobieranie najnowszego pelnego
+   arkusza**. Do doprecyzowania (OTWARTE):
+   - a) czy regula dotyczy tylko trybu `-o`, czy takze `--store`
+     (dzis domyslnie: najnowszy rekord arkusza, takze niepelny, ADR-028;
+     najnowszy pelny tylko jako drugie dowiazanie `--full-sheet`, ADR-033);
+   - b) co, gdy arkusz nie ma zadnego pelnego rekordu (tylko czesciowe):
+     najnowszy czesciowy z ostrzezeniem, czy pominiecie arkusza z bledem;
+   - c) `--all-campaigns` i `--full-sheet` z `-o`: blad z podpowiedzia
+     `--store` (propozycja), bo w `-o` zawsze jest jeden plik na arkusz.
+3. Przerwane pobranie: bez `--skip-existing` -> D10.
+4. HSG: poza zakresem -> D11.

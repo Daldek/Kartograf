@@ -215,7 +215,7 @@
   pobraniem pelna lista plikow i sprawdzenie kolizji, odmowa bez
   nadpisywania; IMGWTools poza zakresem; calosc w 0.8.0 przed tagiem.
 - Spec: `docs/superpowers/specs/2026-10-23-plain-output-design.md`
-  (projekt; 4 pytania otwarte w p. 7). Kodu jeszcze nie ma.
+  (projekt; odpowiedzi 2026-10-23: D9-D11, otwarte p. 7.2 - regula "najnowszy pelny arkusz"). Kodu jeszcze nie ma.
 - **Nastepny krok:** odpowiedzi uzytkownika na p. 7 specu -> ADR-048,
   plan, implementacja. Tag `v0.8.0` wstrzymany do czasu tej zmiany.
 
