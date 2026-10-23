@@ -1,0 +1,173 @@
+# Spec: Zwykly zapis domyslnie, magazyn wersjonowany na zadanie (0.8.0)
+
+**Data:** 2026-10-23
+**Status:** projekt do przegladu uzytkownika (decyzje D1-D5 od uzytkownika
+2026-10-23; pytania otwarte w p. 7). Po akceptacji: ADR-048, plan i
+implementacja.
+**Wersja docelowa:** 0.8.0 (wydanie nietagowane; zmiana lamiaca zgodnosc
+znaczenia `-o`/`--output` wchodzi przed tagiem)
+**Warunek wstepny:** magazyn wersjonowany (ADR-036), katalog komend
+(ADR-046), spojnosc CLI i API (ADR-037)
+**Zmienia:** ADR-036 (magazyn przestaje byc jedynym celem zapisu komend
+danych), ADR-044 D7 i ARCHITECTURE 3.3 (uklad `data/` tylko w trybie
+magazynu), ADR-040 (projekty tylko z magazynem)
+**Odrzucony wariant:** przeniesienie magazynu do Archiwisty (rozmowa
+2026-10-23): rozwiazuje ten sam problem wiekszym kosztem i zrywa zasade
+"kazde dzialanie Archiwisty = komenda `kartograf ...`".
+
+---
+
+## 1. Problem
+
+Od 0.8.0 kazda komenda danych zapisuje wylacznie do magazynu
+wersjonowanego (ADR-036): `-o` oznacza korzen magazynu, a jeden arkusz NMT
+konczy jako
+
+```
+<katalog>/nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e/N-34-130-D-d-2-4.asc
+<katalog>/nmt/pl_1992_1m_evrf2007/versions/N-34/130/D/d/2/4/2022-05-10_83233_3fa91c2e/N-34-130-D-d-2-4.asc.json
+<katalog>/nmt/pl_1992_1m_evrf2007/N-34/130/D/d/2/4/N-34-130-D-d-2-4.asc   (dowiazanie twarde)
+<katalog>/nmt/pl_1992_1m_evrf2007/versions/.incoming/...
+```
+
+Nie ma sposobu, zeby pobrac jeden plik i zapisac go w zwyklym katalogu.
+Magazyn wymaga tez systemu plikow z dowiazaniami twardymi (FAT, exFAT,
+czesc NAS i klient SMB w macOS odpadaja), wiec na takim dysku nie da sie
+pobrac nic. Uzytkownicy biblioteki (Hydrolog: `download_soil`,
+`calculate_hsg`) potrzebuja zwyklych plikow.
+
+## 2. Cel
+
+```bash
+# Domyslnie: sam plik w podanym katalogu
+kartograf elevation download --sheet N-34-130-D-d-2-4 -o ~/dane/nmt
+#   -> ~/dane/nmt/N-34-130-D-d-2-4.asc
+
+# Jawnie: magazyn wersjonowany (dzisiejsze zachowanie, bez zmian)
+kartograf elevation download --sheet N-34-130-D-d-2-4 --store ~/magazyn
+```
+
+Biblioteka: `download_dem(..., output="~/dane/nmt")` albo
+`download_dem(..., store="~/magazyn")`.
+
+## 3. Decyzje
+
+**D1. Dwa wykluczajace sie cele zapisu (uzytkownik 2026-10-23).**
+Kazda komenda danych przyjmuje dokladnie jeden z:
+- `-o`/`--output <KATALOG>` - zwykly zapis (tryb domyslny, p. 4);
+- `--store <KATALOG>` - magazyn wersjonowany, zachowanie 0.8.0 bez zmian
+  (ADR-036): wersje, dowiazania, sidecary, plany, `.incoming/`.
+
+Podanie obu albo zadnego = blad wejscia przed siecia (ADR-037). W API
+parametr `output_dir` zastepuja `output` i `store` (argumenty tylko
+nazwane, ADR-044 errata 1). Odrzucone: `-vo` (w typowym CLI to `-v -o`)
+i bliźniacze komendy `download-versioned` (podwojenie katalogu komend).
+
+**D2. `-o` to zawsze katalog (uzytkownik 2026-10-23).** Nigdy nazwa
+pliku, takze gdy wynikiem jest jeden plik. Kazdy plik trafia bezposrednio
+do tego katalogu (plasko, bez drzewa godla, segmentu i `versions/`) pod
+swoja nazwa (p. 7, pytanie 1).
+
+**D3. Najpierw pelna lista, potem sprawdzenie, dopiero potem pobieranie
+(uzytkownik 2026-10-23).** Kolejnosc:
+1. Kartograf ustala dokladnie, co pobierze: liste plikow z nazwami
+   (ten sam wybor rekordow, kampanii i kafli co w magazynie).
+2. Sprawdza, czy ktorykolwiek z tych plikow juz istnieje w katalogu `-o`,
+   oraz czy dwa pliki z listy nie maja tej samej nazwy.
+3. Jesli tak - odmowa przed pierwszym bajtem pobrania, komunikat wymienia
+   wszystkie kolidujace nazwy. Nic nie jest pobierane ani nadpisywane.
+4. Dopiero potem pobieranie. Kazdy plik zapisywany jako `<nazwa>.part`
+   i zamieniany na `<nazwa>` przez `os.replace` po pelnym pobraniu; plik
+   `.part` po przerwaniu (blad, Ctrl-C) jest usuwany.
+
+Brak flagi nadpisywania: zeby pobrac ponownie, uzytkownik usuwa plik albo
+wskazuje inny katalog.
+
+**D4. Bez metadanych poza magazynem (uzytkownik 2026-10-23).** Tryb `-o`
+nie zapisuje sidecara `kartograf-meta/1`, dowiazan, `full_sheet/`,
+`versions/` ani `.incoming/`, i nie wymaga dowiazan twardych. Wynik
+komendy (`--json`, obiekt wyniku w API) nadal wymienia zapisane pliki
+(sciezki), bo bez tego skrypt nie wie, co powstalo.
+
+**D5. Zakres i wydanie (uzytkownik 2026-10-23).** Tylko Kartograf;
+IMGWTools poza zakresem. Calosc w 0.8.0, przed tagiem.
+
+**D6. Opcje tylko dla magazynu.** `--check-updates`, `--upgrade`,
+`--force`, `--plan` (i `update=` w API) maja sens tylko z `--store`;
+z `-o` = blad wejscia z podpowiedzia ("aktualizacje dzialaja w magazynie:
+uzyj --store"). `--full-sheet` (drugie dowiazanie, ADR-033) - p. 7,
+pytanie 2.
+
+**D7. Projekty tylko z magazynem.** `project *` przypina wersje (ADR-040),
+wiec przyjmuje wylacznie `--store` (dzisiejsze `-o` projektu zmienia nazwe
+na `--store`); `project add` odrzuca komende danych z `-o`.
+
+**D8. Katalog `-o` jest tworzony, jesli nie istnieje** (jak `mkdir -p`).
+
+## 4. Tryb `-o` w torach pobierania
+
+| Tor | Nazwa pliku w `-o` (wg p. 7, pytanie 1, wariant A) |
+|---|---|
+| Arkusze PL NMT/NMPT/orto | `N-34-130-D-d-2-4.asc` (`.tif`) |
+| Wycinki PL/CZ (`--cutout`, WCS, ImageServer) | `<coords>.tif` |
+| Arkusze i kafle CZ | `302_5550.tif`, `CTES96.tif`, `CTES96.jpg` + pliki `.jgw` |
+| LAZ PL/CZ | nazwa pliku kafla `.laz` |
+| Kolekcje (paczki jednostek, obiekty obszaru, pliki krajowe) | `1465.gpkg`, `12.zip`, `<coords>.gpkg`, `cz.zip` |
+| Land cover, SoilGrids | `1465.gpkg`, `<coords>.tif` |
+| HSG | `<coords>.tif` (p. 7, pytanie 4) |
+
+Wybor danych (rekord skorowidza, kampania, kafle, warianty, limit obszaru)
+jest w obu trybach ten sam; roznica dotyczy wylacznie zapisu.
+
+## 5. Zmiany w kodzie (szkic do planu)
+
+1. `catalog/shared.py`: `OUTPUT_DIR` -> dwa parametry `OUTPUT` i `STORE`
+   z regula wykluczenia; parser CLI, REST/MCP i dokumentacja komend
+   z katalogu (ADR-046) przejmuja zmiane automatycznie.
+2. Wspolna sciezka zapisu trybu `-o` (np. `download/plain.py`):
+   lista docelowa -> sprawdzenie kolizji -> `.part` + `os.replace`.
+   Tory pobierania (ok. 15 modulow, m.in. `download/manager.py`,
+   `landcover/manager.py`, `download/collections.py`, `hydrology/hsg.py`,
+   `download/cz_*.py`) dostaja rozgalezienie: `store` -> obecne
+   `commit_version` + `ensure_link`, `output` -> zapis zwykly.
+3. Funkcje `download_*`/`calculate_hsg`/`download_soil`: `output`/`store`
+   zamiast `output_dir`; `check_*` (plany aktualizacji) wymagaja `store`.
+4. MCP: narzedzia odczytu magazynu bez zmian (ADR-045, ADR-046).
+5. Testy: tryb `-o` na kazdym torze (nazwy, kolizje przed siecia,
+   przerwanie bez `.part`), wykluczenie `-o`/`--store`, opcje magazynu
+   z `-o`; istniejace testy magazynu przechodza na `store=`.
+
+## 6. Skutki
+
+- Archiwista (v0.3, pierwszy zapis) wywoluje komendy z `--store`;
+  decyzje Archiwisty bez zmian, adnotacja w jej SPEC 12 przy KB-*.
+- Hydrolog dostaje zwykle pliki z `download_soil`/`calculate_hsg(output=)`.
+- Hydrograf (przypiety do 0.7.0) - bez wplywu do aktualizacji zaleznosci.
+- Dokumentacja: USAGE (przyklady zaczynaja od `-o`), ARCHITECTURE 1, 3.3,
+  4.x, CHANGELOG 0.8.0 (zmiana lamiaca), llms.txt, README.
+
+## 7. Pytania otwarte (do decyzji uzytkownika)
+
+1. **Co znaczy "oryginalna nazwa".**
+   - A) nazwa, ktora Kartograf nadaje dzis ostatniemu elementowi sciezki
+     w magazynie (`N-34-130-D-d-2-4.asc`, `1465.gpkg`, `<coords>.tif`) -
+     przewidywalna, znana przed pobraniem (wymog D3);
+   - B) nazwa pliku na serwerze zrodla - nie kazdy tor ja ma (wycinki WCS,
+     obiekty WFS zapisywane do GPKG sa tworzone przez Kartografa), a czesc
+     zrodel podaje ja dopiero w odpowiedzi, co utrudnia D3.
+   Propozycja: A.
+2. **Kilka plikow o tej samej nazwie w jednym wywolaniu**, np.
+   `--all-campaigns` (kilka kampanii jednego arkusza), `--full-sheet`
+   (najnowszy lot i najnowszy pelny lot), `--country auto`. Wg D3 to
+   kolizja i odmowa. Alternatywa: przyrostek etykiety kampanii
+   (`N-34-130-D-d-2-4_2022-05-10.asc`) tylko dla tych opcji. Propozycja:
+   odmowa z podpowiedzia `--store` dla `--all-campaigns`/`--full-sheet`.
+3. **Przerwane pobranie wielu plikow.** Pliki pobrane w calosci zostaja;
+   ponowne wywolanie z tym samym `-o` odmowi (D3). Czy dodac
+   `--skip-existing` (pomija pliki juz obecne, bez sprawdzania tresci)?
+   Propozycja: nie w 0.8.0; komunikat odmowy podaje liste plikow do
+   usuniecia.
+4. **HSG w trybie `-o`.** HSG liczy sie z rastrow clay/sand/silt; dzis sa
+   one wersjami w magazynie (ADR-036 D33). Propozycja: rastry wejsciowe
+   pobierane do katalogu roboczego w `-o` (`.kartograf-<token>/`),
+   usuwanego po obliczeniu; w `-o` zostaje tylko wynik HSG.
