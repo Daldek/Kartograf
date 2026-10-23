@@ -1,9 +1,8 @@
 # Spec: Zwykly zapis domyslnie, magazyn wersjonowany na zadanie (0.8.0)
 
 **Data:** 2026-10-23
-**Status:** projekt do przegladu uzytkownika (decyzje D1-D5 od uzytkownika
-2026-10-23, odpowiedzi na p. 7 z 2026-10-23: D9-D14; otwarte: p. 7.5). Po
-akceptacji: ADR-048, plan i implementacja.
+**Status:** zaakceptowany przez uzytkownika 2026-10-23 (D1-D5, odpowiedzi
+na p. 7: D9-D15); decyzja: ADR-048; nastepny krok: plan i implementacja.
 **Wersja docelowa:** 0.8.0 (wydanie nietagowane; zmiana lamiaca zgodnosc
 znaczenia `-o`/`--output` wchodzi przed tagiem)
 **Warunek wstepny:** magazyn wersjonowany (ADR-036), katalog komend
@@ -151,6 +150,10 @@ sie bez plikow i kodem jak dla braku danych.
   przedzialem) = blad calego zadania jak dotad; arkusz z danymi
   w przedziale, ale bez pelnego lotu w przedziale = pominiecie D13.
 
+**D15. Jawny wybor kampanii poza 0.8.0 (uzytkownik 2026-10-23, p. 7.5).**
+Rok wskazuja `--year`/`--min-year`/`--max-year` (D14); opcji wskazania
+konkretnej kampanii nie ma w zadnym trybie i nie powstaje w tej zmianie.
+
 ## 4. Tryb `-o` w torach pobierania
 
 | Tor | Nazwa pliku w `-o` (D9) |
@@ -201,8 +204,4 @@ jest w obu trybach ten sam; roznica dotyczy wylacznie zapisu.
    `--all-campaigns` blad, `--full-sheet` ostrzezenie -> D14.
 3. Przerwane pobranie: bez `--skip-existing` -> D10.
 4. HSG: poza zakresem -> D11.
-5. **Jawny wybor kampanii (OTWARTE).** Rok wskazuje sie juz dzis
-   (`--year`/`--min-year`/`--max-year`, D14). Opcji wskazania konkretnej
-   kampanii (zgloszenia/daty lotu) Kartograf nie ma w zadnym trybie.
-   Propozycja: poza 0.8.0 (osobna funkcja dla obu trybow; przy wielu
-   arkuszach kazdy ma wlasne kampanie, wiec wymaga osobnego projektu).
+5. Jawny wybor kampanii: poza 0.8.0 -> D15.
