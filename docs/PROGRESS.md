@@ -203,6 +203,22 @@
 > (stan sprawdzaj komendami, nie liczbami z dziennika).
 > Testy `live` tylko swiadomie (`-m live`).
 
+### Sesja 2026-10-23 - projekt: zwykly zapis `-o` domyslnie, magazyn na zadanie `--store`
+
+- Problem uzytkownika: pobranie jednego pliku (NMT, orto, BDOT10k)
+  zawsze tworzy magazyn wersjonowany (drzewo godla, `versions/`, sidecar,
+  dowiazania twarde); nie da sie zapisac samego pliku w dowolnym katalogu.
+- Rozwazone i odrzucone: przeniesienie magazynu do Archiwisty (wiekszy
+  koszt, zrywa "dzialanie Archiwisty = komenda `kartograf ...`").
+- Decyzje uzytkownika (D1-D5): `-o` = katalog, pliki plasko pod wlasna
+  nazwa, bez metadanych i dowiazan; magazyn tylko z `--store`; przed
+  pobraniem pelna lista plikow i sprawdzenie kolizji, odmowa bez
+  nadpisywania; IMGWTools poza zakresem; calosc w 0.8.0 przed tagiem.
+- Spec: `docs/superpowers/specs/2026-10-23-plain-output-design.md`
+  (projekt; 4 pytania otwarte w p. 7). Kodu jeszcze nie ma.
+- **Nastepny krok:** odpowiedzi uzytkownika na p. 7 specu -> ADR-048,
+  plan, implementacja. Tag `v0.8.0` wstrzymany do czasu tej zmiany.
+
 ### Sesja 2026-10-19 - test E2E przed tagiem v0.8.0, MCP, audyt dokumentacji i poprawki
 
 - Prosba uzytkownika: test E2E wszystkich danych w czystym srodowisku (male
