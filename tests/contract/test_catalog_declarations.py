@@ -10,11 +10,17 @@ from pathlib import Path
 import pytest
 
 import kartograf
+from kartograf import _errors
 from kartograf.catalog import commands as commands_package
 from kartograf.catalog import shared
 from kartograf.catalog.commands import declared, elevation
+from kartograf.catalog.excerpts import EXCERPTS
 from kartograf.catalog.kinds import check_options_json, options_from_json
+from kartograf.catalog.meanings import meaning
 from kartograf.catalog.spec import (
+    CHECK_OPTION,
+    CORE_MAX,
+    FAMILIES,
     SHEET_SYSTEMS,
     Command,
     Constraint,
@@ -176,21 +182,19 @@ def test_command_derives_group_name_and_check_support():
         check_result_schema="kartograf-plan/1",
     )
     root = _command(id="sheet parse", function="describe_sheet", kind="query")
-    api_only = _command(id="sheet find", cli=None, kind="query")
 
-    assert (plain.group, plain.name, plain.cli_words) == (
+    assert (plain.group, plain.name, plain.operation_id) == (
         "elevation",
         "download",
-        "elevation download",
+        "kartograf_elevation_download",
     )
     assert plain.supports_check is False
     assert with_check.supports_check is True
-    assert (root.group, root.name, root.cli_words) == (
+    assert (root.group, root.name, root.operation_id) == (
         "sheet",
         "parse",
-        "sheet parse",
+        "kartograf_sheet_parse",
     )
-    assert (api_only.group, api_only.cli_words) == ("sheet", None)
 
 
 @pytest.mark.parametrize(
@@ -214,16 +218,6 @@ def test_invalid_declaration_of_a_command_is_refused(fields):
 def test_command_params_must_have_unique_names():
     with pytest.raises(ValueError, match="product"):
         _command(Param("product", "str"), Param("product", "int"))
-
-
-def test_api_only_command_declares_no_cli_flag():
-    with pytest.raises(ValueError, match="flag"):
-        _command(Param("segment", "str"), id="store entries", cli=None)
-
-    api_only = _command(
-        Param("segment", "str", flag=None), id="store entries", cli=None
-    )
-    assert api_only.params[0].cli_flag is None
 
 
 def test_constraint_and_example_are_plain_data():
@@ -312,8 +306,7 @@ def test_project_cache_parse_catalog_sheet_search_and_store_commands_are_declare
         *_STORE_AND_SHEET_SEARCH,
     } <= set(_IDS)
     # every command has a CLI: the four that began as API-only functions have flags
-    assert all(c.cli is not None for c in _DECLARED.commands)
-    assert [c.cli_words for c in _DECLARED.commands if c.group == "store"] == [
+    assert [c.id for c in _DECLARED.commands if c.group == "store"] == [
         "store overview",
         "store entries",
         "store sidecar",
@@ -626,30 +619,174 @@ def test_a_provider_reads_the_registry_when_it_is_called(monkeypatch):
     assert "TESTCRS" in resolve(vertical.allowed)
 
 
-def _texts(command: Command) -> list[str]:
-    texts = [command.summary, resolve(command.description)]
+# =============================================================================
+# The texts (AGI-2.2, AGI-9.1, DOC-1.7): English, Polish next to them, the budgets
+# =============================================================================
+
+_REGISTRY_CODES = {entry.code for entry in _errors.CODES if entry.exit_code is not None}
+_CHECK_ONLY = ("json", "quiet", "upgrade", "force", "details", "arguments")
+
+
+def _is_option(command: Command, param: Param) -> bool:
+    """A parameter the catalog document and the MCP tool show as an option."""
+    if param.fixed is not None:
+        return False
+    return param.api_argument is not None or (
+        param.name == CHECK_OPTION and command.supports_check
+    )
+
+
+def _english(command: Command) -> list[str]:
+    texts = [command.summary, resolve(command.description), *command.rules]
     for param in command.params:
-        texts += [resolve(param.description), param.section or "", param.metavar or ""]
-    texts += [constraint.message for constraint in command.constraints]
+        texts.append(resolve(param.description))
+        texts += [str(example) for example in param.examples]
     texts += [example.title or "" for example in command.examples]
     return texts
 
 
-@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
-def test_texts_are_ascii_and_summary_is_short(command):
-    assert len(command.summary) <= 120
-    assert command.summary and resolve(command.description)
-    for text in _texts(command):
-        assert text.isascii(), text
+def _polish(command: Command) -> list[str]:
+    texts = [command.summary_pl, resolve(command.description_pl), *command.rules_pl]
     for param in command.params:
-        assert resolve(param.description), f"{command.id}.{param.name}: no description"
+        texts += [
+            resolve(param.description_pl),
+            param.section or "",
+            param.metavar or "",
+        ]
+    texts += [constraint.message_pl for constraint in command.constraints]
+    texts += [example.title_pl or "" for example in command.examples]
+    return texts
 
 
-def test_group_texts_are_ascii():
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_texts_are_ascii_in_both_languages(command):
+    for text in (*_english(command), *_polish(command)):
+        assert text.isascii(), text
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_a_command_has_its_texts_in_english_and_polish(command):
+    assert command.summary and command.summary_pl
+    assert resolve(command.description) and resolve(command.description_pl)
+    assert len(command.rules) == len(command.rules_pl)
+    for example in command.examples:
+        assert example.title and example.title_pl, command.id
+    for param in command.params:
+        assert resolve(param.description_pl), f"{command.id}.{param.name}: no Polish"
+        if _is_option(command, param):
+            assert resolve(param.description), f"{command.id}.{param.name}: no English"
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_the_tool_description_fits_its_budget(command):
+    """Summary, description and rules are the MCP tool description: 100 characters
+    for the summary and 600 together (DOC-1.7)."""
+    description = "\n\n".join(
+        (command.summary, resolve(command.description), " ".join(command.rules))
+    )
+
+    assert command.summary[0].isupper() and len(command.summary) <= 100
+    assert len(description) <= 600, len(description)
+    assert len(command.summary_pl) <= 120
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_a_command_declares_registry_errors_and_one_example_at_least(command):
+    assert set(command.errors) <= _REGISTRY_CODES
+    assert command.examples, command.id
+
+
+def test_the_core_family_has_at_most_ten_tools_and_only_tools_have_a_family():
+    core = [c.id for c in _DECLARED.commands if c.core]
+
+    assert len(core) <= CORE_MAX
+    assert {c.id for c in _DECLARED.commands if c.family is None} == {
+        "cache stats",
+        "cache clear",
+        "cache path",
+        "config show",
+    }
+    assert all(c.family in FAMILIES for c in _DECLARED.commands if c.family)
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_a_path_parameter_says_what_it_is_for(command):
+    for param in command.params:
+        assert (param.kind == "path") == (param.path_role is not None), param.name
+
+
+def test_the_options_that_write_are_roots_or_outputs():
+    roles = {
+        (command.id, param.name): param.path_role
+        for command in _DECLARED.commands
+        for param in command.params
+        if param.path_role is not None
+    }
+
+    assert {name for (_, name) in roles} == {
+        "output_dir",
+        "geometry",
+        "project_dir",
+        "path",
+    }
+    assert {role for (_, name), role in roles.items() if name == "output_dir"} == {
+        "root"
+    }
+    assert roles["project init", "project_dir"] == "output"
+    assert roles["project status", "project_dir"] == "input"
+
+
+def test_group_texts_are_ascii_in_both_languages():
     for group in _DECLARED.groups:
-        assert group.summary.isascii() and group.description.isascii()
+        for text in (
+            group.summary,
+            group.description,
+            group.summary_pl,
+            group.description_pl,
+        ):
+            assert text and text.isascii(), group.name
         for name, summary in resolve(group.products):
             assert name.isascii() and summary.isascii() and summary
+
+
+@pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)
+def test_every_allowed_value_has_a_meaning(command):
+    """The catalog document gives each allowed value of an option its meaning
+    (AGI-2.3); ``command`` and ``group`` take theirs from the catalog itself."""
+    for param in command.params:
+        if param.allowed is None or param.name in ("command", "group"):
+            continue
+        for value in resolve(param.allowed):
+            assert meaning(param.name, str(value)), (command.id, param.name, value)
+
+
+def test_a_value_without_a_meaning_is_refused_and_a_pattern_gives_one():
+    assert meaning("resolution", "0.25m") == "Cell or pixel size 0.25m (metres)."
+    assert meaning("depth", "5-15cm").endswith("below the surface.")
+    assert meaning("horizontal_crs", "EPSG:5514") == meaning("bbox_crs", "EPSG:5514")
+    with pytest.raises(KeyError, match="nope"):
+        meaning("product", "nope")
+
+
+def test_every_result_schema_has_an_excerpt_of_a_document_of_that_schema():
+    """An example shows an excerpt of its result: the keys of the excerpt are keys
+    of the real document (the contract of ``test_json_contract``)."""
+    from tests.contract.test_json_contract import CONTRACT
+
+    schemas = {
+        schema for command in _DECLARED.commands for schema in (command.result_schema,)
+    }
+
+    assert schemas <= set(EXCERPTS)
+    for schema in schemas:
+        excerpt = EXCERPTS[schema]
+        assert excerpt["schema"] == schema
+        assert set(excerpt) <= set(CONTRACT[schema]), schema
+    for command in _DECLARED.commands:
+        for example in command.examples:
+            assert example.result is None or example.result["schema"] == (
+                command.result_schema
+            )
 
 
 @pytest.mark.parametrize("command", _DECLARED.commands, ids=_IDS)

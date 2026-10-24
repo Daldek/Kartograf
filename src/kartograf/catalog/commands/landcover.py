@@ -88,7 +88,7 @@ def _product_help() -> str:
 
 _PRODUCT = replace(
     shared.PRODUCT,
-    description=_product_help,
+    description_pl=_product_help,
     allowed=lambda: LANDCOVER_PRODUCTS,
     choices=True,
 )
@@ -98,87 +98,148 @@ _DOWNLOAD_PARAMS = (
     Param(
         "teryt",
         "str",
-        "Kod TERYT: powiat BDOT10k (4 cyfry, np. 1465) albo wojewodztwo "
-        "BDOO (2 cyfry, np. 12)",
+        (
+            "TERYT code: a BDOT10k county (4 digits, `1465`) or a BDOO "
+            "voivodeship (2 digits, `12`)."
+        ),
         metavar="KOD",
         task=True,
         section=SELECTION_TITLE,
+        description_pl=(
+            "Kod TERYT: powiat BDOT10k (4 cyfry, np. 1465) albo wojewodztwo"
+            " BDOO (2 cyfry, np. 12)"
+        ),
     ),
     *shared.area(
-        sheet=f"{SHEET_AREA_HELP}; BDOT10k: powiaty przecinajace arkusz, "
-        "BDOO: wojewodztwa",
+        sheet=(
+            "Sheet code (for example N-34-130-D): the area is the extent of"
+            " that sheet, as bbox with its corners. BDOT10k: the counties "
+            "that intersect the sheet; BDOO: the voivodeships.",
+            f"{SHEET_AREA_HELP}; BDOT10k: powiaty przecinajace arkusz, "
+            "BDOO: wojewodztwa",
+        ),
         accepts=PL_SHEETS,
     ),
     Param(
         "whole_country",
         "flag",
-        "Tylko ZABAGED, Data50 i Data250: plik krajowy zamiast obszaru "
-        "(ZIP 1:1 - ZABAGED: GeoPackage pelnej bazy, kilka GB; Data50/Data250: "
-        "Shapefile, 230-760 MB; wymaga --horizontal-crs); rozmiar z feedu w "
-        "Warning przed pobraniem",
+        (
+            "ZABAGED, Data50 and Data250 only: the national file instead of"
+            " an area (a ZIP as published: ZABAGED GeoPackage of the whole "
+            "base, several GB; Data50 and Data250 Shapefile, 230-760 MB; "
+            "needs `horizontal_crs`). The size is in a notice before the "
+            "download."
+        ),
         default=False,
         task=True,
         section=SELECTION_TITLE,
+        description_pl=(
+            "Tylko ZABAGED, Data50 i Data250: plik krajowy zamiast obszaru "
+            "(ZIP 1:1 - ZABAGED: GeoPackage pelnej bazy, kilka GB; "
+            "Data50/Data250: Shapefile, 230-760 MB; wymaga "
+            "--horizontal-crs); rozmiar z feedu w Warning przed pobraniem"
+        ),
     ),
     Param(
         "year",
         "int",
-        _year_help,
+        (
+            "Data year. CORINE (required): edition 2018, 2012, 2006 or 2000"
+            " (CLMS/WMS land cover), 1990 (WMS preview only). BDOT10k: "
+            "archive year 2014-2025 (needs `format` GML or SHP; the "
+            "original county ZIP), without it the current packages. BDOO "
+            "(required): 2015 or 2021-2026 (the original voivodeship ZIP)."
+        ),
         metavar="ROK",
         task=True,
         section=PRODUCT_TITLE,
+        description_pl=_year_help,
     ),
     Param(
         "format",
         "str",
-        "Tylko BDOT10k: biezace paczki GPKG (GeoPackage, domyslnie) lub SHP "
-        "(archiwum ZIP z plikami Shapefile); z --year (archiwum rocznikow) "
-        "wymagany GML albo SHP",
+        (
+            "BDOT10k only: the current packages as GPKG (default) or SHP; "
+            "with `year` (the yearly archive) GML or SHP is required."
+        ),
         short="-f",
         allowed=_formats,
         choices=True,
         normalize="upper",
         task=True,
         section=PRODUCT_TITLE,
+        description_pl=(
+            "Tylko BDOT10k: biezace paczki GPKG (GeoPackage, domyslnie) lub"
+            " SHP (archiwum ZIP z plikami Shapefile); z --year (archiwum "
+            "rocznikow) wymagany GML albo SHP"
+        ),
     ),
     Param(
         "layers",
         "str_list",
-        "Kody po przecinku (np. SWRS,PTWP); domyslnie wszystkie. Biezace "
-        "BDOT10k GPKG: zostaw wybrane warstwy. BDOO: ZIP plikow wybranych "
-        "klas z kazdej paczki (bez obiektow zlozonych, XSD i metadanych). "
-        "Lista: landcover list-layers",
+        (
+            "Layer or class codes, for example `SWRS` and `PTWP`; default "
+            "all. Current BDOT10k GPKG: keeps the chosen layers. BDOO: a "
+            "ZIP of the chosen classes of each package (no complex objects,"
+            " XSD or metadata). Codes: `landcover list-layers`."
+        ),
         metavar="KODY",
         task=True,
         section=PRODUCT_TITLE,
+        description_pl=(
+            "Kody po przecinku (np. SWRS,PTWP); domyslnie wszystkie. "
+            "Biezace BDOT10k GPKG: zostaw wybrane warstwy. BDOO: ZIP plikow"
+            " wybranych klas z kazdej paczki (bez obiektow zlozonych, XSD i"
+            " metadanych). Lista: landcover list-layers"
+        ),
     ),
     Param(
         "keep_raw",
         "flag",
-        "Tylko biezace BDOT10k GPKG: zachowaj oryginalny ZIP GUGiK obok "
-        "pliku (wersja surowa w magazynie)",
+        (
+            "Current BDOT10k GPKG only: also keep the original GUGiK ZIP "
+            "next to the file (a raw version in the store)."
+        ),
         default=False,
         task=True,
         section=PRODUCT_TITLE,
+        description_pl=(
+            "Tylko biezace BDOT10k GPKG: zachowaj oryginalny ZIP GUGiK obok"
+            " pliku (wersja surowa w magazynie)"
+        ),
     ),
     Param(
         "horizontal_crs",
         "str",
-        "Tylko --whole-country (ZABAGED, Data50, Data250; wymagany): "
-        "uklad pliku krajowego; wynik obszaru zawsze w ukladzie uslugi "
-        "EPSG:5514",
+        (
+            "CRS of the national file; required with `whole_country` "
+            "(ZABAGED, Data50, Data250). Area results are always in the "
+            "service CRS EPSG:5514."
+        ),
         allowed=_national_file_crs,
         choices=True,
         normalize="upper",
         task=True,
         section=PRODUCT_TITLE,
+        description_pl=(
+            "Tylko --whole-country (ZABAGED, Data50, Data250; wymagany): "
+            "uklad pliku krajowego; wynik obszaru zawsze w ukladzie uslugi "
+            "EPSG:5514"
+        ),
     ),
     shared.output_dir(lambda: store_files(["landcover"])),
     *shared.update_params(
-        check="Porownaj lokalne wersje ze zrodlem bez pobierania: CORINE "
-        "(CLMS) i pliki krajowe ZABAGED, Data50, Data250 - wydanie zrodla; "
-        "BDOT10k, BDOO, podglad CORINE i obszary CUZK - brak taniego sygnalu "
-        "(nie da sie sprawdzic bez pobrania)",
+        check=(
+            "Signal: the release of CORINE (CLMS) and of the national "
+            "ZABAGED, Data50 and Data250 files; BDOT10k, BDOO, the CORINE "
+            "preview and CUZK areas have none.",
+            (
+                "Porownaj lokalne wersje ze zrodlem bez pobierania: CORINE "
+                "(CLMS) i pliki krajowe ZABAGED, Data50, Data250 - wydanie "
+                "zrodla; BDOT10k, BDOO, podglad CORINE i obszary CUZK - brak "
+                "taniego sygnalu (nie da sie sprawdzic bez pobrania)"
+            ),
+        ),
         upgrade="Pobierz nowsze wydanie CORINE albo pliku krajowego CUZK "
         "(domyslnie tylko informacja); BDOT10k, BDOO, podglad CORINE i obszary "
         "CUZK zostaja lokalne (pobranie: --force); z --plan wykonaj zapisany "
@@ -189,8 +250,14 @@ _DOWNLOAD_PARAMS = (
         "z --upgrade: wykonaj plan (pozycje zmienione od planu = blad)",
     ),
     shared.workers(
-        "Tylko obszar BDOT10k albo BDOO (wiele powiatow albo wojewodztw): "
-        "liczba rownoleglych pobran (domyslnie 1)",
+        (
+            "BDOT10k or BDOO area only (several counties or voivodeships): "
+            "parallel transfers, default 1.",
+            (
+                "Tylko obszar BDOT10k albo BDOO (wiele powiatow albo "
+                "wojewodztw): liczba rownoleglych pobran (domyslnie 1)"
+            ),
+        ),
         1,
     ),
     shared.QUIET,
@@ -229,24 +296,19 @@ _DOWNLOAD_CONSTRAINTS = (
 COMMANDS = (
     Command(
         "landcover download",
-        "Pobierz dane wybranego produktu pokrycia terenu",
+        ("Download land cover: BDOT10k, BDOO, CORINE, ZABAGED, Data50 or Data250"),
         "data",
         "download_landcover",
         "kartograf-download/1",
         _DOWNLOAD_PARAMS,
-        description="Pobierz dane wybranego produktu (--product) dla jednego "
-        "obszaru: --teryt, --sheet, --bbox albo --geometry. BDOT10k obszaru "
-        "= paczki kazdego powiatu, ktory obszar przecina (PRG); z --year "
-        "paczki z archiwum rocznikow BDOT10k (GML albo SHP, zapis 1:1). "
-        "BDOO (--year wymagany): oryginalna paczka GML wojewodztwa (--teryt "
-        "2 cyfry; obszar = paczki wojewodztw, ktore przecina, wg PRG); "
-        "--layers zostawia pliki wybranych klas. ZABAGED, Data50 i Data250 "
-        "(CZ): obszar (--bbox/--geometry) = jeden GeoPackage warstw uslugi w "
-        "EPSG:5514 (ZABAGED: pokrycie terenu i wody, Data50/Data250: "
-        "wszystkie warstwy obiektowe; nazwy CUZK, bez przeliczenia na kody "
-        "BDOT10k; lista: landcover list-layers), --whole-country = plik "
-        "krajowy z feedu ATOM CUZK (ZABAGED: GPKG, Data50/Data250: SHP; zapis "
-        "1:1).",
+        description=(
+            "Fetches one land-cover product for one area (`teryt`, `sheet`,"
+            " `bbox` or `geometry`): BDOT10k county packages or archive, "
+            "BDOO voivodeship packages, CORINE, or the ZABAGED, Data50 and "
+            "Data250 GeoPackage of the area or the national file (CZ). "
+            "Never overwrites: new content is a new version. Not for soil "
+            "(`soil download`)."
+        ),
         effects=("network", "store_write"),
         project_task=True,
         check_function="check_landcover",
@@ -256,15 +318,18 @@ COMMANDS = (
         examples=(
             Example(
                 {"product": "bdot10k", "teryt": "1465"},
-                title="BDOT10k: paczka powiatu",
+                title="BDOT10k: a county package",
+                title_pl="BDOT10k: paczka powiatu",
             ),
             Example(
                 {"product": "bdoo", "teryt": "12", "year": 2023},
-                title="BDOO: paczka wojewodztwa z rocznika 2023",
+                title="BDOO: a voivodeship package of the 2023 archive",
+                title_pl="BDOO: paczka wojewodztwa z rocznika 2023",
             ),
             Example(
                 {"product": "corine", "year": 2018, "sheet": "N-34-130-D"},
-                title="CORINE 2018 dla arkusza",
+                title="CORINE 2018 for a sheet",
+                title_pl="CORINE 2018 dla arkusza",
             ),
             Example(
                 {
@@ -272,14 +337,37 @@ COMMANDS = (
                     "bbox": [-460000, -1120000, -450000, -1110000],
                     "bbox_crs": "EPSG:5514",
                 },
-                title="ZABAGED (CZ) dla prostokata w S-JTSK",
+                title="CZ ZABAGED for a rectangle in S-JTSK",
+                title_pl="ZABAGED (CZ) dla prostokata w S-JTSK",
             ),
         ),
+        summary_pl="Pobierz dane wybranego produktu pokrycia terenu",
+        description_pl=(
+            "Pobierz dane wybranego produktu (--product) dla jednego "
+            "obszaru: --teryt, --sheet, --bbox albo --geometry. BDOT10k "
+            "obszaru = paczki kazdego powiatu, ktory obszar przecina (PRG);"
+            " z --year paczki z archiwum rocznikow BDOT10k (GML albo SHP, "
+            "zapis 1:1). BDOO (--year wymagany): oryginalna paczka GML "
+            "wojewodztwa (--teryt 2 cyfry; obszar = paczki wojewodztw, "
+            "ktore przecina, wg PRG); --layers zostawia pliki wybranych "
+            "klas. ZABAGED, Data50 i Data250 (CZ): obszar "
+            "(--bbox/--geometry) = jeden GeoPackage warstw uslugi w "
+            "EPSG:5514 (ZABAGED: pokrycie terenu i wody, Data50/Data250: "
+            "wszystkie warstwy obiektowe; nazwy CUZK, bez przeliczenia na "
+            "kody BDOT10k; lista: landcover list-layers), --whole-country ="
+            " plik krajowy z feedu ATOM CUZK (ZABAGED: GPKG, "
+            "Data50/Data250: SHP; zapis 1:1)."
+        ),
+        rules=("`year` is required for CORINE and BDOO.",),
+        rules_pl=("`year` jest wymagany dla CORINE i BDOO.",),
+        errors=shared.DATA_ERRORS,
+        family="data",
+        core=True,
     ),
     shared.list_sources_command("landcover", lambda: LANDCOVER_PRODUCTS),
     Command(
         "landcover list-layers",
-        "Wypisz warstwy wybranego produktu",
+        ("List the layers, classes or years of a land-cover product (offline)"),
         "query",
         "list_layers",
         "kartograf-layers/1",
@@ -287,10 +375,13 @@ COMMANDS = (
             Param(
                 "group",
                 "str",
-                "Grupa komend (tu: landcover); list_layers obsluguje landcover i soil",
                 flag=None,
                 required=True,
-                allowed=("landcover",),
+                description_pl=(
+                    "Grupa komend (tu: landcover); list_layers obsluguje landcover "
+                    "i soil"
+                ),
+                fixed="landcover",
             ),
             replace(
                 _PRODUCT,
@@ -299,19 +390,53 @@ COMMANDS = (
             ),
             shared.JSON,
         ),
-        description="Wypisz warstwy BDOT10k, ZABAGED, Data50 i Data250, klasy "
-        "BDOO wg rocznikow albo lata CORINE (bez sieci)",
+        description=(
+            "Lists the layers of BDOT10k, ZABAGED, Data50 and Data250, the "
+            "BDOO classes per archive year or the CORINE years. Use it to "
+            "choose `layers` and `year` for `landcover download`."
+        ),
         tool="list_layers",
+        summary_pl="Wypisz warstwy wybranego produktu",
+        description_pl=(
+            "Wypisz warstwy BDOT10k, ZABAGED, Data50 i Data250, klasy BDOO "
+            "wg rocznikow albo lata CORINE (bez sieci)"
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=("validation_error",),
+        family="discovery",
+        cardinality="bounded",
+        examples=(
+            Example(
+                {"product": "bdoo"},
+                title="The classes of BDOO per archive year",
+                title_pl="Klasy BDOO wg rocznikow",
+            ),
+            Example(
+                {"product": "corine"},
+                title="The years of CORINE",
+                title_pl="Roczniki CORINE",
+            ),
+        ),
     ),
 )
 
 GROUPS = (
     Group(
         "landcover",
-        "Pokrycie terenu: BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250",
-        "Pokrycie terenu i bazy ogolnogeograficzne: wektorowe bazy "
-        "BDOT10k i BDOO (GUGiK, PL), CORINE Land Cover (Copernicus, UE), "
-        "ZABAGED, Data50 i Data250 (CUZK, CZ) w magazynie wersji.",
+        "Land cover: BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250",
+        (
+            "Land cover and general geographic databases in the versioned "
+            "store: the vector databases BDOT10k and BDOO (GUGiK, PL), "
+            "CORINE Land Cover (Copernicus, EU), ZABAGED, Data50 and "
+            "Data250 (CUZK, CZ)."
+        ),
         products=_products,
+        summary_pl=("Pokrycie terenu: BDOT10k, BDOO, CORINE, ZABAGED, Data50, Data250"),
+        description_pl=(
+            "Pokrycie terenu i bazy ogolnogeograficzne: wektorowe bazy "
+            "BDOT10k i BDOO (GUGiK, PL), CORINE Land Cover (Copernicus, "
+            "UE), ZABAGED, Data50 i Data250 (CUZK, CZ) w magazynie wersji."
+        ),
     ),
 )

@@ -25,12 +25,17 @@ from dataclasses import replace
 from kartograf.catalog import shared
 from kartograf.catalog.shared import (
     BBOX_HELP,
+    BBOX_HELP_PL,
+    DATA_ERRORS,
     GEOMETRY_HELP,
+    GEOMETRY_HELP_PL,
     OUTPUT_TITLE,
     PL_SHEETS,
     PRODUCT_TITLE,
     SELECTION_TITLE,
     SHEET_AREA_HELP,
+    SHEET_AREA_HELP_PL,
+    Pair,
 )
 from kartograf.catalog.spec import Command, Constraint, Example, Group, Param
 from kartograf.download.collections import (
@@ -41,9 +46,19 @@ from kartograf.download.collections import (
 )
 from kartograf.download.options import country_choices, store_files
 
-WORKERS_HELP = (
+WORKERS_HELP: Pair = (
+    "Parallel file transfers when the task has several files (unit packages, sheets, "
+    "the countries of auto); default 1.",
     "Liczba rownoleglych pobran plikow, gdy zadanie ma ich kilka (paczki "
-    "jednostek obszaru, arkusze, kraje --country auto; domyslnie 1)"
+    "jednostek obszaru, arkusze, kraje --country auto; domyslnie 1)",
+)
+CHECK_HELP: Pair = (
+    "Cheap signal: the HTTP headers of the national CUZK files; GUGiK packages and "
+    "area objects have none (reported as cannot be checked without downloading).",
+    "Porownaj lokalne wersje ze zrodlem bez pobierania: plik "
+    "z sygnalem zrodla (naglowki HTTP plikow krajowych CUZK) - porownanie "
+    "bez pobrania; paczki GUGiK i obiekty obszaru nie maja taniego sygnalu "
+    "(nie da sie sprawdzic bez pobrania), brakujace pliki = do pobrania",
 )
 
 # Provider of the products of a group (the registry decides, late).
@@ -80,36 +95,52 @@ def choice_text(products: Sequence[str], key: str) -> str:
     )
 
 
-def collection_group(name: str, summary: str, description: str) -> Group:
-    """Return the CLI group of a collection: its products with the registry's texts."""
+def collection_group(name: str, summary: Pair, description: Pair) -> Group:
+    """Return the CLI group of a collection: its products with the registry's texts.
+
+    ``summary`` and ``description`` are ``(English, Polish)``.
+    """
 
     def products() -> list[tuple[str, str]]:
         return shared.product_summaries(
             collection_products(name), collection_product_choices
         )
 
-    return Group(name, summary, description, products=products)
+    return Group(
+        name,
+        str(summary[0]),
+        str(description[0]),
+        products=products,
+        summary_pl=str(summary[1]),
+        description_pl=str(description[1]),
+    )
 
 
 def collection_commands(
     group: str,
     *,
-    summary: str,
-    description: str,
-    area_result: str,
+    summary: Pair,
+    description: Pair,
+    area_result: Pair,
     examples: Sequence[Example],
-    teryt: str | None = None,
-    ku: str | None = None,
+    rules: tuple[tuple[str, ...], tuple[str, ...]] = ((), ()),
+    teryt: Pair | None = None,
+    ku: Pair | None = None,
     sheet: bool = True,
-    sheet_help: str = SHEET_AREA_HELP,
+    sheet_help: Pair = (SHEET_AREA_HELP, SHEET_AREA_HELP_PL),
     sheet_systems: tuple[str, ...] = PL_SHEETS,
-    whole_country: str | None = None,
-    check: str | None = None,
-    workers: str | None = WORKERS_HELP,
+    whole_country: Pair | None = None,
+    check: Pair | None = None,
+    workers: Pair | None = WORKERS_HELP,
     content: Content | None = None,
     constraints: Sequence[Constraint] = (),
 ) -> tuple[Command, Command]:
     """``<group> download`` and ``<group> list-sources``.
+
+    ``summary``, ``description``, ``area_result``, ``teryt``, ``ku``,
+    ``sheet_help``, ``whole_country``, ``check`` and ``workers`` are texts of both
+    languages, ``(English, Polish)``, and ``rules`` is the tuple of the English and
+    the tuple of the Polish rules of the command.
 
     ``area_result``: what an area gives (help of the area flags); ``examples``:
     the examples (``epilog`` of ``download --help``); ``teryt``: the group has
@@ -144,34 +175,66 @@ def collection_commands(
             + "".join(f". {text}" for text in units)
         )
 
+    country_english = (
+        "Country of the source; required with bbox or geometry"
+        + (" and whole_country (auto is not allowed with it)" if whole_country else "")
+        + ". auto splits the area between PL and CZ."
+        + (" teryt implies pl." if teryt is not None else "")
+        + (" ku implies cz." if ku is not None else "")
+        + (" A sheet code implies its country." if sheet else "")
+    )
+
     params: list[Param] = [
         shared.product(products, collection_product_choices),
         shared.country(
-            lambda: (*collection_countries(products()), "auto"), country_help
+            lambda: (*collection_countries(products()), "auto"),
+            (country_english, country_help),
         ),
     ]
     if teryt is not None:
         params.append(
             Param(
-                "teryt", "str", teryt, metavar="KOD", task=True, section=SELECTION_TITLE
+                "teryt",
+                "str",
+                teryt[0],
+                description_pl=teryt[1],
+                metavar="KOD",
+                task=True,
+                section=SELECTION_TITLE,
             )
         )
     if ku is not None:
         params.append(
-            Param("ku", "str", ku, metavar="KOD", task=True, section=SELECTION_TITLE)
+            Param(
+                "ku",
+                "str",
+                ku[0],
+                description_pl=ku[1],
+                metavar="KOD",
+                task=True,
+                section=SELECTION_TITLE,
+            )
         )
     params += shared.area(
-        sheet=f"{sheet_help}; {area_result}" if sheet else None,
+        sheet=(
+            (f"{sheet_help[0]} {area_result[0]}", f"{sheet_help[1]}; {area_result[1]}")
+            if sheet
+            else None
+        ),
         accepts=sheet_systems,
-        bbox=f"{BBOX_HELP}; {area_result}",
-        geometry=f"{GEOMETRY_HELP}; {area_result}",
+        bbox=(f"{BBOX_HELP} {area_result[0]}", f"{BBOX_HELP_PL}; {area_result[1]}"),
+        geometry=(
+            f"{GEOMETRY_HELP} {area_result[0]}",
+            f"{GEOMETRY_HELP_PL}; {area_result[1]}",
+        ),
     )
     if whole_country is not None:
         params.append(
             Param(
                 "whole_country",
                 "flag",
-                whole_country,
+                whole_country[0],
+                description_pl=whole_country[1],
                 default=False,
                 task=True,
                 section=SELECTION_TITLE,
@@ -181,13 +244,7 @@ def collection_commands(
         params += [replace(p, section=PRODUCT_TITLE) for p in content(products)]
     params.append(shared.output_dir(lambda: store_files([group])))
     params += shared.update_params(
-        check=check
-        or (
-            "Porownaj lokalne wersje ze zrodlem bez pobierania: plik "
-            "z sygnalem zrodla (naglowki HTTP plikow krajowych CUZK) - porownanie "
-            "bez pobrania; paczki GUGiK i obiekty obszaru nie maja taniego sygnalu "
-            "(nie da sie sprawdzic bez pobrania), brakujace pliki = do pobrania"
-        ),
+        check=check or CHECK_HELP,
         upgrade="Pobierz nowsza tresc, gdy sygnal zrodla ja wskazuje; pliki "
         "bez taniego sygnalu zostaja lokalne (pobranie: --force); z --plan "
         "wykonaj zapisany plan",
@@ -205,7 +262,7 @@ def collection_commands(
     choices += ["teryt"] if teryt is not None else []
     choices += ["ku"] if ku is not None else []
     choices += ["whole_country"] if whole_country is not None else []
-    rules = [
+    declared = [
         Constraint(
             "one_of",
             tuple(choices),
@@ -218,7 +275,7 @@ def collection_commands(
         countries = " albo ".join(
             f"--country {code}" for code in collection_countries(products())
         )
-        rules.append(
+        declared.append(
             Constraint(
                 "requires",
                 ("country",),
@@ -228,18 +285,24 @@ def collection_commands(
         )
     download = Command(
         f"{group} download",
-        summary,
+        str(summary[0]),
         "data",
         "download_collection",
         "kartograf-download/1",
         tuple(params),
-        description=description,
+        description=description[0],
         effects=("network", "store_write"),
         project_task=True,
         check_function="check_collection",
         check_result_schema="kartograf-plan/1",
         tool=f"{group}_download",
-        constraints=(*rules, *constraints),
+        constraints=(*declared, *constraints),
         examples=tuple(examples),
+        summary_pl=str(summary[1]),
+        description_pl=description[1],
+        rules=rules[0],
+        rules_pl=rules[1],
+        errors=DATA_ERRORS,
+        family="data",
     )
     return download, shared.list_sources_command(group, products)

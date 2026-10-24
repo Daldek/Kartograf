@@ -49,32 +49,50 @@ _PARSE_PARAMS = (
     Param(
         "sheet",
         "str",
-        "Godlo arkusza: PL-1992 (np. N-34-130-D-d-2-4), PL-2000 (np. "
-        "6.179.12.20), SM5 (np. CTES96), kafel TM33 (np. 302_5550) albo ZTM "
-        "(np. 0510-D-11, NM-34-07-1-D-15)",
+        (
+            "Sheet code: PL-1992 (`N-34-130-D-d-2-4`), PL-2000 "
+            "(`6.179.12.20`), SM5 (`CTES96`), TM33 tile (`302_5550`) or ZTM"
+            " (`0510-D-11`, `NM-34-07-1-D-15`)."
+        ),
         positional=True,
         required=True,
         metavar="GODLO",
         normalize="strip",
+        description_pl=(
+            "Godlo arkusza: PL-1992 (np. N-34-130-D-d-2-4), PL-2000 (np. "
+            "6.179.12.20), SM5 (np. CTES96), kafel TM33 (np. 302_5550) albo"
+            " ZTM (np. 0510-D-11, NM-34-07-1-D-15)"
+        ),
+        examples=("N-34-130-D-d-2-4",),
     ),
     Param(
         "hierarchy",
         "flag",
-        "Pokaz hierarchie od arkusza do skali 1:1000000 (tylko godla PL)",
+        ("Add the hierarchy from the sheet up to the scale 1:1000000 (PL codes only)."),
         default=False,
+        description_pl=(
+            "Pokaz hierarchie od arkusza do skali 1:1000000 (tylko godla PL)"
+        ),
     ),
     Param(
         "children",
         "flag",
-        "Pokaz bezposrednie arkusze potomne (tylko godla PL)",
+        "Add the direct child sheets (PL codes only).",
         default=False,
+        description_pl="Pokaz bezposrednie arkusze potomne (tylko godla PL)",
     ),
     Param(
         "descendants",
         "str",
-        "Pokaz wszystkie arkusze potomne do skali docelowej (np. 1:10000; "
-        "tylko godla PL)",
+        (
+            "Add every descendant sheet down to this scale, for example "
+            "`1:10000` (PL codes only)."
+        ),
         metavar="SKALA",
+        description_pl=(
+            "Pokaz wszystkie arkusze potomne do skali docelowej (np. "
+            "1:10000; tylko godla PL)"
+        ),
     ),
     shared.JSON,
 )
@@ -83,37 +101,55 @@ _CATALOG_PARAMS = (
     Param(
         "group",
         "str",
-        "Grupa komend, np. elevation albo project: opisy jej komend i produkty "
-        "ze zrodlami (domyslnie przeglad wszystkich grup)",
+        "Command group; default the overview of every group.",
         positional=True,
         nargs="?",
         metavar="GRUPA",
         allowed=_groups,
+        description_pl=(
+            "Grupa komend, np. elevation albo project: opisy jej komend i "
+            "produkty ze zrodlami (domyslnie przeglad wszystkich grup)"
+        ),
     ),
     Param(
         "command",
         "str",
-        "Komenda do opisania: identyfikator w katalogu (elevation download, "
-        "sheet parse, sheet find); w CLI po GRUPIE wystarczy nazwa komendy grupy "
-        "(download)",
+        (
+            "Command to describe: its name, such as `elevation download`, "
+            "or its `operation_id`, such as `kartograf_elevation_download`."
+        ),
         positional=True,
         nargs="?",
         metavar="KOMENDA",
         allowed=_command_ids,
+        description_pl=(
+            "Komenda do opisania: identyfikator w katalogu (elevation "
+            "download, sheet parse, sheet find); w CLI po GRUPIE wystarczy "
+            "nazwa komendy grupy (download)"
+        ),
     ),
     Param(
         "params",
         "flag",
-        "Dodaj parametry, ograniczenia i przyklady do widoku grupy albo calego "
-        "katalogu (opis jednej komendy zawsze je ma; caly katalog z parametrami "
-        "to ok. 200 tys. znakow)",
+        (
+            "Add the options, constraints and examples to a group or to the"
+            " whole catalog."
+        ),
+        description_pl=(
+            "Dodaj parametry, ograniczenia i przyklady do widoku grupy albo"
+            " calego katalogu (opis jednej komendy zawsze je ma; caly "
+            "katalog z parametrami to ok. 200 tys. znakow)"
+        ),
     ),
     Param(
         "tables",
         "flag",
-        "Dodaj tabele: kody wyjscia CLI, kody bledow i schematy dokumentow "
-        "(caly katalog z parametrami ma je zawsze)",
+        ("Add the tables of the exit codes, the error codes and the document schemas."),
         flag=None,
+        description_pl=(
+            "Dodaj tabele: kody wyjscia CLI, kody bledow i schematy "
+            "dokumentow (caly katalog z parametrami ma je zawsze)"
+        ),
     ),
     shared.JSON,
 )
@@ -122,54 +158,76 @@ _FIND_SHEETS_PARAMS = (
     Param(
         "bbox",
         "bbox",
-        "Prostokat obszaru: min_x,min_y,max_x,max_y w ukladzie --bbox-crs "
-        "(domyslnie EPSG:2180); dokladnie jeden z --bbox i --geometry",
+        (
+            "Area rectangle [min_x, min_y, max_x, max_y] in the CRS of "
+            "`bbox_crs`; exactly one of `bbox` and `geometry`."
+        ),
         metavar="BBOX",
+        description_pl=(
+            "Prostokat obszaru: min_x,min_y,max_x,max_y w ukladzie "
+            "--bbox-crs (domyslnie EPSG:2180); dokladnie jeden z --bbox i "
+            "--geometry"
+        ),
     ),
     Param(
         "bbox_crs",
         "bbox_crs",
-        _bbox_crs_help,
+        ("CRS of `bbox`, required with it (the CLI defaults to EPSG:2180)."),
         allowed=lambda: PL_BBOX_CRS,
         choices=True,
         normalize="upper",
         cli_default="EPSG:2180",
+        description_pl=_bbox_crs_help,
     ),
     Param(
         "geometry",
         "path",
-        "Plik geometrii (SHP albo GPKG): godla przecinajace obiekty pliku; "
-        "dokladnie jeden z --bbox i --geometry",
+        (
+            "Vector file (SHP or GPKG): the sheets that intersect its "
+            "features; exactly one of `bbox` and `geometry`."
+        ),
         metavar="PLIK",
+        description_pl=(
+            "Plik geometrii (SHP albo GPKG): godla przecinajace obiekty "
+            "pliku; dokladnie jeden z --bbox i --geometry"
+        ),
+        path_role="input",
     ),
     Param(
         "layer",
         "str",
-        "Warstwa GPKG pliku --geometry (domyslnie pierwsza)",
+        "GPKG layer of `geometry` (default: the first one).",
         metavar="NAZWA",
+        description_pl="Warstwa GPKG pliku --geometry (domyslnie pierwsza)",
     ),
     Param(
         "scale",
         "str",
-        _scale_help,
+        (
+            "Scale of the sheets (required): PL-1992 1:1000000 to 1:5000, "
+            "PL-2000 1:10000 to 1:500."
+        ),
         required=True,
         allowed=_scales,
         metavar="SKALA",
+        description_pl=_scale_help,
     ),
     Param(
         "sheet_system",
         "str",
-        "Uklad godel (wymagany): 1992 (PL-1992) albo 2000 (PL-2000)",
+        "Sheet system (required): `1992` or `2000`.",
         required=True,
         allowed=lambda: SheetParser.VALID_SYSTEMS,
         choices=True,
+        description_pl="Uklad godel (wymagany): 1992 (PL-1992) albo 2000 (PL-2000)",
     ),
     shared.JSON,
 )
 
 _OUTPUT_DIR = replace(
     shared.OUTPUT_DIR,
-    description="Katalog magazynu (wymagany): katalog z segmentami produktow",
+    description="Store directory (required): the one that holds the product segments.",
+    description_pl="Katalog magazynu (wymagany): katalog z segmentami produktow",
     section=None,
 )
 
@@ -178,26 +236,47 @@ _STORE_ENTRIES_PARAMS = (
     Param(
         "segment",
         "str",
-        "Segment magazynu (wymagany): katalog produktu, np. "
-        "nmt/pl_1992_1m_evrf2007; lista: kartograf store overview",
+        (
+            "Segment of the store (required): the product directory, for "
+            "example `nmt/pl_1992_1m_evrf2007`; `store overview` lists "
+            "them."
+        ),
         required=True,
         metavar="SEGMENT",
+        description_pl=(
+            "Segment magazynu (wymagany): katalog produktu, np. "
+            "nmt/pl_1992_1m_evrf2007; lista: kartograf store overview"
+        ),
     ),
     Param(
         "units",
         "str_list",
-        "Tylko te jednostki segmentu po przecinku: nazwy jak w sidecar.unit wpisu "
-        "(nie prefiksy); nazwy zarezerwowane (versions, full_sheet, kampanie) to "
-        "blad; domyslnie wszystkie",
+        (
+            "Only these units of the segment: names as in `sidecar.unit` of"
+            " an entry (not prefixes); the reserved names (`versions`, "
+            "`full_sheet`, `kampanie`) are errors; default all."
+        ),
         metavar="JEDNOSTKI",
+        description_pl=(
+            "Tylko te jednostki segmentu po przecinku: nazwy jak w "
+            "sidecar.unit wpisu (nie prefiksy); nazwy zarezerwowane "
+            "(versions, full_sheet, kampanie) to blad; domyslnie wszystkie"
+        ),
     ),
     Param(
         "limit",
         "int",
-        "Najwyzej tyle wpisow (liczba >= 1, wymagana); truncated w wyniku "
-        "mowi, czy byly dalsze",
+        (
+            "Most entries to return (at least 1, required); `truncated` in "
+            "the result says whether more followed."
+        ),
         required=True,
         metavar="N",
+        description_pl=(
+            "Najwyzej tyle wpisow (liczba >= 1, wymagana); truncated w "
+            "wyniku mowi, czy byly dalsze"
+        ),
+        minimum=1,
     ),
     shared.JSON,
 )
@@ -206,9 +285,13 @@ _STORE_SIDECAR_PARAMS = (
     Param(
         "path",
         "path",
-        "Plik danych magazynu albo jego sidecar <plik>.meta.json (wymagany)",
+        ("Data file of the store or its sidecar `<file>.meta.json` (required)."),
         required=True,
         metavar="PLIK",
+        description_pl=(
+            "Plik danych magazynu albo jego sidecar <plik>.meta.json (wymagany)"
+        ),
+        path_role="input",
     ),
     shared.JSON,
 )
@@ -216,103 +299,221 @@ _STORE_SIDECAR_PARAMS = (
 COMMANDS = (
     Command(
         "sheet parse",
-        "Rozpoznaj godlo arkusza (PL albo CZ) i pokaz jego wlasciwosci",
+        "Recognise a PL or CZ sheet code and show its properties",
         "query",
         "describe_sheet",
         "kartograf-sheet/1",
         _PARSE_PARAMS,
-        description="Rozpoznaj godlo arkusza i pokaz jego wlasciwosci (bez "
-        "sieci): PL-1992 i PL-2000 - skala, czlony, uklad i hierarchia arkuszy; "
-        "CZ - system (SM5, kafel TM33, ZTM), uklad wspolrzednych i komendy, "
-        "ktore przyjmuja godlo w --sheet.",
+        description=(
+            "Offline. PL-1992 and PL-2000 codes: scale, parts, CRS and "
+            "hierarchy; CZ codes (SM5, TM33, ZTM): system, CRS and the "
+            "commands that accept the code. To go from an area to sheet "
+            "codes use `sheet find`."
+        ),
         tool="parse_sheet",
         examples=(
-            Example({"sheet": "N-34-130-D-d-2-4"}, title="Godlo PL-1992"),
+            Example(
+                {"sheet": "N-34-130-D-d-2-4"},
+                title="A PL-1992 sheet code",
+                title_pl="Godlo PL-1992",
+            ),
             Example(
                 {"sheet": "N-34-130-D", "descendants": "1:10000"},
-                title="Arkusze potomne do skali 1:10000",
+                title="Descendant sheets down to 1:10000",
+                title_pl="Arkusze potomne do skali 1:10000",
             ),
-            Example({"sheet": "6.179.12.20"}, title="Godlo PL-2000"),
-            Example({"sheet": "CTES96"}, title="Godlo CZ (arkusz SM5)"),
+            Example(
+                {"sheet": "6.179.12.20"},
+                title="A PL-2000 sheet code",
+                title_pl="Godlo PL-2000",
+            ),
+            Example(
+                {"sheet": "CTES96"},
+                title="A CZ code (SM5 sheet)",
+                title_pl="Godlo CZ (arkusz SM5)",
+            ),
         ),
+        summary_pl="Rozpoznaj godlo arkusza (PL albo CZ) i pokaz jego wlasciwosci",
+        description_pl=(
+            "Rozpoznaj godlo arkusza i pokaz jego wlasciwosci (bez sieci): "
+            "PL-1992 i PL-2000 - skala, czlony, uklad i hierarchia arkuszy;"
+            " CZ - system (SM5, kafel TM33, ZTM), uklad wspolrzednych i "
+            "komendy, ktore przyjmuja godlo w --sheet."
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=("validation_error",),
+        family="discovery",
     ),
     Command(
         "commands list",
-        "Katalog komend: grupy, komendy i parametry",
+        ("Describe the commands: groups, products, parameters and examples"),
         "query",
         "get_catalog",
         "kartograf-catalog/1",
         _CATALOG_PARAMS,
-        description="Wypisz katalog komend (bez sieci i bez zapisu): grupy "
-        "z produktami i komendami (jedna linia na komende: identyfikator, "
-        "rodzaj, podsumowanie); z GRUPA komendy grupy; z GRUPA KOMENDA opis, "
-        "parametry (flaga, argument API, rodzaj, wymagany, dozwolone wartosci, "
-        "opis) i przyklady; --params dodaje parametry do widoku grupy i "
-        "calosci. --json: dokument kartograf-catalog/1 - wejscie dla agentow "
-        "i skryptow; bez GRUPY zwiezly przeglad (grupy, nazwy produktow, "
-        "komendy: identyfikator, podsumowanie, narzedzie MCP, sprawdzenie "
-        "aktualnosci), reszta z GRUPA, KOMENDA i --params; tabele kodow "
-        "wyjscia i bledow oraz schematy dokumentow: tables=True w API albo "
-        "caly katalog z parametrami.",
+        description=(
+            "Offline, read only: the groups with their products and "
+            "commands; with a group or a command also the parameters, "
+            "constraints and examples."
+        ),
         tool="get_catalog",
         examples=(
-            Example({}, title="Przeglad: grupy, produkty i komendy"),
+            Example(
+                {},
+                title="Overview: groups, products and commands",
+                title_pl="Przeglad: grupy, produkty i komendy",
+            ),
             Example(
                 {"group": "elevation"},
-                title="Opis komendy: parametry, ograniczenia i przyklady",
+                title="A command with its parameters, constraints and examples",
                 run={"command": "download"},
+                title_pl="Opis komendy: parametry, ograniczenia i przyklady",
             ),
             Example(
                 {"group": "soil", "params": True},
-                title="Komendy grupy z parametrami",
+                title="The commands of a group with their parameters",
+                title_pl="Komendy grupy z parametrami",
             ),
-            Example({}, title="Przeglad jako dokument JSON", run={"json": True}),
+            Example(
+                {},
+                title="The overview as a JSON document",
+                run={"json": True},
+                title_pl="Przeglad jako dokument JSON",
+            ),
         ),
+        summary_pl="Katalog komend: grupy, komendy i parametry",
+        description_pl=(
+            "Wypisz katalog komend (bez sieci i bez zapisu): grupy z "
+            "produktami i komendami (jedna linia na komende: identyfikator,"
+            " rodzaj, podsumowanie); z GRUPA komendy grupy; z GRUPA KOMENDA"
+            " opis, parametry (flaga, argument API, rodzaj, wymagany, "
+            "dozwolone wartosci, opis) i przyklady; --params dodaje "
+            "parametry do widoku grupy i calosci. --json: dokument "
+            "kartograf-catalog/1 - wejscie dla agentow i skryptow; bez "
+            "GRUPY zwiezly przeglad (grupy, nazwy produktow, komendy: "
+            "identyfikator, podsumowanie, narzedzie MCP, sprawdzenie "
+            "aktualnosci), reszta z GRUPA, KOMENDA i --params; tabele kodow"
+            " wyjscia i bledow oraz schematy dokumentow: tables=True w API "
+            "albo caly katalog z parametrami."
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=("validation_error",),
+        family="discovery",
+        core=True,
+        cardinality="bounded",
     ),
     Command(
         "cache stats",
-        "Pokaz statystyki cache (liczby wpisow, rozmiar bazy)",
+        "Show the statistics of the metadata cache",
         "query",
         "get_cache_info",
         "kartograf-cache/1",
         (shared.JSON,),
-        description="Wypisz liczby wpisow cache metadanych wg rodzaju (rekordy, "
-        "kampanie, TERYT, arkusze, feedy ATOM), rozmiar i sciezke bazy",
+        description=(
+            "Offline, read only: the number of entries of the metadata "
+            "cache by kind (records, campaigns, TERYT, sheets, ATOM feeds),"
+            " the size and the path of the database."
+        ),
+        summary_pl="Pokaz statystyki cache (liczby wpisow, rozmiar bazy)",
+        description_pl=(
+            "Wypisz liczby wpisow cache metadanych wg rodzaju (rekordy, "
+            "kampanie, TERYT, arkusze, feedy ATOM), rozmiar i sciezke bazy"
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=(
+            "validation_error",
+            "store_unavailable",
+            "io_error",
+        ),
+        examples=(
+            Example(
+                {},
+                title="The statistics of the metadata cache",
+                title_pl="Statystyki cache metadanych",
+            ),
+        ),
     ),
     Command(
         "cache clear",
-        "Usun wszystkie wpisy cache",
+        "Delete every entry of the metadata cache",
         "manage",
         "clear_cache",
         "kartograf-cache/1",
         (shared.JSON,),
-        description="Usun wszystkie wpisy cache metadanych (nastepne komendy "
-        "odpytaja zrodla ponownie); nieczytelny plik bazy jest usuwany. Pliki "
-        "magazynu danych zostaja",
+        description=(
+            "Deletes every entry of the metadata cache (the next commands "
+            "query the sources again); an unreadable database file is "
+            "removed. The data files of the store stay."
+        ),
         effects=("cache_delete",),
         destructive=True,
+        summary_pl="Usun wszystkie wpisy cache",
+        description_pl=(
+            "Usun wszystkie wpisy cache metadanych (nastepne komendy "
+            "odpytaja zrodla ponownie); nieczytelny plik bazy jest usuwany."
+            " Pliki magazynu danych zostaja"
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=(
+            "validation_error",
+            "store_unavailable",
+            "io_error",
+        ),
+        examples=(
+            Example(
+                {},
+                title="Delete every cache entry",
+                title_pl="Usun wszystkie wpisy cache",
+            ),
+        ),
     ),
     Command(
         "cache path",
-        "Pokaz sciezke pliku bazy cache",
+        "Show the path of the metadata cache file",
         "query",
         "get_cache_path",
         "kartograf-cache/1",
         (shared.JSON,),
-        description="Wypisz sciezke pliku bazy cache metadanych (w biezacym "
-        "katalogu) bez otwierania bazy: dziala tez, gdy baza jest nieczytelna",
+        description=(
+            "Offline, read only: the path of the metadata cache file, "
+            "without opening the database, so it works when the database is"
+            " unreadable."
+        ),
+        summary_pl="Pokaz sciezke pliku bazy cache",
+        description_pl=(
+            "Wypisz sciezke pliku bazy cache metadanych (w biezacym "
+            "katalogu) bez otwierania bazy: dziala tez, gdy baza jest "
+            "nieczytelna"
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=(
+            "validation_error",
+            "io_error",
+        ),
+        examples=(
+            Example(
+                {}, title="The path of the cache file", title_pl="Sciezka pliku cache"
+            ),
+        ),
     ),
     Command(
         "sheet find",
-        "Wypisz godla arkuszy pokrywajace obszar (bbox albo geometria)",
+        "List the PL sheet codes that cover an area",
         "query",
         "find_sheets",
         "kartograf-sheets/1",
         _FIND_SHEETS_PARAMS,
-        description="Godla arkuszy PL-1992 albo PL-2000 w wybranej skali, "
-        "ktore pokrywaja obszar: bbox (z bbox_crs) albo plik geometrii "
-        "(arkusze przecinajace obiekty); skala i uklad godel sa wymagane. "
-        "Bez sieci; wynik: lista godel w kolejnosci biblioteki, bez ucinania.",
+        description=(
+            "Offline: the PL-1992 or PL-2000 sheet codes of the chosen "
+            "scale that cover a `bbox` or intersect the features of a "
+            "`geometry` file; the list is not truncated. To describe one "
+            "code use `sheet parse`."
+        ),
         tool="find_sheets",
         constraints=(
             Constraint(
@@ -335,7 +536,8 @@ COMMANDS = (
                     "scale": "1:10000",
                     "sheet_system": "1992",
                 },
-                title="Arkusze PL-1992 1:10000 dla prostokata",
+                title="PL-1992 1:10000 sheets for a rectangle",
+                title_pl="Arkusze PL-1992 1:10000 dla prostokata",
             ),
             Example(
                 {
@@ -343,40 +545,87 @@ COMMANDS = (
                     "scale": "1:2000",
                     "sheet_system": "2000",
                 },
-                title="Arkusze PL-2000 1:2000 dla geometrii",
+                title="PL-2000 1:2000 sheets for a geometry",
+                title_pl="Arkusze PL-2000 1:2000 dla geometrii",
             ),
         ),
+        summary_pl="Wypisz godla arkuszy pokrywajace obszar (bbox albo geometria)",
+        description_pl=(
+            "Godla arkuszy PL-1992 albo PL-2000 w wybranej skali, ktore "
+            "pokrywaja obszar: bbox (z bbox_crs) albo plik geometrii "
+            "(arkusze przecinajace obiekty); skala i uklad godel sa "
+            "wymagane. Bez sieci; wynik: lista godel w kolejnosci "
+            "biblioteki, bez ucinania."
+        ),
+        rules=("`scale` and `sheet_system` are required: nothing is guessed.",),
+        rules_pl=("`scale` i `sheet_system` sa wymagane: nic nie jest zgadywane.",),
+        errors=(
+            "validation_error",
+            "io_error",
+            "forbidden",
+        ),
+        family="discovery",
+        core=True,
+        cardinality="unbounded",
     ),
     Command(
         "store overview",
-        "Wypisz segmenty magazynu danych (przeglad)",
+        "List the segments of a store",
         "query",
         "describe_store",
         "kartograf-store-overview/1",
         (_OUTPUT_DIR, shared.JSON),
-        description="Przeglad magazynu (tylko odczyt, bez sieci): segmenty "
-        "(katalogi produktow) z produktem, krajem, kluczem zbioru, nazwa i "
-        "znacznikiem, czy segment jest w rejestrze zrodel.",
+        description=(
+            "Read only, offline: the segments (product directories) of the "
+            "store with product, country, `dataset` key, name and whether a"
+            " registered source produces them. For the files of one segment"
+            " use `store entries`."
+        ),
         tool="store_overview",
-        examples=(Example({}, title="Segmenty magazynu w ./data"),),
+        examples=(
+            Example(
+                {},
+                title="The segments of the store in ./data",
+                title_pl="Segmenty magazynu w ./data",
+            ),
+        ),
+        summary_pl="Wypisz segmenty magazynu danych (przeglad)",
+        description_pl=(
+            "Przeglad magazynu (tylko odczyt, bez sieci): segmenty "
+            "(katalogi produktow) z produktem, krajem, kluczem zbioru, "
+            "nazwa i znacznikiem, czy segment jest w rejestrze zrodel."
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=(
+            "validation_error",
+            "io_error",
+            "forbidden",
+        ),
+        family="store",
+        core=True,
+        cardinality="bounded",
     ),
     Command(
         "store entries",
-        "Wypisz wpisy segmentu magazynu: pliki wersji z sidecarami",
+        ("List the entries of one store segment: version files with their sidecars"),
         "query",
         "list_store_entries",
         "kartograf-store-entries/1",
         _STORE_ENTRIES_PARAMS,
-        description="Pierwsze limit wpisow segmentu magazynu (tylko odczyt, "
-        "bez sieci): pliki wersji z sidecarami bez pola raw; segment i limit "
-        "sa wymagane, bo pelny skan magazynu nie jest odpowiedzia. "
-        "truncated: byly dalsze wpisy; sidecar.unit wpisu jest wartoscia "
-        "units tego samego segmentu.",
+        description=(
+            "Read only, offline: the first `limit` entries of a segment "
+            "(version files and links, their sidecars without `raw`). "
+            "`segment` and `limit` are required: a full scan is not an "
+            "answer for a model. `truncated` says whether more entries "
+            "followed."
+        ),
         tool="store_entries",
         examples=(
             Example(
                 {"segment": "nmt/pl_1992_1m_evrf2007", "limit": 20},
-                title="Pierwsze 20 wpisow segmentu",
+                title="The first 20 entries of a segment",
+                title_pl="Pierwsze 20 wpisow segmentu",
             ),
             Example(
                 {
@@ -384,57 +633,127 @@ COMMANDS = (
                     "limit": 5,
                     "units": ["N-34-130-D-d-2-4"],
                 },
-                title="Wpisy jednego arkusza",
+                title="The entries of one sheet",
+                title_pl="Wpisy jednego arkusza",
             ),
         ),
+        summary_pl="Wypisz wpisy segmentu magazynu: pliki wersji z sidecarami",
+        description_pl=(
+            "Pierwsze limit wpisow segmentu magazynu (tylko odczyt, bez "
+            "sieci): pliki wersji z sidecarami bez pola raw; segment i "
+            "limit sa wymagane, bo pelny skan magazynu nie jest "
+            "odpowiedzia. truncated: byly dalsze wpisy; sidecar.unit wpisu "
+            "jest wartoscia units tego samego segmentu."
+        ),
+        rules=(
+            ("Take `segment` from `store overview` and `units` from `sidecar.unit`."),
+        ),
+        rules_pl=("Wez `segment` z `store overview`, a `units` z `sidecar.unit`.",),
+        errors=(
+            "validation_error",
+            "io_error",
+            "forbidden",
+        ),
+        family="store",
+        cardinality="bounded",
     ),
     Command(
         "store sidecar",
-        "Odczytaj sidecar jednego pliku magazynu (kartograf-meta/1)",
+        "Read the sidecar of one store file (kartograf-meta/1)",
         "query",
         "read_store_sidecar",
         "kartograf-store-sidecar/1",
         _STORE_SIDECAR_PARAMS,
-        description="Sidecar pliku danych magazynu albo pliku <plik>.meta.json "
-        "(tylko odczyt, bez sieci), wraz z polem raw; brak albo nieczytelny "
-        "sidecar to blad invalid_sidecar.",
+        description=(
+            "Read only, offline: the sidecar of a store data file or of a "
+            "`<file>.meta.json`, with the `raw` field. A missing or "
+            "unreadable sidecar is the error `data_error` (reason "
+            "`invalid_sidecar`)."
+        ),
         tool="store_sidecar",
         examples=(
             Example(
                 {"path": "./data/nmt/pl_1992_1m_evrf2007/N-34-130-D-d-2-4.asc"},
-                title="Sidecar pliku z magazynu",
+                title="The sidecar of a store file",
+                title_pl="Sidecar pliku z magazynu",
             ),
         ),
+        summary_pl="Odczytaj sidecar jednego pliku magazynu (kartograf-meta/1)",
+        description_pl=(
+            "Sidecar pliku danych magazynu albo pliku <plik>.meta.json "
+            "(tylko odczyt, bez sieci), wraz z polem raw; brak albo "
+            "nieczytelny sidecar to blad invalid_sidecar."
+        ),
+        rules=(),
+        rules_pl=(),
+        errors=(
+            "validation_error",
+            "data_error",
+            "io_error",
+            "forbidden",
+        ),
+        family="store",
     ),
 )
 
 GROUPS = (
     Group(
         "cache",
-        "Zarzadzaj cache metadanych",
-        "Lokalny cache metadanych SQLite (odpowiedzi WMS, TERYT, indeks "
-        "arkuszy CUZK) w pliku w biezacym katalogu; dane w magazynie "
-        "(--output) nie sa czescia cache",
+        "Manage the metadata cache",
+        (
+            "The local SQLite cache of metadata (WMS answers, TERYT, the "
+            "index of CUZK sheets); the data of the store are not part of "
+            "it."
+        ),
         position=2,
+        summary_pl="Zarzadzaj cache metadanych",
+        description_pl=(
+            "Lokalny cache metadanych SQLite (odpowiedzi WMS, TERYT, indeks"
+            " arkuszy CUZK) w pliku w biezacym katalogu; dane w magazynie "
+            "(--output) nie sa czescia cache"
+        ),
     ),
     Group(
         "commands",
-        "Katalog komend",
-        "Opis komend Kartografa dla agentow i skryptow (bez sieci i bez zapisu): "
-        "przeglad komend, a po nazwie komendy jej parametry, ograniczenia i "
-        "przyklady.",
+        "Catalog of commands",
+        (
+            "The description of the commands of Kartograf for agents and "
+            "scripts (offline, read only): the list of commands and the "
+            "schema of one command."
+        ),
         position=2,
+        summary_pl="Katalog komend",
+        description_pl=(
+            "Opis komend Kartografa dla agentow i skryptow (bez sieci i bez"
+            " zapisu): przeglad komend, a po nazwie komendy jej parametry, "
+            "ograniczenia i przyklady."
+        ),
     ),
     Group(
         "sheet",
-        "Godla arkuszy",
-        "Godlo arkusza PL-1992, PL-2000 albo CZ (SM5, TM33, ZTM) i jego "
-        "wlasciwosci, bez sieci.",
+        "Sheet codes",
+        (
+            "A PL-1992, PL-2000 or CZ (SM5, TM33, ZTM) sheet code and its "
+            "properties, and the sheets that cover an area (offline)."
+        ),
+        summary_pl="Godla arkuszy",
+        description_pl=(
+            "Godlo arkusza PL-1992, PL-2000 albo CZ (SM5, TM33, ZTM) i jego"
+            " wlasciwosci, bez sieci."
+        ),
     ),
     Group(
         "store",
-        "Odczyt magazynu",
-        "Odczyt magazynu wersji (tylko odczyt, bez sieci): segmenty, wpisy "
-        "z sidecarami i sidecar jednego pliku.",
+        "Read the store",
+        (
+            "Read access to the versioned store (read only, offline): its "
+            "segments, the entries with their sidecars and the sidecar of "
+            "one file."
+        ),
+        summary_pl="Odczyt magazynu",
+        description_pl=(
+            "Odczyt magazynu wersji (tylko odczyt, bez sieci): segmenty, "
+            "wpisy z sidecarami i sidecar jednego pliku."
+        ),
     ),
 )

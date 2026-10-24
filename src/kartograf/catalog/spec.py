@@ -7,6 +7,12 @@ A module of ``kartograf/catalog/commands/`` declares its commands as
 CLI parser, the catalog document and the tools of the MCP server; they are
 plain frozen data, built without side effects.
 
+The texts are authored in English (AGI-9.1): ``summary``, ``description``,
+``rules`` and the ``description`` of a parameter and the ``title`` of an example
+are what the catalog document and the MCP tools say. The Polish ones sit next to
+them in the fields ending in ``_pl`` (``i18n.pl`` of the document) and are what
+``--help`` and the text of the CLI say until the message catalogue.
+
 Two fields may be *providers* - functions without arguments returning the
 value (``Text``, ``Values``): the allowed values and texts that come from
 the source registry. A provider is called by ``resolve`` when the catalog or
@@ -46,6 +52,14 @@ Effect = Literal[
 ConstraintType = Literal[
     "one_of", "any_of", "requires", "excludes", "applies_to", "required_when"
 ]
+# What a path parameter is for the sandbox of the MCP server (AGI-2.3): read
+# (``input``), written as plain output (``output``) or the root of the store (``root``).
+PathRole = Literal["input", "output", "root"]
+# How many documents a call may return (AGI-2.2 ``result.cardinality``).
+Cardinality = Literal["single", "bounded", "unbounded"]
+# The MCP tool families of ``--tools`` (AGI-5.8); ``core`` is not a family of its own
+# but a mark of ``Command.core`` (AGI-5.12).
+Family = Literal["discovery", "availability", "data", "project", "store"]
 
 KINDS: Final[tuple[str, ...]] = get_args(Kind)
 NORMALIZERS: Final[tuple[str, ...]] = get_args(Normalize)
@@ -53,6 +67,15 @@ NARGS: Final[tuple[str, ...]] = get_args(Nargs)
 COMMAND_KINDS: Final[tuple[str, ...]] = get_args(CommandKind)
 EFFECTS: Final[tuple[str, ...]] = get_args(Effect)
 CONSTRAINT_TYPES: Final[tuple[str, ...]] = get_args(ConstraintType)
+PATH_ROLES: Final[tuple[str, ...]] = get_args(PathRole)
+CARDINALITIES: Final[tuple[str, ...]] = get_args(Cardinality)
+FAMILIES: Final[tuple[str, ...]] = get_args(Family)
+# The parameter that makes a call a plan without effects (``check_command``): an
+# option of every command with a ``check_function``, though no function takes it as an
+# argument. The data-output change renames it (DEV-19.10).
+CHECK_OPTION: Final = "check_updates"
+# At most this many tools make the ``core`` family (AGI-5.12).
+CORE_MAX: Final = 10
 # Sheet systems a ``sheet`` parameter may accept (``SheetInfo.system``): the ids
 # of ``core.parser_registry.SYSTEMS`` and the ZTM map sheets of CUZK.
 SHEET_SYSTEMS: Final[tuple[str, ...]] = (
@@ -107,9 +130,12 @@ def resolve[T](value: T | Callable[[], T]) -> T:
 class Param:
     """One parameter of a command: a CLI flag or argument, an API argument, or both.
 
-    The fields up to ``description`` are the catalog fields of ``ParamInfo``;
-    the last six are used by the CLI parser only (spec 8.3) and are not part of
-    the catalog document.
+    ``name``, ``kind``, ``description`` and the fields from ``required`` to
+    ``default`` and from ``description_pl`` on describe the option in every
+    interface (the catalog document, the MCP tool); ``flag``, ``short``,
+    ``positional``, ``cli_default``, ``section``, ``dest``, ``metavar``,
+    ``normalize``, ``exclusive``, ``choices`` and ``nargs`` are used by the CLI
+    parser only (spec 8.3).
 
     Parameters
     ----------
@@ -119,7 +145,9 @@ class Param:
     kind : Kind
         Value kind.
     description : str or callable
-        Help text of the flag and description in the catalog (Polish, ASCII).
+        What the option is, in English (the catalog and the MCP tool). The allowed
+        values are not listed in it: ``allowed`` and the meanings of
+        ``kartograf.catalog.meanings`` say them.
     flag : str, None or AUTO
         CLI flag; AUTO derives ``--<name with dashes>`` (none for a positional
         parameter), ``None`` = API only.
@@ -156,6 +184,21 @@ class Param:
         ``allowed`` are also the ``choices`` of the parser.
     nargs : {"*", "REMAINDER"}, optional
         Number of values of a positional argument.
+    description_pl : str or callable
+        The help text of the flag (Polish, ASCII): what ``--help`` says.
+    unit : str, optional
+        Unit of a physical value (``points/m2``).
+    minimum, maximum : int, optional
+        Bounds of an ``int`` parameter (inclusive).
+    path_role : {"input", "output", "root"}, optional
+        What a ``path`` parameter is (every declared one has it, a contract test
+        checks; refused for other kinds): the MCP server checks every one against
+        its allowed directories (AGI-5.8).
+    examples : tuple
+        Example values (JSON form) for the catalog.
+    fixed : str, optional
+        The constant value of an argument the command always passes (the ``group``
+        of ``<group> list-sources``): not an option of the command in any interface.
     """
 
     name: str
@@ -178,6 +221,13 @@ class Param:
     exclusive: str | None = None
     choices: bool = False
     nargs: Nargs | None = None
+    description_pl: Text = ""
+    unit: str | None = None
+    minimum: int | None = None
+    maximum: int | None = None
+    path_role: PathRole | None = None
+    examples: tuple[object, ...] = ()
+    fixed: str | None = None
 
     def __post_init__(self) -> None:
         """Check the parameter declaration."""
@@ -213,6 +263,16 @@ class Param:
             )
         if self.task and self.api_argument is None:
             raise ValueError(f"Param {name}: a task option needs an API argument")
+        if self.path_role is not None and self.path_role not in PATH_ROLES:
+            raise ValueError(f"Param {name}: unknown path_role {self.path_role!r}")
+        if self.path_role is not None and self.kind != "path":
+            raise ValueError(f"Param {name}: only a path parameter has a path_role")
+        if (
+            self.minimum is not None or self.maximum is not None
+        ) and self.kind != "int":
+            raise ValueError(f"Param {name}: bounds are for an int parameter")
+        if self.fixed is not None and self.api_argument is None:
+            raise ValueError(f"Param {name}: a fixed value needs an API argument")
         if self.accepts is not None:
             unknown = [s for s in self.accepts if s not in SHEET_SYSTEMS]
             if name != "sheet" or unknown:
@@ -248,6 +308,10 @@ class Param:
 class Constraint:
     """A rule among the parameters of a command (documentation, spec 8.4).
 
+    The rule is data: the catalog document derives the ``one_of`` group of the
+    options and the sentence of the other rules in English from it (``kartograf.catalog.
+    rules``); ``message_pl`` is the Polish sentence of the text of the CLI.
+
     ``one_of``: exactly one of ``params``; ``any_of``: at least one;
     ``requires``: when ``param`` is given, all ``params`` are; ``excludes``:
     when ``param`` is given, none of ``params``; ``applies_to``: ``param`` only
@@ -258,7 +322,7 @@ class Constraint:
 
     type: ConstraintType
     params: tuple[str, ...]
-    message: str
+    message_pl: str
     param: str | None = None
     when: Mapping[str, object] | None = None
 
@@ -275,26 +339,33 @@ class Example:
     ``options`` are the project task options in the JSON form of the manifest (``bbox``
     as 4 numbers with ``bbox_crs``, a per-country value as a text or ``{"pl": ..., "cz":
     ...}``), ``run`` the other flags shown in the command line (the store directory is
-    added by the catalog).
+    added by the catalog). ``title`` says what the call does (English), ``title_pl``
+    the same in Polish; ``result`` is the excerpt of the result document this call
+    gives, when it differs from the excerpt of the schema of the command
+    (``kartograf.catalog.excerpts``).
     """
 
     options: Mapping[str, object]
     title: str | None = None
     run: Mapping[str, object] = field(default_factory=dict)
+    title_pl: str | None = None
+    result: Mapping[str, object] | None = None
 
 
 @dataclass(frozen=True)
 class Command:
     """One command of the catalog: a CLI command, an API function, a tool.
 
+    Every command is a CLI command: its words are its id.
+
     Parameters
     ----------
     id : str
         ``<group> <verb>`` as typed in the CLI (AGI-2.2): the key of ``COMMANDS`` of
-        the project for a data command; an API-only command has the id it would
-        have as a CLI command.
+        the project for a data command.
     summary : str
-        One line, at most 120 characters (the command's ``help``).
+        One sentence that starts with a verb, in English, at most 100 characters
+        (DOC-1.7).
     kind : {"data", "query", "manage"}
         Writes to the store, only reads, or changes a project or the cache.
     function, result_schema : str
@@ -302,7 +373,9 @@ class Command:
     params : tuple of Param
         In the order of the flags in ``--help``.
     description : str or callable
-        Full description (the command's ``description``).
+        What the command does, when to use it, when not to (and what instead) and
+        its main limit, in English; ``summary``, ``description`` and ``rules`` are
+        the description of the MCP tool and fit 600 characters together (DOC-1.7).
     effects : tuple of str
         Subset of ``network``, ``store_write``, ``project_write``,
         ``cache_write``, ``cache_delete``.
@@ -312,12 +385,23 @@ class Command:
         A data command a project task may run (a key of ``COMMANDS``).
     check_function, check_result_schema : str, optional
         The ``check_*`` twin and its result schema (both or neither).
-    cli : AUTO or None
-        AUTO: the CLI words are the id; ``None``: an API-only command.
     tool : str, optional
         MCP tool name.
     constraints, examples : tuple
         Rules among the parameters and example calls.
+    summary_pl, description_pl : str or callable
+        The Polish texts of the command (``--help``; ``i18n.pl`` of the document).
+    rules, rules_pl : tuple of str
+        Short imperative rules for an agent, English and Polish (AGI-2.2); they do
+        not repeat what the options say.
+    errors : tuple of str
+        The registry codes the command can raise (ERR-1).
+    family : {"discovery", "availability", "data", "project", "store"}, optional
+        The MCP tool family of the command (``--tools``); ``None``: no tool.
+    core : bool
+        The command is in the ``core`` family (at most ``CORE_MAX`` of them).
+    cardinality : {"single", "bounded", "unbounded"}
+        How many documents the result of one call has (AGI-2.2).
     """
 
     id: str
@@ -333,10 +417,17 @@ class Command:
     project_task: bool = False
     check_function: str | None = None
     check_result_schema: str | None = None
-    cli: _Auto | None = AUTO
     tool: str | None = None
     constraints: tuple[Constraint, ...] = ()
     examples: tuple[Example, ...] = ()
+    summary_pl: str = ""
+    description_pl: Text = ""
+    rules: tuple[str, ...] = ()
+    rules_pl: tuple[str, ...] = ()
+    errors: tuple[str, ...] = ()
+    family: Family | None = None
+    core: bool = False
+    cardinality: Cardinality = "single"
 
     def __post_init__(self) -> None:
         """Check the command declaration."""
@@ -359,16 +450,19 @@ class Command:
             raise ValueError(f"Command {name}: a project task is a data command")
         if self.tool is not None and not _TOOL_NAME.fullmatch(self.tool):
             raise ValueError(f"Command {name}: tool {self.tool!r} is not snake_case")
+        if self.family is not None and self.family not in FAMILIES:
+            raise ValueError(f"Command {name}: unknown family {self.family!r}")
+        if self.core and self.family is None:
+            raise ValueError(f"Command {name}: a command of the core family has a tool")
+        if self.cardinality not in CARDINALITIES:
+            raise ValueError(
+                f"Command {name}: unknown cardinality {self.cardinality!r}"
+            )
+        if len(self.errors) != len(set(self.errors)):
+            raise ValueError(f"Command {name}: an error code is declared twice")
         names = [param.name for param in self.params]
         for duplicate in sorted({n for n in names if names.count(n) > 1}):
             raise ValueError(f"Command {name}: parameter {duplicate!r} declared twice")
-        if self.cli is None:
-            for param in self.params:
-                if param.cli_flag is not None or param.positional:
-                    raise ValueError(
-                        f"Command {name}: an API-only command declares no CLI flag "
-                        f"({param.name})"
-                    )
 
     @property
     def group(self) -> str:
@@ -381,9 +475,20 @@ class Command:
         return self.id.rpartition(" ")[2]
 
     @property
-    def cli_words(self) -> str | None:
-        """The words after ``kartograf``; ``None`` for an API-only command."""
-        return None if self.cli is None else self.id
+    def operation_id(self) -> str:
+        """Return the id of the operation: ``kartograf_<group>_<verb>`` (AGI-2.2).
+
+        The MCP tool name and the key of the command in the documents; ``-`` of the verb
+        becomes ``_``.
+        """
+        return "kartograf_" + self.id.replace(" ", "_").replace("-", "_")
+
+    @property
+    def families(self) -> tuple[str, ...]:
+        """Return the MCP families of the command: its own and ``core`` (if it is)."""
+        if self.family is None:
+            return ()
+        return (self.family, "core") if self.core else (self.family,)
 
     @property
     def supports_check(self) -> bool:
@@ -416,9 +521,11 @@ class Command:
 class Group:
     """A CLI group: ``kartograf <name> <command>`` (spec 8.1).
 
-    ``products``: the ``(product, summary)`` pairs of the group (a provider reads
-    them from the registry); ``position``: the place in the list of commands of
-    ``kartograf --help`` and in the catalog - lower first, equal ones by name.
+    ``summary`` and ``description`` are English (the catalog), ``summary_pl`` and
+    ``description_pl`` Polish (``--help``); ``products``: the ``(product, summary)``
+    pairs of the group (a provider reads them from the registry, Polish);
+    ``position``: the place in the list of commands of ``kartograf --help`` and in the
+    catalog - lower first, equal ones by name.
     """
 
     name: str
@@ -426,6 +533,8 @@ class Group:
     description: str
     products: Products = ()
     position: int = 1
+    summary_pl: str = ""
+    description_pl: str = ""
 
     def __post_init__(self) -> None:
         """Check the group declaration."""
@@ -456,7 +565,7 @@ def check_declarations(commands: Sequence[Command], groups: Sequence[Group]) -> 
     names = [group.name for group in groups]
     for duplicate in sorted({n for n in names if names.count(n) > 1}):
         raise ValueError(f"group {duplicate!r} is declared twice")
-    owned = {command.group for command in commands if command.cli is not None}
+    owned = {command.group for command in commands}
     for missing in sorted(owned - set(names)):
         raise ValueError(f"group {missing!r} has commands but no declaration")
     for group in groups:

@@ -435,7 +435,7 @@ def _argument_kwargs(param: Param, given_only: bool) -> dict[str, Any]:
     With ``given_only`` there is no default, so the namespace has the flags of the line
     only.
     """
-    kwargs: dict[str, Any] = {"help": _help(resolve(param.description))}
+    kwargs: dict[str, Any] = {"help": _help(resolve(param.description_pl))}
     if not param.positional:
         kwargs["dest"] = param.cli_dest
     if param.kind == "flag":
@@ -500,8 +500,8 @@ def _add_command(
 ) -> None:
     parser = subparsers.add_parser(
         command.name,
-        help=_help(command.summary),
-        description=resolve(command.description) or None,
+        help=_help(command.summary_pl),
+        description=resolve(command.description_pl) or None,
         epilog=_epilog(command),
         usage_errors=usage_errors,
     )
@@ -520,7 +520,7 @@ def build_parser(
     """Return the parser of ``kartograf`` for the declared commands.
 
     Every command belongs to a group, so the root parser holds the groups, by position
-    and name; a command without a CLI (``cli`` is ``None``) adds nothing. A parsed
+    and name. A parsed
     line carries ``_command_id`` (the id of the command parser) or, for a bare group,
     ``_group_parser`` (the group's parser, whose help the caller prints).
 
@@ -550,19 +550,18 @@ def build_parser(
         help="pokaz wersje programu i zakoncz",
     )
     subparsers = parser.add_subparsers(dest="command", help="Komendy")
-    cli = [command for command in commands if command.cli is not None]
     for group in sorted_groups(groups):
         group_parser = subparsers.add_parser(
             group.name,
-            help=_help(group.summary),
-            description=group.description,
+            help=_help(group.summary_pl),
+            description=group.description_pl,
             usage_errors=usage_errors,
         )
         group_parser.set_defaults(_group_parser=group_parser)
         group_commands = group_parser.add_subparsers(
             dest=f"{group.name}_command", title="komendy", metavar="KOMENDA"
         )
-        for command in cli:
+        for command in commands:
             if command.group == group.name:
                 _add_command(group_commands, command, usage_errors, given_only)
     return parser
