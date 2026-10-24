@@ -110,14 +110,13 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
   `names_download`, `maps_download`, `geodesy_download`; aktualnosc `check_updates` (parametry
   `tool` i `arguments`); projekt `project_status`, `project_download`, `project_check_updates`
   (aktualnosc projektu); magazyn `store_overview`, `store_entries`.
-- Wynik narzedzia to ten sam dokument co `--json`; `is_error` jest prawda, gdy CLI zwrocilby
-  kod wyjscia != 0 (blad albo `ok: false`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
+- Wynik narzedzia to ta sama koperta co `--json`; `is_error` tylko dla bledu, `partial` i `failed`
+  to wyniki (`items`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
 - Dlugie pobrania zglaszaja postep notyfikacjami MCP.
 
 ## Kody wyjscia i bledow
 Kody wyjscia i bledow sa wspolne dla narzedzi Nogat (rejestr bledow Nogat). Kod wyjscia:
-0 = ok; 10 = czesciowy wynik (`status` `partial`: czesc jednostek w `items` nie powiodla sie); 11 = zadna jednostka
-sie nie powiodla (`status` `failed`); 1 = blad programu; 2 = bledne
+0 = ok; 10 = `partial`, 11 = `failed` (wyniki, patrz `items`); 1 = blad programu; 2 = bledne
 dane wejsciowe (popraw wg `hint` i `details.option`); 5 = zrodlo niedostepne; 7 = bledne
 dane (sidecar); 8 = cache niedostepny; 9 = blad plikow; 13 = blad przeliczenia; 14 = brak
 danych w zrodle; 15 = nieobslugiwane (brak bezpiecznej transformacji); 130 = przerwane

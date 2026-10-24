@@ -1211,7 +1211,7 @@ każda inna odpowiedź (`503`, sieć) to `Error:`, nigdy brak danych. Pole
 rama) — CZ nie ma maski lądu, więc przy granicy obejmuje też terytorium
 PL. Pod `--country auto` raport ma osobne tabele i `areas` PL i CZ;
 część, której nie udało się sprawdzić, przy sprawdzonej drugiej daje
-`Warning:`, `ok: false` w JSON i kod 1 (raport drugiej części jest
+`Warning:`, `ok: false` w JSON i kod 10 (raport drugiej części jest
 wypisany). Stopka CZ podaje polecenia kompletnych kombinacji: raster —
 po jednym na arkusz (`--sheet`, `--resolution`, natywne
 `--vertical-crs`), LAZ — jedno polecenie obszaru z `--country cz`
@@ -3742,12 +3742,12 @@ narzedzie danych - i jego `arguments` z `output_dir`, ale bez `update`, `plan` i
 
 **Wynik i bledy.**
 
-- Sukces i `ok: false`: `CallToolResult` z `structured_content` = `to_dict()` dokumentu i
-  `content` = ten sam dokument jako zwarty JSON (`to_json(indent=None)`). `is_error` jest
-  prawda dokladnie wtedy, gdy CLI zwrocilby kod wyjscia != 0 (9.3): kazdy blad i kazde
-  `ok: false` (takze `project_status` z niepobranym zadaniem), przy czym dokument jest
-  zawsze w wyniku - agent czyta `schema`.
-- Blad: `kartograf-error/1` z `command` = komenda narzedzia (dla `check_updates` - komenda
+- A result, also with the status `partial` or `failed`: `CallToolResult` with
+  `structured_content` = `to_dict()` of the envelope `kartograf-result/1` (9.1) and
+  `content` = the same document as compact JSON (`to_json(indent=None)`); `is_error` is
+  false. The outcomes 10 and 11 of the CLI are results here too (also `project_status` with a
+  task that is not downloaded): the agent reads `status` and `items`.
+- An error: `kartograf-error/1` (`structured_content` and `content`, `is_error: true`) z `command` = komenda narzedzia (dla `check_updates` - komenda
   wskazana przez `tool`), `is_error: true`; `OSError` to `io_error`, inny wyjatek spoza
   hierarchii `internal_error` (pelny traceback tylko w logu stderr serwera). Jedyny blad
   protokolu to nieznana nazwa narzedzia (`INVALID_PARAMS`).
@@ -3779,8 +3779,8 @@ opisie kazdego narzedzia. Test porownuje ten blok z `kartograf.mcp_server.INSTRU
 ```text
 Kartograf pobiera dane przestrzenne Polski i Czech (GUGiK, CUZK, Copernicus, ISRIC) do magazynu wersji w katalogu output_dir. Zacznij od get_catalog (przeglad: grupy, produkty, komendy); parametry komendy: get_catalog(command="elevation download"); kody wyjscia, kody bledow i schematy dokumentow: get_catalog(tables=true). Jakie lata i uklady ma obszar: elevation_availability.
 Wspolne argumenty. Sciezki (output_dir, geometry, project_dir, path) podawaj bezwzglednie. Obszar: sheet (godlo arkusza, np. N-34-130-D-d-2-4), bbox ([min_x, min_y, max_x, max_y] w ukladzie bbox_crs, ktory jest wymagany: bez wartosci domyslnej) albo geometry (plik SHP albo GPKG, obwiednia obiektow; layer: warstwa GPKG) - dokladnie jeden; czesc komend ma tez teryt, ku albo whole_country. country: pl, cz albo auto (wymagany z bbox i geometry, z sheet wynika z godla).
-Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety - tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) sprawdza aktualnosc bez pobierania; jego plan (kartograf-plan/1) wykonasz z update=upgrade i plan.
-Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: kartograf-download/1); ok=false: czesc jednostek sie nie powiodla (is_error=true, lista failed). Blad to kartograf-error/1 z code, hint i details.option.
+Dane wybierasz jawnie (product, resolution, vertical_crs...): Kartograf nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety - tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) sprawdza aktualnosc bez pobierania; jego plan (result koperty, kartograf-plan/1) wykonasz z update=upgrade i plan.
+Wynik to koperta kartograf-result/1: status (ok, partial albo failed), result (dokument komendy, narzedzia danych: kartograf-download/1 z polem ok), items (jednostki; nieudana ma code i reason) i notices. partial i failed to wyniki (is_error=false): sprawdz items. Blad (is_error=true) to kartograf-error/1 z code, hint i details.option.
 ```
 
 ### 9.7 Pliki dla agentow

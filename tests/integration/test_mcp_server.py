@@ -131,7 +131,7 @@ def test_instructions_are_ascii_short_and_say_what_the_tools_do_not_repeat():
         "update",
         "check_updates",
         "kartograf-download/1",
-        "ok=false",
+        "kartograf-result/1",
         "kartograf-error/1",
     ):
         assert word in INSTRUCTIONS, word

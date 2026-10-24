@@ -92,12 +92,13 @@ INSTRUCTIONS = "\n".join(
         "nie zgaduje; wartosc per kraj to tekst albo {pl, cz}. update: pominiety "
         "- tylko brakujace wersje, upgrade - nowsza tresc wg zrodla, force - od "
         "nowa; pobranie nie nadpisuje danych. check_updates (tool, arguments) "
-        "sprawdza aktualnosc bez pobierania; jego plan (kartograf-plan/1) "
-        "wykonasz z update=upgrade i plan.",
-        "Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: "
-        "kartograf-download/1); ok=false: czesc jednostek sie nie powiodla "
-        "(is_error=true, lista failed). Blad to kartograf-error/1 z code, hint "
-        "i details.option.",
+        "sprawdza aktualnosc bez pobierania; jego plan (result koperty, "
+        "kartograf-plan/1) wykonasz z update=upgrade i plan.",
+        "Wynik to koperta kartograf-result/1: status (ok, partial albo failed), "
+        "result (dokument komendy, narzedzia danych: kartograf-download/1 z "
+        "polem ok), items (jednostki; nieudana ma code i reason) i notices. "
+        "partial i failed to wyniki (is_error=false): sprawdz items. Blad "
+        "(is_error=true) to kartograf-error/1 z code, hint i details.option.",
     )
 )
 
