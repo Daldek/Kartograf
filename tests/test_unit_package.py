@@ -332,7 +332,12 @@ def test_non_zip_files_checked_by_kind(tmp_path, key, kind, foreign):
         staged.parent.mkdir(exist_ok=True)
         session = FakePackageSession({url: answer})
         return staged, lambda: fetch_package(
-            session, url, staged, params=params, variant=variant, timeout=5
+            session,  # type: ignore[arg-type]
+            url,
+            staged,
+            params=params,
+            variant=variant,
+            timeout=5,
         )
 
     staged, run = fetch((200, headers, body))

@@ -43,11 +43,11 @@ def _first_pixel(path: Path) -> int:
 
 
 def _soil(tmp_path, session: FakeSoilGrids) -> LandCoverManager:
-    return LandCoverManager(tmp_path, SoilGridsProvider(session=session))
+    return LandCoverManager(tmp_path, SoilGridsProvider(session=session))  # type: ignore[arg-type]
 
 
 def _corine(tmp_path, session: FakeCorine) -> LandCoverManager:
-    return LandCoverManager(tmp_path, CorineProvider(session=session, use_proxy=False))
+    return LandCoverManager(tmp_path, CorineProvider(session=session, use_proxy=False))  # type: ignore[arg-type]
 
 
 # --- SoilGrids --------------------------------------------------------------

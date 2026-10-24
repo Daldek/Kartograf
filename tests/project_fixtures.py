@@ -72,7 +72,7 @@ def collection_sources() -> Iterator[FakePackageSession]:
         monkeypatch.setattr(
             LandCoverManager,
             "_get_provider_by_name",
-            staticmethod(lambda name, cache=None: Bdot10kProvider(session=session)),
+            staticmethod(lambda name, cache=None: Bdot10kProvider(session=session)),  # type: ignore[arg-type]
         )
         yield session
 

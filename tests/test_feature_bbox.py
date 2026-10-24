@@ -602,7 +602,13 @@ def test_arcgis_pages_use_offset_and_order(tmp_path):
 
 def _fetch_prng(service: FakeService, pages_dir: Path, bbox: BBox = PRNG_BBOX):
     return fetch_features(
-        service, PRNG_ENDPOINT, PRNG, [PRNG_RP], bbox, pages_dir, timeout=5
+        service,  # type: ignore[arg-type]
+        PRNG_ENDPOINT,
+        PRNG,
+        [PRNG_RP],
+        bbox,
+        pages_dir,
+        timeout=5,
     )
 
 
