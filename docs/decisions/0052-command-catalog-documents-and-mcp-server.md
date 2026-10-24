@@ -68,7 +68,12 @@ migration (ECO-020).
    `title`, `outputSchema`, `--allow-writes` (needs `--allow-dir`), `forbidden` and
    `missing_dependency`, English instructions, `--lang` validated and reported only, the gate
    test of AGI-5.13. Until then the tool `get_catalog` is `commands_list` and
-   `commands_schema`.
+   `commands_schema`. The two codes come first and are in place: `ForbiddenError`
+   (`forbidden`, 12; a path outside `--allow-dir` is no longer a `ValidationError`) and
+   `MissingDependencyError` (`missing_dependency`, 6; the missing `mcp` extra, hint `uv add
+   "kartograf[mcp]"`, the error document as the last line of stderr). Only the MCP server
+   raises them; they have no `reason`, the arguments of the call (`option`, `path`,
+   `allowed`, `extra`) tell the case.
 
 **Consequences:** A consumer reads the options of a data command from `command_schema`; the task
 options are its options except the run options `output_dir`, `update`, `plan`, `workers`,

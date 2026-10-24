@@ -404,6 +404,8 @@ kartograf/
 │                        # -> NoCoverageError(DownloadError; .hints) — zrodlo nie ma danych
 │                        # arkusza, .hints = podpowiedzi (np. --scale 1:2000), YearRangeError;
 │                        # CacheError; InvalidSidecarError(.path) — nieczytelny sidecar (read_sidecar);
+│                        # ForbiddenError(.option, .path, .allowed) i MissingDependencyError(.extra) -
+│                        # tylko serwer MCP (sciezka poza --allow-dir; brak extra `mcp`);
 │                        # kody bledow i kody wyjscia: USAGE 9.3
 ├── error_report.py      # ErrorReport (kartograf-error/1), error_report(exc, command=):
 │                        # wyjatek jako dane (io_error, interrupted, terminated, internal_error

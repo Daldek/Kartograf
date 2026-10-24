@@ -53,8 +53,14 @@ from kartograf.commands import check_command, run_command, validate_command
 from kartograf.config import check_config
 from kartograf.download.manager import DownloadProgress
 from kartograf.envelope import CommandResult, wrap
-from kartograf.error_report import ErrorReport, error_report
-from kartograf.exceptions import ConfigError, KartografError, ValidationError
+from kartograf.error_report import ErrorReport, error_line, error_report
+from kartograf.exceptions import (
+    ConfigError,
+    ForbiddenError,
+    KartografError,
+    MissingDependencyError,
+    ValidationError,
+)
 
 if TYPE_CHECKING:
     import anyio
@@ -65,7 +71,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-INSTALL_HINT = 'Brak pakietu mcp: pip install "kartograf[mcp]"'
+SDK_REQUIREMENT = "mcp>=2.3.0,<3"
 
 # Text for the client (``instructions`` of the server): Polish, ASCII, four
 # paragraphs, under 2000 characters (spec 9.9). The tools do not repeat what is
@@ -405,13 +411,16 @@ class _Toolbox:
                     hint=_PATH_HINT,
                 )
             allowed = self._allow_dirs
-            if allowed and not any(path.resolve().is_relative_to(d) for d in allowed):
-                raise ValidationError(
+            resolved = path.resolve()
+            if allowed and not any(resolved.is_relative_to(d) for d in allowed):
+                directories = [directory.as_posix() for directory in allowed]
+                raise ForbiddenError(
                     f"argument {option}: sciezka {value!r} lezy poza katalogami "
                     "dozwolonymi dla serwera (--allow-dir)",
                     option=option,
-                    hint="Dozwolone katalogi: "
-                    + ", ".join(directory.as_posix() for directory in allowed),
+                    path=resolved,
+                    allowed=directories,
+                    hint="Dozwolone katalogi: " + ", ".join(directories),
                 )
 
     def _data_tool(self, spec: ToolSpec, arguments: Mapping[str, Any]) -> _Plan:
@@ -594,8 +603,8 @@ def create_server(
     ConfigError
         ``nogat.toml`` or a setting cannot be used (``kartograf.config.check_config``);
         checked first, before the SDK is imported.
-    ImportError
-        The ``mcp`` package is not installed.
+    MissingDependencyError
+        The ``mcp`` package is not installed (hint: ``uv add "kartograf[mcp]"``).
     ValueError
         An unknown family, ``cache=True`` or a relative directory in ``allow_dirs``.
     """
@@ -607,7 +616,9 @@ def create_server(
         from mcp.server import Server
         from mcp.shared.exceptions import MCPError
     except ImportError as error:
-        raise ImportError(INSTALL_HINT) from error
+        raise MissingDependencyError(
+            f"the MCP server needs the mcp package ({SDK_REQUIREMENT})", extra="mcp"
+        ) from error
     if cache is True:
         raise ValueError("cache=True: podaj MetadataCache, plik cache albo False")
     allowed = [_allowed_directory(directory) for directory in allow_dirs]
@@ -758,16 +769,27 @@ async def _serve(server: Server[_State]) -> None:
         )
 
 
+def _fail(error: KartografError) -> int:
+    """Report a failure to start and return its exit code.
+
+    An ``Error:`` line, then the ``kartograf-error/1`` document as the last line of
+    stderr (AGI-3.3); stdout belongs to the protocol and stays empty.
+    """
+    report = error_report(error)
+    print(f"Error: {report.message}", file=sys.stderr)
+    print(error_line(report), file=sys.stderr, flush=True)
+    return report.exit_code
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """``kartograf-mcp``: serve the tools over stdio until the client closes it.
 
     Returns
     -------
     int
-        0 after a normal end, 1 when the ``mcp`` package is missing (the install
-        command is printed on stderr), 2 when the settings cannot be used (the
-        ``kartograf-error/1`` document is the last line of stderr), 130 after
-        Ctrl-C; a wrong argument exits with 2.
+        0 after a normal end, 2 when the settings cannot be used, 6 when the ``mcp``
+        package is missing (``kartograf-error/1`` is the last line of stderr, the hint
+        is the install command), 130 after Ctrl-C; a wrong argument exits with 2.
     """
     args = _parser().parse_args(argv)
     cache: Path | bool | None = False if args.no_cache else args.cache_file
@@ -775,12 +797,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         server = create_server(
             families=args.tools, cache=cache, allow_dirs=args.allow_dir
         )
-    except ImportError as error:
-        print(error, file=sys.stderr)
-        return 1
-    except ConfigError as error:
-        print(error_report(error).to_json(indent=None), file=sys.stderr)
-        return error.exit_code
+    except (ConfigError, MissingDependencyError) as error:
+        return _fail(error)
     import anyio
 
     try:

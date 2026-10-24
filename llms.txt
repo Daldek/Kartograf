@@ -111,17 +111,16 @@ Wyjatki (`KartografError`) maja `code`, `exit_code`, `hint`; `error_report(exc)`
   `tool` i `arguments`); projekt `project_status`, `project_download`, `project_check_updates`
   (aktualnosc projektu); magazyn `store_overview`, `store_entries`.
 - Wynik narzedzia to ta sama koperta co `--json`; `is_error` tylko dla bledu, `partial` i `failed`
-  to wyniki (`items`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`.
-- Dlugie pobrania zglaszaja postep notyfikacjami MCP.
+  to wyniki (`items`). Sciezki podawaj bezwzglednie, `bbox` z `bbox_crs`. Dlugie pobrania zglaszaja postep.
 
 ## Kody wyjscia i bledow
-Kody wyjscia i bledow sa wspolne dla narzedzi Nogat (rejestr bledow Nogat). Kod wyjscia:
-0 = ok; 10 = `partial`, 11 = `failed` (wyniki, patrz `items`); 1 = blad programu; 2 = bledne
-dane wejsciowe (popraw wg `hint` i `details.option`); 5 = zrodlo niedostepne; 7 = bledne
-dane (sidecar); 8 = cache niedostepny; 9 = blad plikow; 13 = blad przeliczenia; 14 = brak
-danych w zrodle; 15 = nieobslugiwane (brak bezpiecznej transformacji); 130 = przerwane
-(Ctrl-C); 143 = SIGTERM. Wynik `--json` to koperta `kartograf-result/1` (`status`, `result`, `items`); blad to ostatnia linia stderr (nie stdout), `kartograf-error/1`: `code`, `title`,
-`message`, `hint`, `details` (z `details.reason`), `exit_code`, `command`. Kody:
+Kody wyjscia i bledow sa wspolne dla narzedzi Nogat (rejestr bledow Nogat). Kod wyjscia: 0 = ok; 10 = `partial`,
+11 = `failed` (wyniki, patrz `items`); 1 = blad programu; 2 = bledne dane wejsciowe (popraw wg `hint` i
+`details.option`); 5 = zrodlo niedostepne; 6 = brak opcjonalnej zaleznosci; 7 = bledne dane (sidecar); 8 = cache
+niedostepny; 9 = blad plikow; 12 = niedozwolone (serwer MCP); 13 = blad przeliczenia; 14 = brak danych w zrodle;
+15 = nieobslugiwane (brak bezpiecznej transformacji); 130 = przerwane (Ctrl-C); 143 = SIGTERM. Wynik `--json` to
+koperta `kartograf-result/1` (`status`, `result`, `items`); blad to ostatnia linia stderr (nie stdout),
+`kartograf-error/1`: `code`, `title`, `message`, `hint`, `details` (z `details.reason`), `exit_code`, `command`. Kody:
 
 - `internal_error` (wyjscie 1): blad programu
 - `validation_error` (wyjscie 2): `reason` `invalid_input` (zla wartosc, brak argumentu), `usage` (nieznana komenda lub flaga), `invalid_sheet_code` (godlo spoza nomenklatury PL i CZ), `invalid_config` (nogat.toml albo ustawienie nie do uzycia: popraw plik wg `details.path`, `kartograf config show` go opisze)
@@ -129,6 +128,8 @@ danych w zrodle; 15 = nieobslugiwane (brak bezpiecznej transformacji); 130 = prz
 - `no_data` (wyjscie 14): `reason` `no_coverage` (zrodlo nie ma danych dla arkusza, ponowienie nie pomoze), `year_out_of_range` (dane sa, ale poza przedzialem lat)
 - `store_unavailable` (wyjscie 8): `reason` `cache` (cache metadanych niedostepny lub zablokowany)
 - `data_error` (wyjscie 7): `reason` `invalid_sidecar` (sidecar `kartograf-meta/1` nieczytelny lub innego schematu)
+- `missing_dependency` (wyjscie 6): brak extra, np. `kartograf[mcp]` dla serwera MCP; `details.extra`, `hint` z poleceniem instalacji
+- `forbidden` (wyjscie 12): serwer MCP odmawia: sciezka poza `--allow-dir` (`details.option`, `details.path`, `details.allowed`)
 - `calculation_error` (wyjscie 13): `reason` `transform_failed` (blad przeliczenia wspolrzednych)
 - `unsupported` (wyjscie 15): `reason` `transform_unavailable` (brak bezpiecznej operacji dla pary ukladow)
 - `io_error` (wyjscie 9): katalog lub plik niedostepny (brak, uprawnienia, miejsce)

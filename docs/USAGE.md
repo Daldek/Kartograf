@@ -3391,11 +3391,13 @@ failed units; the result lists them (`items`) and no error document is written.
 | 1 | `internal_error` | Defect in the tool or an unexpected exception. |
 | 2 | `validation_error` | Unknown command or option, wrong type, value out of range or not allowed, missing required option, violated exclusion rule. |
 | 5 | `source_unavailable` | Remote service failed: timeout, connection error, HTTP error, download failure. |
+| 6 | `missing_dependency` | Feature needs an extra or an external program that is not installed; hint names the install command. |
 | 7 | `data_error` | Data read by the tool (input file, archive, sidecar, stored series) is malformed or violates its format. |
 | 8 | `store_unavailable` | Data store or cache cannot be used: missing marker, locked, unreadable, network share disconnected. |
 | 9 | `io_error` | Reading or writing files failed: permissions, no space, path missing. |
 | 10 | `partial` | Batch operation completed for some units; per-unit status in items[]. |
 | 11 | `failed` | Batch operation ran but no unit succeeded; per-unit codes in items[]. |
+| 12 | `forbidden` | Path outside allowed directories, write attempted in read-only mode, insufficient role. |
 | 13 | `calculation_error` | Input is valid but no result can be computed: no convergence, series too short, numerical failure, transformation failed. |
 | 14 | `no_data` | Request is valid but the source has no data for the area, period or product requested. |
 | 15 | `unsupported` | Request is valid but this combination is not supported: no safe CRS transformation, product not offered for the country, operation outside the tool's scope. |
@@ -3416,6 +3418,8 @@ failed units; the result lists them (`items`) and no error document is written.
 | `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
 | `store_unavailable` | `cache` | `CacheError` | 8 | the metadata cache is unavailable, locked or unreadable |
 | `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema |
+| `missing_dependency` | - | `MissingDependencyError` | 6 | an optional extra is not installed (kartograf[mcp] for the MCP server); the hint names the install command (uv add "kartograf[mcp]") |
+| `forbidden` | - | `ForbiddenError` | 12 | the MCP server refuses the call: a path outside its allowed directories (--allow-dir), or a write on a server that does not write (--allow-writes) |
 | `calculation_error` | `transform_failed` | `TransformError` | 13 | coordinate transformation failed (for example an infinite result) |
 | `unsupported` | `transform_unavailable` | `TransformUnavailableError` | 15 | no safe operation for the pair of coordinate systems |
 | `io_error` | - | `OSError` | 9 | directory or file unavailable: missing, permissions, no space, disconnected share |
@@ -3428,7 +3432,15 @@ failed units; the result lists them (`items`) and no error document is written.
 the `KartografError` hierarchy: `error_report` builds them (`io_error` from `OSError`,
 `cancelled` from `KeyboardInterrupt`, `terminated` from `kartograf.interrupt.Terminated`, a
 subclass of `KeyboardInterrupt`, and `internal_error` from every other exception). With
-`--json` an error is the `kartograf-error/1` document on stdout and nothing else.
+`--json` an error is the `kartograf-error/1` document on the last line of stderr and stdout
+stays empty.
+
+`forbidden` and `missing_dependency` belong to the MCP server: `ForbiddenError` is a path
+outside the directories of `--allow-dir` (`details.option`, `details.path` and
+`details.allowed` name it) and `MissingDependencyError` is a missing `mcp` package
+(`details.extra` is `mcp`, the hint is `uv add "kartograf[mcp]"`; `kartograf-mcp` ends with
+exit code 6 and the document as the last line of stderr). The library functions and the CLI
+never raise them.
 
 **Cancellation in the CLI (Ctrl-C, SIGTERM).** Both signals act the same way: the command
 stops the transfer, removes the working directory of its write
@@ -3599,8 +3611,8 @@ pip install "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"
 
 (po wydaniu: tag `v0.8.0`; wersja deweloperska: `uv sync --locked --all-extras` zawiera `mcp`).
 `import kartograf` i CLI dzialaja bez `mcp`; skrypt `kartograf-mcp` jest instalowany zawsze,
-a bez SDK drukuje na stderr `Brak pakietu mcp: pip install "kartograf[mcp]"` i konczy
-sie kodem 1.
+a bez SDK konczy sie kodem 6 (`missing_dependency`): ostatnia linia stderr to dokument
+`kartograf-error/1` z podpowiedzia `uv add "kartograf[mcp]"`, stdout zostaje pusty.
 
 **Konfiguracja klientow.** Claude Code:
 
@@ -3629,7 +3641,7 @@ i `"args": ["-m", "kartograf.mcp_server", ...]`.
 | Opcja | Znaczenie |
 |---|---|
 | `--tools RODZINY` | rodziny narzedzi po przecinku: `discovery`, `availability`, `data`, `check`, `project`, `store` (domyslnie wszystkie 29; klienty z limitem liczby narzedzi zawezaja np. do `discovery,availability,data,check`); nieznana rodzina to blad uruchomienia |
-| `--allow-dir KATALOG` | powtarzalna; katalog bezwzgledny (albo z `~`; wzgledny konczy start bledem uzycia, kod 2: zalezalby od katalogu roboczego, ktory wybiera klient); gdy podana, kazda sciezka argumentu (`output_dir`, `geometry`, `project_dir`, `path`) po `Path.resolve()` musi lezec w ktoryms z katalogow, inaczej `invalid_input` z `option` i `hint` |
+| `--allow-dir KATALOG` | powtarzalna; katalog bezwzgledny (albo z `~`; wzgledny konczy start bledem uzycia, kod 2: zalezalby od katalogu roboczego, ktory wybiera klient); gdy podana, kazda sciezka argumentu (`output_dir`, `geometry`, `project_dir`, `path`) po `Path.resolve()` musi lezec w ktoryms z katalogow, inaczej `forbidden` (kod 12) z `details.option`, `details.path`, `details.allowed` i `hint` |
 | `--cache-file PLIK` | plik cache metadanych; domyslnie `<cache_dir>/kartograf/metadata.db`, ten sam plik co CLI i biblioteka (sekcja 10); nie zalezy od katalogu roboczego, ktory wybiera klient |
 | `--no-cache` | bez cache metadanych (wylaczne z `--cache-file`) |
 | `--version` | wersja |

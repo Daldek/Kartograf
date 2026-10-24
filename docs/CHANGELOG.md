@@ -96,6 +96,12 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   (`project_task` in the declarations). The MCP tool `get_catalog` is `commands_list` and
   `commands_schema` until the tools are renamed with the MCP server rebuild. The hint of a usage
   error says `kartograf commands schema --command "<id>"`.
+- The MCP server refuses a path outside `--allow-dir` with the registry code `forbidden`
+  (exit code 12 in the error document) instead of `validation_error`, and `kartograf-mcp`
+  without the `mcp` package ends with `missing_dependency` (exit code 6, the error document as
+  the last line of stderr, hint `uv add "kartograf[mcp]"`) instead of a text line and exit code
+  1; `create_server` raises `MissingDependencyError`, not `ImportError`, and
+  `kartograf.mcp_server.INSTALL_HINT` is gone.
 
 **Added**
 
@@ -129,6 +135,10 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   with the message catalogue. `.env.example` and the README list every variable and give the
   backup notes for a store (DEV-18.3, DEV-18.5).
 - `ConfigError` (a `ValidationError`, reason `invalid_config`).
+- `ForbiddenError` (`forbidden`, exit code 12: details `option`, `path`, `allowed`) and
+  `MissingDependencyError` (`missing_dependency`, exit code 6: details `extra`, hint `uv add
+  "kartograf[<extra>]"`), exported from `kartograf` and listed in the error table of USAGE 9.3
+  (ERR §2, DEV-6.5). Only the MCP server raises them.
 - `UnitFailure.code` and `UnitFailure.reason` (the registry code and `details.reason` a
   failed unit stands for: `no_coverage` and `year_out_of_range` are `no_data`, `download`
   and `country` are `source_unavailable`; `kartograf.download.data.FAILURE_CODES`),
