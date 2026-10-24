@@ -64,7 +64,9 @@ def build_version() -> str:
         toplevel = Path(_git(pkg_dir, "rev-parse", "--show-toplevel"))
         # The imported package must belong to this repository (not e.g. a
         # venv located inside some other git checkout).
-        if not os.path.samefile(toplevel / "kartograf" / "__init__.py", pkg_file):
+        if not os.path.samefile(
+            toplevel / "src" / "kartograf" / "__init__.py", pkg_file
+        ):
             return version
         sha = _git(pkg_dir, "rev-parse", "--short", "HEAD")
         if not sha:

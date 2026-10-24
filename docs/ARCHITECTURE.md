@@ -1,7 +1,7 @@
 # Architektura Kartografa
 
 **Wersja opisywana:** kod galezi, w ktorej lezy ten plik — nie stan na
-konkretny dzien. Wersja pakietu: `kartograf/__init__.py` (`__version__`);
+konkretny dzien. Wersja pakietu: `src/kartograf/__init__.py` (`__version__`);
 zmiany per wydanie: `docs/CHANGELOG.md`; biezacy stan prac: `docs/PROGRESS.md`;
 przewodnik uzytkownika (przyklady CLI i biblioteki): `docs/USAGE.md`;
 konwencje i proces pracy: `docs/DEVELOPMENT_STANDARDS.md`.
@@ -21,7 +21,7 @@ ani specu. Gdzie kod odbiega od specu, dokument opisuje kod i mowi o tym wprost.
 
 **Deskryptory jako dane.** Kazdy zbior danych (NMT 1 m z GUGiK, DMR 5G z CUZK,
 CORINE, SoilGrids...) jest opisany jednym `SourceDescriptor` w
-`kartograf/sources/registry.py`: kanaly dostepu, uklady poziome i pionowe,
+`src/kartograf/sources/registry.py`: kanaly dostepu, uklady poziome i pionowe,
 licencja, schemat kafli, szablon katalogu, domyslne rozszerzenie pliku. Modul
 `sources/` nie robi zadnego IO przy imporcie — to czyste dane i kilka funkcji
 wyszukujacych. Rejestr jest zrodlem prawdy dla podkatalogu skladowania
@@ -78,7 +78,7 @@ opisuje zadanie, ktore utworzylo wersje).
 
 **Polityka transformacji (ADR-024).** Transformacje, ktore przesuwaja TRESC
 rastra albo opuszczaja uklady czeskie (EPSG:5514/3045), przechodza przez
-`kartograf/transform/crs.py` — poza obwiednia w WGS84 do rozpoznania kraju
+`src/kartograf/transform/crs.py` — poza obwiednia w WGS84 do rozpoznania kraju
 i przyciecia pod `auto` (`bbox_to_wgs84` w `download/countries.py`, takze dla
 bboxa podanego w ukladzie czeskim) i obwiednia pliku geometrii w torze LAZ
 (`download/area.py::geometry_envelope_2180`: `get_overall_bbox(..., target_crs="EPSG:2180")`).
@@ -133,7 +133,7 @@ operacji z dokladnoscia i wspolny klucz grupowania.
 Graf krawedzi importu miedzy pakietami najwyzszego poziomu `kartograf/`.
 `(l)` = krawedz WYLACZNIE leniwa (import tylko wewnatrz funkcji); bez znaku =
 co najmniej jeden import na poziomie modulu (takze pod `if TYPE_CHECKING:`).
-`kartograf` = pakiet glowny (`kartograf/__init__.py`):
+`kartograf` = pakiet glowny (`src/kartograf/__init__.py`):
 
 ```
 kartograf ──> core, download, providers, landcover, hydrology, cache,
@@ -381,7 +381,7 @@ Uwagi, ktore latwo przeoczyc:
 
 Drzewo wymienia kazdy modul `.py` pakietu (`auth/` i `cli/` zbiorczo,
 `__init__.py` podpakietow tylko gdy niosa wlasna logike). Zrodlo prawdy:
-pliki `.py` pod `kartograf/`; Public API: `kartograf/__init__.py` (`__all__`).
+pliki `.py` pod `kartograf/`; Public API: `src/kartograf/__init__.py` (`__all__`).
 
 Stabilne API transportu i mozaiki (od 0.7.1): `get_with_retry` (dowolny URL
 uslugi, polityka ponowien siec/429/5xx/`Retry-After`, tylko GET),
@@ -655,7 +655,7 @@ kartograf/
 
 ### 3.1 `SourceDescriptor` i szablony `storage_subdir`
 
-`SourceDescriptor` (`kartograf/sources/descriptor.py`) niesie: `key`,
+`SourceDescriptor` (`src/kartograf/sources/descriptor.py`) niesie: `key`,
 `country`, `product`, `name`, `provider_name`, krotke `channels`
 (`AccessChannel`), `tile_scheme`, `storage_subdir`, `default_extension`,
 `license`, `resolution`, `auth` i (od 0.8.0, ADR-041) krotke `variants`
@@ -919,7 +919,7 @@ providera sidecara nie pisze (sekcja 1).
 | `nodata` | wartosc pustego piksela: dla `.asc` czytana automatycznie z naglowka (`read_asc_nodata`), w torze CZ z tagu GeoTIFF (`download/cz_cutout.py::read_tif_nodata`; w trybie bbox z fallbackiem `CUZK_NODATA`), dla wycinka PL stala `-9999.0`, dla wyniku HSG `0`, dla GeoTIFF CORINE/SoilGrids z `LandCoverManager` z tagu pliku (sekcja 4.8); `null` gdy zadna z tych drog nie ma zastosowania (np. orto) |
 | `request` | zadanie, ktore dalo TEN plik: `sheet` (godlo), `bbox` + `bbox_crs` w ukladzie wyniku albo `teryt`; dla kampanii PL `campaigns` (rozwiazane `newest`/`all`, zawsze), `min_year`/`max_year` (gdy podane) i `year` (gdy granice rowne); LAZ: `year`/`min_year`/`max_year`/`min_density` gdy podane, `campaigns` tylko dla `all`; land cover: parametry tresci z domyslnymi wartosciami — SoilGrids `property`/`depth`/`stat`, CORINE `year`, BDOT10k `format` (4.8); wycinek ortofotomapy: `bbox`/`bbox_crs` siatki wyniku, `coverage` i `resolution`; ortofoto CZ: `sheet`; kolekcje: `teryt`, `bbox`/`bbox_crs` w ukladzie uslugi albo `whole_country: true` oraz podane warianty (`level`, `lod`, `year`, `horizontal_crs`). `request` opisuje pierwotne POBRANIE pliku, nie ostatnie wykorzystanie; `extra.parent_request(s)` nie niesie flag roku (3.4) |
 | `license` | `{id, attribution, url}` z deskryptora |
-| `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, od 0.8.0 z mikrosekundami — porzadek dwoch pobran w jednej sekundzie) i wersja pakietu z `kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
+| `downloaded_at`, `kartograf_version` | znacznik czasu UTC (ISO 8601, od 0.8.0 z mikrosekundami — porzadek dwoch pobran w jednej sekundzie) i wersja pakietu z `src/kartograf/_version.py::build_version()`: wydanie = samo `__version__`; wersja rozwojowa (`dev`) = `<__version__>+<krotki SHA>` commita, z ktorego zaimportowano pakiet, z sufiksem `.dirty`, gdy sledzone pliki katalogu `kartograf/` maja niezacommitowane zmiany (docs/testy sie nie licza); gdy git jest niedostepny albo pakiet nie pochodzi z repozytorium, w ktorym lezy (`os.path.samefile`), samo `__version__`. Ta sama wartosc w `kartograf --version`; `User-Agent` HTTP niesie samo `__version__` |
 | `transform` | slownik osi (`horizontal`/`vertical`) z opisem uzytej operacji w formacie `pinned: <opis> (<dokladnosc> m)`; os bez przeliczenia nie ma klucza, a bez zadnego przeliczenia cale pole to `null` |
 | `extra` | `parent_request` (obszar; zadanie, ktore utworzylo plik — `parent_requests` usuniete w 0.8.0); LAZ PL `tile_sheet`/`year`/`nominal_density`/`url`, dodatkowo `acquisition_date`/`full_sheet`, gdy znane; arkusze NMT/NMPT/orto PL `source`, `campaign`, `version` (`label`, `label_source`; ADR-036), `coverage` (lot niepelny, przy zapisie wersji) oraz pola rocznikow/lotow opisane nizej; LAZ, arkusze i wycinki CZ, wycinek PL: `version` (ADR-036, plan 2/3); arkusz CZ `all_nodata`; SM5 (rastry i LAZ CZ) `mapname`/`cz_share`; plik openzu (SM5, natywny kafel TM33, LAZ CZ — plan B) `http` (`etag`, `last_modified`, `content_length` odpowiedzi `openzu`; sygnal swiezosci); wycinek bbox CZ `all_nodata` i `parent_request`; wycinek PL WCS `source`, `mask`, `zero_pixels` (tylko gdy > 0), `all_nodata`, `parent_request` (sekcja 3.2); wycinek ortofotomapy `source`, `all_nodata` (tylko `true`), `http`, `parent_request`; ortofoto CZ `source`, `world_files` (sidecar JPEG), `mapname`/`cz_share`, `http`, `parent_request`; kolekcje `source`, `http`, `parent_request` (nizej); CORINE WMS `fallback`/`note`; HSG `derived` i parametry obliczen |
 | `sha256`, `size_bytes` | od 0.7.1: skrot SHA-256 (hex) i rozmiar w bajtach pliku danych, liczone w `build_metadata` (`sources/sidecar.py::file_digest`) z GOTOWEGO pliku — jedno miejsce dla wszystkich produktow, takze pochodnych (wycinek, scalony GPKG BDOT10k, HSG); `null`, gdy sidecar powstaje bez istniejacego pliku danych. Wersja w magazynie (ADR-036) podaje skrot z jedynego odczytu przy zapisie (`build_metadata(digest=)`, D20) — to tozsamosc wersji (`_<sha8>` w nazwie katalogu). Sidecar sciezki standardowej (kopia sidecara wersji) niesie skrot wersji |
@@ -1433,7 +1433,7 @@ data/
       Archiwisty).** Klucz zrodla opublikowany w wydaniu sie nie zmienia:
       sidecary wersji sa niezmienne (ADR-036), wiec kazdy zapisany kiedys
       `dataset` zostaje na dysku. Zmiana nazwy klucza idzie wylacznie przez
-      tabele aliasow czytnika (`_DEV_DATASETS` w `kartograf/store.py`):
+      tabele aliasow czytnika (`_DEV_DATASETS` w `src/kartograf/store.py`):
       surowy `dataset` w sidecarze i w `Sidecar.dataset` zostaje bez zmian,
       `Sidecar.dataset_key` podaje biezacy klucz deskryptora, a klucz
       nieznany rejestrowi daje `dataset_key=None`, nie blad (3.3.1).
@@ -1506,8 +1506,8 @@ Odczyt `data/` bez zapisu (takze z udzialu SMB zamontowanego tylko do
 odczytu) dla Archiwisty i innych czytnikow - jeden kontrakt `data/`
 z 3.2-3.3, bez prywatnego parsera po stronie konsumenta. W
 `kartograf.__all__`: `list_segments`, `list_partitions`, `iter_store`,
-`read_sidecar`, `describe_segment`, `link_target` (modul `kartograf/store.py`),
-`file_footprint`, `pinned_transform` (`kartograf/store_geometry.py`), typy
+`read_sidecar`, `describe_segment`, `link_target` (modul `src/kartograf/store.py`),
+`file_footprint`, `pinned_transform` (`src/kartograf/store_geometry.py`), typy
 ponizej i `InvalidSidecarError` (atrybut `path`). Funkcje nie tworza
 katalogow, cache ani plikow w magazynie; indeks i cache trzyma
 wywolujacy lokalnie. Publiczne rekordy:
@@ -1773,7 +1773,7 @@ separatorem `/`; `version` wskazuje plik pod `versions/`, nigdy
 `.incoming/`. Przenoszenie katalogu projektu razem z magazynem zachowuje
 powiazania, jezeli ich wzajemne polozenie pozostaje takie samo.
 
-`kartograf/project/manifest.py` scisle sprawdza strukture i typy przy
+`src/kartograf/project/manifest.py` scisle sprawdza strukture i typy przy
 kazdym odczycie (w tym nazwy i opcje komend, sumy i sciezki; BOM UTF-8
 edytora jest dopuszczony, zapis zawsze bez BOM). Zapisuje
 plik tymczasowy obok manifestu, synchronizuje go (`fsync`) i podmienia
@@ -1790,7 +1790,7 @@ zakresow bajtow na udziale. Szczegoly formatu i trybow:
 ### 3.6 Dokumenty JSON `kartograf-*/1`
 
 Wynik komendy to dokument: `@dataclass(frozen=True)` z mixinem `Document`
-(`kartograf/serialization.py`), ktory daje `to_dict()` i `to_json()`. `schema`
+(`src/kartograf/serialization.py`), ktory daje `to_dict()` i `to_json()`. `schema`
 (`kartograf-<rodzaj>/<n>`, stala klasy `SCHEMA`, wlasciwosc `schema`) jest zawsze
 pierwszym kluczem, dalej klucze `JSON_KEYS` w stalej kolejnosci (domyslnie pola
 dataclass; klucz bez pola i bez wlasciwosci bierze `JSON_FILL`). `to_json()` =
@@ -1889,7 +1889,7 @@ pliku LAZ albo wspolrzedne siatki wycinka `<coords>`, jak jednostki
 obszaru kolekcji; linia projektu `zadanie: jednostka (plik)`), `failed` =
 `UnitFailure(unit, country, error, kind)`, `ok` = regula kodu wyjscia
 (czesciowy sukces `auto` = `True`). Komunikaty o danych sa `Notice`
-(`kartograf/notices.py`; lista kodow w docstringu `download/data.py`)
+(`src/kartograf/notices.py`; lista kodow w docstringu `download/data.py`)
 przekazywane przez `on_notice` w chwili powstania i zwracane w `notices`;
 CLI wypisuje je jako `Info:`/`Warning:` na stderr (takze z `-q`), naglowek
 listy arkuszy (`SHEET_LIST`) na stdout. `check_data` (te same argumenty
@@ -3802,7 +3802,7 @@ przez serwer MCP daje ten sam dokument (3.6); blad ma stabilny `code`, `exit_cod
 parametry i dozwolone wartosci opisuje jeden katalog (Z9). Uzycie: USAGE, sekcja 9;
 uzasadnienia: ADR-046.
 
-**Katalog komend (`kartograf/catalog/`).** Deklaracje (`catalog/spec.py`: `Command`, `Param`,
+**Katalog komend (`src/kartograf/catalog/`).** Deklaracje (`catalog/spec.py`: `Command`, `Param`,
 `Constraint`, `Example`, `Group`) leza w `catalog/commands/<modul>.py`, po jednym module na
 grupe CLI (`MODULE_ORDER`: elevation, imagery, landcover, soil, boundaries, cadastre,
 models3d, hydro, names, maps, geodesy, project, misc); `declared()` znajduje moduly po
@@ -3834,7 +3834,7 @@ obie strony, `COMMANDS[...].options` == parametry `task`, `function`/`check_func
 naruszeniem wyprowadzonym z przykladu. Biblioteka nie importuje `kartograf.cli` (test w
 czystym procesie).
 
-**Warstwa komend (`kartograf/commands.py`, KB-2..KB-5 Archiwisty).** `parse_command` (linia
+**Warstwa komend (`src/kartograf/commands.py`, KB-2..KB-5 Archiwisty).** `parse_command` (linia
 -> `CommandCall(command, options, run)`; parser katalogu w trybie "tylko podane flagi"),
 `validate_command` (konwersja i walidacja zadania bez sieci i zapisu), `format_command`
 (`catalog/formatting.py`), `run_command`/`check_command` (konwersja, walidacja, potem funkcja
@@ -3862,7 +3862,7 @@ dokument `kartograf-error/1` na stdout (stderr pusty) oraz kod wyjscia `e.exit_c
 rekordy `kartograf.transport.http` (ponowienia), a z `KARTOGRAF_DEBUG` wszystkie. Tabele kodow wyjscia
 i bledow sa w USAGE 9.3 (`tests/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
 
-**Przerwanie i pule watkow (`kartograf/interrupt.py`).** Ctrl-C to `KeyboardInterrupt` tylko w
+**Przerwanie i pule watkow (`src/kartograf/interrupt.py`).** Ctrl-C to `KeyboardInterrupt` tylko w
 watku glownym, wiec `--workers >= 2` (jednostki w `ThreadPoolExecutor`) czekalo na cala kolejke
 i zatwierdzalo ja po przerwaniu (e2e 0.8.0: B P2-1, C P2-5, D P2-2). Kazda pula pobierania
 (`DownloadManager._download_many`, `run_request` kolekcji, powiaty BDOT10k w `LandCoverManager`,
@@ -3882,7 +3882,7 @@ SIGTERM: `sigterm_interrupts()` (CLI `main`) rzuca w watku glownym `Terminated` 
 `KeyboardInterrupt`; pierwszy sygnal przywraca domyslna reakcje), a `error_report` daje
 `terminated`/143. Poza `main` (biblioteka, serwer MCP) sygnal nie jest przechwytywany.
 
-**Serwer MCP (`kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
+**Serwer MCP (`src/kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
 deklaracje na specyfikacje 29 narzedzi (nazwa, krotki opis, schemat wejscia JSON Schema
 2020-12 bez `$ref`, adnotacje, funkcja) bez `mcp`; `mcp_server.py` wystawia je przez
 niskopoziomowy `mcp.server.Server` (stdio): wynik `CallToolResult(content=<zwarty JSON>,
@@ -3907,7 +3907,7 @@ go nie dostanie). Przepis krok po kroku: DEVELOPMENT_STANDARDS 17.2.
 
 Checklist na przykladzie DE (Brandenburgia, DGM1):
 
-1. **Deskryptor** w `kartograf/sources/registry.py`: `key="de.lgb.dgm1"`,
+1. **Deskryptor** w `src/kartograf/sources/registry.py`: `key="de.lgb.dgm1"`,
    `country="DE"`, `product="nmt"`, `provider_name="LGB"`, kanaly
    (`AccessChannel` z transportem, ukladami, `capabilities`, `endpoint`),
    licencja, `storage_subdir="nmt/de_bb_dgm1_{vcrs}"`, `default_extension`;
@@ -3969,9 +3969,9 @@ wycinka NMT/NMPT to osobna decyzja — dzis tylko warianty 1 m; kanaly
 WCS wycinka ortofotomapy sa wpisami `WcsCutoutParams` (sekcja 3.1, 4.3).
 
 Nowa **komenda zapisujaca dane** (w tym `download` nowej grupy) to deklaracja
-w `kartograf/catalog/commands/<grupa>.py` (parametry `task=True` = opcje zadania
+w `src/kartograf/catalog/commands/<grupa>.py` (parametry `task=True` = opcje zadania
 manifestu; parser CLI, opcje projektu i schematy MCP powstaja z niej, sekcja 4.11)
-oraz pozycja w `kartograf/project/commands.py::COMMANDS`: wspolna z pobraniem
+oraz pozycja w `src/kartograf/project/commands.py::COMMANDS`: wspolna z pobraniem
 walidacja bez sieci, funkcja pobrania i `check_*`, adapter wyniku na komplet
 przypinanych `VersionedFile`. Dodaj test zadania projektu dla tej komendy
 (przypiecie, sprawdzenie i odtworzenie); nowy produkt istniejacej komendy nie
