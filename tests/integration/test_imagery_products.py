@@ -221,7 +221,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
         "/true-orto/pl_1992/N-34/50/A/c/3/2/" in str(f.file.path) for f in report.files
     )
     assert gets_at_notice == [0, 1, 2, 3]  # each notice before its own GET
-    size = [n.text for n in report.notices if n.code == DOWNLOAD_SIZE][0]
+    size = [n.message for n in report.notices if n.code == DOWNLOAD_SIZE][0]
     assert "296853152 B" in size and "true-orto PL" in size
 
     krakow = download_data(
@@ -229,7 +229,7 @@ def test_true_orto_sheets_and_size_notice(tmp_path, images):
     )
     assert not krakow.ok
     assert [f.kind for f in krakow.failed] == ["no_coverage"]
-    hints = [n.text for n in krakow.notices if n.code == NO_COVERAGE_HINT]
+    hints = [n.message for n in krakow.notices if n.code == NO_COVERAGE_HINT]
     assert any("wybrane miasta" in hint for hint in hints)
 
 

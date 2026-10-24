@@ -418,7 +418,7 @@ def test_cz_orto_area_uses_sm5_index(tmp_path, cuzk, area):
     expected = area if area.crs == "EPSG:5514" else bbox_to_crs(area, "EPSG:5514")
     assert envelope == pytest.approx(bbox_coords(expected))
     (listing,) = [n for n in report.notices if n.code == SHEET_LIST]
-    assert "CTES86, CTES96" in listing.text
+    assert "CTES86, CTES96" in listing.message
     for unit_file in report.files:
         assert _meta(unit_file.file)["extra"]["parent_request"] == {
             "bbox": bbox_coords(area),

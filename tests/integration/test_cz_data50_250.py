@@ -234,7 +234,7 @@ def test_whole_country_crs(data, monkeypatch, tmp_path):
     assert fake.file_gets() == 0
 
     events: list[str] = []
-    result = manager.download(**choice, on_notice=lambda n: events.append(n.text))
+    result = manager.download(**choice, on_notice=lambda n: events.append(n.message))
 
     (item,) = result.files
     assert (

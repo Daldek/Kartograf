@@ -207,7 +207,7 @@ def test_addresses_national_file_size_before_transfer(
 
     assert report.ok, report.failed
     assert seen == [(WHOLE_COUNTRY_SIZE, 0)]
-    assert f"{FILES[key]['headers']['Content-Length']} B" in report.notices[0].text
+    assert f"{FILES[key]['headers']['Content-Length']} B" in report.notices[0].message
     (item,) = report.files
     assert item.file.path == tmp_path / f"boundaries/{segment}/country/pl.zip"
     sidecar = json.loads(Path(f"{item.file.version_path}.meta.json").read_text())

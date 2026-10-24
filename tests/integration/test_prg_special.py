@@ -174,8 +174,8 @@ def test_special_area_leaves_out_census_districts(tmp_path, monkeypatch, frozen_
     assert pyogrio.read_info(path, layer="SadRejonowy")["features"] == 1
     (omitted,) = [n for n in report.notices if n.code == AREA_OMITTED]
     assert omitted.level == "info"
-    assert omitted.text.startswith("special: wynik obszaru bez obwodow spisowych")
-    assert CENSUS in omitted.text and "--whole-country" in omitted.text
+    assert omitted.message.startswith("special: wynik obszaru bez obwodow spisowych")
+    assert CENSUS in omitted.message and "--whole-country" in omitted.message
     assert notices == list(report.notices)
 
 
@@ -238,7 +238,7 @@ def test_special_country_package(tmp_path, monkeypatch, frozen_clock, format, su
 
     assert report.ok, report.failed
     assert seen[0] == (WHOLE_COUNTRY_SIZE, 0)
-    assert str(source["length"]) in report.notices[0].text
+    assert str(source["length"]) in report.notices[0].message
     assert fake.calls == [("HEAD", url), ("GET", url)]
     (unit_file,) = report.files
     assert unit_file.file.path == (

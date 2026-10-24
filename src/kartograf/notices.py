@@ -131,11 +131,11 @@ class Notice:
 
     level: Literal["info", "warning"]
     code: str
-    text: str
+    message: str
 
     def __post_init__(self) -> None:
-        """Check that the text of the notice is ASCII."""
-        if not self.text.isascii():
+        """Check that the message of the notice is ASCII."""
+        if not self.message.isascii():
             raise ValueError("Tekst komunikatu musi byc zapisany w ASCII")
 
 
@@ -146,9 +146,9 @@ class NoticeSink:
         self._on_notice = on_notice
         self._notices: list[Notice] = []
 
-    def emit(self, level: Literal["info", "warning"], code: str, text: str) -> None:
+    def emit(self, level: Literal["info", "warning"], code: str, message: str) -> None:
         """Record a notice before forwarding it to the optional callback."""
-        self.add(Notice(level, code, text))
+        self.add(Notice(level, code, message))
 
     def add(self, notice: Notice) -> None:
         """Record an already built notice (e.g. from a nested call) and forward it."""

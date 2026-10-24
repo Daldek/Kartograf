@@ -251,10 +251,10 @@ def test_bdoo_woj_units(bdoo, monkeypatch, area, units):
     assert {(i.track, i.status) for i in plan.items} == {("landcover", "missing")}
     assert {item.segment for item in plan.items} == {"landcover/pl_bdoo_2023"}
     assert [n.code for n in notices] == [UNIT_LIST]
-    assert notices[0].text.startswith(
+    assert notices[0].message.startswith(
         f"bdoo: wojewodztwa obszaru wg PRG ({len(units)})"
     )
-    assert "12 (malopolskie)" in notices[0].text
+    assert "12 (malopolskie)" in notices[0].message
     assert fake.calls == [("GET", PRG_WFS_ENDPOINT)]
 
 
@@ -366,8 +366,8 @@ def test_bdoo_layers_class_absent(bdoo, monkeypatch, tmp_path):
     ] == ["OT_KUIK_A.xml"]
     assert [n.code for n in notices] == [CLASSES_ABSENT]
     assert notices[0].level == "info"
-    assert "plikow klas PTWP" in notices[0].text
-    assert "zapisano klasy KUIK" in notices[0].text
+    assert "plikow klas PTWP" in notices[0].message
+    assert "zapisano klasy KUIK" in notices[0].message
     assert _meta(file.version_path)["extra"]["source"]["classes"] == ["KUIK"]
 
     missing = bdoo.download(teryt="12", year=2023, layers=["PTWP"])

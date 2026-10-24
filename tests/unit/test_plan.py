@@ -38,6 +38,12 @@ def _plan(*items: PlanItem, store="/magazyn") -> UpdatePlan:
     return UpdatePlan(store, "2026-10-12T08:00:00+00:00", "0.8.0", tuple(items))
 
 
+def test_store_path_is_the_position_below_the_store():
+    assert _item().store_path == "laz/pl_1992_evrf2007/N-34/139/C/a/3/a.laz"
+    # a flat segment has no hierarchy: no empty part, no double slash
+    assert _item(hierarchy="").store_path == "laz/pl_1992_evrf2007/a.laz"
+
+
 def test_plan_round_trip_all_tracks():
     assert {"landcover", "hsg"} <= set(TRACKS)
     plan = _plan(*(_item(track=t, name=f"{t}.tif") for t in TRACKS))
@@ -79,7 +85,7 @@ def test_plan_to_dict_schema_first():
     ]
     assert data["schema"] == "kartograf-plan/1" == plan.schema
     assert data["notices"] == [
-        {"level": "info", "code": "unit_list", "text": unit_list.text}
+        {"level": "info", "code": "unit_list", "message": unit_list.message}
     ]
     assert data["ok"] is True
     assert list(data["items"][0]) == [f.name for f in dataclasses.fields(PlanItem)]
@@ -132,13 +138,13 @@ def test_plan_from_dict_rejects_malformed_notices():
     payload = _plan(_item()).to_dict()
     for notices in (
         [{"level": "info", "code": "x"}],
-        [{"level": "info", "code": "x", "text": "zażółć"}],
+        [{"level": "info", "code": "x", "message": "zażółć"}],
         "not a list",
         None,
     ):
         with pytest.raises(ValidationError, match="Niekompletny"):
             UpdatePlan.from_dict({**payload, "notices": notices})
-    unknown_level = [{"level": "debug", "code": "x", "text": "t"}]
+    unknown_level = [{"level": "debug", "code": "x", "message": "t"}]
     with pytest.raises(ValidationError, match="Nieznany poziom"):
         UpdatePlan.from_dict({**payload, "notices": unknown_level})
 

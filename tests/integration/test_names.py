@@ -88,8 +88,8 @@ def test_prng_area_announces_slow_service(tmp_path, monkeypatch):
     assert report.ok, report.failed
     (notice,) = [n for n in report.notices if n.code == SLOW_SOURCE]
     assert notice.level == "info"
-    assert notice.text.startswith("geographic: zapytanie OGC API PRNG - usluga ")
-    assert "80-95 s" in notice.text
+    assert notice.message.startswith("geographic: zapytanie OGC API PRNG - usluga ")
+    assert "80-95 s" in notice.message
     # announced before the first page of items
     calls_then = dict(seen)[SLOW_SOURCE]
     assert not any("/items" in url for url, _ in session.calls[:calls_then])

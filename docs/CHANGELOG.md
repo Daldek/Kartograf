@@ -63,6 +63,14 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   (`get_catalog(command=...)`), the `command` of `kartograf-error/1` and the hints that
   name a command change; the MCP tool names and the library functions are unchanged (the
   tools are renamed with the MCP server rebuild).
+- A notice is `{level, code, message}` in every document and in `kartograf.notices.Notice`
+  (the AGI-4.2 notice): the key and the attribute `text` are now `message` (the same word
+  as in `kartograf-error/1`); the text itself is unchanged (Polish ASCII until the message
+  catalogue). `kartograf-plan/1` documents saved before this change (`--plan FILE`) have
+  `text` in their notices and are rejected: write the plan again with `--check-updates`.
+- `kartograf-availability/1` has the new key `failed` (before `notices`): the countries a
+  `--country auto` check could not examine, as `UnitFailure` (`unit`, `country`, `error`,
+  `kind`); it is `[]` when `ok` is true.
 
 **Added**
 
@@ -77,6 +85,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   with the message catalogue. `.env.example` and the README list every variable and give the
   backup notes for a store (DEV-18.3, DEV-18.5).
 - `ConfigError` (a `ValidationError`, reason `invalid_config`).
+- `UnitFailure.code` and `UnitFailure.reason` (the registry code and `details.reason` a
+  failed unit stands for: `no_coverage` and `year_out_of_range` are `no_data`, `download`
+  and `country` are `source_unavailable`; `kartograf.download.data.FAILURE_CODES`),
+  `PlanItem.store_path` (the path of a position below the store, the subject of a plan
+  line) and the public `kartograf.download.data.failure_kind`.
 
 - `kartograf.testing`: `build_fixture_store`, `build_project` and `make_sidecar`
   build offline fixtures of the store, the project manifest and the

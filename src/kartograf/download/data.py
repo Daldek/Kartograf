@@ -194,6 +194,18 @@ class UnitFile:
     file: VersionedFile
 
 
+# The registry code (and ``details.reason``) a failed unit of each ``kind`` stands
+# for: the states of the data are ``no_data`` (the same names as the exception
+# classes ``NoCoverageError`` and ``YearRangeError``), a failed transfer or country
+# is ``source_unavailable`` (ERR §4).
+FAILURE_CODES: Mapping[FailureKind, tuple[str, str | None]] = {
+    "no_coverage": ("no_data", "no_coverage"),
+    "year_out_of_range": ("no_data", "year_out_of_range"),
+    "download": ("source_unavailable", None),
+    "country": ("source_unavailable", None),
+}
+
+
 @dataclass(frozen=True)
 class UnitFailure:
     """A failed part of the request (country, sheet set or tile set).
@@ -208,6 +220,16 @@ class UnitFailure:
     country: str
     error: str
     kind: FailureKind
+
+    @property
+    def code(self) -> str:
+        """Return the registry code of the failure (``FAILURE_CODES``)."""
+        return FAILURE_CODES[self.kind][0]
+
+    @property
+    def reason(self) -> str | None:
+        """Return the ``details.reason`` of the failure (``None``: none)."""
+        return FAILURE_CODES[self.kind][1]
 
 
 @dataclass(frozen=True)
@@ -316,7 +338,7 @@ def _error_text(error: Exception) -> str:
     return f"{error}" + (f" Remedium: {remedy}" if remedy else "")
 
 
-def _failure_kind(
+def failure_kind(
     error: DownloadError, default: FailureKind = "download"
 ) -> FailureKind:
     """Return the failure kind of an error.
@@ -863,7 +885,7 @@ def _dispatch_area(
             else:
                 rc = _download_pl_bbox(country_task, run, part, parent_request)
         except DownloadError as e:
-            kind = _failure_kind(e, "country")
+            kind = failure_kind(e, "country")
             rc = run.fail(code, code, _error_text(e), kind, e)
         results.append((code, rc))
 
@@ -1232,7 +1254,7 @@ def _download_pl_code(
     except DownloadError as e:
         # a sheet without data or outside the years is the same kind of failure
         # in the download and in the check (``_check_error``)
-        return run.fail(task.sheet, "PL", f"{prefix}{e}", _failure_kind(e), e)
+        return run.fail(task.sheet, "PL", f"{prefix}{e}", failure_kind(e), e)
     if expanded:
         return _finish_pl_sheets(task, run, result, prefix)
     reported = any(n.code == CHECK_FAILED for n in result.notices)
@@ -1360,7 +1382,7 @@ def _download_pl_sheet_list(
         try:
             managers = _managers(task, run, metadata, parent_request)
         except DownloadError as e:
-            return run.fail("PL", "PL", str(e), _failure_kind(e), e)
+            return run.fail("PL", "PL", str(e), failure_kind(e), e)
         rc = 0
         for manager in managers:
             prefix = _prefix(manager)
@@ -1373,7 +1395,7 @@ def _download_pl_sheet_list(
                     sheets, update=run.update, on_progress=_progress(run, manager)
                 )
             except DownloadError as e:
-                kind = _failure_kind(e)
+                kind = failure_kind(e)
                 rc = max(rc, run.fail("PL", "PL", f"{prefix}{e}", kind, e))
                 continue
             rc = max(rc, _finish_pl_sheets(task, run, result, prefix))
@@ -1447,7 +1469,7 @@ def _download_pl_archive(
                 sheets, update=run.update, on_progress=run.on_progress
             )
         except DownloadError as e:
-            return run.fail("PL", "PL", str(e), _failure_kind(e), e)
+            return run.fail("PL", "PL", str(e), failure_kind(e), e)
     return _finish_pl_sheets(task, run, result)
 
 
@@ -1499,7 +1521,7 @@ def _download_pl_files(
             on_progress=run.on_progress,
         )
     except DownloadError as e:
-        return run.fail("PL", "PL", str(e), _failure_kind(e), e)
+        return run.fail("PL", "PL", str(e), failure_kind(e), e)
     # run_request emitted the file notices already
     run.files.extend(files)
     run.failed.extend(failed)
@@ -1582,7 +1604,7 @@ def _coverage_hints(run: _Run, hints_by_sheet: Mapping[str, Sequence[str]]) -> N
     """
     hints = list(dict.fromkeys(h for hs in hints_by_sheet.values() for h in hs))
     # the view directions of one oblique request share their hints
-    shown = {n.text for n in run.sink.notices if n.code == NO_COVERAGE_HINT}
+    shown = {n.message for n in run.sink.notices if n.code == NO_COVERAGE_HINT}
     hints = [hint for hint in hints if hint not in shown]
     for hint in hints[:MAX_HINT_LINES]:
         run.sink.emit("info", NO_COVERAGE_HINT, hint)
@@ -1884,7 +1906,7 @@ def _download_pl_cutout(
             )
     except DownloadError as e:
         # a cutout entirely off PL land (PRG mask) is "no data", like a sheet
-        return run.fail("PL", "PL", _error_text(e), _failure_kind(e), e)
+        return run.fail("PL", "PL", _error_text(e), failure_kind(e), e)
     if result.file is not None:
         run.add(_cutout_unit(result.file.path), "PL", result.file)
     return run.add_stale(result.stale)
@@ -1980,7 +2002,7 @@ def _download_cz(
             **common,
         )
     except DownloadError as e:
-        return run.fail(task.sheet or "CZ", "CZ", str(e), _failure_kind(e), e)
+        return run.fail(task.sheet or "CZ", "CZ", str(e), failure_kind(e), e)
     if cutout.file is not None:
         run.add(_cutout_unit(cutout.file.path), "CZ", cutout.file)
     return run.add_stale(cutout.stale)
@@ -2034,7 +2056,7 @@ def _download_cz_laz(
             **selection,
         )
     except DownloadError as e:
-        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), _failure_kind(e), e)
+        return run.fail(task.sheet or "CZ", "CZ", _error_text(e), failure_kind(e), e)
     for file in result.files:
         run.add(file.path.stem, "CZ", file)
     rc = run.add_stale(result.stale)
@@ -2075,7 +2097,7 @@ def _download_cz_orto(
         try:
             sheets = cz_orto_area_sheets(bbox)
         except DownloadError as e:
-            return run.fail("CZ", "CZ", str(e), _failure_kind(e), e)
+            return run.fail("CZ", "CZ", str(e), failure_kind(e), e)
         if not sheets:
             return run.fail(
                 "CZ",
@@ -2110,7 +2132,7 @@ def _download_cz_orto(
                 **common,
             )
         except DownloadError as e:
-            kind = _failure_kind(e)
+            kind = failure_kind(e)
             rc = run.fail(sheet, "CZ", str(e), kind, e)
             status = "no_coverage" if kind == "no_coverage" else "failed"
         else:
@@ -2154,7 +2176,7 @@ def _download_cz_contours(
         try:
             sheets = cz_contours_area_sheets(bbox)
         except DownloadError as e:
-            return run.fail("CZ", "CZ", str(e), _failure_kind(e), e)
+            return run.fail("CZ", "CZ", str(e), failure_kind(e), e)
         if not sheets:
             return run.fail(
                 "CZ",
@@ -2191,7 +2213,7 @@ def _download_cz_contours(
                 ),
             )
         except DownloadError as e:
-            rc = run.fail(sheet, "CZ", str(e), _failure_kind(e), e)
+            rc = run.fail(sheet, "CZ", str(e), failure_kind(e), e)
             status = "failed"
         else:
             run.add(sheet, "CZ", result.file)

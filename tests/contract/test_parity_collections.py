@@ -158,7 +158,7 @@ def test_hynet_whole_country_reports_size(tmp_path, monkeypatch):
     )
     _same(run, statuses=["new"])
     assert [n.code for n in run.api_result.notices] == [WHOLE_COUNTRY_SIZE]
-    assert "194208037 B" in run.api_result.notices[0].text
+    assert "194208037 B" in run.api_result.notices[0].message
     assert session.calls == [("HEAD", url), ("GET", url)] * 2
 
 

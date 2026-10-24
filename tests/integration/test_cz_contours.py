@@ -186,7 +186,7 @@ def test_contours_area_expands_to_sm5(tmp_path, openzu):
     assert sorted(unit.unit for unit in report.files) == ["CTES86", "CTES96"]
     assert sorted(openzu.zip_gets()) == [_url("SHP", "CTES86"), _url("SHP", "CTES96")]
     (listing,) = [n for n in notices if n.code == SHEET_LIST]
-    assert "CTES86" in listing.text and "CTES96" in listing.text
+    assert "CTES86" in listing.message and "CTES96" in listing.message
     for unit in report.files:
         assert _meta(unit.file.version_path)["extra"]["parent_request"][
             "countries"
@@ -284,7 +284,7 @@ def test_contours_country_rules(tmp_path, openzu):
         on_notice=notices.append,
     )
     (narrowed,) = [n for n in notices if n.code == AUTO_NARROWED_TO_CZ]
-    assert narrowed.text == "--country auto -> cz (--product contours tylko dla CZ)"
+    assert narrowed.message == "--country auto -> cz (--product contours tylko dla CZ)"
 
 
 def test_contours_http_signal(tmp_path, openzu):

@@ -223,7 +223,7 @@ def test_pl_control_packages_and_archives(tmp_path, router):
     )
     assert report.ok, report.failed
     assert seen == [(UNIT_LIST, 0), (DOWNLOAD_SIZE, 0)]
-    assert "1069061020 B" in report.notices[1].text
+    assert "1069061020 B" in report.notices[1].message
     (item,) = report.files
     assert item.unit == "M-34-64"
     assert item.file.path == (
@@ -387,7 +387,7 @@ def test_geoid_whole_country_only(tmp_path, router):
         cache=False,
     )
     assert pl.ok, pl.failed
-    (size,) = [n.text for n in pl.notices if n.code == WHOLE_COUNTRY_SIZE]
+    (size,) = [n.message for n in pl.notices if n.code == WHOLE_COUNTRY_SIZE]
     assert "42328086 B" in size
     (item,) = pl.files
     assert item.file.path == tmp_path / "geodesy/pl_geoid2021_evrf2007/country/pl.txt"

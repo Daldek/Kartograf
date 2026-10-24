@@ -542,6 +542,7 @@ def test_availability_json_has_schema_first_and_same_content():
         "checked_at",
         "areas",
         "combinations",
+        "failed",
         "notices",
         "ok",
     ]
@@ -632,7 +633,7 @@ def test_records_outside_the_registry_are_one_info():
     assert notice.level == "info" and notice.code == INDEX_UNSUPPORTED
     assert (
         "ASCII NMT 12m EVRF2007 (2019; arkusze: 4) - wariant spoza rejestru"
-        in notice.text
+        in notice.message
     )
     assert {c.format for c in report.combinations if c.year == 2019} == {
         "ASC",
@@ -911,7 +912,7 @@ def test_cz_nmpt_combinations():
         assert combo.sheets_missing == () and not combo.uncovered
     (notice,) = report.notices
     assert (notice.level, notice.code) == ("info", CZ_SERVICE_ONLY)
-    assert "DMP 1G (2m)" in notice.text and "--model dmp1g" in notice.text
+    assert "DMP 1G (2m)" in notice.message and "--model dmp1g" in notice.message
     assert report.areas == (
         AvailabilityArea(
             "CZ",
@@ -1157,7 +1158,7 @@ def test_year_flags_are_pl_only():
     assert {c.year for c in report.combinations} == {2024}
     (notice,) = report.notices
     assert notice.code == AUTO_NARROWED_TO_PL
-    assert notice.text == "--country auto -> pl (--year 2024 dotyczy tylko PL)"
+    assert notice.message == "--country auto -> pl (--year 2024 dotyczy tylko PL)"
     assert border.cz.calls == []
 
 
@@ -1227,8 +1228,14 @@ def test_auto_one_country_failed():
     assert {c.country for c in report.combinations} == {"PL"}
     (failed,) = report.notices
     assert (failed.level, failed.code) == ("warning", CHECK_FAILED)
-    assert failed.text.startswith("--country auto: nie udalo sie sprawdzic czesci CZ")
-    assert failed.text.endswith("raport obejmuje tylko PL")
+    assert failed.message.startswith(
+        "--country auto: nie udalo sie sprawdzic czesci CZ"
+    )
+    assert failed.message.endswith("raport obejmuje tylko PL")
+    (country,) = report.failed
+    assert (country.unit, country.country, country.kind) == ("CZ", "CZ", "country")
+    assert (country.code, country.reason) == ("source_unavailable", None)
+    assert country.error and country.error.isascii()
 
     both = _Border("nmpt", _FailingHead(TILE_DMPOK))
     both.pl = RecordedIndex(fail={PRG: wfs_response("<html>blad</html>")})

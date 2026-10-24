@@ -1083,7 +1083,9 @@ deskryptora, `year`, `acquisition_dates`, `published`, `campaigns`,
 `horizontal`, `resolution`, `vertical_crs`, `format`, `densities`,
 `complete`, `sheets_full`, `sheets_partial`, `uncovered_m2`,
 `download_hint` — polecenia bez przedrostka `kartograf `, `full_m2`,
-`sheet_records`, `campaign_coverage`), `notices` i `ok`. `full_m2` to
+`sheet_records`, `campaign_coverage`), `failed` (kraj, ktorego nie
+sprawdzono: `unit`, `country`, `error`, `kind`; w trybie `--country auto`),
+`notices` i `ok`. `full_m2` to
 ląd w ramach pełnych arkuszy (dolna granica tego, co na pewno ma dane;
 w PL `complete` wtedy i tylko wtedy, gdy `full_m2 == land_m2`), a
 `land_m2 - uncovered_m2` — górna granica. `sheet_records` to rekordy,
@@ -1817,7 +1819,7 @@ selection = dict(
     cutout=True,                             # jeden wycinek na kraj
     horizontal_crs="EPSG:3045",
 )
-report = download_data(**selection, on_notice=lambda n: print(n.level, n.text))
+report = download_data(**selection, on_notice=lambda n: print(n.level, n.message))
 for item in report.files:                    # UnitFile(unit, country, file)
     print(item.country, item.unit, item.file.path, item.file.status)
 for failure in report.failed:                # UnitFailure(unit, country, error, kind)
@@ -1830,8 +1832,9 @@ report = download_data(**selection, update="upgrade", plan=plan)  # = --upgrade 
 
 Raport dostępności (sekcja 1.7) — skorowidz i maska PRG, bez pobierania
 danych; wynik `AvailabilityReport` (`request`, `checked_at`, `areas`:
-`AvailabilityArea`, `combinations`: `AvailabilityCombination`, `notices`,
-`ok`), `to_json()` = wydruk `--json`:
+`AvailabilityArea`, `combinations`: `AvailabilityCombination`, `failed`:
+`UnitFailure` kraju, ktorego nie sprawdzono, `notices`, `ok`), `to_json()` =
+wydruk `--json`:
 
 ```python
 from kartograf import BBox, check_availability, download_data
@@ -1886,7 +1889,7 @@ notices, ok)`, elementy `files` i `failed` jak w `DataReport`:
 from kartograf import BBox, check_collection, download_collection, download_landcover
 
 out = "./data"
-show = lambda notice: print(notice.level, notice.text)  # = Info:/Warning: w CLI
+show = lambda notice: print(notice.level, notice.message)  # = Info:/Warning: w CLI
 # = boundaries download --product admin --country pl --level gmina --bbox 550000,220000,590000,270000
 gminy = download_collection(
     product="admin", output_dir=out, country="pl", level="gmina",
@@ -1965,7 +1968,7 @@ from kartograf import (
 )
 
 out = "./data"
-show = lambda notice: print(notice.level, notice.text)
+show = lambda notice: print(notice.level, notice.message)
 # = imagery download --product orto --country cz --sheet CTES96
 report = download_data(product="orto", country="cz", sheet="CTES96", output_dir=out)
 for item in report.files:  # cztery pliki arkusza: .jgw, .TM33N.jgw, .TM34N.jgw, .jpg
@@ -2099,7 +2102,7 @@ selection = dict(horizontal_crs="EPSG:5514", output_dir="./data",
 result = download_pl_cutout(bbox=bbox, **selection)
 print(result.file.path, result.file.status, result.masked_pixels, result.all_nodata)
 for notice in result.notices:               # rozmiar wycinka, wycinek bez danych
-    print(notice.level, notice.text)
+    print(notice.level, notice.message)
 # domyślnie istniejąca wersja bez zapytań PRG/WCS; update="force" pobiera ponownie
 plan = check_pl_cutout(bbox=bbox, **selection)   # te same argumenty, bez pobierania
 result = download_pl_cutout(bbox=bbox, **selection, update="upgrade", plan=plan)
@@ -3181,7 +3184,7 @@ Zasady wspolne dokumentow:
   (`2026-10-18T12:00:00+00:00`), daty danych `RRRR-MM-DD`; `bbox` to
   `[min_x, min_y, max_x, max_y]` obok klucza z ukladem (`bbox_crs`, `crs`);
 - komunikaty (`Info:` i `Warning:` trybu tekstowego) sa w tablicy `notices` jako
-  `{level, code, text}`; klucz tekstu to `text` (blad ma `message`);
+  `{level, code, message}` (klucz tekstu to `message`, jak w bledzie);
 - `ok` maja dokumenty wyniku do oceny (`-download/1`, `-plan/1`,
   `-availability/1`, `-project-report/1`, `-project-check/1`). `ok: false` to
   **wynik** z czesciowa porazka (kod wyjscia 1: jednostki w `failed`, nieaktualne
