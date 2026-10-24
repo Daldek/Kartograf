@@ -3226,10 +3226,11 @@ bledem `invalid_input` z `details.option` rownym `json`.
    efektu. `--plan PLIK` dziala jak dotad, a plik planu to ten sam dokument co stdout
    (zapisany przed wydrukiem; linia `Info: zapisano plan` nie jest drukowana).
    `soil hsg --json --summary` zwraca statystyki w polu `summary`.
-4. **Kod wyjscia** wg 9.3: 0, gdy dokument nie ma pola `ok` albo ma `ok: true`; 1, gdy
-   `ok: false` (dokument i tak jest wydrukowany) albo blad zrodla; 2 dla bledu wejscia;
-   130 po Ctrl-C, 143 po SIGTERM. Blad to dokument `kartograf-error/1` na stdout, takze blad skladni
-   (`usage_error`); stderr zostaje pusty.
+4. **Exit code** as in 9.3: 0 when the document has no `ok` or `ok` is true; 1 when
+   `ok: false` (the document is printed all the same); the registry exit code of the
+   error otherwise (2 for an input error, 5 for a source failure, ...); 130 after Ctrl-C,
+   143 after SIGTERM. An error is a `kartograf-error/1` document on stdout, also a
+   syntax error (`reason` `usage`); stderr stays empty.
 5. Bez `--json` zachowanie jest bez zmian (tekst), z wyjatkami: kod wyjscia 2 dla bledow
    wejscia, tabele `list-sources` i `list-layers` oraz `parse` sa renderowane z dokumentow
    biblioteki (ten sam tekst), a `cache path` drukuje sama sciezke.
@@ -3276,7 +3277,7 @@ przyjmuja to godlo w `--sheet`.) Zrodla z rejestru, bez sieci: `kartograf elevat
 list-sources --json` (`kartograf-sources/1`: `group`, `products`, `sources` z kluczem,
 katalogiem w magazynie, wyborem flag w `select`, licencja i sygnalami aktualnosci).
 
-Blad wejscia (brak `--vertical-crs`) to dokument `kartograf-error/1` i kod 2:
+An input error (missing `--vertical-crs`) is a `kartograf-error/1` document and exit code 2:
 
 ```bash
 kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --output /dane/kartograf --json
@@ -3285,102 +3286,126 @@ kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution
 ```json
 {
   "schema": "kartograf-error/1",
-  "code": "invalid_input",
+  "code": "validation_error",
+  "title": "Invalid input",
   "message": "--vertical-crs wymagane dla --product nmt (PL): EVRF2007 (PL-EVRF2007-NH, uklad obowiazujacy), KRON86 (PL-KRON86-NH, uklad historyczny)",
   "hint": "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 --resolution 1m --vertical-crs EVRF2007 -o ./data",
-  "exception": "ValidationError",
-  "exit_code": 2,
-  "command": "elevation download",
   "details": {
+    "reason": "invalid_input",
     "option": "vertical_crs",
     "allowed": ["EVRF2007", "KRON86"]
-  }
+  },
+  "exit_code": 2,
+  "command": "elevation download"
 }
 ```
 
-(`allowed` zapisano w jednej linii.)
+(`allowed` is written on one line.)
 
-### 9.3 Kody wyjscia i kody bledow
+### 9.3 Exit codes and error codes
 
-Jedna tabela kodow wyjscia CLI (te same wartosci ma katalog: `get_catalog(tables=True).exit_codes`):
+Every error has a `code` of the shared Nogat
+[error registry](https://github.com/Daldek/Nogat/blob/main/standards/ERROR_REGISTRY.md), and
+the CLI exits with the exit code the registry gives that code, in every Nogat tool.
+The finer distinction of Kartograf is `details.reason` (snake_case English). `code`,
+`reason` and the keys never change with the language. Both tables are generated from the
+code by `scripts/generate_docs.py` and a contract test checks them.
 
-| Kod | Nazwa | Znaczenie | Stdout w trybie `--json` |
-|---|---|---|---|
-| 0 | `ok` | komenda wykonana; dokument wyniku z `ok: true` albo dokument bez pola `ok` | dokument wyniku |
-| 1 | `failed` | brak kompletnego wyniku: blad zrodla, sieci, cache, magazynu, blad programu albo `ok: false` | dokument wyniku (`ok: false`) albo `kartograf-error/1` |
-| 2 | `usage` | bledne uzycie albo bledne dane wejsciowe: blad skladni parsera, `ValidationError`, `ParseError`, `UsageError` | `kartograf-error/1` |
-| 130 | `interrupted` | przerwane przez uzytkownika (128 + SIGINT); wersje sa zatwierdzane atomowo - jednostki niedokonczone przed przerwaniem (takze zakolejkowane przy `--workers > 1`) nie powstaja, brak polowicznych plikow | `kartograf-error/1` |
-| 143 | `terminated` | zakonczone sygnalem SIGTERM (128 + SIGTERM): `timeout`, `docker stop`; sprzatanie i dokument bledu jak po Ctrl-C | `kartograf-error/1` |
+<!-- generated: exit-codes from kartograf.error_report by scripts/generate_docs.py; do not edit -->
+| Exit | Name | Meaning |
+|---|---|---|
+| 0 | `ok` | Operation completed for every unit. |
+| 1 | `internal_error` | Defect in the tool or an unexpected exception. |
+| 2 | `validation_error` | Unknown command or option, wrong type, value out of range or not allowed, missing required option, violated exclusion rule. |
+| 5 | `source_unavailable` | Remote service failed: timeout, connection error, HTTP error, download failure. |
+| 7 | `data_error` | Data read by the tool (input file, archive, sidecar, stored series) is malformed or violates its format. |
+| 8 | `store_unavailable` | Data store or cache cannot be used: missing marker, locked, unreadable, network share disconnected. |
+| 9 | `io_error` | Reading or writing files failed: permissions, no space, path missing. |
+| 13 | `calculation_error` | Input is valid but no result can be computed: no convergence, series too short, numerical failure, transformation failed. |
+| 14 | `no_data` | Request is valid but the source has no data for the area, period or product requested. |
+| 15 | `unsupported` | Request is valid but this combination is not supported: no safe CRS transformation, product not offered for the country, operation outside the tool's scope. |
+| 130 | `cancelled` | Cancelled by the user or by SIGINT. |
+| 143 | `terminated` | Terminated by SIGTERM (container stop, timeout). |
+<!-- end generated -->
 
-Jedna tabela kodow bledow (`get_catalog(tables=True).errors`; kazdy wyjatek z hierarchii
-`KartografError` ma stabilny atrybut `code`, a kod wyjscia wynika z kodu bledu):
-
-| Kod bledu (`code`) | Wyjatek | Kod wyjscia | Kiedy | Podpowiedz (`hint`) |
+<!-- generated: error-codes from kartograf.error_report by scripts/generate_docs.py; do not edit -->
+| Code | `details.reason` | Exception | Exit | When |
 |---|---|---|---|---|
-| `kartograf_error` | `KartografError` | 1 | blad pakietu bez dokladniejszej klasy | - |
-| `invalid_input` | `ValidationError` | 2 | bledna wartosc albo kombinacja argumentow, brak wymaganego argumentu, bledny plik wejsciowy (plan, manifest, geometria) | z `option` i `allowed`: `Dozwolone wartosci --<flaga>: a, b, c. Przyklad: kartograf <komenda> ...` |
-| `usage_error` | `UsageError` | 2 | nieznana komenda albo flaga, brak argumentu pozycyjnego, wartosc spoza dozwolonych (takze w trybie `--json`) | znana komenda: `Parametry komendy: kartograf catalog <id>. Przyklad: kartograf <komenda> ...`; inaczej `kartograf catalog <grupa> <komenda> --params` |
-| `invalid_sheet_code` | `ParseError` | 2 | godlo nie jest godlem PL ani CZ albo lezy poza nomenklatura | formaty godel: PL-1992 `N-34-130-D-d-2-4`, PL-2000 `6.179.12.20`, SM5 `CTES96`, TM33 `302_5550` |
-| `download_failed` | `DownloadError` | 1 | siec, HTTP, timeout albo odpowiedz zrodla | - |
-| `no_coverage` | `NoCoverageError` | 1 | zrodlo nie ma danych dla arkusza (stan danych, ponowienie nie pomoze) | podpowiedzi wyjatku (np. `--scale 1:2000`) |
-| `year_out_of_range` | `YearRangeError` | 1 | dane sa, ale poza przedzialem lat (wykryte przed pobraniem) | propozycje flag (`--year`, `--min-year`) |
-| `cache_error` | `CacheError` | 1 | cache metadanych niedostepny, zablokowany albo nieczytelny | `Wyczysc cache: kartograf cache clear` |
-| `invalid_sidecar` | `InvalidSidecarError` | 1 | sidecar `kartograf-meta/1` nie istnieje, jest nieczytelny albo ma inny schemat (`read_sidecar`, `read_store_sidecar`) | sciezka pliku danych albo `<plik>.meta.json` |
-| `transform_failed` | `TransformError` | 1 | blad przeliczenia wspolrzednych (np. wynik nieskonczony) | - |
-| `transform_unavailable` | `TransformUnavailableError` | 1 | brak bezpiecznej operacji dla pary ukladow | `remedy` wyjatku |
-| `io_error` | `OSError` | 1 | katalog albo plik niedostepny: brak, uprawnienia, brak miejsca, odlaczony udzial (m.in. `describe_store` na nieistniejacym `output_dir`) | `Sprawdz sciezke i uprawnienia: <plik>` |
-| `interrupted` | `KeyboardInterrupt` | 130 | Ctrl-C (SIGINT) | - |
-| `terminated` | `Terminated` | 143 | SIGTERM (`timeout`, `docker stop`, `kill`) | - |
-| `internal_error` | `Exception` | 1 | blad programu: kazdy inny wyjatek poza `OSError` | `Zglos blad z komenda i wersja; KARTOGRAF_DEBUG=1 pokazuje traceback` |
+| `internal_error` | - | `KartografError` | 1 | package error without a more precise class |
+| `validation_error` | `invalid_input` | `ValidationError` | 2 | wrong value or combination of arguments, a missing required argument, an invalid input file (plan, manifest, geometry) |
+| `validation_error` | `usage` | `UsageError` | 2 | wrong use of a command: unknown command or flag, a missing positional argument, a value outside the allowed choices |
+| `validation_error` | `invalid_sheet_code` | `ParseError` | 2 | the sheet code is not a PL or CZ code or lies outside the nomenclature |
+| `source_unavailable` | - | `DownloadError` | 5 | network, HTTP, timeout or the response of the source |
+| `no_data` | `no_coverage` | `NoCoverageError` | 14 | the source has no data for the sheet (a state of the data, retrying does not help) |
+| `no_data` | `year_out_of_range` | `YearRangeError` | 14 | data exists but not in the requested year range (found before any download) |
+| `store_unavailable` | `cache` | `CacheError` | 8 | the metadata cache is unavailable, locked or unreadable |
+| `data_error` | `invalid_sidecar` | `InvalidSidecarError` | 7 | the kartograf-meta/1 sidecar is missing, unreadable or of another schema |
+| `calculation_error` | `transform_failed` | `TransformError` | 13 | coordinate transformation failed (for example an infinite result) |
+| `unsupported` | `transform_unavailable` | `TransformUnavailableError` | 15 | no safe operation for the pair of coordinate systems |
+| `io_error` | - | `OSError` | 9 | directory or file unavailable: missing, permissions, no space, disconnected share |
+| `cancelled` | - | `KeyboardInterrupt` | 130 | cancelled by the user (Ctrl-C); versions are committed atomically, so units unfinished at the interrupt (also those queued with --workers > 1) do not exist and no half-written file is left |
+| `terminated` | - | `Terminated` | 143 | terminated by SIGTERM (timeout, docker stop, kill): cleanup as after Ctrl-C |
+| `internal_error` | - | `Exception` | 1 | program error: any other exception except OSError |
+<!-- end generated -->
 
-Kody `io_error`, `interrupted`, `terminated` i `internal_error` nie maja klas w hierarchii
-`KartografError`: buduje je `error_report` (`terminated` z wyjatku `kartograf.interrupt.Terminated`,
-podklasy `KeyboardInterrupt`). Nowe kody wolno dodawac (zmiana addytywna); zmiana albo usuniecie
-kodu to zmiana lamiaca.
+`io_error`, `cancelled`, `terminated` and the second `internal_error` row have no class in
+the `KartografError` hierarchy: `error_report` builds them (`io_error` from `OSError`,
+`cancelled` from `KeyboardInterrupt`, `terminated` from `kartograf.interrupt.Terminated`, a
+subclass of `KeyboardInterrupt`, and `internal_error` from every other exception). With
+`--json` an error is the `kartograf-error/1` document on stdout and nothing else.
 
-**Przerwanie w CLI (Ctrl-C, SIGTERM).** Oba sygnaly dzialaja tak samo: komenda przerywa
-transfer, usuwa katalog roboczy swojego zapisu (`versions/.incoming/<host>_<pid>_<token>/`),
-drukuje `Error: przerwano (Ctrl-C)` albo `Error: przerwano (SIGTERM)` (z `--json`: dokument
-`kartograf-error/1` z kodem `interrupted` albo `terminated`) i konczy sie kodem 130 albo 143.
-Przy `--workers >= 2` kolejka jest anulowana: jednostki (arkusze, powiaty, kafle, paczki),
-ktore nie zakonczyly sie przed przerwaniem, nie sa pobierane ani zatwierdzane; trwajace
-transfery zatrzymuja sie po biezacym kawalku (zwykle w ulamku sekundy, najpozniej z limitem
-czasu odpowiedzi serwera) i dopiero potem komenda sie konczy. Wersje zatwierdzone przed
-przerwaniem zostaja (kazda powstaje atomowo). Po SIGKILL i po drugim SIGTERM (pierwszy
-przywraca domyslna reakcje) sprzatania nie ma: katalog roboczy zostaje, a usuwa go zapis do
-tego segmentu po 24 godzinach. Serwer MCP (`kartograf-mcp`) nie przechwytuje SIGTERM: sygnal
-konczy proces od razu, bez sprzatania (zamkniecie stdin konczy go po biezacych wywolaniach).
+**Cancellation in the CLI (Ctrl-C, SIGTERM).** Both signals act the same way: the command
+stops the transfer, removes the working directory of its write
+(`versions/.incoming/<host>_<pid>_<token>/`), prints `Error: przerwano (Ctrl-C)` or
+`Error: przerwano (SIGTERM)` (with `--json`: a `kartograf-error/1` document with code
+`cancelled` or `terminated`) and exits with 130 or 143. With `--workers >= 2` the queue is
+cancelled: units (sheets, counties, tiles, packages) that did not finish before the
+interrupt are neither downloaded nor committed; running transfers stop after the current
+chunk (usually within a fraction of a second, at the latest with the response timeout of
+the server) and only then does the command end. Versions committed before the interrupt
+stay (each is created atomically). After SIGKILL and after a second SIGTERM (the first
+restores the default action) there is no cleanup: the working directory stays and a write
+to the same segment removes it after 24 hours. The MCP server (`kartograf-mcp`) does not
+intercept SIGTERM: the signal ends the process at once, without cleanup (closing stdin ends
+it after the current calls).
 
-`failed[].kind` w `kartograf-download/1` ma te same nazwy co kody błędów danych:
-`no_coverage` (źródło nie ma danych: arkusz, kafle, wycinek), `year_out_of_range`
-(dane są, ale poza przedziałem lat), `download` (sieć, serwer) i `country`
-(część `--country auto` zawiodła z innej przyczyny). Ten sam stan danych, który
-biblioteka zgłasza wyjątkiem (`NoCoverageError`, `YearRangeError`, np. przy
-`check_data` albo LAZ `--sheet`), jest w raporcie pobrania `kind` jednostki.
+`failed[].kind` in `kartograf-download/1` uses the names of the data reasons: `no_coverage`
+(the source has no data: sheet, tiles, cutout), `year_out_of_range` (data exists but outside
+the year range), `download` (network, server) and `country` (part of `--country auto` failed
+for another reason). The same state of the data that the library reports as an exception
+(`NoCoverageError`, `YearRangeError`, for example in `check_data` or LAZ `--sheet`) is the
+`kind` of the unit in the download report.
 
-Dokument `kartograf-error/1` ma klucze `code`, `message`, `hint`, `exception`, `exit_code`,
-`command` i `details`:
+The document `kartograf-error/1` has the keys `code`, `title`, `message`, `hint`, `details`,
+`exit_code` and `command` (AGI-4.3):
 
-- `message` to dokladnie tekst, ktory CLI drukuje po `Error: ` (po polsku, ASCII);
-- `hint` to jedna linia (do 400 znakow) albo `null`: podpowiedz ustawiona przez wyjatek,
-  inaczej z kodu bledu (tabela wyzej), a dla `ValidationError` z `option` skladniki
-  `Dozwolone wartosci <flaga>: ...` (z `allowed`, najwyzej 40 wartosci) i `Przyklad: <linia
-  polecenia>` z katalogu, a z `options` (np. brak obszaru) `Opcje: <flagi>.` i `Przyklad:
-  <linia polecenia>` z katalogu;
-- `command` to identyfikator komendy katalogu (`elevation download`), w ktorej wystapil blad
-  (CLI i serwer MCP go znaja; wywolanie biblioteki bez kontekstu daje `null`);
-- `details` to atrybuty wyjatku: `option` (nazwa argumentu **API**, np. `vertical_crs`, nie
-  flaga), `options` (grupa argumentow w konflikcie, np. `["sheet", "bbox", "geometry"]`),
-  `allowed` (dozwolone wartosci), a dla zrodel `sheet`, `status_code`, `hints`; dla
-  `OSError` `errno` (nazwa symboliczna) i `path`; `{}`, gdy nic nie ma.
+- `code` is a registry code and `title` its English title;
+- `message` is exactly the text the CLI prints after `Error: ` (Polish ASCII, as the
+  library raises it);
+- `hint` is one line (at most 400 characters) and is left out when there is none: the hint
+  the exception carries, else the one of its class; for a `ValidationError` with `option`
+  the parts `Dozwolone wartosci <flag>: ...` (from `allowed`, at most 40 values) and
+  `Przyklad: <command line>` from the catalog, and with `options` (for example a missing
+  area) `Opcje: <flags>.` and `Przyklad: <command line>` from the catalog;
+- `details` is always present: `reason` first (when the class has one), then the attributes
+  of the exception: `option` (the name of the **API** argument, for example `vertical_crs`,
+  not the flag), `options` (the arguments in conflict, for example `["sheet", "bbox",
+  "geometry"]`), `allowed` (the allowed values), for sources `sheet`, `status_code` and
+  `hints`, for `OSError` `errno` (symbolic name) and `path`; `{}` when there is nothing to
+  tell;
+- `exit_code` is the exit code of the registry for `code`;
+- `command` is the catalog id of the command (`elevation download`) where the error
+  occurred; the CLI and the MCP server know it, a library call without context has none,
+  and the key is then left out.
 
-Biblioteka nie zmienia kontraktu wyjatkow (STANDARDS 11.1): `except KartografError`
-nadal lapie wszystko, a nowe atrybuty (`code`, `exit_code`, `hint`, `details()`,
-`ValidationError.option`/`options`/`allowed`, `UsageError.command`) sa addytywne.
-`error_report(exc, command=None)` zamienia dowolny wyjatek na `ErrorReport` (dokument
-powyzej): uzywaja go CLI i serwer MCP, a skrypt biblioteki moze nim zapisac blad do logu.
-Bez `--json` blad to `Error: <komunikat>` na stderr i ten sam kod wyjscia (`Remedium:` pod
-bledem przeliczenia ukladow wypisuje CLI dla kazdej komendy).
+The exception contract of the library (DEV-11.1) is unchanged in shape: `except
+KartografError` still catches everything, and `code`, `reason`, `exit_code`, `hint`,
+`details()`, `ValidationError.option`/`options`/`allowed` and `UsageError.command` are
+attributes of the exceptions. `error_report(exc, command=None)` turns any exception into an
+`ErrorReport` (the document above): the CLI and the MCP server use it, and a library script
+can write an error to its log with it. Without `--json` an error is `Error: <message>` on
+stderr with the same exit code (the CLI prints `Remedium:` below a transform error for every
+command).
 
 ### 9.4 Katalog komend
 

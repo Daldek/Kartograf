@@ -50,7 +50,7 @@ repozytoriach, ktorzy edytuja Kartografa:
 - interfejs maszynowy Kartografa: `llms.txt` (spis dla agentow),
   `kartograf catalog --json` (komendy, parametry, dozwolone wartosci,
   przyklady), `--json` w kazdej komendzie (dokumenty `kartograf-*/1`, blad
-  `kartograf-error/1`, kody wyjscia 0/1/2/130/143) i serwer MCP `kartograf-mcp`
+  `kartograf-error/1`, kody wyjscia z rejestru bledow Nogat) i serwer MCP `kartograf-mcp`
   (`kartograf[mcp]`); opis: `docs/USAGE.md`, sekcja 9;
 - nie tworz `AGENTS.md`: reguly dla agentow sa w tym pliku.
 

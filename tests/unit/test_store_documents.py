@@ -194,7 +194,10 @@ def test_read_store_sidecar_missing_file_is_invalid_sidecar_error(tmp_path):
     with pytest.raises(InvalidSidecarError) as caught:
         read_store_sidecar(missing)
 
-    assert caught.value.code == "invalid_sidecar"
+    assert (caught.value.code, caught.value.reason) == (
+        "data_error",
+        "invalid_sidecar",
+    )
     assert caught.value.path == missing.with_name("brak.asc.meta.json")
 
 

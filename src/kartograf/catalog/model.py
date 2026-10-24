@@ -183,9 +183,10 @@ class ExitCodeInfo:
 
 @dataclass(frozen=True)
 class ErrorCodeInfo:
-    """A row of the error code table: the exception and its code."""
+    """A row of the error table: the registry code, its reason and the exception."""
 
     code: str
+    reason: str | None
     exception: str
     exit_code: int
     meaning: str

@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import kartograf
+from kartograf._errors import BY_CODE
 from kartograf.commands import parse_command, validate_command
 from kartograf.download.cutout import CUTOUT_CRS
 from kartograf.download.cz_contours import contours_formats
@@ -30,24 +31,25 @@ from kartograf.serialization import SCHEMAS
 from kartograf.sources.variants import cz_models, resolution_label, variants
 from kartograf.transform.crs import TransformError, TransformUnavailableError
 
-# Table 6.2 of the spec (code, exception, exit code) - a literal on purpose: a
-# changed code is a breaking change and must be a deliberate edit of this test.
+# Table of the errors (exception, registry code, details.reason, exit code) - a
+# literal on purpose: a changed code is a breaking change and must be a
+# deliberate edit of this test (ERR §4 maps the old codes to these).
 SPEC_ERROR_TABLE = [
-    ("kartograf_error", "KartografError", 1),
-    ("invalid_input", "ValidationError", 2),
-    ("usage_error", "UsageError", 2),
-    ("invalid_sheet_code", "ParseError", 2),
-    ("download_failed", "DownloadError", 1),
-    ("no_coverage", "NoCoverageError", 1),
-    ("year_out_of_range", "YearRangeError", 1),
-    ("cache_error", "CacheError", 1),
-    ("invalid_sidecar", "InvalidSidecarError", 1),
-    ("transform_failed", "TransformError", 1),
-    ("transform_unavailable", "TransformUnavailableError", 1),
-    ("io_error", "OSError", 1),
-    ("interrupted", "KeyboardInterrupt", 130),
-    ("terminated", "Terminated", 143),
-    ("internal_error", "Exception", 1),
+    ("KartografError", "internal_error", None, 1),
+    ("ValidationError", "validation_error", "invalid_input", 2),
+    ("UsageError", "validation_error", "usage", 2),
+    ("ParseError", "validation_error", "invalid_sheet_code", 2),
+    ("DownloadError", "source_unavailable", None, 5),
+    ("NoCoverageError", "no_data", "no_coverage", 14),
+    ("YearRangeError", "no_data", "year_out_of_range", 14),
+    ("CacheError", "store_unavailable", "cache", 8),
+    ("InvalidSidecarError", "data_error", "invalid_sidecar", 7),
+    ("TransformError", "calculation_error", "transform_failed", 13),
+    ("TransformUnavailableError", "unsupported", "transform_unavailable", 15),
+    ("OSError", "io_error", None, 9),
+    ("KeyboardInterrupt", "cancelled", None, 130),
+    ("Terminated", "terminated", None, 143),
+    ("Exception", "internal_error", None, 1),
 ]
 
 
@@ -74,40 +76,52 @@ def test_every_kartograf_error_class_has_its_own_code(cls):
     """``code`` is defined by the class itself: a new subclass that forgets it
     would report its parent's code, and consumers would not tell them apart."""
     assert "code" in cls.__dict__
-    assert re.fullmatch(r"[a-z][a-z0-9_]*", cls.code)
+    assert cls.code in BY_CODE
+    assert cls.exit_code == BY_CODE[cls.code].exit_code
+    assert cls.reason is None or re.fullmatch(r"[a-z][a-z0-9_]*", cls.reason)
 
 
-def test_error_codes_are_unique():
-    codes = [cls.code for cls in ERROR_CLASSES]
-    assert len(codes) == len(set(codes))
+def test_error_classes_are_told_apart_by_code_and_reason():
+    pairs = [(cls.code, cls.reason) for cls in ERROR_CLASSES]
+    assert len(pairs) == len(set(pairs))
 
 
-def test_error_code_table_equals_the_spec():
-    assert [(r.code, r.exception, r.exit_code) for r in ERROR_CODES] == (
+def test_error_table_equals_the_spec():
+    assert [(r.exception, r.code, r.reason, r.exit_code) for r in ERROR_CODES] == (
         SPEC_ERROR_TABLE
     )
     assert [(r.code, r.name) for r in EXIT_CODES] == [
         (0, "ok"),
-        (1, "failed"),
-        (2, "usage"),
-        (130, "interrupted"),
+        (1, "internal_error"),
+        (2, "validation_error"),
+        (5, "source_unavailable"),
+        (7, "data_error"),
+        (8, "store_unavailable"),
+        (9, "io_error"),
+        (13, "calculation_error"),
+        (14, "no_data"),
+        (15, "unsupported"),
+        (130, "cancelled"),
         (143, "terminated"),
     ]
     for row in (*ERROR_CODES, *EXIT_CODES):
         assert row.meaning.isascii() and row.meaning
 
 
-def test_error_code_table_matches_the_classes():
+def test_error_table_matches_the_classes():
     """The table and the classes cannot drift apart: every class has its row."""
     rows = {r.exception: r for r in ERROR_CODES}
     for cls in ERROR_CLASSES:
         assert cls.__name__ in rows, f"{cls.__name__} has no row in ERROR_CODES"
-        assert (cls.code, cls.exit_code) == (
+        assert (cls.code, cls.reason, cls.exit_code) == (
             rows[cls.__name__].code,
+            rows[cls.__name__].reason,
             rows[cls.__name__].exit_code,
         )
     exit_codes = {r.code for r in EXIT_CODES}
     assert {r.exit_code for r in ERROR_CODES} <= exit_codes
+    for row in ERROR_CODES:
+        assert BY_CODE[row.code].exit_code == row.exit_code
 
 
 def test_existing_constructors_keep_working_and_take_hint():
@@ -137,8 +151,10 @@ def test_existing_constructors_keep_working_and_take_hint():
     assert DownloadError("m").hint is None and str(DownloadError("m")) == "m"
     assert NoCoverageError("m").hints == ()
     assert TransformUnavailableError("m").rejected == []
-    assert (
-        CacheError("m").hint is None and KartografError("m").code == "kartograf_error"
+    assert CacheError("m").hint is None
+    assert (KartografError("m").code, KartografError("m").reason) == (
+        "internal_error",
+        None,
     )
 
 
@@ -152,15 +168,16 @@ def test_validation_error_attributes_and_details():
     )
 
     assert (plain.option, plain.options, plain.allowed) == (None, None, None)
-    assert plain.details() == {}
+    assert plain.details() == {"reason": "invalid_input"}
     assert full.options == ("sheet", "bbox")
     assert full.allowed == ("EVRF2007", "KRON86")
     assert full.details() == {
+        "reason": "invalid_input",
         "option": "vertical_crs",
         "options": ["sheet", "bbox"],
         "allowed": ["EVRF2007", "KRON86"],
     }
-    assert full.exit_code == 2 and full.code == "invalid_input"
+    assert full.exit_code == 2 and full.code == "validation_error"
     with pytest.raises(TypeError, match="allowed"):
         ValidationError("m", option="product", allowed="nmt")
 
@@ -173,10 +190,20 @@ def test_details_encode_paths_and_skip_empty_values():
     sidecar = InvalidSidecarError("m", path=Path("x.meta.json"))
     transform = TransformUnavailableError("m", [("op", "why")])
 
-    assert years.details() == {"sheets": {"N-34": [2019, 2020]}, "min_year": 2021}
-    assert coverage.details() == {"sheet": "N-34"}
-    assert sidecar.details() == {"path": (Path.cwd() / "x.meta.json").as_posix()}
-    assert transform.details() == {"rejected": [["op", "why"]]}
+    assert years.details() == {
+        "reason": "year_out_of_range",
+        "sheets": {"N-34": [2019, 2020]},
+        "min_year": 2021,
+    }
+    assert coverage.details() == {"reason": "no_coverage", "sheet": "N-34"}
+    assert sidecar.details() == {
+        "reason": "invalid_sidecar",
+        "path": (Path.cwd() / "x.meta.json").as_posix(),
+    }
+    assert transform.details() == {
+        "reason": "transform_unavailable",
+        "rejected": [["op", "why"]],
+    }
     assert DownloadError("m", status_code=0).details() == {"status_code": 0}
 
 
@@ -186,12 +213,17 @@ def test_usage_error_is_a_validation_error():
     assert isinstance(error, ValidationError)
     with pytest.raises(ValidationError):
         raise error
-    assert (error.code, error.exit_code) == ("usage_error", 2)
-    assert isinstance(ParseError("m"), ValidationError)
-    assert (ParseError("m").code, ParseError("m").exit_code) == (
-        "invalid_sheet_code",
+    assert (error.code, error.reason, error.exit_code) == (
+        "validation_error",
+        "usage",
         2,
     )
+    assert isinstance(ParseError("m"), ValidationError)
+    assert (ParseError("m").code, ParseError("m").reason) == (
+        "validation_error",
+        "invalid_sheet_code",
+    )
+    assert ParseError("m").exit_code == 2
 
 
 def test_error_report_document():
@@ -207,26 +239,34 @@ def test_error_report_document():
     assert list(report.to_dict()) == [
         "schema",
         "code",
+        "title",
         "message",
         "hint",
-        "exception",
+        "details",
         "exit_code",
         "command",
-        "details",
     ]
     assert report.to_dict() == {
         "schema": "kartograf-error/1",
-        "code": "invalid_input",
+        "code": "validation_error",
+        "title": "Invalid input",
         "message": "--vertical-crs wymagane",
         "hint": "Dozwolone wartosci --vertical-crs: EVRF2007, KRON86. Przyklad: "
         "kartograf elevation download --product nmt --sheet N-34-130-D-d-2-4 "
         "--resolution 1m --vertical-crs EVRF2007 -o ./data",
-        "exception": "ValidationError",
+        "details": {
+            "reason": "invalid_input",
+            "option": "vertical_crs",
+            "allowed": ["EVRF2007", "KRON86"],
+        },
         "exit_code": 2,
         "command": "elevation download",
-        "details": {"option": "vertical_crs", "allowed": ["EVRF2007", "KRON86"]},
     }
     assert error_report(exc).command is None
+    # hint and command are left out of the document when there is none
+    bare = error_report(ValidationError("m")).to_dict()
+    assert "hint" not in bare and "command" not in bare
+    assert bare["details"] == {"reason": "invalid_input"}
 
 
 def test_hint_sources_in_order():
@@ -306,7 +346,7 @@ def test_usage_error_of_a_known_command_names_it_and_gives_an_example():
     report = error_report(exc)
 
     assert (exc.command, report.command) == ("elevation download",) * 2
-    assert report.exit_code == 2 and report.details == {}
+    assert report.exit_code == 2 and report.details == {"reason": "usage"}
     assert report.hint is not None
     where, example = report.hint.split(" Przyklad: kartograf ", 1)
     assert where == "Parametry komendy: kartograf catalog elevation download."
@@ -390,8 +430,8 @@ def test_oserror_is_io_error():
     report = error_report(FileNotFoundError(2, "No such file", "/x"))
 
     assert report.code == "io_error"
-    assert report.exit_code == 1
-    assert report.exception == "FileNotFoundError"
+    assert report.title == "File system error"
+    assert report.exit_code == 9
     assert report.message.startswith("FileNotFoundError: ")
     assert report.details == {"errno": "ENOENT", "path": "/x"}
     assert report.hint == "Sprawdz sciezke i uprawnienia: /x"
@@ -409,7 +449,6 @@ def test_foreign_exception_is_internal_error():
 
     assert report.code == "internal_error"
     assert report.exit_code == 1
-    assert report.exception == "KeyError"
     assert report.message == "KeyError: 'x'"
     assert report.details == {}
     assert report.hint is not None and "KARTOGRAF_DEBUG=1" in report.hint
@@ -419,11 +458,10 @@ def test_foreign_exception_is_internal_error():
     )
 
 
-def test_keyboard_interrupt_is_interrupted():
+def test_keyboard_interrupt_is_cancelled():
     report = error_report(KeyboardInterrupt(), command="elevation download")
 
-    assert (report.code, report.exit_code) == ("interrupted", 130)
-    assert report.exception == "KeyboardInterrupt"
+    assert (report.code, report.exit_code) == ("cancelled", 130)
     assert report.message == "przerwano (Ctrl-C)"
     assert report.command == "elevation download"
 
@@ -432,7 +470,6 @@ def test_sigterm_is_terminated_with_its_own_exit_code():
     report = error_report(Terminated(), command="landcover download")
 
     assert (report.code, report.exit_code) == ("terminated", 143)
-    assert report.exception == "Terminated"
     assert report.message == "przerwano (SIGTERM)"
     assert report.command == "landcover download"
     assert report.hint is None
@@ -457,10 +494,18 @@ def test_error_report_is_registered():
     assert SCHEMAS["kartograf-error/1"] == (ErrorReport,)
 
 
-def test_transform_errors_have_codes():
-    assert TransformError("m").code == "transform_failed"
-    assert TransformUnavailableError("m").code == "transform_unavailable"
-    assert isinstance(TransformUnavailableError("m"), TransformError)
+def test_transform_errors_have_registry_codes():
+    assert (TransformError("m").code, TransformError("m").reason) == (
+        "calculation_error",
+        "transform_failed",
+    )
+    unavailable = TransformUnavailableError("m")
+    assert (unavailable.code, unavailable.reason, unavailable.exit_code) == (
+        "unsupported",
+        "transform_unavailable",
+        15,
+    )
+    assert isinstance(unavailable, TransformError)
 
 
 # --- option/allowed of the collection, land cover, SoilGrids and HSG validators ---
@@ -2153,7 +2198,10 @@ def test_malformed_sheet_is_a_parse_error_naming_the_sheet(function, tmp_path):
         function(**arguments)
 
     assert caught.value.option == "sheet"
-    assert caught.value.code == "invalid_sheet_code"
+    assert (caught.value.code, caught.value.reason) == (
+        "validation_error",
+        "invalid_sheet_code",
+    )
 
 
 def test_malformed_sheet_of_the_availability_report_is_a_parse_error(tmp_path):

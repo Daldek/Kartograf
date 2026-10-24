@@ -119,7 +119,7 @@ def test_emit_document_prints_the_document_and_returns_the_code_of_ok(
     ("error", "code"),
     [
         (ValidationError("zle dane"), 2),
-        (DownloadError("siec"), 1),
+        (DownloadError("siec"), 5),
         (KeyboardInterrupt(), 130),
         (Terminated(), 143),
     ],
@@ -690,8 +690,12 @@ def test_cache_path_is_given_when_the_database_cannot_be_read(
     db = Path.cwd() / ".kartograf_cache.db"
     db.write_bytes(b"to nie jest baza SQLite\n" * 200)
 
-    assert main(["cache", "stats", "--json"]) == 1
-    assert json.loads(capsys.readouterr().out)["code"] == "cache_error"
+    assert main(["cache", "stats", "--json"]) == 8
+    document = json.loads(capsys.readouterr().out)
+    assert (document["code"], document["details"]["reason"]) == (
+        "store_unavailable",
+        "cache",
+    )
     assert main(["cache", "path", "--json"]) == 0
     document = json.loads(capsys.readouterr().out)
     assert (document["path"], document["exists"]) == (db.as_posix(), True)
@@ -782,6 +786,7 @@ def test_project_add_uses_parse_command(tmp_path, capsys, flags, option):
     document = json.loads(captured.out)
     assert code == 2 and captured.err == ""
     assert document["schema"] == "kartograf-error/1"
-    assert document["code"] == "invalid_input"
+    assert document["code"] == "validation_error"
+    assert document["details"]["reason"] == "invalid_input"
     assert document["details"]["option"] == option
     assert (project / "kartograf-project.json").read_bytes() == manifest

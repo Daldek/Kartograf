@@ -75,8 +75,8 @@ SCHEMA_DESCRIPTIONS = {
     "kartograf-store-overview/1": "Przeglad magazynu: segmenty i liczby wpisow",
     "kartograf-store-entries/1": "Wpisy magazynu: pliki z sidecarami",
     "kartograf-store-sidecar/1": "Sidecar jednego pliku magazynu (kartograf-meta/1)",
-    "kartograf-error/1": "Blad komendy: kod, komunikat, podpowiedz, wyjatek, "
-    "kod wyjscia i szczegoly",
+    "kartograf-error/1": "Blad komendy: kod rejestru, tytul, komunikat, "
+    "podpowiedz, szczegoly (details.reason), kod wyjscia i komenda",
     "kartograf-catalog/1": "Katalog komend: grupy, komendy, parametry, "
     "ograniczenia, przyklady, tabele kodow wyjscia i bledow oraz schematy",
 }
@@ -239,7 +239,9 @@ def _build_full(commands: Sequence[Command], groups: Sequence[Group]) -> Catalog
             ExitCodeInfo(row.code, row.name, row.meaning) for row in EXIT_CODES
         ),
         errors=tuple(
-            ErrorCodeInfo(row.code, row.exception, row.exit_code, row.meaning)
+            ErrorCodeInfo(
+                row.code, row.reason, row.exception, row.exit_code, row.meaning
+            )
             for row in ERROR_CODES
         ),
         schemas=_schema_infos(commands),

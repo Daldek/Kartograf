@@ -399,7 +399,7 @@ def test_usage_error_mode():
         with pytest.raises(UsageError) as error:
             parse_command_line(parser, argv)
         assert text in str(error.value)
-        assert error.value.code == "usage_error"
+        assert (error.value.code, error.value.reason) == ("validation_error", "usage")
         assert isinstance(error.value, ValidationError)
 
 

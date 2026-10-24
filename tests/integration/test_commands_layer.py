@@ -188,7 +188,8 @@ def test_parse_command_syntax_error_is_usage_error(line):
     with pytest.raises(UsageError) as caught:
         parse_command(line)
 
-    assert caught.value.code == "usage_error" and caught.value.exit_code == 2
+    assert (caught.value.code, caught.value.reason) == ("validation_error", "usage")
+    assert caught.value.exit_code == 2
 
 
 @pytest.mark.parametrize(

@@ -22,6 +22,26 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 - The `dev` extra is the `dev` dependency group; environments are installed with
   `uv sync --locked --all-extras` from the committed `uv.lock` (DEV-6.2, DEV-6.3).
 - `docs/DECISIONS.md` has LF line endings (DEV-14.1).
+- Error codes and exit codes follow the Nogat registry (ERR §4, ADR-049). `code` of
+  `ValidationError`, `UsageError` and `ParseError` is `validation_error` (exit 2) with
+  `details.reason` `invalid_input`, `usage` and `invalid_sheet_code`; `NoCoverageError`
+  and `YearRangeError` are `no_data` (exit 14, reasons `no_coverage` and
+  `year_out_of_range`); `DownloadError` is `source_unavailable` (5); `CacheError` is
+  `store_unavailable` (reason `cache`, 8); `InvalidSidecarError` is `data_error` (reason
+  `invalid_sidecar`, 7); `TransformError` is `calculation_error` (reason
+  `transform_failed`, 13); `TransformUnavailableError` is `unsupported` (reason
+  `transform_unavailable`, 15); `OSError` is `io_error` (9); Ctrl-C is `cancelled` (130);
+  `KartografError` itself is `internal_error` (1). The codes `invalid_input`,
+  `usage_error`, `invalid_sheet_code`, `download_failed`, `no_coverage`,
+  `year_out_of_range`, `cache_error`, `invalid_sidecar`, `transform_failed`,
+  `transform_unavailable`, `kartograf_error` and `interrupted` no longer exist, and
+  every CLI error exits with the registry exit code of its code instead of 1. Consumers
+  that compared `err.code` (Retman: `no_coverage`) read `err.code` and `err.reason`, or
+  catch the class.
+- The document `kartograf-error/1` follows AGI-4.3: keys `code`, `title`, `message`,
+  `hint`, `details`, `exit_code`, `command`. The `exception` key is removed, `hint` and
+  `command` are left out when there is none, and `details` always exists with `reason`
+  first (`ErrorReport.exception` is gone, `ErrorReport.title` is new).
 
 **Added**
 
@@ -32,6 +52,10 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   and Dependabot workflows (DEV-7.6, DEV-7.7, DEV-13.6).
 - `schemas/nogat/` (copies of the Nogat error registry and agent schemas) and
   the generated module `kartograf._errors` (ERR-3).
+- `KartografError.reason` (class attribute, reported as `details.reason`) and
+  `ErrorCodeInfo.reason` in the catalog tables.
+- `scripts/generate_docs.py` writes the exit code and error code tables of
+  `docs/USAGE.md` 9.3 from the code (DOC-9.4); a contract test checks them.
 
 **Changed**
 
