@@ -69,6 +69,7 @@ kazda relacja jest zapisana po obu stronach.
 | [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) | Publiczne API odczytu magazynu dla Archiwisty | 2026-10-18 | Przyjeta — uzupelniona przez [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) (narzedzia MCP odczytu magazynu; errata 1); errata 2: czesci segmentu (`list_partitions`, `partition`) i mapowanie `skip_versions` bez listingu znanych katalogow wersji (luzuje widocznosc zmian w nich); errata 3: `Sidecar.unit` i obrys kafla LAZ, arkusz ZTM, `link_target` niezaleznej kopii, `file_footprint` bez wyjatku dla zrodla bez operacji CRS (test E2E 0.8.0) |
 | [ADR-046](#adr-046-interfejs-dla-agentow-ai-dokumenty-json-kody-bledow-katalog-komend-i-serwer-mcp) | Interfejs dla agentow AI: dokumenty JSON, kody bledow, katalog komend i serwer MCP | 2026-10-18 | Przyjeta; uzupelnia [ADR-037](#adr-037-spojnosc-cli-i-api) (wynik komendy jako dokument JSON, `--json`, kody bledow i wyjscia), [ADR-039](#adr-039-grupy-komend-cli-wg-typu-danych) (deklaracje komend w katalogu), [ADR-040](#adr-040-manifest-projektu-i-przypiete-wersje) (opcje komend danych z katalogu) i [ADR-045](#adr-045-publiczne-api-odczytu-magazynu-dla-archiwisty) (narzedzia MCP odczytu magazynu); errata 3: kod wyjscia 143 (`terminated`), `failed[].kind`, stderr w `--json`, `hint` z argumentow wywolania (test E2E 0.8.0) |
 | [ADR-047](#adr-047-szczegoly-arkuszy-i-kampanii-w-raporcie-dostepnosci-kd-1-kd-2) | Szczegoly arkuszy i kampanii w raporcie dostepnosci (KD-1, KD-2) | 2026-10-19 | Przyjeta; uzupelnia [ADR-041](#adr-041-rejestr-wariantow-produktu-skorowidz-wfs-nmtnmpt-i-raport-dostepnosci) (`full_m2`, `sheet_records`, `campaign_coverage`); errata 1: `AvailabilityRecord.full_sheet`, ograniczenie LAZ i wyjatek CZ w dokumentacji pola; errata 2: obszar bez ladu: `complete` bez zmian, sygnal `no_land` (test E2E 0.8.0) |
+| [ADR-048](#adr-048-adoption-of-the-nogat-standard-21-layout-tooling-and-versions) | Adoption of the Nogat standard 2.1: layout, tooling and versions | 2026-10-24 | Przyjeta |
 
 ---
 
@@ -4361,6 +4362,42 @@ podpowiedzi pobrania; odrzucona alternatywa `complete = false` dla
 `land_m2 == 0` lamalaby inwariant. Szczegoly: ADR-041 errata 5.
 
 ---
+
+## ADR-048: Adoption of the Nogat standard 2.1: layout, tooling and versions
+
+**Date:** 2026-10-24
+**Status:** Przyjeta (accepted)
+
+**Context:** Kartograf follows the Nogat standard 2.1 before the data-output
+work. The agent-doable items of phase 2 of the adoption plan (structure and
+tooling) are done here; the interface items (phase 4) and the user environment
+are listed in `docs/PROGRESS.md`.
+
+**Options:** keep the flat layout and the local gate (no change); adopt the
+templates of Nogat `standards/ci/` unchanged (chosen); write project-specific
+variants of the gate and CI.
+
+**Decision:**
+- `src/kartograf/` layout, uv with a committed `uv.lock`, the gate and CI
+  templates unchanged except the two settings at the top of `gate.sh`
+  (ECO-011, ECO-012, DEV-7.6, DEV-7.7).
+- `develop` carries `0.8.0.dev0` and the changelog has `[Unreleased]` (REL-1.1);
+  the release pull request sets `0.8.0`.
+- `tests/` is split by what a test needs: `unit` (one module, fakes),
+  `integration` (flows across library, CLI and store), `contract` (interface
+  parity, JSON contracts, generated files), `support` (shared fakes); the
+  `live` marker is the only one in use.
+- ruff `E,F,W,I,UP,B,SIM,C4,D` with the numpy convention and mypy strict; the
+  tests keep one mypy override (their functions are unannotated), recorded as a
+  deviation in `CLAUDE.md`.
+- Verbatim copies of the Nogat registry and agent schemas live in
+  `schemas/nogat/`; `src/kartograf/_errors.py` is generated from the registry
+  by `scripts/generate_errors.py` and a contract test fails when it is stale.
+
+**Consequences:** consumers repeat editable installs and pin the commit until
+the tag `v0.8.0` exists (`kartograf>=0.8.0` rejects a development version).
+Phases 3 and 4 of the adoption change codes, exit codes and JSON documents
+(ERR §4, AGI-4.2) and are breaking changes of the unreleased 0.8.0 (ECO-020).
 
 ## Szablon nowego ADR
 
