@@ -258,7 +258,7 @@ def _prg_route():
 def _bdot(tmp_path: Path, *routes) -> tuple[LandCoverManager, FakePackageSession]:
     """``LandCoverManager`` with a BDOT10k provider holding a fake session."""
     session = FakePackageSession(dict(routes))
-    return LandCoverManager(tmp_path, Bdot10kProvider(session=session)), session
+    return LandCoverManager(tmp_path, Bdot10kProvider(session=session)), session  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(

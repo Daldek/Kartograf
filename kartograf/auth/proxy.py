@@ -195,7 +195,7 @@ class CLMSCredentials:
             )
 
             response = requests.post(
-                creds.get("token_uri"),
+                creds.get("token_uri") or "",
                 data={
                     "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
                     "assertion": assertion,

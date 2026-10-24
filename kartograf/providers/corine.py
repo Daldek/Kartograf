@@ -217,7 +217,7 @@ class CLMSAuth:
         sess = session or requests.Session()
         try:
             response = sess.post(
-                self.token_uri,
+                self.token_uri or "",
                 data={
                     "grant_type": "urn:ietf:params:oauth:grant-type:jwt-bearer",
                     "assertion": assertion,

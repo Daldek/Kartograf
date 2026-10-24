@@ -97,7 +97,7 @@ FIRST = {
         "soil download",
         {"bbox": BDOT_BBOX, **CLAY},
         lambda: landcover_sources(
-            soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids())
+            soilgrids=lambda: SoilGridsProvider(session=FakeSoilGrids())  # type: ignore[arg-type]
         ),
         ["output"],
     ),
