@@ -23,6 +23,7 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Topic :: Scientific/Engineering :: GIS",
+    "Topic :: Scientific/Engineering :: Hydrology",
     "Typing :: Typed",
 ]
 dependencies = [
@@ -42,7 +43,9 @@ kartograf-mcp = "kartograf.mcp_server:main"
 
 [project.urls]
 Homepage = "https://github.com/Daldek/Kartograf"
-Repository = "https://github.com/Daldek/Kartograf.git"
+Source = "https://github.com/Daldek/Kartograf"
+Documentation = "https://github.com/Daldek/Kartograf/blob/main/docs/USAGE.md"
+Changelog = "https://github.com/Daldek/Kartograf/blob/main/docs/CHANGELOG.md"
 Issues = "https://github.com/Daldek/Kartograf/issues"
 
 [tool.setuptools.packages.find]

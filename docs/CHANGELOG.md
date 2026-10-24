@@ -84,6 +84,9 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
 
 **Changed**
 
+- `pyproject.toml` has the discovery metadata of AGI-10.1: `[project.urls]` with `Homepage`,
+  `Source` (was `Repository`), `Documentation`, `Changelog` and `Issues`, and the classifier
+  `Topic :: Scientific/Engineering :: Hydrology`; `twine check` passes on the built distribution.
 - Docstrings follow the numpy convention (ruff `D`) and `mypy --strict` passes
   over `src` and `tests` (DEV-7.2, DEV-7.3); coverage floor 80 (DEV-7.5).
 - `tests/` is split into `unit`, `integration`, `contract` and `support`.
