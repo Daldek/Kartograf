@@ -259,7 +259,7 @@ Uwagi, ktore latwo przeoczyc:
   `download.options` (`output_required`, `require_product`), z `sources.variants`
   tabele wariantow, z `notices` komunikaty, z `project.commands` `task_command`.
   Nie importuje `providers`, `transport`, `transform`, `core` ani doboru
-  arkuszy (`tests/test_cli_translation.py::test_cli_imports_no_data_logic`
+  arkuszy (`tests/contract/test_cli_translation.py::test_cli_imports_no_data_logic`
   dopuszcza ponad to tylko `catalog` i `serialization`).
 - Rejestr wariantow `sources/variants.py` (ADR-041) to czyste dane:
   importuje tylko `exceptions`, `sources.descriptor` i
@@ -806,7 +806,7 @@ niemutowalna konfiguracje silnika - dane bez IO:
 | `AtomFilesParams` (plan D) | `service_feed` (feed uslugi ATOM), `entry_pattern` (wyrazenie na id feedu zbioru; grupa `sheet` = klucz indeksu, `year` = rok wydania w nazwie pliku; bez `sheet` feed ma jeden zbior), `crs` (kody EPSG kategorii ukladu plikow zbioru; `()` = jeden plik), `members` (pary sufiks czlonu ZIP -> sufiks zapisu; `()` = ZIP 1:1), `segment_tokens` (+ kod EPSG, gdy `crs` ma kilka ukladow) | `transport/atom.py` |
 | `WcsCutoutParams` (plan D) | `variant` (`--coverage`: `standard`/`high`), `coverage_id`, `native_step` (krok coverage, 0,1 m), `resolutions` (piksele wyniku: 0.1, 0.25, 0.5, 1; etykiety K2), `max_native_pixels` (budzet zapytania w pikselach coverage, 4 Mpx) | `GugikOrtoProvider` + `download/orto_cutout.py` |
 
-Testy rejestru (`tests/test_sources_registry.py`) pilnuja: tokenow szablonu,
+Testy rejestru (`tests/unit/test_sources_registry.py`) pilnuja: tokenow szablonu,
 tych samych kluczy `choice` w wariantach kanalu, kluczy, katalogow
 i `edition`/`segment_tokens` wg konwencji nazw (sekcja 3.3, regula 10),
 protokolu zgodnego z transportem, `page_size > 0` i capability kanalu
@@ -1386,7 +1386,7 @@ data/
     (`nmt/pl_1992_1m_evrf2007`, `orto/pl_1992_cir`, `laz/pl_2000_kron86`,
     `nmt/cz_dmr5g_bpv`) i regula 8; produkty nowe w 0.8.0 nazwano wg niej
     przed wydaniem (bez migracji). Pilnuje jej test rejestru
-    `tests/test_sources_registry.py::TestNamingConvention`.
+    `tests/unit/test_sources_registry.py::TestNamingConvention`.
     - **Klucz zrodla** = `<kraj>.<dostawca>.<nazwa>`: kraj deskryptora (`pl`,
       `cz`, `eu`, `global`), dostawca (`gugik`, `cuzk`, `clms`, `isric`),
       `<nazwa>` - slowa `[a-z0-9]` laczone `_` (w kluczu nie ma `-` ani
@@ -1631,7 +1631,7 @@ wywolaniom naraz (skan go nie kopiuje ani nie zmienia). To samo dotyczy
 zwykly `dict` moze sluzyc wszystkim watkom - w najgorszym razie dwa watki
 odpytaja indeks o te sama jednostke). `pinned_transform` takze mozna wolac
 z wielu watkow naraz (nizej). Tej gwarancji pilnuje test rownoleglego
-uzycia w `tests/test_store_geometry.py`.
+uzycia w `tests/unit/test_store_geometry.py`.
 
 Koszt CPU (magazyn testowy 50 tys. slotow, SSD, jeden watek, 131 111
 wpisow): skan przyrostowy (`skip_versions` = wszystkie wersje) 6,3 s,
@@ -1851,7 +1851,7 @@ sekcja 5; uzycie: USAGE 9.1):
   pola `ok`, inaczej 1; `ok: false` jest wynikiem, nie bledem (blad to `kartograf-error/1`);
 - w obrebie `/1` tylko zmiany addytywne (nowe klucze, nowe wartosci wyliczen); usuniecie
   klucza albo zmiana typu to `/2`. Nowy dokument = klasa z `Document` w module wyniku,
-  wpis w tabeli wyzej i wiersz w `tests/test_json_contract.py` (dokladna lista kluczy w
+  wpis w tabeli wyzej i wiersz w `tests/contract/test_json_contract.py` (dokladna lista kluczy w
   kolejnosci; zmiana klucza to blad testu).
 
 Schematy plikow - sidecar `kartograf-meta/1` (3.2) i manifest `kartograf-project/1` (3.5) -
@@ -3827,7 +3827,7 @@ tylko dla parsera (`dest`, `metavar`...). Z deklaracji powstaja:
 - specyfikacje narzedzi MCP (`catalog/tools.py`) i podpowiedzi bledow
   (`catalog/hints.py::example_for`: przyklad komendy w `hint`).
 
-Spojnosc wymuszaja testy kontraktowe (`tests/test_catalog*.py`): flagi parsera == katalog w
+Spojnosc wymuszaja testy kontraktowe (`tests/unit/test_catalog*.py` and `tests/contract/test_catalog_declarations.py`): flagi parsera == katalog w
 obie strony, `COMMANDS[...].options` == parametry `task`, `function`/`check_function` w
 `kartograf.__all__` ze zgodnymi sygnaturami, `allowed` == rejestr, przyklady przez
 `validate_command` i okrazenie `parse_command(format_command(...))`, ograniczenia testowane
@@ -3847,7 +3847,7 @@ wywolujacy). Funkcje bez sieci (`parse_command`, `validate_command`,
 `format_command`) maja test z atrapa transportu odrzucajaca kazde zapytanie.
 
 **Bledy.** Kazda klasa `KartografError` ma w `__dict__` wlasny `code` (snake_case, unikalny;
-`tests/test_errors.py`), `exit_code`, `DETAIL_FIELDS` i opcjonalny `hint`; walidatory biblioteki
+`tests/integration/test_errors.py`), `exit_code`, `DETAIL_FIELDS` i opcjonalny `hint`; walidatory biblioteki
 ustawiaja `ValidationError.option`/`options`/`allowed` (nazwa argumentu API, nie flaga).
 `error_report(exc, command=)` zamienia dowolny wyjatek na `ErrorReport` (kody `io_error` dla
 `OSError`, `interrupted`, `terminated` i `internal_error` buduje tu, a nie klasy hierarchii); `hint` skladany
@@ -3860,7 +3860,7 @@ dokument `kartograf-error/1` na stdout (stderr pusty) oraz kod wyjscia `e.exit_c
 `kartograf` (poziom WARNING i wyzej) `main` zamienia na linie `Warning:`/`Error:` na stderr
 (`_StderrLines`; bez handlera Python drukuje je bez prefiksu); z `--json` przechodza tylko
 rekordy `kartograf.transport.http` (ponowienia), a z `KARTOGRAF_DEBUG` wszystkie. Tabele kodow wyjscia
-i bledow sa w USAGE 9.3 (`tests/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
+i bledow sa w USAGE 9.3 (`tests/contract/test_docs_tables.py` pilnuje ich rownosci z katalogiem).
 
 **Przerwanie i pule watkow (`src/kartograf/interrupt.py`).** Ctrl-C to `KeyboardInterrupt` tylko w
 watku glownym, wiec `--workers >= 2` (jednostki w `ThreadPoolExecutor`) czekalo na cala kolejke
@@ -3939,7 +3939,7 @@ Checklist na przykladzie DE (Brandenburgia, DGM1):
    walidacje `download/options.py` (`validate_request`, `check_per_country`)
    oraz `download/area.py::pl_only_flags` o opcje, ktore w tym kraju nie
    istnieja; CLI nie zmienia sie poza wyborami flag w deklaracji katalogu
-   (`catalog/commands/elevation.py` / `imagery.py`, stale z `download/options.py`). Scenariusz kraju w `tests/test_parity.py`. Reprojekcje rob lokalnie, przypieta operacja — nigdy przez
+   (`catalog/commands/elevation.py` / `imagery.py`, stale z `download/options.py`). Scenariusz kraju w `tests/contract/test_parity.py`. Reprojekcje rob lokalnie, przypieta operacja — nigdy przez
    parametr CRS serwera (ADR-024).
 6. **Testy**: fixtury z REALNYCH odpowiedzi serwera (wzor `tests/fixtures/cuzk/`),
    test spojnosci deskryptor-provider, wpis w `KNOWN_PATHS` dla kazdej

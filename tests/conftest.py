@@ -72,7 +72,7 @@ def _block_network(request, monkeypatch):
     state of that server. Tests marked ``live`` are exempt.
 
     Loopback connections are allowed on purpose — some tests spin up a real
-    ``HTTPServer`` on 127.0.0.1 (see ``tests/test_auth_proxy.py``).
+    ``HTTPServer`` on 127.0.0.1 (see ``tests/unit/test_auth_proxy.py``).
 
     The guard raises ``RuntimeError``, not ``OSError``: ``requests`` wraps
     ``OSError`` into ``ConnectionError``, which production fallbacks catch,
