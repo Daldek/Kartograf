@@ -3542,7 +3542,7 @@ formatowania - schematy wejscia pochodza z katalogu.
 pip install "kartograf[mcp] @ git+https://github.com/Daldek/Kartograf.git"
 ```
 
-(po wydaniu: tag `v0.8.0`; wersja deweloperska: `pip install -e ".[dev]"` zawiera `mcp`).
+(po wydaniu: tag `v0.8.0`; wersja deweloperska: `uv sync --locked --all-extras` zawiera `mcp`).
 `import kartograf` i CLI dzialaja bez `mcp`; skrypt `kartograf-mcp` jest instalowany zawsze,
 a bez SDK drukuje na stderr `Brak pakietu mcp: pip install "kartograf[mcp]"` i konczy
 sie kodem 1.

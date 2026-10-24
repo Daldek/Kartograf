@@ -1,57 +1,55 @@
 #!/usr/bin/env bash
-# Jedna komenda bramy Kartografa (STANDARDS 6.3, 8.3, 18): ruff check, ruff format
-# --check, mypy i pytest offline; pierwszy kod != 0 konczy skrypt tym kodem.
-# Argumenty trafiaja do pytest, np.: scripts/gate.sh -x -k parity
+# Quality gate (DEV-7.6), template from Nogat standards/ci/gate.sh.
+# Copy to scripts/gate.sh together with check-commits.sh and set the project
+# settings below; nothing else should need editing.
+#
+# Usage: scripts/gate.sh [extra pytest arguments]
+# Runs, in order: ruff format --check, ruff check, mypy, one pytest call over
+# tests/ with coverage (contract tests included), and the commit step
+# (scripts/check-commits.sh: identity preflight, then message checks). The
+# first failure stops it.
 set -euo pipefail
+
+# --- project settings --------------------------------------------------------
+PACKAGE="kartograf"                 # import name, measured by coverage
+TYPED_PATHS=(kartograf tests)         # mypy targets (DEV-7.3)
+# Marker expression of the gate (DEV-10.1); an `app` project without a local
+# database uses "not live and not db".
+OFFLINE="not live"
+# ------------------------------------------------------------------------------
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-find_python() {
-  if [[ -n "${KARTOGRAF_PYTHON:-}" ]]; then
-    printf '%s\n' "$KARTOGRAF_PYTHON"
-    return
-  fi
-  if [[ -x "$ROOT/.venv/bin/python" ]]; then
-    printf '%s\n' "$ROOT/.venv/bin/python"
-    return
-  fi
-  # worktree bez wlasnego .venv: srodowisko glownego checkoutu
-  local common main
-  if common="$(git -C "$ROOT" rev-parse --path-format=absolute --git-common-dir 2>/dev/null)"; then
-    main="$(dirname "$common")"
-    if [[ -x "$main/.venv/bin/python" ]]; then
-      printf '%s\n' "$main/.venv/bin/python"
-      return
-    fi
-  fi
-  return 1
-}
+step() { printf '\n== %s\n' "$1"; }
+fail() { printf 'gate: %s\n' "$1" >&2; exit 1; }
 
-if ! PY="$(find_python)"; then
-  echo "gate: brak Pythona - ustaw KARTOGRAF_PYTHON albo utworz .venv (STANDARDS 6.1)" >&2
-  exit 2
-fi
-
-# Kontrola 0: kod testowany to kod tego checkoutu (instalacja edytowalna wskazuje
-# glowny checkout, a worktree ma sprawdzac wlasne zrodla - dlatego kazdy krok idzie
-# przez "$PY" -m ... z cwd = korzen).
-package="$("$PY" -c 'import kartograf; print(kartograf.__file__)')"
-case "$package" in
-  "$ROOT"/*) ;;
-  *)
-    echo "gate: brama sprawdza inny checkout ($package), a nie $ROOT" >&2
-    exit 2
-    ;;
-esac
+command -v uv >/dev/null || fail "uv not found (DEV-6.2): https://docs.astral.sh/uv/"
 
 started=$SECONDS
-echo "== ruff check"
-"$PY" -m ruff check .
-echo "== ruff format --check"
-"$PY" -m ruff format --check .
-echo "== mypy"
-"$PY" -m mypy kartograf/ tests/
-echo "== pytest (offline)"
-"$PY" -m pytest tests/ -m "not live" -q "$@"
-echo "GATE OK ($((SECONDS - started)) s)"
+
+# The environment belongs to this checkout: in a git worktree uv creates the
+# worktree's own .venv, so the gate always tests the code it runs from.
+step "uv sync --locked"
+uv sync --locked --all-extras
+
+run() { uv run --no-sync "$@"; }
+
+step "ruff format --check"
+run ruff format --check .
+
+step "ruff check"
+run ruff check .
+
+step "mypy"
+run mypy "${TYPED_PATHS[@]}"
+
+step "pytest (tests/, coverage)"
+# ${@+"$@"} keeps an empty argument list safe under set -u on macOS bash 3.2.
+run pytest tests -m "$OFFLINE" \
+  --cov="$PACKAGE" --cov-report=term-missing:skip-covered -q ${@+"$@"}
+
+step "commit step"
+bash "$ROOT/scripts/check-commits.sh"
+
+printf '\nGATE OK (%d s)\n' "$((SECONDS - started))"
