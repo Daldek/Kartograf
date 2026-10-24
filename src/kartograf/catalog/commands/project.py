@@ -191,7 +191,6 @@ COMMANDS = (
             " tasks with `project add`."
         ),
         effects=("store_write", "project_write"),
-        tool="project_init",
         examples=(
             Example(
                 {},
@@ -230,7 +229,6 @@ COMMANDS = (
         ),
         effects=("project_write",),
         idempotent=False,
-        tool="project_add",
         examples=(
             Example(
                 {"name": "teren"},
@@ -299,7 +297,6 @@ COMMANDS = (
         effects=("project_write",),
         idempotent=False,
         destructive=True,
-        tool="project_remove",
         summary_pl="Usun zadanie (nie pliki magazynu)",
         description_pl=(
             "Usun zadanie i jego przypiecia z manifestu; pliki w magazynie zostaja."
@@ -337,7 +334,6 @@ COMMANDS = (
         effects=("network", "store_write", "project_write"),
         check_function="check_project",
         check_result_schema=_CHECK,
-        tool="project_download",
         examples=(
             Example(
                 {},
@@ -392,7 +388,6 @@ COMMANDS = (
             "size. The manifest is unchanged. Use `project verify` to check"
             " the content."
         ),
-        tool="project_status",
         summary_pl="Sprawdz obecnosc i rozmiar przypietych plikow",
         description_pl=(
             "Sprawdz bez sieci, czy przypiete pliki zadan sa w magazynie i "
@@ -428,7 +423,6 @@ COMMANDS = (
             "sidecars of their versions. The manifest is unchanged. Slower "
             "than `project status`, which checks existence and size only."
         ),
-        tool="project_verify",
         summary_pl="Sprawdz SHA-256 i sidecary przypietych plikow",
         description_pl=(
             "Sprawdz bez sieci tresc przypietych plikow: czyta cale pliki i"

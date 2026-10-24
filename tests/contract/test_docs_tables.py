@@ -153,15 +153,16 @@ def test_document_tables_name_every_registered_schema_once():
 
 
 def test_usage_tool_table_lists_every_mcp_tool():
-    rows = _table_rows(_section(_read(USAGE), "Narzedzia serwera MCP"))
+    rows = _table_rows(_section(_read(USAGE), "MCP server tools"))
 
-    named = [_plain(row[1]) for row in rows if re.fullmatch(r"`[a-z0-9_]+`", row[1])]
+    named = [_plain(row[0]) for row in rows if re.fullmatch(r"`[a-z0-9_]+`", row[0])]
 
-    assert sorted(named) == sorted(spec.name for spec in tool_specs())
+    assert sorted(named) == sorted(spec.name for spec in tool_specs(allow_writes=True))
+    assert len(named) == 39
 
 
 def test_usage_quotes_the_instructions_of_the_server():
-    section = _section(_read(USAGE), "Instrukcje serwera")
+    section = _section(_read(USAGE), "Server instructions")
 
     (block,) = re.findall(r"^```text\n(.*?)^```", section, re.M | re.S)
 

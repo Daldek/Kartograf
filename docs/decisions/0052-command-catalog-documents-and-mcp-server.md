@@ -1,8 +1,8 @@
 # ADR-052: Command catalog documents and the MCP server on the Nogat agent interface
 
 **Date:** 2026-10-24
-**Status:** Accepted. The catalog documents (decisions 1 to 8) are implemented; the MCP
-rebuild (decision 9) follows in the next step and extends this record.
+**Status:** Accepted. The catalog documents (decisions 1 to 8) and the MCP rebuild (decision 9)
+are implemented.
 
 **Context:** The Nogat standard 2.1 asks every tool for a command catalog as the document
 `<tool>-commands/1` (AGI-2.4), for `list_commands()` and `command_schema(command)` in the
@@ -64,16 +64,66 @@ migration (ECO-020).
    `kartograf.error_report` and the registry is vendored.
 8. **Hints.** The hint of a usage error is `Parametry komendy: kartograf commands schema
    --command "<id>"`.
-9. **MCP (next step).** Tools `kartograf_<group>_<verb>` from the catalog, annotations with
-   `title`, `outputSchema`, `--allow-writes` (needs `--allow-dir`), `forbidden` and
-   `missing_dependency`, English instructions, `--lang` validated and reported only, the gate
-   test of AGI-5.13. Until then the tool `get_catalog` is `commands_list` and
-   `commands_schema`. The two codes come first and are in place: `ForbiddenError`
-   (`forbidden`, 12; a path outside `--allow-dir` is no longer a `ValidationError`) and
-   `MissingDependencyError` (`missing_dependency`, 6; the missing `mcp` extra, hint `uv add
-   "kartograf[mcp]"`, the error document as the last line of stderr). Only the MCP server
-   raises them; they have no `reason`, the arguments of the call (`option`, `path`,
-   `allowed`, `extra`) tell the case.
+9. **MCP.** One tool per command of the catalog that has a family (39), named by its
+   `operation_id` `kartograf_<group>_<verb>` (at most 48 characters, in the order of the
+   catalog). The old names (`elevation_download`, `parse_sheet`, `find_sheets`, `list_sources` and
+   `list_layers` with a `group` argument, `commands_list`, `get_catalog`) and the tools
+   `check_updates` and `project_check_updates` are gone without aliases: the check is the option
+   `check_updates` of each tool that has a plan (it becomes `check` with the data-output change,
+   Z7); `<group> list-sources` and `<group> list-layers` are one tool per group whose `group`
+   the tool fixes. The families are `discovery`, `availability`, `data`, `project`, `store` and
+   `core` (the ten tools of the main tasks: `commands list`, `commands schema`, `sheet find`,
+   `elevation availability`, `elevation download`, `imagery download`, `landcover download`,
+   `soil download`, `soil hsg`, `store overview`); the family `check` is gone.
+
+   *The tools* come from the declarations alone (`catalog/tools.py`; `Command.tool` and the
+   `_BRIEF` tables are removed): the description is the summary, the description and the rules
+   (at most 600 characters), every property has the description, the `enum` values, the
+   bounds, the default and the examples of its option; the meaning of an allowed value stays in
+   `kartograf_commands_schema` (listing it in every tool doubles the list), a value per country
+   is `anyOf` a string or `{pl, cz}`, `one_of` is a sentence of the descriptions (clients
+   reject `oneOf` at the top level of a schema) and `bbox` needs `bbox_crs` by
+   `dependentRequired`. The annotations are `title` and all four hints, always set (a client
+   takes an unset `destructiveHint` as true), derived from `effects` and from the mode of the
+   server; `kartograf_commands_list` and `kartograf_commands_schema` carry
+   `_meta["anthropic/alwaysLoad"]`; `outputSchema` is `result-1` made self-contained and kept as
+   data (`scripts/generate_output_schema.py`, a contract test: the module equals the generator
+   and decides like the vendored schema).
+
+   *The mode* is read only by default (AGI-1.3, AGI-5.8). `--allow-writes` needs `--allow-dir`
+   (usage error, exit code 2). Without it a tool that writes and has a check is its plan-only
+   variant (no `update`, `plan`, `workers` or `summary`, `check_updates` fixed to `true`,
+   `readOnlyHint: true`), and the three that write without a check (`project init`, `project add`,
+   `project remove`) are not offered; an option of a run, `check_updates: false` and a call of a
+   hidden tool answer `forbidden`. A path outside `--allow-dir` is `forbidden` too (it was
+   `validation_error`), also a path nested in the options of `project add`; a server without
+   `--allow-dir` still reads any absolute path. `ForbiddenError` (`forbidden`, 12; `option`,
+   `path`, `allowed`) and `MissingDependencyError` (`missing_dependency`, 6; the missing `mcp`
+   extra, hint `uv add "kartograf[mcp]"`, the error document as the last line of stderr) are
+   raised by the MCP server only; they have no `reason`, the arguments of the call tell the
+   case. `--lang pl|en` is validated and reported in the start line; the server answers in
+   English whatever it is (AGI-9.2), so it changes nothing.
+
+   *The texts* of the MCP layer (instructions, descriptions, its own messages) are English; the
+   instructions are built from the names of the catalog and the mode (`build_instructions`, about
+   2,300 characters of the 4,096 allowed). The messages of the library and the hints that
+   `error_report` composes stay Polish until the message catalogue (PROGRESS, Next item 25), so
+   an invalid value has an English message and a Polish hint for now.
+
+   *The budget.* The 30,000 characters of `tools/list` that ADR-046 (D22) set no longer hold: the
+   descriptions of the catalog and the `outputSchema` make the list about 207,000 characters of
+   compact JSON for the 39 tools (87,000 without the `outputSchema`), 188,000 (77,000) for the
+   36 of a server that does not write and 64,000 (34,000) for `--tools core`. The standard
+   limits the description (600), the instructions (4,096) and the page of a result (20,000), not
+   the list; a client that loads every definition should start with `--tools core`. The gate
+   test of AGI-5.13 starts the server over stdio with the SDK client: names, annotations with
+   `title`, schemas and `outputSchema`, descriptions, instructions and page, a cold start with
+   `tools/list` under 5 seconds (about 1.4 seconds measured), one read-only call, one
+   validation error with `isError`, the code and the hint (the SDK client validates every
+   non-error result against the `outputSchema`).
+
+   *Known gap.* `project download`, `project status` and `project verify` read the store path
+   from the project manifest, and `--allow-dir` checks the project directory, not that path.
 
 **Consequences:** A consumer reads the options of a data command from `command_schema`; the task
 options are its options except the run options `output_dir`, `update`, `plan`, `workers`,

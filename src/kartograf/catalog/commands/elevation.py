@@ -737,7 +737,6 @@ COMMANDS = (
         project_task=True,
         check_function="check_data",
         check_result_schema="kartograf-plan/1",
-        tool="elevation_download",
         constraints=_DOWNLOAD_CONSTRAINTS,
         examples=_DOWNLOAD_EXAMPLES,
         summary_pl=(
@@ -790,7 +789,6 @@ COMMANDS = (
             " `country=auto` reports both parts together."
         ),
         effects=("network",),
-        tool="elevation_availability",
         constraints=(
             Constraint(
                 "one_of",

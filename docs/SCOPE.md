@@ -434,9 +434,9 @@ kartograf project download                 # przypnij wersje zadan; --check-upda
 kartograf project status                   # istnienie i rozmiar, bez czytania danych
 kartograf project verify                   # SHA-256 plikow i sidecarow
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
-kartograf commands list --json                   # katalog komend (grupy, komendy, parametry, dozwolone wartości, przykłady); get_catalog() (ADR-046)
+kartograf commands list --json                   # katalog komend (grupy, komendy, ...); `commands schema --command "<grupa> <komenda>"`: opcje, dozwolone wartości, przykłady (ADR-052)
 kartograf elevation availability --product nmt --sheet <godlo> --json # --json w każdej komendzie: jeden dokument kartograf-<rodzaj>/1, błąd kartograf-error/1, kody wyjścia 0/1/2/130/143
-kartograf-mcp                              # serwer MCP (stdio; extra `kartograf[mcp]`): 29 narzędzi 1:1 z komendami (USAGE 9.6)
+kartograf-mcp                              # serwer MCP (stdio; extra `kartograf[mcp]`): 39 narzędzi 1:1 z komendami, domyślnie tylko odczyt i plany; `--allow-writes --allow-dir DIR` pozwala zapisywać (USAGE 9.6)
 # Pełna lista opcji: kartograf <grupa> <komenda> --help
 ```
 
@@ -504,7 +504,7 @@ from kartograf import (
     describe_segment, SegmentInfo, file_footprint, Footprint, link_target,
     pinned_transform, PinnedTransform,
     # Command catalog, command layer and JSON documents (agent interface, ADR-046, USAGE 9)
-    get_catalog, data_commands, Catalog, CommandInfo, ParamInfo,
+    list_commands, command_schema, CommandList, CommandCatalog,
     parse_command, validate_command, format_command, run_command, check_command,
     CommandCall, describe_sheet, SheetInfo, find_sheets, SheetList,
     list_sources, SourceList, list_layers, LayerList,
@@ -861,10 +861,12 @@ from kartograf import (
 # - biblioteka: `to_dict()`/`to_json()` każdego raportu, wyjątki ze stabilnym `code`,
 #   `exit_code` i `hint` (`ValidationError.option`/`allowed`), `error_report`;
 # - serwer MCP `kartograf-mcp` (stdio; opcjonalny extra `kartograf[mcp]`, `mcp>=2.3.0,<3`):
-#   29 narzędzi 1:1 z komendami (w tym `check_updates`), wynik = dokument `--json`,
-#   `is_error` = kod wyjścia CLI != 0, postęp przez notyfikacje MCP, ścieżki bezwzględne,
-#   `--tools`, `--allow-dir`, bez wartości domyślnych wpływających na dane.
-# Katalog komend: `kartograf commands list [--json]`, `get_catalog()` — jedyne źródło prawdy
+#   39 narzędzi 1:1 z komendami (`kartograf_<grupa>_<komenda>`), wynik = koperta `kartograf-result/1`
+#   z `outputSchema`, `is_error` tylko dla błędu, postęp przez notyfikacje MCP, ścieżki bezwzględne,
+#   `--tools`, `--allow-dir`, `--allow-writes` (bez niego tylko plany), bez wartości domyślnych
+#   wpływających na dane.
+# Katalog komend: `kartograf commands list|schema [--json]` (`list_commands()`, `command_schema()`) —
+# jedyne źródło prawdy
 # o komendach (parser CLI, opcje projektu, schematy narzędzi MCP); warstwa komend
 # `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
 # (KB-1..KB-5 Archiwisty). Pliki dla agentów: `llms.txt`, `kartograf/py.typed`,
@@ -914,9 +916,8 @@ from kartograf import (
 # Interfejs dla agentów AI (ADR-046) — poza zakresem 0.8.0:
 - Transport HTTP serwera MCP (tylko stdio)
 - Anulowanie pobrań (KC) i jednolity `on_progress` wszystkich funkcji (KC-2); narzędzia
-  MCP bez postępu: `soil_download`, `soil_hsg`, `check_updates`, `project_check_updates`
+  MCP bez postępu: `kartograf_soil_download`, `kartograf_soil_hsg` i plany (`check_updates`)
 - Szacunek rozmiaru pobrania (KH), `command_for_file` (KB-6), `find_admin_units` (KB-7)
-- `output_schema` narzędzi MCP (wynik to rodzina dokumentów: wynik albo `kartograf-error/1`)
 
 # Później — inne kraje:
 - Niemcy (DE) — federacja 17 modeli krajów związkowych (BKG/basemap.de)
@@ -1196,7 +1197,7 @@ kartograf/
 ├── cache_info.py         # get_cache_info, get_cache_path, clear_cache (kartograf-cache/1)
 ├── store_documents.py    # describe_store, list_store_entries, read_store_sidecar (dokumenty odczytu magazynu)
 ├── mcp_server.py         # serwer MCP kartograf-mcp (stdio; opcjonalny extra `mcp`)
-├── catalog/              # Katalog komend: deklaracje (commands/), get_catalog, parser CLI, narzędzia MCP (tools.py)
+├── catalog/              # Katalog komend: deklaracje (commands/), list_commands, command_schema, parser CLI, narzędzia MCP (tools.py)
 ├── notices.py            # Notice, NoticeSink, kody komunikatów o danych (ADR-037)
 ├── exceptions.py         # KartografError (code, exit_code, hint), ValidationError (option, allowed) -> UsageError/ParseError, DownloadError -> NoCoverageError/YearRangeError, CacheError, InvalidSidecarError, ForbiddenError, MissingDependencyError (serwer MCP)
 ├── store.py              # Odczyt magazynu bez zapisu (ADR-045): list_segments, list_partitions, iter_store, read_sidecar, describe_segment, link_target
@@ -1306,7 +1307,7 @@ kartograf/
     ├── soil_cmd.py            # `soil download` -> download_soil/check_soil; `soil hsg` -> calculate_hsg/check_hsg
     ├── project_cmd.py         # `kartograf project` -> API projektu (ADR-040); `project add` przez parse_command
     ├── cache_cmd.py           # `kartograf cache` -> get_cache_info/get_cache_path/clear_cache
-    ├── catalog_cmd.py         # `kartograf commands list` -> get_catalog
+    ├── catalog_cmd.py         # `kartograf commands list|schema` -> list_commands, command_schema
     └── commands.py            # Fasada zgodności — entry point `main` (błędy -> error_report, kody 0/1/2/130/143)
 ```
 

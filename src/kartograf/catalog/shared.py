@@ -448,7 +448,6 @@ def list_sources_command(group: str, products: Values) -> Command:
         errors=("validation_error",),
         family="discovery",
         cardinality="bounded",
-        tool="list_sources",
         examples=(
             Example(
                 {},

@@ -270,7 +270,6 @@ COMMANDS = (
             "commands that accept the code. To go from an area to sheet "
             "codes use `sheet find`."
         ),
-        tool="parse_sheet",
         examples=(
             Example(
                 {"sheet": "N-34-130-D-d-2-4"},
@@ -318,7 +317,6 @@ COMMANDS = (
             "it only reads and whether `check_updates` plans it. Start here; "
             "for the options of one command use `commands schema`."
         ),
-        tool="commands_list",
         examples=(
             Example(
                 {},
@@ -361,7 +359,6 @@ COMMANDS = (
             "examples with a result excerpt, error codes and the Polish texts. "
             "One command per call; the names are in `commands list`."
         ),
-        tool="commands_schema",
         examples=(
             Example(
                 {"command": "elevation download"},
@@ -500,7 +497,6 @@ COMMANDS = (
             "`geometry` file; the list is not truncated. To describe one "
             "code use `sheet parse`."
         ),
-        tool="find_sheets",
         constraints=(
             Constraint(
                 "one_of",
@@ -567,7 +563,6 @@ COMMANDS = (
             " registered source produces them. For the files of one segment"
             " use `store entries`."
         ),
-        tool="store_overview",
         examples=(
             Example(
                 {},
@@ -606,7 +601,6 @@ COMMANDS = (
             "answer for a model. `truncated` says whether more entries "
             "followed."
         ),
-        tool="store_entries",
         examples=(
             Example(
                 {"segment": "nmt/pl_1992_1m_evrf2007", "limit": 20},
@@ -656,7 +650,6 @@ COMMANDS = (
             "unreadable sidecar is the error `data_error` (reason "
             "`invalid_sidecar`)."
         ),
-        tool="store_sidecar",
         examples=(
             Example(
                 {"path": "./data/nmt/pl_1992_1m_evrf2007/N-34-130-D-d-2-4.asc"},

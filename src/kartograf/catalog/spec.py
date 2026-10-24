@@ -93,7 +93,6 @@ _FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _SHORT = re.compile(r"-[A-Za-z]")
 _COMMAND_ID = re.compile(r"[a-z][a-z0-9]* [a-z][a-z0-9-]*")
 _GROUP_NAME = re.compile(r"[a-z][a-z0-9]*")
-_TOOL_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
 
 class _Auto(enum.Enum):
@@ -385,8 +384,6 @@ class Command:
         A data command a project task may run (a key of ``COMMANDS``).
     check_function, check_result_schema : str, optional
         The ``check_*`` twin and its result schema (both or neither).
-    tool : str, optional
-        MCP tool name.
     constraints, examples : tuple
         Rules among the parameters and example calls.
     summary_pl, description_pl : str or callable
@@ -417,7 +414,6 @@ class Command:
     project_task: bool = False
     check_function: str | None = None
     check_result_schema: str | None = None
-    tool: str | None = None
     constraints: tuple[Constraint, ...] = ()
     examples: tuple[Example, ...] = ()
     summary_pl: str = ""
@@ -448,12 +444,12 @@ class Command:
             )
         if self.project_task and self.kind != "data":
             raise ValueError(f"Command {name}: a project task is a data command")
-        if self.tool is not None and not _TOOL_NAME.fullmatch(self.tool):
-            raise ValueError(f"Command {name}: tool {self.tool!r} is not snake_case")
         if self.family is not None and self.family not in FAMILIES:
             raise ValueError(f"Command {name}: unknown family {self.family!r}")
         if self.core and self.family is None:
-            raise ValueError(f"Command {name}: a command of the core family has a tool")
+            raise ValueError(
+                f"Command {name}: a command of the core family needs a family"
+            )
         if self.cardinality not in CARDINALITIES:
             raise ValueError(
                 f"Command {name}: unknown cardinality {self.cardinality!r}"
@@ -494,19 +490,6 @@ class Command:
     def supports_check(self) -> bool:
         """The command has a check of the update state (``check_function``)."""
         return self.check_function is not None
-
-    @property
-    def check_tool(self) -> str | None:
-        """Return the MCP tool that runs the check twin of the command.
-
-        ``check_updates`` for a data command (a project task), ``<group>_check_updates``
-        for the others (``project_check_updates``); ``None`` without a check or a tool.
-        """
-        if self.check_function is None or self.tool is None:
-            return None
-        if self.project_task:
-            return "check_updates"
-        return f"{self.group}_check_updates"
 
     @property
     def task_options(self) -> dict[str, Kind]:

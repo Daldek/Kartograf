@@ -61,8 +61,8 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `store entries` and `store sidecar` are the former `store_overview`, `store_entries` and
   `store_sidecar` (commands that only the API had: they have a CLI now, see Added). The CLI words, the catalog ids
   (`get_catalog(command=...)`), the `command` of `kartograf-error/1` and the hints that
-  name a command change; the MCP tool names and the library functions are unchanged (the
-  tools are renamed with the MCP server rebuild).
+  name a command change; the library functions are unchanged (the MCP tools are renamed, see
+  below).
 - A notice is `{level, code, message}` in every document and in `kartograf.notices.Notice`
   (the AGI-4.2 notice): the key and the attribute `text` are now `message` (the same word
   as in `kartograf-error/1`); the text itself is unchanged (Polish ASCII until the message
@@ -93,15 +93,44 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `kartograf-catalog/1` (its views, `--params`, `group`, `params` and `tables`, the tables of exit
   codes, error codes and schemas) are removed: migrate to `list_commands()` and
   `command_schema(command)`; the twelve data commands are the values of `project add --command`
-  (`project_task` in the declarations). The MCP tool `get_catalog` is `commands_list` and
-  `commands_schema` until the tools are renamed with the MCP server rebuild. The hint of a usage
-  error says `kartograf commands schema --command "<id>"`.
+  (`project_task` in the declarations). The hint of a usage error says
+  `kartograf commands schema --command "<id>"`.
 - The MCP server refuses a path outside `--allow-dir` with the registry code `forbidden`
   (exit code 12 in the error document) instead of `validation_error`, and `kartograf-mcp`
   without the `mcp` package ends with `missing_dependency` (exit code 6, the error document as
   the last line of stderr, hint `uv add "kartograf[mcp]"`) instead of a text line and exit code
   1; `create_server` raises `MissingDependencyError`, not `ImportError`, and
   `kartograf.mcp_server.INSTALL_HINT` is gone.
+- The MCP server is rebuilt on the catalog (ADR-052, AGI section 5). The 29 tools with the old
+  names are gone without aliases; there is one tool per command of the catalog that has a family,
+  39 of them, named by the `operation_id` `kartograf_<group>_<verb>`: `elevation_download` is
+  `kartograf_elevation_download`, `parse_sheet` is `kartograf_sheet_parse`, `find_sheets` is
+  `kartograf_sheet_find`, `commands_list` is `kartograf_commands_list`, `commands_schema` is
+  `kartograf_commands_schema`, `store_overview` is `kartograf_store_overview`, `project_status` is
+  `kartograf_project_status`, and so on; `list_sources` and `list_layers` with a `group` argument are
+  one tool per group (`kartograf_<group>_list_sources`, `kartograf_landcover_list_layers`,
+  `kartograf_soil_list_layers`). The tools `check_updates` and `project_check_updates` and the family
+  `check` are gone: the check is the argument `check_updates` of each tool that writes and has a plan.
+  `--tools` takes `discovery`, `availability`, `data`, `project`, `store` and `core` (the ten tools of
+  the main tasks).
+- The MCP server is read only by default (AGI-1.3). Without `--allow-writes` a tool that writes and
+  has a plan (the twelve data commands and `project download`) is offered as its plan-only variant:
+  no `update`, `plan`, `workers` or `summary`, `check_updates` fixed to `true`, `readOnlyHint: true`,
+  and a call is the plan; `project init`, `project add` and `project remove` are not offered and
+  answer `forbidden` (12), as does an option of a run. Before, every data tool downloaded. Start
+  `kartograf-mcp --allow-writes --allow-dir DIR` to download inside `DIR`; `--allow-writes` needs
+  `--allow-dir` (usage error, exit code 2).
+- Every MCP tool has an `outputSchema` (the result envelope `kartograf-result/1`, self-contained) and
+  the annotations `title`, `readOnlyHint`, `destructiveHint`, `idempotentHint` and `openWorldHint`,
+  all set; `kartograf_commands_list` and `kartograf_commands_schema` carry
+  `_meta["anthropic/alwaysLoad"]`. The descriptions, the descriptions of the properties (the texts of
+  the catalog) and the server instructions are English, within 600 and 4,096 characters. `tools/list`
+  is about 207,000 characters, not 30,000 (ADR-052, decision 9): a client that loads every
+  definition should start the server with `--tools core` (64,000). `kartograf.catalog.tools` has
+  `tool_specs(families, *, allow_writes)` and `hidden_tools`; `Command.tool` and
+  `check_arguments_schema` are removed; `kartograf.mcp_server` has `build_instructions`, and
+  `create_server(allow_writes=)` raises `ValidationError` (not `ValueError`) for an unknown or empty
+  family, a relative `allow_dirs` entry and `cache=True`.
 
 **Added**
 
@@ -139,6 +168,11 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   `MissingDependencyError` (`missing_dependency`, exit code 6: details `extra`, hint `uv add
   "kartograf[<extra>]"`), exported from `kartograf` and listed in the error table of USAGE 9.3
   (ERR §2, DEV-6.5). Only the MCP server raises them.
+- `kartograf-mcp --allow-writes` and `--lang pl|en` (validated and reported on stderr; the server
+  answers in English whatever its value, AGI-9.2); `scripts/generate_output_schema.py` and the
+  generated module `kartograf._output_schema`; the gate test of AGI-5.13 (the server over stdio
+  with the SDK client: names, annotations, schemas, budgets, cold start under 5 seconds, a
+  read-only call, a validation error with the code and the hint).
 - `UnitFailure.code` and `UnitFailure.reason` (the registry code and `details.reason` a
   failed unit stands for: `no_coverage` and `year_out_of_range` are `no_data`, `download`
   and `country` are `source_unavailable`; `kartograf.download.data.FAILURE_CODES`),
@@ -158,8 +192,9 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   the generated module `kartograf._errors` (ERR-3).
 - `KartografError.reason` (class attribute, reported as `details.reason`) and
   `ErrorCodeInfo.reason` in the catalog tables.
-- `scripts/generate_docs.py` writes the exit code and error code tables of
-  `docs/USAGE.md` 9.3 from the code (DOC-9.4); a contract test checks them.
+- `scripts/generate_docs.py` writes the exit code and error code tables, the table of the MCP
+  tools and the instructions of the server in `docs/USAGE.md` 9.3 and 9.6 from the code
+  (DOC-9.4); a contract test checks them.
 
 **Changed**
 

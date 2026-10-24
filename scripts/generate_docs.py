@@ -53,9 +53,55 @@ def error_codes_table() -> str:
     return "\n".join(lines) + "\n"
 
 
+def mcp_tools_table() -> str:
+    """Return the table of the MCP tools (``kartograf.catalog.tools``, AGI-5.2)."""
+    from kartograf.catalog.build import command_entries
+    from kartograf.catalog.tools import hidden_tools, tool_specs
+
+    documents = {entry.name: entry.result.schema for entry in command_entries()}
+    plans = {spec.name for spec in tool_specs(allow_writes=False) if spec.plan_only}
+    hidden = set(hidden_tools(allow_writes=False))
+    lines = [
+        "| Tool | Catalog command | Library function | Families | Document | Hints "
+        "| Without `--allow-writes` |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for spec in tool_specs(allow_writes=True):
+        hints = spec.annotations
+        shown = ", ".join(
+            label
+            for label, value in (
+                ("RO", hints.read_only_hint),
+                ("D", hints.destructive_hint),
+                ("I", hints.idempotent_hint),
+                ("OW", hints.open_world_hint),
+            )
+            if value
+        )
+        if spec.name in hidden:
+            mode = "not offered"
+        else:
+            mode = "plan" if spec.name in plans else "same"
+        families = ", ".join(f"`{family}`" for family in spec.families)
+        lines.append(
+            f"| `{spec.name}` | `{spec.command}` | `{spec.function}` | {families} "
+            f"| `{documents[spec.command]}` | {shown} | {mode} |"
+        )
+    return "\n".join(lines) + "\n"
+
+
+def mcp_instructions_block() -> str:
+    """Return the instructions of the server in a ``text`` fence (AGI-5.10)."""
+    from kartograf.mcp_server import INSTRUCTIONS
+
+    return f"```text\n{INSTRUCTIONS}\n```\n"
+
+
 TABLES: dict[str, Callable[[], str]] = {
     "exit-codes": exit_codes_table,
     "error-codes": error_codes_table,
+    "mcp-tools": mcp_tools_table,
+    "mcp-instructions": mcp_instructions_block,
 }
 
 

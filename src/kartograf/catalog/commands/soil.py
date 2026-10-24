@@ -212,7 +212,6 @@ COMMANDS = (
         project_task=True,
         check_function="check_soil",
         check_result_schema="kartograf-plan/1",
-        tool="soil_download",
         constraints=(_AREA_RULE,),
         examples=(
             Example(
@@ -267,7 +266,6 @@ COMMANDS = (
         project_task=True,
         check_function="check_hsg",
         check_result_schema="kartograf-plan/1",
-        tool="soil_hsg",
         constraints=(_AREA_RULE,),
         examples=(
             Example(
@@ -320,7 +318,6 @@ COMMANDS = (
             "download` with the units of each property. Use it to choose a "
             "layer."
         ),
-        tool="list_layers",
         summary_pl="Wypisz wlasciwosci, glebokosci i statystyki SoilGrids",
         description_pl=(
             "Wypisz wlasciwosci, glebokosci i statystyki SoilGrids "

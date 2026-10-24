@@ -313,7 +313,6 @@ COMMANDS = (
         project_task=True,
         check_function="check_landcover",
         check_result_schema="kartograf-plan/1",
-        tool="landcover_download",
         constraints=_DOWNLOAD_CONSTRAINTS,
         examples=(
             Example(
@@ -395,7 +394,6 @@ COMMANDS = (
             "BDOO classes per archive year or the CORINE years. Use it to "
             "choose `layers` and `year` for `landcover download`."
         ),
-        tool="list_layers",
         summary_pl="Wypisz warstwy wybranego produktu",
         description_pl=(
             "Wypisz warstwy BDOT10k, ZABAGED, Data50 i Data250, klasy BDOO "

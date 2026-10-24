@@ -156,7 +156,6 @@ def _commands() -> tuple[Command, ...]:
             project_task=True,
             check_function="check_data",
             check_result_schema="kartograf-plan/1",
-            tool="elevation_download",
             constraints=(
                 Constraint(
                     "one_of",
@@ -188,7 +187,6 @@ def _commands() -> tuple[Command, ...]:
             "list_sources",
             "kartograf-sources/1",
             (_params()[10],),
-            tool="list_sources",
             summary_pl="Wypisz zrodla",
             description="The registered sources.",
             description_pl="Zrodla z rejestru",

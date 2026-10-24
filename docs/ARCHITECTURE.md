@@ -529,7 +529,7 @@ kartograf/
 ├── commands.py          # warstwa komend (KB-2..KB-5): parse_command, validate_command,
 │                        # format_command, run_command, check_command, CommandCall
 ├── mcp_server.py        # serwer MCP (stdio; extra `mcp`, skrypt kartograf-mcp): create_server,
-│                        # main, INSTRUCTIONS; jedyny modul dotykajacy SDK
+│                        # main, build_instructions, INSTRUCTIONS; jedyny modul dotykajacy SDK
 ├── catalog/             # Katalog komend - jedyne zrodlo prawdy (sekcja 4.11), bez importu cli/mcp
 │   ├── spec.py          # Command, Param, Constraint, Example, Group (dane; dostawcy wartosci z rejestru)
 │   ├── model.py         # dokumenty kartograf-command-list/1 i kartograf-commands/1: CommandList, GroupRow,
@@ -542,7 +542,7 @@ kartograf/
 │   ├── cliparser.py     # parser argparse z deklaracji: build_parser, parse_command_line, parsed_options
 │   ├── formatting.py    # kanoniczna linia komendy (format_command_line)
 │   ├── hints.py         # example_for, usage_hint (przyklad w podpowiedzi bledu)
-│   ├── tools.py         # narzedzia MCP jako dane: tool_specs, check_arguments_schema, FAMILIES
+│   ├── tools.py         # narzedzia MCP jako dane: tool_specs, hidden_tools, task_paths, parse_families, FAMILIES
 │   └── commands/        # deklaracje, jeden modul = grupa (elevation, imagery, landcover, soil, boundaries,
 │                        # cadastre, models3d, hydro, names, maps, geodesy, project, misc: parse, catalog,
 │                        # cache i komendy tylko-API); _collection.py = ksztalt grup kolekcji
@@ -3896,24 +3896,41 @@ SIGTERM: `sigterm_interrupts()` (CLI `main`) rzuca w watku glownym `Terminated` 
 `KeyboardInterrupt`; pierwszy sygnal przywraca domyslna reakcje), a `error_report` daje
 `terminated`/143. Poza `main` (biblioteka, serwer MCP) sygnal nie jest przechwytywany.
 
-**Serwer MCP (`src/kartograf/mcp_server.py`, `catalog/tools.py`).** `catalog/tools.py` zamienia
-deklaracje na specyfikacje 29 narzedzi (nazwa, krotki opis, schemat wejscia JSON Schema
-2020-12 bez `$ref`, adnotacje, funkcja) bez `mcp`; `mcp_server.py` wystawia je przez
-niskopoziomowy `mcp.server.Server` (stdio): wynik `CallToolResult(content=<zwarty JSON>,
-structured_content=<to_dict() koperty kartograf-result/1>, is_error=<blad>)`, bledy jako `kartograf-error/1`,
-walidacja wejscia schematem (`jsonschema`), regula sciezek bezwzglednych (`--allow-dir`),
-postep przez `report_progress`, najwyzej 4 jednoczesne wywolania sieciowe i cache serwera w
-katalogu cache uzytkownika. SDK `mcp` jest zaleznoscia opcjonalna (extra `mcp`), a dotyka go
-tylko `mcp_server.py` i to leniwie. Budzet kontekstu agenta (D22): `tools/list` <= 30 000 znakow
-(opisy narzedzi pisane na wywolanie, wspolne znaczenia w `instructions`), `list_commands()` <= 20 000
-znakow; pilnuja go testy. Uzycie i konfiguracja klientow: USAGE 9.6.
+**Serwer MCP (`src/kartograf/mcp_server.py`, `catalog/tools.py`, `_output_schema.py`).** Jedno narzedzie na
+komende katalogu z rodzina (39), nazwane `operation_id` (`kartograf_<grupa>_<komenda>`, AGI-5.2).
+`catalog/tools.py` buduje je z deklaracji i `command_entries()` (opisy, wartosci `enum`, granice,
+przyklady, `dependentRequired` `bbox` -> `bbox_crs`, schemat JSON 2020-12 z
+`additionalProperties: false`; `anyOf` dla wartosci per kraj) i z trybu serwera:
+`tool_specs(allow_writes=)` daje przy zapisie komendy takie, jak zadeklarowano, a bez zapisu komendy z
+planem (12 danych i `project download`) w wariancie tylko-plan (bez opcji przebiegu `update`, `plan`,
+`workers`, `summary`; `check_updates` ustalone na `true`; `readOnlyHint: true`), a komendy zapisujace bez
+planu (`project init|add|remove`) znikaja z listy (`hidden_tools`: wywolanie to `forbidden`).
+`_output_schema.py` to `outputSchema` wszystkich narzedzi: schemat `result-1` z `schemas/nogat/`
+uczyniony samodzielnym (`scripts/generate_output_schema.py`, test kontraktowy: modul == generator i te
+same werdykty co schemat Nogat). Bez `mcp` (modul nie importuje SDK).
+
+`mcp_server.py` wystawia je przez niskopoziomowy `mcp.server.Server` (stdio): wynik
+`CallToolResult(content=<zwarty JSON>, structured_content=<to_dict() koperty kartograf-result/1>,
+is_error=<blad>)`, bledy jako `kartograf-error/1` (`forbidden` dla sciezki poza `--allow-dir`, dla
+narzedzia ukrytego i dla opcji przebiegu w wariancie tylko-plan; `missing_dependency` bez SDK),
+kolejnosc kontroli: odmowa zapisu, schemat wejscia (`jsonschema`), regula sciezek bezwzglednych
+(`--allow-dir`, tez sciezki zagniezdzone w opcjach `project add`), opcje przebiegu obok `check_updates`,
+`validate_command`; postep przez `report_progress`, najwyzej 4 jednoczesne wywolania sieciowe (te z
+`openWorldHint`) i cache serwera w katalogu cache uzytkownika. SDK `mcp` jest zaleznoscia opcjonalna
+(extra `mcp`), a dotyka go tylko `mcp_server.py` i to leniwie. Instrukcje serwera (po angielsku, do 4096
+znakow) buduje `build_instructions` z nazw narzedzi katalogu i stanu serwera. Budzet kontekstu:
+`tools/list` ma ok. 207 000 znakow (87 000 bez `outputSchema`; `--tools core` 64 000 i 34 000), bo kazda
+wlasciwosc niesie opis z katalogu, a kazde narzedzie `outputSchema`; budzet 30 000 znakow z ADR-046 (D22)
+przestal obowiazywac (ADR-052, decyzja 9); `list_commands()` i strona wyniku <= 20 000 znakow (DOC-1.7);
+pilnuja tego testy (`tests/contract/test_mcp_tools.py`, test bramy AGI-5.13 w
+`tests/integration/test_mcp_server.py`). Uzycie i konfiguracja klientow: USAGE 9.6.
 
 **Nowa komenda przez katalog.** Deklaracja w `catalog/commands/<modul>.py` (`Command` z
-`function`/`check_function` z `kartograf.__all__`, `result_schema`, `tool`, parametrami,
+`function`/`check_function` z `kartograf.__all__`, `result_schema`, `family`, `core`, parametrami,
 ograniczeniami i przykladami), handler w `cli/_handlers.py::HANDLERS` (grupa kolekcji: nazwa
-w `COLLECTION_GROUPS`), dla komendy danych pozycja w `project/commands.py::COMMANDS`, a dla
-narzedzia MCP wpisy `_BRIEF` w `catalog/tools.py` (nowy parametr nie zbuduje narzedzi, dopoki
-go nie dostanie). Przepis krok po kroku: DEVELOPMENT_STANDARDS 17.2.
+w `COLLECTION_GROUPS`), dla komendy danych pozycja w `project/commands.py::COMMANDS`; narzedzie MCP
+powstaje z deklaracji samo (`catalog/tools.py`: nazwa, opisy, schemat, adnotacje z `effects`), a test
+kontraktowy pilnuje jego 600 znakow opisu. Przepis krok po kroku: DEVELOPMENT_STANDARDS 17.2.
 
 ---
 
