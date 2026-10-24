@@ -10,6 +10,40 @@ projekt stosuje [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 Everything below ships in 0.8.0: the release pull request renames this heading to
 `[0.8.0] - <date>` (REL-2.1).
 
+### Nogat standard 2.1 adoption (so far)
+
+**Breaking**
+
+- The package lives in `src/kartograf/` (ECO-011). Import paths do not change;
+  repeat an editable install made before (`uv sync --locked --all-extras`).
+- `kartograf.__version__` is `0.8.0.dev0` on `develop` (REL-1.1); the release
+  pull request sets `0.8.0`. A requirement `kartograf>=0.8.0` does not accept the
+  development version: pin the commit until the tag exists.
+- The `dev` extra is the `dev` dependency group; environments are installed with
+  `uv sync --locked --all-extras` from the committed `uv.lock` (DEV-6.2, DEV-6.3).
+- `docs/DECISIONS.md` has LF line endings (DEV-14.1).
+
+**Added**
+
+- `kartograf.testing`: `build_fixture_store`, `build_project` and `make_sidecar`
+  build offline fixtures of the store, the project manifest and the
+  `kartograf-meta/1` sidecar with the real writers (DEV-10.6).
+- The Nogat gate (`scripts/gate.sh`, `scripts/check-commits.sh`), CI, live-test
+  and Dependabot workflows (DEV-7.6, DEV-7.7, DEV-13.6).
+- `schemas/nogat/` (copies of the Nogat error registry and agent schemas) and
+  the generated module `kartograf._errors` (ERR-3).
+
+**Changed**
+
+- Docstrings follow the numpy convention (ruff `D`) and `mypy --strict` passes
+  over `src` and `tests` (DEV-7.2, DEV-7.3); coverage floor 80 (DEV-7.5).
+- `tests/` is split into `unit`, `integration`, `contract` and `support`.
+
+**Fixed**
+
+- A CRS label with surrounding spaces (`" EPSG:5514 "`) no longer fails in the
+  pinned transform with PROJ 9.8.
+
 ### Zmiany lamiace (BREAKING)
 
 - Tryb domyslny (bez `--check-updates`/`--upgrade`) nie pyta zrodla
