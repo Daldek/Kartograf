@@ -3702,7 +3702,7 @@ Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: kartograf-download
 
 - **`llms.txt`** w korzeniu repozytorium (format llmstxt.org, po polsku, < 150 linii): czym
   jest Kartograf, instalacja, typowe zadania CLI, biblioteki i MCP z poleceniami, ktore parsuje
-  prawdziwy parser (test `tests/test_llms_txt.py`), kody bledow z tabeli 9.3 i linki do
+  prawdziwy parser (test `tests/contract/test_llms_txt.py`), kody bledow z tabeli 9.3 i linki do
   dokumentacji. Agent spoza repozytorium zaczyna od niego, a potem od `kartograf catalog --json`.
 - **`python -m kartograf`** dziala jak `kartograf` (srodowisko bez katalogu skryptow na
   `PATH`: worktree, `uvx`); `python -m kartograf.cli.commands` tez.
