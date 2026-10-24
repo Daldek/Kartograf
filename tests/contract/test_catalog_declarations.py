@@ -175,8 +175,8 @@ def test_command_derives_group_name_and_check_support():
         check_function="check_data",
         check_result_schema="kartograf-plan/1",
     )
-    root = _command(id="parse", function="describe_sheet", kind="query")
-    api_only = _command(id="find_sheets", cli=None, kind="query")
+    root = _command(id="sheet parse", function="describe_sheet", kind="query")
+    api_only = _command(id="sheet find", cli=None, kind="query")
 
     assert (plain.group, plain.name, plain.cli_words) == (
         "elevation",
@@ -185,8 +185,12 @@ def test_command_derives_group_name_and_check_support():
     )
     assert plain.supports_check is False
     assert with_check.supports_check is True
-    assert (root.group, root.name, root.cli_words) == (None, "parse", "parse")
-    assert (api_only.group, api_only.cli_words) == (None, None)
+    assert (root.group, root.name, root.cli_words) == (
+        "sheet",
+        "parse",
+        "sheet parse",
+    )
+    assert (api_only.group, api_only.cli_words) == ("sheet", None)
 
 
 @pytest.mark.parametrize(
@@ -214,10 +218,10 @@ def test_command_params_must_have_unique_names():
 
 def test_api_only_command_declares_no_cli_flag():
     with pytest.raises(ValueError, match="flag"):
-        _command(Param("segment", "str"), id="store_entries", cli=None)
+        _command(Param("segment", "str"), id="store entries", cli=None)
 
     api_only = _command(
-        Param("segment", "str", flag=None), id="store_entries", cli=None
+        Param("segment", "str", flag=None), id="store entries", cli=None
     )
     assert api_only.params[0].cli_flag is None
 
@@ -289,7 +293,7 @@ _PROJECT_COMMANDS = (
     "project status",
     "project verify",
 )
-_API_ONLY = ("find_sheets", "store_overview", "store_entries", "store_sidecar")
+_API_ONLY = ("sheet find", "store overview", "store entries", "store sidecar")
 
 
 def test_project_cache_parse_catalog_and_api_only_commands_are_declared():
@@ -298,8 +302,8 @@ def test_project_cache_parse_catalog_and_api_only_commands_are_declared():
         "cache stats",
         "cache path",
         "cache clear",
-        "parse",
-        "catalog",
+        "sheet parse",
+        "commands list",
         *_API_ONLY,
     } <= set(_IDS)
     # only the API has these four: no CLI words, no flag, no parser
@@ -364,11 +368,11 @@ def test_project_download_has_the_update_modes_but_no_plan():
 
 
 def test_catalog_command_offers_the_groups_and_the_commands_of_the_catalog():
-    params = {p.name: p for p in _COMMAND_BY_ID["catalog"].params}
+    params = {p.name: p for p in _COMMAND_BY_ID["commands list"].params}
 
     groups = resolve(params["group"].allowed)
     assert groups == [g.name for g in _DECLARED.groups]
-    assert groups[-2:] == ["cache", "config"] and "project" in groups
+    assert groups[-3:] == ["cache", "commands", "config"] and "project" in groups
     assert resolve(params["command"].allowed) == _IDS
     assert (params["group"].positional, params["group"].nargs) == (True, "?")
     assert (params["command"].positional, params["command"].nargs) == (True, "?")
@@ -376,7 +380,7 @@ def test_catalog_command_offers_the_groups_and_the_commands_of_the_catalog():
 
 
 def test_the_sheet_search_requires_the_choice_of_sheets_and_one_area():
-    find = _COMMAND_BY_ID["find_sheets"]
+    find = _COMMAND_BY_ID["sheet find"]
     params = {p.name: p for p in find.params}
 
     assert {name for name, p in params.items() if p.required} == {
@@ -394,13 +398,13 @@ def test_the_sheet_search_requires_the_choice_of_sheets_and_one_area():
 def test_the_store_reads_require_what_the_spec_requires():
     required = {
         command_id: {p.name for p in _COMMAND_BY_ID[command_id].params if p.required}
-        for command_id in ("store_overview", "store_entries", "store_sidecar")
+        for command_id in ("store overview", "store entries", "store sidecar")
     }
 
     assert required == {
-        "store_overview": {"output_dir"},
-        "store_entries": {"output_dir", "segment", "limit"},
-        "store_sidecar": {"path"},
+        "store overview": {"output_dir"},
+        "store entries": {"output_dir", "segment", "limit"},
+        "store sidecar": {"path"},
     }
 
 
@@ -507,7 +511,7 @@ def _collected(group: str, key: str) -> set[str]:
 def _expected_allowed(command_id: str, name: str) -> list[str] | set[str]:
     """The allowed values of a registry parameter, read from the registry in
     another way than the declaration does (a set: the order is the registry's)."""
-    if command_id == "find_sheets":  # the sheet search takes the Polish CRSs
+    if command_id == "sheet find":  # the sheet search takes the Polish CRSs
         scales_2000 = [s for s in SCALE_HIERARCHY_2000 if s not in _SCALES_1992]
         return {
             "bbox_crs": list(PL_BBOX_CRS),

@@ -555,8 +555,8 @@ def _offline_lines(project: Path, base: Path) -> dict[str, list[str]]:
         **{f"{group} list-sources": [group, "list-sources"] for group in SOURCE_GROUPS},
         "landcover list-layers": ["landcover", "list-layers", "--product", "corine"],
         "soil list-layers": ["soil", "list-layers"],
-        "parse": ["parse", "N-34-130-D", "--hierarchy", "--children"],
-        "catalog": ["catalog", "soil"],
+        "sheet parse": ["sheet", "parse", "N-34-130-D", "--hierarchy", "--children"],
+        "commands list": ["commands", "list", "soil"],
         "cache stats": ["cache", "stats"],
         "cache path": ["cache", "path"],
         "cache clear": ["cache", "clear"],
@@ -628,10 +628,10 @@ def test_every_cli_command_has_a_json_test():
     ("argv", "document"),
     [
         (
-            ["parse", "N-34-130-D", "--hierarchy", "--descendants", "1:25000"],
+            ["sheet", "parse", "N-34-130-D", "--hierarchy", "--descendants", "1:25000"],
             lambda: describe_sheet("N-34-130-D", hierarchy=True, descendants="1:25000"),
         ),
-        (["parse", "CTES96"], lambda: describe_sheet("CTES96")),
+        (["sheet", "parse", "CTES96"], lambda: describe_sheet("CTES96")),
         (["elevation", "list-sources"], lambda: list_sources(group="elevation")),
         (["geodesy", "list-sources"], lambda: list_sources(group="geodesy")),
         (
@@ -660,7 +660,7 @@ def test_json_is_the_document_of_the_library_function(argv, document, capsys):
 def test_parse_prints_no_text_before_an_error(capsys):
     """The code is described before anything is printed: a scale that does not
     exist is the error alone (stdout is what a script can use or nothing)."""
-    assert main(["parse", SHEET, "--descendants", "1:77"]) == 2
+    assert main(["sheet", "parse", SHEET, "--descendants", "1:77"]) == 2
 
     captured = capsys.readouterr()
     assert captured.out == ""

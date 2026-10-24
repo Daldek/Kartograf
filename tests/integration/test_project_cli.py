@@ -468,7 +468,7 @@ def test_add_selection_error_matches_public_api_without_store_changes(tmp_path, 
 @pytest.mark.parametrize(
     "invalid",
     [
-        ["parse"],
+        ["sheet", "parse"],
         ["soil", "list-layers"],
         ["elevation", "list-sources"],
         # the report writes nothing: not a data command (no ``_task``)

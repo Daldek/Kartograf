@@ -36,7 +36,7 @@ Kartograf to narzędzie CLI + biblioteka Python oferujące:
 4. **Automatic Processing** - scalanie warstw BDOT10k, kalkulacja HSG, wycinek NMT/NMPT z WCS GUGiK z maska ladu PRG i lokalna reprojekcja (`--cutout --horizontal-crs`)
 5. **Provenance** - kanoniczny układ katalogów `data/`, metadane `<plik>.meta.json` dla pobrań do magazynu, jawny wybór zakresu kampanii GUGiK
 6. **Secure Auth** - Auth Proxy dla izolacji credentials CLMS
-7. **Agent-ready** - `--json` w każdej komendzie i dokumenty `kartograf-*/1` z biblioteki, katalog komend (`kartograf catalog`), serwer MCP (`kartograf[mcp]`), `llms.txt` (ADR-046; sekcja 3.27)
+7. **Agent-ready** - `--json` w każdej komendzie i dokumenty `kartograf-*/1` z biblioteki, katalog komend (`kartograf commands list`), serwer MCP (`kartograf[mcp]`), `llms.txt` (ADR-046; sekcja 3.27)
 
 ### 1.3 Target Users
 
@@ -198,8 +198,8 @@ print(complete[0].download_hint if complete else availability.to_json())
 
 #### CLI Commands
 ```bash
-kartograf parse N-34-130-D-d-2-4
-kartograf parse N-34-130-D --hierarchy
+kartograf sheet parse N-34-130-D-d-2-4
+kartograf sheet parse N-34-130-D --hierarchy
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet N-34-130-D --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # godło grubsze -> arkusze 1:10000 (bez --scale)
 kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # PL-2000: skala arkuszy GUGiK (USAGE 1.6)
@@ -1349,7 +1349,7 @@ poprawić błąd bez parsowania tekstu.
   albo dysku; `ok: false`), 2 (błędne dane wejściowe i użycie), 130 (Ctrl-C), 143 (SIGTERM);
   `ValidationError` niesie `option` i `allowed`, a podpowiedź (`hint`) dozwolone
   wartości i przykład komendy. Jedna tabela kodów: `docs/USAGE.md` 9.3.
-- Katalog komend (`kartograf catalog`, `get_catalog()`, `kartograf-catalog/1`):
+- Katalog komend (`kartograf commands list`, `get_catalog()`, `kartograf-catalog/1`):
   grupy, produkty, komendy, parametry (flaga, argument API, rodzaj, wymagany,
   dozwolone wartości), ograniczenia i przykłady; jedyne źródło prawdy: parser CLI,
   opcje projektu i schematy narzędzi MCP powstają z deklaracji. Warstwa komend:
@@ -1367,7 +1367,7 @@ poprawić błąd bez parsowania tekstu.
 
 #### CLI Commands
 ```bash
-kartograf catalog --json
+kartograf commands list --json
 kartograf elevation availability --product nmt --sheet N-34-130-D-d-2-4 --json
 claude mcp add kartograf -- kartograf-mcp
 ```

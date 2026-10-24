@@ -4,7 +4,7 @@ Kartograf pobiera dane przestrzenne z publicznych uslug GUGiK (PL), CUZK (CZ),
 Copernicus i ISRIC (NMT/NMPT, ortofotomapa, LAZ, BDOT10k, CORINE, SoilGrids,
 HSG) i zapisuje je w ukladzie `data/` z sidecarem metadanych. Dziala jako CLI
 `kartograf`, biblioteka Python i serwer MCP `kartograf-mcp` (interfejs dla
-agentow AI: `llms.txt`, `kartograf catalog --json`); jest czescia toolchainu
+agentow AI: `llms.txt`, `kartograf commands list --json`); jest czescia toolchainu
 hydrologicznego (Hydrograf, Hydrolog, IMGWTools). Wprowadzenie: `README.md`;
 zakres: `docs/SCOPE.md`.
 
@@ -49,7 +49,7 @@ repozytoriach, ktorzy edytuja Kartografa:
   diffu przez uzytkownika i `scripts/gate.sh` zielony; tag dopiero po jawnej
   zgodzie uzytkownika;
 - interfejs maszynowy Kartografa: `llms.txt` (spis dla agentow),
-  `kartograf catalog --json` (komendy, parametry, dozwolone wartosci,
+  `kartograf commands list --json` (komendy, parametry, dozwolone wartosci,
   przyklady), `--json` w kazdej komendzie (dokumenty `kartograf-*/1`, blad
   `kartograf-error/1`, kody wyjscia z rejestru bledow Nogat) i serwer MCP `kartograf-mcp`
   (`kartograf[mcp]`); opis: `docs/USAGE.md`, sekcja 9;
@@ -86,4 +86,4 @@ repozytoriach, ktorzy edytuja Kartografa:
 | Przyklady CLI i biblioteki, wynik pobrania, kampanie, CLMS, znane problemy | `docs/USAGE.md` 1-7 |
 | Decyzje i ich erraty (indeks na poczatku pliku) | `docs/DECISIONS.md` |
 | Historia zmian per wydanie | `docs/CHANGELOG.md` |
-| Pelna lista opcji CLI / publiczne API | `kartograf <grupa> <komenda> --help` albo `kartograf catalog --json` / `kartograf/__init__.py` (`__all__`) |
+| Pelna lista opcji CLI / publiczne API | `kartograf <grupa> <komenda> --help` albo `kartograf commands list --json` / `kartograf/__init__.py` (`__all__`) |

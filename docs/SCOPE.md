@@ -358,8 +358,8 @@ i ZTM (2.15), Bodove pole i QGZU-2013 (2.16).
 
 ```bash
 # Komendy:
-kartograf parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
-kartograf parse 6.179.12.20               # PL-2000 auto-detekcja
+kartograf sheet parse <godlo>                    # info o godle (PL-1992 lub PL-2000)
+kartograf sheet parse 6.179.12.20               # PL-2000 auto-detekcja
 kartograf elevation download --sheet <godlo> --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMT
 kartograf elevation download --sheet <godlo> --product nmpt --resolution 1m --vertical-crs EVRF2007 -o ./data # pobierz NMPT (--resolution wymagane od 0.8.0)
 kartograf imagery download --sheet <godlo> --product orto -o ./data # pobierz ortofoto
@@ -434,7 +434,7 @@ kartograf project download                 # przypnij wersje zadan; --check-upda
 kartograf project status                   # istnienie i rozmiar, bez czytania danych
 kartograf project verify                   # SHA-256 plikow i sidecarow
 kartograf cache stats|clear|path           # cache metadanych (SQLite)
-kartograf catalog --json                   # katalog komend (grupy, komendy, parametry, dozwolone wartości, przykłady); get_catalog() (ADR-046)
+kartograf commands list --json                   # katalog komend (grupy, komendy, parametry, dozwolone wartości, przykłady); get_catalog() (ADR-046)
 kartograf elevation availability --product nmt --sheet <godlo> --json # --json w każdej komendzie: jeden dokument kartograf-<rodzaj>/1, błąd kartograf-error/1, kody wyjścia 0/1/2/130/143
 kartograf-mcp                              # serwer MCP (stdio; extra `kartograf[mcp]`): 29 narzędzi 1:1 z komendami (USAGE 9.6)
 # Pełna lista opcji: kartograf <grupa> <komenda> --help
@@ -863,7 +863,7 @@ from kartograf import (
 #   29 narzędzi 1:1 z komendami (w tym `check_updates`), wynik = dokument `--json`,
 #   `is_error` = kod wyjścia CLI != 0, postęp przez notyfikacje MCP, ścieżki bezwzględne,
 #   `--tools`, `--allow-dir`, bez wartości domyślnych wpływających na dane.
-# Katalog komend: `kartograf catalog [--json]`, `get_catalog()` — jedyne źródło prawdy
+# Katalog komend: `kartograf commands list [--json]`, `get_catalog()` — jedyne źródło prawdy
 # o komendach (parser CLI, opcje projektu, schematy narzędzi MCP); warstwa komend
 # `parse_command`, `validate_command`, `format_command`, `run_command`, `check_command`
 # (KB-1..KB-5 Archiwisty). Pliki dla agentów: `llms.txt`, `kartograf/py.typed`,
@@ -1295,7 +1295,7 @@ kartograf/
     ├── _handlers.py           # HANDLERS: id komendy -> handler
     ├── _args.py               # library_arguments: flagi -> argumenty funkcji biblioteki (przez katalog)
     ├── _json.py               # tryb --json: dokument na stdout, kody wyjścia
-    ├── parse_cmd.py           # `kartograf parse` -> describe_sheet
+    ├── parse_cmd.py           # `kartograf sheet parse` -> describe_sheet
     ├── download_cmd.py        # `elevation download` / `imagery download` -> download_data/check_data
     ├── availability_cmd.py    # `elevation availability` -> check_availability (tabela, --details, --json)
     ├── landcover_cmd.py       # `landcover download` -> download_landcover/check_landcover
@@ -1305,7 +1305,7 @@ kartograf/
     ├── soil_cmd.py            # `soil download` -> download_soil/check_soil; `soil hsg` -> calculate_hsg/check_hsg
     ├── project_cmd.py         # `kartograf project` -> API projektu (ADR-040); `project add` przez parse_command
     ├── cache_cmd.py           # `kartograf cache` -> get_cache_info/get_cache_path/clear_cache
-    ├── catalog_cmd.py         # `kartograf catalog` -> get_catalog
+    ├── catalog_cmd.py         # `kartograf commands list` -> get_catalog
     └── commands.py            # Fasada zgodności — entry point `main` (błędy -> error_report, kody 0/1/2/130/143)
 ```
 

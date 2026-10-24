@@ -68,7 +68,7 @@ _SCHEMA_NAME = re.compile(SCHEMA_PATTERN)
 _PARAM_NAME = re.compile(r"[a-z][a-z0-9_]*")
 _FLAG = re.compile(r"--[a-z][a-z0-9]*(?:-[a-z0-9]+)*")
 _SHORT = re.compile(r"-[A-Za-z]")
-_COMMAND_ID = re.compile(r"[a-z][a-z0-9_]*(?: [a-z][a-z0-9-]*)?")
+_COMMAND_ID = re.compile(r"[a-z][a-z0-9]* [a-z][a-z0-9-]*")
 _GROUP_NAME = re.compile(r"[a-z][a-z0-9]*")
 _TOOL_NAME = re.compile(r"[a-z][a-z0-9_]*")
 
@@ -290,9 +290,9 @@ class Command:
     Parameters
     ----------
     id : str
-        ``<group> <name>`` of a CLI command (the key of ``COMMANDS`` of the
-        project), ``parse``/``catalog``, or the function name of an API-only
-        command.
+        ``<group> <verb>`` as typed in the CLI (AGI-2.2): the key of ``COMMANDS`` of
+        the project for a data command; an API-only command has the id it would
+        have as a CLI command.
     summary : str
         One line, at most 120 characters (the command's ``help``).
     kind : {"data", "query", "manage"}
@@ -342,7 +342,7 @@ class Command:
         """Check the command declaration."""
         name = self.id
         if not _COMMAND_ID.fullmatch(name):
-            raise ValueError(f"Command {name!r}: id is '<group> <name>' or one word")
+            raise ValueError(f"Command {name!r}: the id is '<group> <verb>'")
         if self.kind not in COMMAND_KINDS:
             raise ValueError(f"Command {name}: unknown kind {self.kind!r}")
         unknown = [effect for effect in self.effects if effect not in EFFECTS]
@@ -371,13 +371,9 @@ class Command:
                     )
 
     @property
-    def group(self) -> str | None:
-        """Return the CLI group (``elevation``).
-
-        ``None`` for ``parse``, ``catalog`` and the API-only commands.
-        """
-        first, space, _ = self.id.partition(" ")
-        return first if space else None
+    def group(self) -> str:
+        """Return the group of the id (``elevation``), a CLI group or not."""
+        return self.id.partition(" ")[0]
 
     @property
     def name(self) -> str:
@@ -405,7 +401,7 @@ class Command:
             return None
         if self.project_task:
             return "check_updates"
-        return f"{self.group}_check_updates" if self.group else "check_updates"
+        return f"{self.group}_check_updates"
 
     @property
     def task_options(self) -> dict[str, Kind]:
@@ -460,11 +456,7 @@ def check_declarations(commands: Sequence[Command], groups: Sequence[Group]) -> 
     names = [group.name for group in groups]
     for duplicate in sorted({n for n in names if names.count(n) > 1}):
         raise ValueError(f"group {duplicate!r} is declared twice")
-    owned = {
-        command.group
-        for command in commands
-        if command.cli is not None and command.group is not None
-    }
+    owned = {command.group for command in commands if command.cli is not None}
     for missing in sorted(owned - set(names)):
         raise ValueError(f"group {missing!r} has commands but no declaration")
     for group in groups:

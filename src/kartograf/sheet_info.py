@@ -1,7 +1,7 @@
 """
 Sheet codes as documents: ``describe_sheet`` and ``find_sheets`` (spec 5.4.4-5.4.5).
 
-``describe_sheet`` is the library form of ``kartograf parse``: what a sheet code
+``describe_sheet`` is the library form of ``kartograf sheet parse``: what a sheet code
 is - its system (PL-1992, PL-2000, CZ SM5, TM33 tile or ZTM map sheet), scale,
 parts, native CRS and bounds, the commands that take it in ``--sheet`` and, on
 request, its hierarchy, children and descendants. ``find_sheets`` lists the
@@ -65,7 +65,7 @@ class SheetDescendants:
 
 @dataclass(frozen=True)
 class SheetInfo(Document):
-    """What a sheet code is (``kartograf-sheet/1``; ``kartograf parse``).
+    """What a sheet code is (``kartograf-sheet/1``; ``kartograf sheet parse``).
 
     Attributes
     ----------
@@ -234,7 +234,7 @@ def describe_sheet(
     children: bool = False,
     descendants: str | None = None,
 ) -> SheetInfo:
-    """Describe what a sheet code is: ``kartograf parse`` as a document.
+    """Describe what a sheet code is: ``kartograf sheet parse`` as a document.
 
     Parameters
     ----------

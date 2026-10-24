@@ -129,7 +129,7 @@ def _commands() -> tuple[Command, ...]:
             (),
         ),
         Command(
-            "parse",
+            "sheet parse",
             "Rozpoznaj godlo",
             "query",
             "describe_sheet",
@@ -138,7 +138,7 @@ def _commands() -> tuple[Command, ...]:
             tool="parse_sheet",
         ),
         Command(
-            "find_sheets",
+            "sheet find",
             "Godla obszaru",
             "query",
             "find_sheets",
@@ -161,6 +161,7 @@ def _groups() -> tuple[Group, ...]:
                 ("nmpt", "Numeryczny Model Pokrycia Terenu; PL i CZ"),
             ],
         ),
+        Group("sheet", "Godla arkuszy", "Godla arkuszy PL i CZ"),
         Group("cache", "Cache metadanych", "Lokalny cache metadanych", position=2),
     )
 
@@ -197,7 +198,7 @@ def test_catalog_document_keys():
     ]
 
     # every view has the same keys: the overview shortens the records, not the document
-    for catalog in (_build(), _build(group="elevation"), _build(command="parse")):
+    for catalog in (_build(), _build(group="elevation"), _build(command="sheet parse")):
         assert list(catalog.to_dict()) == keys
     assert catalog.schema == "kartograf-catalog/1"
     assert catalog.language == "pl"
@@ -210,7 +211,7 @@ def test_view_is_the_overview_until_something_is_selected_or_asked_for():
     assert _build(tables=True).view == "overview"
     for view in (
         {"group": "elevation"},
-        {"command": "parse"},
+        {"command": "sheet parse"},
         {"params": True},
         {"group": "elevation", "params": False},
     ):
@@ -239,8 +240,8 @@ def test_overview_objects_are_complete_and_without_params():
         "elevation download",
         "elevation list-sources",
         "cache stats",
-        "parse",
-        "find_sheets",
+        "sheet parse",
+        "sheet find",
     ]
     assert all(
         c.params is None and c.constraints is None and c.examples is None
@@ -259,7 +260,7 @@ def test_overview_document_is_a_short_projection():
     assert document["view"] == "overview"
     assert [list(g) for g in document["groups"]] == [
         ["name", "summary", "products"]
-    ] * 2
+    ] * 3
     assert document["groups"][0]["products"] == ["nmt", "nmpt"]
     assert document["groups"][1]["products"] == []
     assert [list(c) for c in document["commands"]] == [
@@ -269,7 +270,7 @@ def test_overview_document_is_a_short_projection():
     assert by_id["elevation download"]["supports_check"] is True
     assert by_id["cache stats"]["supports_check"] is False
     assert by_id["cache stats"]["tool"] is None
-    assert by_id["parse"]["tool"] == "parse_sheet"
+    assert by_id["sheet parse"]["tool"] == "parse_sheet"
     # the tables are asked for
     assert (document["exit_codes"], document["errors"], document["schemas"]) == (
         None,
@@ -416,7 +417,7 @@ def test_param_document_keys_and_values():
     assert by_name["sheet"].accepts == ("pl1992", "pl2000")
     quiet = by_name["quiet"]
     assert (quiet.argument, quiet.flag, quiet.short) == (None, "--quiet", "-q")
-    parse = _command(_build(command="parse"), "parse")
+    parse = _command(_build(command="sheet parse"), "sheet parse")
     assert parse.params is not None
     assert (parse.params[0].flag, parse.params[0].positional) == (None, True)
 
@@ -433,7 +434,7 @@ def test_group_filter_and_unknown_group():
     with pytest.raises(ValidationError) as error:
         _build(group="nope")
     assert error.value.option == "group"
-    assert error.value.allowed == ("elevation", "cache")
+    assert error.value.allowed == ("elevation", "sheet", "cache")
     assert "nope" in str(error.value)
 
 
@@ -446,7 +447,7 @@ def test_unknown_command_and_command_of_another_group():
     assert unknown.value.option == "command"
     assert unknown.value.allowed is not None
     assert "elevation download" in unknown.value.allowed
-    assert "find_sheets" in unknown.value.allowed
+    assert "sheet find" in unknown.value.allowed
     assert other.value.option == "command"
 
 
@@ -464,18 +465,19 @@ def test_params_flag_overrides_the_default():
     assert group.commands[0].params == ()
 
 
-def test_command_without_a_group_and_api_only_command():
-    parse = _command(_build(), "parse")
-    api_only = _command(_build(), "find_sheets")
+def test_command_of_a_group_and_api_only_command():
+    parse = _command(_build(), "sheet parse")
+    api_only = _command(_build(), "sheet find")
 
-    assert (parse.group, parse.name, parse.cli) == (None, "parse", "parse")
+    assert (parse.group, parse.name, parse.cli) == ("sheet", "parse", "sheet parse")
     assert (api_only.group, api_only.cli, api_only.tool) == (
-        None,
+        "sheet",
         None,
         "find_sheets",
     )
     assert [g.commands for g in _build().groups] == [
         ("elevation download", "elevation list-sources"),
+        ("sheet parse",),
         ("cache stats",),
     ]
 
@@ -514,11 +516,13 @@ def test_tables_are_on_request_and_in_the_whole_catalog():
         return catalog.exit_codes, catalog.errors, catalog.schemas
 
     assert tables(_build()) == tables(_build(group="elevation")) == nothing
-    assert tables(_build(command="parse")) == tables(_build(params=False)) == nothing
+    assert (
+        tables(_build(command="sheet parse")) == tables(_build(params=False)) == nothing
+    )
     asked = _build(tables=True)
     # the overview with the tables: the tables do not make it a full view
     assert asked.view == "overview" and all(tables(asked))
-    assert all(tables(_build(command="parse", tables=True)))
+    assert all(tables(_build(command="sheet parse", tables=True)))
     # the whole catalog (every parameter of every command) has everything ...
     whole = _build(params=True)
     assert whole.view == "full" and all(tables(whole))
@@ -548,7 +552,7 @@ def test_schemas_list_follows_the_registry_and_names_the_producers(monkeypatch):
 
     # registry order; a schema without a description is not part of the catalog
     assert [(s.schema, s.description, s.produced_by) for s in catalog.schemas] == [
-        ("kartograf-sheet/1", "Opis godla", ("parse",)),
+        ("kartograf-sheet/1", "Opis godla", ("sheet parse",)),
         ("kartograf-download/1", "Wynik komendy danych", ("elevation download",)),
         # the check twin of a command produces its plan schema too
         ("kartograf-plan/1", "Plan aktualizacji", ("elevation download",)),
@@ -575,14 +579,14 @@ def test_full_catalog_is_built_once(declared_catalog, monkeypatch):
     monkeypatch.setattr(build, "_build_full", counting)
 
     short = get_catalog()
-    one = get_catalog(command="parse")
+    one = get_catalog(command="sheet parse")
     group = get_catalog(group="elevation")
     everything = get_catalog(params=True)
     data = data_commands()
 
     assert built == [1]
     assert get_catalog() is short
-    assert get_catalog(command="parse") is one
+    assert get_catalog(command="sheet parse") is one
     assert one.commands[0].params is not None
     assert short.commands[0].params is None
     assert [c.id for c in group.commands] == [
@@ -651,7 +655,7 @@ def test_constraints_must_reference_declared_params():
 
 def test_declarations_of_a_group_without_commands_are_refused():
     with pytest.raises(ValueError, match="cache"):
-        build_catalog(_commands()[:1], _groups())
+        build_catalog(_commands()[:1], (_groups()[0], _groups()[2]))
 
 
 # =============================================================================
@@ -739,9 +743,9 @@ def test_example_for_is_an_example_of_the_product_of_the_call():
         "--bbox",
         example_for("models3d download", "bbox")[1],
     )
-    assert example_for("parse", "sheet", {"product": "x"}) == (
+    assert example_for("sheet parse", "sheet", {"product": "x"}) == (
         None,
-        "kartograf parse N-34-130-D-d-2-4",
+        "kartograf sheet parse N-34-130-D-d-2-4",
     )
 
 
@@ -804,10 +808,13 @@ def test_example_for_elevation_and_imagery_is_of_the_country_and_mode_of_the_cal
 
 def test_example_for_positional_api_only_and_example_less_commands():
     # a positional argument has no flag; its example shows the value
-    assert example_for("parse", "sheet") == (None, "kartograf parse N-34-130-D-d-2-4")
+    assert example_for("sheet parse", "sheet") == (
+        None,
+        "kartograf sheet parse N-34-130-D-d-2-4",
+    )
     # a command only the API has: no flag and no command line
-    assert example_for("find_sheets", "scale") == (None, None)
-    assert example_for("find_sheets", "nope") == (None, None)
+    assert example_for("sheet find", "scale") == (None, None)
+    assert example_for("sheet find", "nope") == (None, None)
     # a command without examples: the flag only
     assert example_for("project status", "project_dir") == ("--project", None)
 
@@ -860,18 +867,13 @@ _GROUPS = (
     "models3d",
     "names",
     "project",
+    "sheet",
     "soil",
     "cache",
+    "commands",
     "config",
 )
-_NO_GROUP = (
-    "parse",
-    "catalog",
-    "find_sheets",
-    "store_overview",
-    "store_entries",
-    "store_sidecar",
-)
+_API_ONLY = ("sheet find", "store overview", "store entries", "store sidecar")
 
 
 def _leaf_parsers(parser, path=()):
@@ -979,17 +981,16 @@ def test_catalog_has_every_group_and_command():
 
     assert [g.name for g in short.groups] == list(_GROUPS)
     assert len(short.commands) == len(full.commands) == 42
-    assert [c.id for c in short.commands if c.group is None] == list(_NO_GROUP)
-    assert [c.id for c in short.commands if c.cli is None] == list(_NO_GROUP[2:])
+    assert [c.id for c in short.commands if c.cli is None] == list(_API_ONLY)
     assert all(c.params is None for c in short.commands)
     assert all(
         c.params is not None and c.constraints is not None and c.examples is not None
         for c in full.commands
     )
-    # the commands of a group are those whose id starts with it, none of the others
+    # the commands of a group are the ones with a CLI whose id starts with it
     for group in short.groups:
         assert group.commands == tuple(
-            c.id for c in short.commands if c.group == group.name
+            c.id for c in short.commands if c.group == group.name and c.cli
         )
 
 
@@ -1026,7 +1027,7 @@ def test_overview_is_a_short_and_complete_list_of_groups_products_and_commands()
 
 def test_catalog_filters_and_errors():
     soil = get_catalog(group="soil")
-    one = {i: get_catalog(command=i).commands[0] for i in ("parse", "find_sheets")}
+    one = {i: get_catalog(command=i).commands[0] for i in ("sheet parse", "sheet find")}
 
     assert [g.name for g in soil.groups] == ["soil"]
     assert [c.id for c in soil.commands] == [
@@ -1041,11 +1042,11 @@ def test_catalog_filters_and_errors():
     ]
     assert all(c.params for c in get_catalog(group="soil", params=True).commands)
     # one command: with its parameters, whether it has a group or a CLI or not
-    assert one["parse"].group is None and one["parse"].params
-    assert one["find_sheets"].cli is None and one["find_sheets"].params
-    assert get_catalog(command="parse", params=False).commands[0].params is None
+    assert one["sheet parse"].group == "sheet" and one["sheet parse"].params
+    assert one["sheet find"].cli is None and one["sheet find"].params
+    assert get_catalog(command="sheet parse", params=False).commands[0].params is None
     # the tables only on request: not in a group, a command or the overview
-    for view in (soil, get_catalog(command="parse"), get_catalog()):
+    for view in (soil, get_catalog(command="sheet parse"), get_catalog()):
         assert (view.exit_codes, view.errors, view.schemas) == (None, None, None)
     tables = get_catalog(group="soil", tables=True)
     assert [r.code for r in tables.exit_codes] == [e.code for e in EXIT_CODES]
@@ -1059,7 +1060,7 @@ def test_catalog_filters_and_errors():
     with pytest.raises(ValidationError) as other_group:
         get_catalog(group="soil", command="elevation download")
     with pytest.raises(ValidationError) as api_only:
-        get_catalog(group="soil", command="find_sheets")
+        get_catalog(group="soil", command="sheet find")
 
     assert (group.value.option, group.value.allowed) == ("group", _GROUPS)
     assert command.value.option == "command"

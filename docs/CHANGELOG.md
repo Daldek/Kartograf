@@ -55,6 +55,14 @@ Everything below ships in 0.8.0: the release pull request renames this heading t
   not a table, or missing when `NOGAT_CONFIG` names it) or `lang` is not `pl` or `en`.
   `KARTOGRAF_DEBUG=0` (and `false`, `no`, `off`) is now off; any other non-empty value is on.
 - `platformdirs>=4` is a dependency.
+- Every command id is `<group> <verb>` (AGI-2.2, the `command` of the result envelope):
+  `kartograf parse` is `kartograf sheet parse`, `kartograf catalog` is
+  `kartograf commands list`, and the commands only the API has are `sheet find` (was
+  `find_sheets`), `store overview`, `store entries` and `store sidecar` (were
+  `store_overview`, `store_entries` and `store_sidecar`). The CLI words, the catalog ids
+  (`get_catalog(command=...)`), the `command` of `kartograf-error/1` and the hints that
+  name a command change; the MCP tool names and the library functions are unchanged (the
+  tools are renamed with the MCP server rebuild).
 
 **Added**
 

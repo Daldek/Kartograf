@@ -1181,7 +1181,7 @@ Komenda to deklaracja w katalogu (Z9, ADR-046), nie flagi w `cli/`:
    (`catalog/commands/_collection.py`). `Param`: `name`, `kind`, `flag`, `argument`
    (nazwa argumentu funkcji), `required`, `task=True` dla opcji wyboru danych (trafia do
    manifestu projektu), `allowed` jako dostawca z rejestru (nie kopia listy) i opis.
-   Parser CLI, `COMMANDS` projektu, schematy narzedzi MCP i `kartograf catalog`
+   Parser CLI, `COMMANDS` projektu, schematy narzedzi MCP i `kartograf commands list`
    powstaja z tej deklaracji.
 2. **Funkcja biblioteki** poziomu komendy (Z1, Z2, 11.2) w `kartograf.__all__`, z
    argumentami tylko nazwanymi i wynikiem `Document` z wlasnym schematem (Z8, Z11), plus

@@ -29,7 +29,7 @@ def test_python_dash_m_kartograf_reports_errors_like_the_script():
     root = Path(kartograf.__file__).resolve().parents[1]
 
     done = subprocess.run(
-        [sys.executable, "-m", "kartograf", "parse", "ABC"],
+        [sys.executable, "-m", "kartograf", "sheet", "parse", "ABC"],
         cwd=root,
         capture_output=True,
         text=True,

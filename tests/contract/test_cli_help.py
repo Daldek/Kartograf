@@ -1,4 +1,4 @@
-"""Help, examples and ``kartograf parse`` of the 0.8.0 UX review: what
+"""Help, examples and ``kartograf sheet parse`` of the 0.8.0 UX review: what
 ``--help`` offers is what the commands accept, without network."""
 
 import shlex
@@ -96,7 +96,7 @@ def test_help_example_is_a_valid_task(example, tmp_path, capsys, monkeypatch):
 )
 def test_parse_describes_cz_sheet_codes(sheet, lines, capsys):
     """CZ sheet codes accepted by ``--sheet`` are recognised by ``parse``."""
-    assert main(["parse", sheet]) == 0
+    assert main(["sheet", "parse", sheet]) == 0
     out = capsys.readouterr().out
     assert out.startswith(f"Godlo:     {sheet}\n")
     assert all(line in out for line in lines)
@@ -108,7 +108,7 @@ def test_parse_describes_cz_sheet_codes(sheet, lines, capsys):
 def test_parse_names_the_commands_of_the_document_for_cz_codes(sheet, capsys):
     """The ``Komendy:`` line names the commands that take the code in ``--sheet``:
     the ones ``describe_sheet`` lists, no more and no fewer."""
-    assert main(["parse", sheet]) == 0
+    assert main(["sheet", "parse", sheet]) == 0
     (line,) = [
         text
         for text in capsys.readouterr().out.splitlines()
@@ -127,14 +127,14 @@ def test_soil_list_layers_explains_depths_with_the_library_description(capsys):
 
 def test_parse_cz_code_without_pl_hierarchy(capsys):
     """The PL sheet hierarchy flags are an input error for a CZ code."""
-    assert main(["parse", "CTES96", "--children"]) == 2
+    assert main(["sheet", "parse", "CTES96", "--children"]) == 2
     assert "tylko godel PL" in capsys.readouterr().err
 
 
 def test_parse_off_grid_tm33_tile_and_unknown_code(capsys):
-    assert main(["parse", "303_5550"]) == 2
+    assert main(["sheet", "parse", "303_5550"]) == 2
     assert "TM33" in capsys.readouterr().err
-    assert main(["parse", "XYZ"]) == 2
+    assert main(["sheet", "parse", "XYZ"]) == 2
     assert "Godla CZ: SM5" in capsys.readouterr().err
 
 

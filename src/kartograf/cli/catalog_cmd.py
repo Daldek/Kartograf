@@ -1,5 +1,5 @@
 """
-``kartograf catalog [GRUPA [KOMENDA]] [--params] [--json]`` (spec 7.4).
+``kartograf commands list [GRUPA [KOMENDA]] [--params] [--json]`` (spec 7.4).
 
 The command is a query: it reads the catalog of the commands from the library
 (``get_catalog``), needs no network and writes nothing. With ``--json`` it prints
@@ -20,39 +20,39 @@ from kartograf.exceptions import ValidationError
 
 _WIDTH = 78
 _FOOTER = (
-    "Opis komendy z parametrami i przykladami: kartograf catalog <grupa> <komenda>. "
-    "Przeglad jako dokument JSON: kartograf catalog --json. Caly katalog z "
-    "parametrami, kodami wyjscia i bledow oraz schematami wyniku: "
-    "kartograf catalog --params --json"
+    "Opis komendy z parametrami i przykladami: kartograf commands list <grupa> "
+    "<komenda>. Przeglad jako dokument JSON: kartograf commands list --json. Caly "
+    "katalog z parametrami, kodami wyjscia i bledow oraz schematami wyniku: "
+    "kartograf commands list --params --json"
 )
 
 
 def _selection(args: argparse.Namespace) -> tuple[str | None, str | None]:
     """Return the ``(group, command)`` arguments of ``get_catalog`` for the line.
 
-    ``GRUPA`` is a group, or - for ``parse`` and the commands only the API has - the id
-    of a command without a group; ``KOMENDA`` is the name of a command inside the group
-    (``download``).
+    ``GRUPA`` is a group; with ``KOMENDA`` (the name of a command inside the group,
+    ``download``) the line names one command, whether the command has a CLI or only
+    the API (``store overview``).
     """
     group, name = args.group, args.command
     if group is None:
         if name is not None:
             raise ValidationError("KOMENDA wymaga GRUPY", option="group")
         return None, None
-    if name is not None:
-        return group, f"{group} {name}"
     overview = get_catalog()
     groups = tuple(g.name for g in overview.groups)
-    if group in groups:
+    if name is not None:
+        command = f"{group} {name}"
+        if command in {c.id for c in overview.commands}:
+            return None, command
+        if group in groups:
+            return group, command  # get_catalog names the commands of the group
+    elif group in groups:
         return group, None
-    alone = tuple(c.id for c in overview.commands if c.group is None)
-    if group in alone:
-        return None, group
     raise ValidationError(
-        f"Nieznana grupa albo komenda {group!r} - grupy: {', '.join(groups)}; "
-        f"komendy bez grupy: {', '.join(alone)}",
+        f"Nieznana grupa {group!r} - grupy: {', '.join(groups)}",
         option="group",
-        allowed=(*groups, *alone),
+        allowed=groups,
     )
 
 
@@ -184,8 +184,8 @@ def format_catalog(catalog: Catalog, *, command: str | None = None) -> str:
     """Return the text of a catalog view.
 
     The description of ``command`` when one was asked for, else the groups (and the
-    commands without a group) with one line per command, followed by the description of
-    every command when the view has parameters.
+    commands only the API has) with one line per command, followed by the description
+    of every command when the view has parameters.
     """
     by_id = {c.id: c for c in catalog.commands}
     if command is not None:
@@ -193,9 +193,9 @@ def format_catalog(catalog: Catalog, *, command: str | None = None) -> str:
     lines: list[str] = []
     for group in catalog.groups:
         lines += [*_group_view(group, by_id), ""]
-    alone = tuple(c for c in catalog.commands if c.group is None)
+    alone = tuple(c for c in catalog.commands if c.cli is None)
     if alone:
-        lines += ["Komendy bez grupy:", *_command_lines(alone, "  "), ""]
+        lines += ["Komendy tylko API:", *_command_lines(alone, "  "), ""]
     for entry in catalog.commands:
         if entry.params is not None:
             lines += ["", *_command_view(entry), ""]

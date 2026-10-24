@@ -34,8 +34,8 @@ wybiera `--product` w każdej grupie (w `soil` — `--property`, `--depth`,
 | `geodesy` | Osnowy geodezyjne (`control`): pozioma, wysokościowa, grawimetryczna i magnetyczna GUGiK (także archiwa), Bodove pole CUZK. Quasi-geoidy (`geoid`): PL-geoid2021, QGZU-2013 |
 
 Poza grupami danych: `kartograf project` (projekt z przypiętymi wersjami,
-niżej), `kartograf parse` (godło arkusza), `kartograf cache`, `kartograf config`
-(ustawienia, niżej) i `kartograf catalog` (katalog komend dla agentów AI, niżej).
+niżej), `kartograf sheet parse` (godło arkusza), `kartograf cache`, `kartograf config`
+(ustawienia, niżej) i `kartograf commands list` (katalog komend dla agentów AI, niżej).
 
 ## Instalacja
 
@@ -55,7 +55,7 @@ Serwer MCP dla agentów AI to opcjonalny dodatek: `pip install -e ".[mcp]"`.
 
 ```bash
 # Informacje o godle arkusza
-kartograf parse N-34-130-D-d-2-4
+kartograf sheet parse N-34-130-D-d-2-4
 
 # NMT dla arkusza, inne produkty GUGiK
 kartograf elevation download --sheet N-34-130-D-d-2-4 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
@@ -166,7 +166,7 @@ To samo zadanie daje ten sam wynik w CLI, bibliotece i serwerze MCP:
 - `--json` w każdej komendzie CLI: na stdout jeden dokument
   `kartograf-<rodzaj>/1`, błąd jako `kartograf-error/1` z `code`, `hint`
   i kodem wyjścia (0, 1, 2, 130, 143);
-- `kartograf catalog --json` (`get_catalog()`): komendy, parametry, dozwolone
+- `kartograf commands list --json` (`get_catalog()`): komendy, parametry, dozwolone
   wartości i przykłady;
 - serwer MCP `kartograf-mcp` (`pip install "kartograf[mcp]"`, stdio; w Claude
   Code `claude mcp add kartograf -- kartograf-mcp`) z 29 narzędziami;

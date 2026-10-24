@@ -92,7 +92,7 @@ _CATALOG_PARAMS = (
         "command",
         "str",
         "Komenda do opisania: identyfikator w katalogu (elevation download, "
-        "parse, find_sheets); w CLI po GRUPIE wystarczy nazwa komendy grupy "
+        "sheet parse, sheet find); w CLI po GRUPIE wystarczy nazwa komendy grupy "
         "(download)",
         positional=True,
         nargs="?",
@@ -207,7 +207,7 @@ _STORE_SIDECAR_PARAMS = (
 
 COMMANDS = (
     Command(
-        "parse",
+        "sheet parse",
         "Rozpoznaj godlo arkusza (PL albo CZ) i pokaz jego wlasciwosci",
         "query",
         "describe_sheet",
@@ -229,8 +229,8 @@ COMMANDS = (
         ),
     ),
     Command(
-        "catalog",
-        "Katalog komend: grupy, komendy, parametry i przyklady",
+        "commands list",
+        "Katalog komend: grupy, komendy i parametry",
         "query",
         "get_catalog",
         "kartograf-catalog/1",
@@ -295,8 +295,8 @@ COMMANDS = (
         "katalogu) bez otwierania bazy: dziala tez, gdy baza jest nieczytelna",
     ),
     Command(
-        "find_sheets",
-        "Wypisz godla arkuszy pokrywajace obszar (prostokat albo plik geometrii)",
+        "sheet find",
+        "Wypisz godla arkuszy pokrywajace obszar (bbox albo geometria)",
         "query",
         "find_sheets",
         "kartograf-sheets/1",
@@ -322,7 +322,7 @@ COMMANDS = (
         ),
     ),
     Command(
-        "store_overview",
+        "store overview",
         "Wypisz segmenty magazynu danych (przeglad)",
         "query",
         "describe_store",
@@ -335,7 +335,7 @@ COMMANDS = (
         tool="store_overview",
     ),
     Command(
-        "store_entries",
+        "store entries",
         "Wypisz wpisy segmentu magazynu: pliki wersji z sidecarami",
         "query",
         "list_store_entries",
@@ -350,7 +350,7 @@ COMMANDS = (
         tool="store_entries",
     ),
     Command(
-        "store_sidecar",
+        "store sidecar",
         "Odczytaj sidecar jednego pliku magazynu (kartograf-meta/1)",
         "query",
         "read_store_sidecar",
@@ -372,5 +372,19 @@ GROUPS = (
         "arkuszy CUZK) w pliku w biezacym katalogu; dane w magazynie "
         "(--output) nie sa czescia cache",
         position=2,
+    ),
+    Group(
+        "commands",
+        "Katalog komend",
+        "Opis komend Kartografa dla agentow i skryptow (bez sieci i bez zapisu): "
+        "przeglad komend, a po nazwie komendy jej parametry, ograniczenia i "
+        "przyklady.",
+        position=2,
+    ),
+    Group(
+        "sheet",
+        "Godla arkuszy",
+        "Godlo arkusza PL-1992, PL-2000 albo CZ (SM5, TM33, ZTM) i jego "
+        "wlasciwosci, bez sieci.",
     ),
 )

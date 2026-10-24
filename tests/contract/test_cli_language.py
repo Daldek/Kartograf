@@ -44,7 +44,7 @@ _CLI_ERRORS = [
     (["imagery", "download", "--sheet", "X", "-o", "o"], "wymagane"),
     (["soil", "download", "--sheet", "N-34-130-D"], "wymagane"),
     (["soil", "hsg", "-o", "o"], "Podaj"),
-    (["parse", "Q-99"], "Nieprawidlowe"),
+    (["sheet", "parse", "Q-99"], "Nieprawidlowe"),
 ]
 
 

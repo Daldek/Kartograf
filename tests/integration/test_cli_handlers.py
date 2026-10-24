@@ -40,7 +40,7 @@ def test_catalog_text_lists_groups_commands_summaries(capsys):
         assert group.summary in header
         for product in group.products:
             assert f"{product.name} - {product.summary}" in flat
-    assert "Komendy bez grupy:" in text
+    assert "Komendy tylko API:" in text
     assert "Parametry:" not in text  # the short view has no parameters
 
 
@@ -50,7 +50,7 @@ def test_catalog_group_and_command_views(capsys):
     download = get_catalog(command="elevation download").commands[0]
 
     assert "elevation download" in group and "elevation availability" in group
-    assert "soil download" not in group and "Komendy bez grupy:" not in group
+    assert "soil download" not in group and "Komendy tylko API:" not in group
     assert "Parametry:" not in group
     assert download.description.split()[0] in command
     assert "FLAGA" in command and "ARGUMENT" in command and "WYMAGANY" in command
@@ -80,18 +80,18 @@ def test_catalog_params_flag_adds_params_to_group_view(capsys):
     assert "Parametry:" not in short and "--depth" not in short
     assert detailed.count("Parametry:") == 4  # download, hsg, list-sources, list-layers
     assert "--depth" in detailed and "elevation download" not in detailed
-    assert "elevation download" in everything and "find_sheets" in everything
-    # a command without a group has its parameters too
+    assert "elevation download" in everything and "sheet find" in everything
+    # a command only the API has carries its parameters too
     assert "<sheet>" in everything
 
 
-def test_catalog_command_without_a_group(capsys):
-    parse = _catalog_text(capsys, group="parse")
-    api_only = _catalog_text(capsys, group="find_sheets")
+def test_catalog_command_of_the_sheet_group_and_one_only_the_api_has(capsys):
+    parse = _catalog_text(capsys, group="sheet", command="parse")
+    api_only = _catalog_text(capsys, group="sheet", command="find")
 
-    assert parse.startswith("parse: ") and "<sheet>" in parse
-    assert "kartograf parse N-34-130-D-d-2-4" in parse
-    assert api_only.startswith("find_sheets: ") and "tylko API" in api_only
+    assert parse.startswith("sheet parse: ") and "<sheet>" in parse
+    assert "kartograf sheet parse N-34-130-D-d-2-4" in parse
+    assert api_only.startswith("sheet find: ") and "tylko API" in api_only
 
 
 @pytest.mark.parametrize(
@@ -102,9 +102,9 @@ def test_catalog_command_without_a_group(capsys):
         {"group": "elevation", "command": "download"},
         {"group": "soil", "params": True},
         {"params": True},
-        {"group": "parse"},
+        {"group": "sheet", "command": "find"},
     ],
-    ids=["all", "group", "command", "group-params", "all-params", "no-group-command"],
+    ids=["all", "group", "command", "group-params", "all-params", "api-only-command"],
 )
 def test_catalog_json_is_the_library_document(capsys, given):
     view = {
@@ -112,10 +112,9 @@ def test_catalog_json_is_the_library_document(capsys, given):
         "command": given.get("command"),
         "params": given.get("params") or None,
     }
-    if view["command"] is not None:
+    if view["command"] is not None:  # the CLI asks for the command by its id alone
         view["command"] = f"{view['group']} {view['command']}"
-    if view["group"] == "parse":
-        view["group"], view["command"] = None, "parse"
+        view["group"] = None
 
     printed = _catalog_text(capsys, json=True, **given)
 
@@ -127,12 +126,12 @@ def test_text_footer_commands_run_and_one_of_them_gives_the_tables(capsys):
     runs, and the whole catalog with the code tables and schemas is among them
     (the overview ``catalog --json`` has no tables)."""
     footer = _catalog_text(capsys).replace("\n", " ")
-    lines = re.findall(r"kartograf catalog((?: --[a-z]+)+)", footer)
+    lines = re.findall(r"kartograf commands list((?: --[a-z]+)+)", footer)
 
     assert lines
     documents = []
     for flags in lines:
-        assert main(["catalog", *flags.split()]) == 0
+        assert main(["commands", "list", *flags.split()]) == 0
         documents.append(json.loads(capsys.readouterr().out))
     assert any(document["errors"] for document in documents)
     assert any(document["exit_codes"] and document["schemas"] for document in documents)
@@ -155,7 +154,7 @@ def test_catalog_unknown_group_is_a_validation_error(given, option, capsys):
     assert caught.value.option == option
     if option == "group" and "command" not in given:
         assert "elevation" in caught.value.allowed
-        assert "parse" in caught.value.allowed
+        assert "sheet" in caught.value.allowed
     assert capsys.readouterr().out == ""
 
 

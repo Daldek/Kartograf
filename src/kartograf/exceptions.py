@@ -182,7 +182,9 @@ class UsageError(ValidationError):
 
     code = "validation_error"
     reason = "usage"
-    DEFAULT_HINT = "Parametry komendy: kartograf catalog <grupa> <komenda> --params"
+    DEFAULT_HINT = (
+        "Parametry komendy: kartograf commands list <grupa> <komenda> --params"
+    )
 
     def __init__(
         self,
@@ -218,7 +220,7 @@ class ParseError(ValidationError):
     reason = "invalid_sheet_code"
     DEFAULT_HINT = (
         "Formaty godel: PL-1992 N-34-130-D-d-2-4, PL-2000 6.179.12.20, "
-        "SM5 CTES96, TM33 302_5550; wiecej: kartograf parse --help"
+        "SM5 CTES96, TM33 302_5550; wiecej: kartograf sheet parse --help"
     )
 
 

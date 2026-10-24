@@ -144,26 +144,28 @@ class TestCreateParser:
     def test_has_parse_subcommand(self):
         """Test that parse subcommand exists."""
         parser = create_parser()
-        args = parser.parse_args(["parse", "N-34-130-D"])
-        assert args.command == "parse"
+        args = parser.parse_args(["sheet", "parse", "N-34-130-D"])
+        assert (args.command, args.sheet_command) == ("sheet", "parse")
         assert args.sheet == "N-34-130-D"
 
     def test_parse_hierarchy_flag(self):
         """Test --hierarchy flag."""
         parser = create_parser()
-        args = parser.parse_args(["parse", "N-34-130-D", "--hierarchy"])
+        args = parser.parse_args(["sheet", "parse", "N-34-130-D", "--hierarchy"])
         assert args.hierarchy is True
 
     def test_parse_children_flag(self):
         """Test --children flag."""
         parser = create_parser()
-        args = parser.parse_args(["parse", "N-34-130-D", "--children"])
+        args = parser.parse_args(["sheet", "parse", "N-34-130-D", "--children"])
         assert args.children is True
 
     def test_parse_descendants_option(self):
         """Test --descendants option."""
         parser = create_parser()
-        args = parser.parse_args(["parse", "N-34-130-D", "--descendants", "1:10000"])
+        args = parser.parse_args(
+            ["sheet", "parse", "N-34-130-D", "--descendants", "1:10000"]
+        )
         assert args.descendants == "1:10000"
 
 
@@ -231,7 +233,7 @@ class TestCreateParserSheetStrip:
         )
 
     def test_parse_sheet_stripped(self):
-        assert create_parser().parse_args(["parse", " N-34 "]).sheet == "N-34"
+        assert create_parser().parse_args(["sheet", "parse", " N-34 "]).sheet == "N-34"
 
     def test_download_without_sheet_still_none(self):
         args = create_parser().parse_args(
@@ -333,7 +335,7 @@ class TestCmdParse:
 
     def test_parse_valid_sheet(self, capsys):
         """Test parsing valid sheet."""
-        result = main(["parse", "N-34-130-D"])
+        result = main(["sheet", "parse", "N-34-130-D"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -342,7 +344,7 @@ class TestCmdParse:
 
     def test_parse_invalid_sheet(self, capsys):
         """Test parsing invalid sheet."""
-        result = main(["parse", "INVALID"])
+        result = main(["sheet", "parse", "INVALID"])
 
         assert result == 2
         captured = capsys.readouterr()
@@ -350,7 +352,7 @@ class TestCmdParse:
 
     def test_parse_with_hierarchy(self, capsys):
         """Test parsing with --hierarchy flag."""
-        result = main(["parse", "N-34-130-D", "--hierarchy"])
+        result = main(["sheet", "parse", "N-34-130-D", "--hierarchy"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -359,7 +361,7 @@ class TestCmdParse:
 
     def test_parse_with_children(self, capsys):
         """Test parsing with --children flag."""
-        result = main(["parse", "N-34-130-D", "--children"])
+        result = main(["sheet", "parse", "N-34-130-D", "--children"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -368,7 +370,7 @@ class TestCmdParse:
 
     def test_parse_with_descendants(self, capsys):
         """Test parsing with --descendants option."""
-        result = main(["parse", "N-34-130-D-d-2", "--descendants", "1:10000"])
+        result = main(["sheet", "parse", "N-34-130-D-d-2", "--descendants", "1:10000"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -377,7 +379,7 @@ class TestCmdParse:
 
     def test_parse_with_invalid_descendants_scale(self, capsys):
         """Test parsing with invalid descendants scale."""
-        result = main(["parse", "N-34-130-D", "--descendants", "invalid"])
+        result = main(["sheet", "parse", "N-34-130-D", "--descendants", "invalid"])
 
         assert result == 2
         captured = capsys.readouterr()
@@ -385,9 +387,9 @@ class TestCmdParse:
 
 
 def _parse_fails(error):
-    """``kartograf parse`` fails with ``error``: its handler in the registry of
+    """``kartograf sheet parse`` fails with ``error``: its handler in the registry of
     the CLI is replaced for the length of the ``with`` block."""
-    return patch.dict(HANDLERS, {"parse": Mock(side_effect=error)})
+    return patch.dict(HANDLERS, {"sheet parse": Mock(side_effect=error)})
 
 
 class TestMain:
@@ -405,7 +407,7 @@ class TestMain:
     def test_ctrl_c_is_an_error_line_and_exit_130(self, capsys):
         """Ctrl-C mid-command: one Error line, exit 130 - no traceback."""
         with _parse_fails(KeyboardInterrupt):
-            result = main(["parse", "N-34-130-D"])
+            result = main(["sheet", "parse", "N-34-130-D"])
         assert result == 130
         assert capsys.readouterr().err == "Error: przerwano (Ctrl-C)\n"
 
@@ -429,7 +431,7 @@ class TestMain:
 
     def test_parse_subcommand(self, capsys):
         """Test parse subcommand."""
-        result = main(["parse", "N-34"])
+        result = main(["sheet", "parse", "N-34"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -438,7 +440,7 @@ class TestMain:
     def test_unexpected_exception_is_reported_not_raised(self, capsys):
         """A non-KartografError exception gives a message and code 1, no traceback."""
         with _parse_fails(RuntimeError("boom")):
-            result = main(["parse", "N-34"])
+            result = main(["sheet", "parse", "N-34"])
 
         assert result == 1
         captured = capsys.readouterr()
@@ -448,7 +450,7 @@ class TestMain:
     def test_kartograf_error_is_reported_with_message(self, capsys):
         """KartografError gives a message without the class name."""
         with _parse_fails(ValidationError("zly godlo")):
-            result = main(["parse", "N-34"])
+            result = main(["sheet", "parse", "N-34"])
 
         assert result == 2
         captured = capsys.readouterr()
@@ -460,7 +462,7 @@ class TestMain:
         monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
 
         with _parse_fails(RuntimeError("boom")), pytest.raises(RuntimeError):
-            main(["parse", "N-34"])
+            main(["sheet", "parse", "N-34"])
 
     def test_debug_env_reraises_kartograf_error(self, capsys, monkeypatch):
         """N17: KARTOGRAF_DEBUG=1 gives a traceback also for a KartografError
@@ -471,7 +473,7 @@ class TestMain:
             _parse_fails(ValidationError("zly godlo")),
             pytest.raises(ValidationError, match="zly godlo"),
         ):
-            main(["parse", "N-34"])
+            main(["sheet", "parse", "N-34"])
 
 
 class TestCommandGroups:
@@ -652,7 +654,9 @@ class TestCLIIntegration:
 
     def test_full_workflow_parse(self, capsys):
         """Test full parse workflow."""
-        result = main(["parse", "N-34-130-D-d-2-4", "--hierarchy", "--children"])
+        result = main(
+            ["sheet", "parse", "N-34-130-D-d-2-4", "--hierarchy", "--children"]
+        )
 
         assert result == 0
         captured = capsys.readouterr()
@@ -677,7 +681,7 @@ class TestCLIIntegration:
         ]
 
         for sheet, expected_scale in test_cases:
-            result = main(["parse", sheet])
+            result = main(["sheet", "parse", sheet])
             assert result == 0, f"Failed for {sheet}"
             captured = capsys.readouterr()
             assert expected_scale in captured.out, f"Scale not found for {sheet}"
@@ -3911,11 +3915,11 @@ class TestFormatSheetPL2000:
 
 
 class TestParsePL2000Command:
-    """Tests for 'kartograf parse' with PL-2000 sheets."""
+    """Tests for 'kartograf sheet parse' with PL-2000 sheets."""
 
     def test_parse_pl2000_sheet(self, capsys):
-        """kartograf parse 6.179.12 should work."""
-        result = main(["parse", "6.179.12"])
+        """kartograf sheet parse 6.179.12 should work."""
+        result = main(["sheet", "parse", "6.179.12"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -3925,7 +3929,7 @@ class TestParsePL2000Command:
 
     def test_parse_pl2000_shows_strefa_in_output(self, capsys):
         """Parse command output includes zone info for PL-2000."""
-        result = main(["parse", "6.179.12"])
+        result = main(["sheet", "parse", "6.179.12"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -3933,8 +3937,8 @@ class TestParsePL2000Command:
         assert "Natywny CRS: EPSG:2177" in captured.out
 
     def test_parse_pl2000_finer_scale(self, capsys):
-        """kartograf parse 6.179.12.15 should show 1:2000."""
-        result = main(["parse", "6.179.12.15"])
+        """kartograf sheet parse 6.179.12.15 should show 1:2000."""
+        result = main(["sheet", "parse", "6.179.12.15"])
 
         assert result == 0
         captured = capsys.readouterr()
@@ -3943,7 +3947,7 @@ class TestParsePL2000Command:
 
     def test_parse_pl2000_invalid(self, capsys):
         """Invalid PL-2000 sheet returns error."""
-        result = main(["parse", "9.179.12"])
+        result = main(["sheet", "parse", "9.179.12"])
 
         assert result == 2
 

@@ -34,8 +34,8 @@ ROOT_DESCRIPTION = (
     "i ISRIC. Komendy danych sa w grupach wg typu danych: grupa danych ma "
     "download (pobranie do magazynu) i list-sources (zrodla z rejestru, "
     "bez sieci), czesc grup takze list-layers, availability albo hsg. "
-    "project zarzadza zadaniami projektu, parse rozpoznaje godlo "
-    "arkusza, cache - lokalny cache metadanych."
+    "project zarzadza zadaniami projektu, sheet rozpoznaje godla arkuszy, "
+    "commands opisuje komendy, cache - lokalny cache metadanych."
 )
 ROOT_EPILOG = (
     "Przyklady:\n"
@@ -509,11 +509,10 @@ def build_parser(
 ) -> argparse.ArgumentParser:
     """Return the parser of ``kartograf`` for the declared commands.
 
-    The commands without a group (``parse``, ``catalog``) come first, then the
-    groups by position and name; a command without a CLI (``cli`` is ``None``)
-    adds nothing. A parsed line carries ``_command_id`` (the id of the command
-    parser) or, for a bare group, ``_group_parser`` (the group's parser, whose
-    help the caller prints).
+    Every command belongs to a group, so the root parser holds the groups, by position
+    and name; a command without a CLI (``cli`` is ``None``) adds nothing. A parsed
+    line carries ``_command_id`` (the id of the command parser) or, for a bare group,
+    ``_group_parser`` (the group's parser, whose help the caller prints).
 
     Parameters
     ----------
@@ -542,9 +541,6 @@ def build_parser(
     )
     subparsers = parser.add_subparsers(dest="command", help="Komendy")
     cli = [command for command in commands if command.cli is not None]
-    for command in cli:
-        if command.group is None:
-            _add_command(subparsers, command, usage_errors, given_only)
     for group in sorted_groups(groups):
         group_parser = subparsers.add_parser(
             group.name,
