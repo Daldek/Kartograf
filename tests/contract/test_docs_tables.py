@@ -177,7 +177,7 @@ def test_claude_md_has_the_agent_rule_and_no_agents_md():
     for needed in (
         "scripts/gate.sh",
         "llms.txt",
-        "kartograf catalog --json",
+        "kartograf commands list --json",
         "kartograf-mcp",
     ):
         assert needed in rule, needed

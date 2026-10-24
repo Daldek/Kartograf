@@ -11,10 +11,10 @@ rozdzielczosc, uklad wysokosci, obszar): Kartograf nie ma cichych wartosci domys
 i nie zgaduje. Brakujacy lub bledny argument to blad z podpowiedzia (`hint`), nie zgadywanie.
 
 ## Zasady dla agentow
-- Zacznij od katalogu: `kartograf catalog --json` to zwiezly przeglad (ok. 7 tys. znakow: grupy,
+- Zacznij od katalogu: `kartograf commands list --json` to zwiezly przeglad (ok. 7 tys. znakow: grupy,
   produkty, komendy, nazwy narzedzi MCP). Parametry jednej komendy, dozwolone wartosci i
-  przyklady (ok. 30 tys. znakow): `kartograf catalog elevation download --json`. Wszystko
-  naraz, z kodami wyjscia i bledow (ok. 300 tys. znakow): `kartograf catalog --params --json`.
+  przyklady (ok. 30 tys. znakow): `kartograf commands list elevation download --json`. Wszystko
+  naraz, z kodami wyjscia i bledow (ok. 300 tys. znakow): `kartograf commands list --params --json`.
 - Dodawaj `--json`: stdout to dokladnie jeden dokument `kartograf-<rodzaj>/1` (pole
   `schema`), tekst i pasek postepu znikaja, ostrzezenia sa w `notices`.
 - Przed pobraniem sprawdz, co ma obszar (lata, uklady, rozdzielczosci), bez pobierania danych.
@@ -33,7 +33,7 @@ i nie zgaduje. Brakujacy lub bledny argument to blad z podpowiedzia (`hint`), ni
 Rozpoznanie godla (PL-1992, PL-2000, CZ SM5/TM33), bez sieci:
 
 ```
-kartograf parse N-34-130-D-d-2-4 --json
+kartograf sheet parse N-34-130-D-d-2-4 --json
 ```
 
 Jakie dane ma obszar (sieciowe, bez pobierania plikow):

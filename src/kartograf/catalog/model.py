@@ -124,7 +124,7 @@ class CommandInfo:
     """
 
     id: str
-    group: str | None
+    group: str
     name: str
     summary: str
     description: str

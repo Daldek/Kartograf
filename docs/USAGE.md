@@ -6,7 +6,7 @@ kontrakty leżą w dokumentach kanonicznych, do których sekcje odsyłają:
 zakres i ograniczenia — [SCOPE.md](SCOPE.md), architektura, układ `data/`
 i schemat sidecara — [ARCHITECTURE.md](ARCHITECTURE.md), uzasadnienia —
 [DECISIONS.md](DECISIONS.md). Pełna lista opcji CLI: `kartograf <grupa> <komenda> --help`
-albo maszynowo `kartograf catalog --json` (sekcja 9.4);
+albo maszynowo `kartograf commands list --json` (sekcja 9.4);
 lista publicznego API: `src/kartograf/__init__.py` (`__all__`).
 
 ## Spis treści
@@ -64,8 +64,8 @@ Komendy są pogrupowane wg typu danych (`kartograf <grupa> <komenda>`, ADR-039):
 | `geodesy` | `download`, `list-sources` | osnowy geodezyjne (`control`): PL (GUGiK) i CZ (Bodove pole); quasi-geoidy (`geoid`): PL-geoid2021 i QGZU-2013 |
 | `project` | `init`, `add`, `remove`, `download`, `status`, `verify` | manifest projektu i przypiete wersje z magazynu |
 
-Poza grupami zostają `kartograf parse`, `kartograf cache`, `kartograf config` (ustawienia, sekcja 10) i `kartograf catalog`
-(katalog komend dla agentów, sekcja 9.4). `kartograf <grupa>
+Poza grupami danych są `kartograf sheet parse` (grupa `sheet`), `kartograf cache`, `kartograf config` (ustawienia, sekcja 10)
+i `kartograf commands list` (grupa `commands`: katalog komend dla agentów, sekcja 9.4). `kartograf <grupa>
 --help` wypisuje komendy grupy, `<grupa> <komenda> --help` — opcje i przykłady
 poleceń, `list-sources` — źródła grupy z rejestru (bez sieci): `WYBOR` (komplet
 wymaganych flag wyboru źródła; `a|b` = jedna z wartości), `KRAJ`, `DOSTAWCA`,
@@ -105,8 +105,8 @@ się jawnie. Brak wartości to `Error:` z listą dopuszczalnych wartości
 
 ```bash
 # Informacje o godle (auto-detekcja PL-1992 / PL-2000); --hierarchy pokazuje hierarchię
-kartograf parse N-34-130-D-d-2-4
-kartograf parse N-34-130-D --hierarchy
+kartograf sheet parse N-34-130-D-d-2-4
+kartograf sheet parse N-34-130-D --hierarchy
 
 # NMT: pojedynczy arkusz albo hierarchia; godło PL-1992 grubsze
 # niż 1:10000 rozwija się do arkuszy 1:10000 samo — bez --scale (sekcja 1.6)
@@ -132,7 +132,7 @@ kartograf elevation download --bbox 530000,382000,533000,386000 --product laz --
 
 # PL-2000: godło albo bbox w CRS strefy; godło grubsze i bbox wymagają --scale
 # zgodnej z arkuszami GUGiK (sekcja 1.6)
-kartograf parse 6.179.12.20
+kartograf sheet parse 6.179.12.20
 kartograf elevation download --sheet 6.179.12.20 --product nmt --resolution 0.5m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --sheet 7.171.21 --scale 1:2000 --product nmt --resolution 1m --vertical-crs EVRF2007 -o ./data
 kartograf elevation download --bbox 7503200,5775000,7504800,5776000 --bbox-crs EPSG:2178 --sheet-system 2000 --scale 1:2000 --product nmt --country pl --resolution 1m --vertical-crs EVRF2007 -o ./data
@@ -549,7 +549,7 @@ kartograf elevation download "--bbox=-447000,-1114000,-444000,-1113000" --bbox-c
 kartograf elevation download --bbox 18.615,49.740,18.640,49.755 --bbox-crs EPSG:4326 --country auto --product laz --model dmr4g --vertical-crs pl=EVRF2007,cz=Bpv -o ./data
 ```
 
-`kartograf parse` rozpoznaje godła PL (PL-1992/PL-2000: skala, człony,
+`kartograf sheet parse` rozpoznaje godła PL (PL-1992/PL-2000: skala, człony,
 hierarchia) i CZ bez sieci: arkusz SM5 (`CTES96`), kafel TM33 (`302_5550`,
 z zasięgiem w EPSG:3045) i arkusz ZTM (`0510-D-11`, `NM-34-07-1-D-15`) — system,
 układ i komendy, które przyjmują godło w `--sheet`; `--hierarchy`,
@@ -823,7 +823,7 @@ domyślnej.
 - `--bbox`/`--geometry` z `--sheet-system 2000` (bez `--cutout`): wymagane —
   obszar jest rozbijany na arkusze w tej skali;
 - `--sheet` z godłem PL-2000 1:10000 (np. `7.171.21`): wymagane — godło
-  jest rozwijane do potomków w tej skali (`kartograf parse <godło>
+  jest rozwijane do potomków w tej skali (`kartograf sheet parse <godło>
   --descendants <skala>` pokazuje listę przed pobraniem);
 - drobniejsze godło PL-2000 (np. `7.171.21.23`): opcjonalne — bez flagi
   pobierany jest ten arkusz, z flagą jego potomkowie w tej skali;
@@ -889,7 +889,7 @@ dane tam są:
 **Jak ustalić właściwą skalę.** Najprościej z podpowiedzi CLI: skala
 w `uzyj --scale ...` to skala arkusza, który GUGiK faktycznie opublikował
 (może to być 1:2000, ale też np. 1:1000). Skalę godła i jego potomków
-pokazuje `kartograf parse` (`--descendants <skala>`). Jeśli różne miejsca
+pokazuje `kartograf sheet parse` (`--descendants <skala>`). Jeśli różne miejsca
 obszaru mają arkusze w różnych skalach, jedno wywołanie z jedną `--scale`
 pobierze tylko część — pozostałe arkusze dociągnij kolejnym wywołaniem
 z podpowiedzianą skalą.
@@ -3142,7 +3142,7 @@ ten sam dokument `kartograf-<rodzaj>/1`: te same klucze, wartosci i kolejnosc
 kluczy (roznia sie tylko pola zalezne od chwili wykonania - `checked_at`,
 etykieta wersji - i sciezki magazynu). Na kazdej drodze agent moze:
 (1) **odkryc**, co Kartograf potrafi i jakie wartosci sa dozwolone
-(`kartograf catalog`, 9.4), bez czytania kodu i bez parsowania `--help`;
+(`kartograf commands list`, 9.4), bez czytania kodu i bez parsowania `--help`;
 (2) **wywolac** komende z jawnymi parametrami i dostac wynik maszynowy
 (`--json`, 9.2); (3) po bledzie **wiedziec, co poprawic**, bez parsowania
 tekstu (`kartograf-error/1` z `code`, `hint` i `details.option`, 9.3).
@@ -3158,8 +3158,8 @@ Krotki spis dla agentow, czytany poza repozytorium, to `llms.txt` (9.7).
 | `kartograf-download/1` | `elevation download`, `imagery download`, `boundaries`/`cadastre`/`models3d`/`hydro`/`names`/`maps`/`geodesy download`, `landcover download`, `soil download`, `soil hsg` (MCP: `<grupa>_download`, `soil_hsg`) | `download_data`, `download_collection`, `download_landcover`, `download_soil`, `calculate_hsg` | `ok: false` |
 | `kartograf-plan/1` | kazda z powyzszych z `--check-updates` (MCP: `check_updates`) | `check_data`, `check_collection`, `check_landcover`, `check_soil`, `check_hsg` | pozycja `check_failed` (`ok: false`) |
 | `kartograf-availability/1` | `elevation availability` (MCP: `elevation_availability`) | `check_availability` | `ok: false` |
-| `kartograf-sheet/1` | `parse` (MCP: `parse_sheet`) | `describe_sheet` | - |
-| `kartograf-sheets/1` | tylko API i MCP: `find_sheets` | `find_sheets` | - |
+| `kartograf-sheet/1` | `sheet parse` (MCP: `parse_sheet`) | `describe_sheet` | - |
+| `kartograf-sheets/1` | tylko API i MCP: `sheet find` (MCP: `find_sheets`) | `find_sheets` | - |
 | `kartograf-sources/1` | `<grupa> list-sources` (11 grup; MCP: `list_sources`) | `list_sources` | - |
 | `kartograf-layers/1` | `landcover list-layers`, `soil list-layers` (MCP: `list_layers`) | `list_layers` | - |
 | `kartograf-project-state/1` | `project init`, `project add`, `project remove` | `init_project`, `add_project_task`, `remove_project_task` | - |
@@ -3167,10 +3167,10 @@ Krotki spis dla agentow, czytany poza repozytorium, to `llms.txt` (9.7).
 | `kartograf-project-check/1` | `project status`, `project verify`, `project download --check-updates` | `get_project_status`, `verify_project`, `check_project` | `ok: false` |
 | `kartograf-cache/1` | `cache stats`, `cache path`, `cache clear` | `get_cache_info`, `get_cache_path`, `clear_cache` | - |
 | `kartograf-config/1` | `config show` | `get_config` | - |
-| `kartograf-catalog/1` | `catalog` (MCP: `get_catalog`) | `get_catalog` | - |
-| `kartograf-store-overview/1` | tylko API i MCP: `store_overview` | `describe_store` | - |
-| `kartograf-store-entries/1` | tylko API i MCP: `store_entries` | `list_store_entries` | - |
-| `kartograf-store-sidecar/1` | tylko API i MCP: `store_sidecar` | `read_store_sidecar` | - |
+| `kartograf-catalog/1` | `commands list` (MCP: `get_catalog`) | `get_catalog` | - |
+| `kartograf-store-overview/1` | tylko API i MCP: `store overview` (MCP: `store_overview`) | `describe_store` | - |
+| `kartograf-store-entries/1` | tylko API i MCP: `store entries` (MCP: `store_entries`) | `list_store_entries` | - |
+| `kartograf-store-sidecar/1` | tylko API i MCP: `store sidecar` (MCP: `store_sidecar`) | `read_store_sidecar` | - |
 | `kartograf-error/1` | kazda komenda przy bledzie (9.3) | `error_report` | - |
 
 Zasady wspolne dokumentow:
@@ -3205,7 +3205,7 @@ Zasady wspolne dokumentow:
 
 ### 9.2 Kontrakt `--json`
 
-Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (36 komend i `catalog`),
+Flaga `--json` (bez skrotu) jest w kazdej komendzie-lisciu CLI (36 komend i `commands list`),
 za komenda: `kartograf elevation availability --json ...`; `kartograf --json ...` nie
 istnieje. W `project add` podaj ja przed nazwa zadania (`kartograf project add --json
 teren elevation download ...`): po nazwie zadania jest opcja uruchomienia i konczy sie
@@ -3213,7 +3213,7 @@ bledem `invalid_input` z `details.option` rownym `json`.
 
 1. **stdout** to dokladnie jeden dokument JSON (UTF-8 niezaleznie od lokalizacji, wciecie
    2 spacje, `\n` na koncu) i nic wiecej: ani pasek postepu, ani linie statusu, ani
-   naglowek listy arkuszy. Wyjatek: przeglad katalogu (`kartograf catalog --json` bez
+   naglowek listy arkuszy. Wyjatek: przeglad katalogu (`kartograf commands list --json` bez
    grupy) drukuje rekord grupy i komendy w jednej linii.
 2. **stderr** jest pusty, z dwoma wyjatkami spoza kontraktu: linie ponowien transportu HTTP
    (`Warning:`) i traceback przy `KARTOGRAF_DEBUG=1` (wyjatek jest wtedy podnoszony takze
@@ -3234,13 +3234,13 @@ bledem `invalid_input` z `details.option` rownym `json`.
    143 after SIGTERM. An error is a `kartograf-error/1` document on stdout, also a
    syntax error (`reason` `usage`); stderr stays empty.
 5. Bez `--json` zachowanie jest bez zmian (tekst), z wyjatkami: kod wyjscia 2 dla bledow
-   wejscia, tabele `list-sources` i `list-layers` oraz `parse` sa renderowane z dokumentow
+   wejscia, tabele `list-sources` i `list-layers` oraz `sheet parse` sa renderowane z dokumentow
    biblioteki (ten sam tekst), a `cache path` drukuje sama sciezke.
 
 Godlo arkusza (offline):
 
 ```bash
-kartograf parse N-34-130-D-d-2-4 --json
+kartograf sheet parse N-34-130-D-d-2-4 --json
 ```
 
 ```json
@@ -3420,12 +3420,12 @@ ze kazda flaga kazdej komendy jest w katalogu i odwrotnie. Katalog nie wymaga si
 zapisu.
 
 ```bash
-kartograf catalog                         # grupy z produktami i komendami (tekst)
-kartograf catalog elevation download      # opis komendy: parametry, ograniczenia, przyklady
-kartograf catalog soil --params           # komendy grupy z parametrami
-kartograf catalog --json                  # przeglad (kartograf-catalog/1, view "overview")
-kartograf catalog elevation download --json   # pelny opis jednej komendy
-kartograf catalog --params --json         # caly katalog z tabelami kodow i schematow
+kartograf commands list                         # grupy z produktami i komendami (tekst)
+kartograf commands list elevation download      # opis komendy: parametry, ograniczenia, przyklady
+kartograf commands list soil --params           # komendy grupy z parametrami
+kartograf commands list --json                  # przeglad (kartograf-catalog/1, view "overview")
+kartograf commands list elevation download --json   # pelny opis jednej komendy
+kartograf commands list --params --json         # caly katalog z tabelami kodow i schematow
 ```
 
 ```python
@@ -3449,7 +3449,7 @@ Widoki (kazdy to dokument `kartograf-catalog/1` z tym samym zestawem kluczy: `vi
 | `catalog --params --json`, `get_catalog(params=True)` | `full` | wszystkie komendy z parametrami i tabele kodow wyjscia, bledow i schematow | ok. 300 tys. znakow |
 | `get_catalog(tables=True)` | `overview` | przeglad + tabele `exit_codes`, `errors`, `schemas` | ok. 13 tys. znakow |
 
-Przeglad zaczyna sie tak (fragment prawdziwego wydruku `kartograf catalog --json`, rekord
+Przeglad zaczyna sie tak (fragment prawdziwego wydruku `kartograf commands list --json`, rekord
 w jednej linii - jedyny wyjatek od wciecia 2 spacje):
 
 ```json
@@ -3472,7 +3472,7 @@ w jednej linii - jedyny wyjatek od wciecia 2 spacje):
 }
 ```
 
-Opis komendy (`kartograf catalog soil hsg --json`, skrocony) niesie m.in.: `id`, `group`,
+Opis komendy (`kartograf commands list soil hsg --json`, skrocony) niesie m.in.: `id`, `group`,
 `name`, `summary`, `description`, `kind` (`data`, `query` albo `manage`), `effects`
 (`network`, `store_write`, `project_write`, `cache_write`, `cache_delete`), `idempotent`,
 `destructive`, `project_task` (czy komenda jest zadaniem projektu), `function` i
@@ -3615,9 +3615,9 @@ nieniszczacy (`destructiveHint=false`: magazyn jest niezmienny, nic nie jest nad
 
 | Rodzina | Narzedzie | Komenda katalogu | Funkcja biblioteki | Dokument | Adnotacje |
 |---|---|---|---|---|---|
-| `discovery` | `get_catalog` | `catalog` | `get_catalog` | `kartograf-catalog/1` | RO |
-| `discovery` | `parse_sheet` | `parse` | `describe_sheet` | `kartograf-sheet/1` | RO |
-| `discovery` | `find_sheets` | `find_sheets` (tylko API) | `find_sheets` | `kartograf-sheets/1` | RO |
+| `discovery` | `get_catalog` | `commands list` | `get_catalog` | `kartograf-catalog/1` | RO |
+| `discovery` | `parse_sheet` | `sheet parse` | `describe_sheet` | `kartograf-sheet/1` | RO |
+| `discovery` | `find_sheets` | `sheet find` (tylko API) | `find_sheets` | `kartograf-sheets/1` | RO |
 | `discovery` | `list_sources` | `<grupa> list-sources` (parametr `group`) | `list_sources` | `kartograf-sources/1` | RO |
 | `discovery` | `list_layers` | `landcover list-layers`, `soil list-layers` (parametr `group`) | `list_layers` | `kartograf-layers/1` | RO |
 | `availability` | `elevation_availability` | `elevation availability` | `check_availability` | `kartograf-availability/1` | RO, OW |
@@ -3641,9 +3641,9 @@ nieniszczacy (`destructiveHint=false`: magazyn jest niezmienny, nic nie jest nad
 | `project` | `project_check_updates` | `project download --check-updates` | `check_project` | `kartograf-project-check/1` | RO, OW |
 | `project` | `project_status` | `project status` | `get_project_status` | `kartograf-project-check/1` | RO |
 | `project` | `project_verify` | `project verify` | `verify_project` | `kartograf-project-check/1` | RO |
-| `store` | `store_overview` | `store_overview` (tylko API) | `describe_store` | `kartograf-store-overview/1` | RO |
-| `store` | `store_entries` | `store_entries` (tylko API) | `list_store_entries` | `kartograf-store-entries/1` | RO |
-| `store` | `store_sidecar` | `store_sidecar` (tylko API) | `read_store_sidecar` | `kartograf-store-sidecar/1` | RO |
+| `store` | `store_overview` | `store overview` (tylko API) | `describe_store` | `kartograf-store-overview/1` | RO |
+| `store` | `store_entries` | `store entries` (tylko API) | `list_store_entries` | `kartograf-store-entries/1` | RO |
+| `store` | `store_sidecar` | `store sidecar` (tylko API) | `read_store_sidecar` | `kartograf-store-sidecar/1` | RO |
 
 Poza serwerem zostaja `cache *` (cache serwera to jego wewnetrzna sprawa; `update="force"`
 odswieza wpisy) i `open_project` (stan projektu zwracaja `project_status` i pozostale narzedzia
@@ -3731,7 +3731,7 @@ Wynik to dokument kartograf-*/1 z polem ok (narzedzia danych: kartograf-download
 - **`llms.txt`** w korzeniu repozytorium (format llmstxt.org, po polsku, < 150 linii): czym
   jest Kartograf, instalacja, typowe zadania CLI, biblioteki i MCP z poleceniami, ktore parsuje
   prawdziwy parser (test `tests/contract/test_llms_txt.py`), kody bledow z tabeli 9.3 i linki do
-  dokumentacji. Agent spoza repozytorium zaczyna od niego, a potem od `kartograf catalog --json`.
+  dokumentacji. Agent spoza repozytorium zaczyna od niego, a potem od `kartograf commands list --json`.
 - **`python -m kartograf`** dziala jak `kartograf` (srodowisko bez katalogu skryptow na
   `PATH`: worktree, `uvx`); `python -m kartograf.cli.commands` tez.
 - **`kartograf/py.typed`** (PEP 561): `mypy` konsumenta widzi typy biblioteki zamiast

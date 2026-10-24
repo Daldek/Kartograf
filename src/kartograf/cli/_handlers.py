@@ -48,8 +48,8 @@ COLLECTION_GROUPS = (
 )
 
 HANDLERS: dict[str, Handler] = {
-    "parse": cmd_parse,
-    "catalog": cmd_catalog,
+    "sheet parse": cmd_parse,
+    "commands list": cmd_catalog,
     "elevation download": partial(cmd_download, products=ELEVATION_PRODUCTS),
     "elevation availability": cmd_availability,
     "imagery download": partial(cmd_download, products=IMAGERY_PRODUCTS),

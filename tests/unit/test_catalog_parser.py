@@ -161,7 +161,7 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
             description="Wypisz zrodla",
         ),
         _data(
-            "parse",
+            "sheet parse",
             Param("sheet", "str", "Godlo", metavar="GODLO", positional=True),
             Param("hierarchy", "flag", "Pokaz hierarchie"),
             kind="query",
@@ -218,7 +218,7 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
             description="Status",
         ),
         _data(
-            "catalog",
+            "commands list",
             Param("group", "str", "Grupa", metavar="GRUPA", positional=True, nargs="?"),
             kind="query",
             function="get_catalog",
@@ -229,7 +229,9 @@ def _declarations() -> tuple[tuple[Command, ...], tuple[Group, ...]]:
     groups = (
         Group("elevation", "Wysokosci", "Dane wysokosciowe"),
         Group("project", "Projekt", "Manifest projektu"),
+        Group("sheet", "Godla", "Godla arkuszy"),
         Group("cache", "Cache", "Cache metadanych", position=2),
+        Group("commands", "Katalog", "Katalog komend", position=2),
     )
     return commands, groups
 
@@ -305,13 +307,13 @@ def test_flags_are_never_required():
 def test_positional_arguments_and_their_counts():
     parser = _parser()
 
-    parse = parser.parse_args(["parse", "N-34-130-D", "--hierarchy"])
+    parse = parser.parse_args(["sheet", "parse", "N-34-130-D", "--hierarchy"])
     add = parser.parse_args(
         ["project", "add", "teren", "elevation", "download", "--product", "nmt"]
     )
     status = parser.parse_args(["project", "status", "a", "b"])
     nothing = parser.parse_args(["project", "status"])
-    catalog = parser.parse_args(["catalog"])
+    catalog = parser.parse_args(["commands", "list"])
 
     assert (parse.sheet, parse.hierarchy) == ("N-34-130-D", True)
     assert (add.name, add.arguments, add.project) == (
@@ -390,7 +392,7 @@ def test_usage_error_mode():
     parser = _parser(usage_errors=True)
     for argv, text in (
         (["elevation", "download", "--nope"], "--nope"),
-        (["parse"], "required: GODLO"),
+        (["sheet", "parse"], "required: GODLO"),
         (["elevation", "download", "--product", "dem"], "invalid choice"),
         (["elevation", "download", "--workers", "x"], "invalid int value"),
         (["elevation", "download", "--check-updates", "--upgrade"], "not allowed"),
@@ -458,11 +460,11 @@ def test_leaf_parsers_carry_command_id_and_groups_carry_group_parser():
     parser = _parser()
 
     leaf = parser.parse_args(["elevation", "download"])
-    root_leaf = parser.parse_args(["parse", "N-34"])
+    root_leaf = parser.parse_args(["sheet", "parse", "N-34"])
     group = parser.parse_args(["elevation"])
 
     assert leaf._command_id == "elevation download"
-    assert root_leaf._command_id == "parse"
+    assert root_leaf._command_id == "sheet parse"
     assert not hasattr(group, "_command_id")
     assert group._group_parser is _leaf(parser, "elevation")
     assert group._group_parser.prog == "kartograf elevation"
@@ -473,9 +475,14 @@ def test_root_lists_commands_then_groups_by_position():
     top = _subparsers(parser)
     assert top is not None
 
-    # the commands without a group first (declaration order), then the groups by
-    # position and name
-    assert list(top.choices) == ["parse", "catalog", "elevation", "project", "cache"]
+    # the groups by position and name
+    assert list(top.choices) == [
+        "elevation",
+        "project",
+        "sheet",
+        "cache",
+        "commands",
+    ]
 
 
 def test_group_without_command_name_lists_its_commands():
@@ -550,7 +557,7 @@ def test_unknown_flag_owners_are_listed():
     with pytest.raises(UsageError) as error:
         parse_command_line(parser, ["project", "status", "--hierarchy"])
 
-    assert "nieznana opcja --hierarchy (maja ja: parse)" in str(error.value)
+    assert "nieznana opcja --hierarchy (maja ja: sheet parse)" in str(error.value)
 
 
 def test_version_action_prints_version(capsys):

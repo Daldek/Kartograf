@@ -117,7 +117,7 @@ def test_positional_arguments_stay_where_they_are_declared():
         Param("sheet", "str", positional=True),
         Param("hierarchy", "flag"),
         Param("descendants", "str"),
-        id="parse",
+        id="sheet parse",
     )
     project = _declared(
         Param("project_dir", "path", flag="--project", dest="project", cli_default="."),
@@ -129,7 +129,7 @@ def test_positional_arguments_stay_where_they_are_declared():
 
     assert (
         format_command_line(parse, {"sheet": "N-34-130-D", "descendants": "1:10000"})
-        == "kartograf parse N-34-130-D --descendants 1:10000"
+        == "kartograf sheet parse N-34-130-D --descendants 1:10000"
     )
     assert format_command_line(
         project,
@@ -186,7 +186,7 @@ def test_a_value_without_a_command_line_form_is_refused(options, run):
 def test_api_only_parameter_and_command_have_no_command_line():
     with_update = _declared(Param("product", "str"), Param("update", "str", flag=None))
     api_only = Command(
-        "find_sheets",
+        "sheet find",
         "Godla",
         "query",
         "find_sheets",
@@ -197,7 +197,7 @@ def test_api_only_parameter_and_command_have_no_command_line():
 
     with pytest.raises(ValueError, match="update"):
         format_command_line(with_update, {"update": "force"})
-    with pytest.raises(ValueError, match="find_sheets"):
+    with pytest.raises(ValueError, match="sheet find"):
         format_command_line(api_only, {})
 
 

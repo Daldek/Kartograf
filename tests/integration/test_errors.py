@@ -336,8 +336,8 @@ def test_validation_hint_has_flag_and_example_from_the_catalog():
     bare = "Dozwolone wartosci vertical_crs: EVRF2007, KRON86."
     assert error_report(exc).hint == bare
     assert error_report(exc, command="no such command").hint == bare
-    assert error_report(exc, command="parse").hint == (
-        f"{bare} Przyklad: kartograf parse N-34-130-D-d-2-4"
+    assert error_report(exc, command="sheet parse").hint == (
+        f"{bare} Przyklad: kartograf sheet parse N-34-130-D-d-2-4"
     )
 
 
@@ -350,7 +350,7 @@ def test_usage_error_of_a_known_command_names_it_and_gives_an_example():
     assert report.exit_code == 2 and report.details == {"reason": "usage"}
     assert report.hint is not None
     where, example = report.hint.split(" Przyklad: kartograf ", 1)
-    assert where == "Parametry komendy: kartograf catalog elevation download."
+    assert where == "Parametry komendy: kartograf commands list elevation download."
     assert parse_command(example).command == "elevation download"
     assert UsageError("m").command is None
 
@@ -363,11 +363,13 @@ def test_usage_error_command_and_hint_sources():
     nested = error_report(exc, command="project add")
     assert nested.command == "project add"
     assert nested.hint is not None
-    assert nested.hint.startswith("Parametry komendy: kartograf catalog elevation ")
+    assert nested.hint.startswith(
+        "Parametry komendy: kartograf commands list elevation "
+    )
     # without a command of its own the error is about the command that was run
-    assert error_report(UsageError("m"), command="parse").hint == (
-        "Parametry komendy: kartograf catalog parse. "
-        "Przyklad: kartograf parse N-34-130-D-d-2-4"
+    assert error_report(UsageError("m"), command="sheet parse").hint == (
+        "Parametry komendy: kartograf commands list sheet parse. "
+        "Przyklad: kartograf sheet parse N-34-130-D-d-2-4"
     )
     # a hint set where the error is raised wins, an unknown id is no command
     own = UsageError("m", command="elevation download", hint="Wlasna podpowiedz")

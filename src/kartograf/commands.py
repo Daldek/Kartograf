@@ -100,11 +100,8 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def _words(tokens: Sequence[str]) -> str | None:
-    """Return the id of the command the first words of a line name, if they do."""
-    ids = declared_commands()
-    if tokens and tokens[0] in ids:
-        return tokens[0]
-    if len(tokens) > 1 and f"{tokens[0]} {tokens[1]}" in ids:
+    """Return the id of the command the first two words of a line name, if they do."""
+    if len(tokens) > 1 and f"{tokens[0]} {tokens[1]}" in declared_commands():
         return f"{tokens[0]} {tokens[1]}"
     return None
 
@@ -146,7 +143,7 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
         a removed command, an empty line, a group without a command
         (``command`` is the id of the command the line named, when it did).
     ValidationError
-        A command that is not a data command (``parse``, ``catalog``,
+        A command that is not a data command (``sheet parse``, ``commands list``,
         ``elevation availability``, ``project ...``; ``option="command"``,
         ``allowed``: the data commands), a ``--bbox`` that is not four numbers or
         a ``--bbox-crs`` without ``--bbox`` (``option="bbox_crs"``).
@@ -169,7 +166,7 @@ def parse_command(argv: Sequence[str] | str) -> CommandCall:
     if any(token in _EXITING_FLAGS for token in tokens):
         raise UsageError(
             "--help i --version nie sa czescia komendy danych; opis komendy: "
-            "kartograf catalog <grupa> <komenda> --params",
+            "kartograf commands list <grupa> <komenda> --params",
             command=named,
         )
     if named is not None:

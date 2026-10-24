@@ -95,8 +95,8 @@ def test_commands_name_json_and_absolute_output():
 def test_quoted_commands_of_the_text_exist():
     """Commands quoted inside sentences (`kartograf ...`) parse as well."""
     quoted = re.findall(r"`(kartograf [^`]+)`", _text())
-    assert "kartograf catalog --json" in quoted
-    assert "kartograf catalog elevation download --json" in quoted
+    assert "kartograf commands list --json" in quoted
+    assert "kartograf commands list elevation download --json" in quoted
     parser = create_parser(usage_errors=True)
     for command in quoted:
         if command == "kartograf --version":

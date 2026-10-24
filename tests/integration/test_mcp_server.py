@@ -667,7 +667,7 @@ def test_check_updates_tool_names_come_from_the_schema_enum():
             "plan",
             "elevation download",
         ),
-        ("parse_sheet", {"sheet": 5}, "sheet", "parse"),
+        ("parse_sheet", {"sheet": 5}, "sheet", "sheet parse"),
         ("list_sources", {"group": "nope"}, "group", None),
         (
             "list_sources",
@@ -675,8 +675,8 @@ def test_check_updates_tool_names_come_from_the_schema_enum():
             "product",
             "elevation list-sources",
         ),
-        ("store_overview", {"output_dir": "relative"}, "output_dir", "store_overview"),
-        ("store_sidecar", {"path": "x.meta.json"}, "path", "store_sidecar"),
+        ("store_overview", {"output_dir": "relative"}, "output_dir", "store overview"),
+        ("store_sidecar", {"path": "x.meta.json"}, "path", "store sidecar"),
         ("project_status", {"project_dir": "."}, "project_dir", "project status"),
     ],
 )
@@ -717,7 +717,7 @@ def test_a_bad_sheet_code_is_invalid_sheet_code():
         call("parse_sheet", {"sheet": "not-a-sheet"}), reason="invalid_sheet_code"
     )
 
-    assert report["exit_code"] == 2 and report["command"] == "parse"
+    assert report["exit_code"] == 2 and report["command"] == "sheet parse"
     assert report["details"]["option"] == "sheet"
 
 
@@ -769,7 +769,7 @@ def test_oserror_is_io_error(tmp_path):
         call("store_overview", {"output_dir": str(missing)}), code="io_error"
     )
 
-    assert report["exit_code"] == 9 and report["command"] == "store_overview"
+    assert report["exit_code"] == 9 and report["command"] == "store overview"
     assert report["details"] == {"errno": "ENOENT", "path": str(missing)}
 
 
@@ -973,7 +973,7 @@ def test_function_tools_get_library_types_and_the_server_cache(tmp_path, monkeyp
 
     def availability(*, cache, **kwargs):
         seen.append({**kwargs, "cache": cache})
-        return kartograf.get_catalog(command="catalog")
+        return kartograf.get_catalog(command="commands list")
 
     monkeypatch.setattr(kartograf, "check_availability", availability)
     cache = MetadataCache(tmp_path / "cache.db")
@@ -1018,7 +1018,7 @@ def test_project_download_passes_its_arguments_and_reports_progress(
         assert on_progress is not None
         on_progress(DownloadProgress(1, 2, "N-1", "downloading"))
         on_progress(DownloadProgress(2, 2, "N-1", "completed"))
-        return kartograf.get_catalog(command="catalog")
+        return kartograf.get_catalog(command="commands list")
 
     monkeypatch.setattr(kartograf, "download_project", download)
     received = []

@@ -45,9 +45,9 @@ def _run(capsys, argv: list[str]) -> tuple[int, str, str]:
 
 
 def _handler_fails(error):
-    """``kartograf parse`` fails with ``error``: its handler in the registry of
+    """``kartograf sheet parse`` fails with ``error``: its handler in the registry of
     the CLI is replaced for the length of the ``with`` block."""
-    return patch.dict(HANDLERS, {"parse": Mock(side_effect=error)})
+    return patch.dict(HANDLERS, {"sheet parse": Mock(side_effect=error)})
 
 
 # -- text mode ---------------------------------------------------------------
@@ -114,7 +114,7 @@ def test_transform_failure_exits_13_or_15_and_text_has_the_remedy(
     """The remedy of an unavailable operation follows the message in every
     command, not only in the downloads of elevation and imagery."""
     with _handler_fails(error):
-        code, out, err = _run(capsys, ["parse", "N-34"])
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34"])
 
     assert code == exit_code
     assert out == ""
@@ -210,7 +210,7 @@ def test_json_usage_error_of_a_known_command_names_it_and_gives_an_example(
     assert message in document["message"]
     assert document["command"] == "elevation download"
     where, example = document["hint"].split(" Przyklad: kartograf ", 1)
-    assert where == "Parametry komendy: kartograf catalog elevation download."
+    assert where == "Parametry komendy: kartograf commands list elevation download."
     assert parse_command(example).command == "elevation download"
 
 
@@ -237,7 +237,7 @@ def test_json_usage_error_in_a_task_line_is_about_the_line_not_the_task(
     assert document["details"]["reason"] == "usage"
     assert document["command"] == "project add"
     assert document["hint"].startswith(
-        "Parametry komendy: kartograf catalog elevation download. Przyklad: "
+        "Parametry komendy: kartograf commands list elevation download. Przyklad: "
     )
 
 
@@ -265,32 +265,32 @@ def test_json_flag_before_the_command_is_a_usage_error(capsys):
 
 
 def test_json_parse_error_uses_invalid_sheet_code(capsys):
-    code, out, err = _run(capsys, ["parse", "NIE-GODLO", "--json"])
+    code, out, err = _run(capsys, ["sheet", "parse", "NIE-GODLO", "--json"])
 
     document = json.loads(out)
     assert code == 2 and err == ""
     assert document["code"] == "validation_error"
     assert document["details"]["reason"] == "invalid_sheet_code"
-    assert document["command"] == "parse"
+    assert document["command"] == "sheet parse"
     assert document["details"] == {"reason": "invalid_sheet_code", "option": "sheet"}
     assert document["hint"].startswith("Formaty godel: ")
 
 
 def test_json_interrupt_is_130(capsys):
     with _handler_fails(KeyboardInterrupt):
-        code, out, err = _run(capsys, ["parse", "N-34-130-D", "--json"])
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34-130-D", "--json"])
 
     document = json.loads(out)
     assert code == 130 and err == ""
     assert document["code"] == "cancelled"
     assert document["exit_code"] == 130
     assert document["message"] == "przerwano (Ctrl-C)"
-    assert document["command"] == "parse"
+    assert document["command"] == "sheet parse"
 
 
 @pytest.fixture
 def sigterm_during_parse():
-    """``kartograf parse`` that gets a real SIGTERM (``timeout``, ``docker
+    """``kartograf sheet parse`` that gets a real SIGTERM (``timeout``, ``docker
     stop``) in the middle of its work; the handler of ``main`` ends it."""
     if os.name == "nt" or signal.getsignal(signal.SIGTERM) is not signal.SIG_DFL:
         pytest.skip("SIGTERM is handled by the test runner")
@@ -302,7 +302,7 @@ def sigterm_during_parse():
         time.sleep(PATIENCE_S)  # the handler raises here, in the main thread
         raise AssertionError("SIGTERM did not interrupt the command")
 
-    with patch.dict(HANDLERS, {"parse": handler}):
+    with patch.dict(HANDLERS, {"sheet parse": handler}):
         yield
     assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL  # given back
 
@@ -310,18 +310,18 @@ def sigterm_during_parse():
 def test_sigterm_is_143_with_the_error_document_in_json_mode(
     capsys, sigterm_during_parse
 ):
-    code, out, err = _run(capsys, ["parse", "N-34-130-D", "--json"])
+    code, out, err = _run(capsys, ["sheet", "parse", "N-34-130-D", "--json"])
 
     document = json.loads(out)
     assert code == 143 and err == ""
     assert document["code"] == "terminated"
     assert document["exit_code"] == 143
     assert document["message"] == "przerwano (SIGTERM)"
-    assert document["command"] == "parse"
+    assert document["command"] == "sheet parse"
 
 
 def test_sigterm_is_143_with_one_error_line_in_text_mode(capsys, sigterm_during_parse):
-    code, out, err = _run(capsys, ["parse", "N-34-130-D"])
+    code, out, err = _run(capsys, ["sheet", "parse", "N-34-130-D"])
 
     assert code == 143 and out == ""
     assert err == "Error: przerwano (SIGTERM)\n"
@@ -351,7 +351,7 @@ def test_oserror_is_io_error_in_json_mode(capsys, tmp_path):
 
 def test_internal_error_in_json_mode_and_debug_reraises(capsys, monkeypatch):
     with _handler_fails(RuntimeError("boom")):
-        code, out, err = _run(capsys, ["parse", "N-34", "--json"])
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
 
     document = json.loads(out)
     assert code == 1 and err == ""
@@ -364,7 +364,7 @@ def test_internal_error_in_json_mode_and_debug_reraises(capsys, monkeypatch):
         _handler_fails(RuntimeError("boom")),
         pytest.raises(RuntimeError, match="boom"),
     ):
-        main(["parse", "N-34", "--json"])
+        main(["sheet", "parse", "N-34", "--json"])
     assert capsys.readouterr().out == ""
 
 
@@ -373,7 +373,7 @@ def test_json_mode_sets_utf8_stdout(monkeypatch):
     raw = io.BytesIO()
     monkeypatch.setattr(sys, "stdout", io.TextIOWrapper(raw, encoding="ascii"))
     with _handler_fails(ValidationError("zly znak: \u017c")):
-        code = main(["parse", "N-34", "--json"])
+        code = main(["sheet", "parse", "N-34", "--json"])
     sys.stdout.flush()
 
     assert code == 2
@@ -388,8 +388,8 @@ def test_http_retry_lines_stay_on_stderr(capsys):
         logging.getLogger("kartograf.transport.http").warning("HTTP 503, ponawiam 1/3")
         raise ValidationError("zle")
 
-    with patch.dict(HANDLERS, {"parse": retried_then_failed}):
-        code, out, err = _run(capsys, ["parse", "N-34", "--json"])
+    with patch.dict(HANDLERS, {"sheet parse": retried_then_failed}):
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
 
     assert code == 2
     assert json.loads(out)["message"] == "zle"
@@ -418,8 +418,8 @@ def test_library_warnings_are_not_on_stderr_in_json_mode(capsys, tmp_path, monke
     # no handler above the 'kartograf' branch -> logging.lastResort writes to
     # stderr, as in a real CLI run (pytest's root handler would hide it)
     monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
-    with patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}):
-        code, out, err = _run(capsys, ["parse", "N-34", "--json"])
+    with patch.dict(HANDLERS, {"sheet parse": _skipped_version_listing(tmp_path)}):
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34", "--json"])
 
     assert code == 2
     assert json.loads(out)["message"] == "zle"
@@ -429,8 +429,8 @@ def test_library_warnings_are_not_on_stderr_in_json_mode(capsys, tmp_path, monke
 def test_library_warnings_are_prefixed_in_text_mode(capsys, tmp_path, monkeypatch):
     """Text mode: the same record is a ``Warning:`` line, not a bare message."""
     monkeypatch.setattr(logging.getLogger("kartograf"), "propagate", False)
-    with patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}):
-        code, out, err = _run(capsys, ["parse", "N-34"])
+    with patch.dict(HANDLERS, {"sheet parse": _skipped_version_listing(tmp_path)}):
+        code, out, err = _run(capsys, ["sheet", "parse", "N-34"])
 
     assert code == 2
     lines = err.splitlines()
@@ -442,10 +442,10 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
     """``KARTOGRAF_DEBUG`` lets the library records through also in ``--json``."""
     monkeypatch.setenv("KARTOGRAF_DEBUG", "1")
     with (
-        patch.dict(HANDLERS, {"parse": _skipped_version_listing(tmp_path)}),
+        patch.dict(HANDLERS, {"sheet parse": _skipped_version_listing(tmp_path)}),
         pytest.raises(ValidationError),
     ):
-        main(["parse", "N-34", "--json"])
+        main(["sheet", "parse", "N-34", "--json"])
 
     assert capsys.readouterr().err.startswith(
         "Warning: Pominieto wersje bez czytelnego sidecara"
@@ -463,10 +463,10 @@ def test_library_warnings_pass_with_debug_in_json_mode(capsys, tmp_path, monkeyp
         (["landcover", "list-layers"], "product"),
         (["soil", "download"], "output_dir"),
         (["soil", "hsg"], "output_dir"),
-        (["parse", "NIE-GODLO"], "sheet"),
-        (["parse", "CTES96", "--hierarchy"], "hierarchy"),
-        (["parse", "N-34-130-D", "--descendants", "1:77"], "descendants"),
-        (["catalog", "nie-ma-takiej-grupy"], "group"),
+        (["sheet", "parse", "NIE-GODLO"], "sheet"),
+        (["sheet", "parse", "CTES96", "--hierarchy"], "hierarchy"),
+        (["sheet", "parse", "N-34-130-D", "--descendants", "1:77"], "descendants"),
+        (["commands", "list", "nie-ma-takiej-grupy"], "group"),
     ],
 )
 def test_input_errors_of_the_handlers_name_the_option(capsys, argv, option):

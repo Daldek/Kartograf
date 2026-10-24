@@ -216,9 +216,9 @@ def test_usage_error_names_the_command_the_line_named(line, command):
 @pytest.mark.parametrize(
     "line",
     [
-        "parse N-34",
-        "parse",
-        "catalog",
+        "sheet parse N-34",
+        "sheet parse",
+        "commands list",
         "elevation availability --bbox 1,2,3,4",
         "elevation list-sources",
         "soil list-layers",
@@ -275,7 +275,9 @@ def test_validate_command_is_offline_and_names_the_option(tmp_path, monkeypatch)
     ],
     ids=["validate", "format", "run", "check"],
 )
-@pytest.mark.parametrize("name", ["elevation list-sources", "no such command", "parse"])
+@pytest.mark.parametrize(
+    "name", ["elevation list-sources", "no such command", "sheet parse"]
+)
 def test_unknown_command_names_the_option(call, name):
     with pytest.raises(ValidationError) as caught:
         call(name)

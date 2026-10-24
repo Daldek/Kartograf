@@ -1,5 +1,5 @@
 """
-``kartograf parse``: ``describe_sheet`` as text, or as its document.
+``kartograf sheet parse``: ``describe_sheet`` as text, or as its document.
 
 The library says what a sheet code is (``describe_sheet``: PL-1992 and PL-2000
 codes - scale, parts, hierarchy; CZ codes - SM5 sheets, TM33 tiles and ZTM map
@@ -125,7 +125,7 @@ def _format_descendants(sheet: str, found: SheetDescendants) -> str:
 
 
 def format_sheet(info: SheetInfo) -> str:
-    """Return the text of ``kartograf parse`` from the document.
+    """Return the text of ``kartograf sheet parse`` from the document.
 
     What the code is and, for a PL code, the hierarchy, children and descendants the
     document has (each block after a blank line).

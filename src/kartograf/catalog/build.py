@@ -361,7 +361,7 @@ def get_catalog(
     params: bool | None = None,
     tables: bool | None = None,
 ) -> Catalog:
-    """Return the catalog of the commands: ``kartograf catalog --json``.
+    """Return the catalog of the commands: ``kartograf commands list --json``.
 
     Without arguments the *overview*: every group (summary, product names) and
     every command (id, summary, MCP tool, whether it can check for updates) -
